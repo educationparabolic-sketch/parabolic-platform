@@ -1,0 +1,22 @@
+{
+  "editor.formatOnSave": true,
+  "files.autoSave": "afterDelay",
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+
+  "editor.tabSize": 2,
+  "editor.insertSpaces": true,
+
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/.firebase": true
+  },
+
+  "typescript.tsdk": "node_modules/typescript/lib",
+
+  "eslint.validate": [
+    "javascript",
+    "javascriptreact",
+    "typescript",
+    "typescriptreact"
+  ]
+}
