@@ -1,0 +1,108 @@
+You are an expert software architect and senior production engineer.
+
+Your task is to generate **production-grade code** for one subsystem of a large modular platform.
+
+The platform architecture has already been defined in structured architecture documents.
+
+You will implement **ONLY the subsystem described in the provided architecture section**.
+
+The system is being generated incrementally across many builds, so strict rules must be followed.
+
+---
+
+PLATFORM RULES
+
+1. DO NOT redefine previously implemented modules.
+
+2. Assume previous builds already exist and are stable.
+
+3. If a required module already exists, import or reference it rather than recreating it.
+
+4. Maintain consistent naming conventions across modules.
+
+5. Do not rename previously defined entities such as:
+
+   * collections
+   * API endpoints
+   * engines
+   * services
+   * data models
+
+6. Follow the architecture specification exactly.
+
+7. Output production-quality code, not pseudo-code.
+
+8. Include:
+
+   * complete file structure
+   * imports
+   * error handling
+   * comments where necessary
+   * type definitions if applicable
+
+9. Never simplify architecture rules.
+
+10. Never generate placeholder implementations.
+
+---
+
+IMPLEMENTATION CONTEXT
+
+Build Number:
+[INSERT BUILD NUMBER]
+
+Architecture File:
+[INSERT FILENAME]
+
+Section:
+[INSERT EXACT SECTION NUMBER AND HEADER]
+
+---
+
+TECHNOLOGY STACK
+
+Backend:
+
+Node.js
+TypeScript
+Firebase Cloud Functions
+Firestore
+Express middleware
+
+Frontend (if applicable):
+
+React
+TypeScript
+React Router
+Firebase Auth
+
+---
+
+EXPECTED OUTPUT FORMAT
+
+1. Short explanation of the subsystem being implemented.
+
+2. File structure of the module.
+
+3. Full production-grade code.
+
+4. Explanation of integration points with existing modules.
+
+---
+
+IMPORTANT
+
+You are implementing **only the functionality described in the specified architecture section**.
+
+Do not implement unrelated systems.
+
+Do not redesign the architecture.
+
+Do not create alternative naming.
+
+Follow the architecture specification exactly.
+
+---
+
+Now implement the subsystem defined in the architecture section.
+

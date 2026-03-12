@@ -1,0 +1,4070 @@
+﻿Excellent.
+Now we formalize the Complete Admin Dashboard Sitemap — the full structural map of your platform.
+This is not UI mock text.
+This is:
+    • Navigation architecture
+    • Layer visibility control
+    • Capability hierarchy
+    • Enforcement boundaries
+    • Maturity progression map
+This is what your developer builds against.
+
+🗺 FULL ADMIN DASHBOARD SITEMAP
+(Layer-Aware Enterprise Structure)
+
+0️⃣ GLOBAL STRUCTURE
+Admin Dashboard
+│
+├── Overview
+├── Students
+├── Question Bank
+├── Tests
+├── Assignments
+├── Analytics
+├── Insights
+├── Governance (L3)
+├── Licensing
+├── Settings
+└── Help / Support
+Navigation order matters:
+    • Operational → Academic → Intelligence → Institutional → Commercial → Configuration
+
+1️⃣ OVERVIEW
+Overview
+│
+├── Operational Snapshot
+├── Current Activity
+├── Performance Summary
+├── Execution Summary (L1+)
+├── Risk Snapshot (L2+)
+├── Governance Snapshot (L3)
+└── System Health & Licensing
+Layer-aware rendering.
+
+2️⃣ STUDENTS
+Students
+│
+├── Student List
+│    ├── Search / Filter
+│    ├── Batch View
+│    └── Status (Active / Archived)
+│
+├── Student Profile (Drill-down)
+│    ├── Academic Summary
+│    ├── Performance Trend
+│    ├── Execution Profile (L1+)
+│    ├── Risk Indicators (L2+)
+│    ├── Monthly AI Summary (L1+)
+│    └── Assignment History
+│
+└── Student Import / Export
+No raw session visibility.
+
+3️⃣ QUESTION BANK
+Question Bank
+│
+├── Question Library
+│    ├── Search & Filter
+│    ├── Version Control
+│    ├── Usage Indicator
+│    └── Edit Metadata (restricted)
+│
+├── Upload Package
+│    ├── Download Sample
+│    │    ├── JEE/NEET Wizard
+│    │    └── Generic Template
+│    ├── Upload ZIP
+│    ├── Validation Report
+│    └── Import Summary
+│
+├── Tag Management
+│    ├── Primary Tags
+│    ├── Secondary Tags
+│    └── Additional Tags
+│
+└── Difficulty Calibration (L1+)
+Immutable question structure once used in template.
+
+4️⃣ TESTS
+Tests
+│
+├── Generate Test
+│    ├── Filter Builder
+│    ├── Selection Mode
+│    │    ├── Manual Select
+│    │    ├── Shuffle + Slice
+│    │    ├── Offset + Limit
+│    │    └── Round Robin
+│    ├── Canonical ID Generation
+│    └── Duplicate Detection
+│
+├── Saved Tests
+│    ├── Search
+│    ├── Group Identical
+│    ├── Preview
+│    ├── Download
+│    ├── Archive
+│    └── Delete
+│
+├── Live Monitor
+│    ├── Active Sessions
+│    ├── Live Alerts (L1+)
+│    ├── Risk Monitor (L2+)
+│    └── Force End
+│
+└── Template Analytics (L1+)
+All score references replaced with:
+    • % Raw Marks
+    • % Accuracy
+
+5️⃣ ASSIGNMENTS
+Assignments
+│
+├── Create Assignment
+│    ├── Select Template
+│    ├── Batch / Student Target
+│    ├── Shuffle Questions (order only)
+│    ├── Mode Selection (license-aware)
+│    └── Schedule
+│
+├── Active Assignments
+│    ├── Participation Status
+│    ├── Completion %
+│    └── Reminder Controls
+│
+├── Completed Assignments
+│    ├── Result Summary
+│    ├── Batch Comparison
+│    └── Export
+│
+└── Email Controls
+     ├── Send Post-Test Email
+     ├── Batch Processing
+     └── Manual Override
+Layer-aware behavior logic.
+
+6️⃣ ANALYTICS
+Analytics
+│
+├── Performance Overview
+│    ├── % Raw Trend
+│    ├── % Accuracy Trend
+│    ├── Participation Rate
+│    └── Distribution Charts
+│
+├── Batch Analytics
+│    ├── Batch Comparison
+│    ├── Stability Score
+│    └── Template Effectiveness
+│
+├── Test-Level Analytics
+│    ├── Template Performance
+│    ├── Difficulty Breakdown
+│    └── Question-Level Metrics
+│
+└── Time Analysis
+     ├── Avg Time per Question
+     ├── Phase Timing Split
+     └── Difficulty Timing
+Analytics = measurable outcomes only.
+
+7️⃣ INSIGHTS
+Insights
+│
+├── Risk Overview (L1+)
+│
+├── Student Intelligence (L1+)
+│
+├── Pattern Alerts (L1+)
+│
+├── Intervention Engine (L1 soft, L2 structural)
+│
+├── Execution Signals (L1+)
+│
+└── AI Monthly Summary (L1+)
+Insights = interpretive intelligence.
+
+8️⃣ GOVERNANCE (L3 ONLY)
+Governance
+│
+├── Institutional Stability
+│
+├── Execution Integrity
+│
+├── Override Audit
+│
+├── Batch Risk Map
+│
+├── Longitudinal Trends
+│
+└── Governance Reports (PDF)
+No student micromanagement here.
+
+9️⃣ LICENSING
+Licensing
+│
+├── Current Plan
+│
+├── Feature Matrix
+│
+├── Eligibility Progress
+│
+├── Usage & Billing
+│
+├── Upgrade Preview
+│
+└── License History
+Backend enforced via vendor control model.
+
+🔟 SETTINGS
+Settings
+│
+├── Institute Profile
+│
+├── Academic Year Management
+│
+├── Default Execution Policies
+│
+├── User & Role Management
+│
+├── Security & Access
+│
+├── Data & Archive Controls
+│
+└── System Configuration
+Operational control tower.
+
+1️⃣1️⃣ LAYER VISIBILITY MAP
+L0 — Operational
+Visible:
+    • Overview (Basic)
+    • Students
+    • Question Bank
+    • Tests
+    • Assignments
+    • Analytics (Basic)
+    • Licensing
+    • Settings
+Hidden:
+    • Insights
+    • Governance
+    • Risk Snapshot
+
+L1 — Diagnostic
+Adds:
+    • Insights (Basic)
+    • Behavior in Overview
+    • Diagnostic Metrics
+    • Alert Configuration
+Still Hidden:
+    • Governance
+
+L2 — Controlled
+Adds:
+    • Controlled Mode
+    • Hard Mode
+    • Risk Snapshot
+    • Execution Discipline Metrics
+    • Structural Intervention
+
+L3 — Institutional
+Adds:
+    • Governance Module
+    • Stability Index
+    • Override Audit
+    • Longitudinal Trends
+
+1️⃣2️⃣ DATA FLOW MAP
+Question Bank → Tests → Assignments → Sessions
+        ↓              ↓
+   runAnalytics → studentYearMetrics
+        ↓
+     Insights Engine
+        ↓
+  Governance Snapshots
+        ↓
+      Overview
+No circular dependency.
+
+1️⃣3️⃣ COMMERCIAL FLOW MAP
+Vendor License
+      ↓
+License Object
+      ↓
+Feature Flags
+      ↓
+UI Visibility + Backend Enforcement
+Academic modules never override license.
+
+1️⃣4️⃣ COMPLETE SYSTEM PYRAMID
+                GOVERNANCE (L3)
+         Institutional Stability & Integrity
+────────────────────────────────────────────
+                INSIGHTS (L1–L3)
+        Behavioral & Execution Intelligence
+────────────────────────────────────────────
+               ANALYTICS (L0–L3)
+         Measured Academic Performance
+────────────────────────────────────────────
+           TEST ENGINE & QUESTION BANK
+        Core Academic Execution Infrastructure
+
+FINAL RESULT
+Your Admin Dashboard is now:
+✔ Layer-Progressive
+✔ License-Enforced
+✔ Behavior-Aware
+✔ Institutional-Scalable
+✔ Vendor-Protected
+✔ Archive-Structured
+✔ Audit-Safe
+✔ 10-Year Durable
+This sitemap is production-ready.
+
+Next possible engineering layers:
+    1. 🔥 Full Firestore collection tree
+    2. 🔌 Complete REST API contract
+    3. 🧠 Pattern Engine rule formalization
+    4. 🏗 Microservice boundary architecture
+    5. 📈 5-year scale & cost modeling
+Tell me which one to engineer next.
+
+
+
+
+
+
+
+Excellent.
+Now we formalize the Overview Section as the real-time heartbeat layer of your system.
+Overview is:
+    • Operational, not analytical
+    • Snapshot-based, not exploratory
+    • Layer-aware, not overwhelming
+    • Fast, not computationally heavy
+    • Billing-aware, not commercial-heavy
+    • Upgrade-aware, not promotional
+This is the first screen after Admin login.
+It defines how “intelligent” your system feels within 3 seconds.
+
+🏠 ADMIN DASHBOARD — OVERVIEW SECTION
+Operational + Maturity Snapshot Layer
+
+0️⃣ CORE DESIGN RULE
+Overview answers:
+    1. What is happening right now?
+    2. Are we stable?
+    3. Is execution healthy?
+    4. Do we need intervention?
+    5. Where are we in maturity (L0 → L3)?
+
+Data Sources (Strict)
+Allowed:
+students (HOT aggregate fields only)
+runAnalytics (current academic year)
+studentYearMetrics (aggregated)
+governanceSnapshots (L3 only)
+license document
+Not allowed:
+sessions
+rawAttempts
+per-question logs
+Everything must be precomputed.
+
+1️⃣ LAYOUT STRUCTURE
+Overview
+   ├── Operational Snapshot
+   ├── Current Activity
+   ├── Performance Summary (30-day)
+   ├── Execution Summary (L1+)
+   ├── Risk Snapshot (L2+)
+   ├── Governance Snapshot (L3)
+   ├── System Health & Licensing
+Responsive grid.
+Max 8–12 cards visible at once.
+
+2️⃣ OPERATIONAL SNAPSHOT (ALL LAYERS)
+Pure operational health.
+Cards
+    • Active Students (current month)
+    • Tests Conducted (current month)
+    • Tests Scheduled (next 7 days)
+    • Current Academic Year
+    • Last Test Completion Rate
+    • Billing Count (active student count)
+    • Active Concurrent Sessions (if any)
+All numbers — no graphs here.
+Purpose:
+Immediate clarity.
+
+3️⃣ CURRENT ACTIVITY
+Live operational state.
+
+🟢 L0
+    • Active Test Sessions
+    • Students Currently in Test
+    • Upcoming Test (<24 hours)
+    • Last 5 Submissions
+Link:
+“Go to Live Monitor”
+
+🟡 L1 Adds
+    • Live Behavior Alert Count
+    • % Pacing Drift (active)
+    • % Skip Burst Detected
+No risk labels yet.
+
+🔵 L2 Adds
+    • Live Risk Count
+    • Controlled Mode Compliance %
+    • MinTime Violations (live)
+Displayed as small indicator badges.
+
+🟣 L3
+Same as L2.
+Deep strategic analysis stays in Governance.
+
+4️⃣ PERFORMANCE SUMMARY (LAST 30 DAYS)
+Replace “Score” everywhere with:
+    • Avg % Raw Marks
+    • Avg % Accuracy
+Never show legacy score.
+
+🟢 L0
+Show:
+    • Avg % Raw (30 days)
+    • Avg % Accuracy (30 days)
+    • Highest Performing Batch
+    • Lowest Performing Batch
+    • Participation Rate
+    • Distribution Chart (simple histogram)
+No behavioral metrics.
+
+🟡 L1 Adds
+Behavior overlays:
+    • Avg Phase Adherence %
+    • Easy Neglect %
+    • Hard Bias %
+    • Time Misallocation %
+Now performance becomes interpretive.
+
+🔵 L2 Adds
+Structural compliance:
+    • Risk Distribution
+    • Avg Discipline Index
+    • Controlled Mode Improvement Delta
+    • Execution Stability Badge
+Badge Logic:
+Stable ≥ 75
+Moderate 60–75
+High Variance < 60
+
+🟣 L3
+Same operational performance summary.
+Longitudinal analysis handled in Governance.
+
+5️⃣ EXECUTION SUMMARY (L1+)
+Hidden in L0.
+
+🟡 L1
+Cards:
+    • % Students with Repeated Behavioral Pattern
+    • Most Common Diagnostic Signal
+    • Topic with Highest Weakness Cluster
+Example:
+“32% show late-phase drop.”
+Tone:
+Neutral.
+
+🔵 L2
+Add:
+    • Risk Cluster Breakdown
+    • High-Risk Student Count
+    • Phase Compliance %
+    • Discipline Regression Alerts
+    • Controlled Mode Impact Card
+Example:
+“Controlled Mode improved Raw % by +14% this month.”
+
+6️⃣ RISK SNAPSHOT (L2+)
+Hidden in L0 & L1.
+
+🔵 L2
+Display:
+    • Risk Distribution Pie
+    • Discipline Index 7-day Trend
+    • Overstay Rate %
+    • Guess Cluster %
+Top 5 Students Requiring Attention
+(Only name + risk state — no shaming)
+
+🟣 L3
+Same risk snapshot.
+Strategic trend analysis is elsewhere.
+
+7️⃣ GOVERNANCE SNAPSHOT (L3 ONLY)
+Executive indicators only.
+
+Display
+    • Institutional Stability Index
+    • MoM Stability Change
+    • Override Frequency Trend
+    • Discipline Trajectory Arrow (↑ ↓ →)
+Mini trend sparkline.
+No student detail here.
+Purpose:
+Strategic confidence signal.
+
+8️⃣ SYSTEM HEALTH & LICENSING
+Visible to all layers.
+
+Display
+    • Current Layer Badge
+    • Eligibility Progress
+        ◦ L1 %
+        ◦ L2 %
+    • Active Student Count
+    • Peak Concurrency This Month
+    • Storage Usage (summary only)
+    • Last Archive Date
+    • Academic Year Lock Status
+Upgrade Awareness Card:
+“You are 2 tests away from L1 eligibility.”
+Must not feel sales-heavy.
+
+9️⃣ LAYER VISIBILITY MATRIX
+Component
+L0
+L1
+L2
+L3
+Operational Snapshot
+✔
+✔
+✔
+✔
+Current Activity
+✔
+✔ + Behavior
+✔ + Risk
+✔
+Performance Summary
+✔
+✔ + Diagnostic
+✔ + Discipline
+✔
+Execution Summary
+❌
+✔
+✔ Advanced
+✔
+Risk Snapshot
+❌
+❌
+✔
+✔
+Governance Snapshot
+❌
+❌
+❌
+✔
+Licensing Status
+✔
+✔
+✔
+✔
+
+🔟 PERFORMANCE RULES
+Overview must:
+    • Load < 300ms
+    • Use only summary documents
+    • Never aggregate on read
+    • Cache risk distribution daily
+    • Use small payload documents
+Firestore reads target:
+≤ 8 documents per load.
+
+1️⃣1️⃣ DATA FLOW
+On session submit:
+Session completed
+↓
+runAnalytics updated
+↓
+studentYearMetrics updated
+↓
+Pattern engine updated
+↓
+Governance accumulator updated
+↓
+Overview reflects change instantly
+No recalculation on Overview load.
+
+1️⃣2️⃣ UX PRINCIPLES
+L0:
+Operational clarity.
+L1:
+Pattern awareness.
+L2:
+Execution discipline visibility.
+L3:
+Institutional maturity confidence.
+Avoid:
+    • Chart overload
+    • Red flashing warnings
+    • Emotional labeling
+    • Excessive drill-down links
+Overview is:
+Calm.
+Fast.
+Executive.
+Layer-progressive.
+
+FINAL OVERVIEW SUMMARY
+Overview provides:
+✔ Real-time operational status
+✔ 30-day performance health
+✔ Behavioral awareness (L1)
+✔ Execution discipline insight (L2)
+✔ Institutional stability indicator (L3)
+✔ Billing & licensing visibility
+✔ Fast, summary-based UI
+Overview is the dashboard heartbeat.
+It sets the psychological tone of the platform.
+
+At this point, your Admin system specification is fully architected:
+    • Overview
+    • Students
+    • Question Bank
+    • Tests
+    • Assignments
+    • Analytics
+    • Insights
+    • Governance
+    • Licensing
+    • Settings
+Next logical engineering layer:
+    • 🔐 Full Firestore schema tree
+    • 🔌 API endpoint contract blueprint
+    • 🧠 Pattern Engine rule formalization
+    • 🏗 Microservice boundary design
+    • 📈 5-year scaling & cost model
+Tell me which layer to engineer next.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Good.
+Now I will rewrite your entire Students Section as a clean, developer-grade implementation document incorporating:
+    • Raw % + Accuracy % replacement
+    • All clarified metric formulas
+    • Correct aggregation model
+    • HOT–WARM–COLD compliance
+    • Lifecycle integrity
+    • Immutable history enforcement
+    • Layer gating
+    • Billing awareness
+    • Future calibration compatibility
+No narrative. No philosophy. Only implementable specification.
+
+🎓 ADMIN DASHBOARD — STUDENTS MODULE
+Implementation Specification v2.0
+
+0️⃣ Module Purpose
+Students Module is responsible for:
+    • Identity & onboarding
+    • Lifecycle state enforcement
+    • Year-scoped metric aggregation
+    • Risk & discipline display (layer gated)
+    • Batch cohort management
+    • Billing-relevant active count
+    • Archive-safe long-term scaling
+All analytics shown here must come from precomputed summary documents.
+Never from raw session scans.
+
+1️⃣ NAVIGATION STRUCTURE
+Students
+   ├── Student List
+   ├── Bulk Upload
+   ├── Lifecycle Management
+   ├── Student Profile
+   ├── Batch Management
+   └── Academic Year Archive
+
+2️⃣ STUDENT LIST
+Purpose
+Operational filtering and cohort-level intelligence view.
+
+2.1 Filters
+    • Academic Year (required scope)
+    • Batch
+    • Status (invited / active / inactive / archived / suspended)
+    • Avg Raw Score % range
+    • Avg Accuracy % range
+    • Score Percentile (batch-relative, optional)
+    • Risk State (L2+)
+    • Discipline Index range (L2+)
+    • Last Active Date range
+Filtering must query studentYearMetrics collection.
+
+2.2 Columns
+L0 Columns
+    • StudentID
+    • Name
+    • Batch
+    • Status
+    • Tests Attempted (current year)
+    • Avg Raw Score %
+    • Avg Accuracy %
+    • Last Active
+L1 Adds (Badges Only)
+    • Phase Adherence %
+    • Easy Neglect Rate %
+    • Hard Bias Rate %
+    • Behaviour Tag Summary (most frequent tag)
+L2 Adds
+    • Risk State Badge
+    • Discipline Index (0–100)
+    • Controlled Mode Performance Delta
+    • Guess Rate %
+    • Execution Stability Flag
+L3 same as L2 (Governance is separate).
+
+2.3 Metric Definitions (Stored in studentYearMetrics)
+All metrics are computed on session submission and aggregated.
+
+Avg Raw Score %
+For each run:
+rawPercent = (obtainedMarks / totalMarks) × 100
+Year aggregation:
+avgRawScorePercent = mean(rawPercent across runs)
+
+Avg Accuracy %
+For each run:
+accuracyPercent = (correctAnswers / attemptedQuestions) × 100
+Year aggregation:
+avgAccuracyPercent = mean(accuracyPercent across runs)
+
+Phase Adherence %
+For each run:
+phaseDeviation =
+|actualPhaseTime - recommendedPhaseTime| / recommendedPhaseTime
+
+phaseAdherenceRun =
+100 - (mean phaseDeviation × 100)
+Year:
+avgPhaseAdherence = mean(phaseAdherenceRun)
+
+Easy Neglect Rate %
+Per run:
+easyAttemptRate = easyAttempted / easyTotal
+
+if easyAttemptRate < threshold:
+   mark easyNeglectRun = 1
+else:
+   easyNeglectRun = 0
+Year:
+easyNeglectRate =
+(sum easyNeglectRun / totalRuns) × 100
+
+Hard Bias Rate %
+ExpectedHardRatio:
+expectedHardRatio =
+totalHardQuestions / totalQuestions
+DeviationAllowance:
+0.10 × expectedHardRatio
+Hard bias if:
+studentHardRatio >
+(expectedHardRatio + deviationAllowance)
+Year:
+hardBiasRate =
+(runsWithHardBias / totalRuns) × 100
+
+Behaviour Tag Summary
+For each run compute normalized scores:
+rushScore
+overextensionScore
+phaseDriftScore
+impulsivityScore
+Select highest per run.
+Year summary:
+mostFrequentTag
+
+Guess Rate %
+Per run:
+if timeSpent < (minTime × guessFactor)
+AND incorrect:
+   mark guess
+Difficulty-specific guessFactor:
+    • Easy: 0.5
+    • Medium: 0.6
+    • Hard: 0.7
+Run guessRate:
+guesses / totalAttempted
+Year:
+avgGuessRate = mean(guessRate)
+
+Risk Score
+Normalized components 0–1.
+riskScore =
+0.30 × guessRate +
+0.20 × phaseDeviation +
+0.20 × easyNeglectRate +
+0.15 × hardBiasRate +
+0.15 × consecutiveWrongRate
+Convert:
+normalizedRiskScore = riskScore × 100
+
+Discipline Index
+disciplineIndex = 100 - normalizedRiskScore
+
+Controlled Mode Performance Delta
+If ≥ 3 runs in each mode:
+delta =
+avgRawPercentControlled -
+avgRawPercentUncontrolled
+Else null.
+
+Execution Stability Flag
+stdDev = standardDeviation(rawPercent across runs)
+Bands:
+    • Low → Stable
+    • Medium → Moderate
+    • High → Unstable
+
+3️⃣ BULK UPLOAD
+Flow
+Upload → Validate → Duplicate Resolve → Confirm → Create Accounts
+
+Required Fields
+    • StudentID
+    • FullName
+    • Email
+    • Batch
+Optional:
+    • ParentEmail
+    • Class
+    • Phone
+    • EnrollmentYear
+
+Validation
+    1. Column validation
+    2. Duplicate StudentID in file
+    3. Duplicate email in file
+    4. DB-level StudentID match
+    5. DB-level email mismatch conflict
+
+Reupload Logic
+Match by StudentID:
+If exists:
+    • Update mutable fields
+    • Preserve sessions
+    • Preserve metrics
+Optional checkbox:
+“Deactivate students not in file”
+Used for roster sync.
+
+Account Creation
+After confirmation only:
+    • Create Firebase Auth user
+    • Set custom claims
+    • Create Firestore student doc
+    • Send onboarding email
+Atomic transaction.
+
+4️⃣ LIFECYCLE MANAGEMENT
+States
+    • invited
+    • active
+    • inactive
+    • archived
+    • suspended
+
+Rules
+    • archived excluded from billing
+    • archived included in historical analytics
+    • deletion allowed only if totalRuns = 0
+    • lifecycle transitions logged
+
+5️⃣ STUDENT PROFILE
+L0
+    • Profile info
+    • Test history
+    • Combo chart:
+        ◦ Avg Raw %
+        ◦ Avg Accuracy %
+    • Rank in batch
+
+L1
+    • Phase adherence trend
+    • Easy neglect frequency
+    • Hard bias frequency
+    • Topic Weakness Summary
+    • Time Misallocation Summary
+
+Topic Weakness Summary
+Per topic:
+topicAccuracy =
+correctTopic / attemptedTopic
+If < threshold → mark weak.
+Aggregate by frequency.
+
+Time Misallocation
+Compare:
+actualTimePerDifficulty
+vs
+recommendedTimePerDifficulty
+Display deviation %.
+
+L2
+    • Risk state timeline
+    • Discipline trend
+    • Guess rate trend
+    • MinTime Violation %
+    • MaxTime Violation %
+    • Controlled Mode Delta
+    • Override Records
+
+MinTime Violation %
+minTimeViolations / totalQuestionsAttempted × 100
+
+MaxTime Violation %
+Hard Mode only:
+maxTimeExceeded / totalQuestions × 100
+
+Override Records
+Count of:
+    • Early termination
+    • Manual submission
+    • Phase override
+    • Hard mode exit override
+Stored per run.
+
+6️⃣ BATCH MANAGEMENT
+Batch summary must show:
+    • Student Count
+    • Avg Raw Score %
+    • Avg Accuracy %
+    • Avg Discipline Index (L2+)
+    • Risk Distribution (L2+)
+Never show raw marks.
+
+7️⃣ ACADEMIC YEAR ARCHIVE
+30-Day Warning Banner
+Display countdown:
+“Academic Year Ends in X Days”
+
+On Archive
+System:
+    1. Lock year (read-only)
+    2. Export sessions to BigQuery
+    3. Snapshot governance metrics
+    4. Archive graduating batches
+    5. Reset rolling metrics for new year
+
+After Archive
+Accessible:
+    • Student summaries
+    • Governance snapshots
+    • Read-only profiles
+Disabled:
+    • Assignments
+    • Test edits
+    • Student mutations
+    • Template mutations
+
+8️⃣ DATA MODEL
+HOT
+institutes/{id}/students/{studentId}
+Contains:
+    • identity
+    • status
+    • billing-relevant flags
+
+WARM
+academicYears/{year}/studentYearMetrics/{studentId}
+Contains:
+    • avgRawScorePercent
+    • avgAccuracyPercent
+    • avgPhaseAdherence
+    • easyNeglectRate
+    • hardBiasRate
+    • guessRate
+    • disciplineIndex
+    • riskState
+    • controlledDelta
+    • stabilityFlag
+
+COLD
+Raw sessions → BigQuery only.
+Firestore retains summaries only.
+
+9️⃣ PERFORMANCE RULES
+Never:
+    • Query all sessions for aggregation
+    • Compute averages on read
+    • Store session arrays in student doc
+Always:
+    • Update metrics on submission
+    • Store yearly aggregates
+    • Paginate list queries
+    • Index filters
+
+🔟 LAYER VISIBILITY MATRIX
+Feature
+L0
+L1
+L2
+L3
+Student List Basic
+✔
+✔
+✔
+✔
+Behaviour Indicators
+❌
+✔
+✔
+✔
+Risk & Discipline
+❌
+❌
+✔
+✔
+Controlled Delta
+❌
+❌
+✔
+✔
+Lifecycle Mgmt
+✔
+✔
+✔
+✔
+
+1️⃣1️⃣ BILLING LOGIC
+Active count:
+students where status == active
+Archived excluded.
+
+1️⃣2️⃣ FINAL STRUCTURAL GUARANTEES
+Students Module:
+✔ Normalized performance metrics
+✔ Immutable historical data
+✔ Year-scoped aggregation
+✔ Layer-gated visibility
+✔ Billing-safe lifecycle
+✔ Calibration-ready
+✔ No heavy read operations
+✔ 10-year scalable
+
+This is now developer-ready.
+Next module to formalize?
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Good.
+Now I will rewrite your Question Bank Section into a clean, implementation-ready specification that incorporates:
+    • Wizard-based sample download
+    • Exam-aware schema simplification
+    • Locked structural fields
+    • Editable flexible fields
+    • Versioning enforcement
+    • Tag discipline
+    • HOT–WARM–COLD alignment
+    • Immutable historical safety
+    • Developer-ready logic separation
+No philosophy. Only system design.
+
+📚 ADMIN DASHBOARD — QUESTION BANK MODULE
+Implementation Specification v2.0
+
+0️⃣ MODULE PURPOSE
+Question Bank is internal content infrastructure.
+Responsibilities:
+    • Structured ingestion (ZIP + Excel + Images)
+    • Exam-aware schema enforcement
+    • Difficulty tagging discipline
+    • Immutable structural logic
+    • Version-safe editing
+    • Filter-ready metadata
+    • Question-level analytics aggregation
+    • Long-term storage safety
+Students never access this collection directly.
+
+1️⃣ NAVIGATION STRUCTURE
+Question Bank
+   ├── Upload Package
+   ├── Question Library
+   ├── Distribution Overview
+   ├── Validation Logs
+   ├── Tag Management
+   └── Archive / Versions
+
+2️⃣ UPLOAD PACKAGE
+2.1 Primary UI
+Two buttons only:
+[ Download Sample ]
+[ Upload ZIP ]
+Clean separation.
+
+2.2 Download Sample — Wizard Flow
+Step 1: Choose Exam Type
+Dropdown:
+    • JEE Mains
+    • NEET
+    • Other
+
+Step 2 (Conditional)
+If JEE Mains:
+Select Subject:
+    • Physics
+    • Chemistry
+    • Mathematics
+If NEET:
+Select Subject:
+    • Physics
+    • Chemistry
+    • Biology
+If Other:
+No subject lock.
+
+2.3 Generated Sample Excel Structure
+
+Case A — JEE / NEET (Simplified Schema)
+Columns EXCLUDED:
+    • Exam
+    • Subject
+    • Marks
+    • NegativeMarks
+Marking scheme auto-applied:
+Correct: +4
+Incorrect: -1
+These are stored in template metadata during upload.
+
+Required Columns
+    • UniqueKey
+    • ChapterName
+    • Difficulty (Easy / Medium / Hard)
+    • QuestionType
+    • QuestionNo
+    • QuestionImageFile
+    • SolutionImageFile
+    • CorrectAnswer
+    • PrimaryTag
+    • SecondaryTag
+
+Optional Columns (Included in Sample)
+    • Topic
+    • TutorialVideoLink
+    • SimulationLink
+    • AdditionalTag
+    • InternalNotes
+These appear in Student Portal after test (L0+).
+
+Case B — Other Exam
+Full schema:
+    • Exam
+    • Subject
+    • Marks
+    • NegativeMarks
+    • All metadata fields
+
+2.4 Excel Workbook Structure
+Workbook must contain:
+Sheet 1: questions
+Sheet 2: Exam Summary
+Sheet 3: INSTRUCTIONS
+
+Exam Summary Sheet
+Displays:
+    • Selected Exam
+    • Selected Subject
+    • Marking Scheme
+    • Difficulty definitions
+    • ZIP creation instructions
+
+INSTRUCTIONS Sheet
+Must include:
+    • Column-by-column explanation
+    • Allowed values
+    • Examples
+    • Image naming rules
+    • ZIP packaging steps
+    • Common error list
+This reduces support load.
+
+3️⃣ Upload ZIP Flow
+Step 1 — Upload ZIP
+Extract:
+    • questions.xlsx
+    • Question images
+    • Solution images
+Reject if nested folders exist.
+
+Step 2 — Schema Validation
+Row-level validation:
+Required fields present
+Allowed difficulty values
+CorrectAnswer format valid
+UniqueKey non-empty
+Errors must be:
+    • Row-specific
+    • Human-readable
+    • Downloadable CSV
+No partial commit.
+
+Step 3 — Image Validation
+For each row:
+    • QuestionImageFile exists
+    • SolutionImageFile exists
+    • File names match Excel
+No external URLs allowed.
+
+Step 4 — Duplicate Handling
+Check:
+    • Duplicate UniqueKey in upload
+    • Existing UniqueKey in database
+Rules:
+If question never used → allow overwrite
+If question used in assigned run → block structural overwrite
+
+Step 5 — Distribution Preview
+Before import, show:
+    • Easy / Medium / Hard %
+    • Chapter balance
+    • Marks balance
+    • Missing difficulty warnings
+    • Extreme imbalance warning
+
+Step 6 — Confirm Import
+Atomic commit:
+institutes/{id}/questions/{questionId}
+Images stored:
+CloudStorage/{instituteId}/questionBank/{questionId}/
+
+4️⃣ QUESTION LIBRARY
+4.1 Filters
+    • Exam
+    • Subject
+    • Chapter
+    • Difficulty
+    • QuestionType
+    • PrimaryTag
+    • SecondaryTag
+    • AdditionalTag
+    • Used in Template (Yes/No)
+    • Academic Year (optional)
+All indexed.
+
+4.2 Columns
+    • UniqueKey
+    • Subject
+    • Chapter
+    • Difficulty Badge
+    • Marks
+    • Used Count
+    • Last Used Date
+    • Version
+    • Status
+
+5️⃣ IMMUTABILITY RULES
+5.1 Structural Fields (Locked After Assignment)
+Cannot edit if question used in any assigned run:
+    • UniqueKey
+    • Difficulty
+    • Marks
+    • NegativeMarks
+    • QuestionType
+    • QuestionImageFile
+    • CorrectAnswer
+    • Exam
+    • Subject
+UI shows lock icon with tooltip:
+“Locked: Used in assigned test.”
+
+5.2 Flexible Fields (Editable with Warning)
+Editable even if used:
+    • SolutionImageFile
+    • TutorialVideoLink
+    • SimulationLink
+    • PrimaryTag
+    • SecondaryTag
+    • AdditionalTag
+    • Topic
+    • InternalNotes
+Show warning:
+“Changes affect future solution view only. Past scoring unaffected.”
+
+6️⃣ VERSIONING MODEL
+If structural change required:
+System must:
+    1. Duplicate question
+    2. Increment version
+    3. Generate new internal ID
+    4. Mark old as deprecated
+    5. Prevent new templates from using deprecated version (optional toggle)
+Never mutate question used in completed run.
+Each run stores:
+questionVersionId
+Ensures 10-year audit integrity.
+
+7️⃣ DISTRIBUTION OVERVIEW
+Displays:
+L0
+    • Global difficulty distribution
+    • Chapter coverage heatmap
+    • Marks distribution chart
+L2 Adds
+    • Overstay frequency per difficulty
+    • Guess rate per difficulty
+    • Risk impact per chapter
+    • Discipline stress per chapter
+All derived from questionAnalytics collection.
+
+8️⃣ VALIDATION LOGS
+Store:
+institutes/{id}/questionUploadLogs/{uploadId}
+Fields:
+    • uploadedBy
+    • timestamp
+    • totalRows
+    • errors
+    • warnings
+    • versionCreated
+Logs immutable.
+Rollback allowed only if:
+    • Questions unused in any assigned template.
+
+9️⃣ TAG MANAGEMENT
+Tag operations allowed:
+    • Create
+    • Rename
+    • Merge
+    • Deprecate
+Cannot delete tag if used in active template.
+Tag updates affect:
+    • Future analytics
+    • Not historical run snapshots
+No retroactive recalculation.
+
+🔟 QUESTION ANALYTICS
+Stored separately:
+questionAnalytics/{questionId}
+Contains:
+    • avgRawPercentWhenUsed
+    • avgAccuracyWhenUsed
+    • guessRate
+    • overstayRate
+    • riskImpactScore
+    • disciplineStressIndex
+Updated on session submission.
+Never calculated on read.
+
+1️⃣1️⃣ HOT–WARM–COLD MODEL
+HOT
+Questions used current year.
+WARM
+Unused recently but active.
+COLD
+Unused > 2 years.
+Images moved to archive storage bucket.
+Metadata retained.
+Never delete questions tied to historical runs.
+
+1️⃣2️⃣ SECURITY RULES
+    • Students cannot query questionBank.
+    • Question editing disabled if assigned.
+    • Versioning enforced server-side.
+    • Upload requires admin role.
+
+1️⃣3️⃣ PERFORMANCE RULES
+Never:
+    • Load full image in table view
+    • Query without filter
+    • Recompute distributions on page load
+Always:
+    • Use indexed filters
+    • Paginate library
+    • Precompute questionAnalytics
+    • Lazy-load image preview
+
+1️⃣4️⃣ LAYER VISIBILITY MATRIX
+Feature
+L0
+L1
+L2
+L3
+Upload
+✔
+✔
+✔
+✔
+Library Basic
+✔
+✔
+✔
+✔
+Question Analytics
+❌
+✔ Basic
+✔ Advanced
+✔
+Risk Impact
+❌
+❌
+✔
+✔
+
+1️⃣5️⃣ FINAL GUARANTEES
+Question Bank Module:
+✔ Exam-aware upload wizard
+✔ Simplified JEE/NEET schema
+✔ Rich metadata support
+✔ Immutable structural fields
+✔ Version-safe editing
+✔ Tag governance discipline
+✔ Filter-ready metadata
+✔ Analytics-ready structure
+✔ HOT–WARM–COLD aligned
+✔ 10-year audit safe
+
+Next module to formalize?
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Good.
+Now I will refine and extend your Tests Section to incorporate:
+    • Deterministic + statistical question selection (X → Y logic)
+    • Canonical ID generation & duplicate detection
+    • Structural immutability enforcement
+    • Randomized question order at assignment level
+    • % Raw Score + % Accuracy normalization (no raw score anywhere)
+    • Snapshot-based safety for 10-year integrity
+    • Clear separation between template logic and assignment logic
+This will be developer-ready.
+
+🧩 ADMIN DASHBOARD — TESTS SECTION
+Structural Template Engine Specification v2.0
+
+0️⃣ Core Principle
+Tests = Structural Templates
+Assignments = Execution Instances
+A Test template:
+    • Freezes question set
+    • Freezes difficulty distribution
+    • Freezes timing profile
+    • Freezes phase configuration
+    • Freezes marking scheme
+    • Generates canonical identity
+After first assignment → structure immutable.
+
+1️⃣ NAVIGATION STRUCTURE
+Tests
+   ├── Create Test
+   ├── Test Library
+   ├── Template Analytics
+   ├── Distribution Review
+   └── Template Settings
+
+2️⃣ TESTS → CREATE TEST
+Step 1 — Question Pool Selection
+Teacher applies filters:
+    • Subject
+    • Chapter
+    • Difficulty
+    • Tags
+    • QuestionType
+    • Academic Year
+    • Unused / Used
+    • Custom filters
+System returns:
+X total questions matched
+Now teacher chooses:
+Generate test with Y questions (Y ≤ X)
+
+3️⃣ X → Y SELECTION MECHANISM
+Teacher must select one of the following:
+
+3.1 Deterministic Manual Selection
+UI shows filtered list.
+Teacher manually selects Y questions.
+Use case:
+    • Curated test
+    • Specific concept emphasis
+Store:
+selectionMethod = "manual"
+
+3.2 Statistical Selection Options
+3.2.1 Shuffle + Slice
+    • Shuffle X
+    • Take first Y
+selectionMethod = "shuffle_slice"
+
+3.2.2 Offset + Limit (Slice)
+    • Sorted list (e.g., by createdAt or difficulty)
+    • Take from offset N to N+Y
+selectionMethod = "offset_limit"
+Useful for segmented tests.
+
+3.2.3 Round Robin
+If multiple subjects selected:
+Distribute evenly across:
+    • Subjects
+    • Chapters
+    • Difficulty
+Algorithm:
+For each category:
+    pick 1 question cyclically
+until Y reached
+Ensures structural balance.
+selectionMethod = "round_robin"
+
+4️⃣ CANONICAL TEMPLATE ID (CRITICAL)
+After Y questions finalized:
+Sort question IDs ascending.
+Generate canonical string:
+hash = SHA256(concatenatedQuestionIds)
+Store as:
+canonicalId
+Before saving template:
+Check:
+Does canonicalId already exist?
+If yes:
+Show teacher:
+“Duplicate template detected. Existing template: TEST_023”
+Teacher may:
+    • Reuse existing template
+    • Continue and create duplicate intentionally
+This prevents silent structural duplication.
+
+5️⃣ STEP 2 — Select Exam Type
+Exam Type determines:
+    • Marking scheme
+    • Default timing windows
+    • Default section structure
+    • Difficulty timing mapping
+No manual marks entry allowed for JEE/NEET.
+All stored in template snapshot.
+
+6️⃣ STEP 3 — Set Duration
+Admin sets totalDuration.
+System computes:
+If L2:
+    • Recommended per-difficulty timing
+    • Phase distribution preview
+
+7️⃣ STEP 4 — Mode Capability
+Mode defines allowed execution modes at assignment time.
+Layer
+Allowed Modes
+L0
+Operational
+L1
+Operational + Diagnostic
+L2
+Operational + Diagnostic + Controlled + Hard
+L3
+Same as L2
+Important:
+Mode here defines capability ceiling.
+Actual mode selected during assignment.
+Store:
+allowedModes: []
+
+8️⃣ STEP 5 — Adaptive Phase Snapshot (L2+)
+Using difficulty weights:
+Easy = 1
+Medium = 2.3
+Hard = 4
+Compute load:
+totalLoad = Σ(weight × count)
+Compute recommended phase split.
+Store immutable snapshot:
+phaseConfigSnapshot
+After assignment → locked forever.
+
+9️⃣ STEP 6 — Timing Profile Snapshot (L2+)
+Derived from exam type.
+Example:
+Difficulty
+MinTime
+MaxTime
+Easy
+30s
+60s
+Medium
+60s
+150s
+Hard
+150s
+210s
+Stored in:
+timingProfile
+Never modified post-assignment.
+
+🔟 STEP 7 — Confirm & Save
+Initial status:
+draft
+After confirmation:
+ready
+After first assignment:
+assigned
+Structural edits locked.
+
+11️⃣ TEST LIBRARY
+Columns:
+    • Template Name
+    • Exam Type
+    • Total Questions
+    • Difficulty Distribution Badge
+    • Phase Config Badge (L2)
+    • Mode Capability
+    • Canonical ID (hidden in UI)
+    • Total Runs
+    • Last Used
+    • Status
+
+12️⃣ TEMPLATE STATUS MACHINE
+draft → ready → assigned → archived
+                ↓
+            deprecated
+Rules:
+    • draft → editable
+    • ready → editable
+    • assigned → structure locked
+    • archived → hidden
+    • deprecated → excluded from future comparisons
+
+13️⃣ RANDOMIZATION AT ASSIGNMENT LEVEL
+Important separation.
+Template contains fixed question set.
+At assignment stage:
+Teacher may enable:
+Shuffle Question Order = ON/OFF
+This:
+    • Shuffles display order
+    • Does NOT change canonicalId
+    • Does NOT change structural identity
+    • Does NOT affect analytics normalization
+Each session stores:
+displayOrderMap
+Ensures fairness.
+
+14️⃣ TEMPLATE ANALYTICS
+Cross-run evaluation.
+All metrics must use:
+    • Avg Raw Score %
+    • Avg Accuracy %
+    • Never raw marks.
+L1:
+    • Avg Raw %
+    • Avg Accuracy %
+    • Run count
+L2:
+    • Phase adherence variance
+    • Risk distribution shift
+    • Stability variance
+    • Discipline stress score
+    • Controlled vs Uncontrolled delta
+All aggregated in:
+templateAnalytics/{testId}
+Never recompute from sessions on read.
+
+15️⃣ DISTRIBUTION REVIEW
+Displays:
+    • Difficulty %
+    • Chapter coverage
+    • Marks distribution
+    • Section balance
+L2 adds:
+    • Estimated stress index
+    • Phase load preview
+    • Risk prediction preview
+Purely structural view.
+
+16️⃣ DATA MODEL
+institutes/{id}/tests/{testId}
+{
+  name,
+  canonicalId,
+  examType,
+  totalQuestions,
+  questionIds[],
+  difficultyDistribution,
+  phaseConfigSnapshot,
+  timingProfile,
+  allowedModes[],
+  selectionMethod,
+  totalRuns,
+  status,
+  createdAt
+}
+No session data embedded.
+
+17️⃣ HOT–WARM–COLD MODEL
+HOT:
+Templates used current year.
+WARM:
+Templates unused but recent.
+COLD:
+Unused > 2 years.
+Metadata retained.
+Images may move to archive bucket.
+Never delete template with historical runs.
+
+18️⃣ SECURITY RULES
+    • Students never access template directly.
+    • Session always references templateId.
+    • Structural fields locked post-assignment.
+    • Mode capability cannot be downgraded post-assignment.
+
+19️⃣ PERFORMANCE RULES
+Never:
+    • Query sessions inside Tests section.
+    • Compute distribution dynamically.
+    • Rebuild canonicalId on read.
+Always:
+    • Store difficultyDistribution snapshot.
+    • Store question count snapshot.
+    • Increment totalRuns via atomic counter.
+
+20️⃣ LAYER VISIBILITY
+Feature
+L0
+L1
+L2
+L3
+Create Test
+✔
+✔
+✔
+✔
+Phase Preview
+❌
+❌
+✔
+✔
+Timing Profile
+❌
+❌
+✔
+✔
+Template Analytics
+❌
+✔ Basic
+✔ Advanced
+Same
+Randomization Toggle
+✔
+✔
+✔
+✔
+
+21️⃣ SCORE REPLACEMENT RULE (GLOBAL ENFORCEMENT)
+Throughout Tests module:
+Replace:
+❌ Avg Score
+With:
+✔ Avg Raw Score %
+✔ Avg Accuracy %
+No raw score anywhere in UI or analytics.
+This makes system structurally normalized across:
+    • Chapter tests
+    • Combined tests
+    • Full mocks
+Correct architectural decision.
+
+22️⃣ FINAL TESTS MODULE SUMMARY
+Tests module now:
+✔ Supports X → Y intelligent selection
+✔ Prevents structural duplication via canonicalId
+✔ Snapshots difficulty + timing + phase
+✔ Enforces immutability post-assignment
+✔ Supports shuffle at assignment only
+✔ Uses % Raw + % Accuracy everywhere
+✔ Stores analytics separately
+✔ HOT–WARM–COLD aligned
+✔ 10-year governance safe
+Tests define structure.
+Assignments execute structure.
+Analytics measure execution.
+Insights interpret patterns.
+Governance evaluates maturity.
+
+If you want next, we can refine:
+    • Assignment section (execution instance logic)
+    • Test Portal execution engine
+    • Cross-run stability scoring mathematics
+    • Licensing thresholds based on template maturity
+    • Or full database schema mapping
+Tell me the next module to harden.
+
+
+
+
+
+
+
+
+
+
+Good.
+Now I will refine and harden your Assignments Section to:
+    • Enforce structural immutability strictly
+    • Integrate shuffle-at-assignment logic cleanly
+    • Enforce % Raw Score + % Accuracy everywhere
+    • Make lifecycle state machine unambiguous
+    • Align with HOT–WARM–COLD storage
+    • Prevent hidden mutation risks
+    • Be safe for 10+ years with 100+ institutes
+This is the execution core of Parabolic.
+
+📌 ADMIN DASHBOARD — ASSIGNMENTS SECTION
+Execution Instance Engine Specification v2.0
+
+0️⃣ CORE PRINCIPLE
+Assignment = Timestamped Execution Instance of a Test Template.
+Assignment does NOT modify template.
+Assignment creates:
+Run
+ └── Sessions (per student)
+      └── Attempt data
+Each assignment generates a unique:
+runId
+Even if same template reused.
+
+1️⃣ NAVIGATION STRUCTURE
+Assignments
+   ├── Create Assignment
+   ├── Assignment List
+   ├── Live Monitor
+   ├── Assignment History
+   └── Bulk Operations
+
+2️⃣ CREATE ASSIGNMENT FLOW
+Creates:
+institutes/{id}/academicYears/{year}/runs/{runId}
+Initial state:
+status = scheduled
+
+STEP 1 — Select Test Template
+Dropdown displays:
+    • Template Name
+    • Exam Type
+    • Difficulty Distribution
+    • Allowed Modes
+    • Canonical ID (hidden)
+    • Last Used
+Template must be:
+status ∈ {ready, assigned}
+Cannot assign draft.
+
+STEP 2 — Select Mode (Layer-Aware)
+Mode selection is execution behavior selector.
+Layer
+Modes
+L0
+Operational
+L1
+Operational / Diagnostic
+L2
+Operational / Diagnostic / Controlled / Hard
+L3
+Same as L2
+Mode selection locks:
+    • Phase engine activation
+    • Timing enforcement
+    • Alert engine configuration
+    • Min/Max enforcement
+    • Revisit rules
+    • Early submit policy
+Store in run snapshot:
+modeSnapshot
+Cannot change after activation.
+
+STEP 3 — Select Recipients
+Options:
+    • Entire batch
+    • Multiple batches
+    • Individual students
+    • Filter by:
+        ◦ Risk State (L2+)
+        ◦ Discipline Index Range (L2+)
+        ◦ Avg Raw % range
+        ◦ Avg Accuracy % range
+        ◦ Performance percentile (optional)
+Important:
+Only students with:
+status == active
+are eligible.
+Recipient list stored explicitly:
+recipientStudentIds[]
+Never dynamically computed after creation.
+
+STEP 4 — Time Window
+Fields:
+    • startWindow
+    • endWindow
+    • timezone
+Optional:
+    • attemptLimit (default = 1)
+    • gracePeriod (minutes)
+    • Shuffle Question Order (boolean)
+Shuffle logic:
+Only changes display order.
+Does NOT change canonical structure.
+
+STEP 5 — Confirmation Screen
+Displays snapshot:
+    • Template name
+    • Mode
+    • Phase config snapshot
+    • Timing profile snapshot
+    • Recipient count
+    • Window
+    • Academic year
+    • Shuffle status
+After confirm:
+status = scheduled
+Immutable fields from this point:
+    • testId
+    • modeSnapshot
+    • phaseConfigSnapshot
+    • timingProfileSnapshot
+    • canonicalId
+    • academicYear
+
+3️⃣ ASSIGNMENT STATE MACHINE
+scheduled → active → collecting → completed → archived
+                    ↓
+                cancelled
+                    ↓
+                terminated
+
+scheduled
+Window in future.
+Editable:
+    • Start time
+    • End time
+    • Recipients (before activation only)
+
+active
+Current time within window.
+Sessions may start.
+No structural edits allowed.
+
+collecting
+Some sessions still ongoing (window expired but grace active).
+
+completed
+All sessions ended.
+Analytics finalized.
+Immutable.
+
+archived
+Visibility only change.
+No data mutation.
+
+cancelled
+Before activation.
+No sessions allowed.
+
+terminated
+Manually stopped during active.
+All open sessions force submitted.
+
+4️⃣ ASSIGNMENT LIST
+Filters:
+    • Academic Year
+    • Status
+    • Mode
+    • Batch
+    • Date range
+
+L0 Columns
+    • Run Name
+    • Template
+    • Mode
+    • Start
+    • End
+    • Completion %
+    • Avg Raw Score %
+    • Avg Accuracy %
+No raw marks anywhere.
+
+L1 Adds
+    • Avg Phase Adherence %
+    • Easy Neglect %
+    • Hard Bias %
+    • Behavior Summary Badge
+
+L2 Adds
+    • Risk Distribution Summary
+    • Avg Discipline Index
+    • Controlled Compliance %
+    • Guess Rate %
+    • Execution Stability Badge
+    • Override Count
+All metrics read from:
+runAnalytics/{runId}
+Never computed from sessions live.
+
+5️⃣ LIVE MONITOR
+Visible only when:
+status == active
+
+L0
+Per student row:
+    • Name
+    • Progress %
+    • Time Remaining
+    • Submitted / In Progress
+
+L1 Adds
+    • Current Phase
+    • Pacing Drift Flag
+    • Skip Burst Flag
+    • Rapid Guess Flag
+Flags derived from session snapshot updated every few seconds.
+
+L2 Adds
+    • MinTime Violations (live counter)
+    • MaxTime Violations (Hard mode)
+    • Consecutive Wrong Indicator
+    • Provisional Risk Score
+    • Controlled Compliance %
+Color coding:
+    • Green → Stable
+    • Yellow → Drift
+    • Red → High Risk
+Important:
+No question content visible.
+
+6️⃣ ASSIGNMENT HISTORY
+Historical runs.
+Columns:
+    • Run Name
+    • Mode
+    • Avg Raw %
+    • Avg Accuracy %
+    • Risk Distribution
+    • Stability Index
+    • Discipline Index
+    • Completion %
+Immutable.
+Read-only.
+
+7️⃣ BULK OPERATIONS
+Available:
+    • Duplicate Run (new runId)
+    • Extend Window (if active)
+    • Cancel (if scheduled)
+    • Terminate (if active)
+    • Archive
+    • Export Run Summary (CSV / PDF)
+    • Resend Notification Email
+    • Reassign to different batch (creates new runId)
+Never modify existing run to serve new batch.
+Always create new runId.
+
+8️⃣ RUN DATA MODEL
+institutes/{id}/academicYears/{year}/runs/{runId}
+{
+  testId,
+  canonicalId,
+  modeSnapshot,
+  phaseConfigSnapshot,
+  timingProfileSnapshot,
+  shuffleEnabled,
+  recipientStudentIds[],
+  startWindow,
+  endWindow,
+  attemptLimit,
+  status,
+  academicYear,
+  createdAt
+}
+
+9️⃣ SESSION MODEL
+runs/{runId}/sessions/{sessionId}
+{
+  studentId,
+  startTime,
+  endTime,
+  status,
+  answers[],
+  difficultyTimeSpent[],
+  phaseTimes[],
+  minTimeViolations,
+  maxTimeViolations,
+  guessCount,
+  overrideFlags,
+  rawScorePercent,
+  accuracyPercent,
+  phaseAdherencePercent,
+  disciplineScoreSnapshot,
+  riskScoreSnapshot
+}
+Session immutable after submission.
+
+🔟 RUN ANALYTICS MODEL
+Stored separately:
+runAnalytics/{runId}
+{
+  avgRawScorePercent,
+  avgAccuracyPercent,
+  avgPhaseAdherence,
+  easyNeglectPercent,
+  hardBiasPercent,
+  guessRatePercent,
+  riskDistribution,
+  avgDisciplineIndex,
+  stabilityVariance,
+  controlledCompliancePercent,
+  overrideCount,
+  totalParticipants
+}
+Computed once after completion.
+Never recomputed dynamically.
+
+11️⃣ HOT–WARM–COLD STRATEGY
+HOT
+Active runs + active sessions.
+WARM
+Completed runs (current academic year).
+COLD
+Past academic year:
+    • Sessions exported to BigQuery
+    • runAnalytics retained
+    • Session collections optionally deleted from Firestore
+    • Year marked archived
+This prevents Firestore bloat.
+
+12️⃣ SECURITY RULES
+Assignment must enforce:
+    • One active session per student per run
+    • Server-authoritative timer
+    • Window enforcement server-side
+    • Signed session token
+    • No direct exam link via email
+    • Portal-based entry only
+    • Session cannot change mode mid-run
+    • Student cannot modify shuffle
+
+13️⃣ SCORE NORMALIZATION RULE
+Across Assignment module:
+Always display:
+    • Avg Raw Score %
+    • Avg Accuracy %
+Never display:
+    • Raw marks
+    • Total marks comparison
+Normalization protects:
+    • Chapter tests
+    • Full mocks
+    • Mixed difficulty tests
+
+14️⃣ DESIGN PRINCIPLES
+Assignment Section must:
+    • Be state-driven
+    • Lock structure early
+    • Avoid session scanning queries
+    • Use precomputed analytics
+    • Separate structural vs operational concerns
+    • Preserve audit integrity
+    • Scale horizontally across institutes
+
+15️⃣ FINAL ASSIGNMENT MODULE SUMMARY
+Assignment module now:
+✔ Creates timestamped run instances
+✔ Snapshots structural configuration
+✔ Enforces strict state machine
+✔ Supports shuffle safely
+✔ Uses % Raw + % Accuracy everywhere
+✔ Provides live discipline monitoring
+✔ Locks structure after activation
+✔ Stores analytics separately
+✔ HOT–WARM–COLD aligned
+✔ 10-year governance safe
+Tests define structure.
+Assignments execute structure.
+Sessions capture behavior.
+Analytics summarize execution.
+Insights interpret patterns.
+Governance evaluates maturity.
+
+If you want next, we can now harden:
+    • Test Portal execution engine (most critical part)
+    • Analytics section UI hierarchy
+    • Insights + AI summary integration
+    • Governance longitudinal model
+    • Full database schema map (all collections)
+Tell me the next layer to engineer.
+
+
+
+
+
+
+
+
+Good.
+Now I will harden and refine your Analytics Section into a strict, implementation-ready architecture that:
+    • Enforces % Raw Score + % Accuracy everywhere
+    • Maps cleanly to Session → Run → Template → Year levels
+    • Uses only precomputed aggregates
+    • Prevents heavy reads
+    • Keeps Governance isolated
+    • Supports 10-year scaling
+No conceptual repetition. Only structural clarity.
+
+📊 ADMIN DASHBOARD — ANALYTICS SECTION
+Production UI + Data Architecture v2.0
+
+0️⃣ ANALYTIC HIERARCHY (Non-Negotiable)
+All analytics must map to one of these layers:
+Level
+Source
+Scope
+Session
+session doc
+Single attempt
+Run
+runAnalytics
+Single assignment instance
+Template
+templateAnalytics
+Cross-run structural quality
+Year
+studentYearMetrics / yearSummary
+Longitudinal view
+Analytics module uses:
+    • runAnalytics
+    • studentYearMetrics
+    • templateAnalytics
+    • yearSummarySnapshots
+Never raw session scans.
+
+1️⃣ ANALYTICS → OVERVIEW
+Data Source
+yearSummary/{academicYear}
+Precomputed nightly or on run completion.
+
+🟢 L0 — Operational Snapshot
+Cards:
+    • Total Runs (Current Year)
+    • Avg Raw Score %
+    • Avg Accuracy %
+    • Completion Rate %
+    • Active Students Count
+Charts:
+    • Raw Score % distribution histogram
+    • Accuracy % distribution histogram
+    • Last 5 runs summary list
+No behavior, no risk.
+
+🟡 L1 — Diagnostic Snapshot
+Add:
+    • Avg Phase Adherence %
+    • Easy Neglect %
+    • Hard Bias %
+    • Topic Performance Heatmap
+    • Time Misallocation Index
+Behavior Summary Card:
+    • % Rushed
+    • % Hard Fixation
+    • % Topic Avoidance
+These are aggregates from:
+yearSummary.behaviorSummary
+
+🔵 L2 — Execution Snapshot
+Add:
+    • Risk Distribution Pie
+    • Avg Discipline Index
+    • Controlled Mode Usage %
+    • Guess Rate Cluster %
+    • Execution Stability Index
+Execution Stability Index defined as:
+1 - variance(normalizedRiskScore across runs)
+Stored precomputed.
+
+🟣 L3
+Same as L2.
+Governance-level cross-year comparison excluded here.
+
+2️⃣ ANALYTICS → BY TEST RUN
+Filter by:
+    • Academic Year
+    • Mode
+    • Batch
+    • Date Range
+Loads:
+runAnalytics/{runId}
+Never sessions.
+
+🟢 L0
+Metrics:
+    • Avg Raw Score %
+    • Avg Accuracy %
+    • Median Raw %
+    • Std Deviation
+    • Completion %
+Charts:
+    • Raw % histogram
+    • Accuracy % histogram
+    • Section-wise Accuracy %
+
+🟡 L1
+Add:
+    • Avg Phase Adherence %
+    • Easy Neglect %
+    • Hard Bias %
+    • Topic Heatmap
+    • Time Misallocation %
+Behavior Distribution Bar Chart:
+    • Rushed %
+    • Overextended %
+    • Drift-Prone %
+
+🔵 L2
+Add:
+    • Risk Cluster Distribution
+    • Discipline Index Distribution
+    • MinTime Violation %
+    • MaxTime Violation % (Hard only)
+    • Guess Rate %
+    • Controlled Compliance %
+Execution Compliance Panel:
+    • % followed recommended phase split
+    • % pacing guardrail violations
+    • % structural override
+All from:
+runAnalytics
+
+3️⃣ ANALYTICS → BY STUDENT
+Filter:
+    • Student
+    • Academic Year
+    • Last N tests
+Primary data source:
+studentYearMetrics/{studentId}
+Per-run data loaded via:
+studentRunSummary/{studentId}/{runId}
+
+🟢 L0
+Display:
+    • Test History Table
+    • Raw Score %
+    • Accuracy %
+    • Rank in Batch
+Trend Chart:
+    • Raw % line
+    • Accuracy % line
+No raw marks.
+
+🟡 L1
+Add trend overlays:
+    • Phase Adherence Trend
+    • Easy Neglect Trend
+    • Hard Bias Trend
+    • Topic Weakness Radar
+Insight Cards:
+    • “Rushed in 3/5 recent tests”
+    • “Hard Bias decreasing”
+
+🔵 L2
+Add:
+    • Risk Timeline (per run)
+    • Discipline Index Trend
+    • Guess Rate Trend
+    • Overstay %
+    • Controlled Mode Delta
+    • Override Count
+Execution Stability Score:
+100 - stdDeviation(rawScorePercent last 5 runs)
+Rolling window.
+
+4️⃣ ANALYTICS → BY TEMPLATE
+Purpose: Structural quality evaluation.
+Load from:
+templateAnalytics/{templateId}
+
+🟡 L1
+Show:
+    • Number of Runs
+    • Avg Raw %
+    • Avg Accuracy %
+    • Raw % variance
+    • Run comparison chart
+
+🔵 L2
+Add:
+    • Stability Index per run
+    • Phase adherence variance
+    • Risk shift per run
+    • Discipline stress score
+    • Template Effectiveness Rating
+Effectiveness Rating formula:
+(Avg Raw % × 0.4) +
+(Avg Discipline Index × 0.3) +
+(1 - Risk Variance) × 0.3
+Precomputed.
+
+5️⃣ ANALYTICS → TRENDS
+Time-based aggregation.
+Source:
+monthlySummary/{academicYear}/{month}
+
+🟢 L0
+    • Monthly Avg Raw %
+    • Monthly Avg Accuracy %
+    • Participation Rate
+
+🟡 L1
+    • Phase Adherence Trend
+    • Easy Neglect Trend
+    • Topic Weakness Trend
+
+🔵 L2
+    • Risk Distribution Trend
+    • Discipline Index Trend
+    • Controlled Mode Effectiveness
+    • Stability Trajectory
+All based on summary docs.
+No run-level recomputation.
+
+6️⃣ STRICT PERFORMANCE RULES
+Never:
+    • Query sessions collection
+    • Recompute averages on dashboard load
+    • Load full student list without pagination
+    • Join large collections dynamically
+Always:
+    • Use summary documents
+    • Use atomic counters
+    • Scope queries by academicYear
+    • Use indexed fields
+    • Cache top-level overview doc
+
+7️⃣ HOT–WARM–COLD ALIGNMENT
+HOT
+Current academic year:
+    • runAnalytics
+    • studentYearMetrics
+    • templateAnalytics
+    • monthlySummary
+WARM
+Completed runs within year.
+COLD
+Past years:
+    • Sessions exported to BigQuery
+    • runAnalytics retained
+    • studentYearMetrics retained
+    • templateAnalytics retained
+Dashboard reads only summary documents.
+
+8️⃣ VISIBILITY MATRIX
+Section
+L0
+L1
+L2
+L3
+Overview
+✔ Basic
+✔ + Behavior
+✔ + Risk
+Same
+By Run
+✔ Raw % + Accuracy %
+✔ + Patterns
+✔ + Compliance
+Same
+By Student
+✔ Raw % + Accuracy %
+✔ + Trends
+✔ + Risk Timeline
+Same
+By Template
+❌
+✔ Basic
+✔ Advanced
+Same
+Trends
+✔ Basic
+✔ Diagnostic
+✔ Execution
+Same
+Governance is separate module.
+
+9️⃣ UX PRINCIPLE ENFORCEMENT
+L0 → Clean and academic
+L1 → Insightful but not intimidating
+L2 → Structured and discipline-focused
+L3 → Strategic and longitudinal
+No layer should see metrics beyond its maturity.
+
+🔟 FINAL ANALYTICS ARCHITECTURE SUMMARY
+Analytics module now:
+✔ Uses only precomputed aggregates
+✔ Never reads raw sessions
+✔ Displays % Raw Score + % Accuracy everywhere
+✔ Supports session → run → template → year hierarchy
+✔ Supports L0–L3 progressive exposure
+✔ HOT–WARM–COLD aligned
+✔ Scales across 10+ years
+✔ Protects Firestore costs
+Analytics measures execution.
+Insights interpret patterns.
+Governance evaluates maturity.
+
+Next module to formalize:
+    • Insights section (including AI monthly summary)
+    • Governance section (Director-level)
+    • Test Portal execution engine
+    • Full Firestore collection map
+    • API layer specification for analytics
+Tell me the next layer to engineer.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Good.
+Now we harden and complete the Insights Section, including:
+    • Strict separation from Analytics
+    • Rolling-window pattern engine architecture
+    • AI Monthly Summary (low-cost design)
+    • Layer-safe exposure
+    • Precomputed storage model
+    • Event-driven update flow
+This is the intelligence layer of Parabolic.
+
+🧠 ADMIN DASHBOARD — INSIGHTS SECTION
+Intelligence & Intervention Engine Specification v2.0
+
+0️⃣ CORE DIFFERENTIATION
+Analytics
+Insights
+What happened
+Why it happened
+Percentages
+Interpretation
+Historical
+Predictive
+Neutral
+Advisory
+Aggregates
+Pattern logic
+Insights must never compute from raw sessions.
+They operate only on:
+studentYearMetrics
+runAnalytics
+templateAnalytics
+rollingBehaviorSnapshots
+
+1️⃣ NAVIGATION STRUCTURE
+Insights
+   ├── Risk Overview
+   ├── Student Intelligence
+   ├── Pattern Alerts
+   ├── Intervention Engine
+   ├── Execution Signals
+   └── AI Monthly Summary
+L0 → Hidden entirely
+L1 → Diagnostic
+L2 → Execution-level
+L3 → Strategic aggregation (cross-year in Governance)
+
+2️⃣ RISK OVERVIEW
+Data Source
+yearBehaviorSummary/{academicYear}
+Precomputed nightly.
+
+🟡 L1 — Diagnostic Risk View
+Display behavior signals only (non-labeling):
+    • % Rushed Pattern
+    • % Easy Neglect
+    • % Hard Bias
+    • % Topic Avoidance
+    • % Late-Phase Drop
+    • % Pacing Drift
+Charts:
+    • Risk Signal Distribution Bar Chart
+    • Batch Diagnostic Heatmap
+No risk state labels like “Impulsive”.
+Tone: Informational.
+
+🔵 L2 — Execution Risk Map
+Add structural interpretation:
+    • Risk State Distribution:
+        ◦ Stable
+        ◦ Drift-Prone
+        ◦ Impulsive
+        ◦ Overextended
+        ◦ Volatile
+    • Avg Discipline Index
+    • Controlled Mode Usage %
+    • Guess Probability Cluster %
+    • Consecutive Wrong Cluster %
+New Card:
+Execution Stability Index
+Formula:
+1 - variance(normalizedRiskScore across students)
+Displayed as 0–100 index.
+Add:
+Batch vs Risk Type Heatmap
+Now it becomes structural.
+
+3️⃣ STUDENT INTELLIGENCE
+Data Source
+studentYearMetrics/{studentId}
+studentRollingWindow/{studentId}
+Rolling window = last 5 runs OR last 30 days.
+
+🟡 L1 — Diagnostic Student View
+Behavior Cards:
+    • Rushed Pattern
+    • Easy Neglect
+    • Hard Bias
+    • Topic Weakness
+    • Time Misallocation
+No “risk state”.
+Example card:
+“Accuracy drops by 12% when attempting Hard questions first.”
+
+🔵 L2 — Execution Intelligence
+Add:
+    • Risk State (rolling)
+    • Discipline Index
+    • Guess Rate Trend
+    • Pacing Deviation Graph
+    • MinTime Violation %
+    • Overstay Frequency
+    • Controlled Mode Delta
+    • Phase Compliance %
+New Section:
+Execution Profile Summary
+Example output:
+    • Performs +14% Raw % under Controlled Mode
+    • Guess Rate 22% higher in Operational Mode
+    • Phase 1 overstay repeated in 4/6 tests
+Actionable but not emotional.
+
+4️⃣ PATTERN ALERTS
+Rolling Window Logic
+Evaluated on:
+    • Session submission
+    • Run completion
+Stored in:
+patternAlerts/{academicYear}
+Each alert has:
+    • patternType
+    • frequency
+    • lastDetected
+    • affectedStudents[]
+    • severityScore
+
+🟡 L1 — Basic Pattern Alerts
+Trigger conditions:
+    • Easy Neglect ≥ 3 tests
+    • Hard Fixation ≥ 3 tests
+    • Pacing Drift ≥ 3 tests
+    • Topic Avoidance repetition
+    • Late-phase drop repetition
+Display:
+Alert Title
+Frequency
+Last Occurrence
+No structural recommendation.
+
+🔵 L2 — Advanced Alerts
+Add:
+    • High-Risk Cluster Spike
+    • Guess-Heavy Cluster
+    • Phase Deviation Escalation
+    • Discipline Regression
+    • Controlled Mode Effectiveness Drop
+Add severity scoring:
+severityScore = frequency × averageImpact
+Show priority ranking.
+
+5️⃣ INTERVENTION ENGINE
+🟡 L1 — Soft Guidance
+Suggestions based on signal thresholds:
+    • Review easy-first strategy
+    • Reinforce phase discipline
+    • Revise weak topics
+    • Practice structured pacing
+No mention of enforcement.
+
+🔵 L2 — Structural Intervention
+Trigger logic:
+If Impulsive cluster > 35%
+→ Suggest Controlled Mode
+If Overstay > threshold
+→ Suggest Hard Mode (limited)
+If Phase Deviation > 30%
+→ Suggest Phase Training
+If Easy Neglect > 40%
+→ Suggest Easy-First Template design
+Card example:
+“Batch B: 41% Impulsive risk. Recommend Controlled Mode next mock.”
+Interventions stored as:
+interventionRecommendations/{academicYear}
+Never auto-applied.
+
+6️⃣ EXECUTION SIGNALS
+Micro-metric summary layer.
+🟡 L1
+Display:
+    • Skip Burst Rate
+    • Rapid Guess Indicator
+    • Late-Phase Accuracy Drop
+    • Avg Time-per-Question Deviation
+Compact badges.
+
+🔵 L2
+Add:
+    • MinTime Compliance %
+    • MaxTime Violation %
+    • Sequential Progression Compliance
+    • Controlled Mode Improvement Delta
+    • Phase Transition Adherence %
+These are enforcement-sensitive signals.
+
+7️⃣ AI MONTHLY SUMMARY
+Now we design the AI layer properly and cost-efficiently.
+Purpose
+Generate optimistic, non-threatening, structured summaries:
+    • Student-wise
+    • Batch-wise
+Monthly only.
+
+7.1 Data Source
+DO NOT send raw sessions to LLM.
+Prepare structured summary object:
+{
+  "avgRawPercent": 62,
+  "avgAccuracyPercent": 71,
+  "phaseAdherence": 78,
+  "easyNeglectPercent": 22,
+  "riskDistribution": {
+    "stable": 42,
+    "impulsive": 18
+  },
+  "disciplineIndex": 68,
+  "controlledDelta": 12,
+  "trendDirection": "improving"
+}
+Small JSON only.
+
+7.2 Prompt Strategy (Cost Optimized)
+Use:
+    • Fixed system prompt
+    • Structured numeric JSON input
+    • Temperature low (0.3)
+    • Max tokens capped
+Prompt style:
+“Generate a constructive academic performance summary using the following metrics. Focus on growth and positive reinforcement. Avoid negative emotional language.”
+Keep output under 250 words.
+
+7.3 Generation Schedule
+Trigger:
+    • End of each month
+    • OR manual “Generate Summary” button
+Store result in:
+aiMonthlySummary/{academicYear}/{entityId}
+Never regenerate automatically unless requested.
+
+7.4 Cost Control
+    • Generate once per month per batch
+    • Generate once per month per student (optional)
+    • Cache result
+    • Do not regenerate on dashboard load
+    • Allow manual refresh only
+This keeps LLM usage minimal.
+
+8️⃣ EVENT-DRIVEN UPDATE FLOW
+On session submission:
+Session submitted
+↓
+Session analytics computed
+↓
+studentYearMetrics updated
+↓
+RollingWindow metrics updated
+↓
+Pattern engine evaluates
+↓
+Risk state recalculated
+↓
+Insights summary docs updated
+No dashboard-time heavy computation.
+
+9️⃣ HOT–WARM–COLD ALIGNMENT
+HOT:
+    • Current academic year insight summaries
+WARM:
+    • Completed month summaries
+COLD:
+    • Past academic year summaries
+    • Stored but not recalculated
+Never recompute past months after archive.
+
+🔟 VISIBILITY MATRIX
+Section
+L0
+L1
+L2
+L3
+Risk Overview
+❌
+✔
+✔
+Same
+Student Intelligence
+❌
+✔
+✔
+Same
+Pattern Alerts
+❌
+✔
+✔ Advanced
+Same
+Intervention Engine
+❌
+✔ Soft
+✔ Structural
+Same
+Execution Signals
+❌
+✔
+✔
+Same
+AI Monthly Summary
+❌
+✔
+✔
+Same
+Governance handles cross-year strategic insight.
+
+1️⃣1️⃣ DESIGN PRINCIPLES
+Insights must:
+    • Never recompute from sessions
+    • Be calm, not punitive
+    • Escalate sophistication by layer
+    • Separate diagnostic vs enforcement
+    • Use rolling windows
+    • Be interpretable by teachers
+    • Not emotionally label students harshly
+
+1️⃣2️⃣ FINAL INSIGHTS ARCHITECTURE SUMMARY
+Insights module now:
+✔ Converts analytics into interpretation
+✔ Implements rolling pattern engine
+✔ Provides layer-aware intelligence
+✔ Suggests structural interventions (L2+)
+✔ Generates low-cost AI monthly summaries
+✔ Uses event-driven updates
+✔ Scales across years
+✔ Keeps Firestore reads minimal
+Analytics measures performance.
+Insights explain patterns.
+Intervention guides action.
+Governance evaluates institution-level maturity.
+
+Next module to formalize:
+    • Governance Section (Director-level)
+    • Pattern Engine rule architecture (deep math)
+    • Full Firestore collection map
+    • API endpoint specification
+    • Or Test Portal execution engine (critical runtime logic)
+Tell me which layer to engineer next.
+
+
+
+
+
+
+Excellent.
+Now we formalize the Governance Section as a true executive control layer, fully aligned with:
+    • Your L0 → L3 stratification
+    • Vendor-side enforcement model
+    • Snapshot-only aggregation rule
+    • % Raw Marks + % Accuracy replacement (no “Score” anywhere)
+    • 10-year scale sustainability
+This is the institutional brain above Insights.
+
+🏛 ADMIN DASHBOARD — GOVERNANCE SECTION (L3 ONLY)
+Governance = Institutional Stability Over Time
+Not student-level. Not test-level. Not emotional.
+Only structural truth.
+Visible only if:
+license.layer === L3
+All data read-only from:
+governanceSnapshots/{YYYY-MM}
+runAnalytics summaries
+templateAnalytics summaries
+studentYearMetrics aggregates
+overrideAuditSummary
+Never from:
+sessions
+rawAttempts
+
+0️⃣ NAVIGATION STRUCTURE
+Governance
+   ├── Institutional Stability
+   ├── Execution Integrity
+   ├── Override Audit
+   ├── Batch Risk Map
+   ├── Longitudinal Trends
+   ├── Governance Reports
+Design tone:
+    • White space
+    • Calm color gradients
+    • No red warning overload
+    • Executive typography
+    • Minimal micro-detail
+
+1️⃣ INSTITUTIONAL STABILITY
+Purpose
+Measure execution consistency across time and cohorts.
+
+1.1 Stability Index (Core Metric)
+Composite 0–100 index.
+Derived from normalized variance of:
+    • % Raw Marks variance (across runs)
+    • % Accuracy variance
+    • Phase adherence variance
+    • Discipline Index variance
+    • Risk state fluctuation score
+Formula Concept
+stabilityIndex =
+100 - weightedVarianceScore
+Lower variance → higher stability.
+
+UI Components
+    • Large numeric display (0–100)
+    • Gauge chart
+    • 12-month trend line
+Under it:
+Stable above 75
+Watch zone 60–75
+Unstable below 60
+Not judgmental — purely diagnostic.
+
+1.2 Performance Variability
+Charts:
+    • Std deviation of % Raw Marks (timeline)
+    • Std deviation of % Accuracy
+    • Batch-to-batch spread comparison
+    • Stability vs Difficulty level heatmap
+Purpose:
+Identify systemic volatility.
+
+1.3 Template Stability Comparison
+When same template used multiple times:
+Show:
+    • % Raw delta across runs
+    • % Accuracy delta
+    • Risk shift across batches
+Interpretation logic:
+    • Stable template + unstable batch → training issue
+    • Unstable template + stable batch → template issue
+
+2️⃣ EXECUTION INTEGRITY
+Purpose
+Are teachers enforcing structured execution discipline?
+
+2.1 Phase Compliance Trend
+Monthly:
+    • % students following phase split
+    • MoM change
+Graph:
+Line chart over year.
+
+2.2 Controlled Mode Effectiveness
+Show:
+    • Avg % Raw improvement under Controlled Mode
+    • Avg % Accuracy improvement
+    • Risk reduction %
+Display:
+Bar comparison:
+| Mode | Raw % | Accuracy % |
+
+2.3 Discipline Index Trajectory
+Institution-wide average discipline index trend.
+    • Rolling 30-day
+    • Year-to-date
+    • YoY comparison
+
+2.4 Structural Risk Exposure
+Stacked area chart over time:
+    • Stable %
+    • Drift-Prone %
+    • Impulsive %
+    • Overextended %
+    • Volatile %
+This is institutional behavioral fingerprint.
+
+3️⃣ OVERRIDE AUDIT
+Purpose:
+Prevent erosion of system discipline.
+Source:
+overrideAuditSummary/{YYYY-MM}
+
+3.1 Override Frequency
+    • Per run
+    • Per batch
+    • Per teacher (aggregated only)
+No names in main dashboard.
+Drill-down optional.
+
+3.2 Override Impact Analysis
+Compare:
+    • % Raw Marks when override used vs not used
+    • % Accuracy shift
+    • Risk escalation delta
+If override correlates with instability → visible trend.
+
+3.3 Repeated Override Pattern
+Example:
+“Controlled Mode bypassed 17 times this month.”
+Displayed as:
+Trend + small explanation tooltip.
+No emotional framing.
+
+4️⃣ BATCH RISK MAP
+Purpose:
+Strategic cohort comparison.
+
+4.1 Risk State Matrix
+Heatmap:
+| Batch | Stable | Drift | Impulsive | Overextended |
+Color-coded intensity.
+
+4.2 Batch Discipline Metrics
+Per batch:
+    • Avg Discipline Index
+    • Avg Phase Adherence
+    • % Raw Stability Score
+    • % Accuracy Stability Score
+Purpose:
+Identify training inconsistency across instructors.
+
+5️⃣ LONGITUDINAL TRENDS
+Cross-year comparison.
+Filter:
+    • Academic Year
+    • Batch
+    • Exam Type
+Data source:
+governanceSnapshots/{year_month}
+
+5.1 Year-over-Year Stability
+Line:
+2024 vs 2025 vs 2026
+Metric:
+Stability Index
+
+5.2 Discipline Growth
+Trend of:
+    • Phase adherence
+    • Risk reduction %
+    • Controlled Mode adoption %
+
+5.3 Pattern Recurrence Index
+Measures how often same risk pattern reappears across years.
+Formula:
+patternRecurrence =
+(repeatedHighRiskMonths / totalMonths)
+Higher = systemic issue.
+
+6️⃣ GOVERNANCE REPORTS
+Purpose:
+Exportable institutional intelligence.
+Format:
+PDF.
+Generated from snapshot docs only.
+Sections:
+    1. Stability Index Summary
+    2. Risk Distribution
+    3. Discipline Trajectory
+    4. Override Audit Summary
+    5. Batch Comparison
+    6. Strategic Recommendations (derived from Insights Engine)
+Metadata:
+    • Timestamp
+    • Academic Year
+    • Generated by (Director)
+    • Immutable
+Used for:
+    • Trustee review
+    • Strategic planning
+    • Accreditation documentation
+
+7️⃣ PERFORMANCE & STORAGE RULES
+Governance loads:
+governanceSnapshots/{YYYY-MM}
+Snapshots generated:
+    • Nightly
+    • End-of-month hard snapshot
+    • Immutable past months
+Never:
+    • Recompute historical month
+    • Aggregate on read
+    • Scan sessions
+Reads per dashboard load:
+~5–10 documents max.
+Scales cleanly to 10+ years.
+
+8️⃣ LAYER RELATIONSHIP
+Section
+L0
+L1
+L2
+L3
+Analytics
+✔
+✔
+✔
+✔
+Insights
+❌
+✔
+✔
+✔
+Governance
+❌
+❌
+❌
+✔
+Governance does not duplicate Insights.
+It consumes its outputs longitudinally.
+
+9️⃣ EXECUTIVE UX PRINCIPLES
+    • No student-level names in default view
+    • No micro question metrics
+    • No emotional warnings
+    • Smooth scroll sections
+    • PDF-ready aesthetic
+    • Minimal click depth
+This must feel like:
+“Institutional control panel”
+Not “teacher dashboard”
+
+🔟 DATA PIPELINE FLOW
+On test submission:
+Session Completed
+↓
+RunAnalytics updated
+↓
+studentYearMetrics updated
+↓
+Pattern Engine evaluates
+↓
+Monthly governance accumulator updates
+↓
+governanceSnapshots/{YYYY-MM} refreshed
+Monthly close:
+Snapshot sealed
+Archived
+New month initialized
+
+1️⃣1️⃣ VENDOR-SIDE RELATIONSHIP
+Governance does NOT:
+    • Modify license
+    • Modify usage
+    • Modify concurrency
+Vendor side remains:
+    • License authority
+    • Concurrency authority
+    • MaxStudents enforcement
+    • Usage accounting
+Governance is academic stability only.
+Vendor model defined in ensures:
+Institute scripts run tests.
+Vendor scripts enforce truth.
+This separation protects:
+    • Commercial integrity
+    • Academic autonomy
+    • Scalability to 200+ institutes
+
+1️⃣2️⃣ FINAL GOVERNANCE POSITIONING
+Governance answers:
+    • Are we stable?
+    • Are we disciplined?
+    • Are we enforcing structure?
+    • Are we improving year-over-year?
+    • Are overrides harming integrity?
+    • Are batches consistent?
+It does not answer:
+    • Who failed?
+    • Who guessed?
+    • Who skipped?
+That belongs to Insights.
+
+COMPLETE SYSTEM PYRAMID
+GOVERNANCE (L3)
+Institutional Stability
+
+INSIGHTS (L1–L3)
+Behavior & Intervention Intelligence
+
+ANALYTICS (L0–L3)
+Measured Performance
+This is now architecturally complete.
+
+If you want next refinement, we can:
+    • Design full Firestore collection tree for Governance snapshots
+    • Define exact Stability Index formula weights
+    • Create vendor–institute API contract spec
+    • Or simulate 10-year data growth and cost model
+Tell me the next layer to engineer.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Excellent.
+Now we harden and formalize the Licensing Section as the commercial authority layer, fully aligned with:
+    • Your Layer maturity philosophy (L0 → L3)
+    • Vendor-side enforcement architecture
+    • Concurrency & usage governance model
+    • Academic–commercial separation rule
+This is not UI decoration.
+This is capability governance infrastructure.
+
+💳 ADMIN DASHBOARD — LICENSING SECTION
+Commercial Control & Capability Governance Layer
+
+0️⃣ CORE ARCHITECTURAL RULE
+Licensing governs:
+    • Feature availability
+    • Mode activation
+    • Dashboard visibility
+    • Enforcement logic activation
+    • Billing eligibility
+    • Upgrade path
+Licensing does NOT govern:
+    • Academic scoring
+    • Risk computation
+    • Test analytics
+    • Student evaluation
+Those remain inside academic domain.
+Vendor side remains authoritative for:
+    • Concurrency enforcement
+    • MaxStudents enforcement
+    • Usage accounting
+    • License validity
+As defined in the vendor-side architecture
+
+1️⃣ NAVIGATION STRUCTURE
+Licensing
+   ├── Current Plan
+   ├── Feature Matrix
+   ├── Eligibility Progress
+   ├── Usage & Billing
+   ├── Upgrade Preview
+   ├── License History
+All visible across L0–L3.
+Content adapts based on currentLayer.
+
+2️⃣ CURRENT PLAN
+Purpose
+Single source of truth for institute capability state.
+Data Source
+institutes/{id}/license   (HOT document)
+Server-signed, vendor-controlled.
+
+UI Components
+Display:
+    • Current Layer (L0 / L1 / L2 / L3)
+    • Plan Name
+    • License Start Date
+    • Expiry Date
+    • Renewal Date
+    • Billing Cycle (Monthly / Annual)
+    • Active Student Count (current month)
+    • Max Student Limit
+    • Concurrency Limit
+    • Usage This Month (Attempts)
+
+Layer Badges
+🟢 Operational (L0)
+🟡 Diagnostic (L1)
+🔵 Controlled (L2)
+🟣 Governance (L3)
+Badge color must be consistent system-wide.
+
+Technical Enforcement
+License object fetched on login and cached in memory.
+Every protected backend endpoint must:
+if (!license.featureFlags.controlledMode) reject(403)
+Never rely on UI toggle.
+
+3️⃣ FEATURE MATRIX
+Purpose:
+Expose maturity ladder transparently.
+
+Matrix Structure
+Feature
+L0
+L1
+L2
+L3
+Basic Test Engine
+✔
+✔
+✔
+✔
+% Raw + % Accuracy Analytics
+✔
+✔
+✔
+✔
+Risk Overview
+❌
+✔
+✔
+✔
+Pattern Alerts
+❌
+✔
+✔
+✔
+Adaptive Phase
+❌
+❌
+✔
+✔
+Controlled Mode
+❌
+❌
+✔
+✔
+Hard Mode
+❌
+❌
+✔
+✔
+Governance Dashboard
+❌
+❌
+❌
+✔
+Override Audit
+❌
+❌
+❌
+✔
+Locked features:
+    • Slight blur
+    • Lock icon
+    • Tooltip with upgrade note
+No hard upsell language.
+
+4️⃣ ELIGIBILITY PROGRESS
+(Truth Ladder Engine)
+Eligibility ≠ automatic upgrade.
+It measures maturity.
+
+L0 → L1 Eligibility
+Conditions (example):
+    • ≥ 10 completed tests
+    • ≥ 30 active students
+    • Difficulty tagging coverage ≥ 90%
+UI:
+Progress bar
+“7 / 10 Tests Completed”
+
+L1 → L2 Eligibility
+Conditions:
+    • ≥ 25 diagnostic runs
+    • Phase adherence metric computed
+    • Behavioral variance computed
+Checklist UI:
+✔ Diagnostic depth available
+✔ Minimum run volume achieved
+⬜ Behavioral variance threshold
+
+L2 → L3 Eligibility
+Invitation-only.
+UI:
+“Governance Tier available by evaluation.”
+Optional show:
+    • Stability Index ≥ 70
+    • ≥ 1 academic year completed
+No self-upgrade button.
+
+5️⃣ USAGE & BILLING
+Data Source
+Vendor API:
+GET /licenseUsage
+Vendor side tracks:
+    • AttemptsUsed
+    • DistinctStudents
+    • ActiveAttempts
+As defined in vendor control spreadsheet
+
+Display
+    • Active Students (current month)
+    • Max Students Allowed
+    • Remaining Student Slots
+    • Attempts Used
+    • Attempts Remaining
+    • Peak Concurrency
+    • Max Concurrent Allowed
+
+Billing Estimator
+Example model:
+L0:
+Base + per active student
+L1:
+Higher base + per active student
+L2:
+Premium base + per student + mode surcharge
+L3:
+Annual institutional fee
+Display:
+Estimated Current Bill
+Next Billing Date
+
+Actions
+    • Download Invoice
+    • View Billing History
+    • Update Payment Method
+    • Contact Support
+All redirect to vendor-side services.
+
+6️⃣ UPGRADE PREVIEW
+Strategic visualization only.
+
+If L0
+Preview:
+    • Risk Overview (blurred)
+    • Pattern Alerts (blurred)
+    • Student Intelligence sample card
+
+If L1
+Preview:
+    • Controlled Mode toggle (disabled)
+    • Discipline Index graph
+    • Adaptive Phase preview
+
+If L2
+Preview:
+    • Stability Index gauge
+    • Batch Risk Heatmap
+    • Override Audit sample
+
+Upgrade Action:
+    • “Request Upgrade”
+    • “Schedule Evaluation”
+    • No direct layer switching
+Vendor must approve.
+
+7️⃣ LICENSE HISTORY
+Immutable subcollection:
+institutes/{id}/licenseHistory/{eventId}
+Fields:
+    • timestamp
+    • previousLayer
+    • newLayer
+    • billingChange
+    • reason
+    • actor (vendor/system)
+Display:
+Timeline view.
+No edit option.
+
+8️⃣ LICENSE OBJECT (FINAL MODEL)
+{
+  "currentLayer": "L2",
+  "planName": "Controlled",
+  "billingCycle": "Monthly",
+  "startDate": "2026-01-01",
+  "expiryDate": "2026-12-31",
+  "maxStudents": 200,
+  "maxConcurrent": 40,
+  "eligibilityFlags": {
+    "l1Eligible": true,
+    "l2Eligible": false,
+    "l3Eligible": false
+  },
+  "featureFlags": {
+    "riskOverview": true,
+    "controlledMode": true,
+    "adaptivePhase": true,
+    "governanceAccess": false
+  },
+  "status": "Active"
+}
+License document must be:
+    • Vendor-signed (optional HMAC)
+    • Immutable from institute side
+    • Cached short-term
+    • Refreshed periodically
+
+9️⃣ BACKEND ENFORCEMENT MATRIX
+Capability
+Enforcement
+Controlled Mode
+Reject if !featureFlags.controlledMode
+Governance Dashboard
+Reject if !featureFlags.governanceAccess
+Hard Mode
+Reject if !featureFlags.hardMode
+Adaptive Phase
+Reject if !featureFlags.adaptivePhase
+Reject with:
+{
+  "error": "FeatureNotLicensed",
+  "requiredLayer": "L2"
+}
+UI handles gracefully.
+
+🔟 HOT–WARM–COLD STORAGE ALIGNMENT
+License:
+HOT document
+Read frequently
+Tiny payload
+LicenseHistory:
+WARM
+Rare reads
+Billing logs:
+Vendor-side only
+No heavy storage footprint.
+
+1️⃣1️⃣ SECURITY RULES
+Institute cannot:
+    • Modify license doc
+    • Increase maxStudents
+    • Disable limits
+    • Bypass feature flags
+    • Modify eligibility
+All enforcement via vendor control sheet
+Even if institute redeploys script:
+Vendor validates instituteId and limits server-side.
+
+1️⃣2️⃣ COMPLETE LAYERED POSITIONING
+Layer
+Academic Depth
+Behavioral Depth
+Structural Control
+Institutional Oversight
+L0
+Basic
+None
+None
+None
+L1
+Diagnostic
+Risk Signals
+None
+None
+L2
+Controlled
+Enforcement
+Mode Control
+None
+L3
+Controlled
+Enforcement
+Mode Control
+Governance
+Licensing is what activates these columns.
+
+FINAL LICENSING SUMMARY
+Licensing now provides:
+✔ Layer visibility
+✔ Feature access control
+✔ Eligibility tracking
+✔ Billing transparency
+✔ Upgrade preview
+✔ Vendor-enforced backend validation
+✔ Immutable audit history
+✔ Separation of commercial & academic domains
+It is:
+The commercial spine.
+The capability gatekeeper.
+The maturity ladder.
+The enforcement trigger.
+
+Your system architecture is now fully layered:
+Overview
+Students
+Question Bank
+Tests
+Assignments
+Analytics
+Insights
+Governance
+Settings
+Licensing
+Next, we can engineer:
+    • Full API contract specification (Admin + Test Portal + Vendor)
+    • Microservice boundary map
+    • Firestore schema complete tree
+    • 3-year development roadmap
+    • Investor-ready product architecture deck
+Tell me the next module to formalize.
+
+
+Excellent.
+Now we formalize the Settings Section as the Operational Control Tower of your entire system.
+This section must:
+    • Control configuration without corrupting historical data
+    • Separate academic configuration from licensing
+    • Enforce role-based authority
+    • Trigger HOT–WARM–COLD transitions safely
+    • Log every mutation
+    • Prevent destructive edits to completed academic records
+This is not a miscellaneous page.
+This is controlled infrastructure governance.
+
+⚙️ ADMIN DASHBOARD — SETTINGS SECTION
+Operational Configuration & Data Governance Layer
+
+0️⃣ NAVIGATION STRUCTURE
+Settings
+   ├── Institute Profile
+   ├── Academic Year Management
+   ├── Default Execution Policies
+   ├── User & Role Management
+   ├── Security & Access
+   ├── Data & Archive Controls
+   ├── System Configuration
+Access Control:
+    • Admin → Full access
+    • Director (L3) → View most, limited edit
+    • Teacher → No access
+All mutations logged in:
+institutes/{id}/settingsAudit/{eventId}
+
+1️⃣ INSTITUTE PROFILE
+Purpose
+Define institute identity metadata.
+Editable Fields
+    • Institute Name
+    • Institute Logo (storage reference only)
+    • Contact Email
+    • Contact Phone
+    • Time Zone
+    • Default Exam Type
+    • Academic Year Format (e.g., 2025–2026)
+Stored at:
+institutes/{id}/profile
+No analytics recomputation triggered.
+Logo change does NOT regenerate reports automatically.
+
+2️⃣ ACADEMIC YEAR MANAGEMENT
+This is structurally critical.
+Data Model
+institutes/{id}/academicYears/{yearId}
+{
+  startDate,
+  endDate,
+  status: "Active | Locked | Archived",
+  archivedAt,
+  snapshotId
+}
+
+2.1 View Current Year
+Display:
+    • Academic Year Label
+    • Status Badge:
+        ◦ 🟢 Active
+        ◦ 🟡 Locked
+        ◦ ⚫ Archived
+    • Student Count
+    • Run Count
+    • Snapshot status
+
+2.2 Lock Academic Year
+Effect:
+    • Prevent new test generation under this year
+    • Prevent new assignments
+    • Freeze studentYearMetrics
+    • Disable execution mode toggles
+Allowed only if:
+noActiveAttempts == true
+Lock action logs audit event.
+
+2.3 Archive Academic Year (HIGH-RISK ACTION)
+Irreversible.
+Double confirmation required:
+    1. Confirm no active tests
+    2. Confirm archive action
+Trigger sequence:
+1. Generate final governance snapshot
+2. Seal studentYearMetrics
+3. Export session data to BigQuery
+4. Move Firestore HOT collections to WARM partition
+5. Clear HOT session collections
+6. Initialize new academic year
+After archive:
+    • Year becomes read-only
+    • Appears in Governance longitudinal comparison
+    • No recalculation allowed
+
+3️⃣ DEFAULT EXECUTION POLICIES
+This controls structural behavior — not performance history.
+
+3.1 Phase Defaults
+L0 / L1
+Admin can set:
+    • Phase 1 %
+    • Phase 2 %
+    • Phase 3 %
+Validation:
+Must sum to 100%.
+Stored as:
+executionDefaults.phaseSplit
+
+L2+
+Additional Controls:
+    • Enable Adaptive Phase Engine (default ON)
+    • Allow Manual Override? (Boolean)
+    • Hard Mode Availability (license dependent)
+Manual override must not break test integrity.
+
+3.2 Timing Policy (L2+ Only)
+Define preset timing windows per difficulty.
+Example schema:
+timingPresets: {
+  "JEE_MAIN": {
+      easy: { min: 30, max: 60 },
+      medium: { min: 60, max: 150 },
+      hard: { min: 150, max: 210 }
+  }
+}
+Guardrails:
+    • No per-question arbitrary timing edits
+    • Reset to system defaults option available
+
+3.3 Alert Frequency Policy (L1+)
+Admin controls:
+    • Alert cooldown interval
+    • Max alerts per test section
+    • Escalation threshold
+Purpose:
+Prevent alert fatigue.
+Stored separately from Insights logic.
+
+4️⃣ USER & ROLE MANAGEMENT
+Access control boundary.
+
+Roles
+    • Admin
+    • Teacher
+    • Director (L3 only)
+    • Support (optional)
+
+Capability Matrix
+Role
+Generate Test
+Assign
+View Analytics
+Governance
+Admin
+✔
+✔
+✔
+✔ (if L3)
+Teacher
+✔
+✔
+Limited
+❌
+Director
+❌
+❌
+✔
+✔
+Support
+❌
+❌
+Debug Only
+❌
+
+Actions
+    • Add User
+    • Remove User
+    • Change Role
+    • Reset Password
+    • Suspend User
+All changes require:
+    • Admin authentication
+    • Audit log entry
+Passwords handled via auth provider (not custom stored).
+
+5️⃣ SECURITY & ACCESS
+Critical integrity area.
+
+Session Controls
+    • Allow Multiple Concurrent Admin Sessions (default: No)
+    • Session Timeout Duration
+    • Force Logout on Password Change
+
+Exam Subdomain Controls
+Frontend behavior toggles:
+    • Enforce Fullscreen Mode
+    • Block Right-Click (UI-level)
+    • Tab Switching Warning
+    • Tamper Detection Alerts (L2+)
+Note:
+These are deterrent mechanisms, not full security.
+
+Email Configuration
+    • Sender Name
+    • SMTP Settings (if custom)
+    • Notification Toggles
+Email sending still separated from vendor licensing emails
+
+6️⃣ DATA & ARCHIVE CONTROLS
+Aligns with HOT–WARM–COLD architecture.
+
+6.1 Storage Summary (Read-Only)
+Display:
+    • Firestore HOT storage usage
+    • BigQuery archive size
+    • Active session count
+    • Archived academic years
+No direct editing.
+
+6.2 Export Controls
+    • Export Students (CSV)
+    • Export Run Analytics
+    • Export Governance Snapshot
+    • Full Academic Year Export
+Exports must pull from snapshot collections, not sessions.
+
+6.3 Data Retention Policy
+Configurable:
+    • Years to retain raw sessions
+    • Auto-export threshold
+    • Auto-archive schedule
+Default recommendation:
+    • Keep only current year HOT
+    • Archive yearly
+System validates:
+Retention cannot delete active year data.
+
+7️⃣ SYSTEM CONFIGURATION
+Low-level feature control.
+
+7.1 Layer Configuration (Read-Only)
+Displays:
+    • Current Layer
+    • Eligibility Status
+    • Feature Flags
+Cannot modify — controlled via Licensing section.
+
+7.2 Feature Flags (Admin Only)
+For controlled rollouts:
+    • Enable Experimental Analytics
+    • Enable Beta UI
+    • Toggle Advanced Phase Visualization
+    • Enable LLM Monthly Summary (cost-controlled)
+Feature flags stored separately from license flags.
+
+8️⃣ LAYER VISIBILITY MATRIX
+Settings Area
+L0
+L1
+L2
+L3
+Institute Profile
+✔
+✔
+✔
+✔
+Academic Year
+✔
+✔
+✔
+✔
+Execution Policies
+Basic
+Basic
+Advanced
+Advanced
+Timing Policies
+❌
+❌
+✔
+✔
+User Management
+✔
+✔
+✔
+✔
+Governance Snapshot Trigger
+❌
+❌
+❌
+✔
+Archive Controls
+✔
+✔
+✔
+✔
+
+9️⃣ SAFETY RULES
+Settings must:
+    • Never mutate completed run data
+    • Never delete session records directly
+    • Never allow downgrade to break historical structure
+    • Require confirmation for archive
+    • Require Admin privilege for mutation
+    • Log every configuration change
+
+🔟 HOT–WARM–COLD CONTROL FLOW
+Settings triggers:
+Active Year → Lock
+Lock → Archive
+Archive → BigQuery export
+BigQuery export → Clear HOT partition
+Initialize new HOT partition
+Settings never directly queries sessions.
+All archival done via batch jobs.
+
+1️⃣1️⃣ UX PRINCIPLES
+Settings must:
+    • Separate operational from destructive actions
+    • Clearly label irreversible operations
+    • Group high-risk under “Advanced”
+    • Provide preview before archive
+    • Provide export backup option
+No analytics content mixed here.
+
+FINAL SETTINGS SUMMARY
+Settings now provides:
+✔ Institute identity configuration
+✔ Academic year lifecycle control
+✔ Phase & timing structural defaults
+✔ Alert tuning controls
+✔ Role & access management
+✔ Security configuration
+✔ HOT–WARM–COLD lifecycle triggers
+✔ Data retention management
+✔ Feature flags for safe rollout
+✔ Audit-safe mutation logging
+Settings is:
+The operational control tower.
+The structural safety guard.
+The lifecycle manager.
+The configuration boundary layer.
+
+Your Admin architecture is now structurally complete and layered:
+Overview
+Students
+Question Bank
+Tests
+Assignments
+Analytics
+Insights
+Governance
+Licensing
+Settings
+If you want next, we can:
+    • Produce full Firestore schema tree (all collections)
+    • Design complete API endpoint contract
+    • Create phased build roadmap
+    • Generate investor-grade architecture document
+    • Or simulate 5-year scaling model
+Tell me the next engineering layer.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
