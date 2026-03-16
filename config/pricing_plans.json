@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "plans": [
+    {
+      "planId": "L0",
+      "name": "Operational",
+      "basePriceMonthly": 1500,
+      "pricePerStudent": 40,
+      "studentLimit": 200,
+      "featureFlags": {
+        "adaptivePhase": false,
+        "controlledMode": false,
+        "hardMode": false,
+        "governanceAccess": false
+      },
+      "createdAt": "seed"
+    },
+    {
+      "planId": "L1",
+      "name": "Diagnostic",
+      "basePriceMonthly": 4000,
+      "pricePerStudent": 60,
+      "studentLimit": 500,
+      "featureFlags": {
+        "adaptivePhase": true,
+        "controlledMode": false,
+        "hardMode": false,
+        "governanceAccess": false
+      },
+      "createdAt": "seed"
+    },
+    {
+      "planId": "L2",
+      "name": "Controlled",
+      "basePriceMonthly": 8000,
+      "pricePerStudent": 80,
+      "studentLimit": 1000,
+      "featureFlags": {
+        "adaptivePhase": true,
+        "controlledMode": true,
+        "hardMode": false,
+        "governanceAccess": false
+      },
+      "createdAt": "seed"
+    },
+    {
+      "planId": "L3",
+      "name": "Governance",
+      "basePriceMonthly": 12000,
+      "pricePerStudent": 120,
+      "studentLimit": 3000,
+      "featureFlags": {
+        "adaptivePhase": true,
+        "controlledMode": true,
+        "hardMode": true,
+        "governanceAccess": true
+      },
+      "createdAt": "seed"
+    }
+  ]
+}
