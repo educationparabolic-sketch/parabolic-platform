@@ -1,9 +1,9 @@
-import {onRequest} from "firebase-functions/https";
+import * as functions from "firebase-functions";
 import {loadEnvironmentConfig} from "./utils/environment";
 
-const environmentConfig = loadEnvironmentConfig();
+export const helloWorld = functions.https.onRequest((req: functions.https.Request, res: functions.Response) => {
+  const environmentConfig = loadEnvironmentConfig(); // ✅ moved inside
 
-export const helloWorld = onRequest((req, res) => {
   const message =
     "Parabolic Platform backend is running in " +
     `${environmentConfig.nodeEnv} mode for ` +

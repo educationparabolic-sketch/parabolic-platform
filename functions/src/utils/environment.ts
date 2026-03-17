@@ -1,4 +1,4 @@
-import {logger} from "firebase-functions";
+import * as functions from "firebase-functions";
 import {EnvironmentConfig, RuntimeEnvironment} from "../types/environment";
 
 const ALLOWED_ENVS: ReadonlySet<RuntimeEnvironment> = new Set([
@@ -65,7 +65,7 @@ export const loadEnvironmentConfig = (): EnvironmentConfig => {
     },
   };
 
-  logger.info("Environment configuration loaded", {
+  functions.logger.info("Environment configuration loaded", {
     nodeEnv: config.nodeEnv,
     projectId: config.projectId,
     endpoints: config.endpoints,
