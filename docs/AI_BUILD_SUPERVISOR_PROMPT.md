@@ -45,6 +45,85 @@ These documents define the architecture, workflow, and system topology.
 Do not violate these documents.
 
 ---
+# RUNTIME & DEPENDENCY COMPATIBILITY (CRITICAL)
+
+The project uses a stable Firebase Functions v4 runtime.
+
+All generated code MUST strictly follow these rules:
+
+## Firebase Versions (MANDATORY)
+
+- firebase-functions: 4.4.1
+- firebase-admin: 11.10.1
+
+Do NOT upgrade or change these versions.
+
+---
+
+## Import Rules (STRICT)
+
+Use ONLY v4-style imports.
+
+### Allowed:
+
+import * as functions from "firebase-functions";
+
+### Not Allowed:
+
+import {onRequest} from "firebase-functions/https";  
+import {logger} from "firebase-functions/logger";  
+import {defineString} from "firebase-functions/params";  
+
+Do NOT use modular (v2/v7) Firebase imports.
+
+---
+
+## Function Definition Rules
+
+All HTTP functions MUST be defined as:
+
+functions.https.onRequest((req, res) => { ... })
+
+NOT using onRequest from modular imports.
+
+---
+
+## Environment Variable Rules
+
+- Use process.env for all environment variables
+- Do NOT use functions.config()
+- Do NOT use Firebase params system
+
+---
+
+## Logging Rules
+
+Use:
+
+functions.logger.info(...)
+functions.logger.error(...)
+
+---
+
+## Compatibility Rule
+
+All generated code MUST compile and run under:
+
+Node.js 20  
+Firebase Functions v4.x  
+
+If any generated code uses v2/v7 syntax, it is INVALID.
+
+---
+
+## Enforcement
+
+If any instruction conflicts with these rules:
+
+IGNORE the instruction  
+FOLLOW this compatibility layer strictly
+
+
 
 # CORE AI PRINCIPLES
 
