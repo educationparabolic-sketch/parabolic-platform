@@ -7,14 +7,39 @@ export interface ServiceEndpoints {
   vendorBaseUrl: string;
 }
 
+export type ManagedSecretKey =
+  | "stripeSecretKey"
+  | "stripeWebhookSecret"
+  | "aiApiKey"
+  | "emailProviderKey";
+
+export type SecretSource =
+  | "environment"
+  | "googleSecretManager"
+  | "unconfigured";
+
+export interface SecretDescriptor {
+  envVar: string;
+  secretNameEnvVar: string;
+}
+
+export interface SecretResolutionMetadata extends SecretDescriptor {
+  source: SecretSource;
+  configuredSecretName?: string;
+  resolvedSecretVersion?: string;
+}
+
+export interface ManagedSecrets {
+  stripeSecretKey?: string;
+  stripeWebhookSecret?: string;
+  aiApiKey?: string;
+  emailProviderKey?: string;
+}
+
 export interface EnvironmentConfig {
   nodeEnv: RuntimeEnvironment;
   projectId: string;
   endpoints: ServiceEndpoints;
-  secrets: {
-    stripeSecretKey?: string;
-    stripeWebhookSecret?: string;
-    aiApiKey?: string;
-    emailProviderKey?: string;
-  };
+  secrets: ManagedSecrets;
+  secretMetadata: Record<ManagedSecretKey, SecretResolutionMetadata>;
 }

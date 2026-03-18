@@ -1,5 +1,6 @@
 import * as functions from "firebase-functions";
 import {EnvironmentConfig, RuntimeEnvironment} from "../types/environment";
+import {loadManagedSecrets} from "./secrets";
 
 const ALLOWED_ENVS: ReadonlySet<RuntimeEnvironment> = new Set([
   "development",
@@ -42,9 +43,10 @@ const parseNodeEnv = (value: string | undefined): RuntimeEnvironment => {
   );
 };
 
-export const loadEnvironmentConfig = (): EnvironmentConfig => {
+export const loadEnvironmentConfig = async (): Promise<EnvironmentConfig> => {
   const nodeEnv = parseNodeEnv(getOptionalEnv("NODE_ENV"));
   const projectId = getRequiredEnv("PROJECT_ID");
+  const secretResolution = await loadManagedSecrets({nodeEnv, projectId});
 
   const config: EnvironmentConfig = {
     nodeEnv,
@@ -57,21 +59,21 @@ export const loadEnvironmentConfig = (): EnvironmentConfig => {
       vendorBaseUrl:
         getOptionalEnv("VENDOR_BASE_URL") ?? DEFAULT_ENDPOINTS.vendorBaseUrl,
     },
-    secrets: {
-      stripeSecretKey: getOptionalEnv("STRIPE_SECRET_KEY"),
-      stripeWebhookSecret: getOptionalEnv("STRIPE_WEBHOOK_SECRET"),
-      aiApiKey: getOptionalEnv("AI_API_KEY"),
-      emailProviderKey: getOptionalEnv("EMAIL_PROVIDER_KEY"),
-    },
+    secrets: secretResolution.secrets,
+    secretMetadata: secretResolution.metadata,
   };
 
   functions.logger.info("Environment configuration loaded", {
     nodeEnv: config.nodeEnv,
     projectId: config.projectId,
     endpoints: config.endpoints,
-    configuredSecrets: Object.entries(config.secrets)
-      .filter(([, value]) => Boolean(value))
-      .map(([key]) => key),
+    configuredSecrets: Object.entries(config.secretMetadata)
+      .filter(([, metadata]) => metadata.source !== "unconfigured")
+      .map(([key, metadata]) => ({
+        key,
+        source: metadata.source,
+        configuredSecretName: metadata.configuredSecretName,
+      })),
   });
 
   return config;
