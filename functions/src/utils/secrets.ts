@@ -1,10 +1,10 @@
-import * as functions from "firebase-functions";
 import {
   ManagedSecretKey,
   ManagedSecrets,
   RuntimeEnvironment,
   SecretResolutionMetadata,
 } from "../types/environment";
+import {createLogger} from "../services/logging";
 
 interface SecretManagerContext {
   nodeEnv: RuntimeEnvironment;
@@ -51,6 +51,7 @@ const SECRET_DEFINITIONS: Record<ManagedSecretKey, SecretDefinition> = {
 };
 
 const secretCache = new Map<string, Promise<SecretResolutionResult>>();
+const logger = createLogger("secretManagerService");
 
 const getOptionalEnv = (key: string): string | undefined => {
   const value = process.env[key]?.trim();
@@ -75,12 +76,13 @@ const buildSecretVersionPath = (
   configuredSecretName: string,
 ): string => {
   if (configuredSecretName.startsWith("projects/")) {
-    return configuredSecretName.includes("/versions/")
-      ? configuredSecretName
-      : `${configuredSecretName}/versions/latest`;
+    return configuredSecretName.includes("/versions/") ?
+      configuredSecretName :
+      `${configuredSecretName}/versions/latest`;
   }
 
-  return `projects/${projectId}/secrets/${configuredSecretName}/versions/latest`;
+  return "projects/" +
+    `${projectId}/secrets/${configuredSecretName}/versions/latest`;
 };
 
 const decodeSecretPayload = (
@@ -165,7 +167,7 @@ const loadGoogleSecretManagerSecrets = async (
       );
 
       if (!value) {
-        functions.logger.warn("Secret version returned an empty payload", {
+        logger.warn("Secret version returned an empty payload", {
           secretKey: key,
           configuredSecretName,
           secretVersionPath,
@@ -188,7 +190,7 @@ const loadGoogleSecretManagerSecrets = async (
           configuredSecretName,
         );
 
-        functions.logger.warn("Configured secret was not found in Secret Manager", {
+        logger.warn("Configured secret was not found in Secret Manager", {
           secretKey: key,
           configuredSecretName,
           secretVersionPath,
@@ -196,7 +198,7 @@ const loadGoogleSecretManagerSecrets = async (
         continue;
       }
 
-      functions.logger.error("Secret Manager lookup failed", {
+      logger.error("Secret Manager lookup failed", {
         secretKey: key,
         configuredSecretName,
         secretVersionPath,

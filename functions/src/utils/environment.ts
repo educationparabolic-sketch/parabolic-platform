@@ -1,5 +1,5 @@
-import * as functions from "firebase-functions";
 import {EnvironmentConfig, RuntimeEnvironment} from "../types/environment";
+import {createLogger} from "../services/logging";
 import {loadManagedSecrets} from "./secrets";
 
 const ALLOWED_ENVS: ReadonlySet<RuntimeEnvironment> = new Set([
@@ -44,6 +44,7 @@ const parseNodeEnv = (value: string | undefined): RuntimeEnvironment => {
 };
 
 export const loadEnvironmentConfig = async (): Promise<EnvironmentConfig> => {
+  const logger = createLogger("environmentConfigLoader");
   const nodeEnv = parseNodeEnv(getOptionalEnv("NODE_ENV"));
   const projectId = getRequiredEnv("PROJECT_ID");
   const secretResolution = await loadManagedSecrets({nodeEnv, projectId});
@@ -63,7 +64,7 @@ export const loadEnvironmentConfig = async (): Promise<EnvironmentConfig> => {
     secretMetadata: secretResolution.metadata,
   };
 
-  functions.logger.info("Environment configuration loaded", {
+  logger.info("Environment configuration loaded", {
     nodeEnv: config.nodeEnv,
     projectId: config.projectId,
     endpoints: config.endpoints,
