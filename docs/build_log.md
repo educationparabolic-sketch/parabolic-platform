@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 7  
-Next Build: 8
+Completed Builds: 8  
+Next Build: 9
 
 Current Phase: Phase 2 — Audit & Governance Core
 
@@ -243,18 +243,46 @@ Completed On
 
 ---
 
+## Build 8 — License Change History
+
+Phase  
+Phase 2 — Audit & Governance Core
+
+Summary  
+Implemented immutable institute license mutation history storage aligned with the architecture-defined `licenseHistory` collection.
+
+Components implemented:
+
+- Strongly typed license history entry contracts for service input, persisted records, and write results
+- Centralized LicenseHistoryService for institute-scoped license history writes
+- Create-only Firestore persistence under `institutes/{instituteId}/licenseHistory/{entryId}`
+- Validation for required institute, layer, billing, actor, reason, and effective date fields
+- Optional support for previous/new student limits and Stripe invoice linkage
+- Emulator-backed repeatable tests covering successful writes, duplicate-write rejection, invalid effective dates, and invalid student limits
+
+Result  
+The backend now has a reusable immutable license mutation history layer ready for future billing and vendor license update integrations while preserving billing transparency and analytics traceability.
+
+Commit Reference  
+Build 8 — License Change History implemented
+
+Completed On  
+2026-03-19
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 8
+Next Build Number: 9
 
 Phase  
 Phase 2 — Audit & Governance Core
 
 Subsystem  
-License Change History
+Execution Override Logging
 
 Reference  
-3_Core_Architectures.md → Section 37.5 License Change Logs
+3_Core_Architectures.md → Section 37.7 Override Logs
 
 ---
 
@@ -269,7 +297,8 @@ Build | Phase | Status
 5 | Platform Foundation | Completed
 6 | Audit & Governance Core | Completed
 7 | Audit & Governance Core | Completed
-8–150 | Remaining Phases | Pending
+8 | Audit & Governance Core | Completed
+9–150 | Remaining Phases | Pending
 
 ---
 

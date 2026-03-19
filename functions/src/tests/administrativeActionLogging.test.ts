@@ -3,13 +3,17 @@ import test from "node:test";
 import {
   administrativeActionLoggingService,
 } from "../services/administrativeActionLogging";
-import {getFirestore} from "../utils/firebaseAdmin";
+import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
 
 process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8080";
 process.env.GCLOUD_PROJECT ??= "parabolic-platform-build-7-tests";
 process.env.GOOGLE_CLOUD_PROJECT ??= process.env.GCLOUD_PROJECT;
 
 const firestore = getFirestore();
+
+test.after(async () => {
+  await getFirebaseAdminApp().delete();
+});
 
 const deleteDocumentIfPresent = async (path: string): Promise<void> => {
   const documentReference = firestore.doc(path);
