@@ -51,6 +51,7 @@ RuntimeErrorReporter | Build 5 | Centralized Google Cloud Error Reporting integr
 AuditLogStorageService | Build 6 | Persist immutable global, vendor, and institute audit records in Firestore
 AdministrativeActionLoggingService | Build 7 | Generate architecture-aligned administrative audit events for institute and vendor operations
 LicenseHistoryService | Build 8 | Persist immutable institute license mutation history records
+OverrideLoggingService | Build 9 | Persist immutable institute execution override records
 
 ---
 
@@ -84,6 +85,7 @@ studentYearMetrics | AcademicYear | Student performance metrics
 usage | Institute | Billing usage metering
 license | Institute | License configuration
 licenseHistory | Institute | Immutable institute license change records
+overrideLogs | Institute | Immutable institute execution override records
 
 ---
 

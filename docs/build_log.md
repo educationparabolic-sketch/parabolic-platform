@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 8  
-Next Build: 9
+Completed Builds: 9  
+Next Build: 10
 
 Current Phase: Phase 2 — Audit & Governance Core
 
@@ -271,18 +271,46 @@ Completed On
 
 ---
 
+## Build 9 — Execution Override Logging
+
+Phase  
+Phase 2 — Audit & Governance Core
+
+Summary  
+Implemented immutable institute execution override logging aligned with the architecture-defined `overrideLogs` collection.
+
+Components implemented:
+
+- Strongly typed override log contracts for service input, persisted records, and write results
+- Centralized OverrideLoggingService for institute-scoped execution override writes
+- Create-only Firestore persistence under `institutes/{instituteId}/overrideLogs/{overrideId}`
+- Validation for required institute, run, student, session, override type, justification, and actor fields
+- Support for architecture-defined override categories plus emergency adjustments
+- Emulator-backed repeatable tests for immutable writes and validation failures
+
+Result  
+Backend services now have a reusable immutable override logging layer for forced submissions, mode changes, minimum time bypasses, and emergency adjustments required by governance reporting.
+
+Commit Reference  
+Pending local commit
+
+Completed On  
+2026-03-19
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 9
+Next Build Number: 10
 
 Phase  
 Phase 2 — Audit & Governance Core
 
 Subsystem  
-Execution Override Logging
+Audit Tamper Protection
 
 Reference  
-3_Core_Architectures.md → Section 37.7 Override Logs
+3_Core_Architectures.md → Section 37.14 Tamper Protection
 
 ---
 
@@ -298,7 +326,8 @@ Build | Phase | Status
 6 | Audit & Governance Core | Completed
 7 | Audit & Governance Core | Completed
 8 | Audit & Governance Core | Completed
-9–150 | Remaining Phases | Pending
+9 | Audit & Governance Core | Completed
+10–150 | Remaining Phases | Pending
 
 ---
 
