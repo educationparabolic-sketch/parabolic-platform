@@ -52,6 +52,7 @@ AuditLogStorageService | Build 6 | Persist immutable global, vendor, and institu
 AdministrativeActionLoggingService | Build 7 | Generate architecture-aligned administrative audit events for institute and vendor operations
 LicenseHistoryService | Build 8 | Persist immutable institute license mutation history records
 OverrideLoggingService | Build 9 | Persist immutable institute execution override records
+AuditTamperProtectionRules | Build 10 | Enforce append-only Firestore protection for immutable audit, license history, and override log collections
 
 ---
 
