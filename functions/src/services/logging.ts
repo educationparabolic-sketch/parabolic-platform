@@ -1,5 +1,9 @@
 import {randomUUID} from "crypto";
 import * as functions from "firebase-functions";
+import {
+  createErrorReporterContextFromLog,
+  reportRuntimeError,
+} from "./errorReporting";
 import {LogContext, LogLevel, StructuredLogEntry} from "../types/logging";
 
 const REDACTED_VALUE = "[REDACTED]";
@@ -100,6 +104,25 @@ const emitLog = (entry: StructuredLogEntry): void => {
     throw new Error(`Unsupported log level: ${exhaustiveLevel}`);
   }
   }
+};
+
+const maybeReportRuntimeError = (
+  level: LogLevel,
+  message: string,
+  context: LogContext,
+): void => {
+  if (!("error" in context) || context.error === undefined) {
+    return;
+  }
+
+  if (level !== "ERROR" && level !== "CRITICAL") {
+    return;
+  }
+
+  reportRuntimeError(
+    context.error,
+    createErrorReporterContextFromLog(context, level, message),
+  );
 };
 
 const buildLogEntry = (
@@ -208,6 +231,7 @@ export class StructuredLogger {
    * @param {LogContext} context Additional metadata for this log entry.
    */
   public error(message: string, context: LogContext = {}): void {
+    maybeReportRuntimeError("ERROR", message, this.mergeContext(context));
     emitLog(buildLogEntry("ERROR", message, this.mergeContext(context)));
   }
 
@@ -217,6 +241,7 @@ export class StructuredLogger {
    * @param {LogContext} context Additional metadata for this log entry.
    */
   public critical(message: string, context: LogContext = {}): void {
+    maybeReportRuntimeError("CRITICAL", message, this.mergeContext(context));
     emitLog(buildLogEntry("CRITICAL", message, this.mergeContext(context)));
   }
 
