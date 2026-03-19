@@ -1,6 +1,25 @@
 export type AuditLogScope = "global" | "vendor" | "institute";
 
 export type AuditLogMetadata = Record<string, unknown>;
+export type AuditLogAdditionalFields = Record<string, unknown>;
+
+export type AdministrativeActionType =
+  | "CREATE_TEST_TEMPLATE"
+  | "CREATE_ASSIGNMENT"
+  | "IMPORT_STUDENTS"
+  | "CHANGE_ROLE"
+  | "UPDATE_CALIBRATION";
+
+export type AdministrativeActionEntityType =
+  | "test"
+  | "assignment"
+  | "student"
+  | "role"
+  | "calibration";
+
+export interface AdministrativeActionState {
+  [key: string]: unknown;
+}
 
 export interface AuditLogEntryInput {
   auditId?: string;
@@ -11,6 +30,7 @@ export interface AuditLogEntryInput {
   targetCollection: string;
   targetId: string;
   metadata?: AuditLogMetadata;
+  additionalFields?: AuditLogAdditionalFields;
 }
 
 export interface AuditLogEntry {
@@ -23,10 +43,60 @@ export interface AuditLogEntry {
   targetId: string;
   metadata: AuditLogMetadata;
   timestamp: FirebaseFirestore.FieldValue | FirebaseFirestore.Timestamp;
+  [key: string]: unknown;
 }
 
 export interface AuditLogWriteResult {
   auditId: string;
   path: string;
   scope: AuditLogScope;
+}
+
+export interface AdministrativeActionLogInput {
+  auditId?: string;
+  scope: AuditLogScope;
+  actorId: string;
+  actorRole: string;
+  tenantId?: string | null;
+  actionType: AdministrativeActionType;
+  entityType: AdministrativeActionEntityType;
+  entityId: string;
+  targetCollection: string;
+  beforeState?: AdministrativeActionState;
+  afterState?: AdministrativeActionState;
+  ipAddress?: string;
+  userAgent?: string;
+  layer?: string;
+  calibrationVersion?: string;
+  riskModelVersion?: string;
+  metadata?: AuditLogMetadata;
+}
+
+export interface InstituteAdministrativeActionContext {
+  auditId?: string;
+  actorId: string;
+  actorRole: string;
+  instituteId: string;
+  entityId: string;
+  ipAddress?: string;
+  userAgent?: string;
+  layer?: string;
+  beforeState?: AdministrativeActionState;
+  afterState?: AdministrativeActionState;
+  metadata?: AuditLogMetadata;
+}
+
+export interface VendorAdministrativeActionContext {
+  auditId?: string;
+  actorId: string;
+  actorRole: string;
+  entityId: string;
+  ipAddress?: string;
+  userAgent?: string;
+  layer?: string;
+  calibrationVersion?: string;
+  riskModelVersion?: string;
+  beforeState?: AdministrativeActionState;
+  afterState?: AdministrativeActionState;
+  metadata?: AuditLogMetadata;
 }

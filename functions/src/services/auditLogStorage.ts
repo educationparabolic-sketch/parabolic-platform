@@ -2,6 +2,7 @@ import {randomUUID} from "crypto";
 import {FieldValue} from "firebase-admin/firestore";
 import {createLogger} from "./logging";
 import {
+  AuditLogAdditionalFields,
   AuditLogEntry,
   AuditLogEntryInput,
   AuditLogMetadata,
@@ -19,6 +20,17 @@ const FORBIDDEN_METADATA_KEYS = new Set([
   "answers",
   "responses",
   "sessionData",
+]);
+const RESERVED_AUDIT_FIELD_KEYS = new Set([
+  "auditId",
+  "actorUid",
+  "actorRole",
+  "instituteId",
+  "actionType",
+  "targetCollection",
+  "targetId",
+  "metadata",
+  "timestamp",
 ]);
 
 /**
@@ -64,7 +76,7 @@ const validateTargetCollection = (targetCollection: string): string => {
   return normalizedTargetCollection;
 };
 
-const sanitizeMetadata = (value: unknown): unknown => {
+const sanitizeAuditValue = (value: unknown): unknown => {
   if (value === undefined) {
     return undefined;
   }
@@ -87,7 +99,7 @@ const sanitizeMetadata = (value: unknown): unknown => {
 
   if (Array.isArray(value)) {
     return value
-      .map((item) => sanitizeMetadata(item))
+      .map((item) => sanitizeAuditValue(item))
       .filter((item) => item !== undefined);
   }
 
@@ -100,7 +112,7 @@ const sanitizeMetadata = (value: unknown): unknown => {
           );
         }
 
-        return [key, sanitizeMetadata(nestedValue)] as const;
+        return [key, sanitizeAuditValue(nestedValue)] as const;
       })
       .filter(([, nestedValue]) => nestedValue !== undefined);
 
@@ -110,10 +122,11 @@ const sanitizeMetadata = (value: unknown): unknown => {
   return String(value);
 };
 
-const normalizeMetadata = (
-  metadata: AuditLogMetadata | undefined,
-): AuditLogMetadata => {
-  const sanitizedMetadata = sanitizeMetadata(metadata ?? {});
+const normalizeAuditObject = (
+  value: Record<string, unknown> | undefined,
+  fieldName: string,
+): Record<string, unknown> => {
+  const sanitizedMetadata = sanitizeAuditValue(value ?? {});
 
   if (
     sanitizedMetadata === null ||
@@ -121,11 +134,35 @@ const normalizeMetadata = (
     typeof sanitizedMetadata !== "object"
   ) {
     throw new AuditLogValidationError(
-      "Audit log metadata must resolve to an object.",
+      `Audit log field "${fieldName}" must resolve to an object.`,
     );
   }
 
-  return sanitizedMetadata as AuditLogMetadata;
+  return sanitizedMetadata as Record<string, unknown>;
+};
+
+const normalizeMetadata = (
+  metadata: AuditLogMetadata | undefined,
+): AuditLogMetadata =>
+  normalizeAuditObject(metadata, "metadata") as AuditLogMetadata;
+
+const normalizeAdditionalFields = (
+  additionalFields: AuditLogAdditionalFields | undefined,
+): AuditLogAdditionalFields => {
+  const normalizedAdditionalFields = normalizeAuditObject(
+    additionalFields,
+    "additionalFields",
+  ) as AuditLogAdditionalFields;
+
+  Object.keys(normalizedAdditionalFields).forEach((key) => {
+    if (RESERVED_AUDIT_FIELD_KEYS.has(key)) {
+      throw new AuditLogValidationError(
+        `Audit log additionalFields must not override "${key}".`,
+      );
+    }
+  });
+
+  return normalizedAdditionalFields;
 };
 
 const buildAuditLogPath = (
@@ -226,6 +263,7 @@ export class AuditLogStorageService {
       instituteId ?? undefined,
     );
     const auditLog: AuditLogEntry = {
+      ...normalizeAdditionalFields(entry.additionalFields),
       auditId,
       actorUid: normalizeRequiredString(entry.actorUid, "actorUid"),
       actorRole: normalizeRequiredString(entry.actorRole, "actorRole"),
