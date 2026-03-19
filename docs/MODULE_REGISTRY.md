@@ -48,6 +48,7 @@ EnvironmentConfigLoader | Build 2 | Centralized environment variable and endpoin
 SecretManagerService | Build 3 | Resolve backend secrets from local environment variables or Google Secret Manager
 StructuredLogger | Build 4 | Centralized structured Cloud Logging service with request tracing and log level enforcement
 RuntimeErrorReporter | Build 5 | Centralized Google Cloud Error Reporting integration for handled and unhandled runtime failures
+AuditLogStorageService | Build 6 | Persist immutable global, vendor, and institute audit records in Firestore
 
 ---
 
@@ -68,6 +69,9 @@ PatternEngine | Build 45 | Behavioral pattern detection
 Collection | Scope | Description
 ---|---|---
 institutes | Global | Institute root namespace
+auditLogs | Global | Immutable system-wide audit records
+vendorAuditLogs | Global | Immutable vendor governance audit records
+auditLogs | Institute | Immutable institute-scoped audit records
 students | Institute | Student records
 questionBank | Institute | Question storage
 tests | Institute | Test templates

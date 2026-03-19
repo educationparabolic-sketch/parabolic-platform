@@ -74,6 +74,7 @@ If conflict occurs → follow this section.
 - Do not modify docs unless instructed
 - Use TypeScript
 - Respect Firestore hierarchy
+- Reuse existing services, utilities, and tests before creating new ones
 
 ---
 
@@ -111,6 +112,9 @@ studentYearMetrics
 - Apply middleware + error handling
 - Follow API + Firestore contracts
 - Do not implement unrelated systems
+- Reuse existing test files and test patterns where applicable
+- If backend logic is introduced, add or extend repeatable local tests
+- Prefer emulator-backed tests for Firestore-integrated services
 
 ---
 
@@ -136,6 +140,7 @@ Verify:
 - functions compile
 - no runtime errors
 - endpoints respond correctly
+- repeatable local tests pass for the implemented build
 
 ---
 
@@ -161,6 +166,7 @@ Do NOT:
 - rename modules
 - duplicate systems
 - generate placeholders
+- create duplicate test harnesses when reusable tests already exist
 
 ---
 
