@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 15  
-Next Build: 16
+Completed Builds: 16  
+Next Build: 17
 
 Current Phase: Phase 4 — Template Domain Engine
 
@@ -464,15 +464,45 @@ Completed On
 
 ---
 
+## Build 16 — Template Creation Pipeline
+
+Phase  
+Phase 4 — Template Domain Engine
+
+Summary  
+Implemented the backend template-creation workflow for newly created institute test template documents.
+
+Components implemented:
+
+- Firestore `tests` create trigger for `institutes/{instituteId}/tests/{testId}`
+- Strongly typed `TemplateCreationService` for template payload validation and normalization
+- Validation ensuring `testId` matches the document identifier and `questionIds` are non-empty and duplicate-free
+- Verification that all referenced questions exist under the same institute `questionBank` path
+- Difficulty-distribution validation against referenced question difficulties and `totalQuestions`
+- Timing-profile validation for required difficulty windows and `min <= max` constraints
+- Draft-state enforcement (`status: "draft"`) with deterministic normalization of template core fields
+- Repeatable local test suite for success and validation failure paths
+
+Result  
+New template documents now pass through a deterministic backend validation pipeline that enforces institute-scoped question ownership and architecture-aligned template creation constraints required by Build 16.
+
+Commit Reference  
+Pending local commit
+
+Completed On  
+2026-03-22
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 16
+Next Build Number: 17
 
 Phase  
 Phase 4 — Template Domain Engine
 
 Subsystem  
-Template Creation Pipeline
+Template Configuration Snapshot
 
 Reference  
 3_Core_Architectures.md → Section 42.6 Template Domain Flow
@@ -498,7 +528,8 @@ Build | Phase | Status
 13 | Content Domain | Completed
 14 | Content Domain | Completed
 15 | Content Domain | Completed
-16–150 | Remaining Phases | Pending
+16 | Template Domain | Completed
+17–150 | Remaining Phases | Pending
 
 ---
 
