@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 16  
-Next Build: 17
+Completed Builds: 17  
+Next Build: 18
 
 Current Phase: Phase 4 — Template Domain Engine
 
@@ -494,15 +494,42 @@ Completed On
 
 ---
 
+## Build 17 — Template Configuration Snapshot
+
+Phase  
+Phase 4 — Template Domain Engine
+
+Summary  
+Implemented deterministic template configuration snapshot persistence for assignment-safe reuse of immutable template structure.
+
+Components implemented:
+
+- Extended `TemplateCreationService` normalization to validate and persist `phaseConfigSnapshot` on template creation
+- Deterministic `phaseConfigSnapshot` derivation from difficulty-weighted load when not supplied (`Easy=1`, `Medium=2.3`, `Hard=4`)
+- Added `TemplateConfigurationSnapshotService` to persist immutable template snapshot fields for assignment consumption
+- Integrated snapshot persistence into the existing `tests` onCreate trigger without adding duplicate event handlers
+- Added repeatable local tests for phase snapshot validation and snapshot persistence service behavior
+
+Result  
+Template documents now persist immutable configuration snapshots (`difficultyDistribution`, `phaseConfigSnapshot`, and `timingProfile`) required to prevent future template edits from affecting downstream assignment execution.
+
+Commit Reference  
+Pending local commit
+
+Completed On  
+2026-03-22
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 17
+Next Build Number: 18
 
 Phase  
 Phase 4 — Template Domain Engine
 
 Subsystem  
-Template Configuration Snapshot
+Template Fingerprint Generation
 
 Reference  
 3_Core_Architectures.md → Section 42.6 Template Domain Flow
@@ -529,7 +556,7 @@ Build | Phase | Status
 14 | Content Domain | Completed
 15 | Content Domain | Completed
 16 | Template Domain | Completed
-17–150 | Remaining Phases | Pending
+18–150 | Remaining Phases | Pending
 
 ---
 

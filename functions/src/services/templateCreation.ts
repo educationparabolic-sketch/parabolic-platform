@@ -7,6 +7,7 @@ import {
   TemplateCreationContext,
   TemplateCreationResult,
   TemplateDifficultyDistribution,
+  TemplatePhaseConfigSnapshot,
   TemplateTimingProfile,
   TemplateTimingWindow,
 } from "../types/templateCreation";
@@ -188,6 +189,100 @@ const normalizeTimingProfile = (value: unknown): TemplateTimingProfile => {
   };
 };
 
+const PHASE_EASY_WEIGHT = 1;
+const PHASE_MEDIUM_WEIGHT = 2.3;
+const PHASE_HARD_WEIGHT = 4;
+const PHASE_PERCENT_PRECISION_FACTOR = 100;
+const PHASE_PERCENT_TOLERANCE = 0.01;
+
+const roundToTwoDecimals = (value: number): number =>
+  Math.round(value * PHASE_PERCENT_PRECISION_FACTOR) /
+  PHASE_PERCENT_PRECISION_FACTOR;
+
+const normalizePercentField = (value: unknown, fieldName: string): number => {
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    value < 0 ||
+    value > 100
+  ) {
+    throw new TemplateCreationValidationError(
+      `Template field "${fieldName}" must be a number between 0 and 100.`,
+    );
+  }
+
+  return roundToTwoDecimals(value);
+};
+
+const computeDefaultPhaseConfigSnapshot = (
+  difficultyDistribution: TemplateDifficultyDistribution,
+): TemplatePhaseConfigSnapshot => {
+  const easyLoad = difficultyDistribution.easy * PHASE_EASY_WEIGHT;
+  const mediumLoad = difficultyDistribution.medium * PHASE_MEDIUM_WEIGHT;
+  const hardLoad = difficultyDistribution.hard * PHASE_HARD_WEIGHT;
+  const totalLoad = easyLoad + mediumLoad + hardLoad;
+
+  if (totalLoad <= 0) {
+    throw new TemplateCreationValidationError(
+      "Template phaseConfigSnapshot cannot be computed from an empty " +
+      "difficulty distribution.",
+    );
+  }
+
+  const phase1Percent = roundToTwoDecimals((easyLoad / totalLoad) * 100);
+  const phase2Percent = roundToTwoDecimals((mediumLoad / totalLoad) * 100);
+  const phase3Percent = roundToTwoDecimals(100 - phase1Percent - phase2Percent);
+
+  return {
+    phase1Percent,
+    phase2Percent,
+    phase3Percent,
+  };
+};
+
+const normalizePhaseConfigSnapshot = (
+  value: unknown,
+  difficultyDistribution: TemplateDifficultyDistribution,
+): TemplatePhaseConfigSnapshot => {
+  if (value === undefined) {
+    return computeDefaultPhaseConfigSnapshot(difficultyDistribution);
+  }
+
+  if (!isPlainObject(value)) {
+    throw new TemplateCreationValidationError(
+      "Template field \"phaseConfigSnapshot\" must be an object.",
+    );
+  }
+
+  const phase1Percent = normalizePercentField(
+    value.phase1Percent,
+    "phaseConfigSnapshot.phase1Percent",
+  );
+  const phase2Percent = normalizePercentField(
+    value.phase2Percent,
+    "phaseConfigSnapshot.phase2Percent",
+  );
+  const phase3Percent = normalizePercentField(
+    value.phase3Percent,
+    "phaseConfigSnapshot.phase3Percent",
+  );
+  const phaseTotal = roundToTwoDecimals(
+    phase1Percent + phase2Percent + phase3Percent,
+  );
+
+  if (Math.abs(phaseTotal - 100) > PHASE_PERCENT_TOLERANCE) {
+    throw new TemplateCreationValidationError(
+      "Template field \"phaseConfigSnapshot\" must sum to 100.",
+    );
+  }
+
+  return {
+    phase1Percent,
+    phase2Percent,
+    phase3Percent,
+  };
+};
+
 const countDifficulties = (
   difficulties: QuestionDifficulty[],
 ): QuestionDifficultyCounts => {
@@ -226,6 +321,10 @@ const normalizeTemplateInput = (
   const difficultyDistribution = normalizeDifficultyDistribution(
     data.difficultyDistribution,
   );
+  const phaseConfigSnapshot = normalizePhaseConfigSnapshot(
+    data.phaseConfigSnapshot,
+    difficultyDistribution,
+  );
   const timingProfile = normalizeTimingProfile(data.timingProfile);
   const totalQuestions = data.totalQuestions === undefined ?
     questionIds.length :
@@ -250,6 +349,7 @@ const normalizeTemplateInput = (
 
   return {
     difficultyDistribution,
+    phaseConfigSnapshot,
     questionIds,
     timingProfile,
     totalQuestions,
@@ -348,6 +448,7 @@ export class TemplateCreationService {
     await templateReference.set({
       createdAt,
       difficultyDistribution: normalizedTemplate.difficultyDistribution,
+      phaseConfigSnapshot: normalizedTemplate.phaseConfigSnapshot,
       questionIds: normalizedTemplate.questionIds,
       status: "draft",
       testId,
@@ -364,9 +465,16 @@ export class TemplateCreationService {
     });
 
     return {
+      configurationSnapshot: {
+        difficultyDistribution: normalizedTemplate.difficultyDistribution,
+        phaseConfigSnapshot: normalizedTemplate.phaseConfigSnapshot,
+        timingProfile: normalizedTemplate.timingProfile,
+      },
       difficultyDistribution: normalizedTemplate.difficultyDistribution,
+      phaseConfigSnapshot: normalizedTemplate.phaseConfigSnapshot,
       questionIds: normalizedTemplate.questionIds,
       templatePath,
+      timingProfile: normalizedTemplate.timingProfile,
       totalQuestions: normalizedTemplate.totalQuestions,
       validatedQuestionPaths: questionPaths,
     };

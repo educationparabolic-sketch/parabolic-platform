@@ -13,8 +13,23 @@ gcpMetadata.setGCPResidency(false);
 
 const firestore = getFirestore();
 interface TemplateCreationResult {
+  difficultyDistribution: {
+    easy: number;
+    hard: number;
+    medium: number;
+  };
+  phaseConfigSnapshot: {
+    phase1Percent: number;
+    phase2Percent: number;
+    phase3Percent: number;
+  };
   questionIds: string[];
   templatePath: string;
+  timingProfile: {
+    easy: {max: number; min: number};
+    hard: {max: number; min: number};
+    medium: {max: number; min: number};
+  };
   totalQuestions: number;
   validatedQuestionPaths: string[];
 }
@@ -94,6 +109,11 @@ test(
     assert.equal(result.totalQuestions, 3);
     assert.deepEqual(result.questionIds, questionIds);
     assert.equal(result.validatedQuestionPaths.length, 3);
+    assert.deepEqual(result.phaseConfigSnapshot, {
+      phase1Percent: 13.7,
+      phase2Percent: 31.51,
+      phase3Percent: 54.79,
+    });
 
     const templateSnapshot = await firestore.doc(templatePath).get();
     const templateData = templateSnapshot.data();
@@ -102,6 +122,11 @@ test(
     assert.equal(templateData?.totalQuestions, 3);
     assert.equal(templateData?.totalRuns, 7);
     assert.ok(templateData?.createdAt instanceof Timestamp);
+    assert.deepEqual(templateData?.phaseConfigSnapshot, {
+      phase1Percent: 13.7,
+      phase2Percent: 31.51,
+      phase3Percent: 54.79,
+    });
 
     await deleteDocumentIfPresent(templatePath);
     await Promise.all(questionPaths.map(deleteDocumentIfPresent));
@@ -241,3 +266,48 @@ test("processTemplateCreated rejects invalid timing profile", async () => {
 
   await deleteDocumentIfPresent(questionPath);
 });
+
+test(
+  "processTemplateCreated rejects invalid phase config snapshot totals",
+  async () => {
+    const instituteId = "inst_build_17_invalid_phase_total";
+    const testId = "template_build_17_invalid_phase_total";
+    const questionPath =
+      `institutes/${instituteId}/questionBank/q_build_17_phase_easy`;
+
+    await deleteDocumentIfPresent(questionPath);
+    await firestore.doc(questionPath).set({difficulty: "Easy"});
+
+    await assert.rejects(
+      templateCreationService.processTemplateCreated(
+        {instituteId, testId},
+        {
+          difficultyDistribution: {
+            easy: 1,
+            hard: 0,
+            medium: 0,
+          },
+          phaseConfigSnapshot: {
+            phase1Percent: 10,
+            phase2Percent: 10,
+            phase3Percent: 10,
+          },
+          questionIds: ["q_build_17_phase_easy"],
+          testId,
+          timingProfile: {
+            easy: {max: 60, min: 30},
+            hard: {max: 200, min: 120},
+            medium: {max: 140, min: 70},
+          },
+          totalQuestions: 1,
+        },
+      ),
+      (error: unknown) => {
+        assert.match(String(error), /sum to 100/i);
+        return true;
+      },
+    );
+
+    await deleteDocumentIfPresent(questionPath);
+  },
+);

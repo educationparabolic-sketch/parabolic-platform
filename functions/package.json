@@ -13,6 +13,7 @@
     "test:question-ingestion": "npm run build && node --test lib/tests/questionIngestion.test.js",
     "test:question-search-query": "npm run build && node --test lib/tests/questionSearchQuery.test.js",
     "test:template-creation": "npm run build && node --test lib/tests/templateCreation.test.js",
+    "test:template-configuration-snapshot": "npm run build && node --test lib/tests/templateConfigurationSnapshot.test.js",
     "test:tag-dictionary": "npm run build && node --test lib/tests/tagDictionary.test.js",
     "test:chapter-dictionary": "npm run build && node --test lib/tests/chapterDictionary.test.js",
     "test:audit": "npm run test:audit-storage && npm run test:audit-actions && npm run test:license-history && npm run test:override-logging && npm run test:audit-tamper-protection",

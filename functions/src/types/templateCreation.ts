@@ -22,16 +22,32 @@ export interface TemplateTimingProfile {
   hard: TemplateTimingWindow;
 }
 
-export interface TemplateCreationResult {
+export interface TemplatePhaseConfigSnapshot {
+  phase1Percent: number;
+  phase2Percent: number;
+  phase3Percent: number;
+}
+
+export interface TemplateConfigurationSnapshot {
   difficultyDistribution: TemplateDifficultyDistribution;
+  phaseConfigSnapshot: TemplatePhaseConfigSnapshot;
+  timingProfile: TemplateTimingProfile;
+}
+
+export interface TemplateCreationResult {
+  configurationSnapshot: TemplateConfigurationSnapshot;
+  difficultyDistribution: TemplateDifficultyDistribution;
+  phaseConfigSnapshot: TemplatePhaseConfigSnapshot;
   questionIds: string[];
   templatePath: string;
+  timingProfile: TemplateTimingProfile;
   totalQuestions: number;
   validatedQuestionPaths: string[];
 }
 
 export interface NormalizedTemplateCreationInput {
   difficultyDistribution: TemplateDifficultyDistribution;
+  phaseConfigSnapshot: TemplatePhaseConfigSnapshot;
   questionIds: string[];
   timingProfile: TemplateTimingProfile;
   totalQuestions: number;
