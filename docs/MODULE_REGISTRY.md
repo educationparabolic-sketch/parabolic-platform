@@ -55,6 +55,7 @@ OverrideLoggingService | Build 9 | Persist immutable institute execution overrid
 AuditTamperProtectionRules | Build 10 | Enforce append-only Firestore protection for immutable audit, license history, and override log collections
 QuestionIngestionService | Build 11 | Validate newly created question-bank documents, normalize tags, delegate search token indexing, and initialize question analytics
 SearchTokenIndexService | Build 12 | Generate deterministic lightweight search tokens from subject, chapter, tags, and question text keywords during question ingestion
+QuestionSearchQueryService | Build 13 | Execute indexed and paginated institute question-bank retrieval for examType+subject, subject+chapter, difficulty+subject, and primaryTag filters
 
 ---
 

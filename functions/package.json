@@ -11,6 +11,7 @@
     "test:audit-storage": "npm run build && node --test lib/tests/auditLogStorage.test.js",
     "test:search-token-index": "npm run build && node --test lib/tests/searchTokenIndex.test.js",
     "test:question-ingestion": "npm run build && node --test lib/tests/questionIngestion.test.js",
+    "test:question-search-query": "npm run build && node --test lib/tests/questionSearchQuery.test.js",
     "test:audit": "npm run test:audit-storage && npm run test:audit-actions && npm run test:license-history && npm run test:override-logging && npm run test:audit-tamper-protection",
     "serve": "npm run build && firebase emulators:start --only functions",
     "shell": "npm run build && firebase functions:shell",
