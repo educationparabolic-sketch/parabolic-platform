@@ -24,6 +24,9 @@ type SupportedQueryPattern =
   "difficulty_subject" |
   "primaryTag";
 
+/**
+ * Raised when a question-search request fails validation.
+ */
 class QuestionSearchValidationError extends Error {
   /**
    * @param {string} message Validation failure detail.
@@ -80,7 +83,7 @@ const normalizeLimit = (value: unknown): number => {
     value > MAX_SEARCH_LIMIT
   ) {
     throw new QuestionSearchValidationError(
-      `Question search "limit" must be an integer between 1 and ` +
+      "Question search \"limit\" must be an integer between 1 and " +
       `${MAX_SEARCH_LIMIT}.`,
     );
   }
@@ -143,8 +146,9 @@ const detectQueryPattern = (
   }
 
   throw new QuestionSearchValidationError(
-    "Unsupported question-search filter combination. Allowed combinations are " +
-    "examType+subject, subject+chapter, difficulty+subject, and primaryTag.",
+    "Unsupported question-search filter combination. Allowed combinations " +
+    "are examType+subject, subject+chapter, difficulty+subject, and " +
+    "primaryTag.",
   );
 };
 
@@ -188,7 +192,7 @@ export class QuestionSearchQueryService {
 
   /**
    * Queries institute question-bank documents using approved indexed filters.
-   * @param {QuestionSearchQueryRequest} request Query filter and pagination input.
+   * @param {QuestionSearchQueryRequest} request Query and pagination input.
    * @return {Promise<QuestionSearchQueryResult>} Paginated query result.
    */
   public async searchQuestions(

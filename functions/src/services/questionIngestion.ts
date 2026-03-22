@@ -1,6 +1,7 @@
 import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import {createLogger} from "./logging";
 import {searchTokenIndexService} from "./searchTokenIndex";
+import {chapterDictionaryService} from "./chapterDictionary";
 import {tagDictionaryService} from "./tagDictionary";
 import {
   QuestionAnalyticsDocument,
@@ -394,6 +395,7 @@ export class QuestionIngestionService {
       const questionReference = this.firestore.doc(questionPath);
       const analyticsReference = this.firestore.doc(analyticsPath);
       let tagDictionaryPaths: string[] = [];
+      let chapterDictionaryPaths: string[] = [];
 
       await this.firestore.runTransaction(async (transaction) => {
         const analyticsSnapshot = await transaction.get(analyticsReference);
@@ -406,6 +408,16 @@ export class QuestionIngestionService {
             },
           );
         tagDictionaryPaths = tagDictionaryEntries.map((entry) => entry.path);
+        const chapterDictionaryEntry =
+          await chapterDictionaryService.incrementUsageCountWithTransaction(
+            transaction,
+            {
+              chapterName: normalizedQuestion.chapter,
+              instituteId: normalizedContext.instituteId,
+              subject: normalizedQuestion.subject,
+            },
+          );
+        chapterDictionaryPaths = [chapterDictionaryEntry.path];
 
         transaction.set(questionReference, updatePayload, {merge: true});
 
@@ -423,6 +435,7 @@ export class QuestionIngestionService {
         instituteId: normalizedContext.instituteId,
         questionId: normalizedContext.questionId,
         questionPath,
+        chapterDictionaryPaths,
         searchTokenCount: searchTokens.length,
         subject: normalizedQuestion.subject,
         tagDictionaryPaths,
@@ -434,6 +447,7 @@ export class QuestionIngestionService {
         normalizedTags,
         questionPath,
         searchTokens,
+        chapterDictionaryPaths,
         tagDictionaryPaths,
       };
     } catch (error) {

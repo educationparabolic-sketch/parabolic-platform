@@ -10,7 +10,13 @@ import {
 const INSTITUTES_COLLECTION = "institutes";
 const TAG_DICTIONARY_COLLECTION = "tagDictionary";
 
+/**
+ * Raised when tag dictionary payload validation fails.
+ */
 class TagDictionaryValidationError extends Error {
+  /**
+   * @param {string} message Validation failure detail.
+   */
   constructor(message: string) {
     super(message);
     this.name = "TagDictionaryValidationError";
@@ -58,10 +64,18 @@ const normalizeInput = (
   };
 };
 
+/**
+ * Maintains institute-scoped tag autocomplete metadata.
+ */
 export class TagDictionaryService {
   private readonly logger = createLogger("TagDictionaryService");
   private readonly firestore = getFirestore();
 
+  /**
+   * Increments usage counts for normalized institute tags.
+   * @param {TagDictionaryUpdateInput} input Tag dictionary input.
+   * @return {Promise<TagDictionaryUpdateResult>} Updated tag entries.
+   */
   public async incrementUsageCounts(
     input: TagDictionaryUpdateInput,
   ): Promise<TagDictionaryUpdateResult> {
@@ -85,6 +99,12 @@ export class TagDictionaryService {
     return {entries};
   }
 
+  /**
+   * Transaction-safe tag usage increments with read-before-write ordering.
+   * @param {Transaction} transaction Active Firestore transaction.
+   * @param {TagDictionaryUpdateInput} input Tag dictionary input.
+   * @return {Promise<TagDictionaryEntry[]>} Updated tag entries.
+   */
   public async incrementUsageCountsWithTransaction(
     transaction: Transaction,
     input: TagDictionaryUpdateInput,

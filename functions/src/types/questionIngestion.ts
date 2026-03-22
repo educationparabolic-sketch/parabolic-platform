@@ -50,6 +50,7 @@ export interface QuestionIngestionContext {
 
 export interface QuestionIngestionResult {
   analyticsPath: string;
+  chapterDictionaryPaths: string[];
   normalizedTags: string[];
   questionPath: string;
   searchTokens: string[];

@@ -12,10 +12,10 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 14  
-Next Build: 15
+Completed Builds: 15  
+Next Build: 16
 
-Current Phase: Phase 3 — Content Domain (Question Ingestion)
+Current Phase: Phase 4 — Template Domain Engine
 
 ---
 
@@ -436,18 +436,46 @@ Completed On
 
 ---
 
-# NEXT BUILD
-
-Next Build Number: 15
+## Build 15 — Chapter Dictionary Service
 
 Phase  
 Phase 3 — Content Domain (Question Ingestion)
 
+Summary  
+Implemented an institute-scoped chapter dictionary service for question-bank autocomplete metadata.
+
+Components implemented:
+
+- Strongly typed `ChapterDictionaryService` for deterministic institute chapter metadata updates
+- Chapter and subject normalization (trim, lowercase, single-space normalization) with required-field validation
+- Deterministic chapter document identity mapping with safe Firestore document IDs
+- Atomic usage-count increments for `institutes/{instituteId}/chapterDictionary/{chapterId}`
+- Integration of chapter dictionary updates into the existing question-ingestion transaction flow
+- Repeatable Firestore emulator tests for chapter dictionary usage increments, validation failures, and ingestion integration coverage
+
+Result  
+The content domain now maintains an institute-scoped `chapterDictionary` metadata collection for chapter autocomplete support without collection scans, aligned with the Build 15 architecture contract.
+
+Commit Reference  
+Pending local commit
+
+Completed On  
+2026-03-22
+
+---
+
+# NEXT BUILD
+
+Next Build Number: 16
+
+Phase  
+Phase 4 — Template Domain Engine
+
 Subsystem  
-Chapter Dictionary Service
+Template Creation Pipeline
 
 Reference  
-3_Core_Architectures.md → Section 39.11 Autocomplete Strategy
+3_Core_Architectures.md → Section 42.6 Template Domain Flow
 
 ---
 
@@ -469,7 +497,8 @@ Build | Phase | Status
 12 | Content Domain | Completed
 13 | Content Domain | Completed
 14 | Content Domain | Completed
-15–150 | Remaining Phases | Pending
+15 | Content Domain | Completed
+16–150 | Remaining Phases | Pending
 
 ---
 

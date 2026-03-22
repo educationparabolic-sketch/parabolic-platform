@@ -32,6 +32,8 @@ test(
     const questionPath = `institutes/${instituteId}/questionBank/${questionId}`;
     const analyticsPath =
       `institutes/${instituteId}/questionAnalytics/${questionId}`;
+    const chapterDictionaryPath =
+      `institutes/${instituteId}/chapterDictionary/motion%20laws`;
     const kinematicsTagPath =
       `institutes/${instituteId}/tagDictionary/kinematics`;
     const velocityTagPath =
@@ -39,6 +41,7 @@ test(
 
     await deleteDocumentIfPresent(questionPath);
     await deleteDocumentIfPresent(analyticsPath);
+    await deleteDocumentIfPresent(chapterDictionaryPath);
     await deleteDocumentIfPresent(kinematicsTagPath);
     await deleteDocumentIfPresent(velocityTagPath);
 
@@ -75,6 +78,7 @@ test(
 
     assert.equal(result.questionPath, questionPath);
     assert.equal(result.analyticsPath, analyticsPath);
+    assert.deepEqual(result.chapterDictionaryPaths, [chapterDictionaryPath]);
     assert.deepEqual(result.normalizedTags, ["kinematics", "velocity"]);
     assert.deepEqual(
       result.tagDictionaryPaths,
@@ -87,6 +91,9 @@ test(
 
     const ingestedQuestion = (await firestore.doc(questionPath).get()).data();
     const analytics = (await firestore.doc(analyticsPath).get()).data();
+    const chapterDictionary = (
+      await firestore.doc(chapterDictionaryPath).get()
+    ).data();
     const kinematicsTagDictionary = (
       await firestore.doc(kinematicsTagPath).get()
     ).data();
@@ -110,6 +117,9 @@ test(
     assert.equal(analytics?.overstayRate, 0);
     assert.equal(analytics?.riskImpactScore, 0);
     assert.equal(analytics?.disciplineStressIndex, 0);
+    assert.equal(chapterDictionary?.chapterName, "motion laws");
+    assert.equal(chapterDictionary?.subject, "physics");
+    assert.equal(chapterDictionary?.usageCount, 1);
     assert.equal(kinematicsTagDictionary?.tagName, "kinematics");
     assert.equal(kinematicsTagDictionary?.usageCount, 1);
     assert.equal(velocityTagDictionary?.tagName, "velocity");
@@ -117,6 +127,7 @@ test(
 
     await deleteDocumentIfPresent(questionPath);
     await deleteDocumentIfPresent(analyticsPath);
+    await deleteDocumentIfPresent(chapterDictionaryPath);
     await deleteDocumentIfPresent(kinematicsTagPath);
     await deleteDocumentIfPresent(velocityTagPath);
   },

@@ -57,6 +57,7 @@ QuestionIngestionService | Build 11 | Validate newly created question-bank docum
 SearchTokenIndexService | Build 12 | Generate deterministic lightweight search tokens from subject, chapter, tags, and question text keywords during question ingestion
 QuestionSearchQueryService | Build 13 | Execute indexed and paginated institute question-bank retrieval for examType+subject, subject+chapter, difficulty+subject, and primaryTag filters
 TagDictionaryService | Build 14 | Persist and increment institute-level tag autocomplete metadata in institutes/{instituteId}/tagDictionary/{tagId}
+ChapterDictionaryService | Build 15 | Persist and increment institute-level chapter autocomplete metadata in institutes/{instituteId}/chapterDictionary/{chapterId} with normalized chapter and subject
 
 ---
 
@@ -83,6 +84,7 @@ auditLogs | Institute | Immutable institute-scoped audit records
 students | Institute | Student records
 questionBank | Institute | Question storage
 tagDictionary | Institute | Autocomplete metadata for normalized question tags
+chapterDictionary | Institute | Autocomplete metadata for normalized chapters per subject
 questionAnalytics | Institute | Question-level analytics stubs and aggregates
 tests | Institute | Test templates
 runs | AcademicYear | Test assignments
