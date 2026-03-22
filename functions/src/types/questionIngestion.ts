@@ -53,4 +53,5 @@ export interface QuestionIngestionResult {
   normalizedTags: string[];
   questionPath: string;
   searchTokens: string[];
+  tagDictionaryPaths: string[];
 }

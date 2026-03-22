@@ -1,6 +1,7 @@
 import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import {createLogger} from "./logging";
 import {searchTokenIndexService} from "./searchTokenIndex";
+import {tagDictionaryService} from "./tagDictionary";
 import {
   QuestionAnalyticsDocument,
   QuestionBankDocument,
@@ -392,9 +393,19 @@ export class QuestionIngestionService {
       } = normalizeQuestionDocument(normalizedContext, data);
       const questionReference = this.firestore.doc(questionPath);
       const analyticsReference = this.firestore.doc(analyticsPath);
+      let tagDictionaryPaths: string[] = [];
 
       await this.firestore.runTransaction(async (transaction) => {
         const analyticsSnapshot = await transaction.get(analyticsReference);
+        const tagDictionaryEntries =
+          await tagDictionaryService.incrementUsageCountsWithTransaction(
+            transaction,
+            {
+              instituteId: normalizedContext.instituteId,
+              tags: normalizedTags,
+            },
+          );
+        tagDictionaryPaths = tagDictionaryEntries.map((entry) => entry.path);
 
         transaction.set(questionReference, updatePayload, {merge: true});
 
@@ -414,6 +425,7 @@ export class QuestionIngestionService {
         questionPath,
         searchTokenCount: searchTokens.length,
         subject: normalizedQuestion.subject,
+        tagDictionaryPaths,
         tags: normalizedTags,
       });
 
@@ -422,6 +434,7 @@ export class QuestionIngestionService {
         normalizedTags,
         questionPath,
         searchTokens,
+        tagDictionaryPaths,
       };
     } catch (error) {
       this.logger.error("Question ingestion failed", {

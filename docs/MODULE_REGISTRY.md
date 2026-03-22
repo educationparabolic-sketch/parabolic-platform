@@ -56,6 +56,7 @@ AuditTamperProtectionRules | Build 10 | Enforce append-only Firestore protection
 QuestionIngestionService | Build 11 | Validate newly created question-bank documents, normalize tags, delegate search token indexing, and initialize question analytics
 SearchTokenIndexService | Build 12 | Generate deterministic lightweight search tokens from subject, chapter, tags, and question text keywords during question ingestion
 QuestionSearchQueryService | Build 13 | Execute indexed and paginated institute question-bank retrieval for examType+subject, subject+chapter, difficulty+subject, and primaryTag filters
+TagDictionaryService | Build 14 | Persist and increment institute-level tag autocomplete metadata in institutes/{instituteId}/tagDictionary/{tagId}
 
 ---
 
@@ -81,6 +82,7 @@ vendorAuditLogs | Global | Immutable vendor governance audit records
 auditLogs | Institute | Immutable institute-scoped audit records
 students | Institute | Student records
 questionBank | Institute | Question storage
+tagDictionary | Institute | Autocomplete metadata for normalized question tags
 questionAnalytics | Institute | Question-level analytics stubs and aggregates
 tests | Institute | Test templates
 runs | AcademicYear | Test assignments

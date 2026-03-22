@@ -32,9 +32,15 @@ test(
     const questionPath = `institutes/${instituteId}/questionBank/${questionId}`;
     const analyticsPath =
       `institutes/${instituteId}/questionAnalytics/${questionId}`;
+    const kinematicsTagPath =
+      `institutes/${instituteId}/tagDictionary/kinematics`;
+    const velocityTagPath =
+      `institutes/${instituteId}/tagDictionary/velocity`;
 
     await deleteDocumentIfPresent(questionPath);
     await deleteDocumentIfPresent(analyticsPath);
+    await deleteDocumentIfPresent(kinematicsTagPath);
+    await deleteDocumentIfPresent(velocityTagPath);
 
     const createdAt = Timestamp.now();
 
@@ -71,12 +77,22 @@ test(
     assert.equal(result.analyticsPath, analyticsPath);
     assert.deepEqual(result.normalizedTags, ["kinematics", "velocity"]);
     assert.deepEqual(
+      result.tagDictionaryPaths,
+      [kinematicsTagPath, velocityTagPath],
+    );
+    assert.deepEqual(
       result.searchTokens,
       ["kinematics", "laws", "motion", "physics", "velocity"],
     );
 
     const ingestedQuestion = (await firestore.doc(questionPath).get()).data();
     const analytics = (await firestore.doc(analyticsPath).get()).data();
+    const kinematicsTagDictionary = (
+      await firestore.doc(kinematicsTagPath).get()
+    ).data();
+    const velocityTagDictionary = (
+      await firestore.doc(velocityTagPath).get()
+    ).data();
 
     assert.deepEqual(ingestedQuestion?.tags, ["kinematics", "velocity"]);
     assert.deepEqual(
@@ -94,9 +110,15 @@ test(
     assert.equal(analytics?.overstayRate, 0);
     assert.equal(analytics?.riskImpactScore, 0);
     assert.equal(analytics?.disciplineStressIndex, 0);
+    assert.equal(kinematicsTagDictionary?.tagName, "kinematics");
+    assert.equal(kinematicsTagDictionary?.usageCount, 1);
+    assert.equal(velocityTagDictionary?.tagName, "velocity");
+    assert.equal(velocityTagDictionary?.usageCount, 1);
 
     await deleteDocumentIfPresent(questionPath);
     await deleteDocumentIfPresent(analyticsPath);
+    await deleteDocumentIfPresent(kinematicsTagPath);
+    await deleteDocumentIfPresent(velocityTagPath);
   },
 );
 

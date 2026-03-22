@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 13  
-Next Build: 14
+Completed Builds: 14  
+Next Build: 15
 
 Current Phase: Phase 3 — Content Domain (Question Ingestion)
 
@@ -408,15 +408,43 @@ Completed On
 
 ---
 
+## Build 14 — Tag Dictionary Service
+
+Phase  
+Phase 3 — Content Domain (Question Ingestion)
+
+Summary  
+Implemented an institute-scoped tag dictionary service for question-bank autocomplete metadata.
+
+Components implemented:
+
+- Strongly typed `TagDictionaryService` for deterministic institute tag metadata updates
+- Normalization and deduplication of incoming tags (trim, lowercase, single-space normalization)
+- Deterministic tag document identity mapping with safe Firestore document IDs
+- Atomic usage-count increments for `institutes/{instituteId}/tagDictionary/{tagId}`
+- Integration of tag dictionary updates into the existing question-ingestion transaction flow
+- Repeatable Firestore emulator tests for usage-count increments, normalization, validation failures, and ingestion integration coverage
+
+Result  
+The content domain now maintains a small, institute-scoped `tagDictionary` metadata collection for autocomplete support without collection scans, aligned with the Build 14 architecture contract.
+
+Commit Reference  
+Pending local commit
+
+Completed On  
+2026-03-22
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 14
+Next Build Number: 15
 
 Phase  
 Phase 3 — Content Domain (Question Ingestion)
 
 Subsystem  
-Tag Dictionary Service
+Chapter Dictionary Service
 
 Reference  
 3_Core_Architectures.md → Section 39.11 Autocomplete Strategy
@@ -440,7 +468,8 @@ Build | Phase | Status
 11 | Content Domain | Completed
 12 | Content Domain | Completed
 13 | Content Domain | Completed
-14–150 | Remaining Phases | Pending
+14 | Content Domain | Completed
+15–150 | Remaining Phases | Pending
 
 ---
 
