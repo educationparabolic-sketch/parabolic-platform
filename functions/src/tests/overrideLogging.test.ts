@@ -22,60 +22,63 @@ const deleteDocumentIfPresent = async (path: string): Promise<void> => {
   }
 };
 
-test("createOverrideLog stores an immutable institute override record", async () => {
-  const instituteId = "inst_009";
-  const overrideId = "build-9-force-submit";
-  const overridePath = `institutes/${instituteId}/overrideLogs/${overrideId}`;
+test(
+  "createOverrideLog stores an immutable institute override record",
+  async () => {
+    const instituteId = "inst_009";
+    const overrideId = "build-9-force-submit";
+    const overridePath = `institutes/${instituteId}/overrideLogs/${overrideId}`;
 
-  await deleteDocumentIfPresent(overridePath);
+    await deleteDocumentIfPresent(overridePath);
 
-  const result = await overrideLoggingService.createOverrideLog({
-    instituteId,
-    justification: "Network issue caused proctor-approved forced submission",
-    overrideId,
-    overrideType: "FORCE_SUBMIT",
-    performedBy: "teacher_009",
-    runId: "run_2026_09",
-    sessionId: "session_009",
-    studentId: "student_009",
-  });
-
-  assert.equal(result.instituteId, instituteId);
-  assert.equal(result.overrideId, overrideId);
-  assert.equal(result.path, overridePath);
-
-  const snapshot = await firestore.doc(overridePath).get();
-  const overrideLog = snapshot.data();
-
-  assert.equal(snapshot.exists, true);
-  assert.equal(overrideLog?.overrideId, overrideId);
-  assert.equal(overrideLog?.instituteId, instituteId);
-  assert.equal(overrideLog?.runId, "run_2026_09");
-  assert.equal(overrideLog?.studentId, "student_009");
-  assert.equal(overrideLog?.sessionId, "session_009");
-  assert.equal(overrideLog?.overrideType, "FORCE_SUBMIT");
-  assert.equal(
-    overrideLog?.justification,
-    "Network issue caused proctor-approved forced submission",
-  );
-  assert.equal(overrideLog?.performedBy, "teacher_009");
-  assert.equal(typeof overrideLog?.timestamp?.toDate, "function");
-
-  await assert.rejects(
-    overrideLoggingService.createOverrideLog({
+    const result = await overrideLoggingService.createOverrideLog({
       instituteId,
-      justification: "Duplicate immutable write",
+      justification: "Network issue caused proctor-approved forced submission",
       overrideId,
       overrideType: "FORCE_SUBMIT",
       performedBy: "teacher_009",
       runId: "run_2026_09",
       sessionId: "session_009",
       studentId: "student_009",
-    }),
-  );
+    });
 
-  await deleteDocumentIfPresent(overridePath);
-});
+    assert.equal(result.instituteId, instituteId);
+    assert.equal(result.overrideId, overrideId);
+    assert.equal(result.path, overridePath);
+
+    const snapshot = await firestore.doc(overridePath).get();
+    const overrideLog = snapshot.data();
+
+    assert.equal(snapshot.exists, true);
+    assert.equal(overrideLog?.overrideId, overrideId);
+    assert.equal(overrideLog?.instituteId, instituteId);
+    assert.equal(overrideLog?.runId, "run_2026_09");
+    assert.equal(overrideLog?.studentId, "student_009");
+    assert.equal(overrideLog?.sessionId, "session_009");
+    assert.equal(overrideLog?.overrideType, "FORCE_SUBMIT");
+    assert.equal(
+      overrideLog?.justification,
+      "Network issue caused proctor-approved forced submission",
+    );
+    assert.equal(overrideLog?.performedBy, "teacher_009");
+    assert.equal(typeof overrideLog?.timestamp?.toDate, "function");
+
+    await assert.rejects(
+      overrideLoggingService.createOverrideLog({
+        instituteId,
+        justification: "Duplicate immutable write",
+        overrideId,
+        overrideType: "FORCE_SUBMIT",
+        performedBy: "teacher_009",
+        runId: "run_2026_09",
+        sessionId: "session_009",
+        studentId: "student_009",
+      }),
+    );
+
+    await deleteDocumentIfPresent(overridePath);
+  },
+);
 
 test("createOverrideLog rejects unsupported override types", async () => {
   await assert.rejects(

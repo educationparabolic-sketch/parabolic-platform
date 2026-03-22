@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 11  
-Next Build: 12
+Completed Builds: 12  
+Next Build: 13
 
 Current Phase: Phase 3 — Content Domain (Question Ingestion)
 
@@ -353,18 +353,45 @@ Completed On
 
 ---
 
+## Build 12 — Search Token Index Generation
+
+Phase  
+Phase 3 — Content Domain (Question Ingestion)
+
+Summary  
+Implemented a dedicated lightweight search-token indexing subsystem for question metadata.
+
+Components implemented:
+
+- Strongly typed `SearchTokenIndexService` for deterministic token generation
+- Token generation from subject, chapter, normalized tags, and optional question text keywords
+- Refactor of `QuestionIngestionService` to delegate token creation to the new shared indexing service
+- Repeatable local test coverage for token normalization, deduplication, casing, and keyword expansion
+- Build script entry for isolated search-token index verification
+
+Result  
+Question ingestion now uses a reusable token-indexing module aligned with the lightweight Firestore text-search strategy, preparing the content domain for the later indexed question-query build without introducing new schema collections.
+
+Commit Reference  
+Pending local commit
+
+Completed On  
+2026-03-22
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 12
+Next Build Number: 13
 
 Phase  
 Phase 3 — Content Domain (Question Ingestion)
 
 Subsystem  
-Search Token Index Generation
+Question Search Query Engine
 
 Reference  
-3_Core_Architectures.md → Section 39.5 Text Search Strategy — Lightweight Token Index
+3_Core_Architectures.md → Section 39.3 Question Search Indexing
 
 ---
 
@@ -383,7 +410,8 @@ Build | Phase | Status
 9 | Audit & Governance Core | Completed
 10 | Audit & Governance Core | Completed
 11 | Content Domain | Completed
-12–150 | Remaining Phases | Pending
+12 | Content Domain | Completed
+13–150 | Remaining Phases | Pending
 
 ---
 

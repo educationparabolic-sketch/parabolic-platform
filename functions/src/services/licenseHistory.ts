@@ -11,14 +11,23 @@ import {
 const INSTITUTES_COLLECTION = "institutes";
 const LICENSE_HISTORY_COLLECTION = "licenseHistory";
 
+/**
+ * Raised when a license history entry fails validation.
+ */
 class LicenseHistoryValidationError extends Error {
+  /**
+   * @param {string} message Validation failure detail.
+   */
   constructor(message: string) {
     super(message);
     this.name = "LicenseHistoryValidationError";
   }
 }
 
-const normalizeRequiredString = (value: string, fieldName: string): string => {
+const normalizeRequiredString = (
+  value: string,
+  fieldName: string,
+): string => {
   const normalizedValue = value.trim();
 
   if (!normalizedValue) {
@@ -74,7 +83,8 @@ const normalizeEffectiveDate = (value: string | Date): string => {
 
   if (Number.isNaN(parsedDate.getTime())) {
     throw new LicenseHistoryValidationError(
-      "License history field \"effectiveDate\" must be a valid ISO date string.",
+      "License history field \"effectiveDate\" must be a valid ISO " +
+      "date string.",
     );
   }
 
@@ -88,9 +98,17 @@ const buildLicenseHistoryPath = (
   `${INSTITUTES_COLLECTION}/${instituteId}/` +
   `${LICENSE_HISTORY_COLLECTION}/${entryId}`;
 
+/**
+ * Persists immutable institute license change history records.
+ */
 export class LicenseHistoryService {
   private readonly logger = createLogger("LicenseHistoryService");
 
+  /**
+   * Creates an immutable institute-scoped license history entry.
+   * @param {LicenseHistoryEntryInput} input License change data to persist.
+   * @return {Promise<LicenseHistoryWriteResult>} Stored entry metadata.
+   */
   public async createLicenseHistoryEntry(
     input: LicenseHistoryEntryInput,
   ): Promise<LicenseHistoryWriteResult> {

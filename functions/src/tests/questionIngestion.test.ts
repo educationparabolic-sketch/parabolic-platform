@@ -23,78 +23,82 @@ const deleteDocumentIfPresent = async (path: string): Promise<void> => {
   }
 };
 
-test("ingestQuestion normalizes tags, adds search tokens, and initializes analytics", async () => {
-  const instituteId = "inst_build_11";
-  const questionId = "question_build_11";
-  const questionPath = `institutes/${instituteId}/questionBank/${questionId}`;
-  const analyticsPath =
-    `institutes/${instituteId}/questionAnalytics/${questionId}`;
+test(
+  "ingestQuestion normalizes tags, adds search tokens, " +
+    "and initializes analytics",
+  async () => {
+    const instituteId = "inst_build_11";
+    const questionId = "question_build_11";
+    const questionPath = `institutes/${instituteId}/questionBank/${questionId}`;
+    const analyticsPath =
+      `institutes/${instituteId}/questionAnalytics/${questionId}`;
 
-  await deleteDocumentIfPresent(questionPath);
-  await deleteDocumentIfPresent(analyticsPath);
+    await deleteDocumentIfPresent(questionPath);
+    await deleteDocumentIfPresent(analyticsPath);
 
-  const createdAt = Timestamp.now();
+    const createdAt = Timestamp.now();
 
-  await firestore.doc(questionPath).set({
-    chapter: "Motion Laws",
-    correctAnswer: "B",
-    createdAt,
-    difficulty: "Medium",
-    examType: "JEE",
-    marks: 4,
-    negativeMarks: 1,
-    parentQuestionId: null,
-    questionId,
-    questionImageUrl: "",
-    questionType: "MCQ",
-    simulationLink: null,
-    solutionImageUrl: "",
-    subject: "Physics",
-    tags: [" Kinematics ", "velocity", "kinematics"],
-    tutorialVideoLink: null,
-    uniqueKey: "PHY-MOT-001",
-    version: 1,
-  });
-
-  const result = await questionIngestionService.ingestQuestion(
-    {
-      instituteId,
+    await firestore.doc(questionPath).set({
+      chapter: "Motion Laws",
+      correctAnswer: "B",
+      createdAt,
+      difficulty: "Medium",
+      examType: "JEE",
+      marks: 4,
+      negativeMarks: 1,
+      parentQuestionId: null,
       questionId,
-    },
-    (await firestore.doc(questionPath).get()).data(),
-  );
+      questionImageUrl: "",
+      questionType: "MCQ",
+      simulationLink: null,
+      solutionImageUrl: "",
+      subject: "Physics",
+      tags: [" Kinematics ", "velocity", "kinematics"],
+      tutorialVideoLink: null,
+      uniqueKey: "PHY-MOT-001",
+      version: 1,
+    });
 
-  assert.equal(result.questionPath, questionPath);
-  assert.equal(result.analyticsPath, analyticsPath);
-  assert.deepEqual(result.normalizedTags, ["kinematics", "velocity"]);
-  assert.deepEqual(
-    result.searchTokens,
-    ["kinematics", "laws", "motion", "physics", "velocity"],
-  );
+    const result = await questionIngestionService.ingestQuestion(
+      {
+        instituteId,
+        questionId,
+      },
+      (await firestore.doc(questionPath).get()).data(),
+    );
 
-  const ingestedQuestion = (await firestore.doc(questionPath).get()).data();
-  const analytics = (await firestore.doc(analyticsPath).get()).data();
+    assert.equal(result.questionPath, questionPath);
+    assert.equal(result.analyticsPath, analyticsPath);
+    assert.deepEqual(result.normalizedTags, ["kinematics", "velocity"]);
+    assert.deepEqual(
+      result.searchTokens,
+      ["kinematics", "laws", "motion", "physics", "velocity"],
+    );
 
-  assert.deepEqual(ingestedQuestion?.tags, ["kinematics", "velocity"]);
-  assert.deepEqual(
-    ingestedQuestion?.searchTokens,
-    ["kinematics", "laws", "motion", "physics", "velocity"],
-  );
-  assert.equal(ingestedQuestion?.status, "active");
-  assert.equal(ingestedQuestion?.usedCount, 0);
-  assert.equal(analytics?.avgRawPercentWhenUsed, 0);
-  assert.equal(analytics?.avgAccuracyWhenUsed, 0);
-  assert.equal(analytics?.correctAttemptCount, 0);
-  assert.equal(analytics?.incorrectAttemptCount, 0);
-  assert.equal(analytics?.averageResponseTimeMs, 0);
-  assert.equal(analytics?.guessRate, 0);
-  assert.equal(analytics?.overstayRate, 0);
-  assert.equal(analytics?.riskImpactScore, 0);
-  assert.equal(analytics?.disciplineStressIndex, 0);
+    const ingestedQuestion = (await firestore.doc(questionPath).get()).data();
+    const analytics = (await firestore.doc(analyticsPath).get()).data();
 
-  await deleteDocumentIfPresent(questionPath);
-  await deleteDocumentIfPresent(analyticsPath);
-});
+    assert.deepEqual(ingestedQuestion?.tags, ["kinematics", "velocity"]);
+    assert.deepEqual(
+      ingestedQuestion?.searchTokens,
+      ["kinematics", "laws", "motion", "physics", "velocity"],
+    );
+    assert.equal(ingestedQuestion?.status, "active");
+    assert.equal(ingestedQuestion?.usedCount, 0);
+    assert.equal(analytics?.avgRawPercentWhenUsed, 0);
+    assert.equal(analytics?.avgAccuracyWhenUsed, 0);
+    assert.equal(analytics?.correctAttemptCount, 0);
+    assert.equal(analytics?.incorrectAttemptCount, 0);
+    assert.equal(analytics?.averageResponseTimeMs, 0);
+    assert.equal(analytics?.guessRate, 0);
+    assert.equal(analytics?.overstayRate, 0);
+    assert.equal(analytics?.riskImpactScore, 0);
+    assert.equal(analytics?.disciplineStressIndex, 0);
+
+    await deleteDocumentIfPresent(questionPath);
+    await deleteDocumentIfPresent(analyticsPath);
+  },
+);
 
 test("ingestQuestion rejects invalid schema payloads", async () => {
   await assert.rejects(

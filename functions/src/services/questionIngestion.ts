@@ -1,5 +1,6 @@
 import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import {createLogger} from "./logging";
+import {searchTokenIndexService} from "./searchTokenIndex";
 import {
   QuestionAnalyticsDocument,
   QuestionBankDocument,
@@ -25,9 +26,14 @@ const ALLOWED_STATUSES = new Set<QuestionStatus>([
   "archived",
   "deprecated",
 ]);
-const SEARCH_TOKEN_SPLIT_PATTERN = /[^a-z0-9]+/g;
 
+/**
+ * Raised when a question-bank document fails ingestion validation.
+ */
 class QuestionIngestionValidationError extends Error {
+  /**
+   * @param {string} message Validation failure detail.
+   */
   constructor(message: string) {
     super(message);
     this.name = "QuestionIngestionValidationError";
@@ -42,7 +48,10 @@ const isPlainObject = (
   !(value instanceof Date) &&
   !(value instanceof Timestamp);
 
-const normalizeRequiredString = (value: unknown, fieldName: string): string => {
+const normalizeRequiredString = (
+  value: unknown,
+  fieldName: string,
+): string => {
   if (typeof value !== "string") {
     throw new QuestionIngestionValidationError(
       `Question field "${fieldName}" must be a string.`,
@@ -84,7 +93,10 @@ const normalizeStringAllowEmpty = (
   return value.trim();
 };
 
-const normalizeRequiredNumber = (value: unknown, fieldName: string): number => {
+const normalizeRequiredNumber = (
+  value: unknown,
+  fieldName: string,
+): number => {
   if (typeof value !== "number" || Number.isNaN(value)) {
     throw new QuestionIngestionValidationError(
       `Question field "${fieldName}" must be a valid number.`,
@@ -126,11 +138,15 @@ const normalizeStatus = (value: unknown): QuestionStatus => {
     return "active";
   }
 
-  const normalizedValue = normalizeRequiredString(value, "status").toLowerCase();
+  const normalizedValue = normalizeRequiredString(
+    value,
+    "status",
+  ).toLowerCase();
 
   if (!ALLOWED_STATUSES.has(normalizedValue as QuestionStatus)) {
     throw new QuestionIngestionValidationError(
-      "Question field \"status\" must be one of active, used, archived, or deprecated.",
+      "Question field \"status\" must be one of active, used, " +
+      "archived, or deprecated.",
     );
   }
 
@@ -191,25 +207,35 @@ const normalizeLastUsedAt = (
   return normalizeTimestamp(value, "lastUsedAt");
 };
 
-const tokenizeValue = (value: string): string[] =>
-  value
-    .toLowerCase()
-    .split(SEARCH_TOKEN_SPLIT_PATTERN)
-    .map((token) => token.trim())
-    .filter(Boolean);
+const normalizeQuestionTextKeywords = (value: unknown): string[] => {
+  if (value === undefined || value === null) {
+    return [];
+  }
 
-const buildSearchTokens = (
-  subject: string,
-  chapter: string,
-  tags: string[],
-): string[] => {
-  const tokenValues = [
-    ...tokenizeValue(subject),
-    ...tokenizeValue(chapter),
-    ...tags.flatMap((tag) => tokenizeValue(tag)),
-  ];
+  if (!Array.isArray(value)) {
+    throw new QuestionIngestionValidationError(
+      "Question field \"questionTextKeywords\" must be an array of strings.",
+    );
+  }
 
-  return Array.from(new Set(tokenValues)).sort();
+  return value.map((keyword) => {
+    if (typeof keyword !== "string") {
+      throw new QuestionIngestionValidationError(
+        "Question field \"questionTextKeywords\" must contain only strings.",
+      );
+    }
+
+    const normalizedKeyword = keyword.trim();
+
+    if (!normalizedKeyword) {
+      throw new QuestionIngestionValidationError(
+        "Question field \"questionTextKeywords\" must not contain " +
+        "empty values.",
+      );
+    }
+
+    return normalizedKeyword;
+  });
 };
 
 const buildQuestionAnalyticsStub = (): QuestionAnalyticsDocument => ({
@@ -250,7 +276,14 @@ const normalizeQuestionDocument = (
   const normalizedTags = normalizeTags(data.tags);
   const subject = normalizeRequiredString(data.subject, "subject");
   const chapter = normalizeRequiredString(data.chapter, "chapter");
-  const searchTokens = buildSearchTokens(subject, chapter, normalizedTags);
+  const {searchTokens} = searchTokenIndexService.generateTokens({
+    chapter,
+    questionTextKeywords: normalizeQuestionTextKeywords(
+      data.questionTextKeywords,
+    ),
+    subject,
+    tags: normalizedTags,
+  });
   const createdAt = data.createdAt instanceof Timestamp ?
     normalizeTimestamp(data.createdAt, "createdAt") :
     Timestamp.now();
@@ -319,16 +352,28 @@ const normalizeQuestionDocument = (
   };
 };
 
+/**
+ * Validates and normalizes newly created institute question documents.
+ */
 export class QuestionIngestionService {
   private readonly firestore = getFirestore();
   private readonly logger = createLogger("QuestionIngestionService");
 
+  /**
+   * Ingests a newly created institute question-bank document.
+   * @param {QuestionIngestionContext} context Path-bound identifiers.
+   * @param {unknown} data Raw Firestore document payload.
+   * @return {Promise<QuestionIngestionResult>} Persisted ingestion metadata.
+   */
   public async ingestQuestion(
     context: QuestionIngestionContext,
     data: unknown,
   ): Promise<QuestionIngestionResult> {
     const normalizedContext = {
-      instituteId: normalizeRequiredString(context.instituteId, "instituteId"),
+      instituteId: normalizeRequiredString(
+        context.instituteId,
+        "instituteId",
+      ),
       questionId: normalizeRequiredString(context.questionId, "questionId"),
     };
     const questionPath =

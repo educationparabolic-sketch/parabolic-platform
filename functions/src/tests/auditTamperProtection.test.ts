@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST ?? "127.0.0.1:8080";
-const projectId = process.env.GCLOUD_PROJECT ?? "parabolic-platform-build-10-tests";
+const projectId =
+  process.env.GCLOUD_PROJECT ?? "parabolic-platform-build-10-tests";
 const databasePath = `projects/${projectId}/databases/(default)`;
 const documentsBaseUrl =
   `http://${emulatorHost}/v1/${databasePath}/documents`;
@@ -37,7 +38,9 @@ const toFirestoreFields = (
   payload: Record<string, FirestoreScalar>,
 ): Record<string, Record<string, string | number | boolean>> =>
   Object.fromEntries(
-    Object.entries(payload).map(([key, value]) => [key, toFirestoreValue(value)]),
+    Object.entries(payload).map(
+      ([key, value]) => [key, toFirestoreValue(value)],
+    ),
   );
 
 const buildDocumentName = (documentPath: string): string =>
@@ -234,20 +237,23 @@ const protectedCollections = [
   },
 ] as const;
 
-test("protected audit collections accept create requests with server timestamps", async () => {
-  for (const collection of protectedCollections) {
-    const response = await createProtectedDocument(
-      collection.path,
-      collection.createPayload,
-    );
+test(
+  "protected audit collections accept create requests with server timestamps",
+  async () => {
+    for (const collection of protectedCollections) {
+      const response = await createProtectedDocument(
+        collection.path,
+        collection.createPayload,
+      );
 
-    assert.equal(
-      response.ok,
-      true,
-      `Expected create to succeed for ${collection.path}.`,
-    );
-  }
-});
+      assert.equal(
+        response.ok,
+        true,
+        `Expected create to succeed for ${collection.path}.`,
+      );
+    }
+  },
+);
 
 test("protected audit collections reject client timestamp writes", async () => {
   for (const collection of protectedCollections) {

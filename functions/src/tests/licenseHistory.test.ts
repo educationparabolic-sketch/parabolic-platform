@@ -22,66 +22,69 @@ const deleteDocumentIfPresent = async (path: string): Promise<void> => {
   }
 };
 
-test("createLicenseHistoryEntry stores an immutable institute license record", async () => {
-  const entryId = "build-8-license-history";
-  const instituteId = "inst_008";
-  const entryPath = `institutes/${instituteId}/licenseHistory/${entryId}`;
+test(
+  "createLicenseHistoryEntry stores an immutable institute license record",
+  async () => {
+    const entryId = "build-8-license-history";
+    const instituteId = "inst_008";
+    const entryPath = `institutes/${instituteId}/licenseHistory/${entryId}`;
 
-  await deleteDocumentIfPresent(entryPath);
+    await deleteDocumentIfPresent(entryPath);
 
-  const result = await licenseHistoryService.createLicenseHistoryEntry({
-    billingPlan: "annual_growth",
-    changedBy: "vendor_008",
-    effectiveDate: "2026-04-01T00:00:00.000Z",
-    entryId,
-    instituteId,
-    newLayer: "L2",
-    newStudentLimit: 500,
-    previousLayer: "L1",
-    previousStudentLimit: 200,
-    reason: "Upgrade request approved",
-    stripeInvoiceId: "in_123456789",
-  });
-
-  assert.equal(result.entryId, entryId);
-  assert.equal(result.instituteId, instituteId);
-  assert.equal(result.path, entryPath);
-
-  const snapshot = await firestore.doc(entryPath).get();
-  const licenseHistory = snapshot.data();
-
-  assert.equal(snapshot.exists, true);
-  assert.equal(licenseHistory?.entryId, entryId);
-  assert.equal(licenseHistory?.instituteId, instituteId);
-  assert.equal(licenseHistory?.previousLayer, "L1");
-  assert.equal(licenseHistory?.newLayer, "L2");
-  assert.equal(licenseHistory?.billingPlan, "annual_growth");
-  assert.equal(licenseHistory?.changedBy, "vendor_008");
-  assert.equal(licenseHistory?.reason, "Upgrade request approved");
-  assert.equal(licenseHistory?.previousStudentLimit, 200);
-  assert.equal(licenseHistory?.newStudentLimit, 500);
-  assert.equal(licenseHistory?.stripeInvoiceId, "in_123456789");
-  assert.equal(
-    licenseHistory?.effectiveDate,
-    "2026-04-01T00:00:00.000Z",
-  );
-  assert.equal(typeof licenseHistory?.timestamp?.toDate, "function");
-
-  await assert.rejects(
-    licenseHistoryService.createLicenseHistoryEntry({
+    const result = await licenseHistoryService.createLicenseHistoryEntry({
       billingPlan: "annual_growth",
       changedBy: "vendor_008",
       effectiveDate: "2026-04-01T00:00:00.000Z",
       entryId,
       instituteId,
-      newLayer: "L3",
-      previousLayer: "L2",
-      reason: "Duplicate immutable write",
-    }),
-  );
+      newLayer: "L2",
+      newStudentLimit: 500,
+      previousLayer: "L1",
+      previousStudentLimit: 200,
+      reason: "Upgrade request approved",
+      stripeInvoiceId: "in_123456789",
+    });
 
-  await deleteDocumentIfPresent(entryPath);
-});
+    assert.equal(result.entryId, entryId);
+    assert.equal(result.instituteId, instituteId);
+    assert.equal(result.path, entryPath);
+
+    const snapshot = await firestore.doc(entryPath).get();
+    const licenseHistory = snapshot.data();
+
+    assert.equal(snapshot.exists, true);
+    assert.equal(licenseHistory?.entryId, entryId);
+    assert.equal(licenseHistory?.instituteId, instituteId);
+    assert.equal(licenseHistory?.previousLayer, "L1");
+    assert.equal(licenseHistory?.newLayer, "L2");
+    assert.equal(licenseHistory?.billingPlan, "annual_growth");
+    assert.equal(licenseHistory?.changedBy, "vendor_008");
+    assert.equal(licenseHistory?.reason, "Upgrade request approved");
+    assert.equal(licenseHistory?.previousStudentLimit, 200);
+    assert.equal(licenseHistory?.newStudentLimit, 500);
+    assert.equal(licenseHistory?.stripeInvoiceId, "in_123456789");
+    assert.equal(
+      licenseHistory?.effectiveDate,
+      "2026-04-01T00:00:00.000Z",
+    );
+    assert.equal(typeof licenseHistory?.timestamp?.toDate, "function");
+
+    await assert.rejects(
+      licenseHistoryService.createLicenseHistoryEntry({
+        billingPlan: "annual_growth",
+        changedBy: "vendor_008",
+        effectiveDate: "2026-04-01T00:00:00.000Z",
+        entryId,
+        instituteId,
+        newLayer: "L3",
+        previousLayer: "L2",
+        reason: "Duplicate immutable write",
+      }),
+    );
+
+    await deleteDocumentIfPresent(entryPath);
+  },
+);
 
 test("createLicenseHistoryEntry rejects invalid effective dates", async () => {
   await assert.rejects(

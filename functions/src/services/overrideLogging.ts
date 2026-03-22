@@ -18,14 +18,23 @@ const ALLOWED_OVERRIDE_TYPES = new Set<OverrideType>([
   "EMERGENCY_ADJUSTMENT",
 ]);
 
+/**
+ * Raised when an execution override log fails validation.
+ */
 class OverrideLogValidationError extends Error {
+  /**
+   * @param {string} message Validation failure detail.
+   */
   constructor(message: string) {
     super(message);
     this.name = "OverrideLogValidationError";
   }
 }
 
-const normalizeRequiredString = (value: string, fieldName: string): string => {
+const normalizeRequiredString = (
+  value: string,
+  fieldName: string,
+): string => {
   const normalizedValue = value.trim();
 
   if (!normalizedValue) {
@@ -56,7 +65,7 @@ const normalizeOverrideType = (value: OverrideType): OverrideType => {
 
   if (!ALLOWED_OVERRIDE_TYPES.has(normalizedValue)) {
     throw new OverrideLogValidationError(
-      `Override log field "overrideType" must be one of ` +
+      "Override log field \"overrideType\" must be one of " +
       `${Array.from(ALLOWED_OVERRIDE_TYPES).join(", ")}.`,
     );
   }
@@ -71,9 +80,17 @@ const buildOverrideLogPath = (
   `${INSTITUTES_COLLECTION}/${instituteId}/` +
   `${OVERRIDE_LOGS_COLLECTION}/${overrideId}`;
 
+/**
+ * Persists immutable institute execution override records.
+ */
 export class OverrideLoggingService {
   private readonly logger = createLogger("OverrideLoggingService");
 
+  /**
+   * Creates an immutable institute-scoped override log entry.
+   * @param {OverrideLogEntryInput} input Override metadata to persist.
+   * @return {Promise<OverrideLogWriteResult>} Stored override metadata.
+   */
   public async createOverrideLog(
     input: OverrideLogEntryInput,
   ): Promise<OverrideLogWriteResult> {
@@ -81,7 +98,8 @@ export class OverrideLoggingService {
       input.instituteId,
       "instituteId",
     );
-    const overrideId = normalizeOptionalString(input.overrideId) ?? randomUUID();
+    const overrideId =
+      normalizeOptionalString(input.overrideId) ?? randomUUID();
     const overridePath = buildOverrideLogPath(instituteId, overrideId);
 
     const entry: OverrideLogEntry = {
