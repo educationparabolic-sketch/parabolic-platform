@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 10  
-Next Build: 11
+Completed Builds: 11  
+Next Build: 12
 
 Current Phase: Phase 3 — Content Domain (Question Ingestion)
 
@@ -208,7 +208,7 @@ Result
 The backend now has a reusable append-only audit storage layer aligned with the architecture-defined Firestore collections and ready for Build 7 action-level integrations.
 
 Commit Reference  
-Pending local commit
+Build 11 — Question Ingestion Pipeline implemented
 
 Completed On  
 2026-03-19
@@ -325,18 +325,46 @@ Completed On
 
 ---
 
+## Build 11 — Question Ingestion Pipeline
+
+Phase  
+Phase 3 — Content Domain (Question Ingestion)
+
+Summary  
+Implemented the question-bank ingestion workflow for newly created institute question documents.
+
+Components implemented:
+
+- Firestore `questionBank` create trigger for `institutes/{instituteId}/questionBank/{questionId}`
+- Strongly typed QuestionIngestionService for schema validation and normalization
+- Deterministic tag normalization with deduplication and lowercase taxonomy alignment
+- Lightweight search token generation from subject, chapter, and normalized tags
+- Initialization of institute-scoped `questionAnalytics` stub documents for future aggregation builds
+- Repeatable Firestore integration test covering ingestion success and schema validation failure paths
+
+Result  
+New question documents now pass through a deterministic backend ingestion step that validates the schema, normalizes searchable metadata, and prepares question analytics state for downstream content and analytics builds.
+
+Commit Reference  
+Pending local commit
+
+Completed On  
+2026-03-22
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 11
+Next Build Number: 12
 
 Phase  
 Phase 3 — Content Domain (Question Ingestion)
 
 Subsystem  
-Question Ingestion Pipeline
+Search Token Index Generation
 
 Reference  
-3_Core_Architectures.md → Section 42.5 Content Domain Flow
+3_Core_Architectures.md → Section 39.5 Text Search Strategy — Lightweight Token Index
 
 ---
 
@@ -354,7 +382,8 @@ Build | Phase | Status
 8 | Audit & Governance Core | Completed
 9 | Audit & Governance Core | Completed
 10 | Audit & Governance Core | Completed
-11–150 | Remaining Phases | Pending
+11 | Content Domain | Completed
+12–150 | Remaining Phases | Pending
 
 ---
 

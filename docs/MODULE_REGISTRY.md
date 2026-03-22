@@ -53,6 +53,7 @@ AdministrativeActionLoggingService | Build 7 | Generate architecture-aligned adm
 LicenseHistoryService | Build 8 | Persist immutable institute license mutation history records
 OverrideLoggingService | Build 9 | Persist immutable institute execution override records
 AuditTamperProtectionRules | Build 10 | Enforce append-only Firestore protection for immutable audit, license history, and override log collections
+QuestionIngestionService | Build 11 | Validate newly created question-bank documents, normalize tags, generate search tokens, and initialize question analytics
 
 ---
 
@@ -78,6 +79,7 @@ vendorAuditLogs | Global | Immutable vendor governance audit records
 auditLogs | Institute | Immutable institute-scoped audit records
 students | Institute | Student records
 questionBank | Institute | Question storage
+questionAnalytics | Institute | Question-level analytics stubs and aggregates
 tests | Institute | Test templates
 runs | AcademicYear | Test assignments
 sessions | Run | Exam execution sessions

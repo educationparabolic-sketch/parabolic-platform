@@ -1,9 +1,12 @@
 import * as functions from "firebase-functions";
 import {registerGlobalErrorHandlers} from "./services/errorReporting";
 import {createRequestLogger} from "./services/logging";
+import {questionBankOnCreate} from "./triggers/questionIngestion";
 import {loadEnvironmentConfig} from "./utils/environment";
 
 registerGlobalErrorHandlers();
+
+export {questionBankOnCreate};
 
 export const helloWorld = functions.https.onRequest(async (
   req: functions.https.Request,
