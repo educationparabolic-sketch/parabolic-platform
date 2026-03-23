@@ -176,6 +176,9 @@ const normalizeRequiredLayer = (value: unknown): LicenseLayer => {
   return normalizedLayer;
 };
 
+const normalizeCalibrationVersion = (value: unknown): string =>
+  normalizeRequiredString(value, "institute.calibrationVersion");
+
 const normalizeNonNegativeInteger = (
   value: unknown,
   fieldName: string,
@@ -430,6 +433,7 @@ export class AssignmentCreationService {
       `${INSTITUTES_COLLECTION}/${instituteId}/` +
       `${ACADEMIC_YEARS_COLLECTION}/${yearId}/` +
       `${RUNS_COLLECTION}/${runId}`;
+    const institutePath = `${INSTITUTES_COLLECTION}/${instituteId}`;
     const testPath =
       `${INSTITUTES_COLLECTION}/${instituteId}/` +
       `${TESTS_COLLECTION}/${testId}`;
@@ -440,6 +444,7 @@ export class AssignmentCreationService {
       `${INSTITUTES_COLLECTION}/${instituteId}/` +
       `${LICENSE_COLLECTION}/current`;
     const runReference = this.firestore.doc(runPath);
+    const instituteReference = this.firestore.doc(institutePath);
     const testReference = this.firestore.doc(testPath);
     const recipientReferences = recipientStudentIds.map((studentId) =>
       this.firestore.doc(
@@ -450,16 +455,24 @@ export class AssignmentCreationService {
     const licenseMainReference = this.firestore.doc(licenseMainPath);
     const licenseCurrentReference = this.firestore.doc(licenseCurrentPath);
     const [
+      instituteSnapshot,
       testSnapshot,
       licenseMainSnapshot,
       licenseCurrentSnapshot,
       ...studentSnapshots
     ] = await this.firestore.getAll(
+      instituteReference,
       testReference,
       licenseMainReference,
       licenseCurrentReference,
       ...recipientReferences,
     );
+
+    if (!instituteSnapshot.exists) {
+      throw new AssignmentCreationValidationError(
+        `Institute "${instituteId}" does not exist.`,
+      );
+    }
 
     if (!testSnapshot.exists) {
       throw new AssignmentCreationValidationError(
@@ -560,6 +573,11 @@ export class AssignmentCreationService {
       );
     }
 
+    const instituteData = instituteSnapshot.data();
+    const calibrationVersion = normalizeCalibrationVersion(
+      instituteData?.calibrationVersion,
+    );
+
     const normalizedTotalSessions = typeof data.totalSessions === "number" &&
       Number.isFinite(data.totalSessions) &&
       data.totalSessions >= 0 ?
@@ -571,10 +589,12 @@ export class AssignmentCreationService {
 
     await this.firestore.runTransaction(async (transaction) => {
       transaction.set(runReference, {
+        calibrationVersion,
         createdAt,
         difficultyDistribution:
           capturedTemplateSnapshot.difficultyDistribution,
         endWindow,
+        licenseLayer: currentLayer,
         mode,
         phaseConfigSnapshot: capturedTemplateSnapshot.phaseConfigSnapshot,
         questionIds: capturedTemplateSnapshot.questionIds,
@@ -597,6 +617,8 @@ export class AssignmentCreationService {
 
     this.logger.info("Assignment creation validation completed", {
       instituteId,
+      calibrationVersion,
+      licenseLayer: currentLayer,
       mode,
       questionCount: capturedTemplateSnapshot.questionIds.length,
       recipientCount: recipientStudentIds.length,
@@ -607,7 +629,9 @@ export class AssignmentCreationService {
     });
 
     return {
+      calibrationVersion,
       capturedTemplateSnapshot,
+      licenseLayer: currentLayer,
       recipientCount: recipientStudentIds.length,
       runPath,
       status: "scheduled",

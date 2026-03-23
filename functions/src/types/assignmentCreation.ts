@@ -26,7 +26,9 @@ export interface AssignmentTemplateSnapshot {
 }
 
 export interface AssignmentCreationResult {
+  calibrationVersion: string;
   capturedTemplateSnapshot: AssignmentTemplateSnapshot;
+  licenseLayer: LicenseLayer;
   recipientCount: number;
   runPath: string;
   status: "scheduled";

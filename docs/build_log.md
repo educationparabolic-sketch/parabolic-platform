@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 22  
-Next Build: 23
+Completed Builds: 23  
+Next Build: 24
 
 Current Phase: Phase 5 — Assignment Domain Engine
 
@@ -662,18 +662,46 @@ Completed On
 
 ---
 
+## Build 23 — License & Calibration Snapshot
+
+Phase  
+Phase 5 — Assignment Domain Engine
+
+Summary  
+Extended assignment-time run normalization to persist immutable license and calibration snapshots.
+
+Components implemented:
+
+- Extended `AssignmentCreationService` to resolve and persist `licenseLayer` on run documents from institute license state at assignment time
+- Extended `AssignmentCreationService` to resolve and persist `calibrationVersion` from `institutes/{instituteId}` at assignment time
+- Added institute-root presence validation to prevent assignment creation for missing institutes
+- Added calibration snapshot validation to prevent creating runs without architecture-required calibration metadata
+- Preserved existing Build 21 and Build 22 validations and template snapshot behavior while adding Build 23 snapshot fields
+- Extended emulator-backed assignment tests to assert persisted run snapshots (`licenseLayer`, `calibrationVersion`) and validate missing-calibration rejection
+
+Result  
+Run documents now include immutable assignment-time license and calibration snapshots required for deterministic downstream execution and analytics consistency.
+
+Commit Reference  
+Pending local commit
+
+Completed On  
+2026-03-23
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 23
+Next Build Number: 24
 
 Phase  
 Phase 5 — Assignment Domain Engine
 
 Subsystem  
-License & Calibration Snapshot
+Run Analytics Initialization
 
 Reference  
-3_Core_Architectures.md → Section 42.7 Assignment Domain Flow
+3_Core_Architectures.md → Section 42.10 Post-Submission Processing Pipeline
 
 ---
 
@@ -703,7 +731,8 @@ Build | Phase | Status
 20 | Template Domain | Completed
 21 | Assignment Domain | Completed
 22 | Assignment Domain | Completed
-23–150 | Remaining Phases | Pending
+23 | Assignment Domain | Completed
+24–150 | Remaining Phases | Pending
 
 ---
 
