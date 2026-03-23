@@ -2,6 +2,7 @@ import * as functions from "firebase-functions";
 import {
   templateConfigurationSnapshotService,
 } from "../services/templateConfigurationSnapshot";
+import {templateFingerprintService} from "../services/templateFingerprint";
 import {templateCreationService} from "../services/templateCreation";
 
 const TESTS_DOCUMENT_PATH = "institutes/{instituteId}/tests/{testId}";
@@ -24,6 +25,11 @@ export const handleTemplateCreated = async (
     );
 
   await templateConfigurationSnapshotService.snapshotTemplateConfiguration(
+    templateContext,
+    templateCreationResult,
+  );
+
+  await templateFingerprintService.persistTemplateFingerprint(
     templateContext,
     templateCreationResult,
   );
