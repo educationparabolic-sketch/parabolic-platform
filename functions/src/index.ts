@@ -1,6 +1,7 @@
 import * as functions from "firebase-functions";
 import {registerGlobalErrorHandlers} from "./services/errorReporting";
 import {createRequestLogger} from "./services/logging";
+import {handleExamStartRequest} from "./api/examStart";
 import {runAssignmentOnCreate} from "./triggers/assignmentCreation";
 import {questionBankOnCreate} from "./triggers/questionIngestion";
 import {testTemplateOnCreate} from "./triggers/templateCreation";
@@ -11,6 +12,7 @@ registerGlobalErrorHandlers();
 export {questionBankOnCreate};
 export {runAssignmentOnCreate};
 export {testTemplateOnCreate};
+export const examStart = functions.https.onRequest(handleExamStartRequest);
 
 export const helloWorld = functions.https.onRequest(async (
   req: functions.https.Request,

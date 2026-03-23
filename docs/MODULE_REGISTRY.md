@@ -29,7 +29,7 @@ Endpoint | Build | Description
 GET /student/dashboard | TBD | Student dashboard summary
 POST /admin/tests | TBD | Create test template
 POST /admin/runs | TBD | Create test assignment
-POST /exam/start | Build 26 | Start exam session
+POST /exam/start | Build 26 | Start exam session with authentication, tenant, assignment-window, and active-session enforcement
 POST /exam/session/{sessionId}/answers | Build 30 | Answer batching
 POST /exam/session/{sessionId}/submit | Build 36 | Session submission
 
@@ -40,6 +40,7 @@ POST /exam/session/{sessionId}/submit | Build 36 | Session submission
 Service | Build | Purpose
 ---|---|---
 SessionService | Build 26 | Manage exam session lifecycle
+ExamStartApi | Build 26 | HTTP API handler for POST /exam/start
 AnswerBatchService | Build 30 | Persist incremental answers
 SubmissionService | Build 36 | Handle exam submission logic
 LicenseService | Phase 19 | License validation and enforcement

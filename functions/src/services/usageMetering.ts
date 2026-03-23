@@ -14,7 +14,13 @@ const LICENSE_DOCUMENT_ID = "main";
 const USAGE_METER_COLLECTION = "usageMeter";
 const ASSIGNMENT_EVENTS_COLLECTION = "assignmentEvents";
 
+/**
+ * Raised when usage metering payloads violate build constraints.
+ */
 class UsageMeteringValidationError extends Error {
+  /**
+   * @param {string} message Validation failure detail.
+   */
   constructor(message: string) {
     super(message);
     this.name = "UsageMeteringValidationError";
@@ -123,10 +129,19 @@ const normalizeCountField = (value: unknown): number => {
   return Math.floor(value);
 };
 
+/**
+ * Usage metering service for assignment-driven billing aggregates.
+ */
 export class UsageMeteringService {
   private readonly firestore = getFirestore();
   private readonly logger = createLogger("UsageMeteringService");
 
+  /**
+   * Records usage metrics for a run assignment event.
+   * @param {UsageMeteringContext} context Assignment identifiers.
+   * @param {unknown} runData Created run payload.
+   * @return {Promise<UsageMeteringResult>} Usage metering write result.
+   */
   public async recordAssignmentUsage(
     context: UsageMeteringContext,
     runData: unknown,
@@ -167,71 +182,82 @@ export class UsageMeteringService {
       .collection(INSTITUTES_COLLECTION)
       .doc(instituteId)
       .collection(STUDENTS_COLLECTION);
-    const activeStudentsQuery = studentsReference.where("status", "==", "active");
+    const activeStudentsQuery = studentsReference.where(
+      "status",
+      "==",
+      "active",
+    );
     const licenseReference = this.firestore
       .collection(INSTITUTES_COLLECTION)
       .doc(instituteId)
       .collection(LICENSE_COLLECTION)
       .doc(LICENSE_DOCUMENT_ID);
 
-    const wasUpdated = await this.firestore.runTransaction(async (transaction) => {
-      const [
-        assignmentEventSnapshot,
-        usageMeterSnapshot,
-        activeStudentsSnapshot,
-        licenseSnapshot,
-      ] = await Promise.all([
-        transaction.get(assignmentEventReference),
-        transaction.get(usageMeterReference),
-        transaction.get(activeStudentsQuery),
-        transaction.get(licenseReference),
-      ]);
+    const wasUpdated = await this.firestore.runTransaction(
+      async (transaction) => {
+        const [
+          assignmentEventSnapshot,
+          usageMeterSnapshot,
+          activeStudentsSnapshot,
+          licenseSnapshot,
+        ] = await Promise.all([
+          transaction.get(assignmentEventReference),
+          transaction.get(usageMeterReference),
+          transaction.get(activeStudentsQuery),
+          transaction.get(licenseReference),
+        ]);
 
-      if (assignmentEventSnapshot.exists) {
-        return false;
-      }
+        if (assignmentEventSnapshot.exists) {
+          return false;
+        }
 
-      const activeStudentCount = activeStudentsSnapshot.docs
-        .filter((snapshot) => snapshot.data().archived !== true)
-        .length;
-      const activeStudentLimit = resolveActiveStudentLimit(licenseSnapshot.data());
-      const billingTierCompliance = activeStudentLimit === null ?
-        true :
-        activeStudentCount <= activeStudentLimit;
-      const currentData = usageMeterSnapshot.data();
-      const currentAssignmentsCreated = normalizeCountField(
-        currentData?.assignmentsCreated,
-      );
-      const currentAssignedStudentsCount = normalizeCountField(
-        currentData?.assignedStudentsCount,
-      );
-      const currentPeakStudentUsage = normalizeCountField(
-        currentData?.peakStudentUsage,
-      );
+        const activeStudentCount = activeStudentsSnapshot.docs
+          .filter((snapshot) => snapshot.data().archived !== true)
+          .length;
+        const activeStudentLimit = resolveActiveStudentLimit(
+          licenseSnapshot.data(),
+        );
+        const billingTierCompliance = activeStudentLimit === null ?
+          true :
+          activeStudentCount <= activeStudentLimit;
+        const currentData = usageMeterSnapshot.data();
+        const currentAssignmentsCreated = normalizeCountField(
+          currentData?.assignmentsCreated,
+        );
+        const currentAssignedStudentsCount = normalizeCountField(
+          currentData?.assignedStudentsCount,
+        );
+        const currentPeakStudentUsage = normalizeCountField(
+          currentData?.peakStudentUsage,
+        );
 
-      const nextUsageDocument: UsageMeterDocument = {
-        activeStudentCount,
-        activeStudentLimit,
-        assignedStudentsCount:
-          currentAssignedStudentsCount + recipientStudentIds.length,
-        assignmentsCreated: currentAssignmentsCreated + 1,
-        billingTierCompliance,
-        cycleId,
-        lastAssignmentRunId: runId,
-        peakStudentUsage: Math.max(currentPeakStudentUsage, activeStudentCount),
-        updatedAt: FieldValue.serverTimestamp(),
-      };
+        const nextUsageDocument: UsageMeterDocument = {
+          activeStudentCount,
+          activeStudentLimit,
+          assignedStudentsCount:
+            currentAssignedStudentsCount + recipientStudentIds.length,
+          assignmentsCreated: currentAssignmentsCreated + 1,
+          billingTierCompliance,
+          cycleId,
+          lastAssignmentRunId: runId,
+          peakStudentUsage: Math.max(
+            currentPeakStudentUsage,
+            activeStudentCount,
+          ),
+          updatedAt: FieldValue.serverTimestamp(),
+        };
 
-      transaction.set(usageMeterReference, nextUsageDocument, {merge: true});
-      transaction.create(assignmentEventReference, {
-        assignedStudentsCount: recipientStudentIds.length,
-        createdAt: FieldValue.serverTimestamp(),
-        runId,
-        yearId,
-      });
+        transaction.set(usageMeterReference, nextUsageDocument, {merge: true});
+        transaction.create(assignmentEventReference, {
+          assignedStudentsCount: recipientStudentIds.length,
+          createdAt: FieldValue.serverTimestamp(),
+          runId,
+          yearId,
+        });
 
-      return true;
-    });
+        return true;
+      },
+    );
 
     this.logger.info("Usage metering processed for assignment creation", {
       cycleId,

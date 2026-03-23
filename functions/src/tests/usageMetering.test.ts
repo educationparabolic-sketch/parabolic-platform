@@ -124,7 +124,9 @@ test(
     );
     assert.equal(secondResult.wasUpdated, false);
 
-    const usageMeterSnapshotAfterRetry = await firestore.doc(usageMeterPath).get();
+    const usageMeterSnapshotAfterRetry = await firestore
+      .doc(usageMeterPath)
+      .get();
     const usageMeterDataAfterRetry = usageMeterSnapshotAfterRetry.data();
 
     assert.equal(usageMeterDataAfterRetry?.assignmentsCreated, 1);

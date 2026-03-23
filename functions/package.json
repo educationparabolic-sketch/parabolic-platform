@@ -18,6 +18,7 @@
     "test:template-analytics-initialization": "npm run build && node --test lib/tests/templateAnalyticsInitialization.test.js",
     "test:template-audit-logging": "npm run build && node --test lib/tests/templateAuditLogging.test.js",
     "test:assignment-creation": "npm run build && node --test lib/tests/assignmentCreation.test.js",
+    "test:session-start": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=parabolic-platform-build-26-tests GOOGLE_CLOUD_PROJECT=parabolic-platform-build-26-tests NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none npm run build && node --test lib/tests/sessionStart.test.js",
     "test:run-analytics-initialization": "npm run build && node --test lib/tests/runAnalyticsInitialization.test.js",
     "test:usage-metering": "npm run build && node --test lib/tests/usageMetering.test.js",
     "test:tag-dictionary": "npm run build && node --test lib/tests/tagDictionary.test.js",
