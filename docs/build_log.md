@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 20  
-Next Build: 21
+Completed Builds: 21  
+Next Build: 22
 
 Current Phase: Phase 5 — Assignment Domain Engine
 
@@ -604,15 +604,46 @@ Completed On
 
 ---
 
+## Build 21 — Assignment Creation Pipeline
+
+Phase  
+Phase 5 — Assignment Domain Engine
+
+Summary  
+Implemented deterministic run-assignment creation validation for newly created academic-year run documents.
+
+Components implemented:
+
+- Added Firestore `runs` create trigger for `institutes/{instituteId}/academicYears/{yearId}/runs/{runId}`
+- Added strongly typed `AssignmentCreationService` for assignment payload validation and normalization
+- Added template status and mode validation (`ready` or `assigned`, optional `allowedModes` enforcement)
+- Added recipient validation against institute student records with active-status enforcement
+- Added license-layer and feature-flag enforcement for assignment mode gating (`Operational`, `Diagnostic`, `Controlled`, `Hard`)
+- Added assignment-window scheduling validation (`startWindow` future, `endWindow` after `startWindow`)
+- Enforced run state normalization to `status: "scheduled"` with deterministic `recipientCount` and `totalSessions` defaults
+- Updated template assignment state on successful run creation (`status: "assigned"`, `totalRuns` increment)
+- Added repeatable emulator-backed test coverage for success path and validation failures (template status, recipient status, license restriction)
+
+Result  
+Run creation now passes through a deterministic backend assignment pipeline that enforces template readiness, student recipient eligibility, license restrictions, and scheduling constraints before normalizing run state to the architecture-defined initial status.
+
+Commit Reference  
+Pending local commit
+
+Completed On  
+2026-03-23
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 21
+Next Build Number: 22
 
 Phase  
 Phase 5 — Assignment Domain Engine
 
 Subsystem  
-Assignment Creation Pipeline
+Template Snapshot Capture During Assignment
 
 Reference  
 3_Core_Architectures.md → Section 42.7 Assignment Domain Flow

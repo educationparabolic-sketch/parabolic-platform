@@ -1,6 +1,7 @@
 import * as functions from "firebase-functions";
 import {registerGlobalErrorHandlers} from "./services/errorReporting";
 import {createRequestLogger} from "./services/logging";
+import {runAssignmentOnCreate} from "./triggers/assignmentCreation";
 import {questionBankOnCreate} from "./triggers/questionIngestion";
 import {testTemplateOnCreate} from "./triggers/templateCreation";
 import {loadEnvironmentConfig} from "./utils/environment";
@@ -8,6 +9,7 @@ import {loadEnvironmentConfig} from "./utils/environment";
 registerGlobalErrorHandlers();
 
 export {questionBankOnCreate};
+export {runAssignmentOnCreate};
 export {testTemplateOnCreate};
 
 export const helloWorld = functions.https.onRequest(async (
