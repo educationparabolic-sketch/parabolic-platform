@@ -141,7 +141,7 @@ Verify:
 - no runtime errors
 - endpoints respond correctly
 - repeatable local tests pass for the implemented build
-
+- take permission if necessary to perform all the tests to  verify clean build.
 ---
 
 ## OUTPUT
@@ -150,11 +150,10 @@ Return:
 
 1. Explanation
 2. File structure
-3. Full code
-4. Integration points
-5. Testing steps
-6. MODULE_REGISTRY updates
-7. build_log updates
+3. Integration points
+4. Testing steps
+5. MODULE_REGISTRY updates
+6. build_log updates
 
 ---
 
