@@ -12,10 +12,10 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 24  
-Next Build: 25
+Completed Builds: 25  
+Next Build: 26
 
-Current Phase: Phase 5 — Assignment Domain Engine
+Current Phase: Phase 6 — Session Execution Engine
 
 ---
 
@@ -718,18 +718,47 @@ Completed On
 
 ---
 
-# NEXT BUILD
-
-Next Build Number: 25
+## Build 25 — Usage Metering for Billing
 
 Phase  
 Phase 5 — Assignment Domain Engine
 
+Summary  
+Implemented deterministic assignment-driven usage metering for billing analytics in the run creation pipeline.
+
+Components implemented:
+
+- Added `UsageMeteringService` for usage updates at `institutes/{instituteId}/usageMeter/{cycleId}`
+- Captured architecture-required usage metrics: `assignmentsCreated`, `assignedStudentsCount`, `activeStudentCount`, `peakStudentUsage`, and `billingTierCompliance`
+- Added monthly billing-cycle resolution (`YYYY-MM`) from run timing metadata with deterministic fallback behavior
+- Added active-student limit resolution from institute license metadata (`activeStudentLimit` / `studentLimit` / `maxStudents`)
+- Added transaction-safe idempotency via `assignmentEvents/{runId}` deduplication to prevent retry overcounting
+- Integrated usage metering into the existing `runs` create trigger after assignment normalization and run-analytics initialization
+- Added repeatable emulator-backed tests for successful usage updates, idempotent retries, and runId mismatch validation failures
+
+Result  
+Each new assignment now updates institute-scoped billing usage summaries in a deterministic and retry-safe manner, providing run-time usage telemetry required for downstream billing and vendor analytics workflows.
+
+Commit Reference  
+Pending local commit
+
+Completed On  
+2026-03-23
+
+---
+
+# NEXT BUILD
+
+Next Build Number: 26
+
+Phase  
+Phase 6 — Session Execution Engine
+
 Subsystem  
-Usage Metering for Billing
+Session Start API
 
 Reference  
-3_Core_Architectures.md → Section 42.11 Billing and Usage Flow
+3_Core_Architectures.md → Section 42.8 Session Execution Domain
 
 ---
 
@@ -761,7 +790,8 @@ Build | Phase | Status
 22 | Assignment Domain | Completed
 23 | Assignment Domain | Completed
 24 | Assignment Domain | Completed
-25–150 | Remaining Phases | Pending
+25 | Assignment Domain | Completed
+26–150 | Remaining Phases | Pending
 
 ---
 

@@ -19,6 +19,7 @@
     "test:template-audit-logging": "npm run build && node --test lib/tests/templateAuditLogging.test.js",
     "test:assignment-creation": "npm run build && node --test lib/tests/assignmentCreation.test.js",
     "test:run-analytics-initialization": "npm run build && node --test lib/tests/runAnalyticsInitialization.test.js",
+    "test:usage-metering": "npm run build && node --test lib/tests/usageMetering.test.js",
     "test:tag-dictionary": "npm run build && node --test lib/tests/tagDictionary.test.js",
     "test:chapter-dictionary": "npm run build && node --test lib/tests/chapterDictionary.test.js",
     "test:audit": "npm run test:audit-storage && npm run test:audit-actions && npm run test:license-history && npm run test:override-logging && npm run test:audit-tamper-protection",

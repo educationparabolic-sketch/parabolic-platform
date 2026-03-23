@@ -3,6 +3,7 @@ import {assignmentCreationService} from "../services/assignmentCreation";
 import {
   runAnalyticsInitializationService,
 } from "../services/runAnalyticsInitialization";
+import {usageMeteringService} from "../services/usageMetering";
 
 const RUNS_DOCUMENT_PATH =
   "institutes/{instituteId}/academicYears/{yearId}/runs/{runId}";
@@ -27,6 +28,15 @@ export const handleAssignmentCreated = async (
   const normalizedRunSnapshot = await snapshot.ref.get();
 
   await runAnalyticsInitializationService.initializeRunAnalytics(
+    {
+      instituteId,
+      runId,
+      yearId,
+    },
+    normalizedRunSnapshot.data(),
+  );
+
+  await usageMeteringService.recordAssignmentUsage(
     {
       instituteId,
       runId,

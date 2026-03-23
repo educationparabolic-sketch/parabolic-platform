@@ -65,6 +65,7 @@ TemplateAnalyticsInitializationService | Build 19 | Initialize template analytic
 TemplateAuditLoggingService | Build 20 | Emit immutable institute template lifecycle audit events (creation, update, activation, archival) via the centralized administrative action logging layer
 AssignmentCreationService | Build 21, Build 22, Build 23 | Validate and normalize assignment run creation in institutes/{instituteId}/academicYears/{yearId}/runs/{runId}, including template readiness, recipient eligibility, license-mode restrictions, scheduled window enforcement, assignment-time immutable template snapshot capture (questionIds, difficultyDistribution, phaseConfigSnapshot, timingProfileSnapshot), and assignment-time license/calibration snapshots (licenseLayer, calibrationVersion)
 RunAnalyticsInitializationService | Build 24 | Initialize deterministic run analytics stubs in institutes/{instituteId}/academicYears/{yearId}/runAnalytics/{runId} during assignment creation, including baseline fields (avgRawScorePercent, avgAccuracyPercent, completionRate, riskDistribution) and idempotent create-only semantics
+UsageMeteringService | Build 25 | Track institute assignment-driven usage metrics in institutes/{instituteId}/usageMeter/{cycleId}, including assignmentsCreated, assignedStudentsCount, activeStudentCount, peakStudentUsage, and billingTierCompliance with idempotent assignment-event deduplication
 
 ---
 
@@ -99,6 +100,7 @@ sessions | Run | Exam execution sessions
 runAnalytics | AcademicYear | Run-level analytics
 studentYearMetrics | AcademicYear | Student performance metrics
 usage | Institute | Billing usage metering
+usageMeter | Institute | Billing and assignment usage metering summaries by cycle
 license | Institute | License configuration
 licenseHistory | Institute | Immutable institute license change records
 overrideLogs | Institute | Immutable institute execution override records
