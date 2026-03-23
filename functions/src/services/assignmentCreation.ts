@@ -8,8 +8,15 @@ import {
   AssignmentCreationContext,
   AssignmentCreationResult,
   AssignmentMode,
+  AssignmentTemplateSnapshot,
   LicenseLayer,
 } from "../types/assignmentCreation";
+import {
+  TemplateDifficultyDistribution,
+  TemplatePhaseConfigSnapshot,
+  TemplateTimingProfile,
+  TemplateTimingWindow,
+} from "../types/templateCreation";
 
 const INSTITUTES_COLLECTION = "institutes";
 const ACADEMIC_YEARS_COLLECTION = "academicYears";
@@ -169,6 +176,192 @@ const normalizeRequiredLayer = (value: unknown): LicenseLayer => {
   return normalizedLayer;
 };
 
+const normalizeNonNegativeInteger = (
+  value: unknown,
+  fieldName: string,
+): number => {
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    !Number.isInteger(value) ||
+    value < 0
+  ) {
+    throw new AssignmentCreationValidationError(
+      `Template field "${fieldName}" must be a non-negative integer.`,
+    );
+  }
+
+  return value;
+};
+
+const normalizePositiveInteger = (
+  value: unknown,
+  fieldName: string,
+): number => {
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    !Number.isInteger(value) ||
+    value <= 0
+  ) {
+    throw new AssignmentCreationValidationError(
+      `Template field "${fieldName}" must be a positive integer.`,
+    );
+  }
+
+  return value;
+};
+
+const normalizePercentField = (
+  value: unknown,
+  fieldName: string,
+): number => {
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    value < 0 ||
+    value > 100
+  ) {
+    throw new AssignmentCreationValidationError(
+      `Template field "${fieldName}" must be a number between 0 and 100.`,
+    );
+  }
+
+  return value;
+};
+
+const normalizeQuestionIds = (value: unknown): string[] => {
+  if (!Array.isArray(value)) {
+    throw new AssignmentCreationValidationError(
+      "Template field \"questionIds\" must be an array of strings.",
+    );
+  }
+
+  const normalizedQuestionIds = value.map((questionId) =>
+    normalizeRequiredString(questionId, "questionIds[]"),
+  );
+
+  if (normalizedQuestionIds.length === 0) {
+    throw new AssignmentCreationValidationError(
+      "Template field \"questionIds\" must contain at least one question id.",
+    );
+  }
+
+  const uniqueQuestionIds = Array.from(new Set(normalizedQuestionIds));
+
+  if (uniqueQuestionIds.length !== normalizedQuestionIds.length) {
+    throw new AssignmentCreationValidationError(
+      "Template field \"questionIds\" must not contain duplicates.",
+    );
+  }
+
+  return uniqueQuestionIds;
+};
+
+const normalizeDifficultyDistribution = (
+  value: unknown,
+): TemplateDifficultyDistribution => {
+  if (!isPlainObject(value)) {
+    throw new AssignmentCreationValidationError(
+      "Template field \"difficultyDistribution\" must be an object.",
+    );
+  }
+
+  return {
+    easy: normalizeNonNegativeInteger(
+      value.easy,
+      "difficultyDistribution.easy",
+    ),
+    hard: normalizeNonNegativeInteger(
+      value.hard,
+      "difficultyDistribution.hard",
+    ),
+    medium: normalizeNonNegativeInteger(
+      value.medium,
+      "difficultyDistribution.medium",
+    ),
+  };
+};
+
+const normalizePhaseConfigSnapshot = (
+  value: unknown,
+): TemplatePhaseConfigSnapshot => {
+  if (!isPlainObject(value)) {
+    throw new AssignmentCreationValidationError(
+      "Template field \"phaseConfigSnapshot\" must be an object.",
+    );
+  }
+
+  return {
+    phase1Percent: normalizePercentField(
+      value.phase1Percent,
+      "phaseConfigSnapshot.phase1Percent",
+    ),
+    phase2Percent: normalizePercentField(
+      value.phase2Percent,
+      "phaseConfigSnapshot.phase2Percent",
+    ),
+    phase3Percent: normalizePercentField(
+      value.phase3Percent,
+      "phaseConfigSnapshot.phase3Percent",
+    ),
+  };
+};
+
+const normalizeTimingWindow = (
+  value: unknown,
+  fieldName: string,
+): TemplateTimingWindow => {
+  if (!isPlainObject(value)) {
+    throw new AssignmentCreationValidationError(
+      `Template field "${fieldName}" must be an object.`,
+    );
+  }
+
+  const min = normalizePositiveInteger(value.min, `${fieldName}.min`);
+  const max = normalizePositiveInteger(value.max, `${fieldName}.max`);
+
+  if (min > max) {
+    throw new AssignmentCreationValidationError(
+      `Template field "${fieldName}" must satisfy min <= max.`,
+    );
+  }
+
+  return {max, min};
+};
+
+const normalizeTimingProfile = (value: unknown): TemplateTimingProfile => {
+  if (!isPlainObject(value)) {
+    throw new AssignmentCreationValidationError(
+      "Template field \"timingProfile\" must be an object.",
+    );
+  }
+
+  return {
+    easy: normalizeTimingWindow(value.easy, "timingProfile.easy"),
+    hard: normalizeTimingWindow(value.hard, "timingProfile.hard"),
+    medium: normalizeTimingWindow(value.medium, "timingProfile.medium"),
+  };
+};
+
+const normalizeTemplateSnapshot = (
+  templateData: Record<string, unknown> | undefined,
+): AssignmentTemplateSnapshot => {
+  const timingProfileSource =
+    templateData?.timingProfileSnapshot ?? templateData?.timingProfile;
+
+  return {
+    difficultyDistribution: normalizeDifficultyDistribution(
+      templateData?.difficultyDistribution,
+    ),
+    phaseConfigSnapshot: normalizePhaseConfigSnapshot(
+      templateData?.phaseConfigSnapshot,
+    ),
+    questionIds: normalizeQuestionIds(templateData?.questionIds),
+    timingProfileSnapshot: normalizeTimingProfile(timingProfileSource),
+  };
+};
+
 const isLicenseLayerSufficient = (
   currentLayer: LicenseLayer,
   requiredLayer: LicenseLayer,
@@ -287,6 +480,8 @@ export class AssignmentCreationService {
       );
     }
 
+    const capturedTemplateSnapshot = normalizeTemplateSnapshot(templateData);
+
     const templateAllowedModesRaw = templateData?.allowedModes;
 
     if (
@@ -377,14 +572,20 @@ export class AssignmentCreationService {
     await this.firestore.runTransaction(async (transaction) => {
       transaction.set(runReference, {
         createdAt,
+        difficultyDistribution:
+          capturedTemplateSnapshot.difficultyDistribution,
         endWindow,
         mode,
+        phaseConfigSnapshot: capturedTemplateSnapshot.phaseConfigSnapshot,
+        questionIds: capturedTemplateSnapshot.questionIds,
         recipientCount: recipientStudentIds.length,
         recipientStudentIds,
         runId,
         startWindow,
         status: "scheduled",
         testId,
+        timingProfileSnapshot:
+          capturedTemplateSnapshot.timingProfileSnapshot,
         totalSessions: normalizedTotalSessions,
       }, {merge: true});
 
@@ -397,6 +598,7 @@ export class AssignmentCreationService {
     this.logger.info("Assignment creation validation completed", {
       instituteId,
       mode,
+      questionCount: capturedTemplateSnapshot.questionIds.length,
       recipientCount: recipientStudentIds.length,
       runId,
       runPath,
@@ -405,6 +607,7 @@ export class AssignmentCreationService {
     });
 
     return {
+      capturedTemplateSnapshot,
       recipientCount: recipientStudentIds.length,
       runPath,
       status: "scheduled",

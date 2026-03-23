@@ -6,7 +6,7 @@ import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
 import {AssignmentCreationResult} from "../types/assignmentCreation";
 
 process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8080";
-process.env.GCLOUD_PROJECT ??= "parabolic-platform-build-21-tests";
+process.env.GCLOUD_PROJECT ??= "parabolic-platform-build-22-tests";
 process.env.GOOGLE_CLOUD_PROJECT ??= process.env.GCLOUD_PROJECT;
 process.env.NO_GCE_CHECK ??= "true";
 process.env.METADATA_SERVER_DETECTION ??= "none";
@@ -41,6 +41,32 @@ const deleteDocumentIfPresent = async (path: string): Promise<void> => {
   }
 };
 
+const templateSnapshotFixture = {
+  difficultyDistribution: {
+    easy: 2,
+    hard: 1,
+    medium: 3,
+  },
+  phaseConfigSnapshot: {
+    phase1Percent: 30,
+    phase2Percent: 40,
+    phase3Percent: 30,
+  },
+  questionIds: [
+    "question_build_22_1",
+    "question_build_22_2",
+    "question_build_22_3",
+    "question_build_22_4",
+    "question_build_22_5",
+    "question_build_22_6",
+  ],
+  timingProfile: {
+    easy: {max: 60, min: 30},
+    hard: {max: 210, min: 150},
+    medium: {max: 150, min: 60},
+  },
+};
+
 test(
   "processAssignmentCreated validates assignment payload and enforces " +
     "scheduled state",
@@ -65,8 +91,12 @@ test(
 
     await firestore.doc(testPath).set({
       allowedModes: ["Operational", "Diagnostic", "Controlled", "Hard"],
+      difficultyDistribution: templateSnapshotFixture.difficultyDistribution,
+      phaseConfigSnapshot: templateSnapshotFixture.phaseConfigSnapshot,
+      questionIds: templateSnapshotFixture.questionIds,
       status: "ready",
       testId,
+      timingProfile: templateSnapshotFixture.timingProfile,
       totalRuns: 0,
     });
     await firestore.doc(licensePath).set({
@@ -105,6 +135,10 @@ test(
     assert.equal(result.testPath, testPath);
     assert.equal(result.status, "scheduled");
     assert.equal(result.recipientCount, 2);
+    assert.deepEqual(
+      result.capturedTemplateSnapshot.questionIds,
+      templateSnapshotFixture.questionIds,
+    );
 
     const runSnapshot = await firestore.doc(runPath).get();
     const runData = runSnapshot.data();
@@ -113,6 +147,22 @@ test(
     assert.equal(runData?.recipientCount, 2);
     assert.deepEqual(runData?.recipientStudentIds, studentIds);
     assert.equal(runData?.mode, "Controlled");
+    assert.deepEqual(
+      runData?.questionIds,
+      templateSnapshotFixture.questionIds,
+    );
+    assert.deepEqual(
+      runData?.difficultyDistribution,
+      templateSnapshotFixture.difficultyDistribution,
+    );
+    assert.deepEqual(
+      runData?.phaseConfigSnapshot,
+      templateSnapshotFixture.phaseConfigSnapshot,
+    );
+    assert.deepEqual(
+      runData?.timingProfileSnapshot,
+      templateSnapshotFixture.timingProfile,
+    );
     assert.ok(runData?.createdAt instanceof Timestamp);
     assert.equal(runData?.totalSessions, 0);
 
@@ -148,8 +198,12 @@ test(
     await deleteDocumentIfPresent(studentPath);
 
     await firestore.doc(testPath).set({
+      difficultyDistribution: templateSnapshotFixture.difficultyDistribution,
+      phaseConfigSnapshot: templateSnapshotFixture.phaseConfigSnapshot,
+      questionIds: templateSnapshotFixture.questionIds,
       status: "draft",
       testId,
+      timingProfile: templateSnapshotFixture.timingProfile,
     });
     await firestore.doc(licensePath).set({
       currentLayer: "L2",
@@ -210,8 +264,12 @@ test(
     await deleteDocumentIfPresent(studentPath);
 
     await firestore.doc(testPath).set({
+      difficultyDistribution: templateSnapshotFixture.difficultyDistribution,
+      phaseConfigSnapshot: templateSnapshotFixture.phaseConfigSnapshot,
+      questionIds: templateSnapshotFixture.questionIds,
       status: "ready",
       testId,
+      timingProfile: templateSnapshotFixture.timingProfile,
     });
     await firestore.doc(licensePath).set({
       currentLayer: "L1",
@@ -273,8 +331,12 @@ test(
 
     await firestore.doc(testPath).set({
       allowedModes: ["Operational", "Diagnostic", "Controlled"],
+      difficultyDistribution: templateSnapshotFixture.difficultyDistribution,
+      phaseConfigSnapshot: templateSnapshotFixture.phaseConfigSnapshot,
+      questionIds: templateSnapshotFixture.questionIds,
       status: "ready",
       testId,
+      timingProfile: templateSnapshotFixture.timingProfile,
     });
     await firestore.doc(licensePath).set({
       currentLayer: "L1",
@@ -303,6 +365,67 @@ test(
       ),
       (error: unknown) => {
         assert.match(String(error), /requires license layer/i);
+        return true;
+      },
+    );
+
+    await deleteDocumentIfPresent(testPath);
+    await deleteDocumentIfPresent(runPath);
+    await deleteDocumentIfPresent(licensePath);
+    await deleteDocumentIfPresent(studentPath);
+  },
+);
+
+test(
+  "processAssignmentCreated rejects template missing required snapshot fields",
+  async () => {
+    const instituteId = "inst_build_22_missing_snapshot";
+    const yearId = "2026";
+    const testId = "test_build_22_missing_snapshot";
+    const runId = "run_build_22_missing_snapshot";
+    const studentId = "student_build_22_missing_snapshot";
+    const testPath = `institutes/${instituteId}/tests/${testId}`;
+    const runPath =
+      `institutes/${instituteId}/academicYears/${yearId}/runs/${runId}`;
+    const licensePath = `institutes/${instituteId}/license/main`;
+    const studentPath = `institutes/${instituteId}/students/${studentId}`;
+
+    await deleteDocumentIfPresent(testPath);
+    await deleteDocumentIfPresent(runPath);
+    await deleteDocumentIfPresent(licensePath);
+    await deleteDocumentIfPresent(studentPath);
+
+    await firestore.doc(testPath).set({
+      status: "ready",
+      testId,
+    });
+    await firestore.doc(licensePath).set({
+      currentLayer: "L0",
+      featureFlags: {
+        controlledMode: false,
+        hardMode: false,
+      },
+    });
+    await firestore.doc(studentPath).set({
+      status: "active",
+      studentId,
+    });
+    await firestore.doc(runPath).set({
+      endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
+      mode: "Operational",
+      recipientStudentIds: [studentId],
+      runId,
+      startWindow: Timestamp.fromMillis(Date.now() + 30 * 60 * 1000),
+      testId,
+    });
+
+    await assert.rejects(
+      assignmentCreationService.processAssignmentCreated(
+        {instituteId, runId, yearId},
+        (await firestore.doc(runPath).get()).data(),
+      ),
+      (error: unknown) => {
+        assert.match(String(error), /questionIds|difficultyDistribution/i);
         return true;
       },
     );

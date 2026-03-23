@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 21  
-Next Build: 22
+Completed Builds: 22  
+Next Build: 23
 
 Current Phase: Phase 5 — Assignment Domain Engine
 
@@ -635,15 +635,42 @@ Completed On
 
 ---
 
+## Build 22 — Template Snapshot Capture During Assignment
+
+Phase  
+Phase 5 — Assignment Domain Engine
+
+Summary  
+Extended the assignment creation pipeline to capture immutable template snapshots directly on run creation.
+
+Components implemented:
+
+- Extended `AssignmentCreationService` to validate and copy template snapshot fields into run documents at assignment time
+- Captured architecture-required immutable snapshot fields on runs: `questionIds`, `difficultyDistribution`, `phaseConfigSnapshot`, and `timingProfileSnapshot`
+- Enforced snapshot shape validation during assignment creation to prevent incomplete template state from producing non-reproducible runs
+- Preserved existing Build 21 assignment validations (template readiness, recipient eligibility, license gating, and scheduling window checks)
+- Extended repeatable emulator-backed assignment tests to verify run snapshot persistence and missing-template-snapshot validation failure
+
+Result  
+Run documents now persist immutable assignment-time template snapshots required for reproducible execution even if template documents change later.
+
+Commit Reference  
+Pending local commit
+
+Completed On  
+2026-03-23
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 22
+Next Build Number: 23
 
 Phase  
 Phase 5 — Assignment Domain Engine
 
 Subsystem  
-Template Snapshot Capture During Assignment
+License & Calibration Snapshot
 
 Reference  
 3_Core_Architectures.md → Section 42.7 Assignment Domain Flow
@@ -674,7 +701,9 @@ Build | Phase | Status
 18 | Template Domain | Completed
 19 | Template Domain | Completed
 20 | Template Domain | Completed
-21–150 | Remaining Phases | Pending
+21 | Assignment Domain | Completed
+22 | Assignment Domain | Completed
+23–150 | Remaining Phases | Pending
 
 ---
 

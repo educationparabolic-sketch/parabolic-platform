@@ -1,3 +1,9 @@
+import {
+  TemplateDifficultyDistribution,
+  TemplatePhaseConfigSnapshot,
+  TemplateTimingProfile,
+} from "./templateCreation";
+
 export type AssignmentMode =
   "Operational" |
   "Diagnostic" |
@@ -12,7 +18,15 @@ export interface AssignmentCreationContext {
   yearId: string;
 }
 
+export interface AssignmentTemplateSnapshot {
+  difficultyDistribution: TemplateDifficultyDistribution;
+  phaseConfigSnapshot: TemplatePhaseConfigSnapshot;
+  questionIds: string[];
+  timingProfileSnapshot: TemplateTimingProfile;
+}
+
 export interface AssignmentCreationResult {
+  capturedTemplateSnapshot: AssignmentTemplateSnapshot;
   recipientCount: number;
   runPath: string;
   status: "scheduled";
