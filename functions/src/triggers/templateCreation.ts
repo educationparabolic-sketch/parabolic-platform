@@ -2,6 +2,9 @@ import * as functions from "firebase-functions";
 import {
   templateConfigurationSnapshotService,
 } from "../services/templateConfigurationSnapshot";
+import {
+  templateAnalyticsInitializationService,
+} from "../services/templateAnalyticsInitialization";
 import {templateFingerprintService} from "../services/templateFingerprint";
 import {templateCreationService} from "../services/templateCreation";
 
@@ -32,6 +35,11 @@ export const handleTemplateCreated = async (
   await templateFingerprintService.persistTemplateFingerprint(
     templateContext,
     templateCreationResult,
+  );
+
+  await templateAnalyticsInitializationService.initializeTemplateAnalytics(
+    templateContext,
+    snapshot.data(),
   );
 };
 
