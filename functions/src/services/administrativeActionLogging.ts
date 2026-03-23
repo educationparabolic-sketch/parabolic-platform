@@ -235,6 +235,60 @@ export class AdministrativeActionLoggingService {
   }
 
   /**
+   * Logs institute-scoped test template updates.
+   * @param {InstituteAdministrativeActionContext} context Action context.
+   * @return {Promise<AuditLogWriteResult>} Firestore write metadata.
+   */
+  public async logTestTemplateUpdate(
+    context: InstituteAdministrativeActionContext,
+  ): Promise<AuditLogWriteResult> {
+    return this.logAdministrativeAction({
+      ...context,
+      actionType: "UPDATE_TEST_TEMPLATE",
+      entityType: "test",
+      scope: "institute",
+      targetCollection: "tests",
+      tenantId: context.instituteId,
+    });
+  }
+
+  /**
+   * Logs institute-scoped test template activation.
+   * @param {InstituteAdministrativeActionContext} context Action context.
+   * @return {Promise<AuditLogWriteResult>} Firestore write metadata.
+   */
+  public async logTestTemplateActivation(
+    context: InstituteAdministrativeActionContext,
+  ): Promise<AuditLogWriteResult> {
+    return this.logAdministrativeAction({
+      ...context,
+      actionType: "ACTIVATE_TEST_TEMPLATE",
+      entityType: "test",
+      scope: "institute",
+      targetCollection: "tests",
+      tenantId: context.instituteId,
+    });
+  }
+
+  /**
+   * Logs institute-scoped test template archival.
+   * @param {InstituteAdministrativeActionContext} context Action context.
+   * @return {Promise<AuditLogWriteResult>} Firestore write metadata.
+   */
+  public async logTestTemplateArchival(
+    context: InstituteAdministrativeActionContext,
+  ): Promise<AuditLogWriteResult> {
+    return this.logAdministrativeAction({
+      ...context,
+      actionType: "ARCHIVE_TEST_TEMPLATE",
+      entityType: "test",
+      scope: "institute",
+      targetCollection: "tests",
+      tenantId: context.instituteId,
+    });
+  }
+
+  /**
    * Logs institute-scoped assignment creation.
    * @param {InstituteAdministrativeActionContext} context Action context.
    * @return {Promise<AuditLogWriteResult>} Firestore write metadata.

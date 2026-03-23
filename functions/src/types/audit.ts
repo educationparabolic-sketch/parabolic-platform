@@ -5,6 +5,9 @@ export type AuditLogAdditionalFields = Record<string, unknown>;
 
 export type AdministrativeActionType =
   | "CREATE_TEST_TEMPLATE"
+  | "UPDATE_TEST_TEMPLATE"
+  | "ACTIVATE_TEST_TEMPLATE"
+  | "ARCHIVE_TEST_TEMPLATE"
   | "CREATE_ASSIGNMENT"
   | "IMPORT_STUDENTS"
   | "CHANGE_ROLE"

@@ -5,10 +5,27 @@ import {
 import {
   templateAnalyticsInitializationService,
 } from "../services/templateAnalyticsInitialization";
+import {
+  templateAuditLoggingService,
+} from "../services/templateAuditLogging";
 import {templateFingerprintService} from "../services/templateFingerprint";
 import {templateCreationService} from "../services/templateCreation";
 
 const TESTS_DOCUMENT_PATH = "institutes/{instituteId}/tests/{testId}";
+
+/**
+ * Normalizes optional trigger string metadata.
+ * @param {unknown} value Raw metadata value.
+ * @return {string | undefined} Trimmed string when present.
+ */
+function extractOptionalString(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const normalizedValue = value.trim();
+  return normalizedValue || undefined;
+}
 
 export const handleTemplateCreated = async (
   snapshot: FirebaseFirestore.QueryDocumentSnapshot,
@@ -21,10 +38,12 @@ export const handleTemplateCreated = async (
     instituteId,
     testId,
   };
+  const templatePayload = snapshot.data();
+
   const templateCreationResult = await templateCreationService
     .processTemplateCreated(
       templateContext,
-      snapshot.data(),
+      templatePayload,
     );
 
   await templateConfigurationSnapshotService.snapshotTemplateConfiguration(
@@ -39,8 +58,33 @@ export const handleTemplateCreated = async (
 
   await templateAnalyticsInitializationService.initializeTemplateAnalytics(
     templateContext,
-    snapshot.data(),
+    templatePayload,
   );
+
+  await templateAuditLoggingService.logTemplateLifecycleEvent({
+    actor: {
+      actorId: extractOptionalString(templatePayload?.createdBy),
+      actorRole: extractOptionalString(templatePayload?.createdByRole),
+      ipAddress: extractOptionalString(templatePayload?.createdFromIp),
+      layer: extractOptionalString(templatePayload?.layer),
+      userAgent: extractOptionalString(templatePayload?.createdFromUserAgent),
+    },
+    afterState: {
+      academicYear: extractOptionalString(templatePayload?.academicYear),
+      difficultyDistribution: templateCreationResult.difficultyDistribution,
+      phaseConfigSnapshot: templateCreationResult.phaseConfigSnapshot,
+      status: "draft",
+      testId,
+      timingProfile: templateCreationResult.timingProfile,
+      totalQuestions: templateCreationResult.totalQuestions,
+    },
+    context: templateContext,
+    eventType: "creation",
+    metadata: {
+      source: "testTemplateOnCreate",
+      triggerPath: TESTS_DOCUMENT_PATH,
+    },
+  });
 };
 
 export const testTemplateOnCreate = functions.firestore

@@ -16,6 +16,7 @@
     "test:template-configuration-snapshot": "npm run build && node --test lib/tests/templateConfigurationSnapshot.test.js",
     "test:template-fingerprint": "npm run build && node --test lib/tests/templateFingerprint.test.js",
     "test:template-analytics-initialization": "npm run build && node --test lib/tests/templateAnalyticsInitialization.test.js",
+    "test:template-audit-logging": "npm run build && node --test lib/tests/templateAuditLogging.test.js",
     "test:tag-dictionary": "npm run build && node --test lib/tests/tagDictionary.test.js",
     "test:chapter-dictionary": "npm run build && node --test lib/tests/chapterDictionary.test.js",
     "test:audit": "npm run test:audit-storage && npm run test:audit-actions && npm run test:license-history && npm run test:override-logging && npm run test:audit-tamper-protection",
