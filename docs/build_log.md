@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 23  
-Next Build: 24
+Completed Builds: 24  
+Next Build: 25
 
 Current Phase: Phase 5 — Assignment Domain Engine
 
@@ -690,18 +690,46 @@ Completed On
 
 ---
 
+## Build 24 — Run Analytics Initialization
+
+Phase  
+Phase 5 — Assignment Domain Engine
+
+Summary  
+Implemented deterministic run analytics initialization in the assignment creation trigger pipeline.
+
+Components implemented:
+
+- Added `RunAnalyticsInitializationService` for architecture-aligned run analytics stub creation at `institutes/{instituteId}/academicYears/{yearId}/runAnalytics/{runId}`
+- Initialized schema baseline fields for new run analytics documents: `avgRawScorePercent`, `avgAccuracyPercent`, `completionRate`, `riskDistribution`, `stdDeviation`, `disciplineAverage`, `phaseAdherenceAverage`, `guessRateAverage`, `overrideCount`, `createdAt`
+- Enforced context and payload validation (`instituteId`, `yearId`, `runId`, and payload `runId` consistency)
+- Added idempotent create-only behavior to safely handle retried trigger invocations without mutating existing run analytics records
+- Integrated run analytics initialization into the existing `runs` create trigger after assignment validation/normalization completes
+- Added repeatable emulator-backed tests for initialization success, schema defaults, idempotency, and invalid runId mismatch rejection
+
+Result  
+Each new assignment run now deterministically initializes its academic-year scoped `runAnalytics` summary document, enabling post-submission pipelines to update run-level metrics without creating analytics documents late or ad hoc.
+
+Commit Reference  
+Pending local commit
+
+Completed On  
+2026-03-23
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 24
+Next Build Number: 25
 
 Phase  
 Phase 5 — Assignment Domain Engine
 
 Subsystem  
-Run Analytics Initialization
+Usage Metering for Billing
 
 Reference  
-3_Core_Architectures.md → Section 42.10 Post-Submission Processing Pipeline
+3_Core_Architectures.md → Section 42.11 Billing and Usage Flow
 
 ---
 
@@ -732,7 +760,8 @@ Build | Phase | Status
 21 | Assignment Domain | Completed
 22 | Assignment Domain | Completed
 23 | Assignment Domain | Completed
-24–150 | Remaining Phases | Pending
+24 | Assignment Domain | Completed
+25–150 | Remaining Phases | Pending
 
 ---
 

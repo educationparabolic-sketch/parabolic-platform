@@ -1,5 +1,8 @@
 import * as functions from "firebase-functions";
 import {assignmentCreationService} from "../services/assignmentCreation";
+import {
+  runAnalyticsInitializationService,
+} from "../services/runAnalyticsInitialization";
 
 const RUNS_DOCUMENT_PATH =
   "institutes/{instituteId}/academicYears/{yearId}/runs/{runId}";
@@ -19,6 +22,17 @@ export const handleAssignmentCreated = async (
       yearId,
     },
     snapshot.data(),
+  );
+
+  const normalizedRunSnapshot = await snapshot.ref.get();
+
+  await runAnalyticsInitializationService.initializeRunAnalytics(
+    {
+      instituteId,
+      runId,
+      yearId,
+    },
+    normalizedRunSnapshot.data(),
   );
 };
 
