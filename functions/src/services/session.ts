@@ -8,6 +8,9 @@ import {
   SessionStartContext,
   SessionStartErrorCode,
   SessionStartResult,
+  SessionStateTransitionContext,
+  SessionStateTransitionResult,
+  SessionStatus,
   SessionTokenClaims,
 } from "../types/sessionStart";
 
@@ -19,6 +22,23 @@ const STUDENTS_COLLECTION = "students";
 const LICENSE_COLLECTION = "license";
 const ACTIVE_STUDENT_STATUSES = new Set(["active"]);
 const ACTIVE_SESSION_STATUSES = ["created", "started", "active"];
+const SESSION_STATUS_TRANSITION_ORDER: Record<SessionStatus, number> = {
+  created: 0,
+  started: 1,
+  active: 2,
+  submitted: 3,
+  expired: 4,
+  terminated: 5,
+};
+const ALLOWED_SESSION_STATUS_TRANSITIONS:
+Record<SessionStatus, SessionStatus[]> = {
+  active: ["submitted", "expired"],
+  created: ["started"],
+  expired: ["terminated"],
+  started: ["active"],
+  submitted: [],
+  terminated: [],
+};
 
 type SessionTokenSigner = (
   uid: string,
@@ -83,6 +103,42 @@ const normalizeRunWindowTimestamp = (
     "VALIDATION_ERROR",
     `Run field "${fieldName}" must be a timestamp or ISO date string.`,
   );
+};
+
+const normalizeSessionStatus = (
+  value: unknown,
+  fieldName: string,
+): SessionStatus => {
+  const normalizedValue = normalizeRequiredString(value, fieldName);
+
+  if (!(normalizedValue in SESSION_STATUS_TRANSITION_ORDER)) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Field "${fieldName}" must be a valid session status.`,
+    );
+  }
+
+  return normalizedValue as SessionStatus;
+};
+
+const normalizeSessionTransitionActorType = (
+  value: unknown,
+  fieldName: string,
+): SessionStateTransitionContext["actorType"] => {
+  const normalizedValue = normalizeRequiredString(value, fieldName);
+
+  if (
+    normalizedValue !== "student" &&
+    normalizedValue !== "backend" &&
+    normalizedValue !== "system"
+  ) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Field "${fieldName}" must be a valid session actor type.`,
+    );
+  }
+
+  return normalizedValue;
 };
 
 const resolveLicenseData = (
@@ -335,6 +391,132 @@ export class SessionService {
       sessionToken,
       status: "created",
     };
+  }
+
+  /**
+   * Applies the architecture-defined session lifecycle state machine.
+   * @param {SessionStateTransitionContext} context Session identifiers.
+   * @param {SessionStatus} nextStatus Requested next session state.
+   * @return {Promise<SessionStateTransitionResult>} Updated session metadata.
+   */
+  public async transitionSessionState(
+    context: SessionStateTransitionContext,
+    nextStatus: SessionStatus,
+  ): Promise<SessionStateTransitionResult> {
+    const instituteId = normalizeRequiredString(
+      context.instituteId,
+      "instituteId",
+    );
+    const yearId = normalizeRequiredString(context.yearId, "yearId");
+    const runId = normalizeRequiredString(context.runId, "runId");
+    const sessionId = normalizeRequiredString(context.sessionId, "sessionId");
+    const actorType = normalizeSessionTransitionActorType(
+      context.actorType,
+      "actorType",
+    );
+    const normalizedNextStatus = normalizeSessionStatus(nextStatus, "status");
+    const sessionPath =
+      `${INSTITUTES_COLLECTION}/${instituteId}/` +
+      `${ACADEMIC_YEARS_COLLECTION}/${yearId}/` +
+      `${RUNS_COLLECTION}/${runId}/` +
+      `${SESSIONS_COLLECTION}/${sessionId}`;
+    const sessionReference = this.firestore.doc(sessionPath);
+
+    const transitionResult = await this.firestore.runTransaction(async (
+      transaction,
+    ) => {
+      const sessionSnapshot = await transaction.get(sessionReference);
+      const sessionData = sessionSnapshot.data();
+
+      if (!sessionSnapshot.exists || !isPlainObject(sessionData)) {
+        throw new SessionStartValidationError(
+          "NOT_FOUND",
+          `Session "${sessionId}" does not exist.`,
+        );
+      }
+
+      const currentStatus = normalizeSessionStatus(
+        sessionData.status,
+        "session.status",
+      );
+
+      this.assertTransitionIsAllowed(
+        actorType,
+        currentStatus,
+        normalizedNextStatus,
+      );
+
+      transaction.update(sessionReference, {
+        status: normalizedNextStatus,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+
+      return {
+        fromStatus: currentStatus,
+        sessionId,
+        sessionPath,
+        status: normalizedNextStatus,
+      };
+    });
+
+    this.logger.info("Session state transition applied", {
+      actorType,
+      fromStatus: transitionResult.fromStatus,
+      instituteId,
+      runId,
+      sessionId,
+      status: transitionResult.status,
+      yearId,
+    });
+
+    return transitionResult;
+  }
+
+  /**
+   * Enforces forward-only transition ordering and actor restrictions.
+   * @param {string} actorType Actor type.
+   * @param {string} currentStatus Current persisted status.
+   * @param {string} nextStatus Requested next status.
+   */
+  private assertTransitionIsAllowed(
+    actorType: SessionStateTransitionContext["actorType"],
+    currentStatus: SessionStatus,
+    nextStatus: SessionStatus,
+  ): void {
+    const allowedNextStates =
+      ALLOWED_SESSION_STATUS_TRANSITIONS[currentStatus] ?? [];
+
+    if (!allowedNextStates.includes(nextStatus)) {
+      if (
+        SESSION_STATUS_TRANSITION_ORDER[nextStatus] <=
+        SESSION_STATUS_TRANSITION_ORDER[currentStatus]
+      ) {
+        throw new SessionStartValidationError(
+          "VALIDATION_ERROR",
+          `Session transition ${currentStatus} -> ${nextStatus} ` +
+            "is not forward-only.",
+        );
+      }
+
+      throw new SessionStartValidationError(
+        "VALIDATION_ERROR",
+        `Session transition ${currentStatus} -> ${nextStatus} is not allowed.`,
+      );
+    }
+
+    if (nextStatus === "active" && actorType !== "student") {
+      throw new SessionStartValidationError(
+        "FORBIDDEN",
+        "Only students may transition a session to active.",
+      );
+    }
+
+    if (nextStatus === "submitted" && actorType !== "backend") {
+      throw new SessionStartValidationError(
+        "FORBIDDEN",
+        "Only backend services may transition a session to submitted.",
+      );
+    }
   }
 }
 

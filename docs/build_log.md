@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 26  
-Next Build: 27
+Completed Builds: 27  
+Next Build: 28
 
 Current Phase: Phase 6 — Session Execution Engine
 
@@ -776,18 +776,47 @@ Completed On
 
 ---
 
+## Build 27 — Session Lifecycle State Machine
+
+Phase  
+Phase 6 — Session Execution Engine
+
+Summary  
+Implemented the architecture-defined forward-only session lifecycle transition layer.
+
+Components implemented:
+
+- Extended `SessionService` with explicit lifecycle transition enforcement for `created -> started -> active -> submitted` and `active -> expired -> terminated`
+- Added role-aware guards so only students can transition sessions to `active`
+- Added backend-only enforcement for the `submitted` transition
+- Rejected backward and skipped transitions to preserve strict forward-only session ordering
+- Reused the existing session domain service instead of introducing a duplicate lifecycle module
+- Added repeatable emulator-backed tests for valid transitions, invalid order changes, and actor restriction failures
+- Added a dedicated `test:session-lifecycle` script for isolated verification
+
+Result  
+The session execution domain now has a deterministic lifecycle state machine that preserves architecture-defined session ordering and actor permissions for downstream answer batching, timing, and submission builds.
+
+Commit Reference  
+Pending local commit
+
+Completed On  
+2026-03-24
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 27
+Next Build Number: 28
 
 Phase  
 Phase 6 — Session Execution Engine
 
 Subsystem  
-Session Lifecycle State Machine
+Session Document Initialization
 
 Reference  
-3_Core_Architectures.md → Section 10.1 Session Lifecycle State Machine
+3_Core_Architectures.md → Section 10.2 Session Start Flow
 
 ---
 
@@ -821,7 +850,8 @@ Build | Phase | Status
 24 | Assignment Domain | Completed
 25 | Assignment Domain | Completed
 26 | Session Execution Engine | Completed
-27–150 | Remaining Phases | Pending
+27 | Session Execution Engine | Completed
+28–150 | Remaining Phases | Pending
 
 ---
 

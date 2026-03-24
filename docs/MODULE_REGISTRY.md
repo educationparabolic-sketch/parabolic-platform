@@ -39,7 +39,7 @@ POST /exam/session/{sessionId}/submit | Build 36 | Session submission
 
 Service | Build | Purpose
 ---|---|---
-SessionService | Build 26 | Manage exam session lifecycle
+SessionService | Build 26, Build 27 | Manage exam session creation and enforce forward-only lifecycle transitions across `created`, `started`, `active`, `submitted`, `expired`, and `terminated`
 ExamStartApi | Build 26 | HTTP API handler for POST /exam/start
 AnswerBatchService | Build 30 | Persist incremental answers
 SubmissionService | Build 36 | Handle exam submission logic

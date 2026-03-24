@@ -1,4 +1,10 @@
-export type SessionStatus = "created";
+export type SessionStatus =
+  "created" |
+  "started" |
+  "active" |
+  "submitted" |
+  "expired" |
+  "terminated";
 
 export type SessionStartErrorCode =
   "FORBIDDEN" |
@@ -34,3 +40,22 @@ export interface SessionStartResult {
   status: SessionStatus;
 }
 
+export type SessionTransitionActorType =
+  "student" |
+  "backend" |
+  "system";
+
+export interface SessionStateTransitionContext {
+  actorType: SessionTransitionActorType;
+  instituteId: string;
+  runId: string;
+  sessionId: string;
+  yearId: string;
+}
+
+export interface SessionStateTransitionResult {
+  fromStatus: SessionStatus;
+  sessionPath: string;
+  sessionId: string;
+  status: SessionStatus;
+}
