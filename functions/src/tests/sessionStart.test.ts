@@ -83,13 +83,19 @@ test(
     const sessionSnapshot = await firestore.doc(result.sessionPath).get();
     const sessionData = sessionSnapshot.data();
     assert.equal(sessionData?.sessionId, result.sessionId);
+    assert.equal(sessionData?.instituteId, instituteId);
+    assert.equal(sessionData?.yearId, yearId);
+    assert.equal(sessionData?.runId, runId);
     assert.equal(sessionData?.studentId, studentId);
+    assert.equal(sessionData?.studentUid, `uid_${studentId}`);
     assert.equal(sessionData?.status, "created");
     assert.equal(sessionData?.submissionLock, false);
     assert.deepEqual(sessionData?.answerMap, {});
     assert.equal(sessionData?.startedAt, null);
     assert.equal(sessionData?.submittedAt, null);
     assert.equal(sessionData?.version, 1);
+    assert.ok(sessionData?.createdAt instanceof Timestamp);
+    assert.ok(sessionData?.updatedAt instanceof Timestamp);
 
     await deleteDocumentIfPresent(result.sessionPath);
     await deleteDocumentIfPresent(runPath);
@@ -262,4 +268,3 @@ test(
     await deleteDocumentIfPresent(institutePath);
   },
 );
-

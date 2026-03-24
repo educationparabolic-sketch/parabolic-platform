@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 27  
-Next Build: 28
+Completed Builds: 28  
+Next Build: 29
 
 Current Phase: Phase 6 — Session Execution Engine
 
@@ -805,18 +805,46 @@ Completed On
 
 ---
 
+## Build 28 — Session Document Initialization
+
+Phase  
+Phase 6 — Session Execution Engine
+
+Summary  
+Implemented the architecture-defined session document initialization contract for session start.
+
+Components implemented:
+
+- Reused the existing `SessionService` to avoid duplicate session-domain modules
+- Added typed Build 28 session initialization contracts in `functions/src/types/sessionStart.ts`
+- Added a dedicated session initialization builder in `SessionService` aligned with Section 10.2
+- Enforced deterministic initialization payload fields at creation time: `sessionId`, `studentId`, `status`, `startedAt`, and `answerMap` plus existing session invariants (`submittedAt`, `version`, `submissionLock`)
+- Extended repeatable emulator-backed `sessionStart` tests to assert initialized tenancy/run metadata and persisted server timestamps (`createdAt`, `updatedAt`)
+- Added `test:session-document-initialization` script for isolated Build 28 verification
+
+Result  
+Session start now initializes a typed, deterministic session document shape that is explicitly aligned with the Session Start Flow contract and ready for Build 29/30 answer-write behavior.
+
+Commit Reference  
+Pending local commit
+
+Completed On  
+2026-03-24
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 28
+Next Build Number: 29
 
 Phase  
 Phase 6 — Session Execution Engine
 
 Subsystem  
-Session Document Initialization
+Client Write Batching Policy
 
 Reference  
-3_Core_Architectures.md → Section 10.2 Session Start Flow
+3_Core_Architectures.md → Section 11.1 Write Interval Policy
 
 ---
 
@@ -851,7 +879,8 @@ Build | Phase | Status
 25 | Assignment Domain | Completed
 26 | Session Execution Engine | Completed
 27 | Session Execution Engine | Completed
-28–150 | Remaining Phases | Pending
+28 | Session Execution Engine | Completed
+29–150 | Remaining Phases | Pending
 
 ---
 

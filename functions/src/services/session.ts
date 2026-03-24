@@ -5,6 +5,8 @@ import {
 import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
 import {createLogger} from "./logging";
 import {
+  SessionDocumentInitializationContext,
+  SessionDocumentInitializationRecord,
   SessionStartContext,
   SessionStartErrorCode,
   SessionStartResult,
@@ -357,22 +359,16 @@ export class SessionService {
         );
       }
 
-      transaction.create(sessionReference, {
-        answerMap: {},
-        createdAt: FieldValue.serverTimestamp(),
+      const initializationRecord = this.buildSessionInitializationRecord({
         instituteId,
         runId,
         sessionId,
-        startedAt: null,
-        status: "created",
         studentId,
         studentUid,
-        submissionLock: false,
-        submittedAt: null,
-        updatedAt: FieldValue.serverTimestamp(),
-        version: 1,
         yearId,
       });
+
+      transaction.create(sessionReference, initializationRecord);
 
       this.logger.info("Session start validated and document initialized", {
         instituteId,
@@ -517,6 +513,32 @@ export class SessionService {
         "Only backend services may transition a session to submitted.",
       );
     }
+  }
+
+  /**
+   * Creates the architecture-defined initial session record for Build 28.
+   * @param {SessionDocumentInitializationContext} context Session identifiers.
+   * @return {SessionDocumentInitializationRecord} Initial session document.
+   */
+  private buildSessionInitializationRecord(
+    context: SessionDocumentInitializationContext,
+  ): SessionDocumentInitializationRecord {
+    return {
+      answerMap: {},
+      createdAt: FieldValue.serverTimestamp(),
+      instituteId: context.instituteId,
+      runId: context.runId,
+      sessionId: context.sessionId,
+      startedAt: null,
+      status: "created",
+      studentId: context.studentId,
+      studentUid: context.studentUid,
+      submissionLock: false,
+      submittedAt: null,
+      updatedAt: FieldValue.serverTimestamp(),
+      version: 1,
+      yearId: context.yearId,
+    };
   }
 }
 
