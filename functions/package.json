@@ -21,6 +21,7 @@
     "test:session-start": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=parabolic-platform-build-26-tests GOOGLE_CLOUD_PROJECT=parabolic-platform-build-26-tests NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none npm run build && node --test lib/tests/sessionStart.test.js",
     "test:session-document-initialization": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=parabolic-platform-build-28-tests GOOGLE_CLOUD_PROJECT=parabolic-platform-build-28-tests NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none npm run build && node --test lib/tests/sessionStart.test.js",
     "test:session-lifecycle": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=parabolic-platform-build-27-tests GOOGLE_CLOUD_PROJECT=parabolic-platform-build-27-tests NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none npm run build && node --test lib/tests/sessionLifecycle.test.js",
+    "test:session-write-batching-policy": "GCLOUD_PROJECT=parabolic-platform-build-29-tests GOOGLE_CLOUD_PROJECT=parabolic-platform-build-29-tests NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none npm run build && node --test lib/tests/sessionWriteBatchingPolicy.test.js",
     "test:run-analytics-initialization": "npm run build && node --test lib/tests/runAnalyticsInitialization.test.js",
     "test:usage-metering": "npm run build && node --test lib/tests/usageMetering.test.js",
     "test:tag-dictionary": "npm run build && node --test lib/tests/tagDictionary.test.js",

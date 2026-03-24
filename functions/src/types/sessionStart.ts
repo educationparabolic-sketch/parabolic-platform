@@ -85,3 +85,23 @@ export interface SessionStateTransitionResult {
   sessionId: string;
   status: SessionStatus;
 }
+
+export interface SessionWriteBatchingPolicy {
+  maxPendingAnswers: number;
+  minimumWriteIntervalMs: number;
+}
+
+export type SessionWriteBatchingReason =
+  "MAX_PENDING_ANSWERS_REACHED" |
+  "WRITE_INTERVAL_ELAPSED";
+
+export interface SessionWriteBatchingEvaluationInput {
+  millisecondsSinceLastWrite: number;
+  pendingAnswersCount: number;
+}
+
+export interface SessionWriteBatchingEvaluationResult {
+  policy: SessionWriteBatchingPolicy;
+  reasons: SessionWriteBatchingReason[];
+  shouldWrite: boolean;
+}

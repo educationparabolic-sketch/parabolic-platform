@@ -9,6 +9,10 @@ import {
   SessionDocumentInitializationRecord,
   SessionStartContext,
   SessionStartErrorCode,
+  SessionWriteBatchingEvaluationInput,
+  SessionWriteBatchingEvaluationResult,
+  SessionWriteBatchingPolicy,
+  SessionWriteBatchingReason,
   SessionStartResult,
   SessionStateTransitionContext,
   SessionStateTransitionResult,
@@ -41,6 +45,11 @@ Record<SessionStatus, SessionStatus[]> = {
   submitted: [],
   terminated: [],
 };
+const SESSION_WRITE_BATCHING_POLICY: SessionWriteBatchingPolicy =
+  Object.freeze({
+    maxPendingAnswers: 10,
+    minimumWriteIntervalMs: 5000,
+  });
 
 type SessionTokenSigner = (
   uid: string,
@@ -79,6 +88,27 @@ const normalizeRequiredString = (
   }
 
   return normalizedValue;
+};
+
+const normalizeNonNegativeInteger = (
+  value: unknown,
+  fieldName: string,
+): number => {
+  if (!Number.isInteger(value)) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Field "${fieldName}" must be an integer.`,
+    );
+  }
+
+  if ((value as number) < 0) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Field "${fieldName}" must be a non-negative integer.`,
+    );
+  }
+
+  return value as number;
 };
 
 const normalizeRunWindowTimestamp = (
@@ -466,6 +496,97 @@ export class SessionService {
     });
 
     return transitionResult;
+  }
+
+  /**
+   * Returns the architecture-defined answer write batching policy (Build 29).
+   * @return {SessionWriteBatchingPolicy} Immutable write policy constraints.
+   */
+  public getAnswerWriteBatchingPolicy(): SessionWriteBatchingPolicy {
+    return {
+      maxPendingAnswers: SESSION_WRITE_BATCHING_POLICY.maxPendingAnswers,
+      minimumWriteIntervalMs:
+        SESSION_WRITE_BATCHING_POLICY.minimumWriteIntervalMs,
+    };
+  }
+
+  /**
+   * Evaluates if a write flush should execute using Build 29 constraints.
+   * @param {SessionWriteBatchingEvaluationInput} input Client buffer metrics.
+   * @return {SessionWriteBatchingEvaluationResult} Flush decision details.
+   */
+  public evaluateAnswerWriteBatching(
+    input: SessionWriteBatchingEvaluationInput,
+  ): SessionWriteBatchingEvaluationResult {
+    const pendingAnswersCount = normalizeNonNegativeInteger(
+      input.pendingAnswersCount,
+      "pendingAnswersCount",
+    );
+    const millisecondsSinceLastWrite = normalizeNonNegativeInteger(
+      input.millisecondsSinceLastWrite,
+      "millisecondsSinceLastWrite",
+    );
+    const reasons: SessionWriteBatchingReason[] = [];
+
+    if (
+      pendingAnswersCount >= SESSION_WRITE_BATCHING_POLICY.maxPendingAnswers
+    ) {
+      reasons.push("MAX_PENDING_ANSWERS_REACHED");
+    }
+
+    if (
+      millisecondsSinceLastWrite >=
+      SESSION_WRITE_BATCHING_POLICY.minimumWriteIntervalMs
+    ) {
+      reasons.push("WRITE_INTERVAL_ELAPSED");
+    }
+
+    return {
+      policy: this.getAnswerWriteBatchingPolicy(),
+      reasons,
+      shouldWrite: reasons.length > 0,
+    };
+  }
+
+  /**
+   * Enforces Build 29 answer-write contract constraints for backend APIs.
+   * @param {number} answersInBatchCount Answer updates in current write.
+   * @param {number} millisecondsSinceLastWrite Time since previous write.
+   */
+  public assertAnswerWriteBatchingConstraints(
+    answersInBatchCount: number,
+    millisecondsSinceLastWrite: number,
+  ): void {
+    const normalizedAnswersInBatchCount = normalizeNonNegativeInteger(
+      answersInBatchCount,
+      "answersInBatchCount",
+    );
+    const normalizedMillisecondsSinceLastWrite = normalizeNonNegativeInteger(
+      millisecondsSinceLastWrite,
+      "millisecondsSinceLastWrite",
+    );
+
+    if (
+      normalizedAnswersInBatchCount >
+      SESSION_WRITE_BATCHING_POLICY.maxPendingAnswers
+    ) {
+      throw new SessionStartValidationError(
+        "VALIDATION_ERROR",
+        "Answer batch size exceeds maximum of " +
+          `${SESSION_WRITE_BATCHING_POLICY.maxPendingAnswers}.`,
+      );
+    }
+
+    if (
+      normalizedMillisecondsSinceLastWrite <
+      SESSION_WRITE_BATCHING_POLICY.minimumWriteIntervalMs
+    ) {
+      throw new SessionStartValidationError(
+        "VALIDATION_ERROR",
+        "Minimum write interval is " +
+          `${SESSION_WRITE_BATCHING_POLICY.minimumWriteIntervalMs}ms.`,
+      );
+    }
   }
 
   /**
