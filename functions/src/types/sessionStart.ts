@@ -35,17 +35,39 @@ export interface SessionTokenClaims {
 
 export interface SessionDocumentInitializationContext {
   instituteId: string;
+  questionTimeMap: SessionQuestionTimeMap;
   runId: string;
   sessionId: string;
   studentId: string;
   studentUid: string;
+  timingProfileSnapshot: SessionTimingProfileSnapshot;
   yearId: string;
 }
+
+export interface SessionTimingWindow {
+  max: number;
+  min: number;
+}
+
+export interface SessionTimingProfileSnapshot {
+  easy: SessionTimingWindow;
+  hard: SessionTimingWindow;
+  medium: SessionTimingWindow;
+}
+
+export interface SessionQuestionTimeRecord {
+  cumulativeTimeSpent: number;
+  maxTime: number;
+  minTime: number;
+}
+
+export type SessionQuestionTimeMap = Record<string, SessionQuestionTimeRecord>;
 
 export interface SessionDocumentInitializationRecord {
   answerMap: Record<string, unknown>;
   createdAt: FirebaseFirestore.FieldValue;
   instituteId: string;
+  questionTimeMap: SessionQuestionTimeMap;
   runId: string;
   sessionId: string;
   startedAt: null;
@@ -54,6 +76,7 @@ export interface SessionDocumentInitializationRecord {
   studentUid: string;
   submissionLock: false;
   submittedAt: null;
+  timingProfileSnapshot: SessionTimingProfileSnapshot;
   updatedAt: FirebaseFirestore.FieldValue;
   version: 1;
   yearId: string;

@@ -7,8 +7,10 @@ import {createLogger} from "./logging";
 import {
   SessionDocumentInitializationContext,
   SessionDocumentInitializationRecord,
+  SessionQuestionTimeMap,
   SessionStartContext,
   SessionStartErrorCode,
+  SessionTimingProfileSnapshot,
   SessionWriteBatchingEvaluationInput,
   SessionWriteBatchingEvaluationResult,
   SessionWriteBatchingPolicy,
@@ -25,6 +27,7 @@ const ACADEMIC_YEARS_COLLECTION = "academicYears";
 const RUNS_COLLECTION = "runs";
 const SESSIONS_COLLECTION = "sessions";
 const STUDENTS_COLLECTION = "students";
+const QUESTION_BANK_COLLECTION = "questionBank";
 const LICENSE_COLLECTION = "license";
 const ACTIVE_STUDENT_STATUSES = new Set(["active"]);
 const ACTIVE_SESSION_STATUSES = ["created", "started", "active"];
@@ -151,6 +154,118 @@ const normalizeSessionStatus = (
   }
 
   return normalizedValue as SessionStatus;
+};
+
+const normalizeQuestionIds = (
+  value: unknown,
+  fieldName: string,
+): string[] => {
+  if (!Array.isArray(value)) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Run field "${fieldName}" must be an array of question ids.`,
+    );
+  }
+
+  if (value.length === 0) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Run field "${fieldName}" must contain at least one question id.`,
+    );
+  }
+
+  const normalizedQuestionIds = value.map((questionId, index) =>
+    normalizeRequiredString(questionId, `${fieldName}[${index}]`)
+  );
+
+  if (new Set(normalizedQuestionIds).size !== normalizedQuestionIds.length) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Run field "${fieldName}" must not contain duplicate question ids.`,
+    );
+  }
+
+  return normalizedQuestionIds;
+};
+
+const normalizeTimingWindow = (
+  value: unknown,
+  fieldName: string,
+): SessionTimingProfileSnapshot["easy"] => {
+  if (!isPlainObject(value)) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Run field "${fieldName}" must be an object.`,
+    );
+  }
+
+  const min = value.min;
+  const max = value.max;
+
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Run field "${fieldName}" must contain numeric min and max values.`,
+    );
+  }
+
+  if ((min as number) < 0 || (max as number) < 0) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Run field "${fieldName}" min/max values must be non-negative.`,
+    );
+  }
+
+  if ((min as number) > (max as number)) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Run field "${fieldName}" min must be less than or equal to max.`,
+    );
+  }
+
+  return {
+    max: Number(max),
+    min: Number(min),
+  };
+};
+
+const normalizeTimingProfileSnapshot = (
+  value: unknown,
+  fieldName: string,
+): SessionTimingProfileSnapshot => {
+  if (!isPlainObject(value)) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Run field "${fieldName}" must be an object.`,
+    );
+  }
+
+  return {
+    easy: normalizeTimingWindow(value.easy, `${fieldName}.easy`),
+    hard: normalizeTimingWindow(value.hard, `${fieldName}.hard`),
+    medium: normalizeTimingWindow(value.medium, `${fieldName}.medium`),
+  };
+};
+
+const normalizeQuestionDifficulty = (
+  value: unknown,
+  fieldName: string,
+): keyof SessionTimingProfileSnapshot => {
+  const normalizedValue = normalizeRequiredString(value, fieldName)
+    .toLowerCase();
+
+  if (
+    normalizedValue !== "easy" &&
+    normalizedValue !== "medium" &&
+    normalizedValue !== "hard"
+  ) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Question field "${fieldName}" must be Easy, Medium, or Hard.`,
+    );
+  }
+
+  return normalizedValue;
 };
 
 const normalizeSessionTransitionActorType = (
@@ -389,12 +504,53 @@ export class SessionService {
         );
       }
 
+      const timingProfileSnapshot = normalizeTimingProfileSnapshot(
+        runData.timingProfileSnapshot,
+        "run.timingProfileSnapshot",
+      );
+      const questionIds = normalizeQuestionIds(
+        runData.questionIds,
+        "questionIds",
+      );
+      const questionReferences = questionIds.map((questionId) =>
+        this.firestore.doc(
+          `${INSTITUTES_COLLECTION}/${instituteId}/` +
+            `${QUESTION_BANK_COLLECTION}/${questionId}`,
+        )
+      );
+      const questionSnapshots = await transaction.getAll(...questionReferences);
+      const questionTimeMap: SessionQuestionTimeMap = {};
+
+      questionSnapshots.forEach((questionSnapshot, index) => {
+        if (!questionSnapshot.exists) {
+          throw new SessionStartValidationError(
+            "VALIDATION_ERROR",
+            "Run references a question that does not exist in institute " +
+              `questionBank: "${questionIds[index]}".`,
+          );
+        }
+
+        const difficulty = normalizeQuestionDifficulty(
+          questionSnapshot.data()?.difficulty,
+          `questionBank.${questionIds[index]}.difficulty`,
+        );
+        const timingWindow = timingProfileSnapshot[difficulty];
+
+        questionTimeMap[questionIds[index]] = {
+          cumulativeTimeSpent: 0,
+          maxTime: timingWindow.max,
+          minTime: timingWindow.min,
+        };
+      });
+
       const initializationRecord = this.buildSessionInitializationRecord({
         instituteId,
+        questionTimeMap,
         runId,
         sessionId,
         studentId,
         studentUid,
+        timingProfileSnapshot,
         yearId,
       });
 
@@ -403,6 +559,7 @@ export class SessionService {
       this.logger.info("Session start validated and document initialized", {
         instituteId,
         licenseLayer: currentLayer,
+        questionCount: questionIds.length,
         runId,
         sessionId,
         sessionPath,
@@ -648,6 +805,7 @@ export class SessionService {
       answerMap: {},
       createdAt: FieldValue.serverTimestamp(),
       instituteId: context.instituteId,
+      questionTimeMap: context.questionTimeMap,
       runId: context.runId,
       sessionId: context.sessionId,
       startedAt: null,
@@ -656,6 +814,7 @@ export class SessionService {
       studentUid: context.studentUid,
       submissionLock: false,
       submittedAt: null,
+      timingProfileSnapshot: context.timingProfileSnapshot,
       updatedAt: FieldValue.serverTimestamp(),
       version: 1,
       yearId: context.yearId,

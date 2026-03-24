@@ -18,6 +18,12 @@ const createSessionServiceForTests = (): SessionService =>
   new SessionService(async (uid, claims) =>
     `signed-session-token:${uid}:${claims.sessionId}`);
 
+const timingProfileSnapshotFixture = {
+  easy: {max: 60, min: 30},
+  hard: {max: 210, min: 150},
+  medium: {max: 150, min: 60},
+};
+
 const deleteDocumentIfPresent = async (path: string): Promise<void> => {
   const documentReference = firestore.doc(path);
   const snapshot = await documentReference.get();
@@ -42,23 +48,39 @@ test(
     const institutePath = `institutes/${instituteId}`;
     const studentPath = `${institutePath}/students/${studentId}`;
     const licensePath = `${institutePath}/license/main`;
+    const questionEasyPath = `${institutePath}/questionBank/q_build_31_easy`;
+    const questionHardPath = `${institutePath}/questionBank/q_build_31_hard`;
+    const questionMediumPath =
+      `${institutePath}/questionBank/q_build_31_medium`;
     const runPath =
       `${institutePath}/academicYears/${yearId}/runs/${runId}`;
 
     await deleteDocumentIfPresent(institutePath);
     await deleteDocumentIfPresent(studentPath);
     await deleteDocumentIfPresent(licensePath);
+    await deleteDocumentIfPresent(questionEasyPath);
+    await deleteDocumentIfPresent(questionHardPath);
+    await deleteDocumentIfPresent(questionMediumPath);
     await deleteDocumentIfPresent(runPath);
 
     await firestore.doc(institutePath).set({instituteId});
     await firestore.doc(studentPath).set({status: "active", studentId});
     await firestore.doc(licensePath).set({currentLayer: "L1"});
+    await firestore.doc(questionEasyPath).set({difficulty: "Easy"});
+    await firestore.doc(questionHardPath).set({difficulty: "Hard"});
+    await firestore.doc(questionMediumPath).set({difficulty: "Medium"});
     await firestore.doc(runPath).set({
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
+      questionIds: [
+        "q_build_31_easy",
+        "q_build_31_hard",
+        "q_build_31_medium",
+      ],
       recipientStudentIds: [studentId],
       runId,
       startWindow: Timestamp.fromMillis(Date.now() - 5 * 60 * 1000),
       status: "scheduled",
+      timingProfileSnapshot: timingProfileSnapshotFixture,
     });
 
     const result = await sessionService.startSession({
@@ -91,6 +113,27 @@ test(
     assert.equal(sessionData?.status, "created");
     assert.equal(sessionData?.submissionLock, false);
     assert.deepEqual(sessionData?.answerMap, {});
+    assert.deepEqual(
+      sessionData?.timingProfileSnapshot,
+      timingProfileSnapshotFixture,
+    );
+    assert.deepEqual(sessionData?.questionTimeMap, {
+      q_build_31_easy: {
+        cumulativeTimeSpent: 0,
+        maxTime: 60,
+        minTime: 30,
+      },
+      q_build_31_hard: {
+        cumulativeTimeSpent: 0,
+        maxTime: 210,
+        minTime: 150,
+      },
+      q_build_31_medium: {
+        cumulativeTimeSpent: 0,
+        maxTime: 150,
+        minTime: 60,
+      },
+    });
     assert.equal(sessionData?.startedAt, null);
     assert.equal(sessionData?.submittedAt, null);
     assert.equal(sessionData?.version, 1);
@@ -99,6 +142,9 @@ test(
 
     await deleteDocumentIfPresent(result.sessionPath);
     await deleteDocumentIfPresent(runPath);
+    await deleteDocumentIfPresent(questionMediumPath);
+    await deleteDocumentIfPresent(questionHardPath);
+    await deleteDocumentIfPresent(questionEasyPath);
     await deleteDocumentIfPresent(licensePath);
     await deleteDocumentIfPresent(studentPath);
     await deleteDocumentIfPresent(institutePath);
@@ -146,6 +192,115 @@ test(
       (error: unknown) => {
         assert.ok(error instanceof SessionStartValidationError);
         assert.equal(error.code, "WINDOW_CLOSED");
+        return true;
+      },
+    );
+
+    await deleteDocumentIfPresent(runPath);
+    await deleteDocumentIfPresent(licensePath);
+    await deleteDocumentIfPresent(studentPath);
+    await deleteDocumentIfPresent(institutePath);
+  },
+);
+
+test(
+  "startSession rejects runs missing timing profile snapshot",
+  async () => {
+    const sessionService = createSessionServiceForTests();
+    const instituteId = "inst_build_31_missing_timing";
+    const yearId = "2026";
+    const runId = "run_build_31_missing_timing";
+    const studentId = "student_build_31_missing_timing";
+    const institutePath = `institutes/${instituteId}`;
+    const studentPath = `${institutePath}/students/${studentId}`;
+    const licensePath = `${institutePath}/license/main`;
+    const runPath =
+      `${institutePath}/academicYears/${yearId}/runs/${runId}`;
+
+    await deleteDocumentIfPresent(institutePath);
+    await deleteDocumentIfPresent(studentPath);
+    await deleteDocumentIfPresent(licensePath);
+    await deleteDocumentIfPresent(runPath);
+
+    await firestore.doc(institutePath).set({instituteId});
+    await firestore.doc(studentPath).set({status: "active", studentId});
+    await firestore.doc(licensePath).set({currentLayer: "L1"});
+    await firestore.doc(runPath).set({
+      endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
+      questionIds: ["q_build_31_missing_timing_question"],
+      recipientStudentIds: [studentId],
+      runId,
+      startWindow: Timestamp.fromMillis(Date.now() - 5 * 60 * 1000),
+      status: "scheduled",
+    });
+
+    await assert.rejects(
+      sessionService.startSession({
+        instituteId,
+        runId,
+        studentId,
+        studentUid: `uid_${studentId}`,
+        yearId,
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof SessionStartValidationError);
+        assert.equal(error.code, "VALIDATION_ERROR");
+        assert.match(error.message, /timingprofilesnapshot/i);
+        return true;
+      },
+    );
+
+    await deleteDocumentIfPresent(runPath);
+    await deleteDocumentIfPresent(licensePath);
+    await deleteDocumentIfPresent(studentPath);
+    await deleteDocumentIfPresent(institutePath);
+  },
+);
+
+test(
+  "startSession rejects when run question snapshot is missing in question bank",
+  async () => {
+    const sessionService = createSessionServiceForTests();
+    const instituteId = "inst_build_31_missing_question";
+    const yearId = "2026";
+    const runId = "run_build_31_missing_question";
+    const studentId = "student_build_31_missing_question";
+    const institutePath = `institutes/${instituteId}`;
+    const studentPath = `${institutePath}/students/${studentId}`;
+    const licensePath = `${institutePath}/license/main`;
+    const runPath =
+      `${institutePath}/academicYears/${yearId}/runs/${runId}`;
+
+    await deleteDocumentIfPresent(institutePath);
+    await deleteDocumentIfPresent(studentPath);
+    await deleteDocumentIfPresent(licensePath);
+    await deleteDocumentIfPresent(runPath);
+
+    await firestore.doc(institutePath).set({instituteId});
+    await firestore.doc(studentPath).set({status: "active", studentId});
+    await firestore.doc(licensePath).set({currentLayer: "L1"});
+    await firestore.doc(runPath).set({
+      endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
+      questionIds: ["q_build_31_missing_from_bank"],
+      recipientStudentIds: [studentId],
+      runId,
+      startWindow: Timestamp.fromMillis(Date.now() - 5 * 60 * 1000),
+      status: "scheduled",
+      timingProfileSnapshot: timingProfileSnapshotFixture,
+    });
+
+    await assert.rejects(
+      sessionService.startSession({
+        instituteId,
+        runId,
+        studentId,
+        studentUid: `uid_${studentId}`,
+        yearId,
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof SessionStartValidationError);
+        assert.equal(error.code, "VALIDATION_ERROR");
+        assert.match(error.message, /questionbank/i);
         return true;
       },
     );

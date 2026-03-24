@@ -39,7 +39,7 @@ POST /exam/session/{sessionId}/submit | Build 36 | Session submission
 
 Service | Build | Purpose
 ---|---|---
-SessionService | Build 26, Build 27, Build 28, Build 29 | Manage exam session creation, initialize deterministic session start documents (`status`, `startedAt`, `submittedAt`, `answerMap`, `version`, `submissionLock`), enforce forward-only lifecycle transitions across `created`, `started`, `active`, `submitted`, `expired`, and `terminated`, and enforce answer-write batching policy constraints (`minimumWriteIntervalMs=5000`, `maxPendingAnswers=10`)
+SessionService | Build 26, Build 27, Build 28, Build 29, Build 31 | Manage exam session creation, initialize deterministic session start documents (`status`, `startedAt`, `submittedAt`, `answerMap`, `version`, `submissionLock`), load and persist immutable timing profile snapshots from the run (`timingProfileSnapshot`) with per-question timing initialization (`questionTimeMap.<questionId>.{cumulativeTimeSpent,minTime,maxTime}`), enforce forward-only lifecycle transitions across `created`, `started`, `active`, `submitted`, `expired`, and `terminated`, and enforce answer-write batching policy constraints (`minimumWriteIntervalMs=5000`, `maxPendingAnswers=10`)
 ExamStartApi | Build 26 | HTTP API handler for POST /exam/start
 AnswerBatchService | Build 30 | Persist incremental session answer batches through transaction-safe partial updates to `session.answerMap`, with write-interval and batch-size enforcement plus `clientTimestamp` conflict handling
 SubmissionService | Build 36 | Handle exam submission logic

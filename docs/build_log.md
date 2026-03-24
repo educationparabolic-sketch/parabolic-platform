@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 30  
-Next Build: 31
+Completed Builds: 31  
+Next Build: 32
 
 Current Phase: Phase 7 — Timing Engine
 
@@ -892,18 +892,48 @@ Completed On
 
 ---
 
+## Build 31 — Timing Profile Snapshot Loader
+
+Phase  
+Phase 7 — Timing Engine
+
+Summary  
+Implemented deterministic timing profile snapshot loading during session start.
+
+Components implemented:
+
+- Reused and extended `SessionService` (no duplicate module) to load `timingProfileSnapshot` from the run document at session creation time
+- Added run snapshot validation for `timingProfileSnapshot` shape and required per-difficulty timing windows (`easy`, `medium`, `hard`)
+- Added run snapshot validation for `questionIds` and per-question difficulty resolution from `institutes/{instituteId}/questionBank/{questionId}`
+- Added architecture-aligned session timing snapshot persistence:
+  - `timingProfileSnapshot`
+  - `questionTimeMap.<questionId>.{cumulativeTimeSpent,minTime,maxTime}`
+- Added strict validation failures for missing/invalid run timing snapshots and missing run-referenced question metadata
+- Extended repeatable emulator-backed `sessionStart` tests to verify timing snapshot loading success and new Build 31 validation paths
+
+Result  
+Session documents now persist immutable timing windows at start time, with per-question min/max timing initialized from assignment-time snapshots and question difficulty metadata, aligned with Section 12.5.1 and Section 12.8.
+
+Commit Reference  
+Pending local commit
+
+Completed On  
+2026-03-24
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 31
+Next Build Number: 32
 
 Phase  
 Phase 7 — Timing Engine
 
 Subsystem  
-Timing Profile Snapshot Loader
+Question Time Tracking Model
 
 Reference  
-3_Core_Architectures.md → Section 12.5.1 Timing Profile Snapshot Loading
+3_Core_Architectures.md → Section 12.5.2 Question Time Tracking Model
 
 ---
 
@@ -941,7 +971,8 @@ Build | Phase | Status
 28 | Session Execution Engine | Completed
 29 | Session Execution Engine | Completed
 30 | Session Execution Engine | Completed
-31–150 | Remaining Phases | Pending
+31 | Timing Engine | Completed
+32–150 | Remaining Phases | Pending
 
 ---
 
