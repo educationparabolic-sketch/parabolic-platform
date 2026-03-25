@@ -264,7 +264,10 @@ export const handleExamSessionAnswersRequest = async (
     response.status(200).json({
       code: "OK",
       data: {
+        blockedQuestionIds: result.blockedQuestionIds,
         ignoredQuestionIds: result.ignoredQuestionIds,
+        minTimeEnforcementLevel: result.minTimeEnforcementLevel,
+        minTimeViolations: result.minTimeViolations,
         persistedQuestionIds: result.persistedQuestionIds,
         sessionPath: result.sessionPath,
       },

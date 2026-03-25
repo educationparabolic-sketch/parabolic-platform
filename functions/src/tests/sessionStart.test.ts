@@ -71,6 +71,7 @@ test(
     await firestore.doc(questionMediumPath).set({difficulty: "Medium"});
     await firestore.doc(runPath).set({
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
+      mode: "Diagnostic",
       questionIds: [
         "q_build_31_easy",
         "q_build_31_hard",
@@ -108,6 +109,7 @@ test(
     assert.equal(sessionData?.instituteId, instituteId);
     assert.equal(sessionData?.yearId, yearId);
     assert.equal(sessionData?.runId, runId);
+    assert.equal(sessionData?.mode, "Diagnostic");
     assert.equal(sessionData?.studentId, studentId);
     assert.equal(sessionData?.studentUid, `uid_${studentId}`);
     assert.equal(sessionData?.status, "created");
@@ -184,6 +186,7 @@ test(
     await firestore.doc(licensePath).set({currentLayer: "L1"});
     await firestore.doc(runPath).set({
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
+      mode: "Diagnostic",
       recipientStudentIds: [studentId],
       runId,
       startWindow: Timestamp.fromMillis(Date.now() + 5 * 60 * 1000),
@@ -236,6 +239,7 @@ test(
     await firestore.doc(licensePath).set({currentLayer: "L1"});
     await firestore.doc(runPath).set({
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
+      mode: "Diagnostic",
       questionIds: ["q_build_31_missing_timing_question"],
       recipientStudentIds: [studentId],
       runId,
@@ -290,6 +294,7 @@ test(
     await firestore.doc(licensePath).set({currentLayer: "L1"});
     await firestore.doc(runPath).set({
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
+      mode: "Diagnostic",
       questionIds: ["q_build_31_missing_from_bank"],
       recipientStudentIds: [studentId],
       runId,
@@ -345,6 +350,7 @@ test(
     await firestore.doc(licensePath).set({currentLayer: "L1"});
     await firestore.doc(runPath).set({
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
+      mode: "Diagnostic",
       recipientStudentIds: ["some_other_student"],
       runId,
       startWindow: Timestamp.fromMillis(Date.now() - 5 * 60 * 1000),
@@ -399,6 +405,7 @@ test(
     await firestore.doc(licensePath).set({currentLayer: "L1"});
     await firestore.doc(runPath).set({
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
+      mode: "Diagnostic",
       recipientStudentIds: [studentId],
       runId,
       startWindow: Timestamp.fromMillis(Date.now() - 5 * 60 * 1000),

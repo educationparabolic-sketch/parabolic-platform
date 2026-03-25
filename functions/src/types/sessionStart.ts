@@ -35,6 +35,7 @@ export interface SessionTokenClaims {
 
 export interface SessionDocumentInitializationContext {
   instituteId: string;
+  mode: SessionExecutionMode;
   questionTimeMap: SessionQuestionTimeMap;
   runId: string;
   sessionId: string;
@@ -55,6 +56,12 @@ export interface SessionTimingProfileSnapshot {
   medium: SessionTimingWindow;
 }
 
+export type SessionExecutionMode =
+  "Operational" |
+  "Diagnostic" |
+  "Controlled" |
+  "Hard";
+
 export interface SessionQuestionTimeRecord {
   cumulativeTimeSpent: number;
   enteredAt: number | null;
@@ -70,6 +77,7 @@ export interface SessionDocumentInitializationRecord {
   answerMap: Record<string, unknown>;
   createdAt: FirebaseFirestore.FieldValue;
   instituteId: string;
+  mode: SessionExecutionMode;
   questionTimeMap: SessionQuestionTimeMap;
   runId: string;
   sessionId: string;

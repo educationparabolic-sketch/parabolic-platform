@@ -27,8 +27,21 @@ export interface PersistAnswerBatchInput {
   millisecondsSinceLastWrite: number;
 }
 
+export type MinTimeEnforcementLevel = "none" | "track_only" | "soft" | "strict";
+
+export interface MinTimeViolation {
+  enforcementLevel: Exclude<MinTimeEnforcementLevel, "none">;
+  minTime: number;
+  questionId: string;
+  remainingTime: number;
+  warningMessage: string | null;
+}
+
 export interface PersistAnswerBatchResult {
+  blockedQuestionIds: string[];
   ignoredQuestionIds: string[];
+  minTimeEnforcementLevel: MinTimeEnforcementLevel;
+  minTimeViolations: MinTimeViolation[];
   persistedQuestionIds: string[];
   sessionPath: string;
 }

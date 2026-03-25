@@ -3,17 +3,23 @@ import {createLogger} from "./logging";
 import {SessionStartValidationError, sessionService} from "./session";
 import {getFirestore} from "../utils/firebaseAdmin";
 import {
+  MinTimeEnforcementLevel,
+  MinTimeViolation,
   PersistAnswerBatchInput,
   PersistAnswerBatchResult,
   SessionAnswerWriteInput,
 } from "../types/sessionAnswerBatch";
-import {SessionQuestionTimeRecord} from "../types/sessionStart";
+import {
+  SessionExecutionMode,
+  SessionQuestionTimeRecord,
+} from "../types/sessionStart";
 
 const INSTITUTES_COLLECTION = "institutes";
 const ACADEMIC_YEARS_COLLECTION = "academicYears";
 const RUNS_COLLECTION = "runs";
 const SESSIONS_COLLECTION = "sessions";
 const ACTIVE_WRITE_STATUSES = new Set(["created", "started", "active"]);
+const MIN_TIME_WARNING_MESSAGE = "Minimum recommended time not reached.";
 
 interface NormalizedAnswerWrite {
   clientTimestamp: number;
@@ -30,6 +36,8 @@ interface NormalizedQuestionTimeRecord {
   maxTime: number;
   minTime: number;
 }
+
+type NormalizedSessionExecutionMode = Lowercase<SessionExecutionMode>;
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -191,6 +199,71 @@ const normalizeQuestionTimeRecord = (
     ),
     maxTime: normalizeNonNegativeNumber(value.maxTime, `${fieldName}.maxTime`),
     minTime: normalizeNonNegativeNumber(value.minTime, `${fieldName}.minTime`),
+  };
+};
+
+const normalizeSessionExecutionMode = (
+  value: unknown,
+  fieldName: string,
+): NormalizedSessionExecutionMode => {
+  const normalizedValue = normalizeRequiredString(value, fieldName)
+    .toLowerCase();
+
+  if (
+    normalizedValue !== "operational" &&
+    normalizedValue !== "diagnostic" &&
+    normalizedValue !== "controlled" &&
+    normalizedValue !== "hard"
+  ) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Field "${fieldName}" must be one of Operational, Diagnostic, ` +
+        "Controlled, or Hard.",
+    );
+  }
+
+  return normalizedValue;
+};
+
+const resolveMinTimeEnforcementLevel = (
+  mode: NormalizedSessionExecutionMode,
+): MinTimeEnforcementLevel => {
+  switch (mode) {
+  case "operational":
+    return "none";
+  case "diagnostic":
+    return "track_only";
+  case "controlled":
+    return "soft";
+  case "hard":
+    return "strict";
+  default: {
+    const exhaustiveMode: never = mode;
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Unsupported session mode: ${exhaustiveMode}`,
+    );
+  }
+  }
+};
+
+const evaluateMinTimeViolation = (
+  enforcementLevel: MinTimeEnforcementLevel,
+  minTime: number,
+  questionId: string,
+  cumulativeTimeSpent: number,
+): MinTimeViolation | null => {
+  if (enforcementLevel === "none" || cumulativeTimeSpent >= minTime) {
+    return null;
+  }
+
+  return {
+    enforcementLevel,
+    minTime,
+    questionId,
+    remainingTime: Math.max(minTime - cumulativeTimeSpent, 0),
+    warningMessage:
+      enforcementLevel === "track_only" ? null : MIN_TIME_WARNING_MESSAGE,
   };
 };
 
@@ -429,6 +502,11 @@ export class AnswerBatchService {
         sessionData.status,
         "session.status",
       ).toLowerCase();
+      const mode = normalizeSessionExecutionMode(
+        sessionData.mode,
+        "session.mode",
+      );
+      const minTimeEnforcementLevel = resolveMinTimeEnforcementLevel(mode);
 
       if (
         storedInstituteId !== instituteId ||
@@ -475,8 +553,10 @@ export class AnswerBatchService {
       const updatePayload: Record<string, unknown> = {
         updatedAt: FieldValue.serverTimestamp(),
       };
+      const blockedQuestionIds: string[] = [];
       const persistedQuestionIds: string[] = [];
       const ignoredQuestionIds: string[] = [];
+      const minTimeViolations: MinTimeViolation[] = [];
 
       for (const answer of normalizedAnswers) {
         const questionTimeRecord = normalizeQuestionTimeRecord(
@@ -506,6 +586,26 @@ export class AnswerBatchService {
           questionTimeRecord,
           sessionStartMillis,
         );
+        const minTimeViolation = evaluateMinTimeViolation(
+          minTimeEnforcementLevel,
+          questionTimeRecord.minTime,
+          answer.questionId,
+          timingUpdate.cumulativeTimeSpent,
+        );
+
+        if (minTimeViolation) {
+          minTimeViolations.push(minTimeViolation);
+
+          if (minTimeEnforcementLevel === "strict") {
+            blockedQuestionIds.push(answer.questionId);
+            throw new SessionStartValidationError(
+              "VALIDATION_ERROR",
+              "Minimum required time not reached for question " +
+                `"${answer.questionId}" in Hard mode.`,
+            );
+          }
+        }
+
         const cumulativeTimeSpentPath =
           `questionTimeMap.${answer.questionId}.cumulativeTimeSpent`;
         const lastEntryTimestampPath =
@@ -524,14 +624,20 @@ export class AnswerBatchService {
       transaction.update(sessionReference, updatePayload);
 
       return {
+        blockedQuestionIds,
         ignoredQuestionIds,
+        minTimeEnforcementLevel,
+        minTimeViolations,
         persistedQuestionIds,
       };
     });
 
     this.logger.info("Incremental answer batch persisted", {
+      blockedQuestionIds: writeResult.blockedQuestionIds,
       ignoredQuestionIds: writeResult.ignoredQuestionIds,
       instituteId,
+      minTimeEnforcementLevel: writeResult.minTimeEnforcementLevel,
+      minTimeViolationCount: writeResult.minTimeViolations.length,
       persistedQuestionIds: writeResult.persistedQuestionIds,
       runId,
       sessionId,
@@ -539,7 +645,10 @@ export class AnswerBatchService {
     });
 
     return {
+      blockedQuestionIds: writeResult.blockedQuestionIds,
       ignoredQuestionIds: writeResult.ignoredQuestionIds,
+      minTimeEnforcementLevel: writeResult.minTimeEnforcementLevel,
+      minTimeViolations: writeResult.minTimeViolations,
       persistedQuestionIds: writeResult.persistedQuestionIds,
       sessionPath,
     };

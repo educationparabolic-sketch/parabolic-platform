@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 32  
-Next Build: 33
+Completed Builds: 33  
+Next Build: 34
 
 Current Phase: Phase 7 — Timing Engine
 
@@ -955,18 +955,52 @@ Completed On
 
 ---
 
+## Build 33 — Minimum Time Enforcement
+
+Phase  
+Phase 7 — Timing Engine
+
+Summary  
+Implemented architecture-aligned minimum time enforcement in session answer writes.
+
+Components implemented:
+
+- Extended `SessionService` session initialization to snapshot `run.mode` into session documents for deterministic mode-aware timing enforcement
+- Extended `AnswerBatchService` with mode-aware MinTime enforcement behavior:
+  - `Operational` → no min-time enforcement
+  - `Diagnostic` → track-only violation output
+  - `Controlled` → soft warning violation output
+  - `Hard` → strict rejection when question cumulative time is below min-time
+- Added typed min-time enforcement response contract in `sessionAnswerBatch` types (`minTimeEnforcementLevel`, `minTimeViolations`, `blockedQuestionIds`)
+- Extended `POST /exam/session/{sessionId}/answers` API response payload to return min-time enforcement outcomes
+- Preserved existing Build 30 behavior (partial answer merges, write batching constraints, stale-write handling, and timing-map updates)
+- Extended emulator-backed tests:
+  - updated `sessionStart` tests for required run mode and persisted session mode snapshot
+  - added `sessionAnswerBatch` tests for Diagnostic tracking, Controlled soft warning outputs, and Hard-mode strict rejection
+
+Result  
+Session answer writes now enforce minimum-time behavior according to session mode with deterministic server-side validation and explicit API feedback, aligned with Section 12.5.3.
+
+Commit Reference  
+Pending local commit
+
+Completed On  
+2026-03-25
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 33
+Next Build Number: 34
 
 Phase  
 Phase 7 — Timing Engine
 
 Subsystem  
-Minimum Time Enforcement
+Maximum Time Enforcement
 
 Reference  
-3_Core_Architectures.md → Section 12.5.3 MinTime Enforcement
+3_Core_Architectures.md → Section 12.5.4 MaxTime Enforcement
 
 ---
 
@@ -1006,7 +1040,8 @@ Build | Phase | Status
 30 | Session Execution Engine | Completed
 31 | Timing Engine | Completed
 32 | Timing Engine | Completed
-33–150 | Remaining Phases | Pending
+33 | Timing Engine | Completed
+34–150 | Remaining Phases | Pending
 
 ---
 

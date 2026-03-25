@@ -18,6 +18,7 @@ const firestore = getFirestore();
 const seedSession = async (
   sessionPath: string,
   status = "active",
+  mode = "Operational",
 ): Promise<void> => {
   const nowMillis = Date.now();
   const sessionStartMillis = nowMillis - 120_000;
@@ -34,6 +35,7 @@ const seedSession = async (
     },
     createdAt: Timestamp.fromMillis(sessionStartMillis),
     instituteId: "inst_build_30",
+    mode,
     questionTimeMap: {
       q01: {
         cumulativeTimeSpent: 12,
@@ -309,6 +311,141 @@ test(
       questionTimeMap.q03.lastEntryTimestamp,
       nowMillis - 15_000,
     );
+
+    await deleteIfPresent(sessionPath);
+  },
+);
+
+test(
+  "persistIncrementalAnswers tracks min-time violations in Diagnostic mode",
+  async () => {
+    const nowMillis = Date.now();
+    const sessionPath =
+      "institutes/inst_build_30/academicYears/2026/" +
+      "runs/run_build_30/sessions/session_build_33_min_time_diagnostic";
+
+    await deleteIfPresent(sessionPath);
+    await seedSession(sessionPath, "active", "Diagnostic");
+
+    const result = await answerBatchService.persistIncrementalAnswers({
+      answers: [
+        {
+          clientTimestamp: nowMillis,
+          questionId: "q02",
+          selectedOption: "C",
+          timeSpent: 20,
+        },
+      ],
+      context: {
+        instituteId: "inst_build_30",
+        runId: "run_build_30",
+        sessionId: "session_build_33_min_time_diagnostic",
+        studentId: "student_build_30",
+        yearId: "2026",
+      },
+      millisecondsSinceLastWrite: 5000,
+    });
+
+    assert.equal(result.minTimeEnforcementLevel, "track_only");
+    assert.deepEqual(result.blockedQuestionIds, []);
+    assert.equal(result.minTimeViolations.length, 1);
+    assert.equal(result.minTimeViolations[0]?.questionId, "q02");
+    assert.equal(result.minTimeViolations[0]?.remainingTime, 10);
+    assert.equal(result.minTimeViolations[0]?.warningMessage, null);
+    assert.deepEqual(result.persistedQuestionIds, ["q02"]);
+
+    await deleteIfPresent(sessionPath);
+  },
+);
+
+test(
+  "persistIncrementalAnswers returns soft min-time warnings in Controlled mode",
+  async () => {
+    const nowMillis = Date.now();
+    const sessionPath =
+      "institutes/inst_build_30/academicYears/2026/" +
+      "runs/run_build_30/sessions/session_build_33_min_time_controlled";
+
+    await deleteIfPresent(sessionPath);
+    await seedSession(sessionPath, "active", "Controlled");
+
+    const result = await answerBatchService.persistIncrementalAnswers({
+      answers: [
+        {
+          clientTimestamp: nowMillis,
+          questionId: "q02",
+          selectedOption: "B",
+          timeSpent: 5,
+        },
+      ],
+      context: {
+        instituteId: "inst_build_30",
+        runId: "run_build_30",
+        sessionId: "session_build_33_min_time_controlled",
+        studentId: "student_build_30",
+        yearId: "2026",
+      },
+      millisecondsSinceLastWrite: 5000,
+    });
+
+    assert.equal(result.minTimeEnforcementLevel, "soft");
+    assert.deepEqual(result.blockedQuestionIds, []);
+    assert.equal(result.minTimeViolations.length, 1);
+    assert.equal(result.minTimeViolations[0]?.questionId, "q02");
+    assert.equal(result.minTimeViolations[0]?.remainingTime, 25);
+    assert.match(
+      String(result.minTimeViolations[0]?.warningMessage ?? ""),
+      /minimum recommended time not reached/i,
+    );
+    assert.deepEqual(result.persistedQuestionIds, ["q02"]);
+
+    await deleteIfPresent(sessionPath);
+  },
+);
+
+test(
+  "persistIncrementalAnswers rejects min-time violations in Hard mode",
+  async () => {
+    const nowMillis = Date.now();
+    const sessionPath =
+      "institutes/inst_build_30/academicYears/2026/" +
+      "runs/run_build_30/sessions/session_build_33_min_time_hard";
+
+    await deleteIfPresent(sessionPath);
+    await seedSession(sessionPath, "active", "Hard");
+
+    await assert.rejects(
+      answerBatchService.persistIncrementalAnswers({
+        answers: [
+          {
+            clientTimestamp: nowMillis,
+            questionId: "q02",
+            selectedOption: "D",
+            timeSpent: 10,
+          },
+        ],
+        context: {
+          instituteId: "inst_build_30",
+          runId: "run_build_30",
+          sessionId: "session_build_33_min_time_hard",
+          studentId: "student_build_30",
+          yearId: "2026",
+        },
+        millisecondsSinceLastWrite: 5000,
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof SessionStartValidationError);
+        assert.equal(error.code, "VALIDATION_ERROR");
+        assert.match(error.message, /minimum required time not reached/i);
+        return true;
+      },
+    );
+
+    const snapshot = await firestore.doc(sessionPath).get();
+    const answerMap = snapshot.data()?.answerMap as Record<string, {
+      selectedOption: string;
+    }>;
+    assert.equal(answerMap.q02, undefined);
 
     await deleteIfPresent(sessionPath);
   },

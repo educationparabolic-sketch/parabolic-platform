@@ -7,6 +7,7 @@ import {createLogger} from "./logging";
 import {
   SessionDocumentInitializationContext,
   SessionDocumentInitializationRecord,
+  SessionExecutionMode,
   SessionQuestionTimeMap,
   SessionStartContext,
   SessionStartErrorCode,
@@ -288,6 +289,28 @@ const normalizeSessionTransitionActorType = (
   return normalizedValue;
 };
 
+const normalizeSessionExecutionMode = (
+  value: unknown,
+  fieldName: string,
+): SessionExecutionMode => {
+  const normalizedValue = normalizeRequiredString(value, fieldName);
+
+  if (
+    normalizedValue !== "Operational" &&
+    normalizedValue !== "Diagnostic" &&
+    normalizedValue !== "Controlled" &&
+    normalizedValue !== "Hard"
+  ) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Field "${fieldName}" must be one of Operational, Diagnostic, ` +
+        "Controlled, or Hard.",
+    );
+  }
+
+  return normalizedValue;
+};
+
 const resolveLicenseData = (
   mainLicense: FirebaseFirestore.DocumentSnapshot,
   currentLicense: FirebaseFirestore.DocumentSnapshot,
@@ -508,6 +531,7 @@ export class SessionService {
         runData.timingProfileSnapshot,
         "run.timingProfileSnapshot",
       );
+      const mode = normalizeSessionExecutionMode(runData.mode, "run.mode");
       const questionIds = normalizeQuestionIds(
         runData.questionIds,
         "questionIds",
@@ -548,6 +572,7 @@ export class SessionService {
 
       const initializationRecord = this.buildSessionInitializationRecord({
         instituteId,
+        mode,
         questionTimeMap,
         runId,
         sessionId,
@@ -808,6 +833,7 @@ export class SessionService {
       answerMap: {},
       createdAt: FieldValue.serverTimestamp(),
       instituteId: context.instituteId,
+      mode: context.mode,
       questionTimeMap: context.questionTimeMap,
       runId: context.runId,
       sessionId: context.sessionId,
