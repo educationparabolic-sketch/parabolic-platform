@@ -35,8 +35,20 @@ interface SubmissionScoringInput {
   questionTimeMap: Record<string, unknown>;
 }
 
+interface SubmissionServiceOptions {
+  lockHoldDurationMs?: number;
+}
+
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
+
+const delay = async (durationMs: number): Promise<void> => {
+  if (durationMs <= 0) {
+    return;
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, durationMs));
+};
 
 const normalizeRequiredString = (value: unknown, fieldName: string): string => {
   if (typeof value !== "string") {
@@ -379,11 +391,51 @@ export class SubmissionValidationError extends Error {
 }
 
 /**
- * Build 36/37 service for atomic and idempotent session submission handling.
+ * Build 36/37/38 service for atomic, idempotent, and concurrency-safe
+ * session submission handling.
  */
 export class SubmissionService {
   private readonly firestore = getFirestore();
   private readonly logger = createLogger("SubmissionService");
+  private readonly options: SubmissionServiceOptions;
+
+  /**
+   * @param {SubmissionServiceOptions} options Optional service options.
+   */
+  constructor(options: SubmissionServiceOptions = {}) {
+    this.options = options;
+  }
+
+  /**
+   * Releases an active submission lock after a failed finalize attempt.
+   * @param {FirebaseFirestore.DocumentReference} sessionReference Session ref.
+   * @return {Promise<void>} Resolves after lock cleanup attempt.
+   */
+  private async releaseSubmissionLock(
+    sessionReference: FirebaseFirestore.DocumentReference,
+  ): Promise<void> {
+    await this.firestore.runTransaction(async (transaction) => {
+      const sessionSnapshot = await transaction.get(sessionReference);
+      const sessionData = sessionSnapshot.data();
+
+      if (!sessionSnapshot.exists || !isPlainObject(sessionData)) {
+        return;
+      }
+
+      const status = normalizeRequiredString(
+        sessionData.status,
+        "session.status",
+      ).toLowerCase();
+      const submissionLock = sessionData.submissionLock === true;
+
+      if (status === "active" && submissionLock) {
+        transaction.update(sessionReference, {
+          submissionLock: false,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      }
+    });
+  }
 
   /**
    * Finalizes a session using an atomic Firestore transaction.
@@ -415,215 +467,332 @@ export class SubmissionService {
     const sessionReference = this.firestore.doc(sessionPath);
     const runReference = this.firestore.doc(runPath);
 
-    const result = await this.firestore.runTransaction(async (transaction) => {
-      const sessionSnapshot = await transaction.get(sessionReference);
-      const sessionData = sessionSnapshot.data();
+    const idempotentResult = await this.firestore.runTransaction(
+      async (transaction) => {
+        const sessionSnapshot = await transaction.get(sessionReference);
+        const sessionData = sessionSnapshot.data();
 
-      if (!sessionSnapshot.exists || !isPlainObject(sessionData)) {
-        throw new SubmissionValidationError(
-          "NOT_FOUND",
-          `Session "${sessionId}" does not exist.`,
-        );
-      }
-
-      const storedInstituteId = normalizeRequiredString(
-        sessionData.instituteId,
-        "session.instituteId",
-      );
-      const storedYearId = normalizeRequiredString(
-        sessionData.yearId,
-        "session.yearId",
-      );
-      const storedRunId = normalizeRequiredString(
-        sessionData.runId,
-        "session.runId",
-      );
-      const storedSessionId = normalizeRequiredString(
-        sessionData.sessionId,
-        "session.sessionId",
-      );
-      const storedStudentId = normalizeRequiredString(
-        sessionData.studentId,
-        "session.studentId",
-      );
-
-      if (
-        storedInstituteId !== instituteId ||
-        storedYearId !== yearId ||
-        storedRunId !== runId ||
-        storedSessionId !== sessionId
-      ) {
-        throw new SubmissionValidationError(
-          "TENANT_MISMATCH",
-          "Session context does not match the provided identifiers.",
-        );
-      }
-
-      if (storedStudentId !== studentId) {
-        throw new SubmissionValidationError(
-          "FORBIDDEN",
-          "Student is not allowed to submit this session.",
-        );
-      }
-
-      const status = normalizeRequiredString(
-        sessionData.status,
-        "session.status",
-      ).toLowerCase();
-
-      if (status === "submitted") {
-        const storedResult = normalizeStoredResult(sessionData);
-
-        return {
-          ...storedResult,
-          idempotent: true,
-          sessionPath,
-        };
-      }
-
-      const submissionLock = sessionData.submissionLock === true;
-
-      if (submissionLock) {
-        throw new SubmissionValidationError(
-          "SUBMISSION_LOCKED",
-          "Submission is already in progress for this session.",
-        );
-      }
-
-      if (status !== "active") {
-        throw new SubmissionValidationError(
-          "SESSION_NOT_ACTIVE",
-          "Session must be active before submission.",
-        );
-      }
-
-      const runSnapshot = await transaction.get(runReference);
-      const runData = runSnapshot.data();
-
-      if (!runSnapshot.exists || !isPlainObject(runData)) {
-        throw new SubmissionValidationError(
-          "NOT_FOUND",
-          `Run "${runId}" does not exist.`,
-        );
-      }
-
-      const questionIds = runData.questionIds;
-
-      if (!Array.isArray(questionIds) || questionIds.length === 0) {
-        throw new SubmissionValidationError(
-          "VALIDATION_ERROR",
-          "run.questionIds must be a non-empty array.",
-        );
-      }
-
-      const normalizedQuestionIds = questionIds.map((questionId, index) =>
-        normalizeRequiredString(questionId, `run.questionIds[${index}]`),
-      );
-
-      const phaseConfigSnapshot = runData.phaseConfigSnapshot;
-
-      if (!isPlainObject(phaseConfigSnapshot)) {
-        throw new SubmissionValidationError(
-          "VALIDATION_ERROR",
-          "run.phaseConfigSnapshot must be an object.",
-        );
-      }
-
-      const questionReferences = normalizedQuestionIds.map((questionId) =>
-        this.firestore.doc(
-          `${INSTITUTES_COLLECTION}/${instituteId}/` +
-            `${QUESTION_BANK_COLLECTION}/${questionId}`,
-        )
-      );
-      const questionSnapshots = await transaction.getAll(...questionReferences);
-
-      const questionMetaById: Record<string, SubmissionQuestionMeta> = {};
-
-      questionSnapshots.forEach((questionSnapshot, index) => {
-        if (!questionSnapshot.exists) {
+        if (!sessionSnapshot.exists || !isPlainObject(sessionData)) {
           throw new SubmissionValidationError(
-            "VALIDATION_ERROR",
-            "run.questionIds references a missing question document: " +
-              `"${normalizedQuestionIds[index]}".`,
+            "NOT_FOUND",
+            `Session "${sessionId}" does not exist.`,
           );
         }
 
-        const questionData = questionSnapshot.data();
+        const storedInstituteId = normalizeRequiredString(
+          sessionData.instituteId,
+          "session.instituteId",
+        );
+        const storedYearId = normalizeRequiredString(
+          sessionData.yearId,
+          "session.yearId",
+        );
+        const storedRunId = normalizeRequiredString(
+          sessionData.runId,
+          "session.runId",
+        );
+        const storedSessionId = normalizeRequiredString(
+          sessionData.sessionId,
+          "session.sessionId",
+        );
+        const storedStudentId = normalizeRequiredString(
+          sessionData.studentId,
+          "session.studentId",
+        );
 
-        if (!isPlainObject(questionData)) {
+        if (
+          storedInstituteId !== instituteId ||
+          storedYearId !== yearId ||
+          storedRunId !== runId ||
+          storedSessionId !== sessionId
+        ) {
           throw new SubmissionValidationError(
-            "VALIDATION_ERROR",
-            "Question document payload must be an object.",
+            "TENANT_MISMATCH",
+            "Session context does not match the provided identifiers.",
           );
         }
 
-        questionMetaById[normalizedQuestionIds[index]] = {
-          correctAnswer: normalizeRequiredString(
-            questionData.correctAnswer,
-            `questionBank.${normalizedQuestionIds[index]}.correctAnswer`,
-          ),
-          marks: normalizeNonNegativeNumber(
-            questionData.marks,
-            `questionBank.${normalizedQuestionIds[index]}.marks`,
-          ),
-          negativeMarks: normalizeNonNegativeNumber(
-            questionData.negativeMarks,
-            `questionBank.${normalizedQuestionIds[index]}.negativeMarks`,
-          ),
-        };
-      });
+        if (storedStudentId !== studentId) {
+          throw new SubmissionValidationError(
+            "FORBIDDEN",
+            "Student is not allowed to submit this session.",
+          );
+        }
 
-      const answerMap = isPlainObject(sessionData.answerMap) ?
-        sessionData.answerMap :
-        {};
-      const questionTimeMap = isPlainObject(sessionData.questionTimeMap) ?
-        sessionData.questionTimeMap :
-        {};
-      const metrics = computeSubmissionMetrics({
-        answerMap,
-        phaseConfigSnapshot,
-        questionIds: normalizedQuestionIds,
-        questionMetaById,
-        questionTimeMap,
-      });
+        const status = normalizeRequiredString(
+          sessionData.status,
+          "session.status",
+        ).toLowerCase();
 
-      transaction.update(sessionReference, {
-        submissionLock: true,
-        updatedAt: FieldValue.serverTimestamp(),
-      });
-      transaction.update(sessionReference, {
-        accuracyPercent: metrics.accuracyPercent,
-        disciplineIndex: metrics.disciplineIndex,
-        guessRate: metrics.guessRate,
-        maxTimeViolationPercent: metrics.maxTimeViolationPercent,
-        minTimeViolationPercent: metrics.minTimeViolationPercent,
-        phaseAdherencePercent: metrics.phaseAdherencePercent,
-        rawScorePercent: metrics.rawScorePercent,
-        riskState: metrics.riskState,
-        status: "submitted",
-        submissionLock: false,
-        submittedAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      });
+        if (status === "submitted") {
+          return {
+            ...normalizeStoredResult(sessionData),
+            idempotent: true,
+            sessionPath,
+          };
+        }
 
-      return {
-        ...metrics,
-        idempotent: false,
+        if (sessionData.submissionLock === true) {
+          throw new SubmissionValidationError(
+            "SUBMISSION_LOCKED",
+            "Submission is already in progress for this session.",
+          );
+        }
+
+        if (status !== "active") {
+          throw new SubmissionValidationError(
+            "SESSION_NOT_ACTIVE",
+            "Session must be active before submission.",
+          );
+        }
+
+        transaction.update(sessionReference, {
+          submissionLock: true,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+
+        return null;
+      },
+    );
+
+    if (idempotentResult) {
+      this.logger.info("Session submission processed", {
+        idempotent: true,
+        instituteId,
+        runId,
+        sessionId,
         sessionPath,
-      };
-    });
+        studentId,
+        yearId,
+      });
+      return idempotentResult;
+    }
 
-    this.logger.info("Session submission processed", {
-      idempotent: result.idempotent,
-      instituteId,
-      runId,
-      sessionId,
-      sessionPath,
-      studentId,
-      yearId,
-    });
+    await delay(this.options.lockHoldDurationMs ?? 0);
 
-    return result;
+    try {
+      const result = await this.firestore.runTransaction(
+        async (transaction) => {
+          const sessionSnapshot = await transaction.get(sessionReference);
+          const sessionData = sessionSnapshot.data();
+
+          if (!sessionSnapshot.exists || !isPlainObject(sessionData)) {
+            throw new SubmissionValidationError(
+              "NOT_FOUND",
+              `Session "${sessionId}" does not exist.`,
+            );
+          }
+
+          const storedInstituteId = normalizeRequiredString(
+            sessionData.instituteId,
+            "session.instituteId",
+          );
+          const storedYearId = normalizeRequiredString(
+            sessionData.yearId,
+            "session.yearId",
+          );
+          const storedRunId = normalizeRequiredString(
+            sessionData.runId,
+            "session.runId",
+          );
+          const storedSessionId = normalizeRequiredString(
+            sessionData.sessionId,
+            "session.sessionId",
+          );
+          const storedStudentId = normalizeRequiredString(
+            sessionData.studentId,
+            "session.studentId",
+          );
+
+          if (
+            storedInstituteId !== instituteId ||
+          storedYearId !== yearId ||
+          storedRunId !== runId ||
+          storedSessionId !== sessionId
+          ) {
+            throw new SubmissionValidationError(
+              "TENANT_MISMATCH",
+              "Session context does not match the provided identifiers.",
+            );
+          }
+
+          if (storedStudentId !== studentId) {
+            throw new SubmissionValidationError(
+              "FORBIDDEN",
+              "Student is not allowed to submit this session.",
+            );
+          }
+
+          const status = normalizeRequiredString(
+            sessionData.status,
+            "session.status",
+          ).toLowerCase();
+
+          if (status === "submitted") {
+            return {
+              ...normalizeStoredResult(sessionData),
+              idempotent: true,
+              sessionPath,
+            };
+          }
+
+          if (status !== "active") {
+            throw new SubmissionValidationError(
+              "SESSION_NOT_ACTIVE",
+              "Session must be active before submission.",
+            );
+          }
+
+          const submissionLock = sessionData.submissionLock === true;
+
+          if (!submissionLock) {
+            throw new SubmissionValidationError(
+              "SUBMISSION_LOCKED",
+              "Submission lock is unavailable for this session.",
+            );
+          }
+
+          const runSnapshot = await transaction.get(runReference);
+          const runData = runSnapshot.data();
+
+          if (!runSnapshot.exists || !isPlainObject(runData)) {
+            throw new SubmissionValidationError(
+              "NOT_FOUND",
+              `Run "${runId}" does not exist.`,
+            );
+          }
+
+          const questionIds = runData.questionIds;
+
+          if (!Array.isArray(questionIds) || questionIds.length === 0) {
+            throw new SubmissionValidationError(
+              "VALIDATION_ERROR",
+              "run.questionIds must be a non-empty array.",
+            );
+          }
+
+          const normalizedQuestionIds = questionIds.map((questionId, index) =>
+            normalizeRequiredString(questionId, `run.questionIds[${index}]`),
+          );
+
+          const phaseConfigSnapshot = runData.phaseConfigSnapshot;
+
+          if (!isPlainObject(phaseConfigSnapshot)) {
+            throw new SubmissionValidationError(
+              "VALIDATION_ERROR",
+              "run.phaseConfigSnapshot must be an object.",
+            );
+          }
+
+          const questionReferences = normalizedQuestionIds.map((questionId) =>
+            this.firestore.doc(
+              `${INSTITUTES_COLLECTION}/${instituteId}/` +
+              `${QUESTION_BANK_COLLECTION}/${questionId}`,
+            )
+          );
+          const questionSnapshots = await transaction.getAll(
+            ...questionReferences,
+          );
+
+          const questionMetaById: Record<string, SubmissionQuestionMeta> = {};
+
+          questionSnapshots.forEach((questionSnapshot, index) => {
+            if (!questionSnapshot.exists) {
+              throw new SubmissionValidationError(
+                "VALIDATION_ERROR",
+                "run.questionIds references a missing question document: " +
+                `"${normalizedQuestionIds[index]}".`,
+              );
+            }
+
+            const questionData = questionSnapshot.data();
+
+            if (!isPlainObject(questionData)) {
+              throw new SubmissionValidationError(
+                "VALIDATION_ERROR",
+                "Question document payload must be an object.",
+              );
+            }
+
+            questionMetaById[normalizedQuestionIds[index]] = {
+              correctAnswer: normalizeRequiredString(
+                questionData.correctAnswer,
+                `questionBank.${normalizedQuestionIds[index]}.correctAnswer`,
+              ),
+              marks: normalizeNonNegativeNumber(
+                questionData.marks,
+                `questionBank.${normalizedQuestionIds[index]}.marks`,
+              ),
+              negativeMarks: normalizeNonNegativeNumber(
+                questionData.negativeMarks,
+                `questionBank.${normalizedQuestionIds[index]}.negativeMarks`,
+              ),
+            };
+          });
+
+          const answerMap = isPlainObject(sessionData.answerMap) ?
+            sessionData.answerMap :
+            {};
+          const questionTimeMap = isPlainObject(sessionData.questionTimeMap) ?
+            sessionData.questionTimeMap :
+            {};
+          const metrics = computeSubmissionMetrics({
+            answerMap,
+            phaseConfigSnapshot,
+            questionIds: normalizedQuestionIds,
+            questionMetaById,
+            questionTimeMap,
+          });
+
+          transaction.update(sessionReference, {
+            accuracyPercent: metrics.accuracyPercent,
+            disciplineIndex: metrics.disciplineIndex,
+            guessRate: metrics.guessRate,
+            maxTimeViolationPercent: metrics.maxTimeViolationPercent,
+            minTimeViolationPercent: metrics.minTimeViolationPercent,
+            phaseAdherencePercent: metrics.phaseAdherencePercent,
+            rawScorePercent: metrics.rawScorePercent,
+            riskState: metrics.riskState,
+            status: "submitted",
+            submissionLock: false,
+            submittedAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+
+          return {
+            ...metrics,
+            idempotent: false,
+            sessionPath,
+          };
+        },
+      );
+
+      this.logger.info("Session submission processed", {
+        idempotent: result.idempotent,
+        instituteId,
+        runId,
+        sessionId,
+        sessionPath,
+        studentId,
+        yearId,
+      });
+
+      return result;
+    } catch (error) {
+      try {
+        await this.releaseSubmissionLock(sessionReference);
+      } catch (unlockError) {
+        this.logger.error("Failed to release submission lock after error", {
+          instituteId,
+          runId,
+          sessionId,
+          unlockError,
+          yearId,
+        });
+      }
+
+      throw error;
+    }
   }
 }
 

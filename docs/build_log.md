@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 37  
-Next Build: 38
+Completed Builds: 38  
+Next Build: 39
 
 Current Phase: Phase 8 — Submission Engine
 
@@ -1123,18 +1123,50 @@ Completed On
 
 ---
 
+## Build 38 — Concurrency Protection
+
+Phase  
+Phase 8 — Submission Engine
+
+Summary  
+Implemented architecture-aligned concurrency protection for parallel submission attempts using deterministic submission locking.
+
+Components implemented:
+
+- Refactored `SubmissionService` in `functions/src/services/submission.ts` to use a lock-acquisition Firestore transaction before final scoring transaction:
+  - validates tenant/session ownership and student ownership before lock acquisition
+  - returns stored metrics when session is already `submitted` (idempotent replay retained)
+  - rejects concurrent attempts with `SUBMISSION_LOCKED` when `submissionLock` is already true
+  - sets `submissionLock=true` atomically before finalization to protect multi-tab and parallel device submits
+- Added lock-aware finalization transaction validation to require active status + held submission lock before metrics persistence
+- Added best-effort lock release path on transaction failure so failed submissions do not leave sessions locked in `active` state
+- Extended emulator-backed submission tests in `functions/src/tests/sessionSubmission.test.ts`:
+  - new repeatable parallel submit test verifies secondary attempt is rejected with `SUBMISSION_LOCKED` while primary submission is in progress
+- Added `npm run test:session-submission-concurrency` script in `functions/package.json` for deterministic Build 38 validation
+
+Result  
+Parallel submit attempts from multiple tabs/devices now enforce a deterministic lock boundary so only one submission finalization path can proceed at a time, aligned with Section 10.6 Concurrency Protection.
+
+Commit Reference  
+Pending local commit
+
+Completed On  
+2026-03-25
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 38
+Next Build Number: 39
 
 Phase  
 Phase 8 — Submission Engine
 
 Subsystem  
-Concurrency Protection
+Analytics Trigger Event
 
 Reference  
-3_Core_Architectures.md → Section 10.6 Concurrency Protection
+3_Core_Architectures.md → Section 10.8 Analytics Trigger Flow
 
 ---
 
@@ -1179,7 +1211,8 @@ Build | Phase | Status
 35 | Timing Engine | Completed
 36 | Submission Engine | Completed
 37 | Submission Engine | Completed
-38–150 | Remaining Phases | Pending
+38 | Submission Engine | Completed
+39–150 | Remaining Phases | Pending
 
 ---
 

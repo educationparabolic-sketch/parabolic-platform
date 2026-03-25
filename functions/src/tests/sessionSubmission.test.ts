@@ -4,6 +4,7 @@ import {Timestamp} from "firebase-admin/firestore";
 import * as gcpMetadata from "gcp-metadata";
 import {
   submissionService,
+  SubmissionService,
   SubmissionValidationError,
 } from "../services/submission";
 import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
@@ -176,6 +177,7 @@ test.after(async () => {
     "session_build_36_success",
     "session_build_36_idempotent",
     "session_build_36_idempotent_no_recompute",
+    "session_build_36_parallel_lock",
     "session_build_36_locked",
     "session_build_36_not_active",
   ];
@@ -327,6 +329,58 @@ test("submitSession rejects concurrent submission lock", async () => {
 
   await deleteIfPresent(sessionPath);
 });
+
+test(
+  "submitSession rejects parallel submission while lock is held",
+  async () => {
+    const sessionId = "session_build_36_parallel_lock";
+    const sessionPath = `${SESSION_ROOT_PATH}/${sessionId}`;
+
+    await deleteIfPresent(sessionPath);
+    await seedSession(sessionId, "active", false);
+
+    const slowSubmissionService = new SubmissionService({
+      lockHoldDurationMs: 250,
+    });
+
+    const primarySubmissionPromise = slowSubmissionService
+      .submitSession({
+        instituteId: INSTITUTE_ID,
+        runId: RUN_ID,
+        sessionId,
+        studentId: STUDENT_ID,
+        yearId: YEAR_ID,
+      });
+
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    await assert.rejects(
+      submissionService.submitSession({
+        instituteId: INSTITUTE_ID,
+        runId: RUN_ID,
+        sessionId,
+        studentId: STUDENT_ID,
+        yearId: YEAR_ID,
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof SubmissionValidationError);
+        assert.equal(error.code, "SUBMISSION_LOCKED");
+        return true;
+      },
+    );
+
+    const primaryResult = await primarySubmissionPromise;
+
+    assert.equal(primaryResult.idempotent, false);
+
+    const snapshot = await firestore.doc(sessionPath).get();
+    const data = snapshot.data();
+    assert.equal(data?.status, "submitted");
+    assert.equal(data?.submissionLock, false);
+
+    await deleteIfPresent(sessionPath);
+  },
+);
 
 test("submitSession rejects non-active sessions", async () => {
   const sessionId = "session_build_36_not_active";
