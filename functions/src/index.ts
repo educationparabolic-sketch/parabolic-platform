@@ -3,6 +3,7 @@ import {registerGlobalErrorHandlers} from "./services/errorReporting";
 import {createRequestLogger} from "./services/logging";
 import {handleExamStartRequest} from "./api/examStart";
 import {handleExamSessionAnswersRequest} from "./api/examSessionAnswers";
+import {handleExamSessionSubmitRequest} from "./api/examSessionSubmit";
 import {runAssignmentOnCreate} from "./triggers/assignmentCreation";
 import {questionBankOnCreate} from "./triggers/questionIngestion";
 import {testTemplateOnCreate} from "./triggers/templateCreation";
@@ -16,6 +17,9 @@ export {testTemplateOnCreate};
 export const examStart = functions.https.onRequest(handleExamStartRequest);
 export const examSessionAnswers = functions.https.onRequest(
   handleExamSessionAnswersRequest,
+);
+export const examSessionSubmit = functions.https.onRequest(
+  handleExamSessionSubmitRequest,
 );
 
 export const helloWorld = functions.https.onRequest(async (

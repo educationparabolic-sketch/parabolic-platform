@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 35  
-Next Build: 36
+Completed Builds: 36  
+Next Build: 37
 
 Current Phase: Phase 8 — Submission Engine
 
@@ -1057,18 +1057,57 @@ Completed On
 
 ---
 
+## Build 36 — Atomic Submission Transaction
+
+Phase  
+Phase 8 — Submission Engine
+
+Summary  
+Implemented the architecture-defined atomic submission transaction for exam session finalization.
+
+Components implemented:
+
+- Added typed submission contracts in `functions/src/types/submission.ts` for submission context, error codes, deterministic metric payloads, and risk-state outputs
+- Added `SubmissionService` in `functions/src/services/submission.ts` with Firestore transaction-based submission flow:
+  - validates session ownership and tenant-bound identifiers
+  - returns previously persisted metrics when status is already `submitted` (idempotent branch)
+  - rejects concurrent submissions when `submissionLock` is true
+  - enforces `active` status before finalization
+  - loads run snapshot + referenced question metadata
+  - computes deterministic submission metrics (`rawScorePercent`, `accuracyPercent`, `guessRate`, `phaseAdherencePercent`, `disciplineIndex`, `riskState`, `minTimeViolationPercent`, `maxTimeViolationPercent`)
+  - persists terminal session state (`status=submitted`, `submittedAt`, computed metrics, `submissionLock=false`) atomically
+- Added `POST /exam/session/{sessionId}/submit` HTTP handler in `functions/src/api/examSessionSubmit.ts` with student auth, tenant claim validation, deterministic error responses, and submission result payloads
+- Registered `examSessionSubmit` in `functions/src/index.ts` using `functions.https.onRequest`
+- Added emulator-backed repeatable tests in `functions/src/tests/sessionSubmission.test.ts` for:
+  - successful atomic submission
+  - idempotent submitted-session replay
+  - submission lock conflict rejection
+  - non-active session rejection
+- Added `npm run test:session-submission` script in `functions/package.json`
+
+Result  
+The Submission Engine now supports atomic, deterministic session finalization with transaction-safe submission handling and architecture-aligned API behavior for `POST /exam/session/{sessionId}/submit`, aligned with Section 10.4 Atomic Submission Transaction.
+
+Commit Reference  
+Pending local commit
+
+Completed On  
+2026-03-25
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 36
+Next Build Number: 37
 
 Phase  
 Phase 8 — Submission Engine
 
 Subsystem  
-Atomic Submission Transaction
+Idempotent Submission Handling
 
 Reference  
-3_Core_Architectures.md → Section 10.4 Atomic Submission Transaction
+3_Core_Architectures.md → Section 10.5 Idempotency Control
 
 ---
 
@@ -1111,7 +1150,8 @@ Build | Phase | Status
 33 | Timing Engine | Completed
 34 | Timing Engine | Completed
 35 | Timing Engine | Completed
-36–150 | Remaining Phases | Pending
+36 | Submission Engine | Completed
+37–150 | Remaining Phases | Pending
 
 ---
 
