@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 38  
-Next Build: 39
+Completed Builds: 39  
+Next Build: 40
 
 Current Phase: Phase 8 — Submission Engine
 
@@ -1155,18 +1155,53 @@ Completed On
 
 ---
 
+## Build 39 — Analytics Trigger Event
+
+Phase  
+Phase 8 — Submission Engine
+
+Summary  
+Implemented the architecture-aligned analytics trigger flow for submitted exam sessions.
+
+Components implemented:
+
+- Added `SubmissionAnalyticsTriggerService` in `functions/src/services/submissionAnalyticsTrigger.ts` to detect `submitted` state transitions and queue post-submission processing markers without executing future-build analytics computations
+- Added `functions/src/triggers/sessionSubmission.ts` with a Firestore `onUpdate` trigger for `institutes/{instituteId}/academicYears/{yearId}/runs/{runId}/sessions/{sessionId}`
+- Registered `examSessionOnUpdate` in `functions/src/index.ts`
+- Persisted idempotent processing markers in existing analytics summary collections:
+  - `institutes/{instituteId}/academicYears/{yearId}/runAnalytics/{runId}`
+  - `institutes/{instituteId}/academicYears/{yearId}/studentYearMetrics/{studentId}`
+- Enforced Build 39 trigger safeguards:
+  - trigger only when session status changes to `submitted`
+  - skip re-execution when the same `sessionId` is already recorded as processed
+  - rely on `submittedAt` as the authoritative processing timestamp
+- Added typed trigger contracts in `functions/src/types/submissionAnalyticsTrigger.ts`
+- Added repeatable Build 39 validation in `functions/src/tests/submissionAnalyticsTrigger.test.ts`
+- Added `npm run test:submission-analytics-trigger` script in `functions/package.json`
+
+Result  
+Submitted session transitions now trigger an idempotent post-submission workflow handoff aligned with Section 10.8 Analytics Trigger Flow, without prematurely implementing the downstream analytics engines reserved for Builds 41–45.
+
+Commit Reference  
+Pending local commit
+
+Completed On  
+2026-03-25
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 39
+Next Build Number: 40
 
 Phase  
 Phase 8 — Submission Engine
 
 Subsystem  
-Analytics Trigger Event
+Submission Response Contract
 
 Reference  
-3_Core_Architectures.md → Section 10.8 Analytics Trigger Flow
+3_Core_Architectures.md → Section 10.14 Submission Response
 
 ---
 
@@ -1212,7 +1247,8 @@ Build | Phase | Status
 36 | Submission Engine | Completed
 37 | Submission Engine | Completed
 38 | Submission Engine | Completed
-39–150 | Remaining Phases | Pending
+39 | Submission Engine | Completed
+40–150 | Remaining Phases | Pending
 
 ---
 

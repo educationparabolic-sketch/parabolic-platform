@@ -6,6 +6,7 @@ import {handleExamSessionAnswersRequest} from "./api/examSessionAnswers";
 import {handleExamSessionSubmitRequest} from "./api/examSessionSubmit";
 import {runAssignmentOnCreate} from "./triggers/assignmentCreation";
 import {questionBankOnCreate} from "./triggers/questionIngestion";
+import {examSessionOnUpdate} from "./triggers/sessionSubmission";
 import {testTemplateOnCreate} from "./triggers/templateCreation";
 import {loadEnvironmentConfig} from "./utils/environment";
 
@@ -13,6 +14,7 @@ registerGlobalErrorHandlers();
 
 export {questionBankOnCreate};
 export {runAssignmentOnCreate};
+export {examSessionOnUpdate};
 export {testTemplateOnCreate};
 export const examStart = functions.https.onRequest(handleExamStartRequest);
 export const examSessionAnswers = functions.https.onRequest(
