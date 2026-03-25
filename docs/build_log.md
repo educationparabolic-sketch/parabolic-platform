@@ -208,7 +208,7 @@ Result
 The backend now has a reusable append-only audit storage layer aligned with the architecture-defined Firestore collections and ready for Build 7 action-level integrations.
 
 Commit Reference  
-Build 11 — Question Ingestion Pipeline implemented
+Build 6:Audit Log Storage System
 
 Completed On  
 2026-03-19
@@ -236,7 +236,7 @@ Result
 Backend services now have a reusable action logging layer that emits immutable administrative audit records aligned with the Build 7 architecture contract and ready for integration into future admin and vendor APIs.
 
 Commit Reference  
-Pending local commit
+Build 7 — Administrative Action Logging implemented
 
 Completed On  
 2026-03-19
@@ -292,7 +292,7 @@ Result
 Backend services now have a reusable immutable override logging layer for forced submissions, mode changes, minimum time bypasses, and emergency adjustments required by governance reporting.
 
 Commit Reference  
-Pending local commit
+Build 9 — Execution Override Logging implemented
 
 Completed On  
 2026-03-19
@@ -346,7 +346,7 @@ Result
 New question documents now pass through a deterministic backend ingestion step that validates the schema, normalizes searchable metadata, and prepares question analytics state for downstream content and analytics builds.
 
 Commit Reference  
-Pending local commit
+Build 11 — Question Ingestion Pipeline implemented
 
 Completed On  
 2026-03-22
@@ -373,7 +373,7 @@ Result
 Question ingestion now uses a reusable token-indexing module aligned with the lightweight Firestore text-search strategy, preparing the content domain for the later indexed question-query build without introducing new schema collections.
 
 Commit Reference  
-Pending local commit
+Build 12: Search Token Index Generation
 
 Completed On  
 2026-03-22
@@ -401,7 +401,7 @@ Result
 The content domain now includes a deterministic question search query engine that executes only approved indexed query patterns with cursor pagination, preparing downstream template and assignment modules for scalable question retrieval.
 
 Commit Reference  
-Pending local commit
+Build 13: Question Search Query Engine
 
 Completed On  
 2026-03-22
@@ -429,7 +429,7 @@ Result
 The content domain now maintains a small, institute-scoped `tagDictionary` metadata collection for autocomplete support without collection scans, aligned with the Build 14 architecture contract.
 
 Commit Reference  
-Pending local commit
+Build 14:Tag Dictionary Service
 
 Completed On  
 2026-03-22
@@ -457,7 +457,7 @@ Result
 The content domain now maintains an institute-scoped `chapterDictionary` metadata collection for chapter autocomplete support without collection scans, aligned with the Build 15 architecture contract.
 
 Commit Reference  
-Pending local commit
+Build 15:Chapter Dictionary Service
 
 Completed On  
 2026-03-22
@@ -487,7 +487,7 @@ Result
 New template documents now pass through a deterministic backend validation pipeline that enforces institute-scoped question ownership and architecture-aligned template creation constraints required by Build 16.
 
 Commit Reference  
-Pending local commit
+Build 16: Template Creation Pipeline Implemented
 
 Completed On  
 2026-03-22
@@ -514,7 +514,7 @@ Result
 Template documents now persist immutable configuration snapshots (`difficultyDistribution`, `phaseConfigSnapshot`, and `timingProfile`) required to prevent future template edits from affecting downstream assignment execution.
 
 Commit Reference  
-Pending local commit
+Build 17:Template Configuration Snapshot implemented
 
 Completed On  
 2026-03-22
@@ -541,7 +541,7 @@ Result
 Template documents now store a deterministic structural fingerprint that changes when template question list, difficulty distribution, or phase configuration changes, enabling integrity checks across downstream template usage.
 
 Commit Reference  
-Pending local commit
+Build 18:Template Fingerprint Generation
 
 Completed On  
 2026-03-23
@@ -570,7 +570,7 @@ Result
 Template creation now initializes academic-year scoped template analytics records deterministically, enabling downstream effectiveness tracking without schema drift.
 
 Commit Reference  
-Pending local commit
+Build 19:Template Analytics Initialization
 
 Completed On  
 2026-03-23
@@ -597,7 +597,7 @@ Result
 Template lifecycle events now have a dedicated audit logging layer that writes architecture-aligned immutable institute audit records, with template creation already integrated into the template create pipeline and update/activation/archival event logging available for downstream lifecycle integrations.
 
 Commit Reference  
-Pending local commit
+Build 20:Template Audit Logging
 
 Completed On  
 2026-03-23
@@ -628,7 +628,7 @@ Result
 Run creation now passes through a deterministic backend assignment pipeline that enforces template readiness, student recipient eligibility, license restrictions, and scheduling constraints before normalizing run state to the architecture-defined initial status.
 
 Commit Reference  
-Pending local commit
+Build 21:Assignment Domain Flow
 
 Completed On  
 2026-03-23
@@ -655,7 +655,7 @@ Result
 Run documents now persist immutable assignment-time template snapshots required for reproducible execution even if template documents change later.
 
 Commit Reference  
-Pending local commit
+Build 22:Template Snapshot Capture During Assignment
 
 Completed On  
 2026-03-23
@@ -683,7 +683,7 @@ Result
 Run documents now include immutable assignment-time license and calibration snapshots required for deterministic downstream execution and analytics consistency.
 
 Commit Reference  
-Pending local commit
+Build 23:License & Calibration Snapshot
 
 Completed On  
 2026-03-23
@@ -711,7 +711,7 @@ Result
 Each new assignment run now deterministically initializes its academic-year scoped `runAnalytics` summary document, enabling post-submission pipelines to update run-level metrics without creating analytics documents late or ad hoc.
 
 Commit Reference  
-Pending local commit
+Build 24:Run Analytics Initialization
 
 Completed On  
 2026-03-23
@@ -740,7 +740,7 @@ Result
 Each new assignment now updates institute-scoped billing usage summaries in a deterministic and retry-safe manner, providing run-time usage telemetry required for downstream billing and vendor analytics workflows.
 
 Commit Reference  
-Pending local commit
+Build 25 — Usage Metering for Billing implemented
 
 Completed On  
 2026-03-23
@@ -769,7 +769,7 @@ Result
 Students can now start exam sessions through a deterministic backend API that enforces architecture-defined access checks and initializes session state in the required Firestore hierarchy.
 
 Commit Reference  
-Pending local commit
+Build 26:Session Start API
 
 Completed On  
 2026-03-23
@@ -798,7 +798,7 @@ Result
 The session execution domain now has a deterministic lifecycle state machine that preserves architecture-defined session ordering and actor permissions for downstream answer batching, timing, and submission builds.
 
 Commit Reference  
-Pending local commit
+Build 27: Session Lifecycle State Machine
 
 Completed On  
 2026-03-24
@@ -826,7 +826,7 @@ Result
 Session start now initializes a typed, deterministic session document shape that is explicitly aligned with the Session Start Flow contract and ready for Build 29/30 answer-write behavior.
 
 Commit Reference  
-Pending local commit
+Build 28:Session Document Initialization
 
 Completed On  
 2026-03-24
@@ -855,7 +855,7 @@ Result
 The session domain now has a typed and reusable write batching policy layer that enforces the architecture-defined write interval and batch-size constraints, ready for Build 30 incremental answer persistence integration.
 
 Commit Reference  
-Pending local commit
+Build 29:Client Write Batch Policy
 
 Completed On  
 2026-03-24
@@ -885,7 +885,7 @@ Result
 The session execution domain now supports deterministic incremental answer persistence with schema-safe partial updates, write-throttling enforcement, and conflict-resistant answer merges aligned with Section 11.4.
 
 Commit Reference  
-Pending local commit
+Build 30:Incremental Answer Persistance API
 
 Completed On  
 2026-03-24
@@ -915,7 +915,7 @@ Result
 Session documents now persist immutable timing windows at start time, with per-question min/max timing initialized from assignment-time snapshots and question difficulty metadata, aligned with Section 12.5.1 and Section 12.8.
 
 Commit Reference  
-Pending local commit
+Build 31:Timing Profile Snapshot Loader
 
 Completed On  
 2026-03-24
@@ -948,7 +948,7 @@ Result
 Session timing state now tracks per-question entry/exit/cumulative interaction metrics across revisits with server-side validation at write time, aligned with Section 12.5.2.
 
 Commit Reference  
-Pending local commit
+Build 32:Question Time Tracking Model
 
 Completed On  
 2026-03-25
@@ -982,7 +982,7 @@ Result
 Session answer writes now enforce minimum-time behavior according to session mode with deterministic server-side validation and explicit API feedback, aligned with Section 12.5.3.
 
 Commit Reference  
-Pending local commit
+Build 33:Minimum Time Enforcement
 
 Completed On  
 2026-03-25
@@ -1017,7 +1017,7 @@ Result
 Session answer writes now enforce maximum-time behavior per session mode with deterministic server-side violation tracking and strict hard-mode lock semantics for overthinking control, aligned with Section 12.5.4.
 
 Commit Reference  
-Pending local commit
+Build 34:Maximum Time Enforcement
 
 Completed On  
 2026-03-25
@@ -1050,7 +1050,7 @@ Result
 Session answer writes now export deterministic, server-validated timing metrics required by the Timing Engine output contract, including `minTimeViolationPercent`, `maxTimeViolationPercent`, and `averageTimePerQuestion`, aligned with Section 12.4 Outputs.
 
 Commit Reference  
-Pending local commit
+Build 35:Timing Metrics Export
 
 Completed On  
 2026-03-25
@@ -1089,7 +1089,7 @@ Result
 The Submission Engine now supports atomic, deterministic session finalization with transaction-safe submission handling and architecture-aligned API behavior for `POST /exam/session/{sessionId}/submit`, aligned with Section 10.4 Atomic Submission Transaction.
 
 Commit Reference  
-Pending local commit
+Build 36:Atomic Submission Transaction
 
 Completed On  
 2026-03-25
@@ -1116,7 +1116,7 @@ Result
 Submission retries caused by double-clicks, network retries, or frontend replay logic now deterministically return the existing submission result for already-submitted sessions, aligned with Section 10.5 Idempotency Control.
 
 Commit Reference  
-Pending local commit
+Build 37:Idempotent Submission Handling
 
 Completed On  
 2026-03-25
@@ -1148,7 +1148,7 @@ Result
 Parallel submit attempts from multiple tabs/devices now enforce a deterministic lock boundary so only one submission finalization path can proceed at a time, aligned with Section 10.6 Concurrency Protection.
 
 Commit Reference  
-Pending local commit
+Build 38:Concurrency Protection
 
 Completed On  
 2026-03-25
@@ -1183,7 +1183,7 @@ Result
 Submitted session transitions now trigger an idempotent post-submission workflow handoff aligned with Section 10.8 Analytics Trigger Flow, without prematurely implementing the downstream analytics engines reserved for Builds 41–45.
 
 Commit Reference  
-Pending local commit
+Build 39:Analytics Triger Event
 
 Completed On  
 2026-03-25
@@ -1221,7 +1221,7 @@ Result
 The submission API now returns a deterministic architecture-compliant payload for both first-time submits and idempotent replays, aligned with Section 10.14 Submission Response and without leaking internal scoring inputs or processing metadata.
 
 Commit Reference  
-Pending local commit
+Build 40:Submission Response Contract
 
 Completed On  
 2026-03-25
