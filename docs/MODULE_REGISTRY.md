@@ -31,7 +31,7 @@ POST /admin/tests | TBD | Create test template
 POST /admin/runs | TBD | Create test assignment
 POST /exam/start | Build 26 | Start exam session with authentication, tenant, assignment-window, and active-session enforcement
 POST /exam/session/{sessionId}/answers | Build 30, Build 33, Build 34, Build 35 | Persist incremental answer batches with partial `answerMap.<questionId>` merges, batching-policy enforcement, stale-write rejection, mode-aware min/max-time enforcement responses (including hard-mode max-time lock signaling), and timing metrics export outputs (`minTimeViolationPercent`, `maxTimeViolationPercent`, `averageTimePerQuestion`) for downstream analytics
-POST /exam/session/{sessionId}/submit | Build 36 | Finalize active sessions via an atomic Firestore transaction with submission-lock validation, deterministic scoring metrics, submitted-state persistence, and idempotent return for already-submitted sessions
+POST /exam/session/{sessionId}/submit | Build 36, Build 37 | Finalize active sessions via an atomic Firestore transaction with submission-lock validation, deterministic scoring metrics, submitted-state persistence, and idempotent return of previously computed metrics for already-submitted sessions
 
 ---
 
@@ -42,7 +42,7 @@ Service | Build | Purpose
 SessionService | Build 26, Build 27, Build 28, Build 29, Build 31, Build 32, Build 33 | Manage exam session creation, initialize deterministic session start documents (`status`, `startedAt`, `submittedAt`, `answerMap`, `version`, `submissionLock`), snapshot run mode (`Operational`/`Diagnostic`/`Controlled`/`Hard`) for timing enforcement, load and persist immutable timing profile snapshots from the run (`timingProfileSnapshot`) with per-question timing initialization (`questionTimeMap.<questionId>.{cumulativeTimeSpent,enteredAt,exitedAt,lastEntryTimestamp,minTime,maxTime}`), enforce forward-only lifecycle transitions across `created`, `started`, `active`, `submitted`, `expired`, and `terminated`, and enforce answer-write batching policy constraints (`minimumWriteIntervalMs=5000`, `maxPendingAnswers=10`)
 ExamStartApi | Build 26 | HTTP API handler for POST /exam/start
 AnswerBatchService | Build 30, Build 33, Build 34, Build 35 | Persist incremental session answer batches through transaction-safe partial updates to `session.answerMap`, with write-interval and batch-size enforcement, `clientTimestamp` conflict handling, session-mode-aware MinTime enforcement (`none`, `track_only`, `soft`, `strict`), mode-aware MaxTime enforcement (`none`, `track_only`, `advisory`, `strict`) including strict hard-mode question-lock signaling and follow-up edit blocking, and typed timing metrics export (violation counts/percentages, per-question cumulative records, phase deviation flags, and discipline index inputs)
-SubmissionService | Build 36 | Execute atomic session submission transactions, enforce session ownership/status/lock constraints, compute deterministic scoring and behavioral metrics, and persist final submitted session state
+SubmissionService | Build 36, Build 37 | Execute atomic session submission transactions, enforce session ownership/status/lock constraints, compute deterministic scoring and behavioral metrics, persist final submitted session state, and return stored metrics for idempotent retry replays without recomputation
 LicenseService | Phase 19 | License validation and enforcement
 BillingService | Phase 19 | Billing computation and Stripe sync
 EnvironmentConfigLoader | Build 2 | Centralized environment variable and endpoint configuration loader

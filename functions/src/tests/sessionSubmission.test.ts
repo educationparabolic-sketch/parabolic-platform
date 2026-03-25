@@ -175,6 +175,7 @@ test.after(async () => {
   const sessionIds = [
     "session_build_36_success",
     "session_build_36_idempotent",
+    "session_build_36_idempotent_no_recompute",
     "session_build_36_locked",
     "session_build_36_not_active",
   ];
@@ -250,6 +251,51 @@ test(
     const snapshot = await firestore.doc(sessionPath).get();
     assert.equal(snapshot.data()?.status, "submitted");
 
+    await deleteIfPresent(sessionPath);
+  },
+);
+
+test(
+  "submitSession idempotent replay does not recompute metrics",
+  async () => {
+    const sessionId = "session_build_36_idempotent_no_recompute";
+    const sessionPath = `${SESSION_ROOT_PATH}/${sessionId}`;
+
+    await deleteIfPresent(sessionPath);
+    await seedSession(sessionId, "submitted", false);
+
+    await firestore
+      .doc(`institutes/${INSTITUTE_ID}/questionBank/q36_1`)
+      .update({
+        correctAnswer: "D",
+        marks: 99,
+      });
+    await firestore
+      .doc(`institutes/${INSTITUTE_ID}/academicYears/${YEAR_ID}/runs/${RUN_ID}`)
+      .update({
+        phaseConfigSnapshot: {
+          phase1Percent: 70,
+          phase2Percent: 50,
+          phase3Percent: 10,
+        },
+      });
+
+    const result = await submissionService.submitSession({
+      instituteId: INSTITUTE_ID,
+      runId: RUN_ID,
+      sessionId,
+      studentId: STUDENT_ID,
+      yearId: YEAR_ID,
+    });
+
+    assert.equal(result.idempotent, true);
+    assert.equal(result.rawScorePercent, 62.5);
+    assert.equal(result.accuracyPercent, 50);
+    assert.equal(result.disciplineIndex, 80);
+    assert.equal(result.riskState, "Stable");
+
+    await seedQuestion("q36_1", 4, 1, "A");
+    await seedRun();
     await deleteIfPresent(sessionPath);
   },
 );

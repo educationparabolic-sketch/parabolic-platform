@@ -379,7 +379,7 @@ export class SubmissionValidationError extends Error {
 }
 
 /**
- * Build 36 service for atomic session submission transactions.
+ * Build 36/37 service for atomic and idempotent session submission handling.
  */
 export class SubmissionService {
   private readonly firestore = getFirestore();

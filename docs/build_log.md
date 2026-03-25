@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 36  
-Next Build: 37
+Completed Builds: 37  
+Next Build: 38
 
 Current Phase: Phase 8 — Submission Engine
 
@@ -1096,18 +1096,45 @@ Completed On
 
 ---
 
+## Build 37 — Idempotent Submission Handling
+
+Phase  
+Phase 8 — Submission Engine
+
+Summary  
+Implemented architecture-aligned idempotent submission handling so repeat submission calls return previously computed results without recomputation.
+
+Components implemented:
+
+- Retained and documented the `SubmissionService` idempotent replay branch that returns stored submission metrics when `session.status` is already `submitted`
+- Added a Build 37-focused emulator-backed repeatable test in `functions/src/tests/sessionSubmission.test.ts`:
+  - verifies idempotent replay returns persisted metrics even after run/question data changes, proving no recomputation on retries
+- Added `npm run test:session-submission-idempotency` script in `functions/package.json` for deterministic Build 37 validation
+- Updated service build annotation in `functions/src/services/submission.ts` to explicitly include Build 37 idempotency scope
+
+Result  
+Submission retries caused by double-clicks, network retries, or frontend replay logic now deterministically return the existing submission result for already-submitted sessions, aligned with Section 10.5 Idempotency Control.
+
+Commit Reference  
+Pending local commit
+
+Completed On  
+2026-03-25
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 37
+Next Build Number: 38
 
 Phase  
 Phase 8 — Submission Engine
 
 Subsystem  
-Idempotent Submission Handling
+Concurrency Protection
 
 Reference  
-3_Core_Architectures.md → Section 10.5 Idempotency Control
+3_Core_Architectures.md → Section 10.6 Concurrency Protection
 
 ---
 
@@ -1151,7 +1178,8 @@ Build | Phase | Status
 34 | Timing Engine | Completed
 35 | Timing Engine | Completed
 36 | Submission Engine | Completed
-37–150 | Remaining Phases | Pending
+37 | Submission Engine | Completed
+38–150 | Remaining Phases | Pending
 
 ---
 
