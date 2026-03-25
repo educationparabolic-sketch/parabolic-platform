@@ -7,6 +7,7 @@ import {
   PersistAnswerBatchResult,
   SessionAnswerWriteInput,
 } from "../types/sessionAnswerBatch";
+import {SessionQuestionTimeRecord} from "../types/sessionStart";
 
 const INSTITUTES_COLLECTION = "institutes";
 const ACADEMIC_YEARS_COLLECTION = "academicYears";
@@ -19,6 +20,15 @@ interface NormalizedAnswerWrite {
   questionId: string;
   selectedOption: string;
   timeSpent: number;
+}
+
+interface NormalizedQuestionTimeRecord {
+  cumulativeTimeSpent: number;
+  enteredAt: number | null;
+  exitedAt: number | null;
+  lastEntryTimestamp: number | null;
+  maxTime: number;
+  minTime: number;
 }
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
@@ -65,10 +75,44 @@ const normalizeNonNegativeInteger = (
   return value as number;
 };
 
+const normalizeNonNegativeNumber = (
+  value: unknown,
+  fieldName: string,
+): number => {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Field "${fieldName}" must be a number.`,
+    );
+  }
+
+  if (value < 0) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Field "${fieldName}" must be a non-negative number.`,
+    );
+  }
+
+  return value;
+};
+
 const normalizeClientTimestamp = (
   value: unknown,
   fieldName: string,
 ): number => {
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "toMillis" in value &&
+    typeof (value as {toMillis: unknown}).toMillis === "function"
+  ) {
+    const millisValue = (value as {toMillis: () => number}).toMillis();
+
+    if (Number.isFinite(millisValue) && millisValue >= 0) {
+      return millisValue;
+    }
+  }
+
   if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
     return value;
   }
@@ -104,6 +148,146 @@ const normalizeClientTimestamp = (
     "VALIDATION_ERROR",
     `Field "${fieldName}" must be a valid timestamp.`,
   );
+};
+
+const normalizeOptionalTimestampMillis = (
+  value: unknown,
+  fieldName: string,
+): number | null => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  return normalizeClientTimestamp(value, fieldName);
+};
+
+const normalizeQuestionTimeRecord = (
+  value: unknown,
+  fieldName: string,
+): NormalizedQuestionTimeRecord => {
+  if (!isPlainObject(value)) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Field "${fieldName}" must be an object.`,
+    );
+  }
+
+  return {
+    cumulativeTimeSpent: normalizeNonNegativeNumber(
+      value.cumulativeTimeSpent,
+      `${fieldName}.cumulativeTimeSpent`,
+    ),
+    enteredAt: normalizeOptionalTimestampMillis(
+      value.enteredAt,
+      `${fieldName}.enteredAt`,
+    ),
+    exitedAt: normalizeOptionalTimestampMillis(
+      value.exitedAt,
+      `${fieldName}.exitedAt`,
+    ),
+    lastEntryTimestamp: normalizeOptionalTimestampMillis(
+      value.lastEntryTimestamp,
+      `${fieldName}.lastEntryTimestamp`,
+    ),
+    maxTime: normalizeNonNegativeNumber(value.maxTime, `${fieldName}.maxTime`),
+    minTime: normalizeNonNegativeNumber(value.minTime, `${fieldName}.minTime`),
+  };
+};
+
+const EPOCH_MILLISECONDS_FLOOR = 100_000_000_000;
+const TIMING_CLOCK_SKEW_TOLERANCE_MS = 5000;
+
+const isLikelyEpochMillis = (value: number): boolean =>
+  Number.isFinite(value) && value >= EPOCH_MILLISECONDS_FLOOR;
+
+const resolveSessionStartMillis = (
+  sessionData: Record<string, unknown>,
+): number | null => {
+  const startedAtMillis = normalizeOptionalTimestampMillis(
+    sessionData.startedAt,
+    "session.startedAt",
+  );
+
+  if (startedAtMillis !== null) {
+    return startedAtMillis;
+  }
+
+  return normalizeOptionalTimestampMillis(
+    sessionData.createdAt,
+    "session.createdAt",
+  );
+};
+
+const buildQuestionTimingUpdate = (
+  answer: NormalizedAnswerWrite,
+  questionTimeRecord: NormalizedQuestionTimeRecord,
+  sessionStartMillis: number | null,
+): Pick<
+  SessionQuestionTimeRecord,
+  "cumulativeTimeSpent" | "enteredAt" | "exitedAt" | "lastEntryTimestamp"
+> => {
+  const reportedDurationMillis = answer.timeSpent * 1000;
+
+  if (
+    sessionStartMillis !== null &&
+    isLikelyEpochMillis(sessionStartMillis) &&
+    isLikelyEpochMillis(answer.clientTimestamp)
+  ) {
+    const elapsedSinceSessionStartMillis =
+      answer.clientTimestamp - sessionStartMillis;
+
+    if (elapsedSinceSessionStartMillis < 0) {
+      throw new SessionStartValidationError(
+        "VALIDATION_ERROR",
+        "Timing event timestamp cannot precede session start.",
+      );
+    }
+
+    if (
+      reportedDurationMillis >
+      elapsedSinceSessionStartMillis + TIMING_CLOCK_SKEW_TOLERANCE_MS
+    ) {
+      throw new SessionStartValidationError(
+        "VALIDATION_ERROR",
+        "Reported question time exceeds elapsed session duration.",
+      );
+    }
+  }
+
+  const isIdempotentReplay =
+    questionTimeRecord.exitedAt !== null &&
+    answer.clientTimestamp <= questionTimeRecord.exitedAt;
+
+  if (isIdempotentReplay) {
+    return {
+      cumulativeTimeSpent: questionTimeRecord.cumulativeTimeSpent,
+      enteredAt: questionTimeRecord.enteredAt,
+      exitedAt: questionTimeRecord.exitedAt,
+      lastEntryTimestamp: questionTimeRecord.lastEntryTimestamp,
+    };
+  }
+
+  const enteredAt = answer.clientTimestamp - reportedDurationMillis;
+
+  if (
+    sessionStartMillis !== null &&
+    isLikelyEpochMillis(sessionStartMillis) &&
+    isLikelyEpochMillis(enteredAt) &&
+    enteredAt + TIMING_CLOCK_SKEW_TOLERANCE_MS < sessionStartMillis
+  ) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      "Reported question entry timestamp is earlier than session start.",
+    );
+  }
+
+  return {
+    cumulativeTimeSpent:
+      questionTimeRecord.cumulativeTimeSpent + answer.timeSpent,
+    enteredAt,
+    exitedAt: answer.clientTimestamp,
+    lastEntryTimestamp: enteredAt,
+  };
 };
 
 const normalizeAnswerWrites = (answers: unknown): NormalizedAnswerWrite[] => {
@@ -275,6 +459,18 @@ export class AnswerBatchService {
       const storedAnswerMap = isPlainObject(sessionData.answerMap) ?
         sessionData.answerMap :
         {};
+      const storedQuestionTimeMap = isPlainObject(sessionData.questionTimeMap) ?
+        sessionData.questionTimeMap :
+        null;
+
+      if (!storedQuestionTimeMap) {
+        throw new SessionStartValidationError(
+          "VALIDATION_ERROR",
+          "Session timing map is missing.",
+        );
+      }
+
+      const sessionStartMillis = resolveSessionStartMillis(sessionData);
 
       const updatePayload: Record<string, unknown> = {
         updatedAt: FieldValue.serverTimestamp(),
@@ -283,6 +479,10 @@ export class AnswerBatchService {
       const ignoredQuestionIds: string[] = [];
 
       for (const answer of normalizedAnswers) {
+        const questionTimeRecord = normalizeQuestionTimeRecord(
+          storedQuestionTimeMap[answer.questionId],
+          `questionTimeMap.${answer.questionId}`,
+        );
         const currentAnswer = storedAnswerMap[answer.questionId];
         const currentTimestamp = isPlainObject(currentAnswer) ?
           normalizeClientTimestamp(
@@ -301,6 +501,23 @@ export class AnswerBatchService {
           selectedOption: answer.selectedOption,
           timeSpent: answer.timeSpent,
         };
+        const timingUpdate = buildQuestionTimingUpdate(
+          answer,
+          questionTimeRecord,
+          sessionStartMillis,
+        );
+        const cumulativeTimeSpentPath =
+          `questionTimeMap.${answer.questionId}.cumulativeTimeSpent`;
+        const lastEntryTimestampPath =
+          `questionTimeMap.${answer.questionId}.lastEntryTimestamp`;
+        updatePayload[cumulativeTimeSpentPath] =
+          timingUpdate.cumulativeTimeSpent;
+        updatePayload[`questionTimeMap.${answer.questionId}.enteredAt`] =
+          timingUpdate.enteredAt;
+        updatePayload[`questionTimeMap.${answer.questionId}.exitedAt`] =
+          timingUpdate.exitedAt;
+        updatePayload[lastEntryTimestampPath] =
+          timingUpdate.lastEntryTimestamp;
         persistedQuestionIds.push(answer.questionId);
       }
 

@@ -538,6 +538,9 @@ export class SessionService {
 
         questionTimeMap[questionIds[index]] = {
           cumulativeTimeSpent: 0,
+          enteredAt: null,
+          exitedAt: null,
+          lastEntryTimestamp: null,
           maxTime: timingWindow.max,
           minTime: timingWindow.min,
         };

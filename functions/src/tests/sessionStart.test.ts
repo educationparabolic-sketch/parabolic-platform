@@ -120,16 +120,25 @@ test(
     assert.deepEqual(sessionData?.questionTimeMap, {
       q_build_31_easy: {
         cumulativeTimeSpent: 0,
+        enteredAt: null,
+        exitedAt: null,
+        lastEntryTimestamp: null,
         maxTime: 60,
         minTime: 30,
       },
       q_build_31_hard: {
         cumulativeTimeSpent: 0,
+        enteredAt: null,
+        exitedAt: null,
+        lastEntryTimestamp: null,
         maxTime: 210,
         minTime: 150,
       },
       q_build_31_medium: {
         cumulativeTimeSpent: 0,
+        enteredAt: null,
+        exitedAt: null,
+        lastEntryTimestamp: null,
         maxTime: 150,
         minTime: 60,
       },

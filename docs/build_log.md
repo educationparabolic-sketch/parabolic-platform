@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 31  
-Next Build: 32
+Completed Builds: 32  
+Next Build: 33
 
 Current Phase: Phase 7 — Timing Engine
 
@@ -922,18 +922,51 @@ Completed On
 
 ---
 
+## Build 32 — Question Time Tracking Model
+
+Phase  
+Phase 7 — Timing Engine
+
+Summary  
+Implemented architecture-aligned per-question timing tracking in session writes.
+
+Components implemented:
+
+- Extended `SessionService` session initialization model to include question timing tracking fields: `enteredAt`, `exitedAt`, and `lastEntryTimestamp` alongside `cumulativeTimeSpent`, `minTime`, and `maxTime`
+- Extended `AnswerBatchService` write transaction flow to update `questionTimeMap.<questionId>` during answer writes with:
+  - server-validated `enteredAt`
+  - server-validated `exitedAt`
+  - `lastEntryTimestamp`
+  - cumulative revisit-safe `cumulativeTimeSpent`
+- Added server-side timing validation in write operations to reject malformed timing events and impossible session-boundary timing values
+- Preserved stale-write conflict handling and added idempotent replay handling so duplicate client timestamps do not inflate cumulative timing
+- Extended emulator-backed tests:
+  - updated session initialization assertions in `sessionStart` tests for new timing tracking fields
+  - expanded `sessionAnswerBatch` tests to validate persisted timing model updates and replay-safe cumulative behavior
+
+Result  
+Session timing state now tracks per-question entry/exit/cumulative interaction metrics across revisits with server-side validation at write time, aligned with Section 12.5.2.
+
+Commit Reference  
+Pending local commit
+
+Completed On  
+2026-03-25
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 32
+Next Build Number: 33
 
 Phase  
 Phase 7 — Timing Engine
 
 Subsystem  
-Question Time Tracking Model
+Minimum Time Enforcement
 
 Reference  
-3_Core_Architectures.md → Section 12.5.2 Question Time Tracking Model
+3_Core_Architectures.md → Section 12.5.3 MinTime Enforcement
 
 ---
 
@@ -972,7 +1005,8 @@ Build | Phase | Status
 29 | Session Execution Engine | Completed
 30 | Session Execution Engine | Completed
 31 | Timing Engine | Completed
-32–150 | Remaining Phases | Pending
+32 | Timing Engine | Completed
+33–150 | Remaining Phases | Pending
 
 ---
 

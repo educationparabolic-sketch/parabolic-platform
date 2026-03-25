@@ -57,6 +57,9 @@ export interface SessionTimingProfileSnapshot {
 
 export interface SessionQuestionTimeRecord {
   cumulativeTimeSpent: number;
+  enteredAt: number | null;
+  exitedAt: number | null;
+  lastEntryTimestamp: number | null;
   maxTime: number;
   minTime: number;
 }
