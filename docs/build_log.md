@@ -12,10 +12,10 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 39  
-Next Build: 40
+Completed Builds: 40  
+Next Build: 41
 
-Current Phase: Phase 8 — Submission Engine
+Current Phase: Phase 9 — Analytics Engine
 
 ---
 
@@ -1190,18 +1190,56 @@ Completed On
 
 ---
 
-# NEXT BUILD
-
-Next Build Number: 40
+## Build 40 — Submission Response Contract
 
 Phase  
 Phase 8 — Submission Engine
 
+Summary  
+Implemented the architecture-aligned deterministic response contract for submitted exam sessions.
+
+Components implemented:
+
+- Updated `functions/src/api/examSessionSubmit.ts` to return a Build 40 success payload containing only:
+  - `rawScorePercent`
+  - `accuracyPercent`
+  - `disciplineIndex`
+  - `riskState`
+- Added typed Build 40 response contracts in `functions/src/types/submission.ts`
+- Preserved the existing standardized response wrapper metadata (`code`, `message`, `requestId`, `timestamp`) while adding explicit `success: true` on successful submissions
+- Stopped exposing internal submission-processing fields in client responses, including:
+  - `guessRate`
+  - `minTimeViolationPercent`
+  - `maxTimeViolationPercent`
+  - `phaseAdherencePercent`
+  - `idempotent`
+  - `sessionPath`
+- Added repeatable Build 40 contract validation in `functions/src/tests/submissionResponseContract.test.ts`
+- Added `npm run test:submission-response-contract` in `functions/package.json`
+
+Result  
+The submission API now returns a deterministic architecture-compliant payload for both first-time submits and idempotent replays, aligned with Section 10.14 Submission Response and without leaking internal scoring inputs or processing metadata.
+
+Commit Reference  
+Pending local commit
+
+Completed On  
+2026-03-25
+
+---
+
+# NEXT BUILD
+
+Next Build Number: 41
+
+Phase  
+Phase 9 — Analytics Engine
+
 Subsystem  
-Submission Response Contract
+Run Analytics Aggregation
 
 Reference  
-3_Core_Architectures.md → Section 10.14 Submission Response
+3_Core_Architectures.md → Section 42.10 Post-Submission Processing Pipeline — Step A Run Analytics Engine
 
 ---
 
@@ -1248,7 +1286,8 @@ Build | Phase | Status
 37 | Submission Engine | Completed
 38 | Submission Engine | Completed
 39 | Submission Engine | Completed
-40–150 | Remaining Phases | Pending
+40 | Submission Engine | Completed
+41–150 | Remaining Phases | Pending
 
 ---
 

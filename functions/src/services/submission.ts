@@ -39,6 +39,11 @@ interface SubmissionServiceOptions {
   lockHoldDurationMs?: number;
 }
 
+interface ValidatedSessionIdentity {
+  sessionData: Record<string, unknown>;
+  status: string;
+}
+
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -373,6 +378,27 @@ const normalizeStoredResult = (
   ) as SubmissionRiskState,
 });
 
+const isFirestorePreconditionFailure = (error: unknown): boolean => {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const firestoreError = error as Error & {
+    code?: string | number;
+    details?: unknown;
+  };
+
+  return firestoreError.code === 9 ||
+    firestoreError.code === "failed-precondition" ||
+    firestoreError.code === "aborted" ||
+    firestoreError.code === 10 ||
+    (typeof firestoreError.message === "string" && (
+      firestoreError.message.includes("FAILED_PRECONDITION") ||
+      firestoreError.message.includes("too much contention") ||
+      firestoreError.message.includes("Transaction lock timeout")
+    ));
+};
+
 /**
  * Validation error raised for submission contract violations.
  */
@@ -404,6 +430,156 @@ export class SubmissionService {
    */
   constructor(options: SubmissionServiceOptions = {}) {
     this.options = options;
+  }
+
+  /**
+   * Validates that the stored session belongs to the provided submission
+   * context and returns the normalized session status.
+   * @param {Record<string, unknown>} sessionData Session payload.
+   * @param {SubmissionContext} context Submission request identifiers.
+   * @return {ValidatedSessionIdentity} Validated session payload and status.
+   */
+  private validateSessionIdentity(
+    sessionData: Record<string, unknown>,
+    context: SubmissionContext,
+  ): ValidatedSessionIdentity {
+    const storedInstituteId = normalizeRequiredString(
+      sessionData.instituteId,
+      "session.instituteId",
+    );
+    const storedYearId = normalizeRequiredString(
+      sessionData.yearId,
+      "session.yearId",
+    );
+    const storedRunId = normalizeRequiredString(
+      sessionData.runId,
+      "session.runId",
+    );
+    const storedSessionId = normalizeRequiredString(
+      sessionData.sessionId,
+      "session.sessionId",
+    );
+    const storedStudentId = normalizeRequiredString(
+      sessionData.studentId,
+      "session.studentId",
+    );
+
+    if (
+      storedInstituteId !== context.instituteId ||
+      storedYearId !== context.yearId ||
+      storedRunId !== context.runId ||
+      storedSessionId !== context.sessionId
+    ) {
+      throw new SubmissionValidationError(
+        "TENANT_MISMATCH",
+        "Session context does not match the provided identifiers.",
+      );
+    }
+
+    if (storedStudentId !== context.studentId) {
+      throw new SubmissionValidationError(
+        "FORBIDDEN",
+        "Student is not allowed to submit this session.",
+      );
+    }
+
+    return {
+      sessionData,
+      status: normalizeRequiredString(
+        sessionData.status,
+        "session.status",
+      ).toLowerCase(),
+    };
+  }
+
+  /**
+   * Acquires the submission lock using a single write precondition so
+   * parallel submit attempts fail fast instead of waiting on transaction
+   * retries.
+   * @param {FirebaseFirestore.DocumentReference} sessionReference Session ref.
+   * @param {SubmissionContext} context Submission request identifiers.
+   * @param {string} sessionPath Fully qualified session path.
+   * @return {Promise<SubmissionResult | null>} Idempotent result or null when
+   * lock acquisition succeeds for a new submission.
+   */
+  private async acquireSubmissionLock(
+    sessionReference: FirebaseFirestore.DocumentReference,
+    context: SubmissionContext,
+    sessionPath: string,
+  ): Promise<SubmissionResult | null> {
+    const sessionSnapshot = await sessionReference.get();
+    const sessionData = sessionSnapshot.data();
+
+    if (!sessionSnapshot.exists || !isPlainObject(sessionData)) {
+      throw new SubmissionValidationError(
+        "NOT_FOUND",
+        `Session "${context.sessionId}" does not exist.`,
+      );
+    }
+
+    const validatedSession = this.validateSessionIdentity(sessionData, context);
+
+    if (validatedSession.status === "submitted") {
+      return {
+        ...normalizeStoredResult(validatedSession.sessionData),
+        idempotent: true,
+        sessionPath,
+      };
+    }
+
+    if (validatedSession.sessionData.submissionLock === true) {
+      throw new SubmissionValidationError(
+        "SUBMISSION_LOCKED",
+        "Submission is already in progress for this session.",
+      );
+    }
+
+    if (validatedSession.status !== "active") {
+      throw new SubmissionValidationError(
+        "SESSION_NOT_ACTIVE",
+        "Session must be active before submission.",
+      );
+    }
+
+    try {
+      await sessionReference.update({
+        submissionLock: true,
+        updatedAt: FieldValue.serverTimestamp(),
+      }, {
+        lastUpdateTime: sessionSnapshot.updateTime,
+      });
+
+      return null;
+    } catch (error) {
+      if (!isFirestorePreconditionFailure(error)) {
+        throw error;
+      }
+
+      const latestSnapshot = await sessionReference.get();
+      const latestData = latestSnapshot.data();
+
+      if (!latestSnapshot.exists || !isPlainObject(latestData)) {
+        throw new SubmissionValidationError(
+          "NOT_FOUND",
+          `Session "${context.sessionId}" does not exist.`,
+        );
+      }
+
+      const latestSession = this.validateSessionIdentity(latestData, context);
+
+      if (latestSession.status === "submitted") {
+        return {
+          ...normalizeStoredResult(latestSession.sessionData),
+          idempotent: true,
+          sessionPath,
+        };
+      }
+
+      throw new SubmissionValidationError(
+        "SUBMISSION_LOCKED",
+        "Submission is already in progress for this session.",
+      );
+    }
   }
 
   /**
@@ -467,92 +643,16 @@ export class SubmissionService {
     const sessionReference = this.firestore.doc(sessionPath);
     const runReference = this.firestore.doc(runPath);
 
-    const idempotentResult = await this.firestore.runTransaction(
-      async (transaction) => {
-        const sessionSnapshot = await transaction.get(sessionReference);
-        const sessionData = sessionSnapshot.data();
-
-        if (!sessionSnapshot.exists || !isPlainObject(sessionData)) {
-          throw new SubmissionValidationError(
-            "NOT_FOUND",
-            `Session "${sessionId}" does not exist.`,
-          );
-        }
-
-        const storedInstituteId = normalizeRequiredString(
-          sessionData.instituteId,
-          "session.instituteId",
-        );
-        const storedYearId = normalizeRequiredString(
-          sessionData.yearId,
-          "session.yearId",
-        );
-        const storedRunId = normalizeRequiredString(
-          sessionData.runId,
-          "session.runId",
-        );
-        const storedSessionId = normalizeRequiredString(
-          sessionData.sessionId,
-          "session.sessionId",
-        );
-        const storedStudentId = normalizeRequiredString(
-          sessionData.studentId,
-          "session.studentId",
-        );
-
-        if (
-          storedInstituteId !== instituteId ||
-          storedYearId !== yearId ||
-          storedRunId !== runId ||
-          storedSessionId !== sessionId
-        ) {
-          throw new SubmissionValidationError(
-            "TENANT_MISMATCH",
-            "Session context does not match the provided identifiers.",
-          );
-        }
-
-        if (storedStudentId !== studentId) {
-          throw new SubmissionValidationError(
-            "FORBIDDEN",
-            "Student is not allowed to submit this session.",
-          );
-        }
-
-        const status = normalizeRequiredString(
-          sessionData.status,
-          "session.status",
-        ).toLowerCase();
-
-        if (status === "submitted") {
-          return {
-            ...normalizeStoredResult(sessionData),
-            idempotent: true,
-            sessionPath,
-          };
-        }
-
-        if (sessionData.submissionLock === true) {
-          throw new SubmissionValidationError(
-            "SUBMISSION_LOCKED",
-            "Submission is already in progress for this session.",
-          );
-        }
-
-        if (status !== "active") {
-          throw new SubmissionValidationError(
-            "SESSION_NOT_ACTIVE",
-            "Session must be active before submission.",
-          );
-        }
-
-        transaction.update(sessionReference, {
-          submissionLock: true,
-          updatedAt: FieldValue.serverTimestamp(),
-        });
-
-        return null;
+    const idempotentResult = await this.acquireSubmissionLock(
+      sessionReference,
+      {
+        instituteId,
+        runId,
+        sessionId,
+        studentId,
+        yearId,
       },
+      sessionPath,
     );
 
     if (idempotentResult) {
@@ -583,50 +683,14 @@ export class SubmissionService {
             );
           }
 
-          const storedInstituteId = normalizeRequiredString(
-            sessionData.instituteId,
-            "session.instituteId",
-          );
-          const storedYearId = normalizeRequiredString(
-            sessionData.yearId,
-            "session.yearId",
-          );
-          const storedRunId = normalizeRequiredString(
-            sessionData.runId,
-            "session.runId",
-          );
-          const storedSessionId = normalizeRequiredString(
-            sessionData.sessionId,
-            "session.sessionId",
-          );
-          const storedStudentId = normalizeRequiredString(
-            sessionData.studentId,
-            "session.studentId",
-          );
-
-          if (
-            storedInstituteId !== instituteId ||
-          storedYearId !== yearId ||
-          storedRunId !== runId ||
-          storedSessionId !== sessionId
-          ) {
-            throw new SubmissionValidationError(
-              "TENANT_MISMATCH",
-              "Session context does not match the provided identifiers.",
-            );
-          }
-
-          if (storedStudentId !== studentId) {
-            throw new SubmissionValidationError(
-              "FORBIDDEN",
-              "Student is not allowed to submit this session.",
-            );
-          }
-
-          const status = normalizeRequiredString(
-            sessionData.status,
-            "session.status",
-          ).toLowerCase();
+          const validatedSession = this.validateSessionIdentity(sessionData, {
+            instituteId,
+            runId,
+            sessionId,
+            studentId,
+            yearId,
+          });
+          const status = validatedSession.status;
 
           if (status === "submitted") {
             return {

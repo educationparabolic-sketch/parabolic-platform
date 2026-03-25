@@ -27,6 +27,7 @@
     "test:session-submission-idempotency": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=parabolic-platform-build-37-tests GOOGLE_CLOUD_PROJECT=parabolic-platform-build-37-tests NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none npm run build && node --test lib/tests/sessionSubmission.test.js",
     "test:session-submission-concurrency": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=parabolic-platform-build-38-tests GOOGLE_CLOUD_PROJECT=parabolic-platform-build-38-tests NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none npm run build && node --test lib/tests/sessionSubmission.test.js",
     "test:submission-analytics-trigger": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=parabolic-platform-build-39-tests GOOGLE_CLOUD_PROJECT=parabolic-platform-build-39-tests NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none npm run build && node --test lib/tests/submissionAnalyticsTrigger.test.js",
+    "test:submission-response-contract": "npm run build && node --test lib/tests/submissionResponseContract.test.js",
     "test:run-analytics-initialization": "npm run build && node --test lib/tests/runAnalyticsInitialization.test.js",
     "test:usage-metering": "npm run build && node --test lib/tests/usageMetering.test.js",
     "test:tag-dictionary": "npm run build && node --test lib/tests/tagDictionary.test.js",

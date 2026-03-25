@@ -38,3 +38,19 @@ export interface SubmissionResult extends SubmissionMetrics {
   idempotent: boolean;
   sessionPath: string;
 }
+
+export interface SubmissionResponseData {
+  accuracyPercent: number;
+  disciplineIndex: number;
+  rawScorePercent: number;
+  riskState: SubmissionRiskState;
+}
+
+export interface SubmissionSuccessResponse {
+  code: "OK";
+  data: SubmissionResponseData;
+  message: string;
+  requestId: string;
+  success: true;
+  timestamp: string;
+}

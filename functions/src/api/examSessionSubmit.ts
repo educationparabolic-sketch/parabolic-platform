@@ -1,6 +1,11 @@
 import * as functions from "firebase-functions";
 import {createRequestLogger} from "../services/logging";
-import {SubmissionErrorCode} from "../types/submission";
+import {
+  SubmissionErrorCode,
+  SubmissionResponseData,
+  SubmissionResult,
+  SubmissionSuccessResponse,
+} from "../types/submission";
 import {
   submissionService,
   SubmissionValidationError,
@@ -72,6 +77,28 @@ const sendError = (
     timestamp: new Date().toISOString(),
   });
 };
+
+const buildSubmissionResponseData = (
+  result: SubmissionResult,
+): SubmissionResponseData => ({
+  accuracyPercent: result.accuracyPercent,
+  disciplineIndex: result.disciplineIndex,
+  rawScorePercent: result.rawScorePercent,
+  riskState: result.riskState,
+});
+
+export const buildSubmissionSuccessResponse = (
+  result: SubmissionResult,
+  requestId: string,
+  timestamp: string,
+): SubmissionSuccessResponse => ({
+  code: "OK",
+  data: buildSubmissionResponseData(result),
+  message: "Session submitted successfully.",
+  requestId,
+  success: true,
+  timestamp,
+});
 
 const getBearerToken = (
   request: functions.https.Request,
@@ -225,24 +252,13 @@ export const handleExamSessionSubmitRequest = async (
       yearId,
     });
 
-    response.status(200).json({
-      code: "OK",
-      data: {
-        accuracyPercent: result.accuracyPercent,
-        disciplineIndex: result.disciplineIndex,
-        guessRate: result.guessRate,
-        idempotent: result.idempotent,
-        maxTimeViolationPercent: result.maxTimeViolationPercent,
-        minTimeViolationPercent: result.minTimeViolationPercent,
-        phaseAdherencePercent: result.phaseAdherencePercent,
-        rawScorePercent: result.rawScorePercent,
-        riskState: result.riskState,
-        sessionPath: result.sessionPath,
-      },
-      message: "Session submitted successfully.",
-      requestId,
-      timestamp: new Date().toISOString(),
-    });
+    response.status(200).json(
+      buildSubmissionSuccessResponse(
+        result,
+        requestId,
+        new Date().toISOString(),
+      ),
+    );
   } catch (error) {
     if (error instanceof SubmissionValidationError) {
       logger.warn("Session submission rejected", {
