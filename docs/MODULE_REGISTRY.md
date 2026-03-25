@@ -30,7 +30,7 @@ GET /student/dashboard | TBD | Student dashboard summary
 POST /admin/tests | TBD | Create test template
 POST /admin/runs | TBD | Create test assignment
 POST /exam/start | Build 26 | Start exam session with authentication, tenant, assignment-window, and active-session enforcement
-POST /exam/session/{sessionId}/answers | Build 30, Build 33 | Persist incremental answer batches with partial `answerMap.<questionId>` merges, batching-policy enforcement, stale-write rejection, and mode-aware min-time enforcement responses
+POST /exam/session/{sessionId}/answers | Build 30, Build 33, Build 34 | Persist incremental answer batches with partial `answerMap.<questionId>` merges, batching-policy enforcement, stale-write rejection, and mode-aware min/max-time enforcement responses (including hard-mode max-time lock signaling)
 POST /exam/session/{sessionId}/submit | Build 36 | Session submission
 
 ---
@@ -41,7 +41,7 @@ Service | Build | Purpose
 ---|---|---
 SessionService | Build 26, Build 27, Build 28, Build 29, Build 31, Build 32, Build 33 | Manage exam session creation, initialize deterministic session start documents (`status`, `startedAt`, `submittedAt`, `answerMap`, `version`, `submissionLock`), snapshot run mode (`Operational`/`Diagnostic`/`Controlled`/`Hard`) for timing enforcement, load and persist immutable timing profile snapshots from the run (`timingProfileSnapshot`) with per-question timing initialization (`questionTimeMap.<questionId>.{cumulativeTimeSpent,enteredAt,exitedAt,lastEntryTimestamp,minTime,maxTime}`), enforce forward-only lifecycle transitions across `created`, `started`, `active`, `submitted`, `expired`, and `terminated`, and enforce answer-write batching policy constraints (`minimumWriteIntervalMs=5000`, `maxPendingAnswers=10`)
 ExamStartApi | Build 26 | HTTP API handler for POST /exam/start
-AnswerBatchService | Build 30, Build 33 | Persist incremental session answer batches through transaction-safe partial updates to `session.answerMap`, with write-interval and batch-size enforcement, `clientTimestamp` conflict handling, and session-mode-aware MinTime enforcement (`none`, `track_only`, `soft`, `strict`)
+AnswerBatchService | Build 30, Build 33, Build 34 | Persist incremental session answer batches through transaction-safe partial updates to `session.answerMap`, with write-interval and batch-size enforcement, `clientTimestamp` conflict handling, session-mode-aware MinTime enforcement (`none`, `track_only`, `soft`, `strict`), and mode-aware MaxTime enforcement (`none`, `track_only`, `advisory`, `strict`) including strict hard-mode question-lock signaling and follow-up edit blocking
 SubmissionService | Build 36 | Handle exam submission logic
 LicenseService | Phase 19 | License validation and enforcement
 BillingService | Phase 19 | Billing computation and Stripe sync

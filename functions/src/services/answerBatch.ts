@@ -3,6 +3,8 @@ import {createLogger} from "./logging";
 import {SessionStartValidationError, sessionService} from "./session";
 import {getFirestore} from "../utils/firebaseAdmin";
 import {
+  MaxTimeEnforcementLevel,
+  MaxTimeViolation,
   MinTimeEnforcementLevel,
   MinTimeViolation,
   PersistAnswerBatchInput,
@@ -20,6 +22,8 @@ const RUNS_COLLECTION = "runs";
 const SESSIONS_COLLECTION = "sessions";
 const ACTIVE_WRITE_STATUSES = new Set(["created", "started", "active"]);
 const MIN_TIME_WARNING_MESSAGE = "Minimum recommended time not reached.";
+const MAX_TIME_ADVISORY_WARNING_MESSAGE =
+  "Maximum recommended time exceeded. Consider moving forward.";
 
 interface NormalizedAnswerWrite {
   clientTimestamp: number;
@@ -247,6 +251,28 @@ const resolveMinTimeEnforcementLevel = (
   }
 };
 
+const resolveMaxTimeEnforcementLevel = (
+  mode: NormalizedSessionExecutionMode,
+): MaxTimeEnforcementLevel => {
+  switch (mode) {
+  case "operational":
+    return "none";
+  case "diagnostic":
+    return "track_only";
+  case "controlled":
+    return "advisory";
+  case "hard":
+    return "strict";
+  default: {
+    const exhaustiveMode: never = mode;
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Unsupported session mode: ${exhaustiveMode}`,
+    );
+  }
+  }
+};
+
 const evaluateMinTimeViolation = (
   enforcementLevel: MinTimeEnforcementLevel,
   minTime: number,
@@ -264,6 +290,46 @@ const evaluateMinTimeViolation = (
     remainingTime: Math.max(minTime - cumulativeTimeSpent, 0),
     warningMessage:
       enforcementLevel === "track_only" ? null : MIN_TIME_WARNING_MESSAGE,
+  };
+};
+
+const evaluateMaxTimeViolation = (
+  enforcementLevel: MaxTimeEnforcementLevel,
+  maxTime: number,
+  questionId: string,
+  cumulativeTimeSpent: number,
+): MaxTimeViolation | null => {
+  if (enforcementLevel === "none") {
+    return null;
+  }
+
+  if (
+    enforcementLevel !== "strict" &&
+    cumulativeTimeSpent <= maxTime
+  ) {
+    return null;
+  }
+
+  if (
+    enforcementLevel === "strict" &&
+    cumulativeTimeSpent < maxTime
+  ) {
+    return null;
+  }
+
+  const exceededBy = Math.max(cumulativeTimeSpent - maxTime, 0);
+  const questionLocked = enforcementLevel === "strict";
+
+  return {
+    enforcementLevel,
+    exceededBy,
+    maxTime,
+    questionId,
+    questionLocked,
+    warningMessage:
+      enforcementLevel === "advisory" ?
+        MAX_TIME_ADVISORY_WARNING_MESSAGE :
+        null,
   };
 };
 
@@ -507,6 +573,7 @@ export class AnswerBatchService {
         "session.mode",
       );
       const minTimeEnforcementLevel = resolveMinTimeEnforcementLevel(mode);
+      const maxTimeEnforcementLevel = resolveMaxTimeEnforcementLevel(mode);
 
       if (
         storedInstituteId !== instituteId ||
@@ -556,6 +623,8 @@ export class AnswerBatchService {
       const blockedQuestionIds: string[] = [];
       const persistedQuestionIds: string[] = [];
       const ignoredQuestionIds: string[] = [];
+      const lockedQuestionIds: string[] = [];
+      const maxTimeViolations: MaxTimeViolation[] = [];
       const minTimeViolations: MinTimeViolation[] = [];
 
       for (const answer of normalizedAnswers) {
@@ -573,6 +642,16 @@ export class AnswerBatchService {
 
         if (answer.clientTimestamp < currentTimestamp) {
           ignoredQuestionIds.push(answer.questionId);
+          continue;
+        }
+
+        if (
+          maxTimeEnforcementLevel === "strict" &&
+          questionTimeRecord.cumulativeTimeSpent >= questionTimeRecord.maxTime
+        ) {
+          blockedQuestionIds.push(answer.questionId);
+          ignoredQuestionIds.push(answer.questionId);
+          lockedQuestionIds.push(answer.questionId);
           continue;
         }
 
@@ -618,6 +697,22 @@ export class AnswerBatchService {
           timingUpdate.exitedAt;
         updatePayload[lastEntryTimestampPath] =
           timingUpdate.lastEntryTimestamp;
+
+        const maxTimeViolation = evaluateMaxTimeViolation(
+          maxTimeEnforcementLevel,
+          questionTimeRecord.maxTime,
+          answer.questionId,
+          timingUpdate.cumulativeTimeSpent,
+        );
+
+        if (maxTimeViolation) {
+          maxTimeViolations.push(maxTimeViolation);
+
+          if (maxTimeViolation.questionLocked) {
+            lockedQuestionIds.push(answer.questionId);
+          }
+        }
+
         persistedQuestionIds.push(answer.questionId);
       }
 
@@ -626,6 +721,9 @@ export class AnswerBatchService {
       return {
         blockedQuestionIds,
         ignoredQuestionIds,
+        lockedQuestionIds,
+        maxTimeEnforcementLevel,
+        maxTimeViolations,
         minTimeEnforcementLevel,
         minTimeViolations,
         persistedQuestionIds,
@@ -636,6 +734,9 @@ export class AnswerBatchService {
       blockedQuestionIds: writeResult.blockedQuestionIds,
       ignoredQuestionIds: writeResult.ignoredQuestionIds,
       instituteId,
+      lockedQuestionIds: writeResult.lockedQuestionIds,
+      maxTimeEnforcementLevel: writeResult.maxTimeEnforcementLevel,
+      maxTimeViolationCount: writeResult.maxTimeViolations.length,
       minTimeEnforcementLevel: writeResult.minTimeEnforcementLevel,
       minTimeViolationCount: writeResult.minTimeViolations.length,
       persistedQuestionIds: writeResult.persistedQuestionIds,
@@ -647,6 +748,9 @@ export class AnswerBatchService {
     return {
       blockedQuestionIds: writeResult.blockedQuestionIds,
       ignoredQuestionIds: writeResult.ignoredQuestionIds,
+      lockedQuestionIds: writeResult.lockedQuestionIds,
+      maxTimeEnforcementLevel: writeResult.maxTimeEnforcementLevel,
+      maxTimeViolations: writeResult.maxTimeViolations,
       minTimeEnforcementLevel: writeResult.minTimeEnforcementLevel,
       minTimeViolations: writeResult.minTimeViolations,
       persistedQuestionIds: writeResult.persistedQuestionIds,

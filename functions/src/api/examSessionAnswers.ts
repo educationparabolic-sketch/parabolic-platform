@@ -266,6 +266,9 @@ export const handleExamSessionAnswersRequest = async (
       data: {
         blockedQuestionIds: result.blockedQuestionIds,
         ignoredQuestionIds: result.ignoredQuestionIds,
+        lockedQuestionIds: result.lockedQuestionIds,
+        maxTimeEnforcementLevel: result.maxTimeEnforcementLevel,
+        maxTimeViolations: result.maxTimeViolations,
         minTimeEnforcementLevel: result.minTimeEnforcementLevel,
         minTimeViolations: result.minTimeViolations,
         persistedQuestionIds: result.persistedQuestionIds,

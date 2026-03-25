@@ -28,6 +28,11 @@ export interface PersistAnswerBatchInput {
 }
 
 export type MinTimeEnforcementLevel = "none" | "track_only" | "soft" | "strict";
+export type MaxTimeEnforcementLevel =
+  "none" |
+  "track_only" |
+  "advisory" |
+  "strict";
 
 export interface MinTimeViolation {
   enforcementLevel: Exclude<MinTimeEnforcementLevel, "none">;
@@ -37,9 +42,21 @@ export interface MinTimeViolation {
   warningMessage: string | null;
 }
 
+export interface MaxTimeViolation {
+  enforcementLevel: Exclude<MaxTimeEnforcementLevel, "none">;
+  exceededBy: number;
+  maxTime: number;
+  questionId: string;
+  questionLocked: boolean;
+  warningMessage: string | null;
+}
+
 export interface PersistAnswerBatchResult {
   blockedQuestionIds: string[];
   ignoredQuestionIds: string[];
+  lockedQuestionIds: string[];
+  maxTimeEnforcementLevel: MaxTimeEnforcementLevel;
+  maxTimeViolations: MaxTimeViolation[];
   minTimeEnforcementLevel: MinTimeEnforcementLevel;
   minTimeViolations: MinTimeViolation[];
   persistedQuestionIds: string[];

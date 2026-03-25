@@ -141,7 +141,7 @@ Verify:
 - no runtime errors
 - endpoints respond correctly
 - repeatable local tests pass for the implemented build
-- take permission if necessary to perform all the tests to  verify clean build.
+- take permission if necessary to perform all the tests to  verify clean build (outside sandbox firebase emulator tests, lint tests etc)
 ---
 
 ## OUTPUT
