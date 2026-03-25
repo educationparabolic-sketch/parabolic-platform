@@ -9,7 +9,9 @@ import {
   MinTimeViolation,
   PersistAnswerBatchInput,
   PersistAnswerBatchResult,
+  QuestionTimingMetric,
   SessionAnswerWriteInput,
+  TimingMetricsExport,
 } from "../types/sessionAnswerBatch";
 import {
   SessionExecutionMode,
@@ -483,6 +485,59 @@ const normalizeAnswerWrites = (answers: unknown): NormalizedAnswerWrite[] => {
   });
 };
 
+const toPercent = (value: number, total: number): number => {
+  if (total <= 0) {
+    return 0;
+  }
+
+  return Number(((value / total) * 100).toFixed(2));
+};
+
+const buildTimingMetricsExport = (
+  questionMetrics: QuestionTimingMetric[],
+  minTimeViolationCount: number,
+  maxTimeViolationCount: number,
+): TimingMetricsExport => {
+  const evaluatedQuestionCount = questionMetrics.length;
+  const totalCumulativeTimeSpent = questionMetrics.reduce(
+    (sum, metric) => sum + metric.cumulativeTimeSpent,
+    0,
+  );
+  const averageTimePerQuestion = evaluatedQuestionCount > 0 ?
+    Number((totalCumulativeTimeSpent / evaluatedQuestionCount).toFixed(2)) :
+    0;
+  const minTimeViolationPercent = toPercent(
+    minTimeViolationCount,
+    evaluatedQuestionCount,
+  );
+  const maxTimeViolationPercent = toPercent(
+    maxTimeViolationCount,
+    evaluatedQuestionCount,
+  );
+
+  return {
+    averageTimePerQuestion,
+    disciplineIndexInputs: {
+      impulsiveAnsweringRiskPercent: minTimeViolationPercent,
+      overthinkingRiskPercent: maxTimeViolationPercent,
+    },
+    maxTimeViolationCount,
+    maxTimeViolationPercent,
+    minTimeViolationCount,
+    minTimeViolationPercent,
+    phaseDeviationFlags: {
+      hasMaxTimeDeviation: maxTimeViolationCount > 0,
+      hasMinTimeDeviation: minTimeViolationCount > 0,
+    },
+    questionLevelCumulativeTimeRecords: questionMetrics,
+    serverValidatedTimingMetrics: {
+      evaluatedQuestionCount,
+      persistedQuestionCount: evaluatedQuestionCount,
+      totalCumulativeTimeSpent,
+    },
+  };
+};
+
 /**
  * Build 30 service for incremental answerMap persistence.
  */
@@ -626,6 +681,7 @@ export class AnswerBatchService {
       const lockedQuestionIds: string[] = [];
       const maxTimeViolations: MaxTimeViolation[] = [];
       const minTimeViolations: MinTimeViolation[] = [];
+      const questionTimingMetrics: QuestionTimingMetric[] = [];
 
       for (const answer of normalizedAnswers) {
         const questionTimeRecord = normalizeQuestionTimeRecord(
@@ -713,6 +769,15 @@ export class AnswerBatchService {
           }
         }
 
+        questionTimingMetrics.push({
+          cumulativeTimeSpent: timingUpdate.cumulativeTimeSpent,
+          maxTime: questionTimeRecord.maxTime,
+          maxTimeViolated: maxTimeViolation !== null,
+          minTime: questionTimeRecord.minTime,
+          minTimeViolated: minTimeViolation !== null,
+          questionId: answer.questionId,
+        });
+
         persistedQuestionIds.push(answer.questionId);
       }
 
@@ -727,6 +792,11 @@ export class AnswerBatchService {
         minTimeEnforcementLevel,
         minTimeViolations,
         persistedQuestionIds,
+        timingMetricsExport: buildTimingMetricsExport(
+          questionTimingMetrics,
+          minTimeViolations.length,
+          maxTimeViolations.length,
+        ),
       };
     });
 
@@ -737,8 +807,12 @@ export class AnswerBatchService {
       lockedQuestionIds: writeResult.lockedQuestionIds,
       maxTimeEnforcementLevel: writeResult.maxTimeEnforcementLevel,
       maxTimeViolationCount: writeResult.maxTimeViolations.length,
+      maxTimeViolationPercent:
+        writeResult.timingMetricsExport.maxTimeViolationPercent,
       minTimeEnforcementLevel: writeResult.minTimeEnforcementLevel,
       minTimeViolationCount: writeResult.minTimeViolations.length,
+      minTimeViolationPercent:
+        writeResult.timingMetricsExport.minTimeViolationPercent,
       persistedQuestionIds: writeResult.persistedQuestionIds,
       runId,
       sessionId,
@@ -755,6 +829,7 @@ export class AnswerBatchService {
       minTimeViolations: writeResult.minTimeViolations,
       persistedQuestionIds: writeResult.persistedQuestionIds,
       sessionPath,
+      timingMetricsExport: writeResult.timingMetricsExport,
     };
   }
 }

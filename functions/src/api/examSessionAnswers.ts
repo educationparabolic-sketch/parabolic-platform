@@ -273,6 +273,7 @@ export const handleExamSessionAnswersRequest = async (
         minTimeViolations: result.minTimeViolations,
         persistedQuestionIds: result.persistedQuestionIds,
         sessionPath: result.sessionPath,
+        timingMetricsExport: result.timingMetricsExport,
       },
       message: "Session answers persisted.",
       requestId,

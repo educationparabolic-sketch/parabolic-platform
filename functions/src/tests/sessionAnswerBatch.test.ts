@@ -121,6 +121,14 @@ test(
 
     assert.deepEqual(result.persistedQuestionIds, ["q02"]);
     assert.deepEqual(result.ignoredQuestionIds, []);
+    assert.equal(result.timingMetricsExport.averageTimePerQuestion, 20);
+    assert.equal(result.timingMetricsExport.minTimeViolationPercent, 0);
+    assert.equal(result.timingMetricsExport.maxTimeViolationPercent, 0);
+    assert.equal(
+      result.timingMetricsExport.serverValidatedTimingMetrics
+        .evaluatedQuestionCount,
+      1,
+    );
 
     const snapshot = await firestore.doc(sessionPath).get();
     const answerMap = snapshot.data()?.answerMap as Record<string, {
@@ -353,6 +361,15 @@ test(
     assert.equal(result.minTimeViolations[0]?.remainingTime, 10);
     assert.equal(result.minTimeViolations[0]?.warningMessage, null);
     assert.deepEqual(result.persistedQuestionIds, ["q02"]);
+    assert.equal(result.timingMetricsExport.minTimeViolationCount, 1);
+    assert.equal(result.timingMetricsExport.minTimeViolationPercent, 100);
+    assert.equal(result.timingMetricsExport.maxTimeViolationPercent, 0);
+    assert.equal(
+      result.timingMetricsExport.disciplineIndexInputs
+        .impulsiveAnsweringRiskPercent,
+      100,
+    );
+    assert.equal(result.timingMetricsExport.averageTimePerQuestion, 20);
 
     await deleteIfPresent(sessionPath);
   },
@@ -490,6 +507,15 @@ test(
     assert.equal(result.maxTimeViolations[0]?.warningMessage, null);
     assert.deepEqual(result.lockedQuestionIds, []);
     assert.deepEqual(result.persistedQuestionIds, ["q02"]);
+    assert.equal(result.timingMetricsExport.maxTimeViolationCount, 1);
+    assert.equal(result.timingMetricsExport.maxTimeViolationPercent, 100);
+    assert.equal(result.timingMetricsExport.minTimeViolationPercent, 0);
+    assert.equal(
+      result.timingMetricsExport.disciplineIndexInputs
+        .overthinkingRiskPercent,
+      100,
+    );
+    assert.equal(result.timingMetricsExport.averageTimePerQuestion, 65);
 
     await deleteIfPresent(sessionPath);
   },
@@ -602,6 +628,12 @@ test(
     assert.deepEqual(secondResult.persistedQuestionIds, []);
     assert.deepEqual(secondResult.blockedQuestionIds, ["q02"]);
     assert.deepEqual(secondResult.lockedQuestionIds, ["q02"]);
+    assert.equal(
+      secondResult.timingMetricsExport.serverValidatedTimingMetrics
+        .evaluatedQuestionCount,
+      0,
+    );
+    assert.equal(secondResult.timingMetricsExport.averageTimePerQuestion, 0);
 
     const snapshot = await firestore.doc(sessionPath).get();
     const answerMap = snapshot.data()?.answerMap as Record<string, {

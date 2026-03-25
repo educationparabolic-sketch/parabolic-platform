@@ -12,10 +12,10 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 34  
-Next Build: 35
+Completed Builds: 35  
+Next Build: 36
 
-Current Phase: Phase 7 — Timing Engine
+Current Phase: Phase 8 — Submission Engine
 
 ---
 
@@ -1024,18 +1024,51 @@ Completed On
 
 ---
 
-# NEXT BUILD
-
-Next Build Number: 35
+## Build 35 — Timing Metrics Export
 
 Phase  
 Phase 7 — Timing Engine
 
+Summary  
+Implemented architecture-aligned timing metrics export outputs in session answer writes.
+
+Components implemented:
+
+- Extended `sessionAnswerBatch` types with typed `timingMetricsExport` contracts for:
+  - `minTimeViolationCount`, `maxTimeViolationCount`
+  - `minTimeViolationPercent`, `maxTimeViolationPercent`
+  - `averageTimePerQuestion`
+  - question-level cumulative timing records
+  - phase deviation flags and discipline index inputs
+  - server-validated timing metric summary fields
+- Extended `AnswerBatchService` to compute timing export metrics from server-validated write-time timing data per persisted question
+- Extended `POST /exam/session/{sessionId}/answers` API responses to include `timingMetricsExport` for downstream analytics consumers
+- Preserved existing Build 30, 33, and 34 behavior for batching constraints, stale-write handling, and mode-aware min/max-time enforcement
+- Extended emulator-backed `sessionAnswerBatch` tests to validate exported timing metrics (counts, percentages, averages, and zero-evaluated-question behavior)
+
+Result  
+Session answer writes now export deterministic, server-validated timing metrics required by the Timing Engine output contract, including `minTimeViolationPercent`, `maxTimeViolationPercent`, and `averageTimePerQuestion`, aligned with Section 12.4 Outputs.
+
+Commit Reference  
+Pending local commit
+
+Completed On  
+2026-03-25
+
+---
+
+# NEXT BUILD
+
+Next Build Number: 36
+
+Phase  
+Phase 8 — Submission Engine
+
 Subsystem  
-Timing Metrics Export
+Atomic Submission Transaction
 
 Reference  
-3_Core_Architectures.md → Section 12.4 Outputs
+3_Core_Architectures.md → Section 10.4 Atomic Submission Transaction
 
 ---
 
@@ -1077,7 +1110,8 @@ Build | Phase | Status
 32 | Timing Engine | Completed
 33 | Timing Engine | Completed
 34 | Timing Engine | Completed
-35–150 | Remaining Phases | Pending
+35 | Timing Engine | Completed
+36–150 | Remaining Phases | Pending
 
 ---
 

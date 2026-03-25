@@ -51,6 +51,37 @@ export interface MaxTimeViolation {
   warningMessage: string | null;
 }
 
+export interface QuestionTimingMetric {
+  cumulativeTimeSpent: number;
+  maxTime: number;
+  maxTimeViolated: boolean;
+  minTime: number;
+  minTimeViolated: boolean;
+  questionId: string;
+}
+
+export interface TimingMetricsExport {
+  averageTimePerQuestion: number;
+  disciplineIndexInputs: {
+    impulsiveAnsweringRiskPercent: number;
+    overthinkingRiskPercent: number;
+  };
+  maxTimeViolationCount: number;
+  maxTimeViolationPercent: number;
+  minTimeViolationCount: number;
+  minTimeViolationPercent: number;
+  phaseDeviationFlags: {
+    hasMaxTimeDeviation: boolean;
+    hasMinTimeDeviation: boolean;
+  };
+  questionLevelCumulativeTimeRecords: QuestionTimingMetric[];
+  serverValidatedTimingMetrics: {
+    evaluatedQuestionCount: number;
+    persistedQuestionCount: number;
+    totalCumulativeTimeSpent: number;
+  };
+}
+
 export interface PersistAnswerBatchResult {
   blockedQuestionIds: string[];
   ignoredQuestionIds: string[];
@@ -61,4 +92,5 @@ export interface PersistAnswerBatchResult {
   minTimeViolations: MinTimeViolation[];
   persistedQuestionIds: string[];
   sessionPath: string;
+  timingMetricsExport: TimingMetricsExport;
 }
