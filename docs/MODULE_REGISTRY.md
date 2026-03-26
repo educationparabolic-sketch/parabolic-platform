@@ -46,6 +46,7 @@ SubmissionService | Build 36, Build 37, Build 38 | Execute atomic session submis
 SubmissionAnalyticsTriggerService | Build 39 | Detect `sessions/{sessionId}` state transitions to `submitted` and queue idempotent post-submission processing markers in `runAnalytics/{runId}` and `studentYearMetrics/{studentId}` using the authoritative `submittedAt` timestamp
 RunAnalyticsEngineService | Build 41 | Incrementally aggregate submitted-session metrics into `institutes/{instituteId}/academicYears/{yearId}/runAnalytics/{runId}` using the submission event payload plus existing run analytics state, updating averages, completion rate, standard deviation, risk distribution, and internal score histograms without scanning raw session collections
 QuestionAnalyticsEngineService | Build 42 | Incrementally update `institutes/{instituteId}/questionAnalytics/{questionId}` from submitted-session payloads plus existing question analytics state, including correct/incorrect attempt counts, average response time, guess rate, overstay rate, average raw/accuracy when used, discipline stress, risk impact, and idempotent per-question processing markers
+RiskEngineService | Build 44 | Compute idempotent student-level behavioral risk classification from `studentYearMetrics/{studentId}` updates, persist `riskScore`, `riskState`, `disciplineIndex`, `rollingRiskScore`, `rollingRiskCluster`, and `riskModelVersion`, and maintain a rolling five-evaluation risk window in processing markers without scanning raw sessions
 LicenseService | Phase 19 | License validation and enforcement
 BillingService | Phase 19 | Billing computation and Stripe sync
 EnvironmentConfigLoader | Build 2 | Centralized environment variable and endpoint configuration loader
@@ -80,7 +81,7 @@ Engine | Build | Purpose
 RunAnalyticsEngine | Build 41 | Compute incremental run-level analytics from submitted session events and persist aggregates in `runAnalytics/{runId}`
 QuestionAnalyticsEngine | Build 42 | Compute incremental question-level aggregates from submitted session events and persist them in `questionAnalytics/{questionId}`
 StudentMetricsEngine | Build 43 | Compute incremental yearly student aggregates from submitted session events and persist them in `studentYearMetrics/{studentId}`
-RiskEngine | Build 44 | Risk classification model
+RiskEngine | Build 44 | Compute deterministic student-level risk scores, rolling risk windows, and cluster classifications from `studentYearMetrics/{studentId}` updates
 PatternEngine | Build 45 | Behavioral pattern detection
 
 ---

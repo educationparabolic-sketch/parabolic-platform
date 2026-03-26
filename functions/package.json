@@ -31,6 +31,7 @@
     "test:run-analytics-engine": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=parabolic-platform-build-41-tests GOOGLE_CLOUD_PROJECT=parabolic-platform-build-41-tests NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none npm run build && node --test lib/tests/runAnalyticsEngine.test.js",
     "test:question-analytics-engine": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=parabolic-platform-build-42-tests GOOGLE_CLOUD_PROJECT=parabolic-platform-build-42-tests NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none npm run build && node --test lib/tests/questionAnalyticsEngine.test.js",
     "test:student-metrics-engine": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=parabolic-platform-build-43-tests GOOGLE_CLOUD_PROJECT=parabolic-platform-build-43-tests NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none npm run build && node --test lib/tests/studentMetricsEngine.test.js",
+    "test:risk-engine": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=parabolic-platform-build-44-tests GOOGLE_CLOUD_PROJECT=parabolic-platform-build-44-tests NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none npm run build && node --test lib/tests/riskEngine.test.js",
     "test:run-analytics-initialization": "npm run build && node --test lib/tests/runAnalyticsInitialization.test.js",
     "test:usage-metering": "npm run build && node --test lib/tests/usageMetering.test.js",
     "test:tag-dictionary": "npm run build && node --test lib/tests/tagDictionary.test.js",
