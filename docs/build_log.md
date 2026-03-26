@@ -12,10 +12,10 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 45  
-Next Build: 46
+Completed Builds: 46  
+Next Build: 47
 
-Current Phase: Phase 9 — Analytics Engine
+Current Phase: Phase 10 — Insights & Notification Engine
 
 ---
 
@@ -1434,18 +1434,49 @@ Completed On
 
 ---
 
+## Build 46 — Insight Generation Engine
+
+Phase  
+Phase 10 — Insights & Notification Engine
+
+Summary  
+Implemented the first Insights Engine build by generating deterministic insight snapshots from post-submission analytics outputs.
+
+Components implemented:
+
+- Added a typed `InsightEngineService` that runs on submitted session transitions after the analytics services complete
+- Generated idempotent student-level, run-level, and batch-level snapshots using the submitted session payload plus existing `runAnalytics/{runId}` and `studentYearMetrics/{studentId}` documents
+- Persisted snapshots under `institutes/{instituteId}/academicYears/{yearId}/insightSnapshots/{snapshotId}` with stable IDs derived from run, session, and student context
+- Reused the existing session submission trigger chain instead of introducing a duplicate insights trigger
+- Added repeatable emulator-backed tests covering snapshot generation and idempotency
+- Verified the implementation locally with:
+  - `npm run build`
+  - `npm run lint`
+  - emulator-backed `test:insight-engine` execution through `firebase emulators:exec --only firestore`
+
+Result  
+The backend now produces deterministic student, run, and batch insight snapshots from analytics summaries without reading raw session collections or creating duplicate event handlers.
+
+Commit Reference  
+Build 46: Insight Generation Engine
+
+Completed On  
+2026-03-26
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 46
+Next Build Number: 47
 
 Phase  
 Phase 10 — Insights & Notification Engine
 
 Subsystem  
-Insight Generation Engine
+Notification Queue Generation
 
 Reference  
-3_Core_Architectures.md → Section 42.10 Post-Submission Processing Pipeline — Step F Insights Engine
+3_Core_Architectures.md → Section 42.10 Post-Submission Processing Pipeline — Step G Notification Queue
 
 ---
 
@@ -1496,7 +1527,10 @@ Build | Phase | Status
 41 | Analytics Engine | Completed
 42 | Analytics Engine | Completed
 43 | Analytics Engine | Completed
-44–150 | Remaining Phases | Pending
+44 | Analytics Engine | Completed
+45 | Analytics Engine | Completed
+46 | Insights & Notification Engine | Completed
+47–150 | Remaining Phases | Pending
 
 ---
 
