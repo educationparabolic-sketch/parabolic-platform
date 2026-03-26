@@ -1,5 +1,8 @@
 import * as functions from "firebase-functions";
 import {
+  questionAnalyticsEngineService,
+} from "../services/questionAnalyticsEngine";
+import {
   runAnalyticsEngineService,
 } from "../services/runAnalyticsEngine";
 import {
@@ -32,6 +35,18 @@ export const handleSessionUpdated = async (
   );
 
   await runAnalyticsEngineService.processSubmittedSession(
+    {
+      eventId: context.eventId,
+      instituteId,
+      runId,
+      sessionId,
+      yearId,
+    },
+    change.before.data(),
+    change.after.data(),
+  );
+
+  await questionAnalyticsEngineService.processSubmittedSession(
     {
       eventId: context.eventId,
       instituteId,

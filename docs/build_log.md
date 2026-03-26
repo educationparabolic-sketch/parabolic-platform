@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 41  
-Next Build: 42
+Completed Builds: 42  
+Next Build: 43
 
 Current Phase: Phase 9 — Analytics Engine
 
@@ -1270,18 +1270,60 @@ Completed On
 
 ---
 
+## Build 42 — Question Analytics Engine
+
+Phase  
+Phase 9 — Analytics Engine
+
+Summary  
+Implemented the architecture-aligned Step B Question Analytics Engine for post-submission question-level aggregation.
+
+Components implemented:
+
+- Added `QuestionAnalyticsEngineService` in `functions/src/services/questionAnalyticsEngine.ts` to incrementally update `institutes/{instituteId}/questionAnalytics/{questionId}` from submitted-session payloads plus existing question analytics state
+- Extended the existing submitted-session Firestore trigger in `functions/src/triggers/sessionSubmission.ts` so Build 39 marker queuing and Build 41 run aggregation remain intact while Build 42 executes in the same deterministic `sessions/{sessionId}` update pipeline
+- Added typed Build 42 contracts in `functions/src/types/questionAnalyticsEngine.ts`
+- Reused the Build 11 `questionAnalytics` document shape and updated the architecture-aligned question-level metrics on submission only:
+  - `correctAttemptCount`
+  - `incorrectAttemptCount`
+  - `averageResponseTimeMs`
+  - `guessRate`
+  - `overstayRate`
+  - `avgRawPercentWhenUsed`
+  - `avgAccuracyWhenUsed`
+  - `disciplineStressIndex`
+  - `riskImpactScore`
+- Stored idempotent incremental aggregation state under `questionAnalytics.processingMarkers.questionAnalyticsEngine`, including:
+  - last processed session marker
+  - cumulative use and attempt counters
+  - cumulative sums for rolling averages
+  - guess and overstay counters
+- Added repeatable emulator-backed Build 42 validation in `functions/src/tests/questionAnalyticsEngine.test.ts`
+- Added `npm run test:question-analytics-engine` in `functions/package.json`
+
+Result  
+Submitted exam sessions now update question-level analytics asynchronously through an idempotent incremental engine aligned with Section 42.10 Step B, without introducing duplicate triggers or read-time calculation.
+
+Commit Reference  
+Build 42:Question Analytics Engine
+
+Completed On  
+2026-03-26
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 42
+Next Build Number: 43
 
 Phase  
 Phase 9 — Analytics Engine
 
 Subsystem  
-Question Analytics Engine
+Student Year Metrics Engine
 
 Reference  
-3_Core_Architectures.md → Section 42.10 Post-Submission Processing Pipeline — Step B Question Analytics Engine
+3_Core_Architectures.md → Section 42.10 Post-Submission Processing Pipeline — Step C StudentYearMetrics Engine
 
 ---
 
@@ -1330,7 +1372,8 @@ Build | Phase | Status
 39 | Submission Engine | Completed
 40 | Submission Engine | Completed
 41 | Analytics Engine | Completed
-42–150 | Remaining Phases | Pending
+42 | Analytics Engine | Completed
+43–150 | Remaining Phases | Pending
 
 ---
 
