@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 42  
-Next Build: 43
+Completed Builds: 43  
+Next Build: 44
 
 Current Phase: Phase 9 — Analytics Engine
 
@@ -1312,18 +1312,61 @@ Completed On
 
 ---
 
+## Build 43 — Student Year Metrics Engine
+
+Phase  
+Phase 9 — Analytics Engine
+
+Summary  
+Implemented the architecture-aligned Step C Student Year Metrics Engine for post-submission student-level yearly aggregation.
+
+Components implemented:
+
+- Added `StudentMetricsEngineService` in `functions/src/services/studentMetricsEngine.ts` to incrementally update `institutes/{instituteId}/academicYears/{yearId}/studentYearMetrics/{studentId}` from submitted-session payloads plus existing yearly student metrics state
+- Extended the existing submitted-session Firestore trigger in `functions/src/triggers/sessionSubmission.ts` so Build 39 marker queuing and Builds 41–42 analytics remain intact while Build 43 executes in the same deterministic `sessions/{sessionId}` update pipeline
+- Added typed Build 43 contracts in `functions/src/types/studentMetricsEngine.ts`
+- Updated the architecture-defined student-year metrics on submission only:
+  - `avgRawScorePercent`
+  - `avgAccuracyPercent`
+  - `avgPhaseAdherence`
+  - `easyNeglectRate`
+  - `hardBiasRate`
+  - `guessRate`
+  - `disciplineIndex`
+  - `totalTests`
+  - `lastUpdated`
+- Stored idempotent incremental aggregation state under `studentYearMetrics.processingMarkers.studentMetricsEngine`, including:
+  - last processed session marker
+  - cumulative sums for rolling averages
+  - total test count
+  - event metadata for traceability
+- Added repeatable emulator-backed Build 43 validation in `functions/src/tests/studentMetricsEngine.test.ts`
+- Added `npm run test:student-metrics-engine` in `functions/package.json`
+- Verified the implementation with `npm run lint`, `npm run build`, and `npm run test:student-metrics-engine`
+
+Result  
+Submitted exam sessions now update yearly student aggregate metrics asynchronously through an idempotent incremental engine aligned with Section 42.10 Step C, without introducing duplicate triggers or raw-session read aggregation.
+
+Commit Reference  
+Build 43:Student Year Metrics Engine
+
+Completed On  
+2026-03-26
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 43
+Next Build Number: 44
 
 Phase  
 Phase 9 — Analytics Engine
 
 Subsystem  
-Student Year Metrics Engine
+Risk Classification Engine
 
 Reference  
-3_Core_Architectures.md → Section 42.10 Post-Submission Processing Pipeline — Step C StudentYearMetrics Engine
+3_Core_Architectures.md → Section 42.10 Post-Submission Processing Pipeline — Step D Risk Engine
 
 ---
 
@@ -1373,7 +1416,8 @@ Build | Phase | Status
 40 | Submission Engine | Completed
 41 | Analytics Engine | Completed
 42 | Analytics Engine | Completed
-43–150 | Remaining Phases | Pending
+43 | Analytics Engine | Completed
+44–150 | Remaining Phases | Pending
 
 ---
 

@@ -79,7 +79,7 @@ Engine | Build | Purpose
 ---|---|---
 RunAnalyticsEngine | Build 41 | Compute incremental run-level analytics from submitted session events and persist aggregates in `runAnalytics/{runId}`
 QuestionAnalyticsEngine | Build 42 | Compute incremental question-level aggregates from submitted session events and persist them in `questionAnalytics/{questionId}`
-StudentMetricsEngine | Build 43 | Update yearly student metrics
+StudentMetricsEngine | Build 43 | Compute incremental yearly student aggregates from submitted session events and persist them in `studentYearMetrics/{studentId}`
 RiskEngine | Build 44 | Risk classification model
 PatternEngine | Build 45 | Behavioral pattern detection
 

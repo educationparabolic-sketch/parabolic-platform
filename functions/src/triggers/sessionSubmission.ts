@@ -6,6 +6,9 @@ import {
   runAnalyticsEngineService,
 } from "../services/runAnalyticsEngine";
 import {
+  studentMetricsEngineService,
+} from "../services/studentMetricsEngine";
+import {
   submissionAnalyticsTriggerService,
 } from "../services/submissionAnalyticsTrigger";
 
@@ -35,6 +38,18 @@ export const handleSessionUpdated = async (
   );
 
   await runAnalyticsEngineService.processSubmittedSession(
+    {
+      eventId: context.eventId,
+      instituteId,
+      runId,
+      sessionId,
+      yearId,
+    },
+    change.before.data(),
+    change.after.data(),
+  );
+
+  await studentMetricsEngineService.processSubmittedSession(
     {
       eventId: context.eventId,
       instituteId,
