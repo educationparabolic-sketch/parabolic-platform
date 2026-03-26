@@ -1,4 +1,5 @@
 import * as functions from "firebase-functions";
+import {patternEngineService} from "../services/patternEngine";
 import {riskEngineService} from "../services/riskEngine";
 
 const STUDENT_YEAR_METRICS_DOCUMENT_PATH =
@@ -14,6 +15,17 @@ export const handleStudentYearMetricsWritten = async (
   const studentId = String(context.params.studentId ?? "").trim();
 
   await riskEngineService.processStudentYearMetricsUpdate(
+    {
+      eventId: context.eventId,
+      instituteId,
+      studentId,
+      yearId,
+    },
+    change.before.data(),
+    change.after.data(),
+  );
+
+  await patternEngineService.processStudentYearMetricsUpdate(
     {
       eventId: context.eventId,
       instituteId,

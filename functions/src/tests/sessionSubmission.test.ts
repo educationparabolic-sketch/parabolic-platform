@@ -37,6 +37,7 @@ const deleteIfPresent = async (path: string): Promise<void> => {
 
 const seedQuestion = async (
   questionId: string,
+  difficulty: "Easy" | "Medium" | "Hard",
   marks: number,
   negativeMarks: number,
   correctAnswer: string,
@@ -47,7 +48,7 @@ const seedQuestion = async (
       chapter: "Algebra",
       correctAnswer,
       createdAt: Timestamp.now(),
-      difficulty: "Medium",
+      difficulty,
       examType: "JEE",
       marks,
       negativeMarks,
@@ -154,21 +155,25 @@ const seedSession = async (
     yearId: YEAR_ID,
     ...(status === "submitted" ? {
       accuracyPercent: 50,
+      consecutiveWrongStreakMax: 1,
       disciplineIndex: 80,
+      easyRemainingAfterPhase1Percent: 0,
       guessRate: 10,
+      hardInPhase1Percent: 0,
       maxTimeViolationPercent: 0,
       minTimeViolationPercent: 33.33,
       phaseAdherencePercent: 100,
       rawScorePercent: 62.5,
       riskState: "Stable",
+      skipBurstCount: 0,
     } : {}),
   });
 };
 
 test.before(async () => {
-  await seedQuestion("q36_1", 4, 1, "A");
-  await seedQuestion("q36_2", 4, 1, "C");
-  await seedQuestion("q36_3", 4, 1, "B");
+  await seedQuestion("q36_1", "Easy", 4, 1, "A");
+  await seedQuestion("q36_2", "Hard", 4, 1, "C");
+  await seedQuestion("q36_3", "Easy", 4, 1, "B");
   await seedRun();
 });
 
@@ -225,6 +230,10 @@ test("submitSession finalizes active session atomically", async () => {
   assert.ok(data?.submittedAt instanceof Timestamp);
   assert.equal(data?.rawScorePercent, result.rawScorePercent);
   assert.equal(data?.accuracyPercent, result.accuracyPercent);
+  assert.equal(data?.easyRemainingAfterPhase1Percent, 0);
+  assert.equal(data?.hardInPhase1Percent, 0);
+  assert.equal(data?.consecutiveWrongStreakMax, 1);
+  assert.equal(data?.skipBurstCount, 0);
 
   await deleteIfPresent(sessionPath);
 });
@@ -296,7 +305,7 @@ test(
     assert.equal(result.disciplineIndex, 80);
     assert.equal(result.riskState, "Stable");
 
-    await seedQuestion("q36_1", 4, 1, "A");
+    await seedQuestion("q36_1", "Easy", 4, 1, "A");
     await seedRun();
     await deleteIfPresent(sessionPath);
   },

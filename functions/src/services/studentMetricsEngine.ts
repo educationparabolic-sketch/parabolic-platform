@@ -12,12 +12,16 @@ const STUDENT_YEAR_METRICS_COLLECTION = "studentYearMetrics";
 
 interface SubmittedSessionSnapshot {
   accuracyPercent?: unknown;
+  consecutiveWrongStreakMax?: unknown;
   disciplineIndex?: unknown;
   easyRemainingAfterPhase1Percent?: unknown;
   guessRate?: unknown;
   hardInPhase1Percent?: unknown;
+  maxTimeViolationPercent?: unknown;
+  minTimeViolationPercent?: unknown;
   phaseAdherencePercent?: unknown;
   rawScorePercent?: unknown;
+  skipBurstCount?: unknown;
   status?: unknown;
   studentId?: unknown;
   submittedAt?: unknown;
@@ -133,6 +137,11 @@ const toNonNegativeInteger = (value: unknown, fallback = 0): number => {
   return value;
 };
 
+const toNonNegativeIntegerOrDefault = (
+  value: unknown,
+  fallback: number,
+): number => toNonNegativeInteger(value, fallback);
+
 const roundToTwoDecimals = (value: number): number =>
   Math.round(value * 100) / 100;
 
@@ -238,6 +247,22 @@ export class StudentMetricsEngineService {
       afterData?.hardInPhase1Percent,
       0,
     );
+    const minTimeViolationPercent = toPercentOrDefault(
+      afterData?.minTimeViolationPercent,
+      0,
+    );
+    const maxTimeViolationPercent = toPercentOrDefault(
+      afterData?.maxTimeViolationPercent,
+      0,
+    );
+    const skipBurstCount = toNonNegativeIntegerOrDefault(
+      afterData?.skipBurstCount,
+      0,
+    );
+    const consecutiveWrongStreakMax = toNonNegativeIntegerOrDefault(
+      afterData?.consecutiveWrongStreakMax,
+      0,
+    );
 
     const result = await this.firestore.runTransaction(async (transaction) => {
       const studentMetricsReference = this.firestore.doc(
@@ -318,6 +343,20 @@ export class StudentMetricsEngineService {
               sumPhaseAdherencePercent,
               sumRawScorePercent,
               totalTests,
+              latestSessionSummary: {
+                accuracyPercent,
+                consecutiveWrongStreakMax,
+                easyRemainingAfterPhase1Percent: easyNeglectRate,
+                guessRate,
+                hardInPhase1Percent: hardBiasRate,
+                maxTimeViolationPercent,
+                minTimeViolationPercent,
+                phaseAdherencePercent,
+                rawScorePercent,
+                sessionId,
+                skipBurstCount,
+                submittedAt,
+              },
               updatedAt: FieldValue.serverTimestamp(),
             },
           },

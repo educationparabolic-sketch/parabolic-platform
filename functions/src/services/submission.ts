@@ -23,6 +23,7 @@ const WRONG_STREAK_WEIGHT = 0.15;
 
 interface SubmissionQuestionMeta {
   correctAnswer: string;
+  difficulty: "Easy" | "Medium" | "Hard";
   marks: number;
   negativeMarks: number;
 }
@@ -125,6 +126,28 @@ const resolveRiskState = (riskScorePercent: number): SubmissionRiskState => {
   return "Volatile";
 };
 
+const normalizeDifficulty = (
+  value: unknown,
+  fieldName: string,
+): "Easy" | "Medium" | "Hard" => {
+  const normalizedValue = normalizeRequiredString(value, fieldName)
+    .toLowerCase();
+
+  if (
+    normalizedValue !== "easy" &&
+    normalizedValue !== "medium" &&
+    normalizedValue !== "hard"
+  ) {
+    throw new SubmissionValidationError(
+      "VALIDATION_ERROR",
+      `Field "${fieldName}" must be Easy, Medium, or Hard.`,
+    );
+  }
+
+  return normalizedValue.charAt(0).toUpperCase() +
+    normalizedValue.slice(1) as "Easy" | "Medium" | "Hard";
+};
+
 const normalizePhasePercent = (
   value: unknown,
   fieldName: string,
@@ -209,6 +232,10 @@ const computeSubmissionMetrics = (
   let minTimeViolationCount = 0;
   let maxTimeViolationCount = 0;
   let phaseDeviationCount = 0;
+  let totalEasyQuestions = 0;
+  let totalHardQuestions = 0;
+  let easyRemainingAfterPhase1Count = 0;
+  let hardAttemptedInPhase1Count = 0;
 
   input.questionIds.forEach((questionId, index) => {
     const questionMeta = input.questionMetaById[questionId];
@@ -221,6 +248,15 @@ const computeSubmissionMetrics = (
     }
 
     maxPossibleScore += questionMeta.marks;
+    const isPhase1Question = index < questionBounds.phase1EndIndex;
+
+    if (questionMeta.difficulty === "Easy") {
+      totalEasyQuestions += 1;
+    }
+
+    if (questionMeta.difficulty === "Hard") {
+      totalHardQuestions += 1;
+    }
 
     const answer = input.answerMap[questionId];
     const selectedOption = isPlainObject(answer) ?
@@ -232,8 +268,20 @@ const computeSubmissionMetrics = (
 
     const isAttempted = Boolean(selectedOption);
 
+    if (
+      isPhase1Question &&
+      questionMeta.difficulty === "Easy" &&
+      !isAttempted
+    ) {
+      easyRemainingAfterPhase1Count += 1;
+    }
+
     if (isAttempted) {
       attemptedCount += 1;
+
+      if (isPhase1Question && questionMeta.difficulty === "Hard") {
+        hardAttemptedInPhase1Count += 1;
+      }
 
       const isCorrect = selectedOption.toUpperCase() ===
         questionMeta.correctAnswer.toUpperCase();
@@ -305,6 +353,13 @@ const computeSubmissionMetrics = (
     toPercentage(phaseDeviationCount, questionCount),
   );
   const phaseAdherencePercent = clampPercent(100 - phaseDeviationPercent);
+  const easyRemainingAfterPhase1Percent = clampPercent(
+    toPercentage(easyRemainingAfterPhase1Count, totalEasyQuestions),
+  );
+  const hardInPhase1Percent = clampPercent(
+    toPercentage(hardAttemptedInPhase1Count, totalHardQuestions),
+  );
+  const skipBurstCount = 0;
 
   const riskScore =
     ((minTimeViolationPercent / 100) * MIN_TIME_WEIGHT) +
@@ -320,13 +375,17 @@ const computeSubmissionMetrics = (
 
   return {
     accuracyPercent,
+    consecutiveWrongStreakMax,
     disciplineIndex,
+    easyRemainingAfterPhase1Percent,
     guessRate,
+    hardInPhase1Percent,
     maxTimeViolationPercent,
     minTimeViolationPercent,
     phaseAdherencePercent,
     rawScorePercent,
     riskState,
+    skipBurstCount,
   };
 };
 
@@ -339,14 +398,35 @@ const normalizeStoredResult = (
       "session.accuracyPercent",
     ),
   ),
+  consecutiveWrongStreakMax: Math.max(
+    0,
+    Math.round(
+      normalizeNonNegativeNumber(
+        value.consecutiveWrongStreakMax ?? 0,
+        "session.consecutiveWrongStreakMax",
+      ),
+    ),
+  ),
   disciplineIndex: clampPercent(
     normalizeNonNegativeNumber(
       value.disciplineIndex,
       "session.disciplineIndex",
     ),
   ),
+  easyRemainingAfterPhase1Percent: clampPercent(
+    normalizeNonNegativeNumber(
+      value.easyRemainingAfterPhase1Percent ?? 0,
+      "session.easyRemainingAfterPhase1Percent",
+    ),
+  ),
   guessRate: clampPercent(
     normalizeNonNegativeNumber(value.guessRate ?? 0, "session.guessRate"),
+  ),
+  hardInPhase1Percent: clampPercent(
+    normalizeNonNegativeNumber(
+      value.hardInPhase1Percent ?? 0,
+      "session.hardInPhase1Percent",
+    ),
   ),
   maxTimeViolationPercent: clampPercent(
     normalizeNonNegativeNumber(
@@ -376,6 +456,15 @@ const normalizeStoredResult = (
     value.riskState,
     "session.riskState",
   ) as SubmissionRiskState,
+  skipBurstCount: Math.max(
+    0,
+    Math.round(
+      normalizeNonNegativeNumber(
+        value.skipBurstCount ?? 0,
+        "session.skipBurstCount",
+      ),
+    ),
+  ),
 });
 
 const isFirestorePreconditionFailure = (error: unknown): boolean => {
@@ -783,6 +872,10 @@ export class SubmissionService {
                 questionData.correctAnswer,
                 `questionBank.${normalizedQuestionIds[index]}.correctAnswer`,
               ),
+              difficulty: normalizeDifficulty(
+                questionData.difficulty,
+                `questionBank.${normalizedQuestionIds[index]}.difficulty`,
+              ),
               marks: normalizeNonNegativeNumber(
                 questionData.marks,
                 `questionBank.${normalizedQuestionIds[index]}.marks`,
@@ -810,13 +903,18 @@ export class SubmissionService {
 
           transaction.update(sessionReference, {
             accuracyPercent: metrics.accuracyPercent,
+            consecutiveWrongStreakMax: metrics.consecutiveWrongStreakMax,
             disciplineIndex: metrics.disciplineIndex,
+            easyRemainingAfterPhase1Percent:
+              metrics.easyRemainingAfterPhase1Percent,
             guessRate: metrics.guessRate,
+            hardInPhase1Percent: metrics.hardInPhase1Percent,
             maxTimeViolationPercent: metrics.maxTimeViolationPercent,
             minTimeViolationPercent: metrics.minTimeViolationPercent,
             phaseAdherencePercent: metrics.phaseAdherencePercent,
             rawScorePercent: metrics.rawScorePercent,
             riskState: metrics.riskState,
+            skipBurstCount: metrics.skipBurstCount,
             status: "submitted",
             submissionLock: false,
             submittedAt: FieldValue.serverTimestamp(),

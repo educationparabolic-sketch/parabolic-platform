@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 44  
-Next Build: 45
+Completed Builds: 45  
+Next Build: 46
 
 Current Phase: Phase 9 — Analytics Engine
 
@@ -1394,18 +1394,58 @@ Completed On
 
 ---
 
-# NEXT BUILD
-
-Next Build Number: 45
+## Build 45 — Behavioral Pattern Detection Engine
 
 Phase  
 Phase 9 — Analytics Engine
 
+Summary  
+Implemented the architecture-aligned Step E Pattern Engine for rolling behavioral pattern detection on student analytics records.
+
+Components implemented:
+
+- Added `PatternEngineService` in `functions/src/services/patternEngine.ts` to process `studentYearMetrics/{studentId}` updates idempotently using the upstream `studentMetricsEngine` processing marker and latest session summary as the replay boundary
+- Extended Build 43 student metrics processing in `functions/src/services/studentMetricsEngine.ts` to persist the latest pattern-input session summary under `studentYearMetrics.processingMarkers.studentMetricsEngine.latestSessionSummary`
+- Extended Build 36 submission metrics in `functions/src/services/submission.ts` to persist the documented pattern inputs needed by downstream analytics, including `easyRemainingAfterPhase1Percent`, `hardInPhase1Percent`, `consecutiveWrongStreakMax`, and `skipBurstCount`
+- Reused the existing `studentYearMetricsOnWrite` trigger in `functions/src/triggers/studentYearMetrics.ts` and attached Pattern Engine execution without introducing a duplicate event source
+- Added typed Build 45 contracts in `functions/src/types/patternEngine.ts`
+- Implemented rolling five-session pattern evaluation and persistence for:
+  - `rush`
+  - `easyNeglect`
+  - `hardBias`
+  - `skipBurst`
+  - `wrongStreak`
+- Persisted escalation outputs on `studentYearMetrics`, including `interventionSuggestion`, `escalationLevel`, `lastPatternUpdatedAt`, and flattened flags such as `rushPatternActive`
+- Added repeatable emulator-backed Build 45 validation in `functions/src/tests/patternEngine.test.ts`
+- Corrected emulator-backed test scripts in `functions/package.json` so Firestore emulator environment variables apply to both the TypeScript build and the actual `node --test` process
+- Verified the implementation locally with:
+  - `npm run build`
+  - `npm run lint`
+  - emulator-backed `sessionSubmission`, `studentMetricsEngine`, `riskEngine`, and `patternEngine` test runs against the local Firestore emulator
+
+Result  
+Student yearly analytics now include deterministic rolling behavioral pattern detection, escalation recommendations, and persistent pattern flags without adding raw-session aggregation reads or duplicate triggers.
+
+Commit Reference  
+Build 45: Behavioral Pattern Detection Engine
+
+Completed On  
+2026-03-26
+
+---
+
+# NEXT BUILD
+
+Next Build Number: 46
+
+Phase  
+Phase 10 — Insights & Notification Engine
+
 Subsystem  
-Behavioral Pattern Detection Engine
+Insight Generation Engine
 
 Reference  
-3_Core_Architectures.md → Section 42.10 Post-Submission Processing Pipeline — Step E Pattern Engine
+3_Core_Architectures.md → Section 42.10 Post-Submission Processing Pipeline — Step F Insights Engine
 
 ---
 

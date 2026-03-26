@@ -8,8 +8,11 @@ test(
   () => {
     const result: SubmissionResult = {
       accuracyPercent: 81,
+      consecutiveWrongStreakMax: 2,
       disciplineIndex: 76,
+      easyRemainingAfterPhase1Percent: 12.5,
       guessRate: 22.22,
+      hardInPhase1Percent: 18.5,
       idempotent: true,
       maxTimeViolationPercent: 33.33,
       minTimeViolationPercent: 11.11,
@@ -18,6 +21,7 @@ test(
       riskState: "Drift-Prone",
       sessionPath:
         "institutes/inst_40/academicYears/2026/runs/run_40/sessions/session_40",
+      skipBurstCount: 0,
     };
 
     const response = buildSubmissionSuccessResponse(

@@ -76,12 +76,16 @@ test(
         },
         {
           accuracyPercent: 80,
+          consecutiveWrongStreakMax: 1,
           disciplineIndex: 90,
           easyRemainingAfterPhase1Percent: 20,
           guessRate: 10,
           hardInPhase1Percent: 15,
+          maxTimeViolationPercent: 5,
+          minTimeViolationPercent: 10,
           phaseAdherencePercent: 70,
           rawScorePercent: 60,
+          skipBurstCount: 0,
           status: "submitted",
           studentId,
           submittedAt: Timestamp.fromMillis(Date.now()),
@@ -143,6 +147,16 @@ test(
     assert.equal(secondData?.easyNeglectRate, 10);
     assert.equal(secondData?.hardBiasRate, 7.5);
     assert.equal(secondData?.totalTests, 2);
+    assert.equal(
+      secondData?.processingMarkers?.studentMetricsEngine?.latestSessionSummary
+        ?.sessionId,
+      "session_build_43_2",
+    );
+    assert.equal(
+      secondData?.processingMarkers?.studentMetricsEngine?.latestSessionSummary
+        ?.maxTimeViolationPercent,
+      0,
+    );
 
     await deleteDocumentIfPresent(studentMetricsPath);
   },
@@ -165,10 +179,14 @@ test(
 
     const payload = {
       accuracyPercent: 75,
+      consecutiveWrongStreakMax: 0,
       disciplineIndex: 65,
       guessRate: 12,
+      maxTimeViolationPercent: 0,
+      minTimeViolationPercent: 0,
       phaseAdherencePercent: 55,
       rawScorePercent: 45,
+      skipBurstCount: 0,
       status: "submitted",
       studentId,
       submittedAt,

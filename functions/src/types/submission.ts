@@ -25,13 +25,17 @@ export type SubmissionRiskState =
 
 export interface SubmissionMetrics {
   accuracyPercent: number;
+  consecutiveWrongStreakMax: number;
   disciplineIndex: number;
+  easyRemainingAfterPhase1Percent: number;
   guessRate: number;
+  hardInPhase1Percent: number;
   maxTimeViolationPercent: number;
   minTimeViolationPercent: number;
   phaseAdherencePercent: number;
   rawScorePercent: number;
   riskState: SubmissionRiskState;
+  skipBurstCount: number;
 }
 
 export interface SubmissionResult extends SubmissionMetrics {
