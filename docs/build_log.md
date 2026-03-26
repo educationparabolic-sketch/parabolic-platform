@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 40  
-Next Build: 41
+Completed Builds: 41  
+Next Build: 42
 
 Current Phase: Phase 9 — Analytics Engine
 
@@ -1228,18 +1228,60 @@ Completed On
 
 ---
 
+## Build 41 — Run Analytics Aggregation
+
+Phase  
+Phase 9 — Analytics Engine
+
+Summary  
+Implemented the architecture-aligned Step A Run Analytics Engine for post-submission aggregation.
+
+Components implemented:
+
+- Added `RunAnalyticsEngineService` in `functions/src/services/runAnalyticsEngine.ts` to incrementally update `institutes/{instituteId}/academicYears/{yearId}/runAnalytics/{runId}` from submitted-session payloads plus existing run analytics state
+- Extended the existing submitted-session Firestore trigger in `functions/src/triggers/sessionSubmission.ts` so Build 39 marker queuing remains intact and Build 41 aggregation runs in the same deterministic `sessions/{sessionId}` update pipeline
+- Added typed Build 41 contracts in `functions/src/types/runAnalyticsEngine.ts`
+- Computed and persisted architecture-aligned run-level metrics without scanning raw session collections:
+  - `avgRawScorePercent`
+  - `avgAccuracyPercent`
+  - `completionRate`
+  - `disciplineAverage`
+  - `phaseAdherenceAverage`
+  - `guessRateAverage`
+  - `stdDeviation`
+  - `riskDistribution`
+- Stored idempotent incremental aggregation state under `runAnalytics.processingMarkers.runAnalyticsEngine`, including:
+  - last processed session marker
+  - cumulative sums for average/std-dev calculations
+  - submitted-session count
+  - raw score histogram
+  - accuracy histogram
+- Added repeatable emulator-backed Build 41 validation in `functions/src/tests/runAnalyticsEngine.test.ts`
+- Added `npm run test:run-analytics-engine` in `functions/package.json`
+
+Result  
+Submitted exam sessions now update run-level analytics asynchronously through an idempotent incremental engine aligned with Section 42.10 Step A, while preserving the analytics-isolation constraint against run-wide raw session scans.
+
+Commit Reference  
+Build 41:Run Analytics Aggregation
+
+Completed On  
+2026-03-26
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 41
+Next Build Number: 42
 
 Phase  
 Phase 9 — Analytics Engine
 
 Subsystem  
-Run Analytics Aggregation
+Question Analytics Engine
 
 Reference  
-3_Core_Architectures.md → Section 42.10 Post-Submission Processing Pipeline — Step A Run Analytics Engine
+3_Core_Architectures.md → Section 42.10 Post-Submission Processing Pipeline — Step B Question Analytics Engine
 
 ---
 
@@ -1287,7 +1329,8 @@ Build | Phase | Status
 38 | Submission Engine | Completed
 39 | Submission Engine | Completed
 40 | Submission Engine | Completed
-41–150 | Remaining Phases | Pending
+41 | Analytics Engine | Completed
+42–150 | Remaining Phases | Pending
 
 ---
 

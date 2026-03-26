@@ -1,5 +1,8 @@
 import * as functions from "firebase-functions";
 import {
+  runAnalyticsEngineService,
+} from "../services/runAnalyticsEngine";
+import {
   submissionAnalyticsTriggerService,
 } from "../services/submissionAnalyticsTrigger";
 
@@ -27,9 +30,20 @@ export const handleSessionUpdated = async (
     change.before.data(),
     change.after.data(),
   );
+
+  await runAnalyticsEngineService.processSubmittedSession(
+    {
+      eventId: context.eventId,
+      instituteId,
+      runId,
+      sessionId,
+      yearId,
+    },
+    change.before.data(),
+    change.after.data(),
+  );
 };
 
 export const examSessionOnUpdate = functions.firestore
   .document(SESSIONS_DOCUMENT_PATH)
   .onUpdate(handleSessionUpdated);
-
