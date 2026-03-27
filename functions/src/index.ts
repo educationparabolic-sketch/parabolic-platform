@@ -4,6 +4,7 @@ import {createRequestLogger} from "./services/logging";
 import {handleExamStartRequest} from "./api/examStart";
 import {handleExamSessionAnswersRequest} from "./api/examSessionAnswers";
 import {handleExamSessionSubmitRequest} from "./api/examSessionSubmit";
+import {handleInternalEmailQueueRequest} from "./api/internalEmailQueue";
 import {runAssignmentOnCreate} from "./triggers/assignmentCreation";
 import {questionBankOnCreate} from "./triggers/questionIngestion";
 import {examSessionOnUpdate} from "./triggers/sessionSubmission";
@@ -24,6 +25,9 @@ export const examSessionAnswers = functions.https.onRequest(
 );
 export const examSessionSubmit = functions.https.onRequest(
   handleExamSessionSubmitRequest,
+);
+export const internalEmailQueue = functions.https.onRequest(
+  handleInternalEmailQueueRequest,
 );
 
 export const helloWorld = functions.https.onRequest(async (
