@@ -1,4 +1,5 @@
 import * as functions from "firebase-functions";
+import {DecodedIdToken} from "firebase-admin/auth";
 import {sendErrorResponse} from "../services/apiResponse";
 import {createRequestLogger} from "../services/logging";
 import {
@@ -16,6 +17,11 @@ interface ExamSessionSubmitRequestBody {
   instituteId?: unknown;
   runId?: unknown;
   yearId?: unknown;
+}
+
+interface ExamSessionSubmitRequestDependencies {
+  submitSession: typeof submissionService.submitSession;
+  verifyIdToken: (idToken: string) => Promise<DecodedIdToken>;
 }
 
 const normalizeRequiredBodyField = (
@@ -149,95 +155,102 @@ const resolveSessionIdFromRequest = (
   );
 };
 
-export const handleExamSessionSubmitRequest = async (
-  request: functions.https.Request,
-  response: functions.Response,
-): Promise<void> => {
-  const logger = createRequestLogger("SubmissionApi", request);
-  const requestId = logger.getRequestId();
+export const createExamSessionSubmitHandler = (
+  dependencies: ExamSessionSubmitRequestDependencies,
+) =>
+  async (
+    request: functions.https.Request,
+    response: functions.Response,
+  ): Promise<void> => {
+    const logger = createRequestLogger("SubmissionApi", request);
+    const requestId = logger.getRequestId();
 
-  try {
-    if (request.method !== "POST") {
+    try {
+      if (request.method !== "POST") {
+        sendErrorResponse(
+          response,
+          requestId,
+          "VALIDATION_ERROR",
+          "Method not allowed. Use POST.",
+        );
+        return;
+      }
+
+      const idToken = getBearerToken(request);
+      const decodedToken = await dependencies.verifyIdToken(idToken);
+      const normalizedRole = normalizeRole(decodedToken);
+
+      if (normalizedRole !== "student") {
+        throw new SubmissionValidationError(
+          "FORBIDDEN",
+          "Only students can submit exam sessions.",
+        );
+      }
+
+      const body = (request.body ?? {}) as ExamSessionSubmitRequestBody;
+      const instituteId = normalizeRequiredBodyField(
+        body.instituteId,
+        "instituteId",
+      );
+      const yearId = normalizeRequiredBodyField(body.yearId, "yearId");
+      const runId = normalizeRequiredBodyField(body.runId, "runId");
+      const sessionId = resolveSessionIdFromRequest(request);
+      const instituteClaim = resolveInstituteClaim(decodedToken);
+
+      if (instituteClaim && instituteClaim !== instituteId) {
+        throw new SubmissionValidationError(
+          "TENANT_MISMATCH",
+          "Token instituteId does not match request instituteId.",
+        );
+      }
+
+      const studentId = resolveStudentId(decodedToken, decodedToken.uid);
+      const result = await dependencies.submitSession({
+        instituteId,
+        runId,
+        sessionId,
+        studentId,
+        yearId,
+      });
+
+      logger.info("Session submission handled", {
+        idempotent: result.idempotent,
+        instituteId,
+        runId,
+        sessionId,
+        studentId,
+        yearId,
+      });
+
+      response.status(200).json(
+        buildSubmissionSuccessResponse(
+          result,
+          requestId,
+          new Date().toISOString(),
+        ),
+      );
+    } catch (error) {
+      if (error instanceof SubmissionValidationError) {
+        logger.warn("Session submission rejected", {
+          code: error.code,
+          error,
+        });
+        sendErrorResponse(response, requestId, error.code, error.message);
+        return;
+      }
+
+      logger.error("Session submission failed", {error});
       sendErrorResponse(
         response,
         requestId,
-        "VALIDATION_ERROR",
-        "Method not allowed. Use POST.",
-      );
-      return;
-    }
-
-    const idToken = getBearerToken(request);
-    const decodedToken = await getFirebaseAdminApp()
-      .auth()
-      .verifyIdToken(idToken);
-    const normalizedRole = normalizeRole(decodedToken);
-
-    if (normalizedRole !== "student") {
-      throw new SubmissionValidationError(
-        "FORBIDDEN",
-        "Only students can submit exam sessions.",
+        "INTERNAL_ERROR",
+        "Unexpected error while submitting exam session.",
       );
     }
+  };
 
-    const body = (request.body ?? {}) as ExamSessionSubmitRequestBody;
-    const instituteId = normalizeRequiredBodyField(
-      body.instituteId,
-      "instituteId",
-    );
-    const yearId = normalizeRequiredBodyField(body.yearId, "yearId");
-    const runId = normalizeRequiredBodyField(body.runId, "runId");
-    const sessionId = resolveSessionIdFromRequest(request);
-    const instituteClaim = resolveInstituteClaim(decodedToken);
-
-    if (instituteClaim && instituteClaim !== instituteId) {
-      throw new SubmissionValidationError(
-        "TENANT_MISMATCH",
-        "Token instituteId does not match request instituteId.",
-      );
-    }
-
-    const studentId = resolveStudentId(decodedToken, decodedToken.uid);
-    const result = await submissionService.submitSession({
-      instituteId,
-      runId,
-      sessionId,
-      studentId,
-      yearId,
-    });
-
-    logger.info("Session submission handled", {
-      idempotent: result.idempotent,
-      instituteId,
-      runId,
-      sessionId,
-      studentId,
-      yearId,
-    });
-
-    response.status(200).json(
-      buildSubmissionSuccessResponse(
-        result,
-        requestId,
-        new Date().toISOString(),
-      ),
-    );
-  } catch (error) {
-    if (error instanceof SubmissionValidationError) {
-      logger.warn("Session submission rejected", {
-        code: error.code,
-        error,
-      });
-      sendErrorResponse(response, requestId, error.code, error.message);
-      return;
-    }
-
-    logger.error("Session submission failed", {error});
-    sendErrorResponse(
-      response,
-      requestId,
-      "INTERNAL_ERROR",
-      "Unexpected error while submitting exam session.",
-    );
-  }
-};
+export const handleExamSessionSubmitRequest = createExamSessionSubmitHandler({
+  submitSession: submissionService.submitSession.bind(submissionService),
+  verifyIdToken: (idToken: string) =>
+    getFirebaseAdminApp().auth().verifyIdToken(idToken),
+});

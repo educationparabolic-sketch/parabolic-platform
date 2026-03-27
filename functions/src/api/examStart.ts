@@ -1,4 +1,5 @@
 import * as functions from "firebase-functions";
+import {DecodedIdToken} from "firebase-admin/auth";
 import {sendErrorResponse} from "../services/apiResponse";
 import {createRequestLogger} from "../services/logging";
 import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
@@ -8,6 +9,11 @@ interface ExamStartRequestBody {
   instituteId?: unknown;
   runId?: unknown;
   yearId?: unknown;
+}
+
+interface ExamStartRequestDependencies {
+  startSession: typeof sessionService.startSession;
+  verifyIdToken: (idToken: string) => Promise<DecodedIdToken>;
 }
 
 const normalizeRequiredBodyField = (
@@ -89,98 +95,105 @@ const getBearerToken = (
   return token.trim();
 };
 
-export const handleExamStartRequest = async (
-  request: functions.https.Request,
-  response: functions.Response,
-): Promise<void> => {
-  const logger = createRequestLogger("ExamStartApi", request);
-  const requestId = logger.getRequestId();
+export const createExamStartHandler = (
+  dependencies: ExamStartRequestDependencies,
+) =>
+  async (
+    request: functions.https.Request,
+    response: functions.Response,
+  ): Promise<void> => {
+    const logger = createRequestLogger("ExamStartApi", request);
+    const requestId = logger.getRequestId();
 
-  try {
-    if (request.method !== "POST") {
+    try {
+      if (request.method !== "POST") {
+        sendErrorResponse(
+          response,
+          requestId,
+          "VALIDATION_ERROR",
+          "Method not allowed. Use POST.",
+        );
+        return;
+      }
+
+      const idToken = getBearerToken(request);
+      const decodedToken = await dependencies.verifyIdToken(idToken);
+      const normalizedRole = normalizeRole(decodedToken);
+
+      if (normalizedRole !== "student") {
+        throw new SessionStartValidationError(
+          "FORBIDDEN",
+          "Only students can start exam sessions.",
+        );
+      }
+
+      const body = (request.body ?? {}) as ExamStartRequestBody;
+      const instituteId = normalizeRequiredBodyField(
+        body.instituteId,
+        "instituteId",
+      );
+      const yearId = normalizeRequiredBodyField(body.yearId, "yearId");
+      const runId = normalizeRequiredBodyField(body.runId, "runId");
+      const instituteClaim = resolveInstituteClaim(decodedToken);
+
+      if (instituteClaim && instituteClaim !== instituteId) {
+        throw new SessionStartValidationError(
+          "TENANT_MISMATCH",
+          "Token instituteId does not match request instituteId.",
+        );
+      }
+
+      const studentId = resolveStudentId(decodedToken, decodedToken.uid);
+      const result = await dependencies.startSession({
+        instituteId,
+        runId,
+        studentId,
+        studentUid: decodedToken.uid,
+        yearId,
+      });
+
+      logger.info("Exam session started successfully", {
+        instituteId,
+        runId,
+        sessionId: result.sessionId,
+        studentId,
+        yearId,
+      });
+
+      response.status(200).json({
+        code: "OK",
+        data: {
+          sessionId: result.sessionId,
+          sessionPath: result.sessionPath,
+          sessionToken: result.sessionToken,
+          status: result.status,
+        },
+        message: "Exam session started.",
+        requestId,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      if (error instanceof SessionStartValidationError) {
+        logger.warn("Exam start request rejected", {
+          code: error.code,
+          error,
+        });
+        sendErrorResponse(response, requestId, error.code, error.message);
+        return;
+      }
+
+      logger.error("Exam start request failed", {error});
       sendErrorResponse(
         response,
         requestId,
-        "VALIDATION_ERROR",
-        "Method not allowed. Use POST.",
-      );
-      return;
-    }
-
-    const idToken = getBearerToken(request);
-    const decodedToken = await getFirebaseAdminApp()
-      .auth()
-      .verifyIdToken(idToken);
-    const normalizedRole = normalizeRole(decodedToken);
-
-    if (normalizedRole !== "student") {
-      throw new SessionStartValidationError(
-        "FORBIDDEN",
-        "Only students can start exam sessions.",
+        "INTERNAL_ERROR",
+        "Unexpected error while starting exam session.",
       );
     }
+  };
 
-    const body = (request.body ?? {}) as ExamStartRequestBody;
-    const instituteId = normalizeRequiredBodyField(
-      body.instituteId,
-      "instituteId",
-    );
-    const yearId = normalizeRequiredBodyField(body.yearId, "yearId");
-    const runId = normalizeRequiredBodyField(body.runId, "runId");
-    const instituteClaim = resolveInstituteClaim(decodedToken);
-
-    if (instituteClaim && instituteClaim !== instituteId) {
-      throw new SessionStartValidationError(
-        "TENANT_MISMATCH",
-        "Token instituteId does not match request instituteId.",
-      );
-    }
-
-    const studentId = resolveStudentId(decodedToken, decodedToken.uid);
-    const result = await sessionService.startSession({
-      instituteId,
-      runId,
-      studentId,
-      studentUid: decodedToken.uid,
-      yearId,
-    });
-
-    logger.info("Exam session started successfully", {
-      instituteId,
-      runId,
-      sessionId: result.sessionId,
-      studentId,
-      yearId,
-    });
-
-    response.status(200).json({
-      code: "OK",
-      data: {
-        sessionId: result.sessionId,
-        sessionPath: result.sessionPath,
-        sessionToken: result.sessionToken,
-        status: result.status,
-      },
-      message: "Exam session started.",
-      requestId,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    if (error instanceof SessionStartValidationError) {
-      logger.warn("Exam start request rejected", {
-        code: error.code,
-        error,
-      });
-      sendErrorResponse(response, requestId, error.code, error.message);
-      return;
-    }
-
-    logger.error("Exam start request failed", {error});
-    sendErrorResponse(
-      response,
-      requestId,
-      "INTERNAL_ERROR",
-      "Unexpected error while starting exam session.",
-    );
-  }
-};
+export const handleExamStartRequest = createExamStartHandler({
+  startSession: sessionService.startSession.bind(sessionService),
+  verifyIdToken: (idToken: string) =>
+    getFirebaseAdminApp().auth().verifyIdToken(idToken),
+});

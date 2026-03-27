@@ -1,4 +1,5 @@
 import * as functions from "firebase-functions";
+import {DecodedIdToken} from "firebase-admin/auth";
 import {answerBatchService} from "../services/answerBatch";
 import {sendErrorResponse} from "../services/apiResponse";
 import {createRequestLogger} from "../services/logging";
@@ -12,6 +13,12 @@ interface ExamSessionAnswersRequestBody {
   millisecondsSinceLastWrite?: unknown;
   runId?: unknown;
   yearId?: unknown;
+}
+
+interface ExamSessionAnswersRequestDependencies {
+  persistIncrementalAnswers:
+    typeof answerBatchService.persistIncrementalAnswers;
+  verifyIdToken: (idToken: string) => Promise<DecodedIdToken>;
 }
 
 const normalizeRequiredString = (
@@ -153,117 +160,125 @@ const resolveSessionIdFromRequest = (
   );
 };
 
-export const handleExamSessionAnswersRequest = async (
-  request: functions.https.Request,
-  response: functions.Response,
-): Promise<void> => {
-  const logger = createRequestLogger("AnswerBatchApi", request);
-  const requestId = logger.getRequestId();
+export const createExamSessionAnswersHandler = (
+  dependencies: ExamSessionAnswersRequestDependencies,
+) =>
+  async (
+    request: functions.https.Request,
+    response: functions.Response,
+  ): Promise<void> => {
+    const logger = createRequestLogger("AnswerBatchApi", request);
+    const requestId = logger.getRequestId();
 
-  try {
-    if (request.method !== "POST") {
-      sendErrorResponse(
-        response,
-        requestId,
-        "VALIDATION_ERROR",
-        "Method not allowed. Use POST.",
+    try {
+      if (request.method !== "POST") {
+        sendErrorResponse(
+          response,
+          requestId,
+          "VALIDATION_ERROR",
+          "Method not allowed. Use POST.",
+        );
+        return;
+      }
+
+      const idToken = getBearerToken(request);
+      const decodedToken = await dependencies.verifyIdToken(idToken);
+      const normalizedRole = normalizeRole(decodedToken);
+
+      if (normalizedRole !== "student") {
+        throw new SessionStartValidationError(
+          "FORBIDDEN",
+          "Only students can persist session answers.",
+        );
+      }
+
+      const body = (request.body ?? {}) as ExamSessionAnswersRequestBody;
+      const instituteId = normalizeRequiredString(
+        body.instituteId,
+        "instituteId",
       );
-      return;
-    }
-
-    const idToken = getBearerToken(request);
-    const decodedToken = await getFirebaseAdminApp()
-      .auth()
-      .verifyIdToken(idToken);
-    const normalizedRole = normalizeRole(decodedToken);
-
-    if (normalizedRole !== "student") {
-      throw new SessionStartValidationError(
-        "FORBIDDEN",
-        "Only students can persist session answers.",
+      const yearId = normalizeRequiredString(body.yearId, "yearId");
+      const runId = normalizeRequiredString(body.runId, "runId");
+      const millisecondsSinceLastWrite = normalizeNonNegativeInteger(
+        body.millisecondsSinceLastWrite,
+        "millisecondsSinceLastWrite",
       );
-    }
+      const sessionId = resolveSessionIdFromRequest(request);
+      const instituteClaim = resolveInstituteClaim(decodedToken);
 
-    const body = (request.body ?? {}) as ExamSessionAnswersRequestBody;
-    const instituteId = normalizeRequiredString(
-      body.instituteId,
-      "instituteId",
-    );
-    const yearId = normalizeRequiredString(body.yearId, "yearId");
-    const runId = normalizeRequiredString(body.runId, "runId");
-    const millisecondsSinceLastWrite = normalizeNonNegativeInteger(
-      body.millisecondsSinceLastWrite,
-      "millisecondsSinceLastWrite",
-    );
-    const sessionId = resolveSessionIdFromRequest(request);
-    const instituteClaim = resolveInstituteClaim(decodedToken);
+      if (instituteClaim && instituteClaim !== instituteId) {
+        throw new SessionStartValidationError(
+          "TENANT_MISMATCH",
+          "Token instituteId does not match request instituteId.",
+        );
+      }
 
-    if (instituteClaim && instituteClaim !== instituteId) {
-      throw new SessionStartValidationError(
-        "TENANT_MISMATCH",
-        "Token instituteId does not match request instituteId.",
-      );
-    }
+      const studentId = resolveStudentId(decodedToken, decodedToken.uid);
+      const result = await dependencies.persistIncrementalAnswers({
+        answers: body.answers,
+        context: {
+          instituteId,
+          runId,
+          sessionId,
+          studentId,
+          yearId,
+        },
+        millisecondsSinceLastWrite,
+      });
 
-    const studentId = resolveStudentId(decodedToken, decodedToken.uid);
-    const result = await answerBatchService.persistIncrementalAnswers({
-      answers: body.answers,
-      context: {
+      logger.info("Session answer batch persisted", {
+        ignoredQuestionIds: result.ignoredQuestionIds,
         instituteId,
+        persistedQuestionIds: result.persistedQuestionIds,
         runId,
         sessionId,
         studentId,
         yearId,
-      },
-      millisecondsSinceLastWrite,
-    });
-
-    logger.info("Session answer batch persisted", {
-      ignoredQuestionIds: result.ignoredQuestionIds,
-      instituteId,
-      persistedQuestionIds: result.persistedQuestionIds,
-      runId,
-      sessionId,
-      studentId,
-      yearId,
-    });
-
-    response.status(200).json({
-      code: "OK",
-      data: {
-        blockedQuestionIds: result.blockedQuestionIds,
-        ignoredQuestionIds: result.ignoredQuestionIds,
-        lockedQuestionIds: result.lockedQuestionIds,
-        maxTimeEnforcementLevel: result.maxTimeEnforcementLevel,
-        maxTimeViolations: result.maxTimeViolations,
-        minTimeEnforcementLevel: result.minTimeEnforcementLevel,
-        minTimeViolations: result.minTimeViolations,
-        persistedQuestionIds: result.persistedQuestionIds,
-        sessionPath: result.sessionPath,
-        timingMetricsExport: result.timingMetricsExport,
-      },
-      message: "Session answers persisted.",
-      requestId,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error) {
-    if (error instanceof SessionStartValidationError) {
-      const normalizedCode: AnswerBatchErrorCode =
-        isAnswerBatchErrorCode(error.code) ? error.code : "VALIDATION_ERROR";
-      logger.warn("Session answer persistence rejected", {
-        code: normalizedCode,
-        error,
       });
-      sendErrorResponse(response, requestId, normalizedCode, error.message);
-      return;
-    }
 
-    logger.error("Session answer persistence failed", {error});
-    sendErrorResponse(
-      response,
-      requestId,
-      "INTERNAL_ERROR",
-      "Unexpected error while persisting session answers.",
-    );
-  }
-};
+      response.status(200).json({
+        code: "OK",
+        data: {
+          blockedQuestionIds: result.blockedQuestionIds,
+          ignoredQuestionIds: result.ignoredQuestionIds,
+          lockedQuestionIds: result.lockedQuestionIds,
+          maxTimeEnforcementLevel: result.maxTimeEnforcementLevel,
+          maxTimeViolations: result.maxTimeViolations,
+          minTimeEnforcementLevel: result.minTimeEnforcementLevel,
+          minTimeViolations: result.minTimeViolations,
+          persistedQuestionIds: result.persistedQuestionIds,
+          sessionPath: result.sessionPath,
+          timingMetricsExport: result.timingMetricsExport,
+        },
+        message: "Session answers persisted.",
+        requestId,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      if (error instanceof SessionStartValidationError) {
+        const normalizedCode: AnswerBatchErrorCode =
+          isAnswerBatchErrorCode(error.code) ? error.code : "VALIDATION_ERROR";
+        logger.warn("Session answer persistence rejected", {
+          code: normalizedCode,
+          error,
+        });
+        sendErrorResponse(response, requestId, normalizedCode, error.message);
+        return;
+      }
+
+      logger.error("Session answer persistence failed", {error});
+      sendErrorResponse(
+        response,
+        requestId,
+        "INTERNAL_ERROR",
+        "Unexpected error while persisting session answers.",
+      );
+    }
+  };
+
+export const handleExamSessionAnswersRequest = createExamSessionAnswersHandler({
+  persistIncrementalAnswers:
+    answerBatchService.persistIncrementalAnswers.bind(answerBatchService),
+  verifyIdToken: (idToken: string) =>
+    getFirebaseAdminApp().auth().verifyIdToken(idToken),
+});
