@@ -1,7 +1,7 @@
 import * as functions from "firebase-functions";
+import {sendErrorResponse} from "../services/apiResponse";
 import {createRequestLogger} from "../services/logging";
 import {
-  SubmissionErrorCode,
   SubmissionResponseData,
   SubmissionResult,
   SubmissionSuccessResponse,
@@ -39,43 +39,6 @@ const normalizeRequiredBodyField = (
   }
 
   return normalizedValue;
-};
-
-const resolveErrorStatus = (code: SubmissionErrorCode): number => {
-  switch (code) {
-  case "UNAUTHORIZED":
-    return 401;
-  case "FORBIDDEN":
-  case "TENANT_MISMATCH":
-    return 403;
-  case "NOT_FOUND":
-    return 404;
-  case "VALIDATION_ERROR":
-    return 400;
-  case "SESSION_NOT_ACTIVE":
-  case "SUBMISSION_LOCKED":
-    return 409;
-  case "INTERNAL_ERROR":
-    return 500;
-  default: {
-    const exhaustiveCode: never = code;
-    throw new Error(`Unsupported error code: ${exhaustiveCode}`);
-  }
-  }
-};
-
-const sendError = (
-  response: functions.Response,
-  requestId: string,
-  code: SubmissionErrorCode,
-  message: string,
-): void => {
-  response.status(resolveErrorStatus(code)).json({
-    code,
-    message,
-    requestId,
-    timestamp: new Date().toISOString(),
-  });
 };
 
 const buildSubmissionResponseData = (
@@ -195,7 +158,7 @@ export const handleExamSessionSubmitRequest = async (
 
   try {
     if (request.method !== "POST") {
-      sendError(
+      sendErrorResponse(
         response,
         requestId,
         "VALIDATION_ERROR",
@@ -265,12 +228,12 @@ export const handleExamSessionSubmitRequest = async (
         code: error.code,
         error,
       });
-      sendError(response, requestId, error.code, error.message);
+      sendErrorResponse(response, requestId, error.code, error.message);
       return;
     }
 
     logger.error("Session submission failed", {error});
-    sendError(
+    sendErrorResponse(
       response,
       requestId,
       "INTERNAL_ERROR",

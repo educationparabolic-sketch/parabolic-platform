@@ -199,12 +199,31 @@ test(
 
     assert.equal(response.statusCode, 403);
     assert.equal(
-      (response.body as {code: string}).code,
+      (response.body as {
+        error: {
+          code: string;
+          message: string;
+        };
+        meta: {
+          requestId: string;
+          timestamp: string;
+        };
+        success: boolean;
+      }).error.code,
       "FORBIDDEN",
     );
     assert.equal(
-      (response.body as {message: string}).message,
+      (response.body as {
+        error: {
+          code: string;
+          message: string;
+        };
+      }).error.message,
       "Only backend service roles can enqueue email jobs.",
+    );
+    assert.equal(
+      (response.body as {success: boolean}).success,
+      false,
     );
   },
 );
@@ -239,12 +258,16 @@ test(
 
     assert.equal(response.statusCode, 403);
     assert.equal(
-      (response.body as {code: string}).code,
+      (response.body as {error: {code: string}}).error.code,
       "TENANT_MISMATCH",
     );
     assert.equal(
-      (response.body as {message: string}).message,
+      (response.body as {error: {message: string}}).error.message,
       "Token instituteId does not match payload.instituteId.",
+    );
+    assert.equal(
+      typeof (response.body as {meta: {requestId: string}}).meta.requestId,
+      "string",
     );
   },
 );
@@ -277,12 +300,16 @@ test(
 
     assert.equal(response.statusCode, 400);
     assert.equal(
-      (response.body as {code: string}).code,
+      (response.body as {error: {code: string}}).error.code,
       "VALIDATION_ERROR",
     );
     assert.equal(
-      (response.body as {message: string}).message,
+      (response.body as {error: {message: string}}).error.message,
       "Field \"payload.instituteId\" must be a non-empty string.",
+    );
+    assert.equal(
+      typeof (response.body as {meta: {timestamp: string}}).meta.timestamp,
+      "string",
     );
   },
 );

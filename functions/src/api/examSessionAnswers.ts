@@ -1,5 +1,6 @@
 import * as functions from "firebase-functions";
 import {answerBatchService} from "../services/answerBatch";
+import {sendErrorResponse} from "../services/apiResponse";
 import {createRequestLogger} from "../services/logging";
 import {SessionStartValidationError} from "../services/session";
 import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
@@ -55,40 +56,6 @@ const normalizeNonNegativeInteger = (
   }
 
   return value as number;
-};
-
-const resolveErrorStatus = (code: AnswerBatchErrorCode): number => {
-  switch (code) {
-  case "UNAUTHORIZED":
-    return 401;
-  case "FORBIDDEN":
-  case "TENANT_MISMATCH":
-    return 403;
-  case "NOT_FOUND":
-    return 404;
-  case "VALIDATION_ERROR":
-    return 400;
-  case "INTERNAL_ERROR":
-    return 500;
-  default: {
-    const exhaustiveCode: never = code;
-    throw new Error(`Unsupported error code: ${exhaustiveCode}`);
-  }
-  }
-};
-
-const sendError = (
-  response: functions.Response,
-  requestId: string,
-  code: AnswerBatchErrorCode,
-  message: string,
-): void => {
-  response.status(resolveErrorStatus(code)).json({
-    code,
-    message,
-    requestId,
-    timestamp: new Date().toISOString(),
-  });
 };
 
 const isAnswerBatchErrorCode = (
@@ -195,7 +162,7 @@ export const handleExamSessionAnswersRequest = async (
 
   try {
     if (request.method !== "POST") {
-      sendError(
+      sendErrorResponse(
         response,
         requestId,
         "VALIDATION_ERROR",
@@ -287,12 +254,12 @@ export const handleExamSessionAnswersRequest = async (
         code: normalizedCode,
         error,
       });
-      sendError(response, requestId, normalizedCode, error.message);
+      sendErrorResponse(response, requestId, normalizedCode, error.message);
       return;
     }
 
     logger.error("Session answer persistence failed", {error});
-    sendError(
+    sendErrorResponse(
       response,
       requestId,
       "INTERNAL_ERROR",

@@ -1,5 +1,6 @@
 import * as functions from "firebase-functions";
 import {DecodedIdToken} from "firebase-admin/auth";
+import {sendErrorResponse} from "../services/apiResponse";
 import {createRequestLogger} from "../services/logging";
 import {
   emailQueueService,
@@ -7,7 +8,6 @@ import {
 } from "../services/emailQueue";
 import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
 import {
-  EmailQueueApiErrorCode,
   EmailQueueRequestPayload,
   EmailQueueSuccessResponse,
 } from "../types/emailQueue";
@@ -65,38 +65,6 @@ const getBearerToken = (
   return token.trim();
 };
 
-const resolveErrorStatus = (code: EmailQueueApiErrorCode): number => {
-  switch (code) {
-  case "UNAUTHORIZED":
-    return 401;
-  case "FORBIDDEN":
-  case "TENANT_MISMATCH":
-    return 403;
-  case "VALIDATION_ERROR":
-    return 400;
-  case "INTERNAL_ERROR":
-    return 500;
-  default: {
-    const exhaustiveCode: never = code;
-    throw new Error(`Unsupported error code: ${exhaustiveCode}`);
-  }
-  }
-};
-
-const sendError = (
-  response: functions.Response,
-  requestId: string,
-  code: EmailQueueApiErrorCode,
-  message: string,
-): void => {
-  response.status(resolveErrorStatus(code)).json({
-    code,
-    message,
-    requestId,
-    timestamp: new Date().toISOString(),
-  });
-};
-
 const buildSuccessResponse = (
   result: Awaited<ReturnType<typeof emailQueueService.enqueueEmailJob>>,
   requestId: string,
@@ -139,7 +107,7 @@ export const createInternalEmailQueueHandler = (
 
     try {
       if (request.method !== "POST") {
-        sendError(
+        sendErrorResponse(
           response,
           requestId,
           "VALIDATION_ERROR",
@@ -194,12 +162,12 @@ export const createInternalEmailQueueHandler = (
           code: error.code,
           error,
         });
-        sendError(response, requestId, error.code, error.message);
+        sendErrorResponse(response, requestId, error.code, error.message);
         return;
       }
 
       logger.error("Internal email queue request failed.", {error});
-      sendError(
+      sendErrorResponse(
         response,
         requestId,
         "INTERNAL_ERROR",

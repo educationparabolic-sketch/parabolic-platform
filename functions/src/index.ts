@@ -1,4 +1,5 @@
 import * as functions from "firebase-functions";
+import {sendErrorResponse} from "./services/apiResponse";
 import {registerGlobalErrorHandlers} from "./services/errorReporting";
 import {createRequestLogger} from "./services/logging";
 import {handleExamStartRequest} from "./api/examStart";
@@ -53,11 +54,11 @@ export const helloWorld = functions.https.onRequest(async (
     res.send(message);
   } catch (error) {
     logger.error("Health check request failed", {error});
-    res.status(500).json({
-      code: "INTERNAL_ERROR",
-      message: "Failed to load runtime configuration.",
-      requestId: logger.getRequestId(),
-      timestamp: new Date().toISOString(),
-    });
+    sendErrorResponse(
+      res,
+      logger.getRequestId(),
+      "INTERNAL_ERROR",
+      "Failed to load runtime configuration.",
+    );
   }
 });
