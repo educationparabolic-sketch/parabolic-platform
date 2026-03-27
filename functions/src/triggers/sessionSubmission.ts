@@ -6,6 +6,9 @@ import {
   questionAnalyticsEngineService,
 } from "../services/questionAnalyticsEngine";
 import {
+  notificationQueueGenerationService,
+} from "../services/notificationQueueGeneration";
+import {
   runAnalyticsEngineService,
 } from "../services/runAnalyticsEngine";
 import {
@@ -77,6 +80,18 @@ export const handleSessionUpdated = async (
   );
 
   await insightEngineService.processSubmittedSession(
+    {
+      eventId: context.eventId,
+      instituteId,
+      runId,
+      sessionId,
+      yearId,
+    },
+    change.before.data(),
+    change.after.data(),
+  );
+
+  await notificationQueueGenerationService.processSubmittedSession(
     {
       eventId: context.eventId,
       instituteId,

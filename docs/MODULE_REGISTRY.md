@@ -49,6 +49,7 @@ QuestionAnalyticsEngineService | Build 42 | Incrementally update `institutes/{in
 RiskEngineService | Build 44 | Compute idempotent student-level behavioral risk classification from `studentYearMetrics/{studentId}` updates, persist `riskScore`, `riskState`, `disciplineIndex`, `rollingRiskScore`, `rollingRiskCluster`, and `riskModelVersion`, and maintain a rolling five-evaluation risk window in processing markers without scanning raw sessions
 PatternEngineService | Build 45 | Compute rolling behavioral pattern state from `studentYearMetrics/{studentId}` updates, persist pattern flags (`rush`, `easyNeglect`, `hardBias`, `skipBurst`, `wrongStreak`), escalation recommendations, and a five-session rolling summary window in processing markers without reading raw session collections
 InsightEngineService | Build 46 | Generate idempotent student-level, run-level, and batch-level insight snapshots in `institutes/{instituteId}/academicYears/{yearId}/insightSnapshots/{snapshotId}` by combining submitted-session payloads with `runAnalytics/{runId}` and `studentYearMetrics/{studentId}` aggregates
+NotificationQueueGenerationService | Build 47 | Generate deterministic root-level `emailQueue/{jobId}` jobs for high-risk alerts, exceptional performance recognition, and discipline notifications by combining submitted-session payloads with `institutes/{instituteId}/students/{studentId}` and `studentYearMetrics/{studentId}` inputs
 LicenseService | Phase 19 | License validation and enforcement
 BillingService | Phase 19 | Billing computation and Stripe sync
 EnvironmentConfigLoader | Build 2 | Centralized environment variable and endpoint configuration loader
@@ -108,6 +109,7 @@ sessions | Run | Exam execution sessions
 runAnalytics | AcademicYear | Run-level analytics
 studentYearMetrics | AcademicYear | Student performance metrics
 insightSnapshots | AcademicYear | Generated student, run, and batch insight snapshots
+emailQueue | Global | Root-level asynchronous notification queue jobs created by post-submission notification processing
 usage | Institute | Billing usage metering
 usageMeter | Institute | Billing and assignment usage metering summaries by cycle
 license | Institute | License configuration
