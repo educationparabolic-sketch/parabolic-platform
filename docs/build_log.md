@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 52  
-Next Build: 53
+Completed Builds: 53  
+Next Build: 54
 
 Current Phase: Phase 11 — Search Architecture
 
@@ -1678,18 +1678,65 @@ Completed On
 
 ---
 
+## Build 53 — Student Filtering Queries
+
+Phase  
+Phase 11 — Search Architecture
+
+Summary  
+Implemented indexed student filtering across institute student documents and academic-year student metrics.
+
+Components implemented:
+
+- Added typed Build 53 query contracts in `functions/src/types/studentSearch.ts` for:
+  - batch filtering
+  - `riskState` filtering
+  - `avgRawScorePercent` range filtering
+  - `disciplineIndex` range filtering
+  - deterministic cursor and sort handling
+- Added `StudentFilteringQueryService` in `functions/src/services/studentSearchQuery.ts` to:
+  - query `institutes/{instituteId}/students/{studentId}` directly for batch-only filters
+  - query `institutes/{instituteId}/academicYears/{yearId}/studentYearMetrics/{studentId}` for precomputed risk and score filters
+  - join bounded student identity records onto metric-filtered results without full collection scans
+  - enforce search-domain role limits, academic-year scoping, and approved query patterns through `SearchArchitectureService`
+  - enforce deterministic pagination using `studentId` and metric sort fields as stable cursors
+  - reject unsupported dual-range queries to avoid uncontrolled composite-index growth
+- Added repeatable emulator-backed coverage in `functions/src/tests/studentSearchQuery.test.ts` for:
+  - batch-only student filtering
+  - yearly `riskState` filtering
+  - batch + score-range filtering with cursor continuation
+  - `disciplineIndex` range filtering
+  - students without metrics on batch-only queries
+  - unsupported multi-range validation
+- Added `npm run test:student-search-query` to `functions/package.json`
+- Verified the implementation locally with:
+  - `npm run build`
+  - `npm run test:search-architecture`
+  - `firebase emulators:exec --only firestore "npm --prefix functions run test:student-search-query && npm --prefix functions run test:question-search-query"`
+
+Result  
+The backend now supports deterministic, indexed student filtering across institute identity records and academic-year metrics without relying on client-side filtering or raw session queries.
+
+Commit Reference  
+Build 53 — Student Filtering Queries implemented
+
+Completed On  
+2026-03-28
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 53
+Next Build Number: 54
 
 Phase  
 Phase 11 — Search Architecture
 
 Subsystem  
-Student Filtering Queries
+Token-Based Text Search
 
 Reference  
-3_Core_Architectures.md → Section 39.4 Student Filtering Optimization
+3_Core_Architectures.md → Section 39.5 Text Search Strategy — Lightweight Token Index
 
 ---
 

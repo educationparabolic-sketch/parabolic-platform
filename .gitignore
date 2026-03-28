@@ -74,3 +74,6 @@ dist
 .env
 .env.*
 .firebase
+
+# Codex local workspace state
+.codex
