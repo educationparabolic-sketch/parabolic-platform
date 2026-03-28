@@ -11,12 +11,8 @@ import {
   QuestionSearchResultItem,
   SubjectChapterFilter,
 } from "../types/questionSearch";
+import {searchArchitectureService} from "./searchArchitecture";
 import {getFirestore} from "../utils/firebaseAdmin";
-
-const INSTITUTES_COLLECTION = "institutes";
-const QUESTION_BANK_COLLECTION = "questionBank";
-const MAX_SEARCH_LIMIT = 50;
-const DEFAULT_SEARCH_LIMIT = 25;
 
 type SupportedQueryPattern =
   "examType_subject" |
@@ -70,26 +66,6 @@ const normalizeTagFilter = (value: unknown): string =>
   normalizeRequiredString(value, "primaryTag")
     .toLowerCase()
     .replace(/\s+/g, " ");
-
-const normalizeLimit = (value: unknown): number => {
-  if (value === undefined) {
-    return DEFAULT_SEARCH_LIMIT;
-  }
-
-  if (
-    typeof value !== "number" ||
-    !Number.isInteger(value) ||
-    value < 1 ||
-    value > MAX_SEARCH_LIMIT
-  ) {
-    throw new QuestionSearchValidationError(
-      "Question search \"limit\" must be an integer between 1 and " +
-      `${MAX_SEARCH_LIMIT}.`,
-    );
-  }
-
-  return value;
-};
 
 const normalizeCursor = (
   value: unknown,
@@ -202,11 +178,16 @@ export class QuestionSearchQueryService {
       request.instituteId,
       "instituteId",
     );
-    const limit = normalizeLimit(request.limit);
+    const searchDomain = searchArchitectureService.initializeDomain({
+      domain: "questionBank",
+      instituteId,
+      limit: request.limit,
+    });
+    const limit = searchDomain.limit;
     const cursor = normalizeCursor(request.cursor);
     const queryPattern = detectQueryPattern(request.filter);
-    const collectionPath =
-      `${INSTITUTES_COLLECTION}/${instituteId}/${QUESTION_BANK_COLLECTION}`;
+    searchArchitectureService.assertQueryPattern("questionBank", queryPattern);
+    const collectionPath = searchDomain.collectionPath;
     const firestore = getFirestore();
     let query: FirebaseFirestore.Query = firestore.collection(
       collectionPath,
