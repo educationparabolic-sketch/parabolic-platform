@@ -276,6 +276,7 @@ const normalizeQuestionDocument = (
   }
 
   const normalizedTags = normalizeTags(data.tags);
+  const primaryTag = normalizedTags[0] ?? null;
   const subject = normalizeRequiredString(data.subject, "subject");
   const chapter = normalizeRequiredString(data.chapter, "chapter");
   const {searchTokens} = searchTokenIndexService.generateTokens({
@@ -306,6 +307,7 @@ const normalizeQuestionDocument = (
       data.parentQuestionId,
       "parentQuestionId",
     ),
+    primaryTag,
     questionId,
     questionImageUrl: normalizeStringAllowEmpty(
       data.questionImageUrl,
@@ -340,6 +342,7 @@ const normalizeQuestionDocument = (
       createdAt :
       FieldValue.serverTimestamp(),
     lastUsedAt: normalizedQuestion.lastUsedAt,
+    primaryTag,
     searchTokens,
     status: normalizedQuestion.status,
     tags: normalizedTags,

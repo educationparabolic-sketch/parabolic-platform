@@ -102,6 +102,7 @@ test(
     ).data();
 
     assert.deepEqual(ingestedQuestion?.tags, ["kinematics", "velocity"]);
+    assert.equal(ingestedQuestion?.primaryTag, "kinematics");
     assert.deepEqual(
       ingestedQuestion?.searchTokens,
       ["kinematics", "laws", "motion", "physics", "velocity"],

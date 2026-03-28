@@ -67,7 +67,7 @@ OverrideLoggingService | Build 9 | Persist immutable institute execution overrid
 AuditTamperProtectionRules | Build 10 | Enforce append-only Firestore protection for immutable audit, license history, and override log collections
 QuestionIngestionService | Build 11 | Validate newly created question-bank documents, normalize tags, delegate search token indexing, and initialize question analytics
 SearchTokenIndexService | Build 12 | Generate deterministic lightweight search tokens from subject, chapter, tags, and question text keywords during question ingestion
-QuestionSearchQueryService | Build 13 | Execute indexed and paginated institute question-bank retrieval for examType+subject, subject+chapter, difficulty+subject, and primaryTag filters
+QuestionSearchQueryService | Build 13, Build 51, Build 52 | Execute indexed and paginated institute question-bank retrieval for examType+subject, subject+chapter, difficulty+subject, and primaryTag filters, with shared search-domain role enforcement, primaryTag field indexing, and deterministic `createdAt`/`usedCount` cursor pagination
 SearchArchitectureService | Build 51 | Initialize deterministic search-domain definitions, role restrictions, pagination limits, academic-year summary collection scoping, and approved query-pattern enforcement for question-bank, student, analytics, and vendor aggregate search flows
 TagDictionaryService | Build 14 | Persist and increment institute-level tag autocomplete metadata in institutes/{instituteId}/tagDictionary/{tagId}
 ChapterDictionaryService | Build 15 | Persist and increment institute-level chapter autocomplete metadata in institutes/{instituteId}/chapterDictionary/{chapterId} with normalized chapter and subject

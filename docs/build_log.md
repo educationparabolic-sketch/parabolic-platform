@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 51  
-Next Build: 52
+Completed Builds: 52  
+Next Build: 53
 
 Current Phase: Phase 11 — Search Architecture
 
@@ -1639,18 +1639,57 @@ Completed On
 
 ---
 
+## Build 52 — Question Search Query Engine
+
+Phase  
+Phase 11 — Search Architecture
+
+Summary  
+Hardened the indexed question-bank search engine so it now aligns with the shared Search Architecture rules introduced in Build 51.
+
+Components implemented:
+
+- Extended `QuestionSearchQueryService` to require role-aware search execution through `SearchArchitectureService`, enforcing the Section 39.12 question-bank access rules directly inside the query engine
+- Added deterministic sort configuration for question-bank retrieval with cursor pagination over:
+  - `createdAt`
+  - `usedCount`
+  - `questionId` as the stable tie-breaker
+- Switched `primaryTag` search to an indexed equality query on the question document instead of relying on the broader `tags` array
+- Extended `QuestionIngestionService` to persist normalized `primaryTag` metadata on `institutes/{instituteId}/questionBank/{questionId}` documents without changing the existing question-bank hierarchy
+- Expanded repeatable local test coverage for:
+  - role-restricted question search
+  - `primaryTag` equality filtering
+  - deterministic `usedCount` ordering with cursor continuation
+  - question-ingestion persistence of normalized `primaryTag`
+- Verified the implementation locally with:
+  - `npm run build`
+  - `npm run lint`
+  - `npm run test:search-architecture`
+  - `firebase emulators:exec --only firestore --project parabolic-platform-build-52-tests "cd /home/sumeer/parabolic-platform/functions && npm run test:question-ingestion && npm run test:question-search-query"`
+
+Result  
+The backend question search engine now follows the shared search-governance layer, persists dedicated `primaryTag` index metadata, and supports deterministic paginated retrieval for the approved Build 52 question-bank query patterns.
+
+Commit Reference  
+Build 52 — Question Search Query Engine implemented
+
+Completed On  
+2026-03-28
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 52
+Next Build Number: 53
 
 Phase  
 Phase 11 — Search Architecture
 
 Subsystem  
-Question Search Query Engine
+Student Filtering Queries
 
 Reference  
-3_Core_Architectures.md → Section 39.1 Overview — Search Architecture
+3_Core_Architectures.md → Section 39.4 Student Filtering Optimization
 
 ---
 

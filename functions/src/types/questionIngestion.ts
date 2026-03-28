@@ -23,6 +23,7 @@ export interface QuestionBankDocument {
   solutionImageUrl: string;
   tutorialVideoLink: string | null;
   simulationLink: string | null;
+  primaryTag: string | null;
   tags: string[];
   usedCount: number;
   lastUsedAt: FirebaseFirestore.Timestamp | null;

@@ -9,6 +9,9 @@ import {
   QuestionSearchQueryRequest,
   QuestionSearchQueryResult,
   QuestionSearchResultItem,
+  QuestionSearchSort,
+  QuestionSearchSortDirection,
+  QuestionSearchSortField,
   SubjectChapterFilter,
 } from "../types/questionSearch";
 import {searchArchitectureService} from "./searchArchitecture";
@@ -67,8 +70,59 @@ const normalizeTagFilter = (value: unknown): string =>
     .toLowerCase()
     .replace(/\s+/g, " ");
 
+const normalizeSortField = (value: unknown): QuestionSearchSortField => {
+  if (value === undefined) {
+    return "createdAt";
+  }
+
+  if (value === "createdAt" || value === "usedCount") {
+    return value;
+  }
+
+  throw new QuestionSearchValidationError(
+    "Question search sort field must be one of createdAt or usedCount.",
+  );
+};
+
+const normalizeSortDirection = (
+  value: unknown,
+): QuestionSearchSortDirection => {
+  if (value === undefined) {
+    return "desc";
+  }
+
+  if (value === "asc" || value === "desc") {
+    return value;
+  }
+
+  throw new QuestionSearchValidationError(
+    "Question search sort direction must be either asc or desc.",
+  );
+};
+
+const normalizeSort = (value: unknown): Required<QuestionSearchSort> => {
+  if (value === undefined) {
+    return {
+      direction: "desc",
+      field: "createdAt",
+    };
+  }
+
+  if (!isPlainObject(value)) {
+    throw new QuestionSearchValidationError(
+      "Question search \"sort\" must be an object.",
+    );
+  }
+
+  return {
+    direction: normalizeSortDirection(value.direction),
+    field: normalizeSortField(value.field),
+  };
+};
+
 const normalizeCursor = (
   value: unknown,
+  sortField: QuestionSearchSortField,
 ): QuestionSearchCursor | undefined => {
   if (value === undefined) {
     return undefined;
@@ -80,22 +134,30 @@ const normalizeCursor = (
     );
   }
 
-  const createdAtMillis = value.createdAtMillis;
   const questionId = value.questionId;
+  const cursorSortField = value.sortField;
+  const sortValue = value.sortValue;
 
   if (
-    typeof createdAtMillis !== "number" ||
-    !Number.isFinite(createdAtMillis) ||
-    createdAtMillis < 0
+    typeof sortValue !== "number" ||
+    !Number.isFinite(sortValue) ||
+    sortValue < 0
   ) {
     throw new QuestionSearchValidationError(
-      "Question search cursor \"createdAtMillis\" must be a valid number.",
+      "Question search cursor \"sortValue\" must be a valid number.",
+    );
+  }
+
+  if (cursorSortField !== sortField) {
+    throw new QuestionSearchValidationError(
+      "Question search cursor sortField must match the active sort field.",
     );
   }
 
   return {
-    createdAtMillis,
     questionId: normalizeRequiredString(questionId, "cursor.questionId"),
+    sortField,
+    sortValue,
   };
 };
 
@@ -148,6 +210,11 @@ const normalizeSearchItem = (
       "difficulty",
     ) as QuestionSearchResultItem["difficulty"],
     examType: normalizeRequiredString(payload.examType, "examType"),
+    primaryTag: typeof payload.primaryTag === "string" ?
+      normalizeTagFilter(payload.primaryTag) :
+      Array.isArray(payload.tags) && typeof payload.tags[0] === "string" ?
+        normalizeTagFilter(payload.tags[0]) :
+        null,
     questionId: normalizeRequiredString(payload.questionId, "questionId"),
     status: normalizeRequiredString(
       payload.status,
@@ -178,13 +245,15 @@ export class QuestionSearchQueryService {
       request.instituteId,
       "instituteId",
     );
+    const sort = normalizeSort(request.sort);
     const searchDomain = searchArchitectureService.initializeDomain({
+      actorRole: request.actorRole,
       domain: "questionBank",
       instituteId,
       limit: request.limit,
     });
     const limit = searchDomain.limit;
-    const cursor = normalizeCursor(request.cursor);
+    const cursor = normalizeCursor(request.cursor, sort.field);
     const queryPattern = detectQueryPattern(request.filter);
     searchArchitectureService.assertQueryPattern("questionBank", queryPattern);
     const collectionPath = searchDomain.collectionPath;
@@ -235,21 +304,22 @@ export class QuestionSearchQueryService {
     } else {
       const filter = request.filter as PrimaryTagFilter;
       query = query.where(
-        "tags",
-        "array-contains",
+        "primaryTag",
+        "==",
         normalizeTagFilter(filter.primaryTag),
       );
     }
 
-    query = query.orderBy("createdAt", "desc").orderBy("questionId").limit(
-      limit + 1,
-    );
+    query = query
+      .orderBy(sort.field, sort.direction)
+      .orderBy("questionId", sort.direction)
+      .limit(limit + 1);
 
     if (cursor) {
-      query = query.startAfter(
-        Timestamp.fromMillis(cursor.createdAtMillis),
-        cursor.questionId,
-      );
+      const cursorValue = sort.field === "createdAt" ?
+        Timestamp.fromMillis(cursor.sortValue) :
+        cursor.sortValue;
+      query = query.startAfter(cursorValue, cursor.questionId);
     }
 
     const querySnapshot = await query.get();
@@ -258,10 +328,22 @@ export class QuestionSearchQueryService {
     const questions = selectedDocuments.map(normalizeSearchItem);
     const lastResult =
       questions.length > 0 ? questions[questions.length - 1] : undefined;
+    const lastSnapshot =
+      selectedDocuments.length > 0 ?
+        selectedDocuments[selectedDocuments.length - 1] :
+        undefined;
+    const lastSortValue = lastSnapshot ?
+      lastSnapshot.data()[sort.field] :
+      undefined;
     const nextCursor = hasMore && lastResult ?
       {
-        createdAtMillis: lastResult.createdAt.toMillis(),
         questionId: lastResult.questionId,
+        sortField: sort.field,
+        sortValue: sort.field === "createdAt" ?
+          lastResult.createdAt.toMillis() :
+          typeof lastSortValue === "number" ?
+            lastSortValue :
+            0,
       } :
       null;
 
@@ -271,6 +353,8 @@ export class QuestionSearchQueryService {
       limit,
       queryPattern,
       resultCount: questions.length,
+      sortDirection: sort.direction,
+      sortField: sort.field,
     });
 
     return {
