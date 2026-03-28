@@ -11,7 +11,7 @@
     "test:audit-storage": "npm run build && node --test lib/tests/auditLogStorage.test.js",
     "test:search-token-index": "npm run build && node --test lib/tests/searchTokenIndex.test.js",
     "test:question-ingestion": "npm run build && node --test lib/tests/questionIngestion.test.js",
-    "test:question-search-query": "npm run build && node --test lib/tests/questionSearchQuery.test.js",
+    "test:question-search-query": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=parabolic-platform-build-54-tests GOOGLE_CLOUD_PROJECT=parabolic-platform-build-54-tests NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none npm run build && FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=parabolic-platform-build-54-tests GOOGLE_CLOUD_PROJECT=parabolic-platform-build-54-tests NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none node --test lib/tests/questionSearchQuery.test.js",
     "test:student-search-query": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=parabolic-platform-build-53-tests GOOGLE_CLOUD_PROJECT=parabolic-platform-build-53-tests NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none npm run build && FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=parabolic-platform-build-53-tests GOOGLE_CLOUD_PROJECT=parabolic-platform-build-53-tests NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none node --test lib/tests/studentSearchQuery.test.js",
     "test:search-architecture": "npm run build && node --test lib/tests/searchArchitecture.test.js",
     "test:template-creation": "npm run build && node --test lib/tests/templateCreation.test.js",

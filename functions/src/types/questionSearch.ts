@@ -35,11 +35,16 @@ export interface PrimaryTagFilter {
   primaryTag: string;
 }
 
+export interface SearchTokenFilter {
+  searchToken: string;
+}
+
 export type QuestionSearchFilter =
   ExamTypeSubjectFilter |
   SubjectChapterFilter |
   DifficultySubjectFilter |
-  PrimaryTagFilter;
+  PrimaryTagFilter |
+  SearchTokenFilter;
 
 export interface QuestionSearchQueryRequest {
   actorRole: SearchActorRole;

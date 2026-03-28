@@ -12,6 +12,7 @@ import {
   QuestionSearchSort,
   QuestionSearchSortDirection,
   QuestionSearchSortField,
+  SearchTokenFilter,
   SubjectChapterFilter,
 } from "../types/questionSearch";
 import {searchArchitectureService} from "./searchArchitecture";
@@ -21,7 +22,8 @@ type SupportedQueryPattern =
   "examType_subject" |
   "subject_chapter" |
   "difficulty_subject" |
-  "primaryTag";
+  "primaryTag" |
+  "token_text";
 
 /**
  * Raised when a question-search request fails validation.
@@ -69,6 +71,26 @@ const normalizeTagFilter = (value: unknown): string =>
   normalizeRequiredString(value, "primaryTag")
     .toLowerCase()
     .replace(/\s+/g, " ");
+
+const normalizeSearchTokenFilter = (value: unknown): string => {
+  const normalizedValue = normalizeRequiredString(value, "searchToken")
+    .trim()
+    .toLowerCase();
+
+  const normalizedTokens = normalizedValue
+    .split(/[^a-z0-9]+/g)
+    .map((token) => token.trim())
+    .filter(Boolean);
+
+  if (normalizedTokens.length !== 1) {
+    throw new QuestionSearchValidationError(
+      "Question search field \"searchToken\" must resolve to exactly one " +
+      "search token.",
+    );
+  }
+
+  return normalizedTokens[0];
+};
 
 const normalizeSortField = (value: unknown): QuestionSearchSortField => {
   if (value === undefined) {
@@ -183,10 +205,14 @@ const detectQueryPattern = (
     return "primaryTag";
   }
 
+  if (filterKeys === "searchToken") {
+    return "token_text";
+  }
+
   throw new QuestionSearchValidationError(
     "Unsupported question-search filter combination. Allowed combinations " +
     "are examType+subject, subject+chapter, difficulty+subject, and " +
-    "primaryTag.",
+    "primaryTag, and searchToken.",
   );
 };
 
@@ -301,12 +327,19 @@ export class QuestionSearchQueryService {
           "==",
           normalizeRequiredString(filter.subject, "subject"),
         );
-    } else {
+    } else if (queryPattern === "primaryTag") {
       const filter = request.filter as PrimaryTagFilter;
       query = query.where(
         "primaryTag",
         "==",
         normalizeTagFilter(filter.primaryTag),
+      );
+    } else {
+      const filter = request.filter as SearchTokenFilter;
+      query = query.where(
+        "searchTokens",
+        "array-contains",
+        normalizeSearchTokenFilter(filter.searchToken),
       );
     }
 

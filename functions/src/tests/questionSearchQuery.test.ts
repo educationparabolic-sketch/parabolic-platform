@@ -5,17 +5,19 @@ import {questionSearchQueryService} from "../services/questionSearchQuery";
 import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
 
 process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8080";
-process.env.GCLOUD_PROJECT ??= "parabolic-platform-build-52-tests";
+process.env.GCLOUD_PROJECT ??= "parabolic-platform-build-54-tests";
 process.env.GOOGLE_CLOUD_PROJECT ??= process.env.GCLOUD_PROJECT;
+process.env.NO_GCE_CHECK ??= "true";
+process.env.METADATA_SERVER_DETECTION ??= "none";
 
 const firestore = getFirestore();
-const instituteId = "inst_build_52";
+const instituteId = "inst_build_54";
 const questionIds = [
-  "q_build_52_1",
-  "q_build_52_2",
-  "q_build_52_3",
-  "q_build_52_4",
-  "q_build_52_5",
+  "q_build_54_1",
+  "q_build_54_2",
+  "q_build_54_3",
+  "q_build_54_4",
+  "q_build_54_5",
 ];
 
 const getQuestionPath = (questionId: string): string =>
@@ -39,6 +41,7 @@ const seedQuestions = async (): Promise<void> => {
       examType: "JEE",
       primaryTag: "kinematics",
       questionId: questionIds[0],
+      searchTokens: ["kinematics", "laws", "motion", "physics", "velocity"],
       status: "active",
       subject: "Physics",
       tags: ["kinematics", "velocity"],
@@ -51,6 +54,7 @@ const seedQuestions = async (): Promise<void> => {
       examType: "JEE",
       primaryTag: "kinematics",
       questionId: questionIds[1],
+      searchTokens: ["dynamics", "kinematics", "laws", "motion", "physics"],
       status: "active",
       subject: "Physics",
       tags: ["kinematics", "dynamics"],
@@ -63,6 +67,7 @@ const seedQuestions = async (): Promise<void> => {
       examType: "JEE",
       primaryTag: "electrostatics",
       questionId: questionIds[2],
+      searchTokens: ["charge", "electrostatics", "physics"],
       status: "active",
       subject: "Physics",
       tags: ["electrostatics"],
@@ -75,6 +80,7 @@ const seedQuestions = async (): Promise<void> => {
       examType: "NEET",
       primaryTag: "physiology",
       questionId: questionIds[3],
+      searchTokens: ["biology", "motion", "physiology"],
       status: "active",
       subject: "Biology",
       tags: ["physiology"],
@@ -87,6 +93,7 @@ const seedQuestions = async (): Promise<void> => {
       examType: "JEE",
       primaryTag: "kinematics",
       questionId: questionIds[4],
+      searchTokens: ["archived", "kinematics", "physics"],
       status: "archived",
       subject: "Physics",
       tags: ["kinematics"],
@@ -124,7 +131,7 @@ test("searchQuestions supports examType + subject filter", async () => {
 
   assert.deepEqual(
     result.questions.map((question) => question.questionId),
-    ["q_build_52_1", "q_build_52_2", "q_build_52_3", "q_build_52_5"],
+    ["q_build_54_1", "q_build_54_2", "q_build_54_3", "q_build_54_5"],
   );
   assert.equal(result.nextCursor, null);
 });
@@ -142,7 +149,7 @@ test("searchQuestions supports subject + chapter filter", async () => {
 
   assert.deepEqual(
     result.questions.map((question) => question.questionId),
-    ["q_build_52_1", "q_build_52_2", "q_build_52_5"],
+    ["q_build_54_1", "q_build_54_2", "q_build_54_5"],
   );
 });
 
@@ -159,7 +166,7 @@ test("searchQuestions supports difficulty + subject filter", async () => {
 
   assert.deepEqual(
     result.questions.map((question) => question.questionId),
-    ["q_build_52_1", "q_build_52_3", "q_build_52_5"],
+    ["q_build_54_1", "q_build_54_3", "q_build_54_5"],
   );
 });
 
@@ -175,9 +182,45 @@ test("searchQuestions supports primaryTag equality filtering", async () => {
 
   assert.deepEqual(
     result.questions.map((question) => question.questionId),
-    ["q_build_52_1", "q_build_52_2", "q_build_52_5"],
+    ["q_build_54_1", "q_build_54_2", "q_build_54_5"],
   );
 });
+
+test("searchQuestions supports token-based text filtering", async () => {
+  const result = await questionSearchQueryService.searchQuestions({
+    actorRole: "teacher",
+    filter: {
+      searchToken: " Velocity ",
+    },
+    instituteId,
+    limit: 10,
+  });
+
+  assert.deepEqual(
+    result.questions.map((question) => question.questionId),
+    ["q_build_54_1"],
+  );
+});
+
+test(
+  "searchQuestions enforces exact single-token text queries",
+  async () => {
+    await assert.rejects(
+      questionSearchQueryService.searchQuestions({
+        actorRole: "teacher",
+        filter: {
+          searchToken: "relative velocity",
+        },
+        instituteId,
+        limit: 10,
+      }),
+      (error: unknown) => {
+        assert.match(String(error), /exactly one search token/i);
+        return true;
+      },
+    );
+  },
+);
 
 test("searchQuestions enforces cursor pagination", async () => {
   const firstPage = await questionSearchQueryService.searchQuestions({
@@ -192,7 +235,7 @@ test("searchQuestions enforces cursor pagination", async () => {
 
   assert.deepEqual(
     firstPage.questions.map((question) => question.questionId),
-    ["q_build_52_1", "q_build_52_2"],
+    ["q_build_54_1", "q_build_54_2"],
   );
   assert.ok(firstPage.nextCursor);
 
@@ -209,7 +252,7 @@ test("searchQuestions enforces cursor pagination", async () => {
 
   assert.deepEqual(
     secondPage.questions.map((question) => question.questionId),
-    ["q_build_52_3", "q_build_52_5"],
+    ["q_build_54_3", "q_build_54_5"],
   );
 });
 
@@ -269,7 +312,7 @@ test(
 
     assert.deepEqual(
       firstPage.questions.map((question) => question.questionId),
-      ["q_build_52_2", "q_build_52_1"],
+      ["q_build_54_2", "q_build_54_1"],
     );
     assert.deepEqual(
       firstPage.questions.map((question) => question.primaryTag),
@@ -279,7 +322,7 @@ test(
       ],
     );
     assert.deepEqual(firstPage.nextCursor, {
-      questionId: "q_build_52_1",
+      questionId: "q_build_54_1",
       sortField: "usedCount",
       sortValue: 4,
     });
@@ -300,7 +343,7 @@ test(
 
     assert.deepEqual(
       secondPage.questions.map((question) => question.questionId),
-      ["q_build_52_5", "q_build_52_3"],
+      ["q_build_54_5", "q_build_54_3"],
     );
     assert.equal(secondPage.nextCursor, null);
   },
