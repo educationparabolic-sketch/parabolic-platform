@@ -12,10 +12,10 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 56  
-Next Build: 57
+Completed Builds: 57  
+Next Build: 58
 
-Current Phase: Phase 11 — Search Architecture
+Current Phase: Phase 12 — Firestore Index Strategy
 
 ---
 
@@ -1833,16 +1833,54 @@ Completed On
 
 # NEXT BUILD
 
-Next Build Number: 57
+## Build 57 — Student Collection Composite Indexes
+
+Phase  
+Phase 12 — Firestore Index Strategy
+
+Summary  
+Implemented the Firestore composite index manifest required for deterministic student admin filtering.
+
+Components implemented:
+
+- Extended `firestore.indexes.json` with Build 57 student query composites for:
+  - `students`: `batchId` + `status` + `name`
+  - `students`: `status` + `lastActiveAt`
+  - `students`: `batchId` + `studentId`
+  - `studentYearMetrics`: `riskState` + `disciplineIndex` + `studentId`
+  - `studentYearMetrics`: `avgRawScorePercent` + `studentId`
+- Added repeatable manifest verification in `functions/src/tests/firestoreIndexes.test.ts` to assert the Build 57 index definitions remain present
+- Added `npm run test:firestore-indexes` to `functions/package.json`
+- Verified the implementation locally with:
+  - `npm run build`
+  - `npm run lint`
+  - `npm run test:firestore-indexes`
+  - `npm run test:firestore-query-governance`
+  - `firebase emulators:exec --only firestore "npm --prefix functions run test:student-search-query"`
+
+Result  
+The repository now declares the composite Firestore indexes required for the approved student filtering patterns, and the manifest is protected by repeatable local verification.
+
+Commit Reference  
+Build 57 — Student Collection Composite Indexes implemented
+
+Completed On  
+2026-03-29
+
+---
+
+# NEXT BUILD
+
+Next Build Number: 58
 
 Phase  
 Phase 12 — Firestore Index Strategy
 
 Subsystem  
-Student Collection Composite Indexes
+Question Bank Composite Indexes
 
 Reference  
-3_Core_Architectures.md → Section 9.4 Composite Index Matrix — Students Collection
+3_Core_Architectures.md → Section 9.4 Composite Index Matrix — Question Bank
 
 ---
 
