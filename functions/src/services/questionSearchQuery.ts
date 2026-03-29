@@ -18,6 +18,7 @@ import {
 import {searchArchitectureService} from "./searchArchitecture";
 import {getFirestore} from "../utils/firebaseAdmin";
 import {firestoreQueryGovernanceService} from "./firestoreQueryGovernance";
+import {cursorPaginationService} from "./cursorPagination";
 
 type SupportedQueryPattern =
   "examType_subject" |
@@ -276,6 +277,46 @@ const normalizeSearchItem = (
   };
 };
 
+const buildQuestionCursor = (
+  snapshot: FirebaseFirestore.QueryDocumentSnapshot,
+  sortField: QuestionSearchSortField,
+): QuestionSearchCursor => {
+  const payload = snapshot.data();
+  const sortValue = payload[sortField];
+
+  if (sortField === "createdAt") {
+    if (!(sortValue instanceof Timestamp)) {
+      throw new QuestionSearchValidationError(
+        "Question search cursor requires a Firestore timestamp sort value.",
+      );
+    }
+
+    return {
+      questionId: normalizeRequiredString(
+        payload.questionId ?? snapshot.id,
+        "cursor.questionId",
+      ),
+      sortField,
+      sortValue: sortValue.toMillis(),
+    };
+  }
+
+  if (typeof sortValue !== "number" || !Number.isFinite(sortValue)) {
+    throw new QuestionSearchValidationError(
+      "Question search cursor requires a numeric sort value.",
+    );
+  }
+
+  return {
+    questionId: normalizeRequiredString(
+      payload.questionId ?? snapshot.id,
+      "cursor.questionId",
+    ),
+    sortField,
+    sortValue,
+  };
+};
+
 /**
  * Executes indexed and paginated question-bank queries for supported filters.
  */
@@ -376,40 +417,30 @@ export class QuestionSearchQueryService {
 
     query = query
       .orderBy(sort.field, sort.direction)
-      .orderBy("questionId", sort.direction)
-      .limit(limit + 1);
+      .orderBy("questionId", sort.direction);
 
-    if (cursor) {
-      const cursorValue = sort.field === "createdAt" ?
-        Timestamp.fromMillis(cursor.sortValue) :
-        cursor.sortValue;
-      query = query.startAfter(cursorValue, cursor.questionId);
-    }
+    query = cursorPaginationService.applyToQuery(
+      query,
+      limit,
+      (paginatedQuery, activeCursor) => {
+        const cursorValue = sort.field === "createdAt" ?
+          Timestamp.fromMillis(activeCursor.sortValue) :
+          activeCursor.sortValue;
+
+        return paginatedQuery.startAfter(cursorValue, activeCursor.questionId);
+      },
+      undefined,
+      cursor,
+    );
 
     const querySnapshot = await query.get();
-    const hasMore = querySnapshot.docs.length > limit;
-    const selectedDocuments = querySnapshot.docs.slice(0, limit);
+    const page = cursorPaginationService.buildPage(
+      querySnapshot.docs,
+      limit,
+      (snapshot) => buildQuestionCursor(snapshot, sort.field),
+    );
+    const selectedDocuments = page.selectedDocuments;
     const questions = selectedDocuments.map(normalizeSearchItem);
-    const lastResult =
-      questions.length > 0 ? questions[questions.length - 1] : undefined;
-    const lastSnapshot =
-      selectedDocuments.length > 0 ?
-        selectedDocuments[selectedDocuments.length - 1] :
-        undefined;
-    const lastSortValue = lastSnapshot ?
-      lastSnapshot.data()[sort.field] :
-      undefined;
-    const nextCursor = hasMore && lastResult ?
-      {
-        questionId: lastResult.questionId,
-        sortField: sort.field,
-        sortValue: sort.field === "createdAt" ?
-          lastResult.createdAt.toMillis() :
-          typeof lastSortValue === "number" ?
-            lastSortValue :
-            0,
-      } :
-      null;
 
     this.logger.info("Question search query completed", {
       cursorProvided: Boolean(cursor),
@@ -422,7 +453,7 @@ export class QuestionSearchQueryService {
     });
 
     return {
-      nextCursor,
+      nextCursor: page.nextCursor,
       questions,
     };
   }

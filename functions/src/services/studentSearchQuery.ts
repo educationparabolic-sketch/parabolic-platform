@@ -14,6 +14,7 @@ import {
   StudentMetricsSearchSummary,
 } from "../types/studentSearch";
 import {StudentRiskState} from "../types/riskEngine";
+import {cursorPaginationService} from "./cursorPagination";
 
 const STUDENT_SCAN_MULTIPLIER = 3;
 const MAX_SCAN_LIMIT = 150;
@@ -621,16 +622,24 @@ export class StudentFilteringQueryService {
       searchDomain.collectionPath,
     )
       .where("batchId", "==", request.filter.batchId)
-      .orderBy("studentId", "asc")
-      .limit(limit + 1);
+      .orderBy("studentId", "asc");
 
-    if (request.cursor) {
-      query = query.startAfter(request.cursor.sortValue);
-    }
+    query = cursorPaginationService.applyToQuery(
+      query,
+      limit,
+      (paginatedQuery, activeCursor) =>
+        paginatedQuery.startAfter(activeCursor.sortValue),
+      undefined,
+      request.cursor,
+    );
 
     const querySnapshot = await query.get();
-    const hasMore = querySnapshot.docs.length > limit;
-    const selectedDocuments = querySnapshot.docs.slice(0, limit);
+    const page = cursorPaginationService.buildPage(
+      querySnapshot.docs,
+      limit,
+      buildStudentCursor,
+    );
+    const selectedDocuments = page.selectedDocuments;
     const metricsReferences = selectedDocuments.map((studentSnapshot) =>
       this.firestore.doc(
         `institutes/${request.instituteId}/academicYears/${request.yearId}/` +
@@ -649,11 +658,6 @@ export class StudentFilteringQueryService {
     const students = selectedDocuments.map((studentSnapshot) =>
       toResultItem(studentSnapshot, metricsMap.get(studentSnapshot.id)),
     );
-    const lastSnapshot =
-      selectedDocuments.length > 0 ?
-        selectedDocuments[selectedDocuments.length - 1] :
-        undefined;
-
     this.logger.info("Student filtering query completed", {
       baseDomain: "students",
       batchFilterApplied: Boolean(request.filter.batchId),
@@ -665,8 +669,7 @@ export class StudentFilteringQueryService {
     });
 
     return {
-      nextCursor:
-        hasMore && lastSnapshot ? buildStudentCursor(lastSnapshot) : null,
+      nextCursor: page.nextCursor,
       students,
     };
   }
@@ -722,22 +725,33 @@ export class StudentFilteringQueryService {
       }
 
       query = this.applyMetricRange(query, request.filter, request.sort.field);
-      query = this.applyMetricOrderBy(query, request.sort).limit(scanLimit + 1);
+      query = this.applyMetricOrderBy(query, request.sort);
+      query = cursorPaginationService.applyToQuery(
+        query,
+        scanLimit,
+        (paginatedQuery, activeCursor) => {
+          if (request.sort.field === "studentId") {
+            return paginatedQuery.startAfter(activeCursor.sortValue);
+          }
 
-      if (workingCursor) {
-        if (request.sort.field === "studentId") {
-          query = query.startAfter(workingCursor.sortValue);
-        } else {
-          query = query.startAfter(
-            workingCursor.sortValue,
-            workingCursor.studentId,
+          return paginatedQuery.startAfter(
+            activeCursor.sortValue,
+            activeCursor.studentId,
           );
-        }
-      }
+        },
+        MAX_SCAN_LIMIT,
+        workingCursor,
+      );
 
       const querySnapshot = await query.get();
-      const selectedDocuments = querySnapshot.docs.slice(0, scanLimit);
-      const queryHasMore = querySnapshot.docs.length > scanLimit;
+      const page = cursorPaginationService.buildPage(
+        querySnapshot.docs,
+        scanLimit,
+        (snapshot) => buildMetricsCursor(snapshot, request.sort),
+        MAX_SCAN_LIMIT,
+      );
+      const selectedDocuments = page.selectedDocuments;
+      const queryHasMore = page.hasMore;
 
       if (selectedDocuments.length === 0) {
         break;
