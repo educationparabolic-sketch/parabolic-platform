@@ -1,6 +1,7 @@
 import {createLogger} from "./logging";
 import {getFirestore} from "../utils/firebaseAdmin";
 import {searchArchitectureService} from "./searchArchitecture";
+import {firestoreQueryGovernanceService} from "./firestoreQueryGovernance";
 import {
   StudentFilteringBaseDomain,
   StudentFilteringCursor,
@@ -490,6 +491,26 @@ const toResultItem = (
 const getMetricsScanLimit = (limit: number): number =>
   Math.min(limit * STUDENT_SCAN_MULTIPLIER, MAX_SCAN_LIMIT);
 
+const getMetricsGovernedFilterFields = (
+  filter: NormalizedStudentFilteringFilter,
+): string[] => {
+  const governedFields: string[] = [];
+
+  if (filter.riskState) {
+    governedFields.push("riskState");
+  }
+
+  if (filter.avgRawScorePercentRange) {
+    governedFields.push("avgRawScorePercent");
+  }
+
+  if (filter.disciplineIndexRange) {
+    governedFields.push("disciplineIndex");
+  }
+
+  return governedFields;
+};
+
 /**
  * Executes deterministic student filtering queries across student identity and
  * academic-year metrics collections.
@@ -588,6 +609,14 @@ export class StudentFilteringQueryService {
       limit: request.limit,
     });
     const limit = searchDomain.limit;
+    firestoreQueryGovernanceService.assertQueryPlan({
+      collectionPath: searchDomain.collectionPath,
+      filterFields: ["batchId"],
+      limit,
+      orderByFields: ["studentId"],
+      paginationMode: "cursor",
+      policyId: "studentsBatchSearch",
+    });
     let query: FirebaseFirestore.Query = this.firestore.collection(
       searchDomain.collectionPath,
     )
@@ -667,6 +696,17 @@ export class StudentFilteringQueryService {
       yearId: request.yearId,
     });
     const limit = searchDomain.limit;
+    firestoreQueryGovernanceService.assertQueryPlan({
+      collectionPath: searchDomain.collectionPath,
+      filterFields: getMetricsGovernedFilterFields(request.filter),
+      limit,
+      orderByFields:
+        request.sort.field === "studentId" ?
+          ["studentId"] :
+          [request.sort.field, "studentId"],
+      paginationMode: "cursor",
+      policyId: "studentYearMetricsSearch",
+    });
     const scanLimit = getMetricsScanLimit(limit);
     let workingCursor = request.cursor;
     const results: StudentFilteringResultItem[] = [];

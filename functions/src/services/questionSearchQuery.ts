@@ -17,6 +17,7 @@ import {
 } from "../types/questionSearch";
 import {searchArchitectureService} from "./searchArchitecture";
 import {getFirestore} from "../utils/firebaseAdmin";
+import {firestoreQueryGovernanceService} from "./firestoreQueryGovernance";
 
 type SupportedQueryPattern =
   "examType_subject" |
@@ -216,6 +217,28 @@ const detectQueryPattern = (
   );
 };
 
+const getGovernedFilterFields = (
+  queryPattern: SupportedQueryPattern,
+): string[] => {
+  if (queryPattern === "examType_subject") {
+    return ["examType", "subject"];
+  }
+
+  if (queryPattern === "subject_chapter") {
+    return ["subject", "chapter"];
+  }
+
+  if (queryPattern === "difficulty_subject") {
+    return ["difficulty", "subject"];
+  }
+
+  if (queryPattern === "primaryTag") {
+    return ["primaryTag"];
+  }
+
+  return ["searchTokens"];
+};
+
 const normalizeSearchItem = (
   snapshot: FirebaseFirestore.QueryDocumentSnapshot,
 ): QuestionSearchResultItem => {
@@ -283,6 +306,14 @@ export class QuestionSearchQueryService {
     const queryPattern = detectQueryPattern(request.filter);
     searchArchitectureService.assertQueryPattern("questionBank", queryPattern);
     const collectionPath = searchDomain.collectionPath;
+    firestoreQueryGovernanceService.assertQueryPlan({
+      collectionPath,
+      filterFields: getGovernedFilterFields(queryPattern),
+      limit,
+      orderByFields: [sort.field, "questionId"],
+      paginationMode: "cursor",
+      policyId: "questionBankSearch",
+    });
     const firestore = getFirestore();
     let query: FirebaseFirestore.Query = firestore.collection(
       collectionPath,
