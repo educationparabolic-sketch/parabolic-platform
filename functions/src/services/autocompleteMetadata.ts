@@ -10,7 +10,7 @@ import {
   TagAutocompleteSuggestion,
 } from "../types/autocompleteMetadata";
 import {SearchActorRole} from "../types/searchArchitecture";
-import {firestoreQueryGovernanceService} from "./firestoreQueryGovernance";
+import {indexedQueryValidationService} from "./indexedQueryValidation";
 
 const INSTITUTES_COLLECTION = "institutes";
 const TAG_DICTIONARY_COLLECTION = "tagDictionary";
@@ -139,7 +139,7 @@ export class AutocompleteMetadataService {
   ): Promise<TagAutocompleteResult> {
     const normalizedRequest = normalizeTagRequest(request);
     const collectionPath = getTagCollectionPath(normalizedRequest.instituteId);
-    firestoreQueryGovernanceService.assertQueryPlan({
+    indexedQueryValidationService.assertIndexedQuery({
       collectionPath,
       filterFields: ["tagName"],
       limit: normalizedRequest.limit,
@@ -191,7 +191,7 @@ export class AutocompleteMetadataService {
     const collectionPath = getChapterCollectionPath(
       normalizedRequest.instituteId,
     );
-    firestoreQueryGovernanceService.assertQueryPlan({
+    indexedQueryValidationService.assertIndexedQuery({
       collectionPath,
       filterFields: normalizedRequest.subject ?
         ["chapterName", "subject"] :

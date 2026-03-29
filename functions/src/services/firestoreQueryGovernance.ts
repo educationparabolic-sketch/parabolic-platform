@@ -2,6 +2,7 @@ import {
   FirestoreQueryGovernancePolicy,
   FirestoreQueryGovernancePolicyId,
   FirestoreQueryPlan,
+  FirestoreValidatedQueryPlan,
 } from "../types/firestoreQueryGovernance";
 
 const SEARCH_MAX_LIMIT = 50;
@@ -10,6 +11,18 @@ const AUTOCOMPLETE_MAX_LIMIT = 20;
 const FIRESTORE_QUERY_GOVERNANCE_POLICIES:
 Record<FirestoreQueryGovernancePolicyId, FirestoreQueryGovernancePolicy> = {
   chapterDictionaryAutocomplete: {
+    approvedQueryPatterns: [
+      {
+        filterFields: ["chapterName"],
+        orderByFields: ["chapterName"],
+        patternId: "chapter_prefix",
+      },
+      {
+        filterFields: ["chapterName", "subject"],
+        orderByFields: ["chapterName"],
+        patternId: "chapter_prefix_subject",
+      },
+    ],
     collectionPathTemplate: "institutes/{instituteId}/chapterDictionary",
     disallowCollectionScan: true,
     indexedFilterFields: ["chapterName", "subject"],
@@ -19,6 +32,58 @@ Record<FirestoreQueryGovernancePolicyId, FirestoreQueryGovernancePolicy> = {
     requiredPaginationMode: "bounded-list",
   },
   questionBankSearch: {
+    approvedQueryPatterns: [
+      {
+        filterFields: ["examType", "subject"],
+        orderByFields: ["createdAt", "questionId"],
+        patternId: "examType_subject_createdAt",
+      },
+      {
+        filterFields: ["examType", "subject"],
+        orderByFields: ["usedCount", "questionId"],
+        patternId: "examType_subject_usedCount",
+      },
+      {
+        filterFields: ["subject", "chapter"],
+        orderByFields: ["createdAt", "questionId"],
+        patternId: "subject_chapter_createdAt",
+      },
+      {
+        filterFields: ["subject", "chapter"],
+        orderByFields: ["usedCount", "questionId"],
+        patternId: "subject_chapter_usedCount",
+      },
+      {
+        filterFields: ["difficulty", "subject"],
+        orderByFields: ["createdAt", "questionId"],
+        patternId: "difficulty_subject_createdAt",
+      },
+      {
+        filterFields: ["difficulty", "subject"],
+        orderByFields: ["usedCount", "questionId"],
+        patternId: "difficulty_subject_usedCount",
+      },
+      {
+        filterFields: ["primaryTag"],
+        orderByFields: ["createdAt", "questionId"],
+        patternId: "primaryTag_createdAt",
+      },
+      {
+        filterFields: ["primaryTag"],
+        orderByFields: ["usedCount", "questionId"],
+        patternId: "primaryTag_usedCount",
+      },
+      {
+        filterFields: ["searchTokens"],
+        orderByFields: ["createdAt", "questionId"],
+        patternId: "searchToken_createdAt",
+      },
+      {
+        filterFields: ["searchTokens"],
+        orderByFields: ["usedCount", "questionId"],
+        patternId: "searchToken_usedCount",
+      },
+    ],
     collectionPathTemplate: "institutes/{instituteId}/questionBank",
     disallowCollectionScan: true,
     indexedFilterFields: [
@@ -35,6 +100,43 @@ Record<FirestoreQueryGovernancePolicyId, FirestoreQueryGovernancePolicy> = {
     requiredPaginationMode: "cursor",
   },
   studentYearMetricsSearch: {
+    approvedQueryPatterns: [
+      {
+        filterFields: ["riskState"],
+        orderByFields: ["studentId"],
+        patternId: "riskState_studentId",
+      },
+      {
+        filterFields: ["riskState"],
+        orderByFields: ["disciplineIndex", "studentId"],
+        patternId: "riskState_disciplineIndex",
+      },
+      {
+        filterFields: ["riskState"],
+        orderByFields: ["avgRawScorePercent", "studentId"],
+        patternId: "riskState_avgRawScorePercent",
+      },
+      {
+        filterFields: ["avgRawScorePercent"],
+        orderByFields: ["avgRawScorePercent", "studentId"],
+        patternId: "avgRawScorePercent_range",
+      },
+      {
+        filterFields: ["riskState", "avgRawScorePercent"],
+        orderByFields: ["avgRawScorePercent", "studentId"],
+        patternId: "riskState_avgRawScorePercent_range",
+      },
+      {
+        filterFields: ["disciplineIndex"],
+        orderByFields: ["disciplineIndex", "studentId"],
+        patternId: "disciplineIndex_range",
+      },
+      {
+        filterFields: ["riskState", "disciplineIndex"],
+        orderByFields: ["disciplineIndex", "studentId"],
+        patternId: "riskState_disciplineIndex_range",
+      },
+    ],
     collectionPathTemplate:
       "institutes/{instituteId}/academicYears/{yearId}/studentYearMetrics",
     disallowCollectionScan: true,
@@ -53,6 +155,13 @@ Record<FirestoreQueryGovernancePolicyId, FirestoreQueryGovernancePolicy> = {
     requiredPaginationMode: "cursor",
   },
   studentsBatchSearch: {
+    approvedQueryPatterns: [
+      {
+        filterFields: ["batchId"],
+        orderByFields: ["studentId"],
+        patternId: "batch_studentId",
+      },
+    ],
     collectionPathTemplate: "institutes/{instituteId}/students",
     disallowCollectionScan: true,
     indexedFilterFields: ["batchId"],
@@ -62,6 +171,13 @@ Record<FirestoreQueryGovernancePolicyId, FirestoreQueryGovernancePolicy> = {
     requiredPaginationMode: "cursor",
   },
   tagDictionaryAutocomplete: {
+    approvedQueryPatterns: [
+      {
+        filterFields: ["tagName"],
+        orderByFields: ["tagName"],
+        patternId: "tag_prefix",
+      },
+    ],
     collectionPathTemplate: "institutes/{instituteId}/tagDictionary",
     disallowCollectionScan: true,
     indexedFilterFields: ["tagName"],
@@ -114,6 +230,11 @@ const normalizeFields = (value: string[], fieldName: string): string[] => {
   return [...new Set(normalizedFields)];
 };
 
+const buildExactFieldKey = (value: string[]): string => value.join("|");
+
+const buildUnorderedFieldKey = (value: string[]): string =>
+  [...value].sort().join("|");
+
 const pathMatchesTemplate = (path: string, template: string): boolean => {
   const pathSegments = path.split("/");
   const templateSegments = template.split("/");
@@ -151,7 +272,9 @@ export class FirestoreQueryGovernanceService {
    * @param {FirestoreQueryPlan} plan Proposed Firestore query plan.
    * @return {void} Returns when the query plan is approved.
    */
-  public assertQueryPlan(plan: FirestoreQueryPlan): void {
+  public assertQueryPlan(
+    plan: FirestoreQueryPlan,
+  ): FirestoreValidatedQueryPlan {
     const policy = this.getPolicy(plan.policyId);
     const collectionPath = normalizeRequiredString(
       plan.collectionPath,
@@ -208,6 +331,38 @@ export class FirestoreQueryGovernanceService {
         );
       }
     }
+
+    if (orderByFields.length === 0) {
+      throw new FirestoreQueryGovernanceValidationError(
+        `Firestore query policy ${plan.policyId} requires at least one ` +
+        "orderBy field.",
+      );
+    }
+
+    const matchedPattern = policy.approvedQueryPatterns.find((pattern) =>
+      buildUnorderedFieldKey(pattern.filterFields) ===
+        buildUnorderedFieldKey(filterFields) &&
+      buildExactFieldKey(pattern.orderByFields) ===
+        buildExactFieldKey(orderByFields),
+    );
+
+    if (!matchedPattern) {
+      throw new FirestoreQueryGovernanceValidationError(
+        `Firestore query for ${plan.policyId} does not match an approved ` +
+        "indexed query pattern.",
+      );
+    }
+
+    return {
+      matchedPatternId: matchedPattern.patternId,
+      plan: {
+        ...plan,
+        collectionPath,
+        filterFields,
+        orderByFields,
+      },
+      policy,
+    };
   }
 }
 

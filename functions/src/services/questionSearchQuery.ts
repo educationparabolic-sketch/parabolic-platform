@@ -17,8 +17,8 @@ import {
 } from "../types/questionSearch";
 import {searchArchitectureService} from "./searchArchitecture";
 import {getFirestore} from "../utils/firebaseAdmin";
-import {firestoreQueryGovernanceService} from "./firestoreQueryGovernance";
 import {cursorPaginationService} from "./cursorPagination";
+import {indexedQueryValidationService} from "./indexedQueryValidation";
 
 type SupportedQueryPattern =
   "examType_subject" |
@@ -347,7 +347,7 @@ export class QuestionSearchQueryService {
     const queryPattern = detectQueryPattern(request.filter);
     searchArchitectureService.assertQueryPattern("questionBank", queryPattern);
     const collectionPath = searchDomain.collectionPath;
-    firestoreQueryGovernanceService.assertQueryPlan({
+    indexedQueryValidationService.assertIndexedQuery({
       collectionPath,
       filterFields: getGovernedFilterFields(queryPattern),
       limit,

@@ -7,7 +7,7 @@ test("question-bank search policy accepts approved indexed query plans", () => {
   assert.doesNotThrow(() =>
     firestoreQueryGovernanceService.assertQueryPlan({
       collectionPath: "institutes/inst_build_56/questionBank",
-      filterFields: ["difficulty", "subject"],
+      filterFields: ["examType", "subject"],
       limit: 25,
       orderByFields: ["createdAt", "questionId"],
       paginationMode: "cursor",
@@ -48,6 +48,38 @@ test("query governance rejects collection scans on governed queries", () => {
     /disallows collection scans/i,
   );
 });
+
+test(
+  "query governance rejects query shapes outside approved index patterns",
+  () => {
+    assert.throws(
+      () =>
+        firestoreQueryGovernanceService.assertQueryPlan({
+          collectionPath: "institutes/inst_build_60/questionBank",
+          filterFields: ["difficulty", "subject"],
+          limit: 10,
+          orderByFields: ["questionId"],
+          paginationMode: "cursor",
+          policyId: "questionBankSearch",
+        }),
+      /approved indexed query pattern/i,
+    );
+
+    assert.throws(
+      () =>
+        firestoreQueryGovernanceService.assertQueryPlan({
+          collectionPath:
+            "institutes/inst_build_60/academicYears/2026/studentYearMetrics",
+          filterFields: ["avgRawScorePercent"],
+          limit: 10,
+          orderByFields: ["disciplineIndex", "studentId"],
+          paginationMode: "cursor",
+          policyId: "studentYearMetricsSearch",
+        }),
+      /approved indexed query pattern/i,
+    );
+  },
+);
 
 test("query governance rejects unindexed filter and orderBy fields", () => {
   assert.throws(
@@ -102,4 +134,18 @@ test("autocomplete policies allow bounded non-cursor query plans", () => {
       }),
     /pagination mode/i,
   );
+});
+
+test("query governance returns matched indexed query metadata", () => {
+  const validatedPlan = firestoreQueryGovernanceService.assertQueryPlan({
+    collectionPath: "institutes/inst_build_60/tagDictionary",
+    filterFields: ["tagName"],
+    limit: 10,
+    orderByFields: ["tagName"],
+    paginationMode: "bounded-list",
+    policyId: "tagDictionaryAutocomplete",
+  });
+
+  assert.equal(validatedPlan.matchedPatternId, "tag_prefix");
+  assert.equal(validatedPlan.policy.policyId, "tagDictionaryAutocomplete");
 });

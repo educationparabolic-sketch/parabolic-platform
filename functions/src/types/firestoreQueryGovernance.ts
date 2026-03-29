@@ -7,7 +7,14 @@ export type FirestoreQueryGovernancePolicyId =
 
 export type FirestoreQueryPaginationMode = "bounded-list" | "cursor";
 
+export interface FirestoreIndexedQueryPattern {
+  filterFields: string[];
+  orderByFields: string[];
+  patternId: string;
+}
+
 export interface FirestoreQueryGovernancePolicy {
+  approvedQueryPatterns: FirestoreIndexedQueryPattern[];
   collectionPathTemplate: string;
   disallowCollectionScan: boolean;
   indexedFilterFields: string[];
@@ -24,4 +31,10 @@ export interface FirestoreQueryPlan {
   orderByFields: string[];
   paginationMode: FirestoreQueryPaginationMode;
   policyId: FirestoreQueryGovernancePolicyId;
+}
+
+export interface FirestoreValidatedQueryPlan {
+  matchedPatternId: string;
+  plan: FirestoreQueryPlan;
+  policy: FirestoreQueryGovernancePolicy;
 }

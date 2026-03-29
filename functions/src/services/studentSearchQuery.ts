@@ -1,7 +1,6 @@
 import {createLogger} from "./logging";
 import {getFirestore} from "../utils/firebaseAdmin";
 import {searchArchitectureService} from "./searchArchitecture";
-import {firestoreQueryGovernanceService} from "./firestoreQueryGovernance";
 import {
   StudentFilteringBaseDomain,
   StudentFilteringCursor,
@@ -15,6 +14,7 @@ import {
 } from "../types/studentSearch";
 import {StudentRiskState} from "../types/riskEngine";
 import {cursorPaginationService} from "./cursorPagination";
+import {indexedQueryValidationService} from "./indexedQueryValidation";
 
 const STUDENT_SCAN_MULTIPLIER = 3;
 const MAX_SCAN_LIMIT = 150;
@@ -610,7 +610,7 @@ export class StudentFilteringQueryService {
       limit: request.limit,
     });
     const limit = searchDomain.limit;
-    firestoreQueryGovernanceService.assertQueryPlan({
+    indexedQueryValidationService.assertIndexedQuery({
       collectionPath: searchDomain.collectionPath,
       filterFields: ["batchId"],
       limit,
@@ -699,7 +699,7 @@ export class StudentFilteringQueryService {
       yearId: request.yearId,
     });
     const limit = searchDomain.limit;
-    firestoreQueryGovernanceService.assertQueryPlan({
+    indexedQueryValidationService.assertIndexedQuery({
       collectionPath: searchDomain.collectionPath,
       filterFields: getMetricsGovernedFilterFields(request.filter),
       limit,
