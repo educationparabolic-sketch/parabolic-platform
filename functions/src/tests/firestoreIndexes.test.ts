@@ -75,3 +75,36 @@ test(
     );
   },
 );
+
+test(
+  "firestore index manifest includes build-58 question-bank composites",
+  () => {
+    const manifest = readManifest();
+
+    assert.equal(
+      hasIndex(manifest.indexes, "questionBank", [
+        {fieldPath: "subject", order: "ASCENDING"},
+        {fieldPath: "chapter", order: "ASCENDING"},
+        {fieldPath: "difficulty", order: "ASCENDING"},
+      ]),
+      true,
+    );
+
+    assert.equal(
+      hasIndex(manifest.indexes, "questionBank", [
+        {fieldPath: "difficulty", order: "ASCENDING"},
+        {fieldPath: "lastUsedAt", order: "DESCENDING"},
+      ]),
+      true,
+    );
+
+    assert.equal(
+      hasIndex(manifest.indexes, "questionBank", [
+        {fieldPath: "status", order: "ASCENDING"},
+        {fieldPath: "subject", order: "ASCENDING"},
+        {fieldPath: "createdAt", order: "DESCENDING"},
+      ]),
+      true,
+    );
+  },
+);

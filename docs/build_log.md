@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 57  
-Next Build: 58
+Completed Builds: 58  
+Next Build: 59
 
 Current Phase: Phase 12 — Firestore Index Strategy
 
@@ -1871,16 +1871,50 @@ Completed On
 
 # NEXT BUILD
 
-Next Build Number: 58
+## Build 58 — Question Bank Composite Indexes
+
+Phase  
+Phase 12 — Firestore Index Strategy
+
+Summary  
+Implemented the Firestore composite index manifest required for approved question-bank filtering patterns.
+
+Components implemented:
+
+- Extended `firestore.indexes.json` with Build 58 question-bank composite indexes for:
+  - `questionBank`: `subject` + `chapter` + `difficulty`
+  - `questionBank`: `difficulty` + `lastUsedAt`
+  - `questionBank`: `status` + `subject` + `createdAt`
+- Extended `functions/src/tests/firestoreIndexes.test.ts` with repeatable assertions that the Build 58 question-bank index definitions remain present in the manifest
+- Reused the existing manifest-based verification workflow instead of creating a duplicate index test harness
+- Verified the implementation locally with:
+  - `npm run build`
+  - `npm run lint`
+  - `npm run test:firestore-indexes`
+
+Result  
+The repository now declares the approved question-bank composite indexes required by the architecture, protecting future question filtering queries from runtime index failures while preserving deterministic Firestore query governance.
+
+Commit Reference  
+Build 58 — Question Bank Composite Indexes implemented
+
+Completed On  
+2026-03-29
+
+---
+
+# NEXT BUILD
+
+Next Build Number: 59
 
 Phase  
 Phase 12 — Firestore Index Strategy
 
 Subsystem  
-Question Bank Composite Indexes
+Cursor Pagination Utilities
 
 Reference  
-3_Core_Architectures.md → Section 9.4 Composite Index Matrix — Question Bank
+3_Core_Architectures.md → Section 9.6 Pagination Enforcement Rules
 
 ---
 
