@@ -1,7 +1,6 @@
 import * as functions from "firebase-functions";
 import {DecodedIdToken} from "firebase-admin/auth";
 import {sendErrorResponse} from "../services/apiResponse";
-import {createRequestLogger} from "../services/logging";
 import {
   SubmissionResponseData,
   SubmissionResult,
@@ -12,6 +11,15 @@ import {
   SubmissionValidationError,
 } from "../services/submission";
 import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
+import {
+  createMethodMiddleware,
+  createMiddlewareHandler,
+  createRequestValidationMiddleware,
+  resolveLicenseLayer,
+  setRequestData,
+  setRequestIdentity,
+} from "../middleware/framework";
+import {MiddlewareRequest} from "../types/middleware";
 
 interface ExamSessionSubmitRequestBody {
   instituteId?: unknown;
@@ -22,6 +30,15 @@ interface ExamSessionSubmitRequestBody {
 interface ExamSessionSubmitRequestDependencies {
   submitSession: typeof submissionService.submitSession;
   verifyIdToken: (idToken: string) => Promise<DecodedIdToken>;
+}
+
+interface ExamSessionSubmitValidatedRequestData
+extends Record<string, unknown> {
+  instituteId: string;
+  runId: string;
+  sessionId: string;
+  studentId: string;
+  yearId: string;
 }
 
 const normalizeRequiredBodyField = (
@@ -157,97 +174,103 @@ const resolveSessionIdFromRequest = (
 
 export const createExamSessionSubmitHandler = (
   dependencies: ExamSessionSubmitRequestDependencies,
-) =>
-  async (
-    request: functions.https.Request,
+) => createMiddlewareHandler({
+  controller: async (
+    request: MiddlewareRequest,
     response: functions.Response,
   ): Promise<void> => {
-    const logger = createRequestLogger("SubmissionApi", request);
-    const requestId = logger.getRequestId();
+    const requestId = request.context.requestId;
+    const validatedData = request.context
+      .requestData as ExamSessionSubmitValidatedRequestData;
+    const result = await dependencies.submitSession(validatedData);
 
-    try {
-      if (request.method !== "POST") {
-        sendErrorResponse(
-          response,
-          requestId,
-          "VALIDATION_ERROR",
-          "Method not allowed. Use POST.",
-        );
-        return;
-      }
-
+    response.status(200).json(
+      buildSubmissionSuccessResponse(
+        result,
+        requestId,
+        new Date().toISOString(),
+      ),
+    );
+  },
+  middlewares: [
+    createMethodMiddleware("POST"),
+    async (request, _response, next): Promise<void> => {
       const idToken = getBearerToken(request);
       const decodedToken = await dependencies.verifyIdToken(idToken);
       const normalizedRole = normalizeRole(decodedToken);
 
-      if (normalizedRole !== "student") {
+      setRequestIdentity(request, {
+        instituteId: resolveInstituteClaim(decodedToken),
+        isSuspended: Boolean(decodedToken.isSuspended),
+        isVendor: normalizedRole === "vendor" || Boolean(decodedToken.isVendor),
+        licenseLayer: resolveLicenseLayer(decodedToken.licenseLayer),
+        role: normalizedRole,
+        uid: decodedToken.uid,
+      });
+      setRequestData(request, {
+        studentId: resolveStudentId(decodedToken, decodedToken.uid),
+      });
+
+      await next();
+    },
+    async (request, _response, next): Promise<void> => {
+      if (request.context.identity?.role !== "student") {
         throw new SubmissionValidationError(
           "FORBIDDEN",
           "Only students can submit exam sessions.",
         );
       }
 
-      const body = (request.body ?? {}) as ExamSessionSubmitRequestBody;
-      const instituteId = normalizeRequiredBodyField(
-        body.instituteId,
-        "instituteId",
-      );
-      const yearId = normalizeRequiredBodyField(body.yearId, "yearId");
-      const runId = normalizeRequiredBodyField(body.runId, "runId");
-      const sessionId = resolveSessionIdFromRequest(request);
-      const instituteClaim = resolveInstituteClaim(decodedToken);
-
-      if (instituteClaim && instituteClaim !== instituteId) {
-        throw new SubmissionValidationError(
-          "TENANT_MISMATCH",
-          "Token instituteId does not match request instituteId.",
+      await next();
+    },
+    createRequestValidationMiddleware({
+      validator: (request: MiddlewareRequest): void => {
+        const body = (request.body ?? {}) as ExamSessionSubmitRequestBody;
+        const instituteId = normalizeRequiredBodyField(
+          body.instituteId,
+          "instituteId",
         );
-      }
+        const yearId = normalizeRequiredBodyField(body.yearId, "yearId");
+        const runId = normalizeRequiredBodyField(body.runId, "runId");
+        const sessionId = resolveSessionIdFromRequest(request);
+        const instituteClaim = request.context.identity?.instituteId;
 
-      const studentId = resolveStudentId(decodedToken, decodedToken.uid);
-      const result = await dependencies.submitSession({
-        instituteId,
-        runId,
-        sessionId,
-        studentId,
-        yearId,
-      });
+        if (instituteClaim && instituteClaim !== instituteId) {
+          throw new SubmissionValidationError(
+            "TENANT_MISMATCH",
+            "Token instituteId does not match request instituteId.",
+          );
+        }
 
-      logger.info("Session submission handled", {
-        idempotent: result.idempotent,
-        instituteId,
-        runId,
-        sessionId,
-        studentId,
-        yearId,
-      });
-
-      response.status(200).json(
-        buildSubmissionSuccessResponse(
-          result,
-          requestId,
-          new Date().toISOString(),
-        ),
-      );
-    } catch (error) {
-      if (error instanceof SubmissionValidationError) {
-        logger.warn("Session submission rejected", {
-          code: error.code,
-          error,
+        setRequestData(request, {
+          instituteId,
+          runId,
+          sessionId,
+          studentId: request.context.requestData?.studentId,
+          yearId,
         });
-        sendErrorResponse(response, requestId, error.code, error.message);
-        return;
-      }
-
-      logger.error("Session submission failed", {error});
+      },
+    }),
+  ],
+  onError: (error, context): boolean => {
+    if (error instanceof SubmissionValidationError) {
+      context.logger.warn("Session submission rejected", {
+        code: error.code,
+        error,
+      });
       sendErrorResponse(
-        response,
-        requestId,
-        "INTERNAL_ERROR",
-        "Unexpected error while submitting exam session.",
+        context.response,
+        context.requestId,
+        error.code,
+        error.message,
       );
+      return true;
     }
-  };
+
+    return false;
+  },
+  service: "SubmissionApi",
+});
 
 export const handleExamSessionSubmitRequest = createExamSessionSubmitHandler({
   submitSession: submissionService.submitSession.bind(submissionService),

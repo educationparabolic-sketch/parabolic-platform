@@ -1,7 +1,6 @@
 import * as functions from "firebase-functions";
 import {DecodedIdToken} from "firebase-admin/auth";
 import {sendErrorResponse} from "../services/apiResponse";
-import {createRequestLogger} from "../services/logging";
 import {
   emailQueueService,
   EmailQueueValidationError,
@@ -11,6 +10,15 @@ import {
   EmailQueueRequestPayload,
   EmailQueueSuccessResponse,
 } from "../types/emailQueue";
+import {
+  createMethodMiddleware,
+  createMiddlewareHandler,
+  createRequestValidationMiddleware,
+  resolveLicenseLayer,
+  setRequestData,
+  setRequestIdentity,
+} from "../middleware/framework";
+import {MiddlewareRequest} from "../types/middleware";
 
 interface InternalEmailQueueRequestBody {
   payload?: unknown;
@@ -21,6 +29,13 @@ interface InternalEmailQueueRequestBody {
 interface EmailQueueRequestDependencies {
   enqueueEmailJob: typeof emailQueueService.enqueueEmailJob;
   verifyIdToken: (idToken: string) => Promise<DecodedIdToken>;
+}
+
+interface InternalEmailQueueValidatedRequestData
+extends Record<string, unknown> {
+  payload: EmailQueueRequestPayload;
+  recipientEmail: string;
+  templateType: string;
 }
 
 const normalizeRole = (decodedToken: Record<string, unknown>): string =>
@@ -97,28 +112,35 @@ const getPayloadInstituteId = (payload: unknown): string => {
 
 export const createInternalEmailQueueHandler = (
   dependencies: EmailQueueRequestDependencies,
-) =>
-  async (
-    request: functions.https.Request,
+) => createMiddlewareHandler({
+  controller: async (
+    request: MiddlewareRequest,
     response: functions.Response,
   ): Promise<void> => {
-    const logger = createRequestLogger("EmailQueueApi", request);
-    const requestId = logger.getRequestId();
+    const requestId = request.context.requestId;
+    const validatedData = request.context
+      .requestData as InternalEmailQueueValidatedRequestData;
+    const result = await dependencies.enqueueEmailJob(validatedData);
 
-    try {
-      if (request.method !== "POST") {
-        sendErrorResponse(
-          response,
-          requestId,
-          "VALIDATION_ERROR",
-          "Method not allowed. Use POST.",
-        );
-        return;
-      }
-
+    response.status(200).json(
+      buildSuccessResponse(result, requestId, new Date().toISOString()),
+    );
+  },
+  middlewares: [
+    createMethodMiddleware("POST"),
+    async (request, _response, next): Promise<void> => {
       const idToken = getBearerToken(request);
       const decodedToken = await dependencies.verifyIdToken(idToken);
       const normalizedRole = normalizeRole(decodedToken);
+
+      setRequestIdentity(request, {
+        instituteId: resolveInstituteClaim(decodedToken),
+        isSuspended: Boolean(decodedToken.isSuspended),
+        isVendor: normalizedRole === "vendor" || Boolean(decodedToken.isVendor),
+        licenseLayer: resolveLicenseLayer(decodedToken.licenseLayer),
+        role: normalizedRole,
+        uid: decodedToken.uid,
+      });
 
       if (
         normalizedRole !== "service" &&
@@ -130,51 +152,48 @@ export const createInternalEmailQueueHandler = (
         );
       }
 
-      const body = (request.body ?? {}) as InternalEmailQueueRequestBody;
-      const instituteId = getPayloadInstituteId(body.payload);
-      const instituteClaim = resolveInstituteClaim(decodedToken);
+      await next();
+    },
+    createRequestValidationMiddleware({
+      validator: (request: MiddlewareRequest): void => {
+        const body = (request.body ?? {}) as InternalEmailQueueRequestBody;
+        const instituteId = getPayloadInstituteId(body.payload);
+        const instituteClaim = request.context.identity?.instituteId;
 
-      if (instituteClaim && instituteClaim !== instituteId) {
-        throw new EmailQueueValidationError(
-          "TENANT_MISMATCH",
-          "Token instituteId does not match payload.instituteId.",
-        );
-      }
+        if (instituteClaim && instituteClaim !== instituteId) {
+          throw new EmailQueueValidationError(
+            "TENANT_MISMATCH",
+            "Token instituteId does not match payload.instituteId.",
+          );
+        }
 
-      const result = await dependencies.enqueueEmailJob({
-        payload: body.payload as EmailQueueRequestPayload,
-        recipientEmail: body.recipientEmail as string,
-        templateType: body.templateType as string,
-      });
-
-      logger.info("Internal email queue request completed.", {
-        instituteId,
-        jobId: result.jobId,
-        jobPath: result.jobPath,
-      });
-
-      response.status(200).json(
-        buildSuccessResponse(result, requestId, new Date().toISOString()),
-      );
-    } catch (error) {
-      if (error instanceof EmailQueueValidationError) {
-        logger.warn("Internal email queue request rejected.", {
-          code: error.code,
-          error,
+        setRequestData(request, {
+          payload: body.payload as EmailQueueRequestPayload,
+          recipientEmail: body.recipientEmail as string,
+          templateType: body.templateType as string,
         });
-        sendErrorResponse(response, requestId, error.code, error.message);
-        return;
-      }
-
-      logger.error("Internal email queue request failed.", {error});
+      },
+    }),
+  ],
+  onError: (error, context): boolean => {
+    if (error instanceof EmailQueueValidationError) {
+      context.logger.warn("Internal email queue request rejected.", {
+        code: error.code,
+        error,
+      });
       sendErrorResponse(
-        response,
-        requestId,
-        "INTERNAL_ERROR",
-        "Unexpected error while queueing email job.",
+        context.response,
+        context.requestId,
+        error.code,
+        error.message,
       );
+      return true;
     }
-  };
+
+    return false;
+  },
+  service: "EmailQueueApi",
+});
 
 export const handleInternalEmailQueueRequest = createInternalEmailQueueHandler({
   enqueueEmailJob: emailQueueService.enqueueEmailJob.bind(emailQueueService),
