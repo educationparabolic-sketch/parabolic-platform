@@ -58,6 +58,7 @@ MiddlewareFrameworkService | Build 61 | Provide a reusable middleware pipeline w
 AuthenticationMiddlewareService | Build 62 | Provide shared Firebase ID token Bearer parsing, token verification, required-claim validation (`uid`, `role`, `licenseLayer`), normalized identity-context attachment on `request.context`, and optional studentId request-data hydration for student session endpoints
 TenantGuardMiddlewareService | Build 63 | Provide shared institute-tenant isolation middleware that compares request-scoped institute IDs against authenticated token claims, bypasses vendor requests, emits `TENANT_MISMATCH` on mismatch, and normalizes downstream handlers to use trusted institute context
 RoleAuthorizationMiddlewareService | Build 64 | Provide shared endpoint-level role authorization middleware that enforces declared `allowedRoles` against authenticated request context, normalizes role comparisons, and emits standardized `FORBIDDEN` responses for unauthorized roles
+LicenseEnforcementMiddlewareService | Build 65 | Provide shared endpoint-level license enforcement middleware that validates authenticated `licenseLayer` claims against a declared `requiredLayer` hierarchy (`L0 < L1 < L2 < L3`) and emits standardized `LICENSE_RESTRICTED` responses for insufficient license access
 LicenseService | Phase 19 | License validation and enforcement
 BillingService | Phase 19 | Billing computation and Stripe sync
 EnvironmentConfigLoader | Build 2 | Centralized environment variable and endpoint configuration loader

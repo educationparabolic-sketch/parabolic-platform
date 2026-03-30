@@ -7,6 +7,7 @@ import {
   setRequestData,
   setRequestIdentity,
 } from "../middleware/framework";
+import {createLicenseEnforcementMiddleware} from "../middleware/license";
 import {
   createMockRequest,
   createMockResponse,
@@ -119,6 +120,57 @@ test("middleware framework returns standardized method errors", async () => {
   assert.equal(response.statusCode, 400);
   assert.equal(responseBody.error.code, "VALIDATION_ERROR");
   assert.equal(responseBody.error.message, "Method not allowed. Use POST.");
+  assert.equal(responseBody.success, false);
+  assert.equal(typeof responseBody.meta.requestId, "string");
+  assert.equal(typeof responseBody.meta.timestamp, "string");
+});
+
+test("middleware framework returns standardized license errors", async () => {
+  const handler = createMiddlewareHandler({
+    controller: async () => {
+      throw new Error("controller should not be called");
+    },
+    middlewares: [
+      async (request, _response, next) => {
+        setRequestIdentity(request, {
+          instituteId: "inst_build_65",
+          isSuspended: false,
+          isVendor: false,
+          licenseLayer: "L1",
+          role: "teacher",
+          uid: "uid_build_65",
+        });
+        await next();
+      },
+      createLicenseEnforcementMiddleware({
+        requiredLayer: "L2",
+        restrictionMessage: "Controlled mode requires license layer L2.",
+      }),
+    ],
+    service: "MiddlewareFrameworkTestApi",
+  });
+  const response = createMockResponse();
+
+  await handler(createMockRequest() as never, response as never);
+
+  const responseBody = response.body as {
+    error: {
+      code: string;
+      message: string;
+    };
+    meta: {
+      requestId: string;
+      timestamp: string;
+    };
+    success: boolean;
+  };
+
+  assert.equal(response.statusCode, 403);
+  assert.equal(responseBody.error.code, "LICENSE_RESTRICTED");
+  assert.equal(
+    responseBody.error.message,
+    "Controlled mode requires license layer L2.",
+  );
   assert.equal(responseBody.success, false);
   assert.equal(typeof responseBody.meta.requestId, "string");
   assert.equal(typeof responseBody.meta.timestamp, "string");
