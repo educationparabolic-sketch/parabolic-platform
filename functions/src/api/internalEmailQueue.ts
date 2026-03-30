@@ -18,6 +18,7 @@ import {
 } from "../middleware/framework";
 import {MiddlewareRequest} from "../types/middleware";
 import {createAuthenticationMiddleware} from "../middleware/auth";
+import {createTenantGuardMiddleware} from "../middleware/tenant";
 
 interface InternalEmailQueueRequestBody {
   payload?: unknown;
@@ -86,6 +87,25 @@ export const createInternalEmailQueueHandler = (
   middlewares: [
     createMethodMiddleware("POST"),
     createAuthenticationMiddleware(dependencies),
+    createTenantGuardMiddleware({
+      mismatchMessage:
+        "Token instituteId does not match payload.instituteId.",
+      resolveRequestInstituteId: (request): string | null => {
+        const body = (request.body ?? {}) as InternalEmailQueueRequestBody;
+        const payload = body.payload;
+
+        if (
+          typeof payload !== "object" ||
+          payload === null ||
+          Array.isArray(payload) ||
+          typeof (payload as {instituteId?: unknown}).instituteId !== "string"
+        ) {
+          return null;
+        }
+
+        return (payload as {instituteId: string}).instituteId;
+      },
+    }),
     async (request, _response, next): Promise<void> => {
       const normalizedRole = request.context.identity?.role;
 
@@ -103,17 +123,13 @@ export const createInternalEmailQueueHandler = (
       validator: (request: MiddlewareRequest): void => {
         const body = (request.body ?? {}) as InternalEmailQueueRequestBody;
         const instituteId = getPayloadInstituteId(body.payload);
-        const instituteClaim = request.context.identity?.instituteId;
-
-        if (instituteClaim && instituteClaim !== instituteId) {
-          throw new EmailQueueValidationError(
-            "TENANT_MISMATCH",
-            "Token instituteId does not match payload.instituteId.",
-          );
-        }
+        const payload = body.payload as EmailQueueRequestPayload;
 
         setRequestData(request, {
-          payload: body.payload as EmailQueueRequestPayload,
+          payload: {
+            ...payload,
+            instituteId: request.context.identity?.instituteId ?? instituteId,
+          },
           recipientEmail: body.recipientEmail as string,
           templateType: body.templateType as string,
         });

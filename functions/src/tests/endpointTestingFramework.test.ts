@@ -393,6 +393,41 @@ test("exam session answers handler rejects invalid payloads", async () => {
   );
 });
 
+test("exam session answers handler rejects cross-tenant access", async () => {
+  const handler = createExamSessionAnswersHandler({
+    persistIncrementalAnswers: async () => {
+      throw new Error("persistIncrementalAnswers should not be called");
+    },
+    verifyIdToken: async () =>
+      createStudentToken({instituteId: "inst_other_build_50"}) as never,
+  });
+  const response = createMockResponse();
+
+  await handler(
+    createMockRequest({
+      body: {
+        answers: [],
+        instituteId: "inst_build_50",
+        millisecondsSinceLastWrite: 5000,
+        runId: "run_build_50",
+        yearId: "2026",
+      },
+      headers: {
+        authorization: "Bearer build_50_answers_tenant",
+      },
+      path: "/exam/session/session_build_50/answers",
+    }) as never,
+    response as never,
+  );
+
+  assert.equal(response.statusCode, 403);
+  assertStructuredError(
+    response.body,
+    "TENANT_MISMATCH",
+    "Token instituteId does not match request instituteId.",
+  );
+});
+
 test("exam session submit handler accepts a valid request", async () => {
   const handler = createExamSessionSubmitHandler({
     submitSession: async (): Promise<SubmissionResult> => ({

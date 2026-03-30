@@ -13,6 +13,7 @@ import {
 } from "../middleware/framework";
 import {MiddlewareRequest} from "../types/middleware";
 import {createAuthenticationMiddleware} from "../middleware/auth";
+import {createTenantGuardMiddleware} from "../middleware/tenant";
 
 interface ExamSessionAnswersRequestBody {
   answers?: unknown;
@@ -166,6 +167,15 @@ export const createExamSessionAnswersHandler = (
   middlewares: [
     createMethodMiddleware("POST"),
     createAuthenticationMiddleware(dependencies, {attachStudentId: true}),
+    createTenantGuardMiddleware({
+      resolveRequestInstituteId: (request): string | null => {
+        const body = (request.body ?? {}) as ExamSessionAnswersRequestBody;
+
+        return typeof body.instituteId === "string" ?
+          body.instituteId :
+          null;
+      },
+    }),
     async (request, _response, next): Promise<void> => {
       if (request.context.identity?.role !== "student") {
         throw new SessionStartValidationError(
@@ -190,18 +200,10 @@ export const createExamSessionAnswersHandler = (
           "millisecondsSinceLastWrite",
         );
         const sessionId = resolveSessionIdFromRequest(request);
-        const instituteClaim = request.context.identity?.instituteId;
-
-        if (instituteClaim && instituteClaim !== instituteId) {
-          throw new SessionStartValidationError(
-            "TENANT_MISMATCH",
-            "Token instituteId does not match request instituteId.",
-          );
-        }
 
         setRequestData(request, {
           answers: body.answers,
-          instituteId,
+          instituteId: request.context.identity?.instituteId ?? instituteId,
           millisecondsSinceLastWrite,
           runId,
           sessionId,

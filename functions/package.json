@@ -44,6 +44,7 @@
     "test:email-queue": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=parabolic-platform-build-48-tests GOOGLE_CLOUD_PROJECT=parabolic-platform-build-48-tests NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none npm run build && FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=parabolic-platform-build-48-tests GOOGLE_CLOUD_PROJECT=parabolic-platform-build-48-tests NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none node --test lib/tests/emailQueue.test.js",
     "test:api-error-handling": "npm run build && node --test lib/tests/apiErrorHandling.test.js",
     "test:middleware-framework": "npm run build && node --test lib/tests/middlewareFramework.test.js",
+    "test:tenant-middleware": "npm run build && node --test lib/tests/tenantMiddleware.test.js",
     "test:endpoint-testing-framework": "npm run build && node --test lib/tests/endpointTestingFramework.test.js",
     "test:run-analytics-initialization": "npm run build && node --test lib/tests/runAnalyticsInitialization.test.js",
     "test:usage-metering": "npm run build && node --test lib/tests/usageMetering.test.js",

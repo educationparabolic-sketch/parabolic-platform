@@ -11,6 +11,7 @@ import {
 } from "../middleware/framework";
 import {MiddlewareRequest} from "../types/middleware";
 import {createAuthenticationMiddleware} from "../middleware/auth";
+import {createTenantGuardMiddleware} from "../middleware/tenant";
 
 interface ExamStartRequestBody {
   instituteId?: unknown;
@@ -82,6 +83,15 @@ export const createExamStartHandler = (
   middlewares: [
     createMethodMiddleware("POST"),
     createAuthenticationMiddleware(dependencies, {attachStudentId: true}),
+    createTenantGuardMiddleware({
+      resolveRequestInstituteId: (request): string | null => {
+        const body = (request.body ?? {}) as ExamStartRequestBody;
+
+        return typeof body.instituteId === "string" ?
+          body.instituteId :
+          null;
+      },
+    }),
     async (request, _response, next): Promise<void> => {
       if (request.context.identity?.role !== "student") {
         throw new SessionStartValidationError(
@@ -101,17 +111,9 @@ export const createExamStartHandler = (
         );
         const yearId = normalizeRequiredBodyField(body.yearId, "yearId");
         const runId = normalizeRequiredBodyField(body.runId, "runId");
-        const instituteClaim = request.context.identity?.instituteId;
-
-        if (instituteClaim && instituteClaim !== instituteId) {
-          throw new SessionStartValidationError(
-            "TENANT_MISMATCH",
-            "Token instituteId does not match request instituteId.",
-          );
-        }
 
         setRequestData(request, {
-          instituteId,
+          instituteId: request.context.identity?.instituteId ?? instituteId,
           runId,
           studentId: request.context.requestData?.studentId,
           studentUid: request.context.identity?.uid,

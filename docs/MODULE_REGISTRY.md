@@ -56,6 +56,7 @@ ApiResponseService | Build 49 | Provide standardized API error response generati
 EndpointTestingFramework | Build 50 | Provide reusable dependency-injected HTTP handler factories, shared mock request/response utilities, and deterministic endpoint contract tests for authentication, role, tenant, license, payload, and structured error response scenarios
 MiddlewareFrameworkService | Build 61 | Provide a reusable middleware pipeline with ordered execution, request-context attachment, method guards, request-validation hooks, and centralized middleware failure handling for backend HTTP handlers
 AuthenticationMiddlewareService | Build 62 | Provide shared Firebase ID token Bearer parsing, token verification, required-claim validation (`uid`, `role`, `licenseLayer`), normalized identity-context attachment on `request.context`, and optional studentId request-data hydration for student session endpoints
+TenantGuardMiddlewareService | Build 63 | Provide shared institute-tenant isolation middleware that compares request-scoped institute IDs against authenticated token claims, bypasses vendor requests, emits `TENANT_MISMATCH` on mismatch, and normalizes downstream handlers to use trusted institute context
 LicenseService | Phase 19 | License validation and enforcement
 BillingService | Phase 19 | Billing computation and Stripe sync
 EnvironmentConfigLoader | Build 2 | Centralized environment variable and endpoint configuration loader
