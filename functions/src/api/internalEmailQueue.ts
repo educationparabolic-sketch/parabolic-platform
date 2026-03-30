@@ -18,6 +18,7 @@ import {
 } from "../middleware/framework";
 import {MiddlewareRequest} from "../types/middleware";
 import {createAuthenticationMiddleware} from "../middleware/auth";
+import {createRoleAuthorizationMiddleware} from "../middleware/role";
 import {createTenantGuardMiddleware} from "../middleware/tenant";
 
 interface InternalEmailQueueRequestBody {
@@ -106,19 +107,10 @@ export const createInternalEmailQueueHandler = (
         return (payload as {instituteId: string}).instituteId;
       },
     }),
-    async (request, _response, next): Promise<void> => {
-      const normalizedRole = request.context.identity?.role;
-
-      if (normalizedRole !== "service" &&
-        normalizedRole !== "backend_service") {
-        throw new EmailQueueValidationError(
-          "FORBIDDEN",
-          "Only backend service roles can enqueue email jobs.",
-        );
-      }
-
-      await next();
-    },
+    createRoleAuthorizationMiddleware({
+      allowedRoles: ["service", "backend_service"],
+      forbiddenMessage: "Only backend service roles can enqueue email jobs.",
+    }),
     createRequestValidationMiddleware({
       validator: (request: MiddlewareRequest): void => {
         const body = (request.body ?? {}) as InternalEmailQueueRequestBody;

@@ -11,6 +11,7 @@ import {
 } from "../middleware/framework";
 import {MiddlewareRequest} from "../types/middleware";
 import {createAuthenticationMiddleware} from "../middleware/auth";
+import {createRoleAuthorizationMiddleware} from "../middleware/role";
 import {createTenantGuardMiddleware} from "../middleware/tenant";
 
 interface ExamStartRequestBody {
@@ -92,16 +93,10 @@ export const createExamStartHandler = (
           null;
       },
     }),
-    async (request, _response, next): Promise<void> => {
-      if (request.context.identity?.role !== "student") {
-        throw new SessionStartValidationError(
-          "FORBIDDEN",
-          "Only students can start exam sessions.",
-        );
-      }
-
-      await next();
-    },
+    createRoleAuthorizationMiddleware({
+      allowedRoles: ["student"],
+      forbiddenMessage: "Only students can start exam sessions.",
+    }),
     createRequestValidationMiddleware({
       validator: (request: MiddlewareRequest): void => {
         const body = (request.body ?? {}) as ExamStartRequestBody;

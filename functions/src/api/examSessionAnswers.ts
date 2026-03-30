@@ -13,6 +13,7 @@ import {
 } from "../middleware/framework";
 import {MiddlewareRequest} from "../types/middleware";
 import {createAuthenticationMiddleware} from "../middleware/auth";
+import {createRoleAuthorizationMiddleware} from "../middleware/role";
 import {createTenantGuardMiddleware} from "../middleware/tenant";
 
 interface ExamSessionAnswersRequestBody {
@@ -176,16 +177,10 @@ export const createExamSessionAnswersHandler = (
           null;
       },
     }),
-    async (request, _response, next): Promise<void> => {
-      if (request.context.identity?.role !== "student") {
-        throw new SessionStartValidationError(
-          "FORBIDDEN",
-          "Only students can persist session answers.",
-        );
-      }
-
-      await next();
-    },
+    createRoleAuthorizationMiddleware({
+      allowedRoles: ["student"],
+      forbiddenMessage: "Only students can persist session answers.",
+    }),
     createRequestValidationMiddleware({
       validator: (request: MiddlewareRequest): void => {
         const body = (request.body ?? {}) as ExamSessionAnswersRequestBody;

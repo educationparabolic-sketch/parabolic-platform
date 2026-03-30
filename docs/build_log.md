@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 63  
-Next Build: 64
+Completed Builds: 64  
+Next Build: 65
 
 Current Phase: Phase 13 — Middleware Security Layer
 
@@ -2041,18 +2041,46 @@ Completed On
 
 ---
 
+## Build 64 — Role Authorization Middleware
+
+Phase  
+Phase 13 — Middleware Security Layer
+
+Summary  
+Implemented shared endpoint role-authorization middleware for backend HTTP handlers.
+
+Components implemented:
+
+- Added reusable role authorization middleware that enforces endpoint-declared `allowedRoles` against authenticated request context
+- Normalized role comparisons in the shared guard to support consistent claim matching
+- Refactored current middleware-based exam and internal email APIs to reuse the shared role guard instead of duplicating inline role checks
+- Preserved architecture-aligned role-specific rejection messages while standardizing unauthorized role failures as `FORBIDDEN`
+- Added repeatable local middleware tests covering missing identity context, allowed-role normalization, custom forbidden messages, and default forbidden handling
+- Added clean-build verification across TypeScript build, ESLint, focused middleware tests, endpoint regression tests, and emulator-backed session and email queue tests
+
+Result  
+Backend HTTP handlers now reuse a single role-enforcement middleware that applies architecture-defined RBAC checks before request validation and business logic execution.
+
+Commit Reference  
+Build 64 — Role Authorization Middleware implemented
+
+Completed On  
+2026-03-30
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 64
+Next Build Number: 65
 
 Phase  
 Phase 13 — Middleware Security Layer
 
 Subsystem  
-Role Authorization Middleware
+License Enforcement Middleware
 
 Reference  
-3_Core_Architectures.md → Section 8.5 Role Guard
+3_Core_Architectures.md → Section 8.6 License Guard
 
 ---
 

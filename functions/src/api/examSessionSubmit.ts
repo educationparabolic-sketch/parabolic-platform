@@ -19,6 +19,7 @@ import {
 } from "../middleware/framework";
 import {MiddlewareRequest} from "../types/middleware";
 import {createAuthenticationMiddleware} from "../middleware/auth";
+import {createRoleAuthorizationMiddleware} from "../middleware/role";
 import {createTenantGuardMiddleware} from "../middleware/tenant";
 
 interface ExamSessionSubmitRequestBody {
@@ -148,16 +149,10 @@ export const createExamSessionSubmitHandler = (
           null;
       },
     }),
-    async (request, _response, next): Promise<void> => {
-      if (request.context.identity?.role !== "student") {
-        throw new SubmissionValidationError(
-          "FORBIDDEN",
-          "Only students can submit exam sessions.",
-        );
-      }
-
-      await next();
-    },
+    createRoleAuthorizationMiddleware({
+      allowedRoles: ["student"],
+      forbiddenMessage: "Only students can submit exam sessions.",
+    }),
     createRequestValidationMiddleware({
       validator: (request: MiddlewareRequest): void => {
         const body = (request.body ?? {}) as ExamSessionSubmitRequestBody;
