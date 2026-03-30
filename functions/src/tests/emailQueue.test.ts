@@ -124,6 +124,7 @@ test(
         emailQueueService.enqueueEmailJob.bind(emailQueueService),
       verifyIdToken: async () => ({
         instituteId: "inst_build_48_handler",
+        licenseLayer: "L0",
         role: "service",
         uid: "svc_build_48",
       }) as never,
@@ -177,6 +178,7 @@ test(
         emailQueueService.enqueueEmailJob.bind(emailQueueService),
       verifyIdToken: async () => ({
         instituteId: "inst_build_48_forbidden",
+        licenseLayer: "L0",
         role: "student",
         uid: "student_build_48",
       }) as never,
@@ -236,6 +238,7 @@ test(
         emailQueueService.enqueueEmailJob.bind(emailQueueService),
       verifyIdToken: async () => ({
         instituteId: "inst_build_48_claim",
+        licenseLayer: "L0",
         role: "backend_service",
         uid: "svc_build_48_claim",
       }) as never,
@@ -280,6 +283,7 @@ test(
         emailQueueService.enqueueEmailJob.bind(emailQueueService),
       verifyIdToken: async () => ({
         instituteId: "inst_build_48_invalid",
+        licenseLayer: "L0",
         role: "service",
         uid: "svc_build_48_invalid",
       }) as never,

@@ -14,11 +14,10 @@ import {
   createMethodMiddleware,
   createMiddlewareHandler,
   createRequestValidationMiddleware,
-  resolveLicenseLayer,
   setRequestData,
-  setRequestIdentity,
 } from "../middleware/framework";
 import {MiddlewareRequest} from "../types/middleware";
+import {createAuthenticationMiddleware} from "../middleware/auth";
 
 interface InternalEmailQueueRequestBody {
   payload?: unknown;
@@ -37,48 +36,6 @@ extends Record<string, unknown> {
   recipientEmail: string;
   templateType: string;
 }
-
-const normalizeRole = (decodedToken: Record<string, unknown>): string =>
-  String(decodedToken.role ?? decodedToken.userRole ?? "")
-    .trim()
-    .toLowerCase();
-
-const resolveInstituteClaim = (
-  decodedToken: Record<string, unknown>,
-): string | null => {
-  const rawValue = decodedToken.instituteId ?? decodedToken.tenantId;
-
-  if (typeof rawValue !== "string") {
-    return null;
-  }
-
-  const normalizedValue = rawValue.trim();
-  return normalizedValue || null;
-};
-
-const getBearerToken = (
-  request: functions.https.Request,
-): string => {
-  const headerValue = request.header("authorization");
-
-  if (!headerValue) {
-    throw new EmailQueueValidationError(
-      "UNAUTHORIZED",
-      "Missing authorization header.",
-    );
-  }
-
-  const [scheme, token] = headerValue.split(" ");
-
-  if (scheme?.toLowerCase() !== "bearer" || !token?.trim()) {
-    throw new EmailQueueValidationError(
-      "UNAUTHORIZED",
-      "Authorization header must be in Bearer token format.",
-    );
-  }
-
-  return token.trim();
-};
 
 const buildSuccessResponse = (
   result: Awaited<ReturnType<typeof emailQueueService.enqueueEmailJob>>,
@@ -128,24 +85,12 @@ export const createInternalEmailQueueHandler = (
   },
   middlewares: [
     createMethodMiddleware("POST"),
+    createAuthenticationMiddleware(dependencies),
     async (request, _response, next): Promise<void> => {
-      const idToken = getBearerToken(request);
-      const decodedToken = await dependencies.verifyIdToken(idToken);
-      const normalizedRole = normalizeRole(decodedToken);
+      const normalizedRole = request.context.identity?.role;
 
-      setRequestIdentity(request, {
-        instituteId: resolveInstituteClaim(decodedToken),
-        isSuspended: Boolean(decodedToken.isSuspended),
-        isVendor: normalizedRole === "vendor" || Boolean(decodedToken.isVendor),
-        licenseLayer: resolveLicenseLayer(decodedToken.licenseLayer),
-        role: normalizedRole,
-        uid: decodedToken.uid,
-      });
-
-      if (
-        normalizedRole !== "service" &&
-        normalizedRole !== "backend_service"
-      ) {
+      if (normalizedRole !== "service" &&
+        normalizedRole !== "backend_service") {
         throw new EmailQueueValidationError(
           "FORBIDDEN",
           "Only backend service roles can enqueue email jobs.",

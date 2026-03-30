@@ -15,11 +15,10 @@ import {
   createMethodMiddleware,
   createMiddlewareHandler,
   createRequestValidationMiddleware,
-  resolveLicenseLayer,
   setRequestData,
-  setRequestIdentity,
 } from "../middleware/framework";
 import {MiddlewareRequest} from "../types/middleware";
+import {createAuthenticationMiddleware} from "../middleware/auth";
 
 interface ExamSessionSubmitRequestBody {
   instituteId?: unknown;
@@ -86,62 +85,6 @@ export const buildSubmissionSuccessResponse = (
   timestamp,
 });
 
-const getBearerToken = (
-  request: functions.https.Request,
-): string => {
-  const headerValue = request.header("authorization");
-
-  if (!headerValue) {
-    throw new SubmissionValidationError(
-      "UNAUTHORIZED",
-      "Missing authorization header.",
-    );
-  }
-
-  const [scheme, token] = headerValue.split(" ");
-
-  if (scheme?.toLowerCase() !== "bearer" || !token?.trim()) {
-    throw new SubmissionValidationError(
-      "UNAUTHORIZED",
-      "Authorization header must be in Bearer token format.",
-    );
-  }
-
-  return token.trim();
-};
-
-const normalizeRole = (decodedToken: Record<string, unknown>): string =>
-  String(decodedToken.role ?? decodedToken.userRole ?? "")
-    .trim()
-    .toLowerCase();
-
-const resolveInstituteClaim = (
-  decodedToken: Record<string, unknown>,
-): string | null => {
-  const rawValue = decodedToken.instituteId ?? decodedToken.tenantId;
-
-  if (typeof rawValue !== "string") {
-    return null;
-  }
-
-  const normalizedValue = rawValue.trim();
-
-  return normalizedValue || null;
-};
-
-const resolveStudentId = (
-  decodedToken: Record<string, unknown>,
-  uid: string,
-): string => {
-  const rawStudentId = decodedToken.studentId;
-
-  if (typeof rawStudentId === "string" && rawStudentId.trim()) {
-    return rawStudentId.trim();
-  }
-
-  return uid.trim();
-};
-
 const resolveSessionIdFromRequest = (
   request: functions.https.Request,
 ): string => {
@@ -194,25 +137,7 @@ export const createExamSessionSubmitHandler = (
   },
   middlewares: [
     createMethodMiddleware("POST"),
-    async (request, _response, next): Promise<void> => {
-      const idToken = getBearerToken(request);
-      const decodedToken = await dependencies.verifyIdToken(idToken);
-      const normalizedRole = normalizeRole(decodedToken);
-
-      setRequestIdentity(request, {
-        instituteId: resolveInstituteClaim(decodedToken),
-        isSuspended: Boolean(decodedToken.isSuspended),
-        isVendor: normalizedRole === "vendor" || Boolean(decodedToken.isVendor),
-        licenseLayer: resolveLicenseLayer(decodedToken.licenseLayer),
-        role: normalizedRole,
-        uid: decodedToken.uid,
-      });
-      setRequestData(request, {
-        studentId: resolveStudentId(decodedToken, decodedToken.uid),
-      });
-
-      await next();
-    },
+    createAuthenticationMiddleware(dependencies, {attachStudentId: true}),
     async (request, _response, next): Promise<void> => {
       if (request.context.identity?.role !== "student") {
         throw new SubmissionValidationError(

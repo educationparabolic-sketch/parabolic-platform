@@ -23,6 +23,7 @@ import {SubmissionResult} from "../types/submission";
 
 const createStudentToken = (overrides: Record<string, unknown> = {}) => ({
   instituteId: "inst_build_50",
+  licenseLayer: "L1",
   role: "student",
   studentId: "student_build_50",
   uid: "uid_build_50",
@@ -31,6 +32,7 @@ const createStudentToken = (overrides: Record<string, unknown> = {}) => ({
 
 const createServiceToken = (overrides: Record<string, unknown> = {}) => ({
   instituteId: "inst_build_50",
+  licenseLayer: "L0",
   role: "service",
   uid: "svc_build_50",
   ...overrides,
@@ -124,6 +126,39 @@ test("exam start handler rejects missing authentication", async () => {
     response.body,
     "UNAUTHORIZED",
     "Missing authorization header.",
+  );
+});
+
+test("exam start handler rejects tokens missing required claims", async () => {
+  const handler = createExamStartHandler({
+    startSession: async () => {
+      throw new Error("startSession should not be called");
+    },
+    verifyIdToken: async () =>
+      createStudentToken({licenseLayer: undefined}) as never,
+  });
+  const response = createMockResponse();
+
+  await handler(
+    createMockRequest({
+      body: {
+        instituteId: "inst_build_50",
+        runId: "run_build_50",
+        yearId: "2026",
+      },
+      headers: {
+        authorization: "Bearer build_62_missing_claims",
+      },
+      path: "/exam/start",
+    }) as never,
+    response as never,
+  );
+
+  assert.equal(response.statusCode, 401);
+  assertStructuredError(
+    response.body,
+    "UNAUTHORIZED",
+    "Authentication token is missing required claims.",
   );
 });
 
