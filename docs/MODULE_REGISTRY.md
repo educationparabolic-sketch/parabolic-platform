@@ -145,6 +145,7 @@ ExamRunner | Exam | Exam session interface
 VendorDashboard | Vendor | Vendor analytics interface
 MultiPortalRoutingFramework | Shared | Build 66 shared portal routing foundation covering canonical domain mapping, route-family resolution, secure redirects, role/layer guard evaluation, and lazy-loaded admin/student/exam/vendor portal shells
 AdminPortalRoutes | Admin | Build 67 admin portal route registry and access-control layer covering overview, students, tests, assignments, analytics, insights, governance, settings, licensing, dynamic path resolution, and role/license-gated navigation
+StudentPortalRoutes | Student | Build 68 student portal route registry and access-control layer covering dashboard, my-tests, performance, insights, discipline, profile, dynamic performance detail resolution, and license-gated navigation
 
 ---
 

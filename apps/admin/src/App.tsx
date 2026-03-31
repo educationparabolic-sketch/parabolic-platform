@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import "./App.css";
 import {
   DEFAULT_ROUTE_BY_ROLE,
-  LICENSE_LAYER_ORDER,
   PORTAL_DOMAINS,
   ROUTE_FAMILIES,
   type LicenseLayer,
@@ -12,6 +11,7 @@ import {
   type RoutingSessionContext,
 } from "../../../shared/types/portalRouting";
 import { evaluateAdminRoutePermissions, matchAdminRoute } from "./portals/adminRoutes";
+import { evaluateStudentRoutePermissions, matchStudentRoute } from "./portals/studentRoutes";
 
 type RouteFamily = (typeof ROUTE_FAMILIES)[number]["family"];
 
@@ -164,15 +164,14 @@ function evaluateRouteAccess(
     }
   }
 
-  if (family === "student" && pathname === "/student/discipline") {
-    if (!session.licenseLayer || LICENSE_LAYER_ORDER[session.licenseLayer] < LICENSE_LAYER_ORDER.L2) {
-      return { allowed: false, redirectTo: "/student/dashboard", reason: "license_restricted" };
-    }
-  }
+  if (family === "student") {
+    const studentDecision = evaluateStudentRoutePermissions(
+      matchStudentRoute(pathname),
+      session.licenseLayer,
+    );
 
-  if (family === "student" && pathname === "/student/insights") {
-    if (!session.licenseLayer || LICENSE_LAYER_ORDER[session.licenseLayer] < LICENSE_LAYER_ORDER.L1) {
-      return { allowed: false, redirectTo: "/student/dashboard", reason: "license_restricted" };
+    if (!studentDecision.allowed) {
+      return studentDecision;
     }
   }
 
