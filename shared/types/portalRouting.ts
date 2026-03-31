@@ -7,6 +7,7 @@ export type PortalDomainKey = "marketing" | "portal" | "exam" | "vendor" | "deve
 export type RouteAccessFailureReason =
   | "unauthenticated"
   | "unauthorized"
+  | "invalid_session_token"
   | "license_restricted"
   | "inactive_institute"
   | "suspended_account"

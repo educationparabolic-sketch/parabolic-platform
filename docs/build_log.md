@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 68  
-Next Build: 69
+Completed Builds: 69  
+Next Build: 70
 
 Current Phase: Phase 14 — Routing & Portal Architecture
 
@@ -2193,18 +2193,49 @@ Completed On
 
 ---
 
+## Build 69 — Exam Portal Execution Route
+
+Phase  
+Phase 14 — Routing & Portal Architecture
+
+Summary  
+Implemented the architecture-defined exam portal execution entry route on top of the shared multi-portal routing framework.
+
+Components implemented:
+
+- Added `apps/admin/src/portals/examRoutes.ts` with a deterministic exam route definition for `/session/{sessionId}`, typed parameter resolution, and signed-token entry validation
+- Extended `apps/admin/src/App.tsx` to preserve query-string state during navigation so exam entry URLs such as `/session/{sessionId}?token=...` are evaluated correctly by the shared guard flow
+- Enforced redirect behavior from invalid or missing exam entry tokens to `/student/my-tests` while keeping exam execution restricted to the canonical `exam.yourdomain.com` route family and authenticated student sessions
+- Replaced the placeholder `apps/admin/src/portals/ExamPortalShell.tsx` with a Build 69 execution-entry shell that surfaces the architecture-defined bootstrap sequence for token validation, ownership validation, session snapshot loading, template snapshot loading, and exam runtime initialization
+- Updated `shared/types/portalRouting.ts` and `apps/admin/src/App.css` to support the new invalid-session-token guard reason and the exam execution bootstrap presentation
+- Verified the implementation locally with:
+  - `npm run build` in `apps/admin`
+  - `npm run lint` in `apps/admin`
+  - `npm run build` in `functions`
+
+Result  
+The platform now has an architecture-aligned exam execution entry route that enforces tokenized session access and prepares the isolated exam runtime bootstrap without pre-implementing the later exam engine builds.
+
+Commit Reference  
+Build 69 — Exam Portal Execution Route implemented
+
+Completed On  
+2026-03-31
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 69
+Next Build Number: 70
 
 Phase  
 Phase 14 — Routing & Portal Architecture
 
 Subsystem  
-Exam Portal Execution Route
+Vendor Portal Routes
 
 Reference  
-3_Core_Architectures.md → Section 7.6 Exam Portal Routes
+3_Core_Architectures.md → Section 7.7 Vendor Portal Routes
 
 ---
 

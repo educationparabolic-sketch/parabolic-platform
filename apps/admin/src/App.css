@@ -140,6 +140,58 @@
   color: #364862;
 }
 
+.exam-layout {
+  grid-template-columns: 1.3fr 0.9fr;
+}
+
+.bootstrap-list {
+  display: grid;
+  gap: 14px;
+}
+
+.bootstrap-card {
+  padding: 18px;
+  border-radius: 18px;
+  background: rgba(248, 250, 253, 0.92);
+  border: 1px solid rgba(13, 36, 79, 0.1);
+}
+
+.bootstrap-card h4,
+.bootstrap-card p {
+  margin: 0;
+}
+
+.bootstrap-card p {
+  margin-top: 10px;
+  color: #364862;
+}
+
+.bootstrap-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.status-ready {
+  background: rgba(42, 120, 73, 0.14);
+  color: #1f5a36;
+}
+
+.status-blocked {
+  background: rgba(168, 74, 26, 0.14);
+  color: #8a4215;
+}
+
 .route-chip {
   display: grid;
   justify-items: start;

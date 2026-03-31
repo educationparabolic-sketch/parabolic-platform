@@ -11,6 +11,7 @@ import {
   type RoutingSessionContext,
 } from "../../../shared/types/portalRouting";
 import { evaluateAdminRoutePermissions, matchAdminRoute } from "./portals/adminRoutes";
+import { evaluateExamRoutePermissions, matchExamRoute } from "./portals/examRoutes";
 import { evaluateStudentRoutePermissions, matchStudentRoute } from "./portals/studentRoutes";
 
 type RouteFamily = (typeof ROUTE_FAMILIES)[number]["family"];
@@ -18,12 +19,14 @@ type RouteFamily = (typeof ROUTE_FAMILIES)[number]["family"];
 interface NavigationState {
   family: RouteFamily;
   pathname: string;
+  search: string;
   activeDomain: PortalDomainKey;
   canonicalDomain: PortalDomainKey;
 }
 
 interface PortalShellProps {
   pathname: string;
+  search: string;
   activeDomain: PortalDomainKey;
   canonicalDomain: PortalDomainKey;
   canonicalHostname: string;
@@ -93,21 +96,22 @@ function determineNavigationState(pathname: string, hostname: string): Navigatio
   return {
     family,
     pathname: normalizePathname(pathname),
+    search: window.location.search,
     activeDomain,
     canonicalDomain: routeFamily?.canonicalDomain ?? "marketing",
   };
 }
 
-function buildCanonicalUrl(pathname: string, domain: PortalDomainKey): string {
+function buildCanonicalUrl(pathname: string, search: string, domain: PortalDomainKey): string {
   const canonicalHostname = PORTAL_DOMAINS[domain].hostname;
-  return `https://${canonicalHostname}${normalizePathname(pathname)}`;
+  return `https://${canonicalHostname}${normalizePathname(pathname)}${search}`;
 }
 
 function evaluateRouteAccess(
   navigationState: NavigationState,
   session: RoutingSessionContext,
 ): RouteAccessDecision {
-  const { family, pathname, activeDomain } = navigationState;
+  const { family, pathname, search, activeDomain } = navigationState;
 
   if (family === "public") {
     return {
@@ -131,7 +135,7 @@ function evaluateRouteAccess(
   if (activeDomain !== "development" && activeDomain !== routeFamily.canonicalDomain) {
     return {
       allowed: false,
-      redirectTo: buildCanonicalUrl(pathname, routeFamily.canonicalDomain),
+      redirectTo: buildCanonicalUrl(pathname, search, routeFamily.canonicalDomain),
       reason: "invalid_domain",
     };
   }
@@ -172,6 +176,16 @@ function evaluateRouteAccess(
 
     if (!studentDecision.allowed) {
       return studentDecision;
+    }
+  }
+
+  if (family === "exam") {
+    const examDecision = evaluateExamRoutePermissions(matchExamRoute(pathname), {
+      token: new URLSearchParams(search).get("token"),
+    });
+
+    if (!examDecision.allowed) {
+      return examDecision;
     }
   }
 
@@ -306,6 +320,7 @@ function RouteFrame(props: {
   const canonicalHostname = PORTAL_DOMAINS[navigationState.canonicalDomain].hostname;
   const commonProps: PortalShellProps = {
     pathname: navigationState.pathname,
+    search: navigationState.search,
     activeDomain: navigationState.activeDomain,
     canonicalDomain: navigationState.canonicalDomain,
     canonicalHostname,
@@ -348,7 +363,7 @@ function RouteFrame(props: {
       <nav className="path-nav">
         <button onClick={() => onNavigate("/admin/overview")}>Admin</button>
         <button onClick={() => onNavigate("/student/dashboard")}>Student</button>
-        <button onClick={() => onNavigate("/session/demo-session")}>Exam</button>
+        <button onClick={() => onNavigate("/session/demo-session?token=demo-exam-token")}>Exam</button>
         <button onClick={() => onNavigate("/vendor/overview")}>Vendor</button>
       </nav>
       <Suspense fallback={<section className="surface">Loading route family…</section>}>
@@ -361,10 +376,12 @@ function RouteFrame(props: {
 function App() {
   const [session, setSession] = useState<RoutingSessionContext>(() => loadStoredSession());
   const [pathname, setPathname] = useState(() => normalizePathname(window.location.pathname));
+  const [search, setSearch] = useState(() => window.location.search);
 
   useEffect(() => {
     const handlePopState = () => {
       setPathname(normalizePathname(window.location.pathname));
+      setSearch(window.location.search);
     };
 
     window.addEventListener("popstate", handlePopState);
@@ -376,8 +393,14 @@ function App() {
   }, [session]);
 
   const navigationState = useMemo(
-    () => determineNavigationState(pathname, window.location.hostname),
-    [pathname],
+    () => {
+      const state = determineNavigationState(pathname, window.location.hostname);
+      return {
+        ...state,
+        search,
+      };
+    },
+    [pathname, search],
   );
 
   const decision = useMemo(
@@ -395,13 +418,19 @@ function App() {
   }, [decision]);
 
   function navigate(nextPathname: string, replace = false) {
-    const normalizedPathname = normalizePathname(nextPathname);
+    const nextUrl = new URL(nextPathname, window.location.origin);
+    const normalizedPathname = normalizePathname(nextUrl.pathname);
+    const normalizedSearch = nextUrl.search;
+    const target = `${normalizedPathname}${normalizedSearch}`;
+
     if (replace) {
-      window.history.replaceState({}, "", normalizedPathname);
+      window.history.replaceState({}, "", target);
     } else {
-      window.history.pushState({}, "", normalizedPathname);
+      window.history.pushState({}, "", target);
     }
+
     setPathname(normalizedPathname);
+    setSearch(normalizedSearch);
   }
 
   function updateSession(nextSession: RoutingSessionContext) {
