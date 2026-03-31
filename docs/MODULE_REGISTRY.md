@@ -147,6 +147,7 @@ MultiPortalRoutingFramework | Shared | Build 66 shared portal routing foundation
 AdminPortalRoutes | Admin | Build 67 admin portal route registry and access-control layer covering overview, students, tests, assignments, analytics, insights, governance, settings, licensing, dynamic path resolution, and role/license-gated navigation
 StudentPortalRoutes | Student | Build 68 student portal route registry and access-control layer covering dashboard, my-tests, performance, insights, discipline, profile, dynamic performance detail resolution, and license-gated navigation
 ExamPortalExecutionRoute | Exam | Build 69 exam portal execution route registry and bootstrap shell covering `/session/{sessionId}`, signed token enforcement, student-only access, redirect-on-invalid-entry behavior, immutable snapshot loading sequence, and exam runtime handoff preparation
+VendorPortalRoutes | Vendor | Build 70 vendor portal route registry and access-control layer covering overview, institutes, institute detail, licensing, calibration, calibration simulation/history, intelligence, revenue, system health, and audit navigation on `vendor.yourdomain.com/vendor/*`
 
 ---
 

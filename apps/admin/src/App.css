@@ -199,6 +199,25 @@
   text-align: left;
 }
 
+.vendor-route-groups {
+  display: grid;
+  gap: 18px;
+}
+
+.vendor-route-group {
+  display: grid;
+  gap: 12px;
+}
+
+.vendor-route-group h4,
+.vendor-route-group p {
+  margin: 0;
+}
+
+.vendor-route-group p {
+  color: #364862;
+}
+
 .callout {
   padding: 18px 20px;
   border-left: 4px solid #d46422;

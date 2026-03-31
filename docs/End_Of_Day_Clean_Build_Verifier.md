@@ -1,9 +1,6 @@
-# End Of Day Clean Build Verifier
+# AI CLEAN BUILD VERIFIER AND REPAIR
 
-```text
-# AI CLEAN BUILD VERIFIER
-
-You are performing an end-of-day clean-build and consistency verification for this architecture-driven repository.
+You are performing an end-of-day clean-build, consistency verification, and minimal-repair pass for this architecture-driven repository.
 
 ## Mandatory Reading
 
@@ -34,9 +31,11 @@ docs/system_topology.md
 
 ## Goal
 
-Verify that the current repository state remains clean, deterministic, architecture-compliant, and consistent across all completed builds up to the latest completed build in `docs/build_log.md`.
+Verify that the current repository state remains clean, deterministic, architecture-compliant, runtime-compliant, and consistent across all completed builds up to the latest completed build in `docs/build_log.md`.
 
-Do not implement new features unless fixing a verification failure is necessary.
+If verification failures are found, fix them when they are necessary to restore clean build health and do not require implementing future builds.
+
+Do not stop at reporting if the issue is safely fixable within current build scope and repository rules.
 
 ## Verification Scope
 
@@ -77,12 +76,15 @@ Do not implement new features unless fixing a verification failure is necessary.
 - forbidden runtime usage
 - accidental future-build implementation
 - dirty or suspicious repo state
+- dependency/runtime drift
+- package version drift from required pinned runtime versions
+- lockfile mismatch with required runtime versions
 
 ## Runtime Compatibility Rules
 
 Strictly enforce:
-- firebase-functions: 4.4.1 style usage
-- firebase-admin: 11.10.1
+- firebase-functions: exactly 4.4.1
+- firebase-admin: exactly 11.10.1
 - Node.js 20
 
 Allowed:
@@ -98,12 +100,26 @@ Forbidden:
 - `functions.config()`
 - v2/v7 syntax
 
-If violations are found, report them.
+If runtime dependency drift exists in manifests or lockfiles, fix it.
+If installed dependencies differ from required versions, update manifest and lockfile to restore exact compliance.
+Do not leave version drift as report-only unless repair fails.
+
+## Required Dependency Enforcement
+
+For runtime-critical packages, verify all of the following:
+- `functions/package.json`
+- `functions/package-lock.json`
+- installed dependency tree used by local verification
+
+If `firebase-functions` is not exactly `4.4.1`, repair it.
+If `firebase-admin` is not exactly `11.10.1`, repair it.
+Do not use caret ranges for these runtime-critical dependencies if exact-version compliance is required.
 
 ## Execution Requirements
 
 Run all necessary verification commands for a clean-build check, including:
 - repo status inspection
+- dependency version inspection
 - TypeScript build
 - lint
 - repeatable backend tests
@@ -114,6 +130,8 @@ Take all necessary permissions automatically whenever required for:
 - Firebase emulator execution
 - local port binding
 - config writes needed by Firebase CLI
+- lockfile regeneration
+- dependency reinstall/update needed to restore required runtime versions
 - any other sandbox-restricted verification command
 
 Do not stop just because permission is needed. Request it and continue.
@@ -121,10 +139,25 @@ Do not stop just because permission is needed. Request it and continue.
 ## Fix Policy
 
 - If verification fails, fix only what is necessary to restore clean and consistent build health.
+- Fix version drift, lockfile drift, and verification-only breakages even if they were introduced by earlier builds, as long as the repair does not implement future architecture.
 - Do not modify docs unless required to correct deterministic build records or registry consistency.
 - Do not implement future builds.
 - Do not redesign existing modules.
+- Do not rename modules unless required by a real architecture violation.
 - Reuse existing patterns and services.
+
+## Commit Gate
+
+A build is commit-ready only if all of the following are true:
+- repo builds cleanly
+- required lint passes
+- required repeatable tests pass
+- emulator-backed verification passes where applicable
+- runtime dependency versions are exactly compliant
+- no forbidden API/runtime usage remains
+- no deterministic build-log or registry inconsistency remains
+
+If any of the above fail, commit readiness must be NO.
 
 ## Output Format
 
@@ -153,4 +186,3 @@ Return only:
 - exact blockers before commit
 
 Be concise and rigorous.
-```

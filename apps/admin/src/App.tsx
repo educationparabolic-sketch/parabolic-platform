@@ -13,6 +13,7 @@ import {
 import { evaluateAdminRoutePermissions, matchAdminRoute } from "./portals/adminRoutes";
 import { evaluateExamRoutePermissions, matchExamRoute } from "./portals/examRoutes";
 import { evaluateStudentRoutePermissions, matchStudentRoute } from "./portals/studentRoutes";
+import { evaluateVendorRoutePermissions, matchVendorRoute } from "./portals/vendorRoutes";
 
 type RouteFamily = (typeof ROUTE_FAMILIES)[number]["family"];
 
@@ -186,6 +187,17 @@ function evaluateRouteAccess(
 
     if (!examDecision.allowed) {
       return examDecision;
+    }
+  }
+
+  if (family === "vendor") {
+    const vendorDecision = evaluateVendorRoutePermissions(
+      matchVendorRoute(pathname),
+      session.role,
+    );
+
+    if (!vendorDecision.allowed) {
+      return vendorDecision;
     }
   }
 
