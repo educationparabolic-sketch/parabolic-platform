@@ -11,6 +11,7 @@ import {
   type RouteAccessDecision,
   type RoutingSessionContext,
 } from "../../../shared/types/portalRouting";
+import { evaluateAdminRoutePermissions, matchAdminRoute } from "./portals/adminRoutes";
 
 type RouteFamily = (typeof ROUTE_FAMILIES)[number]["family"];
 
@@ -26,6 +27,9 @@ interface PortalShellProps {
   activeDomain: PortalDomainKey;
   canonicalDomain: PortalDomainKey;
   canonicalHostname: string;
+  licenseLayer: LicenseLayer | null;
+  role: PortalRole | null;
+  onNavigate: (pathname: string) => void;
 }
 
 const AdminPortalShell = lazy(() => import("./portals/AdminPortalShell.tsx"));
@@ -148,13 +152,15 @@ function evaluateRouteAccess(
     return { allowed: false, redirectTo: "/unauthorized", reason: "unauthorized" };
   }
 
-  if (pathname === "/admin/governance") {
-    if (session.role !== "director") {
-      return { allowed: false, redirectTo: "/unauthorized", reason: "unauthorized" };
-    }
+  if (family === "admin") {
+    const adminDecision = evaluateAdminRoutePermissions(
+      matchAdminRoute(pathname),
+      session.role,
+      session.licenseLayer,
+    );
 
-    if (!session.licenseLayer || LICENSE_LAYER_ORDER[session.licenseLayer] < LICENSE_LAYER_ORDER.L3) {
-      return { allowed: false, redirectTo: "/admin/overview", reason: "license_restricted" };
+    if (!adminDecision.allowed) {
+      return adminDecision;
     }
   }
 
@@ -304,6 +310,9 @@ function RouteFrame(props: {
     activeDomain: navigationState.activeDomain,
     canonicalDomain: navigationState.canonicalDomain,
     canonicalHostname,
+    licenseLayer: session.licenseLayer,
+    role: session.role,
+    onNavigate,
   };
 
   let portalComponent = <AdminPortalShell {...commonProps} />;

@@ -125,6 +125,6 @@ export const DEFAULT_ROUTE_BY_ROLE: Record<PortalRole, string> = {
   student: "/student/dashboard",
   teacher: "/admin/overview",
   admin: "/admin/overview",
-  director: "/admin/governance",
+  director: "/admin/governance/stability",
   vendor: "/vendor/overview",
 };
