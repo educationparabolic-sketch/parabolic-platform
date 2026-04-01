@@ -19,6 +19,7 @@
     "test:student-search-query": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=parabolic-platform-build-53-tests GOOGLE_CLOUD_PROJECT=parabolic-platform-build-53-tests NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none npm run build && FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 GCLOUD_PROJECT=parabolic-platform-build-53-tests GOOGLE_CLOUD_PROJECT=parabolic-platform-build-53-tests NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none node --test lib/tests/studentSearchQuery.test.js",
     "test:search-architecture": "npm run build && node --test lib/tests/searchArchitecture.test.js",
     "test:cdn-architecture": "npm run build && node --test lib/tests/cdnArchitecture.test.js",
+    "test:storage-bucket-architecture": "npm run build && node --test lib/tests/storageBucketArchitecture.test.js",
     "test:template-creation": "npm run build && node --test lib/tests/templateCreation.test.js",
     "test:template-configuration-snapshot": "npm run build && node --test lib/tests/templateConfigurationSnapshot.test.js",
     "test:template-fingerprint": "npm run build && node --test lib/tests/templateFingerprint.test.js",

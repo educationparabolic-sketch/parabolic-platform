@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 71  
-Next Build: 72
+Completed Builds: 72  
+Next Build: 73
 
 Current Phase: Phase 15 — CDN & Asset Delivery
 
@@ -2283,18 +2283,53 @@ Completed On
 
 ---
 
+## Build 72 — Storage Bucket Architecture
+
+Phase  
+Phase 15 — CDN & Asset Delivery
+
+Summary  
+Implemented the backend storage bucket architecture layer for deterministic platform asset storage.
+
+Components implemented:
+
+- Added `functions/src/services/storageBucketArchitecture.ts` with a storage bucket architecture service covering the architecture-defined question asset and reports buckets, bucket-handle access through Firebase Admin, and bucket/object-path validation
+- Added `functions/src/types/storageBucketArchitecture.ts` with strongly typed storage architecture contracts for bucket directory definitions, storage target metadata, and validation requests
+- Reused the existing CDN architecture foundation to keep bucket names and object-path resolution canonical for Build 72
+- Implemented storage target resolution for immutable question asset paths such as `/{instituteId}/questions/{questionId}/v{version}/question.png`, `solution.png`, `solution.webp`, and `solution.pdf`
+- Implemented storage target resolution for reports bucket outputs such as `/{instituteId}/reports/{year}/{month}/analytics-export.csv` and student monthly PDF statements
+- Added deterministic object metadata outputs including `directoryPath`, `contentType`, and `gs://` URIs without pre-implementing signed URL generation from Build 73
+- Extended `functions/.env.example` to document `CDN_BASE_URL`, `QUESTION_ASSETS_BUCKET`, and `REPORTS_BUCKET` for repeatable local setup
+- Added repeatable local coverage in `functions/src/tests/storageBucketArchitecture.test.ts` and registered the test script in `functions/package.json`
+- Verified the implementation locally with:
+  - `npm run lint` in `functions`
+  - `npm run build` in `functions`
+  - `npm run test:storage-bucket-architecture` in `functions`
+  - `npm run test:cdn-architecture` in `functions`
+
+Result  
+The platform now has a reusable storage bucket architecture layer that formalizes the two required Cloud Storage buckets, enforces the Section 38.3 directory structure, and prepares the asset system for the later signed URL build without exposing direct bucket URLs.
+
+Commit Reference  
+Build 72 — Storage Bucket Architecture implemented
+
+Completed On  
+2026-04-01
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 72
+Next Build Number: 73
 
 Phase  
 Phase 15 — CDN & Asset Delivery
 
 Subsystem  
-Storage Bucket Architecture
+Signed URL Generation Service
 
 Reference  
-3_Core_Architectures.md → Section 38.3 Storage Architecture
+3_Core_Architectures.md → Section 38.6 Signed URL Security Strategy
 
 ---
 
@@ -2373,7 +2408,8 @@ Build | Phase | Status
 69 | Routing & Portal Architecture | Completed
 70 | Routing & Portal Architecture | Completed
 71 | CDN & Asset Delivery | Completed
-72–150 | Remaining Phases | Pending
+72 | CDN & Asset Delivery | Completed
+73–150 | Remaining Phases | Pending
 
 ---
 
