@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 72  
-Next Build: 73
+Completed Builds: 73  
+Next Build: 74
 
 Current Phase: Phase 15 — CDN & Asset Delivery
 
@@ -2318,18 +2318,63 @@ Completed On
 
 ---
 
+## Build 73 — Signed URL Generation Service
+
+Phase  
+Phase 15 — CDN & Asset Delivery
+
+Summary  
+Implemented the backend signed URL generation layer for secure CDN-backed asset delivery.
+
+Components implemented:
+
+- Added `functions/src/services/signedUrl.ts` with a reusable signed URL service that generates CDN-domain signed URLs for question assets, report assets, and restricted media paths
+- Added `functions/src/types/signedUrl.ts` with strongly typed signing contracts, access-context policies, service config, and result metadata
+- Reused the existing CDN and storage architecture services so Build 73 signs only architecture-approved CDN paths and never exposes direct bucket URLs
+- Implemented architecture-defined expiry policies for:
+  - exam session assets: 2 hours
+  - dashboard viewing assets: 30 minutes
+- Implemented base64url signing-key validation and configurable key-name support through `CDN_SIGNED_URL_KEY_VALUE` and `CDN_SIGNED_URL_KEY_NAME`
+- Added guardrails to reject pre-signed query parameters such as `Expires`, `KeyName`, and `Signature` before generating a new signed URL
+- Added repeatable local coverage in `functions/src/tests/signedUrl.test.ts` for:
+  - deterministic policy initialization
+  - exam question asset URL signing
+  - dashboard report URL signing
+  - restricted media path signing
+  - signing algorithm verification
+  - missing key validation
+  - reserved query parameter rejection
+- Registered `npm run test:signed-url` in `functions/package.json`
+- Verified the implementation locally with:
+  - `npm run lint` in `functions`
+  - `npm run build` in `functions`
+  - `npm run test:signed-url` in `functions`
+  - `npm run test:cdn-architecture` in `functions`
+  - `npm run test:storage-bucket-architecture` in `functions`
+
+Result  
+The platform now has a reusable signed URL generation layer aligned with Section 38.6 that protects private assets behind the CDN domain, enforces time-limited access, and builds directly on the existing CDN and storage architecture without introducing duplicate delivery paths.
+
+Commit Reference  
+Build 73 — Signed URL Generation Service implemented
+
+Completed On  
+2026-04-01
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 73
+Next Build Number: 74
 
 Phase  
 Phase 15 — CDN & Asset Delivery
 
 Subsystem  
-Signed URL Generation Service
+CDN Cache Policy Configuration
 
 Reference  
-3_Core_Architectures.md → Section 38.6 Signed URL Security Strategy
+3_Core_Architectures.md → Section 38.5 Question Image Caching Strategy
 
 ---
 
@@ -2409,7 +2454,8 @@ Build | Phase | Status
 70 | Routing & Portal Architecture | Completed
 71 | CDN & Asset Delivery | Completed
 72 | CDN & Asset Delivery | Completed
-73–150 | Remaining Phases | Pending
+73 | CDN & Asset Delivery | Completed
+74–150 | Remaining Phases | Pending
 
 ---
 
