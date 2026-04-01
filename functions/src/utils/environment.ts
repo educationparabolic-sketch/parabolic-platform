@@ -1,4 +1,9 @@
 import {EnvironmentConfig, RuntimeEnvironment} from "../types/environment";
+import {
+  DEFAULT_CDN_BASE_URL,
+  DEFAULT_QUESTION_ASSETS_BUCKET,
+  DEFAULT_REPORTS_BUCKET,
+} from "../services/cdnArchitecture";
 import {createLogger} from "../services/logging";
 import {loadManagedSecrets} from "./secrets";
 
@@ -13,6 +18,12 @@ const DEFAULT_ENDPOINTS = {
   appBaseUrl: "http://localhost:5173",
   examBaseUrl: "http://localhost:4173",
   vendorBaseUrl: "http://localhost:6173",
+} as const;
+
+const DEFAULT_ASSET_DELIVERY = {
+  cdnBaseUrl: DEFAULT_CDN_BASE_URL,
+  questionAssetsBucket: DEFAULT_QUESTION_ASSETS_BUCKET,
+  reportsBucket: DEFAULT_REPORTS_BUCKET,
 } as const;
 
 const getOptionalEnv = (key: string): string | undefined => {
@@ -50,6 +61,18 @@ export const loadEnvironmentConfig = async (): Promise<EnvironmentConfig> => {
   const secretResolution = await loadManagedSecrets({nodeEnv, projectId});
 
   const config: EnvironmentConfig = {
+    assetDelivery: {
+      buckets: {
+        questionAssets:
+          getOptionalEnv("QUESTION_ASSETS_BUCKET") ??
+          DEFAULT_ASSET_DELIVERY.questionAssetsBucket,
+        reports:
+          getOptionalEnv("REPORTS_BUCKET") ??
+          DEFAULT_ASSET_DELIVERY.reportsBucket,
+      },
+      cdnBaseUrl:
+        getOptionalEnv("CDN_BASE_URL") ?? DEFAULT_ASSET_DELIVERY.cdnBaseUrl,
+    },
     nodeEnv,
     projectId,
     endpoints: {
@@ -67,6 +90,7 @@ export const loadEnvironmentConfig = async (): Promise<EnvironmentConfig> => {
   logger.info("Environment configuration loaded", {
     nodeEnv: config.nodeEnv,
     projectId: config.projectId,
+    assetDelivery: config.assetDelivery,
     endpoints: config.endpoints,
     configuredSecrets: Object.entries(config.secretMetadata)
       .filter(([, metadata]) => metadata.source !== "unconfigured")

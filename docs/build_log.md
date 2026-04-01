@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 70  
-Next Build: 71
+Completed Builds: 71  
+Next Build: 72
 
 Current Phase: Phase 15 — CDN & Asset Delivery
 
@@ -2251,18 +2251,50 @@ Completed On
 
 ---
 
+## Build 71 — CDN Architecture Initialization
+
+Phase  
+Phase 15 — CDN & Asset Delivery
+
+Summary  
+Implemented the backend CDN asset-delivery foundation for secure, low-latency question and report assets.
+
+Components implemented:
+
+- Added `functions/src/services/cdnArchitecture.ts` with a deterministic CDN architecture service covering dedicated CDN-domain configuration, secure bucket bindings, cache-policy defaults, exam optimization rules, and direct bucket URL exposure prevention
+- Added `functions/src/types/cdnArchitecture.ts` with strongly typed CDN architecture contracts, bucket definitions, cache tiers, and question/report asset path resolution request models
+- Extended `functions/src/utils/environment.ts` and `functions/src/types/environment.ts` to load and expose `CDN_BASE_URL`, `QUESTION_ASSETS_BUCKET`, and `REPORTS_BUCKET` through the centralized environment configuration system
+- Implemented normalized question asset path resolution for immutable versioned paths such as `/{instituteId}/questions/{questionId}/v{version}/question.png` and `solution.*`
+- Implemented normalized report asset path resolution for `/{instituteId}/reports/{year}/{month}/...` outputs without pre-implementing the later signed-URL or bucket-provisioning builds
+- Added repeatable local coverage in `functions/src/tests/cdnArchitecture.test.ts` and registered the test script in `functions/package.json`
+- Verified the implementation locally with:
+  - `npm run lint` in `functions`
+  - `npm run build` in `functions`
+  - `npm run test:cdn-architecture` in `functions`
+
+Result  
+The platform now has a reusable CDN architecture initialization layer that centralizes asset-delivery rules, security constraints, and path conventions for upcoming storage and signed-URL builds.
+
+Commit Reference  
+Build 71 — CDN Architecture Initialization implemented
+
+Completed On  
+2026-04-01
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 71
+Next Build Number: 72
 
 Phase  
 Phase 15 — CDN & Asset Delivery
 
 Subsystem  
-CDN Architecture Initialization
+Storage Bucket Architecture
 
 Reference  
-3_Core_Architectures.md → Section 38.1 Overview — CDN & Asset Delivery Strategy
+3_Core_Architectures.md → Section 38.3 Storage Architecture
 
 ---
 
@@ -2340,7 +2372,8 @@ Build | Phase | Status
 68 | Routing & Portal Architecture | Completed
 69 | Routing & Portal Architecture | Completed
 70 | Routing & Portal Architecture | Completed
-71–150 | Remaining Phases | Pending
+71 | CDN & Asset Delivery | Completed
+72–150 | Remaining Phases | Pending
 
 ---
 

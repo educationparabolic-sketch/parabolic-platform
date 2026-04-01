@@ -7,6 +7,14 @@ export interface ServiceEndpoints {
   vendorBaseUrl: string;
 }
 
+export interface AssetDeliveryConfig {
+  buckets: {
+    questionAssets: string;
+    reports: string;
+  };
+  cdnBaseUrl: string;
+}
+
 export type ManagedSecretKey =
   | "stripeSecretKey"
   | "stripeWebhookSecret"
@@ -37,6 +45,7 @@ export interface ManagedSecrets {
 }
 
 export interface EnvironmentConfig {
+  assetDelivery: AssetDeliveryConfig;
   nodeEnv: RuntimeEnvironment;
   projectId: string;
   endpoints: ServiceEndpoints;
