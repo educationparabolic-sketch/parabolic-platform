@@ -6,6 +6,9 @@ import {handleExamStartRequest} from "./api/examStart";
 import {handleExamSessionAnswersRequest} from "./api/examSessionAnswers";
 import {handleExamSessionSubmitRequest} from "./api/examSessionSubmit";
 import {handleInternalEmailQueueRequest} from "./api/internalEmailQueue";
+import {
+  handleVendorSimulationEnvironmentRequest,
+} from "./api/vendorSimulationEnvironment";
 import {runAssignmentOnCreate} from "./triggers/assignmentCreation";
 import {questionBankOnCreate} from "./triggers/questionIngestion";
 import {examSessionOnUpdate} from "./triggers/sessionSubmission";
@@ -29,6 +32,9 @@ export const examSessionSubmit = functions.https.onRequest(
 );
 export const internalEmailQueue = functions.https.onRequest(
   handleInternalEmailQueueRequest,
+);
+export const vendorSimulationEnvironment = functions.https.onRequest(
+  handleVendorSimulationEnvironmentRequest,
 );
 
 export const helloWorld = functions.https.onRequest(async (

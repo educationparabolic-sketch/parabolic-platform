@@ -12,7 +12,13 @@ import {
 import {
   createInternalEmailQueueHandler,
 } from "../api/internalEmailQueue";
+import {
+  createVendorSimulationEnvironmentHandler,
+} from "../api/vendorSimulationEnvironment";
 import {SessionStartValidationError} from "../services/session";
+import {
+  SimulationEnvironmentValidationError,
+} from "../services/simulationEnvironment";
 import {SubmissionValidationError} from "../services/submission";
 import {
   createMockRequest,
@@ -20,6 +26,7 @@ import {
 } from "./helpers/http";
 import {PersistAnswerBatchResult} from "../types/sessionAnswerBatch";
 import {SubmissionResult} from "../types/submission";
+import {EnvironmentConfig} from "../types/environment";
 
 const createStudentToken = (overrides: Record<string, unknown> = {}) => ({
   instituteId: "inst_build_50",
@@ -36,6 +43,55 @@ const createServiceToken = (overrides: Record<string, unknown> = {}) => ({
   role: "service",
   uid: "svc_build_50",
   ...overrides,
+});
+
+const createVendorToken = (overrides: Record<string, unknown> = {}) => ({
+  licenseLayer: "L0",
+  role: "vendor",
+  uid: "vendor_build_76",
+  ...overrides,
+});
+
+const createEnvironmentConfig = (
+  nodeEnv: EnvironmentConfig["nodeEnv"],
+): EnvironmentConfig => ({
+  assetDelivery: {
+    buckets: {
+      questionAssets: "bucket-question-assets",
+      reports: "bucket-reports",
+    },
+    cdnBaseUrl: "https://cdn.example.com",
+  },
+  endpoints: {
+    appBaseUrl: "http://localhost:5173",
+    examBaseUrl: "http://localhost:4173",
+    vendorBaseUrl: "http://localhost:6173",
+  },
+  nodeEnv,
+  projectId: "parabolic-platform-build-76-tests",
+  secretMetadata: {
+    aiApiKey: {
+      envVar: "AI_API_KEY",
+      secretNameEnvVar: "AI_API_KEY_SECRET_NAME",
+      source: "unconfigured",
+    },
+    emailProviderKey: {
+      envVar: "EMAIL_PROVIDER_KEY",
+      secretNameEnvVar: "EMAIL_PROVIDER_KEY_SECRET_NAME",
+      source: "unconfigured",
+    },
+    stripeSecretKey: {
+      envVar: "STRIPE_SECRET_KEY",
+      secretNameEnvVar: "STRIPE_SECRET_KEY_SECRET_NAME",
+      source: "unconfigured",
+    },
+    stripeWebhookSecret: {
+      envVar: "STRIPE_WEBHOOK_SECRET",
+      secretNameEnvVar: "STRIPE_WEBHOOK_SECRET_SECRET_NAME",
+      source: "unconfigured",
+    },
+  },
+  secrets: {},
 });
 
 const assertStructuredError = (
@@ -576,6 +632,163 @@ test(
       response.body,
       "UNAUTHORIZED",
       "Missing authorization header.",
+    );
+  },
+);
+
+test(
+  "vendor simulation environment handler accepts a valid vendor request",
+  async () => {
+    const handler = createVendorSimulationEnvironmentHandler({
+      initializeSimulationEnvironment: async (input) => ({
+        environmentPath: `institutes/sim_${input.simulationId}`,
+        metadata: {
+          calibrationVersion: input.calibrationVersion,
+          instituteId: `sim_${input.simulationId}`,
+          parameterSnapshot: input.parameterSnapshot,
+          riskModelVersion: input.riskModelVersion,
+          runCount: input.parameterSnapshot.runCount,
+          simulationId: input.simulationId,
+          simulationVersion: input.simulationVersion,
+          studentCount: input.parameterSnapshot.studentCountPerInstitute,
+        },
+        wasCreated: true,
+      }),
+      loadEnvironmentConfig: async () => createEnvironmentConfig("development"),
+      verifyIdToken: async () => createVendorToken() as never,
+    });
+    const request = createMockRequest({
+      body: {
+        calibrationVersion: "cal_v2026_01",
+        parameterSnapshot: {
+          archiveSimulationEnabled: true,
+          difficultyDistribution: "realistic",
+          instituteCount: 5,
+          loadIntensity: "medium",
+          riskDistributionBias: "balanced",
+          runCount: 20,
+          studentCountPerInstitute: 200,
+          timingAggressiveness: "moderate",
+        },
+        riskModelVersion: "risk_v3",
+        simulationId: "build_76_environment",
+        simulationVersion: "sim_v1_preview",
+      },
+      headers: {
+        authorization: "Bearer build_76_vendor",
+      },
+      path: "/vendor/simulation/environment",
+    });
+    const response = createMockResponse();
+
+    await handler(request as never, response as never);
+
+    assert.equal(response.statusCode, 200);
+    assert.equal((response.body as {code: string}).code, "OK");
+    assert.equal(
+      (response.body as {data: {environmentPath: string}}).data.environmentPath,
+      "institutes/sim_build_76_environment",
+    );
+  },
+);
+
+test(
+  "vendor simulation environment handler rejects role violations",
+  async () => {
+    const handler = createVendorSimulationEnvironmentHandler({
+      initializeSimulationEnvironment: async () => {
+        throw new Error("initializeSimulationEnvironment should not be called");
+      },
+      loadEnvironmentConfig: async () => {
+        throw new Error("loadEnvironmentConfig should not be called");
+      },
+      verifyIdToken: async () => createStudentToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          calibrationVersion: "cal_v2026_01",
+          parameterSnapshot: {
+            archiveSimulationEnabled: true,
+            difficultyDistribution: "realistic",
+            instituteCount: 5,
+            loadIntensity: "medium",
+            riskDistributionBias: "balanced",
+            runCount: 20,
+            studentCountPerInstitute: 200,
+            timingAggressiveness: "moderate",
+          },
+          riskModelVersion: "risk_v3",
+          simulationId: "build_76_environment",
+          simulationVersion: "sim_v1_preview",
+        },
+        headers: {
+          authorization: "Bearer build_76_student",
+        },
+        path: "/vendor/simulation/environment",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 403);
+    assertStructuredError(
+      response.body,
+      "FORBIDDEN",
+      "Only vendor roles can initialize simulation environments.",
+    );
+  },
+);
+
+test(
+  "vendor simulation environment handler surfaces environment guards",
+  async () => {
+    const handler = createVendorSimulationEnvironmentHandler({
+      initializeSimulationEnvironment: async () => {
+        throw new SimulationEnvironmentValidationError(
+          "FORBIDDEN",
+          "Synthetic simulation environments can only run in development, " +
+            "staging, or test environments.",
+        );
+      },
+      loadEnvironmentConfig: async () => createEnvironmentConfig("production"),
+      verifyIdToken: async () => createVendorToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          calibrationVersion: "cal_v2026_01",
+          parameterSnapshot: {
+            archiveSimulationEnabled: true,
+            difficultyDistribution: "realistic",
+            instituteCount: 5,
+            loadIntensity: "medium",
+            riskDistributionBias: "balanced",
+            runCount: 20,
+            studentCountPerInstitute: 200,
+            timingAggressiveness: "moderate",
+          },
+          riskModelVersion: "risk_v3",
+          simulationId: "build_76_environment",
+          simulationVersion: "sim_v1_preview",
+        },
+        headers: {
+          authorization: "Bearer build_76_vendor",
+        },
+        path: "/vendor/simulation/environment",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 403);
+    assertStructuredError(
+      response.body,
+      "FORBIDDEN",
+      "Synthetic simulation environments can only run in development, " +
+        "staging, or test environments.",
     );
   },
 );
