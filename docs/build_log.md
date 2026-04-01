@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 73  
-Next Build: 74
+Completed Builds: 74  
+Next Build: 75
 
 Current Phase: Phase 15 — CDN & Asset Delivery
 
@@ -2363,18 +2363,64 @@ Completed On
 
 ---
 
+## Build 74 — CDN Cache Policy Configuration
+
+Phase  
+Phase 15 — CDN & Asset Delivery
+
+Summary  
+Implemented the CDN cache policy configuration layer for architecture-aligned asset caching.
+
+Components implemented:
+
+- Added `functions/src/services/cdnCachePolicy.ts` with a reusable cache policy service that resolves hot, warm, and cold CDN cache tiers
+- Added `functions/src/types/cdnCachePolicy.ts` with strongly typed cache-policy configuration, request, and result contracts
+- Reused the existing CDN architecture service so Build 74 consumes the architecture-defined cache policies from Section 38.5 instead of duplicating policy definitions
+- Implemented deterministic cache-tier resolution for:
+  - active academic-year assets: hot cache tier
+  - assets inactive for 30 or more days: warm cache tier
+  - archived academic-year assets: cold cache tier
+- Added `resolveCacheControlHeader` so downstream asset-delivery code can apply the final `Cache-Control` header consistently
+- Added validation to reject invalid access timestamps and future-dated `lastAccessedAt` values
+- Added repeatable local coverage in `functions/src/tests/cdnCachePolicy.test.ts` for:
+  - deterministic policy initialization
+  - hot tier resolution
+  - warm tier resolution
+  - cold tier resolution
+  - final `Cache-Control` header resolution
+  - invalid timestamp validation
+- Registered `npm run test:cdn-cache-policy` in `functions/package.json`
+- Verified the implementation locally with:
+  - `npm run lint` in `functions`
+  - `npm run build` in `functions`
+  - `npm run test:cdn-cache-policy` in `functions`
+  - `npm run test:cdn-architecture` in `functions`
+  - `npm run test:storage-bucket-architecture` in `functions`
+  - `npm run test:signed-url` in `functions`
+
+Result  
+The platform now has a reusable CDN cache-policy layer aligned with Section 38.5 that applies deterministic hot, warm, and cold caching behavior without changing storage topology, signed-URL behavior, or event flows.
+
+Commit Reference  
+Build 74 — CDN Cache Policy Configuration implemented
+
+Completed On  
+2026-04-01
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 74
+Next Build Number: 75
 
 Phase  
 Phase 15 — CDN & Asset Delivery
 
 Subsystem  
-CDN Cache Policy Configuration
+CDN Monitoring System
 
 Reference  
-3_Core_Architectures.md → Section 38.5 Question Image Caching Strategy
+3_Core_Architectures.md → Section 38.18 CDN Monitoring
 
 ---
 
@@ -2455,7 +2501,8 @@ Build | Phase | Status
 71 | CDN & Asset Delivery | Completed
 72 | CDN & Asset Delivery | Completed
 73 | CDN & Asset Delivery | Completed
-74–150 | Remaining Phases | Pending
+74 | CDN & Asset Delivery | Completed
+75–150 | Remaining Phases | Pending
 
 ---
 

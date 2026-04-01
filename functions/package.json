@@ -21,6 +21,7 @@
     "test:cdn-architecture": "npm run build && node --test lib/tests/cdnArchitecture.test.js",
     "test:storage-bucket-architecture": "npm run build && node --test lib/tests/storageBucketArchitecture.test.js",
     "test:signed-url": "npm run build && node --test lib/tests/signedUrl.test.js",
+    "test:cdn-cache-policy": "npm run build && node --test lib/tests/cdnCachePolicy.test.js",
     "test:template-creation": "npm run build && node --test lib/tests/templateCreation.test.js",
     "test:template-configuration-snapshot": "npm run build && node --test lib/tests/templateConfigurationSnapshot.test.js",
     "test:template-fingerprint": "npm run build && node --test lib/tests/templateFingerprint.test.js",
