@@ -9,6 +9,9 @@ import {handleInternalEmailQueueRequest} from "./api/internalEmailQueue";
 import {
   handleVendorSimulationEnvironmentRequest,
 } from "./api/vendorSimulationEnvironment";
+import {
+  handleVendorSimulationStudentsRequest,
+} from "./api/vendorSimulationStudents";
 import {runAssignmentOnCreate} from "./triggers/assignmentCreation";
 import {questionBankOnCreate} from "./triggers/questionIngestion";
 import {examSessionOnUpdate} from "./triggers/sessionSubmission";
@@ -35,6 +38,9 @@ export const internalEmailQueue = functions.https.onRequest(
 );
 export const vendorSimulationEnvironment = functions.https.onRequest(
   handleVendorSimulationEnvironmentRequest,
+);
+export const vendorSimulationStudents = functions.https.onRequest(
+  handleVendorSimulationStudentsRequest,
 );
 
 export const helloWorld = functions.https.onRequest(async (

@@ -15,10 +15,16 @@ import {
 import {
   createVendorSimulationEnvironmentHandler,
 } from "../api/vendorSimulationEnvironment";
+import {
+  createVendorSimulationStudentsHandler,
+} from "../api/vendorSimulationStudents";
 import {SessionStartValidationError} from "../services/session";
 import {
   SimulationEnvironmentValidationError,
 } from "../services/simulationEnvironment";
+import {
+  SimulationStudentGenerationValidationError,
+} from "../services/simulationStudentGenerator";
 import {SubmissionValidationError} from "../services/submission";
 import {
   createMockRequest,
@@ -789,6 +795,121 @@ test(
       "FORBIDDEN",
       "Synthetic simulation environments can only run in development, " +
         "staging, or test environments.",
+    );
+  },
+);
+
+test(
+  "vendor simulation students handler accepts a valid vendor request",
+  async () => {
+    const handler = createVendorSimulationStudentsHandler({
+      generateSyntheticStudents: async (input) => ({
+        existingCount: 0,
+        generatedCount: 200,
+        instituteId: `sim_${input.simulationId}`,
+        simulationId: input.simulationId,
+        simulationVersion: "sim_v1_preview",
+        studentsPath: `institutes/sim_${input.simulationId}/students`,
+        topicIds: input.topicIds ?? ["kinematics", "calculus"],
+        totalStudentCount: 200,
+      }),
+      loadEnvironmentConfig: async () => createEnvironmentConfig("development"),
+      verifyIdToken: async () => createVendorToken() as never,
+    });
+    const request = createMockRequest({
+      body: {
+        simulationId: "build_77_students",
+        topicIds: ["kinematics", "calculus", "probability"],
+      },
+      headers: {
+        authorization: "Bearer build_77_vendor",
+      },
+      path: "/vendor/simulation/students",
+    });
+    const response = createMockResponse();
+
+    await handler(request as never, response as never);
+
+    assert.equal(response.statusCode, 200);
+    assert.equal((response.body as {code: string}).code, "OK");
+    assert.equal(
+      (response.body as {data: {generatedCount: number}}).data.generatedCount,
+      200,
+    );
+  },
+);
+
+test(
+  "vendor simulation students handler rejects role violations",
+  async () => {
+    const handler = createVendorSimulationStudentsHandler({
+      generateSyntheticStudents: async () => {
+        throw new Error("generateSyntheticStudents should not be called");
+      },
+      loadEnvironmentConfig: async () => {
+        throw new Error("loadEnvironmentConfig should not be called");
+      },
+      verifyIdToken: async () => createStudentToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          simulationId: "build_77_students",
+        },
+        headers: {
+          authorization: "Bearer build_77_student",
+        },
+        path: "/vendor/simulation/students",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 403);
+    assertStructuredError(
+      response.body,
+      "FORBIDDEN",
+      "Only vendor roles can generate synthetic students.",
+    );
+  },
+);
+
+test(
+  "vendor simulation students handler surfaces missing environments",
+  async () => {
+    const handler = createVendorSimulationStudentsHandler({
+      generateSyntheticStudents: async () => {
+        throw new SimulationStudentGenerationValidationError(
+          "NOT_FOUND",
+          "Simulation environment must be initialized before generating " +
+            "synthetic students.",
+        );
+      },
+      loadEnvironmentConfig: async () => createEnvironmentConfig("development"),
+      verifyIdToken: async () => createVendorToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          simulationId: "build_77_missing_environment",
+        },
+        headers: {
+          authorization: "Bearer build_77_vendor",
+        },
+        path: "/vendor/simulation/students",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 404);
+    assertStructuredError(
+      response.body,
+      "NOT_FOUND",
+      "Simulation environment must be initialized before generating " +
+        "synthetic students.",
     );
   },
 );

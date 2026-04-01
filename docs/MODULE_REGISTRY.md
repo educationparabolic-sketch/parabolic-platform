@@ -34,6 +34,7 @@ POST /exam/session/{sessionId}/answers | Build 30, Build 33, Build 34, Build 35 
 POST /exam/session/{sessionId}/submit | Build 36, Build 37, Build 38, Build 40 | Finalize active sessions via atomic Firestore transactions with lock-acquisition concurrency protection (`submissionLock`), deterministic scoring metrics, submitted-state persistence, idempotent return of previously computed metrics for already-submitted sessions, and a deterministic Build 40 success payload that exposes only `rawScorePercent`, `accuracyPercent`, `disciplineIndex`, and `riskState`
 POST /internal/email/queue | Build 48 | Enqueue backend-only asynchronous email jobs with Bearer authentication, backend-service role enforcement, payload validation, and `payload.instituteId` tenant matching
 POST /vendor/simulation/environment | Build 76 | Initialize an isolated synthetic institute namespace at `institutes/sim_{simulationId}` with vendor-only access, environment safety gating, versioned simulation metadata, and idempotent create-only semantics
+POST /vendor/simulation/students | Build 77 | Generate deterministic synthetic student profiles under `institutes/sim_{simulationId}/students` with vendor-only access, simulation-environment prerequisites, default topic-strength seeding, and idempotent create-only writes
 
 ---
 
@@ -98,6 +99,7 @@ TemplateAuditLoggingService | Build 20 | Emit immutable institute template lifec
 AssignmentCreationService | Build 21, Build 22, Build 23 | Validate and normalize assignment run creation in institutes/{instituteId}/academicYears/{yearId}/runs/{runId}, including template readiness, recipient eligibility, license-mode restrictions, scheduled window enforcement, assignment-time immutable template snapshot capture (questionIds, difficultyDistribution, phaseConfigSnapshot, timingProfileSnapshot), and assignment-time license/calibration snapshots (licenseLayer, calibrationVersion)
 RunAnalyticsInitializationService | Build 24 | Initialize deterministic run analytics stubs in institutes/{instituteId}/academicYears/{yearId}/runAnalytics/{runId} during assignment creation, including baseline fields (avgRawScorePercent, avgAccuracyPercent, completionRate, riskDistribution) and idempotent create-only semantics
 UsageMeteringService | Build 25 | Track institute assignment-driven usage metrics in institutes/{instituteId}/usageMeter/{cycleId}, including assignmentsCreated, assignedStudentsCount, activeStudentCount, peakStudentUsage, and billingTierCompliance with idempotent assignment-event deduplication
+SimulationStudentGeneratorService | Build 77 | Generate deterministic synthetic students in `institutes/sim_{simulationId}/students` using Build 76 environment metadata, behavioral-profile attributes (`baselineAbility`, `disciplineProfile`, `impulsivenessScore`, `overconfidenceScore`, `fatigueFactor`, `topicStrengthMap`), and idempotent create-only writes
 
 ---
 
