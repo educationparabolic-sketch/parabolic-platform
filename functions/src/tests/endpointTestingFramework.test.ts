@@ -24,6 +24,9 @@ import {
 import {
   createVendorSimulationLoadHandler,
 } from "../api/vendorSimulationLoad";
+import {
+  createVendorSimulationValidationHandler,
+} from "../api/vendorSimulationValidation";
 import {SessionStartValidationError} from "../services/session";
 import {
   SimulationEnvironmentValidationError,
@@ -37,6 +40,9 @@ import {
 import {
   LoadSimulationValidationError,
 } from "../services/loadSimulation";
+import {
+  SimulationValidationError,
+} from "../services/simulationValidation";
 import {SubmissionValidationError} from "../services/submission";
 import {
   createMockRequest,
@@ -1196,6 +1202,216 @@ test(
       response.body,
       "NOT_FOUND",
       "Synthetic sessions must be generated before load simulation.",
+    );
+  },
+);
+
+test(
+  "vendor simulation validation handler accepts a valid vendor request",
+  async () => {
+    const handler = createVendorSimulationValidationHandler({
+      loadEnvironmentConfig: async () => createEnvironmentConfig("development"),
+      runSimulationValidation: async (input) => ({
+        environmentPath: `institutes/sim_${input.simulationId}`,
+        reportPath:
+          "vendor/simulationReports/reports/" +
+          `validation_${input.simulationId}_${input.yearId}`,
+        reusedExistingReport: false,
+        validationReport: {
+          actualPatterns: {},
+          actualRiskDistribution: {
+            "Drift-Prone": 1,
+            "Impulsive": 2,
+            "Overextended": 0,
+            "Stable": 3,
+            "Volatile": 0,
+          },
+          calibrationVersion: "cal_v2026_01",
+          completedAt: "server_timestamp" as never,
+          controlledModeImprovement: {
+            available: false,
+            controlledDisciplineAverage: 78.2,
+            controlledPhaseAdherenceAverage: 84.4,
+            disciplineLiftPercent: null,
+            nonControlledDisciplineAverage: null,
+            nonControlledPhaseAdherenceAverage: null,
+            phaseAdherenceLiftPercent: null,
+          },
+          createdAt: "server_timestamp" as never,
+          environmentPath: `institutes/sim_${input.simulationId}`,
+          expectedPatterns: {},
+          expectedRiskDistribution: {
+            "Drift-Prone": 1,
+            "Impulsive": 1,
+            "Overextended": 1,
+            "Stable": 3,
+            "Volatile": 0,
+          },
+          instituteId: `sim_${input.simulationId}`,
+          parameterSnapshot: {
+            archiveSimulationEnabled: true,
+            difficultyDistribution: "realistic",
+            instituteCount: 1,
+            loadIntensity: "low",
+            riskDistributionBias: "balanced",
+            runCount: 2,
+            studentCountPerInstitute: 6,
+            timingAggressiveness: "moderate",
+          },
+          patternDetectionAccuracy: {
+            accuracyPercent: 88,
+            matchedStudents: 5,
+            perPatternAccuracy: {
+              easyNeglectActive: 100,
+              hardBiasActive: 80,
+              rushPatternActive: 80,
+              skipBurstActive: 100,
+              wrongStreakActive: 80,
+            },
+            totalStudentsCompared: 5,
+          },
+          phaseAdherenceVariation: {
+            actualStudentAverage: 82,
+            actualStudentStandardDeviation: 6.2,
+            expectedSessionAverage: 80.5,
+            expectedSessionStandardDeviation: 8.1,
+            variationDelta: 1.5,
+          },
+          recommendedCalibrationActions: [],
+          reportId: `validation_${input.simulationId}_${input.yearId}`,
+          riskClusterStability: {
+            averageSeverityDrift: 0.2,
+            exactMatchPercent: 80,
+            matchedStudents: 4,
+            totalStudentsCompared: 5,
+          },
+          riskDistributionAlignmentPercent: 83.33,
+          riskDistributionDelta: {
+            "Drift-Prone": 0,
+            "Impulsive": 1,
+            "Overextended": -1,
+            "Stable": 0,
+            "Volatile": 0,
+          },
+          riskModelVersion: "risk_v3",
+          simulationId: input.simulationId,
+          simulationVersion: "sim_v1_preview",
+          sourceLoadReportPath:
+            "vendor/simulationReports/reports/" +
+            `load_${input.simulationId}_${input.yearId}`,
+          stabilityIndexBehavior: {
+            actualStabilityIndex: 79.2,
+            expectedStabilityIndex: 81.5,
+            stabilityDelta: -2.3,
+          },
+          status: "completed",
+          totalStudentsCompared: 6,
+          validatedAt: "server_timestamp" as never,
+          validationVersion: "build_80_v1",
+          yearId: input.yearId,
+        },
+      }),
+      verifyIdToken: async () => createVendorToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          simulationId: "build_80_validation",
+          yearId: "2026",
+        },
+        headers: {
+          authorization: "Bearer build_80_vendor",
+        },
+        path: "/vendor/simulation/validation",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 200);
+    assert.equal((response.body as {code: string}).code, "OK");
+    assert.equal(
+      (response.body as {data: {reportPath: string}}).data.reportPath,
+      "vendor/simulationReports/reports/validation_build_80_validation_2026",
+    );
+  },
+);
+
+test(
+  "vendor simulation validation handler rejects role violations",
+  async () => {
+    const handler = createVendorSimulationValidationHandler({
+      loadEnvironmentConfig: async () => {
+        throw new Error("loadEnvironmentConfig should not be called");
+      },
+      runSimulationValidation: async () => {
+        throw new Error("runSimulationValidation should not be called");
+      },
+      verifyIdToken: async () => createStudentToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          simulationId: "build_80_validation",
+          yearId: "2026",
+        },
+        headers: {
+          authorization: "Bearer build_80_student",
+        },
+        path: "/vendor/simulation/validation",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 403);
+    assertStructuredError(
+      response.body,
+      "FORBIDDEN",
+      "Only vendor roles can run simulation intelligence validation.",
+    );
+  },
+);
+
+test(
+  "vendor simulation validation handler surfaces missing analytics " +
+    "prerequisites",
+  async () => {
+    const handler = createVendorSimulationValidationHandler({
+      loadEnvironmentConfig: async () =>
+        createEnvironmentConfig("development"),
+      runSimulationValidation: async () => {
+        throw new SimulationValidationError(
+          "NOT_FOUND",
+          "Simulation analytics outputs must exist before intelligence " +
+            "validation.",
+        );
+      },
+      verifyIdToken: async () => createVendorToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          simulationId: "build_80_missing_analytics",
+          yearId: "2026",
+        },
+        headers: {
+          authorization: "Bearer build_80_vendor",
+        },
+        path: "/vendor/simulation/validation",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 404);
+    assertStructuredError(
+      response.body,
+      "NOT_FOUND",
+      "Simulation analytics outputs must exist before intelligence validation.",
     );
   },
 );
