@@ -21,6 +21,9 @@ import {
 import {
   createVendorSimulationSessionsHandler,
 } from "../api/vendorSimulationSessions";
+import {
+  createVendorSimulationLoadHandler,
+} from "../api/vendorSimulationLoad";
 import {SessionStartValidationError} from "../services/session";
 import {
   SimulationEnvironmentValidationError,
@@ -31,6 +34,9 @@ import {
 import {
   SimulationSessionGenerationValidationError,
 } from "../services/simulationSessionGenerator";
+import {
+  LoadSimulationValidationError,
+} from "../services/loadSimulation";
 import {SubmissionValidationError} from "../services/submission";
 import {
   createMockRequest,
@@ -1037,6 +1043,159 @@ test(
       response.body,
       "NOT_FOUND",
       "Synthetic students must be generated before synthetic sessions.",
+    );
+  },
+);
+
+test(
+  "vendor simulation load handler accepts a valid vendor request",
+  async () => {
+    const handler = createVendorSimulationLoadHandler({
+      loadEnvironmentConfig: async () => createEnvironmentConfig("development"),
+      runLoadSimulation: async (input) => ({
+        analyticsDocumentsCreated: {
+          insightSnapshotCount: 12,
+          runAnalyticsCount: 2,
+          studentYearMetricsCount: 6,
+        },
+        environmentPath: `institutes/sim_${input.simulationId}`,
+        generatedReport: {
+          calibrationVersion: "cal_v2026_01",
+          completedAt: "server_timestamp" as never,
+          createdAt: "server_timestamp" as never,
+          failedScenarioCount: 0,
+          instituteId: `sim_${input.simulationId}`,
+          outputMetrics: {
+            averageLatencyMs: 14.2,
+            maxFunctionInvocationTimeMs: 104.6,
+            overallEstimatedReadAmplification: 3.5,
+            totalExecutedOperations: 420,
+            totalTransactionConflicts: 0,
+          },
+          parameterSnapshot: {
+            archiveSimulationEnabled: true,
+            difficultyDistribution: "realistic",
+            instituteCount: 1,
+            loadIntensity: "low",
+            riskDistributionBias: "balanced",
+            runCount: 2,
+            studentCountPerInstitute: 6,
+            timingAggressiveness: "moderate",
+          },
+          reportId: `load_${input.simulationId}_${input.yearId}`,
+          riskModelVersion: "risk_v3",
+          runCount: 2,
+          scenarioSummaries: [],
+          simulationId: input.simulationId,
+          simulationVersion: "sim_v1_preview",
+          status: "completed",
+          studentCount: 6,
+          totalSyntheticSessions: 12,
+          yearId: input.yearId,
+        },
+        reportPath:
+          "vendor/simulationReports/reports/" +
+          `load_${input.simulationId}_${input.yearId}`,
+        reusedExistingReport: false,
+      }),
+      verifyIdToken: async () => createVendorToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          simulationId: "build_79_load",
+          yearId: "2026",
+        },
+        headers: {
+          authorization: "Bearer build_79_vendor",
+        },
+        path: "/vendor/simulation/load",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 200);
+    assert.equal((response.body as {code: string}).code, "OK");
+    assert.equal(
+      (response.body as {data: {reportPath: string}}).data.reportPath,
+      "vendor/simulationReports/reports/load_build_79_load_2026",
+    );
+  },
+);
+
+test(
+  "vendor simulation load handler rejects role violations",
+  async () => {
+    const handler = createVendorSimulationLoadHandler({
+      loadEnvironmentConfig: async () => {
+        throw new Error("loadEnvironmentConfig should not be called");
+      },
+      runLoadSimulation: async () => {
+        throw new Error("runLoadSimulation should not be called");
+      },
+      verifyIdToken: async () => createStudentToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          simulationId: "build_79_load",
+          yearId: "2026",
+        },
+        headers: {
+          authorization: "Bearer build_79_student",
+        },
+        path: "/vendor/simulation/load",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 403);
+    assertStructuredError(
+      response.body,
+      "FORBIDDEN",
+      "Only vendor roles can run simulation load tests.",
+    );
+  },
+);
+
+test(
+  "vendor simulation load handler surfaces missing simulation prerequisites",
+  async () => {
+    const handler = createVendorSimulationLoadHandler({
+      loadEnvironmentConfig: async () => createEnvironmentConfig("development"),
+      runLoadSimulation: async () => {
+        throw new LoadSimulationValidationError(
+          "NOT_FOUND",
+          "Synthetic sessions must be generated before load simulation.",
+        );
+      },
+      verifyIdToken: async () => createVendorToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          simulationId: "build_79_missing_sessions",
+          yearId: "2026",
+        },
+        headers: {
+          authorization: "Bearer build_79_vendor",
+        },
+        path: "/vendor/simulation/load",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 404);
+    assertStructuredError(
+      response.body,
+      "NOT_FOUND",
+      "Synthetic sessions must be generated before load simulation.",
     );
   },
 );
