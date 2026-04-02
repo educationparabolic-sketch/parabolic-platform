@@ -18,6 +18,9 @@ import {
 import {
   createVendorSimulationStudentsHandler,
 } from "../api/vendorSimulationStudents";
+import {
+  createVendorSimulationSessionsHandler,
+} from "../api/vendorSimulationSessions";
 import {SessionStartValidationError} from "../services/session";
 import {
   SimulationEnvironmentValidationError,
@@ -25,6 +28,9 @@ import {
 import {
   SimulationStudentGenerationValidationError,
 } from "../services/simulationStudentGenerator";
+import {
+  SimulationSessionGenerationValidationError,
+} from "../services/simulationSessionGenerator";
 import {SubmissionValidationError} from "../services/submission";
 import {
   createMockRequest,
@@ -910,6 +916,127 @@ test(
       "NOT_FOUND",
       "Simulation environment must be initialized before generating " +
         "synthetic students.",
+    );
+  },
+);
+
+test(
+  "vendor simulation sessions handler accepts a valid vendor request",
+  async () => {
+    const handler = createVendorSimulationSessionsHandler({
+      generateSyntheticSessions: async (input) => ({
+        existingRunCount: 0,
+        existingSessionCount: 0,
+        generatedRunCount: 2,
+        generatedSessionCount: 400,
+        instituteId: `sim_${input.simulationId}`,
+        runCount: 2,
+        sessionsRootPath:
+          `institutes/sim_${input.simulationId}/academicYears/` +
+          `${input.yearId}/runs`,
+        simulationId: input.simulationId,
+        simulationVersion: "sim_v1_preview",
+        totalStudentCount: 200,
+        yearId: input.yearId,
+      }),
+      loadEnvironmentConfig: async () => createEnvironmentConfig("development"),
+      verifyIdToken: async () => createVendorToken() as never,
+    });
+    const request = createMockRequest({
+      body: {
+        simulationId: "build_78_sessions",
+        yearId: "2026",
+      },
+      headers: {
+        authorization: "Bearer build_78_vendor",
+      },
+      path: "/vendor/simulation/sessions",
+    });
+    const response = createMockResponse();
+
+    await handler(request as never, response as never);
+
+    assert.equal(response.statusCode, 200);
+    assert.equal((response.body as {code: string}).code, "OK");
+    assert.equal(
+      (response.body as {data: {generatedSessionCount: number}})
+        .data.generatedSessionCount,
+      400,
+    );
+  },
+);
+
+test(
+  "vendor simulation sessions handler rejects role violations",
+  async () => {
+    const handler = createVendorSimulationSessionsHandler({
+      generateSyntheticSessions: async () => {
+        throw new Error("generateSyntheticSessions should not be called");
+      },
+      loadEnvironmentConfig: async () => {
+        throw new Error("loadEnvironmentConfig should not be called");
+      },
+      verifyIdToken: async () => createStudentToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          simulationId: "build_78_sessions",
+          yearId: "2026",
+        },
+        headers: {
+          authorization: "Bearer build_78_student",
+        },
+        path: "/vendor/simulation/sessions",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 403);
+    assertStructuredError(
+      response.body,
+      "FORBIDDEN",
+      "Only vendor roles can generate synthetic sessions.",
+    );
+  },
+);
+
+test(
+  "vendor simulation sessions handler surfaces missing student prerequisites",
+  async () => {
+    const handler = createVendorSimulationSessionsHandler({
+      generateSyntheticSessions: async () => {
+        throw new SimulationSessionGenerationValidationError(
+          "NOT_FOUND",
+          "Synthetic students must be generated before synthetic sessions.",
+        );
+      },
+      loadEnvironmentConfig: async () => createEnvironmentConfig("development"),
+      verifyIdToken: async () => createVendorToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          simulationId: "build_78_missing_students",
+          yearId: "2026",
+        },
+        headers: {
+          authorization: "Bearer build_78_vendor",
+        },
+        path: "/vendor/simulation/sessions",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 404);
+    assertStructuredError(
+      response.body,
+      "NOT_FOUND",
+      "Synthetic students must be generated before synthetic sessions.",
     );
   },
 );

@@ -12,6 +12,9 @@ import {
 import {
   handleVendorSimulationStudentsRequest,
 } from "./api/vendorSimulationStudents";
+import {
+  handleVendorSimulationSessionsRequest,
+} from "./api/vendorSimulationSessions";
 import {runAssignmentOnCreate} from "./triggers/assignmentCreation";
 import {questionBankOnCreate} from "./triggers/questionIngestion";
 import {examSessionOnUpdate} from "./triggers/sessionSubmission";
@@ -41,6 +44,9 @@ export const vendorSimulationEnvironment = functions.https.onRequest(
 );
 export const vendorSimulationStudents = functions.https.onRequest(
   handleVendorSimulationStudentsRequest,
+);
+export const vendorSimulationSessions = functions.https.onRequest(
+  handleVendorSimulationSessionsRequest,
 );
 
 export const helloWorld = functions.https.onRequest(async (

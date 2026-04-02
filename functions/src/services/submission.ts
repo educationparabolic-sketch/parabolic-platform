@@ -21,14 +21,14 @@ const PHASE_WEIGHT = 0.20;
 const GUESS_WEIGHT = 0.20;
 const WRONG_STREAK_WEIGHT = 0.15;
 
-interface SubmissionQuestionMeta {
+export interface SubmissionQuestionMeta {
   correctAnswer: string;
   difficulty: "Easy" | "Medium" | "Hard";
   marks: number;
   negativeMarks: number;
 }
 
-interface SubmissionScoringInput {
+export interface SubmissionScoringInput {
   answerMap: Record<string, unknown>;
   phaseConfigSnapshot: Record<string, unknown>;
   questionIds: string[];
@@ -213,7 +213,7 @@ const resolvePhaseQuestionBounds = (
   };
 };
 
-const computeSubmissionMetrics = (
+export const computeSubmissionMetrics = (
   input: SubmissionScoringInput,
 ): SubmissionMetrics => {
   const questionCount = input.questionIds.length;

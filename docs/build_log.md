@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 77  
-Next Build: 78
+Completed Builds: 78  
+Next Build: 79
 
 Current Phase: Phase 16 — Synthetic Simulation Engine
 
@@ -2564,18 +2564,68 @@ Completed On
 
 ---
 
+## Build 78 — Simulated Exam Session Generator
+
+Phase  
+Phase 16 — Synthetic Simulation Engine
+
+Summary  
+Implemented the simulated exam session generator for isolated simulation institutes.
+
+Components implemented:
+
+- Added `functions/src/services/simulationSessionGenerator.ts` with a reusable generator service that reads Build 76 environment metadata and Build 77 synthetic students, creates deterministic sandbox run documents under `institutes/sim_{simulationId}/academicYears/{yearId}/runs/{runId}`, and writes submitted synthetic session documents under each run
+- Added `functions/src/types/simulationSessionGenerator.ts` with typed generator input, submitted-session document, result, and HTTP success response contracts
+- Added `functions/src/api/vendorSimulationSessions.ts` with a vendor-only HTTP handler for `POST /vendor/simulation/sessions`
+- Wired the new endpoint through `functions/src/index.ts` using `functions.https.onRequest` and the existing middleware pipeline
+- Reused the existing authentication middleware, role authorization middleware, structured logging, API response service, Firebase Admin utility, simulation-environment safety guards, and the real submission scoring formula from `SubmissionService`
+- Enforced architecture-aligned simulation safety by:
+  - requiring a pre-existing `institutes/sim_{simulationId}` environment
+  - requiring pre-generated synthetic students
+  - rejecting generation in `production`
+  - writing only inside the simulation institute namespace and real run/session hierarchy
+  - avoiding live submission updates so analytics, email, billing, and notification triggers are not executed for simulation data
+- Generated realistic synthetic session behavior required by Section 40.5.2 through:
+  - deterministic answer patterns in `answerMap`
+  - deterministic per-question timing behavior in `questionTimeMap`
+  - realistic submitted-session metrics including `rawScorePercent`, `accuracyPercent`, `disciplineIndex`, `riskState`, `guessRate`, and timing/phase-adherence fields
+- Added repeatable local coverage in `functions/src/tests/simulationSessionGenerator.test.ts` for:
+  - deterministic run/session generation
+  - idempotent re-generation
+  - missing-student prerequisite rejection
+- Extended the existing endpoint contract suite in `functions/src/tests/endpointTestingFramework.test.ts` for:
+  - successful vendor session-generation requests
+  - vendor-role enforcement
+  - missing-student prerequisite error responses
+- Registered `npm run test:simulation-session-generator` in `functions/package.json`
+- Verified the implementation locally with:
+  - `npm run build` in `functions`
+  - `npm run test:endpoint-testing-framework` in `functions`
+  - `firebase emulators:exec --only firestore "cd functions && npm run test:simulation-session-generator"` from the repository root
+
+Result  
+The platform now has a deterministic, vendor-triggered simulated exam session generator that produces production-shaped sandbox run/session data under the required institute/year/run/session hierarchy without affecting production analytics, billing, notifications, or other live operational flows.
+
+Commit Reference  
+Build 78 — Simulated Exam Session Generator implemented
+
+Completed On  
+2026-04-02
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 78
+Next Build Number: 79
 
 Phase  
 Phase 16 — Synthetic Simulation Engine
 
 Subsystem  
-Simulated Exam Session Generator
+Load Testing Engine
 
 Reference  
-3_Core_Architectures.md → Section 40.5.2 Test Attempt Simulation
+3_Core_Architectures.md → Section 40.5.6 Load Simulation Engine
 
 ---
 
