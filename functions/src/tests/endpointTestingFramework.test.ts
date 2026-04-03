@@ -45,6 +45,9 @@ import {
 import {
   createAdminGovernanceSnapshotsHandler,
 } from "../api/adminGovernanceSnapshots";
+import {
+  createAdminGovernanceReportsHandler,
+} from "../api/adminGovernanceReports";
 import {SessionStartValidationError} from "../services/session";
 import {
   SimulationEnvironmentValidationError,
@@ -617,6 +620,287 @@ test(
     assert.equal(
       (response.body as {data: {instituteId: string}}).data.instituteId,
       "inst_vendor_target_build_89",
+    );
+  },
+);
+
+test(
+  "admin governance reports handler accepts an L3 director request",
+  async () => {
+    const handler = createAdminGovernanceReportsHandler({
+      generateReport: async () => ({
+        disciplineDeviation: {
+          deviationLevel: "watch",
+          disciplineMean: 72,
+          disciplineTrend: -2.5,
+          disciplineVariance: 8.6,
+          summary: "Discipline indicators require governance review.",
+        },
+        governanceIndicators: {
+          executionIntegrityScore: 68,
+          overrideFrequency: 6,
+          phaseCompliancePercent: 71,
+          stabilityIndex: 61,
+        },
+        header: {
+          academicYear: "2026",
+          calibrationVersion: "cal_v2026_03",
+          generatedAt: "2026-04-03T10:00:00.000Z",
+          instituteId: "inst_build_90",
+          month: "2026-03",
+          schemaVersion: 1,
+          snapshotDocumentPath:
+            "institutes/inst_build_90/academicYears/2026/" +
+            "governanceSnapshots/2026_03",
+        },
+        incidentTimeline: [
+          {
+            at: "2026-04-01T00:00:00.000Z",
+            source: "snapshot",
+            summary: "Monthly governance snapshot sealed.",
+          },
+        ],
+        majorIncidentAlerts: [
+          {
+            affectedRunIds: ["run_build_90"],
+            calibrationVersion: "cal_v2026_03",
+            recoveryActions: [
+              "Review override FORCE_SUBMIT performed by dir_1",
+            ],
+            severity: "high",
+            summary: "Override activity exceeded threshold.",
+            timeline: [
+              {
+                at: "2026-04-01T00:00:00.000Z",
+                source: "snapshot",
+                summary: "Monthly governance snapshot sealed.",
+              },
+            ],
+            title: "Override Spike",
+            type: "override_spike",
+            userActionsInvolved: ["FORCE_SUBMIT"],
+          },
+        ],
+        pdfExport: {
+          bucketName: "bucket-reports",
+          cdnPath: "inst_build_90/reports/2026/03/governance.pdf",
+          contentType: "application/pdf",
+          fileName: "governance.pdf",
+          gsUri: "gs://bucket-reports/inst_build_90/reports/2026/03/governance.pdf",
+          objectPath: "inst_build_90/reports/2026/03/governance.pdf",
+        },
+        performance: {
+          avgAccuracyPercent: 74,
+          avgRawScorePercent: 66,
+          disciplineMean: 72,
+          stabilityIndex: 61,
+          templateVarianceMean: 5.5,
+        },
+        requestedMonth: "2026-03",
+        riskDistribution: {
+          driftProne: 18,
+          impulsive: 10,
+          overextended: 12,
+          stable: 50,
+          volatile: 10,
+        },
+        summary: {
+          affectedRunCount: 1,
+          incidentCount: 1,
+          recoveryActionCount: 1,
+        },
+        yearId: "2026",
+      }),
+      verifyIdToken: async () =>
+        createDirectorToken({
+          instituteId: "inst_build_90",
+          uid: "director_build_90",
+        }) as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          includePdfExport: true,
+          instituteId: "inst_build_90",
+          month: "2026-03",
+          yearId: "2026",
+        },
+        headers: {
+          authorization: "Bearer build_90_director",
+        },
+        path: "/admin/governance/reports",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 200);
+    assert.equal((response.body as {code: string}).code, "OK");
+    assert.equal(
+      (response.body as {
+        data: {majorIncidentAlerts: Array<{type: string}>};
+      }).data.majorIncidentAlerts[0]?.type,
+      "override_spike",
+    );
+  },
+);
+
+test(
+  "admin governance reports handler rejects non-director institute roles",
+  async () => {
+    const handler = createAdminGovernanceReportsHandler({
+      generateReport: async () => {
+        throw new Error("generateReport should not be called");
+      },
+      verifyIdToken: async () =>
+        createDirectorToken({
+          instituteId: "inst_build_90",
+          role: "teacher",
+        }) as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          instituteId: "inst_build_90",
+          yearId: "2026",
+        },
+        headers: {
+          authorization: "Bearer build_90_teacher",
+        },
+        path: "/admin/governance/reports",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 403);
+    assertStructuredError(
+      response.body,
+      "FORBIDDEN",
+      "Only director and vendor roles can access governance reports.",
+    );
+  },
+);
+
+test(
+  "admin governance reports handler rejects invalid month format",
+  async () => {
+    const handler = createAdminGovernanceReportsHandler({
+      generateReport: async () => {
+        throw new Error("generateReport should not be called");
+      },
+      verifyIdToken: async () =>
+        createDirectorToken({
+          instituteId: "inst_build_90",
+          uid: "director_build_90_validation",
+        }) as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          instituteId: "inst_build_90",
+          month: "03-2026",
+          yearId: "2026",
+        },
+        headers: {
+          authorization: "Bearer build_90_invalid_month",
+        },
+        path: "/admin/governance/reports",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 400);
+    assertStructuredError(
+      response.body,
+      "VALIDATION_ERROR",
+      "Field \"month\" must match the YYYY-MM format.",
+    );
+  },
+);
+
+test(
+  "admin governance reports handler allows vendor cross-institute access",
+  async () => {
+    const handler = createAdminGovernanceReportsHandler({
+      generateReport: async (input) => ({
+        disciplineDeviation: {
+          deviationLevel: "none",
+          disciplineMean: 74,
+          disciplineTrend: 1.5,
+          disciplineVariance: 5.8,
+          summary: "No material discipline deviation detected for the month.",
+        },
+        governanceIndicators: {
+          executionIntegrityScore: 82,
+          overrideFrequency: 1,
+          phaseCompliancePercent: 77,
+          stabilityIndex: 80,
+        },
+        header: {
+          academicYear: input.yearId ?? "2026",
+          calibrationVersion: null,
+          generatedAt: "2026-04-03T10:00:00.000Z",
+          instituteId: input.instituteId ?? "inst_vendor_target_build_90",
+          month: input.month ?? "2026-03",
+          schemaVersion: 1,
+          snapshotDocumentPath:
+            `institutes/${input.instituteId ?? "inst_vendor_target_build_90"}` +
+            `/academicYears/${input.yearId ?? "2026"}/` +
+            "governanceSnapshots/2026_03",
+        },
+        incidentTimeline: [],
+        majorIncidentAlerts: [],
+        performance: {
+          avgAccuracyPercent: 76,
+          avgRawScorePercent: 69,
+          disciplineMean: 74,
+          stabilityIndex: 80,
+          templateVarianceMean: 4.8,
+        },
+        requestedMonth: input.month,
+        riskDistribution: {
+          driftProne: 15,
+          impulsive: 7,
+          overextended: 4,
+          stable: 66,
+          volatile: 8,
+        },
+        summary: {
+          affectedRunCount: 0,
+          incidentCount: 0,
+          recoveryActionCount: 0,
+        },
+        yearId: input.yearId ?? "2026",
+      }),
+      verifyIdToken: async () => createVendorToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          includePdfExport: false,
+          instituteId: "inst_vendor_target_build_90",
+          yearId: "2026",
+        },
+        headers: {
+          authorization: "Bearer build_90_vendor",
+        },
+        path: "/admin/governance/reports",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(
+      (response.body as {data: {header: {instituteId: string}}})
+        .data.header.instituteId,
+      "inst_vendor_target_build_90",
     );
   },
 );

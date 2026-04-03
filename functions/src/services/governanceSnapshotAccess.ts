@@ -244,20 +244,23 @@ export class GovernanceSnapshotAccessService {
         ),
       ];
     } else {
+      // Governance snapshots are bounded to one immutable monthly document per
+      // academic year, so an ascending read plus tail slice stays bounded
+      // while remaining compatible with the Firestore emulator.
       const querySnapshot = await collectionReference
         .orderBy(FieldPath.documentId(), "asc")
-        .limit(input.limit)
         .get();
 
       snapshots = querySnapshot.docs
+        .slice(-input.limit)
+        .reverse()
         .map((snapshot) =>
           normalizeSnapshotDocument(
             snapshot.data(),
             snapshot.id,
             snapshot.ref.path,
           ),
-        )
-        .reverse();
+        );
     }
 
     this.logger.info("Governance snapshots retrieved.", {

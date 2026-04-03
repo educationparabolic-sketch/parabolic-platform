@@ -39,6 +39,9 @@ import {
 import {
   handleAdminGovernanceSnapshotsRequest,
 } from "./api/adminGovernanceSnapshots";
+import {
+  handleAdminGovernanceReportsRequest,
+} from "./api/adminGovernanceReports";
 import {runAssignmentOnCreate} from "./triggers/assignmentCreation";
 import {questionBankOnCreate} from "./triggers/questionIngestion";
 import {examSessionOnUpdate} from "./triggers/sessionSubmission";
@@ -97,6 +100,9 @@ export const vendorRevenueForecasting = functions.https.onRequest(
 );
 export const adminGovernanceSnapshots = functions.https.onRequest(
   handleAdminGovernanceSnapshotsRequest,
+);
+export const adminGovernanceReports = functions.https.onRequest(
+  handleAdminGovernanceReportsRequest,
 );
 
 export const helloWorld = functions.https.onRequest(async (

@@ -12,10 +12,10 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 89  
-Next Build: 90
+Completed Builds: 90  
+Next Build: 91
 
-Current Phase: Phase 18 — Governance Snapshot System
+Current Phase: Phase 19 — Billing & License Intelligence
 
 ---
 
@@ -2924,18 +2924,46 @@ Completed On
 
 ---
 
-# NEXT BUILD
-
-Next Build Number: 90
+## Build 90 — Governance Reporting Engine
 
 Phase  
 Phase 18 — Governance Snapshot System
 
+Summary  
+Implemented the governance reporting layer on top of the existing monthly governance snapshot system.
+
+Components implemented:
+
+- Added `POST /admin/governance/reports` with the existing governance authentication, tenant, role, and L3 access controls
+- Added a typed GovernanceReportingService that composes immutable `governanceSnapshots`, institute `overrideLogs`, and institute `auditLogs`
+- Generated monthly governance summaries, reportable incident alerts, discipline deviation analysis, recovery-action outputs, and incident timelines without reading raw session data
+- Added PDF export metadata generation using the existing reports bucket architecture for governance report assets
+- Extended repeatable local tests with endpoint coverage and emulator-backed Firestore coverage for report generation and latest-snapshot retrieval
+- Hardened the shared governance snapshot access path to return latest snapshots in emulator-compatible reverse-month order
+
+Result  
+Institute governance reporting is now available as an architecture-aligned backend API that reuses the existing governance snapshot pipeline, preserves immutable source records, and produces export-ready reporting outputs for executive governance workflows.
+
+Commit Reference  
+Build 90 — Governance Reporting Engine implemented
+
+Completed On  
+2026-04-03
+
+---
+
+# NEXT BUILD
+
+Next Build Number: 91
+
+Phase  
+Phase 19 — Billing & License Intelligence
+
 Subsystem  
-Governance Reporting Engine
+Usage Metering System
 
 Reference  
-3_Core_Architectures.md → Section 37.15 Reportable Incident Framework
+3_Core_Architectures.md → Section 37.16 Billing Dispute Protection
 
 ---
 
