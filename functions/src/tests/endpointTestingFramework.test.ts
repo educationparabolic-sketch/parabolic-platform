@@ -27,6 +27,9 @@ import {
 import {
   createVendorSimulationValidationHandler,
 } from "../api/vendorSimulationValidation";
+import {
+  createVendorIntelligenceInitializeHandler,
+} from "../api/vendorIntelligenceInitialize";
 import {SessionStartValidationError} from "../services/session";
 import {
   SimulationEnvironmentValidationError,
@@ -1412,6 +1415,107 @@ test(
       response.body,
       "NOT_FOUND",
       "Simulation analytics outputs must exist before intelligence validation.",
+    );
+  },
+);
+
+test(
+  "vendor intelligence initialization handler accepts a valid vendor request",
+  async () => {
+    const handler = createVendorIntelligenceInitializeHandler({
+      initializePlatform: async () => ({
+        moduleStatus: {
+          adoptionMeasurement: "pending",
+          calibrationImpact: "pending",
+          churnTracking: "pending",
+          growthForecasting: "pending",
+          layerDistribution: "pending",
+          revenueIntelligence: "pending",
+          upgradeConversion: "pending",
+        },
+        readySourceCount: 2,
+        snapshotMonth: "2026-04",
+        sourceReadiness: {
+          billingSnapshots: {
+            accessPattern: "collection",
+            collectionPath: "billingSnapshots",
+            isAvailable: false,
+          },
+          governanceSnapshots: {
+            accessPattern: "collectionGroup",
+            collectionPath:
+              "institutes/{instituteId}/academicYears/{yearId}/" +
+              "governanceSnapshots",
+            isAvailable: true,
+          },
+          licenseHistory: {
+            accessPattern: "collectionGroup",
+            collectionPath: "institutes/{instituteId}/licenseHistory",
+            isAvailable: false,
+          },
+          usageMeter: {
+            accessPattern: "collectionGroup",
+            collectionPath: "institutes/{instituteId}/usageMeter",
+            isAvailable: true,
+          },
+          vendorAggregates: {
+            accessPattern: "collection",
+            collectionPath: "vendorAggregates",
+            isAvailable: false,
+          },
+        },
+        totalSourceCount: 5,
+      }),
+      verifyIdToken: async () => createVendorToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        headers: {
+          authorization: "Bearer build_81_vendor",
+        },
+        path: "/vendor/intelligence/initialize",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 200);
+    assert.equal((response.body as {code: string}).code, "OK");
+    assert.equal(
+      (response.body as {data: {readySourceCount: number}}).data
+        .readySourceCount,
+      2,
+    );
+  },
+);
+
+test(
+  "vendor intelligence initialization handler rejects role violations",
+  async () => {
+    const handler = createVendorIntelligenceInitializeHandler({
+      initializePlatform: async () => {
+        throw new Error("initializePlatform should not be called");
+      },
+      verifyIdToken: async () => createStudentToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        headers: {
+          authorization: "Bearer build_81_student",
+        },
+        path: "/vendor/intelligence/initialize",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 403);
+    assertStructuredError(
+      response.body,
+      "FORBIDDEN",
+      "Only vendor roles can initialize the vendor intelligence platform.",
     );
   },
 );

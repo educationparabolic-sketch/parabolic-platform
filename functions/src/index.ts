@@ -21,6 +21,9 @@ import {
 import {
   handleVendorSimulationValidationRequest,
 } from "./api/vendorSimulationValidation";
+import {
+  handleVendorIntelligenceInitializeRequest,
+} from "./api/vendorIntelligenceInitialize";
 import {runAssignmentOnCreate} from "./triggers/assignmentCreation";
 import {questionBankOnCreate} from "./triggers/questionIngestion";
 import {examSessionOnUpdate} from "./triggers/sessionSubmission";
@@ -59,6 +62,9 @@ export const vendorSimulationLoad = functions.https.onRequest(
 );
 export const vendorSimulationValidation = functions.https.onRequest(
   handleVendorSimulationValidationRequest,
+);
+export const vendorIntelligenceInitialize = functions.https.onRequest(
+  handleVendorIntelligenceInitializeRequest,
 );
 
 export const helloWorld = functions.https.onRequest(async (
