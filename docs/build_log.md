@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 83  
-Next Build: 84
+Completed Builds: 84  
+Next Build: 85
 
 Current Phase: Phase 17 — Vendor Intelligence Layer
 
@@ -2756,18 +2756,46 @@ Completed On
 
 ---
 
+## Build 84 — Institute Churn Tracking
+
+Phase  
+Phase 17 — Vendor Intelligence Layer
+
+Summary  
+Implemented vendor churn tracking analytics on top of the Build 81 vendor BI foundation.
+
+Components implemented:
+
+- Vendor-only `POST /vendor/intelligence/churn` endpoint
+- Strongly typed churn-tracking analytics request and response contracts
+- `VendorChurnTrackingService` for aggregate churn analysis from `billingSnapshots`, `vendorAggregates`, `licenseHistory`, and `usageMeter`
+- Current-cycle outputs for monthly churn rate plus churn breakdowns by prior-cycle license layer and institute size
+- Retention-risk outputs for inactive institutes, current-cycle license downgrades, and active-student engagement decline across consecutive billing cycles
+- Repeatable endpoint contract tests, emulator-backed Firestore analytics tests, plus local build and lint verification
+
+Result  
+The platform now computes vendor churn tracking analytics entirely from aggregate billing and institute-summary sources, providing retention-risk visibility without reading raw session or student data.
+
+Commit Reference  
+Build 84 — Institute Churn Tracking implemented
+
+Completed On  
+2026-04-03
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 84
+Next Build Number: 85
 
 Phase  
 Phase 17 — Vendor Intelligence Layer
 
 Subsystem  
-Institute Churn Tracking
+Revenue Forecasting Engine
 
 Reference  
-3_Core_Architectures.md → Section 41.5.4 Churn Tracking
+3_Core_Architectures.md → Section 41.5.8 Forecasting and Projection
 
 ---
 
@@ -2858,7 +2886,8 @@ Build | Phase | Status
 81 | Vendor Intelligence Layer | Completed
 82 | Vendor Intelligence Layer | Completed
 83 | Vendor Intelligence Layer | Completed
-84–150 | Remaining Phases | Pending
+84 | Vendor Intelligence Layer | Completed
+85–150 | Remaining Phases | Pending
 
 ---
 

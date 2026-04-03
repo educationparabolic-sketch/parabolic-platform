@@ -36,6 +36,9 @@ import {
 import {
   createVendorLayerDistributionHandler,
 } from "../api/vendorLayerDistribution";
+import {
+  createVendorChurnTrackingHandler,
+} from "../api/vendorChurnTracking";
 import {SessionStartValidationError} from "../services/session";
 import {
   SimulationEnvironmentValidationError,
@@ -1746,6 +1749,125 @@ test(
       response.body,
       "FORBIDDEN",
       "Only vendor roles can access vendor layer distribution analytics.",
+    );
+  },
+);
+
+test(
+  "vendor churn tracking handler accepts a valid vendor request",
+  async () => {
+    const handler = createVendorChurnTrackingHandler({
+      computeChurnTracking: async () => ({
+        churnByInstituteSize: [
+          {
+            baselineInstituteCount: 2,
+            bucket: "medium",
+            churnRate: 0.5,
+            lostInstituteCount: 1,
+          },
+        ],
+        churnByLayer: [
+          {
+            baselineInstituteCount: 2,
+            churnRate: 0.5,
+            layer: "L2",
+            lostInstituteCount: 1,
+          },
+        ],
+        currentCycleDowngrades: [
+          {
+            effectiveDate: "2026-04-05T00:00:00.000Z",
+            fromLayer: "L2",
+            instituteId: "inst_build_84_c",
+            instituteName: "Build 84 Institute C",
+            toLayer: "L1",
+          },
+        ],
+        engagementDeclines: [
+          {
+            currentActiveStudents: 180,
+            currentLayer: "L1",
+            declineCount: 40,
+            dropOffRate: 0.1818,
+            instituteId: "inst_build_84_c",
+            instituteName: "Build 84 Institute C",
+            previousActiveStudents: 220,
+            sizeBucket: "medium",
+          },
+        ],
+        inactiveInstituteCount: 1,
+        inactiveInstitutes: [
+          {
+            currentLayer: "L2",
+            inactiveDays: 31,
+            instituteId: "inst_build_84_b",
+            instituteName: "Build 84 Institute B",
+            lastActivityAt: "2026-03-20T00:00:00.000Z",
+          },
+        ],
+        monthlyChurn: {
+          baselineInstituteCount: 4,
+          churnRate: 0.25,
+          currentCycleId: "2026-04",
+          lostInstituteCount: 1,
+          previousCycleId: "2026-03",
+          retainedInstituteCount: 3,
+        },
+        snapshotMonth: "2026-04",
+      }),
+      verifyIdToken: async () => createVendorToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        headers: {
+          authorization: "Bearer build_84_vendor",
+        },
+        path: "/vendor/intelligence/churn",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 200);
+    assert.equal((response.body as {code: string}).code, "OK");
+    assert.equal(
+      (
+        response.body as {
+          data: {monthlyChurn: {lostInstituteCount: number}};
+        }
+      ).data.monthlyChurn.lostInstituteCount,
+      1,
+    );
+  },
+);
+
+test(
+  "vendor churn tracking handler rejects role violations",
+  async () => {
+    const handler = createVendorChurnTrackingHandler({
+      computeChurnTracking: async () => {
+        throw new Error("computeChurnTracking should not be called");
+      },
+      verifyIdToken: async () => createStudentToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        headers: {
+          authorization: "Bearer build_84_student",
+        },
+        path: "/vendor/intelligence/churn",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 403);
+    assertStructuredError(
+      response.body,
+      "FORBIDDEN",
+      "Only vendor roles can access vendor churn tracking analytics.",
     );
   },
 );

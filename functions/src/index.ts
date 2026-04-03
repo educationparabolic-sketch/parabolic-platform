@@ -30,6 +30,9 @@ import {
 import {
   handleVendorLayerDistributionRequest,
 } from "./api/vendorLayerDistribution";
+import {
+  handleVendorChurnTrackingRequest,
+} from "./api/vendorChurnTracking";
 import {runAssignmentOnCreate} from "./triggers/assignmentCreation";
 import {questionBankOnCreate} from "./triggers/questionIngestion";
 import {examSessionOnUpdate} from "./triggers/sessionSubmission";
@@ -77,6 +80,9 @@ export const vendorRevenueAnalytics = functions.https.onRequest(
 );
 export const vendorLayerDistribution = functions.https.onRequest(
   handleVendorLayerDistributionRequest,
+);
+export const vendorChurnTracking = functions.https.onRequest(
+  handleVendorChurnTrackingRequest,
 );
 
 export const helloWorld = functions.https.onRequest(async (
