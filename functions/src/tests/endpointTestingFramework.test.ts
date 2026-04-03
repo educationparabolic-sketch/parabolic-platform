@@ -33,6 +33,9 @@ import {
 import {
   createVendorRevenueAnalyticsHandler,
 } from "../api/vendorRevenueAnalytics";
+import {
+  createVendorLayerDistributionHandler,
+} from "../api/vendorLayerDistribution";
 import {SessionStartValidationError} from "../services/session";
 import {
   SimulationEnvironmentValidationError,
@@ -1623,6 +1626,126 @@ test(
       response.body,
       "FORBIDDEN",
       "Only vendor roles can access vendor revenue analytics.",
+    );
+  },
+);
+
+test(
+  "vendor layer distribution handler accepts a valid vendor request",
+  async () => {
+    const handler = createVendorLayerDistributionHandler({
+      computeLayerDistribution: async () => ({
+        averageTimeInLayerDays: [
+          {
+            averageDays: null,
+            instituteCount: 0,
+            layer: "L0",
+          },
+          {
+            averageDays: 49,
+            instituteCount: 2,
+            layer: "L1",
+          },
+          {
+            averageDays: 36.5,
+            instituteCount: 2,
+            layer: "L2",
+          },
+          {
+            averageDays: 15,
+            instituteCount: 1,
+            layer: "L3",
+          },
+        ],
+        currentLayerPercentages: {
+          L0: 0,
+          L1: 33.33,
+          L2: 33.33,
+          L3: 33.33,
+        },
+        instituteCountByLayer: {
+          L0: 0,
+          L1: 1,
+          L2: 1,
+          L3: 1,
+        },
+        migrationVelocity: [
+          {
+            conversionRatePercent: 100,
+            fromLayer: "L0",
+            migrationsPerMonth: 0.75,
+            observedMonthCount: 4,
+            targetLayerInstituteCount: 3,
+            toLayer: "L1",
+            transitionedInstituteCount: 3,
+          },
+        ],
+        snapshotMonth: "2026-04",
+        totalInstitutes: 3,
+        upgradeFrequencyByInstituteSize: [
+          {
+            averageUpgradesPerInstitute: 2,
+            bucket: "small",
+            instituteCount: 1,
+            institutesWithUpgradeCount: 1,
+            upgradeFrequencyPercent: 100,
+            upgradeTransitionCount: 2,
+          },
+        ],
+      }),
+      verifyIdToken: async () => createVendorToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        headers: {
+          authorization: "Bearer build_83_vendor",
+        },
+        path: "/vendor/intelligence/layer-distribution",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 200);
+    assert.equal((response.body as {code: string}).code, "OK");
+    assert.equal(
+      (
+        response.body as {
+          data: {currentLayerPercentages: {L1: number}};
+        }
+      ).data.currentLayerPercentages.L1,
+      33.33,
+    );
+  },
+);
+
+test(
+  "vendor layer distribution handler rejects role violations",
+  async () => {
+    const handler = createVendorLayerDistributionHandler({
+      computeLayerDistribution: async () => {
+        throw new Error("computeLayerDistribution should not be called");
+      },
+      verifyIdToken: async () => createStudentToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        headers: {
+          authorization: "Bearer build_83_student",
+        },
+        path: "/vendor/intelligence/layer-distribution",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 403);
+    assertStructuredError(
+      response.body,
+      "FORBIDDEN",
+      "Only vendor roles can access vendor layer distribution analytics.",
     );
   },
 );
