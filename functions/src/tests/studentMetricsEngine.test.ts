@@ -100,11 +100,18 @@ test(
     assert.equal(firstData?.avgRawScorePercent, 60);
     assert.equal(firstData?.avgAccuracyPercent, 80);
     assert.equal(firstData?.disciplineIndex, 90);
+    assert.equal(firstData?.disciplineIndexTrend, 0);
     assert.equal(firstData?.guessRate, 10);
+    assert.equal(firstData?.guessRateTrend, 0);
     assert.equal(firstData?.avgPhaseAdherence, 70);
     assert.equal(firstData?.easyNeglectRate, 20);
     assert.equal(firstData?.hardBiasRate, 15);
     assert.equal(firstData?.totalTests, 1);
+    assert.equal(
+      firstData?.processingMarkers?.studentMetricsEngine
+        ?.recentGovernanceMetrics?.length,
+      1,
+    );
     assert.equal(
       firstData?.processingMarkers?.studentMetricsEngine
         ?.lastProcessedSessionId,
@@ -142,11 +149,18 @@ test(
     assert.equal(secondData?.avgRawScorePercent, 50);
     assert.equal(secondData?.avgAccuracyPercent, 70);
     assert.equal(secondData?.disciplineIndex, 80);
+    assert.equal(secondData?.disciplineIndexTrend, -20);
     assert.equal(secondData?.guessRate, 20);
+    assert.equal(secondData?.guessRateTrend, 20);
     assert.equal(secondData?.avgPhaseAdherence, 60);
     assert.equal(secondData?.easyNeglectRate, 10);
     assert.equal(secondData?.hardBiasRate, 7.5);
     assert.equal(secondData?.totalTests, 2);
+    assert.equal(
+      secondData?.processingMarkers?.studentMetricsEngine
+        ?.recentGovernanceMetrics?.length,
+      2,
+    );
     assert.equal(
       secondData?.processingMarkers?.studentMetricsEngine?.latestSessionSummary
         ?.sessionId,

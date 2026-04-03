@@ -9,6 +9,7 @@ import {
 const INSTITUTES_COLLECTION = "institutes";
 const ACADEMIC_YEARS_COLLECTION = "academicYears";
 const STUDENT_YEAR_METRICS_COLLECTION = "studentYearMetrics";
+const GOVERNANCE_TREND_WINDOW_SIZE = 5;
 
 interface SubmittedSessionSnapshot {
   accuracyPercent?: unknown;
@@ -28,6 +29,7 @@ interface SubmittedSessionSnapshot {
 }
 
 interface StudentMetricsComputationState {
+  recentGovernanceMetrics: GovernanceMetricPoint[];
   sumAccuracyPercent: number;
   sumDisciplineIndex: number;
   sumEasyNeglectRate: number;
@@ -36,6 +38,14 @@ interface StudentMetricsComputationState {
   sumPhaseAdherencePercent: number;
   sumRawScorePercent: number;
   totalTests: number;
+}
+
+interface GovernanceMetricPoint {
+  disciplineIndex: number;
+  guessRate: number;
+  phaseAdherencePercent: number;
+  sessionId: string;
+  submittedAt: FirebaseFirestore.Timestamp;
 }
 
 /**
@@ -145,6 +155,63 @@ const toNonNegativeIntegerOrDefault = (
 const roundToTwoDecimals = (value: number): number =>
   Math.round(value * 100) / 100;
 
+const toGovernanceMetricPoint = (
+  value: unknown,
+): GovernanceMetricPoint | undefined => {
+  if (!isPlainObject(value)) {
+    return undefined;
+  }
+
+  const sessionId = toNonEmptyString(value.sessionId);
+  const submittedAt = toTimestampOrUndefined(value.submittedAt);
+
+  if (!sessionId || !submittedAt) {
+    return undefined;
+  }
+
+  try {
+    return {
+      disciplineIndex: toPercent(value.disciplineIndex, "disciplineIndex"),
+      guessRate: toPercent(value.guessRate, "guessRate"),
+      phaseAdherencePercent: toPercent(
+        value.phaseAdherencePercent,
+        "phaseAdherencePercent",
+      ),
+      sessionId,
+      submittedAt,
+    };
+  } catch {
+    return undefined;
+  }
+};
+
+const toGovernanceMetricPoints = (value: unknown): GovernanceMetricPoint[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry) => toGovernanceMetricPoint(entry))
+    .filter(
+      (entry): entry is GovernanceMetricPoint => entry !== undefined,
+    )
+    .slice(-GOVERNANCE_TREND_WINDOW_SIZE);
+};
+
+const computeMetricTrend = (
+  points: GovernanceMetricPoint[],
+  selector: (point: GovernanceMetricPoint) => number,
+): number => {
+  if (points.length <= 1) {
+    return 0;
+  }
+
+  const firstPoint = points[0];
+  const lastPoint = points[points.length - 1];
+
+  return roundToTwoDecimals(selector(lastPoint) - selector(firstPoint));
+};
+
 const readComputationState = (
   studentMetricsData: Record<string, unknown> | undefined,
 ): StudentMetricsComputationState => {
@@ -160,6 +227,9 @@ const readComputationState = (
     {};
 
   return {
+    recentGovernanceMetrics: toGovernanceMetricPoints(
+      engineState?.recentGovernanceMetrics,
+    ),
     sumAccuracyPercent: toPercentOrDefault(engineState.sumAccuracyPercent, 0),
     sumDisciplineIndex: toPercentOrDefault(engineState.sumDisciplineIndex, 0),
     sumEasyNeglectRate: toPercentOrDefault(engineState.sumEasyNeglectRate, 0),
@@ -312,6 +382,24 @@ export class StudentMetricsEngineService {
         computationState.sumEasyNeglectRate + easyNeglectRate;
       const sumHardBiasRate =
         computationState.sumHardBiasRate + hardBiasRate;
+      const recentGovernanceMetrics = [
+        ...computationState.recentGovernanceMetrics,
+        {
+          disciplineIndex,
+          guessRate,
+          phaseAdherencePercent,
+          sessionId,
+          submittedAt,
+        },
+      ].slice(-GOVERNANCE_TREND_WINDOW_SIZE);
+      const disciplineIndexTrend = computeMetricTrend(
+        recentGovernanceMetrics,
+        (point) => point.disciplineIndex,
+      );
+      const guessRateTrend = computeMetricTrend(
+        recentGovernanceMetrics,
+        (point) => point.guessRate,
+      );
 
       transaction.set(
         studentMetricsReference,
@@ -326,8 +414,10 @@ export class StudentMetricsEngineService {
             sumRawScorePercent / totalTests,
           ),
           disciplineIndex: roundToTwoDecimals(sumDisciplineIndex / totalTests),
+          disciplineIndexTrend,
           easyNeglectRate: roundToTwoDecimals(sumEasyNeglectRate / totalTests),
           guessRate: roundToTwoDecimals(sumGuessRate / totalTests),
+          guessRateTrend,
           hardBiasRate: roundToTwoDecimals(sumHardBiasRate / totalTests),
           lastUpdated: FieldValue.serverTimestamp(),
           processingMarkers: {
@@ -357,6 +447,7 @@ export class StudentMetricsEngineService {
                 skipBurstCount,
                 submittedAt,
               },
+              recentGovernanceMetrics,
               updatedAt: FieldValue.serverTimestamp(),
             },
           },

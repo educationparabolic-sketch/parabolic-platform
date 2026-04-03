@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 86  
-Next Build: 87
+Completed Builds: 87  
+Next Build: 88
 
 Current Phase: Phase 18 — Governance Snapshot System
 
@@ -2842,18 +2842,45 @@ Completed On
 
 ---
 
+## Build 87 — Student Stability Metrics Aggregation
+
+Phase  
+Phase 18 — Governance Snapshot System
+
+Summary  
+Extended the existing student yearly metrics aggregation pipeline to produce governance-ready stability inputs for downstream monthly snapshot computation.
+
+Components implemented:
+
+- Governance trend aggregation within `studentYearMetrics/{studentId}`
+- Rolling discipline index trend computation
+- Rolling guess rate trend computation
+- Reuse of existing phase adherence aggregates as governance inputs
+- Emulator-backed regression coverage for extended student metrics outputs
+
+Result  
+The governance snapshot system now receives student-level stability inputs from the existing yearly metrics engine without introducing new collections or duplicate aggregation modules.
+
+Commit Reference  
+Build 87: Student Stability Metrics Aggregation
+
+Completed On  
+2026-04-03
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 87
+Next Build Number: 88
 
 Phase  
 Phase 18 — Governance Snapshot System
 
 Subsystem  
-Student Stability Metrics Aggregation
+Governance Indicator Computation
 
 Reference  
-3_Core_Architectures.md → Section 42.10 Post-Submission Processing Pipeline — Step C StudentYearMetrics Engine
+3_Core_Architectures.md → Section 42.14 Governance Snapshot Flow
 
 ---
 
@@ -2947,7 +2974,8 @@ Build | Phase | Status
 84 | Vendor Intelligence Layer | Completed
 85 | Vendor Intelligence Layer | Completed
 86 | Governance Snapshot System | Completed
-87–150 | Remaining Phases | Pending
+87 | Governance Snapshot System | Completed
+88–150 | Remaining Phases | Pending
 
 ---
 
