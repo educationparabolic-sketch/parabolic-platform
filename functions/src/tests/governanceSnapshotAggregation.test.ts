@@ -88,9 +88,10 @@ test(
       firestore.doc(`${studentYearMetricsPath}/student_1`).set({
         avgPhaseAdherence: 90,
         disciplineIndex: 80,
+        disciplineIndexTrend: 6,
         easyNeglectActive: false,
         hardBiasActive: false,
-        riskState: "stable",
+        rollingRiskCluster: "Stable",
         rushPatternActive: true,
         skipBurstActive: false,
         wrongStreakActive: false,
@@ -98,9 +99,10 @@ test(
       firestore.doc(`${studentYearMetricsPath}/student_2`).set({
         avgPhaseAdherence: 60,
         disciplineIndex: 60,
+        disciplineIndexTrend: -2,
         easyNeglectActive: true,
         hardBiasActive: false,
-        riskState: "driftProne",
+        rollingRiskCluster: "Drift-Prone",
         rushPatternActive: false,
         skipBurstActive: true,
         wrongStreakActive: false,
@@ -108,6 +110,7 @@ test(
       firestore.doc(`${studentYearMetricsPath}/student_3`).set({
         avgPhaseAdherence: 75,
         disciplineIndex: 70,
+        disciplineIndexTrend: 4,
         easyNeglectActive: false,
         hardBiasActive: true,
         riskState: "volatile",
@@ -136,8 +139,9 @@ test(
     assert.equal(snapshotData?.avgRawScorePercent, 66.67);
     assert.equal(snapshotData?.avgAccuracyPercent, 76.67);
     assert.equal(snapshotData?.disciplineMean, 70);
-    assert.equal(snapshotData?.disciplineTrend, 70);
+    assert.equal(snapshotData?.disciplineTrend, 2.67);
     assert.equal(snapshotData?.disciplineVariance, 66.67);
+    assert.equal(snapshotData?.executionIntegrityScore, 67.67);
     assert.equal(snapshotData?.avgPhaseAdherence, 75);
     assert.equal(snapshotData?.phaseCompliancePercent, 75);
     assert.deepEqual(snapshotData?.riskDistribution, {

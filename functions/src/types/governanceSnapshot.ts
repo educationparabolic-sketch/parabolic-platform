@@ -43,6 +43,7 @@ export interface GovernanceSnapshotDocument {
   disciplineMean: number;
   disciplineTrend: number;
   disciplineVariance: number;
+  executionIntegrityScore: number;
   generatedAt: FirebaseFirestore.Timestamp;
   immutable: true;
   instituteId: string;

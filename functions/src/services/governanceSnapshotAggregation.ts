@@ -26,6 +26,7 @@ interface AggregatedRunAnalytics {
 interface AggregatedStudentMetrics {
   avgPhaseAdherence: number;
   disciplineMean: number;
+  disciplineTrend: number;
   disciplineVariance: number;
   easyNeglectPercent: number;
   hardBiasPercent: number;
@@ -42,6 +43,16 @@ const GOVERNANCE_RISK_CLUSTERS: GovernanceRiskCluster[] = [
   "overextended",
   "volatile",
 ];
+
+const GOVERNANCE_RISK_CLUSTER_ALIASES:
+Record<string, GovernanceRiskCluster> = {
+  "stable": "stable",
+  "drift-prone": "driftProne",
+  "driftprone": "driftProne",
+  "impulsive": "impulsive",
+  "overextended": "overextended",
+  "volatile": "volatile",
+};
 
 const isPlainObject = (
   value: unknown,
@@ -194,6 +205,42 @@ const computeStabilityIndex = (
   return roundToTwoDecimals(clamp(stabilityIndex, 0, 100));
 };
 
+const normalizeRiskCluster = (
+  value: unknown,
+): GovernanceRiskCluster | undefined => {
+  const normalizedValue = toNonEmptyString(value)
+    ?.toLowerCase()
+    .replace(/[\s_]+/g, "");
+
+  if (!normalizedValue) {
+    return undefined;
+  }
+
+  return GOVERNANCE_RISK_CLUSTER_ALIASES[normalizedValue];
+};
+
+const computeExecutionIntegrityScore = (
+  avgPhaseAdherence: number,
+  disciplineMean: number,
+  overrideFrequency: number,
+  riskDistribution: GovernanceRiskDistribution,
+): number => {
+  const structuralRiskBalance = roundToTwoDecimals(
+    (riskDistribution.stable * 1) +
+    (riskDistribution.driftProne * 0.75) +
+    (riskDistribution.impulsive * 0.5) +
+    (riskDistribution.overextended * 0.25),
+  );
+  const overrideIntegrity = 100 - overrideFrequency;
+  const executionIntegrityScore =
+    (avgPhaseAdherence * 0.4) +
+    (disciplineMean * 0.3) +
+    (structuralRiskBalance * 0.2) +
+    (overrideIntegrity * 0.1);
+
+  return roundToTwoDecimals(clamp(executionIntegrityScore, 0, 100));
+};
+
 /**
  * Runs the monthly governance snapshot aggregation pipeline.
  */
@@ -329,9 +376,15 @@ export class GovernanceSnapshotAggregationService {
       avgRawScorePercent: aggregatedRunAnalytics.avgRawScorePercent,
       createdAt: generatedAt,
       disciplineMean: aggregatedStudentMetrics.disciplineMean,
-      disciplineTrend: aggregatedStudentMetrics.disciplineMean,
+      disciplineTrend: aggregatedStudentMetrics.disciplineTrend,
       disciplineVariance: aggregatedStudentMetrics.disciplineVariance,
       easyNeglectPercent: aggregatedStudentMetrics.easyNeglectPercent,
+      executionIntegrityScore: computeExecutionIntegrityScore(
+        aggregatedStudentMetrics.avgPhaseAdherence,
+        aggregatedStudentMetrics.disciplineMean,
+        aggregatedRunAnalytics.overrideFrequency,
+        aggregatedStudentMetrics.riskDistribution,
+      ),
       generatedAt,
       hardBiasPercent: aggregatedStudentMetrics.hardBiasPercent,
       immutable: true,
@@ -453,6 +506,7 @@ export class GovernanceSnapshotAggregationService {
   ): AggregatedStudentMetrics {
     const avgPhaseAdherenceValues: number[] = [];
     const disciplineValues: number[] = [];
+    const disciplineTrendValues: number[] = [];
     const riskCounts: Partial<Record<GovernanceRiskCluster, number>> = {};
     let easyNeglectActiveCount = 0;
     let hardBiasActiveCount = 0;
@@ -467,11 +521,20 @@ export class GovernanceSnapshotAggregationService {
       const avgPhaseAdherence = toNumberOrUndefined(
         studentMetricsDocument.avgPhaseAdherence,
       );
-      const riskState = toNonEmptyString(studentMetricsDocument.riskState) as
-        GovernanceRiskCluster | undefined;
+      const disciplineIndexTrend = toNumberOrUndefined(
+        studentMetricsDocument.disciplineIndexTrend,
+      );
+      const riskState = normalizeRiskCluster(
+        studentMetricsDocument.rollingRiskCluster ??
+        studentMetricsDocument.riskState,
+      );
 
       if (disciplineIndex !== undefined) {
         disciplineValues.push(disciplineIndex);
+      }
+
+      if (disciplineIndexTrend !== undefined) {
+        disciplineTrendValues.push(disciplineIndexTrend);
       }
 
       if (avgPhaseAdherence !== undefined) {
@@ -508,6 +571,7 @@ export class GovernanceSnapshotAggregationService {
     return {
       avgPhaseAdherence: computeAverage(avgPhaseAdherenceValues),
       disciplineMean: computeAverage(disciplineValues),
+      disciplineTrend: computeAverage(disciplineTrendValues),
       disciplineVariance: computeVariance(disciplineValues),
       easyNeglectPercent: studentCount > 0 ?
         roundToTwoDecimals((easyNeglectActiveCount / studentCount) * 100) :
