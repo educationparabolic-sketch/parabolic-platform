@@ -30,6 +30,9 @@ import {
 import {
   createVendorIntelligenceInitializeHandler,
 } from "../api/vendorIntelligenceInitialize";
+import {
+  createVendorRevenueAnalyticsHandler,
+} from "../api/vendorRevenueAnalytics";
 import {SessionStartValidationError} from "../services/session";
 import {
   SimulationEnvironmentValidationError,
@@ -1516,6 +1519,110 @@ test(
       response.body,
       "FORBIDDEN",
       "Only vendor roles can initialize the vendor intelligence platform.",
+    );
+  },
+);
+
+test(
+  "vendor revenue analytics handler accepts a valid vendor request",
+  async () => {
+    const handler = createVendorRevenueAnalyticsHandler({
+      computeRevenueAnalytics: async () => ({
+        activePayingInstitutes: 2,
+        averageRevenuePerInstitute: 3000,
+        averageRevenuePerStudent: 20,
+        currentCycleId: "2026-04",
+        instituteRevenue: [
+          {
+            activeStudentCount: 120,
+            annualRecurringRevenue: 43200,
+            averageRevenuePerStudent: 20,
+            currentLayer: "L2",
+            cycleId: "2026-04",
+            instituteId: "inst_build_82_a",
+            instituteName: "Build 82 Institute A",
+            monthlyRecurringRevenue: 3600,
+          },
+        ],
+        monthlySnapshots: [
+          {
+            activePayingInstitutes: 2,
+            averageRevenuePerInstitute: 3000,
+            averageRevenuePerStudent: 20,
+            cycleId: "2026-04",
+            monthOverMonthGrowthPercent: 20,
+            revenueByLayer: {
+              L0: 0,
+              L1: 2400,
+              L2: 3600,
+              L3: 0,
+            },
+            revenueVolatilityIndex: 0.09,
+            totalARR: 72000,
+            totalMRR: 6000,
+            totalStudents: 300,
+          },
+        ],
+        revenueByLayer: {
+          L0: 0,
+          L1: 2400,
+          L2: 3600,
+          L3: 0,
+        },
+        revenueVolatilityIndex: 0.09,
+        snapshotMonth: "2026-04",
+        totalARR: 72000,
+        totalMRR: 6000,
+      }),
+      verifyIdToken: async () => createVendorToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        headers: {
+          authorization: "Bearer build_82_vendor",
+        },
+        path: "/vendor/intelligence/revenue",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 200);
+    assert.equal((response.body as {code: string}).code, "OK");
+    assert.equal(
+      (response.body as {data: {totalMRR: number}}).data.totalMRR,
+      6000,
+    );
+  },
+);
+
+test(
+  "vendor revenue analytics handler rejects role violations",
+  async () => {
+    const handler = createVendorRevenueAnalyticsHandler({
+      computeRevenueAnalytics: async () => {
+        throw new Error("computeRevenueAnalytics should not be called");
+      },
+      verifyIdToken: async () => createStudentToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        headers: {
+          authorization: "Bearer build_82_student",
+        },
+        path: "/vendor/intelligence/revenue",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 403);
+    assertStructuredError(
+      response.body,
+      "FORBIDDEN",
+      "Only vendor roles can access vendor revenue analytics.",
     );
   },
 );

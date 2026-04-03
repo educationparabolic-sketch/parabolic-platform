@@ -24,6 +24,9 @@ import {
 import {
   handleVendorIntelligenceInitializeRequest,
 } from "./api/vendorIntelligenceInitialize";
+import {
+  handleVendorRevenueAnalyticsRequest,
+} from "./api/vendorRevenueAnalytics";
 import {runAssignmentOnCreate} from "./triggers/assignmentCreation";
 import {questionBankOnCreate} from "./triggers/questionIngestion";
 import {examSessionOnUpdate} from "./triggers/sessionSubmission";
@@ -65,6 +68,9 @@ export const vendorSimulationValidation = functions.https.onRequest(
 );
 export const vendorIntelligenceInitialize = functions.https.onRequest(
   handleVendorIntelligenceInitializeRequest,
+);
+export const vendorRevenueAnalytics = functions.https.onRequest(
+  handleVendorRevenueAnalyticsRequest,
 );
 
 export const helloWorld = functions.https.onRequest(async (

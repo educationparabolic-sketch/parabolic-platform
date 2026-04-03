@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 81  
-Next Build: 82
+Completed Builds: 82  
+Next Build: 83
 
 Current Phase: Phase 17 — Vendor Intelligence Layer
 
@@ -2699,18 +2699,46 @@ Completed On
 
 ---
 
+## Build 82 — Revenue Analytics Engine
+
+Phase  
+Phase 17 — Vendor Intelligence Layer
+
+Summary  
+Implemented vendor revenue intelligence on top of the Build 81 BI foundation.
+
+Components implemented:
+
+- Vendor-only `POST /vendor/intelligence/revenue` endpoint
+- Strongly typed revenue intelligence request and response contracts
+- `VendorRevenueAnalyticsService` for aggregated revenue computation from `billingSnapshots` and `vendorAggregates`
+- Current-cycle outputs for MRR, ARR, active paying institutes, revenue by license layer, institute revenue ranking, and average revenue per institute
+- Time-series outputs for monthly snapshots, month-over-month revenue growth, average revenue per student, and revenue volatility index
+- Repeatable endpoint contract tests plus emulator-backed Firestore revenue analytics tests
+
+Result  
+The platform now computes vendor revenue analytics entirely from aggregate billing and institute-summary sources, providing dashboard-ready commercial metrics without reading raw session or student data.
+
+Commit Reference  
+Build 82 — Revenue Analytics Engine implemented
+
+Completed On  
+2026-04-03
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 82
+Next Build Number: 83
 
 Phase  
 Phase 17 — Vendor Intelligence Layer
 
 Subsystem  
-Revenue Analytics Engine
+License Layer Distribution Analysis
 
 Reference  
-3_Core_Architectures.md → Section 41.5.1 Revenue Intelligence
+3_Core_Architectures.md → Section 41.5.2 Layer Distribution Analysis
 
 ---
 
