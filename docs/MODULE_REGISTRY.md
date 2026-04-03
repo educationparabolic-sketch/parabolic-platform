@@ -98,6 +98,7 @@ VendorRevenueAnalyticsService | Build 82 | Compute vendor revenue intelligence f
 VendorLayerDistributionService | Build 83 | Compute vendor license layer distribution analytics from aggregated `vendorAggregates` and `licenseHistory`, including current layer percentages, adjacent-layer migration velocity, average time spent in each layer, and upgrade frequency by institute size
 VendorChurnTrackingService | Build 84 | Compute vendor churn tracking analytics from aggregate billing, institute-summary, license-history, and usage-meter sources, including monthly churn rate, churn by layer and institute size, inactive institute detection, current-cycle downgrade events, and active-student engagement decline
 VendorRevenueForecastingService | Build 85 | Compute vendor revenue forecasting analytics from aggregate billing, institute-summary, license-history, and usage-meter sources, including projected MRR and ARR, institute acquisition rate, student volume trends, trailing upgrade probability, and infrastructure cost-to-revenue ratio estimates using the documented scaling cost model
+GovernanceSnapshotAggregationService | Build 86 | Generate immutable monthly governance snapshots in `institutes/{instituteId}/academicYears/{yearId}/governanceSnapshots/{YYYY_MM}` by aggregating `runAnalytics` and `studentYearMetrics` summary collections, computing institutional risk distribution, discipline variance, pattern prevalence, override frequency, and stability index without reading raw session data
 FirestoreQueryGovernanceService | Build 56 | Enforce approved Firestore query plans by validating institute-scoped collection paths, indexed filter fields, indexed orderBy fields, bounded limits, and required pagination modes for governed backend query services
 StudentQueryCompositeIndexManifest | Build 57 | Define Firestore composite indexes for student admin filtering across `students` and `studentYearMetrics`, covering batch/status/name ordering, status/lastActiveAt ordering, batch/studentId pagination, riskState/disciplineIndex ordering, and avgRawScorePercent/studentId ordering in `firestore.indexes.json`
 QuestionBankCompositeIndexManifest | Build 58 | Define Firestore composite indexes for approved `questionBank` filtering across subject/chapter/difficulty, difficulty/lastUsedAt ordering, and status/subject/createdAt ordering in `firestore.indexes.json`
@@ -150,6 +151,7 @@ runs | AcademicYear | Test assignments
 sessions | Run | Exam execution sessions
 runAnalytics | AcademicYear | Run-level analytics
 studentYearMetrics | AcademicYear | Student performance metrics
+governanceSnapshots | AcademicYear | Immutable monthly governance snapshot records
 insightSnapshots | AcademicYear | Generated student, run, and batch insight snapshots
 emailQueue | Global | Root-level asynchronous notification queue jobs created by post-submission notification processing
 usage | Institute | Billing usage metering

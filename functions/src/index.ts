@@ -41,6 +41,7 @@ import {questionBankOnCreate} from "./triggers/questionIngestion";
 import {examSessionOnUpdate} from "./triggers/sessionSubmission";
 import {studentYearMetricsOnWrite} from "./triggers/studentYearMetrics";
 import {testTemplateOnCreate} from "./triggers/templateCreation";
+import {governanceSnapshotMonthly} from "./triggers/governanceSnapshot";
 import {loadEnvironmentConfig} from "./utils/environment";
 
 registerGlobalErrorHandlers();
@@ -50,6 +51,7 @@ export {runAssignmentOnCreate};
 export {examSessionOnUpdate};
 export {studentYearMetricsOnWrite};
 export {testTemplateOnCreate};
+export {governanceSnapshotMonthly};
 export const examStart = functions.https.onRequest(handleExamStartRequest);
 export const examSessionAnswers = functions.https.onRequest(
   handleExamSessionAnswersRequest,

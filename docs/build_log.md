@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 85  
-Next Build: 86
+Completed Builds: 86  
+Next Build: 87
 
 Current Phase: Phase 18 — Governance Snapshot System
 
@@ -2813,18 +2813,47 @@ Completed On
 
 ---
 
+## Build 86 — Governance Snapshot Aggregation Pipeline
+
+Phase  
+Phase 18 — Governance Snapshot System
+
+Summary  
+Implemented the monthly governance snapshot aggregation pipeline for institutional governance analytics.
+
+Components implemented:
+
+- Strongly typed governance snapshot aggregation contracts
+- Centralized GovernanceSnapshotAggregationService for monthly academic-year snapshot generation
+- Scheduled monthly Cloud Function trigger for governance snapshot execution
+- Immutable governance snapshot writes to `institutes/{instituteId}/academicYears/{yearId}/governanceSnapshots/{YYYY_MM}`
+- Summary-only aggregation from `runAnalytics` and `studentYearMetrics` with no raw session queries
+- Institutional metric computation for risk distribution, discipline variance, pattern prevalence, override frequency, and stability index
+- Emulator-backed repeatable tests covering snapshot generation and idempotent reruns
+
+Result  
+The backend now produces immutable monthly governance snapshot documents from existing summary collections, establishing the Build 86 aggregation pipeline required for later governance indicator and reporting builds.
+
+Commit Reference  
+Build 86 — Governance Snapshot Aggregation Pipeline implemented
+
+Completed On  
+2026-04-03
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 86
+Next Build Number: 87
 
 Phase  
 Phase 18 — Governance Snapshot System
 
 Subsystem  
-Governance Snapshot Aggregation Pipeline
+Student Stability Metrics Aggregation
 
 Reference  
-3_Core_Architectures.md → Section 42.14 Governance Snapshot Flow
+3_Core_Architectures.md → Section 42.10 Post-Submission Processing Pipeline — Step C StudentYearMetrics Engine
 
 ---
 
@@ -2917,7 +2946,8 @@ Build | Phase | Status
 83 | Vendor Intelligence Layer | Completed
 84 | Vendor Intelligence Layer | Completed
 85 | Vendor Intelligence Layer | Completed
-86–150 | Remaining Phases | Pending
+86 | Governance Snapshot System | Completed
+87–150 | Remaining Phases | Pending
 
 ---
 
