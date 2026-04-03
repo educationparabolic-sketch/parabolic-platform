@@ -42,6 +42,9 @@ import {
 import {
   createVendorRevenueForecastingHandler,
 } from "../api/vendorRevenueForecasting";
+import {
+  createAdminGovernanceSnapshotsHandler,
+} from "../api/adminGovernanceSnapshots";
 import {SessionStartValidationError} from "../services/session";
 import {
   SimulationEnvironmentValidationError,
@@ -88,6 +91,14 @@ const createVendorToken = (overrides: Record<string, unknown> = {}) => ({
   licenseLayer: "L0",
   role: "vendor",
   uid: "vendor_build_76",
+  ...overrides,
+});
+
+const createDirectorToken = (overrides: Record<string, unknown> = {}) => ({
+  instituteId: "inst_build_89",
+  licenseLayer: "L3",
+  role: "director",
+  uid: "director_build_89",
   ...overrides,
 });
 
@@ -388,6 +399,227 @@ test("exam start handler rejects invalid payloads", async () => {
     "Field \"runId\" must be a non-empty string.",
   );
 });
+
+test(
+  "admin governance snapshots handler accepts an L3 director request",
+  async () => {
+    const handler = createAdminGovernanceSnapshotsHandler({
+      readSnapshots: async () => ({
+        instituteId: "inst_build_89",
+        snapshots: [
+          {
+            academicYear: "2026",
+            avgAccuracyPercent: 74,
+            avgPhaseAdherence: 71,
+            avgRawScorePercent: 65,
+            createdAt: "2026-04-01T00:00:00.000Z",
+            disciplineMean: 72,
+            disciplineTrend: 1.2,
+            disciplineVariance: 6.4,
+            documentId: "2026_03",
+            documentPath:
+              "institutes/inst_build_89/academicYears/2026/" +
+              "governanceSnapshots/2026_03",
+            easyNeglectPercent: 8,
+            executionIntegrityScore: 79,
+            generatedAt: "2026-04-01T00:00:00.000Z",
+            hardBiasPercent: 6,
+            immutable: true,
+            instituteId: "inst_build_89",
+            month: "2026-03",
+            overrideFrequency: 2,
+            phaseCompliancePercent: 71,
+            riskClusterDistribution: {
+              driftProne: 18,
+              impulsive: 9,
+              overextended: 4,
+              stable: 61,
+              volatile: 8,
+            },
+            riskDistribution: {
+              driftProne: 18,
+              impulsive: 9,
+              overextended: 4,
+              stable: 61,
+              volatile: 8,
+            },
+            rushPatternPercent: 11,
+            schemaVersion: 1,
+            skipBurstPercent: 4,
+            stabilityIndex: 79,
+            templateVarianceMean: 5.4,
+            wrongStreakPercent: 2,
+          },
+        ],
+        yearId: "2026",
+      }),
+      verifyIdToken: async () => createDirectorToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          instituteId: "inst_build_89",
+          yearId: "2026",
+        },
+        headers: {
+          authorization: "Bearer build_89_director",
+        },
+        path: "/admin/governance/snapshots",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 200);
+    assert.equal((response.body as {code: string}).code, "OK");
+    assert.equal(
+      (response.body as {data: {snapshots: Array<{month: string}>}})
+        .data.snapshots[0]?.month,
+      "2026-03",
+    );
+  },
+);
+
+test(
+  "admin governance snapshots handler rejects non-director institute roles",
+  async () => {
+    const handler = createAdminGovernanceSnapshotsHandler({
+      readSnapshots: async () => {
+        throw new Error("readSnapshots should not be called");
+      },
+      verifyIdToken: async () =>
+        createDirectorToken({role: "teacher"}) as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          instituteId: "inst_build_89",
+          yearId: "2026",
+        },
+        headers: {
+          authorization: "Bearer build_89_teacher",
+        },
+        path: "/admin/governance/snapshots",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 403);
+    assertStructuredError(
+      response.body,
+      "FORBIDDEN",
+      "Only director and vendor roles can access governance snapshots.",
+    );
+  },
+);
+
+test(
+  "admin governance snapshots handler rejects director requests below L3",
+  async () => {
+    const handler = createAdminGovernanceSnapshotsHandler({
+      readSnapshots: async () => {
+        throw new Error("readSnapshots should not be called");
+      },
+      verifyIdToken: async () =>
+        createDirectorToken({licenseLayer: "L2"}) as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          instituteId: "inst_build_89",
+          yearId: "2026",
+        },
+        headers: {
+          authorization: "Bearer build_89_l2",
+        },
+        path: "/admin/governance/snapshots",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 403);
+    assertStructuredError(
+      response.body,
+      "LICENSE_RESTRICTED",
+      "Governance access requires license layer L3.",
+    );
+  },
+);
+
+test(
+  "admin governance snapshots handler enforces tenant isolation for directors",
+  async () => {
+    const handler = createAdminGovernanceSnapshotsHandler({
+      readSnapshots: async () => {
+        throw new Error("readSnapshots should not be called");
+      },
+      verifyIdToken: async () =>
+        createDirectorToken({instituteId: "inst_other_build_89"}) as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          instituteId: "inst_build_89",
+          yearId: "2026",
+        },
+        headers: {
+          authorization: "Bearer build_89_tenant",
+        },
+        path: "/admin/governance/snapshots",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 403);
+    assertStructuredError(
+      response.body,
+      "TENANT_MISMATCH",
+      "Token instituteId does not match request instituteId.",
+    );
+  },
+);
+
+test(
+  "admin governance snapshots handler allows vendor cross-institute access",
+  async () => {
+    const handler = createAdminGovernanceSnapshotsHandler({
+      readSnapshots: async (input) => ({
+        instituteId: input.instituteId ?? "inst_vendor_target_build_89",
+        snapshots: [],
+        yearId: input.yearId ?? "2026",
+      }),
+      verifyIdToken: async () => createVendorToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          instituteId: "inst_vendor_target_build_89",
+          yearId: "2026",
+        },
+        headers: {
+          authorization: "Bearer build_89_vendor",
+        },
+        path: "/admin/governance/snapshots",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(
+      (response.body as {data: {instituteId: string}}).data.instituteId,
+      "inst_vendor_target_build_89",
+    );
+  },
+);
 
 test("exam session answers handler accepts a valid request", async () => {
   const handler = createExamSessionAnswersHandler({

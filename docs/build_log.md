@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 88  
-Next Build: 89
+Completed Builds: 89  
+Next Build: 90
 
 Current Phase: Phase 18 — Governance Snapshot System
 
@@ -2896,18 +2896,46 @@ Completed On
 
 ---
 
+## Build 89 — Governance Access Control
+
+Phase  
+Phase 18 — Governance Snapshot System
+
+Summary  
+Implemented governance snapshot visibility controls aligned with the architecture-defined governance access boundary.
+
+Components implemented:
+
+- Added `POST /admin/governance/snapshots` for governance snapshot reads
+- Enforced `director`-only institute access with required `L3` license validation
+- Allowed `vendor` access to governance snapshots across institutes without tenant coupling
+- Reused existing authentication, role, tenant, and middleware framework modules instead of introducing duplicate access systems
+- Added a dedicated governance snapshot read service that returns summary snapshot documents only from `institutes/{instituteId}/academicYears/{yearId}/governanceSnapshots/{monthId}`
+- Added repeatable handler tests plus emulator-backed governance access service tests
+
+Result  
+Governance snapshot access is now restricted to the intended executive roles without exposing raw session data, duplicate governance triggers, or schema changes.
+
+Commit Reference  
+Build 89: Governance Access Control
+
+Completed On  
+2026-04-03
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 89
+Next Build Number: 90
 
 Phase  
 Phase 18 — Governance Snapshot System
 
 Subsystem  
-Governance Access Control
+Governance Reporting Engine
 
 Reference  
-3_Core_Architectures.md → Section 37.13 Role-Based Audit Access
+3_Core_Architectures.md → Section 37.15 Reportable Incident Framework
 
 ---
 
