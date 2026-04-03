@@ -33,6 +33,9 @@ import {
 import {
   handleVendorChurnTrackingRequest,
 } from "./api/vendorChurnTracking";
+import {
+  handleVendorRevenueForecastingRequest,
+} from "./api/vendorRevenueForecasting";
 import {runAssignmentOnCreate} from "./triggers/assignmentCreation";
 import {questionBankOnCreate} from "./triggers/questionIngestion";
 import {examSessionOnUpdate} from "./triggers/sessionSubmission";
@@ -83,6 +86,9 @@ export const vendorLayerDistribution = functions.https.onRequest(
 );
 export const vendorChurnTracking = functions.https.onRequest(
   handleVendorChurnTrackingRequest,
+);
+export const vendorRevenueForecasting = functions.https.onRequest(
+  handleVendorRevenueForecastingRequest,
 );
 
 export const helloWorld = functions.https.onRequest(async (

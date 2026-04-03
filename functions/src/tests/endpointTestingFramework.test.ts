@@ -39,6 +39,9 @@ import {
 import {
   createVendorChurnTrackingHandler,
 } from "../api/vendorChurnTracking";
+import {
+  createVendorRevenueForecastingHandler,
+} from "../api/vendorRevenueForecasting";
 import {SessionStartValidationError} from "../services/session";
 import {
   SimulationEnvironmentValidationError,
@@ -1868,6 +1871,108 @@ test(
       response.body,
       "FORBIDDEN",
       "Only vendor roles can access vendor churn tracking analytics.",
+    );
+  },
+);
+
+test(
+  "vendor revenue forecasting handler accepts a valid vendor request",
+  async () => {
+    const handler = createVendorRevenueForecastingHandler({
+      computeRevenueForecast: async () => ({
+        infrastructureCostRevenueRatio: {
+          currentCostToRevenueRatioPercent: 1.79,
+          currentEstimatedMonthlyCostInr: 1250,
+          projectedCostToRevenueRatioPercent3Months: 2,
+          projectedCostToRevenueRatioPercent6Months: 1.99,
+          projectedEstimatedMonthlyCostInr3Months: 2000,
+          projectedEstimatedMonthlyCostInr6Months: 2587.5,
+        },
+        instituteAcquisitionProjection: {
+          averageNetNewInstitutesPerMonth: 1,
+          currentInstituteCount: 5,
+          projectedAcquisitionRatePerMonth: 1,
+          projectedInstituteCount3Months: 8,
+          projectedInstituteCount6Months: 11,
+        },
+        observedCycleCount: 4,
+        revenueGrowthProjection: {
+          averageMonthlyGrowthRatePercent: 14.29,
+          averageMonthlyRevenueDelta: 10000,
+          currentMRR: 70000,
+          projectedARR6Months: 1560000,
+          projectedMRR3Months: 100000,
+          projectedMRR6Months: 130000,
+        },
+        snapshotMonth: "2026-04",
+        studentVolumeTrend: {
+          averageMonthlyGrowthRatePercent: 20,
+          averageMonthlyStudentDelta: 100,
+          currentActiveStudents: 500,
+          projectedActiveStudents3Months: 800,
+          projectedActiveStudents6Months: 1100,
+          source: "usageMeter",
+        },
+        upgradeProbability: {
+          currentUpgradeableInstituteCount: 4,
+          observedUpgradeCountTrailing6Months: 2,
+          projectedUpgradeCountNext6Months: 2,
+          trailing6MonthUpgradeProbabilityPercent: 50,
+        },
+      }),
+      verifyIdToken: async () => createVendorToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        headers: {
+          authorization: "Bearer build_85_vendor",
+        },
+        path: "/vendor/intelligence/revenue-forecasting",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 200);
+    assert.equal((response.body as {code: string}).code, "OK");
+    assert.equal(
+      (
+        response.body as {
+          data: {revenueGrowthProjection: {projectedMRR6Months: number}};
+        }
+      ).data.revenueGrowthProjection.projectedMRR6Months,
+      130000,
+    );
+  },
+);
+
+test(
+  "vendor revenue forecasting handler rejects role violations",
+  async () => {
+    const handler = createVendorRevenueForecastingHandler({
+      computeRevenueForecast: async () => {
+        throw new Error("computeRevenueForecast should not be called");
+      },
+      verifyIdToken: async () => createStudentToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        headers: {
+          authorization: "Bearer build_85_student",
+        },
+        path: "/vendor/intelligence/revenue-forecasting",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 403);
+    assertStructuredError(
+      response.body,
+      "FORBIDDEN",
+      "Only vendor roles can access vendor revenue forecasting.",
     );
   },
 );
