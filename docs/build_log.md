@@ -12,10 +12,10 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 94  
-Next Build: 95
+Completed Builds: 95  
+Next Build: 96
 
-Current Phase: Phase 19 — Billing & License Intelligence
+Current Phase: Phase 20 — Calibration System
 
 ---
 
@@ -3091,18 +3091,61 @@ Completed On
 
 ---
 
-# NEXT BUILD
-
-Next Build Number: 95
+## Build 95 — Payment Event Integration
 
 Phase  
 Phase 19 — Billing & License Intelligence
 
+Summary  
+Implemented the Stripe payment-event integration workflow so billing webhooks now update authoritative institute license status, billing records, and billing-snapshot webhook state through a deterministic backend-only path.
+
+Components implemented:
+
+- Added `functions/src/api/stripeWebhook.ts` and exported it from `functions/src/index.ts` as `functions.https.onRequest` for `POST /api/stripe/webhook`
+- Added `functions/src/services/paymentEventIntegration.ts` and `functions/src/types/paymentEventIntegration.ts` to handle:
+  - Stripe signature validation using `STRIPE_WEBHOOK_SECRET`
+  - supported payment/subscription event normalization
+  - retry-safe event deduplication
+  - institute resolution from webhook metadata or stored Stripe identifiers
+- Updated authoritative billing state by writing:
+  - `institutes/{instituteId}/license/current`
+  - `institutes/{instituteId}/license/main`
+  - `institutes/{instituteId}/licenseHistory/{entryId}`
+  - `institutes/{instituteId}/billingRecords/{invoiceId}`
+- Extended the shared `BillingSnapshotService` so payment webhooks can synchronize `stripeWebhookStatus` onto existing or newly generated `billingSnapshots/{instituteId}__{cycleId}` documents without creating partial snapshots
+- Logged processed payment events through:
+  - `vendor/stripeEvents/events/{eventId}` for idempotent webhook deduplication
+  - `vendorAuditLogs/{auditId}` for immutable vendor audit visibility
+- Added repeatable emulator-backed coverage in `functions/src/tests/paymentEventIntegration.test.ts`, extended `functions/src/tests/helpers/http.ts` for raw webhook-body support, and registered `npm run test:payment-event-integration` in `functions/package.json`
+- Verified the implementation locally with:
+  - `npm run build`
+  - `npm run test:payment-event-integration`
+  - `npm run test:billing-snapshot`
+  - `npm run test:license-management`
+
+Result  
+Stripe payment and subscription events now drive license-state synchronization, invoice persistence, webhook-status propagation into billing snapshots, and immutable payment audit trails without introducing duplicate billing modules or triggers.
+
+Commit Reference  
+Build 95 — Payment Event Integration implemented
+
+Completed On  
+2026-04-05
+
+---
+
+# NEXT BUILD
+
+Next Build Number: 96
+
+Phase  
+Phase 20 — Calibration System
+
 Subsystem  
-Payment Event Integration
+Calibration Version Storage
 
 Reference  
-3_Core_Architectures.md → Section 42.11 Billing and Usage Flow
+3_Core_Architectures.md → Section 42.13 Calibration Flow
 
 ---
 
@@ -3203,7 +3246,9 @@ Build | Phase | Status
 91 | Billing & License Intelligence | Completed
 92 | Billing & License Intelligence | Completed
 93 | Billing & License Intelligence | Completed
-94–150 | Remaining Phases | Pending
+94 | Billing & License Intelligence | Completed
+95 | Billing & License Intelligence | Completed
+96–150 | Remaining Phases | Pending
 
 ---
 

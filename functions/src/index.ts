@@ -40,6 +40,9 @@ import {
   handleVendorLicenseUpdateRequest,
 } from "./api/vendorLicenseUpdate";
 import {
+  handleStripeWebhookRequest,
+} from "./api/stripeWebhook";
+import {
   handleAdminGovernanceSnapshotsRequest,
 } from "./api/adminGovernanceSnapshots";
 import {
@@ -107,6 +110,9 @@ export const vendorRevenueForecasting = functions.https.onRequest(
 );
 export const vendorLicenseUpdate = functions.https.onRequest(
   handleVendorLicenseUpdateRequest,
+);
+export const stripeWebhook = functions.https.onRequest(
+  handleStripeWebhookRequest,
 );
 export const adminGovernanceSnapshots = functions.https.onRequest(
   handleAdminGovernanceSnapshotsRequest,

@@ -1,0 +1,91 @@
+import * as functions from "firebase-functions";
+import {sendErrorResponse} from "../services/apiResponse";
+import {
+  paymentEventIntegrationService,
+} from "../services/paymentEventIntegration";
+import {
+  createMethodMiddleware,
+  createMiddlewareHandler,
+} from "../middleware/framework";
+import {MiddlewareRequest} from "../types/middleware";
+import {
+  PaymentEventIntegrationValidationError,
+  StripeWebhookSuccessResponse,
+} from "../types/paymentEventIntegration";
+
+interface StripeWebhookDependencies {
+  processStripeWebhook:
+    typeof paymentEventIntegrationService.processStripeWebhook;
+}
+
+const buildSuccessResponse = (
+  result: Awaited<
+    ReturnType<typeof paymentEventIntegrationService.processStripeWebhook>
+  >,
+  requestId: string,
+  timestamp: string,
+): StripeWebhookSuccessResponse => ({
+  code: "OK",
+  data: result,
+  message:
+    result.duplicate ?
+      "Stripe webhook already processed." :
+      "Stripe webhook processed.",
+  requestId,
+  success: true,
+  timestamp,
+});
+
+export const createStripeWebhookHandler = (
+  dependencies: StripeWebhookDependencies,
+) => createMiddlewareHandler({
+  controller: async (
+    request: MiddlewareRequest,
+    response: functions.Response,
+  ): Promise<void> => {
+    const signatureHeader = request.header("stripe-signature");
+    const result = await dependencies.processStripeWebhook({
+      rawBody: request.rawBody,
+      requestBody: request.body,
+      signatureHeader,
+    });
+
+    response.status(200).json(
+      buildSuccessResponse(
+        result,
+        request.context.requestId,
+        new Date().toISOString(),
+      ),
+    );
+  },
+  middlewares: [
+    createMethodMiddleware("POST"),
+  ],
+  onError: (error, context): boolean => {
+    if (error instanceof PaymentEventIntegrationValidationError) {
+      context.logger.warn("Stripe webhook request rejected.", {
+        code: error.code,
+        error,
+      });
+      sendErrorResponse(
+        context.response,
+        context.requestId,
+        error.code,
+        error.message,
+      );
+      return true;
+    }
+
+    return false;
+  },
+  service: "StripeWebhookApi",
+});
+
+export const handleStripeWebhookRequest = createStripeWebhookHandler({
+  processStripeWebhook:
+    paymentEventIntegrationService.processStripeWebhook.bind(
+      paymentEventIntegrationService,
+    ),
+});
+
+export {buildSuccessResponse};

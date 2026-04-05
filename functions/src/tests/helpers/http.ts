@@ -4,6 +4,7 @@ interface MockRequestOverrides {
   method?: string;
   originalUrl?: string;
   path?: string;
+  rawBody?: Buffer | string;
   url?: string;
 }
 
@@ -55,6 +56,12 @@ export const createMockRequest = (
     method: overrides.method ?? "POST",
     originalUrl: overrides.originalUrl ?? path,
     path,
+    rawBody:
+      overrides.rawBody instanceof Buffer ?
+        overrides.rawBody :
+        typeof overrides.rawBody === "string" ?
+          Buffer.from(overrides.rawBody, "utf8") :
+          Buffer.from(JSON.stringify(overrides.body ?? {}), "utf8"),
     url: overrides.url ?? path,
   };
 };

@@ -302,6 +302,60 @@ export class BillingSnapshotService {
   }
 
   /**
+   * Ensures the billing snapshot for a cycle exists and reflects the latest
+   * Stripe webhook processing status.
+   * @param {string} instituteId Institute namespace that owns the snapshot.
+   * @param {string} cycleId Billing cycle identifier in YYYY-MM format.
+   * @param {BillingSnapshotWebhookStatus} status Latest webhook outcome.
+   * @return {Promise<string>} Updated billing snapshot path.
+   */
+  public async syncStripeWebhookStatus(
+    instituteId: string,
+    cycleId: string,
+    status: BillingSnapshotWebhookStatus,
+  ): Promise<string> {
+    const normalizedCycleId = normalizeRequiredCycleId(cycleId);
+    const snapshotId = resolveBillingSnapshotId(instituteId, normalizedCycleId);
+    const billingSnapshotReference = this.firestore
+      .collection(BILLING_SNAPSHOTS_COLLECTION)
+      .doc(snapshotId);
+
+    await this.generateBillingSnapshots({
+      cycleId: normalizedCycleId,
+      instituteId,
+    });
+
+    const billingSnapshot = await billingSnapshotReference.get();
+
+    if (!billingSnapshot.exists) {
+      this.logger.warn(
+        "Skipped Stripe webhook status sync because billing snapshot " +
+          "is absent.",
+        {
+          billingSnapshotPath: billingSnapshotReference.path,
+          cycleId: normalizedCycleId,
+          instituteId,
+          stripeWebhookStatus: status,
+        },
+      );
+      return billingSnapshotReference.path;
+    }
+
+    await billingSnapshotReference.set({
+      stripeWebhookStatus: status,
+    }, {merge: true});
+
+    this.logger.info("Billing snapshot Stripe webhook status synchronized.", {
+      billingSnapshotPath: billingSnapshotReference.path,
+      cycleId: normalizedCycleId,
+      instituteId,
+      stripeWebhookStatus: status,
+    });
+
+    return billingSnapshotReference.path;
+  }
+
+  /**
    * Persists a single immutable billing snapshot when one does not yet exist.
    * @param {FirebaseFirestore.DocumentReference} instituteReference Institute
    * root document reference.
