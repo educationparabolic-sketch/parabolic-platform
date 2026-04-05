@@ -49,6 +49,9 @@ import {
   createVendorCalibrationPushHandler,
 } from "../api/vendorCalibrationPush";
 import {
+  createVendorCalibrationSimulationHandler,
+} from "../api/vendorCalibrationSimulation";
+import {
   createAdminGovernanceSnapshotsHandler,
 } from "../api/adminGovernanceSnapshots";
 import {
@@ -77,6 +80,9 @@ import {
 import {
   CalibrationDeploymentError,
 } from "../types/calibrationDeployment";
+import {
+  CalibrationSimulationError,
+} from "../types/calibrationSimulation";
 import {
   createMockRequest,
   createMockResponse,
@@ -2189,6 +2195,185 @@ test(
       (response.body as {data: {readySourceCount: number}}).data
         .readySourceCount,
       2,
+    );
+  },
+);
+
+test(
+  "vendor calibration simulation handler accepts a valid vendor request",
+  async () => {
+    const handler = createVendorCalibrationSimulationHandler({
+      simulateCalibrationImpact: async (request) => ({
+        after: {
+          averageProjectedRiskScore: 32.5,
+          instituteCount: request.institutes.length,
+          riskDistribution: {
+            "Drift-Prone": {count: 1, percent: 50},
+            "Impulsive": {count: 1, percent: 50},
+            "Overextended": {count: 0, percent: 0},
+            "Stable": {count: 0, percent: 0},
+            "Volatile": {count: 0, percent: 0},
+          },
+          studentCount: 2,
+        },
+        before: {
+          averageProjectedRiskScore: 25,
+          instituteCount: request.institutes.length,
+          riskDistribution: {
+            "Drift-Prone": {count: 0, percent: 0},
+            "Impulsive": {count: 1, percent: 50},
+            "Overextended": {count: 0, percent: 0},
+            "Stable": {count: 1, percent: 50},
+            "Volatile": {count: 0, percent: 0},
+          },
+          studentCount: 2,
+        },
+        delta: {
+          averageProjectedRiskScore: 7.5,
+          riskDistribution: {
+            "Drift-Prone": {count: 1, percent: 50},
+            "Impulsive": {count: 0, percent: 0},
+            "Overextended": {count: 0, percent: 0},
+            "Stable": {count: -1, percent: -50},
+            "Volatile": {count: 0, percent: 0},
+          },
+          studentCount: 0,
+        },
+        institutes: [
+          {
+            beforeAverageProjectedRiskScore: 25,
+            currentCalibrationSourcePath:
+              "globalCalibration/cal_v2026_04",
+            currentCalibrationVersion: "cal_v2026_04",
+            instituteId: request.institutes[0] ?? "inst_build_98_a",
+            projectedAverageRiskScore: 32.5,
+            riskDistributionDelta: {
+              "Drift-Prone": 1,
+              "Impulsive": 0,
+              "Overextended": 0,
+              "Stable": -1,
+              "Volatile": 0,
+            },
+            studentCount: 2,
+          },
+        ],
+        proposedWeights: request.weights,
+      }),
+      verifyIdToken: async () => createVendorToken({
+        uid: "vendor_build_98",
+      }) as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          institutes: ["inst_build_98_a"],
+          weights: {
+            easyNeglectWeight: 0.15,
+            guessWeight: 0.45,
+            hardBiasWeight: 0.1,
+            phaseWeight: 0.15,
+            wrongStreakWeight: 0.15,
+          },
+        },
+        headers: {
+          authorization: "Bearer build_98_vendor",
+        },
+        path: "/vendor/calibration/simulate",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 200);
+    assert.equal((response.body as {code: string}).code, "OK");
+    assert.equal(
+      (
+        response.body as {
+          data: {delta: {averageProjectedRiskScore: number}};
+        }
+      ).data.delta.averageProjectedRiskScore,
+      7.5,
+    );
+  },
+);
+
+test(
+  "vendor calibration simulation handler rejects invalid request payloads",
+  async () => {
+    const handler = createVendorCalibrationSimulationHandler({
+      simulateCalibrationImpact: async () => {
+        throw new Error("simulateCalibrationImpact should not be called");
+      },
+      verifyIdToken: async () => createVendorToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          weights: {
+            easyNeglectWeight: 0.15,
+          },
+        },
+        headers: {
+          authorization: "Bearer build_98_vendor",
+        },
+        path: "/vendor/calibration/simulate",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 400);
+    assertStructuredError(
+      response.body,
+      "VALIDATION_ERROR",
+      "Calibration field \"institutes\" must be an array.",
+    );
+  },
+);
+
+test(
+  "vendor calibration simulation handler maps service validation errors",
+  async () => {
+    const handler = createVendorCalibrationSimulationHandler({
+      simulateCalibrationImpact: async () => {
+        throw new CalibrationSimulationError(
+          "NOT_FOUND",
+          "Institute \"inst_build_98_missing\" does not have aggregated " +
+            "student metrics available for simulation.",
+        );
+      },
+      verifyIdToken: async () => createVendorToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          institutes: ["inst_build_98_missing"],
+          weights: {
+            easyNeglectWeight: 0.15,
+            guessWeight: 0.45,
+            hardBiasWeight: 0.1,
+            phaseWeight: 0.15,
+            wrongStreakWeight: 0.15,
+          },
+        },
+        headers: {
+          authorization: "Bearer build_98_vendor",
+        },
+        path: "/vendor/calibration/simulate",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 404);
+    assertStructuredError(
+      response.body,
+      "NOT_FOUND",
+      "Institute \"inst_build_98_missing\" does not have aggregated " +
+        "student metrics available for simulation.",
     );
   },
 );

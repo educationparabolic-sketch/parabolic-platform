@@ -43,6 +43,9 @@ import {
   handleVendorCalibrationPushRequest,
 } from "./api/vendorCalibrationPush";
 import {
+  handleVendorCalibrationSimulationRequest,
+} from "./api/vendorCalibrationSimulation";
+import {
   handleStripeWebhookRequest,
 } from "./api/stripeWebhook";
 import {
@@ -116,6 +119,9 @@ export const vendorLicenseUpdate = functions.https.onRequest(
 );
 export const vendorCalibrationPush = functions.https.onRequest(
   handleVendorCalibrationPushRequest,
+);
+export const vendorCalibrationSimulation = functions.https.onRequest(
+  handleVendorCalibrationSimulationRequest,
 );
 export const stripeWebhook = functions.https.onRequest(
   handleStripeWebhookRequest,

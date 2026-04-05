@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 97  
-Next Build: 98
+Completed Builds: 98  
+Next Build: 99
 
 Current Phase: Phase 20 — Calibration System
 
@@ -3192,18 +3192,46 @@ Completed On
 
 ---
 
+## Build 98 — Calibration Simulation Engine
+
+Phase  
+Phase 20 — Calibration System
+
+Summary  
+Implemented the vendor-only calibration simulation engine for projecting calibration impact before deployment using aggregated institute analytics only.
+
+Components implemented:
+
+- Added `functions/src/types/calibrationSimulation.ts` with typed simulation request, summary, delta, success-response, and error contracts
+- Added `functions/src/services/calibrationSimulation.ts` with a centralized `CalibrationSimulationService` that resolves active institute/global calibration baselines, reads only aggregated `studentYearMetrics`, and computes deterministic before/after/delta projected risk distributions
+- Added `functions/src/api/vendorCalibrationSimulation.ts` with vendor-role authentication, request validation, standardized API errors, and a `POST /vendor/calibration/simulate` handler
+- Registered the new function export in `functions/src/index.ts`
+- Added repeatable handler and emulator-backed coverage in `functions/src/tests/endpointTestingFramework.test.ts` and `functions/src/tests/calibrationSimulation.test.ts`
+- Registered `npm run test:calibration-simulation` in `functions/package.json` for deterministic local verification
+
+Result  
+The backend now supports architecture-aligned calibration impact simulation across selected institutes without reading raw session documents or mutating live calibration state.
+
+Commit Reference  
+Build 98 — Calibration Simulation Engine implemented
+
+Completed On  
+2026-04-05
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 98
+Next Build Number: 99
 
 Phase  
 Phase 20 — Calibration System
 
 Subsystem  
-Calibration Simulation Engine
+Calibration History Logging
 
 Reference  
-3_Core_Architectures.md → Section 6.10 Vendor Endpoints — Run Calibration Simulation
+3_Core_Architectures.md → Section 37.6 Calibration History
 
 ---
 
@@ -3308,7 +3336,8 @@ Build | Phase | Status
 95 | Billing & License Intelligence | Completed
 96 | Calibration System | Completed
 97 | Calibration System | Completed
-98–150 | Remaining Phases | Pending
+98 | Calibration System | Completed
+99–150 | Remaining Phases | Pending
 
 ---
 
