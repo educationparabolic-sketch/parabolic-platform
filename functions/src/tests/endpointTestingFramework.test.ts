@@ -46,6 +46,9 @@ import {
   createVendorLicenseUpdateHandler,
 } from "../api/vendorLicenseUpdate";
 import {
+  createVendorCalibrationPushHandler,
+} from "../api/vendorCalibrationPush";
+import {
   createAdminGovernanceSnapshotsHandler,
 } from "../api/adminGovernanceSnapshots";
 import {
@@ -71,6 +74,9 @@ import {SubmissionValidationError} from "../services/submission";
 import {
   LicenseManagementValidationError,
 } from "../types/licenseManagement";
+import {
+  CalibrationDeploymentError,
+} from "../types/calibrationDeployment";
 import {
   createMockRequest,
   createMockResponse,
@@ -2183,6 +2189,167 @@ test(
       (response.body as {data: {readySourceCount: number}}).data
         .readySourceCount,
       2,
+    );
+  },
+);
+
+test(
+  "vendor calibration push handler accepts a valid vendor request",
+  async () => {
+    const handler = createVendorCalibrationPushHandler({
+      deployCalibrationVersion: async (request) => ({
+        calibrationSourcePath: "globalCalibration/cal_v2026_04",
+        deployedInstituteCount: request.targetInstitutes.length,
+        deployedInstitutes: request.targetInstitutes.map((instituteId) => ({
+          calibrationPath:
+            `institutes/${instituteId}/calibration/${request.versionId}`,
+          compatibilityLicensePath: `institutes/${instituteId}/license/main`,
+          instituteId,
+          licensePath: `institutes/${instituteId}/license/current`,
+        })),
+        versionId: request.versionId,
+      }),
+      verifyIdToken: async () => createVendorToken({
+        uid: "vendor_build_97",
+      }) as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          targetInstitutes: ["inst_build_97_a", "inst_build_97_b"],
+          versionId: "cal_v2026_04",
+        },
+        headers: {
+          authorization: "Bearer build_97_vendor",
+        },
+        path: "/vendor/calibration/push",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 200);
+    assert.equal((response.body as {code: string}).code, "OK");
+    assert.equal(
+      (
+        response.body as {
+          data: {deployedInstituteCount: number};
+        }
+      ).data.deployedInstituteCount,
+      2,
+    );
+    assert.equal(
+      (
+        response.body as {
+          data: {versionId: string};
+        }
+      ).data.versionId,
+      "cal_v2026_04",
+    );
+  },
+);
+
+test(
+  "vendor calibration push handler rejects invalid request payloads",
+  async () => {
+    const handler = createVendorCalibrationPushHandler({
+      deployCalibrationVersion: async () => {
+        throw new Error("deployCalibrationVersion should not be called");
+      },
+      verifyIdToken: async () => createVendorToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          versionId: "cal_v2026_04",
+        },
+        headers: {
+          authorization: "Bearer build_97_vendor",
+        },
+        path: "/vendor/calibration/push",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 400);
+    assertStructuredError(
+      response.body,
+      "VALIDATION_ERROR",
+      "Calibration field \"targetInstitutes\" must be an array.",
+    );
+  },
+);
+
+test(
+  "vendor calibration push handler rejects role violations",
+  async () => {
+    const handler = createVendorCalibrationPushHandler({
+      deployCalibrationVersion: async () => {
+        throw new Error("deployCalibrationVersion should not be called");
+      },
+      verifyIdToken: async () => createStudentToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          targetInstitutes: ["inst_build_97_a"],
+          versionId: "cal_v2026_04",
+        },
+        headers: {
+          authorization: "Bearer build_97_student",
+        },
+        path: "/vendor/calibration/push",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 403);
+    assertStructuredError(
+      response.body,
+      "FORBIDDEN",
+      "Only vendor roles can deploy calibration models.",
+    );
+  },
+);
+
+test(
+  "vendor calibration push handler maps service validation errors",
+  async () => {
+    const handler = createVendorCalibrationPushHandler({
+      deployCalibrationVersion: async () => {
+        throw new CalibrationDeploymentError(
+          "NOT_FOUND",
+          "Calibration version \"cal_v2026_04\" does not exist.",
+        );
+      },
+      verifyIdToken: async () => createVendorToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          targetInstitutes: ["inst_build_97_a"],
+          versionId: "cal_v2026_04",
+        },
+        headers: {
+          authorization: "Bearer build_97_vendor",
+        },
+        path: "/vendor/calibration/push",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 404);
+    assertStructuredError(
+      response.body,
+      "NOT_FOUND",
+      "Calibration version \"cal_v2026_04\" does not exist.",
     );
   },
 );

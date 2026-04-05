@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 96  
-Next Build: 97
+Completed Builds: 97  
+Next Build: 98
 
 Current Phase: Phase 20 — Calibration System
 
@@ -3162,18 +3162,48 @@ Completed On
 
 ---
 
+## Build 97 — Calibration Deployment API
+
+Phase  
+Phase 20 — Calibration System
+
+Summary  
+Implemented the vendor-only calibration deployment API for pushing an existing active calibration model to selected institutes without introducing future-build history logging or simulation behavior.
+
+Components implemented:
+
+- Added `functions/src/types/calibrationDeployment.ts` with typed deployment request, result, success-response, and error contracts
+- Added `functions/src/services/calibrationDeployment.ts` with a centralized `CalibrationDeploymentService` that validates deployment input, verifies the source calibration exists in `globalCalibration/{versionId}`, requires the version to be active, and applies institute-scoped deployment writes transactionally
+- Wrote institute deployment records to `institutes/{instituteId}/calibration/{versionId}` while preserving the source calibration payload and attaching deployment metadata
+- Updated `institutes/{instituteId}` plus `license/current` and `license/main` to reference the deployed `calibrationVersion` for downstream assignment, governance, and reporting reads
+- Added `functions/src/api/vendorCalibrationPush.ts` with vendor-role authentication, request validation, standardized API errors, and a `POST /vendor/calibration/push` handler
+- Registered the new function export in `functions/src/index.ts`
+- Added repeatable handler and emulator-backed coverage in `functions/src/tests/endpointTestingFramework.test.ts` and `functions/src/tests/calibrationDeployment.test.ts`
+- Registered `npm run test:calibration-deployment` in `functions/package.json` for deterministic local verification
+
+Result  
+The backend now supports architecture-aligned vendor calibration deployment to institute namespaces while keeping calibration storage immutable and leaving Build 98 simulation and Build 99 history logging for their intended phases.
+
+Commit Reference  
+Build 97 — Calibration Deployment API implemented
+
+Completed On  
+2026-04-05
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 97
+Next Build Number: 98
 
 Phase  
 Phase 20 — Calibration System
 
 Subsystem  
-Calibration Deployment API
+Calibration Simulation Engine
 
 Reference  
-3_Core_Architectures.md → Section 6.10 Vendor Endpoints — Push Calibration Model
+3_Core_Architectures.md → Section 6.10 Vendor Endpoints — Run Calibration Simulation
 
 ---
 
@@ -3277,7 +3307,8 @@ Build | Phase | Status
 94 | Billing & License Intelligence | Completed
 95 | Billing & License Intelligence | Completed
 96 | Calibration System | Completed
-97–150 | Remaining Phases | Pending
+97 | Calibration System | Completed
+98–150 | Remaining Phases | Pending
 
 ---
 

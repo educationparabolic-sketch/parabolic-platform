@@ -86,6 +86,7 @@ AuditLogStorageService | Build 6 | Persist immutable global, vendor, and institu
 AdministrativeActionLoggingService | Build 7 | Generate architecture-aligned administrative audit events for institute and vendor operations
 LicenseHistoryService | Build 8, Build 94 | Persist immutable institute license mutation history records and prepare validated history-entry payloads for transactional reuse inside the vendor license update workflow
 CalibrationVersionStorageService | Build 96 | Persist immutable calibration model version documents, validate behavioral weights and thresholds, require activation dates for active versions, store the canonical record at `globalCalibration/{versionId}`, and mirror the same payload to `calibrationVersions/{versionId}` for Build 96 flow compatibility
+CalibrationDeploymentService | Build 97 | Deploy active global calibration versions to selected institutes by validating target institutes, writing `institutes/{instituteId}/calibration/{versionId}`, updating institute-root `calibrationVersion`, and mirroring the deployed calibration version into `license/current` and `license/main`
 OverrideLoggingService | Build 9 | Persist immutable institute execution override records
 AuditTamperProtectionRules | Build 10 | Enforce append-only Firestore protection for immutable audit, license history, and override log collections
 QuestionIngestionService | Build 11 | Validate newly created question-bank documents, normalize tags, delegate search token indexing, and initialize question analytics
