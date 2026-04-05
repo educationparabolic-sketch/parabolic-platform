@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 95  
-Next Build: 96
+Completed Builds: 96  
+Next Build: 97
 
 Current Phase: Phase 20 — Calibration System
 
@@ -3134,18 +3134,46 @@ Completed On
 
 ---
 
+## Build 96 — Calibration Version Storage
+
+Phase  
+Phase 20 — Calibration System
+
+Summary  
+Implemented immutable calibration version storage for vendor-managed behavioral model parameters without introducing deployment-side institute mutations ahead of Build 97.
+
+Components implemented:
+
+- Added `functions/src/types/calibrationVersion.ts` with strongly typed contracts for calibration weights, thresholds, create input, storage result, and validation failures
+- Added `functions/src/services/calibrationVersionStorage.ts` with a centralized `CalibrationVersionStorageService` that validates version payloads, enforces activation dates for active versions, and uses create-only Firestore persistence
+- Stored the canonical calibration document at `globalCalibration/{versionId}` to align with the existing schema and audit references already used elsewhere in the codebase
+- Mirrored the same immutable payload to `calibrationVersions/{versionId}` to preserve compatibility with the Build 96 calibration-flow entry path defined in the build docs
+- Added repeatable emulator-backed coverage in `functions/src/tests/calibrationVersionStorage.test.ts` for successful active-version storage, inactive draft storage, missing activation-date rejection, and duplicate-version rejection
+- Registered `npm run test:calibration-version-storage` in `functions/package.json` for deterministic local verification
+
+Result  
+The backend now has a dedicated, typed, and repeatably tested calibration model storage layer that future vendor deployment APIs can build on without embedding calibration weights in application code.
+
+Commit Reference  
+Build 96 — Calibration Version Storage implemented
+
+Completed On  
+2026-04-05
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 96
+Next Build Number: 97
 
 Phase  
 Phase 20 — Calibration System
 
 Subsystem  
-Calibration Version Storage
+Calibration Deployment API
 
 Reference  
-3_Core_Architectures.md → Section 42.13 Calibration Flow
+3_Core_Architectures.md → Section 6.10 Vendor Endpoints — Push Calibration Model
 
 ---
 
@@ -3248,7 +3276,8 @@ Build | Phase | Status
 93 | Billing & License Intelligence | Completed
 94 | Billing & License Intelligence | Completed
 95 | Billing & License Intelligence | Completed
-96–150 | Remaining Phases | Pending
+96 | Calibration System | Completed
+97–150 | Remaining Phases | Pending
 
 ---
 

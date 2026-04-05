@@ -85,6 +85,7 @@ RuntimeErrorReporter | Build 5 | Centralized Google Cloud Error Reporting integr
 AuditLogStorageService | Build 6 | Persist immutable global, vendor, and institute audit records in Firestore
 AdministrativeActionLoggingService | Build 7 | Generate architecture-aligned administrative audit events for institute and vendor operations
 LicenseHistoryService | Build 8, Build 94 | Persist immutable institute license mutation history records and prepare validated history-entry payloads for transactional reuse inside the vendor license update workflow
+CalibrationVersionStorageService | Build 96 | Persist immutable calibration model version documents, validate behavioral weights and thresholds, require activation dates for active versions, store the canonical record at `globalCalibration/{versionId}`, and mirror the same payload to `calibrationVersions/{versionId}` for Build 96 flow compatibility
 OverrideLoggingService | Build 9 | Persist immutable institute execution override records
 AuditTamperProtectionRules | Build 10 | Enforce append-only Firestore protection for immutable audit, license history, and override log collections
 QuestionIngestionService | Build 11 | Validate newly created question-bank documents, normalize tags, delegate search token indexing, and initialize question analytics
@@ -165,6 +166,8 @@ governanceSnapshots | AcademicYear | Immutable monthly governance snapshot recor
 insightSnapshots | AcademicYear | Generated student, run, and batch insight snapshots
 emailQueue | Global | Root-level asynchronous notification queue jobs created by post-submission notification processing
 billingSnapshots | Global | Immutable billing-cycle dispute-protection snapshots and vendor billing analytics inputs
+globalCalibration | Global | Canonical immutable calibration model version documents for vendor-managed behavioral weighting and threshold configuration
+calibrationVersions | Global | Compatibility mirror of immutable calibration model version documents for the Build 96 calibration flow entry path
 usage | Institute | Billing usage metering
 usageMeter | Institute | Billing and assignment usage metering summaries by cycle
 license | Institute | License configuration
