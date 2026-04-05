@@ -2,35 +2,6 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isServerTimestampedCreate() {
-      return request.resource.data.timestamp == request.time;
-    }
-
-    match /auditLogs/{auditId} {
-      allow create: if isServerTimestampedCreate();
-      allow read, update, delete: if false;
-    }
-
-    match /vendorAuditLogs/{auditId} {
-      allow create: if isServerTimestampedCreate();
-      allow read, update, delete: if false;
-    }
-
-    match /institutes/{instituteId}/auditLogs/{auditId} {
-      allow create: if isServerTimestampedCreate();
-      allow read, update, delete: if false;
-    }
-
-    match /institutes/{instituteId}/licenseHistory/{recordId} {
-      allow create: if isServerTimestampedCreate();
-      allow read, update, delete: if false;
-    }
-
-    match /institutes/{instituteId}/overrideLogs/{overrideId} {
-      allow create: if isServerTimestampedCreate();
-      allow read, update, delete: if false;
-    }
-
     match /{document=**} {
       allow read, write: if false;
     }
