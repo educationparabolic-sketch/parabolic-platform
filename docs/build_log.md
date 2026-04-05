@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 90  
-Next Build: 91
+Completed Builds: 91  
+Next Build: 92
 
 Current Phase: Phase 19 — Billing & License Intelligence
 
@@ -2952,15 +2952,46 @@ Completed On
 
 ---
 
+## Build 91 — Usage Metering System
+
+Phase  
+Phase 19 — Billing & License Intelligence
+
+Summary  
+Expanded the existing usage metering subsystem into the architecture-aligned Phase 19 usage source for billing and license intelligence.
+
+Components implemented:
+
+- Extended the existing `UsageMeteringService` so `institutes/{instituteId}/usageMeter/{cycleId}` now tracks assignment volume, assigned student counts, active-student lifecycle totals, submitted session volume, peak usage, over-limit state, and pricing-plan-derived invoice projections
+- Added pricing plan resolution from vendor-controlled configuration under `vendorConfig/pricingPlans/{planId}` through the current institute license layer instead of hardcoding billing values
+- Added idempotent student lifecycle metering for `institutes/{instituteId}/students/{studentId}` writes so active-student counts move with activation, archival, and deactivation events
+- Integrated submitted-session usage updates into the existing session submission trigger without introducing a duplicate session event pipeline
+- Added repeatable emulator-backed coverage for assignment pricing resolution, student activation/deactivation metering, and submitted-session execution volume
+- Verified the implementation locally with:
+  - `npm run build`
+  - `npm run lint`
+  - emulator-backed `npm run test:usage-metering` via `firebase emulators:exec --only firestore`
+
+Result  
+The backend usage meter now serves as the deterministic Phase 19 usage foundation for billing analytics by reusing the existing metering module, preserving event idempotency, and keeping pricing logic configurable through Firestore vendor configuration.
+
+Commit Reference  
+Build 91 — Usage Metering System implemented
+
+Completed On  
+2026-04-05
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 91
+Next Build Number: 92
 
 Phase  
 Phase 19 — Billing & License Intelligence
 
 Subsystem  
-Usage Metering System
+Billing Snapshot System
 
 Reference  
 3_Core_Architectures.md → Section 37.16 Billing Dispute Protection
@@ -3059,7 +3090,10 @@ Build | Phase | Status
 86 | Governance Snapshot System | Completed
 87 | Governance Snapshot System | Completed
 88 | Governance Snapshot System | Completed
-89–150 | Remaining Phases | Pending
+89 | Governance Snapshot System | Completed
+90 | Governance Snapshot System | Completed
+91 | Billing & License Intelligence | Completed
+92–150 | Remaining Phases | Pending
 
 ---
 

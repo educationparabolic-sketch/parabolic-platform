@@ -45,6 +45,7 @@ import {
 import {runAssignmentOnCreate} from "./triggers/assignmentCreation";
 import {questionBankOnCreate} from "./triggers/questionIngestion";
 import {examSessionOnUpdate} from "./triggers/sessionSubmission";
+import {instituteStudentOnWrite} from "./triggers/studentUsageMetering";
 import {studentYearMetricsOnWrite} from "./triggers/studentYearMetrics";
 import {testTemplateOnCreate} from "./triggers/templateCreation";
 import {governanceSnapshotMonthly} from "./triggers/governanceSnapshot";
@@ -55,6 +56,7 @@ registerGlobalErrorHandlers();
 export {questionBankOnCreate};
 export {runAssignmentOnCreate};
 export {examSessionOnUpdate};
+export {instituteStudentOnWrite};
 export {studentYearMetricsOnWrite};
 export {testTemplateOnCreate};
 export {governanceSnapshotMonthly};

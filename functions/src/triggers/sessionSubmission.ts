@@ -17,6 +17,7 @@ import {
 import {
   submissionAnalyticsTriggerService,
 } from "../services/submissionAnalyticsTrigger";
+import {usageMeteringService} from "../services/usageMetering";
 
 const SESSIONS_DOCUMENT_PATH =
   "institutes/{instituteId}/academicYears/{yearId}/runs/{runId}/" +
@@ -32,6 +33,18 @@ export const handleSessionUpdated = async (
   const sessionId = String(context.params.sessionId ?? "").trim();
 
   await submissionAnalyticsTriggerService.processSessionSubmissionTransition(
+    {
+      eventId: context.eventId,
+      instituteId,
+      runId,
+      sessionId,
+      yearId,
+    },
+    change.before.data(),
+    change.after.data(),
+  );
+
+  await usageMeteringService.recordSessionExecutionUsage(
     {
       eventId: context.eventId,
       instituteId,
