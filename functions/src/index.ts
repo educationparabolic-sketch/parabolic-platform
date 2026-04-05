@@ -37,6 +37,9 @@ import {
   handleVendorRevenueForecastingRequest,
 } from "./api/vendorRevenueForecasting";
 import {
+  handleVendorLicenseUpdateRequest,
+} from "./api/vendorLicenseUpdate";
+import {
   handleAdminGovernanceSnapshotsRequest,
 } from "./api/adminGovernanceSnapshots";
 import {
@@ -101,6 +104,9 @@ export const vendorChurnTracking = functions.https.onRequest(
 );
 export const vendorRevenueForecasting = functions.https.onRequest(
   handleVendorRevenueForecastingRequest,
+);
+export const vendorLicenseUpdate = functions.https.onRequest(
+  handleVendorLicenseUpdateRequest,
 );
 export const adminGovernanceSnapshots = functions.https.onRequest(
   handleAdminGovernanceSnapshotsRequest,

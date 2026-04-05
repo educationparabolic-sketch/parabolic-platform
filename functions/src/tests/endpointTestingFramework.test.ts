@@ -43,6 +43,9 @@ import {
   createVendorRevenueForecastingHandler,
 } from "../api/vendorRevenueForecasting";
 import {
+  createVendorLicenseUpdateHandler,
+} from "../api/vendorLicenseUpdate";
+import {
   createAdminGovernanceSnapshotsHandler,
 } from "../api/adminGovernanceSnapshots";
 import {
@@ -65,6 +68,9 @@ import {
   SimulationValidationError,
 } from "../services/simulationValidation";
 import {SubmissionValidationError} from "../services/submission";
+import {
+  LicenseManagementValidationError,
+} from "../types/licenseManagement";
 import {
   createMockRequest,
   createMockResponse,
@@ -1943,6 +1949,158 @@ test(
       response.body,
       "NOT_FOUND",
       "Simulation analytics outputs must exist before intelligence validation.",
+    );
+  },
+);
+
+test(
+  "vendor license update handler accepts a valid vendor request",
+  async () => {
+    const handler = createVendorLicenseUpdateHandler({
+      updateInstituteLicense: async (request) => ({
+        activeStudentLimit: 250,
+        billingPlan: request.billingPlan,
+        compatibilityLicensePath: "institutes/inst_build_93/license/main",
+        instituteId: request.instituteId,
+        licensePath: "institutes/inst_build_93/license/current",
+        newLayer: request.newLayer,
+        planId: "L2",
+        planName: "Controlled",
+        previousLayer: "L1",
+      }),
+      verifyIdToken: async () => createVendorToken({
+        uid: "vendor_build_93",
+      }) as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          billingPlan: "Controlled",
+          instituteId: "inst_build_93",
+          newLayer: "L2",
+        },
+        headers: {
+          authorization: "Bearer build_93_vendor",
+        },
+        path: "/vendor/license/update",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 200);
+    assert.equal((response.body as {code: string}).code, "OK");
+    assert.equal(
+      (response.body as {data: {newLayer: string}}).data.newLayer,
+      "L2",
+    );
+  },
+);
+
+test(
+  "vendor license update handler rejects invalid request payloads",
+  async () => {
+    const handler = createVendorLicenseUpdateHandler({
+      updateInstituteLicense: async () => {
+        throw new Error("updateInstituteLicense should not be called");
+      },
+      verifyIdToken: async () => createVendorToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          billingPlan: "Controlled",
+          instituteId: "inst_build_93",
+        },
+        headers: {
+          authorization: "Bearer build_93_vendor",
+        },
+        path: "/vendor/license/update",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 400);
+    assertStructuredError(
+      response.body,
+      "VALIDATION_ERROR",
+      "License field \"newLayer\" must be a string.",
+    );
+  },
+);
+
+test(
+  "vendor license update handler rejects role violations",
+  async () => {
+    const handler = createVendorLicenseUpdateHandler({
+      updateInstituteLicense: async () => {
+        throw new Error("updateInstituteLicense should not be called");
+      },
+      verifyIdToken: async () => createStudentToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          billingPlan: "Controlled",
+          instituteId: "inst_build_93",
+          newLayer: "L2",
+        },
+        headers: {
+          authorization: "Bearer build_93_student",
+        },
+        path: "/vendor/license/update",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 403);
+    assertStructuredError(
+      response.body,
+      "FORBIDDEN",
+      "Only vendor roles can update institute licenses.",
+    );
+  },
+);
+
+test(
+  "vendor license update handler maps service validation errors",
+  async () => {
+    const handler = createVendorLicenseUpdateHandler({
+      updateInstituteLicense: async () => {
+        throw new LicenseManagementValidationError(
+          "NOT_FOUND",
+          "Institute \"inst_build_93\" does not exist.",
+        );
+      },
+      verifyIdToken: async () => createVendorToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          billingPlan: "Controlled",
+          instituteId: "inst_build_93",
+          newLayer: "L2",
+        },
+        headers: {
+          authorization: "Bearer build_93_vendor",
+        },
+        path: "/vendor/license/update",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 404);
+    assertStructuredError(
+      response.body,
+      "NOT_FOUND",
+      "Institute \"inst_build_93\" does not exist.",
     );
   },
 );
