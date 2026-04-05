@@ -87,8 +87,9 @@ AuditLogStorageService | Build 6 | Persist immutable global, vendor, and institu
 AdministrativeActionLoggingService | Build 7 | Generate architecture-aligned administrative audit events for institute and vendor operations
 LicenseHistoryService | Build 8, Build 94 | Persist immutable institute license mutation history records and prepare validated history-entry payloads for transactional reuse inside the vendor license update workflow
 CalibrationVersionStorageService | Build 96 | Persist immutable calibration model version documents, validate behavioral weights and thresholds, require activation dates for active versions, store the canonical record at `globalCalibration/{versionId}`, and mirror the same payload to `calibrationVersions/{versionId}` for Build 96 flow compatibility
-CalibrationDeploymentService | Build 97 | Deploy active global calibration versions to selected institutes by validating target institutes, writing `institutes/{instituteId}/calibration/{versionId}`, updating institute-root `calibrationVersion`, and mirroring the deployed calibration version into `license/current` and `license/main`
+CalibrationDeploymentService | Build 97, Build 99 | Deploy active global calibration versions to selected institutes by validating target institutes, writing `institutes/{instituteId}/calibration/{versionId}`, updating institute-root `calibrationVersion`, mirroring the deployed calibration version into `license/current` and `license/main`, and appending immutable calibration deployment history records for vendor rollback/auditability
 CalibrationSimulationService | Build 98 | Simulate proposed calibration weights against aggregated `studentYearMetrics` for selected institutes, resolve current institute or active global calibration baselines, and return projected before/after/delta risk distributions without scanning raw sessions
+CalibrationHistoryService | Build 99 | Persist immutable vendor calibration deployment logs at `vendorCalibrationLogs/{logId}` and mirror the same deployment history into `institutes/{instituteId}/calibrationHistory/{entryId}` for architecture-aligned auditability and rollback tracing
 OverrideLoggingService | Build 9 | Persist immutable institute execution override records
 AuditTamperProtectionRules | Build 10 | Enforce append-only Firestore protection for immutable audit, license history, and override log collections
 QuestionIngestionService | Build 11 | Validate newly created question-bank documents, normalize tags, delegate search token indexing, and initialize question analytics
@@ -171,10 +172,12 @@ emailQueue | Global | Root-level asynchronous notification queue jobs created by
 billingSnapshots | Global | Immutable billing-cycle dispute-protection snapshots and vendor billing analytics inputs
 globalCalibration | Global | Canonical immutable calibration model version documents for vendor-managed behavioral weighting and threshold configuration
 calibrationVersions | Global | Compatibility mirror of immutable calibration model version documents for the Build 96 calibration flow entry path
+vendorCalibrationLogs | Global | Immutable vendor-scoped calibration deployment history records for activation auditability and rollback tracing
 usage | Institute | Billing usage metering
 usageMeter | Institute | Billing and assignment usage metering summaries by cycle
 license | Institute | License configuration
 licenseHistory | Institute | Immutable institute license change records
+calibrationHistory | Institute | Immutable institute-scoped mirrors of vendor calibration deployment history
 overrideLogs | Institute | Immutable institute execution override records
 
 ---

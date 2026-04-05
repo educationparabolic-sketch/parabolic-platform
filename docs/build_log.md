@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 98  
-Next Build: 99
+Completed Builds: 99  
+Next Build: 100
 
 Current Phase: Phase 20 — Calibration System
 
@@ -3220,18 +3220,47 @@ Completed On
 
 ---
 
+## Build 99 — Calibration History Logging
+
+Phase  
+Phase 20 — Calibration System
+
+Summary  
+Implemented immutable calibration deployment history logging so every successful vendor calibration push now leaves a vendor-level audit record plus institute-scoped mirror logs for rollback tracing.
+
+Components implemented:
+
+- Added `functions/src/types/calibrationHistory.ts` with typed calibration deployment history entry and write-result contracts
+- Added `functions/src/services/calibrationHistory.ts` with a centralized `CalibrationHistoryService` that validates deployment history payloads and persists immutable create-only records
+- Extended `functions/src/services/calibrationDeployment.ts` so every successful deployment now creates a root vendor log at `vendorCalibrationLogs/{logId}` and institute mirrors at `institutes/{instituteId}/calibrationHistory/{entryId}` while returning the generated history paths in the deployment result
+- Extended `functions/src/types/calibrationDeployment.ts` so deployment responses include the vendor history log id/path and institute mirror history paths
+- Added repeatable emulator-backed coverage in `functions/src/tests/calibrationHistory.test.ts`, extended `functions/src/tests/calibrationDeployment.test.ts`, and updated handler contract coverage in `functions/src/tests/endpointTestingFramework.test.ts`
+- Registered `npm run test:calibration-history` in `functions/package.json` for deterministic local verification
+- Followed `3_Core_Architectures.md` Section 37.6 collection naming (`vendorCalibrationLogs` plus institute `calibrationHistory` mirrors) where it conflicts with the shorter root `calibrationHistory` wording in `build_plan.md`
+
+Result  
+The backend now records immutable calibration deployment history for vendor accountability and institute-level rollback visibility without adding duplicate triggers or modifying calibration version storage semantics.
+
+Commit Reference  
+Build 99 — Calibration History Logging implemented
+
+Completed On  
+2026-04-05
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 99
+Next Build Number: 100
 
 Phase  
 Phase 20 — Calibration System
 
 Subsystem  
-Calibration History Logging
+Calibration Version Traceability
 
 Reference  
-3_Core_Architectures.md → Section 37.6 Calibration History
+3_Core_Architectures.md → Section 37.11 Calibration Accountability Model
 
 ---
 

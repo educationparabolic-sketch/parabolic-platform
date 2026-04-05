@@ -36,14 +36,20 @@ test(
     const institutePath = `institutes/${instituteId}`;
     const instituteCalibrationPath =
       `${institutePath}/calibration/${versionId}`;
+    const calibrationHistoryPath =
+      `${institutePath}/calibrationHistory/build_99_integration_log`;
     const currentLicensePath = `${institutePath}/license/current`;
     const mainLicensePath = `${institutePath}/license/main`;
+    const vendorCalibrationLogPath =
+      "vendorCalibrationLogs/build_99_integration_log";
 
     await Promise.all([
       deleteDocumentIfPresent(calibrationSourcePath),
       deleteDocumentIfPresent(instituteCalibrationPath),
+      deleteDocumentIfPresent(calibrationHistoryPath),
       deleteDocumentIfPresent(currentLicensePath),
       deleteDocumentIfPresent(mainLicensePath),
+      deleteDocumentIfPresent(vendorCalibrationLogPath),
       deleteDocumentIfPresent(institutePath),
     ]);
 
@@ -89,6 +95,7 @@ test(
 
     const result = await calibrationDeploymentService.deployCalibrationVersion({
       changedBy: "vendor_build_97",
+      deploymentLogId: "build_99_integration_log",
       targetInstitutes: [instituteId],
       versionId,
     });
@@ -96,22 +103,32 @@ test(
     assert.equal(result.versionId, versionId);
     assert.equal(result.calibrationSourcePath, calibrationSourcePath);
     assert.equal(result.deployedInstituteCount, 1);
+    assert.equal(result.deploymentLogId, "build_99_integration_log");
+    assert.equal(result.vendorCalibrationLogPath, vendorCalibrationLogPath);
     assert.equal(result.deployedInstitutes[0]?.instituteId, instituteId);
     assert.equal(
       result.deployedInstitutes[0]?.calibrationPath,
       instituteCalibrationPath,
     );
+    assert.equal(
+      result.deployedInstitutes[0]?.calibrationHistoryPath,
+      calibrationHistoryPath,
+    );
 
     const [
       deployedCalibrationSnapshot,
+      calibrationHistorySnapshot,
       instituteSnapshot,
       currentLicenseSnapshot,
       mainLicenseSnapshot,
+      vendorCalibrationLogSnapshot,
     ] = await Promise.all([
       firestore.doc(instituteCalibrationPath).get(),
+      firestore.doc(calibrationHistoryPath).get(),
       firestore.doc(institutePath).get(),
       firestore.doc(currentLicensePath).get(),
       firestore.doc(mainLicensePath).get(),
+      firestore.doc(vendorCalibrationLogPath).get(),
     ]);
 
     assert.equal(deployedCalibrationSnapshot.exists, true);
@@ -129,17 +146,37 @@ test(
       typeof deployedCalibrationSnapshot.get("deployedAt")?.toDate,
       "function",
     );
+    assert.equal(calibrationHistorySnapshot.exists, true);
+    assert.equal(
+      calibrationHistorySnapshot.get("calibrationVersion"),
+      versionId,
+    );
+    assert.deepEqual(
+      calibrationHistorySnapshot.get("affectedInstitutes"),
+      [instituteId],
+    );
+    assert.equal(
+      calibrationHistorySnapshot.get("activatedBy"),
+      "vendor_build_97",
+    );
     assert.equal(instituteSnapshot.get("calibrationVersion"), versionId);
     assert.equal(currentLicenseSnapshot.get("calibrationVersion"), versionId);
     assert.equal(mainLicenseSnapshot.get("calibrationVersion"), versionId);
     assert.equal(currentLicenseSnapshot.get("planId"), "L2");
     assert.equal(mainLicenseSnapshot.get("planId"), "L2");
+    assert.equal(vendorCalibrationLogSnapshot.exists, true);
+    assert.equal(
+      vendorCalibrationLogSnapshot.get("calibrationVersion"),
+      versionId,
+    );
 
     await Promise.all([
       deleteDocumentIfPresent(calibrationSourcePath),
       deleteDocumentIfPresent(instituteCalibrationPath),
+      deleteDocumentIfPresent(calibrationHistoryPath),
       deleteDocumentIfPresent(currentLicensePath),
       deleteDocumentIfPresent(mainLicensePath),
+      deleteDocumentIfPresent(vendorCalibrationLogPath),
       deleteDocumentIfPresent(institutePath),
     ]);
   },

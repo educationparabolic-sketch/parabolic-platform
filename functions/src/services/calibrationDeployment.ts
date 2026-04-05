@@ -1,5 +1,6 @@
 import {FieldValue} from "firebase-admin/firestore";
 import {createLogger} from "./logging";
+import {calibrationHistoryService} from "./calibrationHistory";
 import {getFirestore} from "../utils/firebaseAdmin";
 import {
   CalibrationDeploymentError,
@@ -11,6 +12,7 @@ import {
 const GLOBAL_CALIBRATION_COLLECTION = "globalCalibration";
 const INSTITUTES_COLLECTION = "institutes";
 const CALIBRATION_COLLECTION = "calibration";
+const CALIBRATION_HISTORY_COLLECTION = "calibrationHistory";
 const LICENSE_COLLECTION = "license";
 const LICENSE_CURRENT_DOCUMENT_ID = "current";
 const LICENSE_MAIN_DOCUMENT_ID = "main";
@@ -93,6 +95,13 @@ const buildLicensePath = (
   `${buildInstitutePath(instituteId)}/` +
   `${LICENSE_COLLECTION}/${documentId}`;
 
+const buildInstituteCalibrationHistoryPath = (
+  instituteId: string,
+  deploymentLogId: string,
+): string =>
+  `${buildInstitutePath(instituteId)}/` +
+  `${CALIBRATION_HISTORY_COLLECTION}/${deploymentLogId}`;
+
 const buildDeploymentRecord = (
   instituteId: string,
   changedBy: string,
@@ -134,6 +143,9 @@ export class CalibrationDeploymentService {
   ): DeployCalibrationVersionInput {
     return {
       changedBy: normalizeRequiredString(input.changedBy, "changedBy"),
+      deploymentLogId: input.deploymentLogId === undefined ?
+        undefined :
+        normalizeRequiredString(input.deploymentLogId, "deploymentLogId"),
       targetInstitutes: normalizeTargetInstitutes(input.targetInstitutes),
       versionId: normalizeRequiredString(input.versionId, "versionId"),
     };
@@ -148,6 +160,14 @@ export class CalibrationDeploymentService {
     input: DeployCalibrationVersionInput,
   ): Promise<DeployCalibrationVersionResult> {
     const normalizedInput = this.normalizeInput(input);
+    const vendorCalibrationLogWrite =
+      calibrationHistoryService.prepareVendorCalibrationLog({
+        activatedBy: normalizedInput.changedBy,
+        affectedInstitutes: normalizedInput.targetInstitutes,
+        calibrationVersion: normalizedInput.versionId,
+        logId: normalizedInput.deploymentLogId,
+        rollbackAvailable: true,
+      });
     const calibrationSourcePath = buildCalibrationSourcePath(
       normalizedInput.versionId,
     );
@@ -185,6 +205,10 @@ export class CalibrationDeploymentService {
       const calibrationPath = buildInstituteCalibrationPath(
         instituteId,
         normalizedInput.versionId,
+      );
+      const calibrationHistoryPath = buildInstituteCalibrationHistoryPath(
+        instituteId,
+        vendorCalibrationLogWrite.logId,
       );
       const licensePath = buildLicensePath(
         instituteId,
@@ -252,6 +276,10 @@ export class CalibrationDeploymentService {
           ),
           {merge: true},
         );
+        transaction.create(
+          this.firestore.doc(calibrationHistoryPath),
+          vendorCalibrationLogWrite.entry,
+        );
 
         const nextLicenseMetadata = buildLicenseMetadata(
           baseLicenseData,
@@ -269,16 +297,22 @@ export class CalibrationDeploymentService {
 
       deployedInstitutes.push({
         calibrationPath,
+        calibrationHistoryPath,
         compatibilityLicensePath,
         instituteId,
         licensePath,
       });
     }
 
+    await this.firestore
+      .doc(vendorCalibrationLogWrite.path)
+      .create(vendorCalibrationLogWrite.entry);
+
     this.logger.info("Calibration version deployed to institutes.", {
       calibrationSourcePath,
       changedBy: normalizedInput.changedBy,
       deployedInstituteCount: deployedInstitutes.length,
+      deploymentLogId: vendorCalibrationLogWrite.logId,
       instituteIds: deployedInstitutes.map((entry) => entry.instituteId),
       versionId: normalizedInput.versionId,
     });
@@ -287,6 +321,8 @@ export class CalibrationDeploymentService {
       calibrationSourcePath,
       deployedInstituteCount: deployedInstitutes.length,
       deployedInstitutes,
+      deploymentLogId: vendorCalibrationLogWrite.logId,
+      vendorCalibrationLogPath: vendorCalibrationLogWrite.path,
       versionId: normalizedInput.versionId,
     };
   }

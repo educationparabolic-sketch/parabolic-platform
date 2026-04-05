@@ -2385,13 +2385,19 @@ test(
       deployCalibrationVersion: async (request) => ({
         calibrationSourcePath: "globalCalibration/cal_v2026_04",
         deployedInstituteCount: request.targetInstitutes.length,
+        deploymentLogId: "build_99_handler_log",
         deployedInstitutes: request.targetInstitutes.map((instituteId) => ({
           calibrationPath:
             `institutes/${instituteId}/calibration/${request.versionId}`,
+          calibrationHistoryPath:
+            `institutes/${instituteId}/calibrationHistory/` +
+            "build_99_handler_log",
           compatibilityLicensePath: `institutes/${instituteId}/license/main`,
           instituteId,
           licensePath: `institutes/${instituteId}/license/current`,
         })),
+        vendorCalibrationLogPath:
+          "vendorCalibrationLogs/build_99_handler_log",
         versionId: request.versionId,
       }),
       verifyIdToken: async () => createVendorToken({
