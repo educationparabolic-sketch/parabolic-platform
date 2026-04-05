@@ -22,6 +22,7 @@ import {
   SessionStatus,
   SessionTokenClaims,
 } from "../types/sessionStart";
+import {DEFAULT_RISK_MODEL_VERSION} from "../types/riskEngine";
 
 const INSTITUTES_COLLECTION = "institutes";
 const ACADEMIC_YEARS_COLLECTION = "academicYears";
@@ -311,6 +312,20 @@ const normalizeSessionExecutionMode = (
   return normalizedValue;
 };
 
+const normalizeVersionString = (
+  value: unknown,
+  fieldName: string,
+): string => normalizeRequiredString(value, fieldName);
+
+const normalizeRiskModelVersion = (value: unknown): string => {
+  if (typeof value !== "string") {
+    return DEFAULT_RISK_MODEL_VERSION;
+  }
+
+  const normalizedValue = value.trim();
+  return normalizedValue || DEFAULT_RISK_MODEL_VERSION;
+};
+
 const resolveLicenseData = (
   mainLicense: FirebaseFirestore.DocumentSnapshot,
   currentLicense: FirebaseFirestore.DocumentSnapshot,
@@ -531,6 +546,17 @@ export class SessionService {
         runData.timingProfileSnapshot,
         "run.timingProfileSnapshot",
       );
+      const calibrationVersion = normalizeVersionString(
+        runData.calibrationVersion,
+        "run.calibrationVersion",
+      );
+      const riskModelVersion = normalizeRiskModelVersion(
+        runData.riskModelVersion,
+      );
+      const templateVersion = normalizeVersionString(
+        runData.templateVersion,
+        "run.templateVersion",
+      );
       const mode = normalizeSessionExecutionMode(runData.mode, "run.mode");
       const questionIds = normalizeQuestionIds(
         runData.questionIds,
@@ -571,13 +597,16 @@ export class SessionService {
       });
 
       const initializationRecord = this.buildSessionInitializationRecord({
+        calibrationVersion,
         instituteId,
         mode,
         questionTimeMap,
+        riskModelVersion,
         runId,
         sessionId,
         studentId,
         studentUid,
+        templateVersion,
         timingProfileSnapshot,
         yearId,
       });
@@ -586,12 +615,15 @@ export class SessionService {
 
       this.logger.info("Session start validated and document initialized", {
         instituteId,
+        calibrationVersion,
         licenseLayer: currentLayer,
         questionCount: questionIds.length,
+        riskModelVersion,
         runId,
         sessionId,
         sessionPath,
         studentId,
+        templateVersion,
         yearId,
       });
     });
@@ -831,10 +863,12 @@ export class SessionService {
   ): SessionDocumentInitializationRecord {
     return {
       answerMap: {},
+      calibrationVersion: context.calibrationVersion,
       createdAt: FieldValue.serverTimestamp(),
       instituteId: context.instituteId,
       mode: context.mode,
       questionTimeMap: context.questionTimeMap,
+      riskModelVersion: context.riskModelVersion,
       runId: context.runId,
       sessionId: context.sessionId,
       startedAt: null,
@@ -843,6 +877,7 @@ export class SessionService {
       studentUid: context.studentUid,
       submissionLock: false,
       submittedAt: null,
+      templateVersion: context.templateVersion,
       timingProfileSnapshot: context.timingProfileSnapshot,
       updatedAt: FieldValue.serverTimestamp(),
       version: 1,

@@ -69,6 +69,7 @@ const seedRun = async (): Promise<void> => {
   await firestore
     .doc(`institutes/${INSTITUTE_ID}/academicYears/${YEAR_ID}/runs/${RUN_ID}`)
     .set({
+      calibrationVersion: "cal_v2026_04",
       endWindow: Timestamp.fromMillis(Date.now() + 3_600_000),
       mode: "Controlled",
       phaseConfigSnapshot: {
@@ -78,10 +79,12 @@ const seedRun = async (): Promise<void> => {
       },
       questionIds: ["q36_1", "q36_2", "q36_3"],
       recipientStudentIds: [STUDENT_ID],
+      riskModelVersion: "risk_v3",
       runId: RUN_ID,
       startWindow: Timestamp.fromMillis(Date.now() - 3_600_000),
       status: "scheduled",
       testId: "test_build_36",
+      templateVersion: "5",
       timingProfileSnapshot: {
         easy: {max: 90, min: 30},
         hard: {max: 180, min: 60},
@@ -111,6 +114,7 @@ const seedSession = async (
         timeSpent: 20,
       },
     },
+    calibrationVersion: "cal_v2026_04",
     createdAt: Timestamp.fromMillis(nowMillis - 120_000),
     instituteId: INSTITUTE_ID,
     mode: "Controlled",
@@ -141,6 +145,7 @@ const seedSession = async (
       },
     },
     runId: RUN_ID,
+    riskModelVersion: "risk_v3",
     sessionId,
     startedAt: Timestamp.fromMillis(nowMillis - 100_000),
     status,
@@ -150,6 +155,7 @@ const seedSession = async (
     submittedAt: status === "submitted" ?
       Timestamp.fromMillis(nowMillis - 5000) :
       null,
+    templateVersion: "5",
     updatedAt: Timestamp.fromMillis(nowMillis - 3000),
     version: 1,
     yearId: YEAR_ID,
@@ -228,6 +234,9 @@ test("submitSession finalizes active session atomically", async () => {
   assert.equal(data?.status, "submitted");
   assert.equal(data?.submissionLock, false);
   assert.ok(data?.submittedAt instanceof Timestamp);
+  assert.equal(data?.calibrationVersion, "cal_v2026_04");
+  assert.equal(data?.riskModelVersion, "risk_v3");
+  assert.equal(data?.templateVersion, "5");
   assert.equal(data?.rawScorePercent, result.rawScorePercent);
   assert.equal(data?.accuracyPercent, result.accuracyPercent);
   assert.equal(data?.easyRemainingAfterPhase1Percent, 0);

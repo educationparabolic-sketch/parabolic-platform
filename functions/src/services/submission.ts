@@ -8,6 +8,7 @@ import {
   SubmissionResult,
   SubmissionRiskState,
 } from "../types/submission";
+import {DEFAULT_RISK_MODEL_VERSION} from "../types/riskEngine";
 
 const INSTITUTES_COLLECTION = "institutes";
 const ACADEMIC_YEARS_COLLECTION = "academicYears";
@@ -74,6 +75,15 @@ const normalizeRequiredString = (value: unknown, fieldName: string): string => {
   }
 
   return normalizedValue;
+};
+
+const normalizeRiskModelVersion = (value: unknown): string => {
+  if (typeof value !== "string") {
+    return DEFAULT_RISK_MODEL_VERSION;
+  }
+
+  const normalizedValue = value.trim();
+  return normalizedValue || DEFAULT_RISK_MODEL_VERSION;
 };
 
 const normalizeNonNegativeNumber = (
@@ -893,6 +903,27 @@ export class SubmissionService {
           const questionTimeMap = isPlainObject(sessionData.questionTimeMap) ?
             sessionData.questionTimeMap :
             {};
+          const calibrationVersion =
+            typeof sessionData.calibrationVersion === "string" &&
+            sessionData.calibrationVersion.trim() ?
+              sessionData.calibrationVersion.trim() :
+              normalizeRequiredString(
+                runData.calibrationVersion,
+                "run.calibrationVersion",
+              );
+          const templateVersion =
+            typeof sessionData.templateVersion === "string" &&
+            sessionData.templateVersion.trim() ?
+              sessionData.templateVersion.trim() :
+              normalizeRequiredString(
+                runData.templateVersion,
+                "run.templateVersion",
+              );
+          const riskModelVersion =
+            typeof sessionData.riskModelVersion === "string" &&
+            sessionData.riskModelVersion.trim() ?
+              sessionData.riskModelVersion.trim() :
+              normalizeRiskModelVersion(runData.riskModelVersion);
           const metrics = computeSubmissionMetrics({
             answerMap,
             phaseConfigSnapshot,
@@ -903,6 +934,7 @@ export class SubmissionService {
 
           transaction.update(sessionReference, {
             accuracyPercent: metrics.accuracyPercent,
+            calibrationVersion,
             consecutiveWrongStreakMax: metrics.consecutiveWrongStreakMax,
             disciplineIndex: metrics.disciplineIndex,
             easyRemainingAfterPhase1Percent:
@@ -913,11 +945,13 @@ export class SubmissionService {
             minTimeViolationPercent: metrics.minTimeViolationPercent,
             phaseAdherencePercent: metrics.phaseAdherencePercent,
             rawScorePercent: metrics.rawScorePercent,
+            riskModelVersion,
             riskState: metrics.riskState,
             skipBurstCount: metrics.skipBurstCount,
             status: "submitted",
             submissionLock: false,
             submittedAt: FieldValue.serverTimestamp(),
+            templateVersion,
             updatedAt: FieldValue.serverTimestamp(),
           });
 

@@ -2,6 +2,7 @@ import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import {createLogger} from "./logging";
 import {getFirestore} from "../utils/firebaseAdmin";
 import {
+  DEFAULT_RISK_MODEL_VERSION,
   RiskEngineContext,
   RiskEngineResult,
   StudentRiskState,
@@ -10,7 +11,6 @@ import {
 const INSTITUTES_COLLECTION = "institutes";
 const ACADEMIC_YEARS_COLLECTION = "academicYears";
 const STUDENT_YEAR_METRICS_COLLECTION = "studentYearMetrics";
-const DEFAULT_RISK_MODEL_VERSION = "risk_v1";
 const ROLLING_WINDOW_SIZE = 5;
 
 interface StudentYearMetricsSnapshot {

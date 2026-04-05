@@ -5,6 +5,8 @@ export interface RiskEngineContext {
   yearId: string;
 }
 
+export const DEFAULT_RISK_MODEL_VERSION = "risk_v1";
+
 export type StudentRiskState =
   "Stable" |
   "Drift-Prone" |

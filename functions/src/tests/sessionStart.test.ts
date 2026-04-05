@@ -70,6 +70,7 @@ test(
     await firestore.doc(questionHardPath).set({difficulty: "Hard"});
     await firestore.doc(questionMediumPath).set({difficulty: "Medium"});
     await firestore.doc(runPath).set({
+      calibrationVersion: "cal_v2026_04",
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
       mode: "Diagnostic",
       questionIds: [
@@ -78,9 +79,11 @@ test(
         "q_build_31_medium",
       ],
       recipientStudentIds: [studentId],
+      riskModelVersion: "risk_v3",
       runId,
       startWindow: Timestamp.fromMillis(Date.now() - 5 * 60 * 1000),
       status: "scheduled",
+      templateVersion: "7",
       timingProfileSnapshot: timingProfileSnapshotFixture,
     });
 
@@ -114,6 +117,9 @@ test(
     assert.equal(sessionData?.studentUid, `uid_${studentId}`);
     assert.equal(sessionData?.status, "created");
     assert.equal(sessionData?.submissionLock, false);
+    assert.equal(sessionData?.calibrationVersion, "cal_v2026_04");
+    assert.equal(sessionData?.riskModelVersion, "risk_v3");
+    assert.equal(sessionData?.templateVersion, "7");
     assert.deepEqual(sessionData?.answerMap, {});
     assert.deepEqual(
       sessionData?.timingProfileSnapshot,
@@ -185,12 +191,15 @@ test(
     await firestore.doc(studentPath).set({status: "active", studentId});
     await firestore.doc(licensePath).set({currentLayer: "L1"});
     await firestore.doc(runPath).set({
+      calibrationVersion: "cal_v2026_04",
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
       mode: "Diagnostic",
       recipientStudentIds: [studentId],
+      riskModelVersion: "risk_v1",
       runId,
       startWindow: Timestamp.fromMillis(Date.now() + 5 * 60 * 1000),
       status: "scheduled",
+      templateVersion: "1",
     });
 
     await assert.rejects(
@@ -238,13 +247,16 @@ test(
     await firestore.doc(studentPath).set({status: "active", studentId});
     await firestore.doc(licensePath).set({currentLayer: "L1"});
     await firestore.doc(runPath).set({
+      calibrationVersion: "cal_v2026_04",
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
       mode: "Diagnostic",
       questionIds: ["q_build_31_missing_timing_question"],
       recipientStudentIds: [studentId],
+      riskModelVersion: "risk_v1",
       runId,
       startWindow: Timestamp.fromMillis(Date.now() - 5 * 60 * 1000),
       status: "scheduled",
+      templateVersion: "1",
     });
 
     await assert.rejects(
@@ -293,13 +305,16 @@ test(
     await firestore.doc(studentPath).set({status: "active", studentId});
     await firestore.doc(licensePath).set({currentLayer: "L1"});
     await firestore.doc(runPath).set({
+      calibrationVersion: "cal_v2026_04",
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
       mode: "Diagnostic",
       questionIds: ["q_build_31_missing_from_bank"],
       recipientStudentIds: [studentId],
+      riskModelVersion: "risk_v1",
       runId,
       startWindow: Timestamp.fromMillis(Date.now() - 5 * 60 * 1000),
       status: "scheduled",
+      templateVersion: "1",
       timingProfileSnapshot: timingProfileSnapshotFixture,
     });
 

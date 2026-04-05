@@ -104,6 +104,7 @@ test(
       testId,
       timingProfile: templateSnapshotFixture.timingProfile,
       totalRuns: 0,
+      version: 3,
     });
     await firestore.doc(licensePath).set({
       currentLayer: "L2",
@@ -143,6 +144,8 @@ test(
     assert.equal(result.recipientCount, 2);
     assert.equal(result.licenseLayer, "L2");
     assert.equal(result.calibrationVersion, "cal_build_23_success");
+    assert.equal(result.templateVersion, "3");
+    assert.equal(result.riskModelVersion, "risk_v1");
     assert.deepEqual(
       result.capturedTemplateSnapshot.questionIds,
       templateSnapshotFixture.questionIds,
@@ -155,6 +158,8 @@ test(
     assert.equal(runData?.recipientCount, 2);
     assert.equal(runData?.licenseLayer, "L2");
     assert.equal(runData?.calibrationVersion, "cal_build_23_success");
+    assert.equal(runData?.templateVersion, "3");
+    assert.equal(runData?.riskModelVersion, "risk_v1");
     assert.deepEqual(runData?.recipientStudentIds, studentIds);
     assert.equal(runData?.mode, "Controlled");
     assert.deepEqual(
@@ -221,6 +226,7 @@ test(
       status: "draft",
       testId,
       timingProfile: templateSnapshotFixture.timingProfile,
+      version: 1,
     });
     await firestore.doc(licensePath).set({
       currentLayer: "L2",
@@ -294,6 +300,7 @@ test(
       status: "ready",
       testId,
       timingProfile: templateSnapshotFixture.timingProfile,
+      version: 1,
     });
     await firestore.doc(licensePath).set({
       currentLayer: "L1",
@@ -368,6 +375,7 @@ test(
       status: "ready",
       testId,
       timingProfile: templateSnapshotFixture.timingProfile,
+      version: 1,
     });
     await firestore.doc(licensePath).set({
       currentLayer: "L1",
@@ -436,6 +444,7 @@ test(
     await firestore.doc(testPath).set({
       status: "ready",
       testId,
+      version: 1,
     });
     await firestore.doc(licensePath).set({
       currentLayer: "L0",
@@ -509,6 +518,7 @@ test(
       status: "ready",
       testId,
       timingProfile: templateSnapshotFixture.timingProfile,
+      version: 1,
     });
     await firestore.doc(licensePath).set({
       currentLayer: "L0",

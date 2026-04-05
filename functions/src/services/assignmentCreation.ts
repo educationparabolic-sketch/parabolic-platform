@@ -11,6 +11,7 @@ import {
   AssignmentTemplateSnapshot,
   LicenseLayer,
 } from "../types/assignmentCreation";
+import {DEFAULT_RISK_MODEL_VERSION} from "../types/riskEngine";
 import {
   TemplateDifficultyDistribution,
   TemplatePhaseConfigSnapshot,
@@ -178,6 +179,39 @@ const normalizeRequiredLayer = (value: unknown): LicenseLayer => {
 
 const normalizeCalibrationVersion = (value: unknown): string =>
   normalizeRequiredString(value, "institute.calibrationVersion");
+
+const normalizeTemplateVersion = (
+  templateData: Record<string, unknown> | undefined,
+): string => {
+  if (typeof templateData?.templateVersion === "string") {
+    return normalizeRequiredString(
+      templateData.templateVersion,
+      "template.templateVersion",
+    );
+  }
+
+  if (
+    typeof templateData?.version === "number" &&
+    Number.isFinite(templateData.version) &&
+    templateData.version > 0
+  ) {
+    return String(Math.floor(templateData.version));
+  }
+
+  throw new AssignmentCreationValidationError(
+    "Template version is missing. Structural template versions must be " +
+      "captured before assignment creation.",
+  );
+};
+
+const normalizeRiskModelVersion = (value: unknown): string => {
+  if (typeof value !== "string") {
+    return DEFAULT_RISK_MODEL_VERSION;
+  }
+
+  const normalizedValue = value.trim();
+  return normalizedValue || DEFAULT_RISK_MODEL_VERSION;
+};
 
 const normalizeNonNegativeInteger = (
   value: unknown,
@@ -577,6 +611,8 @@ export class AssignmentCreationService {
     const calibrationVersion = normalizeCalibrationVersion(
       instituteData?.calibrationVersion,
     );
+    const templateVersion = normalizeTemplateVersion(templateData);
+    const riskModelVersion = normalizeRiskModelVersion(data.riskModelVersion);
 
     const normalizedTotalSessions = typeof data.totalSessions === "number" &&
       Number.isFinite(data.totalSessions) &&
@@ -600,10 +636,12 @@ export class AssignmentCreationService {
         questionIds: capturedTemplateSnapshot.questionIds,
         recipientCount: recipientStudentIds.length,
         recipientStudentIds,
+        riskModelVersion,
         runId,
         startWindow,
         status: "scheduled",
         testId,
+        templateVersion,
         timingProfileSnapshot:
           capturedTemplateSnapshot.timingProfileSnapshot,
         totalSessions: normalizedTotalSessions,
@@ -622,9 +660,11 @@ export class AssignmentCreationService {
       mode,
       questionCount: capturedTemplateSnapshot.questionIds.length,
       recipientCount: recipientStudentIds.length,
+      riskModelVersion,
       runId,
       runPath,
       testId,
+      templateVersion,
       yearId,
     });
 
@@ -633,8 +673,10 @@ export class AssignmentCreationService {
       capturedTemplateSnapshot,
       licenseLayer: currentLayer,
       recipientCount: recipientStudentIds.length,
+      riskModelVersion,
       runPath,
       status: "scheduled",
+      templateVersion,
       testPath,
     };
   }

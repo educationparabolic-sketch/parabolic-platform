@@ -30,7 +30,9 @@ export interface AssignmentCreationResult {
   capturedTemplateSnapshot: AssignmentTemplateSnapshot;
   licenseLayer: LicenseLayer;
   recipientCount: number;
+  riskModelVersion: string;
   runPath: string;
   status: "scheduled";
+  templateVersion: string;
   testPath: string;
 }

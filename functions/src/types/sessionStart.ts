@@ -34,13 +34,16 @@ export interface SessionTokenClaims {
 }
 
 export interface SessionDocumentInitializationContext {
+  calibrationVersion: string;
   instituteId: string;
   mode: SessionExecutionMode;
   questionTimeMap: SessionQuestionTimeMap;
+  riskModelVersion: string;
   runId: string;
   sessionId: string;
   studentId: string;
   studentUid: string;
+  templateVersion: string;
   timingProfileSnapshot: SessionTimingProfileSnapshot;
   yearId: string;
 }
@@ -75,10 +78,12 @@ export type SessionQuestionTimeMap = Record<string, SessionQuestionTimeRecord>;
 
 export interface SessionDocumentInitializationRecord {
   answerMap: Record<string, unknown>;
+  calibrationVersion: string;
   createdAt: FirebaseFirestore.FieldValue;
   instituteId: string;
   mode: SessionExecutionMode;
   questionTimeMap: SessionQuestionTimeMap;
+  riskModelVersion: string;
   runId: string;
   sessionId: string;
   startedAt: null;
@@ -87,6 +92,7 @@ export interface SessionDocumentInitializationRecord {
   studentUid: string;
   submissionLock: false;
   submittedAt: null;
+  templateVersion: string;
   timingProfileSnapshot: SessionTimingProfileSnapshot;
   updatedAt: FirebaseFirestore.FieldValue;
   version: 1;

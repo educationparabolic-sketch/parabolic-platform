@@ -12,10 +12,10 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 99  
-Next Build: 100
+Completed Builds: 100  
+Next Build: 101
 
-Current Phase: Phase 20 — Calibration System
+Current Phase: Phase 21 — Archive & Data Lifecycle
 
 ---
 
@@ -3249,18 +3249,45 @@ Completed On
 
 ---
 
-# NEXT BUILD
-
-Next Build Number: 100
+## Build 100 — Calibration Version Traceability
 
 Phase  
 Phase 20 — Calibration System
 
+Summary  
+Implemented session-level version traceability so calibration, risk-model, and template references are persisted with each session and preserved through submission-time analytics execution.
+
+Components implemented:
+
+- Extended assignment-run normalization so `institutes/{instituteId}/academicYears/{yearId}/runs/{runId}` now persists `templateVersion` and `riskModelVersion` alongside the existing `calibrationVersion` snapshot
+- Extended session initialization typing and `SessionService` so new session documents now store `calibrationVersion`, `riskModelVersion`, and `templateVersion` at creation time
+- Extended `SubmissionService` so submission-time finalization preserves or backfills the same version traceability fields on submitted sessions before analytics-facing metrics are written
+- Reused the existing default risk-model baseline (`risk_v1`) instead of inventing a parallel version source when an explicit run-level risk model snapshot is absent
+- Extended repeatable local coverage in `functions/src/tests/assignmentCreation.test.ts`, `functions/src/tests/sessionStart.test.ts`, and `functions/src/tests/sessionSubmission.test.ts` to verify run/session version snapshots and submission persistence
+
+Result  
+The backend now records the version references required to reconstruct session scoring and analytics behavior historically without mutating prior calibration or template state.
+
+Commit Reference  
+Build 100 — Calibration Version Traceability implemented
+
+Completed On  
+2026-04-05
+
+---
+
+# NEXT BUILD
+
+Next Build Number: 101
+
+Phase  
+Phase 21 — Archive & Data Lifecycle
+
 Subsystem  
-Calibration Version Traceability
+Academic Year Archive Pipeline
 
 Reference  
-3_Core_Architectures.md → Section 37.11 Calibration Accountability Model
+3_Core_Architectures.md → Section 42.15 Archive Flow (Academic Year)
 
 ---
 
