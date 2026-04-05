@@ -20,6 +20,8 @@ export interface UpdateInstituteLicenseResult {
   billingPlan: string;
   compatibilityLicensePath: string;
   instituteId: string;
+  licenseHistoryEntryId: string;
+  licenseHistoryPath: string;
   licensePath: string;
   newLayer: LicenseLayer;
   planId: string;

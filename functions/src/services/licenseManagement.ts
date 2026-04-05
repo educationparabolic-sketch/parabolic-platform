@@ -1,6 +1,7 @@
 import {FieldValue} from "firebase-admin/firestore";
 import {createLogger} from "./logging";
 import {getFirestore} from "../utils/firebaseAdmin";
+import {licenseHistoryService} from "./licenseHistory";
 import {
   LicenseManagementFeatureFlags,
   LicenseManagementValidationError,
@@ -291,6 +292,9 @@ export class LicenseManagementService {
       instituteId,
       LICENSE_MAIN_DOCUMENT_ID,
     );
+    const effectiveDate = new Date().toISOString();
+    const mutationReason =
+      "Vendor license update via POST /vendor/license/update.";
 
     const result = await this.firestore.runTransaction(async (transaction) => {
       const instituteReference = this.firestore.doc(institutePath);
@@ -333,6 +337,9 @@ export class LicenseManagementService {
       const previousLayer = normalizeOptionalLicenseLayer(
         baseLicenseData.currentLayer,
       );
+      const previousStudentLimit = normalizeOptionalNumber(
+        baseLicenseData.activeStudentLimit,
+      );
       const nextLicenseDocument: Record<string, unknown> = {
         ...baseLicenseData,
         activeStudentLimit: pricingPlan.activeStudentLimit,
@@ -345,6 +352,19 @@ export class LicenseManagementService {
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: changedBy,
       };
+      const licenseHistoryWrite = licenseHistoryService
+        .prepareLicenseHistoryEntry({
+          billingPlan,
+          changedBy,
+          effectiveDate,
+          instituteId,
+          newLayer,
+          newStudentLimit:
+            pricingPlan.activeStudentLimit ?? undefined,
+          previousLayer: previousLayer ?? "L0",
+          previousStudentLimit: previousStudentLimit ?? undefined,
+          reason: mutationReason,
+        });
 
       transaction.set(
         currentLicenseReference,
@@ -356,12 +376,18 @@ export class LicenseManagementService {
         nextLicenseDocument,
         {merge: true},
       );
+      transaction.create(
+        this.firestore.doc(licenseHistoryWrite.path),
+        licenseHistoryWrite.entry,
+      );
 
       return {
         activeStudentLimit: pricingPlan.activeStudentLimit,
         billingPlan,
         compatibilityLicensePath,
         instituteId,
+        licenseHistoryEntryId: licenseHistoryWrite.entryId,
+        licenseHistoryPath: licenseHistoryWrite.path,
         licensePath: currentLicensePath,
         newLayer,
         planId: pricingPlan.planId,
@@ -376,6 +402,8 @@ export class LicenseManagementService {
       changedBy,
       compatibilityLicensePath: result.compatibilityLicensePath,
       instituteId: result.instituteId,
+      licenseHistoryEntryId: result.licenseHistoryEntryId,
+      licenseHistoryPath: result.licenseHistoryPath,
       licensePath: result.licensePath,
       newLayer: result.newLayer,
       planId: result.planId,

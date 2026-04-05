@@ -25,7 +25,7 @@ const deleteDocumentIfPresent = async (path: string): Promise<void> => {
 };
 
 test(
-  "updateInstituteLicense writes current and mirrored license documents",
+  "updateInstituteLicense writes current, mirrored, and history documents",
   async () => {
     const instituteId = "inst_build_93_a";
     const institutePath = `institutes/${instituteId}`;
@@ -78,17 +78,32 @@ test(
     assert.equal(result.activeStudentLimit, 250);
     assert.equal(result.licensePath, currentLicensePath);
     assert.equal(result.compatibilityLicensePath, mainLicensePath);
+    assert.match(
+      result.licenseHistoryPath,
+      new RegExp(`^${institutePath}/licenseHistory/`),
+    );
+    assert.equal(
+      result.licenseHistoryPath,
+      `${institutePath}/licenseHistory/${result.licenseHistoryEntryId}`,
+    );
 
-    const [currentLicenseSnapshot, mainLicenseSnapshot] = await Promise.all([
+    const [
+      currentLicenseSnapshot,
+      mainLicenseSnapshot,
+      licenseHistorySnapshot,
+    ] = await Promise.all([
       firestore.doc(currentLicensePath).get(),
       firestore.doc(mainLicensePath).get(),
+      firestore.doc(result.licenseHistoryPath).get(),
     ]);
 
     const currentLicense = currentLicenseSnapshot.data();
     const mainLicense = mainLicenseSnapshot.data();
+    const licenseHistory = licenseHistorySnapshot.data();
 
     assert.equal(currentLicenseSnapshot.exists, true);
     assert.equal(mainLicenseSnapshot.exists, true);
+    assert.equal(licenseHistorySnapshot.exists, true);
     assert.equal(currentLicense?.currentLayer, "L2");
     assert.equal(currentLicense?.planId, "L2");
     assert.equal(currentLicense?.planName, "Controlled");
@@ -110,10 +125,28 @@ test(
     assert.equal(mainLicense?.planId, "L2");
     assert.equal(mainLicense?.activeStudentLimit, 250);
     assert.deepEqual(mainLicense?.featureFlags, currentLicense?.featureFlags);
+    assert.equal(licenseHistory?.entryId, result.licenseHistoryEntryId);
+    assert.equal(licenseHistory?.instituteId, instituteId);
+    assert.equal(licenseHistory?.previousLayer, "L1");
+    assert.equal(licenseHistory?.newLayer, "L2");
+    assert.equal(licenseHistory?.billingPlan, "Controlled");
+    assert.equal(licenseHistory?.changedBy, "vendor_build_93");
+    assert.equal(
+      licenseHistory?.reason,
+      "Vendor license update via POST /vendor/license/update.",
+    );
+    assert.equal(licenseHistory?.previousStudentLimit, undefined);
+    assert.equal(licenseHistory?.newStudentLimit, 250);
+    assert.equal(typeof licenseHistory?.timestamp?.toDate, "function");
+    assert.equal(
+      typeof licenseHistory?.effectiveDate,
+      "string",
+    );
 
     await Promise.all([
       deleteDocumentIfPresent(currentLicensePath),
       deleteDocumentIfPresent(mainLicensePath),
+      deleteDocumentIfPresent(result.licenseHistoryPath),
       deleteDocumentIfPresent(pricingPlanPath),
       deleteDocumentIfPresent(institutePath),
     ]);

@@ -32,3 +32,7 @@ export interface LicenseHistoryWriteResult {
   instituteId: string;
   path: string;
 }
+
+export interface LicenseHistoryEntryWrite extends LicenseHistoryWriteResult {
+  entry: LicenseHistoryEntry;
+}

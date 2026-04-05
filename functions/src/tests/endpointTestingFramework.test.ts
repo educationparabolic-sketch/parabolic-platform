@@ -1962,6 +1962,9 @@ test(
         billingPlan: request.billingPlan,
         compatibilityLicensePath: "institutes/inst_build_93/license/main",
         instituteId: request.instituteId,
+        licenseHistoryEntryId: "history_build_94",
+        licenseHistoryPath:
+          "institutes/inst_build_93/licenseHistory/history_build_94",
         licensePath: "institutes/inst_build_93/license/current",
         newLayer: request.newLayer,
         planId: "L2",
@@ -1994,6 +1997,14 @@ test(
     assert.equal(
       (response.body as {data: {newLayer: string}}).data.newLayer,
       "L2",
+    );
+    assert.equal(
+      (
+        response.body as {
+          data: {licenseHistoryEntryId: string};
+        }
+      ).data.licenseHistoryEntryId,
+      "history_build_94",
     );
   },
 );
