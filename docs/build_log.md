@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 91  
-Next Build: 92
+Completed Builds: 92  
+Next Build: 93
 
 Current Phase: Phase 19 — Billing & License Intelligence
 
@@ -2983,18 +2983,49 @@ Completed On
 
 ---
 
+## Build 92 — Billing Snapshot System
+
+Phase  
+Phase 19 — Billing & License Intelligence
+
+Summary  
+Implemented the immutable billing snapshot pipeline used for billing transparency, dispute protection, and downstream vendor billing analytics.
+
+Components implemented:
+
+- Added `BillingSnapshotService` to generate root-level `billingSnapshots/{instituteId}__{cycleId}` documents from institute `usageMeter/{cycleId}` summaries plus current license metadata
+- Stored architecture-aligned snapshot fields including `activeStudentCount`, `peakUsage`, `licenseTier`, `invoiceId`, `stripeWebhookStatus`, `cycleStart`, and `cycleEnd`, while preserving compatibility fields already consumed by vendor revenue intelligence
+- Added a monthly scheduled trigger so completed billing cycles are snapshotted through a single bounded pipeline instead of introducing a duplicate billing event handler
+- Added compatibility fallback from the repo's current `institutes/{instituteId}/license/main` usage to the architecture path `institutes/{instituteId}/license/current`
+- Added repeatable emulator-backed tests covering snapshot creation, immutable idempotency on retries, and license-path compatibility
+- Verified the implementation locally with:
+  - `npm run build`
+  - `npm run lint`
+  - `firebase emulators:exec --only firestore "node --test lib/tests/billingSnapshot.test.js"`
+
+Result  
+The platform now generates immutable billing-cycle snapshots from the existing usage metering foundation, creating a deterministic dispute-protection record for each cycle and supplying the aggregate billing source expected by vendor intelligence services.
+
+Commit Reference  
+Build 92 — Billing Snapshot System implemented
+
+Completed On  
+2026-04-05
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 92
+Next Build Number: 93
 
 Phase  
 Phase 19 — Billing & License Intelligence
 
 Subsystem  
-Billing Snapshot System
+License Management API
 
 Reference  
-3_Core_Architectures.md → Section 37.16 Billing Dispute Protection
+3_Core_Architectures.md → Section 6.10 Vendor Endpoints — Update Institute License
 
 ---
 
@@ -3093,7 +3124,8 @@ Build | Phase | Status
 89 | Governance Snapshot System | Completed
 90 | Governance Snapshot System | Completed
 91 | Billing & License Intelligence | Completed
-92–150 | Remaining Phases | Pending
+92 | Billing & License Intelligence | Completed
+93–150 | Remaining Phases | Pending
 
 ---
 

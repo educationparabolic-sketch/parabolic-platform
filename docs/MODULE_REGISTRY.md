@@ -122,6 +122,7 @@ TemplateAuditLoggingService | Build 20 | Emit immutable institute template lifec
 AssignmentCreationService | Build 21, Build 22, Build 23 | Validate and normalize assignment run creation in institutes/{instituteId}/academicYears/{yearId}/runs/{runId}, including template readiness, recipient eligibility, license-mode restrictions, scheduled window enforcement, assignment-time immutable template snapshot capture (questionIds, difficultyDistribution, phaseConfigSnapshot, timingProfileSnapshot), and assignment-time license/calibration snapshots (licenseLayer, calibrationVersion)
 RunAnalyticsInitializationService | Build 24 | Initialize deterministic run analytics stubs in institutes/{instituteId}/academicYears/{yearId}/runAnalytics/{runId} during assignment creation, including baseline fields (avgRawScorePercent, avgAccuracyPercent, completionRate, riskDistribution) and idempotent create-only semantics
 UsageMeteringService | Build 25, Build 91 | Track institute billing usage metrics in `institutes/{instituteId}/usageMeter/{cycleId}`, including assignment counts, assigned student volume, active-student lifecycle totals, submitted session volume, peak usage, pricing-plan-derived billing projections, and idempotent assignment/student/session event deduplication
+BillingSnapshotService | Build 92 | Generate immutable root-level `billingSnapshots/{instituteId}__{cycleId}` records from institute `usageMeter/{cycleId}` summaries plus current license metadata, including cycle boundaries, license tier, peak usage, projected invoice amounts, and dispute-protection webhook status fields for downstream vendor analytics
 SimulationStudentGeneratorService | Build 77 | Generate deterministic synthetic students in `institutes/sim_{simulationId}/students` using Build 76 environment metadata, behavioral-profile attributes (`baselineAbility`, `disciplineProfile`, `impulsivenessScore`, `overconfidenceScore`, `fatigueFactor`, `topicStrengthMap`), and idempotent create-only writes
 
 ---
@@ -160,6 +161,7 @@ studentYearMetrics | AcademicYear | Student performance metrics
 governanceSnapshots | AcademicYear | Immutable monthly governance snapshot records
 insightSnapshots | AcademicYear | Generated student, run, and batch insight snapshots
 emailQueue | Global | Root-level asynchronous notification queue jobs created by post-submission notification processing
+billingSnapshots | Global | Immutable billing-cycle dispute-protection snapshots and vendor billing analytics inputs
 usage | Institute | Billing usage metering
 usageMeter | Institute | Billing and assignment usage metering summaries by cycle
 license | Institute | License configuration
