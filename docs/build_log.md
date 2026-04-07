@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 100  
-Next Build: 101
+Completed Builds: 101  
+Next Build: 102
 
 Current Phase: Phase 21 — Archive & Data Lifecycle
 
@@ -3276,18 +3276,47 @@ Completed On
 
 ---
 
+## Build 101 — Academic Year Archive Pipeline
+
+Phase  
+Phase 21 — Archive & Data Lifecycle
+
+Summary  
+Implemented the academic-year archive pipeline so completed institute years can be deterministically frozen, exported to cold storage, snapshot-sealed, and marked archived without deleting Firestore session records.
+
+Components implemented:
+
+- Added `POST /admin/academicYear/archive` with existing authentication, tenant, and role middleware so institute admins and vendor operators can execute a double-confirmed archive request through the standard API framework
+- Added typed archive request/result contracts plus `ArchivePipelineService` to validate academic-year state, reject non-terminal runs or active sessions, lock the year, and complete the archive flow idempotently
+- Added a BigQuery archive export client that provisions `institute_{instituteId}_archive.sessions_{yearId}` and inserts flattened submitted-session summary rows using deterministic row-count guards before archive completion
+- Extended `GovernanceSnapshotAggregationService` so the archive flow can reuse existing summary aggregation logic to write the final immutable archive snapshot at `institutes/{instituteId}/academicYears/{yearId}/governanceSnapshots/{yearId}` with version metadata (`calibrationVersionUsed`, `riskModelVersionUsed`, `templateVersionRangeUsed`)
+- Extended administrative audit logging to emit immutable `ARCHIVE_ACADEMIC_YEAR` institute audit records for every successful archive operation
+- Added repeatable local verification in `functions/src/tests/archivePipeline.test.ts`, extended `functions/src/tests/endpointTestingFramework.test.ts`, and registered `npm run test:archive-pipeline` for emulator-backed archive validation
+- Followed the Build 101 and Section 42.15 contract when it conflicts with older retention text by preserving Firestore session documents and marking the academic year archived instead of deleting session data
+
+Result  
+The backend now supports deterministic academic-year archival with vendor-authorized execution support, BigQuery cold-storage export, final governance snapshot sealing, immutable auditability, and archive-safe idempotent retries.
+
+Commit Reference  
+Build 101 — Academic Year Archive Pipeline implemented
+
+Completed On  
+2026-04-07
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 101
+Next Build Number: 102
 
 Phase  
 Phase 21 — Archive & Data Lifecycle
 
 Subsystem  
-Academic Year Archive Pipeline
+Data Retention Policy Enforcement
 
 Reference  
-3_Core_Architectures.md → Section 42.15 Archive Flow (Academic Year)
+3_Core_Architectures.md → Section 37.8 Data Retention Policy
 
 ---
 
@@ -3393,7 +3422,10 @@ Build | Phase | Status
 96 | Calibration System | Completed
 97 | Calibration System | Completed
 98 | Calibration System | Completed
-99–150 | Remaining Phases | Pending
+99 | Calibration System | Completed
+100 | Calibration System | Completed
+101 | Archive & Data Lifecycle | Completed
+102–150 | Remaining Phases | Pending
 
 ---
 

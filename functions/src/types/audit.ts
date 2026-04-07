@@ -8,6 +8,7 @@ export type AdministrativeActionType =
   | "UPDATE_TEST_TEMPLATE"
   | "ACTIVATE_TEST_TEMPLATE"
   | "ARCHIVE_TEST_TEMPLATE"
+  | "ARCHIVE_ACADEMIC_YEAR"
   | "CREATE_ASSIGNMENT"
   | "IMPORT_STUDENTS"
   | "CHANGE_ROLE"
@@ -15,6 +16,7 @@ export type AdministrativeActionType =
 
 export type AdministrativeActionEntityType =
   | "test"
+  | "academicYear"
   | "assignment"
   | "student"
   | "role"

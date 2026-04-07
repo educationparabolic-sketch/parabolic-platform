@@ -2,6 +2,7 @@ import {Timestamp} from "firebase-admin/firestore";
 import {createLogger} from "./logging";
 import {getFirestore} from "../utils/firebaseAdmin";
 import {
+  GenerateGovernanceSnapshotForAcademicYearInput,
   GovernanceRiskCluster,
   GovernanceRiskDistribution,
   GovernanceSnapshotAggregationInput,
@@ -275,11 +276,11 @@ export class GovernanceSnapshotAggregationService {
         const academicYear = academicYearDocument.id;
 
         try {
-          const result = await this.generateSnapshotForAcademicYear(
-            instituteId,
+          const result = await this.generateSnapshotForAcademicYear({
             academicYear,
+            instituteId,
             snapshotMonth,
-          );
+          });
           results.push(result);
         } catch (error) {
           this.logger.error("Governance snapshot generation failed.", {
@@ -314,28 +315,30 @@ export class GovernanceSnapshotAggregationService {
 
   /**
    * Builds one immutable governance snapshot for a single academic year.
-   * @param {string} instituteId Institute namespace identifier.
-   * @param {string} academicYear Academic year document identifier.
-   * @param {string} snapshotMonth Month being snapshotted in YYYY-MM format.
+   * @param {GenerateGovernanceSnapshotForAcademicYearInput} input Snapshot
+   * generation parameters for a single academic year.
    * @return {Promise<GovernanceSnapshotRunResult>} Per-year run result.
    */
-  private async generateSnapshotForAcademicYear(
-    instituteId: string,
-    academicYear: string,
-    snapshotMonth: string,
+  public async generateSnapshotForAcademicYear(
+    input: GenerateGovernanceSnapshotForAcademicYearInput,
   ): Promise<GovernanceSnapshotRunResult> {
+    const instituteId = input.instituteId;
+    const academicYear = input.academicYear;
+    const snapshotMonth = input.snapshotMonth;
     const academicYearReference = this.firestore
       .collection(INSTITUTES_COLLECTION)
       .doc(instituteId)
       .collection(ACADEMIC_YEARS_COLLECTION)
       .doc(academicYear);
+    const snapshotDocumentId =
+      input.snapshotId ?? buildSnapshotDocumentId(snapshotMonth);
     const [runAnalyticsSnapshot, studentMetricsSnapshot] = await Promise.all([
       academicYearReference.collection(RUN_ANALYTICS_COLLECTION).get(),
       academicYearReference.collection(STUDENT_YEAR_METRICS_COLLECTION).get(),
     ]);
     const snapshotDocumentPath =
       `${academicYearReference.path}/${GOVERNANCE_SNAPSHOTS_COLLECTION}/` +
-      buildSnapshotDocumentId(snapshotMonth);
+      snapshotDocumentId;
 
     if (runAnalyticsSnapshot.empty && studentMetricsSnapshot.empty) {
       return {
@@ -349,7 +352,7 @@ export class GovernanceSnapshotAggregationService {
 
     const snapshotReference = academicYearReference
       .collection(GOVERNANCE_SNAPSHOTS_COLLECTION)
-      .doc(buildSnapshotDocumentId(snapshotMonth));
+      .doc(snapshotDocumentId);
     const existingSnapshot = await snapshotReference.get();
 
     if (existingSnapshot.exists) {
@@ -374,6 +377,7 @@ export class GovernanceSnapshotAggregationService {
       avgAccuracyPercent: aggregatedRunAnalytics.avgAccuracyPercent,
       avgPhaseAdherence: aggregatedStudentMetrics.avgPhaseAdherence,
       avgRawScorePercent: aggregatedRunAnalytics.avgRawScorePercent,
+      calibrationVersionUsed: input.versionMetadata?.calibrationVersionUsed,
       createdAt: generatedAt,
       disciplineMean: aggregatedStudentMetrics.disciplineMean,
       disciplineTrend: aggregatedStudentMetrics.disciplineTrend,
@@ -392,6 +396,7 @@ export class GovernanceSnapshotAggregationService {
       month: snapshotMonth,
       overrideFrequency: aggregatedRunAnalytics.overrideFrequency,
       phaseCompliancePercent: aggregatedStudentMetrics.avgPhaseAdherence,
+      riskModelVersionUsed: input.versionMetadata?.riskModelVersionUsed,
       riskClusterDistribution: aggregatedStudentMetrics.riskDistribution,
       riskDistribution: aggregatedStudentMetrics.riskDistribution,
       rushPatternPercent: aggregatedStudentMetrics.rushPatternPercent,
@@ -402,6 +407,7 @@ export class GovernanceSnapshotAggregationService {
         aggregatedStudentMetrics.disciplineVariance,
         aggregatedRunAnalytics.templateVarianceMean,
       ),
+      templateVersionRangeUsed: input.versionMetadata?.templateVersionRangeUsed,
       templateVarianceMean: aggregatedRunAnalytics.templateVarianceMean,
       wrongStreakPercent: aggregatedStudentMetrics.wrongStreakPercent,
     };

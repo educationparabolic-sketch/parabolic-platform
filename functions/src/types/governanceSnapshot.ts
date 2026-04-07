@@ -9,6 +9,20 @@ export interface GovernanceSnapshotAggregationInput {
   snapshotMonth?: string;
 }
 
+export interface GovernanceSnapshotVersionMetadata {
+  calibrationVersionUsed?: string;
+  riskModelVersionUsed?: string;
+  templateVersionRangeUsed?: string;
+}
+
+export interface GenerateGovernanceSnapshotForAcademicYearInput {
+  academicYear: string;
+  instituteId: string;
+  snapshotId?: string;
+  snapshotMonth: string;
+  versionMetadata?: GovernanceSnapshotVersionMetadata;
+}
+
 export interface GovernanceSnapshotRunResult {
   academicYear: string;
   created: boolean;
@@ -38,6 +52,7 @@ export interface GovernanceSnapshotDocument {
   academicYear: string;
   avgAccuracyPercent: number;
   avgPhaseAdherence: number;
+  calibrationVersionUsed?: string;
   avgRawScorePercent: number;
   createdAt: FirebaseFirestore.Timestamp;
   disciplineMean: number;
@@ -50,6 +65,7 @@ export interface GovernanceSnapshotDocument {
   month: string;
   overrideFrequency: number;
   phaseCompliancePercent: number;
+  riskModelVersionUsed?: string;
   riskClusterDistribution: GovernanceRiskDistribution;
   riskDistribution: GovernanceRiskDistribution;
   rushPatternPercent: number;
@@ -58,6 +74,7 @@ export interface GovernanceSnapshotDocument {
   skipBurstPercent: number;
   schemaVersion: 1;
   stabilityIndex: number;
+  templateVersionRangeUsed?: string;
   templateVarianceMean: number;
   wrongStreakPercent: number;
 }

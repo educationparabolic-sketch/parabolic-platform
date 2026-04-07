@@ -57,6 +57,9 @@ import {
 import {
   createAdminGovernanceReportsHandler,
 } from "../api/adminGovernanceReports";
+import {
+  createAdminAcademicYearArchiveHandler,
+} from "../api/adminAcademicYearArchive";
 import {SessionStartValidationError} from "../services/session";
 import {
   SimulationEnvironmentValidationError,
@@ -83,6 +86,9 @@ import {
 import {
   CalibrationSimulationError,
 } from "../types/calibrationSimulation";
+import {
+  AcademicYearArchiveValidationError,
+} from "../types/archivePipeline";
 import {
   createMockRequest,
   createMockResponse,
@@ -919,6 +925,133 @@ test(
       (response.body as {data: {header: {instituteId: string}}})
         .data.header.instituteId,
       "inst_vendor_target_build_90",
+    );
+  },
+);
+
+test(
+  "admin academic year archive handler accepts a vendor-authorized request",
+  async () => {
+    const handler = createAdminAcademicYearArchiveHandler({
+      archiveAcademicYear: async (input) => ({
+        academicYearPath:
+          `institutes/${input.instituteId}/academicYears/${input.yearId}`,
+        archived: true,
+        archivedAt: "2026-04-07T00:00:00.000Z",
+        bigQuery: {
+          datasetId: `institute_${input.instituteId}_archive`,
+          projectId: "parabolic-platform-build-101-tests",
+          rowsExported: 12,
+          sessionsTableId: `sessions_${input.yearId}`,
+          skipped: false,
+        },
+        idempotent: false,
+        instituteId: input.instituteId,
+        snapshotPath:
+          `institutes/${input.instituteId}/academicYears/${input.yearId}/` +
+          `governanceSnapshots/${input.yearId}`,
+        status: "archived",
+        yearId: input.yearId,
+      }),
+      verifyIdToken: async () => createVendorToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          doubleConfirm: true,
+          instituteId: "inst_build_101",
+          yearId: "2026",
+        },
+        headers: {
+          "authorization": "Bearer build_101_vendor",
+          "user-agent": "node-test",
+        },
+        path: "/admin/academicYear/archive",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 200);
+    assert.equal((response.body as {code: string}).code, "OK");
+    assert.equal(
+      (response.body as {data: {bigQuery: {rowsExported: number}}})
+        .data.bigQuery.rowsExported,
+      12,
+    );
+  },
+);
+
+test(
+  "admin academic year archive handler requires double confirmation",
+  async () => {
+    const handler = createAdminAcademicYearArchiveHandler({
+      archiveAcademicYear: async () => {
+        throw new Error("archiveAcademicYear should not be called");
+      },
+      verifyIdToken: async () => createVendorToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          doubleConfirm: false,
+          instituteId: "inst_build_101",
+          yearId: "2026",
+        },
+        headers: {
+          authorization: "Bearer build_101_vendor",
+        },
+        path: "/admin/academicYear/archive",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 400);
+    assertStructuredError(
+      response.body,
+      "VALIDATION_ERROR",
+      "Field \"doubleConfirm\" must be true to confirm archive execution.",
+    );
+  },
+);
+
+test(
+  "admin academic year archive handler surfaces archive validation failures",
+  async () => {
+    const handler = createAdminAcademicYearArchiveHandler({
+      archiveAcademicYear: async () => {
+        throw new AcademicYearArchiveValidationError(
+          "VALIDATION_ERROR",
+          "Archive requires all active sessions to be closed before execution.",
+        );
+      },
+      verifyIdToken: async () => createVendorToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          doubleConfirm: true,
+          instituteId: "inst_build_101",
+          yearId: "2026",
+        },
+        headers: {
+          authorization: "Bearer build_101_vendor",
+        },
+        path: "/admin/academicYear/archive",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 400);
+    assertStructuredError(
+      response.body,
+      "VALIDATION_ERROR",
+      "Archive requires all active sessions to be closed before execution.",
     );
   },
 );

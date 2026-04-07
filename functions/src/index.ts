@@ -54,6 +54,9 @@ import {
 import {
   handleAdminGovernanceReportsRequest,
 } from "./api/adminGovernanceReports";
+import {
+  handleAdminAcademicYearArchiveRequest,
+} from "./api/adminAcademicYearArchive";
 import {runAssignmentOnCreate} from "./triggers/assignmentCreation";
 import {questionBankOnCreate} from "./triggers/questionIngestion";
 import {examSessionOnUpdate} from "./triggers/sessionSubmission";
@@ -131,6 +134,9 @@ export const adminGovernanceSnapshots = functions.https.onRequest(
 );
 export const adminGovernanceReports = functions.https.onRequest(
   handleAdminGovernanceReportsRequest,
+);
+export const adminAcademicYearArchive = functions.https.onRequest(
+  handleAdminAcademicYearArchiveRequest,
 );
 
 export const helloWorld = functions.https.onRequest(async (

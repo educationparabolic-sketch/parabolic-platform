@@ -289,6 +289,24 @@ export class AdministrativeActionLoggingService {
   }
 
   /**
+   * Logs institute-scoped academic year archival.
+   * @param {InstituteAdministrativeActionContext} context Action context.
+   * @return {Promise<AuditLogWriteResult>} Firestore write metadata.
+   */
+  public async logAcademicYearArchive(
+    context: InstituteAdministrativeActionContext,
+  ): Promise<AuditLogWriteResult> {
+    return this.logAdministrativeAction({
+      ...context,
+      actionType: "ARCHIVE_ACADEMIC_YEAR",
+      entityType: "academicYear",
+      scope: "institute",
+      targetCollection: "academicYears",
+      tenantId: context.instituteId,
+    });
+  }
+
+  /**
    * Logs institute-scoped assignment creation.
    * @param {InstituteAdministrativeActionContext} context Action context.
    * @return {Promise<AuditLogWriteResult>} Firestore write metadata.
