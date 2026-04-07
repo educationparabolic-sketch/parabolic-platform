@@ -230,7 +230,8 @@ const isActiveStudentRecord = (
   value: unknown,
 ): boolean => isRecord(value) &&
   normalizeOptionalString(value.status) === ACTIVE_STATUS &&
-  value.archived !== true;
+  value.archived !== true &&
+  value.deleted !== true;
 
 const resolveStudentEventDate = (
   beforeData: unknown,
@@ -797,7 +798,8 @@ export class UsageMeteringService {
    * Counts currently active students for a single institute.
    * @param {string} instituteId Institute scope for the count query.
    * @param {FirebaseFirestore.Transaction} transaction Firestore transaction.
-   * @return {Promise<number>} Active student count excluding archived records.
+   * @return {Promise<number>} Active student count excluding archived and
+   * soft-deleted records.
    */
   private async countActiveStudents(
     instituteId: string,
@@ -815,7 +817,10 @@ export class UsageMeteringService {
     const activeStudentsSnapshot = await transaction.get(activeStudentsQuery);
 
     return activeStudentsSnapshot.docs
-      .filter((snapshot) => snapshot.data().archived !== true)
+      .filter((snapshot) => {
+        const data = snapshot.data();
+        return data.archived !== true && data.deleted !== true;
+      })
       .length;
   }
 }

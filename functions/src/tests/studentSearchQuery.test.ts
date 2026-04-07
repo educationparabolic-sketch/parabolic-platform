@@ -63,6 +63,7 @@ const seedStudents = async (): Promise<void> => {
     }),
     firestore.doc(getStudentPath(studentIds[4])).set({
       batchId: "batch-c",
+      deleted: true,
       name: "Esha",
       status: "active",
       studentId: studentIds[4],
@@ -268,9 +269,43 @@ test(
 
     assert.deepEqual(
       result.students.map((student) => student.studentId),
-      ["student_build_53_5"],
+      [],
     );
-    assert.equal(result.students[0]?.metrics, null);
+    assert.equal(result.nextCursor, null);
+  },
+);
+
+test(
+  "searchStudents excludes soft-deleted students from metrics queries",
+  async () => {
+    await firestore.doc(getStudentPath(studentIds[0])).set({
+      batchId: "batch-a",
+      deleted: true,
+      name: "Aarav",
+      status: "active",
+      studentId: studentIds[0],
+    });
+
+    const result = await studentFilteringQueryService.searchStudents({
+      actorRole: "admin",
+      filter: {
+        riskState: "Stable",
+      },
+      instituteId,
+      limit: 10,
+      yearId,
+    });
+
+    assert.deepEqual(result.students, []);
+    assert.equal(result.nextCursor, null);
+
+    await firestore.doc(getStudentPath(studentIds[0])).set({
+      batchId: "batch-a",
+      deleted: false,
+      name: "Aarav",
+      status: "active",
+      studentId: studentIds[0],
+    });
   },
 );
 

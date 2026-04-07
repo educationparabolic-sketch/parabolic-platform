@@ -74,6 +74,7 @@
     "test:archive-pipeline": "GCLOUD_PROJECT=parabolic-platform-build-101-tests GOOGLE_CLOUD_PROJECT=parabolic-platform-build-101-tests NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none firebase emulators:exec --only firestore \"node --test lib/tests/archivePipeline.test.js\"",
     "test:data-retention-policy": "GCLOUD_PROJECT=parabolic-platform-build-102-tests GOOGLE_CLOUD_PROJECT=parabolic-platform-build-102-tests NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none firebase emulators:exec --only firestore \"node --test lib/tests/dataRetentionPolicy.test.js\"",
     "test:student-data-export": "GCLOUD_PROJECT=parabolic-platform-build-103-tests GOOGLE_CLOUD_PROJECT=parabolic-platform-build-103-tests NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none firebase emulators:exec --only firestore \"node --test lib/tests/studentDataExport.test.js\"",
+    "test:student-soft-delete": "GCLOUD_PROJECT=parabolic-platform-build-104-tests GOOGLE_CLOUD_PROJECT=parabolic-platform-build-104-tests NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none firebase emulators:exec --only firestore \"node --test lib/tests/studentSoftDelete.test.js\"",
     "test:run-analytics-initialization": "npm run build && node --test lib/tests/runAnalyticsInitialization.test.js",
     "test:usage-metering": "npm run build && node --test lib/tests/usageMetering.test.js",
     "test:tag-dictionary": "npm run build && node --test lib/tests/tagDictionary.test.js",

@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 103  
-Next Build: 104
+Completed Builds: 104  
+Next Build: 105
 
 Current Phase: Phase 21 — Archive & Data Lifecycle
 
@@ -3363,18 +3363,47 @@ Completed On
 
 ---
 
+## Build 104 — Student Soft Delete System
+
+Phase  
+Phase 21 — Archive & Data Lifecycle
+
+Summary  
+Implemented the safe student soft-delete workflow for compliance-driven data deletion requests.
+
+Components implemented:
+
+- Admin and vendor authorized student soft-delete API
+- Strongly typed student soft-delete request/result contracts
+- Student soft-delete service that marks `institutes/{instituteId}/students/{studentId}` with `deleted = true` idempotently
+- Immutable institute audit logging for `SOFT_DELETE_STUDENT` actions with before/after state capture
+- Usage metering integration updates so soft-deleted students are excluded from billing-active counts
+- Student filtering query integration updates so soft-deleted students are excluded from operational search results while preserving analytics joins and cursor behavior
+- Repeatable endpoint, emulator-backed soft-delete service, usage metering, and student search regression tests
+
+Result  
+Institutes can now satisfy student deletion requests through a soft-delete path that preserves session history and analytics integrity while removing deleted students from operational and billing-sensitive flows.
+
+Commit Reference  
+Build 104 — Student Soft Delete System implemented
+
+Completed On  
+2026-04-07
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 104
+Next Build Number: 105
 
 Phase  
 Phase 21 — Archive & Data Lifecycle
 
 Subsystem  
-Student Soft Delete System
+Data Tier Partition System
 
 Reference  
-3_Core_Architectures.md → Section 37.10 Data Deletion Requests
+3_Core_Architectures.md → Section 42.19 Data Partition Flow
 
 ---
 
@@ -3485,6 +3514,8 @@ Build | Phase | Status
 101 | Archive & Data Lifecycle | Completed
 102 | Archive & Data Lifecycle | Completed
 103 | Archive & Data Lifecycle | Completed
+104 | Archive & Data Lifecycle | Completed
+105 | Archive & Data Lifecycle | Pending
 104–150 | Remaining Phases | Pending
 
 ---

@@ -45,6 +45,7 @@ interface NormalizedStudentFilteringSort {
 
 interface StudentDocumentRecord {
   batchId?: unknown;
+  deleted?: unknown;
   name?: unknown;
   status?: unknown;
   studentId?: unknown;
@@ -469,6 +470,9 @@ const buildStudentCursor = (
   };
 };
 
+const isDeletedStudentRecord = (payload: StudentDocumentRecord): boolean =>
+  payload.deleted === true;
+
 const toResultItem = (
   studentSnapshot: FirebaseFirestore.DocumentSnapshot,
   metricsPayload?: StudentMetricsDocumentRecord,
@@ -618,46 +622,102 @@ export class StudentFilteringQueryService {
       paginationMode: "cursor",
       policyId: "studentsBatchSearch",
     });
-    let query: FirebaseFirestore.Query = this.firestore.collection(
-      searchDomain.collectionPath,
-    )
-      .where("batchId", "==", request.filter.batchId)
-      .orderBy("studentId", "asc");
+    const scanLimit = getMetricsScanLimit(limit);
+    let workingCursor = request.cursor;
+    const students: StudentFilteringResultItem[] = [];
+    let nextCursor: StudentFilteringCursor | null = null;
 
-    query = cursorPaginationService.applyToQuery(
-      query,
-      limit,
-      (paginatedQuery, activeCursor) =>
-        paginatedQuery.startAfter(activeCursor.sortValue),
-      undefined,
-      request.cursor,
-    );
+    while (students.length < limit) {
+      let query: FirebaseFirestore.Query = this.firestore.collection(
+        searchDomain.collectionPath,
+      )
+        .where("batchId", "==", request.filter.batchId)
+        .orderBy("studentId", "asc");
 
-    const querySnapshot = await query.get();
-    const page = cursorPaginationService.buildPage(
-      querySnapshot.docs,
-      limit,
-      buildStudentCursor,
-    );
-    const selectedDocuments = page.selectedDocuments;
-    const metricsReferences = selectedDocuments.map((studentSnapshot) =>
-      this.firestore.doc(
-        `institutes/${request.instituteId}/academicYears/${request.yearId}/` +
-        `studentYearMetrics/${studentSnapshot.id}`,
-      ),
-    );
-    const metricsSnapshots = metricsReferences.length > 0 ?
-      await this.firestore.getAll(...metricsReferences) :
-      [];
-    const metricsMap = new Map(
-      metricsSnapshots.map((snapshot) => [
-        snapshot.id,
-        snapshot.data() as StudentMetricsDocumentRecord | undefined,
-      ]),
-    );
-    const students = selectedDocuments.map((studentSnapshot) =>
-      toResultItem(studentSnapshot, metricsMap.get(studentSnapshot.id)),
-    );
+      query = cursorPaginationService.applyToQuery(
+        query,
+        scanLimit,
+        (paginatedQuery, activeCursor) =>
+          paginatedQuery.startAfter(activeCursor.sortValue),
+        MAX_SCAN_LIMIT,
+        workingCursor,
+      );
+
+      const querySnapshot = await query.get();
+      const page = cursorPaginationService.buildPage(
+        querySnapshot.docs,
+        scanLimit,
+        buildStudentCursor,
+        MAX_SCAN_LIMIT,
+      );
+      const selectedDocuments = page.selectedDocuments;
+
+      if (selectedDocuments.length === 0) {
+        nextCursor = null;
+        break;
+      }
+
+      let processedDocuments = 0;
+      let moreAvailable = page.hasMore;
+      const visibleDocuments: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+
+      for (const studentSnapshot of selectedDocuments) {
+        processedDocuments += 1;
+        const studentPayload =
+          (studentSnapshot.data() ?? {}) as StudentDocumentRecord;
+
+        nextCursor = buildStudentCursor(studentSnapshot);
+        moreAvailable =
+          processedDocuments < selectedDocuments.length || page.hasMore;
+
+        if (isDeletedStudentRecord(studentPayload)) {
+          continue;
+        }
+
+        visibleDocuments.push(studentSnapshot);
+
+        if (visibleDocuments.length >= limit - students.length) {
+          break;
+        }
+      }
+
+      const metricsReferences = visibleDocuments.map((studentSnapshot) =>
+        this.firestore.doc(
+          `institutes/${request.instituteId}/academicYears/${request.yearId}/` +
+          `studentYearMetrics/${studentSnapshot.id}`,
+        ),
+      );
+      const metricsSnapshots = metricsReferences.length > 0 ?
+        await this.firestore.getAll(...metricsReferences) :
+        [];
+      const metricsMap = new Map(
+        metricsSnapshots.map((snapshot) => [
+          snapshot.id,
+          snapshot.data() as StudentMetricsDocumentRecord | undefined,
+        ]),
+      );
+
+      students.push(
+        ...visibleDocuments.map((studentSnapshot) =>
+          toResultItem(studentSnapshot, metricsMap.get(studentSnapshot.id)),
+        ),
+      );
+
+      if (students.length >= limit) {
+        if (!moreAvailable) {
+          nextCursor = null;
+        }
+        break;
+      }
+
+      if (!nextCursor || !moreAvailable) {
+        nextCursor = null;
+        break;
+      }
+
+      workingCursor = nextCursor;
+    }
+
     this.logger.info("Student filtering query completed", {
       baseDomain: "students",
       batchFilterApplied: Boolean(request.filter.batchId),
@@ -669,7 +729,7 @@ export class StudentFilteringQueryService {
     });
 
     return {
-      nextCursor: page.nextCursor,
+      nextCursor,
       students,
     };
   }
@@ -786,6 +846,13 @@ export class StudentFilteringQueryService {
         const studentPayload =
           (studentSnapshot.data() ?? {}) as StudentDocumentRecord;
         const batchId = toOptionalString(studentPayload.batchId);
+
+        if (isDeletedStudentRecord(studentPayload)) {
+          nextCursor = buildMetricsCursor(metricsSnapshot, request.sort);
+          moreAvailable =
+            processedDocuments < selectedDocuments.length || queryHasMore;
+          continue;
+        }
 
         if (request.filter.batchId && batchId !== request.filter.batchId) {
           nextCursor = buildMetricsCursor(metricsSnapshot, request.sort);

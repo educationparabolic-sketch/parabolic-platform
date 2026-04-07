@@ -342,6 +342,86 @@ test(
 );
 
 test(
+  "recordStudentStatusChange removes soft-deleted students from billing " +
+    "counts",
+  async () => {
+    const instituteId = "inst_build_104_usage";
+    const studentId = "student_build_104_usage";
+    const cycleId = "2026-04";
+    const usageMeterPath = `institutes/${instituteId}/usageMeter/${cycleId}`;
+    const studentEventPath =
+      `institutes/${instituteId}/usageMeter/${cycleId}/studentEvents/` +
+      "event_build_104_student_delete";
+    const studentPath = `institutes/${instituteId}/students/${studentId}`;
+    const licensePath = `institutes/${instituteId}/license/main`;
+    const pricingPlanPath = "vendorConfig/pricingPlans/pricingPlans/L1";
+
+    await Promise.all([
+      deleteDocumentIfPresent(studentEventPath),
+      deleteDocumentIfPresent(usageMeterPath),
+      deleteDocumentIfPresent(studentPath),
+      deleteDocumentIfPresent(licensePath),
+      deleteDocumentIfPresent(pricingPlanPath),
+    ]);
+
+    await firestore.doc(licensePath).set({
+      activeStudentLimit: 5,
+      currentLayer: "L1",
+    });
+    await firestore.doc(pricingPlanPath).set({
+      basePriceMonthly: 100,
+      name: "Growth",
+      planId: "L1",
+      pricePerStudent: 5,
+      studentLimit: 5,
+    });
+
+    const beforeState = {
+      archived: false,
+      deleted: false,
+      status: "active",
+      studentId,
+      updatedAt: Timestamp.fromDate(new Date("2026-04-15T07:55:00.000Z")),
+    };
+    const afterState = {
+      archived: false,
+      deleted: true,
+      status: "active",
+      studentId,
+      updatedAt: Timestamp.fromDate(new Date("2026-04-15T08:00:00.000Z")),
+    };
+
+    await firestore.doc(studentPath).set(afterState);
+
+    const result = await usageMeteringService.recordStudentStatusChange(
+      {
+        eventId: "event_build_104_student_delete",
+        instituteId,
+        studentId,
+      },
+      beforeState,
+      afterState,
+    );
+
+    assert.equal(result.wasUpdated, true);
+
+    const usageMeterSnapshot = await firestore.doc(usageMeterPath).get();
+    const usageMeterData = usageMeterSnapshot.data();
+
+    assert.equal(usageMeterData?.activeStudentCount, 0);
+    assert.equal(usageMeterData?.projectedInvoiceAmount, 100);
+
+    await Promise.all([
+      deleteDocumentIfPresent(studentEventPath),
+      deleteDocumentIfPresent(usageMeterPath),
+      deleteDocumentIfPresent(studentPath),
+      deleteDocumentIfPresent(licensePath),
+      deleteDocumentIfPresent(pricingPlanPath),
+    ]);
+  },
+);
+
+test(
   "recordSessionExecutionUsage increments submitted session volume once per " +
     "session",
   async () => {

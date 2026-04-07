@@ -60,6 +60,9 @@ import {
 import {
   handleAdminStudentDataExportRequest,
 } from "./api/adminStudentDataExport";
+import {
+  handleAdminStudentSoftDeleteRequest,
+} from "./api/adminStudentSoftDelete";
 import {runAssignmentOnCreate} from "./triggers/assignmentCreation";
 import {questionBankOnCreate} from "./triggers/questionIngestion";
 import {examSessionOnUpdate} from "./triggers/sessionSubmission";
@@ -145,6 +148,9 @@ export const adminAcademicYearArchive = functions.https.onRequest(
 );
 export const adminStudentDataExport = functions.https.onRequest(
   handleAdminStudentDataExportRequest,
+);
+export const adminStudentSoftDelete = functions.https.onRequest(
+  handleAdminStudentSoftDeleteRequest,
 );
 
 export const helloWorld = functions.https.onRequest(async (

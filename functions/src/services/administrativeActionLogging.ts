@@ -325,6 +325,24 @@ export class AdministrativeActionLoggingService {
   }
 
   /**
+   * Logs institute-scoped student soft-delete actions.
+   * @param {InstituteAdministrativeActionContext} context Action context.
+   * @return {Promise<AuditLogWriteResult>} Firestore write metadata.
+   */
+  public async logStudentSoftDelete(
+    context: InstituteAdministrativeActionContext,
+  ): Promise<AuditLogWriteResult> {
+    return this.logAdministrativeAction({
+      ...context,
+      actionType: "SOFT_DELETE_STUDENT",
+      entityType: "student",
+      scope: "institute",
+      targetCollection: "students",
+      tenantId: context.instituteId,
+    });
+  }
+
+  /**
    * Logs institute-scoped assignment creation.
    * @param {InstituteAdministrativeActionContext} context Action context.
    * @return {Promise<AuditLogWriteResult>} Firestore write metadata.

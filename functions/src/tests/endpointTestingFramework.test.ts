@@ -63,6 +63,9 @@ import {
 import {
   createAdminStudentDataExportHandler,
 } from "../api/adminStudentDataExport";
+import {
+  createAdminStudentSoftDeleteHandler,
+} from "../api/adminStudentSoftDelete";
 import {SessionStartValidationError} from "../services/session";
 import {
   SimulationEnvironmentValidationError,
@@ -95,6 +98,9 @@ import {
 import {
   StudentDataExportValidationError,
 } from "../types/studentDataExport";
+import {
+  StudentSoftDeleteValidationError,
+} from "../types/studentSoftDelete";
 import {
   createMockRequest,
   createMockResponse,
@@ -569,6 +575,116 @@ test(
       response.body,
       "NOT_FOUND",
       "Student record was not found for export.",
+    );
+  },
+);
+
+test(
+  "admin student soft-delete handler accepts an admin request",
+  async () => {
+    const handler = createAdminStudentSoftDeleteHandler({
+      softDeleteStudent: async () => ({
+        alreadyDeleted: false,
+        analyticsPreserved: true,
+        deleted: true,
+        instituteId: "inst_build_104",
+        sessionHistoryPreserved: true,
+        studentId: "student_104",
+      }),
+      verifyIdToken: async () => createAdminToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          instituteId: "inst_build_104",
+          studentId: "student_104",
+        },
+        headers: {
+          authorization: "Bearer build_104_admin",
+        },
+        path: "/admin/students/soft-delete",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 200);
+    assert.equal((response.body as {code: string}).code, "OK");
+    assert.equal(
+      (response.body as {data: {studentId: string}}).data.studentId,
+      "student_104",
+    );
+  },
+);
+
+test(
+  "admin student soft-delete handler rejects teacher roles",
+  async () => {
+    const handler = createAdminStudentSoftDeleteHandler({
+      softDeleteStudent: async () => {
+        throw new Error("softDeleteStudent should not be called");
+      },
+      verifyIdToken: async () => createAdminToken({role: "teacher"}) as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          instituteId: "inst_build_104",
+          studentId: "student_104",
+        },
+        headers: {
+          authorization: "Bearer build_104_teacher",
+        },
+        path: "/admin/students/soft-delete",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 403);
+    assertStructuredError(
+      response.body,
+      "FORBIDDEN",
+      "Only admin and vendor roles can soft-delete student records.",
+    );
+  },
+);
+
+test(
+  "admin student soft-delete handler surfaces missing student failures",
+  async () => {
+    const handler = createAdminStudentSoftDeleteHandler({
+      softDeleteStudent: async () => {
+        throw new StudentSoftDeleteValidationError(
+          "NOT_FOUND",
+          "Student record was not found for soft delete.",
+        );
+      },
+      verifyIdToken: async () => createAdminToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+      createMockRequest({
+        body: {
+          instituteId: "inst_build_104",
+          studentId: "student_404",
+        },
+        headers: {
+          authorization: "Bearer build_104_missing_student",
+        },
+        path: "/admin/students/soft-delete",
+      }) as never,
+      response as never,
+    );
+
+    assert.equal(response.statusCode, 404);
+    assertStructuredError(
+      response.body,
+      "NOT_FOUND",
+      "Student record was not found for soft delete.",
     );
   },
 );
