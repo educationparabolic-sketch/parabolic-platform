@@ -60,6 +60,9 @@ import {
 import {
   createAdminAcademicYearArchiveHandler,
 } from "../api/adminAcademicYearArchive";
+import {
+  createAdminStudentDataExportHandler,
+} from "../api/adminStudentDataExport";
 import {SessionStartValidationError} from "../services/session";
 import {
   SimulationEnvironmentValidationError,
@@ -89,6 +92,9 @@ import {
 import {
   AcademicYearArchiveValidationError,
 } from "../types/archivePipeline";
+import {
+  StudentDataExportValidationError,
+} from "../types/studentDataExport";
 import {
   createMockRequest,
   createMockResponse,
@@ -126,6 +132,14 @@ const createDirectorToken = (overrides: Record<string, unknown> = {}) => ({
   licenseLayer: "L3",
   role: "director",
   uid: "director_build_89",
+  ...overrides,
+});
+
+const createAdminToken = (overrides: Record<string, unknown> = {}) => ({
+  instituteId: "inst_build_103",
+  licenseLayer: "L2",
+  role: "admin",
+  uid: "admin_build_103",
   ...overrides,
 });
 
@@ -426,6 +440,138 @@ test("exam start handler rejects invalid payloads", async () => {
     "Field \"runId\" must be a non-empty string.",
   );
 });
+
+test(
+  "admin student data export handler accepts an admin approval",
+  async () => {
+    const handler = createAdminStudentDataExportHandler({
+      generateExport: async () => ({
+        approvedBy: "admin_build_103",
+        download: {
+          accessContext: "dataExportDownload",
+          cdnPath: "inst_build_103/reports/2026/04/student_103-data-export.csv",
+          expiresAt: "2026-04-08T00:00:00.000Z",
+          expiresInSeconds: 86400,
+          signedUrl: "https://cdn.example.com/export.csv",
+        },
+        expiresAt: "2026-04-08T00:00:00.000Z",
+        exportHash: "hash_103",
+        generatedAt: "2026-04-07T00:00:00.000Z",
+        includeAiSummaries: true,
+        instituteId: "inst_build_103",
+        records: {
+          academicYearCount: 1,
+          aiSummaryCount: 1,
+          metricDocumentCount: 1,
+          sessionCount: 2,
+        },
+        requestedBy: "student_103",
+        storage: {
+          bucketName: "bucket-reports",
+          objectPath:
+          "inst_build_103/reports/2026/04/" +
+          "student_103-data-export.csv",
+        },
+        studentId: "student_103",
+      }),
+      verifyIdToken: async () => createAdminToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+    createMockRequest({
+      body: {
+        includeAiSummaries: true,
+        instituteId: "inst_build_103",
+        studentId: "student_103",
+      },
+      headers: {
+        authorization: "Bearer build_103_admin",
+      },
+      path: "/admin/students/data-export",
+    }) as never,
+    response as never,
+    );
+
+    assert.equal(response.statusCode, 200);
+    assert.equal((response.body as {code: string}).code, "OK");
+    assert.equal(
+      (response.body as {data: {studentId: string}}).data.studentId,
+      "student_103",
+    );
+  },
+);
+
+test(
+  "admin student data export handler rejects non-approver roles",
+  async () => {
+    const handler = createAdminStudentDataExportHandler({
+      generateExport: async () => {
+        throw new Error("generateExport should not be called");
+      },
+      verifyIdToken: async () => createAdminToken({role: "teacher"}) as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+    createMockRequest({
+      body: {
+        instituteId: "inst_build_103",
+        studentId: "student_103",
+      },
+      headers: {
+        authorization: "Bearer build_103_teacher",
+      },
+      path: "/admin/students/data-export",
+    }) as never,
+    response as never,
+    );
+
+    assert.equal(response.statusCode, 403);
+    assertStructuredError(
+      response.body,
+      "FORBIDDEN",
+      "Only admin, director, and vendor roles can approve data exports.",
+    );
+  },
+);
+
+test(
+  "admin student data export handler surfaces validation failures",
+  async () => {
+    const handler = createAdminStudentDataExportHandler({
+      generateExport: async () => {
+        throw new StudentDataExportValidationError(
+          "NOT_FOUND",
+          "Student record was not found for export.",
+        );
+      },
+      verifyIdToken: async () => createAdminToken() as never,
+    });
+    const response = createMockResponse();
+
+    await handler(
+    createMockRequest({
+      body: {
+        instituteId: "inst_build_103",
+        studentId: "student_404",
+      },
+      headers: {
+        authorization: "Bearer build_103_missing_student",
+      },
+      path: "/admin/students/data-export",
+    }) as never,
+    response as never,
+    );
+
+    assert.equal(response.statusCode, 404);
+    assertStructuredError(
+      response.body,
+      "NOT_FOUND",
+      "Student record was not found for export.",
+    );
+  },
+);
 
 test(
   "admin governance snapshots handler accepts an L3 director request",

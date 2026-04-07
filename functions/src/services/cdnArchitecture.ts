@@ -79,6 +79,8 @@ const resolveReportFileName = (
     return `governance.${extension}`;
   case "analyticsExport":
     return `analytics-export.${extension}`;
+  case "studentDataExport":
+    return `${requirePathSegment(studentId, "studentId")}-data-export.csv`;
   default: {
     const exhaustiveReportKind: never = reportKind;
     throw new Error(`Unsupported report asset kind: ${exhaustiveReportKind}`);
@@ -338,6 +340,16 @@ export class CdnArchitectureService {
     ) {
       throw new CdnArchitectureValidationError(
         "Report kind \"studentMonthlyStatement\" must use the \"pdf\" " +
+        "extension.",
+      );
+    }
+
+    if (
+      request.reportKind === "studentDataExport" &&
+      extension !== "csv"
+    ) {
+      throw new CdnArchitectureValidationError(
+        "Report kind \"studentDataExport\" must use the \"csv\" " +
         "extension.",
       );
     }

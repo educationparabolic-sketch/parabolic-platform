@@ -166,3 +166,47 @@ test("session-level administrative action data is rejected", async () => {
     },
   );
 });
+
+test(
+  "logStudentDataExport stores institute export audit metadata",
+  async () => {
+    const auditId = "build-103-student-data-export";
+    const instituteId = "inst_103";
+    const auditPath = `institutes/${instituteId}/auditLogs/${auditId}`;
+
+    await deleteDocumentIfPresent(auditPath);
+
+    const result =
+      await administrativeActionLoggingService.logStudentDataExport({
+        actorId: "admin_103",
+        actorRole: "admin",
+        auditId,
+        entityId: "student_103",
+        instituteId,
+        metadata: {
+          approvedBy: "admin_103",
+          expiresAt: "2026-04-08T00:00:00.000Z",
+          exportHash: "abc123",
+          requestedBy: "student_103",
+        },
+      });
+
+    assert.equal(result.path, auditPath);
+
+    const snapshot = await firestore.doc(auditPath).get();
+    const auditLog = snapshot.data();
+
+    assert.equal(auditLog?.actionType, "DATA_EXPORT");
+    assert.equal(auditLog?.entityType, "student");
+    assert.equal(auditLog?.targetCollection, "students");
+    assert.equal(auditLog?.targetId, "student_103");
+    assert.deepEqual(auditLog?.metadata, {
+      approvedBy: "admin_103",
+      expiresAt: "2026-04-08T00:00:00.000Z",
+      exportHash: "abc123",
+      requestedBy: "student_103",
+    });
+
+    await deleteDocumentIfPresent(auditPath);
+  },
+);

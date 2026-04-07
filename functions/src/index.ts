@@ -57,6 +57,9 @@ import {
 import {
   handleAdminAcademicYearArchiveRequest,
 } from "./api/adminAcademicYearArchive";
+import {
+  handleAdminStudentDataExportRequest,
+} from "./api/adminStudentDataExport";
 import {runAssignmentOnCreate} from "./triggers/assignmentCreation";
 import {questionBankOnCreate} from "./triggers/questionIngestion";
 import {examSessionOnUpdate} from "./triggers/sessionSubmission";
@@ -139,6 +142,9 @@ export const adminGovernanceReports = functions.https.onRequest(
 );
 export const adminAcademicYearArchive = functions.https.onRequest(
   handleAdminAcademicYearArchiveRequest,
+);
+export const adminStudentDataExport = functions.https.onRequest(
+  handleAdminStudentDataExportRequest,
 );
 
 export const helloWorld = functions.https.onRequest(async (

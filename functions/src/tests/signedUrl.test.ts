@@ -14,6 +14,10 @@ test("initializeService returns deterministic signed URL policies", () => {
   assert.equal(result.keyName, "build_73_key");
   assert.equal(result.contextPolicies.examSession.expiresInSeconds, 7200);
   assert.equal(result.contextPolicies.dashboardView.expiresInSeconds, 1800);
+  assert.equal(
+    result.contextPolicies.dataExportDownload.expiresInSeconds,
+    86400,
+  );
 });
 
 test(
@@ -67,6 +71,31 @@ test("generateReportAssetSignedUrl signs dashboard report URLs", () => {
     "/inst_build_73/reports/2026/03/stu_73.pdf",
   );
   assert.equal(signedUrl.searchParams.get("KeyName"), "reports_key");
+});
+
+test("generateReportAssetSignedUrl signs student data export URLs", () => {
+  const result = signedUrlService.generateReportAssetSignedUrl({
+    accessContext: "dataExportDownload",
+    extension: "csv",
+    instituteId: "inst_build_103",
+    month: 4,
+    reportKind: "studentDataExport",
+    studentId: "stu_103",
+    year: 2026,
+  }, {
+    cdnBaseUrl: "https://cdn.example.com",
+    signedUrlKeyName: "reports_key",
+    signedUrlKeyValue: TEST_SIGNING_KEY,
+  });
+
+  const signedUrl = new URL(result.signedUrl);
+
+  assert.equal(result.accessContext, "dataExportDownload");
+  assert.equal(result.expiresInSeconds, 86400);
+  assert.equal(
+    signedUrl.pathname,
+    "/inst_build_103/reports/2026/04/stu_103-data-export.csv",
+  );
 });
 
 test(

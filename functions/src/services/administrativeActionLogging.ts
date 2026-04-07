@@ -307,6 +307,24 @@ export class AdministrativeActionLoggingService {
   }
 
   /**
+   * Logs institute-scoped student data export approvals.
+   * @param {InstituteAdministrativeActionContext} context Action context.
+   * @return {Promise<AuditLogWriteResult>} Firestore write metadata.
+   */
+  public async logStudentDataExport(
+    context: InstituteAdministrativeActionContext,
+  ): Promise<AuditLogWriteResult> {
+    return this.logAdministrativeAction({
+      ...context,
+      actionType: "DATA_EXPORT",
+      entityType: "student",
+      scope: "institute",
+      targetCollection: "students",
+      tenantId: context.instituteId,
+    });
+  }
+
+  /**
    * Logs institute-scoped assignment creation.
    * @param {InstituteAdministrativeActionContext} context Action context.
    * @return {Promise<AuditLogWriteResult>} Firestore write metadata.

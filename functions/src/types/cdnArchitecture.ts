@@ -12,7 +12,8 @@ export type QuestionAssetExtension = "png" | "webp" | "pdf";
 export type ReportAssetKind =
   "studentMonthlyStatement" |
   "governanceReport" |
-  "analyticsExport";
+  "analyticsExport" |
+  "studentDataExport";
 
 export interface CdnBucketDefinition {
   bucketKey: AssetBucketKey;

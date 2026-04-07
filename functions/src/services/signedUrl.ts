@@ -16,6 +16,7 @@ import {createLogger} from "./logging";
 
 const DEFAULT_SIGNED_URL_KEY_NAME = "cdn-signing-key";
 const DASHBOARD_VIEW_EXPIRY_SECONDS = 30 * 60;
+const DATA_EXPORT_DOWNLOAD_EXPIRY_SECONDS = 24 * 60 * 60;
 const EXAM_SESSION_EXPIRY_SECONDS = 2 * 60 * 60;
 const RESERVED_SIGNED_URL_QUERY_PARAMETERS = new Set([
   "Expires",
@@ -62,6 +63,10 @@ const buildContextPolicies = () => ({
   dashboardView: {
     accessContext: "dashboardView",
     expiresInSeconds: DASHBOARD_VIEW_EXPIRY_SECONDS,
+  },
+  dataExportDownload: {
+    accessContext: "dataExportDownload",
+    expiresInSeconds: DATA_EXPORT_DOWNLOAD_EXPIRY_SECONDS,
   },
   examSession: {
     accessContext: "examSession",
