@@ -65,6 +65,7 @@ import {studentYearMetricsOnWrite} from "./triggers/studentYearMetrics";
 import {testTemplateOnCreate} from "./triggers/templateCreation";
 import {governanceSnapshotMonthly} from "./triggers/governanceSnapshot";
 import {billingSnapshotMonthly} from "./triggers/billingSnapshot";
+import {dataRetentionPolicyDaily} from "./triggers/dataRetentionPolicy";
 import {loadEnvironmentConfig} from "./utils/environment";
 
 registerGlobalErrorHandlers();
@@ -77,6 +78,7 @@ export {studentYearMetricsOnWrite};
 export {testTemplateOnCreate};
 export {governanceSnapshotMonthly};
 export {billingSnapshotMonthly};
+export {dataRetentionPolicyDaily};
 export const examStart = functions.https.onRequest(handleExamStartRequest);
 export const examSessionAnswers = functions.https.onRequest(
   handleExamSessionAnswersRequest,
