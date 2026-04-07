@@ -1,5 +1,6 @@
 import {FieldValue} from "firebase-admin/firestore";
 import {createLogger} from "./logging";
+import {dataTierPartitionService} from "./dataTierPartition";
 import {getFirestore} from "../utils/firebaseAdmin";
 import {
   SubmissionContext,
@@ -738,9 +739,13 @@ export class SubmissionService {
       `${INSTITUTES_COLLECTION}/${instituteId}/` +
       `${ACADEMIC_YEARS_COLLECTION}/${yearId}/` +
       `${RUNS_COLLECTION}/${runId}`;
+    const academicYearPath =
+      `${INSTITUTES_COLLECTION}/${instituteId}/` +
+      `${ACADEMIC_YEARS_COLLECTION}/${yearId}`;
 
     const sessionReference = this.firestore.doc(sessionPath);
     const runReference = this.firestore.doc(runPath);
+    const academicYearReference = this.firestore.doc(academicYearPath);
 
     const idempotentResult = await this.acquireSubmissionLock(
       sessionReference,
@@ -772,8 +777,30 @@ export class SubmissionService {
     try {
       const result = await this.firestore.runTransaction(
         async (transaction) => {
-          const sessionSnapshot = await transaction.get(sessionReference);
+          const [academicYearSnapshot, sessionSnapshot] = await Promise.all([
+            transaction.get(academicYearReference),
+            transaction.get(sessionReference),
+          ]);
+          const academicYearData = academicYearSnapshot.data();
           const sessionData = sessionSnapshot.data();
+
+          if (
+            !academicYearSnapshot.exists ||
+            !isPlainObject(academicYearData)
+          ) {
+            throw new SubmissionValidationError(
+              "NOT_FOUND",
+              `Academic year "${yearId}" does not exist.`,
+            );
+          }
+
+          dataTierPartitionService.assertOperationalAcademicYearAccess({
+            operation: "session submission",
+            partition: dataTierPartitionService.buildAcademicYearPartition(
+              academicYearReference.path,
+              academicYearData,
+            ),
+          });
 
           if (!sessionSnapshot.exists || !isPlainObject(sessionData)) {
             throw new SubmissionValidationError(

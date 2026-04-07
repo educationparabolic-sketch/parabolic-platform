@@ -12,6 +12,7 @@ import {
   LicenseLayer,
 } from "../types/assignmentCreation";
 import {DEFAULT_RISK_MODEL_VERSION} from "../types/riskEngine";
+import {dataTierPartitionService} from "./dataTierPartition";
 import {
   TemplateDifficultyDistribution,
   TemplatePhaseConfigSnapshot,
@@ -468,6 +469,9 @@ export class AssignmentCreationService {
       `${ACADEMIC_YEARS_COLLECTION}/${yearId}/` +
       `${RUNS_COLLECTION}/${runId}`;
     const institutePath = `${INSTITUTES_COLLECTION}/${instituteId}`;
+    const academicYearPath =
+      `${INSTITUTES_COLLECTION}/${instituteId}/` +
+      `${ACADEMIC_YEARS_COLLECTION}/${yearId}`;
     const testPath =
       `${INSTITUTES_COLLECTION}/${instituteId}/` +
       `${TESTS_COLLECTION}/${testId}`;
@@ -479,6 +483,7 @@ export class AssignmentCreationService {
       `${LICENSE_COLLECTION}/current`;
     const runReference = this.firestore.doc(runPath);
     const instituteReference = this.firestore.doc(institutePath);
+    const academicYearReference = this.firestore.doc(academicYearPath);
     const testReference = this.firestore.doc(testPath);
     const recipientReferences = recipientStudentIds.map((studentId) =>
       this.firestore.doc(
@@ -490,12 +495,14 @@ export class AssignmentCreationService {
     const licenseCurrentReference = this.firestore.doc(licenseCurrentPath);
     const [
       instituteSnapshot,
+      academicYearSnapshot,
       testSnapshot,
       licenseMainSnapshot,
       licenseCurrentSnapshot,
       ...studentSnapshots
     ] = await this.firestore.getAll(
       instituteReference,
+      academicYearReference,
       testReference,
       licenseMainReference,
       licenseCurrentReference,
@@ -507,6 +514,23 @@ export class AssignmentCreationService {
         `Institute "${instituteId}" does not exist.`,
       );
     }
+
+    if (
+      !academicYearSnapshot.exists ||
+      !isPlainObject(academicYearSnapshot.data())
+    ) {
+      throw new AssignmentCreationValidationError(
+        `Academic year "${yearId}" does not exist.`,
+      );
+    }
+
+    dataTierPartitionService.assertOperationalAcademicYearAccess({
+      operation: "assignment creation",
+      partition: dataTierPartitionService.buildAcademicYearPartition(
+        academicYearReference.path,
+        academicYearSnapshot.data(),
+      ),
+    });
 
     if (!testSnapshot.exists) {
       throw new AssignmentCreationValidationError(

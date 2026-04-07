@@ -41,6 +41,18 @@ const deleteDocumentIfPresent = async (path: string): Promise<void> => {
   }
 };
 
+const seedAcademicYear = async (
+  instituteId: string,
+  yearId: string,
+  status = "active",
+): Promise<void> => {
+  await firestore.doc(
+    `institutes/${instituteId}/academicYears/${yearId}`,
+  ).set({
+    status,
+  });
+};
+
 const templateSnapshotFixture = {
   difficultyDistribution: {
     easy: 2,
@@ -77,6 +89,8 @@ test(
     const runId = "run_build_21";
     const studentIds = ["student_build_21_1", "student_build_21_2"];
     const institutePath = `institutes/${instituteId}`;
+    const academicYearPath =
+      `institutes/${instituteId}/academicYears/${yearId}`;
     const testPath = `institutes/${instituteId}/tests/${testId}`;
     const runPath =
       `institutes/${instituteId}/academicYears/${yearId}/runs/${runId}`;
@@ -95,6 +109,7 @@ test(
       calibrationVersion: "cal_build_23_success",
       instituteId,
     });
+    await seedAcademicYear(instituteId, yearId);
     await firestore.doc(testPath).set({
       allowedModes: ["Operational", "Diagnostic", "Controlled", "Hard"],
       difficultyDistribution: templateSnapshotFixture.difficultyDistribution,
@@ -187,6 +202,7 @@ test(
     assert.equal(templateData?.totalRuns, 1);
 
     await deleteDocumentIfPresent(institutePath);
+    await deleteDocumentIfPresent(academicYearPath);
     await deleteDocumentIfPresent(testPath);
     await deleteDocumentIfPresent(runPath);
     await deleteDocumentIfPresent(licensePath);
@@ -203,6 +219,8 @@ test(
     const runId = "run_build_21_invalid_template";
     const studentId = "student_build_21_template_check";
     const institutePath = `institutes/${instituteId}`;
+    const academicYearPath =
+      `institutes/${instituteId}/academicYears/${yearId}`;
     const testPath = `institutes/${instituteId}/tests/${testId}`;
     const runPath =
       `institutes/${instituteId}/academicYears/${yearId}/runs/${runId}`;
@@ -219,6 +237,7 @@ test(
       calibrationVersion: "cal_build_23_invalid_template",
       instituteId,
     });
+    await seedAcademicYear(instituteId, yearId);
     await firestore.doc(testPath).set({
       difficultyDistribution: templateSnapshotFixture.difficultyDistribution,
       phaseConfigSnapshot: templateSnapshotFixture.phaseConfigSnapshot,
@@ -261,6 +280,7 @@ test(
     );
 
     await deleteDocumentIfPresent(institutePath);
+    await deleteDocumentIfPresent(academicYearPath);
     await deleteDocumentIfPresent(testPath);
     await deleteDocumentIfPresent(runPath);
     await deleteDocumentIfPresent(licensePath);
@@ -277,6 +297,8 @@ test(
     const runId = "run_build_21_invalid_recipients";
     const studentId = "student_build_21_inactive";
     const institutePath = `institutes/${instituteId}`;
+    const academicYearPath =
+      `institutes/${instituteId}/academicYears/${yearId}`;
     const testPath = `institutes/${instituteId}/tests/${testId}`;
     const runPath =
       `institutes/${instituteId}/academicYears/${yearId}/runs/${runId}`;
@@ -293,6 +315,7 @@ test(
       calibrationVersion: "cal_build_23_invalid_recipient",
       instituteId,
     });
+    await seedAcademicYear(instituteId, yearId);
     await firestore.doc(testPath).set({
       difficultyDistribution: templateSnapshotFixture.difficultyDistribution,
       phaseConfigSnapshot: templateSnapshotFixture.phaseConfigSnapshot,
@@ -335,6 +358,7 @@ test(
     );
 
     await deleteDocumentIfPresent(institutePath);
+    await deleteDocumentIfPresent(academicYearPath);
     await deleteDocumentIfPresent(testPath);
     await deleteDocumentIfPresent(runPath);
     await deleteDocumentIfPresent(licensePath);
@@ -351,6 +375,8 @@ test(
     const runId = "run_build_21_license_restriction";
     const studentId = "student_build_21_license_restriction";
     const institutePath = `institutes/${instituteId}`;
+    const academicYearPath =
+      `institutes/${instituteId}/academicYears/${yearId}`;
     const testPath = `institutes/${instituteId}/tests/${testId}`;
     const runPath =
       `institutes/${instituteId}/academicYears/${yearId}/runs/${runId}`;
@@ -367,6 +393,7 @@ test(
       calibrationVersion: "cal_build_23_license_restriction",
       instituteId,
     });
+    await seedAcademicYear(instituteId, yearId);
     await firestore.doc(testPath).set({
       allowedModes: ["Operational", "Diagnostic", "Controlled"],
       difficultyDistribution: templateSnapshotFixture.difficultyDistribution,
@@ -409,6 +436,7 @@ test(
     );
 
     await deleteDocumentIfPresent(institutePath);
+    await deleteDocumentIfPresent(academicYearPath);
     await deleteDocumentIfPresent(testPath);
     await deleteDocumentIfPresent(runPath);
     await deleteDocumentIfPresent(licensePath);
@@ -425,6 +453,8 @@ test(
     const runId = "run_build_22_missing_snapshot";
     const studentId = "student_build_22_missing_snapshot";
     const institutePath = `institutes/${instituteId}`;
+    const academicYearPath =
+      `institutes/${instituteId}/academicYears/${yearId}`;
     const testPath = `institutes/${instituteId}/tests/${testId}`;
     const runPath =
       `institutes/${instituteId}/academicYears/${yearId}/runs/${runId}`;
@@ -441,6 +471,7 @@ test(
       calibrationVersion: "cal_build_23_missing_snapshot",
       instituteId,
     });
+    await seedAcademicYear(instituteId, yearId);
     await firestore.doc(testPath).set({
       status: "ready",
       testId,
@@ -478,6 +509,7 @@ test(
     );
 
     await deleteDocumentIfPresent(institutePath);
+    await deleteDocumentIfPresent(academicYearPath);
     await deleteDocumentIfPresent(testPath);
     await deleteDocumentIfPresent(runPath);
     await deleteDocumentIfPresent(licensePath);
@@ -495,6 +527,8 @@ test(
     const runId = "run_build_23_missing_calibration";
     const studentId = "student_build_23_missing_calibration";
     const institutePath = `institutes/${instituteId}`;
+    const academicYearPath =
+      `institutes/${instituteId}/academicYears/${yearId}`;
     const testPath = `institutes/${instituteId}/tests/${testId}`;
     const runPath =
       `institutes/${instituteId}/academicYears/${yearId}/runs/${runId}`;
@@ -511,6 +545,7 @@ test(
       instituteId,
       name: "Calibration Missing Institute",
     });
+    await seedAcademicYear(instituteId, yearId);
     await firestore.doc(testPath).set({
       difficultyDistribution: templateSnapshotFixture.difficultyDistribution,
       phaseConfigSnapshot: templateSnapshotFixture.phaseConfigSnapshot,
@@ -552,6 +587,85 @@ test(
     );
 
     await deleteDocumentIfPresent(institutePath);
+    await deleteDocumentIfPresent(academicYearPath);
+    await deleteDocumentIfPresent(testPath);
+    await deleteDocumentIfPresent(runPath);
+    await deleteDocumentIfPresent(licensePath);
+    await deleteDocumentIfPresent(studentPath);
+  },
+);
+
+test(
+  "processAssignmentCreated rejects archived academic years",
+  async () => {
+    const instituteId = "inst_build_105_assignment_archived";
+    const yearId = "2025";
+    const testId = "test_build_105_assignment_archived";
+    const runId = "run_build_105_assignment_archived";
+    const studentId = "student_build_105_assignment_archived";
+    const institutePath = `institutes/${instituteId}`;
+    const academicYearPath =
+      `institutes/${instituteId}/academicYears/${yearId}`;
+    const testPath = `institutes/${instituteId}/tests/${testId}`;
+    const runPath =
+      `institutes/${instituteId}/academicYears/${yearId}/runs/${runId}`;
+    const licensePath = `institutes/${instituteId}/license/main`;
+    const studentPath = `institutes/${instituteId}/students/${studentId}`;
+
+    await deleteDocumentIfPresent(institutePath);
+    await deleteDocumentIfPresent(testPath);
+    await deleteDocumentIfPresent(runPath);
+    await deleteDocumentIfPresent(licensePath);
+    await deleteDocumentIfPresent(studentPath);
+
+    await firestore.doc(institutePath).set({
+      calibrationVersion: "cal_build_105_archived",
+      instituteId,
+    });
+    await seedAcademicYear(instituteId, yearId, "archived");
+    await firestore.doc(testPath).set({
+      difficultyDistribution: templateSnapshotFixture.difficultyDistribution,
+      phaseConfigSnapshot: templateSnapshotFixture.phaseConfigSnapshot,
+      questionIds: templateSnapshotFixture.questionIds,
+      status: "ready",
+      testId,
+      timingProfile: templateSnapshotFixture.timingProfile,
+      version: 1,
+    });
+    await firestore.doc(licensePath).set({
+      currentLayer: "L0",
+      featureFlags: {
+        controlledMode: true,
+        hardMode: true,
+      },
+    });
+    await firestore.doc(studentPath).set({
+      status: "active",
+      studentId,
+    });
+    await firestore.doc(runPath).set({
+      endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
+      mode: "Operational",
+      recipientStudentIds: [studentId],
+      runId,
+      startWindow: Timestamp.fromMillis(Date.now() + 30 * 60 * 1000),
+      testId,
+    });
+
+    await assert.rejects(
+      assignmentCreationService.processAssignmentCreated(
+        {instituteId, runId, yearId},
+        (await firestore.doc(runPath).get()).data(),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /cannot be used for assignment creation/i);
+        return true;
+      },
+    );
+
+    await deleteDocumentIfPresent(institutePath);
+    await deleteDocumentIfPresent(academicYearPath);
     await deleteDocumentIfPresent(testPath);
     await deleteDocumentIfPresent(runPath);
     await deleteDocumentIfPresent(licensePath);

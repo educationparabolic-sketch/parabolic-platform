@@ -4,6 +4,7 @@ import {
 } from "firebase-admin/firestore";
 import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
 import {createLogger} from "./logging";
+import {dataTierPartitionService} from "./dataTierPartition";
 import {
   SessionDocumentInitializationContext,
   SessionDocumentInitializationRecord,
@@ -408,6 +409,10 @@ export class SessionService {
       `${INSTITUTES_COLLECTION}/${instituteId}/` +
       `${STUDENTS_COLLECTION}/${studentId}`,
     );
+    const academicYearReference = this.firestore.doc(
+      `${INSTITUTES_COLLECTION}/${instituteId}/` +
+      `${ACADEMIC_YEARS_COLLECTION}/${yearId}`,
+    );
     const licenseMainReference = this.firestore.doc(
       `${INSTITUTES_COLLECTION}/${instituteId}/${LICENSE_COLLECTION}/main`,
     );
@@ -431,15 +436,33 @@ export class SessionService {
       const [
         runSnapshot,
         studentSnapshot,
+        academicYearSnapshot,
         licenseMainSnapshot,
         licenseCurrentSnapshot,
       ] = await Promise.all([
         transaction.get(runReference),
         transaction.get(studentReference),
+        transaction.get(academicYearReference),
         transaction.get(licenseMainReference),
         transaction.get(licenseCurrentReference),
       ]);
+      const academicYearData = academicYearSnapshot.data();
       const runData = runSnapshot.data();
+
+      if (!academicYearSnapshot.exists || !isPlainObject(academicYearData)) {
+        throw new SessionStartValidationError(
+          "NOT_FOUND",
+          `Academic year "${yearId}" does not exist.`,
+        );
+      }
+
+      dataTierPartitionService.assertOperationalAcademicYearAccess({
+        operation: "session start",
+        partition: dataTierPartitionService.buildAcademicYearPartition(
+          academicYearReference.path,
+          academicYearData,
+        ),
+      });
 
       if (!runSnapshot.exists || !isPlainObject(runData)) {
         throw new SessionStartValidationError(

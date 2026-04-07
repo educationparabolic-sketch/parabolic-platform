@@ -22,6 +22,8 @@ const INSTITUTE_ID = "inst_build_36";
 const YEAR_ID = "2026";
 const RUN_ID = "run_build_36";
 const STUDENT_ID = "student_build_36";
+const ACADEMIC_YEAR_PATH =
+  `institutes/${INSTITUTE_ID}/academicYears/${YEAR_ID}`;
 const SESSION_ROOT_PATH =
   `institutes/${INSTITUTE_ID}/academicYears/${YEAR_ID}/` +
   `runs/${RUN_ID}/sessions`;
@@ -66,6 +68,9 @@ const seedQuestion = async (
 };
 
 const seedRun = async (): Promise<void> => {
+  await firestore.doc(ACADEMIC_YEAR_PATH).set({
+    status: "active",
+  });
   await firestore
     .doc(`institutes/${INSTITUTE_ID}/academicYears/${YEAR_ID}/runs/${RUN_ID}`)
     .set({
@@ -204,6 +209,7 @@ test.after(async () => {
     deleteIfPresent(
       `institutes/${INSTITUTE_ID}/academicYears/${YEAR_ID}/runs/${RUN_ID}`,
     ),
+    deleteIfPresent(ACADEMIC_YEAR_PATH),
   ]);
 
   await getFirebaseAdminApp().delete();

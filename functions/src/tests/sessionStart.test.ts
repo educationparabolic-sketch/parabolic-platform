@@ -33,6 +33,18 @@ const deleteDocumentIfPresent = async (path: string): Promise<void> => {
   }
 };
 
+const seedAcademicYear = async (
+  instituteId: string,
+  yearId: string,
+  status = "active",
+): Promise<void> => {
+  await firestore.doc(
+    `institutes/${instituteId}/academicYears/${yearId}`,
+  ).set({
+    status,
+  });
+};
+
 test.after(async () => {
   await getFirebaseAdminApp().delete();
 });
@@ -64,6 +76,7 @@ test(
     await deleteDocumentIfPresent(runPath);
 
     await firestore.doc(institutePath).set({instituteId});
+    await seedAcademicYear(instituteId, yearId);
     await firestore.doc(studentPath).set({status: "active", studentId});
     await firestore.doc(licensePath).set({currentLayer: "L1"});
     await firestore.doc(questionEasyPath).set({difficulty: "Easy"});
@@ -188,6 +201,7 @@ test(
     await deleteDocumentIfPresent(runPath);
 
     await firestore.doc(institutePath).set({instituteId});
+    await seedAcademicYear(instituteId, yearId);
     await firestore.doc(studentPath).set({status: "active", studentId});
     await firestore.doc(licensePath).set({currentLayer: "L1"});
     await firestore.doc(runPath).set({
@@ -244,6 +258,7 @@ test(
     await deleteDocumentIfPresent(runPath);
 
     await firestore.doc(institutePath).set({instituteId});
+    await seedAcademicYear(instituteId, yearId);
     await firestore.doc(studentPath).set({status: "active", studentId});
     await firestore.doc(licensePath).set({currentLayer: "L1"});
     await firestore.doc(runPath).set({
@@ -302,6 +317,7 @@ test(
     await deleteDocumentIfPresent(runPath);
 
     await firestore.doc(institutePath).set({instituteId});
+    await seedAcademicYear(instituteId, yearId);
     await firestore.doc(studentPath).set({status: "active", studentId});
     await firestore.doc(licensePath).set({currentLayer: "L1"});
     await firestore.doc(runPath).set({
@@ -361,6 +377,7 @@ test(
     await deleteDocumentIfPresent(runPath);
 
     await firestore.doc(institutePath).set({instituteId});
+    await seedAcademicYear(instituteId, yearId);
     await firestore.doc(studentPath).set({status: "active", studentId});
     await firestore.doc(licensePath).set({currentLayer: "L1"});
     await firestore.doc(runPath).set({
@@ -416,6 +433,7 @@ test(
     await deleteDocumentIfPresent(runPath);
 
     await firestore.doc(institutePath).set({instituteId});
+    await seedAcademicYear(instituteId, yearId);
     await firestore.doc(studentPath).set({status: "active", studentId});
     await firestore.doc(licensePath).set({currentLayer: "L1"});
     await firestore.doc(runPath).set({
@@ -448,6 +466,63 @@ test(
     );
 
     await deleteDocumentIfPresent(existingSessionPath);
+    await deleteDocumentIfPresent(runPath);
+    await deleteDocumentIfPresent(licensePath);
+    await deleteDocumentIfPresent(studentPath);
+    await deleteDocumentIfPresent(institutePath);
+  },
+);
+
+test(
+  "startSession rejects archived academic years from operational access",
+  async () => {
+    const sessionService = createSessionServiceForTests();
+    const instituteId = "inst_build_105_archived_year";
+    const yearId = "2025";
+    const runId = "run_build_105_archived_year";
+    const studentId = "student_build_105_archived_year";
+    const institutePath = `institutes/${instituteId}`;
+    const studentPath = `${institutePath}/students/${studentId}`;
+    const licensePath = `${institutePath}/license/main`;
+    const runPath =
+      `${institutePath}/academicYears/${yearId}/runs/${runId}`;
+
+    await deleteDocumentIfPresent(institutePath);
+    await deleteDocumentIfPresent(studentPath);
+    await deleteDocumentIfPresent(licensePath);
+    await deleteDocumentIfPresent(runPath);
+
+    await firestore.doc(institutePath).set({instituteId});
+    await seedAcademicYear(instituteId, yearId, "archived");
+    await firestore.doc(studentPath).set({status: "active", studentId});
+    await firestore.doc(licensePath).set({currentLayer: "L1"});
+    await firestore.doc(runPath).set({
+      endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
+      mode: "Diagnostic",
+      questionIds: ["q_build_31_easy"],
+      recipientStudentIds: [studentId],
+      runId,
+      startWindow: Timestamp.fromMillis(Date.now() - 5 * 60 * 1000),
+      status: "scheduled",
+      templateVersion: "7",
+      timingProfileSnapshot: timingProfileSnapshotFixture,
+    });
+
+    await assert.rejects(
+      sessionService.startSession({
+        instituteId,
+        runId,
+        studentId,
+        studentUid: `uid_${studentId}`,
+        yearId,
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.match(error.message, /cannot be used for session start/i);
+        return true;
+      },
+    );
+
     await deleteDocumentIfPresent(runPath);
     await deleteDocumentIfPresent(licensePath);
     await deleteDocumentIfPresent(studentPath);

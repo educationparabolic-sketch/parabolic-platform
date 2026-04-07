@@ -1,6 +1,7 @@
 import {createLogger} from "./logging";
 import {getFirestore} from "../utils/firebaseAdmin";
 import {searchArchitectureService} from "./searchArchitecture";
+import {dataTierPartitionService} from "./dataTierPartition";
 import {
   StudentFilteringBaseDomain,
   StudentFilteringCursor,
@@ -538,6 +539,14 @@ export class StudentFilteringQueryService {
       "instituteId",
     );
     const yearId = normalizeRequiredString(request.yearId, "yearId");
+    const academicYearPartition = await dataTierPartitionService
+      .loadAcademicYearPartition(instituteId, yearId);
+
+    dataTierPartitionService.assertOperationalAcademicYearAccess({
+      operation: "student operational search",
+      partition: academicYearPartition,
+    });
+
     const filter = normalizeFilter(request.filter);
     const baseDomain = resolveBaseDomain(filter);
     const sort = normalizeSort(request.sort, baseDomain, filter);

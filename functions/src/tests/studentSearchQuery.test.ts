@@ -12,6 +12,7 @@ process.env.METADATA_SERVER_DETECTION ??= "none";
 const firestore = getFirestore();
 const instituteId = "inst_build_53";
 const yearId = "2026";
+const academicYearPath = `institutes/${instituteId}/academicYears/${yearId}`;
 const studentIds = [
   "student_build_53_1",
   "student_build_53_2",
@@ -36,6 +37,10 @@ const deleteDocumentIfPresent = async (path: string): Promise<void> => {
 };
 
 const seedStudents = async (): Promise<void> => {
+  await firestore.doc(academicYearPath).set({
+    status: "active",
+  });
+
   await Promise.all([
     firestore.doc(getStudentPath(studentIds[0])).set({
       batchId: "batch-a",
@@ -110,6 +115,7 @@ let studentFilteringQueryService: {
 test.before(async () => {
   const module = await import("../services/studentSearchQuery.js");
   studentFilteringQueryService = module.studentFilteringQueryService;
+  await deleteDocumentIfPresent(academicYearPath);
   await Promise.all(
     studentIds.flatMap((studentId) => [
       deleteDocumentIfPresent(getStudentPath(studentId)),
@@ -126,6 +132,7 @@ test.after(async () => {
       deleteDocumentIfPresent(getMetricsPath(studentId)),
     ]),
   );
+  await deleteDocumentIfPresent(academicYearPath);
   await getFirebaseAdminApp().delete();
 });
 
@@ -251,6 +258,37 @@ test("searchStudents supports discipline-index range filtering", async () => {
       "student_build_53_3",
     ],
   );
+});
+
+test("searchStudents rejects archived academic years", async () => {
+  await firestore.doc(academicYearPath).set({
+    archivedAt: "2026-04-07T00:00:00.000Z",
+    status: "archived",
+  }, {merge: true});
+
+  await assert.rejects(
+    studentFilteringQueryService.searchStudents({
+      actorRole: "teacher",
+      filter: {
+        batchId: "batch-a",
+      },
+      instituteId,
+      limit: 10,
+      yearId,
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(
+        error.message,
+        /cannot be used for student operational search/i,
+      );
+      return true;
+    },
+  );
+
+  await firestore.doc(academicYearPath).set({
+    status: "active",
+  }, {merge: true});
 });
 
 test(
