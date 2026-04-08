@@ -17,6 +17,7 @@ test(
     const summary = systemEventTopologyService.getTopologySummary();
 
     assert.equal(summary.eventCount, 15);
+    assert.equal(summary.engineCount, 12);
     assert.deepEqual(summary.domains, [
       "archiveLifecycle",
       "assignment",
@@ -44,6 +45,29 @@ test(
       "QuestionCreated",
       "BillingWebhookReceived",
     ]);
+  },
+);
+
+test(
+  "listEngineDefinitions exposes an acyclic dependency graph for topology " +
+    "engines",
+  () => {
+    const definitions = systemEventTopologyService.listEngineDefinitions();
+    const dependencyMap = new Map(
+      definitions.map(
+        (definition) => [definition.engine, definition.dependsOn],
+      ),
+    );
+
+    assert.equal(definitions.length, 12);
+    assert.deepEqual(
+      dependencyMap.get("PatternEngine"),
+      ["RiskEngine"],
+    );
+    assert.deepEqual(
+      dependencyMap.get("ArchiveEngine"),
+      ["BillingMeterEngine"],
+    );
   },
 );
 

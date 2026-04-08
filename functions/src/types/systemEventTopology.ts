@@ -58,3 +58,23 @@ export interface SystemEventDispatchContext {
   testId?: string;
   yearId?: string;
 }
+
+export type TopologyEngineName =
+  | "SubmissionPipeline"
+  | "RunAnalyticsEngine"
+  | "QuestionAnalyticsEngine"
+  | "StudentMetricsEngine"
+  | "RiskEngine"
+  | "PatternEngine"
+  | "InsightEngine"
+  | "NotificationQueueEngine"
+  | "GovernanceSnapshotEngine"
+  | "VendorAggregationEngine"
+  | "BillingMeterEngine"
+  | "ArchiveEngine";
+
+export interface TopologyEngineDefinition {
+  dependsOn: readonly TopologyEngineName[];
+  drivenByEvents: readonly SystemEventName[];
+  engine: TopologyEngineName;
+}

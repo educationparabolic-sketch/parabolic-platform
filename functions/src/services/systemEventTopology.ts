@@ -3,6 +3,8 @@ import {
   SystemEventDefinition,
   SystemEventDispatchContext,
   SystemEventName,
+  TopologyEngineDefinition,
+  TopologyEngineName,
 } from "../types/systemEventTopology";
 
 /**
@@ -223,14 +225,88 @@ const MASTER_LIFECYCLE_SEQUENCE: readonly SystemEventName[] = [
   "ArchiveTriggered",
 ] as const;
 
+const TOPOLOGY_ENGINE_DEFINITIONS: readonly TopologyEngineDefinition[] = [
+  {
+    dependsOn: [],
+    drivenByEvents: ["SessionSubmitted"],
+    engine: "SubmissionPipeline",
+  },
+  {
+    dependsOn: ["SubmissionPipeline"],
+    drivenByEvents: ["AnalyticsGenerated"],
+    engine: "RunAnalyticsEngine",
+  },
+  {
+    dependsOn: ["RunAnalyticsEngine"],
+    drivenByEvents: ["AnalyticsGenerated"],
+    engine: "QuestionAnalyticsEngine",
+  },
+  {
+    dependsOn: ["QuestionAnalyticsEngine"],
+    drivenByEvents: ["AnalyticsGenerated"],
+    engine: "StudentMetricsEngine",
+  },
+  {
+    dependsOn: ["StudentMetricsEngine"],
+    drivenByEvents: ["StudentYearMetricsUpdated"],
+    engine: "RiskEngine",
+  },
+  {
+    dependsOn: ["RiskEngine"],
+    drivenByEvents: ["StudentYearMetricsUpdated"],
+    engine: "PatternEngine",
+  },
+  {
+    dependsOn: ["PatternEngine"],
+    drivenByEvents: ["InsightsGenerated"],
+    engine: "InsightEngine",
+  },
+  {
+    dependsOn: ["InsightEngine"],
+    drivenByEvents: ["InsightsGenerated"],
+    engine: "NotificationQueueEngine",
+  },
+  {
+    dependsOn: ["NotificationQueueEngine"],
+    drivenByEvents: ["GovernanceSnapshotScheduled"],
+    engine: "GovernanceSnapshotEngine",
+  },
+  {
+    dependsOn: ["GovernanceSnapshotEngine"],
+    drivenByEvents: ["VendorAggregatesUpdated"],
+    engine: "VendorAggregationEngine",
+  },
+  {
+    dependsOn: ["VendorAggregationEngine"],
+    drivenByEvents: ["BillingMeterUpdated", "BillingWebhookReceived"],
+    engine: "BillingMeterEngine",
+  },
+  {
+    dependsOn: ["BillingMeterEngine"],
+    drivenByEvents: ["ArchiveTriggered"],
+    engine: "ArchiveEngine",
+  },
+] as const;
+
 const definitionsByEvent = new Map<SystemEventName, SystemEventDefinition>(
   SYSTEM_EVENT_DEFINITIONS.map((definition) => [definition.name, definition]),
+);
+const definitionsByEngine = new Map<
+  TopologyEngineName,
+  TopologyEngineDefinition
+>(
+  TOPOLOGY_ENGINE_DEFINITIONS.map(
+    (definition) => [definition.engine, definition],
+  ),
 );
 
 const logger = createLogger("SystemEventTopologyService");
 
 const sortNames = (values: Iterable<string>): string[] =>
   Array.from(values).sort((left, right) => left.localeCompare(right));
+const lifecycleIndexByEvent = new Map<SystemEventName, number>(
+  MASTER_LIFECYCLE_SEQUENCE.map((eventName, index) => [eventName, index]),
+);
 
 const assertNonEmptyValue = (value: string, fieldName: string): void => {
   if (!value.trim()) {
@@ -266,6 +342,172 @@ const assertMasterLifecycleSequence = (): void => {
   }
 };
 
+const assertDownstreamOrdering = (): void => {
+  for (const definition of SYSTEM_EVENT_DEFINITIONS) {
+    const sourceIndex = lifecycleIndexByEvent.get(definition.name);
+
+    for (const downstreamEvent of definition.downstreamEvents) {
+      const downstreamIndex = lifecycleIndexByEvent.get(downstreamEvent);
+
+      if (
+        sourceIndex !== undefined &&
+        downstreamIndex !== undefined &&
+        sourceIndex >= downstreamIndex
+      ) {
+        throw new SystemEventTopologyValidationError(
+          "Event ordering drift detected: " +
+          `"${definition.name}" appears after "${downstreamEvent}" ` +
+          "in the master topology sequence.",
+        );
+      }
+    }
+  }
+};
+
+const assertNoSelfReferentialLoopEdges = (): void => {
+  for (const definition of SYSTEM_EVENT_DEFINITIONS) {
+    for (const downstreamEventName of definition.downstreamEvents) {
+      const downstreamDefinition = definitionsByEvent.get(downstreamEventName);
+
+      if (!downstreamDefinition) {
+        continue;
+      }
+
+      const isFirestoreTrigger =
+        definition.sourceKind === "firestore.onCreate" ||
+        definition.sourceKind === "firestore.onUpdate" ||
+        definition.sourceKind === "firestore.onWrite";
+
+      if (
+        isFirestoreTrigger &&
+        definition.primaryHandler === downstreamDefinition.primaryHandler &&
+        definition.sourceKind === downstreamDefinition.sourceKind &&
+        definition.source === downstreamDefinition.source
+      ) {
+        throw new SystemEventTopologyValidationError(
+          "Potential infinite trigger loop detected between " +
+          `"${definition.name}" and "${downstreamDefinition.name}".`,
+        );
+      }
+    }
+  }
+};
+
+const getFirstLifecycleIndex = (
+  eventNames: readonly SystemEventName[],
+): number | undefined => {
+  const indexes = eventNames
+    .map((eventName) => lifecycleIndexByEvent.get(eventName))
+    .filter((index): index is number => index !== undefined);
+
+  if (!indexes.length) {
+    return undefined;
+  }
+
+  return Math.min(...indexes);
+};
+
+const assertEngineDependencyGraph = (): void => {
+  const seenEngineNames = new Set<TopologyEngineName>();
+
+  for (const definition of TOPOLOGY_ENGINE_DEFINITIONS) {
+    if (seenEngineNames.has(definition.engine)) {
+      throw new SystemEventTopologyValidationError(
+        `Duplicate topology engine "${definition.engine}" found.`,
+      );
+    }
+
+    seenEngineNames.add(definition.engine);
+
+    for (const eventName of definition.drivenByEvents) {
+      if (!definitionsByEvent.has(eventName)) {
+        throw new SystemEventTopologyValidationError(
+          `Topology engine "${definition.engine}" references unknown ` +
+          `event "${eventName}".`,
+        );
+      }
+    }
+
+    for (const dependencyEngine of definition.dependsOn) {
+      if (!definitionsByEngine.has(dependencyEngine)) {
+        throw new SystemEventTopologyValidationError(
+          `Topology engine "${definition.engine}" depends on unknown ` +
+          `engine "${dependencyEngine}".`,
+        );
+      }
+    }
+  }
+
+  const visited = new Set<TopologyEngineName>();
+  const activePath = new Set<TopologyEngineName>();
+
+  const visit = (engineName: TopologyEngineName): void => {
+    if (activePath.has(engineName)) {
+      throw new SystemEventTopologyValidationError(
+        `Circular dependency detected for topology engine "${engineName}".`,
+      );
+    }
+
+    if (visited.has(engineName)) {
+      return;
+    }
+
+    const definition = definitionsByEngine.get(engineName);
+
+    if (!definition) {
+      throw new SystemEventTopologyValidationError(
+        `Unknown topology engine "${engineName}".`,
+      );
+    }
+
+    activePath.add(engineName);
+
+    for (const dependencyEngine of definition.dependsOn) {
+      visit(dependencyEngine);
+    }
+
+    activePath.delete(engineName);
+    visited.add(engineName);
+  };
+
+  for (const definition of TOPOLOGY_ENGINE_DEFINITIONS) {
+    visit(definition.engine);
+  }
+
+  for (const definition of TOPOLOGY_ENGINE_DEFINITIONS) {
+    const engineOrder = getFirstLifecycleIndex(definition.drivenByEvents);
+
+    if (engineOrder === undefined) {
+      continue;
+    }
+
+    for (const dependencyEngineName of definition.dependsOn) {
+      const dependencyDefinition = definitionsByEngine.get(
+        dependencyEngineName,
+      );
+
+      if (!dependencyDefinition) {
+        continue;
+      }
+
+      const dependencyOrder = getFirstLifecycleIndex(
+        dependencyDefinition.drivenByEvents,
+      );
+
+      if (
+        dependencyOrder !== undefined &&
+        dependencyOrder > engineOrder
+      ) {
+        throw new SystemEventTopologyValidationError(
+          `Topology engine ordering drift detected: "${definition.engine}" ` +
+          `depends on "${dependencyEngineName}", but its driving events ` +
+          "occur earlier in the master lifecycle sequence.",
+        );
+      }
+    }
+  }
+};
+
 /**
  * Coordinates deterministic system event topology validation and dispatch.
  */
@@ -276,6 +518,14 @@ export class SystemEventTopologyService {
    */
   public listEventDefinitions(): readonly SystemEventDefinition[] {
     return SYSTEM_EVENT_DEFINITIONS;
+  }
+
+  /**
+   * Returns the static engine dependency graph definitions.
+   * @return {TopologyEngineDefinition[]} Registered engine definitions.
+   */
+  public listEngineDefinitions(): readonly TopologyEngineDefinition[] {
+    return TOPOLOGY_ENGINE_DEFINITIONS;
   }
 
   /**
@@ -355,6 +605,9 @@ export class SystemEventTopologyService {
     }
 
     assertMasterLifecycleSequence();
+    assertDownstreamOrdering();
+    assertNoSelfReferentialLoopEdges();
+    assertEngineDependencyGraph();
   }
 
   /**
@@ -422,6 +675,7 @@ export class SystemEventTopologyService {
    */
   public getTopologySummary(): {
     domains: string[];
+    engineCount: number;
     eventCount: number;
     masterLifecycleSequence: readonly SystemEventName[];
     rootEvents: SystemEventName[];
@@ -443,6 +697,7 @@ export class SystemEventTopologyService {
 
     return {
       domains,
+      engineCount: TOPOLOGY_ENGINE_DEFINITIONS.length,
       eventCount: SYSTEM_EVENT_DEFINITIONS.length,
       masterLifecycleSequence: MASTER_LIFECYCLE_SEQUENCE,
       rootEvents,
