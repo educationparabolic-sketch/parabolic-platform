@@ -3479,18 +3479,46 @@ Completed On
 
 ---
 
+## Build 108 — Search Index Event Pipeline
+
+Phase  
+Phase 22 — Unified System Event Topology
+
+Summary  
+Implemented the architecture-defined search index event pipeline so question index metadata now refreshes automatically from both create and update events.
+
+Components implemented:
+
+- Added `questionBankOnUpdate` Cloud Function trigger at `institutes/{instituteId}/questionBank/{questionId}` and exported it through the Functions entrypoint
+- Added trigger-level stale-event protection by comparing source snapshot update time with the latest document update time before running ingestion to avoid duplicate processing on retries/out-of-order events
+- Added update-input change detection to skip ingestion when `subject`, `chapter`, `tags`, and `questionTextKeywords` are unchanged
+- Extended `QuestionIngestionService.ingestQuestion` to accept optional previous question state and apply delta-based dictionary writes
+- Updated ingestion flow to increment `tagDictionary` only for newly introduced tags and increment `chapterDictionary` only when chapter/subject changes, while always maintaining canonical `searchTokens` writes
+- Added repeatable local ingestion regression coverage for create + update dictionary behavior
+
+Result  
+Search index processing is now event-driven for question create and update boundaries, keeps search tokens current, and updates autocomplete dictionaries without full collection scans or duplicate trigger modules.
+
+Commit Reference  
+Build 108 — Search Index Event Pipeline implemented
+
+Completed On  
+2026-04-08
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 108
+Next Build Number: 109
 
 Phase  
 Phase 22 — Unified System Event Topology
 
 Subsystem  
-Search Index Event Pipeline
+Failure Recovery & Retry System
 
 Reference  
-3_Core_Architectures.md → Section 42.16 Search Index Flow
+3_Core_Architectures.md → Section 42.18 Failure Recovery Flow
 
 ---
 
@@ -3605,7 +3633,8 @@ Build | Phase | Status
 105 | Archive & Data Lifecycle | Completed
 106 | Unified System Event Topology | Completed
 107 | Unified System Event Topology | Completed
-108–150 | Remaining Phases | Pending
+108 | Unified System Event Topology | Completed
+109–150 | Remaining Phases | Pending
 
 ---
 

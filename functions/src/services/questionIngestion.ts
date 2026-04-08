@@ -368,11 +368,13 @@ export class QuestionIngestionService {
    * Ingests a newly created institute question-bank document.
    * @param {QuestionIngestionContext} context Path-bound identifiers.
    * @param {unknown} data Raw Firestore document payload.
+   * @param {unknown} previousData Previous Firestore payload for update delta.
    * @return {Promise<QuestionIngestionResult>} Persisted ingestion metadata.
    */
   public async ingestQuestion(
     context: QuestionIngestionContext,
     data: unknown,
+    previousData?: unknown,
   ): Promise<QuestionIngestionResult> {
     const normalizedContext = {
       instituteId: normalizeRequiredString(
@@ -395,6 +397,40 @@ export class QuestionIngestionService {
         searchTokens,
         updatePayload,
       } = normalizeQuestionDocument(normalizedContext, data);
+      let previousNormalizedTags: string[] = [];
+      let previousChapter: string | null = null;
+      let previousSubject: string | null = null;
+
+      if (previousData !== undefined) {
+        try {
+          const {normalizedQuestion: previousNormalizedQuestion,
+            normalizedTags: previousTags} = normalizeQuestionDocument(
+            normalizedContext,
+            previousData,
+          );
+          previousNormalizedTags = previousTags;
+          previousChapter = previousNormalizedQuestion.chapter;
+          previousSubject = previousNormalizedQuestion.subject;
+        } catch (error) {
+          this.logger.warn(
+            "Previous question state was invalid. " +
+            "Falling back to full dictionary update.",
+            {
+              error,
+              instituteId: normalizedContext.instituteId,
+              questionId: normalizedContext.questionId,
+            },
+          );
+        }
+      }
+
+      const tagsToIncrement = normalizedTags.filter(
+        (tag) => !previousNormalizedTags.includes(tag),
+      );
+      const shouldIncrementChapter = previousChapter === null ||
+        previousSubject === null ||
+        previousChapter !== normalizedQuestion.chapter ||
+        previousSubject !== normalizedQuestion.subject;
       const questionReference = this.firestore.doc(questionPath);
       const analyticsReference = this.firestore.doc(analyticsPath);
       let tagDictionaryPaths: string[] = [];
@@ -402,25 +438,29 @@ export class QuestionIngestionService {
 
       await this.firestore.runTransaction(async (transaction) => {
         const analyticsSnapshot = await transaction.get(analyticsReference);
-        const tagDictionaryEntries =
-          await tagDictionaryService.incrementUsageCountsWithTransaction(
-            transaction,
-            {
-              instituteId: normalizedContext.instituteId,
-              tags: normalizedTags,
-            },
-          );
-        tagDictionaryPaths = tagDictionaryEntries.map((entry) => entry.path);
-        const chapterDictionaryEntry =
-          await chapterDictionaryService.incrementUsageCountWithTransaction(
-            transaction,
-            {
-              chapterName: normalizedQuestion.chapter,
-              instituteId: normalizedContext.instituteId,
-              subject: normalizedQuestion.subject,
-            },
-          );
-        chapterDictionaryPaths = [chapterDictionaryEntry.path];
+        if (tagsToIncrement.length) {
+          const tagDictionaryEntries =
+            await tagDictionaryService.incrementUsageCountsWithTransaction(
+              transaction,
+              {
+                instituteId: normalizedContext.instituteId,
+                tags: tagsToIncrement,
+              },
+            );
+          tagDictionaryPaths = tagDictionaryEntries.map((entry) => entry.path);
+        }
+        if (shouldIncrementChapter) {
+          const chapterDictionaryEntry =
+            await chapterDictionaryService.incrementUsageCountWithTransaction(
+              transaction,
+              {
+                chapterName: normalizedQuestion.chapter,
+                instituteId: normalizedContext.instituteId,
+                subject: normalizedQuestion.subject,
+              },
+            );
+          chapterDictionaryPaths = [chapterDictionaryEntry.path];
+        }
 
         transaction.set(questionReference, updatePayload, {merge: true});
 
@@ -440,7 +480,9 @@ export class QuestionIngestionService {
         questionPath,
         chapterDictionaryPaths,
         searchTokenCount: searchTokens.length,
+        tagsIncremented: tagsToIncrement,
         subject: normalizedQuestion.subject,
+        shouldIncrementChapter,
         tagDictionaryPaths,
         tags: normalizedTags,
       });

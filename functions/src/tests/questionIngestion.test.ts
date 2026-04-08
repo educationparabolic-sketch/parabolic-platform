@@ -168,3 +168,110 @@ test("ingestQuestion rejects invalid schema payloads", async () => {
     },
   );
 });
+
+test(
+  "ingestQuestion update flow only increments newly introduced " +
+    "dictionary values",
+  async () => {
+    const instituteId = "inst_build_108";
+    const questionId = "question_build_108";
+    const questionPath = `institutes/${instituteId}/questionBank/${questionId}`;
+    const analyticsPath =
+      `institutes/${instituteId}/questionAnalytics/${questionId}`;
+    const oldChapterDictionaryPath =
+      `institutes/${instituteId}/chapterDictionary/motion%20laws`;
+    const newChapterDictionaryPath =
+      `institutes/${instituteId}/chapterDictionary/newtonian%20motion`;
+    const kinematicsTagPath =
+      `institutes/${instituteId}/tagDictionary/kinematics`;
+    const velocityTagPath =
+      `institutes/${instituteId}/tagDictionary/velocity`;
+    const dynamicsTagPath =
+      `institutes/${instituteId}/tagDictionary/dynamics`;
+
+    await deleteDocumentIfPresent(questionPath);
+    await deleteDocumentIfPresent(analyticsPath);
+    await deleteDocumentIfPresent(oldChapterDictionaryPath);
+    await deleteDocumentIfPresent(newChapterDictionaryPath);
+    await deleteDocumentIfPresent(kinematicsTagPath);
+    await deleteDocumentIfPresent(velocityTagPath);
+    await deleteDocumentIfPresent(dynamicsTagPath);
+
+    await firestore.doc(questionPath).set({
+      chapter: "Motion Laws",
+      correctAnswer: "B",
+      createdAt: Timestamp.now(),
+      difficulty: "Medium",
+      examType: "JEE",
+      marks: 4,
+      negativeMarks: 1,
+      parentQuestionId: null,
+      questionId,
+      questionImageUrl: "",
+      questionType: "MCQ",
+      simulationLink: null,
+      solutionImageUrl: "",
+      subject: "Physics",
+      tags: ["kinematics", "velocity"],
+      tutorialVideoLink: null,
+      uniqueKey: "PHY-MOT-108",
+      version: 1,
+    });
+
+    const firstSnapshot = await firestore.doc(questionPath).get();
+    await questionIngestionService.ingestQuestion(
+      {
+        instituteId,
+        questionId,
+      },
+      firstSnapshot.data(),
+    );
+
+    await firestore.doc(questionPath).set({
+      chapter: "Newtonian Motion",
+      questionTextKeywords: ["frames"],
+      tags: ["kinematics", "dynamics"],
+      version: 2,
+    }, {merge: true});
+
+    const secondSnapshot = await firestore.doc(questionPath).get();
+    await questionIngestionService.ingestQuestion(
+      {
+        instituteId,
+        questionId,
+      },
+      secondSnapshot.data(),
+      firstSnapshot.data(),
+    );
+
+    const oldChapterDictionary = (
+      await firestore.doc(oldChapterDictionaryPath).get()
+    ).data();
+    const newChapterDictionary = (
+      await firestore.doc(newChapterDictionaryPath).get()
+    ).data();
+    const kinematicsTagDictionary = (
+      await firestore.doc(kinematicsTagPath).get()
+    ).data();
+    const velocityTagDictionary = (
+      await firestore.doc(velocityTagPath).get()
+    ).data();
+    const dynamicsTagDictionary = (
+      await firestore.doc(dynamicsTagPath).get()
+    ).data();
+
+    assert.equal(oldChapterDictionary?.usageCount, 1);
+    assert.equal(newChapterDictionary?.usageCount, 1);
+    assert.equal(kinematicsTagDictionary?.usageCount, 1);
+    assert.equal(velocityTagDictionary?.usageCount, 1);
+    assert.equal(dynamicsTagDictionary?.usageCount, 1);
+
+    await deleteDocumentIfPresent(questionPath);
+    await deleteDocumentIfPresent(analyticsPath);
+    await deleteDocumentIfPresent(oldChapterDictionaryPath);
+    await deleteDocumentIfPresent(newChapterDictionaryPath);
+    await deleteDocumentIfPresent(kinematicsTagPath);
+    await deleteDocumentIfPresent(velocityTagPath);
+    await deleteDocumentIfPresent(dynamicsTagPath);
+  },
+);

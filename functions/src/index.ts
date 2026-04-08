@@ -64,7 +64,10 @@ import {
   handleAdminStudentSoftDeleteRequest,
 } from "./api/adminStudentSoftDelete";
 import {runAssignmentOnCreate} from "./triggers/assignmentCreation";
-import {questionBankOnCreate} from "./triggers/questionIngestion";
+import {
+  questionBankOnCreate,
+  questionBankOnUpdate,
+} from "./triggers/questionIngestion";
 import {examSessionOnUpdate} from "./triggers/sessionSubmission";
 import {instituteStudentOnWrite} from "./triggers/studentUsageMetering";
 import {studentYearMetricsOnWrite} from "./triggers/studentYearMetrics";
@@ -79,6 +82,7 @@ registerGlobalErrorHandlers();
 systemEventTopologyService.assertTopologyInvariants();
 
 export {questionBankOnCreate};
+export {questionBankOnUpdate};
 export {runAssignmentOnCreate};
 export {examSessionOnUpdate};
 export {instituteStudentOnWrite};
