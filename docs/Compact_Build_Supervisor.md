@@ -129,20 +129,30 @@ Ensure:
 
 ---
 
-## TESTING
+## TESTING (PHASE-AWARE)
 
-Run:
+Run only what is applicable to the current build domain.
 
-firebase emulators:start
+### Backend builds (1–110)
+- TypeScript compile
+- lint
+- repeatable local tests
+- emulator-backed tests for Firestore-integrated flows
+- endpoint smoke checks where applicable
 
-Verify:
+### Frontend builds (111–150)
+- TypeScript compile for affected app(s)
+- lint for affected app(s)
+- unit/component tests where available
+- browser verification of affected routes/features
+- role/layer guard behavior
+- console/network error check
+- responsive sanity check (desktop + mobile width)
+- integration check against backend APIs (or mocks if defined by build scope)
+- browser verification is mandatory for commit readiness
 
-- functions compile
-- no runtime errors
-- endpoints respond correctly
-- repeatable local tests pass for the implemented build
-- take permission if necessary to perform all the tests to  verify clean build (outside sandbox firebase emulator tests, lint tests etc)
----
+If sandbox restrictions block required checks, request permission and continue.
+
 
 ## OUTPUT
 
@@ -154,6 +164,10 @@ Return:
 4. Testing steps
 5. MODULE_REGISTRY updates
 6. build_log updates
+7. Commit readiness (YES/NO)
+8. If NO, exact blockers
+9. Local URLs to open for verification (app base URL + exact affected route URLs)
+10. First route to verify and expected visible outcome
 
 ---
 
