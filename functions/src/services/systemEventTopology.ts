@@ -25,7 +25,7 @@ const SYSTEM_EVENT_DEFINITIONS: readonly SystemEventDefinition[] = [
       "Question ingestion begins from a deterministic institute-scoped " +
       "question-bank create trigger.",
     domain: "content",
-    downstreamEvents: [],
+    downstreamEvents: ["TemplateCreated"],
     executionMode: "asynchronous",
     name: "QuestionCreated",
     primaryHandler: "questionBankOnCreate",
@@ -37,7 +37,7 @@ const SYSTEM_EVENT_DEFINITIONS: readonly SystemEventDefinition[] = [
       "Template processing starts after an institute template document is " +
       "created.",
     domain: "template",
-    downstreamEvents: [],
+    downstreamEvents: ["AssignmentCreated"],
     executionMode: "asynchronous",
     name: "TemplateCreated",
     primaryHandler: "testTemplateOnCreate",
@@ -48,7 +48,7 @@ const SYSTEM_EVENT_DEFINITIONS: readonly SystemEventDefinition[] = [
     description:
       "Assignment initialization starts after a run document is created.",
     domain: "assignment",
-    downstreamEvents: ["UsageUpdated"],
+    downstreamEvents: ["SessionStarted", "UsageUpdated"],
     executionMode: "asynchronous",
     name: "AssignmentCreated",
     primaryHandler: "runAssignmentOnCreate",
@@ -59,7 +59,7 @@ const SYSTEM_EVENT_DEFINITIONS: readonly SystemEventDefinition[] = [
     description:
       "Exam execution begins through the authenticated exam start API.",
     domain: "sessionExecution",
-    downstreamEvents: [],
+    downstreamEvents: ["AnswerBatchReceived"],
     executionMode: "synchronous",
     name: "SessionStarted",
     primaryHandler: "examStart",
@@ -71,7 +71,7 @@ const SYSTEM_EVENT_DEFINITIONS: readonly SystemEventDefinition[] = [
       "Active session answer batching is accepted only through the exam " +
       "answer-write API.",
     domain: "sessionExecution",
-    downstreamEvents: [],
+    downstreamEvents: ["SessionSubmitted"],
     executionMode: "synchronous",
     name: "AnswerBatchReceived",
     primaryHandler: "examSessionAnswers",
@@ -97,12 +97,26 @@ const SYSTEM_EVENT_DEFINITIONS: readonly SystemEventDefinition[] = [
       "Submitted-session analytics update run, question, student, and " +
       "insight summaries without scanning raw sessions downstream.",
     domain: "postSubmission",
-    downstreamEvents: ["StudentYearMetricsUpdated"],
+    downstreamEvents: ["StudentYearMetricsUpdated", "InsightsGenerated"],
     executionMode: "asynchronous",
     name: "AnalyticsGenerated",
-    primaryHandler: "submissionAnalyticsPipeline",
+    primaryHandler: "examSessionOnUpdate",
     source:
       "Triggered from SessionSubmitted within the session submission " +
+      "topology boundary",
+    sourceKind: "firestore.onUpdate",
+  },
+  {
+    description:
+      "Insight snapshots are generated after deterministic analytics writes " +
+      "complete for a submitted session.",
+    domain: "postSubmission",
+    downstreamEvents: ["GovernanceSnapshotScheduled"],
+    executionMode: "asynchronous",
+    name: "InsightsGenerated",
+    primaryHandler: "examSessionOnUpdate",
+    source:
+      "Triggered from AnalyticsGenerated within the session submission " +
       "topology boundary",
     sourceKind: "firestore.onUpdate",
   },
@@ -125,7 +139,7 @@ const SYSTEM_EVENT_DEFINITIONS: readonly SystemEventDefinition[] = [
       "Vendor billing changes enter the platform through the Stripe webhook " +
       "boundary.",
     domain: "vendorIntelligence",
-    downstreamEvents: [],
+    downstreamEvents: ["BillingMeterUpdated"],
     executionMode: "synchronous",
     name: "BillingWebhookReceived",
     primaryHandler: "stripeWebhook",
@@ -149,11 +163,35 @@ const SYSTEM_EVENT_DEFINITIONS: readonly SystemEventDefinition[] = [
       "Monthly governance snapshots summarize academic-year analytics on a " +
       "scheduled cadence.",
     domain: "archiveLifecycle",
-    downstreamEvents: [],
+    downstreamEvents: ["VendorAggregatesUpdated"],
     executionMode: "scheduled",
     name: "GovernanceSnapshotScheduled",
     primaryHandler: "governanceSnapshotMonthly",
     source: "Monthly schedule",
+    sourceKind: "scheduled",
+  },
+  {
+    description:
+      "Vendor aggregate rollups are produced from monthly governance summary " +
+      "boundaries.",
+    domain: "vendorIntelligence",
+    downstreamEvents: ["BillingMeterUpdated"],
+    executionMode: "scheduled",
+    name: "VendorAggregatesUpdated",
+    primaryHandler: "governanceSnapshotMonthly",
+    source: "Monthly governance aggregation rollup",
+    sourceKind: "scheduled",
+  },
+  {
+    description:
+      "Billing meter snapshots are generated from deterministic lifecycle " +
+      "events and monthly billing rollups.",
+    domain: "vendorIntelligence",
+    downstreamEvents: ["ArchiveTriggered"],
+    executionMode: "scheduled",
+    name: "BillingMeterUpdated",
+    primaryHandler: "billingSnapshotMonthly",
+    source: "Monthly billing snapshot schedule",
     sourceKind: "scheduled",
   },
   {
@@ -170,6 +208,21 @@ const SYSTEM_EVENT_DEFINITIONS: readonly SystemEventDefinition[] = [
   },
 ] as const;
 
+const MASTER_LIFECYCLE_SEQUENCE: readonly SystemEventName[] = [
+  "QuestionCreated",
+  "TemplateCreated",
+  "AssignmentCreated",
+  "SessionStarted",
+  "AnswerBatchReceived",
+  "SessionSubmitted",
+  "AnalyticsGenerated",
+  "InsightsGenerated",
+  "GovernanceSnapshotScheduled",
+  "VendorAggregatesUpdated",
+  "BillingMeterUpdated",
+  "ArchiveTriggered",
+] as const;
+
 const definitionsByEvent = new Map<SystemEventName, SystemEventDefinition>(
   SYSTEM_EVENT_DEFINITIONS.map((definition) => [definition.name, definition]),
 );
@@ -184,6 +237,32 @@ const assertNonEmptyValue = (value: string, fieldName: string): void => {
     throw new SystemEventTopologyValidationError(
       `System event definition field "${fieldName}" must be non-empty.`,
     );
+  }
+};
+
+const assertMasterLifecycleSequence = (): void => {
+  for (
+    let index = 0;
+    index < MASTER_LIFECYCLE_SEQUENCE.length - 1;
+    index += 1
+  ) {
+    const sourceEvent = MASTER_LIFECYCLE_SEQUENCE[index];
+    const downstreamEvent = MASTER_LIFECYCLE_SEQUENCE[index + 1];
+
+    const sourceDefinition = definitionsByEvent.get(sourceEvent);
+
+    if (!sourceDefinition) {
+      throw new SystemEventTopologyValidationError(
+        `Master lifecycle event "${sourceEvent}" is not registered.`,
+      );
+    }
+
+    if (!sourceDefinition.downstreamEvents.includes(downstreamEvent)) {
+      throw new SystemEventTopologyValidationError(
+        `Master lifecycle sequence is broken between "${sourceEvent}" and ` +
+        `"${downstreamEvent}".`,
+      );
+    }
   }
 };
 
@@ -274,6 +353,8 @@ export class SystemEventTopologyService {
     for (const definition of SYSTEM_EVENT_DEFINITIONS) {
       visit(definition.name);
     }
+
+    assertMasterLifecycleSequence();
   }
 
   /**
@@ -342,6 +423,7 @@ export class SystemEventTopologyService {
   public getTopologySummary(): {
     domains: string[];
     eventCount: number;
+    masterLifecycleSequence: readonly SystemEventName[];
     rootEvents: SystemEventName[];
     } {
     const downstreamEventNames = new Set<SystemEventName>();
@@ -362,6 +444,7 @@ export class SystemEventTopologyService {
     return {
       domains,
       eventCount: SYSTEM_EVENT_DEFINITIONS.length,
+      masterLifecycleSequence: MASTER_LIFECYCLE_SEQUENCE,
       rootEvents,
     };
   }

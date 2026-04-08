@@ -16,7 +16,7 @@ test(
   () => {
     const summary = systemEventTopologyService.getTopologySummary();
 
-    assert.equal(summary.eventCount, 12);
+    assert.equal(summary.eventCount, 15);
     assert.deepEqual(summary.domains, [
       "archiveLifecycle",
       "assignment",
@@ -26,16 +26,23 @@ test(
       "template",
       "vendorIntelligence",
     ]);
-    assert.deepEqual(summary.rootEvents, [
+    assert.deepEqual(summary.masterLifecycleSequence, [
       "QuestionCreated",
       "TemplateCreated",
       "AssignmentCreated",
       "SessionStarted",
       "AnswerBatchReceived",
       "SessionSubmitted",
-      "BillingWebhookReceived",
+      "AnalyticsGenerated",
+      "InsightsGenerated",
       "GovernanceSnapshotScheduled",
+      "VendorAggregatesUpdated",
+      "BillingMeterUpdated",
       "ArchiveTriggered",
+    ]);
+    assert.deepEqual(summary.rootEvents, [
+      "QuestionCreated",
+      "BillingWebhookReceived",
     ]);
   },
 );

@@ -13,6 +13,7 @@ import {MiddlewareRequest} from "../types/middleware";
 import {createAuthenticationMiddleware} from "../middleware/auth";
 import {createRoleAuthorizationMiddleware} from "../middleware/role";
 import {createTenantGuardMiddleware} from "../middleware/tenant";
+import {systemEventTopologyService} from "../services/systemEventTopology";
 
 interface ExamStartRequestBody {
   instituteId?: unknown;
@@ -66,7 +67,18 @@ export const createExamStartHandler = (
     const requestId = request.context.requestId;
     const validatedData = request.context
       .requestData as ExamStartValidatedRequestData;
-    const result = await dependencies.startSession(validatedData);
+    const result = await systemEventTopologyService.executeEventHandler(
+      "SessionStarted",
+      "examStart",
+      {
+        instituteId: validatedData.instituteId,
+        requestId,
+        runId: validatedData.runId,
+        studentId: validatedData.studentId,
+        yearId: validatedData.yearId,
+      },
+      async () => dependencies.startSession(validatedData),
+    );
 
     response.status(200).json({
       code: "OK",

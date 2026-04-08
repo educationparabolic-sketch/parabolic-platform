@@ -15,6 +15,7 @@ import {MiddlewareRequest} from "../types/middleware";
 import {createAuthenticationMiddleware} from "../middleware/auth";
 import {createRoleAuthorizationMiddleware} from "../middleware/role";
 import {createTenantGuardMiddleware} from "../middleware/tenant";
+import {systemEventTopologyService} from "../services/systemEventTopology";
 
 interface ExamSessionAnswersRequestBody {
   answers?: unknown;
@@ -134,17 +135,29 @@ export const createExamSessionAnswersHandler = (
     const requestId = request.context.requestId;
     const validatedData = request.context
       .requestData as ExamSessionAnswersValidatedRequestData;
-    const result = await dependencies.persistIncrementalAnswers({
-      answers: validatedData.answers,
-      context: {
+    const result = await systemEventTopologyService.executeEventHandler(
+      "AnswerBatchReceived",
+      "examSessionAnswers",
+      {
         instituteId: validatedData.instituteId,
+        requestId,
         runId: validatedData.runId,
         sessionId: validatedData.sessionId,
         studentId: validatedData.studentId,
         yearId: validatedData.yearId,
       },
-      millisecondsSinceLastWrite: validatedData.millisecondsSinceLastWrite,
-    });
+      async () => dependencies.persistIncrementalAnswers({
+        answers: validatedData.answers,
+        context: {
+          instituteId: validatedData.instituteId,
+          runId: validatedData.runId,
+          sessionId: validatedData.sessionId,
+          studentId: validatedData.studentId,
+          yearId: validatedData.yearId,
+        },
+        millisecondsSinceLastWrite: validatedData.millisecondsSinceLastWrite,
+      }),
+    );
 
     response.status(200).json({
       code: "OK",

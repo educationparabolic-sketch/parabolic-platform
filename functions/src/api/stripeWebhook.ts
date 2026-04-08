@@ -12,6 +12,7 @@ import {
   PaymentEventIntegrationValidationError,
   StripeWebhookSuccessResponse,
 } from "../types/paymentEventIntegration";
+import {systemEventTopologyService} from "../services/systemEventTopology";
 
 interface StripeWebhookDependencies {
   processStripeWebhook:
@@ -44,11 +45,18 @@ export const createStripeWebhookHandler = (
     response: functions.Response,
   ): Promise<void> => {
     const signatureHeader = request.header("stripe-signature");
-    const result = await dependencies.processStripeWebhook({
-      rawBody: request.rawBody,
-      requestBody: request.body,
-      signatureHeader,
-    });
+    const result = await systemEventTopologyService.executeEventHandler(
+      "BillingWebhookReceived",
+      "stripeWebhook",
+      {
+        requestId: request.context.requestId,
+      },
+      async () => dependencies.processStripeWebhook({
+        rawBody: request.rawBody,
+        requestBody: request.body,
+        signatureHeader,
+      }),
+    );
 
     response.status(200).json(
       buildSuccessResponse(

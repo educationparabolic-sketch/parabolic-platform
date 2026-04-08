@@ -19,6 +19,7 @@ import {
   AcademicYearArchiveValidationError,
 } from "../types/archivePipeline";
 import {MiddlewareRequest} from "../types/middleware";
+import {systemEventTopologyService} from "../services/systemEventTopology";
 
 interface AdminAcademicYearArchiveDependencies {
   archiveAcademicYear: typeof archivePipelineService.archiveAcademicYear;
@@ -49,7 +50,16 @@ export const createAdminAcademicYearArchiveHandler = (
   ): Promise<void> => {
     const validatedRequest = request.context
       .requestData as unknown as AcademicYearArchiveValidatedRequest;
-    const result = await dependencies.archiveAcademicYear(validatedRequest);
+    const result = await systemEventTopologyService.executeEventHandler(
+      "ArchiveTriggered",
+      "adminAcademicYearArchive",
+      {
+        instituteId: validatedRequest.instituteId,
+        requestId: request.context.requestId,
+        yearId: validatedRequest.yearId,
+      },
+      async () => dependencies.archiveAcademicYear(validatedRequest),
+    );
 
     response.status(200).json(
       buildSuccessResponse(

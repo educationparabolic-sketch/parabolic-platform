@@ -45,87 +45,65 @@ export const handleSessionUpdated = async (
       yearId,
     },
     async () => {
+      const eventContext = {
+        eventId: context.eventId,
+        instituteId,
+        runId,
+        sessionId,
+        yearId,
+      };
+
       await submissionAnalyticsTriggerService
         .processSessionSubmissionTransition(
-          {
-            eventId: context.eventId,
-            instituteId,
-            runId,
-            sessionId,
-            yearId,
-          },
+          eventContext,
           change.before.data(),
           change.after.data(),
         );
 
       await usageMeteringService.recordSessionExecutionUsage(
-        {
-          eventId: context.eventId,
-          instituteId,
-          runId,
-          sessionId,
-          yearId,
-        },
+        eventContext,
         change.before.data(),
         change.after.data(),
       );
 
-      await runAnalyticsEngineService.processSubmittedSession(
-        {
-          eventId: context.eventId,
-          instituteId,
-          runId,
-          sessionId,
-          yearId,
+      await systemEventTopologyService.executeEventHandler(
+        "AnalyticsGenerated",
+        "examSessionOnUpdate",
+        eventContext,
+        async () => {
+          await runAnalyticsEngineService.processSubmittedSession(
+            eventContext,
+            change.before.data(),
+            change.after.data(),
+          );
+
+          await studentMetricsEngineService.processSubmittedSession(
+            eventContext,
+            change.before.data(),
+            change.after.data(),
+          );
+
+          await questionAnalyticsEngineService.processSubmittedSession(
+            eventContext,
+            change.before.data(),
+            change.after.data(),
+          );
         },
-        change.before.data(),
-        change.after.data(),
       );
 
-      await studentMetricsEngineService.processSubmittedSession(
-        {
-          eventId: context.eventId,
-          instituteId,
-          runId,
-          sessionId,
-          yearId,
-        },
-        change.before.data(),
-        change.after.data(),
-      );
-
-      await questionAnalyticsEngineService.processSubmittedSession(
-        {
-          eventId: context.eventId,
-          instituteId,
-          runId,
-          sessionId,
-          yearId,
-        },
-        change.before.data(),
-        change.after.data(),
-      );
-
-      await insightEngineService.processSubmittedSession(
-        {
-          eventId: context.eventId,
-          instituteId,
-          runId,
-          sessionId,
-          yearId,
-        },
-        change.before.data(),
-        change.after.data(),
+      await systemEventTopologyService.executeEventHandler(
+        "InsightsGenerated",
+        "examSessionOnUpdate",
+        eventContext,
+        async () => insightEngineService.processSubmittedSession(
+          eventContext,
+          change.before.data(),
+          change.after.data(),
+        ),
       );
 
       await notificationQueueGenerationService.processSubmittedSession(
-        {
-          eventId: context.eventId,
-          instituteId,
-          runId,
-          sessionId,
-          yearId,
-        },
+        eventContext,
         change.before.data(),
         change.after.data(),
       );
