@@ -75,6 +75,10 @@ import {testTemplateOnCreate} from "./triggers/templateCreation";
 import {governanceSnapshotMonthly} from "./triggers/governanceSnapshot";
 import {billingSnapshotMonthly} from "./triggers/billingSnapshot";
 import {dataRetentionPolicyDaily} from "./triggers/dataRetentionPolicy";
+import {
+  failureRecoveryDispatch,
+  failureRecoveryRetrySweep,
+} from "./triggers/failureRecovery";
 import {systemEventTopologyService} from "./services/systemEventTopology";
 import {loadEnvironmentConfig} from "./utils/environment";
 
@@ -91,6 +95,8 @@ export {testTemplateOnCreate};
 export {governanceSnapshotMonthly};
 export {billingSnapshotMonthly};
 export {dataRetentionPolicyDaily};
+export {failureRecoveryDispatch};
+export {failureRecoveryRetrySweep};
 export const examStart = functions.https.onRequest(handleExamStartRequest);
 export const examSessionAnswers = functions.https.onRequest(
   handleExamSessionAnswersRequest,

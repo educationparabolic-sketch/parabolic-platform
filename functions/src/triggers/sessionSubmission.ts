@@ -1,24 +1,9 @@
 import * as functions from "firebase-functions";
+import {failureRecoveryService} from "../services/failureRecovery";
 import {
-  insightEngineService,
-} from "../services/insightEngine";
-import {
-  questionAnalyticsEngineService,
-} from "../services/questionAnalyticsEngine";
-import {
-  notificationQueueGenerationService,
-} from "../services/notificationQueueGeneration";
-import {
-  runAnalyticsEngineService,
-} from "../services/runAnalyticsEngine";
-import {
-  studentMetricsEngineService,
-} from "../services/studentMetricsEngine";
-import {
-  submissionAnalyticsTriggerService,
-} from "../services/submissionAnalyticsTrigger";
+  postSubmissionPipelineService,
+} from "../services/postSubmissionPipeline";
 import {systemEventTopologyService} from "../services/systemEventTopology";
-import {usageMeteringService} from "../services/usageMetering";
 
 const SESSIONS_DOCUMENT_PATH =
   "institutes/{instituteId}/academicYears/{yearId}/runs/{runId}/" +
@@ -45,7 +30,13 @@ export const handleSessionUpdated = async (
       yearId,
     },
     async () => {
-      const eventContext = {
+      const eventContext: {
+        eventId?: string;
+        instituteId: string;
+        runId: string;
+        sessionId: string;
+        yearId: string;
+      } = {
         eventId: context.eventId,
         instituteId,
         runId,
@@ -53,60 +44,42 @@ export const handleSessionUpdated = async (
         yearId,
       };
 
-      await submissionAnalyticsTriggerService
-        .processSessionSubmissionTransition(
+      const beforeData = change.before.data() as Record<string, unknown>;
+      const afterData = change.after.data() as Record<string, unknown>;
+
+      try {
+        await postSubmissionPipelineService.execute(
           eventContext,
-          change.before.data(),
-          change.after.data(),
+          beforeData,
+          afterData,
+          {
+            eventId: context.eventId,
+            instituteId,
+            runId,
+            sessionId,
+            sourcePath: change.after.ref.path,
+            yearId,
+          },
+        );
+      } catch (error) {
+        await failureRecoveryService.queuePostSubmissionFailure(
+          eventContext,
+          afterData,
+          change.after.ref.path,
+          error,
         );
 
-      await usageMeteringService.recordSessionExecutionUsage(
-        eventContext,
-        change.before.data(),
-        change.after.data(),
-      );
-
-      await systemEventTopologyService.executeEventHandler(
-        "AnalyticsGenerated",
-        "examSessionOnUpdate",
-        eventContext,
-        async () => {
-          await runAnalyticsEngineService.processSubmittedSession(
-            eventContext,
-            change.before.data(),
-            change.after.data(),
-          );
-
-          await studentMetricsEngineService.processSubmittedSession(
-            eventContext,
-            change.before.data(),
-            change.after.data(),
-          );
-
-          await questionAnalyticsEngineService.processSubmittedSession(
-            eventContext,
-            change.before.data(),
-            change.after.data(),
-          );
-        },
-      );
-
-      await systemEventTopologyService.executeEventHandler(
-        "InsightsGenerated",
-        "examSessionOnUpdate",
-        eventContext,
-        async () => insightEngineService.processSubmittedSession(
-          eventContext,
-          change.before.data(),
-          change.after.data(),
-        ),
-      );
-
-      await notificationQueueGenerationService.processSubmittedSession(
-        eventContext,
-        change.before.data(),
-        change.after.data(),
-      );
+        functions.logger.warn(
+          "Deferred post-submission processing to failure recovery queue.",
+          {
+            eventId: context.eventId,
+            instituteId,
+            runId,
+            sessionId,
+            yearId,
+          },
+        );
+      }
     },
   );
 };
