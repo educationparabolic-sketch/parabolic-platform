@@ -139,6 +139,8 @@ RunAnalyticsInitializationService | Build 24 | Initialize deterministic run anal
 UsageMeteringService | Build 25, Build 91, Build 104 | Track institute billing usage metrics in `institutes/{instituteId}/usageMeter/{cycleId}`, including assignment counts, assigned student volume, active-student lifecycle totals, submitted session volume, peak usage, pricing-plan-derived billing projections, and idempotent assignment/student/session event deduplication, while excluding soft-deleted students from active billing counts
 BillingSnapshotService | Build 92 | Generate immutable root-level `billingSnapshots/{instituteId}__{cycleId}` records from institute `usageMeter/{cycleId}` summaries plus current license metadata, including cycle boundaries, license tier, peak usage, projected invoice amounts, and dispute-protection webhook status fields for downstream vendor analytics
 SimulationStudentGeneratorService | Build 77 | Generate deterministic synthetic students in `institutes/sim_{simulationId}/students` using Build 76 environment metadata, behavioral-profile attributes (`baselineAbility`, `disciplineProfile`, `impulsivenessScore`, `overconfidenceScore`, `fatigueFactor`, `topicStrengthMap`), and idempotent create-only writes
+DataTierPartitionService | Build 105 | Resolve HOT/WARM/COLD academic-year and run partition state from existing lifecycle documents, map operational collections to documented storage tiers, and block non-HOT academic years from active execution and operational query flows
+SystemEventTopologyService | Build 106 | Centralize the unified deterministic event topology registry across content, template, assignment, session-execution, post-submission, vendor-intelligence, and archive-lifecycle domains; validate single-primary-handler and acyclic downstream relationships at startup; and enforce trigger-handler alignment through typed event-dispatch guards
 
 ---
 
@@ -214,4 +216,3 @@ After completing each build:
 3. Record the build number
 
 This ensures the platform remains deterministic.
-DataTierPartitionService | Build 105 | Resolve HOT/WARM/COLD academic-year and run partition state from existing lifecycle documents, map operational collections to documented storage tiers, and block non-HOT academic years from active execution and operational query flows

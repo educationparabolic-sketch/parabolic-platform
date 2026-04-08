@@ -10,6 +10,7 @@ import {
 } from "../services/templateAuditLogging";
 import {templateFingerprintService} from "../services/templateFingerprint";
 import {templateCreationService} from "../services/templateCreation";
+import {systemEventTopologyService} from "../services/systemEventTopology";
 
 const TESTS_DOCUMENT_PATH = "institutes/{instituteId}/tests/{testId}";
 
@@ -34,57 +35,71 @@ export const handleTemplateCreated = async (
   const instituteId = String(context.params.instituteId ?? "").trim();
   const testId = String(context.params.testId ?? "").trim();
 
-  const templateContext = {
-    instituteId,
-    testId,
-  };
-  const templatePayload = snapshot.data();
-
-  const templateCreationResult = await templateCreationService
-    .processTemplateCreated(
-      templateContext,
-      templatePayload,
-    );
-
-  await templateConfigurationSnapshotService.snapshotTemplateConfiguration(
-    templateContext,
-    templateCreationResult,
-  );
-
-  await templateFingerprintService.persistTemplateFingerprint(
-    templateContext,
-    templateCreationResult,
-  );
-
-  await templateAnalyticsInitializationService.initializeTemplateAnalytics(
-    templateContext,
-    templatePayload,
-  );
-
-  await templateAuditLoggingService.logTemplateLifecycleEvent({
-    actor: {
-      actorId: extractOptionalString(templatePayload?.createdBy),
-      actorRole: extractOptionalString(templatePayload?.createdByRole),
-      ipAddress: extractOptionalString(templatePayload?.createdFromIp),
-      layer: extractOptionalString(templatePayload?.layer),
-      userAgent: extractOptionalString(templatePayload?.createdFromUserAgent),
-    },
-    afterState: {
-      academicYear: extractOptionalString(templatePayload?.academicYear),
-      difficultyDistribution: templateCreationResult.difficultyDistribution,
-      phaseConfigSnapshot: templateCreationResult.phaseConfigSnapshot,
-      status: "draft",
+  await systemEventTopologyService.executeEventHandler(
+    "TemplateCreated",
+    "testTemplateOnCreate",
+    {
+      eventId: context.eventId,
+      instituteId,
+      sourcePath: snapshot.ref.path,
       testId,
-      timingProfile: templateCreationResult.timingProfile,
-      totalQuestions: templateCreationResult.totalQuestions,
     },
-    context: templateContext,
-    eventType: "creation",
-    metadata: {
-      source: "testTemplateOnCreate",
-      triggerPath: TESTS_DOCUMENT_PATH,
+    async () => {
+      const templateContext = {
+        instituteId,
+        testId,
+      };
+      const templatePayload = snapshot.data();
+
+      const templateCreationResult = await templateCreationService
+        .processTemplateCreated(
+          templateContext,
+          templatePayload,
+        );
+
+      await templateConfigurationSnapshotService.snapshotTemplateConfiguration(
+        templateContext,
+        templateCreationResult,
+      );
+
+      await templateFingerprintService.persistTemplateFingerprint(
+        templateContext,
+        templateCreationResult,
+      );
+
+      await templateAnalyticsInitializationService.initializeTemplateAnalytics(
+        templateContext,
+        templatePayload,
+      );
+
+      await templateAuditLoggingService.logTemplateLifecycleEvent({
+        actor: {
+          actorId: extractOptionalString(templatePayload?.createdBy),
+          actorRole: extractOptionalString(templatePayload?.createdByRole),
+          ipAddress: extractOptionalString(templatePayload?.createdFromIp),
+          layer: extractOptionalString(templatePayload?.layer),
+          userAgent: extractOptionalString(
+            templatePayload?.createdFromUserAgent,
+          ),
+        },
+        afterState: {
+          academicYear: extractOptionalString(templatePayload?.academicYear),
+          difficultyDistribution: templateCreationResult.difficultyDistribution,
+          phaseConfigSnapshot: templateCreationResult.phaseConfigSnapshot,
+          status: "draft",
+          testId,
+          timingProfile: templateCreationResult.timingProfile,
+          totalQuestions: templateCreationResult.totalQuestions,
+        },
+        context: templateContext,
+        eventType: "creation",
+        metadata: {
+          source: "testTemplateOnCreate",
+          triggerPath: TESTS_DOCUMENT_PATH,
+        },
+      });
     },
-  });
+  );
 };
 
 export const testTemplateOnCreate = functions.firestore

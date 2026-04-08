@@ -1,5 +1,6 @@
 import * as functions from "firebase-functions";
 import {questionIngestionService} from "../services/questionIngestion";
+import {systemEventTopologyService} from "../services/systemEventTopology";
 
 const QUESTION_BANK_DOCUMENT_PATH =
   "institutes/{instituteId}/questionBank/{questionId}";
@@ -11,12 +12,21 @@ export const handleQuestionCreated = async (
   const instituteId = String(context.params.instituteId ?? "").trim();
   const questionId = String(context.params.questionId ?? "").trim();
 
-  await questionIngestionService.ingestQuestion(
+  await systemEventTopologyService.executeEventHandler(
+    "QuestionCreated",
+    "questionBankOnCreate",
     {
+      eventId: context.eventId,
       instituteId,
-      questionId,
+      sourcePath: snapshot.ref.path,
     },
-    snapshot.data(),
+    async () => questionIngestionService.ingestQuestion(
+      {
+        instituteId,
+        questionId,
+      },
+      snapshot.data(),
+    ),
   );
 };
 

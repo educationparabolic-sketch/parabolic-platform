@@ -1,6 +1,7 @@
 import * as functions from "firebase-functions";
 import {patternEngineService} from "../services/patternEngine";
 import {riskEngineService} from "../services/riskEngine";
+import {systemEventTopologyService} from "../services/systemEventTopology";
 
 const STUDENT_YEAR_METRICS_DOCUMENT_PATH =
   "institutes/{instituteId}/academicYears/{yearId}/" +
@@ -14,26 +15,41 @@ export const handleStudentYearMetricsWritten = async (
   const yearId = String(context.params.yearId ?? "").trim();
   const studentId = String(context.params.studentId ?? "").trim();
 
-  await riskEngineService.processStudentYearMetricsUpdate(
+  await systemEventTopologyService.executeEventHandler(
+    "StudentYearMetricsUpdated",
+    "studentYearMetricsOnWrite",
     {
       eventId: context.eventId,
       instituteId,
+      sourcePath: change.after.exists ?
+        change.after.ref.path :
+        change.before.ref.path,
       studentId,
       yearId,
     },
-    change.before.data(),
-    change.after.data(),
-  );
+    async () => {
+      await riskEngineService.processStudentYearMetricsUpdate(
+        {
+          eventId: context.eventId,
+          instituteId,
+          studentId,
+          yearId,
+        },
+        change.before.data(),
+        change.after.data(),
+      );
 
-  await patternEngineService.processStudentYearMetricsUpdate(
-    {
-      eventId: context.eventId,
-      instituteId,
-      studentId,
-      yearId,
+      await patternEngineService.processStudentYearMetricsUpdate(
+        {
+          eventId: context.eventId,
+          instituteId,
+          studentId,
+          yearId,
+        },
+        change.before.data(),
+        change.after.data(),
+      );
     },
-    change.before.data(),
-    change.after.data(),
   );
 };
 

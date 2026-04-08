@@ -17,6 +17,7 @@ import {
 import {
   submissionAnalyticsTriggerService,
 } from "../services/submissionAnalyticsTrigger";
+import {systemEventTopologyService} from "../services/systemEventTopology";
 import {usageMeteringService} from "../services/usageMetering";
 
 const SESSIONS_DOCUMENT_PATH =
@@ -32,88 +33,103 @@ export const handleSessionUpdated = async (
   const runId = String(context.params.runId ?? "").trim();
   const sessionId = String(context.params.sessionId ?? "").trim();
 
-  await submissionAnalyticsTriggerService.processSessionSubmissionTransition(
+  await systemEventTopologyService.executeEventHandler(
+    "SessionSubmitted",
+    "examSessionOnUpdate",
     {
       eventId: context.eventId,
       instituteId,
       runId,
       sessionId,
+      sourcePath: change.after.ref.path,
       yearId,
     },
-    change.before.data(),
-    change.after.data(),
-  );
+    async () => {
+      await submissionAnalyticsTriggerService
+        .processSessionSubmissionTransition(
+          {
+            eventId: context.eventId,
+            instituteId,
+            runId,
+            sessionId,
+            yearId,
+          },
+          change.before.data(),
+          change.after.data(),
+        );
 
-  await usageMeteringService.recordSessionExecutionUsage(
-    {
-      eventId: context.eventId,
-      instituteId,
-      runId,
-      sessionId,
-      yearId,
-    },
-    change.before.data(),
-    change.after.data(),
-  );
+      await usageMeteringService.recordSessionExecutionUsage(
+        {
+          eventId: context.eventId,
+          instituteId,
+          runId,
+          sessionId,
+          yearId,
+        },
+        change.before.data(),
+        change.after.data(),
+      );
 
-  await runAnalyticsEngineService.processSubmittedSession(
-    {
-      eventId: context.eventId,
-      instituteId,
-      runId,
-      sessionId,
-      yearId,
-    },
-    change.before.data(),
-    change.after.data(),
-  );
+      await runAnalyticsEngineService.processSubmittedSession(
+        {
+          eventId: context.eventId,
+          instituteId,
+          runId,
+          sessionId,
+          yearId,
+        },
+        change.before.data(),
+        change.after.data(),
+      );
 
-  await studentMetricsEngineService.processSubmittedSession(
-    {
-      eventId: context.eventId,
-      instituteId,
-      runId,
-      sessionId,
-      yearId,
-    },
-    change.before.data(),
-    change.after.data(),
-  );
+      await studentMetricsEngineService.processSubmittedSession(
+        {
+          eventId: context.eventId,
+          instituteId,
+          runId,
+          sessionId,
+          yearId,
+        },
+        change.before.data(),
+        change.after.data(),
+      );
 
-  await questionAnalyticsEngineService.processSubmittedSession(
-    {
-      eventId: context.eventId,
-      instituteId,
-      runId,
-      sessionId,
-      yearId,
-    },
-    change.before.data(),
-    change.after.data(),
-  );
+      await questionAnalyticsEngineService.processSubmittedSession(
+        {
+          eventId: context.eventId,
+          instituteId,
+          runId,
+          sessionId,
+          yearId,
+        },
+        change.before.data(),
+        change.after.data(),
+      );
 
-  await insightEngineService.processSubmittedSession(
-    {
-      eventId: context.eventId,
-      instituteId,
-      runId,
-      sessionId,
-      yearId,
-    },
-    change.before.data(),
-    change.after.data(),
-  );
+      await insightEngineService.processSubmittedSession(
+        {
+          eventId: context.eventId,
+          instituteId,
+          runId,
+          sessionId,
+          yearId,
+        },
+        change.before.data(),
+        change.after.data(),
+      );
 
-  await notificationQueueGenerationService.processSubmittedSession(
-    {
-      eventId: context.eventId,
-      instituteId,
-      runId,
-      sessionId,
-      yearId,
+      await notificationQueueGenerationService.processSubmittedSession(
+        {
+          eventId: context.eventId,
+          instituteId,
+          runId,
+          sessionId,
+          yearId,
+        },
+        change.before.data(),
+        change.after.data(),
+      );
     },
-    change.before.data(),
-    change.after.data(),
   );
 };
 

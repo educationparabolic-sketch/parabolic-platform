@@ -72,9 +72,11 @@ import {testTemplateOnCreate} from "./triggers/templateCreation";
 import {governanceSnapshotMonthly} from "./triggers/governanceSnapshot";
 import {billingSnapshotMonthly} from "./triggers/billingSnapshot";
 import {dataRetentionPolicyDaily} from "./triggers/dataRetentionPolicy";
+import {systemEventTopologyService} from "./services/systemEventTopology";
 import {loadEnvironmentConfig} from "./utils/environment";
 
 registerGlobalErrorHandlers();
+systemEventTopologyService.assertTopologyInvariants();
 
 export {questionBankOnCreate};
 export {runAssignmentOnCreate};

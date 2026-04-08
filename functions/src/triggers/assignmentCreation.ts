@@ -3,6 +3,7 @@ import {assignmentCreationService} from "../services/assignmentCreation";
 import {
   runAnalyticsInitializationService,
 } from "../services/runAnalyticsInitialization";
+import {systemEventTopologyService} from "../services/systemEventTopology";
 import {usageMeteringService} from "../services/usageMetering";
 
 const RUNS_DOCUMENT_PATH =
@@ -16,33 +17,46 @@ export const handleAssignmentCreated = async (
   const yearId = String(context.params.yearId ?? "").trim();
   const runId = String(context.params.runId ?? "").trim();
 
-  await assignmentCreationService.processAssignmentCreated(
+  await systemEventTopologyService.executeEventHandler(
+    "AssignmentCreated",
+    "runAssignmentOnCreate",
     {
+      eventId: context.eventId,
       instituteId,
       runId,
+      sourcePath: snapshot.ref.path,
       yearId,
     },
-    snapshot.data(),
-  );
+    async () => {
+      await assignmentCreationService.processAssignmentCreated(
+        {
+          instituteId,
+          runId,
+          yearId,
+        },
+        snapshot.data(),
+      );
 
-  const normalizedRunSnapshot = await snapshot.ref.get();
+      const normalizedRunSnapshot = await snapshot.ref.get();
 
-  await runAnalyticsInitializationService.initializeRunAnalytics(
-    {
-      instituteId,
-      runId,
-      yearId,
+      await runAnalyticsInitializationService.initializeRunAnalytics(
+        {
+          instituteId,
+          runId,
+          yearId,
+        },
+        normalizedRunSnapshot.data(),
+      );
+
+      await usageMeteringService.recordAssignmentUsage(
+        {
+          instituteId,
+          runId,
+          yearId,
+        },
+        normalizedRunSnapshot.data(),
+      );
     },
-    normalizedRunSnapshot.data(),
-  );
-
-  await usageMeteringService.recordAssignmentUsage(
-    {
-      instituteId,
-      runId,
-      yearId,
-    },
-    normalizedRunSnapshot.data(),
   );
 };
 
