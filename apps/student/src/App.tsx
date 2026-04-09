@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { useState, type FormEvent, type ReactElement } from "react";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
+import { useAuthProvider } from "../../../shared/services/authProvider";
 import { PORTAL_MANIFEST } from "../../../shared/services/portalManifest";
 import {
   UiChartContainer,
@@ -12,7 +13,8 @@ import {
   UiTable,
 } from "../../../shared/ui/components";
 
-function StudentPortalHome() {
+function StudentPortalHome(props: { onLogout: () => Promise<void> }) {
+  const { onLogout } = props;
   const portal = PORTAL_MANIFEST.student;
   const rows = [
     { id: "run-118", test: "Quadratic Drill", accuracy: "82%", discipline: "Stable" },
@@ -42,9 +44,10 @@ function StudentPortalHome() {
   return (
     <main className="portal-shell">
       <section className="portal-card">
-        <p className="portal-eyebrow">Build 113</p>
+        <p className="portal-eyebrow">Build 115</p>
         <h1>{portal.name}</h1>
         <p className="portal-purpose">{portal.purpose}</p>
+        <button onClick={() => void onLogout()} type="button">Logout</button>
         <UiNavBar
           title="Student Navigation"
           subtitle="Shared navbar component from shared/ui"
@@ -111,14 +114,124 @@ function StudentPortalHome() {
   );
 }
 
+function StudentLoginPage(props: { loginPath: string; protectedPath: string }) {
+  const { loginPath, protectedPath } = props;
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { session, signIn, clearError } = useAuthProvider();
+  const [email, setEmail] = useState("student@parabolic.local");
+  const [password, setPassword] = useState("demo-password");
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    clearError();
+
+    const signedIn = await signIn({ email, password });
+    if (signedIn) {
+      const nextTarget =
+        typeof location.state === "object" && location.state !== null && "from" in location.state ?
+          String((location.state as { from?: string }).from ?? protectedPath) :
+          protectedPath;
+
+      navigate(nextTarget, { replace: true });
+    }
+  }
+
+  if (session.status === "authenticated") {
+    return <Navigate replace to={protectedPath} />;
+  }
+
+  return (
+    <main className="portal-shell">
+      <section className="portal-card">
+        <p className="portal-eyebrow">Build 115</p>
+        <h1>Student Login</h1>
+        <p className="portal-purpose">
+          Firebase-authenticated student access for protected student routes.
+        </p>
+        <UiForm
+          title="Sign In"
+          description="Use Firebase credentials configured for this environment"
+          submitLabel="Login"
+          onSubmit={handleSubmit}
+        >
+          <UiFormField label="Email" htmlFor="student-login-email">
+            <input
+              id="student-login-email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </UiFormField>
+          <UiFormField label="Password" htmlFor="student-login-password">
+            <input
+              id="student-login-password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </UiFormField>
+        </UiForm>
+        {session.error ? <p role="alert">{session.error}</p> : null}
+        <p>
+          Protected path: <code>{protectedPath}</code>
+        </p>
+        <p>
+          Login route: <code>{loginPath}</code>
+        </p>
+      </section>
+    </main>
+  );
+}
+
+function StudentProtectedRoute(props: {
+  loginPath: string;
+  children: ReactElement;
+}) {
+  const { loginPath, children } = props;
+  const location = useLocation();
+  const { session } = useAuthProvider();
+
+  if (session.status === "loading") {
+    return (
+      <main className="portal-shell">
+        <section className="portal-card">
+          <p className="portal-eyebrow">Build 115</p>
+          <h1>Checking session</h1>
+          <p className="portal-purpose">Restoring Firebase authentication state.</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (session.status !== "authenticated") {
+    return <Navigate replace to={loginPath} state={{ from: location.pathname }} />;
+  }
+
+  return children;
+}
+
 function App() {
   usePortalTitle("student");
   const basePath = PORTAL_MANIFEST.student.routePrefix;
+  const loginPath = `${basePath}/login`;
+  const { signOut } = useAuthProvider();
 
   return (
     <Routes>
       <Route element={<Navigate replace to={basePath} />} path="/" />
-      <Route element={<StudentPortalHome />} path={basePath} />
+      <Route
+        element={<StudentLoginPage loginPath={loginPath} protectedPath={basePath} />}
+        path={loginPath}
+      />
+      <Route
+        element={(
+          <StudentProtectedRoute loginPath={loginPath}>
+            <StudentPortalHome onLogout={signOut} />
+          </StudentProtectedRoute>
+        )}
+        path={basePath}
+      />
       <Route element={<Navigate replace to={basePath} />} path="*" />
     </Routes>
   );
