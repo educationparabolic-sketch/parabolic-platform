@@ -5,5 +5,11 @@
   "type": "module",
   "dependencies": {
     "firebase": "^12.11.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
   }
 }

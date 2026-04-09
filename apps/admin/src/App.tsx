@@ -15,6 +15,7 @@ import { evaluateExamRoutePermissions, matchExamRoute } from "./portals/examRout
 import { evaluateStudentRoutePermissions, matchStudentRoute } from "./portals/studentRoutes";
 import { evaluateVendorRoutePermissions, matchVendorRoute } from "./portals/vendorRoutes";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
+import { UiNavBar } from "../../../shared/ui/components";
 
 type RouteFamily = (typeof ROUTE_FAMILIES)[number]["family"];
 
@@ -341,6 +342,11 @@ function RouteFrame(props: {
     role: session.role,
     onNavigate,
   };
+  const activeNavItemId =
+    navigationState.family === "admin" ? "admin" :
+    navigationState.family === "student" ? "student" :
+    navigationState.family === "exam" ? "exam" :
+    "vendor";
 
   let portalComponent = <AdminPortalShell {...commonProps} />;
 
@@ -373,12 +379,22 @@ function RouteFrame(props: {
           <button className="ghost-button" onClick={onLogout}>Logout</button>
         </div>
       </header>
-      <nav className="path-nav">
-        <button onClick={() => onNavigate("/admin/overview")}>Admin</button>
-        <button onClick={() => onNavigate("/student/dashboard")}>Student</button>
-        <button onClick={() => onNavigate("/session/demo-session?token=demo-exam-token")}>Exam</button>
-        <button onClick={() => onNavigate("/vendor/overview")}>Vendor</button>
-      </nav>
+      <UiNavBar
+        title="Portal Navigation"
+        subtitle="Shared navigation component in use across frontend portals."
+        activeItemId={activeNavItemId}
+        items={[
+          { id: "admin", label: "Admin", hint: "/admin/overview", onClick: () => onNavigate("/admin/overview") },
+          { id: "student", label: "Student", hint: "/student/dashboard", onClick: () => onNavigate("/student/dashboard") },
+          {
+            id: "exam",
+            label: "Exam",
+            hint: "/session/demo-session?token=...",
+            onClick: () => onNavigate("/session/demo-session?token=demo-exam-token"),
+          },
+          { id: "vendor", label: "Vendor", hint: "/vendor/overview", onClick: () => onNavigate("/vendor/overview") },
+        ]}
+      />
       <Suspense fallback={<section className="surface">Loading route family…</section>}>
         {portalComponent}
       </Suspense>
