@@ -215,6 +215,7 @@ FrontendFirebaseClientService | Shared | Build 112 shared `shared/services/fireb
 FrontendStackRuntimeBootstrap | Shared | Build 112 wired React Router + Firebase bootstrap into `apps/admin|student|exam|vendor/src/main.tsx`, configured student/exam/vendor base routes, and standardized formatting tooling (`.prettierrc.json`, `.prettierignore`, per-portal format scripts)
 SharedUiComponentLibrary | Shared | Build 113 added reusable frontend UI primitives in `shared/ui/components` (navigation bar, table, form fields, modal dialog, chart container, pagination) with shared styling in `shared/ui/components/shared-ui-components.css`
 PortalSharedUiConsumption | Shared | Build 113 integrated shared UI primitives across `apps/admin/src/App.tsx` and `apps/student|exam|vendor/src/App.tsx` so all portals consume the shared component system for deterministic UI consistency
+FrontendApiClientLayer | Shared | Build 114 added centralized typed API client contracts in `shared/types/apiClient.ts` and shared API client runtime in `shared/services/apiClient.ts`, including Firebase ID token attachment, retry policy handling, and standardized `ApiClientError` responses with optional `VITE_API_BASE_URL` support
 
 ---
 

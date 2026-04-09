@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 113  
-Next Build: 114
+Completed Builds: 114  
+Next Build: 115
 
 Current Phase: Phase 23 — Frontend Platform Foundation
 
@@ -3646,18 +3646,47 @@ Completed On
 
 ---
 
+## Build 114 — Frontend API Client Layer
+
+Phase  
+Phase 23 — Frontend Platform Foundation
+
+Summary  
+Implemented a centralized shared frontend API client layer with typed request/response contracts, Firebase ID token attachment, retry handling, and normalized API error behavior.
+
+Components implemented:
+
+- Added shared API client type contracts in `shared/types/apiClient.ts` covering request options, retry policy, typed client methods, and API error payload shape
+- Added shared API client service in `shared/services/apiClient.ts` with generic `request/get/post/put/patch/delete` methods
+- Implemented Firebase ID token attachment on authenticated requests using the shared Firebase auth bootstrap (`shared/services/firebaseClient.ts`)
+- Implemented deterministic retry behavior for network/transient HTTP failures with configurable retry policy support
+- Implemented standardized `ApiClientError` error object exposing status/code/payload for consistent frontend error handling
+- Extended shared frontend environment contract to include optional `VITE_API_BASE_URL` resolution and added this key to all portal `.env.example` files
+- Executed frontend compile/lint checks across all four portals and captured desktop/mobile browser verification artifacts for affected portal routes
+
+Result  
+All frontend portals now have a reusable, typed, token-aware API communication layer under `shared/services/apiClient.ts` aligned with Build 114 architecture scope.
+
+Commit Reference  
+Build 114 — Frontend API Client Layer implemented
+
+Completed On  
+2026-04-09
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 114
+Next Build Number: 115
 
 Phase  
 Phase 23 — Frontend Platform Foundation
 
 Subsystem  
-Frontend API Client Layer
+Authentication Integration
 
 Reference  
-2_Portals_Architecture.md → Section 1.4 API Client Layer
+2_Portals_Architecture.md → Section 1.5 Authentication Integration
 
 ---
 
@@ -3777,7 +3806,9 @@ Build | Phase | Status
 110 | Unified System Event Topology | Completed
 111 | Frontend Platform Foundation | Completed
 112 | Frontend Platform Foundation | Completed
-113–150 | Remaining Phases | Pending
+113 | Frontend Platform Foundation | Completed
+114 | Frontend Platform Foundation | Completed
+115–150 | Remaining Phases | Pending
 
 ---
 

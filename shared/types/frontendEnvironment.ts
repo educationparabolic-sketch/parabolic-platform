@@ -7,6 +7,7 @@ export interface FrontendEnvironment {
   firebaseStorageBucket?: string;
   firebaseMessagingSenderId?: string;
   firebaseMeasurementId?: string;
+  apiBaseUrl?: string;
 }
 
 export interface FrontendEnvironmentValidationResult {
