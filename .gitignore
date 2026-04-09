@@ -77,3 +77,6 @@ dist
 
 # Codex local workspace state
 .codex
+
+# Local-only Firebase auth test credentials (do not commit)
+docs/LOCAL_TEST_CREDENTIALS.md

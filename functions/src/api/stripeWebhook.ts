@@ -1,28 +1,31 @@
 import * as functions from "firebase-functions";
 import {sendErrorResponse} from "../services/apiResponse";
 import {
-  paymentEventIntegrationService,
-} from "../services/paymentEventIntegration";
-import {
   createMethodMiddleware,
   createMiddlewareHandler,
 } from "../middleware/framework";
 import {MiddlewareRequest} from "../types/middleware";
 import {
+  StripeWebhookProcessingResult,
   PaymentEventIntegrationValidationError,
   StripeWebhookSuccessResponse,
 } from "../types/paymentEventIntegration";
 import {systemEventTopologyService} from "../services/systemEventTopology";
 
+type ProcessStripeWebhook = (
+  input: {
+    rawBody?: Buffer | string;
+    requestBody?: unknown;
+    signatureHeader?: string;
+  },
+) => Promise<StripeWebhookProcessingResult>;
+
 interface StripeWebhookDependencies {
-  processStripeWebhook:
-    typeof paymentEventIntegrationService.processStripeWebhook;
+  processStripeWebhook: ProcessStripeWebhook;
 }
 
 const buildSuccessResponse = (
-  result: Awaited<
-    ReturnType<typeof paymentEventIntegrationService.processStripeWebhook>
-  >,
+  result: StripeWebhookProcessingResult,
   requestId: string,
   timestamp: string,
 ): StripeWebhookSuccessResponse => ({
@@ -90,10 +93,12 @@ export const createStripeWebhookHandler = (
 });
 
 export const handleStripeWebhookRequest = createStripeWebhookHandler({
-  processStripeWebhook:
-    paymentEventIntegrationService.processStripeWebhook.bind(
-      paymentEventIntegrationService,
-    ),
+  processStripeWebhook: async (input) => {
+    const {paymentEventIntegrationService} = await import(
+      "../services/paymentEventIntegration.js"
+    );
+    return paymentEventIntegrationService.processStripeWebhook(input);
+  },
 });
 
 export {buildSuccessResponse};
