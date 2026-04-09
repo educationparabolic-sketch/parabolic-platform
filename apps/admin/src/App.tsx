@@ -14,6 +14,7 @@ import { evaluateAdminRoutePermissions, matchAdminRoute } from "./portals/adminR
 import { evaluateExamRoutePermissions, matchExamRoute } from "./portals/examRoutes";
 import { evaluateStudentRoutePermissions, matchStudentRoute } from "./portals/studentRoutes";
 import { evaluateVendorRoutePermissions, matchVendorRoute } from "./portals/vendorRoutes";
+import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 
 type RouteFamily = (typeof ROUTE_FAMILIES)[number]["family"];
 
@@ -386,6 +387,7 @@ function RouteFrame(props: {
 }
 
 function App() {
+  usePortalTitle("admin");
   const [session, setSession] = useState<RoutingSessionContext>(() => loadStoredSession());
   const [pathname, setPathname] = useState(() => normalizePathname(window.location.pathname));
   const [search, setSearch] = useState(() => window.location.search);

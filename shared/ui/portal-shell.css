@@ -1,0 +1,84 @@
+:root {
+  font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #13213a;
+  background:
+    radial-gradient(circle at top left, rgba(209, 98, 24, 0.12), transparent 24%),
+    linear-gradient(180deg, #fff7ef 0%, #f2f6fb 100%);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  min-width: 320px;
+}
+
+.portal-shell {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 1.5rem;
+}
+
+.portal-card {
+  width: min(680px, 100%);
+  border-radius: 16px;
+  background: #ffffff;
+  border: 1px solid #dfe7f3;
+  padding: 1.5rem;
+  box-shadow: 0 24px 44px rgba(17, 37, 64, 0.1);
+}
+
+.portal-eyebrow {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #9a5619;
+}
+
+.portal-card h1 {
+  margin: 0.4rem 0 0;
+}
+
+.portal-purpose {
+  margin: 0.6rem 0 1rem;
+  color: #3b4d68;
+}
+
+.portal-meta {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.portal-meta div {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 0.5rem;
+}
+
+.portal-meta dt {
+  font-weight: 600;
+  color: #33435c;
+}
+
+.portal-meta dd {
+  margin: 0;
+  color: #13213a;
+}

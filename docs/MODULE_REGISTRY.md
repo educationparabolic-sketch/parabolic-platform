@@ -206,6 +206,10 @@ AdminPortalRoutes | Admin | Build 67 admin portal route registry and access-cont
 StudentPortalRoutes | Student | Build 68 student portal route registry and access-control layer covering dashboard, my-tests, performance, insights, discipline, profile, dynamic performance detail resolution, and license-gated navigation
 ExamPortalExecutionRoute | Exam | Build 69 exam portal execution route registry and bootstrap shell covering `/session/{sessionId}`, signed token enforcement, student-only access, redirect-on-invalid-entry behavior, immutable snapshot loading sequence, and exam runtime handoff preparation
 VendorPortalRoutes | Vendor | Build 70 vendor portal route registry and access-control layer covering overview, institutes, institute detail, licensing, calibration, calibration simulation/history, intelligence, revenue, system health, and audit navigation on `vendor.yourdomain.com/vendor/*`
+MultiPortalAppScaffold | Shared | Build 111 initialized independent frontend apps under `apps/admin`, `apps/student`, `apps/exam`, and `apps/vendor` so each portal can run/build independently with aligned Vite+TypeScript scaffolding
+PortalManifestService | Shared | Build 111 shared `shared/services/portalManifest.ts` domain-map module defining canonical admin/student/exam/vendor portal metadata for cross-portal reuse
+PortalTitleHook | Shared | Build 111 shared `shared/hooks/usePortalTitle.ts` helper to apply consistent portal-specific document titles across frontend apps
+PortalShellUiFoundation | Shared | Build 111 shared UI foundation under `shared/ui` (`portal-shell.css`, `portalShellModel.ts`) for reusable shell styling and metadata rendering support across portals
 
 ---
 

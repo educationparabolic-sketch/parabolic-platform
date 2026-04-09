@@ -150,8 +150,56 @@ Run only what is applicable to the current build domain.
 - responsive sanity check (desktop + mobile width)
 - integration check against backend APIs (or mocks if defined by build scope)
 - browser verification is mandatory for commit readiness
+- if browser verification tooling is missing, install required tooling (e.g., Playwright + browser binaries) and continue
+- after browser verification, clean up temporary test tooling/scripts/dependencies unless they are intentionally part of the build scope
 
 If sandbox restrictions block required checks, request permission and continue.
+
+### Frontend Verification Protocol (MANDATORY FOR 111–150)
+
+For every affected portal route in the current build scope:
+
+Affected routes include:
+- every new or modified route introduced by the build
+- related guard/redirect/unauthorized/login fallback routes impacted by the change
+
+1. Start local app(s) and open exact affected URLs.
+2. Run browser checks for both viewport classes:
+   - Desktop: 1366x768
+   - Mobile: 390x844
+3. Validate all of the following:
+   - Route loads expected UI state for this build
+   - No uncaught console errors
+   - No failed network calls (HTTP >= 400), unless explicitly expected by build scope
+   - No horizontal overflow / broken layout at required viewport sizes
+   - Role/layer guard behavior matches build scope (when applicable)
+4. If route depends on backend integration:
+   - Verify successful API interaction against emulator/backend, or declared mock mode for that build
+5. Record deterministic evidence in output:
+   - Route URL
+   - Viewport tested
+   - Console status (PASS/FAIL)
+   - Network status (PASS/FAIL)
+   - Responsive status (PASS/FAIL)
+   - Guard behavior status (PASS/FAIL or N/A)
+   - Artifact path(s) for screenshots/log outputs captured during verification (or N/A if not captured)
+
+### Frontend Commit Gate (111–150)
+
+Commit readiness must be NO if any of these are true:
+- Browser verification not run for all affected routes
+- Console errors remain unresolved
+- Unexpected network failures remain unresolved
+- Responsive break exists on desktop or mobile required viewport
+- Guard behavior is incorrect for route scope
+
+Commit readiness can be YES only when all required frontend checks pass.
+
+### Frontend Sandbox Escalation Rule
+
+If browser checks, dev-server startup, or tooling install are blocked by sandbox/network restrictions:
+- request escalated permission immediately
+- continue and complete the required verification after approval
 
 
 ## OUTPUT
@@ -168,6 +216,7 @@ Return:
 8. If NO, exact blockers
 9. Local URLs to open for verification (app base URL + exact affected route URLs)
 10. First route to verify and expected visible outcome
+11. Frontend verification matrix (route x viewport x console/network/responsive/guard status) for builds 111–150
 
 ---
 
