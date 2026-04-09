@@ -81,4 +81,19 @@ body {
 .portal-meta dd {
   margin: 0;
   color: #13213a;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+  .portal-shell {
+    padding: 1rem;
+  }
+
+  .portal-card {
+    padding: 1rem;
+  }
+
+  .portal-meta div {
+    grid-template-columns: 1fr;
+  }
 }

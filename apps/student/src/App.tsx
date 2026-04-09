@@ -1,15 +1,15 @@
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { PORTAL_MANIFEST } from "../../../shared/services/portalManifest";
 import { getPortalMetaRows } from "../../../shared/ui/portalShellModel";
+import { Navigate, Route, Routes } from "react-router-dom";
 
-function App() {
-  usePortalTitle("student");
+function StudentPortalHome() {
   const portal = PORTAL_MANIFEST.student;
 
   return (
     <main className="portal-shell">
       <section className="portal-card">
-        <p className="portal-eyebrow">Build 111</p>
+        <p className="portal-eyebrow">Build 112</p>
         <h1>{portal.name}</h1>
         <p className="portal-purpose">{portal.purpose}</p>
         <dl className="portal-meta">
@@ -20,9 +20,22 @@ function App() {
             </div>
           ))}
         </dl>
-        <p>This portal shell is initialized and ready for Student domain route modules.</p>
+        <p>Frontend stack is configured with React Router, TypeScript, Vite, and Firebase auth bootstrap.</p>
       </section>
     </main>
+  );
+}
+
+function App() {
+  usePortalTitle("student");
+  const basePath = PORTAL_MANIFEST.student.routePrefix;
+
+  return (
+    <Routes>
+      <Route element={<Navigate replace to={basePath} />} path="/" />
+      <Route element={<StudentPortalHome />} path={basePath} />
+      <Route element={<Navigate replace to={basePath} />} path="*" />
+    </Routes>
   );
 }
 

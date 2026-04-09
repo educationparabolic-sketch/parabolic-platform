@@ -1,15 +1,15 @@
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { PORTAL_MANIFEST } from "../../../shared/services/portalManifest";
 import { getPortalMetaRows } from "../../../shared/ui/portalShellModel";
+import { Navigate, Route, Routes } from "react-router-dom";
 
-function App() {
-  usePortalTitle("exam");
+function ExamPortalHome() {
   const portal = PORTAL_MANIFEST.exam;
 
   return (
     <main className="portal-shell">
       <section className="portal-card">
-        <p className="portal-eyebrow">Build 111</p>
+        <p className="portal-eyebrow">Build 112</p>
         <h1>{portal.name}</h1>
         <p className="portal-purpose">{portal.purpose}</p>
         <dl className="portal-meta">
@@ -20,9 +20,22 @@ function App() {
             </div>
           ))}
         </dl>
-        <p>This portal shell is initialized and ready for Exam runtime modules.</p>
+        <p>Frontend stack is configured with React Router, TypeScript, Vite, and Firebase auth bootstrap.</p>
       </section>
     </main>
+  );
+}
+
+function App() {
+  usePortalTitle("exam");
+  const basePath = PORTAL_MANIFEST.exam.routePrefix;
+
+  return (
+    <Routes>
+      <Route element={<Navigate replace to={basePath} />} path="/" />
+      <Route element={<ExamPortalHome />} path={basePath} />
+      <Route element={<Navigate replace to={basePath} />} path="*" />
+    </Routes>
   );
 }
 

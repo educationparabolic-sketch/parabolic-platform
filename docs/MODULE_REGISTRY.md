@@ -210,6 +210,9 @@ MultiPortalAppScaffold | Shared | Build 111 initialized independent frontend app
 PortalManifestService | Shared | Build 111 shared `shared/services/portalManifest.ts` domain-map module defining canonical admin/student/exam/vendor portal metadata for cross-portal reuse
 PortalTitleHook | Shared | Build 111 shared `shared/hooks/usePortalTitle.ts` helper to apply consistent portal-specific document titles across frontend apps
 PortalShellUiFoundation | Shared | Build 111 shared UI foundation under `shared/ui` (`portal-shell.css`, `portalShellModel.ts`) for reusable shell styling and metadata rendering support across portals
+FrontendEnvironmentConfig | Shared | Build 112 shared typed frontend environment contract via `shared/types/frontendEnvironment.ts` and `shared/services/frontendEnvironment.ts`, plus per-portal `.env.example` templates for Vite Firebase keys
+FrontendFirebaseClientService | Shared | Build 112 shared `shared/services/firebaseClient.ts` lazy Firebase app/auth bootstrap for portal runtime initialization
+FrontendStackRuntimeBootstrap | Shared | Build 112 wired React Router + Firebase bootstrap into `apps/admin|student|exam|vendor/src/main.tsx`, configured student/exam/vendor base routes, and standardized formatting tooling (`.prettierrc.json`, `.prettierignore`, per-portal format scripts)
 
 ---
 
