@@ -219,6 +219,7 @@ FrontendApiClientLayer | Shared | Build 114 added centralized typed API client c
 FrontendAuthProviderService | Shared | Build 115 added shared authentication contracts in `shared/types/authProvider.ts` and provider runtime in `shared/services/authProvider.tsx`, including Firebase auth-state subscription, sign-in/sign-out methods, session persistence, and periodic ID-token refresh support
 FrontendAuthRouteGuards | Shared | Build 115 integrated protected-route and login-route enforcement across portal apps (`apps/student|exam|vendor/src/App.tsx`) with deterministic unauthenticated redirects to `/student/login`, `/session/login`, and `/vendor/login`
 FrontendAuthRuntimeBootstrap | Shared | Build 115 wrapped all portal entry points (`apps/admin|student|exam|vendor/src/main.tsx`) with the shared `AuthProvider` so authentication context is accessible across portal runtimes
+AdminPortalLayoutShell | Admin | Build 116 implemented the admin portal core layout in `apps/admin/src/App.tsx` with sidebar navigation, top header bar, main content container, and route-based rendering for `/admin/overview`, `/admin/students`, `/admin/tests`, `/admin/assignments`, `/admin/analytics`, and `/admin/settings`
 
 ---
 

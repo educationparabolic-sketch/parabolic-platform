@@ -1,530 +1,218 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import "./App.css";
-import {
-  DEFAULT_ROUTE_BY_ROLE,
-  PORTAL_DOMAINS,
-  ROUTE_FAMILIES,
-  type LicenseLayer,
-  type PortalDomainKey,
-  type PortalRole,
-  type RouteAccessDecision,
-  type RoutingSessionContext,
-} from "../../../shared/types/portalRouting";
-import { evaluateAdminRoutePermissions, matchAdminRoute } from "./portals/adminRoutes";
-import { evaluateExamRoutePermissions, matchExamRoute } from "./portals/examRoutes";
-import { evaluateStudentRoutePermissions, matchStudentRoute } from "./portals/studentRoutes";
-import { evaluateVendorRoutePermissions, matchVendorRoute } from "./portals/vendorRoutes";
+import { Navigate, NavLink, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
-import { UiNavBar } from "../../../shared/ui/components";
+import { useAuthProvider } from "../../../shared/services/authProvider";
+import "./App.css";
 
-type RouteFamily = (typeof ROUTE_FAMILIES)[number]["family"];
-
-interface NavigationState {
-  family: RouteFamily;
-  pathname: string;
-  search: string;
-  activeDomain: PortalDomainKey;
-  canonicalDomain: PortalDomainKey;
+interface AdminNavItem {
+  path: string;
+  label: string;
+  summary: string;
 }
 
-interface PortalShellProps {
-  pathname: string;
-  search: string;
-  activeDomain: PortalDomainKey;
-  canonicalDomain: PortalDomainKey;
-  canonicalHostname: string;
-  licenseLayer: LicenseLayer | null;
-  role: PortalRole | null;
-  onNavigate: (pathname: string) => void;
+interface AdminSectionPageProps {
+  title: string;
+  summary: string;
 }
 
-const AdminPortalShell = lazy(() => import("./portals/AdminPortalShell.tsx"));
-const StudentPortalShell = lazy(() => import("./portals/StudentPortalShell.tsx"));
-const ExamPortalShell = lazy(() => import("./portals/ExamPortalShell.tsx"));
-const VendorPortalShell = lazy(() => import("./portals/VendorPortalShell.tsx"));
+const ADMIN_NAV_ITEMS: AdminNavItem[] = [
+  {
+    path: "/admin/overview",
+    label: "Overview",
+    summary: "Operational institute snapshot and core portal landing context.",
+  },
+  {
+    path: "/admin/students",
+    label: "Students",
+    summary: "Student roster and lifecycle navigation workspace.",
+  },
+  {
+    path: "/admin/tests",
+    label: "Tests",
+    summary: "Template creation and test management entry point.",
+  },
+  {
+    path: "/admin/assignments",
+    label: "Assignments",
+    summary: "Assignment planning and run participation controls.",
+  },
+  {
+    path: "/admin/analytics",
+    label: "Analytics",
+    summary: "Summary-level performance and participation dashboards.",
+  },
+  {
+    path: "/admin/settings",
+    label: "Settings",
+    summary: "Institute-level configuration and account controls.",
+  },
+];
 
-const DEFAULT_SESSION: RoutingSessionContext = {
-  isAuthenticated: false,
-  role: null,
-  licenseLayer: null,
-  instituteActive: true,
-  isSuspended: false,
-};
-
-const STORAGE_KEY = "parabolic-build-66-session";
-
-function normalizePathname(pathname: string): string {
-  if (!pathname.startsWith("/")) {
-    return `/${pathname}`;
-  }
-
-  return pathname.length > 1 && pathname.endsWith("/") ?
-    pathname.slice(0, -1) :
-    pathname;
-}
-
-function resolveActiveDomain(hostname: string): PortalDomainKey {
-  const normalizedHostname = hostname.toLowerCase();
-
-  if (
-    normalizedHostname === "localhost" ||
-    normalizedHostname === "127.0.0.1" ||
-    normalizedHostname.endsWith(".localhost")
-  ) {
-    return "development";
-  }
-
-  const matchedDomain = Object.values(PORTAL_DOMAINS).find((domain) =>
-    domain.hostname === normalizedHostname,
-  );
-
-  return matchedDomain?.key ?? "marketing";
-}
-
-function resolveRouteFamily(pathname: string): RouteFamily {
-  const normalizedPathname = normalizePathname(pathname);
-  const matchedFamily = ROUTE_FAMILIES.find((family) =>
-    normalizedPathname === family.matchPrefix ||
-    normalizedPathname.startsWith(`${family.matchPrefix}/`),
-  );
-
-  return matchedFamily?.family ?? "public";
-}
-
-function determineNavigationState(pathname: string, hostname: string): NavigationState {
-  const family = resolveRouteFamily(pathname);
-  const routeFamily = ROUTE_FAMILIES.find((entry) => entry.family === family);
-  const activeDomain = resolveActiveDomain(hostname);
-
-  return {
-    family,
-    pathname: normalizePathname(pathname),
-    search: window.location.search,
-    activeDomain,
-    canonicalDomain: routeFamily?.canonicalDomain ?? "marketing",
-  };
-}
-
-function buildCanonicalUrl(pathname: string, search: string, domain: PortalDomainKey): string {
-  const canonicalHostname = PORTAL_DOMAINS[domain].hostname;
-  return `https://${canonicalHostname}${normalizePathname(pathname)}${search}`;
-}
-
-function evaluateRouteAccess(
-  navigationState: NavigationState,
-  session: RoutingSessionContext,
-): RouteAccessDecision {
-  const { family, pathname, search, activeDomain } = navigationState;
-
-  if (family === "public") {
-    return {
-      allowed: false,
-      redirectTo: session.isAuthenticated && session.role ?
-        DEFAULT_ROUTE_BY_ROLE[session.role] :
-        "/login",
-      reason: null,
-    };
-  }
-
-  if (family === "login" || family === "unauthorized") {
-    return { allowed: true, redirectTo: null, reason: null };
-  }
-
-  const routeFamily = ROUTE_FAMILIES.find((entry) => entry.family === family);
-  if (!routeFamily) {
-    return { allowed: false, redirectTo: "/unauthorized", reason: "unauthorized" };
-  }
-
-  if (activeDomain !== "development" && activeDomain !== routeFamily.canonicalDomain) {
-    return {
-      allowed: false,
-      redirectTo: buildCanonicalUrl(pathname, search, routeFamily.canonicalDomain),
-      reason: "invalid_domain",
-    };
-  }
-
-  if (routeFamily.requiresAuthentication && !session.isAuthenticated) {
-    return { allowed: false, redirectTo: "/login", reason: "unauthenticated" };
-  }
-
-  if (session.isSuspended) {
-    return { allowed: false, redirectTo: "/unauthorized", reason: "suspended_account" };
-  }
-
-  if (!session.instituteActive && family !== "vendor") {
-    return { allowed: false, redirectTo: "/unauthorized", reason: "inactive_institute" };
-  }
-
-  if (session.role && !routeFamily.allowedRoles.includes(session.role)) {
-    return { allowed: false, redirectTo: "/unauthorized", reason: "unauthorized" };
-  }
-
-  if (family === "admin") {
-    const adminDecision = evaluateAdminRoutePermissions(
-      matchAdminRoute(pathname),
-      session.role,
-      session.licenseLayer,
-    );
-
-    if (!adminDecision.allowed) {
-      return adminDecision;
-    }
-  }
-
-  if (family === "student") {
-    const studentDecision = evaluateStudentRoutePermissions(
-      matchStudentRoute(pathname),
-      session.licenseLayer,
-    );
-
-    if (!studentDecision.allowed) {
-      return studentDecision;
-    }
-  }
-
-  if (family === "exam") {
-    const examDecision = evaluateExamRoutePermissions(matchExamRoute(pathname), {
-      token: new URLSearchParams(search).get("token"),
-    });
-
-    if (!examDecision.allowed) {
-      return examDecision;
-    }
-  }
-
-  if (family === "vendor") {
-    const vendorDecision = evaluateVendorRoutePermissions(
-      matchVendorRoute(pathname),
-      session.role,
-    );
-
-    if (!vendorDecision.allowed) {
-      return vendorDecision;
-    }
-  }
-
-  return { allowed: true, redirectTo: null, reason: null };
-}
-
-function loadStoredSession(): RoutingSessionContext {
-  if (typeof window === "undefined") {
-    return DEFAULT_SESSION;
-  }
-
-  const storedValue = window.localStorage.getItem(STORAGE_KEY);
-  if (!storedValue) {
-    return DEFAULT_SESSION;
-  }
-
-  try {
-    return {
-      ...DEFAULT_SESSION,
-      ...(JSON.parse(storedValue) as Partial<RoutingSessionContext>),
-    };
-  } catch {
-    return DEFAULT_SESSION;
-  }
-}
-
-function LoginPage(props: {
-  session: RoutingSessionContext;
-  onAuthenticate: (role: PortalRole) => void;
-  onLicenseLayerChange: (licenseLayer: LicenseLayer) => void;
-  onInstituteActiveChange: (value: boolean) => void;
-  onSuspendedChange: (value: boolean) => void;
-  onLogout: () => void;
-}) {
-  const { session, onAuthenticate, onLicenseLayerChange, onInstituteActiveChange, onSuspendedChange, onLogout } =
-    props;
-
+function AdminSectionPage({ title, summary }: AdminSectionPageProps) {
   return (
-    <section className="surface">
-      <p className="eyebrow">Build 66</p>
-      <h1>Multi-Portal Routing Framework</h1>
-      <p className="lede">
-        Login and unauthorized flows are now centralized so role, license, institute state,
-        and suspension checks can resolve to the correct portal family before feature routes are
-        added in later builds.
+    <section className="admin-content-card" aria-labelledby="admin-content-title">
+      <p className="admin-content-eyebrow">Admin Portal</p>
+      <h2 id="admin-content-title">{title}</h2>
+      <p className="admin-content-copy">{summary}</p>
+      <p className="admin-content-note">
+        Build 116 establishes layout, navigation, and route-based rendering for this section.
       </p>
-      <div className="controls-grid">
-        <label>
-          <span>License Layer</span>
-          <select
-            value={session.licenseLayer ?? "L0"}
-            onChange={(event) => onLicenseLayerChange(event.target.value as LicenseLayer)}
-          >
-            <option value="L0">L0</option>
-            <option value="L1">L1</option>
-            <option value="L2">L2</option>
-            <option value="L3">L3</option>
-          </select>
-        </label>
-        <label className="checkbox-field">
-          <input
-            checked={session.instituteActive}
-            type="checkbox"
-            onChange={(event) => onInstituteActiveChange(event.target.checked)}
-          />
-          <span>Institute active</span>
-        </label>
-        <label className="checkbox-field">
-          <input
-            checked={session.isSuspended}
-            type="checkbox"
-            onChange={(event) => onSuspendedChange(event.target.checked)}
-          />
-          <span>Account suspended</span>
-        </label>
-      </div>
-      <div className="role-grid">
-        <button onClick={() => onAuthenticate("student")}>Continue as Student</button>
-        <button onClick={() => onAuthenticate("teacher")}>Continue as Teacher</button>
-        <button onClick={() => onAuthenticate("admin")}>Continue as Admin</button>
-        <button onClick={() => onAuthenticate("director")}>Continue as Director</button>
-        <button onClick={() => onAuthenticate("vendor")}>Continue as Vendor</button>
-      </div>
-      {session.isAuthenticated ? (
-        <button className="ghost-button" onClick={onLogout}>Clear Session</button>
-      ) : null}
     </section>
   );
 }
 
-function UnauthorizedPage(props: {
-  decision: RouteAccessDecision;
-  pathname: string;
-  canonicalHostname: string;
-}) {
-  const { decision, pathname, canonicalHostname } = props;
-
+function NotFoundPage() {
   return (
-    <section className="surface">
-      <p className="eyebrow">Access Blocked</p>
-      <h1>Unauthorized Route</h1>
-      <p className="lede">
-        The current route failed guard evaluation with reason
-        {" "}
-        <strong>{decision.reason ?? "unknown"}</strong>.
-      </p>
-      <dl className="meta-grid">
-        <div>
-          <dt>Path</dt>
-          <dd>{pathname}</dd>
-        </div>
-        <div>
-          <dt>Canonical Host</dt>
-          <dd>{canonicalHostname}</dd>
-        </div>
-        <div>
-          <dt>Redirect</dt>
-          <dd>{decision.redirectTo ?? "None"}</dd>
-        </div>
-      </dl>
-    </section>
+    <main className="admin-page-shell">
+      <section className="admin-content-card" aria-labelledby="admin-not-found-title">
+        <p className="admin-content-eyebrow">Route Not Found</p>
+        <h1 id="admin-not-found-title">Unknown admin route</h1>
+        <p className="admin-content-copy">
+          The requested path is outside the Build 116 admin navigation scope. Use the sidebar routes under
+          <code> /admin/*</code>
+          .
+        </p>
+        <NavLink className="admin-primary-link" to="/admin/overview">
+          Go to /admin/overview
+        </NavLink>
+      </section>
+    </main>
   );
 }
 
-function RouteFrame(props: {
-  session: RoutingSessionContext;
-  navigationState: NavigationState;
-  onNavigate: (pathname: string, replace?: boolean) => void;
-  onLogout: () => void;
-}) {
-  const { session, navigationState, onNavigate, onLogout } = props;
-  const canonicalHostname = PORTAL_DOMAINS[navigationState.canonicalDomain].hostname;
-  const commonProps: PortalShellProps = {
-    pathname: navigationState.pathname,
-    search: navigationState.search,
-    activeDomain: navigationState.activeDomain,
-    canonicalDomain: navigationState.canonicalDomain,
-    canonicalHostname,
-    licenseLayer: session.licenseLayer,
-    role: session.role,
-    onNavigate,
-  };
-  const activeNavItemId =
-    navigationState.family === "admin" ? "admin" :
-    navigationState.family === "student" ? "student" :
-    navigationState.family === "exam" ? "exam" :
-    "vendor";
+function AdminLayout() {
+  const location = useLocation();
+  const { session, signOut } = useAuthProvider();
 
-  let portalComponent = <AdminPortalShell {...commonProps} />;
-
-  switch (navigationState.family) {
-  case "student":
-    portalComponent = <StudentPortalShell {...commonProps} />;
-    break;
-  case "exam":
-    portalComponent = <ExamPortalShell {...commonProps} />;
-    break;
-  case "vendor":
-    portalComponent = <VendorPortalShell {...commonProps} />;
-    break;
-  case "admin":
-  default:
-    portalComponent = <AdminPortalShell {...commonProps} />;
-    break;
-  }
+  const activeItem = ADMIN_NAV_ITEMS.find((item) =>
+    location.pathname === item.path || location.pathname.startsWith(`${item.path}/`),
+  );
 
   return (
-    <div className="app-shell">
-      <header className="app-header">
-        <div>
-          <p className="eyebrow">Routing Runtime</p>
-          <h1>Parabolic Platform</h1>
+    <main className="admin-page-shell">
+      <div className="admin-layout-grid">
+        <aside className="admin-sidebar" aria-label="Admin navigation">
+          <div className="admin-sidebar-header">
+            <p className="admin-sidebar-eyebrow">Portal</p>
+            <h1>Admin Dashboard</h1>
+            <p className="admin-sidebar-copy">Institute operations navigation</p>
+          </div>
+          <nav>
+            <ul className="admin-nav-list">
+              {ADMIN_NAV_ITEMS.map((item) => (
+                <li key={item.path}>
+                  <NavLink
+                    to={item.path}
+                    className={({ isActive }) =>
+                      isActive ? "admin-nav-link admin-nav-link-active" : "admin-nav-link"
+                    }
+                  >
+                    <span>{item.label}</span>
+                    <small>{item.summary}</small>
+                  </NavLink>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        </aside>
+
+        <div className="admin-main-area">
+          <header className="admin-topbar">
+            <div>
+              <p className="admin-topbar-eyebrow">Current Route</p>
+              <h2>{activeItem?.label ?? "Admin"}</h2>
+              <p className="admin-topbar-path">{location.pathname}</p>
+            </div>
+            <div className="admin-session-pill">
+              <span>Status: {session.status}</span>
+              <button
+                type="button"
+                className="admin-signout-button"
+                onClick={() => {
+                  void signOut();
+                }}
+                disabled={session.status !== "authenticated"}
+              >
+                Sign out
+              </button>
+            </div>
+          </header>
+
+          <section className="admin-content-container">
+            <Outlet />
+          </section>
         </div>
-        <div className="session-pill">
-          <span>{session.role ?? "guest"}</span>
-          <span>{session.licenseLayer ?? "L0"}</span>
-          <button className="ghost-button" onClick={onLogout}>Logout</button>
-        </div>
-      </header>
-      <UiNavBar
-        title="Portal Navigation"
-        subtitle="Shared navigation component in use across frontend portals."
-        activeItemId={activeNavItemId}
-        items={[
-          { id: "admin", label: "Admin", hint: "/admin/overview", onClick: () => onNavigate("/admin/overview") },
-          { id: "student", label: "Student", hint: "/student/dashboard", onClick: () => onNavigate("/student/dashboard") },
-          {
-            id: "exam",
-            label: "Exam",
-            hint: "/session/demo-session?token=...",
-            onClick: () => onNavigate("/session/demo-session?token=demo-exam-token"),
-          },
-          { id: "vendor", label: "Vendor", hint: "/vendor/overview", onClick: () => onNavigate("/vendor/overview") },
-        ]}
-      />
-      <Suspense fallback={<section className="surface">Loading route family…</section>}>
-        {portalComponent}
-      </Suspense>
-    </div>
+      </div>
+    </main>
   );
 }
 
 function App() {
   usePortalTitle("admin");
-  const [session, setSession] = useState<RoutingSessionContext>(() => loadStoredSession());
-  const [pathname, setPathname] = useState(() => normalizePathname(window.location.pathname));
-  const [search, setSearch] = useState(() => window.location.search);
-
-  useEffect(() => {
-    const handlePopState = () => {
-      setPathname(normalizePathname(window.location.pathname));
-      setSearch(window.location.search);
-    };
-
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-  }, [session]);
-
-  const navigationState = useMemo(
-    () => {
-      const state = determineNavigationState(pathname, window.location.hostname);
-      return {
-        ...state,
-        search,
-      };
-    },
-    [pathname, search],
-  );
-
-  const decision = useMemo(
-    () => evaluateRouteAccess(navigationState, session),
-    [navigationState, session],
-  );
-
-  useEffect(() => {
-    if (!decision.allowed && decision.redirectTo) {
-      const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-      if (decision.redirectTo !== currentUrl) {
-        window.location.replace(decision.redirectTo);
-      }
-    }
-  }, [decision]);
-
-  function navigate(nextPathname: string, replace = false) {
-    const nextUrl = new URL(nextPathname, window.location.origin);
-    const normalizedPathname = normalizePathname(nextUrl.pathname);
-    const normalizedSearch = nextUrl.search;
-    const target = `${normalizedPathname}${normalizedSearch}`;
-
-    if (replace) {
-      window.history.replaceState({}, "", target);
-    } else {
-      window.history.pushState({}, "", target);
-    }
-
-    setPathname(normalizedPathname);
-    setSearch(normalizedSearch);
-  }
-
-  function updateSession(nextSession: RoutingSessionContext) {
-    setSession(nextSession);
-  }
-
-  function handleAuthenticate(role: PortalRole) {
-    const licenseLayer = role === "director" ? "L3" : (session.licenseLayer ?? "L0");
-    const nextSession: RoutingSessionContext = {
-      ...session,
-      isAuthenticated: true,
-      role,
-      licenseLayer,
-    };
-
-    updateSession(nextSession);
-    navigate(DEFAULT_ROUTE_BY_ROLE[role], true);
-  }
-
-  function handleLogout() {
-    updateSession(DEFAULT_SESSION);
-    navigate("/login", true);
-  }
-
-  if (navigationState.family === "login") {
-    return (
-      <main className="page-shell">
-        <LoginPage
-          session={session}
-          onAuthenticate={handleAuthenticate}
-          onInstituteActiveChange={(value) => updateSession({...session, instituteActive: value})}
-          onLicenseLayerChange={(licenseLayer) => updateSession({...session, licenseLayer})}
-          onSuspendedChange={(value) => updateSession({...session, isSuspended: value})}
-          onLogout={handleLogout}
-        />
-      </main>
-    );
-  }
-
-  if (navigationState.family === "unauthorized") {
-    return (
-      <main className="page-shell">
-        <UnauthorizedPage
-          canonicalHostname={PORTAL_DOMAINS[navigationState.canonicalDomain].hostname}
-          decision={decision}
-          pathname={navigationState.pathname}
-        />
-      </main>
-    );
-  }
-
-  if (!decision.allowed) {
-    return null;
-  }
 
   return (
-    <main className="page-shell">
-      <RouteFrame
-        navigationState={navigationState}
-        onLogout={handleLogout}
-        onNavigate={navigate}
-        session={session}
-      />
-    </main>
+    <Routes>
+      <Route path="/" element={<Navigate to="/admin/overview" replace />} />
+      <Route path="/admin" element={<Navigate to="/admin/overview" replace />} />
+
+      <Route path="/admin" element={<AdminLayout />}>
+        <Route
+          path="overview"
+          element={
+            <AdminSectionPage
+              title="Overview"
+              summary="Track operational status, activity, and summary insights for your institute from the admin portal landing page."
+            />
+          }
+        />
+        <Route
+          path="students"
+          element={
+            <AdminSectionPage
+              title="Students"
+              summary="Navigate student records, roster organization, and institute-level student management actions from one workspace."
+            />
+          }
+        />
+        <Route
+          path="tests"
+          element={
+            <AdminSectionPage
+              title="Tests"
+              summary="Access template generation, saved tests, and testing workflows through a dedicated route-based admin section."
+            />
+          }
+        />
+        <Route
+          path="assignments"
+          element={
+            <AdminSectionPage
+              title="Assignments"
+              summary="Prepare and monitor assignments with route-driven navigation that anchors upcoming assignment workflows."
+            />
+          }
+        />
+        <Route
+          path="analytics"
+          element={
+            <AdminSectionPage
+              title="Analytics"
+              summary="Review measurable performance trends and summary metrics through the admin analytics route container."
+            />
+          }
+        />
+        <Route
+          path="settings"
+          element={
+            <AdminSectionPage
+              title="Settings"
+              summary="Manage institute-level configuration options and portal behavior in a dedicated settings route."
+            />
+          }
+        />
+      </Route>
+
+      <Route path="*" element={<NotFoundPage />} />
+    </Routes>
   );
 }
 

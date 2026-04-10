@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 115  
-Next Build: 116
+Completed Builds: 116  
+Next Build: 117
 
 Current Phase: Phase 24 — Admin Portal Core
 
@@ -3703,18 +3703,46 @@ Completed On
 
 ---
 
+## Build 116 — Admin Portal Layout
+
+Phase  
+Phase 24 — Admin Portal Core
+
+Summary  
+Implemented the admin portal base layout with deterministic React Router route rendering and sidebar-driven navigation for the primary admin sections.
+
+Components implemented:
+
+- Replaced the prior multi-portal demo runtime in `apps/admin/src/App.tsx` with a dedicated admin app shell aligned to Phase 24 scope
+- Implemented a persistent sidebar navigation for `/admin/overview`, `/admin/students`, `/admin/tests`, `/admin/assignments`, `/admin/analytics`, and `/admin/settings`
+- Implemented a top header bar showing active route context and auth-session status with sign-out action wiring
+- Implemented a route-based main content container using nested React Router routes and deterministic redirects from `/` and `/admin` to `/admin/overview`
+- Added Build 116-specific responsive layout styling in `apps/admin/src/App.css` for desktop and mobile viewport classes
+- Executed frontend compile/lint checks for the admin app and completed browser verification across all affected admin routes for required desktop/mobile viewports with captured artifacts under `artifacts/build-116/`
+
+Result  
+The admin portal now provides the architecture-defined base layout and route navigation framework required for subsequent Admin Portal Core feature builds.
+
+Commit Reference  
+Build 116 — Admin Portal Layout implemented
+
+Completed On  
+2026-04-10
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 116
+Next Build Number: 117
 
 Phase  
 Phase 24 — Admin Portal Core
 
 Subsystem  
-Admin Portal Layout
+Student Management Interface
 
 Reference  
-2_Portals_Architecture.md → Section 2.1 Admin Portal Overview
+2_Portals_Architecture.md → Section 2.3 Student Management UI
 
 ---
 
@@ -3837,7 +3865,8 @@ Build | Phase | Status
 113 | Frontend Platform Foundation | Completed
 114 | Frontend Platform Foundation | Completed
 115 | Frontend Platform Foundation | Completed
-116–150 | Remaining Phases | Pending
+116 | Admin Portal Core | Completed
+117–150 | Remaining Phases | Pending
 
 ---
 

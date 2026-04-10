@@ -1,0 +1,242 @@
+[
+  {
+    "route": "/admin/overview",
+    "url": "http://127.0.0.1:4173/admin/overview",
+    "viewport": {
+      "name": "desktop",
+      "width": 1366,
+      "height": 768
+    },
+    "firstHeading": "Admin Dashboard",
+    "consoleErrors": [],
+    "pageErrors": [],
+    "networkFailures": [],
+    "responsiveResult": {
+      "hasHorizontalOverflow": false,
+      "scrollWidth": 1366,
+      "clientWidth": 1366
+    },
+    "guardBehavior": "N/A",
+    "screenshotPath": "/home/sumeer/parabolic-platform/artifacts/build-116/screenshots/admin-overview-desktop.png"
+  },
+  {
+    "route": "/admin/overview",
+    "url": "http://127.0.0.1:4173/admin/overview",
+    "viewport": {
+      "name": "mobile",
+      "width": 390,
+      "height": 844
+    },
+    "firstHeading": "Admin Dashboard",
+    "consoleErrors": [],
+    "pageErrors": [],
+    "networkFailures": [],
+    "responsiveResult": {
+      "hasHorizontalOverflow": false,
+      "scrollWidth": 390,
+      "clientWidth": 390
+    },
+    "guardBehavior": "N/A",
+    "screenshotPath": "/home/sumeer/parabolic-platform/artifacts/build-116/screenshots/admin-overview-mobile.png"
+  },
+  {
+    "route": "/admin/students",
+    "url": "http://127.0.0.1:4173/admin/students",
+    "viewport": {
+      "name": "desktop",
+      "width": 1366,
+      "height": 768
+    },
+    "firstHeading": "Admin Dashboard",
+    "consoleErrors": [],
+    "pageErrors": [],
+    "networkFailures": [],
+    "responsiveResult": {
+      "hasHorizontalOverflow": false,
+      "scrollWidth": 1366,
+      "clientWidth": 1366
+    },
+    "guardBehavior": "N/A",
+    "screenshotPath": "/home/sumeer/parabolic-platform/artifacts/build-116/screenshots/admin-students-desktop.png"
+  },
+  {
+    "route": "/admin/students",
+    "url": "http://127.0.0.1:4173/admin/students",
+    "viewport": {
+      "name": "mobile",
+      "width": 390,
+      "height": 844
+    },
+    "firstHeading": "Admin Dashboard",
+    "consoleErrors": [],
+    "pageErrors": [],
+    "networkFailures": [],
+    "responsiveResult": {
+      "hasHorizontalOverflow": false,
+      "scrollWidth": 390,
+      "clientWidth": 390
+    },
+    "guardBehavior": "N/A",
+    "screenshotPath": "/home/sumeer/parabolic-platform/artifacts/build-116/screenshots/admin-students-mobile.png"
+  },
+  {
+    "route": "/admin/tests",
+    "url": "http://127.0.0.1:4173/admin/tests",
+    "viewport": {
+      "name": "desktop",
+      "width": 1366,
+      "height": 768
+    },
+    "firstHeading": "Admin Dashboard",
+    "consoleErrors": [],
+    "pageErrors": [],
+    "networkFailures": [],
+    "responsiveResult": {
+      "hasHorizontalOverflow": false,
+      "scrollWidth": 1366,
+      "clientWidth": 1366
+    },
+    "guardBehavior": "N/A",
+    "screenshotPath": "/home/sumeer/parabolic-platform/artifacts/build-116/screenshots/admin-tests-desktop.png"
+  },
+  {
+    "route": "/admin/tests",
+    "url": "http://127.0.0.1:4173/admin/tests",
+    "viewport": {
+      "name": "mobile",
+      "width": 390,
+      "height": 844
+    },
+    "firstHeading": "Admin Dashboard",
+    "consoleErrors": [],
+    "pageErrors": [],
+    "networkFailures": [],
+    "responsiveResult": {
+      "hasHorizontalOverflow": false,
+      "scrollWidth": 390,
+      "clientWidth": 390
+    },
+    "guardBehavior": "N/A",
+    "screenshotPath": "/home/sumeer/parabolic-platform/artifacts/build-116/screenshots/admin-tests-mobile.png"
+  },
+  {
+    "route": "/admin/assignments",
+    "url": "http://127.0.0.1:4173/admin/assignments",
+    "viewport": {
+      "name": "desktop",
+      "width": 1366,
+      "height": 768
+    },
+    "firstHeading": "Admin Dashboard",
+    "consoleErrors": [],
+    "pageErrors": [],
+    "networkFailures": [],
+    "responsiveResult": {
+      "hasHorizontalOverflow": false,
+      "scrollWidth": 1366,
+      "clientWidth": 1366
+    },
+    "guardBehavior": "N/A",
+    "screenshotPath": "/home/sumeer/parabolic-platform/artifacts/build-116/screenshots/admin-assignments-desktop.png"
+  },
+  {
+    "route": "/admin/assignments",
+    "url": "http://127.0.0.1:4173/admin/assignments",
+    "viewport": {
+      "name": "mobile",
+      "width": 390,
+      "height": 844
+    },
+    "firstHeading": "Admin Dashboard",
+    "consoleErrors": [],
+    "pageErrors": [],
+    "networkFailures": [],
+    "responsiveResult": {
+      "hasHorizontalOverflow": false,
+      "scrollWidth": 390,
+      "clientWidth": 390
+    },
+    "guardBehavior": "N/A",
+    "screenshotPath": "/home/sumeer/parabolic-platform/artifacts/build-116/screenshots/admin-assignments-mobile.png"
+  },
+  {
+    "route": "/admin/analytics",
+    "url": "http://127.0.0.1:4173/admin/analytics",
+    "viewport": {
+      "name": "desktop",
+      "width": 1366,
+      "height": 768
+    },
+    "firstHeading": "Admin Dashboard",
+    "consoleErrors": [],
+    "pageErrors": [],
+    "networkFailures": [],
+    "responsiveResult": {
+      "hasHorizontalOverflow": false,
+      "scrollWidth": 1366,
+      "clientWidth": 1366
+    },
+    "guardBehavior": "N/A",
+    "screenshotPath": "/home/sumeer/parabolic-platform/artifacts/build-116/screenshots/admin-analytics-desktop.png"
+  },
+  {
+    "route": "/admin/analytics",
+    "url": "http://127.0.0.1:4173/admin/analytics",
+    "viewport": {
+      "name": "mobile",
+      "width": 390,
+      "height": 844
+    },
+    "firstHeading": "Admin Dashboard",
+    "consoleErrors": [],
+    "pageErrors": [],
+    "networkFailures": [],
+    "responsiveResult": {
+      "hasHorizontalOverflow": false,
+      "scrollWidth": 390,
+      "clientWidth": 390
+    },
+    "guardBehavior": "N/A",
+    "screenshotPath": "/home/sumeer/parabolic-platform/artifacts/build-116/screenshots/admin-analytics-mobile.png"
+  },
+  {
+    "route": "/admin/settings",
+    "url": "http://127.0.0.1:4173/admin/settings",
+    "viewport": {
+      "name": "desktop",
+      "width": 1366,
+      "height": 768
+    },
+    "firstHeading": "Admin Dashboard",
+    "consoleErrors": [],
+    "pageErrors": [],
+    "networkFailures": [],
+    "responsiveResult": {
+      "hasHorizontalOverflow": false,
+      "scrollWidth": 1366,
+      "clientWidth": 1366
+    },
+    "guardBehavior": "N/A",
+    "screenshotPath": "/home/sumeer/parabolic-platform/artifacts/build-116/screenshots/admin-settings-desktop.png"
+  },
+  {
+    "route": "/admin/settings",
+    "url": "http://127.0.0.1:4173/admin/settings",
+    "viewport": {
+      "name": "mobile",
+      "width": 390,
+      "height": 844
+    },
+    "firstHeading": "Admin Dashboard",
+    "consoleErrors": [],
+    "pageErrors": [],
+    "networkFailures": [],
+    "responsiveResult": {
+      "hasHorizontalOverflow": false,
+      "scrollWidth": 390,
+      "clientWidth": 390
+    },
+    "guardBehavior": "N/A",
+    "screenshotPath": "/home/sumeer/parabolic-platform/artifacts/build-116/screenshots/admin-settings-mobile.png"
+  }
+]
