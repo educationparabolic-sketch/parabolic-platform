@@ -16,6 +16,7 @@
 }
 
 .admin-sidebar {
+  min-width: 0;
   border: 1px solid rgba(15, 43, 85, 0.15);
   border-radius: 22px;
   padding: 22px;
@@ -82,11 +83,14 @@
 }
 
 .admin-main-area {
+  min-width: 0;
   display: grid;
   gap: 16px;
 }
 
 .admin-topbar {
+  width: 100%;
+  max-width: 100%;
   border: 1px solid rgba(15, 43, 85, 0.12);
   border-radius: 20px;
   padding: 16px 18px;
@@ -145,10 +149,16 @@
 }
 
 .admin-content-container {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 440px;
 }
 
 .admin-content-card {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   border: 1px solid rgba(15, 43, 85, 0.12);
   border-radius: 22px;
   background:
@@ -187,6 +197,128 @@
   padding-left: 12px;
 }
 
+.admin-student-inline-note {
+  margin-top: 14px;
+  border-left: 4px solid #1b5fc2;
+  padding-left: 10px;
+  color: #325b8f;
+  overflow-wrap: anywhere;
+}
+
+.admin-student-grid {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.admin-student-form-footnote {
+  color: #4f688a;
+  font-size: 0.88rem;
+}
+
+.admin-student-table-toolbar {
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.admin-student-table-toolbar button,
+.admin-student-row-actions button,
+.admin-student-edit-actions button {
+  border: 1px solid rgba(16, 42, 81, 0.22);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #ffffff;
+  color: #163961;
+  font: inherit;
+}
+
+.admin-student-table-toolbar button:hover,
+.admin-student-row-actions button:hover,
+.admin-student-edit-actions button:hover {
+  border-color: #1b5fc2;
+}
+
+.admin-student-name-cell,
+.admin-student-metrics-cell {
+  display: grid;
+  gap: 2px;
+}
+
+.admin-student-name-cell small,
+.admin-student-metrics-cell span {
+  color: #4f688a;
+}
+
+.admin-student-status {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  text-transform: capitalize;
+  font-weight: 600;
+}
+
+.admin-student-status-live {
+  color: #0f6a41;
+  background: rgba(15, 146, 85, 0.14);
+}
+
+.admin-student-status-idle {
+  color: #8b5a13;
+  background: rgba(219, 153, 41, 0.16);
+}
+
+.admin-student-status-alert {
+  color: #8a2431;
+  background: rgba(196, 56, 56, 0.14);
+}
+
+.admin-student-actions-col {
+  min-width: 180px;
+}
+
+.admin-student-row-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.admin-student-select-col {
+  min-width: 70px;
+}
+
+.admin-student-pagination-row {
+  margin-top: 16px;
+}
+
+.admin-student-edit-form {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-student-edit-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.admin-content-card .ui-table-shell {
+  margin-top: 12px;
+  overflow-x: auto;
+}
+
+.admin-content-card .ui-form-card,
+.admin-content-card .ui-form,
+.admin-content-card .ui-form-content {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
 @media (max-width: 1024px) {
   .admin-layout-grid {
     grid-template-columns: 1fr;
@@ -203,6 +335,10 @@
   .admin-topbar {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .admin-student-grid {
+    grid-template-columns: 1fr;
   }
 }
 

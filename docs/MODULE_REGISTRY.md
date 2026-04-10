@@ -220,6 +220,7 @@ FrontendAuthProviderService | Shared | Build 115 added shared authentication con
 FrontendAuthRouteGuards | Shared | Build 115 integrated protected-route and login-route enforcement across portal apps (`apps/student|exam|vendor/src/App.tsx`) with deterministic unauthenticated redirects to `/student/login`, `/session/login`, and `/vendor/login`
 FrontendAuthRuntimeBootstrap | Shared | Build 115 wrapped all portal entry points (`apps/admin|student|exam|vendor/src/main.tsx`) with the shared `AuthProvider` so authentication context is accessible across portal runtimes
 AdminPortalLayoutShell | Admin | Build 116 implemented the admin portal core layout in `apps/admin/src/App.tsx` with sidebar navigation, top header bar, main content container, and route-based rendering for `/admin/overview`, `/admin/students`, `/admin/tests`, `/admin/assignments`, `/admin/analytics`, and `/admin/settings`
+AdminStudentManagementInterface | Admin | Build 117 implemented the `/admin/students` management workspace in `apps/admin/src/features/students/StudentManagementPage.tsx` with shared `UiTable` + `UiForm` components, search/filter controls, batch assignment actions, activation/deactivation toggles, edit-details modal workflow, and mobile-safe responsive behavior wired into `apps/admin/src/App.tsx`
 
 ---
 

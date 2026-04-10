@@ -1,0 +1,30 @@
+[
+  {
+    "route": "/admin/students",
+    "viewport": "1366x768",
+    "url": "http://127.0.0.1:4173/admin/students",
+    "consoleStatus": "PASS",
+    "networkStatus": "PASS",
+    "responsiveStatus": "PASS",
+    "guardStatus": "PASS",
+    "screenshotPath": "artifacts/build-117/desktop-1366x768-admin-students.png",
+    "consoleErrors": [],
+    "pageErrors": [],
+    "failedNetwork": [],
+    "requestFailures": []
+  },
+  {
+    "route": "/admin/students",
+    "viewport": "390x844",
+    "url": "http://127.0.0.1:4173/admin/students",
+    "consoleStatus": "PASS",
+    "networkStatus": "PASS",
+    "responsiveStatus": "PASS",
+    "guardStatus": "PASS",
+    "screenshotPath": "artifacts/build-117/mobile-390x844-admin-students.png",
+    "consoleErrors": [],
+    "pageErrors": [],
+    "failedNetwork": [],
+    "requestFailures": []
+  }
+]

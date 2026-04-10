@@ -1,6 +1,7 @@
 import { Navigate, NavLink, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { useAuthProvider } from "../../../shared/services/authProvider";
+import StudentManagementPage from "./features/students/StudentManagementPage";
 import "./App.css";
 
 interface AdminNavItem {
@@ -166,12 +167,7 @@ function App() {
         />
         <Route
           path="students"
-          element={
-            <AdminSectionPage
-              title="Students"
-              summary="Navigate student records, roster organization, and institute-level student management actions from one workspace."
-            />
-          }
+          element={<StudentManagementPage />}
         />
         <Route
           path="tests"
