@@ -1,6 +1,7 @@
 import { Navigate, NavLink, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { useAuthProvider } from "../../../shared/services/authProvider";
+import AdminAnalyticsDashboardPage from "./features/analytics/AdminAnalyticsDashboardPage";
 import AssignmentManagementPage from "./features/assignments/AssignmentManagementPage";
 import StudentManagementPage from "./features/students/StudentManagementPage";
 import TestTemplateManagementPage from "./features/tests/TestTemplateManagementPage";
@@ -181,12 +182,7 @@ function App() {
         />
         <Route
           path="analytics"
-          element={
-            <AdminSectionPage
-              title="Analytics"
-              summary="Review measurable performance trends and summary metrics through the admin analytics route container."
-            />
-          }
+          element={<AdminAnalyticsDashboardPage />}
         />
         <Route
           path="settings"

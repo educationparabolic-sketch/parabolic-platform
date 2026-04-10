@@ -562,6 +562,88 @@
   background: rgba(196, 56, 56, 0.14);
 }
 
+.admin-analytics-inline-note {
+  margin-top: 14px;
+  border-left: 4px solid #1b5fc2;
+  padding-left: 10px;
+  color: #325b8f;
+  overflow-wrap: anywhere;
+}
+
+.admin-analytics-kpi-grid {
+  margin-top: 18px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.admin-analytics-kpi-card {
+  border: 1px solid rgba(16, 42, 81, 0.16);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  padding: 12px 14px;
+  display: grid;
+  gap: 4px;
+}
+
+.admin-analytics-kpi-card p,
+.admin-analytics-kpi-card h3,
+.admin-analytics-kpi-card small {
+  margin: 0;
+}
+
+.admin-analytics-kpi-card p {
+  color: #486486;
+  font-weight: 600;
+}
+
+.admin-analytics-kpi-card h3 {
+  color: #173c68;
+}
+
+.admin-analytics-kpi-card small {
+  color: #5f7697;
+}
+
+.admin-analytics-chart-grid {
+  margin-top: 16px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-analytics-chart-grid .ui-chart {
+  min-width: 0;
+}
+
+.admin-analytics-run-summary {
+  margin-top: 18px;
+}
+
+.admin-analytics-run-summary h3 {
+  margin: 0 0 10px;
+  color: #143764;
+}
+
+.admin-analytics-run-summary .ui-table-shell {
+  overflow-x: auto;
+}
+
+.admin-analytics-run-cell,
+.admin-analytics-mode-cell,
+.admin-analytics-score-cell,
+.admin-analytics-discipline-cell {
+  display: grid;
+  gap: 2px;
+}
+
+.admin-analytics-run-cell small,
+.admin-analytics-mode-cell small,
+.admin-analytics-score-cell small,
+.admin-analytics-discipline-cell small {
+  color: #4f688a;
+}
+
 @media (max-width: 1024px) {
   .admin-layout-grid {
     grid-template-columns: 1fr;
@@ -592,6 +674,14 @@
   .admin-assignments-grid {
     grid-template-columns: 1fr;
   }
+
+  .admin-analytics-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-analytics-chart-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 640px) {
@@ -609,5 +699,9 @@
 
   .admin-session-pill {
     border-radius: 16px;
+  }
+
+  .admin-analytics-kpi-grid {
+    grid-template-columns: 1fr;
   }
 }

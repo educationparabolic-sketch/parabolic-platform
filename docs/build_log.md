@@ -12,10 +12,10 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 119  
-Next Build: 120
+Completed Builds: 120  
+Next Build: 121
 
-Current Phase: Phase 24 — Admin Portal Core
+Current Phase: Phase 25 — Admin Analytics & Governance
 
 ---
 
@@ -3823,18 +3823,48 @@ Completed On
 
 ---
 
-# NEXT BUILD
-
-Next Build Number: 120
+## Build 120 — Admin Analytics Dashboard
 
 Phase  
 Phase 24 — Admin Portal Core
 
+Summary  
+Implemented the admin analytics dashboard with summary-only performance/risk/discipline visualizations, shared chart containers, and run-level summary tables aligned with architecture constraints.
+
+Components implemented:
+
+- Added a dedicated analytics dashboard feature module in `apps/admin/src/features/analytics/AdminAnalyticsDashboardPage.tsx`
+- Replaced the `/admin/analytics` placeholder route in `apps/admin/src/App.tsx` with the Build 120 analytics dashboard interface
+- Implemented normalized dashboard KPI cards and chart visualizations using shared `UiChartContainer` components for score distribution, accuracy metrics, risk cluster visualization, and discipline index statistics
+- Implemented run performance summaries table using shared `UiTable` for run name, mode/participants, normalized score metrics, discipline/completion metrics, and run date
+- Enforced summary-only data handling (no raw session scans) through `runAnalytics` + `studentYearMetrics` dashboard models with deterministic local-mode fixtures
+- Added responsive and overflow-safe styling updates in `apps/admin/src/App.css` for analytics cards, charts, and run summary table behavior
+- Added route verification automation in `apps/admin/artifacts/build-120/verify-routes.mjs` and captured desktop/mobile verification artifacts under `apps/admin/artifacts/build-120/`
+- Executed admin compile/lint checks and mandatory browser verification for `/admin/analytics` plus impacted redirect routes (`/admin`, `/`) at `1366x768` and `390x844`
+
+Result  
+The admin portal now has a production-typed analytics dashboard aligned with Build 120 scope: score distribution, accuracy metrics, risk cluster visualization, run performance summaries, and discipline index statistics sourced from summary collections.
+
+Commit Reference  
+Build 120 — Admin Analytics Dashboard implemented
+
+Completed On  
+2026-04-10
+
+---
+
+# NEXT BUILD
+
+Next Build Number: 121
+
+Phase  
+Phase 25 — Admin Analytics & Governance
+
 Subsystem  
-Admin Analytics Dashboard
+Risk Insights Dashboard
 
 Reference  
-2_Portals_Architecture.md → Section 2.6 Analytics Dashboard
+2_Portals_Architecture.md → Section 2.7 Risk Insights Dashboard
 
 ---
 
@@ -3960,7 +3990,9 @@ Build | Phase | Status
 116 | Admin Portal Core | Completed
 117 | Admin Portal Core | Completed
 118 | Admin Portal Core | Completed
-120–150 | Remaining Phases | Pending
+119 | Admin Portal Core | Completed
+120 | Admin Portal Core | Completed
+121–150 | Remaining Phases | Pending
 
 ---
 
