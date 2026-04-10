@@ -446,6 +446,122 @@
   min-width: 0;
 }
 
+.admin-assignments-inline-note {
+  margin-top: 14px;
+  border-left: 4px solid #1b5fc2;
+  padding-left: 10px;
+  color: #325b8f;
+  overflow-wrap: anywhere;
+}
+
+.admin-assignments-inline-error {
+  margin-top: 10px;
+  border-left: 4px solid #b33131;
+  padding-left: 10px;
+  color: #8a2431;
+  overflow-wrap: anywhere;
+}
+
+.admin-assignments-grid {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.admin-assignments-form-footnote {
+  color: #4f688a;
+  font-size: 0.88rem;
+}
+
+.admin-assignments-batch-list {
+  border: 1px solid rgba(16, 42, 81, 0.16);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.82);
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.admin-assignments-batch-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: #1f426f;
+}
+
+.admin-assignments-batch-option span {
+  display: grid;
+  gap: 2px;
+}
+
+.admin-assignments-summary {
+  margin-top: 16px;
+  border: 1px solid rgba(16, 42, 81, 0.16);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 12px 14px;
+}
+
+.admin-assignments-summary h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: #143764;
+}
+
+.admin-assignments-summary p {
+  margin: 5px 0;
+  color: #284a75;
+}
+
+.admin-assignments-run-cell,
+.admin-assignments-mode-cell,
+.admin-assignments-window-cell,
+.admin-assignments-status-cell {
+  display: grid;
+  gap: 2px;
+}
+
+.admin-assignments-run-cell small,
+.admin-assignments-mode-cell small,
+.admin-assignments-window-cell small,
+.admin-assignments-status-cell small {
+  color: #4f688a;
+}
+
+.admin-assignments-status-col {
+  min-width: 160px;
+}
+
+.admin-assignments-status {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  text-transform: capitalize;
+  font-weight: 600;
+}
+
+.admin-assignments-status-scheduled {
+  color: #8b5a13;
+  background: rgba(219, 153, 41, 0.16);
+}
+
+.admin-assignments-status-active {
+  color: #0f6a41;
+  background: rgba(15, 146, 85, 0.14);
+}
+
+.admin-assignments-status-completed {
+  color: #2e4f86;
+  background: rgba(77, 120, 194, 0.14);
+}
+
+.admin-assignments-status-cancelled {
+  color: #8a2431;
+  background: rgba(196, 56, 56, 0.14);
+}
+
 @media (max-width: 1024px) {
   .admin-layout-grid {
     grid-template-columns: 1fr;
@@ -470,6 +586,10 @@
 
   .admin-tests-grid,
   .admin-tests-config-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-assignments-grid {
     grid-template-columns: 1fr;
   }
 }

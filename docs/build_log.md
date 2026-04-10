@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 118  
-Next Build: 119
+Completed Builds: 119  
+Next Build: 120
 
 Current Phase: Phase 24 — Admin Portal Core
 
@@ -3792,18 +3792,49 @@ Completed On
 
 ---
 
+## Build 119 — Assignment Management Interface
+
+Phase  
+Phase 24 — Admin Portal Core
+
+Summary  
+Implemented the admin assignment management workspace with architecture-aligned run scheduling controls, license-aware mode selection, and run status visibility via a deterministic table.
+
+Components implemented:
+
+- Added a dedicated assignment management feature module in `apps/admin/src/features/assignments/AssignmentManagementPage.tsx`
+- Replaced the `/admin/assignments` placeholder route in `apps/admin/src/App.tsx` with the Build 119 assignment interface
+- Implemented template selection and execution-mode controls using shared `UiForm` + `UiFormField` components with client-side license-layer gating metadata
+- Implemented student-batch selection with recipient de-duplication to prepare assignment targets for run scheduling
+- Implemented assignment-window scheduling controls and run payload composition aligned to `POST /admin/runs` (`testId`, `mode`, `recipientStudentIds`, `startWindow`, `endWindow`)
+- Implemented deterministic local-mode fallback behavior plus live-mode submit handling for `POST /admin/runs`
+- Implemented a run status table using shared `UiTable` to surface run identifiers, mode, target batches, assignment window, and status/completion state
+- Added responsive and overflow-safe styling updates in `apps/admin/src/App.css` for assignment form, batch selector, summary panel, and run status table behavior
+- Executed admin compile/lint checks and mandatory browser verification for `/admin/assignments` plus impacted redirect routes (`/admin`, `/`) at `1366x768` and `390x844` with artifacts under `apps/admin/artifacts/build-119/`
+
+Result  
+The admin portal now has a production-typed assignment management interface aligned with Build 119 scope: template/mode selection, batch targeting, assignment-window scheduling, and visible run status tracking.
+
+Commit Reference  
+Build 119 — Assignment Management Interface implemented
+
+Completed On  
+2026-04-10
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 119
+Next Build Number: 120
 
 Phase  
 Phase 24 — Admin Portal Core
 
 Subsystem  
-Assignment Management Interface
+Admin Analytics Dashboard
 
 Reference  
-2_Portals_Architecture.md → Section 2.5 Assignment Management UI
+2_Portals_Architecture.md → Section 2.6 Analytics Dashboard
 
 ---
 
@@ -3929,7 +3960,7 @@ Build | Phase | Status
 116 | Admin Portal Core | Completed
 117 | Admin Portal Core | Completed
 118 | Admin Portal Core | Completed
-119–150 | Remaining Phases | Pending
+120–150 | Remaining Phases | Pending
 
 ---
 

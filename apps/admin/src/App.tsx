@@ -1,6 +1,7 @@
 import { Navigate, NavLink, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { useAuthProvider } from "../../../shared/services/authProvider";
+import AssignmentManagementPage from "./features/assignments/AssignmentManagementPage";
 import StudentManagementPage from "./features/students/StudentManagementPage";
 import TestTemplateManagementPage from "./features/tests/TestTemplateManagementPage";
 import "./App.css";
@@ -176,12 +177,7 @@ function App() {
         />
         <Route
           path="assignments"
-          element={
-            <AdminSectionPage
-              title="Assignments"
-              summary="Prepare and monitor assignments with route-driven navigation that anchors upcoming assignment workflows."
-            />
-          }
+          element={<AssignmentManagementPage />}
         />
         <Route
           path="analytics"
