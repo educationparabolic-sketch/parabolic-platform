@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 117  
-Next Build: 118
+Completed Builds: 118  
+Next Build: 119
 
 Current Phase: Phase 24 — Admin Portal Core
 
@@ -3761,18 +3761,49 @@ Completed On
 
 ---
 
+## Build 118 — Test Template Management UI
+
+Phase  
+Phase 24 — Admin Portal Core
+
+Summary  
+Implemented the admin test template management workspace with architecture-aligned template drafting controls, publish lifecycle enforcement, and route-level browser verification for desktop and mobile viewports.
+
+Components implemented:
+
+- Added a dedicated test template management feature module in `apps/admin/src/features/tests/TestTemplateManagementPage.tsx`
+- Replaced the `/admin/tests` placeholder route in `apps/admin/src/App.tsx` with the Build 118 management interface
+- Implemented create-template workflow using shared `UiForm` controls for template name, exam type, selection method, and duration configuration
+- Implemented question selection workflow with deterministic local question pool, filterable selection list, and selected-count feedback
+- Implemented timing-profile and difficulty-distribution configuration using shared form components aligned to template snapshot requirements
+- Implemented save-draft and publish actions wired to `POST /admin/tests` for live mode, with deterministic local-mode fallbacks
+- Implemented draft-only structural edit enforcement, preventing edits/publish actions for non-draft template states
+- Added responsive and overflow-safe styling updates in `apps/admin/src/App.css` for the new tests management layout
+- Executed admin compile/lint checks and mandatory browser verification for `/admin/tests` at `1366x768` and `390x844` with artifacts under `apps/admin/artifacts/build-118/`
+
+Result  
+The admin portal now has a production-typed test template management interface aligned with Build 118 scope: template drafting, question selection, timing/difficulty configuration, and draft-to-ready publish lifecycle handling.
+
+Commit Reference  
+Build 118 — Test Template Management UI implemented
+
+Completed On  
+2026-04-10
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 118
+Next Build Number: 119
 
 Phase  
 Phase 24 — Admin Portal Core
 
 Subsystem  
-Test Template Management UI
+Assignment Management Interface
 
 Reference  
-2_Portals_Architecture.md → Section 2.4 Test Template Management
+2_Portals_Architecture.md → Section 2.5 Assignment Management UI
 
 ---
 
@@ -3897,7 +3928,8 @@ Build | Phase | Status
 115 | Frontend Platform Foundation | Completed
 116 | Admin Portal Core | Completed
 117 | Admin Portal Core | Completed
-118–150 | Remaining Phases | Pending
+118 | Admin Portal Core | Completed
+119–150 | Remaining Phases | Pending
 
 ---
 

@@ -2,6 +2,7 @@ import { Navigate, NavLink, Outlet, Route, Routes, useLocation } from "react-rou
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { useAuthProvider } from "../../../shared/services/authProvider";
 import StudentManagementPage from "./features/students/StudentManagementPage";
+import TestTemplateManagementPage from "./features/tests/TestTemplateManagementPage";
 import "./App.css";
 
 interface AdminNavItem {
@@ -171,12 +172,7 @@ function App() {
         />
         <Route
           path="tests"
-          element={
-            <AdminSectionPage
-              title="Tests"
-              summary="Access template generation, saved tests, and testing workflows through a dedicated route-based admin section."
-            />
-          }
+          element={<TestTemplateManagementPage />}
         />
         <Route
           path="assignments"
