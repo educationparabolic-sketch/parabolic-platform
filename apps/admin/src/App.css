@@ -853,6 +853,121 @@
   color: #4f688a;
 }
 
+.admin-governance-kpi-grid {
+  margin-top: 16px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.admin-governance-kpi-card {
+  border: 1px solid rgba(16, 42, 81, 0.16);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.admin-governance-kpi-card p,
+.admin-governance-kpi-card h3,
+.admin-governance-kpi-card small {
+  margin: 0;
+}
+
+.admin-governance-kpi-card p {
+  color: #486486;
+  font-weight: 600;
+}
+
+.admin-governance-kpi-card h3 {
+  color: #173c68;
+}
+
+.admin-governance-kpi-card small {
+  color: #5f7697;
+}
+
+.admin-governance-comparison {
+  margin-top: 18px;
+}
+
+.admin-governance-comparison h3 {
+  margin: 0 0 10px;
+  color: #143764;
+}
+
+.admin-governance-comparison-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.admin-governance-comparison-card {
+  border: 1px solid rgba(16, 42, 81, 0.16);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  padding: 12px 14px;
+  display: grid;
+  gap: 4px;
+}
+
+.admin-governance-comparison-card p,
+.admin-governance-comparison-card h4,
+.admin-governance-comparison-card small {
+  margin: 0;
+}
+
+.admin-governance-comparison-card p {
+  color: #486486;
+  font-weight: 600;
+}
+
+.admin-governance-comparison-card h4 {
+  color: #173c68;
+}
+
+.admin-governance-comparison-card small {
+  color: #5f7697;
+}
+
+.admin-governance-comparison-up {
+  border-color: rgba(39, 123, 70, 0.35);
+}
+
+.admin-governance-comparison-stable {
+  border-color: rgba(91, 113, 148, 0.35);
+}
+
+.admin-governance-comparison-down {
+  border-color: rgba(176, 70, 70, 0.35);
+}
+
+.admin-governance-chart-grid {
+  margin-top: 16px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-governance-table-section {
+  margin-top: 18px;
+}
+
+.admin-governance-table-section h3 {
+  margin: 0 0 10px;
+  color: #143764;
+}
+
+.admin-governance-month-cell {
+  display: grid;
+  gap: 2px;
+}
+
+.admin-governance-month-cell small {
+  color: #4f688a;
+}
+
 @media (max-width: 1024px) {
   .admin-layout-grid {
     grid-template-columns: 1fr;
@@ -908,6 +1023,15 @@
   .admin-batch-trend-grid {
     grid-template-columns: 1fr;
   }
+
+  .admin-governance-kpi-grid,
+  .admin-governance-comparison-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-governance-chart-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 640px) {
@@ -936,6 +1060,11 @@
   }
 
   .admin-batch-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-governance-kpi-grid,
+  .admin-governance-comparison-grid {
     grid-template-columns: 1fr;
   }
 }

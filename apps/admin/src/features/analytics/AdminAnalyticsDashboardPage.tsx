@@ -293,6 +293,10 @@ function AdminAnalyticsDashboardPage() {
         <NavLink className="admin-primary-link" to="/admin/analytics/batch">
           Open Batch Analytics Dashboard
         </NavLink>
+        {" "}
+        <NavLink className="admin-primary-link" to="/admin/governance">
+          Open Governance Monitoring Dashboard
+        </NavLink>
       </p>
 
       <p className="admin-analytics-inline-note">

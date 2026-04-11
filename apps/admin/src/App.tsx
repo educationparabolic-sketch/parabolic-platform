@@ -3,6 +3,7 @@ import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { useAuthProvider } from "../../../shared/services/authProvider";
 import AdminAnalyticsDashboardPage from "./features/analytics/AdminAnalyticsDashboardPage";
 import BatchAnalyticsDashboardPage from "./features/analytics/BatchAnalyticsDashboardPage";
+import GovernanceMonitoringDashboardPage from "./features/analytics/GovernanceMonitoringDashboardPage";
 import RiskInsightsDashboardPage from "./features/analytics/RiskInsightsDashboardPage";
 import AssignmentManagementPage from "./features/assignments/AssignmentManagementPage";
 import StudentManagementPage from "./features/students/StudentManagementPage";
@@ -45,6 +46,11 @@ const ADMIN_NAV_ITEMS: AdminNavItem[] = [
     path: "/admin/analytics",
     label: "Analytics",
     summary: "Summary-level performance and participation dashboards.",
+  },
+  {
+    path: "/admin/governance",
+    label: "Governance",
+    summary: "Institutional stability and execution quality monitoring.",
   },
   {
     path: "/admin/settings",
@@ -193,6 +199,10 @@ function App() {
         <Route
           path="analytics/batch"
           element={<BatchAnalyticsDashboardPage />}
+        />
+        <Route
+          path="governance"
+          element={<GovernanceMonitoringDashboardPage />}
         />
         <Route
           path="settings"
