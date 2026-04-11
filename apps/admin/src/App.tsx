@@ -2,6 +2,7 @@ import { Navigate, NavLink, Outlet, Route, Routes, useLocation } from "react-rou
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { useAuthProvider } from "../../../shared/services/authProvider";
 import AdminAnalyticsDashboardPage from "./features/analytics/AdminAnalyticsDashboardPage";
+import BatchAnalyticsDashboardPage from "./features/analytics/BatchAnalyticsDashboardPage";
 import RiskInsightsDashboardPage from "./features/analytics/RiskInsightsDashboardPage";
 import AssignmentManagementPage from "./features/assignments/AssignmentManagementPage";
 import StudentManagementPage from "./features/students/StudentManagementPage";
@@ -188,6 +189,10 @@ function App() {
         <Route
           path="analytics/risk-insights"
           element={<RiskInsightsDashboardPage />}
+        />
+        <Route
+          path="analytics/batch"
+          element={<BatchAnalyticsDashboardPage />}
         />
         <Route
           path="settings"

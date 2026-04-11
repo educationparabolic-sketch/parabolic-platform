@@ -765,6 +765,94 @@
   color: #8a2431;
 }
 
+.admin-batch-kpi-grid {
+  margin-top: 16px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.admin-batch-kpi-card {
+  border: 1px solid rgba(16, 42, 81, 0.16);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.admin-batch-kpi-card p,
+.admin-batch-kpi-card h3,
+.admin-batch-kpi-card small {
+  margin: 0;
+}
+
+.admin-batch-kpi-card p {
+  color: #486486;
+  font-weight: 600;
+}
+
+.admin-batch-kpi-card h3 {
+  color: #173c68;
+}
+
+.admin-batch-kpi-card small {
+  color: #5f7697;
+}
+
+.admin-batch-chart-grid {
+  margin-top: 16px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-batch-trend-section {
+  margin-top: 18px;
+}
+
+.admin-batch-trend-section h3 {
+  margin: 0 0 8px;
+  color: #143764;
+}
+
+.admin-batch-trend-grid {
+  margin-top: 12px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-batch-trend-card {
+  border: 1px solid rgba(16, 42, 81, 0.16);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  padding: 12px;
+}
+
+.admin-batch-trend-card h4 {
+  margin: 0 0 8px;
+  color: #173c68;
+}
+
+.admin-batch-table-section {
+  margin-top: 18px;
+}
+
+.admin-batch-table-section h3 {
+  margin: 0 0 10px;
+  color: #143764;
+}
+
+.admin-batch-cell {
+  display: grid;
+  gap: 2px;
+}
+
+.admin-batch-cell small {
+  color: #4f688a;
+}
+
 @media (max-width: 1024px) {
   .admin-layout-grid {
     grid-template-columns: 1fr;
@@ -811,6 +899,15 @@
   .admin-risk-chart-grid {
     grid-template-columns: 1fr;
   }
+
+  .admin-batch-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-batch-chart-grid,
+  .admin-batch-trend-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 640px) {
@@ -835,6 +932,10 @@
   }
 
   .admin-risk-trend-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-batch-kpi-grid {
     grid-template-columns: 1fr;
   }
 }

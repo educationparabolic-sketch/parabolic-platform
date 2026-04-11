@@ -168,6 +168,14 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     allowedRoles: ["admin", "teacher", "director"],
   },
   {
+    path: "/admin/analytics/batch",
+    title: "Batch Analytics Dashboard",
+    section: "Analytics",
+    description:
+      "Batch analytics dashboard for cross-batch performance comparisons, average score time-series trends, discipline metrics, and risk distribution.",
+    allowedRoles: ["admin", "teacher", "director"],
+  },
+  {
     path: "/admin/insights",
     title: "Insights",
     section: "Insights",

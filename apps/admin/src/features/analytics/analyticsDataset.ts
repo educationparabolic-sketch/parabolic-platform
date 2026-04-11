@@ -11,6 +11,8 @@ export type DisciplineTrend = (typeof DISCIPLINE_TRENDS)[number];
 export interface RunAnalyticsRecord {
   runId: string;
   runName: string;
+  batchId: string;
+  batchName: string;
   mode: string;
   participants: number;
   completionRatePercent: number;
@@ -25,6 +27,8 @@ export interface RunAnalyticsRecord {
 export interface StudentYearMetricRecord {
   studentId: string;
   studentName: string;
+  batchId: string;
+  batchName: string;
   avgRawScorePercent: number;
   avgAccuracyPercent: number;
   disciplineIndex: number;
@@ -44,6 +48,8 @@ export const FALLBACK_DATASET: DashboardDataset = {
     {
       runId: "run-2026-0410-001",
       runName: "JEE Mains Mock - Set A",
+      batchId: "batch-alpha",
+      batchName: "Batch Alpha",
       mode: "Controlled",
       participants: 74,
       completionRatePercent: 96,
@@ -57,6 +63,8 @@ export const FALLBACK_DATASET: DashboardDataset = {
     {
       runId: "run-2026-0409-003",
       runName: "NEET Revision - Biology Focus",
+      batchId: "batch-beta",
+      batchName: "Batch Beta",
       mode: "Diagnostic",
       participants: 66,
       completionRatePercent: 92,
@@ -70,6 +78,8 @@ export const FALLBACK_DATASET: DashboardDataset = {
     {
       runId: "run-2026-0408-006",
       runName: "Physics Adaptive Drill - Wave Optics",
+      batchId: "batch-alpha",
+      batchName: "Batch Alpha",
       mode: "Operational",
       participants: 52,
       completionRatePercent: 88,
@@ -83,6 +93,8 @@ export const FALLBACK_DATASET: DashboardDataset = {
     {
       runId: "run-2026-0407-010",
       runName: "Chemistry Timing Calibration",
+      batchId: "batch-gamma",
+      batchName: "Batch Gamma",
       mode: "Controlled",
       participants: 48,
       completionRatePercent: 90,
@@ -98,6 +110,8 @@ export const FALLBACK_DATASET: DashboardDataset = {
     {
       studentId: "STU-001",
       studentName: "Aarav Menon",
+      batchId: "batch-alpha",
+      batchName: "Batch Alpha",
       avgRawScorePercent: 74,
       avgAccuracyPercent: 81,
       disciplineIndex: 79,
@@ -109,6 +123,8 @@ export const FALLBACK_DATASET: DashboardDataset = {
     {
       studentId: "STU-002",
       studentName: "Diya Sharma",
+      batchId: "batch-beta",
+      batchName: "Batch Beta",
       avgRawScorePercent: 67,
       avgAccuracyPercent: 73,
       disciplineIndex: 65,
@@ -120,6 +136,8 @@ export const FALLBACK_DATASET: DashboardDataset = {
     {
       studentId: "STU-003",
       studentName: "Kabir Gupta",
+      batchId: "batch-alpha",
+      batchName: "Batch Alpha",
       avgRawScorePercent: 83,
       avgAccuracyPercent: 88,
       disciplineIndex: 86,
@@ -131,6 +149,8 @@ export const FALLBACK_DATASET: DashboardDataset = {
     {
       studentId: "STU-004",
       studentName: "Naina Iyer",
+      batchId: "batch-gamma",
+      batchName: "Batch Gamma",
       avgRawScorePercent: 58,
       avgAccuracyPercent: 63,
       disciplineIndex: 54,
@@ -142,6 +162,8 @@ export const FALLBACK_DATASET: DashboardDataset = {
     {
       studentId: "STU-005",
       studentName: "Rehan Patel",
+      batchId: "batch-gamma",
+      batchName: "Batch Gamma",
       avgRawScorePercent: 49,
       avgAccuracyPercent: 57,
       disciplineIndex: 42,
@@ -153,6 +175,8 @@ export const FALLBACK_DATASET: DashboardDataset = {
     {
       studentId: "STU-006",
       studentName: "Mira Shah",
+      batchId: "batch-beta",
+      batchName: "Batch Beta",
       avgRawScorePercent: 71,
       avgAccuracyPercent: 77,
       disciplineIndex: 72,
@@ -239,10 +263,14 @@ function normalizeRunAnalyticsRecord(value: unknown, index: number): RunAnalytic
 
   const record = value as Record<string, unknown>;
   const runId = toNonEmptyString(record.runId, `run-${index + 1}`);
+  const batchId = toNonEmptyString(record.batchId, toNonEmptyString(record.batch, "unassigned"));
+  const batchName = toNonEmptyString(record.batchName, batchId === "unassigned" ? "Unassigned Batch" : batchId);
 
   return {
     runId,
     runName: toNonEmptyString(record.runName, toNonEmptyString(record.testName, runId)),
+    batchId,
+    batchName,
     mode: toNonEmptyString(record.mode, "Operational"),
     participants: toNumberOrZero(record.totalParticipants ?? record.participants),
     completionRatePercent: toNumberOrZero(record.completionRate ?? record.completionRatePercent),
@@ -262,6 +290,8 @@ function normalizeStudentMetricRecord(value: unknown, index: number): StudentYea
 
   const record = value as Record<string, unknown>;
   const studentId = toNonEmptyString(record.studentId, `student-${index + 1}`);
+  const batchId = toNonEmptyString(record.batchId, toNonEmptyString(record.batch, "unassigned"));
+  const batchName = toNonEmptyString(record.batchName, batchId === "unassigned" ? "Unassigned Batch" : batchId);
   const disciplineTrend =
     record.disciplineIndexTrend !== undefined
       ? toDisciplineTrend(record.disciplineIndexTrend)
@@ -270,6 +300,8 @@ function normalizeStudentMetricRecord(value: unknown, index: number): StudentYea
   return {
     studentId,
     studentName: toNonEmptyString(record.studentName, toNonEmptyString(record.fullName, studentId)),
+    batchId,
+    batchName,
     avgRawScorePercent: toNumberOrZero(record.avgRawScorePercent),
     avgAccuracyPercent: toNumberOrZero(record.avgAccuracyPercent),
     disciplineIndex: toNumberOrZero(record.disciplineIndex),

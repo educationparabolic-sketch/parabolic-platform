@@ -8,7 +8,7 @@ export interface UiChartContainerProps {
   subtitle?: string;
   data: UiChartPoint[];
   maxValue?: number;
-  variant?: "bar" | "pie";
+  variant?: "bar" | "pie" | "line";
 }
 
 function pieSlicePath(cx: number, cy: number, radius: number, startAngle: number, endAngle: number): string {
@@ -73,6 +73,53 @@ function UiChartContainer({ title, subtitle, data, maxValue, variant = "bar" }: 
                 </div>
               );
             })}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (variant === "line") {
+    const normalized = data.map((point) => Math.max(point.value, 0));
+    const width = 240;
+    const height = 120;
+    const paddingX = 14;
+    const paddingY = 14;
+    const usableWidth = width - paddingX * 2;
+    const usableHeight = height - paddingY * 2;
+    const denominator = normalized.length > 1 ? normalized.length - 1 : 1;
+    const points = normalized.map((value, index) => {
+      const x = paddingX + (index / denominator) * usableWidth;
+      const y = height - paddingY - (value / chartMax) * usableHeight;
+      return { x, y, value, label: data[index]?.label ?? "" };
+    });
+
+    const linePath = points
+      .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
+      .join(" ");
+
+    return (
+      <section className="ui-chart" aria-label={title}>
+        <header className="ui-chart-header">
+          <h3>{title}</h3>
+          {subtitle ? <p>{subtitle}</p> : null}
+        </header>
+        <div className="ui-chart-line-layout">
+          <svg className="ui-chart-line" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${title} line chart`}>
+            <line x1={paddingX} y1={height - paddingY} x2={width - paddingX} y2={height - paddingY} className="ui-chart-line-axis" />
+            <line x1={paddingX} y1={paddingY} x2={paddingX} y2={height - paddingY} className="ui-chart-line-axis" />
+            {points.length > 1 ? <path d={linePath} className="ui-chart-line-path" /> : null}
+            {points.map((point) => (
+              <circle key={`${point.label}-${point.x}`} cx={point.x} cy={point.y} r="3" className="ui-chart-line-point" />
+            ))}
+          </svg>
+          <div className="ui-chart-line-legend">
+            {points.map((point) => (
+              <div key={`${point.label}-${point.x}-legend`} className="ui-chart-line-legend-row">
+                <span>{point.label}</span>
+                <strong>{point.value}</strong>
+              </div>
+            ))}
           </div>
         </div>
       </section>

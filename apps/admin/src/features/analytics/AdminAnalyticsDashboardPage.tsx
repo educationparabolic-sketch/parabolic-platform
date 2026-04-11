@@ -289,6 +289,10 @@ function AdminAnalyticsDashboardPage() {
         <NavLink className="admin-primary-link" to="/admin/analytics/risk-insights">
           Open Risk Insights Dashboard
         </NavLink>
+        {" "}
+        <NavLink className="admin-primary-link" to="/admin/analytics/batch">
+          Open Batch Analytics Dashboard
+        </NavLink>
       </p>
 
       <p className="admin-analytics-inline-note">

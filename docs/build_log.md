@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 121  
-Next Build: 122
+Completed Builds: 122  
+Next Build: 123
 
 Current Phase: Phase 25 — Admin Analytics & Governance
 
@@ -3883,18 +3883,48 @@ Completed On
 
 ---
 
+## Build 122 — Batch Analytics Dashboard
+
+Phase  
+Phase 25 — Admin Analytics & Governance
+
+Summary  
+Implemented the admin batch analytics dashboard with cross-batch comparisons, score trend time-series visualizations, discipline metrics, and risk distribution summaries sourced from analytics summary collections.
+
+Components implemented:
+
+- Added a dedicated batch analytics feature module in `apps/admin/src/features/analytics/BatchAnalyticsDashboardPage.tsx`
+- Added route integration for `/admin/analytics/batch` in `apps/admin/src/App.tsx` and updated analytics cross-navigation links between overview, risk insights, and batch dashboards
+- Extended analytics hydration contracts in `apps/admin/src/features/analytics/analyticsDataset.ts` with batch identifiers and names for run/student summary normalization
+- Added a line-chart visualization mode to shared charting in `shared/ui/components/UiChartContainer.tsx` and styling in `shared/ui/components/shared-ui-components.css` to support batch time-series score trends across runs
+- Added batch dashboard styling in `apps/admin/src/App.css` for KPI cards, trend sections, chart grids, and comparison table presentation with desktop/mobile responsive behavior
+- Added admin route-registry entry for batch analytics in `apps/admin/src/portals/adminRoutes.ts`
+- Added deterministic browser verification automation in `apps/admin/artifacts/build-122/verify-routes.mjs` and captured desktop/mobile artifacts under `apps/admin/artifacts/build-122/`
+- Executed admin lint/build checks and mandatory browser verification for `/admin/analytics/batch`, `/admin/analytics`, and impacted redirect routes (`/admin`, `/`) at `1366x768` and `390x844`
+
+Result  
+The admin portal now includes a production-typed batch analytics dashboard aligned with Build 122 scope: batch performance comparisons, average score trend time-series across runs, batch discipline metrics, and batch risk distribution using summary-only analytics inputs.
+
+Commit Reference  
+Build 122 — Batch Analytics Dashboard implemented
+
+Completed On  
+2026-04-11
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 122
+Next Build Number: 123
 
 Phase  
 Phase 25 — Admin Analytics & Governance
 
 Subsystem  
-Batch Analytics Dashboard
+Governance Monitoring Dashboard
 
 Reference  
-2_Portals_Architecture.md → Section 2.8 Batch Analytics Dashboard
+2_Portals_Architecture.md → Section 2.9 Governance Dashboard
 
 ---
 
@@ -4023,7 +4053,8 @@ Build | Phase | Status
 119 | Admin Portal Core | Completed
 120 | Admin Portal Core | Completed
 121 | Admin Analytics & Governance | Completed
-122–150 | Remaining Phases | Pending
+122 | Admin Analytics & Governance | Completed
+123–150 | Remaining Phases | Pending
 
 ---
 
