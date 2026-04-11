@@ -66,6 +66,9 @@ import {
 import {
   handleAdminInterventionsRequest,
 } from "./api/adminInterventions";
+import {
+  handleAdminSettingsRequest,
+} from "./api/adminSettings";
 import {runAssignmentOnCreate} from "./triggers/assignmentCreation";
 import {
   questionBankOnCreate,
@@ -169,6 +172,9 @@ export const adminStudentSoftDelete = functions.https.onRequest(
 );
 export const adminInterventions = functions.https.onRequest(
   handleAdminInterventionsRequest,
+);
+export const adminSettings = functions.https.onRequest(
+  handleAdminSettingsRequest,
 );
 
 export const helloWorld = functions.https.onRequest(async (

@@ -12,10 +12,10 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 124  
-Next Build: 125
+Completed Builds: 125  
+Next Build: 126
 
-Current Phase: Phase 25 — Admin Analytics & Governance
+Current Phase: Phase 26 — Student Portal Core
 
 ---
 
@@ -3989,18 +3989,72 @@ Completed On
 
 ---
 
-# NEXT BUILD
-
-Next Build Number: 125
+## Build 125 — Admin Settings & Configuration
 
 Phase  
 Phase 25 — Admin Analytics & Governance
 
+Summary  
+Implemented the admin settings and configuration domain with secured backend APIs, typed institute settings services, and multi-route admin portal settings UI coverage.
+
+Components implemented:
+
+- Added `POST /admin/settings` in `functions/src/api/adminSettings.ts` using existing middleware stack reuse (method guard, authentication, tenant guard, role authorization, payload validation, standardized API responses)
+- Added `AdminSettingsService` in `functions/src/services/adminSettings.ts` and typed contracts in `functions/src/types/adminSettings.ts` supporting:
+  - `GET_SETTINGS_SNAPSHOT`
+  - `UPDATE_INSTITUTE_PROFILE`
+  - `LOCK_ACADEMIC_YEAR`
+  - `UPDATE_EXECUTION_POLICY`
+  - `UPSERT_USER_ACCESS`
+  - `REMOVE_USER_ACCESS`
+  - `RESET_USER_PASSWORD`
+  - `UPDATE_SECURITY_SETTINGS`
+  - `UPDATE_FEATURE_FLAGS`
+- Added immutable settings mutation audit persistence at `institutes/{instituteId}/settingsAudit/{eventId}` for admin configuration changes
+- Exported the new Cloud Function in `functions/src/index.ts` as `adminSettings` using `functions.https.onRequest`
+- Added repeatable backend tests:
+  - `functions/src/tests/adminSettingsApi.test.ts`
+  - `functions/src/tests/adminSettings.test.ts` (emulator-backed)
+  - scripts: `npm run test:admin-settings-api`, `npm run test:admin-settings`
+- Implemented the admin settings UI in `apps/admin/src/features/settings/AdminSettingsConfigurationPage.tsx` and dataset adapter `apps/admin/src/features/settings/settingsDataset.ts`
+- Integrated route and redirect wiring for:
+  - `/admin/settings`
+  - `/admin/settings/profile`
+  - `/admin/settings/academic-year`
+  - `/admin/settings/execution-policy`
+  - `/admin/settings/users`
+  - `/admin/settings/security`
+  - `/admin/settings/system`
+- Added responsive settings styling in `apps/admin/src/App.css` for tabs, section layouts, forms, status chips, and tables
+- Added deterministic browser verification automation and artifacts under `apps/admin/artifacts/build-125/`
+- Executed frontend + backend verification:
+  - `functions`: build, lint, `test:admin-settings-api`, emulator-backed `test:admin-settings`
+  - `apps/admin`: build, lint
+  - browser checks for `/admin/settings`, each settings sub-route, and impacted redirects (`/admin`) at `1366x768` and `390x844`
+
+Result  
+The admin portal now includes a fully integrated settings and system-configuration workflow aligned to Build 125 scope, with secured backend mutation APIs, typed snapshot/update contracts, immutable settings audit traceability, and deterministic desktop/mobile browser verification evidence.
+
+Commit Reference  
+Build 125 — Admin Settings & Configuration implemented
+
+Completed On  
+2026-04-11
+
+---
+
+# NEXT BUILD
+
+Next Build Number: 126
+
+Phase  
+Phase 26 — Student Portal Core
+
 Subsystem  
-Admin Settings & Configuration
+Student Portal Layout
 
 Reference  
-2_Portals_Architecture.md → Section 2.11 Settings & System Configuration
+2_Portals_Architecture.md → Section 3.1 Student Portal Overview
 
 ---
 
@@ -4132,7 +4186,8 @@ Build | Phase | Status
 122 | Admin Analytics & Governance | Completed
 123 | Admin Analytics & Governance | Completed
 124 | Admin Analytics & Governance | Completed
-125–150 | Remaining Phases | Pending
+125 | Admin Analytics & Governance | Completed
+126–150 | Remaining Phases | Pending
 
 ---
 

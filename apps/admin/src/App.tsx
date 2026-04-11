@@ -7,6 +7,7 @@ import GovernanceMonitoringDashboardPage from "./features/analytics/GovernanceMo
 import RiskInsightsDashboardPage from "./features/analytics/RiskInsightsDashboardPage";
 import AssignmentManagementPage from "./features/assignments/AssignmentManagementPage";
 import InterventionToolsPage from "./features/insights/InterventionToolsPage";
+import AdminSettingsConfigurationPage from "./features/settings/AdminSettingsConfigurationPage";
 import StudentManagementPage from "./features/students/StudentManagementPage";
 import TestTemplateManagementPage from "./features/tests/TestTemplateManagementPage";
 import "./App.css";
@@ -216,12 +217,31 @@ function App() {
         />
         <Route
           path="settings"
-          element={
-            <AdminSectionPage
-              title="Settings"
-              summary="Manage institute-level configuration options and portal behavior in a dedicated settings route."
-            />
-          }
+          element={<Navigate to="/admin/settings/profile" replace />}
+        />
+        <Route
+          path="settings/profile"
+          element={<AdminSettingsConfigurationPage />}
+        />
+        <Route
+          path="settings/academic-year"
+          element={<AdminSettingsConfigurationPage />}
+        />
+        <Route
+          path="settings/execution-policy"
+          element={<AdminSettingsConfigurationPage />}
+        />
+        <Route
+          path="settings/users"
+          element={<AdminSettingsConfigurationPage />}
+        />
+        <Route
+          path="settings/security"
+          element={<AdminSettingsConfigurationPage />}
+        />
+        <Route
+          path="settings/system"
+          element={<AdminSettingsConfigurationPage />}
         />
       </Route>
 
