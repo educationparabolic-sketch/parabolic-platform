@@ -570,6 +570,10 @@
   overflow-wrap: anywhere;
 }
 
+.admin-analytics-inline-link-row {
+  margin: 14px 0 0;
+}
+
 .admin-analytics-kpi-grid {
   margin-top: 18px;
   display: grid;
@@ -644,6 +648,123 @@
   color: #4f688a;
 }
 
+.admin-risk-trend-grid {
+  margin-top: 16px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.admin-risk-trend-card {
+  border: 1px solid rgba(16, 42, 81, 0.16);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.admin-risk-trend-card p,
+.admin-risk-trend-card h3,
+.admin-risk-trend-card small {
+  margin: 0;
+}
+
+.admin-risk-trend-card p {
+  color: #486486;
+  font-weight: 600;
+}
+
+.admin-risk-trend-card h3 {
+  color: #173c68;
+}
+
+.admin-risk-trend-card small {
+  color: #5f7697;
+}
+
+.admin-risk-trend-card-up {
+  border-color: rgba(39, 123, 70, 0.35);
+}
+
+.admin-risk-trend-card-stable {
+  border-color: rgba(91, 113, 148, 0.35);
+}
+
+.admin-risk-trend-card-down {
+  border-color: rgba(176, 70, 70, 0.35);
+}
+
+.admin-risk-chart-grid {
+  margin-top: 16px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-risk-table-section {
+  margin-top: 18px;
+}
+
+.admin-risk-table-section h3 {
+  margin: 0 0 10px;
+  color: #143764;
+}
+
+.admin-risk-student-cell {
+  display: grid;
+  gap: 2px;
+}
+
+.admin-risk-student-cell small {
+  color: #4f688a;
+}
+
+.admin-risk-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  text-transform: capitalize;
+  font-weight: 600;
+}
+
+.admin-risk-chip-low {
+  color: #0f6a41;
+  background: rgba(15, 146, 85, 0.14);
+}
+
+.admin-risk-chip-medium {
+  color: #8b5a13;
+  background: rgba(219, 153, 41, 0.16);
+}
+
+.admin-risk-chip-high {
+  color: #8a2431;
+  background: rgba(196, 56, 56, 0.14);
+}
+
+.admin-risk-chip-critical {
+  color: #ffffff;
+  background: #9e2b3c;
+}
+
+.admin-risk-trend {
+  font-weight: 600;
+}
+
+.admin-risk-trend-up {
+  color: #0f6a41;
+}
+
+.admin-risk-trend-stable {
+  color: #5f7697;
+}
+
+.admin-risk-trend-down {
+  color: #8a2431;
+}
+
 @media (max-width: 1024px) {
   .admin-layout-grid {
     grid-template-columns: 1fr;
@@ -682,6 +803,14 @@
   .admin-analytics-chart-grid {
     grid-template-columns: 1fr;
   }
+
+  .admin-risk-trend-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-risk-chart-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 640px) {
@@ -702,6 +831,10 @@
   }
 
   .admin-analytics-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-risk-trend-grid {
     grid-template-columns: 1fr;
   }
 }

@@ -99,6 +99,52 @@
   gap: 10px;
 }
 
+.ui-chart-pie-layout {
+  margin-top: 12px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 180px) minmax(0, 1fr);
+  align-items: center;
+}
+
+.ui-chart-pie {
+  width: 100%;
+  max-width: 220px;
+  justify-self: center;
+}
+
+.ui-chart-pie-total-label {
+  font-size: 0.6rem;
+  fill: #5a6f8f;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ui-chart-pie-total-value {
+  font-size: 0.9rem;
+  fill: #1c3559;
+  font-weight: 700;
+}
+
+.ui-chart-pie-legend {
+  display: grid;
+  gap: 8px;
+}
+
+.ui-chart-pie-legend-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.ui-chart-pie-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+
 .ui-chart-row {
   display: grid;
   grid-template-columns: minmax(92px, 0.7fr) 2fr auto;
@@ -192,4 +238,10 @@
 
 .ui-modal-footer {
   margin-top: 14px;
+}
+
+@media (max-width: 640px) {
+  .ui-chart-pie-layout {
+    grid-template-columns: 1fr;
+  }
 }

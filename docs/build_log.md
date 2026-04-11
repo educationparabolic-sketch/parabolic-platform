@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 120  
-Next Build: 121
+Completed Builds: 121  
+Next Build: 122
 
 Current Phase: Phase 25 — Admin Analytics & Governance
 
@@ -3853,18 +3853,48 @@ Completed On
 
 ---
 
+## Build 121 — Risk Insights Dashboard
+
+Phase  
+Phase 25 — Admin Analytics & Governance
+
+Summary  
+Implemented the admin risk insights dashboard with risk cluster distribution visuals, high-risk student tables, guess-rate indicators, and discipline trend signals sourced from summary analytics collections.
+
+Components implemented:
+
+- Added shared analytics dataset contracts and normalization utilities in `apps/admin/src/features/analytics/analyticsDataset.ts` for reusable `runAnalytics` + `studentYearMetrics` hydration
+- Added a dedicated risk insights feature module in `apps/admin/src/features/analytics/RiskInsightsDashboardPage.tsx`
+- Added route integration for `/admin/analytics/risk-insights` in `apps/admin/src/App.tsx` and updated analytics navigation link flow between overview and risk dashboards
+- Extended shared charting with a pie visualization mode in `shared/ui/components/UiChartContainer.tsx` and matching styling in `shared/ui/components/shared-ui-components.css`
+- Added risk dashboard layout styling in `apps/admin/src/App.css` for trend cards, cluster chips, responsive chart grid, and high-risk table presentation
+- Added admin route-registry entry for risk insights in `apps/admin/src/portals/adminRoutes.ts`
+- Added deterministic browser verification automation in `apps/admin/artifacts/build-121/verify-routes.mjs` and captured desktop/mobile artifacts under `apps/admin/artifacts/build-121/`
+- Executed admin lint/build checks and mandatory browser verification for `/admin/analytics/risk-insights`, `/admin/analytics`, and impacted redirect routes (`/admin`, `/`) at `1366x768` and `390x844`
+
+Result  
+The admin portal now includes a production-typed risk insights dashboard aligned with Build 121 scope: pie-based risk cluster distribution, high-risk student visibility, guess-rate indicators, and discipline trend monitoring using summary-only analytics inputs.
+
+Commit Reference  
+Build 121 — Risk Insights Dashboard implemented
+
+Completed On  
+2026-04-11
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 121
+Next Build Number: 122
 
 Phase  
 Phase 25 — Admin Analytics & Governance
 
 Subsystem  
-Risk Insights Dashboard
+Batch Analytics Dashboard
 
 Reference  
-2_Portals_Architecture.md → Section 2.7 Risk Insights Dashboard
+2_Portals_Architecture.md → Section 2.8 Batch Analytics Dashboard
 
 ---
 
@@ -3992,7 +4022,8 @@ Build | Phase | Status
 118 | Admin Portal Core | Completed
 119 | Admin Portal Core | Completed
 120 | Admin Portal Core | Completed
-121–150 | Remaining Phases | Pending
+121 | Admin Analytics & Governance | Completed
+122–150 | Remaining Phases | Pending
 
 ---
 

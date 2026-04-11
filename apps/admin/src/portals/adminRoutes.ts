@@ -160,6 +160,14 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     allowedRoles: ["admin", "teacher", "director"],
   },
   {
+    path: "/admin/analytics/risk-insights",
+    title: "Risk Insights Dashboard",
+    section: "Analytics",
+    description:
+      "Risk-focused analytics dashboard for cluster distribution, high-risk student review, guess-rate indicators, and discipline trend signals.",
+    allowedRoles: ["admin", "teacher", "director"],
+  },
+  {
     path: "/admin/insights",
     title: "Insights",
     section: "Insights",
