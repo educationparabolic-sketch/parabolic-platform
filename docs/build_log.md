@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 123  
-Next Build: 124
+Completed Builds: 124  
+Next Build: 125
 
 Current Phase: Phase 25 — Admin Analytics & Governance
 
@@ -3942,18 +3942,65 @@ Completed On
 
 ---
 
+## Build 124 — Intervention Tools
+
+Phase  
+Phase 25 — Admin Analytics & Governance
+
+Summary  
+Implemented admin intervention tools for high-risk student workflows with remedial action logging, alert dispatch logging, and outcome tracking backed by immutable institute audit records.
+
+Components implemented:
+
+- Added `POST /admin/interventions` in `functions/src/api/adminInterventions.ts` with existing middleware stack reuse (authentication, tenant guard, role enforcement, L1+ license enforcement, validation, structured errors)
+- Added `InterventionToolsService` in `functions/src/services/interventionTools.ts` and typed contracts in `functions/src/types/interventionTools.ts` for:
+  - identifying target students from existing institute + `studentYearMetrics` summaries
+  - logging remedial assignment actions
+  - logging intervention alerts
+  - logging intervention outcome updates
+  - listing intervention timeline records from institute immutable audit logs
+- Extended centralized administrative audit logging in `functions/src/services/administrativeActionLogging.ts` and `functions/src/types/audit.ts` with Build 124 intervention action types:
+  - `ASSIGN_REMEDIAL_TEST`
+  - `SEND_INTERVENTION_ALERT`
+  - `UPDATE_INTERVENTION_OUTCOME`
+- Exported the new Cloud Function in `functions/src/index.ts` as `adminInterventions` using `functions.https.onRequest`
+- Added repeatable backend tests:
+  - `functions/src/tests/adminInterventionsApi.test.ts`
+  - `functions/src/tests/interventionTools.test.ts` (emulator-backed)
+  - scripts: `npm run test:admin-interventions`, `npm run test:intervention-tools`
+- Implemented the admin intervention UI in `apps/admin/src/features/insights/InterventionToolsPage.tsx` and dataset adapter `apps/admin/src/features/insights/interventionDataset.ts`
+- Integrated route and navigation wiring for `/admin/insights/interventions` in `apps/admin/src/App.tsx`
+- Added risk-dashboard cross-link to interventions in `apps/admin/src/features/analytics/RiskInsightsDashboardPage.tsx`
+- Added responsive intervention styling in `apps/admin/src/App.css` for KPI cards, action controls, and audit timeline tables
+- Added deterministic browser verification automation and artifacts under `apps/admin/artifacts/build-124/`
+- Executed frontend + backend verification:
+  - `functions`: build, lint, `test:admin-interventions`, emulator-backed `test:intervention-tools`
+  - `apps/admin`: build, lint
+  - browser checks for `/admin/insights/interventions`, `/admin/analytics/risk-insights`, and `/admin` at `1366x768` and `390x844`
+
+Result  
+The admin portal now includes Build 124 intervention tools aligned with the architecture-defined intervention engine: high-risk targeting, targeted remedial assignment actions, alert actions, and outcome tracking with immutable audit-log traceability and deterministic frontend verification evidence.
+
+Commit Reference  
+Build 124 — Intervention Tools implemented
+
+Completed On  
+2026-04-11
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 124
+Next Build Number: 125
 
 Phase  
 Phase 25 — Admin Analytics & Governance
 
 Subsystem  
-Intervention Tools
+Admin Settings & Configuration
 
 Reference  
-2_Portals_Architecture.md → Section 2.10 Intervention Tools
+2_Portals_Architecture.md → Section 2.11 Settings & System Configuration
 
 ---
 
@@ -4084,7 +4131,8 @@ Build | Phase | Status
 121 | Admin Analytics & Governance | Completed
 122 | Admin Analytics & Governance | Completed
 123 | Admin Analytics & Governance | Completed
-124–150 | Remaining Phases | Pending
+124 | Admin Analytics & Governance | Completed
+125–150 | Remaining Phases | Pending
 
 ---
 

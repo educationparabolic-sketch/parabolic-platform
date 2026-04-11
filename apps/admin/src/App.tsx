@@ -6,6 +6,7 @@ import BatchAnalyticsDashboardPage from "./features/analytics/BatchAnalyticsDash
 import GovernanceMonitoringDashboardPage from "./features/analytics/GovernanceMonitoringDashboardPage";
 import RiskInsightsDashboardPage from "./features/analytics/RiskInsightsDashboardPage";
 import AssignmentManagementPage from "./features/assignments/AssignmentManagementPage";
+import InterventionToolsPage from "./features/insights/InterventionToolsPage";
 import StudentManagementPage from "./features/students/StudentManagementPage";
 import TestTemplateManagementPage from "./features/tests/TestTemplateManagementPage";
 import "./App.css";
@@ -51,6 +52,11 @@ const ADMIN_NAV_ITEMS: AdminNavItem[] = [
     path: "/admin/governance",
     label: "Governance",
     summary: "Institutional stability and execution quality monitoring.",
+  },
+  {
+    path: "/admin/insights/interventions",
+    label: "Interventions",
+    summary: "High-risk student intervention queue and outcome tracking.",
   },
   {
     path: "/admin/settings",
@@ -203,6 +209,10 @@ function App() {
         <Route
           path="governance"
           element={<GovernanceMonitoringDashboardPage />}
+        />
+        <Route
+          path="insights/interventions"
+          element={<InterventionToolsPage />}
         />
         <Route
           path="settings"

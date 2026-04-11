@@ -397,6 +397,60 @@ export class AdministrativeActionLoggingService {
   }
 
   /**
+   * Logs institute-scoped remedial assignment interventions.
+   * @param {InstituteAdministrativeActionContext} context Action context.
+   * @return {Promise<AuditLogWriteResult>} Firestore write metadata.
+   */
+  public async logInterventionRemedialAssignment(
+    context: InstituteAdministrativeActionContext,
+  ): Promise<AuditLogWriteResult> {
+    return this.logAdministrativeAction({
+      ...context,
+      actionType: "ASSIGN_REMEDIAL_TEST",
+      entityType: "assignment",
+      scope: "institute",
+      targetCollection: "runs",
+      tenantId: context.instituteId,
+    });
+  }
+
+  /**
+   * Logs institute-scoped student intervention alerts.
+   * @param {InstituteAdministrativeActionContext} context Action context.
+   * @return {Promise<AuditLogWriteResult>} Firestore write metadata.
+   */
+  public async logInterventionStudentAlert(
+    context: InstituteAdministrativeActionContext,
+  ): Promise<AuditLogWriteResult> {
+    return this.logAdministrativeAction({
+      ...context,
+      actionType: "SEND_INTERVENTION_ALERT",
+      entityType: "student",
+      scope: "institute",
+      targetCollection: "students",
+      tenantId: context.instituteId,
+    });
+  }
+
+  /**
+   * Logs institute-scoped intervention outcome tracking updates.
+   * @param {InstituteAdministrativeActionContext} context Action context.
+   * @return {Promise<AuditLogWriteResult>} Firestore write metadata.
+   */
+  public async logInterventionOutcomeUpdate(
+    context: InstituteAdministrativeActionContext,
+  ): Promise<AuditLogWriteResult> {
+    return this.logAdministrativeAction({
+      ...context,
+      actionType: "UPDATE_INTERVENTION_OUTCOME",
+      entityType: "student",
+      scope: "institute",
+      targetCollection: "students",
+      tenantId: context.instituteId,
+    });
+  }
+
+  /**
    * Logs vendor-scoped calibration updates.
    * @param {VendorAdministrativeActionContext} context Action context.
    * @return {Promise<AuditLogWriteResult>} Firestore write metadata.

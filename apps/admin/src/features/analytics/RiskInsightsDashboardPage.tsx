@@ -291,6 +291,10 @@ function RiskInsightsDashboardPage() {
         <NavLink className="admin-primary-link" to="/admin/analytics/batch">
           Open Batch Analytics Dashboard
         </NavLink>
+        {" "}
+        <NavLink className="admin-primary-link" to="/admin/insights/interventions">
+          Open Intervention Tools
+        </NavLink>
       </p>
 
       <p className="admin-analytics-inline-note">

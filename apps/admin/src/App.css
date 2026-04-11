@@ -968,6 +968,102 @@
   color: #4f688a;
 }
 
+.admin-intervention-kpi-grid {
+  margin-top: 16px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.admin-intervention-kpi-card {
+  border: 1px solid rgba(16, 42, 81, 0.16);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.admin-intervention-kpi-card p,
+.admin-intervention-kpi-card h3,
+.admin-intervention-kpi-card small {
+  margin: 0;
+}
+
+.admin-intervention-kpi-card p {
+  color: #486486;
+  font-weight: 600;
+}
+
+.admin-intervention-kpi-card h3 {
+  color: #173c68;
+}
+
+.admin-intervention-kpi-card small {
+  color: #5f7697;
+}
+
+.admin-intervention-table-section {
+  margin-top: 18px;
+}
+
+.admin-intervention-table-section h3 {
+  margin: 0 0 10px;
+  color: #143764;
+}
+
+.admin-intervention-signal-cell {
+  display: grid;
+  gap: 2px;
+}
+
+.admin-intervention-signal-cell small {
+  color: #4f688a;
+}
+
+.admin-intervention-action-cell {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-intervention-outcome-editor {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-intervention-outcome-editor select,
+.admin-intervention-outcome-editor input {
+  border: 1px solid rgba(13, 36, 79, 0.2);
+  border-radius: 10px;
+  min-height: 34px;
+  padding: 6px 8px;
+  font: inherit;
+}
+
+.admin-compact-button {
+  border: 1px solid rgba(23, 65, 124, 0.34);
+  border-radius: 10px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #153d6c;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.admin-compact-button:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+}
+
+.admin-intervention-history-cell {
+  display: grid;
+  gap: 2px;
+}
+
+.admin-intervention-history-cell small {
+  color: #4f688a;
+}
+
 @media (max-width: 1024px) {
   .admin-layout-grid {
     grid-template-columns: 1fr;
@@ -1032,6 +1128,10 @@
   .admin-governance-chart-grid {
     grid-template-columns: 1fr;
   }
+
+  .admin-intervention-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 640px) {
@@ -1065,6 +1165,10 @@
 
   .admin-governance-kpi-grid,
   .admin-governance-comparison-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-intervention-kpi-grid {
     grid-template-columns: 1fr;
   }
 }

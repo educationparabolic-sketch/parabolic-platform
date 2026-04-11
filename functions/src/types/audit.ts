@@ -14,7 +14,10 @@ export type AdministrativeActionType =
   | "CREATE_ASSIGNMENT"
   | "IMPORT_STUDENTS"
   | "CHANGE_ROLE"
-  | "UPDATE_CALIBRATION";
+  | "UPDATE_CALIBRATION"
+  | "ASSIGN_REMEDIAL_TEST"
+  | "SEND_INTERVENTION_ALERT"
+  | "UPDATE_INTERVENTION_OUTCOME";
 
 export type AdministrativeActionEntityType =
   | "test"
