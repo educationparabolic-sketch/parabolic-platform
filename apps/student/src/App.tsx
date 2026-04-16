@@ -11,6 +11,7 @@ import {
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { useAuthProvider } from "../../../shared/services/authProvider";
 import StudentDashboardPage from "./features/dashboard/StudentDashboardPage";
+import StudentMyTestsPage from "./features/my-tests/StudentMyTestsPage";
 import "./App.css";
 
 interface StudentNavItem {
@@ -261,12 +262,7 @@ function App() {
         />
         <Route
           path="my-tests"
-          element={
-            <StudentSectionPage
-              title="My Tests"
-              summary="Assignment-centric workspace for student test availability, in-progress attempts, and completed outcomes."
-            />
-          }
+          element={<StudentMyTestsPage />}
         />
         <Route
           path="performance"

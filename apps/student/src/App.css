@@ -372,6 +372,112 @@
   color: #385172;
 }
 
+.student-my-tests-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.student-my-tests-inline-note {
+  margin: 0;
+  padding: 0.75rem;
+  border-left: 4px solid #2f66b3;
+  background: #eef4ff;
+  color: #24426a;
+}
+
+.student-my-tests-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.student-my-tests-filter {
+  border: 1px solid #c9d6e8;
+  background: #ffffff;
+  border-radius: 0.65rem;
+  padding: 0.55rem 0.6rem;
+  text-align: left;
+  color: #1f3557;
+  cursor: pointer;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.student-my-tests-filter strong {
+  font-size: 1rem;
+}
+
+.student-my-tests-filter-active {
+  border-color: #8ca9cf;
+  background: #ecf4ff;
+}
+
+.student-my-tests-test-cell {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.student-my-tests-test-cell small {
+  color: #5d7698;
+}
+
+.student-my-tests-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 0.2rem 0.7rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.student-my-tests-status-scheduled {
+  color: #7a5208;
+  border-color: #dfc28d;
+  background: #fff5e2;
+}
+
+.student-my-tests-status-active {
+  color: #0f4f90;
+  border-color: #9dc2eb;
+  background: #eaf3ff;
+}
+
+.student-my-tests-status-completed {
+  color: #0f6a46;
+  border-color: #8ecfb0;
+  background: #e9f7ef;
+}
+
+.student-my-tests-status-archived {
+  color: #5b667a;
+  border-color: #bec8d6;
+  background: #f0f3f8;
+}
+
+.student-my-tests-session-link {
+  color: #1b4d8e;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.student-my-tests-session-link:hover {
+  text-decoration: underline;
+}
+
+.student-my-tests-session-muted {
+  color: #566f91;
+  font-size: 0.85rem;
+}
+
+.student-my-tests-page .ui-table-shell {
+  overflow-x: auto;
+}
+
+.student-my-tests-page .ui-table {
+  min-width: 900px;
+}
+
 @media (max-width: 1024px) {
   .student-topbar {
     grid-template-columns: 1fr;
@@ -395,5 +501,9 @@
   .student-dashboard-status-grid,
   .student-dashboard-widget-grid {
     grid-template-columns: 1fr;
+  }
+
+  .student-my-tests-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

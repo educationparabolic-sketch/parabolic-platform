@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 127  
-Next Build: 128
+Completed Builds: 128  
+Next Build: 129
 
 Current Phase: Phase 26 — Student Portal Core
 
@@ -4124,18 +4124,63 @@ Completed On
 
 ---
 
+## Build 128 — My Tests Interface
+
+Phase  
+Phase 26 — Student Portal Core
+
+Summary  
+Implemented the student My Tests workspace with status-based filtering, results-overview visibility, and exam-session link access for the Build 128 scope.
+
+Components implemented:
+
+- Added Build 128 My Tests feature module in `apps/student/src/features/my-tests/`:
+  - `StudentMyTestsPage.tsx`
+  - `studentMyTestsDataset.ts`
+- Replaced only the `/student/my-tests` placeholder route in `apps/student/src/App.tsx` with the new `StudentMyTestsPage` component while preserving Build 126 protected-route shell behavior
+- Implemented typed dataset normalization for `GET /student/tests` with deterministic local fallback fixtures covering:
+  - scheduled tests
+  - active tests
+  - completed tests
+  - archived tests
+  - results overview fields (raw/accuracy/completed date)
+  - exam-session link resolution (`/session/{sessionId}` when available)
+- Added status indicator chips and filter controls in the My Tests UI for architecture-defined assignment visibility and execution gateway behavior
+- Added Build 128 My Tests responsive styling in `apps/student/src/App.css` for:
+  - status filter controls
+  - status indicator pills
+  - results/session-action table cell layouts
+  - mobile-safe table overflow handling
+- Added deterministic browser verification automation and artifacts under `apps/student/artifacts/build-128/`
+- Executed frontend verification:
+  - `apps/student`: build, lint
+  - browser checks for `/student/my-tests` and `/student/login` at `1366x768` and `390x844`
+  - guard redirect checks in unauthenticated context and My Tests UI checks in authenticated context using local Firebase test credentials
+  - console/network/responsive/guard checks recorded in `apps/student/artifacts/build-128/verification-results.json`
+
+Result  
+The student portal now includes the Build 128 My Tests interface aligned with assignment visibility and status-filter requirements, ready for Build 129 student performance analytics implementation.
+
+Commit Reference  
+Build 128 — My Tests Interface implemented
+
+Completed On  
+2026-04-16
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 128
+Next Build Number: 129
 
 Phase  
 Phase 26 — Student Portal Core
 
 Subsystem  
-My Tests Interface
+Student Performance Analytics
 
 Reference  
-2_Portals_Architecture.md → Section 3.3 My Tests Interface
+2_Portals_Architecture.md → Section 3.4 Performance Analytics UI
 
 ---
 
@@ -4269,7 +4314,9 @@ Build | Phase | Status
 124 | Admin Analytics & Governance | Completed
 125 | Admin Analytics & Governance | Completed
 126 | Student Portal Core | Completed
-128–150 | Remaining Phases | Pending
+127 | Student Portal Core | Completed
+128 | Student Portal Core | Completed
+129–150 | Remaining Phases | Pending
 
 ---
 
