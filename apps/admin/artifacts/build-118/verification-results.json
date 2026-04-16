@@ -1,6 +1,6 @@
 {
   "build": 118,
-  "generatedAt": "2026-04-10T06:34:34.190Z",
+  "generatedAt": "2026-04-16T09:26:57.237Z",
   "results": [
     {
       "route": "/admin/tests",
@@ -13,7 +13,7 @@
       "failedRequests": [],
       "responsiveStatus": "PASS",
       "guardStatus": "N/A",
-      "rootTextLen": 2115,
+      "rootTextLen": 98,
       "screenshotPath": "/home/sumeer/parabolic-platform/apps/admin/artifacts/build-118/desktop-1366x768-admin-tests.png"
     },
     {
@@ -27,7 +27,7 @@
       "failedRequests": [],
       "responsiveStatus": "PASS",
       "guardStatus": "N/A",
-      "rootTextLen": 2115,
+      "rootTextLen": 98,
       "screenshotPath": "/home/sumeer/parabolic-platform/apps/admin/artifacts/build-118/mobile-390x844-admin-tests.png"
     }
   ]
