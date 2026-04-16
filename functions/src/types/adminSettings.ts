@@ -6,6 +6,7 @@ export type AdminSettingsActionType =
   | "UPDATE_INSTITUTE_PROFILE"
   | "LOCK_ACADEMIC_YEAR"
   | "UPDATE_EXECUTION_POLICY"
+  | "UPDATE_DATA_RETENTION_POLICY"
   | "UPSERT_USER_ACCESS"
   | "REMOVE_USER_ACCESS"
   | "RESET_USER_PASSWORD"
@@ -117,6 +118,22 @@ export interface AdminFeatureFlags {
   enableLlmMonthlySummary: boolean;
 }
 
+export interface DataRetentionPolicySettings {
+  rawSessionRetentionYears: number;
+  autoExportThreshold: number;
+  autoArchiveSchedule: string;
+}
+
+export interface DataArchiveControlsSnapshot {
+  storageSummary: {
+    firestoreHotUsage: string;
+    bigQueryArchiveSize: string;
+    activeSessionCount: number;
+    archivedAcademicYears: number;
+  };
+  dataRetentionPolicy: DataRetentionPolicySettings;
+}
+
 export interface AdminSettingsSnapshot {
   profile: InstituteProfileSettings;
   academicYears: AcademicYearSummary[];
@@ -125,6 +142,7 @@ export interface AdminSettingsSnapshot {
   security: SecuritySettings;
   layerConfiguration: LayerConfiguration;
   featureFlags: AdminFeatureFlags;
+  dataArchiveControls: DataArchiveControlsSnapshot;
 }
 
 export interface AdminSettingsRequest {
@@ -144,6 +162,7 @@ export interface AdminSettingsRequest {
   };
   security?: Partial<SecuritySettings>;
   featureFlags?: Partial<AdminFeatureFlags>;
+  dataRetentionPolicy?: Partial<DataRetentionPolicySettings>;
 }
 
 export interface AdminSettingsValidatedRequest extends AdminSettingsRequest {

@@ -141,3 +141,35 @@ test("admin settings service rejects invalid phase split updates", async () => {
     },
   );
 });
+
+test("admin settings service blocks director from profile mutation actions", async () => {
+  const service = new AdminSettingsService({firestore});
+
+  await assert.rejects(
+    async () => {
+      await service.executeRequest({
+        actionType: "UPDATE_INSTITUTE_PROFILE",
+        actorId: "director_build_125",
+        actorRole: "director",
+        instituteId: "inst_build_125",
+        profile: {
+          academicYearFormat: "YYYY-YY",
+          contactEmail: "director@example.org",
+          contactPhone: "+1-555-0199",
+          defaultExamType: "JEE_MAIN",
+          instituteName: "Director Attempt",
+          logoReference: "logos/director.png",
+          timeZone: "Asia/Kolkata",
+        },
+      });
+    },
+    (error: unknown) => {
+      assert.equal(error instanceof AdminSettingsValidationError, true);
+      assert.equal(
+        (error as AdminSettingsValidationError).message,
+        "Role is not permitted to perform this settings action.",
+      );
+      return true;
+    },
+  );
+});

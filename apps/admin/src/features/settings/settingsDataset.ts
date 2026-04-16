@@ -7,6 +7,7 @@ export type SettingsActionType =
   | "UPDATE_INSTITUTE_PROFILE"
   | "LOCK_ACADEMIC_YEAR"
   | "UPDATE_EXECUTION_POLICY"
+  | "UPDATE_DATA_RETENTION_POLICY"
   | "UPSERT_USER_ACCESS"
   | "REMOVE_USER_ACCESS"
   | "RESET_USER_PASSWORD"
@@ -102,6 +103,12 @@ export interface FeatureFlagsSettings {
   enableLlmMonthlySummary: boolean;
 }
 
+export interface DataRetentionPolicySettings {
+  rawSessionRetentionYears: number;
+  autoExportThreshold: number;
+  autoArchiveSchedule: string;
+}
+
 export interface AdminSettingsSnapshot {
   profile: InstituteProfileSettings;
   academicYears: AcademicYearSummary[];
@@ -110,6 +117,15 @@ export interface AdminSettingsSnapshot {
   security: SecuritySettings;
   layerConfiguration: LayerConfiguration;
   featureFlags: FeatureFlagsSettings;
+  dataArchiveControls: {
+    storageSummary: {
+      firestoreHotUsage: string;
+      bigQueryArchiveSize: string;
+      activeSessionCount: number;
+      archivedAcademicYears: number;
+    };
+    dataRetentionPolicy: DataRetentionPolicySettings;
+  };
 }
 
 interface AdminSettingsApiResponse {
@@ -167,6 +183,19 @@ const FALLBACK_SNAPSHOT: AdminSettingsSnapshot = {
         hard: {max: 240, min: 90},
         medium: {max: 180, min: 60},
       },
+    },
+  },
+  dataArchiveControls: {
+    dataRetentionPolicy: {
+      autoArchiveSchedule: "monthly",
+      autoExportThreshold: 1000,
+      rawSessionRetentionYears: 2,
+    },
+    storageSummary: {
+      activeSessionCount: 12,
+      archivedAcademicYears: 1,
+      bigQueryArchiveSize: "34.2 GB",
+      firestoreHotUsage: "6.8 GB",
     },
   },
   featureFlags: {
@@ -272,6 +301,12 @@ function normalizeSnapshot(value: unknown): AdminSettingsSnapshot | null {
   const emailSource = isPlainObject(securitySource.emailConfiguration) ? securitySource.emailConfiguration : {};
   const layerSource = isPlainObject(value.layerConfiguration) ? value.layerConfiguration : {};
   const flagsSource = isPlainObject(value.featureFlags) ? value.featureFlags : {};
+  const archiveControlsSource =
+    isPlainObject(value.dataArchiveControls) ? value.dataArchiveControls : {};
+  const storageSummarySource =
+    isPlainObject(archiveControlsSource.storageSummary) ? archiveControlsSource.storageSummary : {};
+  const retentionSource =
+    isPlainObject(archiveControlsSource.dataRetentionPolicy) ? archiveControlsSource.dataRetentionPolicy : {};
 
   const years = Array.isArray(value.academicYears) ? value.academicYears : [];
   const users = Array.isArray(value.users) ? value.users : [];
@@ -321,6 +356,57 @@ function normalizeSnapshot(value: unknown): AdminSettingsSnapshot | null {
         isPlainObject(executionSource.timingPresets) && Object.keys(executionSource.timingPresets).length > 0 ?
           (executionSource.timingPresets as ExecutionPolicySettings["timingPresets"]) :
           FALLBACK_SNAPSHOT.executionPolicy.timingPresets,
+    },
+    dataArchiveControls: {
+      dataRetentionPolicy: {
+        autoArchiveSchedule:
+          toNonEmptyString(
+            retentionSource.autoArchiveSchedule,
+            FALLBACK_SNAPSHOT.dataArchiveControls.dataRetentionPolicy.autoArchiveSchedule,
+          ),
+        autoExportThreshold:
+          Math.max(
+            1,
+            Math.round(
+              toNumberOrZero(retentionSource.autoExportThreshold) ||
+              FALLBACK_SNAPSHOT.dataArchiveControls.dataRetentionPolicy.autoExportThreshold,
+            ),
+          ),
+        rawSessionRetentionYears:
+          Math.max(
+            1,
+            Math.round(
+              toNumberOrZero(retentionSource.rawSessionRetentionYears) ||
+              FALLBACK_SNAPSHOT.dataArchiveControls.dataRetentionPolicy.rawSessionRetentionYears,
+            ),
+          ),
+      },
+      storageSummary: {
+        activeSessionCount:
+          Math.max(
+            0,
+            Math.round(
+              toNumberOrZero(storageSummarySource.activeSessionCount),
+            ),
+          ),
+        archivedAcademicYears:
+          Math.max(
+            0,
+            Math.round(
+              toNumberOrZero(storageSummarySource.archivedAcademicYears),
+            ),
+          ),
+        bigQueryArchiveSize:
+          toNonEmptyString(
+            storageSummarySource.bigQueryArchiveSize,
+            FALLBACK_SNAPSHOT.dataArchiveControls.storageSummary.bigQueryArchiveSize,
+          ),
+        firestoreHotUsage:
+          toNonEmptyString(
+            storageSummarySource.firestoreHotUsage,
+            FALLBACK_SNAPSHOT.dataArchiveControls.storageSummary.firestoreHotUsage,
+          ),
+      },
     },
     featureFlags: {
       enableBetaUi: toBoolean(flagsSource.enableBetaUi, false),
@@ -392,11 +478,6 @@ function normalizeSnapshot(value: unknown): AdminSettingsSnapshot | null {
   };
 }
 
-export function shouldUseLiveApi(): boolean {
-  const host = window.location.hostname.toLowerCase();
-  return host !== "127.0.0.1" && host !== "localhost";
-}
-
 async function settingsAction(
   payload: {
     instituteId: string;
@@ -413,12 +494,9 @@ async function settingsAction(
     };
     security?: Partial<SecuritySettings>;
     featureFlags?: Partial<FeatureFlagsSettings>;
+    dataRetentionPolicy?: Partial<DataRetentionPolicySettings>;
   },
 ): Promise<AdminSettingsSnapshot> {
-  if (!shouldUseLiveApi()) {
-    return FALLBACK_SNAPSHOT;
-  }
-
   const result = await apiClient.post<AdminSettingsApiResponse, Record<string, unknown>>(
     "/admin/settings",
     {
@@ -435,7 +513,16 @@ async function settingsAction(
   return snapshot;
 }
 
+export function isLocalSettingsReadMode(): boolean {
+  const host = window.location.hostname.toLowerCase();
+  return host === "127.0.0.1" || host === "localhost";
+}
+
 export async function fetchSettingsSnapshot(instituteId: string): Promise<AdminSettingsSnapshot> {
+  if (isLocalSettingsReadMode()) {
+    return FALLBACK_SNAPSHOT;
+  }
+
   return settingsAction({
     actionType: "GET_SETTINGS_SNAPSHOT",
     instituteId,
@@ -536,14 +623,21 @@ export async function updateFeatureFlags(
   });
 }
 
+export async function updateDataRetentionPolicy(
+  instituteId: string,
+  dataRetentionPolicy: DataRetentionPolicySettings,
+): Promise<AdminSettingsSnapshot> {
+  return settingsAction({
+    actionType: "UPDATE_DATA_RETENTION_POLICY",
+    dataRetentionPolicy,
+    instituteId,
+  });
+}
+
 export async function archiveAcademicYear(
   instituteId: string,
   yearId: string,
 ): Promise<void> {
-  if (!shouldUseLiveApi()) {
-    return;
-  }
-
   await apiClient.post<unknown, Record<string, unknown>>(
     "/admin/academicYear/archive",
     {

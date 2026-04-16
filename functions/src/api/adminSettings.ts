@@ -70,8 +70,8 @@ export const createAdminSettingsHandler = (
       },
     }),
     createRoleAuthorizationMiddleware({
-      allowedRoles: ["admin"],
-      forbiddenMessage: "Only admin role can manage settings configuration.",
+      allowedRoles: ["admin", "director"],
+      forbiddenMessage: "Only admin and director roles can access settings configuration.",
     }),
     createRequestValidationMiddleware({
       validator: (request: MiddlewareRequest): void => {
@@ -85,6 +85,7 @@ export const createAdminSettingsHandler = (
           academicYear: body.academicYear,
           executionPolicy: body.executionPolicy,
           featureFlags: body.featureFlags,
+          dataRetentionPolicy: body.dataRetentionPolicy,
           instituteId: identity?.instituteId ?? body.instituteId,
           ipAddress: request.ip,
           profile: body.profile,

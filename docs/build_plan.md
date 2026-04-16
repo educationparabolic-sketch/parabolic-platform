@@ -2739,7 +2739,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.1 Frontend Platform Overview
+1.1 Domain Map
 
 Purpose  
 Initialize the multi-portal React architecture within the monorepo.
@@ -2747,7 +2747,7 @@ Initialize the multi-portal React architecture within the monorepo.
 Codex Prompt
 
 Implement the frontend project structure according to  
-**2_Portals_Architecture.md → Section 1.1 Frontend Platform Overview**.
+**2_Portals_Architecture.md → Section 1.1 Domain Map**.
 
 The system must support multiple portals within the `apps` directory:
 
@@ -2774,7 +2774,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.2 Frontend Technology Stack
+1.2.1 Admin Dashboard Sitemap
 
 Purpose  
 Configure the frontend development stack.
@@ -2782,7 +2782,7 @@ Configure the frontend development stack.
 Codex Prompt
 
 Initialize the frontend stack according to  
-**2_Portals_Architecture.md → Section 1.2 Frontend Technology Stack**.
+**2_Portals_Architecture.md → Section 1.2.1 Admin Dashboard Sitemap**.
 
 Required technologies:
 
@@ -2809,7 +2809,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.3 Shared UI Component System
+1.2.1.1 Global Navigation Structure
 
 Purpose  
 Create reusable UI components shared across all portals.
@@ -2817,7 +2817,7 @@ Create reusable UI components shared across all portals.
 Codex Prompt
 
 Implement shared UI component system according to  
-**2_Portals_Architecture.md → Section 1.3 Shared UI Component System**.
+**2_Portals_Architecture.md → Section 1.2.1.1 Global Navigation Structure**.
 
 Shared component directory:
 
@@ -2842,7 +2842,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.4 API Client Layer
+1.2.1.13 Data Flow (Admin Perspective)
 
 Purpose  
 Implement centralized API communication layer for frontend.
@@ -2850,7 +2850,7 @@ Implement centralized API communication layer for frontend.
 Codex Prompt
 
 Create frontend API client system according to  
-**2_Portals_Architecture.md → Section 1.4 API Client Layer**.
+**2_Portals_Architecture.md → Section 1.2.1.13 Data Flow (Admin Perspective)**.
 
 The API client must:
 
@@ -2873,7 +2873,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.5 Authentication Integration
+1.3.12 Security Rules
 
 Purpose  
 Integrate Firebase Authentication with the frontend.
@@ -2881,7 +2881,7 @@ Integrate Firebase Authentication with the frontend.
 Codex Prompt
 
 Implement authentication integration according to  
-**2_Portals_Architecture.md → Section 1.5 Authentication Integration**.
+**2_Portals_Architecture.md → Section 1.3.12 Security Rules**.
 
 Features:
 
@@ -2913,7 +2913,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-2.1 Admin Portal Overview
+1.2.1 Admin Dashboard Sitemap
 
 Purpose  
 Implement the base layout and navigation system for the admin portal.
@@ -2921,7 +2921,7 @@ Implement the base layout and navigation system for the admin portal.
 Codex Prompt
 
 Implement the admin portal layout according to  
-**2_Portals_Architecture.md → Section 2.1 Admin Portal Overview**.
+**2_Portals_Architecture.md → Section 1.2.1 Admin Dashboard Sitemap**.
 
 Layout components must include:
 
@@ -2951,7 +2951,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-2.3 Student Management UI
+1.2.3 Admin Dashboard - Students Section
 
 Purpose  
 Provide administrators with tools to manage institute students.
@@ -2959,7 +2959,7 @@ Provide administrators with tools to manage institute students.
 Codex Prompt
 
 Implement student management interface according to  
-**2_Portals_Architecture.md → Section 2.3 Student Management UI**.
+**2_Portals_Architecture.md → Section 1.2.3 Admin Dashboard - Students Section**.
 
 Features must include:
 
@@ -2983,7 +2983,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-2.4 Test Template Management
+1.2.5 Admin Dashboard - Tests Section
 
 Purpose  
 Allow teachers to create and manage exam templates.
@@ -2991,7 +2991,7 @@ Allow teachers to create and manage exam templates.
 Codex Prompt
 
 Implement test template management UI according to  
-**2_Portals_Architecture.md → Section 2.4 Test Template Management**.
+**2_Portals_Architecture.md → Section 1.2.5 Admin Dashboard - Tests Section**.
 
 Features:
 
@@ -3015,7 +3015,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-2.5 Assignment Management UI
+1.2.6 Admin Dashboard - Assignments Section
 
 Purpose  
 Allow teachers to assign tests to student batches.
@@ -3023,7 +3023,7 @@ Allow teachers to assign tests to student batches.
 Codex Prompt
 
 Implement assignment interface according to  
-**2_Portals_Architecture.md → Section 2.5 Assignment Management UI**.
+**2_Portals_Architecture.md → Section 1.2.6 Admin Dashboard - Assignments Section**.
 
 Features:
 
@@ -3047,7 +3047,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-2.6 Analytics Dashboard
+1.2.7 Admin Dashboard - Analytics Section
 
 Purpose  
 Display exam performance analytics to administrators.
@@ -3055,7 +3055,7 @@ Display exam performance analytics to administrators.
 Codex Prompt
 
 Implement admin analytics dashboard according to  
-**2_Portals_Architecture.md → Section 2.6 Analytics Dashboard**.
+**2_Portals_Architecture.md → Section 1.2.7 Admin Dashboard - Analytics Section**.
 
 Dashboard components:
 
@@ -3089,7 +3089,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-2.7 Risk Insights Dashboard
+1.2.8.3 Risk Overview
 
 Purpose  
 Provide administrators with visual insights into student behavioral risk clusters.
@@ -3097,7 +3097,7 @@ Provide administrators with visual insights into student behavioral risk cluster
 Codex Prompt
 
 Implement the Risk Insights dashboard according to  
-**2_Portals_Architecture.md → Section 2.7 Risk Insights Dashboard**.
+**2_Portals_Architecture.md → Section 1.2.8.3 Risk Overview**.
 
 The dashboard must display:
 
@@ -3125,7 +3125,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-2.8 Batch Analytics Dashboard
+1.2.7.3 Analytics → By Test Run
 
 Purpose  
 Enable administrators to evaluate academic performance across student batches.
@@ -3133,7 +3133,7 @@ Enable administrators to evaluate academic performance across student batches.
 Codex Prompt
 
 Implement batch analytics dashboard according to  
-**2_Portals_Architecture.md → Section 2.8 Batch Analytics Dashboard**.
+**2_Portals_Architecture.md → Section 1.2.7.3 Analytics → By Test Run**.
 
 Features:
 
@@ -3152,7 +3152,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-2.9 Governance Dashboard
+1.2.9 Admin Dashboard - Governance Section (L3 Only)
 
 Purpose  
 Allow institutes to monitor institutional discipline and execution quality.
@@ -3160,7 +3160,7 @@ Allow institutes to monitor institutional discipline and execution quality.
 Codex Prompt
 
 Implement governance monitoring dashboard according to  
-**2_Portals_Architecture.md → Section 2.9 Governance Dashboard**.
+**2_Portals_Architecture.md → Section 1.2.9 Admin Dashboard - Governance Section (L3 Only)**.
 
 Display metrics such as:
 
@@ -3183,7 +3183,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-2.10 Intervention Tools
+1.2.8.6 Intervention Engine
 
 Purpose  
 Provide teachers with tools to intervene with high-risk students.
@@ -3191,7 +3191,7 @@ Provide teachers with tools to intervene with high-risk students.
 Codex Prompt
 
 Implement teacher intervention tools according to  
-**2_Portals_Architecture.md → Section 2.10 Intervention Tools**.
+**2_Portals_Architecture.md → Section 1.2.8.6 Intervention Engine**.
 
 Features include:
 
@@ -3210,7 +3210,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-2.11 Settings & System Configuration
+1.2.11 Admin Dashboard - Settings Section
 
 Purpose  
 Allow administrators to configure institutional settings.
@@ -3218,7 +3218,7 @@ Allow administrators to configure institutional settings.
 Codex Prompt
 
 Implement the admin settings interface according to  
-**2_Portals_Architecture.md → Section 2.11 Settings & System Configuration**.
+**2_Portals_Architecture.md → Section 1.2.11 Admin Dashboard - Settings Section**.
 
 Configuration options include:
 
@@ -3245,7 +3245,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-3.1 Student Portal Overview
+1.3.1 Global Navigation Structure
 
 Purpose  
 Implement the base layout and navigation structure for the student portal.
@@ -3253,7 +3253,7 @@ Implement the base layout and navigation structure for the student portal.
 Codex Prompt
 
 Implement the student portal layout according to  
-**2_Portals_Architecture.md → Section 3.1 Student Portal Overview**.
+**2_Portals_Architecture.md → Section 1.3.1 Global Navigation Structure**.
 
 Layout components must include:
 
@@ -3280,7 +3280,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-3.2 Student Dashboard UI
+1.3.2 Dashboard
 
 Purpose  
 Provide students with a high-level overview of their performance and upcoming tests.
@@ -3288,7 +3288,7 @@ Provide students with a high-level overview of their performance and upcoming te
 Codex Prompt
 
 Implement the student dashboard interface according to  
-**2_Portals_Architecture.md → Section 3.2 Student Dashboard UI**.
+**2_Portals_Architecture.md → Section 1.3.2 Dashboard**.
 
 Dashboard widgets must include:
 
@@ -3312,7 +3312,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-3.3 My Tests Interface
+1.3.3 My Tests
 
 Purpose  
 Allow students to view their assigned and completed tests.
@@ -3320,7 +3320,7 @@ Allow students to view their assigned and completed tests.
 Codex Prompt
 
 Implement the "My Tests" interface according to  
-**2_Portals_Architecture.md → Section 3.3 My Tests Interface**.
+**2_Portals_Architecture.md → Section 1.3.3 My Tests**.
 
 Features:
 
@@ -3343,7 +3343,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-3.4 Performance Analytics UI
+1.3.4 Performance Section
 
 Purpose  
 Allow students to visualize performance trends across tests.
@@ -3351,7 +3351,7 @@ Allow students to visualize performance trends across tests.
 Codex Prompt
 
 Implement student performance analytics according to  
-**2_Portals_Architecture.md → Section 3.4 Performance Analytics UI**.
+**2_Portals_Architecture.md → Section 1.3.4 Performance Section**.
 
 Charts must display:
 
@@ -3374,7 +3374,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-3.5 Student Insights UI
+1.3.5 Insights (L1+)
 
 Purpose  
 Display behavioral insights generated by the analytics engine.
@@ -3382,7 +3382,7 @@ Display behavioral insights generated by the analytics engine.
 Codex Prompt
 
 Implement the student insights interface according to  
-**2_Portals_Architecture.md → Section 3.5 Student Insights UI**.
+**2_Portals_Architecture.md → Section 1.3.5 Insights (L1+)**.
 
 Insights may include:
 
@@ -3415,7 +3415,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-4.1 Exam Portal Overview
+1.4 Test Portal Architecture
 
 Purpose  
 Create the base layout and execution container for the exam portal.
@@ -3423,7 +3423,7 @@ Create the base layout and execution container for the exam portal.
 Codex Prompt
 
 Implement the exam interface layout according to  
-**2_Portals_Architecture.md → Section 4.1 Exam Portal Overview**.
+**2_Portals_Architecture.md → Section 1.4 Test Portal Architecture**.
 
 Layout components must include:
 
@@ -3443,7 +3443,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-4.2 Question Rendering Engine
+1.4.6 Question Area
 
 Purpose  
 Render exam questions and options dynamically during test execution.
@@ -3451,7 +3451,7 @@ Render exam questions and options dynamically during test execution.
 Codex Prompt
 
 Implement the question rendering system according to  
-**2_Portals_Architecture.md → Section 4.2 Question Rendering Engine**.
+**2_Portals_Architecture.md → Section 1.4.6 Question Area**.
 
 The renderer must support:
 
@@ -3479,7 +3479,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-4.3 Navigation & Timing Interface
+1.4.4 Header Components
 
 Purpose  
 Provide navigation controls and timing feedback during exam sessions.
@@ -3487,7 +3487,7 @@ Provide navigation controls and timing feedback during exam sessions.
 Codex Prompt
 
 Implement navigation and timing components according to  
-**2_Portals_Architecture.md → Section 4.3 Navigation & Timing Interface**.
+**2_Portals_Architecture.md → Section 1.4.4 Header Components**.
 
 Components must include:
 
@@ -3506,7 +3506,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-4.4 Answer Submission Interface
+1.4.6 Question Area
 
 Purpose  
 Allow students to select answers and persist them during the exam.
@@ -3514,7 +3514,7 @@ Allow students to select answers and persist them during the exam.
 Codex Prompt
 
 Implement answer interaction system according to  
-**2_Portals_Architecture.md → Section 4.4 Answer Submission Interface**.
+**2_Portals_Architecture.md → Section 1.4.6 Question Area**.
 
 Features must include:
 
@@ -3536,7 +3536,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-4.5 Exam Submission UI
+1.4.10 Session State Machine
 
 Purpose  
 Allow students to complete the exam and submit their session.
@@ -3544,7 +3544,7 @@ Allow students to complete the exam and submit their session.
 Codex Prompt
 
 Implement exam submission workflow according to  
-**2_Portals_Architecture.md → Section 4.5 Exam Submission UI**.
+**2_Portals_Architecture.md → Section 1.4.10 Session State Machine**.
 
 Submission process must include:
 
@@ -3574,7 +3574,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-5.1 Vendor Portal Overview
+1.5 Vendor Portal
 
 Purpose  
 Create the base layout and navigation structure for the vendor portal.
@@ -3582,7 +3582,7 @@ Create the base layout and navigation structure for the vendor portal.
 Codex Prompt
 
 Implement the vendor portal layout according to  
-**2_Portals_Architecture.md → Section 5.1 Vendor Portal Overview**.
+**2_Portals_Architecture.md → Section 1.5.1 High-Level Structure**.
 
 Layout components must include:
 
@@ -3611,7 +3611,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-5.2 Institute Management UI
+1.5.3 Institutes Management
 
 Purpose  
 Allow vendors to view and manage institutes on the platform.
@@ -3619,7 +3619,7 @@ Allow vendors to view and manage institutes on the platform.
 Codex Prompt
 
 Implement institute management interface according to  
-**2_Portals_Architecture.md → Section 5.2 Institute Management UI**.
+**2_Portals_Architecture.md → Section 1.5.3 Institutes Management**.
 
 Features must include:
 
@@ -3648,7 +3648,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-5.3 Calibration Management UI
+1.5.5 Global Calibration Control (Core Moat)
 
 Purpose  
 Allow vendors to manage analytics calibration models.
@@ -3656,7 +3656,7 @@ Allow vendors to manage analytics calibration models.
 Codex Prompt
 
 Implement calibration management UI according to  
-**2_Portals_Architecture.md → Section 5.3 Calibration Management UI**.
+**2_Portals_Architecture.md → Section 1.5.5 Global Calibration Control (Core Moat)**.
 
 Features include:
 
@@ -3680,7 +3680,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-5.4 Vendor Intelligence Dashboard
+1.5.6 Cross-Institute Intelligence
 
 Purpose  
 Provide revenue and platform analytics for the vendor.
@@ -3688,7 +3688,7 @@ Provide revenue and platform analytics for the vendor.
 Codex Prompt
 
 Implement vendor intelligence dashboard according to  
-**2_Portals_Architecture.md → Section 5.4 Vendor Intelligence Dashboard**.
+**2_Portals_Architecture.md → Section 1.5.6 Cross-Institute Intelligence**.
 
 Dashboard metrics include:
 
@@ -3714,7 +3714,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-5.5 System Health Dashboard
+1.5.8 System Health & Cost Monitoring
 
 Purpose  
 Allow vendors to monitor platform operational health.
@@ -3722,7 +3722,7 @@ Allow vendors to monitor platform operational health.
 Codex Prompt
 
 Implement system health dashboard according to  
-**2_Portals_Architecture.md → Section 5.5 System Health Dashboard**.
+**2_Portals_Architecture.md → Section 1.5.8 System Health & Cost Monitoring**.
 
 Dashboard must display:
 
@@ -3756,7 +3756,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-6.1 Frontend Performance Strategy
+1.3.11 Performance Constraints
 
 Purpose  
 Optimize frontend application performance across all portals.
@@ -3764,7 +3764,7 @@ Optimize frontend application performance across all portals.
 Codex Prompt
 
 Implement frontend performance optimizations according to  
-**2_Portals_Architecture.md → Section 6.1 Frontend Performance Strategy**.
+**2_Portals_Architecture.md → Section 1.3.11 Performance Constraints**.
 
 Required optimizations:
 
@@ -3783,7 +3783,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-6.2 CDN Integration
+1.3.11 Performance Constraints
 
 Purpose  
 Ensure static assets and media files are delivered through a CDN.
@@ -3791,7 +3791,7 @@ Ensure static assets and media files are delivered through a CDN.
 Codex Prompt
 
 Configure CDN asset delivery according to  
-**2_Portals_Architecture.md → Section 6.2 CDN Integration**.
+**2_Portals_Architecture.md → Section 1.3.11 Performance Constraints**.
 
 Frontend applications must load:
 
@@ -3811,7 +3811,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-6.3 Error Monitoring Integration
+1.5.8 System Health & Cost Monitoring
 
 Purpose  
 Capture frontend runtime errors and performance issues.
@@ -3819,7 +3819,7 @@ Capture frontend runtime errors and performance issues.
 Codex Prompt
 
 Implement frontend telemetry and error monitoring according to  
-**2_Portals_Architecture.md → Section 6.3 Error Monitoring Integration**.
+**2_Portals_Architecture.md → Section 1.5.8 System Health & Cost Monitoring**.
 
 Monitoring system must capture:
 
@@ -3842,7 +3842,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-6.4 Deployment Pipeline
+1.5.13 Structural Guarantees
 
 Purpose  
 Automate build and deployment of frontend portals.
@@ -3850,7 +3850,7 @@ Automate build and deployment of frontend portals.
 Codex Prompt
 
 Implement CI/CD pipeline according to  
-**2_Portals_Architecture.md → Section 6.4 Deployment Pipeline**.
+**2_Portals_Architecture.md → Section 1.5.13 Structural Guarantees**.
 
 Pipeline must:
 
@@ -3873,7 +3873,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-6.5 Cross-Portal Authentication
+1.3.12 Security Rules
 
 Purpose  
 Allow users to move between portals without repeated login.
@@ -3881,7 +3881,7 @@ Allow users to move between portals without repeated login.
 Codex Prompt
 
 Implement shared authentication system according to  
-**2_Portals_Architecture.md → Section 6.5 Cross-Portal Authentication**.
+**2_Portals_Architecture.md → Section 1.3.12 Security Rules**.
 
 Requirements:
 
@@ -3907,7 +3907,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-7 Portal Integration Architecture
+1.1 Domain Map
 
 Purpose  
 Integrate all frontend portals with backend services and shared infrastructure.
@@ -3915,7 +3915,7 @@ Integrate all frontend portals with backend services and shared infrastructure.
 Codex Prompt
 
 Implement portal integration architecture according to  
-**2_Portals_Architecture.md → Section 7 Portal Integration Architecture**.
+**2_Portals_Architecture.md → Section 1.1 Domain Map**.
 
 The integration layer must ensure:
 
@@ -3934,7 +3934,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-7 Portal Integration Architecture
+1.1 Domain Map
 
 Purpose  
 Provide shared state management across all portals.
@@ -3942,7 +3942,7 @@ Provide shared state management across all portals.
 Codex Prompt
 
 Implement global state management according to  
-**2_Portals_Architecture.md → Section 7 Portal Integration Architecture**.
+**2_Portals_Architecture.md → Section 1.1 Domain Map**.
 
 Shared global state must manage:
 
@@ -3961,7 +3961,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-7 Portal Integration Architecture
+1.1 Domain Map
 
 Purpose  
 Ensure consistent handling of application errors.
@@ -3969,7 +3969,7 @@ Ensure consistent handling of application errors.
 Codex Prompt
 
 Implement centralized error handling according to  
-**2_Portals_Architecture.md → Section 7 Portal Integration Architecture**.
+**2_Portals_Architecture.md → Section 1.1 Domain Map**.
 
 Error handling system must:
 
@@ -3988,7 +3988,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-7 Portal Integration Architecture
+1.1 Domain Map
 
 Purpose  
 Ensure visual and functional consistency across all portals.
@@ -3996,7 +3996,7 @@ Ensure visual and functional consistency across all portals.
 Codex Prompt
 
 Enforce UI consistency according to  
-**2_Portals_Architecture.md → Section 7 Portal Integration Architecture**.
+**2_Portals_Architecture.md → Section 1.1 Domain Map**.
 
 All portals must:
 
@@ -4015,7 +4015,7 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-7 Portal Integration Architecture
+1.1 Domain Map
 
 Purpose  
 Validate full platform functionality across all portals.
@@ -4023,7 +4023,7 @@ Validate full platform functionality across all portals.
 Codex Prompt
 
 Perform end-to-end platform validation according to  
-**2_Portals_Architecture.md → Section 7 Portal Integration Architecture**.
+**2_Portals_Architecture.md → Section 1.1 Domain Map**.
 
 Validation must confirm:
 

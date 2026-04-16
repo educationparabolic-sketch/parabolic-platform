@@ -16,6 +16,7 @@ import {
   AdminStaffStatus,
   AdminUserAccessRecord,
   AlertFrequencyPolicy,
+  DataRetentionPolicySettings,
   ExecutionPolicySettings,
   InstituteProfileSettings,
   LayerConfiguration,
@@ -36,6 +37,7 @@ const SETTINGS_ACTIONS: AdminSettingsActionType[] = [
   "UPDATE_INSTITUTE_PROFILE",
   "LOCK_ACADEMIC_YEAR",
   "UPDATE_EXECUTION_POLICY",
+  "UPDATE_DATA_RETENTION_POLICY",
   "UPSERT_USER_ACCESS",
   "REMOVE_USER_ACCESS",
   "RESET_USER_PASSWORD",
@@ -241,6 +243,12 @@ const defaultFeatureFlags = (): AdminFeatureFlags => ({
   enableExperimentalAnalytics: false,
   enableLlmMonthlySummary: false,
   toggleAdvancedPhaseVisualization: false,
+});
+
+const defaultDataRetentionPolicy = (): DataRetentionPolicySettings => ({
+  autoArchiveSchedule: "monthly",
+  autoExportThreshold: 1000,
+  rawSessionRetentionYears: 2,
 });
 
 const normalizeTimingWindow = (
@@ -548,6 +556,33 @@ export class AdminSettingsService {
       return validated;
     }
 
+    if (actionType === "UPDATE_DATA_RETENTION_POLICY") {
+      if (!isPlainObject(input.dataRetentionPolicy)) {
+        throw new AdminSettingsValidationError(
+          "VALIDATION_ERROR",
+          "Field \"dataRetentionPolicy\" is required for retention updates.",
+        );
+      }
+
+      validated.dataRetentionPolicy = {
+        autoArchiveSchedule: normalizeRequiredString(
+          input.dataRetentionPolicy.autoArchiveSchedule,
+          "dataRetentionPolicy.autoArchiveSchedule",
+        ),
+        autoExportThreshold: normalizeNumber(
+          input.dataRetentionPolicy.autoExportThreshold,
+          "dataRetentionPolicy.autoExportThreshold",
+          {integer: true, min: 1, max: 1000000},
+        ),
+        rawSessionRetentionYears: normalizeNumber(
+          input.dataRetentionPolicy.rawSessionRetentionYears,
+          "dataRetentionPolicy.rawSessionRetentionYears",
+          {integer: true, min: 1, max: 20},
+        ),
+      };
+      return validated;
+    }
+
     if (
       actionType === "UPSERT_USER_ACCESS" ||
       actionType === "REMOVE_USER_ACCESS" ||
@@ -698,6 +733,7 @@ export class AdminSettingsService {
     },
   ): Promise<AdminSettingsResult> {
     const validatedRequest = this.normalizeRequest(input);
+    this.assertRoleAuthorization(validatedRequest.actorRole, validatedRequest.actionType);
     let mutationAuditId: string | undefined;
 
     switch (validatedRequest.actionType) {
@@ -711,6 +747,9 @@ export class AdminSettingsService {
       break;
     case "UPDATE_EXECUTION_POLICY":
       mutationAuditId = await this.updateExecutionPolicy(validatedRequest);
+      break;
+    case "UPDATE_DATA_RETENTION_POLICY":
+      mutationAuditId = await this.updateDataRetentionPolicy(validatedRequest);
       break;
     case "UPSERT_USER_ACCESS":
       mutationAuditId = await this.upsertUserAccess(validatedRequest);
@@ -881,6 +920,34 @@ export class AdminSettingsService {
       ipAddress: request.ipAddress,
       metadata: {
         executionPolicy,
+      },
+      userAgent: request.userAgent,
+    });
+  }
+
+  private async updateDataRetentionPolicy(
+    request: AdminSettingsValidatedRequest,
+  ): Promise<string> {
+    const dataRetentionPolicy = request.dataRetentionPolicy as DataRetentionPolicySettings;
+
+    await this.dependencies.firestore
+      .doc(`${INSTITUTES_COLLECTION}/${request.instituteId}`)
+      .set(
+        {
+          dataRetentionPolicy,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        {merge: true},
+      );
+
+    return this.writeSettingsAudit({
+      actionType: request.actionType,
+      actorId: request.actorId,
+      actorRole: request.actorRole,
+      instituteId: request.instituteId,
+      ipAddress: request.ipAddress,
+      metadata: {
+        dataRetentionPolicy,
       },
       userAgent: request.userAgent,
     });
@@ -1106,6 +1173,10 @@ export class AdminSettingsService {
       isPlainObject(instituteData.settingsUsers) ?
         instituteData.settingsUsers :
         {};
+    const dataRetentionSource =
+      isPlainObject(instituteData.dataRetentionPolicy) ?
+        instituteData.dataRetentionPolicy :
+        {};
 
     const profileDefaults = defaultProfile();
     const profile: InstituteProfileSettings = {
@@ -1295,11 +1366,18 @@ export class AdminSettingsService {
       .sort((left, right) => left.userId.localeCompare(right.userId));
 
     const runCountByYearId = new Map<string, number>();
+    let activeSessionCount = 0;
     for (const yearSnapshot of yearsSnapshot.docs) {
       const runsSnapshot = await yearSnapshot.ref
         .collection(RUNS_COLLECTION)
         .get();
       runCountByYearId.set(yearSnapshot.id, runsSnapshot.size);
+      for (const runDocument of runsSnapshot.docs) {
+        const status = normalizeOptionalString(runDocument.data().status)?.toLowerCase();
+        if (status === "active" || status === "started" || status === "scheduled") {
+          activeSessionCount += 1;
+        }
+      }
     }
 
     const academicYears = yearsSnapshot.docs
@@ -1327,6 +1405,21 @@ export class AdminSettingsService {
       })
       .sort((left, right) => right.yearId.localeCompare(left.yearId));
 
+    const dataRetentionDefaults = defaultDataRetentionPolicy();
+    const dataRetentionPolicy: DataRetentionPolicySettings = {
+      autoArchiveSchedule:
+        normalizeOptionalString(dataRetentionSource.autoArchiveSchedule) ??
+        dataRetentionDefaults.autoArchiveSchedule,
+      autoExportThreshold:
+        typeof dataRetentionSource.autoExportThreshold === "number" ?
+          Math.max(1, Math.round(dataRetentionSource.autoExportThreshold)) :
+          dataRetentionDefaults.autoExportThreshold,
+      rawSessionRetentionYears:
+        typeof dataRetentionSource.rawSessionRetentionYears === "number" ?
+          Math.max(1, Math.round(dataRetentionSource.rawSessionRetentionYears)) :
+          dataRetentionDefaults.rawSessionRetentionYears,
+    };
+
     const licenseData =
       licenseCurrentSnapshot.data() ?? licenseMainSnapshot.data() ?? {};
 
@@ -1350,6 +1443,15 @@ export class AdminSettingsService {
 
     const snapshot: AdminSettingsSnapshot = {
       academicYears,
+      dataArchiveControls: {
+        dataRetentionPolicy,
+        storageSummary: {
+          activeSessionCount,
+          archivedAcademicYears: academicYears.filter((year) => year.status === "Archived").length,
+          bigQueryArchiveSize: "Unknown",
+          firestoreHotUsage: "Unknown",
+        },
+      },
       executionPolicy,
       featureFlags,
       layerConfiguration,
@@ -1365,6 +1467,29 @@ export class AdminSettingsService {
     });
 
     return snapshot;
+  }
+
+  private assertRoleAuthorization(actorRole: string, actionType: AdminSettingsActionType): void {
+    const normalizedRole = actorRole.trim().toLowerCase();
+
+    if (normalizedRole === "admin") {
+      return;
+    }
+
+    if (normalizedRole === "director") {
+      if (
+        actionType === "GET_SETTINGS_SNAPSHOT" ||
+        actionType === "UPDATE_EXECUTION_POLICY" ||
+        actionType === "UPDATE_DATA_RETENTION_POLICY"
+      ) {
+        return;
+      }
+    }
+
+    throw new AdminSettingsValidationError(
+      "FORBIDDEN",
+      "Role is not permitted to perform this settings action.",
+    );
   }
 }
 

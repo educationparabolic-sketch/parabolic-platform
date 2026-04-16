@@ -4725,7 +4725,7 @@ Settings module guarantees:
 - Controlled feature rollout
 - Long-term scalability
 
-## 1.3 Student Portal Sitemap
+# 1.3 Student Portal Sitemap
 Domain:
 portal.yourdomain.com/student
 
@@ -5144,7 +5144,7 @@ Student Portal guarantees:
 - Long-term scalability
 
 
-## 1.4 Test Portal Architecture
+# 1.4 Test Portal Architecture
 
 Domain:
 exam.yourdomain.com
@@ -5558,7 +5558,7 @@ Test Portal guarantees:
 
 ---
 
-## 1.5 Vendor Dashboard Architecture
+# 1.5 Vendor Dashboard Architecture
 
 Vendor Dashboard = Cross-Institute Intelligence & Commercial Control Layer
 

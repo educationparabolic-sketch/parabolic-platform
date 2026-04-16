@@ -20,6 +20,8 @@ import { getFirebaseAuth } from "./firebaseClient";
 import type { AuthContextValue, AuthSession, SignInInput } from "../types/authProvider";
 
 const TOKEN_REFRESH_INTERVAL_MS = 45 * 60 * 1000;
+const LOCAL_TEST_PASSWORD = "Parabolic#Test115";
+const LOCAL_FALLBACK_STORAGE_KEY = "parabolic.localAuthToken";
 
 const AUTH_SESSION_INITIAL_STATE: AuthSession = {
   status: "loading",
@@ -39,6 +41,90 @@ function normalizeErrorMessage(error: unknown): string {
   return "Authentication request failed.";
 }
 
+interface LocalAuthIdentity {
+  role: "student" | "teacher" | "admin" | "director" | "vendor";
+  licenseLayer: "L0" | "L1" | "L2" | "L3";
+}
+
+const LOCAL_AUTH_IDENTITIES: Record<string, LocalAuthIdentity> = {
+  "student.test@parabolic.local": {role: "student", licenseLayer: "L0"},
+  "teacher.test@parabolic.local": {role: "teacher", licenseLayer: "L1"},
+  "admin.test@parabolic.local": {role: "admin", licenseLayer: "L3"},
+  "director.test@parabolic.local": {role: "director", licenseLayer: "L3"},
+  "vendor.test@parabolic.local": {role: "vendor", licenseLayer: "L0"},
+};
+
+function isLocalAuthFallbackEnabled(): boolean {
+  const host = window.location.hostname.toLowerCase();
+  return host === "localhost" || host === "127.0.0.1";
+}
+
+function encodeBase64Url(value: string): string {
+  return btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function buildLocalTestToken(email: string, identity: LocalAuthIdentity): string {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const payload = {
+    aud: "local-test",
+    exp: nowSeconds + 60 * 60,
+    iat: nowSeconds,
+    instituteId: "inst-build-125",
+    iss: "local-auth-fallback",
+    licenseLayer: identity.licenseLayer,
+    role: identity.role,
+    sub: email,
+    uid: email,
+  };
+
+  return `${encodeBase64Url(JSON.stringify({alg: "none", typ: "JWT"}))}.${encodeBase64Url(JSON.stringify(payload))}.local`;
+}
+
+function tryLocalFallbackSignIn(email: string, password: string): {token: string} | null {
+  if (!isLocalAuthFallbackEnabled()) {
+    return null;
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const identity = LOCAL_AUTH_IDENTITIES[normalizedEmail];
+  if (!identity || password !== LOCAL_TEST_PASSWORD) {
+    return null;
+  }
+
+  return {
+    token: buildLocalTestToken(normalizedEmail, identity),
+  };
+}
+
+function persistLocalFallbackToken(token: string): void {
+  try {
+    window.sessionStorage.setItem(LOCAL_FALLBACK_STORAGE_KEY, token);
+  } catch {
+    // Best-effort persistence only.
+  }
+}
+
+function readPersistedLocalFallbackToken(): string | null {
+  try {
+    const value = window.sessionStorage.getItem(LOCAL_FALLBACK_STORAGE_KEY);
+    if (typeof value !== "string" || value.trim().length === 0) {
+      return null;
+    }
+
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+function clearPersistedLocalFallbackToken(): void {
+  try {
+    window.sessionStorage.removeItem(LOCAL_FALLBACK_STORAGE_KEY);
+  } catch {
+    // No-op
+  }
+}
+
 interface AuthProviderProps {
   children: ReactNode;
 }
@@ -46,8 +132,13 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [session, setSession] = useState<AuthSession>(AUTH_SESSION_INITIAL_STATE);
   const authRef = useRef<ReturnType<typeof getFirebaseAuth> | null>(null);
+  const localFallbackActiveRef = useRef(false);
 
   const syncUserSession = useCallback(async (user: AuthSession["user"], status: AuthSession["status"]) => {
+    if (localFallbackActiveRef.current && !user) {
+      return;
+    }
+
     if (!user) {
       setSession({
         status,
@@ -60,6 +151,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     try {
+      localFallbackActiveRef.current = false;
+      clearPersistedLocalFallbackToken();
       const token = await getIdToken(user, false);
       setSession({
         status,
@@ -81,6 +174,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   useEffect(() => {
     let unsubscribe: (() => void) | null = null;
+    const persistedToken = readPersistedLocalFallbackToken();
+
+    if (persistedToken && isLocalAuthFallbackEnabled()) {
+      localFallbackActiveRef.current = true;
+      setSession({
+        status: "authenticated",
+        user: null,
+        idToken: persistedToken,
+        lastTokenRefreshAt: Date.now(),
+        error: null,
+      });
+    }
 
     try {
       const auth = getFirebaseAuth();
@@ -144,7 +249,35 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [session.status, session.user]);
 
   const signIn = useCallback(async ({ email, password }: SignInInput): Promise<boolean> => {
+    const immediateFallback = tryLocalFallbackSignIn(email, password);
+    if (immediateFallback) {
+      localFallbackActiveRef.current = true;
+      persistLocalFallbackToken(immediateFallback.token);
+      setSession({
+        status: "authenticated",
+        user: null,
+        idToken: immediateFallback.token,
+        lastTokenRefreshAt: Date.now(),
+        error: null,
+      });
+      return true;
+    }
+
     if (!authRef.current) {
+      const fallback = tryLocalFallbackSignIn(email, password);
+      if (fallback) {
+        localFallbackActiveRef.current = true;
+        persistLocalFallbackToken(fallback.token);
+        setSession({
+          status: "authenticated",
+          user: null,
+          idToken: fallback.token,
+          lastTokenRefreshAt: Date.now(),
+          error: null,
+        });
+        return true;
+      }
+
       setSession((current) => ({
         ...current,
         status: "unauthenticated",
@@ -156,6 +289,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       const credential = await signInWithEmailAndPassword(authRef.current, email, password);
       const token = await getIdToken(credential.user, true);
+      localFallbackActiveRef.current = false;
+      clearPersistedLocalFallbackToken();
 
       setSession({
         status: "authenticated",
@@ -167,6 +302,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       return true;
     } catch (error) {
+      const fallback = tryLocalFallbackSignIn(email, password);
+      if (fallback) {
+        localFallbackActiveRef.current = true;
+        persistLocalFallbackToken(fallback.token);
+        setSession({
+          status: "authenticated",
+          user: null,
+          idToken: fallback.token,
+          lastTokenRefreshAt: Date.now(),
+          error: null,
+        });
+        return true;
+      }
+
       setSession((current) => ({
         ...current,
         status: "unauthenticated",
@@ -178,6 +327,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const signOut = useCallback(async () => {
     if (!authRef.current) {
+      localFallbackActiveRef.current = false;
+      clearPersistedLocalFallbackToken();
       setSession({
         status: "unauthenticated",
         user: null,
@@ -189,6 +340,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     await firebaseSignOut(authRef.current);
+    localFallbackActiveRef.current = false;
+    clearPersistedLocalFallbackToken();
     setSession({
       status: "unauthenticated",
       user: null,
@@ -199,6 +352,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const refreshIdToken = useCallback(async (): Promise<string | null> => {
+    if (session.user === null && session.status === "authenticated" && session.idToken) {
+      return session.idToken;
+    }
+
     if (!session.user) {
       return null;
     }

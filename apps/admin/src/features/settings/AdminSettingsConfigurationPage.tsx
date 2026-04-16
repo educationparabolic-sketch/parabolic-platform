@@ -1,18 +1,22 @@
 import {useCallback, useEffect, useMemo, useState} from "react";
 import {NavLink, useLocation} from "react-router-dom";
+import {useAuthProvider} from "../../../../../shared/services/authProvider";
 import {UiForm, UiFormField, UiTable, type UiTableColumn} from "../../../../../shared/ui/components";
+import {resolveAdminAccessContext} from "../../portals/adminAccess";
 import {
   ApiClientError,
   archiveAcademicYear,
   FALLBACK_SNAPSHOT,
   fetchSettingsSnapshot,
+  isLocalSettingsReadMode,
   lockAcademicYear,
   removeUserAccess,
   resetUserPassword,
-  shouldUseLiveApi,
+  type SettingsActionType,
   type AdminSettingsSnapshot,
   type StaffRole,
   type StaffStatus,
+  updateDataRetentionPolicy,
   updateExecutionPolicy,
   updateFeatureFlags,
   updateInstituteProfile,
@@ -35,8 +39,14 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   {id: "execution-policy", route: "/admin/settings/execution-policy", title: "Execution Policy"},
   {id: "users", route: "/admin/settings/users", title: "User & Role Management"},
   {id: "security", route: "/admin/settings/security", title: "Security & Access"},
+  {id: "data", route: "/admin/settings/data", title: "Data & Archive Controls"},
   {id: "system", route: "/admin/settings/system", title: "System Configuration"},
 ];
+
+const DIRECTOR_ALLOWED_MUTATIONS = new Set<SettingsActionType>([
+  "UPDATE_EXECUTION_POLICY",
+  "UPDATE_DATA_RETENTION_POLICY",
+]);
 
 interface UserDraft {
   userId: string;
@@ -79,7 +89,10 @@ function sectionFromPath(pathname: string): string {
 
 function AdminSettingsConfigurationPage() {
   const location = useLocation();
+  const {session} = useAuthProvider();
+  const accessContext = resolveAdminAccessContext(session);
   const activeSection = sectionFromPath(location.pathname);
+  const isDirector = accessContext.role === "director";
 
   const [snapshot, setSnapshot] = useState<AdminSettingsSnapshot>(FALLBACK_SNAPSHOT);
   const [isLoading, setIsLoading] = useState(true);
@@ -90,6 +103,7 @@ function AdminSettingsConfigurationPage() {
   const [executionForm, setExecutionForm] = useState(FALLBACK_SNAPSHOT.executionPolicy);
   const [securityForm, setSecurityForm] = useState(FALLBACK_SNAPSHOT.security);
   const [featureFlagsForm, setFeatureFlagsForm] = useState(FALLBACK_SNAPSHOT.featureFlags);
+  const [dataRetentionForm, setDataRetentionForm] = useState(FALLBACK_SNAPSHOT.dataArchiveControls.dataRetentionPolicy);
   const [userDraft, setUserDraft] = useState<UserDraft>(DEFAULT_USER_DRAFT);
 
   const defaultYearId = FALLBACK_SNAPSHOT.academicYears[0]?.yearId ?? "";
@@ -107,6 +121,7 @@ function AdminSettingsConfigurationPage() {
     setExecutionForm(nextSnapshot.executionPolicy);
     setSecurityForm(nextSnapshot.security);
     setFeatureFlagsForm(nextSnapshot.featureFlags);
+    setDataRetentionForm(nextSnapshot.dataArchiveControls.dataRetentionPolicy);
 
     const nextYearId = nextSnapshot.academicYears[0]?.yearId ?? "";
     setSelectedYearId((currentValue) => {
@@ -142,9 +157,9 @@ function AdminSettingsConfigurationPage() {
 
         applySnapshot(
           nextSnapshot,
-          shouldUseLiveApi() ?
-            "Live mode enabled: settings loaded from POST /admin/settings." :
-            "Local mode detected. Loaded deterministic Build 125 settings fixtures.",
+          isLocalSettingsReadMode() ?
+            "Local read mode: deterministic settings snapshot loaded." :
+            "Settings loaded from secured /admin/settings API.",
         );
       } catch (error) {
         if (!isMounted) {
@@ -167,10 +182,24 @@ function AdminSettingsConfigurationPage() {
     };
   }, [applySnapshot]);
 
+  const canMutate = useCallback((actionType: SettingsActionType): boolean => {
+    if (!isDirector) {
+      return true;
+    }
+
+    return DIRECTOR_ALLOWED_MUTATIONS.has(actionType);
+  }, [isDirector]);
+
   const withSubmitGuard = async (
     operation: () => Promise<AdminSettingsSnapshot | void>,
     successMessage: string,
+    actionType: SettingsActionType,
   ): Promise<void> => {
+    if (!canMutate(actionType)) {
+      setInlineMessage("Director access is read-only for this settings action.");
+      return;
+    }
+
     setIsSubmitting(true);
     setInlineMessage(null);
 
@@ -188,6 +217,14 @@ function AdminSettingsConfigurationPage() {
       setIsSubmitting(false);
     }
   };
+
+  const canEditProfile = canMutate("UPDATE_INSTITUTE_PROFILE");
+  const canEditAcademicYear = canMutate("LOCK_ACADEMIC_YEAR");
+  const canEditExecutionPolicy = canMutate("UPDATE_EXECUTION_POLICY");
+  const canEditUsers = canMutate("UPSERT_USER_ACCESS");
+  const canEditSecurity = canMutate("UPDATE_SECURITY_SETTINGS");
+  const canEditDataRetention = canMutate("UPDATE_DATA_RETENTION_POLICY");
+  const canEditSystem = canMutate("UPDATE_FEATURE_FLAGS");
 
   const yearColumns = useMemo<UiTableColumn<AdminSettingsSnapshot["academicYears"][number]>[]>(
     () => [
@@ -263,6 +300,11 @@ function AdminSettingsConfigurationPage() {
       <p className="admin-settings-inline-note">
         {isLoading ? "Loading settings configuration..." : inlineMessage ?? "Settings workspace ready."}
       </p>
+      {isDirector ? (
+        <p className="admin-settings-inline-note">
+          Director mode: view access to all settings sections with limited edit capabilities.
+        </p>
+      ) : null}
 
       <nav className="admin-settings-tab-grid" aria-label="Settings sections">
         {SETTINGS_SECTIONS.map((section) => (
@@ -291,10 +333,12 @@ function AdminSettingsConfigurationPage() {
               async () =>
                 updateInstituteProfile(SETTINGS_INSTITUTE_ID, profileForm),
               "Institute profile updated via secured admin settings API.",
+              "UPDATE_INSTITUTE_PROFILE",
             );
           }}
         >
-          <div className="admin-settings-grid-two">
+          <fieldset disabled={!canEditProfile || isSubmitting}>
+            <div className="admin-settings-grid-two">
             <UiFormField label="Institute Name" htmlFor="settings-institute-name">
               <input
                 id="settings-institute-name"
@@ -387,7 +431,8 @@ function AdminSettingsConfigurationPage() {
                 required
               />
             </UiFormField>
-          </div>
+            </div>
+          </fieldset>
         </UiForm>
       ) : null}
 
@@ -424,7 +469,7 @@ function AdminSettingsConfigurationPage() {
             <button
               type="button"
               className="admin-compact-button"
-              disabled={!currentAcademicYear || isSubmitting || currentAcademicYear.status !== "Active"}
+              disabled={!canEditAcademicYear || !currentAcademicYear || isSubmitting || currentAcademicYear.status !== "Active"}
               onClick={() => {
                 if (!currentAcademicYear) {
                   return;
@@ -433,6 +478,7 @@ function AdminSettingsConfigurationPage() {
                 void withSubmitGuard(
                   async () => lockAcademicYear(SETTINGS_INSTITUTE_ID, currentAcademicYear.yearId),
                   `Academic year ${currentAcademicYear.academicYearLabel} locked successfully.`,
+                  "LOCK_ACADEMIC_YEAR",
                 );
               }}
             >
@@ -441,7 +487,7 @@ function AdminSettingsConfigurationPage() {
             <button
               type="button"
               className="admin-compact-button"
-              disabled={!currentAcademicYear || isSubmitting || currentAcademicYear.status === "Archived"}
+              disabled={!canEditAcademicYear || !currentAcademicYear || isSubmitting || currentAcademicYear.status === "Archived"}
               onClick={() => {
                 if (!currentAcademicYear) {
                   return;
@@ -461,6 +507,7 @@ function AdminSettingsConfigurationPage() {
                     return fetchSettingsSnapshot(SETTINGS_INSTITUTE_ID);
                   },
                   `Archive requested for ${currentAcademicYear.academicYearLabel} through secured archive API.`,
+                  "LOCK_ACADEMIC_YEAR",
                 );
               }}
             >
@@ -481,10 +528,12 @@ function AdminSettingsConfigurationPage() {
             void withSubmitGuard(
               async () => updateExecutionPolicy(SETTINGS_INSTITUTE_ID, executionForm),
               "Execution defaults saved through secured backend policy API.",
+              "UPDATE_EXECUTION_POLICY",
             );
           }}
         >
-          <div className="admin-settings-grid-three">
+          <fieldset disabled={!canEditExecutionPolicy || isSubmitting}>
+            <div className="admin-settings-grid-three">
             <UiFormField label="Phase 1 %" htmlFor="settings-phase-1">
               <input
                 id="settings-phase-1"
@@ -545,9 +594,9 @@ function AdminSettingsConfigurationPage() {
                 required
               />
             </UiFormField>
-          </div>
+            </div>
 
-          <div className="admin-settings-inline-controls">
+            <div className="admin-settings-inline-controls">
             <label>
               <input
                 type="checkbox"
@@ -599,9 +648,9 @@ function AdminSettingsConfigurationPage() {
               />
               Hard Mode Available
             </label>
-          </div>
+            </div>
 
-          <div className="admin-settings-grid-three">
+            <div className="admin-settings-grid-three">
             <UiFormField label="Alert Cooldown (min)" htmlFor="settings-alert-cooldown">
               <input
                 id="settings-alert-cooldown"
@@ -659,7 +708,8 @@ function AdminSettingsConfigurationPage() {
                 required
               />
             </UiFormField>
-          </div>
+            </div>
+          </fieldset>
         </UiForm>
       ) : null}
 
@@ -689,10 +739,12 @@ function AdminSettingsConfigurationPage() {
                 async () =>
                   upsertUserAccess(SETTINGS_INSTITUTE_ID, userDraft),
                 `User ${userDraft.userId} access updated.`,
+                "UPSERT_USER_ACCESS",
               );
             }}
           >
-            <div className="admin-settings-grid-two">
+            <fieldset disabled={!canEditUsers || isSubmitting}>
+              <div className="admin-settings-grid-two">
               <UiFormField label="User ID" htmlFor="settings-user-id">
                 <input
                   id="settings-user-id"
@@ -765,14 +817,15 @@ function AdminSettingsConfigurationPage() {
                   <option value="suspended">suspended</option>
                 </select>
               </UiFormField>
-            </div>
+              </div>
+            </fieldset>
           </UiForm>
 
           <div className="admin-settings-user-actions">
             <button
               type="button"
               className="admin-compact-button"
-              disabled={isSubmitting || userDraft.userId.trim().length === 0}
+              disabled={!canEditUsers || isSubmitting || userDraft.userId.trim().length === 0}
               onClick={() => {
                 const userId = userDraft.userId.trim();
                 if (!userId) {
@@ -782,6 +835,7 @@ function AdminSettingsConfigurationPage() {
                 void withSubmitGuard(
                   async () => removeUserAccess(SETTINGS_INSTITUTE_ID, userId),
                   `User ${userId} removed from institute role registry.`,
+                  "REMOVE_USER_ACCESS",
                 );
               }}
             >
@@ -790,7 +844,7 @@ function AdminSettingsConfigurationPage() {
             <button
               type="button"
               className="admin-compact-button"
-              disabled={isSubmitting || userDraft.userId.trim().length === 0}
+              disabled={!canEditUsers || isSubmitting || userDraft.userId.trim().length === 0}
               onClick={() => {
                 const userId = userDraft.userId.trim();
                 if (!userId) {
@@ -800,6 +854,7 @@ function AdminSettingsConfigurationPage() {
                 void withSubmitGuard(
                   async () => resetUserPassword(SETTINGS_INSTITUTE_ID, userId),
                   `Password reset request logged for ${userId}.`,
+                  "RESET_USER_PASSWORD",
                 );
               }}
             >
@@ -820,10 +875,12 @@ function AdminSettingsConfigurationPage() {
             void withSubmitGuard(
               async () => updateSecuritySettings(SETTINGS_INSTITUTE_ID, securityForm),
               "Security and access policies updated.",
+              "UPDATE_SECURITY_SETTINGS",
             );
           }}
         >
-          <div className="admin-settings-inline-controls">
+          <fieldset disabled={!canEditSecurity || isSubmitting}>
+            <div className="admin-settings-inline-controls">
             <label>
               <input
                 type="checkbox"
@@ -920,9 +977,9 @@ function AdminSettingsConfigurationPage() {
               />
               Tamper Detection Alerts
             </label>
-          </div>
+            </div>
 
-          <div className="admin-settings-grid-three">
+            <div className="admin-settings-grid-three">
             <UiFormField label="Session Timeout (minutes)" htmlFor="settings-session-timeout">
               <input
                 id="settings-session-timeout"
@@ -1012,7 +1069,99 @@ function AdminSettingsConfigurationPage() {
                 <option value="disabled">disabled</option>
               </select>
             </UiFormField>
+            </div>
+          </fieldset>
+        </UiForm>
+      ) : null}
+
+      {activeSection === "data" ? (
+        <UiForm
+          title="Data & Archive Controls"
+          description="Storage summary is read-only. Retention policy updates use secured backend APIs."
+          submitLabel={isSubmitting ? "Saving..." : "Save Retention Policy"}
+          onSubmit={(event) => {
+            event.preventDefault();
+
+            void withSubmitGuard(
+              async () => updateDataRetentionPolicy(SETTINGS_INSTITUTE_ID, dataRetentionForm),
+              "Data retention policy updated through secured backend API.",
+              "UPDATE_DATA_RETENTION_POLICY",
+            );
+          }}
+        >
+          <div className="admin-settings-layer-card">
+            <p>
+              <strong>Firestore HOT Usage:</strong>{" "}
+              {snapshot.dataArchiveControls.storageSummary.firestoreHotUsage}
+            </p>
+            <p>
+              <strong>BigQuery Archive Size:</strong>{" "}
+              {snapshot.dataArchiveControls.storageSummary.bigQueryArchiveSize}
+            </p>
+            <p>
+              <strong>Active Session Count:</strong>{" "}
+              {snapshot.dataArchiveControls.storageSummary.activeSessionCount}
+            </p>
+            <p>
+              <strong>Archived Academic Years:</strong>{" "}
+              {snapshot.dataArchiveControls.storageSummary.archivedAcademicYears}
+            </p>
           </div>
+
+          <fieldset disabled={!canEditDataRetention || isSubmitting}>
+            <div className="admin-settings-grid-three">
+              <UiFormField label="Raw Session Retention (years)" htmlFor="settings-retention-years">
+                <input
+                  id="settings-retention-years"
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={dataRetentionForm.rawSessionRetentionYears}
+                  onChange={(event) => {
+                    const nextValue = Number(event.target.value);
+                    setDataRetentionForm((current) => ({
+                      ...current,
+                      rawSessionRetentionYears: Number.isFinite(nextValue) ? nextValue : 1,
+                    }));
+                  }}
+                  required
+                />
+              </UiFormField>
+              <UiFormField label="Auto Export Threshold" htmlFor="settings-auto-export-threshold">
+                <input
+                  id="settings-auto-export-threshold"
+                  type="number"
+                  min={1}
+                  value={dataRetentionForm.autoExportThreshold}
+                  onChange={(event) => {
+                    const nextValue = Number(event.target.value);
+                    setDataRetentionForm((current) => ({
+                      ...current,
+                      autoExportThreshold: Number.isFinite(nextValue) ? nextValue : 1,
+                    }));
+                  }}
+                  required
+                />
+              </UiFormField>
+              <UiFormField label="Auto Archive Schedule" htmlFor="settings-auto-archive-schedule">
+                <select
+                  id="settings-auto-archive-schedule"
+                  value={dataRetentionForm.autoArchiveSchedule}
+                  onChange={(event) => {
+                    setDataRetentionForm((current) => ({
+                      ...current,
+                      autoArchiveSchedule: event.target.value,
+                    }));
+                  }}
+                >
+                  <option value="daily">daily</option>
+                  <option value="weekly">weekly</option>
+                  <option value="monthly">monthly</option>
+                  <option value="quarterly">quarterly</option>
+                </select>
+              </UiFormField>
+            </div>
+          </fieldset>
         </UiForm>
       ) : null}
 
@@ -1027,10 +1176,12 @@ function AdminSettingsConfigurationPage() {
             void withSubmitGuard(
               async () => updateFeatureFlags(SETTINGS_INSTITUTE_ID, featureFlagsForm),
               "System feature flags updated via secured backend API.",
+              "UPDATE_FEATURE_FLAGS",
             );
           }}
         >
-          <div className="admin-settings-layer-card">
+          <fieldset disabled={!canEditSystem || isSubmitting}>
+            <div className="admin-settings-layer-card">
             <p>
               <strong>Current Layer:</strong> {snapshot.layerConfiguration.currentLayer}
             </p>
@@ -1043,9 +1194,9 @@ function AdminSettingsConfigurationPage() {
                 .map(([key, value]) => `${key}=${value ? "on" : "off"}`)
                 .join(", ") || "none"}
             </p>
-          </div>
+            </div>
 
-          <div className="admin-settings-inline-controls">
+            <div className="admin-settings-inline-controls">
             <label>
               <input
                 type="checkbox"
@@ -1102,7 +1253,8 @@ function AdminSettingsConfigurationPage() {
               />
               Enable LLM Monthly Summary
             </label>
-          </div>
+            </div>
+          </fieldset>
         </UiForm>
       ) : null}
     </section>

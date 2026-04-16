@@ -54,6 +54,19 @@ test("admin settings handler accepts snapshot read request", async () => {
           },
           timingPresets: {},
         },
+        dataArchiveControls: {
+          dataRetentionPolicy: {
+            autoArchiveSchedule: "monthly",
+            autoExportThreshold: 1000,
+            rawSessionRetentionYears: 2,
+          },
+          storageSummary: {
+            activeSessionCount: 0,
+            archivedAcademicYears: 0,
+            bigQueryArchiveSize: "Unknown",
+            firestoreHotUsage: "Unknown",
+          },
+        },
         featureFlags: {
           enableBetaUi: false,
           enableExperimentalAnalytics: false,
@@ -114,7 +127,7 @@ test("admin settings handler accepts snapshot read request", async () => {
   assert.equal((response.body as {success: boolean}).success, true);
 });
 
-test("admin settings handler rejects non-admin role", async () => {
+test("admin settings handler rejects non-admin/director role", async () => {
   const handler = createAdminSettingsHandler({
     executeRequest: async () => {
       throw new Error("executeRequest should not be called");
@@ -143,8 +156,104 @@ test("admin settings handler rejects non-admin role", async () => {
   assertStructuredError(
     response.body,
     "FORBIDDEN",
-    "Only admin role can manage settings configuration.",
+    "Only admin and director roles can access settings configuration.",
   );
+});
+
+test("admin settings handler allows director snapshot read", async () => {
+  const handler = createAdminSettingsHandler({
+    executeRequest: async () => ({
+      actionType: "GET_SETTINGS_SNAPSHOT",
+      snapshot: {
+        academicYears: [],
+        dataArchiveControls: {
+          dataRetentionPolicy: {
+            autoArchiveSchedule: "monthly",
+            autoExportThreshold: 1000,
+            rawSessionRetentionYears: 2,
+          },
+          storageSummary: {
+            activeSessionCount: 0,
+            archivedAcademicYears: 0,
+            bigQueryArchiveSize: "Unknown",
+            firestoreHotUsage: "Unknown",
+          },
+        },
+        executionPolicy: {
+          advancedControls: {
+            adaptivePhaseEnabled: true,
+            hardModeAvailable: false,
+            manualOverrideAllowed: false,
+          },
+          alertFrequencyPolicy: {
+            alertCooldownInterval: 10,
+            escalationThreshold: 3,
+            maxAlertsPerSection: 2,
+          },
+          phaseSplit: {
+            phase1Percent: 30,
+            phase2Percent: 40,
+            phase3Percent: 30,
+          },
+          timingPresets: {},
+        },
+        featureFlags: {
+          enableBetaUi: false,
+          enableExperimentalAnalytics: false,
+          enableLlmMonthlySummary: false,
+          toggleAdvancedPhaseVisualization: false,
+        },
+        layerConfiguration: {
+          currentLayer: "L3",
+          eligibilityStatus: "Eligible",
+          featureFlags: {},
+        },
+        profile: {
+          academicYearFormat: "YYYY-YY",
+          contactEmail: "ops@example.org",
+          contactPhone: "+1-555-0100",
+          defaultExamType: "JEE_MAIN",
+          instituteName: "Build 125 Institute",
+          logoReference: "logos/build-125.png",
+          timeZone: "Asia/Kolkata",
+        },
+        security: {
+          allowMultipleAdminSessions: false,
+          emailConfiguration: {
+            notificationToggles: true,
+            senderName: "Build 125",
+          },
+          examControls: {
+            blockRightClick: true,
+            enforceFullscreen: true,
+            tabSwitchWarning: true,
+            tamperDetectionAlerts: false,
+          },
+          forceLogoutOnPasswordChange: true,
+          sessionTimeoutDuration: 30,
+        },
+        users: [],
+      },
+    }),
+    verifyIdToken: async () => createAdminToken({role: "director", uid: "director_build_125"}) as never,
+  });
+
+  const request = createMockRequest({
+    body: {
+      actionType: "GET_SETTINGS_SNAPSHOT",
+      instituteId: "inst_build_125",
+    },
+    headers: {
+      authorization: "Bearer build_125_director",
+    },
+    path: "/admin/settings",
+  });
+  const response = createMockResponse();
+
+  await handler(request as never, response as never);
+
+  assert.equal(response.statusCode, 200);
+  assert.equal((response.body as {success: boolean}).success, true);
 });
 
 test("admin settings handler maps validation errors", async () => {

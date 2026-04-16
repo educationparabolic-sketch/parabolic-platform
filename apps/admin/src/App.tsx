@@ -388,6 +388,10 @@ function App() {
           element={<AdminSettingsConfigurationPage />}
         />
         <Route
+          path="settings/data"
+          element={<AdminSettingsConfigurationPage />}
+        />
+        <Route
           path="settings/system"
           element={<AdminSettingsConfigurationPage />}
         />
