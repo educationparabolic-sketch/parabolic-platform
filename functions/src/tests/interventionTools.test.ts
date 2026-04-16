@@ -51,6 +51,8 @@ test(
     const metricsPath =
       `institutes/${instituteId}/academicYears/${yearId}/` +
       `studentYearMetrics/${studentId}`;
+    const recommendationsPath =
+      `interventionRecommendations/${yearId}/institutes/${instituteId}/actions`;
 
     const service = new InterventionToolsService({
       firestore,
@@ -68,7 +70,10 @@ test(
         ),
     });
 
-    await deleteCollectionDocuments(auditPath);
+    await Promise.all([
+      deleteCollectionDocuments(auditPath),
+      deleteCollectionDocuments(recommendationsPath),
+    ]);
     await Promise.all([
       deleteDocumentIfPresent(metricsPath),
       deleteDocumentIfPresent(studentPath),
@@ -157,7 +162,21 @@ test(
       .get();
     assert.equal(auditSnapshot.size >= 2, true);
 
-    await deleteCollectionDocuments(auditPath);
+    const recommendationSnapshot = await firestore
+      .collection(recommendationsPath)
+      .get();
+    assert.equal(recommendationSnapshot.size, 3);
+    assert.equal(
+      recommendationSnapshot.docs.every((documentSnapshot) =>
+        documentSnapshot.data().advisoryOnly === true
+      ),
+      true,
+    );
+
+    await Promise.all([
+      deleteCollectionDocuments(auditPath),
+      deleteCollectionDocuments(recommendationsPath),
+    ]);
     await Promise.all([
       deleteDocumentIfPresent(metricsPath),
       deleteDocumentIfPresent(studentPath),

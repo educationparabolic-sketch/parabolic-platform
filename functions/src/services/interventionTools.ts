@@ -19,6 +19,8 @@ const STUDENTS_COLLECTION = "students";
 const ACADEMIC_YEARS_COLLECTION = "academicYears";
 const STUDENT_YEAR_METRICS_COLLECTION = "studentYearMetrics";
 const AUDIT_LOGS_COLLECTION = "auditLogs";
+const INTERVENTION_RECOMMENDATIONS_COLLECTION = "interventionRecommendations";
+const INTERVENTION_ACTIONS_COLLECTION = "actions";
 const ACTION_TYPES = [
   "ASSIGN_REMEDIAL_TEST",
   "SEND_INTERVENTION_ALERT",
@@ -431,7 +433,7 @@ export class InterventionToolsService {
       yearId: input.yearId,
     });
 
-    return {
+    const actionRecord: InterventionActionRecord = {
       actionType: input.actionType,
       alertMessage: undefined,
       auditId: auditResult.auditId,
@@ -447,6 +449,9 @@ export class InterventionToolsService {
       timestamp,
       yearId: input.yearId,
     };
+
+    await this.persistInterventionRecommendation(input, actionRecord);
+    return actionRecord;
   }
 
   /**
@@ -489,7 +494,7 @@ export class InterventionToolsService {
       yearId: input.yearId,
     });
 
-    return {
+    const actionRecord: InterventionActionRecord = {
       actionType: input.actionType,
       alertMessage,
       auditId: auditResult.auditId,
@@ -505,6 +510,9 @@ export class InterventionToolsService {
       timestamp,
       yearId: input.yearId,
     };
+
+    await this.persistInterventionRecommendation(input, actionRecord);
+    return actionRecord;
   }
 
   /**
@@ -557,7 +565,7 @@ export class InterventionToolsService {
       yearId: input.yearId,
     });
 
-    return {
+    const actionRecord: InterventionActionRecord = {
       actionType: input.actionType,
       alertMessage: undefined,
       auditId: auditResult.auditId,
@@ -573,6 +581,50 @@ export class InterventionToolsService {
       timestamp,
       yearId: input.yearId,
     };
+
+    await this.persistInterventionRecommendation(input, actionRecord);
+    return actionRecord;
+  }
+
+  /**
+   * Persists advisory intervention records in architecture-mapped storage.
+   * Stored at interventionRecommendations/{academicYear}/institutes/{instituteId}/actions/{interventionId}.
+   * @param {AdminInterventionValidatedRequest} input Validated intervention request.
+   * @param {InterventionActionRecord} actionRecord Action record.
+   * @return {Promise<void>} Promise that resolves when persisted.
+   */
+  private async persistInterventionRecommendation(
+    input: AdminInterventionValidatedRequest,
+    actionRecord: InterventionActionRecord,
+  ): Promise<void> {
+    const collectionPath = [
+      INTERVENTION_RECOMMENDATIONS_COLLECTION,
+      input.yearId,
+      INSTITUTES_COLLECTION,
+      input.instituteId,
+      INTERVENTION_ACTIONS_COLLECTION,
+    ].join("/");
+
+    await this.dependencies.firestore
+      .collection(collectionPath)
+      .doc(actionRecord.interventionId)
+      .set({
+        actionType: actionRecord.actionType,
+        advisoryOnly: true,
+        alertMessage: actionRecord.alertMessage ?? null,
+        auditId: actionRecord.auditId ?? null,
+        auditPath: actionRecord.auditPath ?? null,
+        createdAt: actionRecord.timestamp,
+        instituteId: actionRecord.instituteId,
+        interventionId: actionRecord.interventionId,
+        outcomeNotes: actionRecord.outcomeNotes ?? null,
+        outcomeStatus: actionRecord.outcomeStatus ?? null,
+        remedialTestId: actionRecord.remedialTestId ?? null,
+        riskCluster: actionRecord.riskCluster ?? null,
+        studentId: actionRecord.studentId ?? null,
+        studentName: actionRecord.studentName ?? null,
+        yearId: actionRecord.yearId,
+      });
   }
 
   /**
