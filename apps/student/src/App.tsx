@@ -1,116 +1,67 @@
 import { useState, type FormEvent, type ReactElement } from "react";
-import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import {
+  Navigate,
+  NavLink,
+  Outlet,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { useAuthProvider } from "../../../shared/services/authProvider";
-import { PORTAL_MANIFEST } from "../../../shared/services/portalManifest";
-import {
-  UiChartContainer,
-  UiForm,
-  UiFormField,
-  UiModal,
-  UiNavBar,
-  UiPagination,
-  UiTable,
-} from "../../../shared/ui/components";
+import "./App.css";
 
-function StudentPortalHome(props: { onLogout: () => Promise<void> }) {
-  const { onLogout } = props;
-  const portal = PORTAL_MANIFEST.student;
-  const rows = [
-    { id: "run-118", test: "Quadratic Drill", accuracy: "82%", discipline: "Stable" },
-    { id: "run-119", test: "Electrostatics Sprint", accuracy: "76%", discipline: "Watch" },
-    { id: "run-120", test: "Organic Revision", accuracy: "88%", discipline: "Stable" },
-    { id: "run-121", test: "Vector Timed Set", accuracy: "79%", discipline: "Improving" },
-    { id: "run-122", test: "Wave Practice", accuracy: "85%", discipline: "Stable" },
-    { id: "run-123", test: "Probability Set", accuracy: "74%", discipline: "Watch" },
-  ];
-  const chartData = [
-    { label: "Raw %", value: 79 },
-    { label: "Accuracy %", value: 83 },
-    { label: "Participation", value: 92 },
-    { label: "Discipline", value: 77 },
-  ];
-  const [page, setPage] = useState(1);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const pageSize = 3;
-  const pageStart = (page - 1) * pageSize;
-  const pageRows = rows.slice(pageStart, pageStart + pageSize);
+interface StudentNavItem {
+  path: string;
+  label: string;
+  summary: string;
+}
 
-  function handleFilterSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setIsModalOpen(true);
-  }
+interface StudentSectionPageProps {
+  title: string;
+  summary: string;
+}
 
+const STUDENT_NAV_ITEMS: StudentNavItem[] = [
+  {
+    path: "/student/dashboard",
+    label: "Dashboard",
+    summary: "Landing view for student progress highlights and upcoming assessments.",
+  },
+  {
+    path: "/student/my-tests",
+    label: "My Tests",
+    summary: "Assigned, active, and completed test navigation for the student account.",
+  },
+  {
+    path: "/student/performance",
+    label: "Performance",
+    summary: "Summary-level performance trends based on analytics collections.",
+  },
+  {
+    path: "/student/insights",
+    label: "Insights",
+    summary: "Behavioral insight space for interpreted performance indicators.",
+  },
+  {
+    path: "/student/profile",
+    label: "Profile",
+    summary: "Student-managed profile and account settings workspace.",
+  },
+];
+
+function StudentSectionPage({ title, summary }: StudentSectionPageProps) {
   return (
-    <main className="portal-shell">
-      <section className="portal-card">
-        <p className="portal-eyebrow">Build 115</p>
-        <h1>{portal.name}</h1>
-        <p className="portal-purpose">{portal.purpose}</p>
-        <button onClick={() => void onLogout()} type="button">Logout</button>
-        <UiNavBar
-          title="Student Navigation"
-          subtitle="Shared navbar component from shared/ui"
-          activeItemId="dashboard"
-          items={[
-            { id: "dashboard", label: "Dashboard", hint: "/student" },
-            { id: "tests", label: "My Tests", hint: "/student/my-tests" },
-            { id: "performance", label: "Performance", hint: "/student/performance" },
-          ]}
-        />
-        <UiForm
-          title="Result Filters"
-          description="Shared form and field components"
-          submitLabel="Apply Filters"
-          onSubmit={handleFilterSubmit}
-        >
-          <UiFormField label="Academic Window" htmlFor="student-window">
-            <select id="student-window" defaultValue="current-year">
-              <option value="current-year">Current Year</option>
-              <option value="last-run">Last 3 Runs</option>
-              <option value="all">All Available</option>
-            </select>
-          </UiFormField>
-          <UiFormField
-            label="Search"
-            htmlFor="student-search"
-            helper="Use test name or run id"
-          >
-            <input id="student-search" type="text" placeholder="Search test" />
-          </UiFormField>
-        </UiForm>
-        <UiChartContainer
-          title="Performance Summary"
-          subtitle="Shared chart container component"
-          data={chartData}
-          maxValue={100}
-        />
-        <UiTable
-          caption="Recent Performance"
-          rows={pageRows}
-          rowKey={(row) => row.id}
-          columns={[
-            { id: "test", header: "Test", render: (row) => row.test },
-            { id: "accuracy", header: "Accuracy", render: (row) => row.accuracy },
-            { id: "discipline", header: "Discipline", render: (row) => row.discipline },
-          ]}
-        />
-        <UiPagination
-          page={page}
-          pageSize={pageSize}
-          totalItems={rows.length}
-          onPageChange={setPage}
-        />
-        <UiModal
-          isOpen={isModalOpen}
-          title="Filter Draft Saved"
-          description="Shared modal dialog component"
-          onClose={() => setIsModalOpen(false)}
-        >
-          <p>Your filter choices are saved in the local UI state for this foundation build.</p>
-        </UiModal>
-      </section>
-    </main>
+    <section className="student-content-card" aria-labelledby="student-content-title">
+      <p className="student-content-eyebrow">Student Portal</p>
+      <h2 id="student-content-title">{title}</h2>
+      <p className="student-content-copy">{summary}</p>
+      <p className="student-content-note">
+        Build 126 establishes the student layout shell, authenticated route protection, and route-based
+        rendering containers for this section.
+      </p>
+    </section>
   );
 }
 
@@ -142,41 +93,37 @@ function StudentLoginPage(props: { loginPath: string; protectedPath: string }) {
   }
 
   return (
-    <main className="portal-shell">
-      <section className="portal-card">
-        <p className="portal-eyebrow">Build 115</p>
-        <h1>Student Login</h1>
-        <p className="portal-purpose">
-          Firebase-authenticated student access for protected student routes.
+    <main className="student-page-shell student-page-shell-login">
+      <section className="student-login-card" aria-labelledby="student-login-title">
+        <p className="student-content-eyebrow">Build 126</p>
+        <h1 id="student-login-title">Student Login</h1>
+        <p className="student-content-copy">
+          Sign in through Firebase Authentication to access protected student routes.
         </p>
-        <UiForm
-          title="Sign In"
-          description="Use Firebase credentials configured for this environment"
-          submitLabel="Login"
-          onSubmit={handleSubmit}
-        >
-          <UiFormField label="Email" htmlFor="student-login-email">
-            <input
-              id="student-login-email"
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </UiFormField>
-          <UiFormField label="Password" htmlFor="student-login-password">
-            <input
-              id="student-login-password"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-          </UiFormField>
-        </UiForm>
-        {session.error ? <p role="alert">{session.error}</p> : null}
-        <p>
-          Protected path: <code>{protectedPath}</code>
+        <form className="student-login-form" onSubmit={handleSubmit}>
+          <label htmlFor="student-login-email">Email</label>
+          <input
+            id="student-login-email"
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+
+          <label htmlFor="student-login-password">Password</label>
+          <input
+            id="student-login-password"
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+          />
+
+          <button type="submit">Login</button>
+        </form>
+        {session.error ? <p className="student-login-error" role="alert">{session.error}</p> : null}
+        <p className="student-login-meta">
+          Protected route: <code>{protectedPath}</code>
         </p>
-        <p>
+        <p className="student-login-meta">
           Login route: <code>{loginPath}</code>
         </p>
       </section>
@@ -194,11 +141,11 @@ function StudentProtectedRoute(props: {
 
   if (session.status === "loading") {
     return (
-      <main className="portal-shell">
-        <section className="portal-card">
-          <p className="portal-eyebrow">Build 115</p>
-          <h1>Checking session</h1>
-          <p className="portal-purpose">Restoring Firebase authentication state.</p>
+      <main className="student-page-shell student-page-shell-login">
+        <section className="student-login-card" aria-labelledby="student-loading-title">
+          <p className="student-content-eyebrow">Build 126</p>
+          <h1 id="student-loading-title">Checking session</h1>
+          <p className="student-content-copy">Restoring Firebase authentication state.</p>
         </section>
       </main>
     );
@@ -211,28 +158,149 @@ function StudentProtectedRoute(props: {
   return children;
 }
 
+function StudentLayout() {
+  const location = useLocation();
+  const { session, signOut } = useAuthProvider();
+
+  const activeRoute = STUDENT_NAV_ITEMS.find((item) => location.pathname === item.path);
+
+  return (
+    <main className="student-page-shell">
+      <header className="student-topbar" aria-label="Student top navigation bar">
+        <div className="student-topbar-branding">
+          <p>Portal</p>
+          <h1>Student Portal</h1>
+        </div>
+        <nav aria-label="Student top route navigation">
+          <ul className="student-top-nav-list">
+            {STUDENT_NAV_ITEMS.map((item) => (
+              <li key={item.path}>
+                <NavLink
+                  to={item.path}
+                  className={({ isActive }) =>
+                    isActive ? "student-top-nav-link student-top-nav-link-active" : "student-top-nav-link"
+                  }
+                >
+                  {item.label}
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        <button
+          type="button"
+          className="student-signout-button"
+          onClick={() => {
+            void signOut();
+          }}
+          disabled={session.status !== "authenticated"}
+        >
+          Sign out
+        </button>
+      </header>
+
+      <div className="student-layout-grid">
+        <aside className="student-sidebar" aria-label="Student sidebar menu">
+          <p className="student-content-eyebrow">Route Menu</p>
+          <h2>{activeRoute?.label ?? "Student"}</h2>
+          <p className="student-sidebar-copy">
+            {activeRoute?.summary ?? "Student route selection and contextual section guidance."}
+          </p>
+          <ul className="student-sidebar-list">
+            {STUDENT_NAV_ITEMS.map((item) => (
+              <li key={item.path}>
+                <NavLink
+                  to={item.path}
+                  className={({ isActive }) =>
+                    isActive ? "student-sidebar-link student-sidebar-link-active" : "student-sidebar-link"
+                  }
+                >
+                  <strong>{item.label}</strong>
+                  <small>{item.summary}</small>
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+        </aside>
+
+        <section className="student-main-content" aria-label="Student main dashboard container">
+          <Outlet />
+        </section>
+      </div>
+    </main>
+  );
+}
+
 function App() {
   usePortalTitle("student");
-  const basePath = PORTAL_MANIFEST.student.routePrefix;
-  const loginPath = `${basePath}/login`;
-  const { signOut } = useAuthProvider();
+
+  const loginPath = "/student/login";
+  const protectedDefaultPath = "/student/dashboard";
 
   return (
     <Routes>
-      <Route element={<Navigate replace to={basePath} />} path="/" />
+      <Route path="/" element={<Navigate to={protectedDefaultPath} replace />} />
+      <Route path="/student" element={<Navigate to={protectedDefaultPath} replace />} />
       <Route
-        element={<StudentLoginPage loginPath={loginPath} protectedPath={basePath} />}
         path={loginPath}
+        element={<StudentLoginPage loginPath={loginPath} protectedPath={protectedDefaultPath} />}
       />
       <Route
+        path="/student"
         element={(
           <StudentProtectedRoute loginPath={loginPath}>
-            <StudentPortalHome onLogout={signOut} />
+            <StudentLayout />
           </StudentProtectedRoute>
         )}
-        path={basePath}
-      />
-      <Route element={<Navigate replace to={basePath} />} path="*" />
+      >
+        <Route index element={<Navigate to="dashboard" replace />} />
+        <Route
+          path="dashboard"
+          element={
+            <StudentSectionPage
+              title="Dashboard"
+              summary="Personalized student landing view for summary performance, risk context, and upcoming test reminders."
+            />
+          }
+        />
+        <Route
+          path="my-tests"
+          element={
+            <StudentSectionPage
+              title="My Tests"
+              summary="Assignment-centric workspace for student test availability, in-progress attempts, and completed outcomes."
+            />
+          }
+        />
+        <Route
+          path="performance"
+          element={
+            <StudentSectionPage
+              title="Performance"
+              summary="Route shell for student performance trends backed by summary analytics collections."
+            />
+          }
+        />
+        <Route
+          path="insights"
+          element={
+            <StudentSectionPage
+              title="Insights"
+              summary="Behavioral insight route container for interpreted student performance signals."
+            />
+          }
+        />
+        <Route
+          path="profile"
+          element={
+            <StudentSectionPage
+              title="Profile"
+              summary="Student profile and account settings route container for personal details management."
+            />
+          }
+        />
+      </Route>
+      <Route path="*" element={<Navigate to={protectedDefaultPath} replace />} />
     </Routes>
   );
 }

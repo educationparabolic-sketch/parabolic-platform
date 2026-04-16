@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 125  
-Next Build: 126
+Completed Builds: 126  
+Next Build: 127
 
 Current Phase: Phase 26 — Student Portal Core
 
@@ -4043,18 +4043,56 @@ Completed On
 
 ---
 
+## Build 126 — Student Portal Layout
+
+Phase  
+Phase 26 — Student Portal Core
+
+Summary  
+Implemented the student portal base shell with authenticated route protection, deterministic route rendering, and responsive navigation layout for the Build 126 student route scope.
+
+Components implemented:
+
+- Replaced the student app shell in `apps/student/src/App.tsx` with route-based rendering for:
+  - `/student/dashboard`
+  - `/student/my-tests`
+  - `/student/performance`
+  - `/student/insights`
+  - `/student/profile`
+- Implemented top navigation bar, sidebar menu, and main dashboard container layout through a shared `StudentLayout` route shell and nested `Outlet` rendering
+- Kept all student routes protected through the existing auth middleware pattern (`StudentProtectedRoute`) with redirect fallback to `/student/login`
+- Preserved and integrated student login flow at `/student/login` with post-auth redirect handling
+- Added responsive student layout and login styles in `apps/student/src/App.css`
+- Fixed runtime React hook dispatcher conflict by aligning Vite React dedupe in `apps/student/vite.config.ts` (`dedupe: [\"react\", \"react-dom\"]`)
+- Added deterministic browser verification automation and artifacts under `apps/student/artifacts/build-126/`
+- Executed frontend verification:
+  - `apps/student`: build, lint
+  - browser checks for `/`, `/student`, `/student/dashboard`, `/student/my-tests`, `/student/performance`, `/student/insights`, `/student/profile`, `/student/login`, and `/student/unknown` at `1366x768` and `390x844`
+  - console/network/responsive/guard checks all passing in `apps/student/artifacts/build-126/verification-results.json`
+
+Result  
+The student portal now has the Build 126 architecture-defined base layout and protected navigation structure, ready for Build 127 dashboard-specific UI work.
+
+Commit Reference  
+Build 126 — Student Portal Layout implemented
+
+Completed On  
+2026-04-16
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 126
+Next Build Number: 127
 
 Phase  
 Phase 26 — Student Portal Core
 
 Subsystem  
-Student Portal Layout
+Student Dashboard UI
 
 Reference  
-2_Portals_Architecture.md → Section 3.1 Student Portal Overview
+2_Portals_Architecture.md → Section 3.2 Student Dashboard UI
 
 ---
 
@@ -4187,7 +4225,8 @@ Build | Phase | Status
 123 | Admin Analytics & Governance | Completed
 124 | Admin Analytics & Governance | Completed
 125 | Admin Analytics & Governance | Completed
-126–150 | Remaining Phases | Pending
+126 | Student Portal Core | Completed
+127–150 | Remaining Phases | Pending
 
 ---
 
