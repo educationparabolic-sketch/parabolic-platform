@@ -11,6 +11,7 @@ import {
 
 const apiClient = createApiClient({ baseUrl: "/" });
 const STUDENT_STATUSES = ["invited", "active", "inactive", "archived", "suspended"] as const;
+const RISK_STATES = ["low", "medium", "high", "critical"] as const;
 
 const FALLBACK_STUDENTS: StudentRecord[] = [
   {
@@ -20,9 +21,13 @@ const FALLBACK_STUDENTS: StudentRecord[] = [
     email: "aarav.menon@school.local",
     batch: "Batch-A",
     status: "active",
+    academicYear: "2025-26",
     testsAttempted: 6,
     avgRawScorePercent: 74,
     avgAccuracyPercent: 81,
+    scorePercentile: 82,
+    riskState: "low",
+    disciplineIndex: 86,
     lastActive: "2026-04-09",
   },
   {
@@ -32,9 +37,13 @@ const FALLBACK_STUDENTS: StudentRecord[] = [
     email: "diya.sharma@school.local",
     batch: "Batch-A",
     status: "inactive",
+    academicYear: "2025-26",
     testsAttempted: 4,
     avgRawScorePercent: 68,
     avgAccuracyPercent: 73,
+    scorePercentile: 59,
+    riskState: "medium",
+    disciplineIndex: 63,
     lastActive: "2026-04-02",
   },
   {
@@ -44,9 +53,13 @@ const FALLBACK_STUDENTS: StudentRecord[] = [
     email: "kabir.gupta@school.local",
     batch: "Batch-B",
     status: "active",
+    academicYear: "2025-26",
     testsAttempted: 8,
     avgRawScorePercent: 83,
     avgAccuracyPercent: 87,
+    scorePercentile: 91,
+    riskState: "low",
+    disciplineIndex: 90,
     lastActive: "2026-04-10",
   },
   {
@@ -56,9 +69,13 @@ const FALLBACK_STUDENTS: StudentRecord[] = [
     email: "naina.iyer@school.local",
     batch: "Batch-C",
     status: "suspended",
+    academicYear: "2025-26",
     testsAttempted: 2,
     avgRawScorePercent: 59,
     avgAccuracyPercent: 65,
+    scorePercentile: 37,
+    riskState: "high",
+    disciplineIndex: 42,
     lastActive: "2026-03-29",
   },
   {
@@ -68,14 +85,19 @@ const FALLBACK_STUDENTS: StudentRecord[] = [
     email: "rehan.patel@school.local",
     batch: "Batch-B",
     status: "invited",
+    academicYear: "2025-26",
     testsAttempted: 0,
     avgRawScorePercent: 0,
     avgAccuracyPercent: 0,
+    scorePercentile: null,
+    riskState: "critical",
+    disciplineIndex: 18,
     lastActive: null,
   },
 ];
 
 type StudentStatus = (typeof STUDENT_STATUSES)[number];
+type StudentRiskState = (typeof RISK_STATES)[number];
 
 interface StudentRecord {
   id: string;
@@ -84,16 +106,32 @@ interface StudentRecord {
   email: string;
   batch: string;
   status: StudentStatus;
+  academicYear: string;
   testsAttempted: number;
   avgRawScorePercent: number;
   avgAccuracyPercent: number;
+  scorePercentile: number | null;
+  riskState: StudentRiskState;
+  disciplineIndex: number;
   lastActive: string | null;
 }
 
 interface StudentFilterState {
   query: string;
+  academicYear: string;
   status: StudentStatus | "all";
   batch: string;
+  rawScoreMin: string;
+  rawScoreMax: string;
+  accuracyMin: string;
+  accuracyMax: string;
+  scorePercentileMin: string;
+  scorePercentileMax: string;
+  riskState: StudentRiskState | "all";
+  disciplineMin: string;
+  disciplineMax: string;
+  lastActiveStart: string;
+  lastActiveEnd: string;
 }
 
 interface EditDraft {
@@ -129,6 +167,15 @@ function toStudentStatus(value: unknown): StudentStatus {
   return (STUDENT_STATUSES as readonly string[]).includes(normalized) ? (normalized as StudentStatus) : "inactive";
 }
 
+function toRiskState(value: unknown): StudentRiskState {
+  if (typeof value !== "string") {
+    return "medium";
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return (RISK_STATES as readonly string[]).includes(normalized) ? (normalized as StudentRiskState) : "medium";
+}
+
 function extractStudentArray(payload: unknown): unknown[] {
   if (Array.isArray(payload)) {
     return payload;
@@ -158,6 +205,9 @@ function normalizeStudentRecord(value: unknown, index: number): StudentRecord | 
 
   const email = toNonEmptyString(record.email) ?? `${studentId.toLowerCase()}@unknown.local`;
   const batch = toNonEmptyString(record.batch) ?? toNonEmptyString(record.batchId) ?? "Unassigned";
+  const scorePercentileRaw = record.scorePercentile ?? record.batchRelativePercentile;
+  const scorePercentile =
+    scorePercentileRaw === null || typeof scorePercentileRaw === "undefined" ? null : toNumberOrZero(scorePercentileRaw);
 
   return {
     id: toNonEmptyString(record.id) ?? studentId,
@@ -166,9 +216,13 @@ function normalizeStudentRecord(value: unknown, index: number): StudentRecord | 
     email,
     batch,
     status: toStudentStatus(record.status),
+    academicYear: toNonEmptyString(record.academicYear) ?? toNonEmptyString(record.year) ?? "2025-26",
     testsAttempted: toNumberOrZero(record.testsAttempted),
     avgRawScorePercent: toNumberOrZero(record.avgRawScorePercent),
     avgAccuracyPercent: toNumberOrZero(record.avgAccuracyPercent),
+    scorePercentile,
+    riskState: toRiskState(record.riskState ?? record.rollingRiskCluster),
+    disciplineIndex: toNumberOrZero(record.disciplineIndex),
     lastActive: toNonEmptyString(record.lastActive),
   };
 }
@@ -216,14 +270,64 @@ function statusToTone(status: StudentStatus): "live" | "idle" | "alert" {
   return "alert";
 }
 
+function isWithinNumberRange(value: number, minRaw: string, maxRaw: string): boolean {
+  const minValue = minRaw.trim().length > 0 ? Number(minRaw) : null;
+  const maxValue = maxRaw.trim().length > 0 ? Number(maxRaw) : null;
+
+  if (minValue !== null && Number.isFinite(minValue) && value < minValue) {
+    return false;
+  }
+
+  if (maxValue !== null && Number.isFinite(maxValue) && value > maxValue) {
+    return false;
+  }
+
+  return true;
+}
+
+function isWithinOptionalNumberRange(value: number | null, minRaw: string, maxRaw: string): boolean {
+  const hasMin = minRaw.trim().length > 0;
+  const hasMax = maxRaw.trim().length > 0;
+  if (!hasMin && !hasMax) {
+    return true;
+  }
+
+  if (value === null) {
+    return false;
+  }
+
+  return isWithinNumberRange(value, minRaw, maxRaw);
+}
+
+function toEpochDay(value: string | null): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
 function StudentManagementPage() {
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadMessage, setLoadMessage] = useState<string | null>(null);
   const [filters, setFilters] = useState<StudentFilterState>({
     query: "",
+    academicYear: "all",
     status: "all",
     batch: "all",
+    rawScoreMin: "",
+    rawScoreMax: "",
+    accuracyMin: "",
+    accuracyMax: "",
+    scorePercentileMin: "",
+    scorePercentileMax: "",
+    riskState: "all",
+    disciplineMin: "",
+    disciplineMax: "",
+    lastActiveStart: "",
+    lastActiveEnd: "",
   });
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [batchAssignmentValue, setBatchAssignmentValue] = useState("Batch-A");
@@ -283,6 +387,12 @@ function StudentManagementPage() {
     return ["all", ...Array.from(batches).sort((left, right) => left.localeCompare(right))];
   }, [students]);
 
+  const uniqueAcademicYears = useMemo(() => {
+    const years = new Set<string>();
+    students.forEach((student) => years.add(student.academicYear));
+    return ["all", ...Array.from(years).sort((left, right) => right.localeCompare(left))];
+  }, [students]);
+
   const filteredStudents = useMemo(() => {
     const loweredQuery = filters.query.trim().toLowerCase();
 
@@ -295,10 +405,37 @@ function StudentManagementPage() {
 
       const statusMatches = filters.status === "all" || student.status === filters.status;
       const batchMatches = filters.batch === "all" || student.batch === filters.batch;
+      const academicYearMatches = filters.academicYear === "all" || student.academicYear === filters.academicYear;
+      const rawScoreMatches = isWithinNumberRange(student.avgRawScorePercent, filters.rawScoreMin, filters.rawScoreMax);
+      const accuracyMatches = isWithinNumberRange(student.avgAccuracyPercent, filters.accuracyMin, filters.accuracyMax);
+      const scorePercentileMatches =
+        isWithinOptionalNumberRange(student.scorePercentile, filters.scorePercentileMin, filters.scorePercentileMax);
+      const riskStateMatches = filters.riskState === "all" || student.riskState === filters.riskState;
+      const disciplineMatches = isWithinNumberRange(student.disciplineIndex, filters.disciplineMin, filters.disciplineMax);
+      const lastActiveEpoch = toEpochDay(student.lastActive);
+      const filterDateStart = toEpochDay(filters.lastActiveStart);
+      const filterDateEnd = toEpochDay(filters.lastActiveEnd);
+      const hasDateFilter = filterDateStart !== null || filterDateEnd !== null;
+      const lastActiveMatches =
+        !hasDateFilter ||
+        (lastActiveEpoch !== null &&
+          (filterDateStart === null || lastActiveEpoch >= filterDateStart) &&
+          (filterDateEnd === null || lastActiveEpoch <= filterDateEnd));
 
-      return queryMatches && statusMatches && batchMatches;
+      return (
+        queryMatches &&
+        statusMatches &&
+        batchMatches &&
+        academicYearMatches &&
+        rawScoreMatches &&
+        accuracyMatches &&
+        scorePercentileMatches &&
+        riskStateMatches &&
+        disciplineMatches &&
+        lastActiveMatches
+      );
     });
-  }, [filters.batch, filters.query, filters.status, students]);
+  }, [filters, students]);
 
   const pageSize = 8;
   const totalPages = Math.max(1, Math.ceil(filteredStudents.length / pageSize));
@@ -502,7 +639,7 @@ function StudentManagementPage() {
       <div className="admin-student-grid">
         <UiForm
           title="Search & Filters"
-          description="Filter by student identity, status, and batch scope."
+          description="Filter by student identity, year, status, batch, score bands, percentile, risk, discipline, and last active date."
           submitLabel="Apply"
           onSubmit={(event) => {
             event.preventDefault();
@@ -537,6 +674,23 @@ function StudentManagementPage() {
               ))}
             </select>
           </UiFormField>
+          <UiFormField
+            label="Academic Year"
+            htmlFor="admin-student-academic-year-filter"
+            helper="Required scope from studentYearMetrics."
+          >
+            <select
+              id="admin-student-academic-year-filter"
+              value={filters.academicYear}
+              onChange={(event) => setFilters((current) => ({ ...current, academicYear: event.target.value }))}
+            >
+              {uniqueAcademicYears.map((academicYear) => (
+                <option key={academicYear} value={academicYear}>
+                  {academicYear === "all" ? "All" : academicYear}
+                </option>
+              ))}
+            </select>
+          </UiFormField>
           <UiFormField label="Batch" htmlFor="admin-student-batch-filter">
             <select
               id="admin-student-batch-filter"
@@ -549,6 +703,121 @@ function StudentManagementPage() {
                 </option>
               ))}
             </select>
+          </UiFormField>
+          <UiFormField label="Avg Raw Score Min %" htmlFor="admin-student-raw-min">
+            <input
+              id="admin-student-raw-min"
+              type="number"
+              min="0"
+              max="100"
+              value={filters.rawScoreMin}
+              onChange={(event) => setFilters((current) => ({ ...current, rawScoreMin: event.target.value }))}
+            />
+          </UiFormField>
+          <UiFormField label="Avg Raw Score Max %" htmlFor="admin-student-raw-max">
+            <input
+              id="admin-student-raw-max"
+              type="number"
+              min="0"
+              max="100"
+              value={filters.rawScoreMax}
+              onChange={(event) => setFilters((current) => ({ ...current, rawScoreMax: event.target.value }))}
+            />
+          </UiFormField>
+          <UiFormField label="Avg Accuracy Min %" htmlFor="admin-student-accuracy-min">
+            <input
+              id="admin-student-accuracy-min"
+              type="number"
+              min="0"
+              max="100"
+              value={filters.accuracyMin}
+              onChange={(event) => setFilters((current) => ({ ...current, accuracyMin: event.target.value }))}
+            />
+          </UiFormField>
+          <UiFormField label="Avg Accuracy Max %" htmlFor="admin-student-accuracy-max">
+            <input
+              id="admin-student-accuracy-max"
+              type="number"
+              min="0"
+              max="100"
+              value={filters.accuracyMax}
+              onChange={(event) => setFilters((current) => ({ ...current, accuracyMax: event.target.value }))}
+            />
+          </UiFormField>
+          <UiFormField label="Score Percentile Min" htmlFor="admin-student-percentile-min">
+            <input
+              id="admin-student-percentile-min"
+              type="number"
+              min="0"
+              max="100"
+              value={filters.scorePercentileMin}
+              onChange={(event) => setFilters((current) => ({ ...current, scorePercentileMin: event.target.value }))}
+            />
+          </UiFormField>
+          <UiFormField label="Score Percentile Max" htmlFor="admin-student-percentile-max">
+            <input
+              id="admin-student-percentile-max"
+              type="number"
+              min="0"
+              max="100"
+              value={filters.scorePercentileMax}
+              onChange={(event) => setFilters((current) => ({ ...current, scorePercentileMax: event.target.value }))}
+            />
+          </UiFormField>
+          <UiFormField label="Risk State" htmlFor="admin-student-risk-filter">
+            <select
+              id="admin-student-risk-filter"
+              value={filters.riskState}
+              onChange={(event) =>
+                setFilters((current) => ({
+                  ...current,
+                  riskState: event.target.value as StudentFilterState["riskState"],
+                }))
+              }
+            >
+              <option value="all">All</option>
+              {RISK_STATES.map((riskState) => (
+                <option key={riskState} value={riskState}>
+                  {riskState}
+                </option>
+              ))}
+            </select>
+          </UiFormField>
+          <UiFormField label="Discipline Min" htmlFor="admin-student-discipline-min">
+            <input
+              id="admin-student-discipline-min"
+              type="number"
+              min="0"
+              max="100"
+              value={filters.disciplineMin}
+              onChange={(event) => setFilters((current) => ({ ...current, disciplineMin: event.target.value }))}
+            />
+          </UiFormField>
+          <UiFormField label="Discipline Max" htmlFor="admin-student-discipline-max">
+            <input
+              id="admin-student-discipline-max"
+              type="number"
+              min="0"
+              max="100"
+              value={filters.disciplineMax}
+              onChange={(event) => setFilters((current) => ({ ...current, disciplineMax: event.target.value }))}
+            />
+          </UiFormField>
+          <UiFormField label="Last Active From" htmlFor="admin-student-last-active-start">
+            <input
+              id="admin-student-last-active-start"
+              type="date"
+              value={filters.lastActiveStart}
+              onChange={(event) => setFilters((current) => ({ ...current, lastActiveStart: event.target.value }))}
+            />
+          </UiFormField>
+          <UiFormField label="Last Active To" htmlFor="admin-student-last-active-end">
+            <input
+              id="admin-student-last-active-end"
+              type="date"
+              value={filters.lastActiveEnd}
+              onChange={(event) => setFilters((current) => ({ ...current, lastActiveEnd: event.target.value }))}
+            />
           </UiFormField>
         </UiForm>
 
