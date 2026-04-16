@@ -2730,6 +2730,7 @@ The frontend platform foundation initializes the multi-portal React architecture
 The frontend architecture follows a modular monorepo structure under the `apps/` directory and shares reusable components, authentication logic, and API communication utilities.
 
 This phase establishes the shared frontend infrastructure required by all portals.
+Phase 23 defines shared frontend primitives only; feature-complete portal behavior is implemented in Phases 24–30.
 
 ---
 
@@ -2739,7 +2740,8 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.1 Domain Map
+1.1 Domain Map  
+1.5.12 Global Collections Required
 
 Purpose  
 Initialize the multi-portal React architecture within the monorepo.
@@ -2747,7 +2749,7 @@ Initialize the multi-portal React architecture within the monorepo.
 Codex Prompt
 
 Implement the frontend project structure according to  
-**2_Portals_Architecture.md → Section 1.1 Domain Map**.
+**2_Portals_Architecture.md → Sections 1.1, 1.5.12**.
 
 The system must support multiple portals within the `apps` directory:
 
@@ -2774,7 +2776,8 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.2.1 Admin Dashboard Sitemap
+1.3.0 Core Principles  
+1.4.0 Core Execution Principles
 
 Purpose  
 Configure the frontend development stack.
@@ -2782,7 +2785,7 @@ Configure the frontend development stack.
 Codex Prompt
 
 Initialize the frontend stack according to  
-**2_Portals_Architecture.md → Section 1.2.1 Admin Dashboard Sitemap**.
+**2_Portals_Architecture.md → Sections 1.3.0, 1.4.0**.
 
 Required technologies:
 
@@ -2809,7 +2812,10 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.2.1.1 Global Navigation Structure
+1.2.1.1 Global Navigation Structure  
+1.2.2.15 UX Principles  
+1.3.10 Motivational Design Requirements  
+1.4.15 Visual Rules (JEE-Style Structure)
 
 Purpose  
 Create reusable UI components shared across all portals.
@@ -2817,7 +2823,7 @@ Create reusable UI components shared across all portals.
 Codex Prompt
 
 Implement shared UI component system according to  
-**2_Portals_Architecture.md → Section 1.2.1.1 Global Navigation Structure**.
+**2_Portals_Architecture.md → Sections 1.2.1.1, 1.2.2.15, 1.3.10, 1.4.15**.
 
 Shared component directory:
 
@@ -2842,7 +2848,10 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.2.1.13 Data Flow (Admin Perspective)
+1.2.1.13 Data Flow (Admin Perspective)  
+1.3.8 Data Flow (Student Side)  
+1.4.12 HOT–WARM–COLD Alignment  
+1.2.7.7 Strict Performance Rules
 
 Purpose  
 Implement centralized API communication layer for frontend.
@@ -2850,7 +2859,7 @@ Implement centralized API communication layer for frontend.
 Codex Prompt
 
 Create frontend API client system according to  
-**2_Portals_Architecture.md → Section 1.2.1.13 Data Flow (Admin Perspective)**.
+**2_Portals_Architecture.md → Sections 1.2.1.13, 1.3.8, 1.4.12, 1.2.7.7**.
 
 The API client must:
 
@@ -2864,6 +2873,7 @@ Shared service location:
 shared/services/apiClient.ts
 
 All portal API calls must pass through this client.
+API workflows must avoid raw-session aggregation and heavy read-time computation patterns.
 
 ---
 
@@ -2873,7 +2883,10 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.3.12 Security Rules
+1.3.12 Security Rules  
+1.4.13 Security Hardening  
+1.2.10.9 Backend Enforcement Matrix  
+1.5.12 Global Collections Required
 
 Purpose  
 Integrate Firebase Authentication with the frontend.
@@ -2881,7 +2894,7 @@ Integrate Firebase Authentication with the frontend.
 Codex Prompt
 
 Implement authentication integration according to  
-**2_Portals_Architecture.md → Section 1.3.12 Security Rules**.
+**2_Portals_Architecture.md → Sections 1.3.12, 1.4.13, 1.2.10.9, 1.5.12**.
 
 Features:
 
@@ -2897,6 +2910,7 @@ Create shared authentication provider:
 shared/services/authProvider.ts
 
 Protected routes must redirect unauthenticated users to login pages.
+Authentication and authorization checks must enforce backend-controlled feature and role boundaries.
 
 
 # PHASE 24 — ADMIN PORTAL CORE
@@ -2913,15 +2927,16 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.2.1 Admin Dashboard Sitemap
+1.2.1 Admin Dashboard Sitemap  
+1.2.2 Admin Dashboard - Overview Section
 
 Purpose  
-Implement the base layout and navigation system for the admin portal.
+Implement the base layout, navigation system, and overview entry experience for the admin portal.
 
 Codex Prompt
 
 Implement the admin portal layout according to  
-**2_Portals_Architecture.md → Section 1.2.1 Admin Dashboard Sitemap**.
+**2_Portals_Architecture.md → Sections 1.2.1, 1.2.2**.
 
 Layout components must include:
 
@@ -2936,12 +2951,18 @@ Primary navigation sections:
 
 /admin/overview  
 /admin/students  
+/admin/question-bank  
 /admin/tests  
 /admin/assignments  
 /admin/analytics  
+/admin/insights  
+/admin/governance  
+/admin/licensing  
 /admin/settings
 
 All admin pages must be accessible through the sidebar navigation.
+
+Overview screen must load from summary documents and follow layer-aware rendering rules.
 
 ---
 
@@ -2983,18 +3004,22 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
+1.2.4 Admin Dashboard - Question Bank Section  
 1.2.5 Admin Dashboard - Tests Section
 
 Purpose  
-Allow teachers to create and manage exam templates.
+Allow teachers to manage question bank content and create exam templates.
 
 Codex Prompt
 
 Implement test template management UI according to  
-**2_Portals_Architecture.md → Section 1.2.5 Admin Dashboard - Tests Section**.
+**2_Portals_Architecture.md → Sections 1.2.4, 1.2.5**.
 
 Features:
 
+- upload question package
+- question library with indexed filters
+- metadata and tag management
 - create test template
 - select questions
 - configure timing profile
@@ -3006,6 +3031,8 @@ Backend endpoint:
 POST /admin/tests
 
 Templates must be editable only in draft state.
+
+Question structure immutability and versioning rules must be enforced once questions are used in assigned runs.
 
 ---
 
@@ -3059,7 +3086,7 @@ Implement admin analytics dashboard according to
 
 Dashboard components:
 
-- score distribution charts
+- raw score % distribution charts
 - accuracy metrics
 - risk cluster visualization
 - run performance summaries
@@ -3071,6 +3098,8 @@ Data sources include:
 
 runAnalytics  
 studentYearMetrics
+
+Analytics must enforce score normalization and summary-document-only reads.
 
 
 # PHASE 25 — ADMIN ANALYTICS & GOVERNANCE
@@ -3089,15 +3118,15 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.2.8.3 Risk Overview
+1.2.8 Admin Dashboard - Insights Section
 
 Purpose  
-Provide administrators with visual insights into student behavioral risk clusters.
+Provide administrators with full insights workflows for behavioral interpretation and advisory output.
 
 Codex Prompt
 
 Implement the Risk Insights dashboard according to  
-**2_Portals_Architecture.md → Section 1.2.8.3 Risk Overview**.
+**2_Portals_Architecture.md → Section 1.2.8 Admin Dashboard - Insights Section**.
 
 The dashboard must display:
 
@@ -3105,6 +3134,9 @@ The dashboard must display:
 - high-risk student lists
 - guess-rate indicators
 - discipline index metrics
+- student intelligence summaries
+- execution signals
+- monthly AI summary access
 
 Data sources:
 
@@ -3117,6 +3149,8 @@ Visualization components must include:
 - tables for high-risk students
 - trend indicators for discipline metrics.
 
+Insights must remain advisory, layer-aware, and must not query raw sessions.
+
 ---
 
 ## Build 122 — Batch Analytics Dashboard
@@ -3125,15 +3159,16 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.2.7.3 Analytics → By Test Run
+1.2.7 Admin Dashboard - Analytics Section  
+1.2.2 Admin Dashboard - Overview Section
 
 Purpose  
-Enable administrators to evaluate academic performance across student batches.
+Enable administrators to evaluate batch-level analytics with overview alignment.
 
 Codex Prompt
 
 Implement batch analytics dashboard according to  
-**2_Portals_Architecture.md → Section 1.2.7.3 Analytics → By Test Run**.
+**2_Portals_Architecture.md → Sections 1.2.7, 1.2.2**.
 
 Features:
 
@@ -3143,6 +3178,8 @@ Features:
 - batch risk distribution
 
 Charts must support time-series visualization for performance trends across multiple runs.
+
+Overview-compatible cards and layer visibility rules must remain consistent with the overview architecture.
 
 ---
 
@@ -3183,7 +3220,9 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.2.8.6 Intervention Engine
+1.2.8.5 Pattern Alerts  
+1.2.8.6 Intervention Engine  
+1.2.8.7 Execution Signals
 
 Purpose  
 Provide teachers with tools to intervene with high-risk students.
@@ -3191,7 +3230,7 @@ Provide teachers with tools to intervene with high-risk students.
 Codex Prompt
 
 Implement teacher intervention tools according to  
-**2_Portals_Architecture.md → Section 1.2.8.6 Intervention Engine**.
+**2_Portals_Architecture.md → Sections 1.2.8.5, 1.2.8.6, 1.2.8.7**.
 
 Features include:
 
@@ -3210,15 +3249,16 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
+1.2.10 Admin Dashboard - Licensing Section  
 1.2.11 Admin Dashboard - Settings Section
 
 Purpose  
-Allow administrators to configure institutional settings.
+Allow administrators to configure institutional settings with licensing-aware boundaries.
 
 Codex Prompt
 
 Implement the admin settings interface according to  
-**2_Portals_Architecture.md → Section 1.2.11 Admin Dashboard - Settings Section**.
+**2_Portals_Architecture.md → Sections 1.2.10, 1.2.11**.
 
 Configuration options include:
 
@@ -3227,8 +3267,12 @@ Configuration options include:
 - user role management
 - institute profile settings
 - security settings
+- license visibility and feature entitlement matrix
+- usage and billing visibility
 
 All configuration updates must pass through secured backend APIs.
+
+Licensing controls must remain vendor-authoritative and backend enforced.
 
 
 # PHASE 26 — STUDENT PORTAL CORE
@@ -3245,15 +3289,17 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.3.1 Global Navigation Structure
+1.3.1 Global Navigation Structure  
+1.3.8 Data Flow (Student Side)  
+1.3.9 Score Replacement Rule (Global)
 
 Purpose  
-Implement the base layout and navigation structure for the student portal.
+Implement the base layout, route architecture, and global student portal data contracts.
 
 Codex Prompt
 
 Implement the student portal layout according to  
-**2_Portals_Architecture.md → Section 1.3.1 Global Navigation Structure**.
+**2_Portals_Architecture.md → Sections 1.3.1, 1.3.8, 1.3.9**.
 
 Layout components must include:
 
@@ -3272,6 +3318,24 @@ Routes must include:
 
 All routes must be protected by authentication middleware.
 
+Portal data flow must follow:
+
+Session Submitted  
+→ runAnalytics updated  
+→ studentYearMetrics updated  
+→ Student Portal reflects new summary
+
+Global score terminology must enforce:
+
+- Raw Score %
+- Accuracy %
+
+Never display:
+
+- Score
+- Total Marks
+- cumulative raw marks
+
 ---
 
 ## Build 127 — Student Dashboard UI
@@ -3280,15 +3344,16 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.3.2 Dashboard
+1.3.2 Dashboard  
+1.3.10 Motivational Design Requirements
 
 Purpose  
-Provide students with a high-level overview of their performance and upcoming tests.
+Provide students with a motivation-first dashboard across L0, L1, and L2 layers.
 
 Codex Prompt
 
 Implement the student dashboard interface according to  
-**2_Portals_Architecture.md → Section 1.3.2 Dashboard**.
+**2_Portals_Architecture.md → Sections 1.3.2, 1.3.10**.
 
 Dashboard widgets must include:
 
@@ -3304,6 +3369,18 @@ assigned runs
 
 Widgets must use shared card and chart components.
 
+Layer rendering rules must be enforced:
+
+- L0 core motivational and performance cards
+- L1 behavioral cards and adherence indicators
+- L2 risk-state and discipline depth
+
+Design language must:
+
+- highlight improvement trends
+- surface next available test prominently
+- avoid harsh warning patterns and intimidating labels
+
 ---
 
 ## Build 128 — My Tests Interface
@@ -3312,28 +3389,51 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.3.3 My Tests
+1.3.3 My Tests  
+1.3.7 Profile & Settings  
+1.3.11 Performance Constraints (My Tests Scope)  
+1.3.12 Security Rules (My Tests Scope)  
+1.3.13 HOT–WARM–COLD Alignment (My Tests Scope)
 
 Purpose  
-Allow students to view their assigned and completed tests.
+Allow students to manage assigned tests lifecycle and account-level settings safely.
 
 Codex Prompt
 
 Implement the "My Tests" interface according to  
-**2_Portals_Architecture.md → Section 1.3.3 My Tests**.
+**2_Portals_Architecture.md → Sections 1.3.3, 1.3.7, 1.3.11, 1.3.12, 1.3.13**.
 
 Features:
 
 - list of assigned tests
-- status indicators (scheduled, active, completed)
+- status indicators (available, in-progress, completed, archived)
 - test results overview
 - links to exam sessions
+- solution view for current academic year only
+- archived summary-only view for past years
+- profile and settings (name, email, batch, year, change password, logout)
 
 Backend endpoints:
 
 GET /student/tests
 
 The table must support filtering by test status.
+
+Performance and data constraints:
+
+- paginate completed tests
+- lazy-load solution images
+- do not preload all solutions
+- do not fetch all completed tests at once
+
+Security and storage rules:
+
+- no access to other students' data
+- no archived solution access
+- no direct question access via URL
+- session access must require signed token
+- active and current-year data follow HOT/WARM policy
+- archived data follows COLD summary-only policy
 
 ---
 
@@ -3343,28 +3443,41 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.3.4 Performance Section
+1.3.4 Performance Section  
+1.3.6 Discipline (L2+)
 
 Purpose  
-Allow students to visualize performance trends across tests.
+Allow students to visualize longitudinal performance and execution maturity.
 
 Codex Prompt
 
 Implement student performance analytics according to  
-**2_Portals_Architecture.md → Section 1.3.4 Performance Section**.
+**2_Portals_Architecture.md → Sections 1.3.4, 1.3.6**.
 
 Charts must display:
 
-- score trend
+- raw score % trend
 - accuracy trend
 - phase adherence trend
 - guess rate trend
+- discipline index trend
+- minTime / maxTime violation trends (layer-aware)
 
 Data source:
 
 studentYearMetrics
 
 Charts must support time-series visualization across runs.
+
+Discipline section must include:
+
+- Discipline Index (0–100)
+- Phase Compliance %
+- Controlled Mode Improvement %
+- Overstay Frequency
+- Guess Probability Cluster
+
+Use progress bars for discipline visualization where required.
 
 ---
 
@@ -3374,15 +3487,19 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.3.5 Insights (L1+)
+1.3.5 Insights (L1+)  
+1.3.11 Performance Constraints  
+1.3.12 Security Rules  
+1.3.13 HOT–WARM–COLD Alignment  
+1.3.14 Structural Guarantees
 
 Purpose  
-Display behavioral insights generated by the analytics engine.
+Display behavioral insights with full structural and compliance guarantees.
 
 Codex Prompt
 
 Implement the student insights interface according to  
-**2_Portals_Architecture.md → Section 1.3.5 Insights (L1+)**.
+**2_Portals_Architecture.md → Sections 1.3.5, 1.3.11, 1.3.12, 1.3.13, 1.3.14**.
 
 Insights may include:
 
@@ -3396,6 +3513,18 @@ Insights are generated by backend analytics and stored in:
 insightSnapshots
 
 The interface must present insights in a readable and actionable format.
+
+Final hardening checklist must validate:
+
+- motivational UX language
+- Raw % + Accuracy % normalization across all student views
+- current-year solution access only
+- TutorialVideoLink integration
+- SimulationLink integration
+- archived summary-only access
+- layer-aware behavioral depth
+- no raw session exposure
+- firestore cost protection and scalable query patterns
 
 
 # PHASE 27 — EXAM PORTAL ENGINE
@@ -3415,15 +3544,19 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.4 Test Portal Architecture
+1.4.0 Core Execution Principles  
+1.4.1 Entry Flow  
+1.4.2 Instruction Screen (Mandatory)  
+1.4.3 Main Interface Layout  
+1.4.15 Visual Rules (JEE-Style Structure)
 
 Purpose  
-Create the base layout and execution container for the exam portal.
+Create the base execution shell, instruction-first entry flow, and compliant visual structure for the exam portal.
 
 Codex Prompt
 
 Implement the exam interface layout according to  
-**2_Portals_Architecture.md → Section 1.4 Test Portal Architecture**.
+**2_Portals_Architecture.md → Sections 1.4.0, 1.4.1, 1.4.2, 1.4.3, 1.4.15**.
 
 Layout components must include:
 
@@ -3433,7 +3566,20 @@ Layout components must include:
 - question navigation panel
 - answer status indicators
 
-The exam interface must minimize UI distractions and maintain focus during test execution.
+Entry and instruction flow must include:
+
+- backend-validated session entry with signed token
+- mandatory instruction screen before exam interface
+- declaration checkbox gating Start Test button
+- marking scheme and palette legend visibility
+- mode-specific instruction injection (L1, L2 Controlled, Hard Mode)
+
+Visual structure rules must enforce:
+
+- instruction-first layout
+- left vertical palette and square tiles
+- minimal animation and no branding replication
+- structural JEE-style alignment without trademark elements
 
 ---
 
@@ -3443,15 +3589,17 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.4.6 Question Area
+1.4.5 Question Navigation Palette  
+1.4.6 Question Area  
+1.4.7 Scientific Calculator
 
 Purpose  
-Render exam questions and options dynamically during test execution.
+Render questions, palette behavior, and calculator interactions during test execution.
 
 Codex Prompt
 
 Implement the question rendering system according to  
-**2_Portals_Architecture.md → Section 1.4.6 Question Area**.
+**2_Portals_Architecture.md → Sections 1.4.5, 1.4.6, 1.4.7**.
 
 The renderer must support:
 
@@ -3471,6 +3619,26 @@ Each question must display:
 - optional images
 - question index
 
+Question interaction controls must include:
+
+- Clear Response
+- Mark for Review
+- Save & Next
+- Previous
+
+Palette behavior must include:
+
+- direct jump
+- status transitions (not visited / not answered / answered / marked)
+- section filtering
+- Hard Mode-compatible revisit restrictions
+
+Scientific calculator must:
+
+- open from header modal
+- run client-side only
+- avoid backend persistence and history storage
+
 ---
 
 ## Build 133 — Navigation & Timing Interface
@@ -3479,15 +3647,17 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.4.4 Header Components
+1.4.4 Header Components  
+1.4.8 Layer-Based Behavior Engine  
+1.4.9 Adaptive Phase Engine
 
 Purpose  
-Provide navigation controls and timing feedback during exam sessions.
+Provide timing, phase-aware navigation behavior, and adaptive execution feedback.
 
 Codex Prompt
 
 Implement navigation and timing components according to  
-**2_Portals_Architecture.md → Section 1.4.4 Header Components**.
+**2_Portals_Architecture.md → Sections 1.4.4, 1.4.8, 1.4.9**.
 
 Components must include:
 
@@ -3498,6 +3668,30 @@ Components must include:
 
 Navigation behavior must enforce timing constraints defined by the backend timing engine.
 
+Header and timer rules must include:
+
+- candidate identity display
+- subject tabs and question count
+- server-authoritative countdown sync
+- final-window timer emphasis
+- auto-submit on expiry
+
+Layer behavior engine must support:
+
+- L0 operational mode
+- L1 advisory diagnostics
+- L2 controlled enforcement (MinTime, save gating, slowdown logic)
+- Hard Mode strict constraints (MaxTime, optional no-revisit, restricted submit)
+
+Adaptive phase engine must track and surface:
+
+- phase adherence
+- overspend
+- difficulty compliance
+- skip pattern behavior
+
+UI must remain lightweight and avoid heavy client-side computation.
+
 ---
 
 ## Build 134 — Answer Submission Interaction
@@ -3506,15 +3700,17 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.4.6 Question Area
+1.4.11 Data Model (Session)  
+1.4.13 Security Hardening  
+1.4.14 Performance Constraints
 
 Purpose  
-Allow students to select answers and persist them during the exam.
+Allow students to select answers and persist them using secure, performant, session-model compliant writes.
 
 Codex Prompt
 
 Implement answer interaction system according to  
-**2_Portals_Architecture.md → Section 1.4.6 Question Area**.
+**2_Portals_Architecture.md → Sections 1.4.11, 1.4.13, 1.4.14**.
 
 Features must include:
 
@@ -3528,6 +3724,25 @@ POST /exam/session/{sessionId}/answers
 
 Client must batch updates before sending them to the backend.
 
+Session write behavior must align with session model fields and immutability expectations.
+
+Security hardening must enforce:
+
+- signed JWT session token handling
+- token expiry and refresh flow
+- anti-tamper timestamp validation
+- strict no-trust frontend calculation policy
+- no questionId enumeration and no iframe embedding
+
+Performance constraints must enforce:
+
+- batch writes every 5–10 seconds
+- heartbeat ping every 20 seconds
+- preload next question image only
+- lazy-load large assets
+- no analytics queries during exam
+- no template queries mid-test
+
 ---
 
 ## Build 135 — Exam Submission Workflow
@@ -3536,15 +3751,17 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.4.10 Session State Machine
+1.4.10 Session State Machine  
+1.4.12 HOT–WARM–COLD Alignment  
+1.4.16 Structural Guarantees
 
 Purpose  
-Allow students to complete the exam and submit their session.
+Allow students to complete exam submission with deterministic state transitions and structural guarantees.
 
 Codex Prompt
 
 Implement exam submission workflow according to  
-**2_Portals_Architecture.md → Section 1.4.10 Session State Machine**.
+**2_Portals_Architecture.md → Sections 1.4.10, 1.4.12, 1.4.16**.
 
 Submission process must include:
 
@@ -3557,6 +3774,31 @@ Submission endpoint:
 POST /exam/session/{sessionId}/submit
 
 After submission, the interface must display confirmation and prevent further answer changes.
+
+State-machine and lifecycle rules must include:
+
+- created / started / active / submitted / expired / terminated transitions
+- one active session per run per student
+- auto-submit on timer expiry
+- indexedDB recovery and reconnect sync behavior
+
+Storage alignment must enforce:
+
+- HOT usage during active test
+- submission-triggered summary updates
+- archive behavior with summary retention and no portal BigQuery reads
+
+Final acceptance checklist must validate:
+
+- mandatory instruction screen
+- scientific calculator availability
+- JEE-style navigation behavior
+- layer-based enforcement engine
+- adaptive phase logic
+- server-authoritative timing
+- token-isolated execution
+- immutable post-submit session behavior
+- enterprise-grade scalability expectations
 
 
 # PHASE 28 — VENDOR PORTAL
@@ -3574,15 +3816,17 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.5 Vendor Portal
+1.5.1 High-Level Structure  
+1.5.2 Platform Overview (Executive Snapshot)  
+1.5.12 Global Collections Required
 
 Purpose  
-Create the base layout and navigation structure for the vendor portal.
+Create the base vendor portal shell, executive overview entrypoint, and global collection access boundaries.
 
 Codex Prompt
 
 Implement the vendor portal layout according to  
-**2_Portals_Architecture.md → Section 1.5.1 High-Level Structure**.
+**2_Portals_Architecture.md → Sections 1.5.1, 1.5.2, 1.5.12**.
 
 Layout components must include:
 
@@ -3603,6 +3847,24 @@ Primary routes:
 
 Only users with vendor role may access this portal.
 
+Overview page must include executive snapshot cards for:
+
+- TotalInstitutes
+- ActiveInstitutes
+- TotalActiveStudents
+- TotalMonthlyTestRuns
+- GlobalRiskDistribution
+- GlobalDisciplineIndex
+- MonthlyRecurringRevenue (MRR)
+- InfrastructureCostEstimate
+- SystemErrorRate
+
+Global vendor collections must be:
+
+- isolated from institute-level query paths
+- protected by strict RBAC
+- enforced through dedicated middleware guards
+
 ---
 
 ## Build 137 — Institute Management Interface
@@ -3611,15 +3873,16 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.5.3 Institutes Management
+1.5.3 Institutes Management  
+1.5.4 Licensing & Subscription Control
 
 Purpose  
-Allow vendors to view and manage institutes on the platform.
+Allow vendors to manage institute lifecycle, licensing status, and subscription controls.
 
 Codex Prompt
 
 Implement institute management interface according to  
-**2_Portals_Architecture.md → Section 1.5.3 Institutes Management**.
+**2_Portals_Architecture.md → Sections 1.5.3, 1.5.4**.
 
 Features must include:
 
@@ -3640,6 +3903,26 @@ Each institute row must display:
 - active student count
 - subscription status.
 
+Institute actions must support:
+
+- ViewInstitute
+- SuspendInstitute
+- UpgradeLicense
+- DowngradeLicense
+- ExtendLicense
+- ForceArchive
+- DeleteInstitute (hard-guard protected)
+
+Licensing module must include:
+
+- subscription status and billing cycle
+- next invoice and payment failure visibility
+- manual override option
+- webhook log viewer
+- license change history
+
+All license changes must be vendor-authoritative.
+
 ---
 
 ## Build 138 — Calibration Management Interface
@@ -3648,15 +3931,16 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.5.5 Global Calibration Control (Core Moat)
+1.5.5 Global Calibration Control (Core Moat)  
+1.5.10 Audit & Activity Logs
 
 Purpose  
-Allow vendors to manage analytics calibration models.
+Allow vendors to manage calibration models with full simulation safety and audit traceability.
 
 Codex Prompt
 
 Implement calibration management UI according to  
-**2_Portals_Architecture.md → Section 1.5.5 Global Calibration Control (Core Moat)**.
+**2_Portals_Architecture.md → Sections 1.5.5, 1.5.10**.
 
 Features include:
 
@@ -3672,6 +3956,25 @@ POST /vendor/calibration/simulate
 
 Calibration deployments must generate audit logs.
 
+Calibration workflow must include:
+
+- parameter editor with validation guardrails
+- simulation engine using stored summary components only
+- before/after impact comparison views
+- push to selected institutes or global scope
+- version history and rollback support
+
+Strict rule:
+
+- never recompute raw sessions
+- never retroactively mutate historical metrics
+
+Audit requirements:
+
+- immutable append-only records
+- timestamped and actor-attributed entries
+- track calibration pushes and manual overrides
+
 ---
 
 ## Build 139 — Vendor Intelligence Dashboard
@@ -3680,15 +3983,16 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.5.6 Cross-Institute Intelligence
+1.5.6 Cross-Institute Intelligence  
+1.5.7 Revenue & Business Metrics
 
 Purpose  
-Provide revenue and platform analytics for the vendor.
+Provide macro-level platform intelligence and commercial performance analytics.
 
 Codex Prompt
 
 Implement vendor intelligence dashboard according to  
-**2_Portals_Architecture.md → Section 1.5.6 Cross-Institute Intelligence**.
+**2_Portals_Architecture.md → Sections 1.5.6, 1.5.7**.
 
 Dashboard metrics include:
 
@@ -3706,6 +4010,23 @@ licenseHistory.
 
 Charts must visualize platform growth trends.
 
+Cross-institute intelligence must include:
+
+- discipline index by exam type
+- global hard-bias and easy-neglect frequencies
+- controlled mode effectiveness
+- topic weakness clusters across institutes
+
+Business metrics must include:
+
+- layer distribution
+- upgrade conversion rate
+- churn rate
+- average revenue per institute
+- active student growth
+
+All analytics must be derived from aggregated collections only.
+
 ---
 
 ## Build 140 — System Health Monitoring Dashboard
@@ -3714,15 +4035,18 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.5.8 System Health & Cost Monitoring
+1.5.8 System Health & Cost Monitoring  
+1.5.9 Global Feature Flags  
+1.5.11 Data Export & Backups  
+1.5.13 Structural Guarantees
 
 Purpose  
-Allow vendors to monitor platform operational health.
+Allow vendors to monitor platform health, control feature rollout, manage exports/backups, and enforce final vendor guarantees.
 
 Codex Prompt
 
 Implement system health dashboard according to  
-**2_Portals_Architecture.md → Section 1.5.8 System Health & Cost Monitoring**.
+**2_Portals_Architecture.md → Sections 1.5.8, 1.5.9, 1.5.11, 1.5.13**.
 
 Dashboard must display:
 
@@ -3740,6 +4064,33 @@ monitoring dashboards.
 
 Critical alerts must be highlighted for vendor visibility.
 
+Feature flag controls must support:
+
+- EnableBetaFeatures
+- EnableExperimentalRiskEngine
+- EnableNewUI
+- SetRolloutPercentage
+
+Flags must be stored in `globalFeatureFlags/{flagName}` and enforced through backend middleware.
+
+Data operations must include:
+
+- ExportPlatformMetrics
+- ExportInstituteData
+- TriggerManualBackup
+- RestoreSimulationEnvironment
+
+Exports must use snapshot collections only.
+
+Final structural guarantee checklist must validate:
+
+- cross-institute intelligence aggregation
+- calibration simulation without raw recomputation
+- immutable calibration versioning
+- vendor-authoritative licensing
+- feature-flag-based rollout control
+- strong tenant separation and scalability expectations
+
 
 # PHASE 29 — FRONTEND PERFORMANCE OPTIMIZATION
 
@@ -3756,7 +4107,10 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.3.11 Performance Constraints
+1.3.11 Performance Constraints  
+1.4.14 Performance Constraints  
+1.2.2.13 Performance Rules  
+1.2.7.7 Strict Performance Rules
 
 Purpose  
 Optimize frontend application performance across all portals.
@@ -3764,7 +4118,7 @@ Optimize frontend application performance across all portals.
 Codex Prompt
 
 Implement frontend performance optimizations according to  
-**2_Portals_Architecture.md → Section 1.3.11 Performance Constraints**.
+**2_Portals_Architecture.md → Sections 1.3.11, 1.4.14, 1.2.2.13, 1.2.7.7**.
 
 Required optimizations:
 
@@ -3775,6 +4129,13 @@ Required optimizations:
 
 Ensure that initial page load remains lightweight and responsive.
 
+Global performance guardrails must include:
+
+- summary-document-first read strategy
+- no heavy aggregation on dashboard load
+- indexed and scoped query patterns
+- read-budget-aware portal rendering
+
 ---
 
 ## Build 142 — CDN Asset Delivery Integration
@@ -3783,7 +4144,9 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.3.11 Performance Constraints
+1.3.11 Performance Constraints  
+1.4.6 Question Area  
+1.4.14 Performance Constraints
 
 Purpose  
 Ensure static assets and media files are delivered through a CDN.
@@ -3791,7 +4154,7 @@ Ensure static assets and media files are delivered through a CDN.
 Codex Prompt
 
 Configure CDN asset delivery according to  
-**2_Portals_Architecture.md → Section 1.3.11 Performance Constraints**.
+**2_Portals_Architecture.md → Sections 1.3.11, 1.4.6, 1.4.14**.
 
 Frontend applications must load:
 
@@ -3803,6 +4166,12 @@ through CDN endpoints rather than direct storage access.
 
 Assets must be cached appropriately to reduce latency.
 
+Asset-loading behavior must enforce:
+
+- preload next exam question image only
+- lazy-load large assets and solution images
+- never preload full test media payloads
+
 ---
 
 ## Build 143 — Frontend Error Monitoring
@@ -3811,7 +4180,9 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.5.8 System Health & Cost Monitoring
+1.5.8 System Health & Cost Monitoring  
+1.5.10 Audit & Activity Logs  
+1.5.12 Global Collections Required
 
 Purpose  
 Capture frontend runtime errors and performance issues.
@@ -3819,7 +4190,7 @@ Capture frontend runtime errors and performance issues.
 Codex Prompt
 
 Implement frontend telemetry and error monitoring according to  
-**2_Portals_Architecture.md → Section 1.5.8 System Health & Cost Monitoring**.
+**2_Portals_Architecture.md → Sections 1.5.8, 1.5.10, 1.5.12**.
 
 Monitoring system must capture:
 
@@ -3834,6 +4205,12 @@ Error logs must include:
 - request metadata
 - stack traces.
 
+Monitoring persistence must enforce:
+
+- append-only audit logging for critical monitoring events
+- actor/time attribution for operational mutations
+- strict RBAC and middleware isolation for vendor telemetry collections
+
 ---
 
 ## Build 144 — Frontend CI/CD Deployment Pipeline
@@ -3842,6 +4219,9 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
+1.1 Domain Map  
+1.3.14 Structural Guarantees  
+1.4.16 Structural Guarantees  
 1.5.13 Structural Guarantees
 
 Purpose  
@@ -3850,7 +4230,7 @@ Automate build and deployment of frontend portals.
 Codex Prompt
 
 Implement CI/CD pipeline according to  
-**2_Portals_Architecture.md → Section 1.5.13 Structural Guarantees**.
+**2_Portals_Architecture.md → Sections 1.1, 1.3.14, 1.4.16, 1.5.13**.
 
 Pipeline must:
 
@@ -3865,6 +4245,13 @@ The deployment pipeline must support:
 - staging environment
 - production environment.
 
+Pipeline outputs must preserve portal isolation by domain:
+
+- portal.yourdomain.com/admin
+- portal.yourdomain.com/student
+- exam.yourdomain.com
+- vendor.yourdomain.com
+
 ---
 
 ## Build 145 — Cross-Portal Authentication System
@@ -3873,7 +4260,11 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.3.12 Security Rules
+1.1 Domain Map  
+1.3.12 Security Rules  
+1.4.13 Security Hardening  
+1.2.10.9 Backend Enforcement Matrix  
+1.5.12 Global Collections Required
 
 Purpose  
 Allow users to move between portals without repeated login.
@@ -3881,7 +4272,7 @@ Allow users to move between portals without repeated login.
 Codex Prompt
 
 Implement shared authentication system according to  
-**2_Portals_Architecture.md → Section 1.3.12 Security Rules**.
+**2_Portals_Architecture.md → Sections 1.1, 1.3.12, 1.4.13, 1.2.10.9, 1.5.12**.
 
 Requirements:
 
@@ -3891,6 +4282,12 @@ Requirements:
 - cross-domain session persistence
 
 Users authenticated in one portal must remain authenticated when navigating to other portals.
+
+Security enforcement must include:
+
+- signed token validation for exam session access
+- backend feature/license authorization checks on protected capabilities
+- strict RBAC boundaries and middleware enforcement for vendor-scoped collections
 
 
 # PHASE 30 — FINAL FRONTEND INTEGRATION
@@ -3907,7 +4304,11 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.1 Domain Map
+1.1 Domain Map  
+1.2.1.13 Data Flow (Admin Perspective)  
+1.3.8 Data Flow (Student Side)  
+1.4.1 Entry Flow  
+1.5.1 High-Level Structure
 
 Purpose  
 Integrate all frontend portals with backend services and shared infrastructure.
@@ -3915,7 +4316,7 @@ Integrate all frontend portals with backend services and shared infrastructure.
 Codex Prompt
 
 Implement portal integration architecture according to  
-**2_Portals_Architecture.md → Section 1.1 Domain Map**.
+**2_Portals_Architecture.md → Sections 1.1, 1.2.1.13, 1.3.8, 1.4.1, 1.5.1**.
 
 The integration layer must ensure:
 
@@ -3926,6 +4327,8 @@ The integration layer must ensure:
 
 All portals must interact with backend APIs through the shared API client layer.
 
+Cross-portal integration must preserve architecture data flow constraints and avoid circular dependency between modules.
+
 ---
 
 ## Build 147 — Global State Management
@@ -3934,7 +4337,12 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.1 Domain Map
+1.2.10.8 License Object Model  
+1.2.10.9 Backend Enforcement Matrix  
+1.5.9 Global Feature Flags  
+1.5.12 Global Collections Required  
+1.3.12 Security Rules  
+1.4.13 Security Hardening
 
 Purpose  
 Provide shared state management across all portals.
@@ -3942,7 +4350,7 @@ Provide shared state management across all portals.
 Codex Prompt
 
 Implement global state management according to  
-**2_Portals_Architecture.md → Section 1.1 Domain Map**.
+**2_Portals_Architecture.md → Sections 1.2.10.8, 1.2.10.9, 1.5.9, 1.5.12, 1.3.12, 1.4.13**.
 
 Shared global state must manage:
 
@@ -3953,6 +4361,8 @@ Shared global state must manage:
 
 State must be accessible across all portal modules.
 
+State access must remain RBAC-safe and enforced through backend authorization checks.
+
 ---
 
 ## Build 148 — Global Error Handling System
@@ -3961,7 +4371,10 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.1 Domain Map
+1.5.8 System Health & Cost Monitoring  
+1.5.10 Audit & Activity Logs  
+1.2.2.11 System Health and Licensing  
+1.2.11 Settings
 
 Purpose  
 Ensure consistent handling of application errors.
@@ -3969,7 +4382,7 @@ Ensure consistent handling of application errors.
 Codex Prompt
 
 Implement centralized error handling according to  
-**2_Portals_Architecture.md → Section 1.1 Domain Map**.
+**2_Portals_Architecture.md → Sections 1.5.8, 1.5.10, 1.2.2.11, 1.2.11**.
 
 Error handling system must:
 
@@ -3980,6 +4393,8 @@ Error handling system must:
 
 Fallback UI components must be used when rendering failures occur.
 
+Error and operational events must be timestamped, append-only where required, and suitable for monitoring dashboards.
+
 ---
 
 ## Build 149 — UI Consistency Enforcement
@@ -3988,7 +4403,11 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.1 Domain Map
+1.2.2.15 UX Principles  
+1.3.10 Motivational Design Requirements  
+1.4.15 Visual Rules (JEE-Style Structure)  
+1.2.1.1 Global Navigation Structure  
+1.5.1 High-Level Structure
 
 Purpose  
 Ensure visual and functional consistency across all portals.
@@ -3996,7 +4415,7 @@ Ensure visual and functional consistency across all portals.
 Codex Prompt
 
 Enforce UI consistency according to  
-**2_Portals_Architecture.md → Section 1.1 Domain Map**.
+**2_Portals_Architecture.md → Sections 1.2.2.15, 1.3.10, 1.4.15, 1.2.1.1, 1.5.1**.
 
 All portals must:
 
@@ -4007,6 +4426,8 @@ All portals must:
 
 Design tokens and UI components must remain centralized.
 
+Portal-specific visual language constraints must be preserved where architecture defines dedicated behavior.
+
 ---
 
 ## Build 150 — Final Platform Validation
@@ -4015,7 +4436,12 @@ Architecture File
 2_Portals_Architecture.md
 
 Section  
-1.1 Domain Map
+1.1 Domain Map  
+1.3.14 Structural Guarantees  
+1.4.16 Structural Guarantees  
+1.5.13 Structural Guarantees  
+1.2.11.12 Structural Guarantees  
+1.2.9.12 Structural Guarantees
 
 Purpose  
 Validate full platform functionality across all portals.
@@ -4023,7 +4449,7 @@ Validate full platform functionality across all portals.
 Codex Prompt
 
 Perform end-to-end platform validation according to  
-**2_Portals_Architecture.md → Section 1.1 Domain Map**.
+**2_Portals_Architecture.md → Sections 1.1, 1.3.14, 1.4.16, 1.5.13, 1.2.11.12, 1.2.9.12**.
 
 Validation must confirm:
 
@@ -4035,12 +4461,7 @@ Validation must confirm:
 
 All portals must successfully communicate with backend APIs and maintain consistent system behavior.
 
-
-
-
-
-
-
+Validation must include structural guarantee compliance for Student, Exam, Vendor, Settings, and Governance modules.
 
 
 
