@@ -671,6 +671,10 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.admin-risk-trend-grid-wide {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .admin-risk-trend-card {
   border: 1px solid rgba(16, 42, 81, 0.16);
   border-radius: 14px;
@@ -779,6 +783,64 @@
 
 .admin-risk-trend-down {
   color: #8a2431;
+}
+
+.admin-risk-heatmap-section {
+  margin-top: 18px;
+}
+
+.admin-risk-heatmap-section h3 {
+  margin: 0 0 8px;
+  color: #143764;
+}
+
+.admin-risk-heatmap-copy {
+  margin: 0 0 10px;
+  color: #4f688a;
+}
+
+.admin-risk-heatmap-shell {
+  overflow-x: auto;
+  border: 1px solid rgba(16, 42, 81, 0.16);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.admin-risk-heatmap-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 720px;
+}
+
+.admin-risk-heatmap-table caption {
+  padding: 10px 12px;
+  text-align: left;
+  color: #4f688a;
+  font-weight: 600;
+}
+
+.admin-risk-heatmap-table th,
+.admin-risk-heatmap-table td {
+  border-top: 1px solid rgba(16, 42, 81, 0.12);
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.admin-risk-heatmap-table thead th {
+  color: #173c68;
+  background: rgba(227, 238, 250, 0.66);
+}
+
+.admin-risk-heat-low {
+  background: rgba(40, 135, 76, 0.15);
+}
+
+.admin-risk-heat-medium {
+  background: rgba(214, 149, 40, 0.18);
+}
+
+.admin-risk-heat-high {
+  background: rgba(176, 70, 70, 0.2);
 }
 
 .admin-batch-kpi-grid {

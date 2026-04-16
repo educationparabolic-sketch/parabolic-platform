@@ -56,7 +56,7 @@ const ADMIN_NAV_PATH_ORDER = [
   "/admin/assignments",
   "/admin/analytics",
   "/admin/governance",
-  "/admin/insights/interventions",
+  "/admin/insights/risk",
   "/admin/settings",
 ] as const;
 
@@ -323,8 +323,12 @@ function App() {
           element={<InterventionToolsPage />}
         />
         <Route
+          path="insights/risk"
+          element={<RiskInsightsDashboardPage />}
+        />
+        <Route
           path="insights"
-          element={<Navigate to="/admin/insights/interventions" replace />}
+          element={<Navigate to="/admin/insights/risk" replace />}
         />
         <Route
           path="settings"

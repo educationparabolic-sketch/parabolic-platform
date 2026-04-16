@@ -5,30 +5,53 @@ import path from "node:path";
 const baseUrl = "http://127.0.0.1:4173";
 const outDir = "/home/sumeer/parabolic-platform/apps/admin/artifacts/build-121";
 
+const credentials = {
+  email: "admin.test@parabolic.local",
+  password: "Parabolic#Test115",
+};
+
 const routes = [
   {
-    route: "/admin/analytics/risk-insights",
-    expectedPath: "/admin/analytics/risk-insights",
-    expectedText: "Behavioral Risk Cluster Insights",
-    guardStatus: "N/A",
+    name: "unauth-guard-risk-overview",
+    route: "/admin/insights/risk",
+    expectedPath: "/login",
+    expectedText: "Admin Login",
+    authMode: "unauthenticated",
   },
   {
+    name: "auth-risk-overview",
+    route: "/admin/insights/risk",
+    expectedPath: "/admin/insights/risk",
+    expectedText: "Behavioral Risk Overview",
+    authMode: "authenticated",
+  },
+  {
+    name: "auth-risk-insights-legacy",
+    route: "/admin/analytics/risk-insights",
+    expectedPath: "/admin/analytics/risk-insights",
+    expectedText: "Behavioral Risk Overview",
+    authMode: "authenticated",
+  },
+  {
+    name: "auth-analytics",
     route: "/admin/analytics",
     expectedPath: "/admin/analytics",
     expectedText: "Performance, Risk, and Discipline Overview",
-    guardStatus: "N/A",
+    authMode: "authenticated",
   },
   {
+    name: "auth-admin-root",
     route: "/admin",
     expectedPath: "/admin/overview",
     expectedText: "Overview",
-    guardStatus: "PASS",
+    authMode: "authenticated",
   },
   {
+    name: "auth-root",
     route: "/",
     expectedPath: "/admin/overview",
     expectedText: "Overview",
-    guardStatus: "PASS",
+    authMode: "authenticated",
   },
 ];
 
@@ -36,6 +59,16 @@ const viewports = [
   { name: "desktop-1366x768", width: 1366, height: 768 },
   { name: "mobile-390x844", width: 390, height: 844 },
 ];
+
+async function authenticate(page) {
+  await page.goto(`${baseUrl}/login`, { waitUntil: "networkidle" });
+  await page.fill("#admin-login-email", credentials.email);
+  await page.fill("#admin-login-password", credentials.password);
+  await Promise.all([
+    page.waitForURL((url) => url.pathname.startsWith("/admin/"), { timeout: 15000 }),
+    page.click("button[type='submit']"),
+  ]);
+}
 
 await fs.mkdir(outDir, { recursive: true });
 const browser = await chromium.launch({ headless: true });
@@ -71,6 +104,10 @@ for (const routeConfig of routes) {
       }
     });
 
+    if (routeConfig.authMode === "authenticated") {
+      await authenticate(page);
+    }
+
     const url = `${baseUrl}${routeConfig.route}`;
     await page.goto(url, { waitUntil: "networkidle" });
     await page.waitForTimeout(1000);
@@ -88,7 +125,7 @@ for (const routeConfig of routes) {
 
     const screenshotPath = path.join(
       outDir,
-      `${viewport.name}${routeConfig.route.replaceAll("/", "-") || "-root"}.png`,
+      `${viewport.name}-${routeConfig.name}.png`,
     );
 
     await page.screenshot({ path: screenshotPath, fullPage: true });
@@ -97,13 +134,18 @@ for (const routeConfig of routes) {
     const networkStatus = failedRequests.length === 0 ? "PASS" : "FAIL";
     const responsiveStatus = hasHorizontalOverflow ? "FAIL" : "PASS";
     const routeExpectationStatus = expectedPathMatched && expectedTextVisible ? "PASS" : "FAIL";
+    const guardStatus = routeConfig.authMode === "unauthenticated"
+      ? (finalPath === "/login" ? "PASS" : "FAIL")
+      : (finalPath.startsWith("/admin/") ? "PASS" : "FAIL");
 
     results.push({
+      name: routeConfig.name,
       route: routeConfig.route,
       url,
       finalPath,
       expectedPath: routeConfig.expectedPath,
       expectedText: routeConfig.expectedText,
+      authMode: routeConfig.authMode,
       viewport: `${viewport.width}x${viewport.height}`,
       routeExpectationStatus,
       consoleStatus,
@@ -112,7 +154,7 @@ for (const routeConfig of routes) {
       networkStatus,
       failedRequests,
       responsiveStatus,
-      guardStatus: routeConfig.guardStatus,
+      guardStatus,
       screenshotPath,
     });
 
@@ -126,6 +168,10 @@ const report = {
   build: 121,
   generatedAt: new Date().toISOString(),
   baseUrl,
+  credentials: {
+    email: credentials.email,
+    password: "***",
+  },
   results,
 };
 
