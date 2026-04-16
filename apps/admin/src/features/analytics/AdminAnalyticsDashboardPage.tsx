@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
+import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { UiChartContainer, UiTable, type UiChartPoint, type UiTableColumn } from "../../../../../shared/ui/components";
+import { resolveAdminAccessContext } from "../../portals/adminAccess";
+import { evaluateAdminRoutePermissions, matchAdminRoute } from "../../portals/adminRoutes";
 import {
   ApiClientError,
   FALLBACK_DATASET,
@@ -121,6 +124,8 @@ function buildDisciplineIndexStatistics(studentMetrics: StudentYearMetricRecord[
 }
 
 function AdminAnalyticsDashboardPage() {
+  const { session } = useAuthProvider();
+  const accessContext = resolveAdminAccessContext(session);
   const [dataset, setDataset] = useState<DashboardDataset>(FALLBACK_DATASET);
   const [isLoading, setIsLoading] = useState(true);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
@@ -275,6 +280,11 @@ function AdminAnalyticsDashboardPage() {
     () => [...dataset.runAnalytics].sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt)),
     [dataset.runAnalytics],
   );
+  const governanceRoute = matchAdminRoute("/admin/governance");
+  const governanceAccessDecision = governanceRoute ?
+    evaluateAdminRoutePermissions(governanceRoute, accessContext.role, accessContext.licenseLayer) :
+    null;
+  const showGovernanceLink = governanceAccessDecision?.allowed ?? false;
 
   return (
     <section className="admin-content-card" aria-labelledby="admin-analytics-title">
@@ -293,10 +303,14 @@ function AdminAnalyticsDashboardPage() {
         <NavLink className="admin-primary-link" to="/admin/analytics/batch">
           Open Batch Analytics Dashboard
         </NavLink>
-        {" "}
-        <NavLink className="admin-primary-link" to="/admin/governance">
-          Open Governance Monitoring Dashboard
-        </NavLink>
+        {showGovernanceLink ?
+          <>
+            {" "}
+            <NavLink className="admin-primary-link" to="/admin/governance">
+              Open Governance Monitoring Dashboard
+            </NavLink>
+          </> :
+          null}
       </p>
 
       <p className="admin-analytics-inline-note">

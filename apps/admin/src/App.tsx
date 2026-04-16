@@ -19,7 +19,13 @@ import InterventionToolsPage from "./features/insights/InterventionToolsPage";
 import AdminSettingsConfigurationPage from "./features/settings/AdminSettingsConfigurationPage";
 import StudentManagementPage from "./features/students/StudentManagementPage";
 import TestTemplateManagementPage from "./features/tests/TestTemplateManagementPage";
-import { ADMIN_ROUTE_DEFINITIONS } from "./portals/adminRoutes";
+import {
+  ADMIN_ROUTE_DEFINITIONS,
+  evaluateAdminRoutePermissions,
+  getVisibleAdminRoutes,
+  matchAdminRoute,
+} from "./portals/adminRoutes";
+import { resolveAdminAccessContext } from "./portals/adminAccess";
 import "./App.css";
 
 interface AdminNavItem {
@@ -104,8 +110,11 @@ function NotFoundPage() {
 function AdminLayout() {
   const location = useLocation();
   const { session, signOut } = useAuthProvider();
+  const accessContext = resolveAdminAccessContext(session);
+  const visibleRoutes = getVisibleAdminRoutes(accessContext.role, accessContext.licenseLayer);
+  const visibleNavItems = ADMIN_NAV_ITEMS.filter((item) => visibleRoutes.some((route) => route.path === item.path));
 
-  const activeItem = ADMIN_NAV_ITEMS.find((item) =>
+  const activeItem = visibleNavItems.find((item) =>
     location.pathname === item.path || location.pathname.startsWith(`${item.path}/`),
   );
 
@@ -120,7 +129,7 @@ function AdminLayout() {
           </div>
           <nav>
             <ul className="admin-nav-list">
-              {ADMIN_NAV_ITEMS.map((item) => (
+              {visibleNavItems.map((item) => (
                 <li key={item.path}>
                   <NavLink
                     to={item.path}
@@ -259,6 +268,28 @@ function AdminProtectedRoute(props: { loginPath: string; children: ReactElement 
   return children;
 }
 
+function AdminRouteAccessGuard(props: { children: ReactElement }) {
+  const { children } = props;
+  const location = useLocation();
+  const { session } = useAuthProvider();
+  const accessContext = resolveAdminAccessContext(session);
+  const matchedRoute = matchAdminRoute(location.pathname);
+
+  if (matchedRoute) {
+    const accessDecision = evaluateAdminRoutePermissions(
+      matchedRoute,
+      accessContext.role,
+      accessContext.licenseLayer,
+    );
+
+    if (!accessDecision.allowed) {
+      return <Navigate replace to={accessDecision.redirectTo ?? "/unauthorized"} />;
+    }
+  }
+
+  return children;
+}
+
 function App() {
   usePortalTitle("admin");
   const loginPath = "/login";
@@ -277,7 +308,9 @@ function App() {
         path="/admin"
         element={(
           <AdminProtectedRoute loginPath={loginPath}>
-            <AdminLayout />
+            <AdminRouteAccessGuard>
+              <AdminLayout />
+            </AdminRouteAccessGuard>
           </AdminProtectedRoute>
         )}
       >
