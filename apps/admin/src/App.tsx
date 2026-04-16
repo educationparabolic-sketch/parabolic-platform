@@ -33,6 +33,22 @@ interface AdminSectionPageProps {
   summary: string;
 }
 
+function resolveAdminRedirectTarget(locationState: unknown, fallbackPath: string): string {
+  if (
+    typeof locationState === "object" &&
+    locationState !== null &&
+    "from" in locationState &&
+    typeof (locationState as { from?: unknown }).from === "string"
+  ) {
+    const fromPath = String((locationState as { from: string }).from);
+    if (fromPath.startsWith("/admin/")) {
+      return fromPath;
+    }
+  }
+
+  return fallbackPath;
+}
+
 const ADMIN_NAV_PATH_ORDER = [
   "/admin/overview",
   "/admin/students",
@@ -169,15 +185,12 @@ function AdminLoginPage(props: { loginPath: string; protectedPath: string }) {
       return;
     }
 
-    const nextTarget =
-      typeof location.state === "object" && location.state !== null && "from" in location.state ?
-        String((location.state as { from?: string }).from ?? protectedPath) :
-        protectedPath;
+    const nextTarget = resolveAdminRedirectTarget(location.state, protectedPath);
     navigate(nextTarget, { replace: true });
   }
 
   if (session.status === "authenticated") {
-    return <Navigate replace to={protectedPath} />;
+    return <Navigate replace to={resolveAdminRedirectTarget(location.state, protectedPath)} />;
   }
 
   return (
@@ -234,7 +247,13 @@ function AdminProtectedRoute(props: { loginPath: string; children: ReactElement 
   }
 
   if (session.status !== "authenticated") {
-    return <Navigate replace to={loginPath} state={{ from: location.pathname }} />;
+    return (
+      <Navigate
+        replace
+        to={loginPath}
+        state={{ from: `${location.pathname}${location.search}${location.hash}` }}
+      />
+    );
   }
 
   return children;

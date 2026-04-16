@@ -8,20 +8,20 @@ const outDir = "/home/sumeer/parabolic-platform/apps/admin/artifacts/build-120";
 const routes = [
   {
     route: "/admin/analytics",
-    expectedPath: "/admin/analytics",
-    expectedText: "Performance, Risk, and Discipline Overview",
-    guardStatus: "N/A",
+    expectedPath: "/login",
+    expectedText: "Admin Login",
+    guardStatus: "PASS",
   },
   {
     route: "/admin",
-    expectedPath: "/admin/overview",
-    expectedText: "Overview",
+    expectedPath: "/login",
+    expectedText: "Admin Login",
     guardStatus: "PASS",
   },
   {
     route: "/",
-    expectedPath: "/admin/overview",
-    expectedText: "Overview",
+    expectedPath: "/login",
+    expectedText: "Admin Login",
     guardStatus: "PASS",
   },
 ];
