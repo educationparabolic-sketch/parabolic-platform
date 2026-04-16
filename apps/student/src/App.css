@@ -42,6 +42,10 @@
   flex-wrap: wrap;
 }
 
+.student-top-nav-list li {
+  min-width: 0;
+}
+
 .student-top-nav-link {
   display: inline-block;
   padding: 0.45rem 0.65rem;
@@ -50,6 +54,8 @@
   color: #2e425f;
   border: 1px solid transparent;
   font-size: 0.9rem;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .student-top-nav-link-active {
@@ -164,6 +170,157 @@
   color: #1f3557;
 }
 
+.student-dashboard-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.student-dashboard-inline-note {
+  margin: 0;
+  padding: 0.75rem;
+  border-left: 4px solid #2f66b3;
+  background: #eef4ff;
+  color: #24426a;
+}
+
+.student-dashboard-card-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.student-dashboard-summary-card {
+  border: 1px solid #d8e1ef;
+  border-radius: 0.75rem;
+  background: #ffffff;
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.student-dashboard-summary-card p {
+  margin: 0;
+  color: #476286;
+  font-size: 0.9rem;
+}
+
+.student-dashboard-summary-card strong {
+  font-size: 1.35rem;
+  color: #173457;
+}
+
+.student-dashboard-summary-card small {
+  color: #5f7699;
+}
+
+.student-dashboard-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.student-dashboard-risk-card,
+.student-dashboard-discipline-card {
+  border: 1px solid #d8e1ef;
+  border-radius: 0.75rem;
+  background: #ffffff;
+  padding: 0.85rem;
+}
+
+.student-dashboard-risk-card h3,
+.student-dashboard-discipline-card h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #173457;
+}
+
+.student-dashboard-risk-card p,
+.student-dashboard-discipline-card p {
+  color: #3f5a7c;
+}
+
+.student-dashboard-risk-pill {
+  margin: 0.55rem 0 0.5rem;
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 0.32rem 0.75rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.student-dashboard-risk-stable {
+  color: #0b6942;
+  border-color: #96d3b7;
+  background: #e9f7ef;
+}
+
+.student-dashboard-risk-drift {
+  color: #7b4f09;
+  border-color: #d9bc86;
+  background: #fff4df;
+}
+
+.student-dashboard-risk-impulsive,
+.student-dashboard-risk-volatile,
+.student-dashboard-risk-overextended {
+  color: #8e2034;
+  border-color: #e7b6c2;
+  background: #fff0f3;
+}
+
+.student-dashboard-discipline-value {
+  margin: 0.55rem 0 0.4rem;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #173457;
+}
+
+.student-dashboard-discipline-track {
+  min-height: 11px;
+  border-radius: 999px;
+  background: #dce5f2;
+  overflow: hidden;
+}
+
+.student-dashboard-discipline-track span {
+  display: block;
+  min-height: 11px;
+  background: linear-gradient(90deg, #1f5ca8, #1a7da5);
+}
+
+.student-dashboard-widget-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.student-dashboard-widget-grid .ui-table-shell {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.student-dashboard-widget-grid .ui-table {
+  min-width: 540px;
+}
+
+.student-dashboard-table-title {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.student-dashboard-table-title small {
+  color: #5f7699;
+}
+
+.student-dashboard-mode-chip {
+  display: inline-flex;
+  border-radius: 999px;
+  border: 1px solid #bdcce4;
+  background: #eef3fb;
+  color: #29466e;
+  padding: 0.25rem 0.55rem;
+}
+
 .student-login-card {
   width: min(100%, 440px);
   background: #ffffff;
@@ -221,6 +378,22 @@
   }
 
   .student-layout-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .student-top-nav-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .student-top-nav-link {
+    width: 100%;
+    text-align: center;
+  }
+
+  .student-dashboard-card-grid,
+  .student-dashboard-status-grid,
+  .student-dashboard-widget-grid {
     grid-template-columns: 1fr;
   }
 }

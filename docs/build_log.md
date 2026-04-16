@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 126  
-Next Build: 127
+Completed Builds: 127  
+Next Build: 128
 
 Current Phase: Phase 26 — Student Portal Core
 
@@ -4081,18 +4081,61 @@ Completed On
 
 ---
 
+## Build 127 — Student Dashboard UI
+
+Phase  
+Phase 26 — Student Portal Core
+
+Summary  
+Implemented the student dashboard experience with summary cards, upcoming test visibility, recent results, risk indicator status, and discipline index tracking for the Build 127 scope.
+
+Components implemented:
+
+- Added Build 127 dashboard feature module in `apps/student/src/features/dashboard/`:
+  - `StudentDashboardPage.tsx`
+  - `studentDashboardDataset.ts`
+- Replaced only the `/student/dashboard` placeholder route in `apps/student/src/App.tsx` with the new `StudentDashboardPage` component while preserving Build 126 protected-route shell behavior
+- Implemented typed dashboard dataset normalization for `GET /student/dashboard` with deterministic local fallback fixtures covering:
+  - upcoming assigned runs
+  - recent completed results
+  - risk state
+  - discipline index
+  - average raw and accuracy metrics
+- Added Build 127 dashboard-specific responsive styling in `apps/student/src/App.css` for:
+  - summary KPI card grid
+  - risk and discipline status widgets
+  - upcoming-tests and recent-results table widgets
+  - mobile-safe table overflow handling and top-nav wrapping
+- Added deterministic browser verification automation and artifacts under `apps/student/artifacts/build-127/`
+- Executed frontend verification:
+  - `apps/student`: build, lint
+  - browser checks for `/`, `/student`, `/student/dashboard`, and `/student/login` at `1366x768` and `390x844`
+  - guard redirect checks in unauthenticated context and dashboard UI checks in authenticated context using local Firebase test credentials
+  - console/network/responsive/guard checks recorded in `apps/student/artifacts/build-127/verification-results.json`
+
+Result  
+The student portal now includes the Build 127 dashboard interface aligned with the architecture-defined student summary scope and is ready for Build 128 My Tests interface implementation.
+
+Commit Reference  
+Build 127 — Student Dashboard UI implemented
+
+Completed On  
+2026-04-16
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 127
+Next Build Number: 128
 
 Phase  
 Phase 26 — Student Portal Core
 
 Subsystem  
-Student Dashboard UI
+My Tests Interface
 
 Reference  
-2_Portals_Architecture.md → Section 3.2 Student Dashboard UI
+2_Portals_Architecture.md → Section 3.3 My Tests Interface
 
 ---
 
@@ -4226,7 +4269,7 @@ Build | Phase | Status
 124 | Admin Analytics & Governance | Completed
 125 | Admin Analytics & Governance | Completed
 126 | Student Portal Core | Completed
-127–150 | Remaining Phases | Pending
+128–150 | Remaining Phases | Pending
 
 ---
 

@@ -10,6 +10,7 @@ import {
 } from "react-router-dom";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { useAuthProvider } from "../../../shared/services/authProvider";
+import StudentDashboardPage from "./features/dashboard/StudentDashboardPage";
 import "./App.css";
 
 interface StudentNavItem {
@@ -256,12 +257,7 @@ function App() {
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route
           path="dashboard"
-          element={
-            <StudentSectionPage
-              title="Dashboard"
-              summary="Personalized student landing view for summary performance, risk context, and upcoming test reminders."
-            />
-          }
+          element={<StudentDashboardPage />}
         />
         <Route
           path="my-tests"
