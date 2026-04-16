@@ -436,6 +436,8 @@
 .admin-content-card .ui-table-shell {
   margin-top: 12px;
   overflow-x: auto;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .admin-content-card .ui-form-card,
@@ -1312,6 +1314,10 @@
     padding: 20px;
   }
 
+  .admin-tests-timing-row {
+    grid-template-columns: 1fr;
+  }
+
   .admin-session-pill {
     border-radius: 16px;
   }
@@ -1341,4 +1347,37 @@
   .admin-settings-grid-two {
     grid-template-columns: 1fr;
   }
+}
+
+.admin-page-shell-login {
+  display: grid;
+  place-items: center;
+}
+
+.admin-login-card {
+  width: min(560px, 100%);
+}
+
+.admin-login-form {
+  margin-top: 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.admin-login-form input {
+  border: 1px solid rgba(13, 36, 79, 0.2);
+  border-radius: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.admin-login-form button {
+  justify-self: start;
+}
+
+.admin-login-meta {
+  margin: 12px 0 0;
+  color: #325b8f;
 }

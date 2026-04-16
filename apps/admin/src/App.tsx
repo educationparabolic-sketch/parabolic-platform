@@ -1,4 +1,13 @@
-import { Navigate, NavLink, Outlet, Route, Routes, useLocation } from "react-router-dom";
+import { useState, type FormEvent, type ReactElement } from "react";
+import {
+  Navigate,
+  NavLink,
+  Outlet,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { useAuthProvider } from "../../../shared/services/authProvider";
 import AdminAnalyticsDashboardPage from "./features/analytics/AdminAnalyticsDashboardPage";
@@ -10,6 +19,7 @@ import InterventionToolsPage from "./features/insights/InterventionToolsPage";
 import AdminSettingsConfigurationPage from "./features/settings/AdminSettingsConfigurationPage";
 import StudentManagementPage from "./features/students/StudentManagementPage";
 import TestTemplateManagementPage from "./features/tests/TestTemplateManagementPage";
+import { ADMIN_ROUTE_DEFINITIONS } from "./portals/adminRoutes";
 import "./App.css";
 
 interface AdminNavItem {
@@ -23,48 +33,25 @@ interface AdminSectionPageProps {
   summary: string;
 }
 
-const ADMIN_NAV_ITEMS: AdminNavItem[] = [
-  {
-    path: "/admin/overview",
-    label: "Overview",
-    summary: "Operational institute snapshot and core portal landing context.",
-  },
-  {
-    path: "/admin/students",
-    label: "Students",
-    summary: "Student roster and lifecycle navigation workspace.",
-  },
-  {
-    path: "/admin/tests",
-    label: "Tests",
-    summary: "Template creation and test management entry point.",
-  },
-  {
-    path: "/admin/assignments",
-    label: "Assignments",
-    summary: "Assignment planning and run participation controls.",
-  },
-  {
-    path: "/admin/analytics",
-    label: "Analytics",
-    summary: "Summary-level performance and participation dashboards.",
-  },
-  {
-    path: "/admin/governance",
-    label: "Governance",
-    summary: "Institutional stability and execution quality monitoring.",
-  },
-  {
-    path: "/admin/insights/interventions",
-    label: "Interventions",
-    summary: "High-risk student intervention queue and outcome tracking.",
-  },
-  {
-    path: "/admin/settings",
-    label: "Settings",
-    summary: "Institute-level configuration and account controls.",
-  },
-];
+const ADMIN_NAV_PATH_ORDER = [
+  "/admin/overview",
+  "/admin/students",
+  "/admin/tests",
+  "/admin/assignments",
+  "/admin/analytics",
+  "/admin/governance",
+  "/admin/insights/interventions",
+  "/admin/settings",
+] as const;
+
+const ADMIN_NAV_ITEMS: AdminNavItem[] = ADMIN_NAV_PATH_ORDER.map((path) => {
+  const definition = ADMIN_ROUTE_DEFINITIONS.find((route) => route.path === path);
+  return {
+    path,
+    label: definition?.title ?? path,
+    summary: definition?.description ?? "Admin route",
+  };
+});
 
 function AdminSectionPage({ title, summary }: AdminSectionPageProps) {
   return (
@@ -165,15 +152,116 @@ function AdminLayout() {
   );
 }
 
+function AdminLoginPage(props: { loginPath: string; protectedPath: string }) {
+  const { loginPath, protectedPath } = props;
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { session, signIn, clearError } = useAuthProvider();
+  const [email, setEmail] = useState("admin@parabolic.local");
+  const [password, setPassword] = useState("demo-password");
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    clearError();
+
+    const signedIn = await signIn({ email, password });
+    if (!signedIn) {
+      return;
+    }
+
+    const nextTarget =
+      typeof location.state === "object" && location.state !== null && "from" in location.state ?
+        String((location.state as { from?: string }).from ?? protectedPath) :
+        protectedPath;
+    navigate(nextTarget, { replace: true });
+  }
+
+  if (session.status === "authenticated") {
+    return <Navigate replace to={protectedPath} />;
+  }
+
+  return (
+    <main className="admin-page-shell admin-page-shell-login">
+      <section className="admin-content-card admin-login-card" aria-labelledby="admin-login-title">
+        <p className="admin-content-eyebrow">Build 116</p>
+        <h1 id="admin-login-title">Admin Login</h1>
+        <p className="admin-content-copy">
+          Sign in to access protected admin routes.
+        </p>
+        <form className="admin-login-form" onSubmit={handleSubmit}>
+          <label htmlFor="admin-login-email">Email</label>
+          <input
+            id="admin-login-email"
+            type="email"
+            value={email}
+            onChange={(event) => {
+              setEmail(event.target.value);
+            }}
+          />
+          <label htmlFor="admin-login-password">Password</label>
+          <input
+            id="admin-login-password"
+            type="password"
+            value={password}
+            onChange={(event) => {
+              setPassword(event.target.value);
+            }}
+          />
+          <button type="submit" className="admin-primary-link">Login</button>
+        </form>
+        {session.error ? <p className="admin-tests-inline-error" role="alert">{session.error}</p> : null}
+        <p className="admin-login-meta">Login route: <code>{loginPath}</code></p>
+      </section>
+    </main>
+  );
+}
+
+function AdminProtectedRoute(props: { loginPath: string; children: ReactElement }) {
+  const { loginPath, children } = props;
+  const location = useLocation();
+  const { session } = useAuthProvider();
+
+  if (session.status === "loading") {
+    return (
+      <main className="admin-page-shell admin-page-shell-login">
+        <section className="admin-content-card admin-login-card" aria-labelledby="admin-loading-title">
+          <p className="admin-content-eyebrow">Build 116</p>
+          <h1 id="admin-loading-title">Checking session</h1>
+          <p className="admin-content-copy">Restoring Firebase authentication state.</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (session.status !== "authenticated") {
+    return <Navigate replace to={loginPath} state={{ from: location.pathname }} />;
+  }
+
+  return children;
+}
+
 function App() {
   usePortalTitle("admin");
+  const loginPath = "/login";
+  const protectedDefaultPath = "/admin/overview";
 
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/admin/overview" replace />} />
-      <Route path="/admin" element={<Navigate to="/admin/overview" replace />} />
+      <Route path="/" element={<Navigate to={protectedDefaultPath} replace />} />
+      <Route path="/admin" element={<Navigate to={protectedDefaultPath} replace />} />
+      <Route
+        path={loginPath}
+        element={<AdminLoginPage loginPath={loginPath} protectedPath={protectedDefaultPath} />}
+      />
 
-      <Route path="/admin" element={<AdminLayout />}>
+      <Route
+        path="/admin"
+        element={(
+          <AdminProtectedRoute loginPath={loginPath}>
+            <AdminLayout />
+          </AdminProtectedRoute>
+        )}
+      >
         <Route
           path="overview"
           element={
@@ -214,6 +302,10 @@ function App() {
         <Route
           path="insights/interventions"
           element={<InterventionToolsPage />}
+        />
+        <Route
+          path="insights"
+          element={<Navigate to="/admin/insights/interventions" replace />}
         />
         <Route
           path="settings"

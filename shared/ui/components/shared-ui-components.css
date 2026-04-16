@@ -8,6 +8,12 @@
   background: rgba(255, 255, 255, 0.74);
 }
 
+.ui-table-shell {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 .ui-navbar-header h3,
 .ui-form-header h3,
 .ui-chart-header h3 {
@@ -80,9 +86,15 @@
 .ui-form-field select {
   border: 1px solid rgba(13, 36, 79, 0.2);
   border-radius: 10px;
+  width: 100%;
+  max-width: 100%;
   min-height: 38px;
   padding: 8px 10px;
   font: inherit;
+}
+
+.ui-form-helper {
+  overflow-wrap: anywhere;
 }
 
 .ui-form-actions {
@@ -206,7 +218,8 @@
 }
 
 .ui-table {
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
 }
 
