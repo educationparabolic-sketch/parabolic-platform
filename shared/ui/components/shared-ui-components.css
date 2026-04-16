@@ -71,6 +71,7 @@
 .ui-form-field {
   display: grid;
   gap: 6px;
+  min-width: 0;
 }
 
 .ui-form-label {
@@ -84,8 +85,10 @@
 
 .ui-form-field input,
 .ui-form-field select {
+  box-sizing: border-box;
   border: 1px solid rgba(13, 36, 79, 0.2);
   border-radius: 10px;
+  min-width: 0;
   width: 100%;
   max-width: 100%;
   min-height: 38px;

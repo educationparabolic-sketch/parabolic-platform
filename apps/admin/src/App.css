@@ -535,6 +535,20 @@
   min-width: 160px;
 }
 
+.admin-content-card[aria-labelledby="admin-assignments-title"] .ui-table {
+  width: 100%;
+  min-width: 100%;
+  max-width: 100%;
+  table-layout: fixed;
+}
+
+.admin-content-card[aria-labelledby="admin-assignments-title"] .ui-table th,
+.admin-content-card[aria-labelledby="admin-assignments-title"] .ui-table td {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .admin-assignments-status {
   display: inline-flex;
   align-items: center;
@@ -1164,8 +1178,12 @@
 .admin-settings-year-actions select,
 .admin-content-card .ui-form-content input,
 .admin-content-card .ui-form-content select {
+  box-sizing: border-box;
   border: 1px solid rgba(13, 36, 79, 0.2);
   border-radius: 10px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 36px;
   padding: 6px 8px;
   font: inherit;
@@ -1316,6 +1334,10 @@
 
   .admin-tests-timing-row {
     grid-template-columns: 1fr;
+  }
+
+  .admin-assignments-status-col {
+    min-width: 120px;
   }
 
   .admin-session-pill {
