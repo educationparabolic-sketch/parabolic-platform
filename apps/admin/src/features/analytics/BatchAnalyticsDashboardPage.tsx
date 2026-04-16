@@ -32,6 +32,14 @@ interface TrendSeries {
   points: UiChartPoint[];
 }
 
+interface BatchFilterState {
+  academicYear: string;
+  mode: string;
+  batch: string;
+  dateRangeStart: string;
+  dateRangeEnd: string;
+}
+
 function batchKey(batchId: string, batchName: string): string {
   const trimmedId = batchId.trim().toLowerCase();
   if (trimmedId.length > 0) {
@@ -40,6 +48,17 @@ function batchKey(batchId: string, batchName: string): string {
 
   const trimmedName = batchName.trim().toLowerCase();
   return trimmedName.length > 0 ? trimmedName : "unassigned";
+}
+
+function toEpochDay(value: string): number | null {
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) {
+    return null;
+  }
+
+  const normalized = new Date(parsed);
+  normalized.setUTCHours(0, 0, 0, 0);
+  return normalized.getTime();
 }
 
 function buildBatchAggregates(dataset: DashboardDataset): BatchAggregate[] {
@@ -178,6 +197,13 @@ function BatchAnalyticsDashboardPage() {
   const [dataset, setDataset] = useState<DashboardDataset>(FALLBACK_DATASET);
   const [isLoading, setIsLoading] = useState(true);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
+  const [filters, setFilters] = useState<BatchFilterState>({
+    academicYear: "all",
+    mode: "all",
+    batch: "all",
+    dateRangeStart: "",
+    dateRangeEnd: "",
+  });
 
   useEffect(() => {
     let isMounted = true;
@@ -225,11 +251,113 @@ function BatchAnalyticsDashboardPage() {
     };
   }, []);
 
-  const aggregates = useMemo(() => buildBatchAggregates(dataset), [dataset]);
-  const trendSeries = useMemo(() => buildTrendSeries(dataset), [dataset]);
+  const academicYearOptions = useMemo(() => {
+    const years = new Set<string>();
+    for (const run of dataset.runAnalytics) {
+      const parsed = Date.parse(run.startedAt);
+      if (!Number.isNaN(parsed)) {
+        years.add(String(new Date(parsed).getUTCFullYear()));
+      }
+    }
+
+    return ["all", ...Array.from(years).sort((left, right) => right.localeCompare(left))];
+  }, [dataset.runAnalytics]);
+
+  const modeOptions = useMemo(() => {
+    const modes = new Set<string>();
+    for (const run of dataset.runAnalytics) {
+      const normalized = run.mode.trim();
+      if (normalized.length > 0) {
+        modes.add(normalized);
+      }
+    }
+
+    return ["all", ...Array.from(modes).sort((left, right) => left.localeCompare(right))];
+  }, [dataset.runAnalytics]);
+
+  const batchOptions = useMemo(() => {
+    const groups = new Map<string, { key: string; batchName: string; batchId: string }>();
+    for (const run of dataset.runAnalytics) {
+      const key = batchKey(run.batchId, run.batchName);
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          batchId: run.batchId,
+          batchName: run.batchName,
+        });
+      }
+    }
+
+    return Array.from(groups.values()).sort((left, right) => left.batchName.localeCompare(right.batchName));
+  }, [dataset.runAnalytics]);
+
+  const filteredRunAnalytics = useMemo(() => {
+    const startEpoch = toEpochDay(filters.dateRangeStart);
+    const endEpoch = toEpochDay(filters.dateRangeEnd);
+
+    return dataset.runAnalytics.filter((run) => {
+      const runEpochDay = toEpochDay(run.startedAt);
+      const runYear = runEpochDay === null ? "" : String(new Date(runEpochDay).getUTCFullYear());
+      const runMode = run.mode.trim().toLowerCase();
+      const runBatch = batchKey(run.batchId, run.batchName);
+
+      const academicYearMatches = filters.academicYear === "all" || runYear === filters.academicYear;
+      const modeMatches = filters.mode === "all" || runMode === filters.mode.toLowerCase();
+      const batchMatches = filters.batch === "all" || runBatch === filters.batch;
+      const startMatches = startEpoch === null || (runEpochDay !== null && runEpochDay >= startEpoch);
+      const endMatches = endEpoch === null || (runEpochDay !== null && runEpochDay <= endEpoch);
+
+      return academicYearMatches && modeMatches && batchMatches && startMatches && endMatches;
+    });
+  }, [dataset.runAnalytics, filters]);
+
+  const filteredStudentYearMetrics = useMemo(() => {
+    const batchKeysInScope = new Set(
+      filteredRunAnalytics.map((run) => batchKey(run.batchId, run.batchName)),
+    );
+
+    return dataset.studentYearMetrics.filter((student) => {
+      const studentBatch = batchKey(student.batchId, student.batchName);
+
+      if (filters.batch !== "all") {
+        return studentBatch === filters.batch;
+      }
+
+      return batchKeysInScope.has(studentBatch);
+    });
+  }, [dataset.studentYearMetrics, filteredRunAnalytics, filters.batch]);
+
+  const filteredDataset = useMemo<DashboardDataset>(
+    () => ({
+      ...dataset,
+      runAnalytics: filteredRunAnalytics,
+      studentYearMetrics: filteredStudentYearMetrics,
+    }),
+    [dataset, filteredRunAnalytics, filteredStudentYearMetrics],
+  );
+
+  const aggregates = useMemo(() => buildBatchAggregates(filteredDataset), [filteredDataset]);
+  const trendSeries = useMemo(() => buildTrendSeries(filteredDataset), [filteredDataset]);
   const disciplineChartData = useMemo(() => batchDisciplineChart(aggregates), [aggregates]);
   const primaryBatch = useMemo(() => (aggregates.length > 0 ? aggregates[0] : null), [aggregates]);
   const riskDistributionData = useMemo(() => batchRiskDistributionChart(primaryBatch), [primaryBatch]);
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.academicYear !== "all") {
+      count += 1;
+    }
+    if (filters.mode !== "all") {
+      count += 1;
+    }
+    if (filters.batch !== "all") {
+      count += 1;
+    }
+    if (filters.dateRangeStart.length > 0 || filters.dateRangeEnd.length > 0) {
+      count += 1;
+    }
+
+    return count;
+  }, [filters]);
 
   const kpis = useMemo(() => {
     const totalBatches = aggregates.length;
@@ -324,6 +452,111 @@ function BatchAnalyticsDashboardPage() {
       <p className="admin-analytics-inline-note">
         {isLoading ? "Loading batch analytics dashboard..." : inlineMessage ?? "Batch analytics dashboard ready."}
       </p>
+
+      <section className="admin-batch-filter-panel" aria-label="By test run filters">
+        <h3>By Test Run Filters</h3>
+        <p className="admin-content-copy">
+          Filter run analytics by academic year, mode, batch, and date range before rendering comparisons and trends.
+        </p>
+        <div className="admin-batch-filter-grid">
+          <label htmlFor="admin-batch-filter-year">
+            Academic Year
+            <select
+              id="admin-batch-filter-year"
+              value={filters.academicYear}
+              onChange={(event) => {
+                setFilters((current) => ({ ...current, academicYear: event.target.value }));
+              }}
+            >
+              {academicYearOptions.map((yearOption) => (
+                <option key={yearOption} value={yearOption}>
+                  {yearOption === "all" ? "All years" : yearOption}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label htmlFor="admin-batch-filter-mode">
+            Mode
+            <select
+              id="admin-batch-filter-mode"
+              value={filters.mode}
+              onChange={(event) => {
+                setFilters((current) => ({ ...current, mode: event.target.value }));
+              }}
+            >
+              {modeOptions.map((modeOption) => (
+                <option key={modeOption} value={modeOption}>
+                  {modeOption === "all" ? "All modes" : modeOption}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label htmlFor="admin-batch-filter-batch">
+            Batch
+            <select
+              id="admin-batch-filter-batch"
+              value={filters.batch}
+              onChange={(event) => {
+                setFilters((current) => ({ ...current, batch: event.target.value }));
+              }}
+            >
+              <option value="all">All batches</option>
+              {batchOptions.map((batchOption) => (
+                <option key={batchOption.key} value={batchOption.key}>
+                  {batchOption.batchName}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label htmlFor="admin-batch-filter-date-start">
+            Date Range Start
+            <input
+              id="admin-batch-filter-date-start"
+              type="date"
+              value={filters.dateRangeStart}
+              onChange={(event) => {
+                setFilters((current) => ({ ...current, dateRangeStart: event.target.value }));
+              }}
+            />
+          </label>
+
+          <label htmlFor="admin-batch-filter-date-end">
+            Date Range End
+            <input
+              id="admin-batch-filter-date-end"
+              type="date"
+              value={filters.dateRangeEnd}
+              onChange={(event) => {
+                setFilters((current) => ({ ...current, dateRangeEnd: event.target.value }));
+              }}
+            />
+          </label>
+        </div>
+        <div className="admin-batch-filter-actions">
+          <button
+            type="button"
+            className="admin-batch-filter-reset-button"
+            disabled={activeFilterCount === 0}
+            onClick={() => {
+              setFilters({
+                academicYear: "all",
+                mode: "all",
+                batch: "all",
+                dateRangeStart: "",
+                dateRangeEnd: "",
+              });
+            }}
+          >
+            Clear filters
+          </button>
+          <p className="admin-batch-filter-summary">
+            Active filters: {activeFilterCount} | Runs in scope: {filteredRunAnalytics.length}
+          </p>
+        </div>
+      </section>
 
       <div className="admin-batch-kpi-grid">
         {kpis.map((kpi) => (

@@ -850,6 +850,71 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.admin-batch-filter-panel {
+  margin-top: 16px;
+  border: 1px solid rgba(16, 42, 81, 0.16);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  padding: 14px;
+}
+
+.admin-batch-filter-panel h3 {
+  margin: 0 0 8px;
+  color: #143764;
+}
+
+.admin-batch-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-batch-filter-grid label {
+  display: grid;
+  gap: 6px;
+  color: #355476;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.admin-batch-filter-grid select,
+.admin-batch-filter-grid input {
+  border: 1px solid rgba(26, 59, 101, 0.28);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: #f9fcff;
+  color: #173c68;
+}
+
+.admin-batch-filter-actions {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.admin-batch-filter-reset-button {
+  border: 1px solid rgba(16, 42, 81, 0.2);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #173c68;
+  padding: 8px 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-batch-filter-reset-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.admin-batch-filter-summary {
+  margin: 0;
+  color: #4f688a;
+  font-size: 0.9rem;
+}
+
 .admin-batch-kpi-card {
   border: 1px solid rgba(16, 42, 81, 0.16);
   border-radius: 14px;
@@ -1350,6 +1415,15 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .admin-batch-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-batch-filter-actions {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .admin-batch-chart-grid,
   .admin-batch-trend-grid {
     grid-template-columns: 1fr;
@@ -1415,6 +1489,10 @@
   }
 
   .admin-batch-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-batch-filter-grid {
     grid-template-columns: 1fr;
   }
 
