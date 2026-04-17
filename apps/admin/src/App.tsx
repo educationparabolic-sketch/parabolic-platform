@@ -17,6 +17,7 @@ import GovernanceMonitoringDashboardPage from "./features/analytics/GovernanceMo
 import RiskInsightsDashboardPage from "./features/analytics/RiskInsightsDashboardPage";
 import AssignmentManagementPage from "./features/assignments/AssignmentManagementPage";
 import InterventionToolsPage from "./features/insights/InterventionToolsPage";
+import AdminOverviewPage from "./features/overview/AdminOverviewPage";
 import AdminSettingsConfigurationPage from "./features/settings/AdminSettingsConfigurationPage";
 import StudentManagementPage from "./features/students/StudentManagementPage";
 import TestTemplateManagementPage from "./features/tests/TestTemplateManagementPage";
@@ -59,11 +60,13 @@ function resolveAdminRedirectTarget(locationState: unknown, fallbackPath: string
 const ADMIN_NAV_PATH_ORDER = [
   "/admin/overview",
   "/admin/students",
+  "/admin/question-bank",
   "/admin/tests",
   "/admin/assignments",
   "/admin/analytics",
+  "/admin/insights",
   "/admin/governance",
-  "/admin/insights/risk",
+  "/admin/licensing",
   "/admin/settings",
 ] as const;
 
@@ -307,16 +310,20 @@ function App() {
       >
         <Route
           path="overview"
-          element={
-            <AdminSectionPage
-              title="Overview"
-              summary="Track operational status, activity, and summary insights for your institute from the admin portal landing page."
-            />
-          }
+          element={<AdminOverviewPage />}
         />
         <Route
           path="students"
           element={<StudentManagementPage />}
+        />
+        <Route
+          path="question-bank"
+          element={(
+            <AdminSectionPage
+              title="Question Bank"
+              summary="Manage question library navigation, package upload entry, and metadata-oriented workflows from this route."
+            />
+          )}
         />
         <Route
           path="tests"
@@ -353,6 +360,15 @@ function App() {
         <Route
           path="insights"
           element={<Navigate to="/admin/insights/risk" replace />}
+        />
+        <Route
+          path="licensing"
+          element={(
+            <AdminSectionPage
+              title="Licensing"
+              summary="Review institute licensing status, feature eligibility, usage boundaries, and upgrade-readiness summary."
+            />
+          )}
         />
         <Route
           path="settings"

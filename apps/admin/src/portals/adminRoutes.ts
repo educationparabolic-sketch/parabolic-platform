@@ -69,6 +69,13 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     allowedRoles: ["admin", "teacher"],
   },
   {
+    path: "/admin/question-bank",
+    title: "Question Bank",
+    section: "Question Bank",
+    description: "Question library, upload package operations, and metadata management entry route.",
+    allowedRoles: ["admin", "teacher"],
+  },
+  {
     path: "/admin/tests",
     title: "Tests",
     section: "Test Templates",
@@ -356,6 +363,14 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "System Settings",
     section: "Settings",
     description: "Platform integration and system-level settings scoped to the institute.",
+    allowedRoles: ["admin", "director"],
+    readOnlyRoles: ["director"],
+  },
+  {
+    path: "/admin/licensing",
+    title: "Licensing",
+    section: "Licensing",
+    description: "Licensing overview route for current plan, eligibility, usage, and feature visibility.",
     allowedRoles: ["admin", "director"],
     readOnlyRoles: ["director"],
   },
