@@ -1,7 +1,6 @@
 import { useState, type FormEvent, type ReactElement } from "react";
 import {
   Navigate,
-  NavLink,
   Outlet,
   Route,
   Routes,
@@ -10,6 +9,7 @@ import {
 } from "react-router-dom";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { useAuthProvider } from "../../../shared/services/authProvider";
+import { UiNavBar } from "../../../shared/ui/components";
 import StudentDashboardPage from "./features/dashboard/StudentDashboardPage";
 import StudentMyTestsPage from "./features/my-tests/StudentMyTestsPage";
 import "./App.css";
@@ -162,9 +162,10 @@ function StudentProtectedRoute(props: {
 
 function StudentLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { session, signOut } = useAuthProvider();
 
-  const activeRoute = STUDENT_NAV_ITEMS.find((item) => location.pathname === item.path);
+  const activeRoute = STUDENT_NAV_ITEMS.find((item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`));
 
   return (
     <main className="student-page-shell">
@@ -173,22 +174,17 @@ function StudentLayout() {
           <p>Portal</p>
           <h1>Student Portal</h1>
         </div>
-        <nav aria-label="Student top route navigation">
-          <ul className="student-top-nav-list">
-            {STUDENT_NAV_ITEMS.map((item) => (
-              <li key={item.path}>
-                <NavLink
-                  to={item.path}
-                  className={({ isActive }) =>
-                    isActive ? "student-top-nav-link student-top-nav-link-active" : "student-top-nav-link"
-                  }
-                >
-                  {item.label}
-                </NavLink>
-              </li>
-            ))}
-          </ul>
-        </nav>
+        <UiNavBar
+          title="Student Routes"
+          subtitle="Shared top navigation"
+          activeItemId={activeRoute?.path}
+          items={STUDENT_NAV_ITEMS.map((item) => ({
+            id: item.path,
+            label: item.label,
+            hint: item.summary,
+            onClick: () => navigate(item.path),
+          }))}
+        />
         <button
           type="button"
           className="student-signout-button"
@@ -208,21 +204,6 @@ function StudentLayout() {
           <p className="student-sidebar-copy">
             {activeRoute?.summary ?? "Student route selection and contextual section guidance."}
           </p>
-          <ul className="student-sidebar-list">
-            {STUDENT_NAV_ITEMS.map((item) => (
-              <li key={item.path}>
-                <NavLink
-                  to={item.path}
-                  className={({ isActive }) =>
-                    isActive ? "student-sidebar-link student-sidebar-link-active" : "student-sidebar-link"
-                  }
-                >
-                  <strong>{item.label}</strong>
-                  <small>{item.summary}</small>
-                </NavLink>
-              </li>
-            ))}
-          </ul>
         </aside>
 
         <section className="student-main-content" aria-label="Student main dashboard container">

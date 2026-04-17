@@ -10,6 +10,7 @@ import {
 } from "react-router-dom";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { useAuthProvider } from "../../../shared/services/authProvider";
+import { UiNavBar } from "../../../shared/ui/components";
 import AdminAnalyticsDashboardPage from "./features/analytics/AdminAnalyticsDashboardPage";
 import BatchAnalyticsDashboardPage from "./features/analytics/BatchAnalyticsDashboardPage";
 import GovernanceMonitoringDashboardPage from "./features/analytics/GovernanceMonitoringDashboardPage";
@@ -109,6 +110,7 @@ function NotFoundPage() {
 
 function AdminLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { session, signOut } = useAuthProvider();
   const accessContext = resolveAdminAccessContext(session);
   const visibleRoutes = getVisibleAdminRoutes(accessContext.role, accessContext.licenseLayer);
@@ -122,28 +124,17 @@ function AdminLayout() {
     <main className="admin-page-shell">
       <div className="admin-layout-grid">
         <aside className="admin-sidebar" aria-label="Admin navigation">
-          <div className="admin-sidebar-header">
-            <p className="admin-sidebar-eyebrow">Portal</p>
-            <h1>Admin Dashboard</h1>
-            <p className="admin-sidebar-copy">Institute operations navigation</p>
-          </div>
-          <nav>
-            <ul className="admin-nav-list">
-              {visibleNavItems.map((item) => (
-                <li key={item.path}>
-                  <NavLink
-                    to={item.path}
-                    className={({ isActive }) =>
-                      isActive ? "admin-nav-link admin-nav-link-active" : "admin-nav-link"
-                    }
-                  >
-                    <span>{item.label}</span>
-                    <small>{item.summary}</small>
-                  </NavLink>
-                </li>
-              ))}
-            </ul>
-          </nav>
+          <UiNavBar
+            title="Admin Dashboard"
+            subtitle="Institute operations navigation"
+            activeItemId={activeItem?.path}
+            items={visibleNavItems.map((item) => ({
+              id: item.path,
+              label: item.label,
+              hint: item.summary,
+              onClick: () => navigate(item.path),
+            }))}
+          />
         </aside>
 
         <div className="admin-main-area">
