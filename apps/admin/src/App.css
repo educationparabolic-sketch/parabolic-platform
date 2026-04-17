@@ -433,6 +433,32 @@
   cursor: not-allowed;
 }
 
+.admin-tests-canonical-id {
+  font-size: 0.76rem;
+  color: #325b8f;
+}
+
+.admin-question-tag-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-question-tag-chip {
+  border-radius: 999px;
+  border: 1px solid rgba(16, 42, 81, 0.16);
+  background: rgba(255, 255, 255, 0.86);
+  color: #1f426f;
+  font-size: 0.78rem;
+  padding: 4px 10px;
+}
+
+.admin-question-tag-chip-deprecated {
+  color: #8a2431;
+  border-color: rgba(196, 56, 56, 0.32);
+  background: rgba(196, 56, 56, 0.1);
+}
+
 .admin-content-card .ui-table-shell {
   margin-top: 12px;
   overflow-x: auto;

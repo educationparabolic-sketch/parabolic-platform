@@ -20,6 +20,7 @@ import InterventionToolsPage from "./features/insights/InterventionToolsPage";
 import AdminOverviewPage from "./features/overview/AdminOverviewPage";
 import AdminSettingsConfigurationPage from "./features/settings/AdminSettingsConfigurationPage";
 import StudentManagementPage from "./features/students/StudentManagementPage";
+import QuestionBankManagementPage from "./features/tests/QuestionBankManagementPage";
 import TestTemplateManagementPage from "./features/tests/TestTemplateManagementPage";
 import {
   ADMIN_ROUTE_DEFINITIONS,
@@ -318,12 +319,7 @@ function App() {
         />
         <Route
           path="question-bank"
-          element={(
-            <AdminSectionPage
-              title="Question Bank"
-              summary="Manage question library navigation, package upload entry, and metadata-oriented workflows from this route."
-            />
-          )}
+          element={<QuestionBankManagementPage />}
         />
         <Route
           path="tests"
