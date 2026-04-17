@@ -314,7 +314,7 @@ function StudentManagementPage() {
   const [loadMessage, setLoadMessage] = useState<string | null>(null);
   const [filters, setFilters] = useState<StudentFilterState>({
     query: "",
-    academicYear: "all",
+    academicYear: "",
     status: "all",
     batch: "all",
     rawScoreMin: "",
@@ -390,8 +390,26 @@ function StudentManagementPage() {
   const uniqueAcademicYears = useMemo(() => {
     const years = new Set<string>();
     students.forEach((student) => years.add(student.academicYear));
-    return ["all", ...Array.from(years).sort((left, right) => right.localeCompare(left))];
+    return Array.from(years).sort((left, right) => right.localeCompare(left));
   }, [students]);
+
+  useEffect(() => {
+    if (uniqueAcademicYears.length === 0) {
+      if (filters.academicYear !== "") {
+        setFilters((current) => ({ ...current, academicYear: "" }));
+      }
+      return;
+    }
+
+    const hasSelectedYear = uniqueAcademicYears.includes(filters.academicYear);
+    if (!hasSelectedYear) {
+      setFilters((current) => ({
+        ...current,
+        academicYear: uniqueAcademicYears[0],
+      }));
+      setPage(1);
+    }
+  }, [filters.academicYear, uniqueAcademicYears]);
 
   const filteredStudents = useMemo(() => {
     const loweredQuery = filters.query.trim().toLowerCase();
@@ -405,7 +423,7 @@ function StudentManagementPage() {
 
       const statusMatches = filters.status === "all" || student.status === filters.status;
       const batchMatches = filters.batch === "all" || student.batch === filters.batch;
-      const academicYearMatches = filters.academicYear === "all" || student.academicYear === filters.academicYear;
+      const academicYearMatches = filters.academicYear.length > 0 && student.academicYear === filters.academicYear;
       const rawScoreMatches = isWithinNumberRange(student.avgRawScorePercent, filters.rawScoreMin, filters.rawScoreMax);
       const accuracyMatches = isWithinNumberRange(student.avgAccuracyPercent, filters.accuracyMin, filters.accuracyMax);
       const scorePercentileMatches =
@@ -684,9 +702,10 @@ function StudentManagementPage() {
               value={filters.academicYear}
               onChange={(event) => setFilters((current) => ({ ...current, academicYear: event.target.value }))}
             >
+              {uniqueAcademicYears.length === 0 ? <option value="">No years available</option> : null}
               {uniqueAcademicYears.map((academicYear) => (
                 <option key={academicYear} value={academicYear}>
-                  {academicYear === "all" ? "All" : academicYear}
+                  {academicYear}
                 </option>
               ))}
             </select>
