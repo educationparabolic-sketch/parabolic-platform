@@ -19,7 +19,7 @@ import {
 import { getFirebaseAuth } from "./firebaseClient";
 import type { AuthContextValue, AuthSession, SignInInput } from "../types/authProvider";
 
-const TOKEN_REFRESH_INTERVAL_MS = 45 * 60 * 1000;
+const TOKEN_REFRESH_INTERVAL_MS = 14 * 60 * 1000;
 const LOCAL_TEST_PASSWORD = "Parabolic#Test115";
 const LOCAL_FALLBACK_STORAGE_KEY = "parabolic.localAuthToken";
 
@@ -67,7 +67,7 @@ function buildLocalTestToken(email: string, identity: LocalAuthIdentity): string
   const nowSeconds = Math.floor(Date.now() / 1000);
   const payload = {
     aud: "local-test",
-    exp: nowSeconds + 60 * 60,
+    exp: nowSeconds + 15 * 60,
     iat: nowSeconds,
     instituteId: "inst-build-125",
     iss: "local-auth-fallback",
@@ -98,7 +98,7 @@ function tryLocalFallbackSignIn(email: string, password: string): {token: string
 
 function persistLocalFallbackToken(token: string): void {
   try {
-    window.sessionStorage.setItem(LOCAL_FALLBACK_STORAGE_KEY, token);
+    window.localStorage.setItem(LOCAL_FALLBACK_STORAGE_KEY, token);
   } catch {
     // Best-effort persistence only.
   }
@@ -106,7 +106,7 @@ function persistLocalFallbackToken(token: string): void {
 
 function readPersistedLocalFallbackToken(): string | null {
   try {
-    const value = window.sessionStorage.getItem(LOCAL_FALLBACK_STORAGE_KEY);
+    const value = window.localStorage.getItem(LOCAL_FALLBACK_STORAGE_KEY);
     if (typeof value !== "string" || value.trim().length === 0) {
       return null;
     }
@@ -119,7 +119,7 @@ function readPersistedLocalFallbackToken(): string | null {
 
 function clearPersistedLocalFallbackToken(): void {
   try {
-    window.sessionStorage.removeItem(LOCAL_FALLBACK_STORAGE_KEY);
+    window.localStorage.removeItem(LOCAL_FALLBACK_STORAGE_KEY);
   } catch {
     // No-op
   }
