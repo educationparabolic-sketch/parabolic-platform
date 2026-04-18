@@ -173,6 +173,8 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     description:
       "Risk-focused analytics dashboard for cluster distribution, high-risk student review, guess-rate indicators, and discipline trend signals.",
     allowedRoles: ["admin", "teacher", "director"],
+    minimumLicenseLayer: "L1",
+    redirectOnDenied: "/admin/analytics",
   },
   {
     path: "/admin/analytics/batch",
