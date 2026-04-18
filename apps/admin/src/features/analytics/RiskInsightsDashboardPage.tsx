@@ -42,6 +42,14 @@ interface ExecutionSignalBadge {
   helper: string;
 }
 
+interface PatternAlertRow {
+  patternType: string;
+  frequency: number;
+  lastDetected: string;
+  affectedStudents: string[];
+  severityScore?: number;
+}
+
 interface MonthlySummaryAccessRow {
   id: string;
   entityLabel: string;
@@ -182,7 +190,100 @@ function buildExecutionSignals(dataset: DashboardDataset, includeL2Signals: bool
       value: formatPercent(dataset.yearBehaviorSummary.avgDisciplineIndex),
       helper: "L2 execution signal",
     },
+    {
+      label: "Sequential Progression Compliance",
+      value: formatPercent(dataset.yearBehaviorSummary.executionStabilityIndex),
+      helper: "L2 execution signal",
+    },
   ];
+}
+
+function buildPatternAlerts(
+  dataset: DashboardDataset,
+  highRiskStudents: StudentYearMetricRecord[],
+  includeL2Signals: boolean,
+): PatternAlertRow[] {
+  const summary = dataset.yearBehaviorSummary;
+  const signals = summary.riskSignals;
+  const topAffectedStudents = highRiskStudents.slice(0, 3).map((student) => student.studentName);
+  const lastDetected = formatIsoDate(summary.computedAt);
+
+  const l1Alerts: PatternAlertRow[] = [
+    {
+      patternType: "EasyNeglect",
+      frequency: Math.max(1, Math.round(signals.percentEasyNeglect / 10)),
+      lastDetected,
+      affectedStudents: topAffectedStudents,
+    },
+    {
+      patternType: "HardFixation",
+      frequency: Math.max(1, Math.round(signals.percentHardBias / 10)),
+      lastDetected,
+      affectedStudents: topAffectedStudents,
+    },
+    {
+      patternType: "PacingDrift",
+      frequency: Math.max(1, Math.round(signals.percentPacingDrift / 10)),
+      lastDetected,
+      affectedStudents: topAffectedStudents,
+    },
+    {
+      patternType: "TopicAvoidance",
+      frequency: Math.max(1, Math.round(signals.percentTopicAvoidance / 10)),
+      lastDetected,
+      affectedStudents: topAffectedStudents,
+    },
+    {
+      patternType: "LatePhaseDrop",
+      frequency: Math.max(1, Math.round(signals.percentLatePhaseDrop / 10)),
+      lastDetected,
+      affectedStudents: topAffectedStudents,
+    },
+  ];
+
+  if (!includeL2Signals) {
+    return l1Alerts;
+  }
+
+  const l2Alerts: PatternAlertRow[] = [
+    {
+      patternType: "HighRiskClusterSpike",
+      frequency: Math.max(1, Math.round((highRiskStudents.length / Math.max(1, dataset.studentYearMetrics.length)) * 10)),
+      lastDetected,
+      affectedStudents: topAffectedStudents,
+      severityScore: Math.round((highRiskStudents.length / Math.max(1, dataset.studentYearMetrics.length)) * 100),
+    },
+    {
+      patternType: "GuessHeavyCluster",
+      frequency: Math.max(1, Math.round(summary.guessProbabilityClusterPercent / 10)),
+      lastDetected,
+      affectedStudents: topAffectedStudents,
+      severityScore: Math.round((summary.guessProbabilityClusterPercent / 10) * summary.guessProbabilityClusterPercent),
+    },
+    {
+      patternType: "PhaseDeviationEscalation",
+      frequency: Math.max(1, Math.round(signals.percentPacingDrift / 10)),
+      lastDetected,
+      affectedStudents: topAffectedStudents,
+      severityScore: Math.round((signals.percentPacingDrift / 10) * signals.percentLatePhaseDrop),
+    },
+    {
+      patternType: "DisciplineRegression",
+      frequency: Math.max(1, Math.round((100 - summary.avgDisciplineIndex) / 10)),
+      lastDetected,
+      affectedStudents: topAffectedStudents,
+      severityScore: Math.round(((100 - summary.avgDisciplineIndex) / 10) * (100 - summary.avgDisciplineIndex)),
+    },
+    {
+      patternType: "ControlledModeEffectivenessDrop",
+      frequency: Math.max(1, Math.round((100 - summary.controlledModeUsagePercent) / 10)),
+      lastDetected,
+      affectedStudents: topAffectedStudents,
+      severityScore: Math.round(((100 - summary.controlledModeUsagePercent) / 10) * (100 - summary.executionStabilityIndex)),
+    },
+  ];
+
+  return [...l1Alerts, ...l2Alerts].sort((left, right) => (right.severityScore ?? 0) - (left.severityScore ?? 0));
 }
 
 function buildMonthlySummaryRows(dataset: DashboardDataset): MonthlySummaryAccessRow[] {
@@ -454,6 +555,46 @@ function RiskInsightsDashboardPage() {
     () => buildExecutionSignals(dataset, isL2OrAbove),
     [dataset, isL2OrAbove],
   );
+  const patternAlerts = useMemo(
+    () => buildPatternAlerts(dataset, highRiskStudents, isL2OrAbove),
+    [dataset, highRiskStudents, isL2OrAbove],
+  );
+
+  const patternAlertColumns = useMemo<UiTableColumn<PatternAlertRow>[]>(
+    () => {
+      const baseColumns: UiTableColumn<PatternAlertRow>[] = [
+        {
+          id: "patternType",
+          header: "Alert Title",
+          render: (row) => row.patternType,
+        },
+        {
+          id: "frequency",
+          header: "Frequency",
+          render: (row) => `${row.frequency} detections`,
+        },
+        {
+          id: "lastDetected",
+          header: "Last Occurrence",
+          render: (row) => row.lastDetected,
+        },
+      ];
+
+      if (!isL2OrAbove) {
+        return baseColumns;
+      }
+
+      return [
+        ...baseColumns,
+        {
+          id: "severity",
+          header: "Severity Score",
+          render: (row) => row.severityScore ?? 0,
+        },
+      ];
+    },
+    [isL2OrAbove],
+  );
 
   const monthlySummaryRows = useMemo(() => buildMonthlySummaryRows(dataset), [dataset]);
   const selectedMonthlySummary = useMemo(
@@ -575,6 +716,16 @@ function RiskInsightsDashboardPage() {
           columns={intelligenceColumns}
           rows={studentIntelligenceRows}
           rowKey={(row) => row.studentId}
+        />
+      </div>
+
+      <div className="admin-risk-table-section">
+        <h3>Pattern Alerts</h3>
+        <UiTable
+          caption="Pattern alert feed from yearBehaviorSummary diagnostics"
+          columns={patternAlertColumns}
+          rows={patternAlerts}
+          rowKey={(row) => row.patternType}
         />
       </div>
 

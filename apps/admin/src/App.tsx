@@ -350,6 +350,14 @@ function App() {
           element={<InterventionToolsPage />}
         />
         <Route
+          path="insights/patterns"
+          element={<RiskInsightsDashboardPage />}
+        />
+        <Route
+          path="insights/execution"
+          element={<RiskInsightsDashboardPage />}
+        />
+        <Route
           path="insights/risk"
           element={<RiskInsightsDashboardPage />}
         />
