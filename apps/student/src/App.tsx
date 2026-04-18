@@ -13,6 +13,7 @@ import { useAuthProvider } from "../../../shared/services/authProvider";
 import { UiNavBar } from "../../../shared/ui/components";
 import StudentDashboardPage from "./features/dashboard/StudentDashboardPage";
 import StudentMyTestsPage from "./features/my-tests/StudentMyTestsPage";
+import StudentProfileSettingsPage from "./features/profile/StudentProfileSettingsPage";
 import "./App.css";
 
 interface StudentNavItem {
@@ -291,12 +292,7 @@ function App() {
         />
         <Route
           path="profile"
-          element={
-            <StudentSectionPage
-              title="Profile"
-              summary="Student profile and account settings route container for personal details management."
-            />
-          }
+          element={<StudentProfileSettingsPage />}
         />
       </Route>
       <Route path="*" element={<Navigate to={protectedDefaultPath} replace />} />

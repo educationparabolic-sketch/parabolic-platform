@@ -404,6 +404,30 @@
   color: #5d7698;
 }
 
+.student-my-tests-action {
+  border: 1px solid #a9bfdc;
+  background: #f2f6fd;
+  color: #173c6e;
+  border-radius: 0.5rem;
+  padding: 0.35rem 0.6rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.student-my-tests-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.student-my-tests-action-stack {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.student-my-tests-action-stack small {
+  color: #5d7698;
+}
+
 .student-my-tests-status {
   display: inline-flex;
   align-items: center;
@@ -461,6 +485,171 @@
   min-width: 900px;
 }
 
+.student-my-tests-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.student-my-tests-pagination p {
+  margin: 0;
+  color: #2a456d;
+}
+
+.student-my-tests-pagination button {
+  border: 1px solid #b1c4df;
+  border-radius: 0.5rem;
+  background: #f4f8ff;
+  color: #163a69;
+  padding: 0.4rem 0.65rem;
+  cursor: pointer;
+}
+
+.student-my-tests-pagination button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.student-my-tests-solution-view {
+  border: 1px solid #d8e2f1;
+  border-radius: 0.75rem;
+  padding: 0.95rem;
+  background: #fbfdff;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.student-my-tests-solution-view h3 {
+  margin: 0;
+}
+
+.student-my-tests-solution-view p {
+  margin: 0;
+  color: #355174;
+}
+
+.student-my-tests-solution-grid {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.student-my-tests-solution-card {
+  border: 1px solid #d8e4f5;
+  border-radius: 0.7rem;
+  padding: 0.7rem;
+  background: #ffffff;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.student-my-tests-solution-card h4 {
+  margin: 0;
+}
+
+.student-my-tests-solution-card p {
+  margin: 0;
+}
+
+.student-my-tests-solution-images {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.student-my-tests-solution-images img {
+  width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid #d5dfef;
+}
+
+.student-my-tests-solution-links {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.student-my-tests-solution-links a {
+  color: #1b4d8e;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.student-my-tests-solution-links a:hover {
+  text-decoration: underline;
+}
+
+.student-profile-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.student-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.student-profile-field {
+  margin: 0;
+  border: 1px solid #d7e2f2;
+  border-radius: 0.65rem;
+  padding: 0.75rem;
+  background: #fbfdff;
+}
+
+.student-profile-field h3 {
+  margin: 0;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #5d7497;
+}
+
+.student-profile-field p {
+  margin: 0.4rem 0 0;
+  font-weight: 600;
+  color: #143059;
+}
+
+.student-profile-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.student-profile-actions button {
+  border: 1px solid #afc3e0;
+  background: #f1f6ff;
+  color: #173b69;
+  border-radius: 0.55rem;
+  padding: 0.5rem 0.8rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.student-profile-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.student-profile-logout-button {
+  border-color: #d5c6c6;
+  background: #fff8f8;
+  color: #6c2323;
+}
+
+.student-profile-notice {
+  margin: 0;
+  padding: 0.7rem;
+  border-left: 4px solid #2f66b3;
+  background: #eef4ff;
+  color: #24426a;
+}
+
 @media (max-width: 1024px) {
   .student-topbar {
     grid-template-columns: 1fr;
@@ -489,5 +678,10 @@
 
   .student-my-tests-filter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .student-my-tests-solution-images,
+  .student-profile-grid {
+    grid-template-columns: 1fr;
   }
 }
