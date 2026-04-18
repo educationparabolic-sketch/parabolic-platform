@@ -183,34 +183,33 @@
   color: #24426a;
 }
 
+.student-dashboard-motivational-banner {
+  margin: 0;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid #b7c8e1;
+  border-radius: 0.75rem;
+  background: linear-gradient(90deg, #edf3ff, #f6fbff);
+  color: #1f3558;
+  font-weight: 600;
+}
+
+.student-dashboard-layer-badge {
+  margin: 0;
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 999px;
+  border: 1px solid #c0d1e7;
+  background: #f4f8ff;
+  color: #254567;
+  padding: 0.22rem 0.65rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
 .student-dashboard-card-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.75rem;
-}
-
-.student-dashboard-summary-card {
-  border: 1px solid #d8e1ef;
-  border-radius: 0.75rem;
-  background: #ffffff;
-  padding: 0.75rem;
-  display: grid;
-  gap: 0.35rem;
-}
-
-.student-dashboard-summary-card p {
-  margin: 0;
-  color: #476286;
-  font-size: 0.9rem;
-}
-
-.student-dashboard-summary-card strong {
-  font-size: 1.35rem;
-  color: #173457;
-}
-
-.student-dashboard-summary-card small {
-  color: #5f7699;
 }
 
 .student-dashboard-status-grid {
@@ -219,28 +218,14 @@
   gap: 0.75rem;
 }
 
-.student-dashboard-risk-card,
-.student-dashboard-discipline-card {
-  border: 1px solid #d8e1ef;
-  border-radius: 0.75rem;
-  background: #ffffff;
-  padding: 0.85rem;
-}
-
-.student-dashboard-risk-card h3,
-.student-dashboard-discipline-card h3 {
-  margin: 0;
-  font-size: 1rem;
-  color: #173457;
-}
-
-.student-dashboard-risk-card p,
-.student-dashboard-discipline-card p {
-  color: #3f5a7c;
+.student-dashboard-layer-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
 }
 
 .student-dashboard-risk-pill {
-  margin: 0.55rem 0 0.5rem;
+  margin: 0;
   display: inline-flex;
   border-radius: 999px;
   padding: 0.32rem 0.75rem;
@@ -266,13 +251,6 @@
   color: #8e2034;
   border-color: #e7b6c2;
   background: #fff0f3;
-}
-
-.student-dashboard-discipline-value {
-  margin: 0.55rem 0 0.4rem;
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: #173457;
 }
 
 .student-dashboard-discipline-track {
@@ -301,6 +279,11 @@
 
 .student-dashboard-widget-grid .ui-table {
   min-width: 540px;
+}
+
+.student-dashboard-l2-section {
+  display: grid;
+  gap: 0.75rem;
 }
 
 .student-dashboard-table-title {
@@ -499,6 +482,7 @@
 
   .student-dashboard-card-grid,
   .student-dashboard-status-grid,
+  .student-dashboard-layer-grid,
   .student-dashboard-widget-grid {
     grid-template-columns: 1fr;
   }

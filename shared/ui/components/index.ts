@@ -9,5 +9,7 @@ export { default as UiNavBar } from "./UiNavBar";
 export type { UiNavBarProps, UiNavItem } from "./UiNavBar";
 export { default as UiPagination } from "./UiPagination";
 export type { UiPaginationProps } from "./UiPagination";
+export { default as UiStatCard } from "./UiStatCard";
+export type { UiStatCardProps } from "./UiStatCard";
 export { default as UiTable } from "./UiTable";
 export type { UiTableColumn, UiTableProps } from "./UiTable";

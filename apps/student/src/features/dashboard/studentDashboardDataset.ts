@@ -1,4 +1,5 @@
 import { ApiClientError, createApiClient } from "../../../../../shared/services/apiClient";
+import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
 
 const apiClient = createApiClient({ baseUrl: "/" });
 
@@ -22,21 +23,43 @@ export interface RecentResultRecord {
 }
 
 export interface StudentDashboardDataset {
+  licenseLayer: LicenseLayer;
   avgRawScorePercent: number;
   avgAccuracyPercent: number;
   disciplineIndex: number;
   testsAttempted: number;
   riskState: StudentRiskState;
+  phaseAdherencePercent: number;
+  easyNeglectPercent: number;
+  hardBiasPercent: number;
+  timeMisallocationPercent: number;
+  behaviorSummaryTag: string;
+  controlledModeImprovementDeltaPercent: number;
+  guessProbabilityPercent: number;
+  phaseComplianceMiniTrend: Array<{ label: string; value: number }>;
   upcomingTests: UpcomingTestRecord[];
   recentResults: RecentResultRecord[];
 }
 
 export const STUDENT_DASHBOARD_FALLBACK_DATASET: StudentDashboardDataset = {
+  licenseLayer: "L0",
   avgRawScorePercent: 72,
   avgAccuracyPercent: 78,
   disciplineIndex: 74,
   testsAttempted: 9,
   riskState: "Drift-Prone",
+  phaseAdherencePercent: 68,
+  easyNeglectPercent: 21,
+  hardBiasPercent: 17,
+  timeMisallocationPercent: 24,
+  behaviorSummaryTag: "Steady with end-phase drift",
+  controlledModeImprovementDeltaPercent: 6,
+  guessProbabilityPercent: 19,
+  phaseComplianceMiniTrend: [
+    { label: "W-3", value: 62 },
+    { label: "W-2", value: 66 },
+    { label: "W-1", value: 70 },
+  ],
   upcomingTests: [
     {
       runId: "run-2026-04-18-a",
@@ -110,6 +133,19 @@ function toNumberOrZero(value: unknown): number {
 
 function toStringOrFallback(value: unknown, fallback: string): string {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
+}
+
+function toLicenseLayer(value: unknown): LicenseLayer {
+  if (typeof value !== "string") {
+    return "L0";
+  }
+
+  const normalized = value.trim().toUpperCase();
+  if (normalized === "L1" || normalized === "L2" || normalized === "L3") {
+    return normalized;
+  }
+
+  return "L0";
 }
 
 function toRiskState(value: unknown): StudentRiskState {
@@ -192,12 +228,41 @@ function normalizeStudentDashboardDataset(payload: unknown): StudentDashboardDat
     .map((record, index) => normalizeRecentResultRecord(record, index))
     .filter((record): record is RecentResultRecord => Boolean(record));
 
+  const phaseComplianceMiniTrendSource = Array.isArray(typedPayload.phaseComplianceMiniTrend)
+    ? typedPayload.phaseComplianceMiniTrend
+    : [];
+  const phaseComplianceMiniTrend = phaseComplianceMiniTrendSource
+    .map((entry, index) => {
+      if (!entry || typeof entry !== "object") {
+        return null;
+      }
+
+      const record = entry as Record<string, unknown>;
+      return {
+        label: toStringOrFallback(record.label, `P${index + 1}`),
+        value: toNumberOrZero(record.value),
+      };
+    })
+    .filter((entry): entry is { label: string; value: number } => Boolean(entry));
+
   return {
+    licenseLayer: toLicenseLayer(typedPayload.licenseLayer),
     avgRawScorePercent: toNumberOrZero(typedPayload.avgRawScorePercent),
     avgAccuracyPercent: toNumberOrZero(typedPayload.avgAccuracyPercent),
     disciplineIndex: toNumberOrZero(typedPayload.disciplineIndex),
     testsAttempted: toNumberOrZero(typedPayload.testsAttempted),
     riskState: toRiskState(typedPayload.riskState),
+    phaseAdherencePercent: toNumberOrZero(typedPayload.phaseAdherencePercent),
+    easyNeglectPercent: toNumberOrZero(typedPayload.easyNeglectPercent),
+    hardBiasPercent: toNumberOrZero(typedPayload.hardBiasPercent),
+    timeMisallocationPercent: toNumberOrZero(typedPayload.timeMisallocationPercent),
+    behaviorSummaryTag: toStringOrFallback(typedPayload.behaviorSummaryTag, "Balanced execution momentum"),
+    controlledModeImprovementDeltaPercent: toNumberOrZero(typedPayload.controlledModeImprovementDeltaPercent),
+    guessProbabilityPercent: toNumberOrZero(typedPayload.guessProbabilityPercent),
+    phaseComplianceMiniTrend:
+      phaseComplianceMiniTrend.length > 0 ?
+        phaseComplianceMiniTrend :
+        STUDENT_DASHBOARD_FALLBACK_DATASET.phaseComplianceMiniTrend,
     upcomingTests,
     recentResults,
   };

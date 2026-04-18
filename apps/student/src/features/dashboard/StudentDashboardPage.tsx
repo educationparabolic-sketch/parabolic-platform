@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { UiChartContainer, UiTable, type UiChartPoint, type UiTableColumn } from "../../../../../shared/ui/components";
+import { useAuthProvider } from "../../../../../shared/services/authProvider";
+import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
+import {
+  UiChartContainer,
+  UiStatCard,
+  UiTable,
+  type UiChartPoint,
+  type UiTableColumn,
+} from "../../../../../shared/ui/components";
 import {
   ApiClientError,
   STUDENT_DASHBOARD_FALLBACK_DATASET,
@@ -16,6 +24,13 @@ interface DashboardCard {
   value: string;
   helper: string;
 }
+
+const LICENSE_LAYER_ORDER: Record<LicenseLayer, number> = {
+  L0: 0,
+  L1: 1,
+  L2: 2,
+  L3: 3,
+};
 
 function formatPercent(value: number): string {
   return `${Math.round(value)}%`;
@@ -61,7 +76,42 @@ function riskToneClass(riskState: StudentRiskState): string {
   }
 }
 
+function decodeLicenseLayerFromToken(idToken: string | null): LicenseLayer | null {
+  if (!idToken) {
+    return null;
+  }
+
+  const segments = idToken.split(".");
+  if (segments.length !== 3) {
+    return null;
+  }
+
+  try {
+    const payloadSegment = segments[1].replace(/-/g, "+").replace(/_/g, "/");
+    const paddedPayload = payloadSegment.padEnd(Math.ceil(payloadSegment.length / 4) * 4, "=");
+    const payload = JSON.parse(atob(paddedPayload)) as Record<string, unknown>;
+    const candidate = typeof payload.licenseLayer === "string" ? payload.licenseLayer.trim().toUpperCase() : "";
+    if (candidate === "L0" || candidate === "L1" || candidate === "L2" || candidate === "L3") {
+      return candidate;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function getNextUpcomingTest(dataset: StudentDashboardDataset): UpcomingTestRecord | null {
+  if (dataset.upcomingTests.length === 0) {
+    return null;
+  }
+
+  return [...dataset.upcomingTests]
+    .sort((left, right) => Date.parse(left.startAt) - Date.parse(right.startAt))[0];
+}
+
 function StudentDashboardPage() {
+  const { session } = useAuthProvider();
   const [dataset, setDataset] = useState<StudentDashboardDataset>(STUDENT_DASHBOARD_FALLBACK_DATASET);
   const [isLoading, setIsLoading] = useState(true);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
@@ -115,26 +165,60 @@ function StudentDashboardPage() {
   const summaryCards = useMemo<DashboardCard[]>(() => {
     return [
       {
-        label: "Avg Raw Score (Last 5)",
+        label: "Avg Raw Score % (Last 5 Tests)",
         value: formatPercent(dataset.avgRawScorePercent),
         helper: "studentYearMetrics",
       },
       {
-        label: "Avg Accuracy",
+        label: "Avg Accuracy %",
         value: formatPercent(dataset.avgAccuracyPercent),
         helper: "studentYearMetrics",
       },
       {
-        label: "Tests Attempted",
+        label: "Tests Attempted (Current Year)",
         value: String(dataset.testsAttempted),
         helper: "Current academic year",
       },
       {
-        label: "Upcoming Tests",
+        label: "Upcoming Tests Count",
         value: String(dataset.upcomingTests.length),
         helper: "Assigned runs",
       },
     ];
+  }, [dataset]);
+
+  const activeLicenseLayer = useMemo<LicenseLayer>(() => {
+    const tokenLayer = decodeLicenseLayerFromToken(session.idToken);
+    const resolvedLayer = tokenLayer ?? dataset.licenseLayer;
+    return LICENSE_LAYER_ORDER[resolvedLayer] > LICENSE_LAYER_ORDER.L2 ? "L2" : resolvedLayer;
+  }, [dataset.licenseLayer, session.idToken]);
+
+  const isL1Plus = LICENSE_LAYER_ORDER[activeLicenseLayer] >= LICENSE_LAYER_ORDER.L1;
+  const isL2Plus = LICENSE_LAYER_ORDER[activeLicenseLayer] >= LICENSE_LAYER_ORDER.L2;
+
+  const motivationalBannerMessage = useMemo(() => {
+    const nextUpcoming = getNextUpcomingTest(dataset);
+    const latest = dataset.recentResults[0];
+    const previous = dataset.recentResults[1];
+
+    let headline = "Consistency is your strength this month.";
+    if (latest && previous) {
+      const delta = Math.round(latest.rawScorePercent - previous.rawScorePercent);
+      if (delta > 0) {
+        headline = `You improved Raw % by +${delta}% in your last 2 tests.`;
+      } else if (delta === 0) {
+        headline = "Your Raw % is stable across the last 2 tests. Keep momentum.";
+      } else {
+        headline = "Stay steady. Your next run is a chance to recover recent dip.";
+      }
+    }
+
+    const nextRunPrompt =
+      nextUpcoming ?
+        `Next available test: ${nextUpcoming.testName} at ${formatDateTime(nextUpcoming.startAt)}.` :
+        "No upcoming run is scheduled yet. Check back for newly assigned tests.";
+
+    return `${headline} ${nextRunPrompt}`;
   }, [dataset]);
 
   const performanceTrendPoints = useMemo<UiChartPoint[]>(() => {
@@ -217,37 +301,57 @@ function StudentDashboardPage() {
         Track upcoming tests, recent outcomes, current risk signal, and discipline trends from summary-only
         analytics sources.
       </p>
+      <p className="student-dashboard-motivational-banner" role="status">
+        {motivationalBannerMessage}
+      </p>
+      <p className="student-dashboard-layer-badge">License Layer: {activeLicenseLayer}</p>
 
       {inlineMessage ? <p className="student-dashboard-inline-note">{inlineMessage}</p> : null}
 
       <div className="student-dashboard-card-grid">
         {summaryCards.map((card) => (
-          <article key={card.label} className="student-dashboard-summary-card">
-            <p>{card.label}</p>
-            <strong>{isLoading ? "Loading..." : card.value}</strong>
-            <small>{card.helper}</small>
-          </article>
+          <UiStatCard
+            key={card.label}
+            title={card.label}
+            value={isLoading ? "Loading..." : card.value}
+            helper={card.helper}
+          />
         ))}
       </div>
 
       <div className="student-dashboard-status-grid">
-        <article className="student-dashboard-risk-card" aria-label="Current risk indicator">
-          <h3>Current Risk Indicator</h3>
-          <p className={`student-dashboard-risk-pill ${riskToneClass(dataset.riskState)}`}>{dataset.riskState}</p>
-          <p>
-            Risk signal sourced from <code>studentYearMetrics.riskState</code> using constructive, neutral framing.
-          </p>
-        </article>
+        <UiStatCard
+          title="Current Risk Indicator"
+          value={<span className={`student-dashboard-risk-pill ${riskToneClass(dataset.riskState)}`}>{dataset.riskState}</span>}
+          helper="studentYearMetrics.riskState"
+        >
+          Risk signal is rendered with constructive, neutral language.
+        </UiStatCard>
 
-        <article className="student-dashboard-discipline-card" aria-label="Discipline index summary">
-          <h3>Discipline Index Summary</h3>
-          <p className="student-dashboard-discipline-value">{formatPercent(dataset.disciplineIndex)}</p>
+        <UiStatCard
+          title="Discipline Index Summary"
+          value={formatPercent(dataset.disciplineIndex)}
+          helper="studentYearMetrics.disciplineIndex"
+        >
           <div className="student-dashboard-discipline-track" aria-hidden="true">
             <span style={{ width: `${Math.max(0, Math.min(100, Math.round(dataset.disciplineIndex)))}%` }} />
           </div>
-          <p>Higher values indicate stronger timing discipline and steadier execution behavior.</p>
-        </article>
+        </UiStatCard>
       </div>
+
+      {isL1Plus ? (
+        <div className="student-dashboard-layer-grid" aria-label="L1 behavioral cards and adherence indicators">
+          <UiStatCard title="Phase Adherence %" value={formatPercent(dataset.phaseAdherencePercent)} helper="L1 adherence indicator" />
+          <UiStatCard title="Easy Neglect %" value={formatPercent(dataset.easyNeglectPercent)} helper="L1 behavior indicator" />
+          <UiStatCard title="Hard Bias %" value={formatPercent(dataset.hardBiasPercent)} helper="L1 behavior indicator" />
+          <UiStatCard
+            title="Time Misallocation %"
+            value={formatPercent(dataset.timeMisallocationPercent)}
+            helper="L1 pacing indicator"
+          />
+          <UiStatCard title="Behavior Summary Tag" value={dataset.behaviorSummaryTag} helper="Constructive interpretation" />
+        </div>
+      ) : null}
 
       <div className="student-dashboard-widget-grid">
         <UiTable
@@ -274,6 +378,30 @@ function StudentDashboardPage() {
         data={performanceTrendPoints.length > 0 ? performanceTrendPoints : [{ label: "No Data", value: 0 }]}
         maxValue={100}
       />
+
+      {isL2Plus ? (
+        <section className="student-dashboard-l2-section" aria-label="L2 risk-state and discipline depth">
+          <div className="student-dashboard-layer-grid">
+            <UiStatCard
+              title="Controlled Mode Improvement Delta"
+              value={`${Math.round(dataset.controlledModeImprovementDeltaPercent)}%`}
+              helper="L2 execution depth"
+            />
+            <UiStatCard
+              title="Guess Probability Indicator"
+              value={`${Math.round(dataset.guessProbabilityPercent)}%`}
+              helper="L2 execution depth"
+            />
+          </div>
+          <UiChartContainer
+            title="Phase Compliance Mini Trend"
+            subtitle="L2 phase discipline progression"
+            variant="line"
+            data={dataset.phaseComplianceMiniTrend}
+            maxValue={100}
+          />
+        </section>
+      ) : null}
     </section>
   );
 }

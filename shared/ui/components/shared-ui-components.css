@@ -1,11 +1,37 @@
 .ui-navbar,
 .ui-form-card,
 .ui-chart,
+.ui-stat-card,
 .ui-table-shell {
   border: 1px solid rgba(13, 36, 79, 0.1);
   border-radius: 16px;
   padding: 14px;
   background: rgba(255, 255, 255, 0.74);
+}
+
+.ui-stat-card {
+  display: grid;
+  gap: 6px;
+}
+
+.ui-stat-card-title {
+  margin: 0;
+  color: #465d80;
+  font-size: 0.9rem;
+}
+
+.ui-stat-card-value {
+  color: #16365d;
+  font-size: 1.3rem;
+}
+
+.ui-stat-card-helper {
+  color: #5d7498;
+}
+
+.ui-stat-card-content {
+  margin-top: 4px;
+  color: #324d74;
 }
 
 .ui-table-shell {
