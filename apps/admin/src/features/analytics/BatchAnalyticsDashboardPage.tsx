@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { UiChartContainer, UiTable, type UiChartPoint, type UiTableColumn } from "../../../../../shared/ui/components";
+import { useAuthProvider } from "../../../../../shared/services/authProvider";
+import { LICENSE_LAYER_ORDER } from "../../../../../shared/types/portalRouting";
+import { resolveAdminAccessContext } from "../../portals/adminAccess";
 import {
   ApiClientError,
   FALLBACK_DATASET,
@@ -194,6 +197,12 @@ function batchRiskDistributionChart(aggregate: BatchAggregate | null): UiChartPo
 }
 
 function BatchAnalyticsDashboardPage() {
+  const { session } = useAuthProvider();
+  const accessContext = resolveAdminAccessContext(session);
+  const isL1OrAbove =
+    accessContext.licenseLayer !== null && LICENSE_LAYER_ORDER[accessContext.licenseLayer] >= LICENSE_LAYER_ORDER.L1;
+  const isL2OrAbove =
+    accessContext.licenseLayer !== null && LICENSE_LAYER_ORDER[accessContext.licenseLayer] >= LICENSE_LAYER_ORDER.L2;
   const [dataset, setDataset] = useState<DashboardDataset>(FALLBACK_DATASET);
   const [isLoading, setIsLoading] = useState(true);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
@@ -361,6 +370,8 @@ function BatchAnalyticsDashboardPage() {
 
   const kpis = useMemo(() => {
     const totalBatches = aggregates.length;
+    const runsInScope = filteredRunAnalytics.length;
+    const participantsInScope = filteredRunAnalytics.reduce((sum, run) => sum + run.participants, 0);
     const averageScore =
       totalBatches > 0
         ? aggregates.reduce((sum, aggregate) => sum + aggregate.avgScorePercent, 0) / totalBatches
@@ -374,60 +385,82 @@ function BatchAnalyticsDashboardPage() {
         ? [...aggregates].sort((left, right) => right.highRiskPercent - left.highRiskPercent)[0]?.batchName ?? "N/A"
         : "N/A";
 
-    return [
+    const baseCards = [
       { label: "Active Batches", value: `${totalBatches}`, helper: "runAnalytics groups" },
       { label: "Average Score", value: formatPercent(averageScore), helper: "avg raw + accuracy" },
+    ];
+
+    if (!isL2OrAbove) {
+      return [
+        ...baseCards,
+        { label: "Runs in Scope", value: `${runsInScope}`, helper: "filtered runAnalytics" },
+        { label: "Participants in Scope", value: `${participantsInScope}`, helper: "runAnalytics totals" },
+      ];
+    }
+
+    return [
+      ...baseCards,
       { label: "Average Discipline", value: formatPercent(averageDiscipline), helper: "studentYearMetrics" },
       { label: "Highest Risk Batch", value: highestRiskBatch, helper: "high + critical share" },
     ];
-  }, [aggregates]);
+  }, [aggregates, filteredRunAnalytics, isL2OrAbove]);
 
   const comparisonColumns = useMemo<UiTableColumn<BatchAggregate>[]>(
-    () => [
-      {
-        id: "batch",
-        header: "Batch",
-        render: (aggregate) => (
-          <div className="admin-batch-cell">
-            <strong>{aggregate.batchName}</strong>
-            <small>{aggregate.batchId}</small>
-          </div>
-        ),
-      },
-      {
-        id: "activity",
-        header: "Runs / Participants",
-        render: (aggregate) => (
-          <div className="admin-batch-cell">
-            <strong>{aggregate.runCount} runs</strong>
-            <small>{aggregate.participantCount} participants</small>
-          </div>
-        ),
-      },
-      {
-        id: "scores",
-        header: "Average Scores",
-        render: (aggregate) => (
-          <div className="admin-batch-cell">
-            <strong>{formatPercent(aggregate.avgScorePercent)}</strong>
-            <small>
-              Raw {formatPercent(aggregate.avgRawScorePercent)} | Accuracy {formatPercent(aggregate.avgAccuracyPercent)}
-            </small>
-          </div>
-        ),
-      },
-      {
-        id: "discipline",
-        header: "Discipline",
-        render: (aggregate) => formatPercent(aggregate.avgDisciplineIndex),
-      },
-      {
-        id: "risk",
-        header: "High-Risk Share",
-        render: (aggregate) => formatPercent(aggregate.highRiskPercent),
-      },
-    ],
-    [],
+    () => {
+      const baseColumns: UiTableColumn<BatchAggregate>[] = [
+        {
+          id: "batch",
+          header: "Batch",
+          render: (aggregate) => (
+            <div className="admin-batch-cell">
+              <strong>{aggregate.batchName}</strong>
+              <small>{aggregate.batchId}</small>
+            </div>
+          ),
+        },
+        {
+          id: "activity",
+          header: "Runs / Participants",
+          render: (aggregate) => (
+            <div className="admin-batch-cell">
+              <strong>{aggregate.runCount} runs</strong>
+              <small>{aggregate.participantCount} participants</small>
+            </div>
+          ),
+        },
+        {
+          id: "scores",
+          header: "Average Scores",
+          render: (aggregate) => (
+            <div className="admin-batch-cell">
+              <strong>{formatPercent(aggregate.avgScorePercent)}</strong>
+              <small>
+                Raw {formatPercent(aggregate.avgRawScorePercent)} | Accuracy {formatPercent(aggregate.avgAccuracyPercent)}
+              </small>
+            </div>
+          ),
+        },
+      ];
+
+      if (!isL2OrAbove) {
+        return baseColumns;
+      }
+
+      return [
+        ...baseColumns,
+        {
+          id: "discipline",
+          header: "Discipline",
+          render: (aggregate) => formatPercent(aggregate.avgDisciplineIndex),
+        },
+        {
+          id: "risk",
+          header: "High-Risk Share",
+          render: (aggregate) => formatPercent(aggregate.highRiskPercent),
+        },
+      ];
+    },
+    [isL2OrAbove],
   );
 
   return (
@@ -439,14 +472,20 @@ function BatchAnalyticsDashboardPage() {
         academic performance, track time-series score trends, monitor batch discipline, and review batch-level risk
         distribution.
       </p>
+      <p className="admin-content-copy">
+        Layer visibility follows overview-aligned rules: L0-L1 show operational batch comparisons and trends, while
+        discipline and risk surfaces are shown only at L2+.
+      </p>
 
       <p className="admin-analytics-inline-link-row">
         <NavLink className="admin-primary-link" to="/admin/analytics">
           Back to Analytics Dashboard
         </NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/analytics/risk-insights">
-          Open Risk Insights Dashboard
-        </NavLink>
+        {isL1OrAbove ? (
+          <NavLink className="admin-primary-link" to="/admin/analytics/risk-insights">
+            Open Risk Insights Dashboard
+          </NavLink>
+        ) : null}
       </p>
 
       <p className="admin-analytics-inline-note">
@@ -568,19 +607,26 @@ function BatchAnalyticsDashboardPage() {
         ))}
       </div>
 
-      <div className="admin-batch-chart-grid">
-        <UiChartContainer
-          title="Batch Discipline Metrics"
-          subtitle="Average discipline index by batch"
-          data={disciplineChartData}
-        />
-        <UiChartContainer
-          title={`Batch Risk Distribution${primaryBatch ? ` (${primaryBatch.batchName})` : ""}`}
-          subtitle="Risk cluster composition for the highest-performing batch"
-          data={riskDistributionData}
-          variant="pie"
-        />
-      </div>
+      {isL2OrAbove ? (
+        <div className="admin-batch-chart-grid">
+          <UiChartContainer
+            title="Batch Discipline Metrics"
+            subtitle="Average discipline index by batch"
+            data={disciplineChartData}
+          />
+          <UiChartContainer
+            title={`Batch Risk Distribution${primaryBatch ? ` (${primaryBatch.batchName})` : ""}`}
+            subtitle="Risk cluster composition for the highest-performing batch"
+            data={riskDistributionData}
+            variant="pie"
+          />
+        </div>
+      ) : (
+        <p className="admin-analytics-inline-note">
+          Discipline and risk distribution charts unlock at license layer L2 to stay aligned with overview visibility
+          policy.
+        </p>
+      )}
 
       <div className="admin-batch-trend-section">
         <h3>Average Score Trends Across Runs</h3>
