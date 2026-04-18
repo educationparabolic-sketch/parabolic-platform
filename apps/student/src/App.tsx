@@ -1,6 +1,7 @@
 import { useState, type FormEvent, type ReactElement } from "react";
 import {
   Navigate,
+  NavLink,
   Outlet,
   Route,
   Routes,
@@ -203,6 +204,31 @@ function StudentLayout() {
           <h2>{activeRoute?.label ?? "Student"}</h2>
           <p className="student-sidebar-copy">
             {activeRoute?.summary ?? "Student route selection and contextual section guidance."}
+          </p>
+          <ul className="student-sidebar-list">
+            {STUDENT_NAV_ITEMS.map((item) => (
+              <li key={item.path}>
+                <NavLink
+                  to={item.path}
+                  className={({ isActive }) =>
+                    isActive ?
+                      "student-sidebar-link student-sidebar-link-active" :
+                      "student-sidebar-link"
+                  }
+                >
+                  <strong>{item.label}</strong>
+                  <small>{item.summary}</small>
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+          <p className="student-content-note">
+            Data flow: Session Submitted to runAnalytics updated to studentYearMetrics updated to Student
+            Portal summary refresh.
+          </p>
+          <p className="student-content-note">
+            Terminology standard: display only Raw Score % and Accuracy %. Score, Total Marks, and
+            cumulative raw marks are not shown.
           </p>
         </aside>
 
