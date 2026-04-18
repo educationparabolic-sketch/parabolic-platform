@@ -236,7 +236,7 @@ export async function fetchGovernanceDataset(): Promise<GovernanceDashboardDatas
     body: {
       instituteId,
       yearId,
-      limit: 12,
+      limit: 10,
     },
   });
 

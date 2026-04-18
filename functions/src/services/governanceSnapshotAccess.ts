@@ -13,7 +13,7 @@ const INSTITUTES_COLLECTION = "institutes";
 const ACADEMIC_YEARS_COLLECTION = "academicYears";
 const GOVERNANCE_SNAPSHOTS_COLLECTION = "governanceSnapshots";
 const DEFAULT_LIMIT = 6;
-const MAX_LIMIT = 12;
+const MAX_LIMIT = 10;
 
 const isPlainObject = (
   value: unknown,

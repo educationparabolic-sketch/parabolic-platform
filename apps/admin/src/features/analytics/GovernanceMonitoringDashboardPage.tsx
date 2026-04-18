@@ -300,7 +300,7 @@ function GovernanceMonitoringDashboardPage() {
       <div className="admin-governance-chart-grid">
         <UiChartContainer
           title="Stability Index Trend"
-          subtitle="12-month institutional stability trajectory"
+          subtitle="Institutional stability trajectory from recent monthly snapshots"
           data={stabilityTrend}
           variant="line"
           maxValue={100}
