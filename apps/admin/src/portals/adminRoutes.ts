@@ -409,6 +409,14 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     readOnlyRoles: ["director"],
   },
   {
+    path: "/admin/licensing/upgrade-preview",
+    title: "Upgrade Preview",
+    section: "Licensing",
+    description: "Strategic preview of next-layer capabilities with vendor-approved upgrade workflow.",
+    allowedRoles: ["admin", "director"],
+    readOnlyRoles: ["director"],
+  },
+  {
     path: "/admin/licensing/history",
     title: "License History",
     section: "Licensing",

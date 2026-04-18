@@ -17,6 +17,7 @@ import GovernanceMonitoringDashboardPage from "./features/analytics/GovernanceMo
 import RiskInsightsDashboardPage from "./features/analytics/RiskInsightsDashboardPage";
 import AssignmentManagementPage from "./features/assignments/AssignmentManagementPage";
 import InterventionToolsPage from "./features/insights/InterventionToolsPage";
+import AdminLicensingConfigurationPage from "./features/licensing/AdminLicensingConfigurationPage";
 import AdminOverviewPage from "./features/overview/AdminOverviewPage";
 import AdminSettingsConfigurationPage from "./features/settings/AdminSettingsConfigurationPage";
 import StudentManagementPage from "./features/students/StudentManagementPage";
@@ -34,11 +35,6 @@ import "./App.css";
 interface AdminNavItem {
   path: string;
   label: string;
-  summary: string;
-}
-
-interface AdminSectionPageProps {
-  title: string;
   summary: string;
 }
 
@@ -79,19 +75,6 @@ const ADMIN_NAV_ITEMS: AdminNavItem[] = ADMIN_NAV_PATH_ORDER.map((path) => {
     summary: definition?.description ?? "Admin route",
   };
 });
-
-function AdminSectionPage({ title, summary }: AdminSectionPageProps) {
-  return (
-    <section className="admin-content-card" aria-labelledby="admin-content-title">
-      <p className="admin-content-eyebrow">Admin Portal</p>
-      <h2 id="admin-content-title">{title}</h2>
-      <p className="admin-content-copy">{summary}</p>
-      <p className="admin-content-note">
-        Build 116 establishes layout, navigation, and route-based rendering for this section.
-      </p>
-    </section>
-  );
-}
 
 function NotFoundPage() {
   return (
@@ -367,12 +350,31 @@ function App() {
         />
         <Route
           path="licensing"
-          element={(
-            <AdminSectionPage
-              title="Licensing"
-              summary="Review institute licensing status, feature eligibility, usage boundaries, and upgrade-readiness summary."
-            />
-          )}
+          element={<Navigate to="/admin/licensing/current" replace />}
+        />
+        <Route
+          path="licensing/current"
+          element={<AdminLicensingConfigurationPage />}
+        />
+        <Route
+          path="licensing/features"
+          element={<AdminLicensingConfigurationPage />}
+        />
+        <Route
+          path="licensing/eligibility"
+          element={<AdminLicensingConfigurationPage />}
+        />
+        <Route
+          path="licensing/usage"
+          element={<AdminLicensingConfigurationPage />}
+        />
+        <Route
+          path="licensing/upgrade-preview"
+          element={<AdminLicensingConfigurationPage />}
+        />
+        <Route
+          path="licensing/history"
+          element={<AdminLicensingConfigurationPage />}
         />
         <Route
           path="settings"

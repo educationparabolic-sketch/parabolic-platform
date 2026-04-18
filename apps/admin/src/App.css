@@ -1647,6 +1647,45 @@
   color: #2b4f76;
 }
 
+.admin-licensing-eligibility-grid {
+  margin-top: 12px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.admin-licensing-progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(27, 95, 194, 0.15);
+  overflow: hidden;
+}
+
+.admin-licensing-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: #1b5fc2;
+}
+
+.admin-licensing-checklist {
+  margin: 0;
+  padding-left: 18px;
+  color: #21486f;
+  display: grid;
+  gap: 3px;
+}
+
+.admin-licensing-action-grid {
+  margin-top: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.admin-licensing-preview-card {
+  min-height: 112px;
+}
+
 @media (max-width: 1024px) {
   .admin-layout-grid {
     grid-template-columns: 1fr;
@@ -1746,6 +1785,10 @@
   }
 
   .admin-settings-inline-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-licensing-eligibility-grid {
     grid-template-columns: 1fr;
   }
 }
