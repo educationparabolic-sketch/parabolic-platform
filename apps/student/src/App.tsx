@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactElement } from "react";
+import { useMemo, useState, type FormEvent, type ReactElement } from "react";
 import {
   Navigate,
   NavLink,
@@ -10,8 +10,10 @@ import {
 } from "react-router-dom";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { useAuthProvider } from "../../../shared/services/authProvider";
+import type { LicenseLayer } from "../../../shared/types/portalRouting";
 import { UiNavBar } from "../../../shared/ui/components";
 import StudentDashboardPage from "./features/dashboard/StudentDashboardPage";
+import StudentInsightsPage from "./features/insights/StudentInsightsPage";
 import StudentMyTestsPage from "./features/my-tests/StudentMyTestsPage";
 import StudentPerformancePage from "./features/performance/StudentPerformancePage";
 import StudentProfileSettingsPage from "./features/profile/StudentProfileSettingsPage";
@@ -21,11 +23,7 @@ interface StudentNavItem {
   path: string;
   label: string;
   summary: string;
-}
-
-interface StudentSectionPageProps {
-  title: string;
-  summary: string;
+  minimumLicenseLayer?: LicenseLayer;
 }
 
 const STUDENT_NAV_ITEMS: StudentNavItem[] = [
@@ -48,6 +46,7 @@ const STUDENT_NAV_ITEMS: StudentNavItem[] = [
     path: "/student/insights",
     label: "Insights",
     summary: "Behavioral insight space for interpreted performance indicators.",
+    minimumLicenseLayer: "L1",
   },
   {
     path: "/student/profile",
@@ -56,18 +55,36 @@ const STUDENT_NAV_ITEMS: StudentNavItem[] = [
   },
 ];
 
-function StudentSectionPage({ title, summary }: StudentSectionPageProps) {
-  return (
-    <section className="student-content-card" aria-labelledby="student-content-title">
-      <p className="student-content-eyebrow">Student Portal</p>
-      <h2 id="student-content-title">{title}</h2>
-      <p className="student-content-copy">{summary}</p>
-      <p className="student-content-note">
-        Build 126 establishes the student layout shell, authenticated route protection, and route-based
-        rendering containers for this section.
-      </p>
-    </section>
-  );
+const LICENSE_LAYER_ORDER: Record<LicenseLayer, number> = {
+  L0: 0,
+  L1: 1,
+  L2: 2,
+  L3: 3,
+};
+
+function decodeLicenseLayerFromToken(idToken: string | null): LicenseLayer | null {
+  if (!idToken) {
+    return null;
+  }
+
+  const parts = idToken.split(".");
+  if (parts.length !== 3) {
+    return null;
+  }
+
+  try {
+    const encoded = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = encoded.padEnd(Math.ceil(encoded.length / 4) * 4, "=");
+    const payload = JSON.parse(atob(padded)) as Record<string, unknown>;
+    const candidate = typeof payload.licenseLayer === "string" ? payload.licenseLayer.trim().toUpperCase() : "";
+    if (candidate === "L0" || candidate === "L1" || candidate === "L2" || candidate === "L3") {
+      return candidate;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
 }
 
 function StudentLoginPage(props: { loginPath: string; protectedPath: string }) {
@@ -167,8 +184,21 @@ function StudentLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { session, signOut } = useAuthProvider();
+  const activeLicenseLayer = decodeLicenseLayerFromToken(session.idToken) ?? "L0";
 
-  const activeRoute = STUDENT_NAV_ITEMS.find((item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`));
+  const visibleNavItems = useMemo(() => {
+    return STUDENT_NAV_ITEMS.filter((item) => {
+      if (!item.minimumLicenseLayer) {
+        return true;
+      }
+
+      return LICENSE_LAYER_ORDER[activeLicenseLayer] >= LICENSE_LAYER_ORDER[item.minimumLicenseLayer];
+    });
+  }, [activeLicenseLayer]);
+
+  const activeRoute = STUDENT_NAV_ITEMS.find(
+    (item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`),
+  );
 
   return (
     <main className="student-page-shell">
@@ -181,7 +211,7 @@ function StudentLayout() {
           title="Student Routes"
           subtitle="Shared top navigation"
           activeItemId={activeRoute?.path}
-          items={STUDENT_NAV_ITEMS.map((item) => ({
+          items={visibleNavItems.map((item) => ({
             id: item.path,
             label: item.label,
             hint: item.summary,
@@ -208,7 +238,7 @@ function StudentLayout() {
             {activeRoute?.summary ?? "Student route selection and contextual section guidance."}
           </p>
           <ul className="student-sidebar-list">
-            {STUDENT_NAV_ITEMS.map((item) => (
+            {visibleNavItems.map((item) => (
               <li key={item.path}>
                 <NavLink
                   to={item.path}
@@ -232,6 +262,11 @@ function StudentLayout() {
             Terminology standard: display only Raw Score % and Accuracy %. Score, Total Marks, and
             cumulative raw marks are not shown.
           </p>
+          {LICENSE_LAYER_ORDER[activeLicenseLayer] < LICENSE_LAYER_ORDER.L1 ? (
+            <p className="student-content-note">
+              Insights unlock at L1+ license layer. Upgrade path remains backend-authoritative.
+            </p>
+          ) : null}
         </aside>
 
         <section className="student-main-content" aria-label="Student main dashboard container">
@@ -240,6 +275,25 @@ function StudentLayout() {
       </div>
     </main>
   );
+}
+
+function StudentLicenseRoute(props: {
+  minimumLicenseLayer: LicenseLayer;
+  fallbackPath: string;
+  children: ReactElement;
+}) {
+  const { minimumLicenseLayer, fallbackPath, children } = props;
+  const { session } = useAuthProvider();
+  const location = useLocation();
+
+  const activeLicenseLayer = decodeLicenseLayerFromToken(session.idToken) ?? "L0";
+  const hasAccess = LICENSE_LAYER_ORDER[activeLicenseLayer] >= LICENSE_LAYER_ORDER[minimumLicenseLayer];
+
+  if (!hasAccess) {
+    return <Navigate replace to={fallbackPath} state={{ from: location.pathname }} />;
+  }
+
+  return children;
 }
 
 function App() {
@@ -279,12 +333,11 @@ function App() {
         />
         <Route
           path="insights"
-          element={
-            <StudentSectionPage
-              title="Insights"
-              summary="Behavioral insight route container for interpreted student performance signals."
-            />
-          }
+          element={(
+            <StudentLicenseRoute minimumLicenseLayer="L1" fallbackPath="/student/dashboard">
+              <StudentInsightsPage />
+            </StudentLicenseRoute>
+          )}
         />
         <Route
           path="profile"

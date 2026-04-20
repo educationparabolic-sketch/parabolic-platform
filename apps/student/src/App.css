@@ -698,6 +698,158 @@
   min-width: 780px;
 }
 
+.student-insights-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.student-insights-inline-note {
+  margin: 0;
+  padding: 0.75rem;
+  border-left: 4px solid #2f66b3;
+  background: #eef4ff;
+  color: #24426a;
+}
+
+.student-insights-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.student-insights-guardrail-strip {
+  border: 1px solid #d6e1f1;
+  border-radius: 0.75rem;
+  background: #fbfdff;
+  padding: 0.9rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.student-insights-guardrail-strip p {
+  margin: 0;
+  color: #2b456d;
+}
+
+.student-insights-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.student-insights-snapshot-cell {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.student-insights-snapshot-cell small {
+  color: #5d7698;
+}
+
+.student-insights-topic-cell {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.student-insights-topic-cell small {
+  color: #5d7698;
+}
+
+.student-insights-resource-links {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.student-insights-resource-links a {
+  color: #1b4d8e;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.student-insights-resource-links a:hover {
+  text-decoration: underline;
+}
+
+.student-insights-resource-muted {
+  color: #5d7698;
+  font-size: 0.85rem;
+}
+
+.student-insights-guidance {
+  border: 1px solid #d6e1f1;
+  border-radius: 0.75rem;
+  background: #fbfdff;
+  padding: 0.95rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.student-insights-guidance h3,
+.student-insights-guidance p {
+  margin: 0;
+}
+
+.student-insights-guidance ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.35rem;
+  color: #2f4a71;
+}
+
+.student-insights-l2-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.student-insights-progress-card {
+  border: 1px solid #d9e4f3;
+  border-radius: 0.65rem;
+  background: #ffffff;
+  padding: 0.7rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.student-insights-progress-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.student-insights-progress-card header strong {
+  color: #173a68;
+  font-size: 0.9rem;
+}
+
+.student-insights-progress-card header span {
+  color: #294b75;
+  font-weight: 700;
+}
+
+.student-insights-progress-track {
+  min-height: 10px;
+  border-radius: 999px;
+  background: #dbe4f3;
+  overflow: hidden;
+}
+
+.student-insights-progress-track span {
+  display: block;
+  min-height: 10px;
+  background: linear-gradient(90deg, #1f5ca8, #1a7da5);
+}
+
+.student-insights-page .ui-table-shell {
+  overflow-x: auto;
+}
+
+.student-insights-page .ui-table {
+  min-width: 950px;
+}
+
 .student-profile-page {
   display: grid;
   gap: 1rem;
@@ -793,7 +945,10 @@
   .student-performance-kpi-grid,
   .student-performance-chart-grid,
   .student-performance-l1-grid,
-  .student-performance-progress-grid {
+  .student-performance-progress-grid,
+  .student-insights-kpi-grid,
+  .student-insights-chart-grid,
+  .student-insights-l2-grid {
     grid-template-columns: 1fr;
   }
 
