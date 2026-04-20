@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 131  
-Next Build: 132
+Completed Builds: 132  
+Next Build: 133
 
 Current Phase: Phase 27 — Exam Portal Engine
 
@@ -4321,18 +4321,70 @@ Completed On
 
 ---
 
+## Build 132 — Question Rendering Engine
+
+Phase  
+Phase 27 — Exam Portal Engine
+
+Summary  
+Implemented the exam portal question rendering engine with typed snapshot-driven question content, palette-state transitions, hard-mode-compatible navigation restrictions, and client-side scientific calculator interactions.
+
+Components implemented:
+
+- Extended `apps/exam/src/App.tsx` with a Build 132 session snapshot renderer supporting:
+  - text-based questions
+  - image-based questions (lazy loaded)
+  - optional media blocks
+  - MCQ, numeric, and matrix option interaction models
+- Implemented question controls aligned with architecture scope:
+  - Previous
+  - Clear Response
+  - Mark for Review
+  - Save & Next
+- Implemented deterministic palette behavior:
+  - direct jump
+  - per-question status transitions (`not_visited`, `not_answered`, `answered`, `marked`, `answered_marked`)
+  - section filtering (`All`, `Physics`, `Chemistry`, `Mathematics`)
+  - hard mode revisit restrictions via forward-only/locked-question behavior
+- Implemented header-launched scientific calculator modal in `apps/exam/src/App.tsx` with client-side operations only:
+  - basic arithmetic
+  - `sqrt`, `x²`, `cbrt`, `x³`, `log`, `ln`, `sin`, `cos`, `tan`, `pi`, `e`
+  - no backend storage and no history persistence
+- Added Build 132 styling updates in `apps/exam/src/App.css` for:
+  - question rendering surface and option controls
+  - media/image blocks
+  - matrix/numeric input layouts
+  - calculator modal and responsive behavior
+- Added deterministic browser verification automation and artifacts under `apps/exam/artifacts/build-132/`
+- Executed frontend verification:
+  - `apps/exam`: build, lint
+  - browser checks for `/session/session-build-132?token=...`, `/session/session-build-132`, and `/` at `1366x768` and `390x844`
+  - route guard checks for valid token session access and missing-token fallback behavior
+  - console/network/responsive/guard checks recorded in `apps/exam/artifacts/build-132/verification-results.json`
+
+Result  
+The exam portal now includes the Build 132 question rendering engine aligned with Sections 1.4.5, 1.4.6, and 1.4.7, and is ready for Build 133 navigation and timing interface enhancements.
+
+Commit Reference  
+Build 132 — Question Rendering Engine implemented
+
+Completed On  
+2026-04-20
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 132
+Next Build Number: 133
 
 Phase  
 Phase 27 — Exam Portal Engine
 
 Subsystem  
-Question Rendering Engine
+Navigation & Timing Interface
 
 Reference  
-2_Portals_Architecture.md → Sections 1.4.5, 1.4.6, 1.4.7
+2_Portals_Architecture.md → Sections 1.4.4, 1.4.8, 1.4.9
 
 ---
 
@@ -4471,7 +4523,8 @@ Build | Phase | Status
 129 | Student Portal Core | Completed
 130 | Student Portal Core | Completed
 131 | Exam Portal Engine | Completed
-132–150 | Remaining Phases | Pending
+132 | Exam Portal Engine | Completed
+133–150 | Remaining Phases | Pending
 
 ---
 
