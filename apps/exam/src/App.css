@@ -421,6 +421,74 @@ input {
   font-size: 0.84rem;
 }
 
+.exam-submit-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 1rem;
+  background: rgba(7, 20, 44, 0.58);
+}
+
+.exam-submit-dialog {
+  width: min(620px, 100%);
+  background: #ffffff;
+  border: 1px solid var(--exam-border);
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(7, 20, 44, 0.28);
+  padding: 1rem;
+}
+
+.exam-submit-dialog h2 {
+  margin: 0;
+  color: var(--exam-blue);
+}
+
+.exam-submit-summary {
+  margin-top: 0.75rem;
+  border: 1px solid var(--exam-border);
+  border-radius: 8px;
+  background: #f7fbff;
+  padding: 0.7rem;
+}
+
+.exam-submit-summary p {
+  margin: 0.22rem 0;
+  color: var(--exam-muted);
+}
+
+.exam-submit-check {
+  margin-top: 0.75rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  color: var(--exam-muted);
+}
+
+.exam-submit-dialog-actions {
+  margin-top: 0.9rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  justify-content: flex-end;
+}
+
+.exam-submit-dialog-actions button {
+  border: 1px solid var(--exam-border);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--exam-ink);
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+}
+
+.exam-submit-dialog-actions .exam-submit-button {
+  width: auto;
+  padding-inline: 0.9rem;
+}
+
 .exam-question-container {
   padding: 1rem;
 }

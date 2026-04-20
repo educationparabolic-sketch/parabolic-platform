@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 134  
-Next Build: 135
+Completed Builds: 135  
+Next Build: 136
 
 Current Phase: Phase 27 — Exam Portal Engine
 
@@ -4470,18 +4470,71 @@ Completed On
 
 ---
 
-# NEXT BUILD
-
-Next Build Number: 135
+## Build 135 — Exam Submission Workflow
 
 Phase  
 Phase 27 — Exam Portal Engine
 
+Summary  
+Implemented deterministic exam submission workflow for the exam portal with explicit submission confirmation, unanswered-question safeguards, backend submit integration, lifecycle-state transitions, and recovery protections aligned to Sections 1.4.10, 1.4.12, and 1.4.16.
+
+Components implemented:
+
+- Extended `apps/exam/src/App.tsx` with explicit frontend lifecycle-state tracking (`created` → `started` → `active` → `submitted`/`expired`/`terminated`) and runtime lifecycle visibility in the exam header
+- Implemented final submission orchestration for `POST /exam/session/{sessionId}/submit`:
+  - typed submit request/response contracts
+  - mandatory answer-batch flush before submit
+  - manual submit flow using backend-confirmed finalization
+  - timer-expiry auto-submit path routed through the same submit endpoint
+  - immutable post-submit interaction lock and terminal state rendering
+- Added submission confirmation dialog workflow:
+  - explicit final-submit confirmation step
+  - unanswered/unvisited warning acknowledgement gate
+  - controlled-mode early-submit override acknowledgement when discipline/adherence is low
+- Added session state resilience aligned to session-state-machine and reconnect expectations:
+  - IndexedDB recovery snapshot persistence for active sessions
+  - reload recovery hydration for same session
+  - reconnect-triggered pending-answer sync
+  - recovery snapshot cleanup on terminal submission state
+- Added browser-session one-active-session-per-run guard keyed by student + run
+- Updated `apps/exam/src/App.css` with deterministic styling for submission dialog overlays, summary/warning blocks, and dialog actions while preserving JEE-style layout constraints
+- Added deterministic frontend verification automation and artifacts under `apps/exam/artifacts/build-135/`:
+  - `verify-routes.mjs`
+  - `verification-results.json`
+  - desktop/mobile screenshots for affected routes
+- Installed required frontend verification tooling for this build scope:
+  - added `playwright` in `apps/exam/devDependencies`
+  - installed Chromium binaries for local browser verification
+- Executed frontend verification:
+  - `apps/exam`: build, lint
+  - browser checks for `/session/session-build-135?token=...`, `/session/session-build-135`, and `/` at `1366x768` and `390x844`
+  - submit-workflow route checks include confirmation dialog, unanswered warning acknowledgement, and final submitted-state visibility
+  - route guard checks for valid token session access and missing-token fallback behavior
+  - console/network/responsive/guard checks recorded in `apps/exam/artifacts/build-135/verification-results.json`
+
+Result  
+The exam portal now includes the Build 135 exam submission workflow with deterministic submission state transitions, backend-authoritative final submission trigger, and structural guarantee coverage for mandatory instructions, calculator availability, token-isolated execution, server-timed auto-submit behavior, and immutable post-submit interaction state.
+
+Commit Reference  
+Build 135 — Exam Submission Workflow implemented
+
+Completed On  
+2026-04-20
+
+---
+
+# NEXT BUILD
+
+Next Build Number: 136
+
+Phase  
+Phase 28 — Vendor Portal
+
 Subsystem  
-Exam Submission Workflow
+Vendor Portal Layout
 
 Reference  
-2_Portals_Architecture.md → Sections 1.4.10, 1.4.12, 1.4.16
+2_Portals_Architecture.md → Sections 1.5.1, 1.5.2, 1.5.12
 
 ---
 
@@ -4623,7 +4676,8 @@ Build | Phase | Status
 132 | Exam Portal Engine | Completed
 133 | Exam Portal Engine | Completed
 134 | Exam Portal Engine | Completed
-135–150 | Remaining Phases | Pending
+135 | Exam Portal Engine | Completed
+136–150 | Remaining Phases | Pending
 
 ---
 

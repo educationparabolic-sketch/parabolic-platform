@@ -11,6 +11,7 @@ type QuestionType = "mcq" | "numeric" | "matrix";
 type DifficultyBand = "easy" | "medium" | "hard";
 type PhaseId = "phase1" | "phase2" | "phase3";
 type SubmissionReason = "manual" | "expiry";
+type SessionLifecycleState = "created" | "started" | "active" | "submitted" | "expired" | "terminated";
 type CalculatorOperation =
   | "sqrt"
   | "square"
@@ -173,6 +174,43 @@ interface SessionTokenRefreshResponse {
   };
 }
 
+interface ExamSubmitRequestBody {
+  instituteId: string;
+  runId: string;
+  yearId: string;
+  reason: SubmissionReason;
+  unansweredQuestionIds: string[];
+  clientSubmittedAt: string;
+}
+
+interface ExamSubmitResponse {
+  code?: string;
+  data?: {
+    status?: SessionLifecycleState;
+    submittedAt?: string;
+    rawScorePercent?: number;
+    accuracyPercent?: number;
+    disciplineIndex?: number;
+    riskState?: string;
+    alreadySubmitted?: boolean;
+  };
+}
+
+interface SessionRecoverySnapshot {
+  sessionId: string;
+  responseStateByQuestionId: Record<string, QuestionResponseState>;
+  questionTimingById: Record<string, QuestionTimingState>;
+  visitedQuestionIds: string[];
+  hardModeLockedQuestionIds: string[];
+  selectedQuestionId: string;
+  remainingMs: number;
+  deadlineEpochMs: number | null;
+  pendingAnswerMap: Record<string, QueuedAnswerWrite>;
+  lastAnswerWriteAtMs: number;
+  syncCounter: number;
+  savedAtIso: string;
+}
+
 type SyncState = "idle" | "syncing" | "error";
 
 const EXAM_DURATION_MINUTES = 180;
@@ -185,6 +223,9 @@ const ANSWER_BATCH_INTERVAL_MS = 5_000;
 const ANSWER_BATCH_MAX_SIZE = 10;
 const HEARTBEAT_INTERVAL_MS = 20_000;
 const SESSION_TOKEN_REFRESH_WINDOW_SEC = 120;
+const RECOVERY_DB_NAME = "parabolic-exam-runtime";
+const RECOVERY_STORE_NAME = "sessionRecovery";
+const RECOVERY_SAVE_INTERVAL_MS = 3_000;
 
 const MARKING_SCHEME = [
   "+4 for each correct answer",
@@ -400,6 +441,95 @@ function parseSessionRefreshToken(responseBody: SessionTokenRefreshResponse): st
   }
 
   return refreshedToken.trim();
+}
+
+async function openRecoveryDb(): Promise<IDBDatabase | null> {
+  if (typeof window === "undefined" || !("indexedDB" in window)) {
+    return null;
+  }
+
+  return new Promise<IDBDatabase | null>((resolve) => {
+    const openRequest = window.indexedDB.open(RECOVERY_DB_NAME, 1);
+    openRequest.onupgradeneeded = () => {
+      const db = openRequest.result;
+      if (!db.objectStoreNames.contains(RECOVERY_STORE_NAME)) {
+        db.createObjectStore(RECOVERY_STORE_NAME, { keyPath: "sessionId" });
+      }
+    };
+    openRequest.onerror = () => resolve(null);
+    openRequest.onsuccess = () => resolve(openRequest.result);
+  });
+}
+
+async function loadRecoverySnapshot(sessionId: string): Promise<SessionRecoverySnapshot | null> {
+  const db = await openRecoveryDb();
+  if (!db) {
+    return null;
+  }
+
+  return new Promise<SessionRecoverySnapshot | null>((resolve) => {
+    const transaction = db.transaction(RECOVERY_STORE_NAME, "readonly");
+    const store = transaction.objectStore(RECOVERY_STORE_NAME);
+    const getRequest = store.get(sessionId);
+
+    getRequest.onerror = () => {
+      db.close();
+      resolve(null);
+    };
+    getRequest.onsuccess = () => {
+      const snapshot = getRequest.result as SessionRecoverySnapshot | undefined;
+      db.close();
+      resolve(snapshot ?? null);
+    };
+  });
+}
+
+async function saveRecoverySnapshot(snapshot: SessionRecoverySnapshot): Promise<void> {
+  const db = await openRecoveryDb();
+  if (!db) {
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    const transaction = db.transaction(RECOVERY_STORE_NAME, "readwrite");
+    transaction.objectStore(RECOVERY_STORE_NAME).put(snapshot);
+    transaction.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    transaction.onerror = () => {
+      db.close();
+      resolve();
+    };
+    transaction.onabort = () => {
+      db.close();
+      resolve();
+    };
+  });
+}
+
+async function clearRecoverySnapshot(sessionId: string): Promise<void> {
+  const db = await openRecoveryDb();
+  if (!db) {
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    const transaction = db.transaction(RECOVERY_STORE_NAME, "readwrite");
+    transaction.objectStore(RECOVERY_STORE_NAME).delete(sessionId);
+    transaction.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    transaction.onerror = () => {
+      db.close();
+      resolve();
+    };
+    transaction.onabort = () => {
+      db.close();
+      resolve();
+    };
+  });
 }
 
 function statusClassName(status: QuestionPaletteStatus): string {
@@ -914,7 +1044,7 @@ function ExamSessionPage() {
   const [slowdownUntilMs, setSlowdownUntilMs] = useState<number | null>(null);
   const [rushedAttemptStreak, setRushedAttemptStreak] = useState(0);
   const [skippedQuestionsCount, setSkippedQuestionsCount] = useState(0);
-  const [manualSubmitAttempts, setManualSubmitAttempts] = useState(0);
+  const [sessionLifecycleState, setSessionLifecycleState] = useState<SessionLifecycleState>("created");
   const [submittedAtIso, setSubmittedAtIso] = useState<string | null>(null);
   const [submissionReason, setSubmissionReason] = useState<SubmissionReason | null>(null);
   const [nowEpochMs, setNowEpochMs] = useState(() => Date.now());
@@ -924,6 +1054,13 @@ function ExamSessionPage() {
   const [syncMessage, setSyncMessage] = useState("No pending answer updates.");
   const [lastHeartbeatAtIso, setLastHeartbeatAtIso] = useState<string | null>(null);
   const [sessionTokenRefreshAtIso, setSessionTokenRefreshAtIso] = useState<string | null>(null);
+  const [recoveryApplied, setRecoveryApplied] = useState(false);
+  const [submitDialogOpen, setSubmitDialogOpen] = useState(false);
+  const [submitInFlight, setSubmitInFlight] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitWarningAcknowledged, setSubmitWarningAcknowledged] = useState(false);
+  const [earlySubmitOverrideAccepted, setEarlySubmitOverrideAccepted] = useState(false);
+  const [sessionConflictMessage, setSessionConflictMessage] = useState<string | null>(null);
 
   const totalDurationMs = EXAM_DURATION_MINUTES * 60 * 1000;
   const isOperationalMode = entryValidation.claims.mode === "Operational";
@@ -931,14 +1068,30 @@ function ExamSessionPage() {
   const isControlledMode = entryValidation.claims.mode === "Controlled";
   const isHardMode = entryValidation.claims.mode === "Hard";
   const enforcementMode = isControlledMode || isHardMode;
-  const isSubmitted = submissionReason !== null;
+  const isSubmitted = sessionLifecycleState === "submitted";
   const tokenExpiryEpochSec = entryValidation.claims.exp;
-  const instituteId = entryValidation.claims.instituteId ?? "inst-build-134";
-  const yearId = entryValidation.claims.yearId ?? "year-build-134";
-  const runId = entryValidation.claims.runId ?? "run-build-134";
+  const instituteId = entryValidation.claims.instituteId ?? "inst-build-135";
+  const yearId = entryValidation.claims.yearId ?? "year-build-135";
+  const runId = entryValidation.claims.runId ?? "run-build-135";
   const tokenSessionId = entryValidation.claims.sessionId;
   const effectiveSessionId = tokenSessionId && tokenSessionId.length > 0 ? tokenSessionId : sessionId;
+  const activeSessionGuardKey = `exam-active-session::${entryValidation.claims.sub ?? "anonymous"}::${runId}`;
   const pendingAnswers = useMemo(() => Object.values(pendingAnswerMap), [pendingAnswerMap]);
+  const unansweredQuestionIdsForSubmission = useMemo(
+    () =>
+      sessionSnapshot.questions
+        .filter((question) => {
+          const responseState = responseStateByQuestionId[question.id] ?? {
+            selectedOptionId: null,
+            numericResponse: "",
+            matrixSelections: [],
+            markedForReview: false,
+          };
+          return !visitedQuestionIds.has(question.id) || !hasAnswer(question, responseState);
+        })
+        .map((question) => question.id),
+    [responseStateByQuestionId, sessionSnapshot.questions, visitedQuestionIds],
+  );
 
   useEffect(() => {
     setSessionToken(tokenFromQuery);
@@ -999,8 +1152,7 @@ function ExamSessionPage() {
     }
 
     const submitTimeout = window.setTimeout(() => {
-      setSubmissionReason("expiry");
-      setSubmittedAtIso(new Date().toISOString());
+      setSessionLifecycleState("expired");
     }, 0);
 
     return () => window.clearTimeout(submitTimeout);
@@ -1262,12 +1414,188 @@ function ExamSessionPage() {
   ]);
 
   useEffect(() => {
+    if (!instructionConfirmed || sessionLifecycleState === "submitted" || sessionLifecycleState === "terminated") {
+      return;
+    }
+
+    if (sessionLifecycleState !== "created" && sessionLifecycleState !== "started") {
+      return;
+    }
+
+    setSessionLifecycleState("active");
+  }, [instructionConfirmed, sessionLifecycleState]);
+
+  useEffect(() => {
+    if (sessionLifecycleState === "active") {
+      window.sessionStorage.setItem(activeSessionGuardKey, effectiveSessionId);
+      return;
+    }
+
+    if (sessionLifecycleState === "submitted" || sessionLifecycleState === "terminated") {
+      window.sessionStorage.removeItem(activeSessionGuardKey);
+    }
+  }, [activeSessionGuardKey, effectiveSessionId, sessionLifecycleState]);
+
+  useEffect(() => {
+    if (!instructionConfirmed || !entryValidation.allowed || recoveryApplied || isSubmitted) {
+      return;
+    }
+
+    void loadRecoverySnapshot(effectiveSessionId).then((snapshot) => {
+      if (!snapshot) {
+        return;
+      }
+
+      setResponseStateByQuestionId(snapshot.responseStateByQuestionId);
+      setQuestionTimingById(snapshot.questionTimingById);
+      setVisitedQuestionIds(new Set(snapshot.visitedQuestionIds));
+      setHardModeLockedQuestionIds(new Set(snapshot.hardModeLockedQuestionIds));
+      setSelectedQuestionId(snapshot.selectedQuestionId);
+      setRemainingMs(snapshot.remainingMs);
+      setDeadlineEpochMs(snapshot.deadlineEpochMs);
+      setPendingAnswerMap(snapshot.pendingAnswerMap);
+      setLastAnswerWriteAtMs(snapshot.lastAnswerWriteAtMs);
+      setSyncCounter(snapshot.syncCounter);
+      setSyncMessage("Recovered session state from local IndexedDB snapshot.");
+      setRecoveryApplied(true);
+    });
+  }, [effectiveSessionId, entryValidation.allowed, instructionConfirmed, isSubmitted, recoveryApplied]);
+
+  useEffect(() => {
+    if (!instructionConfirmed || isSubmitted) {
+      return;
+    }
+
+    const saveInterval = window.setInterval(() => {
+      const snapshot: SessionRecoverySnapshot = {
+        sessionId: effectiveSessionId,
+        responseStateByQuestionId,
+        questionTimingById,
+        visitedQuestionIds: Array.from(visitedQuestionIds),
+        hardModeLockedQuestionIds: Array.from(hardModeLockedQuestionIds),
+        selectedQuestionId,
+        remainingMs,
+        deadlineEpochMs,
+        pendingAnswerMap,
+        lastAnswerWriteAtMs,
+        syncCounter,
+        savedAtIso: new Date().toISOString(),
+      };
+      void saveRecoverySnapshot(snapshot);
+    }, RECOVERY_SAVE_INTERVAL_MS);
+
+    return () => window.clearInterval(saveInterval);
+  }, [
+    deadlineEpochMs,
+    effectiveSessionId,
+    hardModeLockedQuestionIds,
+    instructionConfirmed,
+    isSubmitted,
+    lastAnswerWriteAtMs,
+    pendingAnswerMap,
+    questionTimingById,
+    remainingMs,
+    responseStateByQuestionId,
+    selectedQuestionId,
+    syncCounter,
+    visitedQuestionIds,
+  ]);
+
+  useEffect(() => {
+    if (!instructionConfirmed || isSubmitted) {
+      return;
+    }
+
+    const handleOnline = () => {
+      setSyncMessage("Connection restored. Syncing pending responses.");
+      void flushAnswerBatch("submission");
+    };
+
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
+  }, [flushAnswerBatch, instructionConfirmed, isSubmitted]);
+
+  useEffect(() => {
     if (!isSubmitted) {
       return;
     }
 
-    void flushAnswerBatch("submission");
-  }, [flushAnswerBatch, isSubmitted]);
+    setSessionLifecycleState("submitted");
+    void clearRecoverySnapshot(effectiveSessionId);
+  }, [effectiveSessionId, isSubmitted]);
+
+  const submitSession = useCallback(async (reason: SubmissionReason, unansweredIds: string[]): Promise<void> => {
+    if (!entryValidation.allowed || !sessionToken) {
+      throw new Error("Missing valid session token for submission.");
+    }
+
+    setSubmitInFlight(true);
+    setSubmitError(null);
+
+    try {
+      const answeredPersisted = await flushAnswerBatch("submission");
+      if (!answeredPersisted) {
+        throw new Error("Unable to flush pending answers before submission.");
+      }
+
+      const endpointBase = apiBaseUrl || "";
+      const endpoint = `${endpointBase}/exam/session/${encodeURIComponent(effectiveSessionId)}/submit`;
+      const requestBody: ExamSubmitRequestBody = {
+        instituteId,
+        runId,
+        yearId,
+        reason,
+        unansweredQuestionIds: unansweredIds,
+        clientSubmittedAt: new Date().toISOString(),
+      };
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${sessionToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Submission failed with status ${response.status}`);
+      }
+
+      const responseBody = await response.json() as ExamSubmitResponse;
+      setSubmissionReason(reason);
+      setSubmittedAtIso(responseBody.data?.submittedAt ?? new Date().toISOString());
+      setSessionLifecycleState("submitted");
+      setSubmitDialogOpen(false);
+      setSubmitWarningAcknowledged(false);
+      setEarlySubmitOverrideAccepted(false);
+      setSyncMessage(responseBody.data?.alreadySubmitted ? "Submission already finalized on server." : "Submission completed.");
+    } finally {
+      setSubmitInFlight(false);
+    }
+  }, [
+    apiBaseUrl,
+    effectiveSessionId,
+    entryValidation.allowed,
+    flushAnswerBatch,
+    instituteId,
+    runId,
+    sessionToken,
+    yearId,
+  ]);
+
+  useEffect(() => {
+    if (sessionLifecycleState !== "expired" || isSubmitted || submitInFlight) {
+      return;
+    }
+
+    void submitSession("expiry", unansweredQuestionIdsForSubmission)
+      .catch((error) => {
+        setSubmitError(error instanceof Error ? error.message : "Auto-submit failed.");
+        setSessionLifecycleState("terminated");
+      });
+  }, [isSubmitted, sessionLifecycleState, submitInFlight, submitSession, unansweredQuestionIdsForSubmission]);
 
   const palette = useMemo<PaletteTile[]>(
     () =>
@@ -1421,14 +1749,20 @@ function ExamSessionPage() {
     enforcementMode &&
     selectedQuestionMinTimeRemainingSec > 0;
 
-  const saveDisabled = selectedQuestionRevisitLocked || saveBlockedByTiming || slowdownActive || isSubmitted;
+  const sessionLocked = sessionLifecycleState !== "active";
+  const saveDisabled = selectedQuestionRevisitLocked || saveBlockedByTiming || slowdownActive || isSubmitted || sessionLocked;
 
   const shouldRestrictManualSubmit =
     isHardMode &&
     sessionSnapshot.timingProfile.hardModeRestrictSubmitUntilAllVisited &&
     visitedCount < sessionSnapshot.questions.length;
 
-  const manualSubmitDisabled = isSubmitted || slowdownActive || shouldRestrictManualSubmit;
+  const unansweredCount = unansweredQuestionIdsForSubmission.length;
+  const lowDiscipline = adaptivePhaseSnapshot.disciplineIndex < EARLY_SUBMIT_DISCIPLINE_THRESHOLD;
+  const lowAdherence = adaptivePhaseSnapshot.phaseAdherencePercent < EARLY_SUBMIT_PHASE_ADHERENCE_THRESHOLD;
+  const requiresEarlySubmitOverride = isControlledMode && (lowDiscipline || lowAdherence);
+
+  const manualSubmitDisabled = isSubmitted || sessionLocked || slowdownActive || shouldRestrictManualSubmit;
 
   if (!entryValidation.allowed) {
     return <ExamAccessRedirect reason={entryValidation.reason} />;
@@ -1520,6 +1854,14 @@ function ExamSessionPage() {
               className="exam-start-button"
               disabled={!declarationAccepted}
               onClick={() => {
+                const activeSessionId = window.sessionStorage.getItem(activeSessionGuardKey);
+                if (activeSessionId && activeSessionId !== effectiveSessionId) {
+                  setSessionConflictMessage(
+                    "Another active session is already registered for this run in this browser profile. Resume that session or submit it before starting a new one.",
+                  );
+                  return;
+                }
+
                 const deadline = Date.now() + totalDurationMs;
                 setDeadlineEpochMs(deadline);
                 setRemainingMs(totalDurationMs);
@@ -1527,11 +1869,15 @@ function ExamSessionPage() {
                 setPendingAnswerMap({});
                 setSyncState("idle");
                 setSyncMessage("No pending answer updates.");
+                setSessionConflictMessage(null);
+                setSessionLifecycleState("started");
+                setRecoveryApplied(false);
                 setInstructionConfirmed(true);
               }}
             >
               Start Test
             </button>
+            {sessionConflictMessage ? <p className="exam-submit-warning">{sessionConflictMessage}</p> : null}
           </section>
         </section>
       </main>
@@ -1539,7 +1885,7 @@ function ExamSessionPage() {
   }
 
   const saveCurrentAndMaybeAdvance = (advance: boolean) => {
-    if (!selectedQuestion || isSubmitted) {
+    if (!selectedQuestion || sessionLocked) {
       return;
     }
 
@@ -1610,7 +1956,7 @@ function ExamSessionPage() {
   };
 
   const goToPreviousQuestion = () => {
-    if (!selectedQuestion || selectedQuestionIndex <= 0 || slowdownActive || isSubmitted) {
+    if (!selectedQuestion || selectedQuestionIndex <= 0 || slowdownActive || sessionLocked) {
       return;
     }
 
@@ -1627,7 +1973,7 @@ function ExamSessionPage() {
   };
 
   const jumpToQuestion = (questionId: string) => {
-    if (!selectedQuestion || slowdownActive || isSubmitted) {
+    if (!selectedQuestion || slowdownActive || sessionLocked) {
       return;
     }
 
@@ -1647,17 +1993,26 @@ function ExamSessionPage() {
     navigateToQuestion(questionId);
   };
 
-  const submitExam = async () => {
+  const openSubmitDialog = () => {
     if (manualSubmitDisabled) {
       return;
     }
+    setSubmitError(null);
+    setSubmitWarningAcknowledged(unansweredCount === 0);
+    setEarlySubmitOverrideAccepted(!requiresEarlySubmitOverride);
+    setSubmitDialogOpen(true);
+  };
 
-    const lowDiscipline = adaptivePhaseSnapshot.disciplineIndex < EARLY_SUBMIT_DISCIPLINE_THRESHOLD;
-    const lowAdherence = adaptivePhaseSnapshot.phaseAdherencePercent < EARLY_SUBMIT_PHASE_ADHERENCE_THRESHOLD;
-    const requiresExtraConfirmation = isControlledMode && (lowDiscipline || lowAdherence);
+  const submitExam = async () => {
+    if (manualSubmitDisabled || submitInFlight) {
+      return;
+    }
 
-    if (requiresExtraConfirmation && manualSubmitAttempts === 0) {
-      setManualSubmitAttempts(1);
+    if (unansweredCount > 0 && !submitWarningAcknowledged) {
+      return;
+    }
+
+    if (requiresEarlySubmitOverride && !earlySubmitOverrideAccepted) {
       return;
     }
 
@@ -1673,10 +2028,33 @@ function ExamSessionPage() {
       );
     }
 
-    await flushAnswerBatch("submission");
-    setSubmissionReason("manual");
-    setSubmittedAtIso(new Date().toISOString());
+    await submitSession("manual", unansweredQuestionIdsForSubmission).catch((error) => {
+      setSubmitError(error instanceof Error ? error.message : "Submission failed.");
+    });
   };
+
+  if (sessionLifecycleState === "terminated") {
+    return (
+      <main className="exam-submitted-shell" aria-live="polite">
+        <section className="exam-submitted-card">
+          <p className="exam-access-eyebrow">Session Terminated</p>
+          <h1>Submission Could Not Be Finalized</h1>
+          <p>
+            Reason:
+            {" "}
+            <strong>{submitError ?? "Auto-submit failed after expiry."}</strong>
+          </p>
+          <button
+            type="button"
+            className="exam-start-button"
+            onClick={() => window.location.assign(STUDENT_PORTAL_FALLBACK_PATH)}
+          >
+            Return to Student Portal
+          </button>
+        </section>
+      </main>
+    );
+  }
 
   if (isSubmitted) {
     return (
@@ -1748,6 +2126,11 @@ function ExamSessionPage() {
             Version:
             {" "}
             <strong>{sessionSnapshot.questionSetVersion}</strong>
+          </p>
+          <p>
+            Lifecycle:
+            {" "}
+            <strong>{sessionLifecycleState}</strong>
           </p>
           {!isOperationalMode ? (
             <p>
@@ -1856,6 +2239,16 @@ function ExamSessionPage() {
         </section>
       ) : null}
 
+      {(sessionLifecycleState === "expired" || submitInFlight) ? (
+        <section className="exam-enforcement-warning" aria-label="Submission finalization status">
+          <p>
+            {sessionLifecycleState === "expired"
+              ? "Timer expired. Auto-submit is being finalized with the backend submission endpoint."
+              : "Submission in progress. Do not close this tab until confirmation is displayed."}
+          </p>
+        </section>
+      ) : null}
+
       <div className="exam-main-layout">
         <aside className="exam-palette-panel" aria-label="Question navigation panel">
           <div className="exam-palette-section-header">
@@ -1947,19 +2340,15 @@ function ExamSessionPage() {
             <button
               type="button"
               className="exam-submit-button"
-              disabled={manualSubmitDisabled}
-              onClick={submitExam}
+              disabled={manualSubmitDisabled || submitInFlight}
+              onClick={openSubmitDialog}
             >
-              Submit Test
+              {submitInFlight ? "Submitting..." : "Submit Test"}
             </button>
-            {manualSubmitAttempts > 0 && isControlledMode ? (
-              <p className="exam-submit-warning">
-                Controlled mode warning: low discipline or phase adherence detected. Click submit again to confirm early submission.
-              </p>
-            ) : null}
             {shouldRestrictManualSubmit ? (
               <p className="exam-submit-warning">Hard Mode submit restriction active until all questions are visited.</p>
             ) : null}
+            {submitError ? <p className="exam-submit-warning">{submitError}</p> : null}
           </div>
         </aside>
 
@@ -2041,7 +2430,7 @@ function ExamSessionPage() {
                         name={selectedQuestion.id}
                         checked={selectedResponseState.selectedOptionId === option.id}
                         onChange={() => {
-                          if (selectedQuestionRevisitLocked || slowdownActive) {
+                          if (selectedQuestionRevisitLocked || slowdownActive || sessionLocked) {
                             return;
                           }
 
@@ -2072,7 +2461,7 @@ function ExamSessionPage() {
                     type="text"
                     value={selectedResponseState.numericResponse}
                     onChange={(event) => {
-                      if (selectedQuestionRevisitLocked || slowdownActive) {
+                      if (selectedQuestionRevisitLocked || slowdownActive || sessionLocked) {
                         return;
                       }
 
@@ -2104,7 +2493,7 @@ function ExamSessionPage() {
                                 type="checkbox"
                                 checked={checked}
                                 onChange={(event) => {
-                                  if (selectedQuestionRevisitLocked || slowdownActive) {
+                                  if (selectedQuestionRevisitLocked || slowdownActive || sessionLocked) {
                                     return;
                                   }
 
@@ -2135,14 +2524,14 @@ function ExamSessionPage() {
                 <button
                   type="button"
                   onClick={goToPreviousQuestion}
-                  disabled={selectedQuestionIndex <= 0 || selectedQuestionRevisitLocked || slowdownActive}
+                  disabled={selectedQuestionIndex <= 0 || selectedQuestionRevisitLocked || slowdownActive || sessionLocked}
                 >
                   Previous
                 </button>
                 <button
                   type="button"
                   onClick={() => {
-                    if (selectedQuestionRevisitLocked || slowdownActive) {
+                    if (selectedQuestionRevisitLocked || slowdownActive || sessionLocked) {
                       return;
                     }
 
@@ -2153,14 +2542,14 @@ function ExamSessionPage() {
                       markedForReview: current.markedForReview,
                     }));
                   }}
-                  disabled={selectedQuestionRevisitLocked || slowdownActive}
+                  disabled={selectedQuestionRevisitLocked || slowdownActive || sessionLocked}
                 >
                   Clear Response
                 </button>
                 <button
                   type="button"
                   onClick={() => {
-                    if (selectedQuestionRevisitLocked || slowdownActive) {
+                    if (selectedQuestionRevisitLocked || slowdownActive || sessionLocked) {
                       return;
                     }
 
@@ -2169,7 +2558,7 @@ function ExamSessionPage() {
                       markedForReview: !current.markedForReview,
                     }));
                   }}
-                  disabled={selectedQuestionRevisitLocked || slowdownActive}
+                  disabled={selectedQuestionRevisitLocked || slowdownActive || sessionLocked}
                 >
                   Mark for Review
                 </button>
@@ -2204,6 +2593,93 @@ function ExamSessionPage() {
           ) : null}
         </section>
       </div>
+
+      {submitDialogOpen ? (
+        <div className="exam-submit-dialog-overlay" role="presentation" onClick={() => setSubmitDialogOpen(false)}>
+          <section
+            className="exam-submit-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Confirm exam submission"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2>Confirm Submission</h2>
+            <p>
+              You are about to submit your exam. This action is immutable after server confirmation.
+            </p>
+            <div className="exam-submit-summary">
+              <p>
+                Answered:
+                {" "}
+                <strong>{answeredCount}</strong>
+              </p>
+              <p>
+                Marked:
+                {" "}
+                <strong>{markedCount}</strong>
+              </p>
+              <p>
+                Unanswered/Unvisited:
+                {" "}
+                <strong>{unansweredCount}</strong>
+              </p>
+              <p>
+                Lifecycle state:
+                {" "}
+                <strong>{sessionLifecycleState}</strong>
+              </p>
+            </div>
+
+            {unansweredCount > 0 ? (
+              <label className="exam-submit-check">
+                <input
+                  type="checkbox"
+                  checked={submitWarningAcknowledged}
+                  onChange={(event) => setSubmitWarningAcknowledged(event.target.checked)}
+                />
+                I understand {unansweredCount} question(s) will remain unanswered after final submission.
+              </label>
+            ) : null}
+
+            {requiresEarlySubmitOverride ? (
+              <label className="exam-submit-check">
+                <input
+                  type="checkbox"
+                  checked={earlySubmitOverrideAccepted}
+                  onChange={(event) => setEarlySubmitOverrideAccepted(event.target.checked)}
+                />
+                I confirm early submit in Controlled mode despite low discipline/phase-adherence indicators.
+              </label>
+            ) : null}
+
+            {submitError ? <p className="exam-submit-warning">{submitError}</p> : null}
+
+            <div className="exam-submit-dialog-actions">
+              <button
+                type="button"
+                onClick={() => setSubmitDialogOpen(false)}
+                disabled={submitInFlight}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="exam-submit-button"
+                disabled={
+                  submitInFlight ||
+                  (unansweredCount > 0 && !submitWarningAcknowledged) ||
+                  (requiresEarlySubmitOverride && !earlySubmitOverrideAccepted)
+                }
+                onClick={() => {
+                  void submitExam();
+                }}
+              >
+                {submitInFlight ? "Submitting..." : "Confirm Final Submit"}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       <ScientificCalculatorModal open={calculatorOpen} onClose={() => setCalculatorOpen(false)} />
     </main>
