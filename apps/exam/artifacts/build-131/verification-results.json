@@ -1,0 +1,80 @@
+[
+  {
+    "routeId": "valid_session_entry",
+    "routeUrl": "http://127.0.0.1:4173/session/session-build-131?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJzdHVkZW50LnRlc3RAcGFyYWJvbGljLmxvY2FsIiwiZXhwIjoxNzc2NzAzMzQwLCJtb2RlIjoiQ29udHJvbGxlZCJ9.signature",
+    "viewport": "1366x768",
+    "finalUrl": "http://127.0.0.1:4173/session/session-build-131?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJzdHVkZW50LnRlc3RAcGFyYWJvbGljLmxvY2FsIiwiZXhwIjoxNzc2NzAzMzQwLCJtb2RlIjoiQ29udHJvbGxlZCJ9.signature",
+    "consoleStatus": "PASS",
+    "consoleErrors": [],
+    "networkStatus": "PASS",
+    "networkFailures": [],
+    "responsiveStatus": "PASS",
+    "guardStatus": "PASS",
+    "screenshotPath": "/home/sumeer/parabolic-platform/apps/exam/artifacts/build-131/valid_session_entry_desktop.png"
+  },
+  {
+    "routeId": "valid_session_entry",
+    "routeUrl": "http://127.0.0.1:4173/session/session-build-131?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJzdHVkZW50LnRlc3RAcGFyYWJvbGljLmxvY2FsIiwiZXhwIjoxNzc2NzAzMzQwLCJtb2RlIjoiQ29udHJvbGxlZCJ9.signature",
+    "viewport": "390x844",
+    "finalUrl": "http://127.0.0.1:4173/session/session-build-131?token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJzdHVkZW50LnRlc3RAcGFyYWJvbGljLmxvY2FsIiwiZXhwIjoxNzc2NzAzMzQwLCJtb2RlIjoiQ29udHJvbGxlZCJ9.signature",
+    "consoleStatus": "PASS",
+    "consoleErrors": [],
+    "networkStatus": "PASS",
+    "networkFailures": [],
+    "responsiveStatus": "PASS",
+    "guardStatus": "PASS",
+    "screenshotPath": "/home/sumeer/parabolic-platform/apps/exam/artifacts/build-131/valid_session_entry_mobile.png"
+  },
+  {
+    "routeId": "missing_token_guard_redirect",
+    "routeUrl": "http://127.0.0.1:4173/session/session-build-131",
+    "viewport": "1366x768",
+    "finalUrl": "http://127.0.0.1:4173/student/my-tests",
+    "consoleStatus": "PASS",
+    "consoleErrors": [],
+    "networkStatus": "PASS",
+    "networkFailures": [],
+    "responsiveStatus": "PASS",
+    "guardStatus": "PASS",
+    "screenshotPath": "/home/sumeer/parabolic-platform/apps/exam/artifacts/build-131/missing_token_guard_redirect_desktop.png"
+  },
+  {
+    "routeId": "missing_token_guard_redirect",
+    "routeUrl": "http://127.0.0.1:4173/session/session-build-131",
+    "viewport": "390x844",
+    "finalUrl": "http://127.0.0.1:4173/student/my-tests",
+    "consoleStatus": "PASS",
+    "consoleErrors": [],
+    "networkStatus": "PASS",
+    "networkFailures": [],
+    "responsiveStatus": "PASS",
+    "guardStatus": "PASS",
+    "screenshotPath": "/home/sumeer/parabolic-platform/apps/exam/artifacts/build-131/missing_token_guard_redirect_mobile.png"
+  },
+  {
+    "routeId": "root_redirect",
+    "routeUrl": "http://127.0.0.1:4173/",
+    "viewport": "1366x768",
+    "finalUrl": "http://127.0.0.1:4173/student/my-tests",
+    "consoleStatus": "PASS",
+    "consoleErrors": [],
+    "networkStatus": "PASS",
+    "networkFailures": [],
+    "responsiveStatus": "PASS",
+    "guardStatus": "PASS",
+    "screenshotPath": "/home/sumeer/parabolic-platform/apps/exam/artifacts/build-131/root_redirect_desktop.png"
+  },
+  {
+    "routeId": "root_redirect",
+    "routeUrl": "http://127.0.0.1:4173/",
+    "viewport": "390x844",
+    "finalUrl": "http://127.0.0.1:4173/student/my-tests",
+    "consoleStatus": "PASS",
+    "consoleErrors": [],
+    "networkStatus": "PASS",
+    "networkFailures": [],
+    "responsiveStatus": "PASS",
+    "guardStatus": "PASS",
+    "screenshotPath": "/home/sumeer/parabolic-platform/apps/exam/artifacts/build-131/root_redirect_mobile.png"
+  }
+]

@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 130  
-Next Build: 131
+Completed Builds: 131  
+Next Build: 132
 
 Current Phase: Phase 27 — Exam Portal Engine
 
@@ -4273,18 +4273,66 @@ Completed On
 
 ---
 
+## Build 131 — Exam Interface Layout
+
+Phase  
+Phase 27 — Exam Portal Engine
+
+Summary  
+Implemented the exam portal instruction-first execution shell with token-gated session entry, JEE-style structural layout, and deterministic browser verification for Build 131 scope.
+
+Components implemented:
+
+- Replaced the Build 115 exam placeholder in `apps/exam/src/App.tsx` with the Build 131 session layout flow for `/session/:sessionId`
+- Implemented backend-token-aware entry validation from query parameter `token` with malformed/expired/missing-token handling and blocked-access guard UI
+- Implemented mandatory instruction screen before test interface with architecture-aligned sections:
+  - General Instructions
+  - Marking Scheme
+  - Question Palette Explanation
+  - Navigation Instructions
+  - Mode-Specific Instructions
+  - Declaration Checkbox
+  - Start Test button gated by declaration acceptance
+- Implemented mode-specific instruction injection for Operational, Diagnostic (L1), Controlled (L2), and Hard mode behavior messaging
+- Implemented base main execution shell structure in `apps/exam/src/App.tsx` and `apps/exam/src/App.css`:
+  - header bar with candidate name, mode, question count, and global countdown timer
+  - left vertical question navigation palette with square status tiles
+  - section filtering controls (All/Physics/Chemistry/Mathematics)
+  - answer status indicators (Answered/Not Answered/Marked)
+  - question rendering container scaffold for Build 132 handoff
+- Implemented architecture-aligned visual rules (instruction-first, minimal animation, no trademark branding replication, white/blue/red palette behavior)
+- Fixed fallback-route behavior to avoid blank captures by rendering a visible blocked-access screen for `/` and unknown routes in the isolated exam app
+- Updated `apps/exam/src/index.css` to ensure deterministic root sizing for full-height shell rendering
+- Added deterministic browser verification artifacts under `apps/exam/artifacts/build-131/`
+- Executed frontend verification:
+  - `apps/exam`: build, lint
+  - browser checks for `/session/session-build-131?token=...`, `/session/session-build-131`, and `/` at `1366x768` and `390x844`
+  - route guard checks for valid token access and blocked/missing-token fallback behavior
+  - console/network/responsive/guard checks recorded in `apps/exam/artifacts/build-131/verification-results.json`
+
+Result  
+The exam portal now includes the Build 131 instruction-first interface layout and token-gated entry shell aligned with Sections 1.4.0, 1.4.1, 1.4.2, 1.4.3, and 1.4.15, ready for Build 132 question rendering engine implementation.
+
+Commit Reference  
+Build 131 — Exam Interface Layout implemented
+
+Completed On  
+2026-04-20
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 131
+Next Build Number: 132
 
 Phase  
 Phase 27 — Exam Portal Engine
 
 Subsystem  
-Exam Interface Layout
+Question Rendering Engine
 
 Reference  
-2_Portals_Architecture.md → Sections 1.4.0, 1.4.1, 1.4.2, 1.4.3, 1.4.15
+2_Portals_Architecture.md → Sections 1.4.5, 1.4.6, 1.4.7
 
 ---
 
@@ -4422,7 +4470,8 @@ Build | Phase | Status
 128 | Student Portal Core | Completed
 129 | Student Portal Core | Completed
 130 | Student Portal Core | Completed
-131–150 | Remaining Phases | Pending
+131 | Exam Portal Engine | Completed
+132–150 | Remaining Phases | Pending
 
 ---
 
