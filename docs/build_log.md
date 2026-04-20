@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 128  
-Next Build: 129
+Completed Builds: 129  
+Next Build: 130
 
 Current Phase: Phase 26 — Student Portal Core
 
@@ -4169,18 +4169,66 @@ Completed On
 
 ---
 
+## Build 129 — Student Performance Analytics
+
+Phase  
+Phase 26 — Student Portal Core
+
+Summary  
+Implemented the student performance analytics workspace with longitudinal trend visualization and layer-aware discipline depth for the Build 129 scope.
+
+Components implemented:
+
+- Added Build 129 performance feature module in `apps/student/src/features/performance/`:
+  - `StudentPerformancePage.tsx`
+  - `studentPerformanceDataset.ts`
+- Replaced only the `/student/performance` placeholder route in `apps/student/src/App.tsx` with the new `StudentPerformancePage` component while preserving Build 126 protected-route shell behavior
+- Implemented typed dataset normalization for `GET /student/performance` with deterministic local fallback fixtures sourced from `studentYearMetrics`-style summary fields, including:
+  - raw score % trend
+  - accuracy % trend
+  - phase adherence % trend
+  - guess rate trend
+  - discipline index trend
+  - minTime/maxTime violation % trends
+- Implemented layer-aware rendering aligned with Sections 1.3.4 and 1.3.6:
+  - L0: raw and accuracy longitudinal trends, time spent, rank snapshots
+  - L1+: phase adherence and guess-rate trend visibility with topic-performance summary and pacing indicators
+  - L2+: discipline trend + min/max timing-violation trend visibility and progress-bar discipline section (discipline index, phase compliance, controlled mode improvement, overstay frequency, guess probability cluster)
+- Added Build 129 performance-responsive styling in `apps/student/src/App.css` for:
+  - chart grids
+  - KPI cards
+  - discipline progress bars
+  - mobile-safe table overflow and small-screen layout collapse
+- Added deterministic browser verification automation and artifacts under `apps/student/artifacts/build-129/`
+- Executed frontend verification:
+  - `apps/student`: build, lint
+  - browser checks for `/student/performance` and `/student/login` at `1366x768` and `390x844`
+  - guard redirect checks in unauthenticated context and performance analytics UI checks in authenticated context using local Firebase test credentials
+  - console/network/responsive/guard checks recorded in `apps/student/artifacts/build-129/verification-results.json`
+
+Result  
+The student portal now includes the Build 129 performance analytics interface aligned with architecture-defined longitudinal trends and L2 discipline visibility, ready for Build 130 student insights interface implementation.
+
+Commit Reference  
+Build 129 — Student Performance Analytics implemented
+
+Completed On  
+2026-04-20
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 129
+Next Build Number: 130
 
 Phase  
 Phase 26 — Student Portal Core
 
 Subsystem  
-Student Performance Analytics
+Student Insights Interface
 
 Reference  
-2_Portals_Architecture.md → Section 3.4 Performance Analytics UI
+2_Portals_Architecture.md → Sections 1.3.5, 1.3.11, 1.3.12, 1.3.13, 1.3.14
 
 ---
 
@@ -4316,7 +4364,8 @@ Build | Phase | Status
 126 | Student Portal Core | Completed
 127 | Student Portal Core | Completed
 128 | Student Portal Core | Completed
-129–150 | Remaining Phases | Pending
+129 | Student Portal Core | Completed
+130–150 | Remaining Phases | Pending
 
 ---
 

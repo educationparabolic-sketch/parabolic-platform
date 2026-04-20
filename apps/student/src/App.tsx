@@ -13,6 +13,7 @@ import { useAuthProvider } from "../../../shared/services/authProvider";
 import { UiNavBar } from "../../../shared/ui/components";
 import StudentDashboardPage from "./features/dashboard/StudentDashboardPage";
 import StudentMyTestsPage from "./features/my-tests/StudentMyTestsPage";
+import StudentPerformancePage from "./features/performance/StudentPerformancePage";
 import StudentProfileSettingsPage from "./features/profile/StudentProfileSettingsPage";
 import "./App.css";
 
@@ -274,12 +275,7 @@ function App() {
         />
         <Route
           path="performance"
-          element={
-            <StudentSectionPage
-              title="Performance"
-              summary="Route shell for student performance trends backed by summary analytics collections."
-            />
-          }
+          element={<StudentPerformancePage />}
         />
         <Route
           path="insights"

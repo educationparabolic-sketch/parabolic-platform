@@ -581,6 +581,123 @@
   text-decoration: underline;
 }
 
+.student-performance-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.student-performance-inline-note {
+  margin: 0;
+  padding: 0.75rem;
+  border-left: 4px solid #2f66b3;
+  background: #eef4ff;
+  color: #24426a;
+}
+
+.student-performance-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.student-performance-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.student-performance-l1-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.student-performance-run-cell {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.student-performance-run-cell small {
+  color: #5d7698;
+}
+
+.student-performance-discipline-section {
+  border: 1px solid #d6e1f1;
+  border-radius: 0.75rem;
+  background: #fbfdff;
+  padding: 0.95rem;
+  display: grid;
+  gap: 0.7rem;
+}
+
+.student-performance-discipline-section h3 {
+  margin: 0;
+}
+
+.student-performance-progress-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.student-performance-progress-card {
+  border: 1px solid #d9e4f3;
+  border-radius: 0.65rem;
+  background: #ffffff;
+  padding: 0.7rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.student-performance-progress-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.student-performance-progress-card header strong {
+  color: #173a68;
+  font-size: 0.9rem;
+}
+
+.student-performance-progress-card header span {
+  color: #294b75;
+  font-weight: 700;
+}
+
+.student-performance-progress-track {
+  min-height: 10px;
+  border-radius: 999px;
+  background: #dbe4f3;
+  overflow: hidden;
+}
+
+.student-performance-progress-track span {
+  display: block;
+  min-height: 10px;
+  background: linear-gradient(90deg, #1f5ca8, #1a7da5);
+}
+
+.student-performance-cluster-pill {
+  margin: 0;
+  border: 1px solid #bbcee7;
+  border-radius: 999px;
+  background: #edf4ff;
+  color: #1f416b;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.35rem 0.8rem;
+}
+
+.student-performance-page .ui-table-shell {
+  overflow-x: auto;
+}
+
+.student-performance-page .ui-table {
+  min-width: 780px;
+}
+
 .student-profile-page {
   display: grid;
   gap: 1rem;
@@ -672,7 +789,11 @@
   .student-dashboard-card-grid,
   .student-dashboard-status-grid,
   .student-dashboard-layer-grid,
-  .student-dashboard-widget-grid {
+  .student-dashboard-widget-grid,
+  .student-performance-kpi-grid,
+  .student-performance-chart-grid,
+  .student-performance-l1-grid,
+  .student-performance-progress-grid {
     grid-template-columns: 1fr;
   }
 
