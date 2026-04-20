@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 132  
-Next Build: 133
+Completed Builds: 133  
+Next Build: 134
 
 Current Phase: Phase 27 — Exam Portal Engine
 
@@ -4373,18 +4373,68 @@ Completed On
 
 ---
 
+## Build 133 — Navigation & Timing Interface
+
+Phase  
+Phase 27 — Exam Portal Engine
+
+Summary  
+Implemented the exam portal navigation and timing interface with layer-aware behavior enforcement, server-authoritative timer synchronization, and lightweight adaptive phase telemetry.
+
+Components implemented:
+
+- Extended `apps/exam/src/App.tsx` with Build 133 header and timing components:
+  - candidate identity display
+  - subject tabs and question count visibility
+  - server-authoritative countdown sync loop (`syncEveryMs`)
+  - final-window timer emphasis
+  - auto-submit on expiry
+- Implemented layer-based behavior engine aligned to Sections 1.4.8 and 1.4.9:
+  - `L0` operational mode: free navigation with no pacing enforcement
+  - `L1` diagnostic mode: advisory pacing banner and phase telemetry display
+  - `L2` controlled mode: per-question MinTime save gating, violation tracking, and slowdown pause on consecutive rushed save attempts
+  - Hard Mode: MinTime + MaxTime enforcement, max-time auto-lock behavior, revisit/sequence constraints, and restricted submit behavior until configured criteria are met
+- Implemented lightweight adaptive phase telemetry in UI state:
+  - phase adherence %
+  - overspend %
+  - difficulty compliance %
+  - skip pattern behavior
+  - discipline index snapshot for controlled-mode early-submit confirmation
+- Added Build 133 styling updates in `apps/exam/src/App.css` for:
+  - subject-tab header row
+  - advisory and enforcement banners
+  - timing and submit control blocks
+  - submitted-session summary state
+- Added deterministic browser verification automation and artifacts under `apps/exam/artifacts/build-133/`
+- Executed frontend verification:
+  - `apps/exam`: build, lint
+  - browser checks for `/session/session-build-133?token=...`, `/session/session-build-133`, and `/` at `1366x768` and `390x844`
+  - route guard checks for valid token session access and missing-token fallback behavior
+  - console/network/responsive/guard checks recorded in `apps/exam/artifacts/build-133/verification-results.json`
+
+Result  
+The exam portal now includes the Build 133 navigation and timing interface aligned with Sections 1.4.4, 1.4.8, and 1.4.9, and is ready for Build 134 answer submission interaction implementation.
+
+Commit Reference  
+Build 133 — Navigation & Timing Interface implemented
+
+Completed On  
+2026-04-20
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 133
+Next Build Number: 134
 
 Phase  
 Phase 27 — Exam Portal Engine
 
 Subsystem  
-Navigation & Timing Interface
+Answer Submission Interaction
 
 Reference  
-2_Portals_Architecture.md → Sections 1.4.4, 1.4.8, 1.4.9
+2_Portals_Architecture.md → Sections 1.4.11, 1.4.13, 1.4.14
 
 ---
 
@@ -4524,7 +4574,8 @@ Build | Phase | Status
 130 | Student Portal Core | Completed
 131 | Exam Portal Engine | Completed
 132 | Exam Portal Engine | Completed
-133–150 | Remaining Phases | Pending
+133 | Exam Portal Engine | Completed
+134–150 | Remaining Phases | Pending
 
 ---
 

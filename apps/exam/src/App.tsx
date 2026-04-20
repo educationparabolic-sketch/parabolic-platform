@@ -7,6 +7,9 @@ type QuestionPaletteStatus = "not_visited" | "not_answered" | "answered" | "mark
 type ExecutionMode = "Operational" | "Diagnostic" | "Controlled" | "Hard";
 type QuestionSection = "Physics" | "Chemistry" | "Mathematics";
 type QuestionType = "mcq" | "numeric" | "matrix";
+type DifficultyBand = "easy" | "medium" | "hard";
+type PhaseId = "phase1" | "phase2" | "phase3";
+type SubmissionReason = "manual" | "expiry";
 type CalculatorOperation =
   | "sqrt"
   | "square"
@@ -57,6 +60,7 @@ interface SessionQuestion {
   number: number;
   section: QuestionSection;
   type: QuestionType;
+  difficulty: DifficultyBand;
   text: string;
   imageUrl?: string;
   options?: QuestionOption[];
@@ -65,12 +69,37 @@ interface SessionQuestion {
   media?: QuestionMedia;
 }
 
+interface PhaseConfigSnapshot {
+  phase1Percent: number;
+  phase2Percent: number;
+  phase3Percent: number;
+}
+
+interface DifficultyDistributionSnapshot {
+  easyPercent: number;
+  mediumPercent: number;
+  hardPercent: number;
+}
+
+interface TimingProfileSnapshot {
+  minTimeByDifficultySec: Record<DifficultyBand, number>;
+  maxTimeByDifficultySec: Record<DifficultyBand, number>;
+  finalWindowMinutes: number;
+  syncEveryMs: number;
+  controlledSlowdownSeconds: number;
+  hardModeSequentialNavigation: boolean;
+  hardModeRestrictSubmitUntilAllVisited: boolean;
+}
+
 interface SessionSnapshot {
   sessionId: string;
   questionSetVersion: string;
   subjects: QuestionSection[];
   questions: SessionQuestion[];
   hardModeRevisitRestricted: boolean;
+  phaseConfigSnapshot: PhaseConfigSnapshot;
+  difficultyDistribution: DifficultyDistributionSnapshot;
+  timingProfile: TimingProfileSnapshot;
 }
 
 interface QuestionResponseState {
@@ -88,10 +117,30 @@ interface PaletteTile {
   revisitLocked: boolean;
 }
 
+interface QuestionTimingState {
+  timeSpentMs: number;
+  minTimeSec: number;
+  maxTimeSec: number;
+  maxTimeLocked: boolean;
+  minTimeViolationCount: number;
+}
+
+interface AdaptivePhaseSnapshot {
+  currentPhase: PhaseId;
+  elapsedPercent: number;
+  answeredPercent: number;
+  phaseAdherencePercent: number;
+  overspendPercent: number;
+  difficultyCompliancePercent: number;
+  skipPatternScore: number;
+  disciplineIndex: number;
+}
+
 const EXAM_DURATION_MINUTES = 180;
-const TIMER_SYNC_INTERVAL_MS = 10_000;
 const TICK_INTERVAL_MS = 1_000;
-const EXPIRY_RED_MINUTES_THRESHOLD = 10;
+const EARLY_SUBMIT_DISCIPLINE_THRESHOLD = 65;
+const EARLY_SUBMIT_PHASE_ADHERENCE_THRESHOLD = 62;
+const MAX_RUSHED_SAVE_BEFORE_SLOWDOWN = 2;
 const STUDENT_PORTAL_FALLBACK_PATH = "/student/my-tests";
 
 const MARKING_SCHEME = [
@@ -255,6 +304,10 @@ function statusClassName(status: QuestionPaletteStatus): string {
   }
 }
 
+function clamp(value: number, lower: number, upper: number): number {
+  return Math.min(upper, Math.max(lower, value));
+}
+
 function toCountdownLabel(remainingMs: number): string {
   const totalSeconds = Math.max(0, Math.floor(remainingMs / 1000));
   const hours = Math.floor(totalSeconds / 3600);
@@ -264,6 +317,13 @@ function toCountdownLabel(remainingMs: number): string {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+function toPercent(numerator: number, denominator: number): number {
+  if (denominator <= 0) {
+    return 0;
+  }
+  return clamp((numerator / denominator) * 100, 0, 100);
+}
+
 function buildSessionSnapshot(sessionId: string, mode: ExecutionMode): SessionSnapshot {
   const questions: SessionQuestion[] = [
     {
@@ -271,6 +331,7 @@ function buildSessionSnapshot(sessionId: string, mode: ExecutionMode): SessionSn
       number: 1,
       section: "Physics",
       type: "mcq",
+      difficulty: "easy",
       text: "A particle moves in a circle of radius r with constant speed v. What is the magnitude of centripetal acceleration?",
       options: [
         { id: "q1-a", label: "A", text: "v / r" },
@@ -289,6 +350,7 @@ function buildSessionSnapshot(sessionId: string, mode: ExecutionMode): SessionSn
       number: 2,
       section: "Physics",
       type: "numeric",
+      difficulty: "medium",
       text: "A body starts from rest and accelerates uniformly at 2 m/s² for 6 seconds. Enter displacement in meters.",
       imageUrl: PHYSICS_IMAGE_DATA_URI,
     },
@@ -297,6 +359,7 @@ function buildSessionSnapshot(sessionId: string, mode: ExecutionMode): SessionSn
       number: 3,
       section: "Physics",
       type: "matrix",
+      difficulty: "hard",
       text: "Match each quantity to its SI unit symbol.",
       matrixRows: ["Force", "Power", "Frequency"],
       matrixColumns: ["N", "W", "Hz", "J"],
@@ -306,6 +369,7 @@ function buildSessionSnapshot(sessionId: string, mode: ExecutionMode): SessionSn
       number: 4,
       section: "Chemistry",
       type: "mcq",
+      difficulty: "easy",
       text: "Which quantum number determines the orientation of an orbital?",
       options: [
         { id: "q4-a", label: "A", text: "Principal quantum number" },
@@ -319,6 +383,7 @@ function buildSessionSnapshot(sessionId: string, mode: ExecutionMode): SessionSn
       number: 5,
       section: "Chemistry",
       type: "numeric",
+      difficulty: "medium",
       text: "For pH = 3 solution, enter [H+] concentration in mol/L using decimal notation.",
     },
     {
@@ -326,6 +391,7 @@ function buildSessionSnapshot(sessionId: string, mode: ExecutionMode): SessionSn
       number: 6,
       section: "Chemistry",
       type: "mcq",
+      difficulty: "hard",
       text: "Identify the compound that exhibits hydrogen bonding in pure state.",
       options: [
         { id: "q6-a", label: "A", text: "CH4" },
@@ -340,6 +406,7 @@ function buildSessionSnapshot(sessionId: string, mode: ExecutionMode): SessionSn
       number: 7,
       section: "Mathematics",
       type: "mcq",
+      difficulty: "easy",
       text: "If f(x) = x³, then f'(2) equals:",
       options: [
         { id: "q7-a", label: "A", text: "4" },
@@ -353,6 +420,7 @@ function buildSessionSnapshot(sessionId: string, mode: ExecutionMode): SessionSn
       number: 8,
       section: "Mathematics",
       type: "matrix",
+      difficulty: "hard",
       text: "Select all statements that are true for a 2x2 identity matrix.",
       matrixRows: ["Determinant", "Trace", "Inverse"],
       matrixColumns: ["Equals 1", "Equals 2", "Exists", "Zero"],
@@ -362,6 +430,7 @@ function buildSessionSnapshot(sessionId: string, mode: ExecutionMode): SessionSn
       number: 9,
       section: "Mathematics",
       type: "numeric",
+      difficulty: "medium",
       text: "Evaluate integral of 2x from x = 0 to x = 3.",
       media: {
         type: "audio",
@@ -377,6 +446,33 @@ function buildSessionSnapshot(sessionId: string, mode: ExecutionMode): SessionSn
     subjects: ["Physics", "Chemistry", "Mathematics"],
     questions,
     hardModeRevisitRestricted: mode === "Hard",
+    phaseConfigSnapshot: {
+      phase1Percent: 40,
+      phase2Percent: 45,
+      phase3Percent: 15,
+    },
+    difficultyDistribution: {
+      easyPercent: 35,
+      mediumPercent: 40,
+      hardPercent: 25,
+    },
+    timingProfile: {
+      minTimeByDifficultySec: {
+        easy: 20,
+        medium: 35,
+        hard: 50,
+      },
+      maxTimeByDifficultySec: {
+        easy: 180,
+        medium: 240,
+        hard: 300,
+      },
+      finalWindowMinutes: 10,
+      syncEveryMs: 10_000,
+      controlledSlowdownSeconds: 12,
+      hardModeSequentialNavigation: true,
+      hardModeRestrictSubmitUntilAllVisited: true,
+    },
   };
 }
 
@@ -387,6 +483,22 @@ function buildInitialResponseMap(questions: SessionQuestion[]): Record<string, Q
       numericResponse: "",
       matrixSelections: [],
       markedForReview: false,
+    };
+    return accumulator;
+  }, {});
+}
+
+function buildInitialTimingMap(
+  questions: SessionQuestion[],
+  timingProfile: TimingProfileSnapshot,
+): Record<string, QuestionTimingState> {
+  return questions.reduce<Record<string, QuestionTimingState>>((accumulator, question) => {
+    accumulator[question.id] = {
+      timeSpentMs: 0,
+      minTimeSec: timingProfile.minTimeByDifficultySec[question.difficulty],
+      maxTimeSec: timingProfile.maxTimeByDifficultySec[question.difficulty],
+      maxTimeLocked: false,
+      minTimeViolationCount: 0,
     };
     return accumulator;
   }, {});
@@ -423,6 +535,19 @@ function toPaletteStatus(question: SessionQuestion, responseState: QuestionRespo
 
 function getQuestionIndex(questions: SessionQuestion[], questionId: string): number {
   return questions.findIndex((question) => question.id === questionId);
+}
+
+function getPhaseId(elapsedPercent: number, phaseConfigSnapshot: PhaseConfigSnapshot): PhaseId {
+  const phase1Cutoff = phaseConfigSnapshot.phase1Percent;
+  const phase2Cutoff = phaseConfigSnapshot.phase1Percent + phaseConfigSnapshot.phase2Percent;
+
+  if (elapsedPercent <= phase1Cutoff) {
+    return "phase1";
+  }
+  if (elapsedPercent <= phase2Cutoff) {
+    return "phase2";
+  }
+  return "phase3";
 }
 
 function evaluateExpression(expression: string): number {
@@ -636,30 +761,96 @@ function ExamSessionPage() {
   const [declarationAccepted, setDeclarationAccepted] = useState(false);
   const [instructionConfirmed, setInstructionConfirmed] = useState(false);
   const [remainingMs, setRemainingMs] = useState(EXAM_DURATION_MINUTES * 60 * 1000);
+  const [deadlineEpochMs, setDeadlineEpochMs] = useState<number | null>(null);
+  const [syncCounter, setSyncCounter] = useState(0);
   const [calculatorOpen, setCalculatorOpen] = useState(false);
   const [responseStateByQuestionId, setResponseStateByQuestionId] = useState<Record<string, QuestionResponseState>>(() =>
     buildInitialResponseMap(sessionSnapshot.questions),
+  );
+  const [questionTimingById, setQuestionTimingById] = useState<Record<string, QuestionTimingState>>(() =>
+    buildInitialTimingMap(sessionSnapshot.questions, sessionSnapshot.timingProfile),
   );
   const [visitedQuestionIds, setVisitedQuestionIds] = useState<Set<string>>(() =>
     new Set(sessionSnapshot.questions[0] ? [sessionSnapshot.questions[0].id] : []),
   );
   const [hardModeLockedQuestionIds, setHardModeLockedQuestionIds] = useState<Set<string>>(new Set());
+  const [slowdownUntilMs, setSlowdownUntilMs] = useState<number | null>(null);
+  const [rushedAttemptStreak, setRushedAttemptStreak] = useState(0);
+  const [skippedQuestionsCount, setSkippedQuestionsCount] = useState(0);
+  const [manualSubmitAttempts, setManualSubmitAttempts] = useState(0);
+  const [submittedAtIso, setSubmittedAtIso] = useState<string | null>(null);
+  const [submissionReason, setSubmissionReason] = useState<SubmissionReason | null>(null);
+  const [nowEpochMs, setNowEpochMs] = useState(() => Date.now());
+
+  const totalDurationMs = EXAM_DURATION_MINUTES * 60 * 1000;
+  const isOperationalMode = entryValidation.claims.mode === "Operational";
+  const isDiagnosticMode = entryValidation.claims.mode === "Diagnostic";
+  const isControlledMode = entryValidation.claims.mode === "Controlled";
+  const isHardMode = entryValidation.claims.mode === "Hard";
+  const enforcementMode = isControlledMode || isHardMode;
+  const isSubmitted = submissionReason !== null;
 
   useEffect(() => {
+    if (!instructionConfirmed || isSubmitted) {
+      return;
+    }
+
     const tickInterval = window.setInterval(() => {
+      setNowEpochMs(Date.now());
       setRemainingMs((current) => Math.max(0, current - TICK_INTERVAL_MS));
+      setQuestionTimingById((current) => {
+        const currentTiming = current[selectedQuestionId];
+        if (!currentTiming || currentTiming.maxTimeLocked) {
+          return current;
+        }
+
+        const nextTimeSpentMs = currentTiming.timeSpentMs + TICK_INTERVAL_MS;
+        const reachedMaxTime = isHardMode && nextTimeSpentMs >= currentTiming.maxTimeSec * 1000;
+        if (!reachedMaxTime && nextTimeSpentMs === currentTiming.timeSpentMs) {
+          return current;
+        }
+
+        return {
+          ...current,
+          [selectedQuestionId]: {
+            ...currentTiming,
+            timeSpentMs: nextTimeSpentMs,
+            maxTimeLocked: reachedMaxTime ? true : currentTiming.maxTimeLocked,
+          },
+        };
+      });
     }, TICK_INTERVAL_MS);
 
     return () => window.clearInterval(tickInterval);
-  }, []);
+  }, [instructionConfirmed, isSubmitted, isHardMode, selectedQuestionId]);
 
   useEffect(() => {
+    if (!instructionConfirmed || isSubmitted || !deadlineEpochMs) {
+      return;
+    }
+
     const syncInterval = window.setInterval(() => {
-      // Server sync wiring lands with runtime API integration builds.
-    }, TIMER_SYNC_INTERVAL_MS);
+      const authoritativeRemaining = Math.max(0, deadlineEpochMs - Date.now());
+      setNowEpochMs(Date.now());
+      setRemainingMs(authoritativeRemaining);
+      setSyncCounter((current) => current + 1);
+    }, sessionSnapshot.timingProfile.syncEveryMs);
 
     return () => window.clearInterval(syncInterval);
-  }, []);
+  }, [deadlineEpochMs, instructionConfirmed, isSubmitted, sessionSnapshot.timingProfile.syncEveryMs]);
+
+  useEffect(() => {
+    if (!instructionConfirmed || isSubmitted || remainingMs > 0) {
+      return;
+    }
+
+    const submitTimeout = window.setTimeout(() => {
+      setSubmissionReason("expiry");
+      setSubmittedAtIso(new Date().toISOString());
+    }, 0);
+
+    return () => window.clearTimeout(submitTimeout);
+  }, [instructionConfirmed, isSubmitted, remainingMs]);
 
   const navigateToQuestion = (questionId: string) => {
     setVisitedQuestionIds((current) => {
@@ -686,9 +877,9 @@ function ExamSessionPage() {
           },
           visitedQuestionIds.has(question.id),
         ),
-        revisitLocked: hardModeLockedQuestionIds.has(question.id),
+        revisitLocked: hardModeLockedQuestionIds.has(question.id) || questionTimingById[question.id]?.maxTimeLocked === true,
       })),
-    [hardModeLockedQuestionIds, responseStateByQuestionId, sessionSnapshot.questions, visitedQuestionIds],
+    [hardModeLockedQuestionIds, questionTimingById, responseStateByQuestionId, sessionSnapshot.questions, visitedQuestionIds],
   );
 
   const filteredPalette = useMemo(
@@ -705,6 +896,9 @@ function ExamSessionPage() {
   const selectedResponseState = selectedQuestion
     ? responseStateByQuestionId[selectedQuestion.id]
     : undefined;
+  const selectedQuestionTiming = selectedQuestion
+    ? questionTimingById[selectedQuestion.id]
+    : undefined;
 
   useEffect(() => {
     if (!nextQuestion?.imageUrl) {
@@ -715,10 +909,118 @@ function ExamSessionPage() {
     preloadedImage.src = nextQuestion.imageUrl;
   }, [nextQuestion?.imageUrl]);
 
+  useEffect(() => {
+    if (!isHardMode || !selectedQuestion || isSubmitted) {
+      return;
+    }
+
+    const selectedTiming = questionTimingById[selectedQuestion.id];
+    if (!selectedTiming?.maxTimeLocked) {
+      return;
+    }
+
+    const nextUnlockedQuestion = sessionSnapshot.questions.find((question, index) => {
+      if (index <= selectedQuestionIndex) {
+        return false;
+      }
+      const timing = questionTimingById[question.id];
+      return !timing?.maxTimeLocked;
+    });
+
+    if (nextUnlockedQuestion) {
+      const navigateTimeout = window.setTimeout(() => {
+        navigateToQuestion(nextUnlockedQuestion.id);
+      }, 0);
+      return () => window.clearTimeout(navigateTimeout);
+    }
+  }, [isHardMode, isSubmitted, questionTimingById, selectedQuestion, selectedQuestionIndex, sessionSnapshot.questions]);
+
   const answeredCount = palette.filter((tile) => tile.status === "answered" || tile.status === "answered_marked").length;
   const notAnsweredCount = palette.filter((tile) => tile.status === "not_answered").length;
   const markedCount = palette.filter((tile) => tile.status === "marked" || tile.status === "answered_marked").length;
+  const visitedCount = visitedQuestionIds.size;
+  const elapsedPercent = toPercent(totalDurationMs - remainingMs, totalDurationMs);
+
+  const adaptivePhaseSnapshot = useMemo<AdaptivePhaseSnapshot>(() => {
+    const currentPhase = getPhaseId(elapsedPercent, sessionSnapshot.phaseConfigSnapshot);
+    const answeredPercent = toPercent(answeredCount, sessionSnapshot.questions.length);
+    const phaseAdherencePercent = clamp(100 - Math.abs(elapsedPercent - answeredPercent), 0, 100);
+    const overspendPercent = clamp(elapsedPercent - answeredPercent, 0, 100);
+
+    const timeByDifficultyMs = sessionSnapshot.questions.reduce<Record<DifficultyBand, number>>(
+      (accumulator, question) => {
+        accumulator[question.difficulty] += questionTimingById[question.id]?.timeSpentMs ?? 0;
+        return accumulator;
+      },
+      { easy: 0, medium: 0, hard: 0 },
+    );
+
+    const totalTrackedMs = timeByDifficultyMs.easy + timeByDifficultyMs.medium + timeByDifficultyMs.hard;
+    const easyShare = toPercent(timeByDifficultyMs.easy, totalTrackedMs);
+    const mediumShare = toPercent(timeByDifficultyMs.medium, totalTrackedMs);
+    const hardShare = toPercent(timeByDifficultyMs.hard, totalTrackedMs);
+
+    const easyDiff = Math.abs(easyShare - sessionSnapshot.difficultyDistribution.easyPercent);
+    const mediumDiff = Math.abs(mediumShare - sessionSnapshot.difficultyDistribution.mediumPercent);
+    const hardDiff = Math.abs(hardShare - sessionSnapshot.difficultyDistribution.hardPercent);
+    const compliancePenalty = (easyDiff + mediumDiff + hardDiff) / 3;
+    const difficultyCompliancePercent = clamp(100 - compliancePenalty, 0, 100);
+
+    const skipPatternScore = clamp(100 - skippedQuestionsCount * 12, 0, 100);
+    const disciplineIndex = clamp((phaseAdherencePercent + difficultyCompliancePercent + skipPatternScore) / 3, 0, 100);
+
+    return {
+      currentPhase,
+      elapsedPercent,
+      answeredPercent,
+      phaseAdherencePercent,
+      overspendPercent,
+      difficultyCompliancePercent,
+      skipPatternScore,
+      disciplineIndex,
+    };
+  }, [
+    answeredCount,
+    elapsedPercent,
+    questionTimingById,
+    sessionSnapshot.difficultyDistribution.easyPercent,
+    sessionSnapshot.difficultyDistribution.hardPercent,
+    sessionSnapshot.difficultyDistribution.mediumPercent,
+    sessionSnapshot.phaseConfigSnapshot,
+    sessionSnapshot.questions,
+    skippedQuestionsCount,
+  ]);
+
   const timerMinutes = Math.floor(remainingMs / 1000 / 60);
+  const finalWindowThresholdMinutes = sessionSnapshot.timingProfile.finalWindowMinutes;
+  const isFinalWindow = timerMinutes <= finalWindowThresholdMinutes;
+  const slowdownSecondsRemaining = slowdownUntilMs ? Math.max(0, Math.ceil((slowdownUntilMs - nowEpochMs) / 1000)) : 0;
+  const slowdownActive = slowdownSecondsRemaining > 0;
+
+  const selectedQuestionTimeSpentSec = selectedQuestionTiming ? Math.floor(selectedQuestionTiming.timeSpentMs / 1000) : 0;
+  const selectedQuestionMinTimeRemainingSec = selectedQuestionTiming
+    ? Math.max(0, selectedQuestionTiming.minTimeSec - selectedQuestionTimeSpentSec)
+    : 0;
+  const selectedQuestionMaxTimeRemainingSec = selectedQuestionTiming
+    ? Math.max(0, selectedQuestionTiming.maxTimeSec - selectedQuestionTimeSpentSec)
+    : 0;
+
+  const selectedQuestionRevisitLocked = selectedQuestion
+    ? hardModeLockedQuestionIds.has(selectedQuestion.id) || questionTimingById[selectedQuestion.id]?.maxTimeLocked === true
+    : false;
+
+  const saveBlockedByTiming =
+    enforcementMode &&
+    selectedQuestionMinTimeRemainingSec > 0;
+
+  const saveDisabled = selectedQuestionRevisitLocked || saveBlockedByTiming || slowdownActive || isSubmitted;
+
+  const shouldRestrictManualSubmit =
+    isHardMode &&
+    sessionSnapshot.timingProfile.hardModeRestrictSubmitUntilAllVisited &&
+    visitedCount < sessionSnapshot.questions.length;
+
+  const manualSubmitDisabled = isSubmitted || slowdownActive || shouldRestrictManualSubmit;
 
   if (!entryValidation.allowed) {
     return <ExamAccessRedirect reason={entryValidation.reason} />;
@@ -809,7 +1111,12 @@ function ExamSessionPage() {
               type="button"
               className="exam-start-button"
               disabled={!declarationAccepted}
-              onClick={() => setInstructionConfirmed(true)}
+              onClick={() => {
+                const deadline = Date.now() + totalDurationMs;
+                setDeadlineEpochMs(deadline);
+                setRemainingMs(totalDurationMs);
+                setInstructionConfirmed(true);
+              }}
             >
               Start Test
             </button>
@@ -819,23 +1126,43 @@ function ExamSessionPage() {
     );
   }
 
-  const isHardMode = entryValidation.claims.mode === "Hard";
-  const selectedQuestionRevisitLocked = selectedQuestion ? hardModeLockedQuestionIds.has(selectedQuestion.id) : false;
-
   const saveCurrentAndMaybeAdvance = (advance: boolean) => {
-    if (!selectedQuestion) {
+    if (!selectedQuestion || isSubmitted) {
       return;
     }
 
-    if (isHardMode && selectedQuestionRevisitLocked) {
+    if (slowdownActive || selectedQuestionRevisitLocked) {
       return;
     }
+
+    if (saveBlockedByTiming) {
+      setQuestionTimingById((current) => ({
+        ...current,
+        [selectedQuestion.id]: {
+          ...current[selectedQuestion.id],
+          minTimeViolationCount: current[selectedQuestion.id].minTimeViolationCount + 1,
+        },
+      }));
+      const nextStreak = rushedAttemptStreak + 1;
+      setRushedAttemptStreak(nextStreak);
+      if (isControlledMode && nextStreak >= MAX_RUSHED_SAVE_BEFORE_SLOWDOWN) {
+        setSlowdownUntilMs(Date.now() + sessionSnapshot.timingProfile.controlledSlowdownSeconds * 1000);
+        setRushedAttemptStreak(0);
+      }
+      return;
+    }
+
+    setRushedAttemptStreak(0);
 
     setVisitedQuestionIds((current) => {
       const next = new Set(current);
       next.add(selectedQuestion.id);
       return next;
     });
+
+    if (!hasAnswer(selectedQuestion, responseStateByQuestionId[selectedQuestion.id])) {
+      setSkippedQuestionsCount((current) => current + 1);
+    }
 
     if (isHardMode && sessionSnapshot.hardModeRevisitRestricted) {
       setHardModeLockedQuestionIds((current) => {
@@ -861,7 +1188,7 @@ function ExamSessionPage() {
   };
 
   const goToPreviousQuestion = () => {
-    if (!selectedQuestion || selectedQuestionIndex <= 0) {
+    if (!selectedQuestion || selectedQuestionIndex <= 0 || slowdownActive || isSubmitted) {
       return;
     }
 
@@ -878,12 +1205,15 @@ function ExamSessionPage() {
   };
 
   const jumpToQuestion = (questionId: string) => {
-    if (!selectedQuestion) {
+    if (!selectedQuestion || slowdownActive || isSubmitted) {
       return;
     }
 
     if (isHardMode && sessionSnapshot.hardModeRevisitRestricted) {
       const targetQuestionIndex = getQuestionIndex(sessionSnapshot.questions, questionId);
+      if (sessionSnapshot.timingProfile.hardModeSequentialNavigation && targetQuestionIndex > selectedQuestionIndex + 1) {
+        return;
+      }
       if (targetQuestionIndex < selectedQuestionIndex) {
         return;
       }
@@ -894,6 +1224,69 @@ function ExamSessionPage() {
 
     navigateToQuestion(questionId);
   };
+
+  const submitExam = () => {
+    if (manualSubmitDisabled) {
+      return;
+    }
+
+    const lowDiscipline = adaptivePhaseSnapshot.disciplineIndex < EARLY_SUBMIT_DISCIPLINE_THRESHOLD;
+    const lowAdherence = adaptivePhaseSnapshot.phaseAdherencePercent < EARLY_SUBMIT_PHASE_ADHERENCE_THRESHOLD;
+    const requiresExtraConfirmation = isControlledMode && (lowDiscipline || lowAdherence);
+
+    if (requiresExtraConfirmation && manualSubmitAttempts === 0) {
+      setManualSubmitAttempts(1);
+      return;
+    }
+
+    setSubmissionReason("manual");
+    setSubmittedAtIso(new Date().toISOString());
+  };
+
+  if (isSubmitted) {
+    return (
+      <main className="exam-submitted-shell" aria-live="polite">
+        <section className="exam-submitted-card">
+          <p className="exam-access-eyebrow">Session Closed</p>
+          <h1>Exam Submitted</h1>
+          <p>
+            Reason:
+            {" "}
+            <strong>{submissionReason === "expiry" ? "Timer expiry auto-submit" : "Manual submit"}</strong>
+          </p>
+          <p>
+            Submitted At:
+            {" "}
+            <strong>{submittedAtIso ?? "N/A"}</strong>
+          </p>
+          <div className="exam-submission-metrics">
+            <p>
+              Phase Adherence:
+              {" "}
+              <strong>{adaptivePhaseSnapshot.phaseAdherencePercent.toFixed(1)}%</strong>
+            </p>
+            <p>
+              Overspend:
+              {" "}
+              <strong>{adaptivePhaseSnapshot.overspendPercent.toFixed(1)}%</strong>
+            </p>
+            <p>
+              Difficulty Compliance:
+              {" "}
+              <strong>{adaptivePhaseSnapshot.difficultyCompliancePercent.toFixed(1)}%</strong>
+            </p>
+          </div>
+          <button
+            type="button"
+            className="exam-start-button"
+            onClick={() => window.location.assign(STUDENT_PORTAL_FALLBACK_PATH)}
+          >
+            Return to Student Portal
+          </button>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main className="exam-runner-shell">
@@ -921,13 +1314,21 @@ function ExamSessionPage() {
             {" "}
             <strong>{sessionSnapshot.questionSetVersion}</strong>
           </p>
+          {!isOperationalMode ? (
+            <p>
+              Phase:
+              {" "}
+              <strong>{adaptivePhaseSnapshot.currentPhase.toUpperCase()}</strong>
+            </p>
+          ) : null}
         </div>
 
         <div className="exam-header-group exam-header-timer-group">
           <p className="exam-header-label">Time Left</p>
-          <p className={timerMinutes <= EXPIRY_RED_MINUTES_THRESHOLD ? "exam-header-timer danger" : "exam-header-timer"}>
+          <p className={isFinalWindow ? "exam-header-timer danger" : "exam-header-timer"}>
             {toCountdownLabel(remainingMs)}
           </p>
+          <p className="exam-sync-indicator">Server Sync #{syncCounter}</p>
           <button
             type="button"
             className="exam-calculator-launch"
@@ -937,6 +1338,67 @@ function ExamSessionPage() {
           </button>
         </div>
       </header>
+
+      <div className="exam-header-subject-tabs" role="tablist" aria-label="Header subject tabs">
+        {sessionSnapshot.subjects.map((subject) => (
+          <button
+            key={subject}
+            type="button"
+            role="tab"
+            aria-selected={selectedSection === subject}
+            className={selectedSection === subject ? "exam-filter-button active" : "exam-filter-button"}
+            onClick={() => setSelectedSection(subject)}
+          >
+            {subject}
+          </button>
+        ))}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={selectedSection === "All"}
+          className={selectedSection === "All" ? "exam-filter-button active" : "exam-filter-button"}
+          onClick={() => setSelectedSection("All")}
+        >
+          All Subjects
+        </button>
+      </div>
+
+      {(isDiagnosticMode || isControlledMode) && !slowdownActive ? (
+        <section className="exam-advisory-banner" aria-label="Adaptive advisory banner">
+          {isDiagnosticMode ? (
+            <p>
+              Advisory: Phase adherence is
+              {" "}
+              <strong>{adaptivePhaseSnapshot.phaseAdherencePercent.toFixed(1)}%</strong>
+              {" "}
+              and overspend is
+              {" "}
+              <strong>{adaptivePhaseSnapshot.overspendPercent.toFixed(1)}%</strong>.
+              Keep skip behavior controlled.
+            </p>
+          ) : (
+            <p>
+              Controlled Enforcement: MinTime gating active.
+              {" "}
+              Discipline Index
+              {" "}
+              <strong>{adaptivePhaseSnapshot.disciplineIndex.toFixed(1)}</strong>.
+              {" "}
+              Save is blocked until question timer reaches MinTime.
+            </p>
+          )}
+        </section>
+      ) : null}
+
+      {slowdownActive ? (
+        <section className="exam-enforcement-warning" aria-label="Controlled slowdown warning">
+          <p>
+            Slowdown active due to consecutive rushed saves. Resume in
+            {" "}
+            <strong>{slowdownSecondsRemaining}s</strong>.
+          </p>
+        </section>
+      ) : null}
 
       <div className="exam-main-layout">
         <aside className="exam-palette-panel" aria-label="Question navigation panel">
@@ -963,9 +1425,10 @@ function ExamSessionPage() {
           <div className="exam-palette-grid" aria-label="Question status tiles">
             {filteredPalette.map((tile) => {
               const jumpDisabled =
-                isHardMode &&
-                sessionSnapshot.hardModeRevisitRestricted &&
-                (tile.revisitLocked || tile.number < (selectedQuestion?.number ?? 1));
+                slowdownActive ||
+                (isHardMode &&
+                  sessionSnapshot.hardModeRevisitRestricted &&
+                  (tile.revisitLocked || tile.number < (selectedQuestion?.number ?? 1)));
 
               return (
                 <button
@@ -1007,6 +1470,40 @@ function ExamSessionPage() {
               {" "}
               <strong>{hardModeLockedQuestionIds.size}</strong>
             </p>
+            <p>
+              Phase Adherence:
+              {" "}
+              <strong>{adaptivePhaseSnapshot.phaseAdherencePercent.toFixed(1)}%</strong>
+            </p>
+            <p>
+              Difficulty Compliance:
+              {" "}
+              <strong>{adaptivePhaseSnapshot.difficultyCompliancePercent.toFixed(1)}%</strong>
+            </p>
+            <p>
+              Skip Pattern:
+              {" "}
+              <strong>{adaptivePhaseSnapshot.skipPatternScore.toFixed(1)}%</strong>
+            </p>
+          </div>
+
+          <div className="exam-submit-controls" aria-label="Submit controls">
+            <button
+              type="button"
+              className="exam-submit-button"
+              disabled={manualSubmitDisabled}
+              onClick={submitExam}
+            >
+              Submit Test
+            </button>
+            {manualSubmitAttempts > 0 && isControlledMode ? (
+              <p className="exam-submit-warning">
+                Controlled mode warning: low discipline or phase adherence detected. Click submit again to confirm early submission.
+              </p>
+            ) : null}
+            {shouldRestrictManualSubmit ? (
+              <p className="exam-submit-warning">Hard Mode submit restriction active until all questions are visited.</p>
+            ) : null}
           </div>
         </aside>
 
@@ -1024,6 +1521,23 @@ function ExamSessionPage() {
               {" "}
               <code>{sessionSnapshot.sessionId}</code>
             </p>
+            <div className="exam-question-timing-metrics">
+              <p>
+                MinTime Remaining:
+                {" "}
+                <strong>{selectedQuestionMinTimeRemainingSec}s</strong>
+              </p>
+              <p>
+                MaxTime Remaining:
+                {" "}
+                <strong>{selectedQuestionMaxTimeRemainingSec}s</strong>
+              </p>
+              <p>
+                Time Spent:
+                {" "}
+                <strong>{selectedQuestionTimeSpentSec}s</strong>
+              </p>
+            </div>
           </header>
 
           {selectedQuestion && selectedResponseState ? (
@@ -1032,6 +1546,10 @@ function ExamSessionPage() {
                 Type:
                 {" "}
                 <strong>{selectedQuestion.type.toUpperCase()}</strong>
+                {" "}
+                • Difficulty:
+                {" "}
+                <strong>{selectedQuestion.difficulty.toUpperCase()}</strong>
               </p>
               <p className="exam-question-text">{selectedQuestion.text}</p>
 
@@ -1067,7 +1585,7 @@ function ExamSessionPage() {
                         name={selectedQuestion.id}
                         checked={selectedResponseState.selectedOptionId === option.id}
                         onChange={() => {
-                          if (selectedQuestionRevisitLocked) {
+                          if (selectedQuestionRevisitLocked || slowdownActive) {
                             return;
                           }
 
@@ -1098,7 +1616,7 @@ function ExamSessionPage() {
                     type="text"
                     value={selectedResponseState.numericResponse}
                     onChange={(event) => {
-                      if (selectedQuestionRevisitLocked) {
+                      if (selectedQuestionRevisitLocked || slowdownActive) {
                         return;
                       }
 
@@ -1130,7 +1648,7 @@ function ExamSessionPage() {
                                 type="checkbox"
                                 checked={checked}
                                 onChange={(event) => {
-                                  if (selectedQuestionRevisitLocked) {
+                                  if (selectedQuestionRevisitLocked || slowdownActive) {
                                     return;
                                   }
 
@@ -1164,14 +1682,14 @@ function ExamSessionPage() {
                 <button
                   type="button"
                   onClick={goToPreviousQuestion}
-                  disabled={selectedQuestionIndex <= 0 || selectedQuestionRevisitLocked}
+                  disabled={selectedQuestionIndex <= 0 || selectedQuestionRevisitLocked || slowdownActive}
                 >
                   Previous
                 </button>
                 <button
                   type="button"
                   onClick={() => {
-                    if (selectedQuestionRevisitLocked) {
+                    if (selectedQuestionRevisitLocked || slowdownActive) {
                       return;
                     }
 
@@ -1185,14 +1703,14 @@ function ExamSessionPage() {
                       },
                     }));
                   }}
-                  disabled={selectedQuestionRevisitLocked}
+                  disabled={selectedQuestionRevisitLocked || slowdownActive}
                 >
                   Clear Response
                 </button>
                 <button
                   type="button"
                   onClick={() => {
-                    if (selectedQuestionRevisitLocked) {
+                    if (selectedQuestionRevisitLocked || slowdownActive) {
                       return;
                     }
 
@@ -1204,7 +1722,7 @@ function ExamSessionPage() {
                       },
                     }));
                   }}
-                  disabled={selectedQuestionRevisitLocked}
+                  disabled={selectedQuestionRevisitLocked || slowdownActive}
                 >
                   Mark for Review
                 </button>
@@ -1212,16 +1730,28 @@ function ExamSessionPage() {
                   type="button"
                   className="exam-save-next-button"
                   onClick={() => saveCurrentAndMaybeAdvance(true)}
-                  disabled={selectedQuestionRevisitLocked}
+                  disabled={saveDisabled}
                 >
                   Save & Next
                 </button>
               </footer>
 
+              {saveBlockedByTiming ? (
+                <p className="exam-enforcement-warning">
+                  MinTime enforcement active. Save unlocks in
+                  {" "}
+                  <strong>{selectedQuestionMinTimeRemainingSec}s</strong>.
+                </p>
+              ) : null}
+
               {selectedQuestionRevisitLocked ? (
                 <p className="exam-hard-mode-notice">
-                  Hard Mode revisit restriction active. This question is locked after save.
+                  Hard Mode lock active for this question. Edits and revisit are disabled.
                 </p>
+              ) : null}
+
+              {isHardMode && selectedQuestionTiming?.maxTimeLocked ? (
+                <p className="exam-hard-mode-notice">MaxTime reached. Question auto-locked by Hard Mode timing policy.</p>
               ) : null}
             </article>
           ) : null}
