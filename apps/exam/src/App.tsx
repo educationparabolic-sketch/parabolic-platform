@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Route, Routes, useLocation, useParams } from "react-router-dom";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
+import { getFrontendEnvironment } from "../../../shared/services/frontendEnvironment";
 import "./App.css";
 
 type QuestionPaletteStatus = "not_visited" | "not_answered" | "answered" | "marked" | "answered_marked";
@@ -30,11 +31,16 @@ interface TokenClaims {
   sub: string | null;
   exp: number | null;
   mode: ExecutionMode;
+  instituteId: string | null;
+  yearId: string | null;
+  runId: string | null;
+  sessionId: string | null;
+  refreshNonce: string | null;
 }
 
 interface EntryValidationResult {
   allowed: boolean;
-  reason: "missing_token" | "expired_token" | "malformed_token" | null;
+  reason: "missing_token" | "expired_token" | "malformed_token" | "iframe_blocked" | null;
   claims: TokenClaims;
 }
 
@@ -136,12 +142,49 @@ interface AdaptivePhaseSnapshot {
   disciplineIndex: number;
 }
 
+interface QueuedAnswerWrite {
+  clientTimestamp: number;
+  questionId: string;
+  selectedOption: string;
+  timeSpent: number;
+}
+
+interface ExamAnswerBatchRequestBody {
+  answers: QueuedAnswerWrite[];
+  instituteId: string;
+  millisecondsSinceLastWrite: number;
+  runId: string;
+  yearId: string;
+}
+
+interface ExamAnswerBatchResponse {
+  code?: string;
+  data?: {
+    ignoredQuestionIds?: string[];
+    lockedQuestionIds?: string[];
+    persistedQuestionIds?: string[];
+  };
+}
+
+interface SessionTokenRefreshResponse {
+  code?: string;
+  data?: {
+    token?: string;
+  };
+}
+
+type SyncState = "idle" | "syncing" | "error";
+
 const EXAM_DURATION_MINUTES = 180;
 const TICK_INTERVAL_MS = 1_000;
 const EARLY_SUBMIT_DISCIPLINE_THRESHOLD = 65;
 const EARLY_SUBMIT_PHASE_ADHERENCE_THRESHOLD = 62;
 const MAX_RUSHED_SAVE_BEFORE_SLOWDOWN = 2;
 const STUDENT_PORTAL_FALLBACK_PATH = "/student/my-tests";
+const ANSWER_BATCH_INTERVAL_MS = 5_000;
+const ANSWER_BATCH_MAX_SIZE = 10;
+const HEARTBEAT_INTERVAL_MS = 20_000;
+const SESSION_TOKEN_REFRESH_WINDOW_SEC = 120;
 
 const MARKING_SCHEME = [
   "+4 for each correct answer",
@@ -240,6 +283,12 @@ function parseTokenClaims(token: string): TokenClaims | null {
 
   try {
     const payload = JSON.parse(decodeBase64Url(tokenParts[1] ?? "")) as Record<string, unknown>;
+    const instituteId = typeof payload.instituteId === "string" ? payload.instituteId.trim() : "";
+    const yearId = typeof payload.yearId === "string" ? payload.yearId.trim() : "";
+    const runId = typeof payload.runId === "string" ? payload.runId.trim() : "";
+    const sessionId = typeof payload.sessionId === "string" ? payload.sessionId.trim() : "";
+    const refreshNonce = typeof payload.refreshNonce === "string" ? payload.refreshNonce.trim() : "";
+
     return {
       sub: typeof payload.sub === "string" && payload.sub.trim().length > 0 ? payload.sub.trim() : null,
       exp: typeof payload.exp === "number" && Number.isFinite(payload.exp) ? payload.exp : null,
@@ -248,6 +297,11 @@ function parseTokenClaims(token: string): TokenClaims | null {
         parseExecutionMode(payload.executionMode) ??
         parseExecutionMode(payload.licenseLayer) ??
         "Operational",
+      instituteId: instituteId.length > 0 ? instituteId : null,
+      yearId: yearId.length > 0 ? yearId : null,
+      runId: runId.length > 0 ? runId : null,
+      sessionId: sessionId.length > 0 ? sessionId : null,
+      refreshNonce: refreshNonce.length > 0 ? refreshNonce : null,
     };
   } catch {
     return null;
@@ -255,11 +309,37 @@ function parseTokenClaims(token: string): TokenClaims | null {
 }
 
 function validateSessionEntry(token: string | null): EntryValidationResult {
+  if (window.self !== window.top) {
+    return {
+      allowed: false,
+      reason: "iframe_blocked",
+      claims: {
+        sub: null,
+        exp: null,
+        mode: "Operational",
+        instituteId: null,
+        yearId: null,
+        runId: null,
+        sessionId: null,
+        refreshNonce: null,
+      },
+    };
+  }
+
   if (!token || token.trim().length === 0) {
     return {
       allowed: false,
       reason: "missing_token",
-      claims: { sub: null, exp: null, mode: "Operational" },
+      claims: {
+        sub: null,
+        exp: null,
+        mode: "Operational",
+        instituteId: null,
+        yearId: null,
+        runId: null,
+        sessionId: null,
+        refreshNonce: null,
+      },
     };
   }
 
@@ -268,7 +348,16 @@ function validateSessionEntry(token: string | null): EntryValidationResult {
     return {
       allowed: false,
       reason: "malformed_token",
-      claims: { sub: null, exp: null, mode: "Operational" },
+      claims: {
+        sub: null,
+        exp: null,
+        mode: "Operational",
+        instituteId: null,
+        yearId: null,
+        runId: null,
+        sessionId: null,
+        refreshNonce: null,
+      },
     };
   }
 
@@ -285,6 +374,32 @@ function validateSessionEntry(token: string | null): EntryValidationResult {
     reason: null,
     claims,
   };
+}
+
+function resolveExamApiBaseUrl(): string {
+  const apiBaseUrl = getFrontendEnvironment().apiBaseUrl?.trim();
+  if (!apiBaseUrl) {
+    return "";
+  }
+
+  return apiBaseUrl.endsWith("/") ? apiBaseUrl.slice(0, -1) : apiBaseUrl;
+}
+
+function toEpochSeconds(value: number): number {
+  return Math.floor(value / 1000);
+}
+
+function parseSessionRefreshToken(responseBody: SessionTokenRefreshResponse): string | null {
+  if (!responseBody || typeof responseBody !== "object") {
+    return null;
+  }
+
+  const refreshedToken = responseBody.data?.token;
+  if (typeof refreshedToken !== "string" || refreshedToken.trim().length === 0) {
+    return null;
+  }
+
+  return refreshedToken.trim();
 }
 
 function statusClassName(status: QuestionPaletteStatus): string {
@@ -513,6 +628,26 @@ function hasAnswer(question: SessionQuestion, responseState: QuestionResponseSta
   }
 
   return responseState.matrixSelections.length > 0;
+}
+
+function serializeResponseForPersistence(
+  question: SessionQuestion,
+  responseState: QuestionResponseState,
+): string {
+  if (question.type === "mcq") {
+    return responseState.selectedOptionId ?? "UNANSWERED";
+  }
+
+  if (question.type === "numeric") {
+    const normalizedValue = responseState.numericResponse.trim();
+    return normalizedValue.length > 0 ? normalizedValue : "UNANSWERED";
+  }
+
+  if (responseState.matrixSelections.length === 0) {
+    return "UNANSWERED";
+  }
+
+  return responseState.matrixSelections.slice().sort().join("|");
 }
 
 function toPaletteStatus(question: SessionQuestion, responseState: QuestionResponseState, hasVisited: boolean): QuestionPaletteStatus {
@@ -746,10 +881,12 @@ function ScientificCalculatorModal(props: { open: boolean; onClose: () => void }
 function ExamSessionPage() {
   const { sessionId = "" } = useParams<{ sessionId: string }>();
   const location = useLocation();
-  const token = useMemo(() => new URLSearchParams(location.search).get("token"), [location.search]);
-  const entryValidation = useMemo(() => validateSessionEntry(token), [token]);
+  const tokenFromQuery = useMemo(() => new URLSearchParams(location.search).get("token"), [location.search]);
+  const [sessionToken, setSessionToken] = useState<string | null>(() => tokenFromQuery);
+  const entryValidation = useMemo(() => validateSessionEntry(sessionToken), [sessionToken]);
   const modeInstruction = MODE_INSTRUCTIONS[entryValidation.claims.mode];
   const candidateName = entryValidation.claims.sub ?? "Student Candidate";
+  const apiBaseUrl = useMemo(() => resolveExamApiBaseUrl(), []);
 
   const sessionSnapshot = useMemo(
     () => buildSessionSnapshot(sessionId || "runtime-session", entryValidation.claims.mode),
@@ -781,6 +918,12 @@ function ExamSessionPage() {
   const [submittedAtIso, setSubmittedAtIso] = useState<string | null>(null);
   const [submissionReason, setSubmissionReason] = useState<SubmissionReason | null>(null);
   const [nowEpochMs, setNowEpochMs] = useState(() => Date.now());
+  const [lastAnswerWriteAtMs, setLastAnswerWriteAtMs] = useState(() => Date.now() - ANSWER_BATCH_INTERVAL_MS);
+  const [pendingAnswerMap, setPendingAnswerMap] = useState<Record<string, QueuedAnswerWrite>>({});
+  const [syncState, setSyncState] = useState<SyncState>("idle");
+  const [syncMessage, setSyncMessage] = useState("No pending answer updates.");
+  const [lastHeartbeatAtIso, setLastHeartbeatAtIso] = useState<string | null>(null);
+  const [sessionTokenRefreshAtIso, setSessionTokenRefreshAtIso] = useState<string | null>(null);
 
   const totalDurationMs = EXAM_DURATION_MINUTES * 60 * 1000;
   const isOperationalMode = entryValidation.claims.mode === "Operational";
@@ -789,6 +932,17 @@ function ExamSessionPage() {
   const isHardMode = entryValidation.claims.mode === "Hard";
   const enforcementMode = isControlledMode || isHardMode;
   const isSubmitted = submissionReason !== null;
+  const tokenExpiryEpochSec = entryValidation.claims.exp;
+  const instituteId = entryValidation.claims.instituteId ?? "inst-build-134";
+  const yearId = entryValidation.claims.yearId ?? "year-build-134";
+  const runId = entryValidation.claims.runId ?? "run-build-134";
+  const tokenSessionId = entryValidation.claims.sessionId;
+  const effectiveSessionId = tokenSessionId && tokenSessionId.length > 0 ? tokenSessionId : sessionId;
+  const pendingAnswers = useMemo(() => Object.values(pendingAnswerMap), [pendingAnswerMap]);
+
+  useEffect(() => {
+    setSessionToken(tokenFromQuery);
+  }, [tokenFromQuery]);
 
   useEffect(() => {
     if (!instructionConfirmed || isSubmitted) {
@@ -860,6 +1014,260 @@ function ExamSessionPage() {
     });
     setSelectedQuestionId(questionId);
   };
+
+  const queueAnswerWrite = useCallback((questionId: string, nextResponseState: QuestionResponseState): void => {
+    if (!entryValidation.allowed) {
+      return;
+    }
+
+    const question = sessionSnapshot.questions.find((candidateQuestion) => candidateQuestion.id === questionId);
+    if (!question) {
+      return;
+    }
+
+    const selectedOption = serializeResponseForPersistence(question, nextResponseState);
+    const questionTimeSpentMs = questionTimingById[questionId]?.timeSpentMs ?? 0;
+    const queuedWrite: QueuedAnswerWrite = {
+      clientTimestamp: Date.now(),
+      questionId,
+      selectedOption,
+      timeSpent: Math.max(0, Math.floor(questionTimeSpentMs / 1000)),
+    };
+
+    setPendingAnswerMap((current) => {
+      const nextPendingMap = {
+        ...current,
+        [questionId]: queuedWrite,
+      };
+      setSyncMessage(`Pending answer updates: ${Object.keys(nextPendingMap).length}`);
+      return nextPendingMap;
+    });
+  }, [entryValidation.allowed, questionTimingById, sessionSnapshot.questions]);
+
+  const updateQuestionResponseState = useCallback((
+    questionId: string,
+    updater: (previous: QuestionResponseState) => QuestionResponseState,
+  ): void => {
+    setResponseStateByQuestionId((current) => {
+      const currentState = current[questionId] ?? {
+        selectedOptionId: null,
+        numericResponse: "",
+        matrixSelections: [],
+        markedForReview: false,
+      };
+      const nextState = updater(currentState);
+      queueAnswerWrite(questionId, nextState);
+      return {
+        ...current,
+        [questionId]: nextState,
+      };
+    });
+  }, [queueAnswerWrite]);
+
+  const flushAnswerBatch = useCallback(async (reason: "interval" | "heartbeat" | "submission"): Promise<boolean> => {
+    if (!entryValidation.allowed || !instructionConfirmed || isSubmitted && reason !== "submission") {
+      return false;
+    }
+
+    if (!sessionToken || pendingAnswers.length === 0) {
+      if (reason === "heartbeat") {
+        setLastHeartbeatAtIso(new Date().toISOString());
+      }
+      return true;
+    }
+
+    const nowMs = Date.now();
+    const millisecondsSinceLastWrite = nowMs - lastAnswerWriteAtMs;
+    if (millisecondsSinceLastWrite < ANSWER_BATCH_INTERVAL_MS && reason !== "submission") {
+      return false;
+    }
+
+    const answersToPersist = pendingAnswers.slice(0, ANSWER_BATCH_MAX_SIZE);
+    if (answersToPersist.length === 0) {
+      return true;
+    }
+
+    const endpointBase = apiBaseUrl || "";
+    const endpoint = `${endpointBase}/exam/session/${encodeURIComponent(effectiveSessionId)}/answers`;
+    const requestBody: ExamAnswerBatchRequestBody = {
+      answers: answersToPersist,
+      instituteId,
+      millisecondsSinceLastWrite,
+      runId,
+      yearId,
+    };
+
+    setSyncState("syncing");
+    setSyncMessage(`Syncing ${answersToPersist.length} answer update(s)...`);
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${sessionToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Answer sync failed with status ${response.status}`);
+      }
+
+      const responseBody = await response.json() as ExamAnswerBatchResponse;
+      const persistedQuestionIds = responseBody.data?.persistedQuestionIds ?? answersToPersist.map((answer) => answer.questionId);
+      const ignoredQuestionIds = responseBody.data?.ignoredQuestionIds ?? [];
+      const settledQuestionIds = new Set([...persistedQuestionIds, ...ignoredQuestionIds]);
+      const lockedQuestionIds = responseBody.data?.lockedQuestionIds ?? [];
+
+      if (lockedQuestionIds.length > 0) {
+        setHardModeLockedQuestionIds((current) => {
+          const next = new Set(current);
+          lockedQuestionIds.forEach((questionId) => next.add(questionId));
+          return next;
+        });
+      }
+
+      setPendingAnswerMap((current) => {
+        const next = {...current};
+        settledQuestionIds.forEach((questionId) => {
+          delete next[questionId];
+        });
+        const remainingPending = Object.keys(next).length;
+        setSyncMessage(
+          remainingPending > 0 ?
+            `Synced ${persistedQuestionIds.length} answer(s). Pending: ${remainingPending}` :
+            `Synced ${persistedQuestionIds.length} answer(s).`,
+        );
+        return next;
+      });
+      setLastAnswerWriteAtMs(nowMs);
+      setSyncState("idle");
+
+      return true;
+    } catch (error) {
+      setSyncState("error");
+      setSyncMessage(error instanceof Error ? error.message : "Answer sync failed.");
+      return false;
+    }
+  }, [
+    apiBaseUrl,
+    effectiveSessionId,
+    entryValidation.allowed,
+    instituteId,
+    instructionConfirmed,
+    isSubmitted,
+    lastAnswerWriteAtMs,
+    pendingAnswers,
+    runId,
+    sessionToken,
+    yearId,
+  ]);
+
+  useEffect(() => {
+    if (!instructionConfirmed || isSubmitted) {
+      return;
+    }
+
+    const batchInterval = window.setInterval(() => {
+      void flushAnswerBatch("interval");
+    }, ANSWER_BATCH_INTERVAL_MS);
+
+    return () => window.clearInterval(batchInterval);
+  }, [flushAnswerBatch, instructionConfirmed, isSubmitted]);
+
+  useEffect(() => {
+    if (!instructionConfirmed || isSubmitted || pendingAnswers.length < ANSWER_BATCH_MAX_SIZE) {
+      return;
+    }
+
+    void flushAnswerBatch("interval");
+  }, [flushAnswerBatch, instructionConfirmed, isSubmitted, pendingAnswers.length]);
+
+  useEffect(() => {
+    if (!instructionConfirmed || isSubmitted) {
+      return;
+    }
+
+    const heartbeatInterval = window.setInterval(() => {
+      setLastHeartbeatAtIso(new Date().toISOString());
+      void flushAnswerBatch("heartbeat");
+    }, HEARTBEAT_INTERVAL_MS);
+
+    return () => window.clearInterval(heartbeatInterval);
+  }, [flushAnswerBatch, instructionConfirmed, isSubmitted]);
+
+  useEffect(() => {
+    if (!instructionConfirmed || !sessionToken || !tokenExpiryEpochSec || isSubmitted) {
+      return;
+    }
+
+    const refreshCheckInterval = window.setInterval(() => {
+      const secondsUntilExpiry = tokenExpiryEpochSec - toEpochSeconds(Date.now());
+      if (secondsUntilExpiry > SESSION_TOKEN_REFRESH_WINDOW_SEC) {
+        return;
+      }
+
+      const endpointBase = apiBaseUrl || "";
+      const refreshEndpoint = `${endpointBase}/exam/session/${encodeURIComponent(effectiveSessionId)}/token/refresh`;
+      void fetch(refreshEndpoint, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${sessionToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          instituteId,
+          refreshNonce: entryValidation.claims.refreshNonce,
+          runId,
+          sessionId: effectiveSessionId,
+          yearId,
+        }),
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            throw new Error(`Token refresh failed with status ${response.status}`);
+          }
+
+          const responseBody = await response.json() as SessionTokenRefreshResponse;
+          const refreshedToken = parseSessionRefreshToken(responseBody);
+          if (!refreshedToken) {
+            throw new Error("Token refresh response was missing a token.");
+          }
+
+          setSessionToken(refreshedToken);
+          setSessionTokenRefreshAtIso(new Date().toISOString());
+          setSyncMessage("Session token refreshed.");
+        })
+        .catch((error) => {
+          setSyncState("error");
+          setSyncMessage(error instanceof Error ? error.message : "Session token refresh failed.");
+        });
+    }, 30_000);
+
+    return () => window.clearInterval(refreshCheckInterval);
+  }, [
+    apiBaseUrl,
+    effectiveSessionId,
+    entryValidation.claims.refreshNonce,
+    instituteId,
+    instructionConfirmed,
+    isSubmitted,
+    runId,
+    sessionToken,
+    tokenExpiryEpochSec,
+    yearId,
+  ]);
+
+  useEffect(() => {
+    if (!isSubmitted) {
+      return;
+    }
+
+    void flushAnswerBatch("submission");
+  }, [flushAnswerBatch, isSubmitted]);
 
   const palette = useMemo<PaletteTile[]>(
     () =>
@@ -1115,6 +1523,10 @@ function ExamSessionPage() {
                 const deadline = Date.now() + totalDurationMs;
                 setDeadlineEpochMs(deadline);
                 setRemainingMs(totalDurationMs);
+                setLastAnswerWriteAtMs(Date.now() - ANSWER_BATCH_INTERVAL_MS);
+                setPendingAnswerMap({});
+                setSyncState("idle");
+                setSyncMessage("No pending answer updates.");
                 setInstructionConfirmed(true);
               }}
             >
@@ -1163,6 +1575,16 @@ function ExamSessionPage() {
     if (!hasAnswer(selectedQuestion, responseStateByQuestionId[selectedQuestion.id])) {
       setSkippedQuestionsCount((current) => current + 1);
     }
+
+    queueAnswerWrite(
+      selectedQuestion.id,
+      responseStateByQuestionId[selectedQuestion.id] ?? {
+        selectedOptionId: null,
+        numericResponse: "",
+        matrixSelections: [],
+        markedForReview: false,
+      },
+    );
 
     if (isHardMode && sessionSnapshot.hardModeRevisitRestricted) {
       setHardModeLockedQuestionIds((current) => {
@@ -1225,7 +1647,7 @@ function ExamSessionPage() {
     navigateToQuestion(questionId);
   };
 
-  const submitExam = () => {
+  const submitExam = async () => {
     if (manualSubmitDisabled) {
       return;
     }
@@ -1239,6 +1661,19 @@ function ExamSessionPage() {
       return;
     }
 
+    if (selectedQuestion) {
+      queueAnswerWrite(
+        selectedQuestion.id,
+        responseStateByQuestionId[selectedQuestion.id] ?? {
+          selectedOptionId: null,
+          numericResponse: "",
+          matrixSelections: [],
+          markedForReview: false,
+        },
+      );
+    }
+
+    await flushAnswerBatch("submission");
     setSubmissionReason("manual");
     setSubmittedAtIso(new Date().toISOString());
   };
@@ -1329,6 +1764,27 @@ function ExamSessionPage() {
             {toCountdownLabel(remainingMs)}
           </p>
           <p className="exam-sync-indicator">Server Sync #{syncCounter}</p>
+          <p className={syncState === "error" ? "exam-sync-indicator error" : "exam-sync-indicator"}>
+            Sync State:
+            {" "}
+            <strong>{syncState.toUpperCase()}</strong>
+          </p>
+          <p className="exam-sync-indicator">{syncMessage}</p>
+          <p className="exam-sync-indicator">
+            Pending Batch Size:
+            {" "}
+            <strong>{pendingAnswers.length}</strong>
+          </p>
+          <p className="exam-sync-indicator">
+            Last Heartbeat:
+            {" "}
+            <strong>{lastHeartbeatAtIso ?? "N/A"}</strong>
+          </p>
+          <p className="exam-sync-indicator">
+            Token Refresh:
+            {" "}
+            <strong>{sessionTokenRefreshAtIso ?? "Not required yet"}</strong>
+          </p>
           <button
             type="button"
             className="exam-calculator-launch"
@@ -1589,13 +2045,13 @@ function ExamSessionPage() {
                             return;
                           }
 
-                          setResponseStateByQuestionId((current) => ({
-                            ...current,
-                            [selectedQuestion.id]: {
-                              ...current[selectedQuestion.id],
+                          updateQuestionResponseState(
+                            selectedQuestion.id,
+                            (current) => ({
+                              ...current,
                               selectedOptionId: option.id,
-                            },
-                          }));
+                            }),
+                          );
                         }}
                       />
                       <span>
@@ -1620,13 +2076,13 @@ function ExamSessionPage() {
                         return;
                       }
 
-                      setResponseStateByQuestionId((current) => ({
-                        ...current,
-                        [selectedQuestion.id]: {
-                          ...current[selectedQuestion.id],
+                      updateQuestionResponseState(
+                        selectedQuestion.id,
+                        (current) => ({
+                          ...current,
                           numericResponse: event.target.value,
-                        },
-                      }));
+                        }),
+                      );
                     }}
                     placeholder="Enter numeric answer"
                   />
@@ -1652,18 +2108,15 @@ function ExamSessionPage() {
                                     return;
                                   }
 
-                                  setResponseStateByQuestionId((current) => {
-                                    const existing = current[selectedQuestion.id].matrixSelections;
+                                  updateQuestionResponseState(selectedQuestion.id, (current) => {
+                                    const existing = current.matrixSelections;
                                     const nextSelections = event.target.checked
                                       ? [...existing, value]
                                       : existing.filter((entry) => entry !== value);
 
                                     return {
                                       ...current,
-                                      [selectedQuestion.id]: {
-                                        ...current[selectedQuestion.id],
-                                        matrixSelections: nextSelections,
-                                      },
+                                      matrixSelections: nextSelections,
                                     };
                                   });
                                 }}
@@ -1693,14 +2146,11 @@ function ExamSessionPage() {
                       return;
                     }
 
-                    setResponseStateByQuestionId((current) => ({
-                      ...current,
-                      [selectedQuestion.id]: {
-                        selectedOptionId: null,
-                        numericResponse: "",
-                        matrixSelections: [],
-                        markedForReview: current[selectedQuestion.id]?.markedForReview ?? false,
-                      },
+                    updateQuestionResponseState(selectedQuestion.id, (current) => ({
+                      selectedOptionId: null,
+                      numericResponse: "",
+                      matrixSelections: [],
+                      markedForReview: current.markedForReview,
                     }));
                   }}
                   disabled={selectedQuestionRevisitLocked || slowdownActive}
@@ -1714,12 +2164,9 @@ function ExamSessionPage() {
                       return;
                     }
 
-                    setResponseStateByQuestionId((current) => ({
+                    updateQuestionResponseState(selectedQuestion.id, (current) => ({
                       ...current,
-                      [selectedQuestion.id]: {
-                        ...current[selectedQuestion.id],
-                        markedForReview: !current[selectedQuestion.id].markedForReview,
-                      },
+                      markedForReview: !current.markedForReview,
                     }));
                   }}
                   disabled={selectedQuestionRevisitLocked || slowdownActive}

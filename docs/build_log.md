@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 133  
-Next Build: 134
+Completed Builds: 134  
+Next Build: 135
 
 Current Phase: Phase 27 — Exam Portal Engine
 
@@ -4423,18 +4423,65 @@ Completed On
 
 ---
 
+## Build 134 — Answer Submission Interaction
+
+Phase  
+Phase 27 — Exam Portal Engine
+
+Summary  
+Implemented exam answer submission interaction with client-side batching, session-token safeguards, and deterministic browser verification aligned to the Build 134 scope.
+
+Components implemented:
+
+- Extended `apps/exam/src/App.tsx` with typed answer-persistence orchestration for `POST /exam/session/{sessionId}/answers`:
+  - per-question answer selection/update queueing
+  - normalized payload generation from MCQ/numeric/matrix responses
+  - batch flush cadence aligned to backend policy (`5s` interval, max `10` answers per batch)
+  - `millisecondsSinceLastWrite` propagation for backend anti-tamper/write-interval enforcement
+- Implemented secure session-token handling flow in exam runtime:
+  - iframe-entry blocking (`no iframe embedding`)
+  - runtime token state management
+  - expiry-window refresh attempt flow using bearer-authenticated refresh requests
+- Added heartbeat orchestration in `apps/exam/src/App.tsx` on a `20s` cadence with deterministic runtime timestamps and sync-state indicators
+- Added answer sync feedback rendering in exam header:
+  - sync state (`idle`/`syncing`/`error`)
+  - pending batch size
+  - last heartbeat timestamp
+  - token refresh timestamp
+- Updated `apps/exam/src/App.css` for sync-status rendering (wrapping/error states) without changing prior layout architecture
+- Added deterministic browser verification automation and artifacts under `apps/exam/artifacts/build-134/`:
+  - `verify-routes.mjs`
+  - `verification-results.json`
+  - desktop/mobile screenshots for affected routes
+- Executed frontend verification:
+  - `apps/exam`: build, lint
+  - browser checks for `/session/session-build-134?token=...`, `/session/session-build-134`, and `/` at `1366x768` and `390x844`
+  - route guard checks for valid token session access and missing-token fallback behavior
+  - console/network/responsive/guard checks recorded in `apps/exam/artifacts/build-134/verification-results.json`
+
+Result  
+The exam portal now includes the Build 134 answer submission interaction aligned with Sections 1.4.11, 1.4.13, and 1.4.14, and is ready for Build 135 exam submission workflow implementation.
+
+Commit Reference  
+Build 134 — Answer Submission Interaction implemented
+
+Completed On  
+2026-04-20
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 134
+Next Build Number: 135
 
 Phase  
 Phase 27 — Exam Portal Engine
 
 Subsystem  
-Answer Submission Interaction
+Exam Submission Workflow
 
 Reference  
-2_Portals_Architecture.md → Sections 1.4.11, 1.4.13, 1.4.14
+2_Portals_Architecture.md → Sections 1.4.10, 1.4.12, 1.4.16
 
 ---
 
@@ -4575,7 +4622,8 @@ Build | Phase | Status
 131 | Exam Portal Engine | Completed
 132 | Exam Portal Engine | Completed
 133 | Exam Portal Engine | Completed
-134–150 | Remaining Phases | Pending
+134 | Exam Portal Engine | Completed
+135–150 | Remaining Phases | Pending
 
 ---
 
