@@ -11,6 +11,7 @@
   --exam-not-answered: #d93025;
   --exam-answered: #2e9f45;
   --exam-marked: #7f42c5;
+  --exam-calculator-overlay: rgba(7, 20, 44, 0.62);
 }
 
 * {
@@ -187,11 +188,22 @@ input {
   color: var(--exam-danger);
 }
 
+.exam-calculator-launch {
+  margin-top: 0.5rem;
+  border: 1px solid var(--exam-blue);
+  background: var(--exam-blue);
+  color: #ffffff;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 0.38rem 0.6rem;
+  cursor: pointer;
+}
+
 .exam-main-layout {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
   gap: 0;
-  min-height: calc(100vh - 93px);
+  min-height: calc(100vh - 126px);
 }
 
 .exam-palette-panel {
@@ -250,6 +262,11 @@ input {
   cursor: pointer;
 }
 
+.exam-palette-tile:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .exam-palette-tile.selected {
   outline: 2px solid #0f284f;
 }
@@ -271,7 +288,13 @@ input {
 }
 
 .exam-palette-tile-answered-marked {
-  background: linear-gradient(145deg, var(--exam-marked) 0%, var(--exam-marked) 58%, var(--exam-answered) 58%, var(--exam-answered) 100%);
+  background: linear-gradient(
+    145deg,
+    var(--exam-marked) 0%,
+    var(--exam-marked) 58%,
+    var(--exam-answered) 58%,
+    var(--exam-answered) 100%
+  );
 }
 
 .exam-status-indicators {
@@ -320,6 +343,243 @@ input {
   border-radius: 10px;
   padding: 1rem;
   line-height: 1.5;
+  background: #ffffff;
+}
+
+.exam-question-type {
+  margin: 0;
+  color: var(--exam-muted);
+}
+
+.exam-question-text {
+  margin: 0.7rem 0;
+  font-size: 1.02rem;
+}
+
+.exam-question-image-wrap {
+  margin: 0.6rem 0 0;
+  border: 1px solid var(--exam-border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #f9fcff;
+}
+
+.exam-question-image {
+  width: 100%;
+  max-height: 260px;
+  object-fit: cover;
+  display: block;
+}
+
+.exam-question-image-wrap figcaption {
+  margin: 0;
+  padding: 0.55rem 0.7rem;
+  color: var(--exam-muted);
+  font-size: 0.85rem;
+}
+
+.exam-question-media {
+  margin-top: 0.7rem;
+  padding: 0.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--exam-border);
+  background: #f3f8ff;
+}
+
+.exam-question-media p {
+  margin: 0;
+}
+
+.exam-question-media a {
+  color: var(--exam-blue);
+  font-weight: 600;
+}
+
+.exam-option-list {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.8rem;
+}
+
+.exam-option-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  border: 1px solid var(--exam-border);
+  border-radius: 8px;
+  padding: 0.65rem;
+  background: #fdfefe;
+}
+
+.exam-numeric-response {
+  margin-top: 0.8rem;
+}
+
+.exam-numeric-response label {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: var(--exam-muted);
+}
+
+.exam-numeric-response input {
+  width: min(300px, 100%);
+  border: 1px solid var(--exam-border);
+  border-radius: 8px;
+  padding: 0.48rem 0.55rem;
+}
+
+.exam-matrix-response {
+  margin-top: 0.8rem;
+  display: grid;
+  gap: 0.7rem;
+}
+
+.exam-matrix-row {
+  border: 1px solid var(--exam-border);
+  border-radius: 8px;
+  padding: 0.65rem;
+  background: #fafdff;
+}
+
+.exam-matrix-row p {
+  margin: 0 0 0.45rem;
+  font-weight: 600;
+}
+
+.exam-matrix-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 0.4rem;
+}
+
+.exam-matrix-columns label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--exam-muted);
+}
+
+.exam-question-actions {
+  margin-top: 0.95rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.exam-question-actions button {
+  border: 1px solid var(--exam-border);
+  background: #ffffff;
+  color: var(--exam-ink);
+  border-radius: 8px;
+  padding: 0.52rem 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.exam-question-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.exam-question-actions .exam-save-next-button {
+  border-color: var(--exam-blue);
+  background: var(--exam-blue);
+  color: #ffffff;
+}
+
+.exam-hard-mode-notice {
+  margin-top: 0.75rem;
+  border: 1px solid #f2c4bf;
+  border-radius: 8px;
+  padding: 0.6rem;
+  background: #fff6f5;
+  color: #9a2f22;
+}
+
+.exam-calculator-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 1rem;
+  background: var(--exam-calculator-overlay);
+}
+
+.exam-calculator-modal {
+  width: min(560px, 100%);
+  border-radius: 12px;
+  border: 1px solid var(--exam-border);
+  background: #ffffff;
+  box-shadow: 0 18px 36px rgba(5, 16, 38, 0.34);
+  padding: 1rem;
+  max-height: 90vh;
+  overflow: auto;
+}
+
+.exam-calculator-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.exam-calculator-header h2 {
+  margin: 0;
+  color: var(--exam-blue);
+}
+
+.exam-calculator-close {
+  border: 1px solid var(--exam-border);
+  border-radius: 8px;
+  background: #ffffff;
+  cursor: pointer;
+  padding: 0.35rem 0.55rem;
+}
+
+.exam-calculator-note {
+  margin: 0.55rem 0;
+  color: var(--exam-muted);
+}
+
+.exam-calculator-display {
+  width: 100%;
+  border: 1px solid var(--exam-border);
+  border-radius: 8px;
+  padding: 0.65rem;
+  font-size: 1.02rem;
+}
+
+.exam-calculator-error {
+  margin: 0.5rem 0;
+  color: var(--exam-danger);
+  font-size: 0.9rem;
+}
+
+.exam-calculator-grid {
+  margin-top: 0.65rem;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.exam-calculator-grid button,
+.exam-calculator-operations button {
+  border: 1px solid var(--exam-border);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--exam-ink);
+  font-weight: 600;
+  padding: 0.45rem 0.3rem;
+  cursor: pointer;
+}
+
+.exam-calculator-operations {
+  margin-top: 0.7rem;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.45rem;
 }
 
 @media (max-width: 1024px) {
@@ -341,7 +601,8 @@ input {
   .exam-access-shell,
   .exam-instruction-shell,
   .exam-question-container,
-  .exam-palette-panel {
+  .exam-palette-panel,
+  .exam-calculator-modal {
     padding: 0.8rem;
   }
 
@@ -355,5 +616,14 @@ input {
 
   .exam-legend-grid {
     grid-template-columns: 1fr;
+  }
+
+  .exam-question-actions button {
+    flex: 1 1 130px;
+  }
+
+  .exam-calculator-grid,
+  .exam-calculator-operations {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }

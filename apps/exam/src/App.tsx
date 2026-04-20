@@ -5,6 +5,23 @@ import "./App.css";
 
 type QuestionPaletteStatus = "not_visited" | "not_answered" | "answered" | "marked" | "answered_marked";
 type ExecutionMode = "Operational" | "Diagnostic" | "Controlled" | "Hard";
+type QuestionSection = "Physics" | "Chemistry" | "Mathematics";
+type QuestionType = "mcq" | "numeric" | "matrix";
+type CalculatorOperation =
+  | "sqrt"
+  | "square"
+  | "cbrt"
+  | "cube"
+  | "log"
+  | "ln"
+  | "sin"
+  | "cos"
+  | "tan"
+  | "pi"
+  | "e"
+  | "clear"
+  | "backspace"
+  | "equals";
 
 interface TokenClaims {
   sub: string | null;
@@ -18,16 +35,57 @@ interface EntryValidationResult {
   claims: TokenClaims;
 }
 
-interface QuestionTile {
-  id: string;
-  number: number;
-  status: QuestionPaletteStatus;
-  section: "Physics" | "Chemistry" | "Mathematics";
-}
-
 interface ModeInstruction {
   title: string;
   points: string[];
+}
+
+interface QuestionOption {
+  id: string;
+  label: string;
+  text: string;
+}
+
+interface QuestionMedia {
+  type: "video" | "audio";
+  title: string;
+  url: string;
+}
+
+interface SessionQuestion {
+  id: string;
+  number: number;
+  section: QuestionSection;
+  type: QuestionType;
+  text: string;
+  imageUrl?: string;
+  options?: QuestionOption[];
+  matrixRows?: string[];
+  matrixColumns?: string[];
+  media?: QuestionMedia;
+}
+
+interface SessionSnapshot {
+  sessionId: string;
+  questionSetVersion: string;
+  subjects: QuestionSection[];
+  questions: SessionQuestion[];
+  hardModeRevisitRestricted: boolean;
+}
+
+interface QuestionResponseState {
+  selectedOptionId: string | null;
+  numericResponse: string;
+  matrixSelections: string[];
+  markedForReview: boolean;
+}
+
+interface PaletteTile {
+  id: string;
+  number: number;
+  section: QuestionSection;
+  status: QuestionPaletteStatus;
+  revisitLocked: boolean;
 }
 
 const EXAM_DURATION_MINUTES = 180;
@@ -89,26 +147,13 @@ const QUESTION_PALETTE_LEGEND: Array<{ status: QuestionPaletteStatus; label: str
   { status: "answered_marked", label: "Answered & Marked" },
 ];
 
-function buildQuestionPalette(): QuestionTile[] {
-  const sections: Array<QuestionTile["section"]> = ["Physics", "Chemistry", "Mathematics"];
-  const statuses: QuestionPaletteStatus[] = [
-    "not_visited",
-    "not_answered",
-    "answered",
-    "marked",
-    "answered_marked",
-  ];
-
-  return Array.from({ length: 30 }, (_, index) => {
-    const section = sections[Math.floor(index / 10)] ?? "Physics";
-    return {
-      id: `q-${index + 1}`,
-      number: index + 1,
-      status: statuses[index % statuses.length] ?? "not_visited",
-      section,
-    };
-  });
-}
+const CALCULATOR_KEYS = ["7", "8", "9", "/", "4", "5", "6", "*", "1", "2", "3", "-", "0", ".", "(", ")", "+"];
+const PHYSICS_IMAGE_DATA_URI = `data:image/svg+xml;utf8,${encodeURIComponent(
+  "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='400'><rect width='100%' height='100%' fill='#edf4ff'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' font-family='Segoe UI' font-size='28' fill='#1f5fbf'>Physics Question Figure</text></svg>",
+)}`;
+const CHEMISTRY_IMAGE_DATA_URI = `data:image/svg+xml;utf8,${encodeURIComponent(
+  "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='400'><rect width='100%' height='100%' fill='#f2fbf5'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' font-family='Segoe UI' font-size='28' fill='#0a7e42'>Chemistry Question Figure</text></svg>",
+)}`;
 
 function decodeBase64Url(value: string): string {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
@@ -219,6 +264,241 @@ function toCountdownLabel(remainingMs: number): string {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+function buildSessionSnapshot(sessionId: string, mode: ExecutionMode): SessionSnapshot {
+  const questions: SessionQuestion[] = [
+    {
+      id: "q-1",
+      number: 1,
+      section: "Physics",
+      type: "mcq",
+      text: "A particle moves in a circle of radius r with constant speed v. What is the magnitude of centripetal acceleration?",
+      options: [
+        { id: "q1-a", label: "A", text: "v / r" },
+        { id: "q1-b", label: "B", text: "v² / r" },
+        { id: "q1-c", label: "C", text: "r / v²" },
+        { id: "q1-d", label: "D", text: "v² r" },
+      ],
+      media: {
+        type: "video",
+        title: "Reference animation: circular motion setup",
+        url: "https://example.com/media/circular-motion",
+      },
+    },
+    {
+      id: "q-2",
+      number: 2,
+      section: "Physics",
+      type: "numeric",
+      text: "A body starts from rest and accelerates uniformly at 2 m/s² for 6 seconds. Enter displacement in meters.",
+      imageUrl: PHYSICS_IMAGE_DATA_URI,
+    },
+    {
+      id: "q-3",
+      number: 3,
+      section: "Physics",
+      type: "matrix",
+      text: "Match each quantity to its SI unit symbol.",
+      matrixRows: ["Force", "Power", "Frequency"],
+      matrixColumns: ["N", "W", "Hz", "J"],
+    },
+    {
+      id: "q-4",
+      number: 4,
+      section: "Chemistry",
+      type: "mcq",
+      text: "Which quantum number determines the orientation of an orbital?",
+      options: [
+        { id: "q4-a", label: "A", text: "Principal quantum number" },
+        { id: "q4-b", label: "B", text: "Azimuthal quantum number" },
+        { id: "q4-c", label: "C", text: "Magnetic quantum number" },
+        { id: "q4-d", label: "D", text: "Spin quantum number" },
+      ],
+    },
+    {
+      id: "q-5",
+      number: 5,
+      section: "Chemistry",
+      type: "numeric",
+      text: "For pH = 3 solution, enter [H+] concentration in mol/L using decimal notation.",
+    },
+    {
+      id: "q-6",
+      number: 6,
+      section: "Chemistry",
+      type: "mcq",
+      text: "Identify the compound that exhibits hydrogen bonding in pure state.",
+      options: [
+        { id: "q6-a", label: "A", text: "CH4" },
+        { id: "q6-b", label: "B", text: "NH3" },
+        { id: "q6-c", label: "C", text: "CO2" },
+        { id: "q6-d", label: "D", text: "CCl4" },
+      ],
+      imageUrl: CHEMISTRY_IMAGE_DATA_URI,
+    },
+    {
+      id: "q-7",
+      number: 7,
+      section: "Mathematics",
+      type: "mcq",
+      text: "If f(x) = x³, then f'(2) equals:",
+      options: [
+        { id: "q7-a", label: "A", text: "4" },
+        { id: "q7-b", label: "B", text: "8" },
+        { id: "q7-c", label: "C", text: "12" },
+        { id: "q7-d", label: "D", text: "16" },
+      ],
+    },
+    {
+      id: "q-8",
+      number: 8,
+      section: "Mathematics",
+      type: "matrix",
+      text: "Select all statements that are true for a 2x2 identity matrix.",
+      matrixRows: ["Determinant", "Trace", "Inverse"],
+      matrixColumns: ["Equals 1", "Equals 2", "Exists", "Zero"],
+    },
+    {
+      id: "q-9",
+      number: 9,
+      section: "Mathematics",
+      type: "numeric",
+      text: "Evaluate integral of 2x from x = 0 to x = 3.",
+      media: {
+        type: "audio",
+        title: "Optional audio instruction",
+        url: "https://example.com/media/math-audio",
+      },
+    },
+  ];
+
+  return {
+    sessionId,
+    questionSetVersion: "snapshot-v1",
+    subjects: ["Physics", "Chemistry", "Mathematics"],
+    questions,
+    hardModeRevisitRestricted: mode === "Hard",
+  };
+}
+
+function buildInitialResponseMap(questions: SessionQuestion[]): Record<string, QuestionResponseState> {
+  return questions.reduce<Record<string, QuestionResponseState>>((accumulator, question) => {
+    accumulator[question.id] = {
+      selectedOptionId: null,
+      numericResponse: "",
+      matrixSelections: [],
+      markedForReview: false,
+    };
+    return accumulator;
+  }, {});
+}
+
+function hasAnswer(question: SessionQuestion, responseState: QuestionResponseState): boolean {
+  if (question.type === "mcq") {
+    return Boolean(responseState.selectedOptionId);
+  }
+  if (question.type === "numeric") {
+    return responseState.numericResponse.trim().length > 0;
+  }
+
+  return responseState.matrixSelections.length > 0;
+}
+
+function toPaletteStatus(question: SessionQuestion, responseState: QuestionResponseState, hasVisited: boolean): QuestionPaletteStatus {
+  if (!hasVisited) {
+    return "not_visited";
+  }
+
+  const answered = hasAnswer(question, responseState);
+  if (answered && responseState.markedForReview) {
+    return "answered_marked";
+  }
+  if (answered) {
+    return "answered";
+  }
+  if (responseState.markedForReview) {
+    return "marked";
+  }
+  return "not_answered";
+}
+
+function getQuestionIndex(questions: SessionQuestion[], questionId: string): number {
+  return questions.findIndex((question) => question.id === questionId);
+}
+
+function evaluateExpression(expression: string): number {
+  if (!/^[0-9+\-*/().\s]+$/.test(expression)) {
+    throw new Error("Invalid expression");
+  }
+
+  const evaluator = Function(`"use strict"; return (${expression});`);
+  const value = evaluator();
+
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error("Evaluation error");
+  }
+
+  return value;
+}
+
+function evaluateScientificOperation(currentValue: string, operation: CalculatorOperation): string {
+  const trimmed = currentValue.trim();
+
+  if (operation === "clear") {
+    return "";
+  }
+  if (operation === "backspace") {
+    return currentValue.slice(0, -1);
+  }
+  if (operation === "pi") {
+    return `${currentValue}${Math.PI.toFixed(8)}`;
+  }
+  if (operation === "e") {
+    return `${currentValue}${Math.E.toFixed(8)}`;
+  }
+  if (operation === "equals") {
+    if (trimmed.length === 0) {
+      return "";
+    }
+    return String(evaluateExpression(trimmed));
+  }
+
+  if (trimmed.length === 0) {
+    return currentValue;
+  }
+
+  const numericValue = Number(trimmed);
+  if (!Number.isFinite(numericValue)) {
+    throw new Error("Input must be numeric for scientific operations");
+  }
+
+  if (operation === "sqrt") {
+    return String(Math.sqrt(numericValue));
+  }
+  if (operation === "square") {
+    return String(numericValue ** 2);
+  }
+  if (operation === "cbrt") {
+    return String(Math.cbrt(numericValue));
+  }
+  if (operation === "cube") {
+    return String(numericValue ** 3);
+  }
+  if (operation === "log") {
+    return String(Math.log10(numericValue));
+  }
+  if (operation === "ln") {
+    return String(Math.log(numericValue));
+  }
+  if (operation === "sin") {
+    return String(Math.sin(numericValue));
+  }
+  if (operation === "cos") {
+    return String(Math.cos(numericValue));
+  }
+
+  return String(Math.tan(numericValue));
+}
+
 function ExamAccessRedirect(props: { reason: EntryValidationResult["reason"] }) {
   const { reason } = props;
 
@@ -249,20 +529,122 @@ function ExamAccessRedirect(props: { reason: EntryValidationResult["reason"] }) 
   );
 }
 
+function ScientificCalculatorModal(props: { open: boolean; onClose: () => void }) {
+  const { open, onClose } = props;
+  const [displayValue, setDisplayValue] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  if (!open) {
+    return null;
+  }
+
+  const runScientificOperation = (operation: CalculatorOperation) => {
+    try {
+      const nextValue = evaluateScientificOperation(displayValue, operation);
+      setDisplayValue(nextValue);
+      setError(null);
+    } catch (operationError) {
+      setError(operationError instanceof Error ? operationError.message : "Calculation error");
+    }
+  };
+
+  return (
+    <div className="exam-calculator-overlay" role="presentation" onClick={onClose}>
+      <section
+        className="exam-calculator-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Scientific calculator"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="exam-calculator-header">
+          <h2>Scientific Calculator</h2>
+          <button type="button" className="exam-calculator-close" onClick={onClose}>
+            Close
+          </button>
+        </header>
+
+        <p className="exam-calculator-note">
+          Client-side calculator only. No server persistence and no history storage.
+        </p>
+
+        <input
+          type="text"
+          className="exam-calculator-display"
+          value={displayValue}
+          onChange={(event) => {
+            setDisplayValue(event.target.value);
+            setError(null);
+          }}
+          aria-label="Calculator display"
+        />
+
+        {error ? <p className="exam-calculator-error">{error}</p> : null}
+
+        <div className="exam-calculator-grid" aria-label="Arithmetic keypad">
+          {CALCULATOR_KEYS.map((key) => (
+            <button
+              key={key}
+              type="button"
+              className="exam-calculator-key"
+              onClick={() => {
+                setDisplayValue((current) => `${current}${key}`);
+                setError(null);
+              }}
+            >
+              {key}
+            </button>
+          ))}
+        </div>
+
+        <div className="exam-calculator-operations" aria-label="Scientific operations">
+          <button type="button" onClick={() => runScientificOperation("sqrt")}>sqrt</button>
+          <button type="button" onClick={() => runScientificOperation("square")}>x²</button>
+          <button type="button" onClick={() => runScientificOperation("cbrt")}>cbrt</button>
+          <button type="button" onClick={() => runScientificOperation("cube")}>x³</button>
+          <button type="button" onClick={() => runScientificOperation("log")}>log</button>
+          <button type="button" onClick={() => runScientificOperation("ln")}>ln</button>
+          <button type="button" onClick={() => runScientificOperation("sin")}>sin</button>
+          <button type="button" onClick={() => runScientificOperation("cos")}>cos</button>
+          <button type="button" onClick={() => runScientificOperation("tan")}>tan</button>
+          <button type="button" onClick={() => runScientificOperation("pi")}>pi</button>
+          <button type="button" onClick={() => runScientificOperation("e")}>e</button>
+          <button type="button" onClick={() => runScientificOperation("backspace")}>backspace</button>
+          <button type="button" onClick={() => runScientificOperation("clear")}>clear</button>
+          <button type="button" onClick={() => runScientificOperation("equals")}>equals</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function ExamSessionPage() {
   const { sessionId = "" } = useParams<{ sessionId: string }>();
   const location = useLocation();
   const token = useMemo(() => new URLSearchParams(location.search).get("token"), [location.search]);
   const entryValidation = useMemo(() => validateSessionEntry(token), [token]);
-  const palette = useMemo(() => buildQuestionPalette(), []);
-  const [selectedSection, setSelectedSection] = useState<QuestionTile["section"] | "All">("All");
-  const [selectedQuestionId, setSelectedQuestionId] = useState(palette[0]?.id ?? "q-1");
+  const modeInstruction = MODE_INSTRUCTIONS[entryValidation.claims.mode];
+  const candidateName = entryValidation.claims.sub ?? "Student Candidate";
+
+  const sessionSnapshot = useMemo(
+    () => buildSessionSnapshot(sessionId || "runtime-session", entryValidation.claims.mode),
+    [entryValidation.claims.mode, sessionId],
+  );
+
+  const [selectedSection, setSelectedSection] = useState<QuestionSection | "All">("All");
+  const [selectedQuestionId, setSelectedQuestionId] = useState(sessionSnapshot.questions[0]?.id ?? "q-1");
   const [declarationAccepted, setDeclarationAccepted] = useState(false);
   const [instructionConfirmed, setInstructionConfirmed] = useState(false);
   const [remainingMs, setRemainingMs] = useState(EXAM_DURATION_MINUTES * 60 * 1000);
+  const [calculatorOpen, setCalculatorOpen] = useState(false);
+  const [responseStateByQuestionId, setResponseStateByQuestionId] = useState<Record<string, QuestionResponseState>>(() =>
+    buildInitialResponseMap(sessionSnapshot.questions),
+  );
+  const [visitedQuestionIds, setVisitedQuestionIds] = useState<Set<string>>(() =>
+    new Set(sessionSnapshot.questions[0] ? [sessionSnapshot.questions[0].id] : []),
+  );
+  const [hardModeLockedQuestionIds, setHardModeLockedQuestionIds] = useState<Set<string>>(new Set());
 
-  const modeInstruction = MODE_INSTRUCTIONS[entryValidation.claims.mode];
-  const candidateName = entryValidation.claims.sub ?? "Student Candidate";
   useEffect(() => {
     const tickInterval = window.setInterval(() => {
       setRemainingMs((current) => Math.max(0, current - TICK_INTERVAL_MS));
@@ -272,27 +654,75 @@ function ExamSessionPage() {
   }, []);
 
   useEffect(() => {
-    // Placeholder sync loop that preserves the server-authoritative timing contract.
     const syncInterval = window.setInterval(() => {
       // Server sync wiring lands with runtime API integration builds.
     }, TIMER_SYNC_INTERVAL_MS);
 
     return () => window.clearInterval(syncInterval);
   }, []);
+
+  const navigateToQuestion = (questionId: string) => {
+    setVisitedQuestionIds((current) => {
+      const next = new Set(current);
+      next.add(questionId);
+      return next;
+    });
+    setSelectedQuestionId(questionId);
+  };
+
+  const palette = useMemo<PaletteTile[]>(
+    () =>
+      sessionSnapshot.questions.map((question) => ({
+        id: question.id,
+        number: question.number,
+        section: question.section,
+        status: toPaletteStatus(
+          question,
+          responseStateByQuestionId[question.id] ?? {
+            selectedOptionId: null,
+            numericResponse: "",
+            matrixSelections: [],
+            markedForReview: false,
+          },
+          visitedQuestionIds.has(question.id),
+        ),
+        revisitLocked: hardModeLockedQuestionIds.has(question.id),
+      })),
+    [hardModeLockedQuestionIds, responseStateByQuestionId, sessionSnapshot.questions, visitedQuestionIds],
+  );
+
+  const filteredPalette = useMemo(
+    () =>
+      selectedSection === "All"
+        ? palette
+        : palette.filter((tile) => tile.section === selectedSection),
+    [palette, selectedSection],
+  );
+
+  const selectedQuestion = sessionSnapshot.questions.find((question) => question.id === selectedQuestionId) ?? sessionSnapshot.questions[0];
+  const selectedQuestionIndex = getQuestionIndex(sessionSnapshot.questions, selectedQuestion?.id ?? "");
+  const nextQuestion = selectedQuestionIndex >= 0 ? sessionSnapshot.questions[selectedQuestionIndex + 1] : null;
+  const selectedResponseState = selectedQuestion
+    ? responseStateByQuestionId[selectedQuestion.id]
+    : undefined;
+
+  useEffect(() => {
+    if (!nextQuestion?.imageUrl) {
+      return;
+    }
+
+    const preloadedImage = new Image();
+    preloadedImage.src = nextQuestion.imageUrl;
+  }, [nextQuestion?.imageUrl]);
+
+  const answeredCount = palette.filter((tile) => tile.status === "answered" || tile.status === "answered_marked").length;
+  const notAnsweredCount = palette.filter((tile) => tile.status === "not_answered").length;
+  const markedCount = palette.filter((tile) => tile.status === "marked" || tile.status === "answered_marked").length;
   const timerMinutes = Math.floor(remainingMs / 1000 / 60);
 
   if (!entryValidation.allowed) {
     return <ExamAccessRedirect reason={entryValidation.reason} />;
   }
-
-  const filteredPalette = selectedSection === "All"
-    ? palette
-    : palette.filter((tile) => tile.section === selectedSection);
-
-  const selectedQuestion = palette.find((tile) => tile.id === selectedQuestionId) ?? palette[0];
-  const answeredCount = palette.filter((tile) => tile.status === "answered" || tile.status === "answered_marked").length;
-  const notAnsweredCount = palette.filter((tile) => tile.status === "not_answered").length;
-  const markedCount = palette.filter((tile) => tile.status === "marked" || tile.status === "answered_marked").length;
 
   if (!instructionConfirmed) {
     return (
@@ -389,6 +819,82 @@ function ExamSessionPage() {
     );
   }
 
+  const isHardMode = entryValidation.claims.mode === "Hard";
+  const selectedQuestionRevisitLocked = selectedQuestion ? hardModeLockedQuestionIds.has(selectedQuestion.id) : false;
+
+  const saveCurrentAndMaybeAdvance = (advance: boolean) => {
+    if (!selectedQuestion) {
+      return;
+    }
+
+    if (isHardMode && selectedQuestionRevisitLocked) {
+      return;
+    }
+
+    setVisitedQuestionIds((current) => {
+      const next = new Set(current);
+      next.add(selectedQuestion.id);
+      return next;
+    });
+
+    if (isHardMode && sessionSnapshot.hardModeRevisitRestricted) {
+      setHardModeLockedQuestionIds((current) => {
+        const next = new Set(current);
+        next.add(selectedQuestion.id);
+        return next;
+      });
+    }
+
+    if (!advance) {
+      return;
+    }
+
+    const firstForwardQuestion = sessionSnapshot.questions.find(
+      (question, index) =>
+        index > selectedQuestionIndex &&
+        (!isHardMode || !hardModeLockedQuestionIds.has(question.id) || question.id === selectedQuestion.id),
+    );
+
+    if (firstForwardQuestion) {
+      navigateToQuestion(firstForwardQuestion.id);
+    }
+  };
+
+  const goToPreviousQuestion = () => {
+    if (!selectedQuestion || selectedQuestionIndex <= 0) {
+      return;
+    }
+
+    const previousQuestion = sessionSnapshot.questions[selectedQuestionIndex - 1];
+    if (!previousQuestion) {
+      return;
+    }
+
+    if (isHardMode && sessionSnapshot.hardModeRevisitRestricted && hardModeLockedQuestionIds.has(previousQuestion.id)) {
+      return;
+    }
+
+    navigateToQuestion(previousQuestion.id);
+  };
+
+  const jumpToQuestion = (questionId: string) => {
+    if (!selectedQuestion) {
+      return;
+    }
+
+    if (isHardMode && sessionSnapshot.hardModeRevisitRestricted) {
+      const targetQuestionIndex = getQuestionIndex(sessionSnapshot.questions, questionId);
+      if (targetQuestionIndex < selectedQuestionIndex) {
+        return;
+      }
+      if (hardModeLockedQuestionIds.has(questionId)) {
+        return;
+      }
+    }
+
+    navigateToQuestion(questionId);
+  };
+
   return (
     <main className="exam-runner-shell">
       <header className="exam-header" aria-label="Exam header bar">
@@ -403,12 +909,17 @@ function ExamSessionPage() {
             {" "}
             <strong>{selectedQuestion?.number ?? 1}</strong>
             {" / "}
-            {palette.length}
+            {sessionSnapshot.questions.length}
           </p>
           <p>
             Mode:
             {" "}
             <strong>{entryValidation.claims.mode}</strong>
+          </p>
+          <p>
+            Version:
+            {" "}
+            <strong>{sessionSnapshot.questionSetVersion}</strong>
           </p>
         </div>
 
@@ -417,6 +928,13 @@ function ExamSessionPage() {
           <p className={timerMinutes <= EXPIRY_RED_MINUTES_THRESHOLD ? "exam-header-timer danger" : "exam-header-timer"}>
             {toCountdownLabel(remainingMs)}
           </p>
+          <button
+            type="button"
+            className="exam-calculator-launch"
+            onClick={() => setCalculatorOpen(true)}
+          >
+            Open Calculator
+          </button>
         </div>
       </header>
 
@@ -428,7 +946,7 @@ function ExamSessionPage() {
           </div>
 
           <div className="exam-section-filters" role="tablist" aria-label="Question section filters">
-            {(["All", "Physics", "Chemistry", "Mathematics"] as const).map((section) => (
+            {(["All", ...sessionSnapshot.subjects] as const).map((section) => (
               <button
                 key={section}
                 type="button"
@@ -443,20 +961,28 @@ function ExamSessionPage() {
           </div>
 
           <div className="exam-palette-grid" aria-label="Question status tiles">
-            {filteredPalette.map((tile) => (
-              <button
-                key={tile.id}
-                type="button"
-                className={
-                  tile.id === selectedQuestionId ?
-                    `exam-palette-tile ${statusClassName(tile.status)} selected` :
-                    `exam-palette-tile ${statusClassName(tile.status)}`
-                }
-                onClick={() => setSelectedQuestionId(tile.id)}
-              >
-                {tile.number}
-              </button>
-            ))}
+            {filteredPalette.map((tile) => {
+              const jumpDisabled =
+                isHardMode &&
+                sessionSnapshot.hardModeRevisitRestricted &&
+                (tile.revisitLocked || tile.number < (selectedQuestion?.number ?? 1));
+
+              return (
+                <button
+                  key={tile.id}
+                  type="button"
+                  disabled={jumpDisabled}
+                  className={
+                    tile.id === selectedQuestionId
+                      ? `exam-palette-tile ${statusClassName(tile.status)} selected`
+                      : `exam-palette-tile ${statusClassName(tile.status)}`
+                  }
+                  onClick={() => jumpToQuestion(tile.id)}
+                >
+                  {tile.number}
+                </button>
+              );
+            })}
           </div>
 
           <div className="exam-status-indicators" aria-label="Answer status indicators">
@@ -476,6 +1002,11 @@ function ExamSessionPage() {
               {" "}
               <strong>{markedCount}</strong>
             </p>
+            <p>
+              Hard Mode Locks:
+              {" "}
+              <strong>{hardModeLockedQuestionIds.size}</strong>
+            </p>
           </div>
         </aside>
 
@@ -488,22 +1019,216 @@ function ExamSessionPage() {
               {" "}
               {selectedQuestion?.number ?? 1}
             </h2>
-            <p>This build establishes the base execution layout shell and status-aware navigation frame.</p>
+            <p>
+              Snapshot:
+              {" "}
+              <code>{sessionSnapshot.sessionId}</code>
+            </p>
           </header>
 
-          <article className="exam-question-surface">
-            <p>
-              Read the question carefully and choose the best answer. The full rendering engine for text/image/options
-              is implemented in Build 132.
-            </p>
-            <ol>
-              <li>Use palette tiles to move between questions.</li>
-              <li>Track answer state from the left panel indicators.</li>
-              <li>Follow mode-specific guidance shown on the instruction screen.</li>
-            </ol>
-          </article>
+          {selectedQuestion && selectedResponseState ? (
+            <article className="exam-question-surface">
+              <p className="exam-question-type">
+                Type:
+                {" "}
+                <strong>{selectedQuestion.type.toUpperCase()}</strong>
+              </p>
+              <p className="exam-question-text">{selectedQuestion.text}</p>
+
+              {selectedQuestion.imageUrl ? (
+                <figure className="exam-question-image-wrap">
+                  <img
+                    src={selectedQuestion.imageUrl}
+                    alt={`Question ${selectedQuestion.number} prompt`}
+                    loading="lazy"
+                    className="exam-question-image"
+                  />
+                  <figcaption>Image-based question content (lazy loaded)</figcaption>
+                </figure>
+              ) : null}
+
+              {selectedQuestion.media ? (
+                <section className="exam-question-media" aria-label="Optional media">
+                  <p>
+                    <strong>{selectedQuestion.media.title}</strong>
+                  </p>
+                  <a href={selectedQuestion.media.url} target="_blank" rel="noreferrer">
+                    Open {selectedQuestion.media.type} reference
+                  </a>
+                </section>
+              ) : null}
+
+              {selectedQuestion.type === "mcq" && selectedQuestion.options ? (
+                <div className="exam-option-list" role="radiogroup" aria-label="Multiple choice options">
+                  {selectedQuestion.options.map((option) => (
+                    <label key={option.id} className="exam-option-item">
+                      <input
+                        type="radio"
+                        name={selectedQuestion.id}
+                        checked={selectedResponseState.selectedOptionId === option.id}
+                        onChange={() => {
+                          if (selectedQuestionRevisitLocked) {
+                            return;
+                          }
+
+                          setResponseStateByQuestionId((current) => ({
+                            ...current,
+                            [selectedQuestion.id]: {
+                              ...current[selectedQuestion.id],
+                              selectedOptionId: option.id,
+                            },
+                          }));
+                        }}
+                      />
+                      <span>
+                        <strong>{option.label}.</strong>
+                        {" "}
+                        {option.text}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              ) : null}
+
+              {selectedQuestion.type === "numeric" ? (
+                <div className="exam-numeric-response">
+                  <label htmlFor={`numeric-${selectedQuestion.id}`}>Numeric response</label>
+                  <input
+                    id={`numeric-${selectedQuestion.id}`}
+                    type="text"
+                    value={selectedResponseState.numericResponse}
+                    onChange={(event) => {
+                      if (selectedQuestionRevisitLocked) {
+                        return;
+                      }
+
+                      setResponseStateByQuestionId((current) => ({
+                        ...current,
+                        [selectedQuestion.id]: {
+                          ...current[selectedQuestion.id],
+                          numericResponse: event.target.value,
+                        },
+                      }));
+                    }}
+                    placeholder="Enter numeric answer"
+                  />
+                </div>
+              ) : null}
+
+              {selectedQuestion.type === "matrix" ? (
+                <div className="exam-matrix-response" aria-label="Matrix response">
+                  {(selectedQuestion.matrixRows ?? []).map((row) => (
+                    <div key={row} className="exam-matrix-row">
+                      <p>{row}</p>
+                      <div className="exam-matrix-columns">
+                        {(selectedQuestion.matrixColumns ?? []).map((column) => {
+                          const value = `${row}::${column}`;
+                          const checked = selectedResponseState.matrixSelections.includes(value);
+                          return (
+                            <label key={value}>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(event) => {
+                                  if (selectedQuestionRevisitLocked) {
+                                    return;
+                                  }
+
+                                  setResponseStateByQuestionId((current) => {
+                                    const existing = current[selectedQuestion.id].matrixSelections;
+                                    const nextSelections = event.target.checked
+                                      ? [...existing, value]
+                                      : existing.filter((entry) => entry !== value);
+
+                                    return {
+                                      ...current,
+                                      [selectedQuestion.id]: {
+                                        ...current[selectedQuestion.id],
+                                        matrixSelections: nextSelections,
+                                      },
+                                    };
+                                  });
+                                }}
+                              />
+                              {column}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
+              <footer className="exam-question-actions" aria-label="Question interaction controls">
+                <button
+                  type="button"
+                  onClick={goToPreviousQuestion}
+                  disabled={selectedQuestionIndex <= 0 || selectedQuestionRevisitLocked}
+                >
+                  Previous
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedQuestionRevisitLocked) {
+                      return;
+                    }
+
+                    setResponseStateByQuestionId((current) => ({
+                      ...current,
+                      [selectedQuestion.id]: {
+                        selectedOptionId: null,
+                        numericResponse: "",
+                        matrixSelections: [],
+                        markedForReview: current[selectedQuestion.id]?.markedForReview ?? false,
+                      },
+                    }));
+                  }}
+                  disabled={selectedQuestionRevisitLocked}
+                >
+                  Clear Response
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedQuestionRevisitLocked) {
+                      return;
+                    }
+
+                    setResponseStateByQuestionId((current) => ({
+                      ...current,
+                      [selectedQuestion.id]: {
+                        ...current[selectedQuestion.id],
+                        markedForReview: !current[selectedQuestion.id].markedForReview,
+                      },
+                    }));
+                  }}
+                  disabled={selectedQuestionRevisitLocked}
+                >
+                  Mark for Review
+                </button>
+                <button
+                  type="button"
+                  className="exam-save-next-button"
+                  onClick={() => saveCurrentAndMaybeAdvance(true)}
+                  disabled={selectedQuestionRevisitLocked}
+                >
+                  Save & Next
+                </button>
+              </footer>
+
+              {selectedQuestionRevisitLocked ? (
+                <p className="exam-hard-mode-notice">
+                  Hard Mode revisit restriction active. This question is locked after save.
+                </p>
+              ) : null}
+            </article>
+          ) : null}
         </section>
       </div>
+
+      <ScientificCalculatorModal open={calculatorOpen} onClose={() => setCalculatorOpen(false)} />
     </main>
   );
 }
