@@ -301,6 +301,100 @@
   font: inherit;
 }
 
+.ui-form-field textarea {
+  box-sizing: border-box;
+  border: 1px solid rgba(13, 36, 79, 0.2);
+  border-radius: 10px;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  padding: 8px 10px;
+  font: inherit;
+  resize: vertical;
+}
+
+.vendor-validation-list {
+  margin: 0;
+  padding-left: 18px;
+  color: #943327;
+}
+
+.vendor-checkbox-list {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(16, 58, 108, 0.16);
+  border-radius: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.vendor-checkbox-list legend {
+  padding: 0 6px;
+  color: #1c4678;
+  font-weight: 700;
+}
+
+.vendor-checkbox-list label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #2f4f75;
+}
+
+.vendor-impact-grid {
+  margin-top: 4px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.vendor-impact-list {
+  margin-top: 6px;
+  display: grid;
+  gap: 6px;
+}
+
+.vendor-impact-list p {
+  margin: 0;
+  color: #375a83;
+}
+
+.vendor-inline-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #264c7b;
+  font-weight: 600;
+}
+
+.vendor-rollback-buttons {
+  margin-top: 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.vendor-rollback-buttons button {
+  border: 1px solid rgba(20, 62, 118, 0.24);
+  border-radius: 10px;
+  background: #ffffff;
+  color: #1b487a;
+  padding: 9px 10px;
+  text-align: left;
+}
+
+.vendor-rollback-buttons button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.vendor-activity-feed {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  color: #355a85;
+}
+
 .vendor-login-form button {
   margin-top: 4px;
   border: none;
@@ -316,6 +410,23 @@
   margin: 12px 0 0;
   color: #a03126;
   font-size: 0.92rem;
+}
+
+@media (max-width: 980px) {
+  .vendor-topbar {
+    grid-template-columns: 1fr;
+  }
+
+  .vendor-layout-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .vendor-overview-grid,
+  .vendor-impact-grid,
+  .vendor-section-grid,
+  .vendor-action-buttons {
+    grid-template-columns: 1fr;
+  }
 }
 
 .vendor-login-meta {

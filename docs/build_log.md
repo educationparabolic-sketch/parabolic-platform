@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 137  
-Next Build: 138
+Completed Builds: 138  
+Next Build: 139
 
 Current Phase: Phase 28 — Vendor Portal
 
@@ -4632,18 +4632,74 @@ Completed On
 
 ---
 
+## Build 138 — Calibration Management Interface
+
+Phase  
+Phase 28 — Vendor Portal
+
+Summary  
+Implemented the vendor calibration management and audit activity interfaces according to Sections 1.5.5 and 1.5.10 with guarded parameter editing, summary-only simulation, scoped deployment controls, rollback queue support, and immutable append-only event visibility.
+
+Components implemented:
+
+- Replaced vendor route placeholders in `apps/vendor/src/App.tsx` with Build 138 pages:
+  - `/vendor/calibration` → `VendorCalibrationManagementPage`
+  - `/vendor/audit` → `VendorAuditActivityLogsPage`
+- Added typed calibration and audit dataset contracts in `apps/vendor/src/features/calibration/vendorCalibrationDataset.ts`:
+  - calibration version history records with activation metadata and rollback status
+  - editable calibration parameter model with architecture-aligned risk weights and threshold controls
+  - simulation workflow adapters for `POST /vendor/calibration/simulate` using summary-only sources (`studentYearMetrics`, `runAnalytics`, `riskComponents`, `disciplineComponents`)
+  - deployment adapter for `POST /vendor/calibration/push` with global/selected institute scope handling
+  - append-only immutable audit record helpers for calibration push, simulation, override, and rollback actions
+- Implemented calibration management workspace in `apps/vendor/src/features/calibration/VendorCalibrationManagementPage.tsx`:
+  - calibration version list with detail handoff into parameter editor
+  - parameter editor guardrails enforcing weight-sum and range constraints before simulation
+  - simulation controls supporting single/selected/all institute modes and before/after impact comparison views
+  - push controls supporting apply globally or selected institutes, schedule activation date, and draft mode workflow metadata
+  - rollback queue controls and local deterministic action feed evidence
+  - immutable calibration audit preview table embedded in the calibration route
+- Implemented audit and activity logs workspace in `apps/vendor/src/features/audit/VendorAuditActivityLogsPage.tsx`:
+  - append-only event table with timestamp, actor, action type, scope, target, version, and note fields
+  - filter controls for action type, event scope, and free-text search
+  - immutable audit guarantees section for calibration pushes and manual overrides
+- Extended vendor styling in `apps/vendor/src/App.css` for Build 138 calibration and audit components:
+  - textarea/form support for operator notes
+  - checkbox fieldset layouts for institute selection
+  - impact comparison cards and rollback activity controls
+  - responsive layout behavior at required mobile viewport class
+- Added deterministic frontend verification automation and artifacts under `apps/vendor/artifacts/build-138/`:
+  - `verify-routes.mjs`
+  - `verification-results.json`
+  - desktop/mobile screenshots for affected routes and guard fallbacks
+- Executed frontend verification:
+  - `apps/vendor`: build, lint
+  - browser checks for `/vendor/calibration`, `/vendor/audit`, `/vendor/login`, and `/unauthorized` at `1366x768` and `390x844`
+  - guard checks for unauthenticated, authenticated-vendor, and authenticated-non-vendor sessions
+  - console/network/responsive/guard statuses recorded in `apps/vendor/artifacts/build-138/verification-results.json`
+
+Result  
+The vendor portal now includes Build 138 calibration and audit interfaces with architecture-aligned global calibration controls, summary-only simulation safety, vendor-authoritative deployment workflows, and immutable activity traceability verified across required desktop and mobile browser checks.
+
+Commit Reference  
+Build 138 — Calibration Management Interface implemented
+
+Completed On  
+2026-04-22
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 138
+Next Build Number: 139
 
 Phase  
 Phase 28 — Vendor Portal
 
 Subsystem  
-Calibration Management Interface
+Vendor Intelligence Dashboard
 
 Reference  
-2_Portals_Architecture.md → Sections 1.5.5, 1.5.10
+2_Portals_Architecture.md → Sections 1.5.6, 1.5.7
 
 ---
 

@@ -12,6 +12,8 @@ import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { useAuthProvider } from "../../../shared/services/authProvider";
 import { PORTAL_MANIFEST } from "../../../shared/services/portalManifest";
 import { UiNavBar } from "../../../shared/ui/components";
+import VendorAuditActivityLogsPage from "./features/audit/VendorAuditActivityLogsPage";
+import VendorCalibrationManagementPage from "./features/calibration/VendorCalibrationManagementPage";
 import VendorInstituteManagementPage from "./features/institutes/VendorInstituteManagementPage";
 import VendorLicensingPage from "./features/licensing/VendorLicensingPage";
 import VendorOverviewPage from "./features/overview/VendorOverviewPage";
@@ -321,12 +323,7 @@ function App() {
         />
         <Route
           path="calibration"
-          element={(
-            <VendorPlaceholderPage
-              title="Global Calibration"
-              description="Calibration parameter editor, simulation, and deployment route entrypoint."
-            />
-          )}
+          element={<VendorCalibrationManagementPage />}
         />
         <Route
           path="intelligence"
@@ -348,12 +345,7 @@ function App() {
         />
         <Route
           path="audit"
-          element={(
-            <VendorPlaceholderPage
-              title="Audit & Activity Logs"
-              description="Immutable vendor audit and activity feed route entrypoint."
-            />
-          )}
+          element={<VendorAuditActivityLogsPage />}
         />
         <Route path="*" element={<Navigate to={protectedDefaultPath} replace />} />
       </Route>
