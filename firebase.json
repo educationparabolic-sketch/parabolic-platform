@@ -23,20 +23,76 @@
       ]
     }
   ],
-  "hosting": {
-    "public": "apps/admin/dist",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ],
-    "rewrites": [
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
-    ]
-  },
+  "hosting": [
+    {
+      "target": "portal",
+      "public": ".firebase/hosting/portal",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "redirects": [
+        {
+          "source": "/",
+          "destination": "/admin",
+          "type": 302
+        }
+      ],
+      "rewrites": [
+        {
+          "source": "admin",
+          "destination": "/admin/index.html"
+        },
+        {
+          "source": "admin/**",
+          "destination": "/admin/index.html"
+        },
+        {
+          "source": "student",
+          "destination": "/student/index.html"
+        },
+        {
+          "source": "student/**",
+          "destination": "/student/index.html"
+        },
+        {
+          "source": "login",
+          "destination": "/admin/index.html"
+        }
+      ]
+    },
+    {
+      "target": "exam",
+      "public": "apps/exam/dist",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
+    },
+    {
+      "target": "vendor",
+      "public": "apps/vendor/dist",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "rewrites": [
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
+    }
+  ],
   "emulators": {
     "functions": {
       "port": 5001

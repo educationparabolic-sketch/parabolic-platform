@@ -1,0 +1,160 @@
+name: Frontend CI/CD
+
+on:
+  pull_request:
+    branches:
+      - dev
+      - staging
+      - main
+    paths:
+      - ".github/workflows/frontend-ci-cd.yml"
+      - "apps/**"
+      - "shared/**"
+      - "firebase.json"
+      - "scripts/frontend-cicd/**"
+  push:
+    branches:
+      - dev
+      - staging
+      - main
+    paths:
+      - ".github/workflows/frontend-ci-cd.yml"
+      - "apps/**"
+      - "shared/**"
+      - "firebase.json"
+      - "scripts/frontend-cicd/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-ci:
+    name: Frontend Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: |
+            apps/admin/package-lock.json
+            apps/student/package-lock.json
+            apps/exam/package-lock.json
+            apps/vendor/package-lock.json
+            shared/package-lock.json
+
+      - name: Install frontend dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          for app in admin student exam vendor; do
+            npm ci --prefix "apps/${app}"
+          done
+          npm ci --prefix shared
+
+      - name: Lint frontend portals
+        shell: bash
+        run: |
+          set -euo pipefail
+          for app in admin student exam vendor; do
+            npm --prefix "apps/${app}" run lint
+          done
+
+      - name: Type check and build frontend portals
+        shell: bash
+        run: |
+          set -euo pipefail
+          for app in admin student exam vendor; do
+            npm --prefix "apps/${app}" run build
+          done
+
+      - name: Run frontend automated tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          for app in admin student exam vendor; do
+            npm --prefix "apps/${app}" run test --if-present
+          done
+
+  frontend-deploy:
+    name: Frontend Deploy
+    runs-on: ubuntu-latest
+    needs: frontend-ci
+    if: github.event_name == 'push' && (github.ref_name == 'dev' || github.ref_name == 'staging' || github.ref_name == 'main')
+    concurrency:
+      group: frontend-deploy-${{ github.ref_name }}
+      cancel-in-progress: false
+    environment:
+      name: ${{ github.ref_name == 'main' && 'production' || github.ref_name == 'staging' && 'staging' || 'development' }}
+    env:
+      FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+      FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+      FIREBASE_SITE_PORTAL: ${{ secrets.FIREBASE_SITE_PORTAL }}
+      FIREBASE_SITE_EXAM: ${{ secrets.FIREBASE_SITE_EXAM }}
+      FIREBASE_SITE_VENDOR: ${{ secrets.FIREBASE_SITE_VENDOR }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: |
+            apps/admin/package-lock.json
+            apps/student/package-lock.json
+            apps/exam/package-lock.json
+            apps/vendor/package-lock.json
+            shared/package-lock.json
+
+      - name: Install frontend dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          for app in admin student exam vendor; do
+            npm ci --prefix "apps/${app}"
+          done
+          npm ci --prefix shared
+
+      - name: Build deployment artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          VITE_BASE_PATH=/admin/ npm --prefix apps/admin run build
+          VITE_BASE_PATH=/student/ npm --prefix apps/student run build
+          npm --prefix apps/exam run build
+          npm --prefix apps/vendor run build
+          node scripts/frontend-cicd/prepare-portal-hosting.mjs
+
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools
+
+      - name: Validate deploy secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${FIREBASE_PROJECT_ID}"
+          test -n "${FIREBASE_TOKEN}"
+          test -n "${FIREBASE_SITE_PORTAL}"
+          test -n "${FIREBASE_SITE_EXAM}"
+          test -n "${FIREBASE_SITE_VENDOR}"
+
+      - name: Apply hosting targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          firebase target:apply hosting portal "${FIREBASE_SITE_PORTAL}" --project "${FIREBASE_PROJECT_ID}" --token "${FIREBASE_TOKEN}"
+          firebase target:apply hosting exam "${FIREBASE_SITE_EXAM}" --project "${FIREBASE_PROJECT_ID}" --token "${FIREBASE_TOKEN}"
+          firebase target:apply hosting vendor "${FIREBASE_SITE_VENDOR}" --project "${FIREBASE_PROJECT_ID}" --token "${FIREBASE_TOKEN}"
+
+      - name: Deploy hosting bundles
+        shell: bash
+        run: |
+          set -euo pipefail
+          firebase deploy --project "${FIREBASE_PROJECT_ID}" --only hosting:portal,hosting:exam,hosting:vendor --non-interactive --token "${FIREBASE_TOKEN}"

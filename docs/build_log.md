@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 143  
-Next Build: 144
+Completed Builds: 144  
+Next Build: 145
 
 Current Phase: Phase 29 — Frontend Performance Optimization
 
@@ -4915,18 +4915,65 @@ Completed On
 
 ---
 
+## Build 144 — Frontend CI/CD Deployment Pipeline
+
+Phase  
+Phase 29 — Frontend Performance Optimization
+
+Summary  
+Implemented deterministic frontend CI/CD deployment automation for admin/student/exam/vendor portals with branch-based environment promotion, multi-site Firebase Hosting deployment targets, and portal-domain isolation support.
+
+Components implemented:
+
+- Added GitHub Actions CI/CD workflow for frontend portals:
+  - `.github/workflows/frontend-ci-cd.yml`
+  - branch mapping: `dev -> development`, `staging -> staging`, `main -> production`
+  - CI gates: install, lint, type-check/build, automated tests (if present) across `apps/admin|student|exam|vendor`
+  - deploy gates: portal build packaging, Firebase target assignment, hosting deploy with environment secrets
+- Added deterministic portal hosting packaging script for admin+student path isolation:
+  - `scripts/frontend-cicd/prepare-portal-hosting.mjs`
+  - builds and assembles `.firebase/hosting/portal/admin` + `.firebase/hosting/portal/student`
+  - writes root portal redirect document for `/ -> /admin`
+- Updated Firebase Hosting topology to multi-site deployment for Build 144 domain isolation requirements:
+  - `firebase.json`
+  - targets: `portal`, `exam`, `vendor`
+  - path-isolated rewrites for `portal` admin/student routes and SPA fallback behavior
+- Added configurable Vite base-path support for admin and student deployment builds:
+  - `apps/admin/vite.config.ts`
+  - `apps/student/vite.config.ts`
+  - enables `/admin/` and `/student/` asset-safe build output for portal hosting bundle
+- Added Build 144 browser verification harness and artifacts:
+  - `artifacts/build-144/verify-routes.mjs`
+  - `artifacts/build-144/verification-results.json`
+  - desktop/mobile screenshots for affected admin/student/exam/vendor routes
+- Executed frontend verification for affected build-domain apps and routes:
+  - `apps/admin|student|exam|vendor`: lint + build
+  - browser checks for `/login`, `/admin/overview`, `/student/login`, `/student/dashboard`, `/`, `/session/demo`, `/vendor/login`, and `/vendor/overview` at `1366x768` and `390x844`
+  - console/network/responsive/guard statuses recorded in `artifacts/build-144/verification-results.json`
+
+Result  
+Frontend delivery now has architecture-aligned CI/CD automation that builds, validates, and deploys isolated portal bundles to environment-specific Firebase Hosting targets with deterministic promotion flow and verified route integrity across desktop/mobile viewports.
+
+Commit Reference  
+Build 144 — Frontend CI/CD Deployment Pipeline implemented
+
+Completed On  
+2026-04-22
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 144
+Next Build Number: 145
 
 Phase  
 Phase 29 — Frontend Performance Optimization
 
 Subsystem  
-Frontend CI/CD Deployment Pipeline
+Cross-Portal Authentication System
 
 Reference  
-2_Portals_Architecture.md → Sections 1.1, 1.3.14, 1.4.16, 1.5.13
+2_Portals_Architecture.md → Sections 1.1, 1.3.12, 1.4.13, 1.2.10.9, 1.5.12
 
 ---
 
@@ -5069,8 +5116,8 @@ Build | Phase | Status
 133 | Exam Portal Engine | Completed
 134 | Exam Portal Engine | Completed
 135 | Exam Portal Engine | Completed
-136–143 | Frontend Phases | Completed
-144–150 | Remaining Phases | Pending
+136–144 | Frontend Phases | Completed
+145–150 | Remaining Phases | Pending
 
 ---
 
