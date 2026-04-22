@@ -12,10 +12,10 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 135  
-Next Build: 136
+Completed Builds: 136  
+Next Build: 137
 
-Current Phase: Phase 27 — Exam Portal Engine
+Current Phase: Phase 28 — Vendor Portal
 
 ---
 
@@ -4523,18 +4523,74 @@ Completed On
 
 ---
 
+## Build 136 — Vendor Portal Layout
+
+Phase  
+Phase 28 — Vendor Portal
+
+Summary  
+Implemented the vendor portal layout shell with vendor-only access control, executive overview route, and architecture-aligned global collection boundary signaling according to Sections 1.5.1, 1.5.2, and 1.5.12.
+
+Components implemented:
+
+- Replaced legacy vendor app shell in `apps/vendor/src/App.tsx` with the Build 136 route architecture:
+  - sidebar navigation
+  - top header bar
+  - main content container
+  - route-based rendering for `/vendor/overview`, `/vendor/institutes`, `/vendor/licensing`, `/vendor/calibration`, `/vendor/intelligence`, `/vendor/system-health`, and `/vendor/audit`
+- Added vendor-only route access enforcement in `apps/vendor/src/portals/vendorAccess.ts`:
+  - typed ID-token claim decoding
+  - role normalization
+  - strict `vendor` role guard with `/unauthorized` fallback
+- Implemented executive overview entrypoint in `apps/vendor/src/features/overview/VendorOverviewPage.tsx` with required snapshot cards:
+  - `TotalInstitutes`
+  - `ActiveInstitutes`
+  - `TotalActiveStudents`
+  - `TotalMonthlyTestRuns`
+  - `GlobalRiskDistribution`
+  - `GlobalDisciplineIndex`
+  - `MonthlyRecurringRevenue (MRR)`
+  - `InfrastructureCostEstimate`
+  - `SystemErrorRate`
+- Added typed overview dataset boundary in `apps/vendor/src/features/overview/vendorOverviewDataset.ts`:
+  - source fixed to `vendorMetrics`
+  - summary-only contract
+  - explicit boundary flags for institute-query isolation, strict RBAC, and dedicated middleware requirements
+- Added route placeholders in `apps/vendor/src/features/shared/VendorPlaceholderPage.tsx` for non-overview vendor routes so Build 136 remains scoped to layout and route shell only
+- Added Build 136 styling in `apps/vendor/src/App.css` and updated `apps/vendor/src/index.css` for responsive desktop/mobile layout behavior without introducing unrelated UI systems
+- Added deterministic frontend verification automation and artifacts under `apps/vendor/artifacts/build-136/`:
+  - `verify-routes.mjs`
+  - `verification-results.json`
+  - desktop/mobile screenshots for affected routes
+- Executed frontend verification:
+  - `apps/vendor`: build, lint
+  - browser checks for all affected vendor routes plus guard/fallback routes at `1366x768` and `390x844`
+  - role guard checks for unauthenticated, authenticated-vendor, and authenticated-non-vendor sessions
+  - console/network/responsive/guard checks recorded in `apps/vendor/artifacts/build-136/verification-results.json`
+
+Result  
+The vendor portal now includes the Build 136 architecture-aligned layout shell with vendor-only access control, executive snapshot overview entrypoint, deterministic route rendering, and verified responsive behavior across required viewport classes.
+
+Commit Reference  
+Build 136 — Vendor Portal Layout implemented
+
+Completed On  
+2026-04-22
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 136
+Next Build Number: 137
 
 Phase  
 Phase 28 — Vendor Portal
 
 Subsystem  
-Vendor Portal Layout
+Institute Management Interface
 
 Reference  
-2_Portals_Architecture.md → Sections 1.5.1, 1.5.2, 1.5.12
+2_Portals_Architecture.md → Sections 1.5.3, 1.5.4
 
 ---
 

@@ -1,1 +1,33 @@
-@import "../../../shared/ui/portal-shell.css";
+@import "../../../shared/ui/components/shared-ui-components.css";
+
+:root {
+  font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #15263f;
+  background:
+    radial-gradient(circle at top right, rgba(19, 105, 189, 0.14), transparent 26%),
+    linear-gradient(180deg, #f8fbff 0%, #edf3fa 100%);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+body {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+}
