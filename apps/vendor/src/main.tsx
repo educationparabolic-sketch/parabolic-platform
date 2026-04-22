@@ -19,7 +19,7 @@ initializeFrontendMonitoring({ portal: "vendor" });
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <AuthProvider>
+    <AuthProvider portalKey="vendor">
       <BrowserRouter>
         <App />
       </BrowserRouter>
