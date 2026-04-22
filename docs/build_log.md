@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 136  
-Next Build: 137
+Completed Builds: 137  
+Next Build: 138
 
 Current Phase: Phase 28 — Vendor Portal
 
@@ -4579,18 +4579,71 @@ Completed On
 
 ---
 
+## Build 137 — Institute Management Interface
+
+Phase  
+Phase 28 — Vendor Portal
+
+Summary  
+Implemented the vendor institute management and licensing subscription interfaces according to Sections 1.5.3 and 1.5.4 with institute-sourced listing, lifecycle actions, and vendor-authoritative licensing controls.
+
+Components implemented:
+
+- Replaced vendor route placeholders in `apps/vendor/src/App.tsx` with Build 137 pages:
+  - `/vendor/institutes` → `VendorInstituteManagementPage`
+  - `/vendor/licensing` → `VendorLicensingPage`
+- Added typed institute management dataset and licensing helper contracts in `apps/vendor/src/features/institutes/vendorInstitutesDataset.ts`:
+  - primary source semantics fixed to `institutes`
+  - institute listing fields for `instituteName`, `currentLicenseLayer`, `activeStudentCount`, and `subscriptionStatus`
+  - per-institute billing metadata (`billingCycle`, `nextInvoiceDate`, `paymentFailures`, manual override flag)
+  - webhook log rows and license change history rows for licensing visibility
+- Implemented institutes management workspace in `apps/vendor/src/features/institutes/VendorInstituteManagementPage.tsx`:
+  - institute listing table via shared `UiTable`
+  - search and filtering controls via shared `UiForm`
+  - institute profile view with activity metrics and layer overview cards
+  - vendor action controls for `ViewInstitute`, `SuspendInstitute`, `UpgradeLicense`, `DowngradeLicense`, `ExtendLicense`, `ForceArchive`
+  - hard-guarded `DeleteInstitute` action requiring explicit typed confirmation phrase
+- Implemented licensing and subscription control workspace in `apps/vendor/src/features/licensing/VendorLicensingPage.tsx`:
+  - selected institute subscription status + billing cycle + next invoice + payment failure visibility
+  - manual override form for vendor-authoritative license/subscription changes
+  - webhook log viewer table
+  - license change history table
+- Extended vendor styling in `apps/vendor/src/App.css` for new Build 137 responsive sections (tables, forms, action controls, and mobile-safe layout behavior)
+- Added deterministic frontend verification automation and artifacts under `apps/vendor/artifacts/build-137/`:
+  - `verify-routes.mjs`
+  - `verification-results.json`
+  - desktop/mobile screenshots for affected routes and guard fallbacks
+- Installed required browser verification tooling for this build scope:
+  - added `playwright` in `apps/vendor/devDependencies`
+- Executed frontend verification:
+  - `apps/vendor`: build, lint
+  - browser checks for `/vendor/institutes`, `/vendor/licensing`, `/vendor/login`, and `/unauthorized` at `1366x768` and `390x844`
+  - guard checks for unauthenticated, authenticated-vendor, and authenticated-non-vendor sessions
+  - console/network/responsive/guard statuses recorded in `apps/vendor/artifacts/build-137/verification-results.json`
+
+Result  
+The vendor portal now includes Build 137 institute and licensing control interfaces with architecture-aligned institute lifecycle governance, vendor-authoritative license workflows, and deterministic browser verification evidence across required desktop and mobile viewports.
+
+Commit Reference  
+Build 137 — Institute Management Interface implemented
+
+Completed On  
+2026-04-22
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 137
+Next Build Number: 138
 
 Phase  
 Phase 28 — Vendor Portal
 
 Subsystem  
-Institute Management Interface
+Calibration Management Interface
 
 Reference  
-2_Portals_Architecture.md → Sections 1.5.3, 1.5.4
+2_Portals_Architecture.md → Sections 1.5.5, 1.5.10
 
 ---
 

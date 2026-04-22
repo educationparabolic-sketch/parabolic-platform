@@ -176,6 +176,99 @@
   padding-left: 18px;
 }
 
+.vendor-section-grid {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.vendor-section-grid-actions {
+  margin-top: 14px;
+  align-items: start;
+}
+
+.vendor-profile-title {
+  margin: 0;
+  color: #112e55;
+}
+
+.vendor-profile-title span {
+  color: #49688f;
+  font-size: 0.9rem;
+}
+
+.vendor-profile-detail {
+  margin: 10px 0 0;
+  color: #3e5d81;
+}
+
+.vendor-link-button {
+  border: none;
+  background: none;
+  color: #0f4f9a;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  padding: 0;
+}
+
+.vendor-link-button:hover {
+  text-decoration: underline;
+}
+
+.vendor-action-buttons {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.vendor-action-buttons button,
+.vendor-danger-button {
+  border: 1px solid rgba(21, 60, 112, 0.2);
+  border-radius: 10px;
+  background: #ffffff;
+  color: #173e6e;
+  font: inherit;
+  font-weight: 600;
+  padding: 10px;
+  cursor: pointer;
+}
+
+.vendor-action-buttons button:hover,
+.vendor-danger-button:hover:not(:disabled) {
+  border-color: rgba(20, 73, 137, 0.5);
+}
+
+.vendor-delete-guard {
+  margin-top: 14px;
+  display: grid;
+  gap: 6px;
+  color: #325479;
+}
+
+.vendor-delete-guard input {
+  border: 1px solid rgba(21, 60, 112, 0.24);
+  border-radius: 10px;
+  min-height: 38px;
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.vendor-danger-button {
+  margin-top: 10px;
+  background: linear-gradient(180deg, #fff5f4, #ffeceb);
+  border-color: rgba(165, 43, 31, 0.3);
+  color: #8a231b;
+}
+
+.vendor-danger-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .vendor-page-shell-login {
   display: grid;
   place-items: center;
@@ -249,6 +342,10 @@
   .vendor-overview-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .vendor-section-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 680px) {
@@ -265,6 +362,10 @@
   }
 
   .vendor-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .vendor-action-buttons {
     grid-template-columns: 1fr;
   }
 }

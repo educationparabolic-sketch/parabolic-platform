@@ -12,6 +12,8 @@ import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { useAuthProvider } from "../../../shared/services/authProvider";
 import { PORTAL_MANIFEST } from "../../../shared/services/portalManifest";
 import { UiNavBar } from "../../../shared/ui/components";
+import VendorInstituteManagementPage from "./features/institutes/VendorInstituteManagementPage";
+import VendorLicensingPage from "./features/licensing/VendorLicensingPage";
 import VendorOverviewPage from "./features/overview/VendorOverviewPage";
 import VendorPlaceholderPage from "./features/shared/VendorPlaceholderPage";
 import { resolveVendorAccessContext } from "./portals/vendorAccess";
@@ -311,21 +313,11 @@ function App() {
         <Route path="overview" element={<VendorOverviewPage />} />
         <Route
           path="institutes"
-          element={(
-            <VendorPlaceholderPage
-              title="Institutes Management"
-              description="Global institute listing and lifecycle controls are routed here for vendor operations."
-            />
-          )}
+          element={<VendorInstituteManagementPage />}
         />
         <Route
           path="licensing"
-          element={(
-            <VendorPlaceholderPage
-              title="Licensing & Subscriptions"
-              description="Vendor-authoritative license and subscription control screens are routed here."
-            />
-          )}
+          element={<VendorLicensingPage />}
         />
         <Route
           path="calibration"
