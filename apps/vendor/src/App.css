@@ -48,6 +48,7 @@
   margin: 8px 0 0;
   color: #406084;
   font-size: 0.92rem;
+  overflow-wrap: anywhere;
 }
 
 .vendor-signout-button {
@@ -372,12 +373,148 @@
   max-width: 60%;
 }
 
+.vendor-system-health-chart-grid {
+  margin-top: 14px;
+}
+
+.vendor-system-health-page {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.vendor-system-health-page .vendor-section-grid,
+.vendor-system-health-page .ui-form-card,
+.vendor-system-health-page .ui-form,
+.vendor-system-health-page .ui-form-content,
+.vendor-system-health-page .ui-form-actions,
+.vendor-system-health-page .vendor-nested-card,
+.vendor-system-health-page .vendor-system-health-actions,
+.vendor-system-health-page .vendor-system-health-actions button,
+.vendor-system-health-page .vendor-inline-checkbox,
+.vendor-system-health-page .ui-form-field {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.vendor-subsection-title {
+  margin: 0;
+  color: #12365f;
+  font-size: 1.05rem;
+}
+
+.vendor-alert-list {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.vendor-alert-item {
+  border: 1px solid rgba(19, 56, 104, 0.18);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.vendor-alert-item p {
+  margin: 0;
+  color: #2d4f77;
+}
+
+.vendor-alert-item p + p {
+  margin-top: 6px;
+}
+
+.vendor-alert-item strong {
+  color: #12365f;
+}
+
+.vendor-alert-item span {
+  color: #5d7ea3;
+  font-size: 0.9rem;
+}
+
+.vendor-alert-critical {
+  border-color: rgba(153, 36, 22, 0.38);
+  background: linear-gradient(180deg, #fff5f3, #ffefec);
+}
+
+.vendor-alert-warning {
+  border-color: rgba(164, 118, 22, 0.4);
+  background: linear-gradient(180deg, #fffaf0, #fff4e3);
+}
+
+.vendor-alert-info {
+  border-color: rgba(20, 83, 153, 0.25);
+  background: linear-gradient(180deg, #f5f9ff, #eef5ff);
+}
+
+.vendor-nested-card {
+  padding: 16px;
+  box-shadow: none;
+  border-radius: 14px;
+  margin: 0;
+}
+
+.vendor-system-health-actions {
+  margin-bottom: 12px;
+}
+
+.vendor-system-health-actions button {
+  text-align: left;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.vendor-section-grid-actions .ui-form-actions {
+  flex-wrap: wrap;
+}
+
+.vendor-section-grid-actions .ui-form-actions small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.vendor-guarantee-list {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 10px;
+}
+
+.vendor-guarantee-list p {
+  margin: 0;
+  color: #35597f;
+}
+
+.vendor-guarantee-list span {
+  color: #2b6a39;
+  font-weight: 700;
+  font-size: 0.83rem;
+}
+
 .vendor-inline-checkbox {
-  display: inline-flex;
+  overflow-wrap: anywhere;
+}
+
+.vendor-main-content .ui-table th,
+.vendor-main-content .ui-table td {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.vendor-inline-checkbox {
+  display: flex;
   align-items: center;
   gap: 8px;
   color: #264c7b;
   font-weight: 600;
+  width: 100%;
+  min-width: 0;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .vendor-rollback-buttons {
@@ -495,5 +632,9 @@
 
   .vendor-intelligence-chart-grid .ui-chart-line-legend-row {
     grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .vendor-system-health-actions {
+    grid-template-columns: 1fr;
   }
 }

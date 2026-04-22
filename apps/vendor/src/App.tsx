@@ -18,7 +18,7 @@ import VendorIntelligenceDashboardPage from "./features/intelligence/VendorIntel
 import VendorInstituteManagementPage from "./features/institutes/VendorInstituteManagementPage";
 import VendorLicensingPage from "./features/licensing/VendorLicensingPage";
 import VendorOverviewPage from "./features/overview/VendorOverviewPage";
-import VendorPlaceholderPage from "./features/shared/VendorPlaceholderPage";
+import VendorSystemHealthDashboardPage from "./features/system-health/VendorSystemHealthDashboardPage";
 import { resolveVendorAccessContext } from "./portals/vendorAccess";
 import "./App.css";
 
@@ -332,12 +332,7 @@ function App() {
         />
         <Route
           path="system-health"
-          element={(
-            <VendorPlaceholderPage
-              title="System Health"
-              description="Runtime operations, error-rate monitoring, and infrastructure cost route entrypoint."
-            />
-          )}
+          element={<VendorSystemHealthDashboardPage />}
         />
         <Route
           path="audit"

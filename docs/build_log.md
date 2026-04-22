@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 139  
-Next Build: 140
+Completed Builds: 140  
+Next Build: 141
 
 Current Phase: Phase 28 — Vendor Portal
 
@@ -4735,18 +4735,70 @@ Completed On
 
 ---
 
-# NEXT BUILD
-
-Next Build Number: 140
+## Build 140 — System Health Monitoring Dashboard
 
 Phase  
 Phase 28 — Vendor Portal
 
+Summary  
+Implemented the vendor system health dashboard according to Sections 1.5.8, 1.5.9, 1.5.11, and 1.5.13 with platform health visibility, global feature-flag controls, snapshot-safe data operations, and structural guarantee checklist coverage.
+
+Components implemented:
+
+- Replaced the `/vendor/system-health` placeholder in `apps/vendor/src/App.tsx` with `VendorSystemHealthDashboardPage` while preserving existing vendor auth + role guard behavior
+- Added typed system health dataset contracts in `apps/vendor/src/features/system-health/vendorSystemHealthDataset.ts`:
+  - system health KPI definitions for Firestore, Cloud Functions, BigQuery, hosting bandwidth, error rate, failure count, and cost estimates
+  - trend points for error-rate, failed-function, and cost monitoring charts
+  - severity-based infrastructure alerts with timestamped event records
+  - global feature-flag models for `EnableBetaFeatures`, `EnableExperimentalRiskEngine`, `EnableNewUI`, and `SetRolloutPercentage`
+  - explicit `globalFeatureFlags/{flagName}` document-path metadata and middleware enforcement markers
+  - snapshot-only data operation models for `ExportPlatformMetrics`, `ExportInstituteData`, `TriggerManualBackup`, and `RestoreSimulationEnvironment`
+  - structural guarantee checklist evidence entries aligned with Section 1.5.13
+- Implemented the system health workspace in `apps/vendor/src/features/system-health/VendorSystemHealthDashboardPage.tsx`:
+  - health KPI cards and chart visualizations using shared `UiStatCard` + `UiChartContainer`
+  - critical/warning/info infrastructure alert rendering with elevated critical highlighting
+  - feature-flag draft controls and rollout percentage capture via shared `UiForm`
+  - snapshot-only export/backup action controls and operation status table via shared `UiTable`
+  - system performance indicator table and structural guarantee checklist panel
+  - explicit boundary messaging for aggregate-only health sources and no raw recomputation
+- Extended responsive vendor styling in `apps/vendor/src/App.css` for Build 140:
+  - system health chart grid and subsection layouts
+  - severity-specific alert card styles with critical emphasis
+  - nested operational panels for feature-flag and backup/export workflows
+  - structural guarantee checklist formatting and mobile-safe action layout
+- Added deterministic frontend verification automation and artifacts under `apps/vendor/artifacts/build-140/`:
+  - `verify-routes.mjs`
+  - `verification-results.json`
+  - desktop/mobile screenshots for affected routes and guard fallbacks
+- Executed frontend verification:
+  - `apps/vendor`: build, lint
+  - browser checks for `/vendor/system-health`, `/vendor/login`, and `/unauthorized` at `1366x768` and `390x844`
+  - guard checks for unauthenticated, authenticated-vendor, and authenticated-non-vendor sessions
+  - console/network/responsive/guard statuses recorded in `apps/vendor/artifacts/build-140/verification-results.json`
+
+Result  
+The vendor portal now includes Build 140 system health capabilities with architecture-aligned runtime monitoring, middleware-bound global feature-flag control surfaces, snapshot-safe export/backup workflows, and structural guarantee visibility verified across required desktop and mobile browser checks.
+
+Commit Reference  
+Build 140 — System Health Monitoring Dashboard implemented
+
+Completed On  
+2026-04-22
+
+---
+
+# NEXT BUILD
+
+Next Build Number: 141
+
+Phase  
+Phase 29 — Frontend Performance Optimization
+
 Subsystem  
-System Health Monitoring Dashboard
+Frontend Performance Strategy
 
 Reference  
-2_Portals_Architecture.md → Sections 1.5.8, 1.5.9, 1.5.11, 1.5.13
+2_Portals_Architecture.md → Sections 1.3.11, 1.4.14, 1.2.2.13, 1.2.7.7
 
 ---
 
