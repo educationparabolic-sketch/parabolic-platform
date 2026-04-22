@@ -14,6 +14,7 @@ import { PORTAL_MANIFEST } from "../../../shared/services/portalManifest";
 import { UiNavBar } from "../../../shared/ui/components";
 import VendorAuditActivityLogsPage from "./features/audit/VendorAuditActivityLogsPage";
 import VendorCalibrationManagementPage from "./features/calibration/VendorCalibrationManagementPage";
+import VendorIntelligenceDashboardPage from "./features/intelligence/VendorIntelligenceDashboardPage";
 import VendorInstituteManagementPage from "./features/institutes/VendorInstituteManagementPage";
 import VendorLicensingPage from "./features/licensing/VendorLicensingPage";
 import VendorOverviewPage from "./features/overview/VendorOverviewPage";
@@ -327,12 +328,7 @@ function App() {
         />
         <Route
           path="intelligence"
-          element={(
-            <VendorPlaceholderPage
-              title="Cross-Institute Intelligence"
-              description="Vendor intelligence and aggregate trend visualizations route through this workspace."
-            />
-          )}
+          element={<VendorIntelligenceDashboardPage />}
         />
         <Route
           path="system-health"

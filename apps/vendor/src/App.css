@@ -359,6 +359,19 @@
   color: #375a83;
 }
 
+.vendor-intelligence-chart-grid .ui-chart {
+  min-width: 0;
+}
+
+.vendor-intelligence-chart-grid .ui-chart-pie-layout,
+.vendor-intelligence-chart-grid .ui-chart-line-layout {
+  min-width: 0;
+}
+
+.vendor-intelligence-chart-grid .ui-chart-line-legend-row span {
+  max-width: 60%;
+}
+
 .vendor-inline-checkbox {
   display: inline-flex;
   align-items: center;
@@ -478,5 +491,9 @@
 
   .vendor-action-buttons {
     grid-template-columns: 1fr;
+  }
+
+  .vendor-intelligence-chart-grid .ui-chart-line-legend-row {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 }

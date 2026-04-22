@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 138  
-Next Build: 139
+Completed Builds: 139  
+Next Build: 140
 
 Current Phase: Phase 28 — Vendor Portal
 
@@ -4688,18 +4688,65 @@ Completed On
 
 ---
 
+## Build 139 — Vendor Intelligence Dashboard
+
+Phase  
+Phase 28 — Vendor Portal
+
+Summary  
+Implemented the vendor intelligence dashboard according to Sections 1.5.6 and 1.5.7 with aggregate-only cross-institute intelligence views, revenue/business KPI visibility, and deterministic route guard verification.
+
+Components implemented:
+
+- Replaced the `/vendor/intelligence` placeholder in `apps/vendor/src/App.tsx` with `VendorIntelligenceDashboardPage` while preserving existing vendor auth + role guard behavior
+- Added typed intelligence dataset contracts in `apps/vendor/src/features/intelligence/vendorIntelligenceDataset.ts`:
+  - source collections fixed to `vendorAggregates`, `billingRecords`, and `licenseHistory`
+  - monthly recurring revenue trend points
+  - institute and student growth trend points
+  - license layer distribution records (L0/L1/L2/L3)
+  - churn and upgrade conversion indicators
+  - discipline index by exam type summaries
+  - global hard-bias / easy-neglect / controlled-mode effectiveness signal records
+  - topic weakness cluster summaries across institutes
+- Implemented intelligence dashboard UI in `apps/vendor/src/features/intelligence/VendorIntelligenceDashboardPage.tsx`:
+  - KPI stat cards for MRR, institute growth, churn, ARPI, conversion, and active student growth
+  - growth and business trend visualizations using shared `UiChartContainer` (`line`, `pie`, `bar`)
+  - cross-institute and business detail tables using shared `UiTable`
+  - explicit aggregate-only boundary messaging prohibiting raw session scans
+- Extended responsive vendor styling in `apps/vendor/src/App.css` for intelligence chart/table layouts at desktop and mobile viewport classes
+- Added deterministic frontend verification automation and artifacts under `apps/vendor/artifacts/build-139/`:
+  - `verify-routes.mjs`
+  - `verification-results.json`
+  - desktop/mobile screenshots for affected routes and guard fallbacks
+- Executed frontend verification:
+  - `apps/vendor`: build, lint
+  - browser checks for `/vendor/intelligence`, `/vendor/login`, and `/unauthorized` at `1366x768` and `390x844`
+  - guard checks for unauthenticated, authenticated-vendor, and authenticated-non-vendor sessions
+  - console/network/responsive/guard statuses recorded in `apps/vendor/artifacts/build-139/verification-results.json`
+
+Result  
+The vendor portal now includes Build 139 intelligence capabilities with architecture-aligned cross-institute intelligence and business metrics views sourced from aggregate collections only, with deterministic guard and responsive verification evidence across required desktop and mobile browser checks.
+
+Commit Reference  
+Build 139 — Vendor Intelligence Dashboard implemented
+
+Completed On  
+2026-04-22
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 139
+Next Build Number: 140
 
 Phase  
 Phase 28 — Vendor Portal
 
 Subsystem  
-Vendor Intelligence Dashboard
+System Health Monitoring Dashboard
 
 Reference  
-2_Portals_Architecture.md → Sections 1.5.6, 1.5.7
+2_Portals_Architecture.md → Sections 1.5.8, 1.5.9, 1.5.11, 1.5.13
 
 ---
 
