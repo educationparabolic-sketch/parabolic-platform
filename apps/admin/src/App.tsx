@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactElement } from "react";
+import { Suspense, lazy, useMemo, useState, type FormEvent, type ReactElement } from "react";
 import {
   Navigate,
   NavLink,
@@ -10,19 +10,7 @@ import {
 } from "react-router-dom";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { useAuthProvider } from "../../../shared/services/authProvider";
-import { UiNavBar } from "../../../shared/ui/components";
-import AdminAnalyticsDashboardPage from "./features/analytics/AdminAnalyticsDashboardPage";
-import BatchAnalyticsDashboardPage from "./features/analytics/BatchAnalyticsDashboardPage";
-import GovernanceMonitoringDashboardPage from "./features/analytics/GovernanceMonitoringDashboardPage";
-import RiskInsightsDashboardPage from "./features/analytics/RiskInsightsDashboardPage";
-import AssignmentManagementPage from "./features/assignments/AssignmentManagementPage";
-import InterventionToolsPage from "./features/insights/InterventionToolsPage";
-import AdminLicensingConfigurationPage from "./features/licensing/AdminLicensingConfigurationPage";
-import AdminOverviewPage from "./features/overview/AdminOverviewPage";
-import AdminSettingsConfigurationPage from "./features/settings/AdminSettingsConfigurationPage";
-import StudentManagementPage from "./features/students/StudentManagementPage";
-import QuestionBankManagementPage from "./features/tests/QuestionBankManagementPage";
-import TestTemplateManagementPage from "./features/tests/TestTemplateManagementPage";
+import { UiNavBar, UiRouteLoading } from "../../../shared/ui/components";
 import {
   ADMIN_ROUTE_DEFINITIONS,
   evaluateAdminRoutePermissions,
@@ -76,6 +64,24 @@ const ADMIN_NAV_ITEMS: AdminNavItem[] = ADMIN_NAV_PATH_ORDER.map((path) => {
   };
 });
 
+const AdminAnalyticsDashboardPage = lazy(() => import("./features/analytics/AdminAnalyticsDashboardPage"));
+const BatchAnalyticsDashboardPage = lazy(() => import("./features/analytics/BatchAnalyticsDashboardPage"));
+const GovernanceMonitoringDashboardPage = lazy(() => import("./features/analytics/GovernanceMonitoringDashboardPage"));
+const RiskInsightsDashboardPage = lazy(() => import("./features/analytics/RiskInsightsDashboardPage"));
+const AssignmentManagementPage = lazy(() => import("./features/assignments/AssignmentManagementPage"));
+const InterventionToolsPage = lazy(() => import("./features/insights/InterventionToolsPage"));
+const AdminLicensingConfigurationPage = lazy(() => import("./features/licensing/AdminLicensingConfigurationPage"));
+const AdminOverviewPage = lazy(() => import("./features/overview/AdminOverviewPage"));
+const AdminSettingsConfigurationPage = lazy(() => import("./features/settings/AdminSettingsConfigurationPage"));
+const StudentManagementPage = lazy(() => import("./features/students/StudentManagementPage"));
+const QuestionBankManagementPage = lazy(() => import("./features/tests/QuestionBankManagementPage"));
+const TestTemplateManagementPage = lazy(() => import("./features/tests/TestTemplateManagementPage"));
+
+function AdminRouteBoundary(props: { label: string; children: ReactElement }) {
+  const { label, children } = props;
+  return <Suspense fallback={<UiRouteLoading label={label} />}>{children}</Suspense>;
+}
+
 function NotFoundPage() {
   return (
     <main className="admin-page-shell">
@@ -100,12 +106,24 @@ function AdminLayout() {
   const navigate = useNavigate();
   const { session, signOut } = useAuthProvider();
   const accessContext = resolveAdminAccessContext(session);
-  const visibleRoutes = getVisibleAdminRoutes(accessContext.role, accessContext.licenseLayer);
-  const visibleNavItems = ADMIN_NAV_ITEMS.filter((item) => visibleRoutes.some((route) => route.path === item.path));
+  const visibleRoutes = useMemo(() => {
+    return getVisibleAdminRoutes(accessContext.role, accessContext.licenseLayer);
+  }, [accessContext.licenseLayer, accessContext.role]);
+  const visibleNavItems = useMemo(() => {
+    return ADMIN_NAV_ITEMS.filter((item) => visibleRoutes.some((route) => route.path === item.path));
+  }, [visibleRoutes]);
 
-  const activeItem = visibleNavItems.find((item) =>
-    location.pathname === item.path || location.pathname.startsWith(`${item.path}/`),
-  );
+  const activeItem = useMemo(() => {
+    return visibleNavItems.find((item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`));
+  }, [location.pathname, visibleNavItems]);
+  const navItems = useMemo(() => {
+    return visibleNavItems.map((item) => ({
+      id: item.path,
+      label: item.label,
+      hint: item.summary,
+      onClick: () => navigate(item.path),
+    }));
+  }, [navigate, visibleNavItems]);
 
   return (
     <main className="admin-page-shell">
@@ -115,12 +133,7 @@ function AdminLayout() {
             title="Admin Dashboard"
             subtitle="Institute operations navigation"
             activeItemId={activeItem?.path}
-            items={visibleNavItems.map((item) => ({
-              id: item.path,
-              label: item.label,
-              hint: item.summary,
-              onClick: () => navigate(item.path),
-            }))}
+            items={navItems}
           />
         </aside>
 
@@ -294,55 +307,55 @@ function App() {
       >
         <Route
           path="overview"
-          element={<AdminOverviewPage />}
+          element={<AdminRouteBoundary label="Loading overview"><AdminOverviewPage /></AdminRouteBoundary>}
         />
         <Route
           path="students"
-          element={<StudentManagementPage />}
+          element={<AdminRouteBoundary label="Loading students"><StudentManagementPage /></AdminRouteBoundary>}
         />
         <Route
           path="question-bank"
-          element={<QuestionBankManagementPage />}
+          element={<AdminRouteBoundary label="Loading question bank"><QuestionBankManagementPage /></AdminRouteBoundary>}
         />
         <Route
           path="tests"
-          element={<TestTemplateManagementPage />}
+          element={<AdminRouteBoundary label="Loading tests"><TestTemplateManagementPage /></AdminRouteBoundary>}
         />
         <Route
           path="assignments"
-          element={<AssignmentManagementPage />}
+          element={<AdminRouteBoundary label="Loading assignments"><AssignmentManagementPage /></AdminRouteBoundary>}
         />
         <Route
           path="analytics"
-          element={<AdminAnalyticsDashboardPage />}
+          element={<AdminRouteBoundary label="Loading analytics"><AdminAnalyticsDashboardPage /></AdminRouteBoundary>}
         />
         <Route
           path="analytics/risk-insights"
-          element={<RiskInsightsDashboardPage />}
+          element={<AdminRouteBoundary label="Loading risk insights"><RiskInsightsDashboardPage /></AdminRouteBoundary>}
         />
         <Route
           path="analytics/batch"
-          element={<BatchAnalyticsDashboardPage />}
+          element={<AdminRouteBoundary label="Loading batch analytics"><BatchAnalyticsDashboardPage /></AdminRouteBoundary>}
         />
         <Route
           path="governance"
-          element={<GovernanceMonitoringDashboardPage />}
+          element={<AdminRouteBoundary label="Loading governance"><GovernanceMonitoringDashboardPage /></AdminRouteBoundary>}
         />
         <Route
           path="insights/interventions"
-          element={<InterventionToolsPage />}
+          element={<AdminRouteBoundary label="Loading interventions"><InterventionToolsPage /></AdminRouteBoundary>}
         />
         <Route
           path="insights/patterns"
-          element={<RiskInsightsDashboardPage />}
+          element={<AdminRouteBoundary label="Loading insight patterns"><RiskInsightsDashboardPage /></AdminRouteBoundary>}
         />
         <Route
           path="insights/execution"
-          element={<RiskInsightsDashboardPage />}
+          element={<AdminRouteBoundary label="Loading execution insights"><RiskInsightsDashboardPage /></AdminRouteBoundary>}
         />
         <Route
           path="insights/risk"
-          element={<RiskInsightsDashboardPage />}
+          element={<AdminRouteBoundary label="Loading risk insights"><RiskInsightsDashboardPage /></AdminRouteBoundary>}
         />
         <Route
           path="insights"
@@ -354,27 +367,27 @@ function App() {
         />
         <Route
           path="licensing/current"
-          element={<AdminLicensingConfigurationPage />}
+          element={<AdminRouteBoundary label="Loading licensing"><AdminLicensingConfigurationPage /></AdminRouteBoundary>}
         />
         <Route
           path="licensing/features"
-          element={<AdminLicensingConfigurationPage />}
+          element={<AdminRouteBoundary label="Loading feature matrix"><AdminLicensingConfigurationPage /></AdminRouteBoundary>}
         />
         <Route
           path="licensing/eligibility"
-          element={<AdminLicensingConfigurationPage />}
+          element={<AdminRouteBoundary label="Loading eligibility"><AdminLicensingConfigurationPage /></AdminRouteBoundary>}
         />
         <Route
           path="licensing/usage"
-          element={<AdminLicensingConfigurationPage />}
+          element={<AdminRouteBoundary label="Loading usage"><AdminLicensingConfigurationPage /></AdminRouteBoundary>}
         />
         <Route
           path="licensing/upgrade-preview"
-          element={<AdminLicensingConfigurationPage />}
+          element={<AdminRouteBoundary label="Loading upgrade preview"><AdminLicensingConfigurationPage /></AdminRouteBoundary>}
         />
         <Route
           path="licensing/history"
-          element={<AdminLicensingConfigurationPage />}
+          element={<AdminRouteBoundary label="Loading license history"><AdminLicensingConfigurationPage /></AdminRouteBoundary>}
         />
         <Route
           path="settings"
@@ -382,31 +395,31 @@ function App() {
         />
         <Route
           path="settings/profile"
-          element={<AdminSettingsConfigurationPage />}
+          element={<AdminRouteBoundary label="Loading settings"><AdminSettingsConfigurationPage /></AdminRouteBoundary>}
         />
         <Route
           path="settings/academic-year"
-          element={<AdminSettingsConfigurationPage />}
+          element={<AdminRouteBoundary label="Loading academic year settings"><AdminSettingsConfigurationPage /></AdminRouteBoundary>}
         />
         <Route
           path="settings/execution-policy"
-          element={<AdminSettingsConfigurationPage />}
+          element={<AdminRouteBoundary label="Loading execution policy"><AdminSettingsConfigurationPage /></AdminRouteBoundary>}
         />
         <Route
           path="settings/users"
-          element={<AdminSettingsConfigurationPage />}
+          element={<AdminRouteBoundary label="Loading user settings"><AdminSettingsConfigurationPage /></AdminRouteBoundary>}
         />
         <Route
           path="settings/security"
-          element={<AdminSettingsConfigurationPage />}
+          element={<AdminRouteBoundary label="Loading security settings"><AdminSettingsConfigurationPage /></AdminRouteBoundary>}
         />
         <Route
           path="settings/data"
-          element={<AdminSettingsConfigurationPage />}
+          element={<AdminRouteBoundary label="Loading data settings"><AdminSettingsConfigurationPage /></AdminRouteBoundary>}
         />
         <Route
           path="settings/system"
-          element={<AdminSettingsConfigurationPage />}
+          element={<AdminRouteBoundary label="Loading system settings"><AdminSettingsConfigurationPage /></AdminRouteBoundary>}
         />
       </Route>
 

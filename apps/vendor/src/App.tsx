@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent, type ReactElement } from "react";
+import { Suspense, lazy, useMemo, useState, type FormEvent, type ReactElement } from "react";
 import {
   Navigate,
   NavLink,
@@ -11,14 +11,7 @@ import {
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { useAuthProvider } from "../../../shared/services/authProvider";
 import { PORTAL_MANIFEST } from "../../../shared/services/portalManifest";
-import { UiNavBar } from "../../../shared/ui/components";
-import VendorAuditActivityLogsPage from "./features/audit/VendorAuditActivityLogsPage";
-import VendorCalibrationManagementPage from "./features/calibration/VendorCalibrationManagementPage";
-import VendorIntelligenceDashboardPage from "./features/intelligence/VendorIntelligenceDashboardPage";
-import VendorInstituteManagementPage from "./features/institutes/VendorInstituteManagementPage";
-import VendorLicensingPage from "./features/licensing/VendorLicensingPage";
-import VendorOverviewPage from "./features/overview/VendorOverviewPage";
-import VendorSystemHealthDashboardPage from "./features/system-health/VendorSystemHealthDashboardPage";
+import { UiNavBar, UiRouteLoading } from "../../../shared/ui/components";
 import { resolveVendorAccessContext } from "./portals/vendorAccess";
 import "./App.css";
 
@@ -65,6 +58,19 @@ const VENDOR_NAV_ITEMS: VendorNavItem[] = [
     summary: "Immutable vendor activity and governance events.",
   },
 ];
+
+const VendorAuditActivityLogsPage = lazy(() => import("./features/audit/VendorAuditActivityLogsPage"));
+const VendorCalibrationManagementPage = lazy(() => import("./features/calibration/VendorCalibrationManagementPage"));
+const VendorIntelligenceDashboardPage = lazy(() => import("./features/intelligence/VendorIntelligenceDashboardPage"));
+const VendorInstituteManagementPage = lazy(() => import("./features/institutes/VendorInstituteManagementPage"));
+const VendorLicensingPage = lazy(() => import("./features/licensing/VendorLicensingPage"));
+const VendorOverviewPage = lazy(() => import("./features/overview/VendorOverviewPage"));
+const VendorSystemHealthDashboardPage = lazy(() => import("./features/system-health/VendorSystemHealthDashboardPage"));
+
+function VendorRouteBoundary(props: { label: string; children: ReactElement }) {
+  const { label, children } = props;
+  return <Suspense fallback={<UiRouteLoading label={label} />}>{children}</Suspense>;
+}
 
 function resolveVendorRedirectTarget(locationState: unknown, fallbackPath: string): string {
   if (
@@ -214,6 +220,14 @@ function VendorLayout() {
   const activeItem = useMemo(() => {
     return VENDOR_NAV_ITEMS.find((item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`));
   }, [location.pathname]);
+  const navBarItems = useMemo(() => {
+    return VENDOR_NAV_ITEMS.map((item) => ({
+      id: item.path,
+      label: item.label,
+      hint: item.summary,
+      onClick: () => navigate(item.path),
+    }));
+  }, [navigate]);
 
   const portal = PORTAL_MANIFEST.vendor;
 
@@ -230,12 +244,7 @@ function VendorLayout() {
           title="Vendor Routes"
           subtitle="Global administration"
           activeItemId={activeItem?.path}
-          items={VENDOR_NAV_ITEMS.map((item) => ({
-            id: item.path,
-            label: item.label,
-            hint: item.summary,
-            onClick: () => navigate(item.path),
-          }))}
+          items={navBarItems}
         />
 
         <button
@@ -313,30 +322,30 @@ function App() {
           </VendorProtectedRoute>
         )}
       >
-        <Route path="overview" element={<VendorOverviewPage />} />
+        <Route path="overview" element={<VendorRouteBoundary label="Loading overview"><VendorOverviewPage /></VendorRouteBoundary>} />
         <Route
           path="institutes"
-          element={<VendorInstituteManagementPage />}
+          element={<VendorRouteBoundary label="Loading institutes"><VendorInstituteManagementPage /></VendorRouteBoundary>}
         />
         <Route
           path="licensing"
-          element={<VendorLicensingPage />}
+          element={<VendorRouteBoundary label="Loading licensing"><VendorLicensingPage /></VendorRouteBoundary>}
         />
         <Route
           path="calibration"
-          element={<VendorCalibrationManagementPage />}
+          element={<VendorRouteBoundary label="Loading calibration"><VendorCalibrationManagementPage /></VendorRouteBoundary>}
         />
         <Route
           path="intelligence"
-          element={<VendorIntelligenceDashboardPage />}
+          element={<VendorRouteBoundary label="Loading intelligence"><VendorIntelligenceDashboardPage /></VendorRouteBoundary>}
         />
         <Route
           path="system-health"
-          element={<VendorSystemHealthDashboardPage />}
+          element={<VendorRouteBoundary label="Loading system health"><VendorSystemHealthDashboardPage /></VendorRouteBoundary>}
         />
         <Route
           path="audit"
-          element={<VendorAuditActivityLogsPage />}
+          element={<VendorRouteBoundary label="Loading audit"><VendorAuditActivityLogsPage /></VendorRouteBoundary>}
         />
         <Route path="*" element={<Navigate to={protectedDefaultPath} replace />} />
       </Route>

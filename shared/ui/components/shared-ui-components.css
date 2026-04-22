@@ -328,3 +328,44 @@
     grid-template-columns: 1fr;
   }
 }
+
+.ui-route-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid rgba(13, 36, 79, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #2a4469;
+}
+
+.ui-route-loading p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.ui-route-loading-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: #1e57a8;
+  animation: ui-route-loading-pulse 1s ease-in-out infinite;
+}
+
+@keyframes ui-route-loading-pulse {
+  0% {
+    opacity: 0.4;
+    transform: scale(0.85);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  100% {
+    opacity: 0.4;
+    transform: scale(0.85);
+  }
+}

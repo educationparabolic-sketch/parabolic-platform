@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent, type ReactElement } from "react";
+import { Suspense, lazy, useMemo, useState, type FormEvent, type ReactElement } from "react";
 import {
   Navigate,
   NavLink,
@@ -11,12 +11,7 @@ import {
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { useAuthProvider } from "../../../shared/services/authProvider";
 import type { LicenseLayer } from "../../../shared/types/portalRouting";
-import { UiNavBar } from "../../../shared/ui/components";
-import StudentDashboardPage from "./features/dashboard/StudentDashboardPage";
-import StudentInsightsPage from "./features/insights/StudentInsightsPage";
-import StudentMyTestsPage from "./features/my-tests/StudentMyTestsPage";
-import StudentPerformancePage from "./features/performance/StudentPerformancePage";
-import StudentProfileSettingsPage from "./features/profile/StudentProfileSettingsPage";
+import { UiNavBar, UiRouteLoading } from "../../../shared/ui/components";
 import "./App.css";
 
 interface StudentNavItem {
@@ -61,6 +56,17 @@ const LICENSE_LAYER_ORDER: Record<LicenseLayer, number> = {
   L2: 2,
   L3: 3,
 };
+
+const StudentDashboardPage = lazy(() => import("./features/dashboard/StudentDashboardPage"));
+const StudentInsightsPage = lazy(() => import("./features/insights/StudentInsightsPage"));
+const StudentMyTestsPage = lazy(() => import("./features/my-tests/StudentMyTestsPage"));
+const StudentPerformancePage = lazy(() => import("./features/performance/StudentPerformancePage"));
+const StudentProfileSettingsPage = lazy(() => import("./features/profile/StudentProfileSettingsPage"));
+
+function StudentRouteBoundary(props: { label: string; children: ReactElement }) {
+  const { label, children } = props;
+  return <Suspense fallback={<UiRouteLoading label={label} />}>{children}</Suspense>;
+}
 
 function decodeLicenseLayerFromToken(idToken: string | null): LicenseLayer | null {
   if (!idToken) {
@@ -195,6 +201,14 @@ function StudentLayout() {
       return LICENSE_LAYER_ORDER[activeLicenseLayer] >= LICENSE_LAYER_ORDER[item.minimumLicenseLayer];
     });
   }, [activeLicenseLayer]);
+  const navBarItems = useMemo(() => {
+    return visibleNavItems.map((item) => ({
+      id: item.path,
+      label: item.label,
+      hint: item.summary,
+      onClick: () => navigate(item.path),
+    }));
+  }, [navigate, visibleNavItems]);
 
   const activeRoute = STUDENT_NAV_ITEMS.find(
     (item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`),
@@ -211,12 +225,7 @@ function StudentLayout() {
           title="Student Routes"
           subtitle="Shared top navigation"
           activeItemId={activeRoute?.path}
-          items={visibleNavItems.map((item) => ({
-            id: item.path,
-            label: item.label,
-            hint: item.summary,
-            onClick: () => navigate(item.path),
-          }))}
+          items={navBarItems}
         />
         <button
           type="button"
@@ -319,30 +328,20 @@ function App() {
         )}
       >
         <Route index element={<Navigate to="dashboard" replace />} />
-        <Route
-          path="dashboard"
-          element={<StudentDashboardPage />}
-        />
-        <Route
-          path="my-tests"
-          element={<StudentMyTestsPage />}
-        />
-        <Route
-          path="performance"
-          element={<StudentPerformancePage />}
-        />
+        <Route path="dashboard" element={<StudentRouteBoundary label="Loading dashboard"><StudentDashboardPage /></StudentRouteBoundary>} />
+        <Route path="my-tests" element={<StudentRouteBoundary label="Loading tests"><StudentMyTestsPage /></StudentRouteBoundary>} />
+        <Route path="performance" element={<StudentRouteBoundary label="Loading performance"><StudentPerformancePage /></StudentRouteBoundary>} />
         <Route
           path="insights"
           element={(
             <StudentLicenseRoute minimumLicenseLayer="L1" fallbackPath="/student/dashboard">
-              <StudentInsightsPage />
+              <StudentRouteBoundary label="Loading insights">
+                <StudentInsightsPage />
+              </StudentRouteBoundary>
             </StudentLicenseRoute>
           )}
         />
-        <Route
-          path="profile"
-          element={<StudentProfileSettingsPage />}
-        />
+        <Route path="profile" element={<StudentRouteBoundary label="Loading profile"><StudentProfileSettingsPage /></StudentRouteBoundary>} />
       </Route>
       <Route path="*" element={<Navigate to={protectedDefaultPath} replace />} />
     </Routes>
