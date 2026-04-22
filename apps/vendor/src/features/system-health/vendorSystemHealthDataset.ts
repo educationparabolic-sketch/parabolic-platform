@@ -1,3 +1,5 @@
+import { getFrontendMonitoringSnapshot } from "../../../../../shared/services/frontendMonitoring";
+
 export interface SystemHealthMetric {
   id:
     | "FirestoreReadCount"
@@ -88,9 +90,32 @@ export interface VendorSystemHealthDataset {
   dataOperations: DataOperationRecord[];
   structuralGuarantees: StructuralGuaranteeCheck[];
   performanceIndicators: SystemHealthPerformanceIndicator[];
+  frontendTelemetry: FrontendTelemetrySummary;
+}
+
+export interface FrontendTelemetryCriticalEvent {
+  eventId: string;
+  portal: string;
+  eventType: string;
+  severity: string;
+  actorId: string;
+  timestamp: string;
+  message: string;
+  requestPath: string;
+}
+
+export interface FrontendTelemetrySummary {
+  sessionIdentifier: string;
+  capturedAt: string;
+  runtimeExceptionCount: number;
+  failedApiCallCount: number;
+  averageApiLatencyMs: number;
+  recentCriticalEvents: FrontendTelemetryCriticalEvent[];
 }
 
 export function getVendorSystemHealthDataset(): VendorSystemHealthDataset {
+  const frontendTelemetrySnapshot = getFrontendMonitoringSnapshot();
+
   return {
     sourceSystems: ["platform metrics", "error logs", "monitoring dashboards"],
     healthMetrics: [
@@ -282,5 +307,22 @@ export function getVendorSystemHealthDataset(): VendorSystemHealthDataset {
       { indicator: "EmulatorServiceHealth", value: "degraded: auth reconnects", status: "degraded" },
       { indicator: "ErrorBudgetConsumption", value: "42% (30d)", status: "healthy" },
     ],
+    frontendTelemetry: {
+      sessionIdentifier: frontendTelemetrySnapshot.sessionIdentifier,
+      capturedAt: frontendTelemetrySnapshot.capturedAt,
+      runtimeExceptionCount: frontendTelemetrySnapshot.runtimeExceptionCount,
+      failedApiCallCount: frontendTelemetrySnapshot.failedApiCallCount,
+      averageApiLatencyMs: frontendTelemetrySnapshot.averageApiLatencyMs,
+      recentCriticalEvents: frontendTelemetrySnapshot.recentCriticalEvents.map((event) => ({
+        eventId: event.eventId,
+        portal: event.portal,
+        eventType: event.eventType,
+        severity: event.severity,
+        actorId: event.actorId,
+        timestamp: event.timestamp,
+        message: event.error?.message ?? "No error message captured.",
+        requestPath: event.request?.path ?? "N/A",
+      })),
+    },
   };
 }

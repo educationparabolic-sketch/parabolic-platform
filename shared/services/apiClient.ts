@@ -1,6 +1,10 @@
 import { getIdToken, type User } from "firebase/auth";
 import { getFrontendEnvironment } from "./frontendEnvironment";
 import { getFirebaseAuth } from "./firebaseClient";
+import {
+  captureFrontendApiFailure,
+  captureFrontendApiTiming,
+} from "./frontendMonitoring";
 import type {
   ApiClient,
   ApiClientConfig,
@@ -206,6 +210,10 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
     path: string,
     options: ApiClientRequestOptions<TRequestBody> = {},
   ): Promise<TResponse> {
+    const requestStartedAt =
+      typeof performance !== "undefined" && typeof performance.now === "function" ?
+        performance.now() :
+        Date.now();
     const method = options.method ?? "GET";
     const policy = toRetryPolicy(config, options.retry);
     const requestPath = ensureLeadingSlash(path);
@@ -266,12 +274,40 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
         }
 
         if (response.ok) {
+          const finishedAt =
+            typeof performance !== "undefined" && typeof performance.now === "function" ?
+              performance.now() :
+              Date.now();
+          captureFrontendApiTiming({
+            method,
+            path: requestPath,
+            url: requestUrl,
+            status: response.status,
+            attempt,
+            durationMs: Math.max(0, Math.round(finishedAt - requestStartedAt)),
+          });
           return payload as TResponse;
         }
 
         const retryable = isRetryableRequest(method, policy, response.status, false);
 
         if (!retryable || attempt >= policy.maxAttempts) {
+          const finishedAt =
+            typeof performance !== "undefined" && typeof performance.now === "function" ?
+              performance.now() :
+              Date.now();
+          captureFrontendApiFailure({
+            method,
+            path: requestPath,
+            url: requestUrl,
+            status: response.status,
+            attempt,
+            durationMs: Math.max(0, Math.round(finishedAt - requestStartedAt)),
+            code: (payload as ApiErrorPayload | null)?.error?.code ?? `HTTP_${response.status}`,
+            message:
+              (payload as ApiErrorPayload | null)?.error?.message ??
+              `API request failed for ${method} ${requestPath}`,
+          });
           throw toApiError(context, response.status, payload);
         }
       } catch (error) {
@@ -283,6 +319,20 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
 
         const retryable = isRetryableRequest(method, policy, response?.status ?? null, true);
         if (!retryable || attempt >= policy.maxAttempts) {
+          const finishedAt =
+            typeof performance !== "undefined" && typeof performance.now === "function" ?
+              performance.now() :
+              Date.now();
+          captureFrontendApiFailure({
+            method,
+            path: requestPath,
+            url: requestUrl,
+            status: response?.status ?? 0,
+            attempt,
+            durationMs: Math.max(0, Math.round(finishedAt - requestStartedAt)),
+            code: "NETWORK_ERROR",
+            message: `Network failure for ${context.method} ${context.path}`,
+          });
           throw new ApiClientError(
             `Network failure for ${context.method} ${context.path}`,
             response?.status ?? 0,

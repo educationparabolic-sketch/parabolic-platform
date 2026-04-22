@@ -10,6 +10,7 @@ import {
 import {
   getVendorSystemHealthDataset,
   type DataOperationRecord,
+  type FrontendTelemetryCriticalEvent,
   type GlobalFeatureFlagName,
   type InfrastructureAlert,
   type SystemHealthPerformanceIndicator,
@@ -126,6 +127,46 @@ function VendorSystemHealthDashboardPage() {
         id: "status",
         header: "Status",
         render: (row) => row.status,
+      },
+    ];
+  }, []);
+
+  const telemetryColumns = useMemo<Array<UiTableColumn<FrontendTelemetryCriticalEvent>>>(() => {
+    return [
+      {
+        id: "timestamp",
+        header: "Timestamp",
+        render: (row) => formatAlertTimestamp(row.timestamp),
+      },
+      {
+        id: "portal",
+        header: "Portal",
+        render: (row) => row.portal,
+      },
+      {
+        id: "eventType",
+        header: "Event Type",
+        render: (row) => row.eventType,
+      },
+      {
+        id: "severity",
+        header: "Severity",
+        render: (row) => row.severity,
+      },
+      {
+        id: "actorId",
+        header: "Actor",
+        render: (row) => row.actorId,
+      },
+      {
+        id: "requestPath",
+        header: "Path",
+        render: (row) => row.requestPath,
+      },
+      {
+        id: "message",
+        header: "Message",
+        render: (row) => row.message,
       },
     ];
   }, []);
@@ -329,6 +370,32 @@ function VendorSystemHealthDashboardPage() {
         </section>
       </div>
 
+      <div className="vendor-section-grid vendor-telemetry-summary-grid">
+        <UiStatCard
+          title="Frontend Runtime Exceptions"
+          value={String(dataset.frontendTelemetry.runtimeExceptionCount)}
+          helper="Captured from window.error and unhandled rejection events."
+        />
+        <UiStatCard
+          title="Frontend Failed API Calls"
+          value={String(dataset.frontendTelemetry.failedApiCallCount)}
+          helper="Final failed calls with method/path/status metadata."
+        />
+        <UiStatCard
+          title="Frontend Avg API Latency"
+          value={`${dataset.frontendTelemetry.averageApiLatencyMs} ms`}
+          helper="Average request timing from shared API client telemetry."
+        />
+      </div>
+
+      <UiTable
+        caption={`Critical frontend telemetry events (session ${dataset.frontendTelemetry.sessionIdentifier})`}
+        columns={telemetryColumns}
+        rows={dataset.frontendTelemetry.recentCriticalEvents}
+        rowKey={(row) => row.eventId}
+        emptyStateText="No critical frontend telemetry events captured in this session."
+      />
+
       <div className="vendor-boundary-note" role="note" aria-label="System health boundaries and controls">
         <p>Build 140 controls:</p>
         <ul>
@@ -337,6 +404,7 @@ function VendorSystemHealthDashboardPage() {
           <li>Feature flags map to globalFeatureFlags docs and are middleware-enforced.</li>
           <li>Exports and backups are restricted to snapshot collections only.</li>
           <li>No raw cross-institute session recomputation is performed in this route.</li>
+          <li>Frontend telemetry critical events use append-only audit identifiers with actor and timestamp metadata.</li>
         </ul>
       </div>
 

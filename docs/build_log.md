@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 142  
-Next Build: 143
+Completed Builds: 143  
+Next Build: 144
 
 Current Phase: Phase 29 — Frontend Performance Optimization
 
@@ -4871,18 +4871,62 @@ Completed On
 
 ---
 
+## Build 143 — Frontend Error Monitoring
+
+Phase  
+Phase 29 — Frontend Performance Optimization
+
+Summary  
+Implemented shared frontend telemetry and error monitoring across all portals, then surfaced critical monitoring visibility in the vendor system-health route with append-only audit-style event metadata.
+
+Components implemented:
+
+- Added shared frontend telemetry contracts and capture utilities:
+  - `shared/types/frontendMonitoring.ts`
+  - `shared/services/frontendMonitoring.ts`
+- Added API client telemetry instrumentation to capture failed API calls and request performance metadata:
+  - `shared/services/apiClient.ts`
+- Initialized frontend monitoring in all portal entry points for runtime exception and unhandled rejection capture:
+  - `apps/admin/src/main.tsx`
+  - `apps/student/src/main.tsx`
+  - `apps/vendor/src/main.tsx`
+  - `apps/exam/src/main.tsx`
+- Extended vendor system-health dataset and UI to display frontend monitoring KPIs and critical event records:
+  - `apps/vendor/src/features/system-health/vendorSystemHealthDataset.ts`
+  - `apps/vendor/src/features/system-health/VendorSystemHealthDashboardPage.tsx`
+  - `apps/vendor/src/App.css`
+- Added Build 143 browser verification harness and artifacts:
+  - `artifacts/build-143/verify-routes.mjs`
+  - `artifacts/build-143/verification-results.json`
+  - desktop/mobile screenshots for affected admin/student/vendor/exam routes
+- Executed frontend verification for affected build-domain apps and routes:
+  - `apps/admin|student|vendor|exam`: lint + build
+  - browser checks for `/login`, `/admin/overview`, `/student/login`, `/student/dashboard`, `/vendor/login`, `/vendor/system-health`, `/`, and `/session/demo` at `1366x768` and `390x844`
+  - console/network/responsive/guard statuses recorded in `artifacts/build-143/verification-results.json`
+
+Result  
+Frontend portals now capture runtime exceptions, unhandled client crashes, failed API calls, and request/navigation performance signals with session + actor attribution; vendor system-health now shows deterministic frontend telemetry summaries and critical event visibility aligned with monitoring/audit architecture constraints.
+
+Commit Reference  
+Build 143 — Frontend Error Monitoring implemented
+
+Completed On  
+2026-04-22
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 143
+Next Build Number: 144
 
 Phase  
 Phase 29 — Frontend Performance Optimization
 
 Subsystem  
-Frontend Error Monitoring
+Frontend CI/CD Deployment Pipeline
 
 Reference  
-2_Portals_Architecture.md → Sections 1.5.8, 1.5.10, 1.5.12
+2_Portals_Architecture.md → Sections 1.1, 1.3.14, 1.4.16, 1.5.13
 
 ---
 
@@ -5025,8 +5069,8 @@ Build | Phase | Status
 133 | Exam Portal Engine | Completed
 134 | Exam Portal Engine | Completed
 135 | Exam Portal Engine | Completed
-136–142 | Frontend Phases | Completed
-143–150 | Remaining Phases | Pending
+136–143 | Frontend Phases | Completed
+144–150 | Remaining Phases | Pending
 
 ---
 

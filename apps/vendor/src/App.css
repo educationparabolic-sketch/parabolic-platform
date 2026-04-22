@@ -189,6 +189,10 @@
   align-items: start;
 }
 
+.vendor-telemetry-summary-grid {
+  margin-top: 16px;
+}
+
 .vendor-profile-title {
   margin: 0;
   color: #112e55;
