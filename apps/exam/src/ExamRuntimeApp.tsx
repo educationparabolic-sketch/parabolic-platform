@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Route, Routes, useLocation, useParams } from "react-router-dom";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
+import { buildQuestionAssetUrl, toCdnAssetUrl } from "../../../shared/services/cdnAssetDelivery";
 import { getFrontendEnvironment } from "../../../shared/services/frontendEnvironment";
 import "./App.css";
 
@@ -281,12 +282,19 @@ const QUESTION_PALETTE_LEGEND: Array<{ status: QuestionPaletteStatus; label: str
 ];
 
 const CALCULATOR_KEYS = ["7", "8", "9", "/", "4", "5", "6", "*", "1", "2", "3", "-", "0", ".", "(", ")", "+"];
-const PHYSICS_IMAGE_DATA_URI = `data:image/svg+xml;utf8,${encodeURIComponent(
-  "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='400'><rect width='100%' height='100%' fill='#edf4ff'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' font-family='Segoe UI' font-size='28' fill='#1f5fbf'>Physics Question Figure</text></svg>",
-)}`;
-const CHEMISTRY_IMAGE_DATA_URI = `data:image/svg+xml;utf8,${encodeURIComponent(
-  "<svg xmlns='http://www.w3.org/2000/svg' width='800' height='400'><rect width='100%' height='100%' fill='#f2fbf5'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' font-family='Segoe UI' font-size='28' fill='#0a7e42'>Chemistry Question Figure</text></svg>",
-)}`;
+const MOCK_INSTITUTE_ID = "inst-build-142";
+const PHYSICS_IMAGE_CDN_URL = buildQuestionAssetUrl({
+  instituteId: MOCK_INSTITUTE_ID,
+  questionId: "exam-demo-q-2",
+  version: "v1",
+  kind: "questionImage",
+});
+const CHEMISTRY_IMAGE_CDN_URL = buildQuestionAssetUrl({
+  instituteId: MOCK_INSTITUTE_ID,
+  questionId: "exam-demo-q-6",
+  version: "v1",
+  kind: "questionImage",
+});
 
 function decodeBase64Url(value: string): string {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
@@ -597,7 +605,7 @@ function buildSessionSnapshot(sessionId: string, mode: ExecutionMode): SessionSn
       type: "numeric",
       difficulty: "medium",
       text: "A body starts from rest and accelerates uniformly at 2 m/s² for 6 seconds. Enter displacement in meters.",
-      imageUrl: PHYSICS_IMAGE_DATA_URI,
+      imageUrl: PHYSICS_IMAGE_CDN_URL,
     },
     {
       id: "q-3",
@@ -644,7 +652,7 @@ function buildSessionSnapshot(sessionId: string, mode: ExecutionMode): SessionSn
         { id: "q6-c", label: "C", text: "CO2" },
         { id: "q6-d", label: "D", text: "CCl4" },
       ],
-      imageUrl: CHEMISTRY_IMAGE_DATA_URI,
+      imageUrl: CHEMISTRY_IMAGE_CDN_URL,
     },
     {
       id: "q-7",
@@ -1642,7 +1650,7 @@ function ExamSessionPage() {
     }
 
     const preloadedImage = new Image();
-    preloadedImage.src = nextQuestion.imageUrl;
+    preloadedImage.src = toCdnAssetUrl(nextQuestion.imageUrl);
   }, [nextQuestion?.imageUrl]);
 
   useEffect(() => {
@@ -2401,7 +2409,7 @@ function ExamSessionPage() {
               {selectedQuestion.imageUrl ? (
                 <figure className="exam-question-image-wrap">
                   <img
-                    src={selectedQuestion.imageUrl}
+                    src={toCdnAssetUrl(selectedQuestion.imageUrl)}
                     alt={`Question ${selectedQuestion.number} prompt`}
                     loading="lazy"
                     className="exam-question-image"

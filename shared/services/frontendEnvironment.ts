@@ -46,5 +46,6 @@ export function getFrontendEnvironment(): FrontendEnvironment {
     firebaseMessagingSenderId: readEnvValue("VITE_FIREBASE_MESSAGING_SENDER_ID") || undefined,
     firebaseMeasurementId: readEnvValue("VITE_FIREBASE_MEASUREMENT_ID") || undefined,
     apiBaseUrl: readEnvValue("VITE_API_BASE_URL") || undefined,
+    cdnBaseUrl: readEnvValue("VITE_CDN_BASE_URL") || undefined,
   };
 }

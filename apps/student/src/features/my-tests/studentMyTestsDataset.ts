@@ -1,4 +1,9 @@
 import { ApiClientError, createApiClient } from "../../../../../shared/services/apiClient";
+import {
+  buildQuestionAssetUrl,
+  buildStudentReportUrl,
+  toCdnAssetUrl,
+} from "../../../../../shared/services/cdnAssetDelivery";
 
 const apiClient = createApiClient({ baseUrl: "/" });
 
@@ -48,6 +53,7 @@ interface StartSessionResponse {
 
 const CURRENT_ACADEMIC_YEAR = "2026";
 const DEFAULT_COMPLETED_PAGE_SIZE = 5;
+const DEFAULT_INSTITUTE_ID = "inst-build-142";
 
 export const STUDENT_MY_TESTS_FALLBACK: StudentTestRecord[] = [
   {
@@ -105,7 +111,12 @@ export const STUDENT_MY_TESTS_FALLBACK: StudentTestRecord[] = [
     academicYear: CURRENT_ACADEMIC_YEAR,
     currentAcademicYear: true,
     archivedSummary: null,
-    summaryPdfUrl: "/student/tests/test-2026-04-14-c/summary.pdf",
+    summaryPdfUrl: buildStudentReportUrl({
+      instituteId: DEFAULT_INSTITUTE_ID,
+      year: "2026",
+      month: "04",
+      fileName: "student_test_2026_04_14_c_summary.pdf",
+    }),
   },
   {
     testId: "test-2026-04-09-d",
@@ -124,7 +135,12 @@ export const STUDENT_MY_TESTS_FALLBACK: StudentTestRecord[] = [
     academicYear: CURRENT_ACADEMIC_YEAR,
     currentAcademicYear: true,
     archivedSummary: null,
-    summaryPdfUrl: "/student/tests/test-2026-04-09-d/summary.pdf",
+    summaryPdfUrl: buildStudentReportUrl({
+      instituteId: DEFAULT_INSTITUTE_ID,
+      year: "2026",
+      month: "04",
+      fileName: "student_test_2026_04_09_d_summary.pdf",
+    }),
   },
   {
     testId: "test-2026-04-05-e",
@@ -143,7 +159,12 @@ export const STUDENT_MY_TESTS_FALLBACK: StudentTestRecord[] = [
     academicYear: CURRENT_ACADEMIC_YEAR,
     currentAcademicYear: true,
     archivedSummary: null,
-    summaryPdfUrl: "/student/tests/test-2026-04-05-e/summary.pdf",
+    summaryPdfUrl: buildStudentReportUrl({
+      instituteId: DEFAULT_INSTITUTE_ID,
+      year: "2026",
+      month: "04",
+      fileName: "student_test_2026_04_05_e_summary.pdf",
+    }),
   },
   {
     testId: "test-2026-03-30-f",
@@ -162,7 +183,12 @@ export const STUDENT_MY_TESTS_FALLBACK: StudentTestRecord[] = [
     academicYear: CURRENT_ACADEMIC_YEAR,
     currentAcademicYear: true,
     archivedSummary: null,
-    summaryPdfUrl: "/student/tests/test-2026-03-30-f/summary.pdf",
+    summaryPdfUrl: buildStudentReportUrl({
+      instituteId: DEFAULT_INSTITUTE_ID,
+      year: "2026",
+      month: "03",
+      fileName: "student_test_2026_03_30_f_summary.pdf",
+    }),
   },
   {
     testId: "test-2026-03-21-g",
@@ -181,7 +207,12 @@ export const STUDENT_MY_TESTS_FALLBACK: StudentTestRecord[] = [
     academicYear: CURRENT_ACADEMIC_YEAR,
     currentAcademicYear: true,
     archivedSummary: null,
-    summaryPdfUrl: "/student/tests/test-2026-03-21-g/summary.pdf",
+    summaryPdfUrl: buildStudentReportUrl({
+      instituteId: DEFAULT_INSTITUTE_ID,
+      year: "2026",
+      month: "03",
+      fileName: "student_test_2026_03_21_g_summary.pdf",
+    }),
   },
   {
     testId: "test-2025-01-17-h",
@@ -208,8 +239,18 @@ const FALLBACK_SOLUTIONS: Record<string, StudentSolutionItem[]> = {
   "test-2026-04-14-c": [
     {
       questionId: "q-1",
-      questionImageUrl: "https://cdn.example.com/questions/test-2026-04-14-c/q-1.png",
-      solutionImageUrl: "https://cdn.example.com/solutions/test-2026-04-14-c/q-1.png",
+      questionImageUrl: buildQuestionAssetUrl({
+        instituteId: DEFAULT_INSTITUTE_ID,
+        questionId: "test-2026-04-14-c-q-1",
+        version: "v1",
+        kind: "questionImage",
+      }),
+      solutionImageUrl: buildQuestionAssetUrl({
+        instituteId: DEFAULT_INSTITUTE_ID,
+        questionId: "test-2026-04-14-c-q-1",
+        version: "v1",
+        kind: "solutionImage",
+      }),
       correctAnswer: "B",
       studentAnswer: "C",
       tutorialVideoLink: "https://example.com/tutorials/biology-enzymes",
@@ -217,8 +258,18 @@ const FALLBACK_SOLUTIONS: Record<string, StudentSolutionItem[]> = {
     },
     {
       questionId: "q-2",
-      questionImageUrl: "https://cdn.example.com/questions/test-2026-04-14-c/q-2.png",
-      solutionImageUrl: "https://cdn.example.com/solutions/test-2026-04-14-c/q-2.png",
+      questionImageUrl: buildQuestionAssetUrl({
+        instituteId: DEFAULT_INSTITUTE_ID,
+        questionId: "test-2026-04-14-c-q-2",
+        version: "v1",
+        kind: "questionImage",
+      }),
+      solutionImageUrl: buildQuestionAssetUrl({
+        instituteId: DEFAULT_INSTITUTE_ID,
+        questionId: "test-2026-04-14-c-q-2",
+        version: "v1",
+        kind: "solutionImage",
+      }),
       correctAnswer: "D",
       studentAnswer: "D",
       tutorialVideoLink: null,
@@ -311,7 +362,7 @@ function normalizeStudentTestRecord(value: unknown, index: number): StudentTestR
     academicYear,
     currentAcademicYear: isCurrentAcademicYear(academicYear),
     archivedSummary: toOptionalString(record.archivedSummary),
-    summaryPdfUrl: toOptionalString(record.summaryPdfUrl),
+    summaryPdfUrl: toCdnAssetUrl(toOptionalString(record.summaryPdfUrl)),
   };
 }
 
@@ -358,8 +409,8 @@ function normalizeSolutionsPayload(payload: unknown): StudentSolutionItem[] {
       const record = entry as Record<string, unknown>;
       return {
         questionId: toStringOrFallback(record.questionId, `q-${index + 1}`),
-        questionImageUrl: toStringOrFallback(record.questionImageUrl, ""),
-        solutionImageUrl: toStringOrFallback(record.solutionImageUrl, ""),
+        questionImageUrl: toCdnAssetUrl(toStringOrFallback(record.questionImageUrl, "")),
+        solutionImageUrl: toCdnAssetUrl(toStringOrFallback(record.solutionImageUrl, "")),
         correctAnswer: toStringOrFallback(record.correctAnswer, "N/A"),
         studentAnswer: toStringOrFallback(record.studentAnswer, "N/A"),
         tutorialVideoLink: toOptionalString(record.tutorialVideoLink),

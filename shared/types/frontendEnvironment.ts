@@ -8,6 +8,7 @@ export interface FrontendEnvironment {
   firebaseMessagingSenderId?: string;
   firebaseMeasurementId?: string;
   apiBaseUrl?: string;
+  cdnBaseUrl?: string;
 }
 
 export interface FrontendEnvironmentValidationResult {
