@@ -1,7 +1,8 @@
-import { createApiClient, ApiClientError } from "../../../../../shared/services/apiClient";
+import { ApiClientError } from "../../../../../shared/services/apiClient";
+import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
 
-const apiClient = createApiClient({ baseUrl: "/" });
+const apiClient = getPortalApiClient("admin");
 
 export interface AdminOverviewSnapshot {
   academicYear: string;

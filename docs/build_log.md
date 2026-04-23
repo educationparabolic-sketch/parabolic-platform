@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 145  
-Next Build: 146
+Completed Builds: 146  
+Next Build: 147
 
 Current Phase: Phase 30 — Final Frontend Integration
 
@@ -5015,18 +5015,69 @@ Completed On
 
 ---
 
+## Build 146 — Portal Integration Layer
+
+Phase  
+Phase 30 — Final Frontend Integration
+
+Summary  
+Implemented the frontend portal integration layer across Admin, Student, Exam, and Vendor portals using shared routing conventions, shared API communication wiring, and unified environment-aware portal integration utilities.
+
+Components implemented:
+
+- Added shared portal integration service:
+  - `shared/services/portalIntegration.ts`
+  - centralizes portal login/default route conventions from `portalManifest`
+  - resolves environment-aware portal base URLs (`portal`, `exam`, `vendor`)
+  - provides shared per-portal API client instances with standardized portal attribution headers
+- Extended shared portal manifest and environment contracts:
+  - `shared/services/portalManifest.ts`
+  - `shared/types/frontendEnvironment.ts`
+  - `shared/services/frontendEnvironment.ts`
+  - added typed support for `VITE_PORTAL_BASE_URL`, `VITE_EXAM_BASE_URL`, and `VITE_VENDOR_BASE_URL`
+- Standardized portal route conventions in app shells:
+  - `apps/admin/src/App.tsx` now uses shared login/default-path conventions and supports `/admin/login` canonical alias
+  - `apps/student/src/App.tsx` now derives route-prefix/login/default paths from shared integration conventions
+  - `apps/vendor/src/App.tsx` now derives route-prefix/login/default paths from shared integration conventions
+- Standardized API communication through shared portal API client layer:
+  - migrated admin/student/vendor feature datasets/pages from local `createApiClient({ baseUrl: \"/\" })` calls to shared `getPortalApiClient(...)`
+  - updated exam runtime network flows in `apps/exam/src/ExamRuntimeApp.tsx` (`answers`, `token/refresh`, `submit`) to use shared API client layer instead of direct `fetch`
+- Added deterministic Build 146 browser verification harness and artifacts:
+  - `artifacts/build-146/verify-routes.mjs`
+  - `artifacts/build-146/verification-results.json`
+  - desktop/mobile screenshots for all affected routes
+- Executed frontend verification for affected build-domain apps and routes:
+  - `apps/admin|student|exam|vendor`: lint + build
+  - browser checks at `1366x768` and `390x844` for:
+    - admin legacy login flow and canonical login alias route behavior
+    - student cross-portal authenticated dashboard continuity
+    - vendor RBAC unauthorized behavior and authenticated vendor login flow
+    - exam missing-token guard and signed-token session entry flow
+  - console/network/responsive/guard statuses recorded in `artifacts/build-146/verification-results.json`
+
+Result  
+Portal integration now uses a shared integration layer for route conventions, environment-aware portal wiring, and standardized API communication across all portals, while preserving architecture data flow and guard constraints.
+
+Commit Reference  
+Build 146 — Portal Integration Layer implemented
+
+Completed On  
+2026-04-23
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 146
+Next Build Number: 147
 
 Phase  
 Phase 30 — Final Frontend Integration
 
 Subsystem  
-Portal Integration Layer
+Global State Management
 
 Reference  
-2_Portals_Architecture.md → Sections 1.1, 1.2.1.13, 1.3.8, 1.4.1, 1.5.1
+2_Portals_Architecture.md → Sections 1.2.10.8, 1.2.10.9, 1.5.9, 1.5.12, 1.3.12, 1.4.13
 
 ---
 
@@ -5169,8 +5220,8 @@ Build | Phase | Status
 133 | Exam Portal Engine | Completed
 134 | Exam Portal Engine | Completed
 135 | Exam Portal Engine | Completed
-136–145 | Frontend Phases | Completed
-146–150 | Remaining Phases | Pending
+136–146 | Frontend Phases | Completed
+147–150 | Remaining Phases | Pending
 
 ---
 

@@ -1,4 +1,5 @@
-import {ApiClientError, createApiClient} from "../../../../../shared/services/apiClient";
+import {ApiClientError} from "../../../../../shared/services/apiClient";
+import {getPortalApiClient} from "../../../../../shared/services/portalIntegration";
 import {
   fetchDashboardDataset,
   FALLBACK_DATASET,
@@ -8,7 +9,7 @@ import {
   type StudentYearMetricRecord,
 } from "../analytics/analyticsDataset";
 
-const apiClient = createApiClient({baseUrl: "/"});
+const apiClient = getPortalApiClient("admin");
 
 export type InterventionActionType =
   | "ASSIGN_REMEDIAL_TEST"

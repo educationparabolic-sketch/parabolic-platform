@@ -1,6 +1,7 @@
-import {ApiClientError, createApiClient} from "../../../../../shared/services/apiClient";
+import {ApiClientError} from "../../../../../shared/services/apiClient";
+import {getPortalApiClient} from "../../../../../shared/services/portalIntegration";
 
-const apiClient = createApiClient({baseUrl: "/"});
+const apiClient = getPortalApiClient("admin");
 
 export type SettingsActionType =
   | "GET_SETTINGS_SNAPSHOT"

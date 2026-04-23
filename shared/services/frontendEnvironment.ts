@@ -26,6 +26,15 @@ function readRequiredValue(key: RequiredEnvKey): string {
   return readEnvValue(key);
 }
 
+function readOptionalUrlValue(key: string): string | undefined {
+  const value = readEnvValue(key);
+  if (!value) {
+    return undefined;
+  }
+
+  return value.endsWith("/") ? value.slice(0, -1) : value;
+}
+
 export function validateFrontendEnvironment(): FrontendEnvironmentValidationResult {
   const missingKeys = REQUIRED_ENV_KEYS.filter((key) => readRequiredValue(key).length === 0);
 
@@ -45,7 +54,10 @@ export function getFrontendEnvironment(): FrontendEnvironment {
     firebaseStorageBucket: readEnvValue("VITE_FIREBASE_STORAGE_BUCKET") || undefined,
     firebaseMessagingSenderId: readEnvValue("VITE_FIREBASE_MESSAGING_SENDER_ID") || undefined,
     firebaseMeasurementId: readEnvValue("VITE_FIREBASE_MEASUREMENT_ID") || undefined,
-    apiBaseUrl: readEnvValue("VITE_API_BASE_URL") || undefined,
-    cdnBaseUrl: readEnvValue("VITE_CDN_BASE_URL") || undefined,
+    apiBaseUrl: readOptionalUrlValue("VITE_API_BASE_URL"),
+    cdnBaseUrl: readOptionalUrlValue("VITE_CDN_BASE_URL"),
+    portalBaseUrl: readOptionalUrlValue("VITE_PORTAL_BASE_URL"),
+    examBaseUrl: readOptionalUrlValue("VITE_EXAM_BASE_URL"),
+    vendorBaseUrl: readOptionalUrlValue("VITE_VENDOR_BASE_URL"),
   };
 }

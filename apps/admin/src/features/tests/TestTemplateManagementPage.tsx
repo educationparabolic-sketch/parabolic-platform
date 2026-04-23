@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { ApiClientError, createApiClient } from "../../../../../shared/services/apiClient";
+import { ApiClientError } from "../../../../../shared/services/apiClient";
+import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import {
   UiForm,
   UiFormField,
@@ -18,7 +19,7 @@ import {
   type SelectionMethod,
 } from "./testTemplateFixtures";
 
-const apiClient = createApiClient({ baseUrl: "/" });
+const apiClient = getPortalApiClient("admin");
 
 type TemplateStatus = "draft" | "ready" | "assigned" | "archived" | "deprecated";
 

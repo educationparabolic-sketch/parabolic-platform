@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { ApiClientError, createApiClient } from "../../../../../shared/services/apiClient";
+import { ApiClientError } from "../../../../../shared/services/apiClient";
+import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import {
   UiForm,
   UiFormField,
@@ -7,7 +8,7 @@ import {
   type UiTableColumn,
 } from "../../../../../shared/ui/components";
 
-const apiClient = createApiClient({ baseUrl: "/" });
+const apiClient = getPortalApiClient("admin");
 
 const EXECUTION_MODES = ["Operational", "Diagnostic", "Controlled", "Hard"] as const;
 const LICENSE_ORDER = ["L0", "L1", "L2", "L3"] as const;

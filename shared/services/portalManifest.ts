@@ -5,6 +5,8 @@ export interface PortalDefinition {
   name: string;
   domain: string;
   routePrefix: string;
+  loginPath: string;
+  defaultAuthenticatedPath: string;
   purpose: string;
 }
 
@@ -14,6 +16,8 @@ export const PORTAL_MANIFEST: Record<PortalKey, PortalDefinition> = {
     name: "Admin Portal",
     domain: "portal.yourdomain.com/admin",
     routePrefix: "/admin",
+    loginPath: "/login",
+    defaultAuthenticatedPath: "/admin/overview",
     purpose: "Institute control and academic operations",
   },
   student: {
@@ -21,6 +25,8 @@ export const PORTAL_MANIFEST: Record<PortalKey, PortalDefinition> = {
     name: "Student Portal",
     domain: "portal.yourdomain.com/student",
     routePrefix: "/student",
+    loginPath: "/student/login",
+    defaultAuthenticatedPath: "/student/dashboard",
     purpose: "Student profile, performance, and insights",
   },
   exam: {
@@ -28,6 +34,8 @@ export const PORTAL_MANIFEST: Record<PortalKey, PortalDefinition> = {
     name: "Exam Portal",
     domain: "exam.yourdomain.com",
     routePrefix: "/session",
+    loginPath: "/",
+    defaultAuthenticatedPath: "/",
     purpose: "Secure test execution runtime",
   },
   vendor: {
@@ -35,6 +43,8 @@ export const PORTAL_MANIFEST: Record<PortalKey, PortalDefinition> = {
     name: "Vendor Portal",
     domain: "vendor.yourdomain.com",
     routePrefix: "/vendor",
+    loginPath: "/vendor/login",
+    defaultAuthenticatedPath: "/vendor/overview",
     purpose: "Platform-wide operations and controls",
   },
 };

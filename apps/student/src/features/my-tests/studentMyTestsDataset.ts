@@ -1,11 +1,12 @@
-import { ApiClientError, createApiClient } from "../../../../../shared/services/apiClient";
+import { ApiClientError } from "../../../../../shared/services/apiClient";
 import {
   buildQuestionAssetUrl,
   buildStudentReportUrl,
   toCdnAssetUrl,
 } from "../../../../../shared/services/cdnAssetDelivery";
+import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 
-const apiClient = createApiClient({ baseUrl: "/" });
+const apiClient = getPortalApiClient("student");
 
 export type StudentTestStatus = "scheduled" | "active" | "completed" | "archived";
 

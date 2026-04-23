@@ -10,6 +10,10 @@ import {
 } from "react-router-dom";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { useAuthProvider } from "../../../shared/services/authProvider";
+import {
+  getPortalDefaultAuthenticatedPath,
+  getPortalLoginPath,
+} from "../../../shared/services/portalIntegration";
 import { UiNavBar, UiRouteLoading } from "../../../shared/ui/components";
 import {
   ADMIN_ROUTE_DEFINITIONS,
@@ -283,13 +287,14 @@ function AdminRouteAccessGuard(props: { children: ReactElement }) {
 
 function App() {
   usePortalTitle("admin");
-  const loginPath = "/login";
-  const protectedDefaultPath = "/admin/overview";
+  const loginPath = getPortalLoginPath("admin");
+  const protectedDefaultPath = getPortalDefaultAuthenticatedPath("admin");
 
   return (
     <Routes>
       <Route path="/" element={<Navigate to={protectedDefaultPath} replace />} />
       <Route path="/admin" element={<Navigate to={protectedDefaultPath} replace />} />
+      <Route path="/admin/login" element={<Navigate replace to={loginPath} />} />
       <Route
         path={loginPath}
         element={<AdminLoginPage loginPath={loginPath} protectedPath={protectedDefaultPath} />}

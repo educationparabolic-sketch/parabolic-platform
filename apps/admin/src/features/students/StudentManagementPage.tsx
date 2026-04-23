@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { createApiClient, ApiClientError } from "../../../../../shared/services/apiClient";
+import { ApiClientError } from "../../../../../shared/services/apiClient";
+import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import {
   UiForm,
   UiFormField,
@@ -9,7 +10,7 @@ import {
   type UiTableColumn,
 } from "../../../../../shared/ui/components";
 
-const apiClient = createApiClient({ baseUrl: "/" });
+const apiClient = getPortalApiClient("admin");
 const STUDENT_STATUSES = ["invited", "active", "inactive", "archived", "suspended"] as const;
 const RISK_STATES = ["low", "medium", "high", "critical"] as const;
 

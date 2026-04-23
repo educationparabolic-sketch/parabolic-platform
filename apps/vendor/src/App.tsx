@@ -11,6 +11,11 @@ import {
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { useAuthProvider } from "../../../shared/services/authProvider";
 import { PORTAL_MANIFEST } from "../../../shared/services/portalManifest";
+import {
+  getPortalDefaultAuthenticatedPath,
+  getPortalLoginPath,
+  getPortalRoutePrefix,
+} from "../../../shared/services/portalIntegration";
 import { UiNavBar, UiRouteLoading } from "../../../shared/ui/components";
 import { resolveVendorAccessContext } from "./portals/vendorAccess";
 import "./App.css";
@@ -298,9 +303,9 @@ function VendorLayout() {
 function App() {
   usePortalTitle("vendor");
 
-  const basePath = PORTAL_MANIFEST.vendor.routePrefix;
-  const loginPath = `${basePath}/login`;
-  const protectedDefaultPath = `${basePath}/overview`;
+  const basePath = getPortalRoutePrefix("vendor");
+  const loginPath = getPortalLoginPath("vendor");
+  const protectedDefaultPath = getPortalDefaultAuthenticatedPath("vendor");
 
   return (
     <Routes>

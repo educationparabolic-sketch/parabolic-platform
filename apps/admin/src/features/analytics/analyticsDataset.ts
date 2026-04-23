@@ -1,6 +1,7 @@
-import { ApiClientError, createApiClient } from "../../../../../shared/services/apiClient";
+import { ApiClientError } from "../../../../../shared/services/apiClient";
+import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 
-const apiClient = createApiClient({ baseUrl: "/" });
+const apiClient = getPortalApiClient("admin");
 
 export const RISK_CLUSTERS = ["low", "medium", "high", "critical"] as const;
 export const DISCIPLINE_TRENDS = ["up", "stable", "down"] as const;

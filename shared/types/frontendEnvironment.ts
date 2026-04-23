@@ -9,6 +9,9 @@ export interface FrontendEnvironment {
   firebaseMeasurementId?: string;
   apiBaseUrl?: string;
   cdnBaseUrl?: string;
+  portalBaseUrl?: string;
+  examBaseUrl?: string;
+  vendorBaseUrl?: string;
 }
 
 export interface FrontendEnvironmentValidationResult {

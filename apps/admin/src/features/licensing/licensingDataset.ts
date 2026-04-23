@@ -1,7 +1,8 @@
-import {ApiClientError, createApiClient} from "../../../../../shared/services/apiClient";
+import {ApiClientError} from "../../../../../shared/services/apiClient";
+import {getPortalApiClient} from "../../../../../shared/services/portalIntegration";
 import {LICENSE_LAYER_ORDER, type LicenseLayer} from "../../../../../shared/types/portalRouting";
 
-const apiClient = createApiClient({baseUrl: "/"});
+const apiClient = getPortalApiClient("admin");
 
 export type CapabilityState = "enabled" | "locked";
 

@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Route, Routes, useLocation, useParams } from "react-router-dom";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { buildQuestionAssetUrl, toCdnAssetUrl } from "../../../shared/services/cdnAssetDelivery";
-import { getFrontendEnvironment } from "../../../shared/services/frontendEnvironment";
+import { ApiClientError } from "../../../shared/services/apiClient";
+import { getPortalApiClient } from "../../../shared/services/portalIntegration";
 import "./App.css";
 
 type QuestionPaletteStatus = "not_visited" | "not_answered" | "answered" | "marked" | "answered_marked";
@@ -423,15 +424,6 @@ function validateSessionEntry(token: string | null): EntryValidationResult {
     reason: null,
     claims,
   };
-}
-
-function resolveExamApiBaseUrl(): string {
-  const apiBaseUrl = getFrontendEnvironment().apiBaseUrl?.trim();
-  if (!apiBaseUrl) {
-    return "";
-  }
-
-  return apiBaseUrl.endsWith("/") ? apiBaseUrl.slice(0, -1) : apiBaseUrl;
 }
 
 function toEpochSeconds(value: number): number {
@@ -1024,7 +1016,7 @@ function ExamSessionPage() {
   const entryValidation = useMemo(() => validateSessionEntry(sessionToken), [sessionToken]);
   const modeInstruction = MODE_INSTRUCTIONS[entryValidation.claims.mode];
   const candidateName = entryValidation.claims.sub ?? "Student Candidate";
-  const apiBaseUrl = useMemo(() => resolveExamApiBaseUrl(), []);
+  const examApiClient = useMemo(() => getPortalApiClient("exam"), []);
 
   const sessionSnapshot = useMemo(
     () => buildSessionSnapshot(sessionId || "runtime-session", entryValidation.claims.mode),
@@ -1247,8 +1239,7 @@ function ExamSessionPage() {
       return true;
     }
 
-    const endpointBase = apiBaseUrl || "";
-    const endpoint = `${endpointBase}/exam/session/${encodeURIComponent(effectiveSessionId)}/answers`;
+    const endpointPath = `/exam/session/${encodeURIComponent(effectiveSessionId)}/answers`;
     const requestBody: ExamAnswerBatchRequestBody = {
       answers: answersToPersist,
       instituteId,
@@ -1261,21 +1252,16 @@ function ExamSessionPage() {
     setSyncMessage(`Syncing ${answersToPersist.length} answer update(s)...`);
 
     try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${sessionToken}`,
-          "Content-Type": "application/json",
+      const responseBody = await examApiClient.post<ExamAnswerBatchResponse, ExamAnswerBatchRequestBody>(
+        endpointPath,
+        {
+          body: requestBody,
+          headers: {
+            Authorization: `Bearer ${sessionToken}`,
+          },
+          skipAuth: true,
         },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Answer sync failed with status ${response.status}`);
-      }
-
-      const responseBody = await response.json() as ExamAnswerBatchResponse;
+      );
       const persistedQuestionIds = responseBody.data?.persistedQuestionIds ?? answersToPersist.map((answer) => answer.questionId);
       const ignoredQuestionIds = responseBody.data?.ignoredQuestionIds ?? [];
       const settledQuestionIds = new Set([...persistedQuestionIds, ...ignoredQuestionIds]);
@@ -1308,11 +1294,15 @@ function ExamSessionPage() {
       return true;
     } catch (error) {
       setSyncState("error");
-      setSyncMessage(error instanceof Error ? error.message : "Answer sync failed.");
+      if (error instanceof ApiClientError) {
+        setSyncMessage(`Answer sync failed with status ${error.status}`);
+      } else {
+        setSyncMessage(error instanceof Error ? error.message : "Answer sync failed.");
+      }
       return false;
     }
   }, [
-    apiBaseUrl,
+    examApiClient,
     effectiveSessionId,
     entryValidation.allowed,
     instituteId,
@@ -1369,29 +1359,28 @@ function ExamSessionPage() {
         return;
       }
 
-      const endpointBase = apiBaseUrl || "";
-      const refreshEndpoint = `${endpointBase}/exam/session/${encodeURIComponent(effectiveSessionId)}/token/refresh`;
-      void fetch(refreshEndpoint, {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${sessionToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          instituteId,
-          refreshNonce: entryValidation.claims.refreshNonce,
-          runId,
-          sessionId: effectiveSessionId,
-          yearId,
-        }),
-      })
-        .then(async (response) => {
-          if (!response.ok) {
-            throw new Error(`Token refresh failed with status ${response.status}`);
-          }
-
-          const responseBody = await response.json() as SessionTokenRefreshResponse;
+      const refreshEndpointPath = `/exam/session/${encodeURIComponent(effectiveSessionId)}/token/refresh`;
+      void examApiClient
+        .post<SessionTokenRefreshResponse, {
+          instituteId: string;
+          refreshNonce: string | null;
+          runId: string;
+          sessionId: string;
+          yearId: string;
+        }>(refreshEndpointPath, {
+          body: {
+            instituteId,
+            refreshNonce: entryValidation.claims.refreshNonce,
+            runId,
+            sessionId: effectiveSessionId,
+            yearId,
+          },
+          headers: {
+            Authorization: `Bearer ${sessionToken}`,
+          },
+          skipAuth: true,
+        })
+        .then((responseBody) => {
           const refreshedToken = parseSessionRefreshToken(responseBody);
           if (!refreshedToken) {
             throw new Error("Token refresh response was missing a token.");
@@ -1403,13 +1392,17 @@ function ExamSessionPage() {
         })
         .catch((error) => {
           setSyncState("error");
+          if (error instanceof ApiClientError) {
+            setSyncMessage(`Token refresh failed with status ${error.status}`);
+            return;
+          }
           setSyncMessage(error instanceof Error ? error.message : "Session token refresh failed.");
         });
     }, 30_000);
 
     return () => window.clearInterval(refreshCheckInterval);
   }, [
-    apiBaseUrl,
+    examApiClient,
     effectiveSessionId,
     entryValidation.claims.refreshNonce,
     instituteId,
@@ -1546,8 +1539,7 @@ function ExamSessionPage() {
         throw new Error("Unable to flush pending answers before submission.");
       }
 
-      const endpointBase = apiBaseUrl || "";
-      const endpoint = `${endpointBase}/exam/session/${encodeURIComponent(effectiveSessionId)}/submit`;
+      const endpointPath = `/exam/session/${encodeURIComponent(effectiveSessionId)}/submit`;
       const requestBody: ExamSubmitRequestBody = {
         instituteId,
         runId,
@@ -1557,21 +1549,16 @@ function ExamSessionPage() {
         clientSubmittedAt: new Date().toISOString(),
       };
 
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${sessionToken}`,
-          "Content-Type": "application/json",
+      const responseBody = await examApiClient.post<ExamSubmitResponse, ExamSubmitRequestBody>(
+        endpointPath,
+        {
+          body: requestBody,
+          headers: {
+            Authorization: `Bearer ${sessionToken}`,
+          },
+          skipAuth: true,
         },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Submission failed with status ${response.status}`);
-      }
-
-      const responseBody = await response.json() as ExamSubmitResponse;
+      );
       setSubmissionReason(reason);
       setSubmittedAtIso(responseBody.data?.submittedAt ?? new Date().toISOString());
       setSessionLifecycleState("submitted");
@@ -1579,11 +1566,16 @@ function ExamSessionPage() {
       setSubmitWarningAcknowledged(false);
       setEarlySubmitOverrideAccepted(false);
       setSyncMessage(responseBody.data?.alreadySubmitted ? "Submission already finalized on server." : "Submission completed.");
+    } catch (error) {
+      if (error instanceof ApiClientError) {
+        throw new Error(`Submission failed with status ${error.status}`);
+      }
+      throw error;
     } finally {
       setSubmitInFlight(false);
     }
   }, [
-    apiBaseUrl,
+    examApiClient,
     effectiveSessionId,
     entryValidation.allowed,
     flushAnswerBatch,

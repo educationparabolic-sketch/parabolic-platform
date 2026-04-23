@@ -10,6 +10,11 @@ import {
 } from "react-router-dom";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { useAuthProvider } from "../../../shared/services/authProvider";
+import {
+  getPortalDefaultAuthenticatedPath,
+  getPortalLoginPath,
+  getPortalRoutePrefix,
+} from "../../../shared/services/portalIntegration";
 import type { LicenseLayer } from "../../../shared/types/portalRouting";
 import { UiNavBar, UiRouteLoading } from "../../../shared/ui/components";
 import "./App.css";
@@ -308,19 +313,20 @@ function StudentLicenseRoute(props: {
 function App() {
   usePortalTitle("student");
 
-  const loginPath = "/student/login";
-  const protectedDefaultPath = "/student/dashboard";
+  const basePath = getPortalRoutePrefix("student");
+  const loginPath = getPortalLoginPath("student");
+  const protectedDefaultPath = getPortalDefaultAuthenticatedPath("student");
 
   return (
     <Routes>
       <Route path="/" element={<Navigate to={protectedDefaultPath} replace />} />
-      <Route path="/student" element={<Navigate to={protectedDefaultPath} replace />} />
+      <Route path={basePath} element={<Navigate to={protectedDefaultPath} replace />} />
       <Route
         path={loginPath}
         element={<StudentLoginPage loginPath={loginPath} protectedPath={protectedDefaultPath} />}
       />
       <Route
-        path="/student"
+        path={basePath}
         element={(
           <StudentProtectedRoute loginPath={loginPath}>
             <StudentLayout />
