@@ -17,44 +17,12 @@ import {
   getPortalRoutePrefix,
 } from "../../../shared/services/portalIntegration";
 import type { LicenseLayer } from "../../../shared/types/portalRouting";
+import {
+  STUDENT_PRIMARY_NAVIGATION,
+  findActivePortalNavigationItem,
+} from "../../../shared/ui/portalConsistency";
 import { UiNavBar, UiRouteLoading } from "../../../shared/ui/components";
 import "./App.css";
-
-interface StudentNavItem {
-  path: string;
-  label: string;
-  summary: string;
-  minimumLicenseLayer?: LicenseLayer;
-}
-
-const STUDENT_NAV_ITEMS: StudentNavItem[] = [
-  {
-    path: "/student/dashboard",
-    label: "Dashboard",
-    summary: "Landing view for student progress highlights and upcoming assessments.",
-  },
-  {
-    path: "/student/my-tests",
-    label: "My Tests",
-    summary: "Assigned, active, and completed test navigation for the student account.",
-  },
-  {
-    path: "/student/performance",
-    label: "Performance",
-    summary: "Summary-level performance trends based on analytics collections.",
-  },
-  {
-    path: "/student/insights",
-    label: "Insights",
-    summary: "Behavioral insight space for interpreted performance indicators.",
-    minimumLicenseLayer: "L1",
-  },
-  {
-    path: "/student/profile",
-    label: "Profile",
-    summary: "Student-managed profile and account settings workspace.",
-  },
-];
 
 const LICENSE_LAYER_ORDER: Record<LicenseLayer, number> = {
   L0: 0,
@@ -175,7 +143,7 @@ function StudentLayout() {
   const activeLicenseLayer = globalState.licenseLayer ?? "L0";
 
   const visibleNavItems = useMemo(() => {
-    return STUDENT_NAV_ITEMS.filter((item) => {
+    return STUDENT_PRIMARY_NAVIGATION.filter((item) => {
       if (!item.minimumLicenseLayer) {
         return true;
       }
@@ -192,9 +160,7 @@ function StudentLayout() {
     }));
   }, [navigate, visibleNavItems]);
 
-  const activeRoute = STUDENT_NAV_ITEMS.find(
-    (item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`),
-  );
+  const activeRoute = findActivePortalNavigationItem(STUDENT_PRIMARY_NAVIGATION, location.pathname);
 
   return (
     <main className="student-page-shell">

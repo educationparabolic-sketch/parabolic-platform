@@ -1,0 +1,26 @@
+:root {
+  --portal-font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+  --portal-text-primary: #13213a;
+  --portal-text-muted: #435d80;
+  --portal-surface-primary: #ffffff;
+  --portal-surface-subtle: #f2f6fb;
+  --portal-border-soft: rgba(15, 43, 85, 0.15);
+  --portal-shadow-soft: 0 16px 36px rgba(14, 40, 74, 0.1);
+  --portal-radius-lg: 20px;
+  --portal-radius-md: 12px;
+  --portal-focus-ring: #1f5fbf;
+}
+
+body {
+  font-family: var(--portal-font-family);
+  color: var(--portal-text-primary);
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--portal-focus-ring);
+  outline-offset: 2px;
+}

@@ -1,3 +1,5 @@
+@import "../../../shared/ui/portal-theme.css";
+
 .student-page-shell {
   min-height: 100vh;
   background: linear-gradient(180deg, #f7f9fc 0%, #eef3fa 60%, #e9eff7 100%);

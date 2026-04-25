@@ -14,21 +14,18 @@ import {
   getPortalDefaultAuthenticatedPath,
   getPortalLoginPath,
 } from "../../../shared/services/portalIntegration";
+import {
+  ADMIN_PRIMARY_NAVIGATION,
+  findActivePortalNavigationItem,
+} from "../../../shared/ui/portalConsistency";
 import { UiNavBar, UiRouteLoading } from "../../../shared/ui/components";
 import {
-  ADMIN_ROUTE_DEFINITIONS,
   evaluateAdminRoutePermissions,
   getVisibleAdminRoutes,
   matchAdminRoute,
 } from "./portals/adminRoutes";
 import { resolveAdminAccessContext } from "./portals/adminAccess";
 import "./App.css";
-
-interface AdminNavItem {
-  path: string;
-  label: string;
-  summary: string;
-}
 
 function resolveAdminRedirectTarget(locationState: unknown, fallbackPath: string): string {
   if (
@@ -45,28 +42,6 @@ function resolveAdminRedirectTarget(locationState: unknown, fallbackPath: string
 
   return fallbackPath;
 }
-
-const ADMIN_NAV_PATH_ORDER = [
-  "/admin/overview",
-  "/admin/students",
-  "/admin/question-bank",
-  "/admin/tests",
-  "/admin/assignments",
-  "/admin/analytics",
-  "/admin/insights",
-  "/admin/governance",
-  "/admin/licensing",
-  "/admin/settings",
-] as const;
-
-const ADMIN_NAV_ITEMS: AdminNavItem[] = ADMIN_NAV_PATH_ORDER.map((path) => {
-  const definition = ADMIN_ROUTE_DEFINITIONS.find((route) => route.path === path);
-  return {
-    path,
-    label: definition?.title ?? path,
-    summary: definition?.description ?? "Admin route",
-  };
-});
 
 const AdminAnalyticsDashboardPage = lazy(() => import("./features/analytics/AdminAnalyticsDashboardPage"));
 const BatchAnalyticsDashboardPage = lazy(() => import("./features/analytics/BatchAnalyticsDashboardPage"));
@@ -114,11 +89,13 @@ function AdminLayout() {
     return getVisibleAdminRoutes(accessContext.role, accessContext.licenseLayer);
   }, [accessContext.licenseLayer, accessContext.role]);
   const visibleNavItems = useMemo(() => {
-    return ADMIN_NAV_ITEMS.filter((item) => visibleRoutes.some((route) => route.path === item.path));
+    return ADMIN_PRIMARY_NAVIGATION.filter((item) =>
+      visibleRoutes.some((route) => route.path === item.path),
+    );
   }, [visibleRoutes]);
 
   const activeItem = useMemo(() => {
-    return visibleNavItems.find((item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`));
+    return findActivePortalNavigationItem(visibleNavItems, location.pathname);
   }, [location.pathname, visibleNavItems]);
   const navItems = useMemo(() => {
     return visibleNavItems.map((item) => ({

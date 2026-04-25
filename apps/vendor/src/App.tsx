@@ -16,53 +16,13 @@ import {
   getPortalLoginPath,
   getPortalRoutePrefix,
 } from "../../../shared/services/portalIntegration";
+import {
+  VENDOR_PRIMARY_NAVIGATION,
+  findActivePortalNavigationItem,
+} from "../../../shared/ui/portalConsistency";
 import { UiNavBar, UiRouteLoading } from "../../../shared/ui/components";
 import { resolveVendorAccessContext } from "./portals/vendorAccess";
 import "./App.css";
-
-interface VendorNavItem {
-  path: string;
-  label: string;
-  summary: string;
-}
-
-const VENDOR_NAV_ITEMS: VendorNavItem[] = [
-  {
-    path: "/vendor/overview",
-    label: "Overview",
-    summary: "Executive platform snapshot using aggregated vendor metrics.",
-  },
-  {
-    path: "/vendor/institutes",
-    label: "Institutes",
-    summary: "Cross-institute management and lifecycle governance.",
-  },
-  {
-    path: "/vendor/licensing",
-    label: "Licensing",
-    summary: "Vendor-authoritative subscription and layer controls.",
-  },
-  {
-    path: "/vendor/calibration",
-    label: "Calibration",
-    summary: "Global calibration parameters, simulation, and rollout controls.",
-  },
-  {
-    path: "/vendor/intelligence",
-    label: "Intelligence",
-    summary: "Cross-institute intelligence and macro behavioral trends.",
-  },
-  {
-    path: "/vendor/system-health",
-    label: "System Health",
-    summary: "Platform runtime status, cost monitoring, and operational checks.",
-  },
-  {
-    path: "/vendor/audit",
-    label: "Audit",
-    summary: "Immutable vendor activity and governance events.",
-  },
-];
 
 const VendorAuditActivityLogsPage = lazy(() => import("./features/audit/VendorAuditActivityLogsPage"));
 const VendorCalibrationManagementPage = lazy(() => import("./features/calibration/VendorCalibrationManagementPage"));
@@ -223,10 +183,10 @@ function VendorLayout() {
   const { session, signOut } = useAuthProvider();
 
   const activeItem = useMemo(() => {
-    return VENDOR_NAV_ITEMS.find((item) => location.pathname === item.path || location.pathname.startsWith(`${item.path}/`));
+    return findActivePortalNavigationItem(VENDOR_PRIMARY_NAVIGATION, location.pathname);
   }, [location.pathname]);
   const navBarItems = useMemo(() => {
-    return VENDOR_NAV_ITEMS.map((item) => ({
+    return VENDOR_PRIMARY_NAVIGATION.map((item) => ({
       id: item.path,
       label: item.label,
       hint: item.summary,
@@ -272,7 +232,7 @@ function VendorLayout() {
             {activeItem?.summary ?? "Vendor dashboard sections for platform-wide operations."}
           </p>
           <ul className="vendor-sidebar-list">
-            {VENDOR_NAV_ITEMS.map((item) => (
+            {VENDOR_PRIMARY_NAVIGATION.map((item) => (
               <li key={item.path}>
                 <NavLink
                   to={item.path}

@@ -1,3 +1,5 @@
+@import "../../../shared/ui/portal-theme.css";
+
 :root {
   --exam-surface: #ffffff;
   --exam-ink: #0f1e36;

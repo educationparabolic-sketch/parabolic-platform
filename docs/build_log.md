@@ -5175,18 +5175,68 @@ Completed On
 
 ---
 
+## Build 149 — UI Consistency Enforcement
+
+Phase  
+Phase 30 — Final Frontend Integration
+
+Summary  
+Implemented cross-portal UI consistency enforcement by centralizing primary navigation definitions, unifying portal theme tokens, and preserving portal-specific interaction constraints (including exam JEE-style behavior) under shared frontend modules.
+
+Components implemented:
+
+- Added shared architecture-aligned portal navigation source of truth:
+  - `shared/ui/portalConsistency.ts`
+  - centralized primary navigation definitions for Admin (`1.2.1.1`), Student (`1.3.x core routes + motivational flow context`), and Vendor (`1.5.1`) with shared active-route resolution behavior
+- Added shared frontend theme token layer:
+  - `shared/ui/portal-theme.css`
+  - standardized font/focus/surface primitives used by all portals while preserving portal-local visual language
+- Updated portal shells to consume shared navigation consistency contracts:
+  - `apps/admin/src/App.tsx`
+  - `apps/student/src/App.tsx`
+  - `apps/vendor/src/App.tsx`
+  - removed duplicated local navigation arrays and reused shared definitions for deterministic route ordering and active-state behavior
+- Wired shared theme into all frontend apps:
+  - `apps/admin/src/App.css`
+  - `apps/student/src/App.css`
+  - `apps/vendor/src/App.css`
+  - `apps/exam/src/App.css`
+- Added deterministic Build 149 browser verification harness and artifacts:
+  - `artifacts/build-149/verify-routes.mjs`
+  - `artifacts/build-149/verification-results.json`
+  - desktop/mobile screenshots for affected admin/student/vendor/exam routes and guard flows
+- Executed frontend verification for affected build-domain apps and routes:
+  - `apps/admin|student|vendor|exam`: lint + build
+  - browser checks at `1366x768` and `390x844` for:
+    - admin authenticated navigation continuity (`/login -> /admin/overview`)
+    - student authenticated navigation continuity and L1 insights guard redirect (`/student/login`, `/student/insights`)
+    - vendor role guard continuity on overview route (`/vendor/overview -> /unauthorized` for non-vendor identity)
+    - exam token guard and signed-token session continuity (`/`, `/session/:sessionId`)
+  - console/network/responsive/guard statuses recorded in `artifacts/build-149/verification-results.json`
+
+Result  
+Primary navigation behavior and foundational UI tokens are now enforced through shared modules across all portals, reducing drift while preserving architecture-defined portal-specific UX rules.
+
+Commit Reference  
+Build 149 — UI Consistency Enforcement implemented
+
+Completed On  
+2026-04-25
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 149
+Next Build Number: 150
 
 Phase  
 Phase 30 — Final Frontend Integration
 
 Subsystem  
-UI Consistency Enforcement
+Final Platform Validation
 
 Reference  
-2_Portals_Architecture.md → Sections 1.2.2.15, 1.3.10, 1.4.15, 1.2.1.1, 1.5.1
+2_Portals_Architecture.md → Sections 1.1, 1.3.14, 1.4.16, 1.5.13, 1.2.11.12, 1.2.9.12
 
 ---
 
@@ -5330,7 +5380,8 @@ Build | Phase | Status
 134 | Exam Portal Engine | Completed
 135 | Exam Portal Engine | Completed
 136–148 | Frontend Phases | Completed
-149–150 | Remaining Phases | Pending
+149 | Remaining Phases | Completed
+150 | Remaining Phases | Pending
 
 ---
 
