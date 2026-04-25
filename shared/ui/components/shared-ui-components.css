@@ -353,6 +353,69 @@
   animation: ui-route-loading-pulse 1s ease-in-out infinite;
 }
 
+.ui-error-boundary-shell {
+  min-height: 100vh;
+  padding: 20px;
+  display: grid;
+  place-items: center;
+}
+
+.ui-error-boundary-card {
+  width: min(560px, 100%);
+  border: 1px solid rgba(13, 36, 79, 0.16);
+  border-radius: 16px;
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.ui-error-boundary-eyebrow {
+  margin: 0;
+  font-size: 0.78rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #466083;
+}
+
+.ui-error-boundary-title {
+  margin: 8px 0 0;
+  color: #1a2f50;
+  font-size: 1.35rem;
+}
+
+.ui-error-boundary-copy {
+  margin: 10px 0 0;
+  color: #2b456c;
+}
+
+.ui-error-boundary-message {
+  margin: 10px 0 0;
+  color: #21446f;
+}
+
+.ui-error-boundary-meta {
+  margin: 8px 0 0;
+  color: #496286;
+  font-size: 0.88rem;
+}
+
+.ui-error-boundary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.ui-error-boundary-actions button {
+  border: 1px solid rgba(13, 36, 79, 0.16);
+  border-radius: 10px;
+  min-height: 36px;
+  padding: 0 14px;
+  background: #ffffff;
+  color: #16365d;
+  font: inherit;
+  cursor: pointer;
+}
+
 @keyframes ui-route-loading-pulse {
   0% {
     opacity: 0.4;

@@ -78,3 +78,12 @@ export interface FrontendApiTimingEventInput {
   attempt: number;
   durationMs: number;
 }
+
+export interface FrontendClientCrashEventInput {
+  message: string;
+  name?: string;
+  stack?: string;
+  componentStack?: string;
+  path?: string;
+  url?: string;
+}

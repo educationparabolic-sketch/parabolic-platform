@@ -5,6 +5,7 @@ import { AuthProvider } from "../../../shared/services/authProvider";
 import { ensureFirebaseClient } from "../../../shared/services/firebaseClient";
 import { initializeFrontendMonitoring } from "../../../shared/services/frontendMonitoring";
 import { GlobalPortalStateProvider } from "../../../shared/services/globalPortalState";
+import { UiErrorBoundary } from "../../../shared/ui/components";
 import "./index.css";
 import App from "./App.tsx";
 
@@ -19,9 +20,11 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthProvider portalKey="exam">
       <GlobalPortalStateProvider portalKey="exam">
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
+        <UiErrorBoundary portalLabel="Exam Portal">
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </UiErrorBoundary>
       </GlobalPortalStateProvider>
     </AuthProvider>
   </StrictMode>,

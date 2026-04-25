@@ -2,6 +2,7 @@ import { getFirebaseAuth } from "./firebaseClient";
 import type {
   FrontendApiFailureEventInput,
   FrontendApiTimingEventInput,
+  FrontendClientCrashEventInput,
   FrontendMonitoringInitializationOptions,
   FrontendMonitoringSnapshot,
   FrontendPortalId,
@@ -251,6 +252,27 @@ export function captureFrontendApiTiming(input: FrontendApiTimingEventInput): vo
     },
     performance: {
       requestDurationMs: input.durationMs,
+    },
+  });
+}
+
+export function captureFrontendClientCrash(input: FrontendClientCrashEventInput): FrontendTelemetryEvent {
+  const path = input.path ?? (canUseDomApis() ? window.location.pathname : undefined);
+  const url = input.url ?? (canUseDomApis() ? window.location.href : undefined);
+  const stack =
+    input.componentStack && input.componentStack.trim().length > 0 ?
+      `${input.stack ?? ""}\nComponent stack:${input.componentStack}`.trim() :
+      input.stack;
+
+  return appendTelemetryEvent("client_crash", "critical", {
+    error: {
+      name: input.name,
+      message: input.message,
+      stack,
+    },
+    request: {
+      path,
+      url,
     },
   });
 }
