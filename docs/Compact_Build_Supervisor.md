@@ -134,6 +134,7 @@ Ensure:
 Run only what is applicable to the current build domain.
 
 ### Backend builds (1–110)
+
 - TypeScript compile
 - lint
 - repeatable local tests
@@ -141,6 +142,7 @@ Run only what is applicable to the current build domain.
 - endpoint smoke checks where applicable
 
 ### Frontend builds (111–150)
+
 - TypeScript compile for affected app(s)
 - lint for affected app(s)
 - unit/component tests where available
@@ -160,6 +162,7 @@ If sandbox restrictions block required checks, request permission and continue.
 For every affected portal route in the current build scope:
 
 Affected routes include:
+
 - every new or modified route introduced by the build
 - related guard/redirect/unauthorized/login fallback routes impacted by the change
 
@@ -187,6 +190,7 @@ Affected routes include:
 ### Frontend Commit Gate (111–150)
 
 Commit readiness must be NO if any of these are true:
+
 - Browser verification not run for all affected routes
 - Console errors remain unresolved
 - Unexpected network failures remain unresolved
@@ -198,9 +202,9 @@ Commit readiness can be YES only when all required frontend checks pass.
 ### Frontend Sandbox Escalation Rule
 
 If browser checks, dev-server startup, or tooling install are blocked by sandbox/network restrictions:
+
 - request escalated permission immediately
 - continue and complete the required verification after approval
-
 
 ## OUTPUT
 

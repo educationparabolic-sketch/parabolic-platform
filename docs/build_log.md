@@ -12,8 +12,8 @@ The purpose of this log is to ensure deterministic development and prevent AI co
 
 Total Builds Planned: 150
 
-Completed Builds: 146  
-Next Build: 147
+Completed Builds: 147  
+Next Build: 148
 
 Current Phase: Phase 30 — Final Frontend Integration
 
@@ -5066,18 +5066,78 @@ Completed On
 
 ---
 
+## Build 147 — Global State Management
+
+Phase  
+Phase 30 — Final Frontend Integration
+
+Summary  
+Implemented shared global frontend state management across Admin, Student, Exam, and Vendor portals for authenticated session, role/permission context, license object + feature flags, and environment configuration access.
+
+Components implemented:
+
+- Added shared global state contracts:
+  - `shared/types/globalPortalState.ts`
+  - typed license object model (`currentLayer`, eligibility flags, feature flags, limits, lifecycle metadata)
+  - typed global rollout flags and backend-enforcement capability mapping
+  - typed global portal permission shape for role + licensed capability visibility
+- Added shared global state service and provider:
+  - `shared/services/globalPortalState.tsx`
+  - deterministic ID-token claim decoding and normalization for role/license context
+  - centralized derivation of license object + feature flags + global rollout flags
+  - centralized portal permission evaluation (`ControlledMode`, `GovernanceDashboard`, `HardMode`, `AdaptivePhase`) aligned to backend-enforcement matrix semantics
+  - environment configuration state exposure through `getFrontendEnvironment()` in global state
+  - shared `GlobalPortalStateProvider` + `useGlobalPortalState` hook for cross-portal module access
+- Wired global state provider into all portal runtime bootstraps:
+  - `apps/admin/src/main.tsx`
+  - `apps/student/src/main.tsx`
+  - `apps/exam/src/main.tsx`
+  - `apps/vendor/src/main.tsx`
+- Reused shared global state in access-control modules to remove duplicated token parsing:
+  - `apps/admin/src/portals/adminAccess.ts`
+  - `apps/vendor/src/portals/vendorAccess.ts`
+- Reused shared global state in student portal license-gated flows:
+  - `apps/student/src/App.tsx`
+  - `apps/student/src/features/dashboard/StudentDashboardPage.tsx`
+  - `apps/student/src/features/performance/StudentPerformancePage.tsx`
+  - `apps/student/src/features/insights/StudentInsightsPage.tsx`
+  - removed duplicated per-file JWT decoding and now consume centralized license-layer state
+- Added deterministic Build 147 browser verification harness and artifacts:
+  - `artifacts/build-147/verify-routes.mjs`
+  - `artifacts/build-147/verification-results.json`
+  - desktop/mobile screenshots for all affected routes
+- Executed frontend verification for affected build-domain apps and routes:
+  - `apps/admin|student|exam|vendor`: lint + build
+  - browser checks at `1366x768` and `390x844` for:
+    - admin canonical login alias and authenticated protected-route continuity
+    - student cross-portal dashboard continuity and insights guard behavior with bridged session context
+    - vendor RBAC unauthorized behavior and authenticated vendor login flow
+    - exam missing-token guard and signed-token session entry flow
+  - console/network/responsive/guard statuses recorded in `artifacts/build-147/verification-results.json`
+
+Result  
+Global frontend state is now centralized and reusable across all portals, with shared RBAC/license/feature-flag derivation and environment-state access while preserving backend-authoritative enforcement boundaries.
+
+Commit Reference  
+Build 147 — Global State Management implemented
+
+Completed On  
+2026-04-25
+
+---
+
 # NEXT BUILD
 
-Next Build Number: 147
+Next Build Number: 148
 
 Phase  
 Phase 30 — Final Frontend Integration
 
 Subsystem  
-Global State Management
+Global Error Handling System
 
 Reference  
-2_Portals_Architecture.md → Sections 1.2.10.8, 1.2.10.9, 1.5.9, 1.5.12, 1.3.12, 1.4.13
+2_Portals_Architecture.md → Sections 1.5.8, 1.5.10, 1.2.2.11, 1.2.11
 
 ---
 
@@ -5220,8 +5280,8 @@ Build | Phase | Status
 133 | Exam Portal Engine | Completed
 134 | Exam Portal Engine | Completed
 135 | Exam Portal Engine | Completed
-136–146 | Frontend Phases | Completed
-147–150 | Remaining Phases | Pending
+136–147 | Frontend Phases | Completed
+148–150 | Remaining Phases | Pending
 
 ---
 

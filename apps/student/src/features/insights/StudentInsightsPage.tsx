@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useAuthProvider } from "../../../../../shared/services/authProvider";
+import { useGlobalPortalState } from "../../../../../shared/services/globalPortalState";
 import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
 import {
   UiChartContainer,
@@ -40,32 +40,6 @@ function formatDate(value: string): string {
   }).format(new Date(timestamp));
 }
 
-function decodeLicenseLayerFromToken(idToken: string | null): LicenseLayer | null {
-  if (!idToken) {
-    return null;
-  }
-
-  const segments = idToken.split(".");
-  if (segments.length !== 3) {
-    return null;
-  }
-
-  try {
-    const payloadSegment = segments[1].replace(/-/g, "+").replace(/_/g, "/");
-    const paddedPayload = payloadSegment.padEnd(Math.ceil(payloadSegment.length / 4) * 4, "=");
-    const payload = JSON.parse(atob(paddedPayload)) as Record<string, unknown>;
-    const candidate = typeof payload.licenseLayer === "string" ? payload.licenseLayer.trim().toUpperCase() : "";
-
-    if (candidate === "L0" || candidate === "L1" || candidate === "L2" || candidate === "L3") {
-      return candidate;
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
-}
-
 function toTrendPoints(
   snapshots: StudentInsightSnapshot[],
   selector: (snapshot: StudentInsightSnapshot) => number,
@@ -77,7 +51,7 @@ function toTrendPoints(
 }
 
 function StudentInsightsPage() {
-  const { session } = useAuthProvider();
+  const globalState = useGlobalPortalState();
   const [dataset, setDataset] = useState<StudentInsightsDataset>(STUDENT_INSIGHTS_FALLBACK_DATASET);
   const [isLoading, setIsLoading] = useState(true);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
@@ -129,9 +103,8 @@ function StudentInsightsPage() {
   }, []);
 
   const activeLicenseLayer = useMemo<LicenseLayer>(() => {
-    const tokenLayer = decodeLicenseLayerFromToken(session.idToken);
-    return tokenLayer ?? dataset.licenseLayer;
-  }, [dataset.licenseLayer, session.idToken]);
+    return globalState.licenseLayer ?? dataset.licenseLayer;
+  }, [dataset.licenseLayer, globalState.licenseLayer]);
 
   const isL2Plus = LICENSE_LAYER_ORDER[activeLicenseLayer] >= LICENSE_LAYER_ORDER.L2;
   const latestSnapshot = dataset.snapshots[dataset.snapshots.length - 1];

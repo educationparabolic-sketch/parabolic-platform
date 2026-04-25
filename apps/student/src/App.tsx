@@ -10,6 +10,7 @@ import {
 } from "react-router-dom";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { useAuthProvider } from "../../../shared/services/authProvider";
+import { useGlobalPortalState } from "../../../shared/services/globalPortalState";
 import {
   getPortalDefaultAuthenticatedPath,
   getPortalLoginPath,
@@ -71,31 +72,6 @@ const StudentProfileSettingsPage = lazy(() => import("./features/profile/Student
 function StudentRouteBoundary(props: { label: string; children: ReactElement }) {
   const { label, children } = props;
   return <Suspense fallback={<UiRouteLoading label={label} />}>{children}</Suspense>;
-}
-
-function decodeLicenseLayerFromToken(idToken: string | null): LicenseLayer | null {
-  if (!idToken) {
-    return null;
-  }
-
-  const parts = idToken.split(".");
-  if (parts.length !== 3) {
-    return null;
-  }
-
-  try {
-    const encoded = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const padded = encoded.padEnd(Math.ceil(encoded.length / 4) * 4, "=");
-    const payload = JSON.parse(atob(padded)) as Record<string, unknown>;
-    const candidate = typeof payload.licenseLayer === "string" ? payload.licenseLayer.trim().toUpperCase() : "";
-    if (candidate === "L0" || candidate === "L1" || candidate === "L2" || candidate === "L3") {
-      return candidate;
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
 }
 
 function StudentLoginPage(props: { loginPath: string; protectedPath: string }) {
@@ -195,7 +171,8 @@ function StudentLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { session, signOut } = useAuthProvider();
-  const activeLicenseLayer = decodeLicenseLayerFromToken(session.idToken) ?? "L0";
+  const globalState = useGlobalPortalState();
+  const activeLicenseLayer = globalState.licenseLayer ?? "L0";
 
   const visibleNavItems = useMemo(() => {
     return STUDENT_NAV_ITEMS.filter((item) => {
@@ -297,10 +274,10 @@ function StudentLicenseRoute(props: {
   children: ReactElement;
 }) {
   const { minimumLicenseLayer, fallbackPath, children } = props;
-  const { session } = useAuthProvider();
+  const globalState = useGlobalPortalState();
   const location = useLocation();
 
-  const activeLicenseLayer = decodeLicenseLayerFromToken(session.idToken) ?? "L0";
+  const activeLicenseLayer = globalState.licenseLayer ?? "L0";
   const hasAccess = LICENSE_LAYER_ORDER[activeLicenseLayer] >= LICENSE_LAYER_ORDER[minimumLicenseLayer];
 
   if (!hasAccess) {

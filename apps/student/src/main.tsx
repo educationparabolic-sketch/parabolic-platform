@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import { AuthProvider } from "../../../shared/services/authProvider";
 import { ensureFirebaseClient } from "../../../shared/services/firebaseClient";
 import { initializeFrontendMonitoring } from "../../../shared/services/frontendMonitoring";
+import { GlobalPortalStateProvider } from "../../../shared/services/globalPortalState";
 import "./index.css";
 import App from "./App.tsx";
 
@@ -20,9 +21,11 @@ initializeFrontendMonitoring({ portal: "student" });
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AuthProvider portalKey="student">
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
+      <GlobalPortalStateProvider portalKey="student">
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </GlobalPortalStateProvider>
     </AuthProvider>
   </StrictMode>,
 )
