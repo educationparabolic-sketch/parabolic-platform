@@ -46,6 +46,10 @@ function formatControlledDelta(value: number): string {
   return `${value >= 0 ? "+" : ""}${Math.round(value)}%`;
 }
 
+function formatRegressionCount(value: number): string {
+  return value === 1 ? "1 regression alert" : `${value} regression alerts`;
+}
+
 function AdminOverviewPage() {
   const { session } = useAuthProvider();
   const accessContext = resolveAdminAccessContext(session);
@@ -213,13 +217,45 @@ function AdminOverviewPage() {
             <h3>{formatPercent(snapshot.executionSummary.percentageStudentsWithRepeatedPattern)} repeated patterns</h3>
             <small>Signal: {snapshot.executionSummary.mostCommonDiagnosticSignal}</small>
             <small>Weakness: {snapshot.executionSummary.topicWithHighestWeaknessCluster}</small>
+            {hasLayer(currentLayer, "L2") ? (
+              <div className="admin-overview-execution-signals" aria-label="L2 execution summary expansion">
+                <div className="admin-overview-execution-signal">
+                  <span>Risk cluster</span>
+                  <strong>{snapshot.executionSummary.riskClusterBreakdown}</strong>
+                </div>
+                <div className="admin-overview-execution-signal">
+                  <span>High-risk students</span>
+                  <strong>{String(snapshot.executionSummary.highRiskStudentCount)}</strong>
+                </div>
+                <div className="admin-overview-execution-signal">
+                  <span>Phase compliance</span>
+                  <strong>{formatPercent(snapshot.executionSummary.phaseCompliancePercentage)}</strong>
+                </div>
+                <div className="admin-overview-execution-signal">
+                  <span>Discipline regression</span>
+                  <strong>{formatRegressionCount(snapshot.executionSummary.disciplineRegressionAlerts)}</strong>
+                </div>
+              </div>
+            ) : null}
           </article>
           <article className="admin-analytics-kpi-card">
-            <p>L1 Diagnostics</p>
-            <h3>Phase adherence {formatPercent(snapshot.performanceSummary.avgPhaseAdherencePercentage)}</h3>
-            <small>Easy neglect: {formatPercent(snapshot.performanceSummary.easyNeglectPercentage)}</small>
-            <small>Hard bias: {formatPercent(snapshot.performanceSummary.hardBiasPercentage)}</small>
-            <small>Time misallocation: {formatPercent(snapshot.performanceSummary.timeMisallocationPercentage)}</small>
+            <p>{hasLayer(currentLayer, "L2") ? "Controlled Mode Impact" : "L1 Diagnostics"}</p>
+            {hasLayer(currentLayer, "L2") ? (
+              <>
+                <h3>{snapshot.executionSummary.controlledModeImpactCard}</h3>
+                <small>Phase adherence: {formatPercent(snapshot.performanceSummary.avgPhaseAdherencePercentage)}</small>
+                <small>Easy neglect: {formatPercent(snapshot.performanceSummary.easyNeglectPercentage)}</small>
+                <small>Hard bias: {formatPercent(snapshot.performanceSummary.hardBiasPercentage)}</small>
+                <small>Time misallocation: {formatPercent(snapshot.performanceSummary.timeMisallocationPercentage)}</small>
+              </>
+            ) : (
+              <>
+                <h3>Phase adherence {formatPercent(snapshot.performanceSummary.avgPhaseAdherencePercentage)}</h3>
+                <small>Easy neglect: {formatPercent(snapshot.performanceSummary.easyNeglectPercentage)}</small>
+                <small>Hard bias: {formatPercent(snapshot.performanceSummary.hardBiasPercentage)}</small>
+                <small>Time misallocation: {formatPercent(snapshot.performanceSummary.timeMisallocationPercentage)}</small>
+              </>
+            )}
           </article>
         </div>
       ) : null}
@@ -229,8 +265,20 @@ function AdminOverviewPage() {
           <article className="admin-analytics-kpi-card">
             <p>Risk Snapshot (L2+)</p>
             <h3>{snapshot.riskSnapshot.riskDistributionPie}</h3>
+            <small>Discipline trend (7d): {snapshot.riskSnapshot.disciplineIndex7DayTrend}</small>
             <small>Overstay: {formatPercent(snapshot.riskSnapshot.overstayRatePercentage)}</small>
             <small>Guess cluster: {formatPercent(snapshot.riskSnapshot.guessClusterPercentage)}</small>
+            <div className="admin-overview-risk-attention-list" aria-label="Top five students requiring attention">
+              {snapshot.riskSnapshot.topFiveStudentsRequiringAttention.map((student) => (
+                <div
+                  key={`${student.studentName}-${student.riskState}`}
+                  className="admin-overview-risk-attention-item"
+                >
+                  <strong>{student.studentName}</strong>
+                  <span>{student.riskState}</span>
+                </div>
+              ))}
+            </div>
           </article>
           <article className="admin-analytics-kpi-card">
             <p>Controlled Mode</p>

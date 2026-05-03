@@ -339,7 +339,35 @@ function App() {
         />
         <Route
           path="tests"
-          element={<AdminRouteBoundary label="Loading tests"><TestTemplateManagementPage /></AdminRouteBoundary>}
+          element={<Navigate to="/admin/tests/library" replace />}
+        />
+        <Route
+          path="tests/create"
+          element={<AdminRouteBoundary label="Loading create test"><TestTemplateManagementPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="tests/library"
+          element={<AdminRouteBoundary label="Loading test library"><TestTemplateManagementPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="tests/analytics"
+          element={<AdminRouteBoundary label="Loading template analytics"><TestTemplateManagementPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="tests/analytics/:testId"
+          element={<AdminRouteBoundary label="Loading template analytics"><TestTemplateManagementPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="tests/distribution"
+          element={<AdminRouteBoundary label="Loading distribution review"><TestTemplateManagementPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="tests/settings"
+          element={<AdminRouteBoundary label="Loading template settings"><TestTemplateManagementPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="tests/:testId"
+          element={<AdminRouteBoundary label="Loading test detail"><TestTemplateManagementPage /></AdminRouteBoundary>}
         />
         <Route path="tests/*" element={<AdminRouteResolutionPage />} />
         <Route

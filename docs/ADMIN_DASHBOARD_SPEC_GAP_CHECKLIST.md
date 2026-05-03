@@ -26,8 +26,8 @@ Priority guide:
 | OVR-006 | Overview | Performance distribution histograms | completed | P1 | Added a compact 30-day raw marks distribution histogram inside the overview performance summary card using summary-document data only |
 | OVR-007 | Overview | L1 time misallocation metric | completed | P1 | Added the L1 time misallocation percentage to the overview diagnostics block alongside phase adherence, easy neglect, and hard bias |
 | OVR-008 | Overview | L2 performance metrics: avg discipline index, controlled delta, execution stability badge | completed | P1 | Added L2-only structural compliance metrics in the overview performance card, including risk distribution, discipline index, controlled delta, and stability badge |
-| OVR-009 | Overview | L2 execution summary expansion: risk cluster breakdown, high-risk count, discipline regression, controlled mode impact | missing | P1 | Only L1 execution summary is implemented |
-| OVR-010 | Overview | Risk snapshot: discipline 7-day trend and top-5 attention list | missing | P1 | Current risk snapshot is thinner |
+| OVR-009 | Overview | L2 execution summary expansion: risk cluster breakdown, high-risk count, discipline regression, controlled mode impact | completed | P1 | Expanded the overview execution summary for L2+ with risk cluster breakdown, high-risk student count, phase compliance, discipline regression alerts, and a dedicated controlled mode impact card using the existing summary payload |
+| OVR-010 | Overview | Risk snapshot: discipline 7-day trend and top-5 attention list | completed | P1 | Expanded the L2 risk snapshot with the 7-day discipline trend plus a top-5 attention list that shows student name and risk state from the overview summary payload |
 | OVR-011 | Overview | Governance snapshot: override frequency trend and sparkline | missing | P2 | Governance snapshot exists but is lighter |
 | OVR-012 | Overview | Exact performance guarantees (<300ms, <=8 docs, daily cached risk distribution) | partial | P2 | Architectural intent exists; exact runtime guarantees not proven in current UI |
 
@@ -38,15 +38,15 @@ Priority guide:
 | STU-001 | Students | Students module shell and route registry structure | completed | P0 | Core module exists |
 | STU-002 | Students | Dedicated mounted subpages for Student List, Bulk Upload, Lifecycle, Profile, Batch Management, Archive | completed | P0 | Dedicated `/admin/students/*` subroutes now mount route-specific screens; deeper profile analytics remain tracked under STU-007 |
 | STU-003 | Students | Student list basic filters and L0 columns | completed | P0 | Present in mounted UI |
-| STU-004 | Students | L2-gated risk state and discipline filters enforced in UI | partial | P1 | Filters exist but not cleanly gated by layer |
-| STU-005 | Students | L1 student list badges: phase adherence, easy neglect, hard bias, behaviour tag summary | missing | P1 | Not present |
-| STU-006 | Students | L2 student list metrics: risk badge, discipline index, controlled delta, guess rate, stability flag | partial | P1 | Only partial depth currently surfaced |
+| STU-004 | Students | L2-gated risk state and discipline filters enforced in UI | completed | P1 | Student list now hides risk-state and discipline filters below L2, clears any stale L2-only filter values, and prevents below-L2 sessions from applying those predicates in the filter logic |
+| STU-005 | Students | L1 student list badges: phase adherence, easy neglect, hard bias, behaviour tag summary | completed | P1 | Student list now renders an L1-only badges column with phase adherence, easy neglect, hard bias, and behaviour tag summary values sourced from normalized student summary fields and fallback fixtures |
+| STU-006 | Students | L2 student list metrics: risk badge, discipline index, controlled delta, guess rate, stability flag | completed | P1 | Student list now renders an L2-only metrics column with risk badge, discipline index, controlled mode delta, guess rate, and stability flag, backed by normalized student summary fields and fixture coverage |
 | STU-007 | Students | Dedicated student profile screen | completed | P0 | `/admin/students/:studentId` now mounts its own dedicated profile workspace; deeper analytics remain tracked under STU-008 through STU-010 |
-| STU-008 | Students | Student profile L0 analytics: history, combo chart, rank in batch | missing | P1 | Not implemented |
-| STU-009 | Students | Student profile L1 intelligence: phase/easy-neglect/hard-bias/topic weakness/time misallocation | missing | P1 | Not implemented |
-| STU-010 | Students | Student profile L2 intelligence: risk timeline, discipline trend, guess rate trend, min/max time violations, controlled delta, overrides | missing | P1 | Not implemented |
-| STU-011 | Students | Dedicated bulk upload workflow UI (upload -> validate -> resolve -> confirm) | missing | P0 | Backend exists, dedicated UI does not |
-| STU-012 | Students | Account creation and roster-sync UX surfaced in Students module | partial | P1 | Backend exists; UI workflow is incomplete |
+| STU-008 | Students | Student profile L0 analytics: history, combo chart, rank in batch | completed | P1 | Student profile now includes summary-safe current-year test history, a Raw/Accuracy combo chart, and rank-in-batch visibility without introducing L1/L2 intelligence fields |
+| STU-009 | Students | Student profile L1 intelligence: phase/easy-neglect/hard-bias/topic weakness/time misallocation | completed | P1 | Student profile now includes an L1 intelligence section with phase adherence, easy neglect, hard bias, topic weakness summary, and time misallocation from normalized summary-only metrics without pulling in L2 trend surfaces |
+| STU-010 | Students | Student profile L2 intelligence: risk timeline, discipline trend, guess rate trend, min/max time violations, controlled delta, overrides | completed | P1 | Student profile now exposes an L2-gated intelligence block with risk timeline, discipline trend, guess rate trend, min/max violation metrics, controlled mode delta, and override records from normalized summary-only fields |
+| STU-011 | Students | Dedicated bulk upload workflow UI (upload -> validate -> resolve -> confirm) | completed | P0 | Added a dedicated `/admin/students/bulk-upload` workflow with CSV roster intake, validate/resolve/confirm stages, optional deactivate-missing roster sync, and live commit wiring to `/admin/students/bulk` |
+| STU-012 | Students | Account creation and roster-sync UX surfaced in Students module | partial | P1 | Bulk upload now surfaces confirm-time account creation and deactivate-missing roster sync, but broader student-module account creation and sync workflows remain incomplete |
 | STU-013 | Students | Lifecycle management rules surfaced cleanly in UI | partial | P1 | States exist, rule depth is incomplete |
 | STU-014 | Students | Batch management summary screen with cohort metrics | missing | P1 | No dedicated summary surface |
 | STU-015 | Students | Academic year archive section within Students module, including warning banner and post-archive behavior | missing | P2 | Archive behavior lives elsewhere |
@@ -60,8 +60,8 @@ Priority guide:
 | QB-003 | Question Bank | Upload package basic UI with sample guidance and ZIP upload | completed | P1 | Present at a basic level |
 | QB-004 | Question Bank | Exam-aware sample download wizard | missing | P1 | No full wizard flow |
 | QB-005 | Question Bank | Generated workbook structure with `questions`, `Exam Summary`, `INSTRUCTIONS` sheets | missing | P1 | Not implemented |
-| QB-006 | Question Bank | Full ZIP validation flow including nested-folder rejection and downloadable row-level CSV errors | missing | P0 | Current flow is much thinner |
-| QB-007 | Question Bank | Image validation against workbook references with no external URLs | missing | P0 | Not fully surfaced end-to-end |
+| QB-006 | Question Bank | Full ZIP validation flow including nested-folder rejection and downloadable row-level CSV errors | completed | P0 | Upload Package now performs client-side ZIP root inspection, rejects nested folders, validates `questions.xlsx` sheet/column structure plus row-level schema rules, and offers downloadable CSV error output before any import step |
+| QB-007 | Question Bank | Image validation against workbook references with no external URLs | completed | P0 | Upload Package now validates `QuestionImageFile` and `SolutionImageFile` against ZIP-root assets, rejects folder-based references, and blocks external/data URLs with row-level CSV output before import |
 | QB-008 | Question Bank | Pre-import distribution preview (difficulty/chapter/marks/imbalance warnings) | missing | P1 | Not implemented |
 | QB-009 | Question Bank | Question library core filters and metadata table | completed | P1 | Basic library/filter table exists |
 | QB-010 | Question Bank | Full library filter matrix (exam, question type, additional tag, used-in-template, academic year) | partial | P1 | Only partial filter set is implemented |
@@ -78,7 +78,7 @@ Priority guide:
 | ID | Module | Item | Status | Priority | Notes |
 |---|---|---|---|---|---|
 | TST-001 | Tests | Tests module shell | completed | P0 | Core module exists |
-| TST-002 | Tests | Dedicated subpages for Create Test, Test Library, Template Analytics, Distribution Review, Template Settings | partial | P0 | Core work is merged/redirected |
+| TST-002 | Tests | Dedicated subpages for Create Test, Test Library, Template Analytics, Distribution Review, Template Settings | completed | P0 | Admin tests now mount dedicated `/admin/tests/*` subpages for create, library, analytics, distribution review, and settings, with route-specific workspaces and test sub-navigation instead of collapsing into one merged screen |
 | TST-003 | Tests | Create Test basic question-pool selection and manual selection | completed | P0 | Present |
 | TST-004 | Tests | Full filter set for question-pool selection | partial | P1 | Basic filters exist; full spec set does not |
 | TST-005 | Tests | Explicit X matched -> choose Y flow | partial | P1 | Concept exists but not exactly as specified |

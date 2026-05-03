@@ -15,6 +15,11 @@ export interface OverviewDistributionBin {
   value: number;
 }
 
+export interface OverviewAttentionStudent {
+  studentName: string;
+  riskState: string;
+}
+
 export interface AdminOverviewSnapshot {
   academicYear: string;
   computedAt: string;
@@ -69,7 +74,7 @@ export interface AdminOverviewSnapshot {
     disciplineIndex7DayTrend: string;
     overstayRatePercentage: number;
     guessClusterPercentage: number;
-    topFiveStudentsRequiringAttention: string[];
+    topFiveStudentsRequiringAttention: OverviewAttentionStudent[];
   };
   governanceSnapshot: {
     institutionalStabilityIndex: number;
@@ -177,7 +182,13 @@ const FALLBACK_OVERVIEW_SNAPSHOT: AdminOverviewSnapshot = {
     disciplineIndex7DayTrend: "Upward",
     overstayRatePercentage: 14,
     guessClusterPercentage: 21,
-    topFiveStudentsRequiringAttention: ["A. Menon", "D. Sharma", "N. Iyer", "R. Patel", "S. Khan"],
+    topFiveStudentsRequiringAttention: [
+      { studentName: "A. Menon", riskState: "Critical" },
+      { studentName: "D. Sharma", riskState: "High" },
+      { studentName: "N. Iyer", riskState: "High" },
+      { studentName: "R. Patel", riskState: "Medium" },
+      { studentName: "S. Khan", riskState: "Medium" },
+    ],
   },
   governanceSnapshot: {
     institutionalStabilityIndex: 76,
@@ -290,6 +301,28 @@ function normalizeDistributionBin(
   };
 }
 
+function normalizeAttentionStudent(
+  value: unknown,
+  fallback: OverviewAttentionStudent,
+): OverviewAttentionStudent {
+  if (typeof value === "string") {
+    return {
+      studentName: toNonEmptyString(value, fallback.studentName),
+      riskState: fallback.riskState,
+    };
+  }
+
+  if (!value || typeof value !== "object") {
+    return fallback;
+  }
+
+  const source = value as Record<string, unknown>;
+  return {
+    studentName: toNonEmptyString(source.studentName ?? source.name, fallback.studentName),
+    riskState: toNonEmptyString(source.riskState, fallback.riskState),
+  };
+}
+
 function normalizeOverviewSnapshot(payload: unknown): AdminOverviewSnapshot {
   if (!payload || typeof payload !== "object") {
     throw new Error("GET /admin/overview returned an invalid payload.");
@@ -379,7 +412,13 @@ function normalizeOverviewSnapshot(payload: unknown): AdminOverviewSnapshot {
       overstayRatePercentage: toNumberOrZero(riskSource?.overstayRatePercentage),
       guessClusterPercentage: toNumberOrZero(riskSource?.guessClusterPercentage),
       topFiveStudentsRequiringAttention: topStudentsSource.map((entry, index) =>
-        toNonEmptyString(entry, fallback.riskSnapshot.topFiveStudentsRequiringAttention[index] ?? `Student ${index + 1}`),
+        normalizeAttentionStudent(
+          entry,
+          fallback.riskSnapshot.topFiveStudentsRequiringAttention[index] ?? {
+            studentName: `Student ${index + 1}`,
+            riskState: "Medium",
+          },
+        ),
       ).slice(0, 5),
     },
     governanceSnapshot: {

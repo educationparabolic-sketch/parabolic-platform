@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, useParams } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
+import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
-import { UiStatCard, UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
+import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
+import { UiChartContainer, UiStatCard, UiTable, type UiChartPoint, type UiTableColumn } from "../../../../../shared/ui/components";
+import { resolveAdminAccessContext } from "../../portals/adminAccess";
 
 const apiClient = getPortalApiClient("admin");
 const STUDENT_STATUSES = ["invited", "active", "inactive", "archived", "suspended"] as const;
@@ -10,6 +13,13 @@ const RISK_STATES = ["low", "medium", "high", "critical"] as const;
 
 type StudentStatus = (typeof STUDENT_STATUSES)[number];
 type StudentRiskState = (typeof RISK_STATES)[number];
+
+const LAYER_ORDER: Record<LicenseLayer, number> = {
+  L0: 0,
+  L1: 1,
+  L2: 2,
+  L3: 3,
+};
 
 interface StudentRecord {
   id: string;
@@ -23,9 +33,49 @@ interface StudentRecord {
   avgRawScorePercent: number;
   avgAccuracyPercent: number;
   scorePercentile: number | null;
+  rankInBatch: number | null;
+  phaseAdherencePercent: number;
+  easyNeglectRate: number;
+  hardBiasRate: number;
+  topicWeaknessSummary: string;
+  timeMisallocationPercent: number;
   riskState: StudentRiskState;
   disciplineIndex: number;
+  guessRatePercent: number;
+  minTimeViolationPercent: number;
+  maxTimeViolationPercent: number;
+  controlledModeDelta: number;
+  riskTimeline: StudentRiskTimelineEntry[];
+  disciplineTrend: StudentTrendEntry[];
+  guessRateTrend: StudentTrendEntry[];
+  overrideRecords: StudentOverrideRecord[];
   lastActive: string | null;
+  testHistory: StudentHistoryEntry[];
+}
+
+interface StudentHistoryEntry {
+  id: string;
+  label: string;
+  completedOn: string;
+  rawScorePercent: number;
+  accuracyPercent: number;
+}
+
+interface StudentTrendEntry {
+  label: string;
+  value: number;
+}
+
+interface StudentRiskTimelineEntry {
+  id: string;
+  label: string;
+  riskState: StudentRiskState;
+}
+
+interface StudentOverrideRecord {
+  id: string;
+  label: string;
+  count: number;
 }
 
 const FALLBACK_STUDENTS: StudentRecord[] = [
@@ -41,9 +91,47 @@ const FALLBACK_STUDENTS: StudentRecord[] = [
     avgRawScorePercent: 74,
     avgAccuracyPercent: 81,
     scorePercentile: 82,
+    rankInBatch: 4,
+    phaseAdherencePercent: 88,
+    easyNeglectRate: 12,
+    hardBiasRate: 9,
+    topicWeaknessSummary: "Organic Chemistry accuracy slips below cohort threshold in timed sets.",
+    timeMisallocationPercent: 14,
     riskState: "low",
     disciplineIndex: 86,
+    guessRatePercent: 11,
+    minTimeViolationPercent: 7,
+    maxTimeViolationPercent: 2,
+    controlledModeDelta: 9,
+    riskTimeline: [
+      { id: "aarav-risk-1", label: "Feb", riskState: "medium" },
+      { id: "aarav-risk-2", label: "Mar", riskState: "low" },
+      { id: "aarav-risk-3", label: "Apr", riskState: "low" },
+    ],
+    disciplineTrend: [
+      { label: "Feb", value: 78 },
+      { label: "Mar", value: 83 },
+      { label: "Apr", value: 86 },
+    ],
+    guessRateTrend: [
+      { label: "Feb", value: 16 },
+      { label: "Mar", value: 13 },
+      { label: "Apr", value: 11 },
+    ],
+    overrideRecords: [
+      { id: "aarav-override-1", label: "Early termination", count: 0 },
+      { id: "aarav-override-2", label: "Manual submission", count: 1 },
+      { id: "aarav-override-3", label: "Phase override", count: 0 },
+      { id: "aarav-override-4", label: "Hard mode exit", count: 0 },
+    ],
     lastActive: "2026-04-09",
+    testHistory: [
+      { id: "jee-mock-12", label: "JEE Mock 12", completedOn: "2026-02-14", rawScorePercent: 69, accuracyPercent: 78 },
+      { id: "physics-sectional-8", label: "Physics Sectional 8", completedOn: "2026-03-02", rawScorePercent: 72, accuracyPercent: 80 },
+      { id: "chemistry-drill-5", label: "Chemistry Drill 5", completedOn: "2026-03-18", rawScorePercent: 75, accuracyPercent: 82 },
+      { id: "jee-mock-13", label: "JEE Mock 13", completedOn: "2026-04-01", rawScorePercent: 78, accuracyPercent: 84 },
+      { id: "full-length-7", label: "Full Length 7", completedOn: "2026-04-09", rawScorePercent: 76, accuracyPercent: 81 },
+    ],
   },
   {
     id: "student-002",
@@ -57,9 +145,46 @@ const FALLBACK_STUDENTS: StudentRecord[] = [
     avgRawScorePercent: 68,
     avgAccuracyPercent: 73,
     scorePercentile: 59,
+    rankInBatch: 11,
+    phaseAdherencePercent: 74,
+    easyNeglectRate: 21,
+    hardBiasRate: 18,
+    topicWeaknessSummary: "Biology recall clusters dip in genetics and plant physiology.",
+    timeMisallocationPercent: 22,
     riskState: "medium",
     disciplineIndex: 63,
+    guessRatePercent: 19,
+    minTimeViolationPercent: 11,
+    maxTimeViolationPercent: 4,
+    controlledModeDelta: 4,
+    riskTimeline: [
+      { id: "diya-risk-1", label: "Feb", riskState: "high" },
+      { id: "diya-risk-2", label: "Mar", riskState: "medium" },
+      { id: "diya-risk-3", label: "Apr", riskState: "medium" },
+    ],
+    disciplineTrend: [
+      { label: "Feb", value: 58 },
+      { label: "Mar", value: 61 },
+      { label: "Apr", value: 63 },
+    ],
+    guessRateTrend: [
+      { label: "Feb", value: 24 },
+      { label: "Mar", value: 21 },
+      { label: "Apr", value: 19 },
+    ],
+    overrideRecords: [
+      { id: "diya-override-1", label: "Early termination", count: 1 },
+      { id: "diya-override-2", label: "Manual submission", count: 1 },
+      { id: "diya-override-3", label: "Phase override", count: 1 },
+      { id: "diya-override-4", label: "Hard mode exit", count: 0 },
+    ],
     lastActive: "2026-04-02",
+    testHistory: [
+      { id: "neet-bio-11", label: "NEET Biology 11", completedOn: "2026-02-10", rawScorePercent: 64, accuracyPercent: 71 },
+      { id: "chemistry-sectional-4", label: "Chemistry Sectional 4", completedOn: "2026-02-28", rawScorePercent: 67, accuracyPercent: 74 },
+      { id: "mock-14", label: "Mock 14", completedOn: "2026-03-21", rawScorePercent: 69, accuracyPercent: 75 },
+      { id: "revision-set-3", label: "Revision Set 3", completedOn: "2026-04-02", rawScorePercent: 72, accuracyPercent: 73 },
+    ],
   },
   {
     id: "student-003",
@@ -73,9 +198,47 @@ const FALLBACK_STUDENTS: StudentRecord[] = [
     avgRawScorePercent: 83,
     avgAccuracyPercent: 87,
     scorePercentile: 91,
+    rankInBatch: 2,
+    phaseAdherencePercent: 92,
+    easyNeglectRate: 8,
+    hardBiasRate: 11,
+    topicWeaknessSummary: "Minor weakness in coordinate geometry under speed pressure.",
+    timeMisallocationPercent: 10,
     riskState: "low",
     disciplineIndex: 90,
+    guessRatePercent: 8,
+    minTimeViolationPercent: 4,
+    maxTimeViolationPercent: 1,
+    controlledModeDelta: 12,
+    riskTimeline: [
+      { id: "kabir-risk-1", label: "Feb", riskState: "low" },
+      { id: "kabir-risk-2", label: "Mar", riskState: "low" },
+      { id: "kabir-risk-3", label: "Apr", riskState: "low" },
+    ],
+    disciplineTrend: [
+      { label: "Feb", value: 84 },
+      { label: "Mar", value: 88 },
+      { label: "Apr", value: 90 },
+    ],
+    guessRateTrend: [
+      { label: "Feb", value: 12 },
+      { label: "Mar", value: 10 },
+      { label: "Apr", value: 8 },
+    ],
+    overrideRecords: [
+      { id: "kabir-override-1", label: "Early termination", count: 0 },
+      { id: "kabir-override-2", label: "Manual submission", count: 0 },
+      { id: "kabir-override-3", label: "Phase override", count: 0 },
+      { id: "kabir-override-4", label: "Hard mode exit", count: 0 },
+    ],
     lastActive: "2026-04-10",
+    testHistory: [
+      { id: "jee-mock-10", label: "JEE Mock 10", completedOn: "2026-02-08", rawScorePercent: 79, accuracyPercent: 84 },
+      { id: "algebra-batch-6", label: "Algebra Batch 6", completedOn: "2026-02-26", rawScorePercent: 82, accuracyPercent: 87 },
+      { id: "full-length-6", label: "Full Length 6", completedOn: "2026-03-15", rawScorePercent: 84, accuracyPercent: 88 },
+      { id: "jee-mock-11", label: "JEE Mock 11", completedOn: "2026-03-31", rawScorePercent: 85, accuracyPercent: 90 },
+      { id: "full-length-8", label: "Full Length 8", completedOn: "2026-04-10", rawScorePercent: 83, accuracyPercent: 87 },
+    ],
   },
   {
     id: "student-004",
@@ -89,9 +252,45 @@ const FALLBACK_STUDENTS: StudentRecord[] = [
     avgRawScorePercent: 59,
     avgAccuracyPercent: 65,
     scorePercentile: 37,
+    rankInBatch: 18,
+    phaseAdherencePercent: 61,
+    easyNeglectRate: 29,
+    hardBiasRate: 24,
+    topicWeaknessSummary: "Mechanics and electrostatics accuracy remain below recovery targets.",
+    timeMisallocationPercent: 31,
     riskState: "high",
     disciplineIndex: 42,
+    guessRatePercent: 31,
+    minTimeViolationPercent: 18,
+    maxTimeViolationPercent: 9,
+    controlledModeDelta: -3,
+    riskTimeline: [
+      { id: "naina-risk-1", label: "Feb", riskState: "critical" },
+      { id: "naina-risk-2", label: "Mar", riskState: "high" },
+      { id: "naina-risk-3", label: "Apr", riskState: "high" },
+    ],
+    disciplineTrend: [
+      { label: "Feb", value: 36 },
+      { label: "Mar", value: 39 },
+      { label: "Apr", value: 42 },
+    ],
+    guessRateTrend: [
+      { label: "Feb", value: 37 },
+      { label: "Mar", value: 34 },
+      { label: "Apr", value: 31 },
+    ],
+    overrideRecords: [
+      { id: "naina-override-1", label: "Early termination", count: 1 },
+      { id: "naina-override-2", label: "Manual submission", count: 2 },
+      { id: "naina-override-3", label: "Phase override", count: 1 },
+      { id: "naina-override-4", label: "Hard mode exit", count: 1 },
+    ],
     lastActive: "2026-03-29",
+    testHistory: [
+      { id: "foundation-mock-9", label: "Foundation Mock 9", completedOn: "2026-02-19", rawScorePercent: 57, accuracyPercent: 61 },
+      { id: "physics-recovery-2", label: "Physics Recovery 2", completedOn: "2026-03-11", rawScorePercent: 60, accuracyPercent: 66 },
+      { id: "revision-set-2", label: "Revision Set 2", completedOn: "2026-03-29", rawScorePercent: 59, accuracyPercent: 65 },
+    ],
   },
   {
     id: "student-005",
@@ -105,9 +304,24 @@ const FALLBACK_STUDENTS: StudentRecord[] = [
     avgRawScorePercent: 0,
     avgAccuracyPercent: 0,
     scorePercentile: null,
+    rankInBatch: null,
+    phaseAdherencePercent: 0,
+    easyNeglectRate: 0,
+    hardBiasRate: 0,
+    topicWeaknessSummary: "No current-year attempts yet.",
+    timeMisallocationPercent: 0,
     riskState: "critical",
     disciplineIndex: 18,
+    guessRatePercent: 0,
+    minTimeViolationPercent: 0,
+    maxTimeViolationPercent: 0,
+    controlledModeDelta: 0,
+    riskTimeline: [],
+    disciplineTrend: [],
+    guessRateTrend: [],
+    overrideRecords: [],
     lastActive: null,
+    testHistory: [],
   },
 ];
 
@@ -178,6 +392,15 @@ function normalizeStudentRecord(value: unknown, index: number): StudentRecord | 
   const scorePercentileRaw = record.scorePercentile ?? record.batchRelativePercentile;
   const scorePercentile =
     scorePercentileRaw === null || typeof scorePercentileRaw === "undefined" ? null : toNumberOrZero(scorePercentileRaw);
+  const testHistorySource =
+    Array.isArray(record.testHistory) ? record.testHistory :
+    Array.isArray(record.history) ? record.history :
+    Array.isArray(record.recentTests) ? record.recentTests :
+    [];
+  const riskTimelineSource = Array.isArray(record.riskTimeline) ? record.riskTimeline : [];
+  const disciplineTrendSource = Array.isArray(record.disciplineTrend) ? record.disciplineTrend : [];
+  const guessRateTrendSource = Array.isArray(record.guessRateTrend) ? record.guessRateTrend : [];
+  const overrideRecordsSource = Array.isArray(record.overrideRecords) ? record.overrideRecords : [];
 
   return {
     id: toNonEmptyString(record.id) ?? studentId,
@@ -191,9 +414,98 @@ function normalizeStudentRecord(value: unknown, index: number): StudentRecord | 
     avgRawScorePercent: toNumberOrZero(record.avgRawScorePercent),
     avgAccuracyPercent: toNumberOrZero(record.avgAccuracyPercent),
     scorePercentile,
+    rankInBatch: record.rankInBatch === null || typeof record.rankInBatch === "undefined" ? null : toNumberOrZero(record.rankInBatch),
+    phaseAdherencePercent: toNumberOrZero(record.phaseAdherencePercent ?? record.avgPhaseAdherence ?? record.phaseAdherenceAverage),
+    easyNeglectRate: toNumberOrZero(record.easyNeglectRate ?? record.easyNeglectPercent),
+    hardBiasRate: toNumberOrZero(record.hardBiasRate ?? record.hardBiasPercent),
+    topicWeaknessSummary: toNonEmptyString(record.topicWeaknessSummary ?? record.topicWeakness ?? record.weakTopicSummary) ?? "No summary",
+    timeMisallocationPercent: toNumberOrZero(record.timeMisallocationPercent ?? record.timeMisallocationRate),
     riskState: toRiskState(record.riskState ?? record.rollingRiskCluster),
     disciplineIndex: toNumberOrZero(record.disciplineIndex),
+    guessRatePercent: toNumberOrZero(record.guessRatePercent ?? record.guessRate ?? record.avgGuessRatePercent),
+    minTimeViolationPercent: toNumberOrZero(record.minTimeViolationPercent ?? record.minTimeViolationsPercent),
+    maxTimeViolationPercent: toNumberOrZero(record.maxTimeViolationPercent ?? record.maxTimeViolationsPercent),
+    controlledModeDelta: toNumberOrZero(record.controlledModeDelta ?? record.controlledDelta ?? record.controlledModeImprovementDelta),
+    riskTimeline: riskTimelineSource.map((entry, entryIndex) => normalizeRiskTimelineEntry(entry, index, entryIndex)),
+    disciplineTrend: disciplineTrendSource.map((entry, entryIndex) => normalizeTrendEntry(entry, entryIndex, "discipline")),
+    guessRateTrend: guessRateTrendSource.map((entry, entryIndex) => normalizeTrendEntry(entry, entryIndex, "guess")),
+    overrideRecords: overrideRecordsSource.map((entry, entryIndex) => normalizeOverrideRecord(entry, index, entryIndex)),
     lastActive: toNonEmptyString(record.lastActive),
+    testHistory: testHistorySource.map((entry, entryIndex) => normalizeStudentHistoryEntry(entry, index, entryIndex)),
+  };
+}
+
+function normalizeStudentHistoryEntry(value: unknown, studentIndex: number, entryIndex: number): StudentHistoryEntry {
+  if (!value || typeof value !== "object") {
+    return {
+      id: `student-${studentIndex + 1}-history-${entryIndex + 1}`,
+      label: `Test ${entryIndex + 1}`,
+      completedOn: "Unknown",
+      rawScorePercent: 0,
+      accuracyPercent: 0,
+    };
+  }
+
+  const record = value as Record<string, unknown>;
+  return {
+    id: toNonEmptyString(record.id) ?? `student-${studentIndex + 1}-history-${entryIndex + 1}`,
+    label: toNonEmptyString(record.label ?? record.testName ?? record.assessmentLabel) ?? `Test ${entryIndex + 1}`,
+    completedOn: toNonEmptyString(record.completedOn ?? record.completedAt ?? record.submittedAt ?? record.date) ?? "Unknown",
+    rawScorePercent: toNumberOrZero(record.rawScorePercent ?? record.avgRawScorePercent),
+    accuracyPercent: toNumberOrZero(record.accuracyPercent ?? record.avgAccuracyPercent),
+  };
+}
+
+function normalizeTrendEntry(
+  value: unknown,
+  entryIndex: number,
+  prefix: string,
+): StudentTrendEntry {
+  if (!value || typeof value !== "object") {
+    return {
+      label: `${prefix}-${entryIndex + 1}`,
+      value: 0,
+    };
+  }
+
+  const record = value as Record<string, unknown>;
+  return {
+    label: toNonEmptyString(record.label ?? record.period ?? record.date) ?? `${prefix}-${entryIndex + 1}`,
+    value: toNumberOrZero(record.value),
+  };
+}
+
+function normalizeRiskTimelineEntry(value: unknown, studentIndex: number, entryIndex: number): StudentRiskTimelineEntry {
+  if (!value || typeof value !== "object") {
+    return {
+      id: `student-${studentIndex + 1}-risk-${entryIndex + 1}`,
+      label: `Point ${entryIndex + 1}`,
+      riskState: "medium",
+    };
+  }
+
+  const record = value as Record<string, unknown>;
+  return {
+    id: toNonEmptyString(record.id) ?? `student-${studentIndex + 1}-risk-${entryIndex + 1}`,
+    label: toNonEmptyString(record.label ?? record.period ?? record.date) ?? `Point ${entryIndex + 1}`,
+    riskState: toRiskState(record.riskState),
+  };
+}
+
+function normalizeOverrideRecord(value: unknown, studentIndex: number, entryIndex: number): StudentOverrideRecord {
+  if (!value || typeof value !== "object") {
+    return {
+      id: `student-${studentIndex + 1}-override-${entryIndex + 1}`,
+      label: `Override ${entryIndex + 1}`,
+      count: 0,
+    };
+  }
+
+  const record = value as Record<string, unknown>;
+  return {
+    id: toNonEmptyString(record.id) ?? `student-${studentIndex + 1}-override-${entryIndex + 1}`,
+    label: toNonEmptyString(record.label ?? record.type) ?? `Override ${entryIndex + 1}`,
+    count: toNumberOrZero(record.count),
   };
 }
 
@@ -219,6 +531,18 @@ function formatPercent(value: number | null): string {
   return value === null ? "Not available" : `${value.toFixed(1)}%`;
 }
 
+function formatSignedPercent(value: number): string {
+  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+
+function effectiveLayer(layer: LicenseLayer | null): LicenseLayer {
+  return layer ?? "L0";
+}
+
+function hasLayer(current: LicenseLayer, required: LicenseLayer): boolean {
+  return LAYER_ORDER[current] >= LAYER_ORDER[required];
+}
+
 function formatDateLabel(value: string | null): string {
   if (!value) {
     return "Never";
@@ -232,8 +556,36 @@ function formatDateLabel(value: string | null): string {
   return new Date(parsed).toISOString().slice(0, 10);
 }
 
+function buildChartPoints(history: StudentHistoryEntry[], getValue: (entry: StudentHistoryEntry) => number) {
+  const width = 320;
+  const height = 180;
+  const paddingX = 24;
+  const paddingY = 18;
+  const usableWidth = width - paddingX * 2;
+  const usableHeight = height - paddingY * 2;
+  const denominator = history.length > 1 ? history.length - 1 : 1;
+
+  return history.map((entry, index) => {
+    const value = Math.max(0, Math.min(100, getValue(entry)));
+    return {
+      label: entry.label,
+      value,
+      x: paddingX + (index / denominator) * usableWidth,
+      y: height - paddingY - (value / 100) * usableHeight,
+    };
+  });
+}
+
+function linePath(points: Array<{x: number; y: number}>): string {
+  return points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" ");
+}
+
 function StudentProfilePage() {
   const params = useParams<{ studentId: string }>();
+  const { session } = useAuthProvider();
+  const accessContext = resolveAdminAccessContext(session);
+  const currentLayer = effectiveLayer(accessContext.licenseLayer);
+  const hasL2Insights = hasLayer(currentLayer, "L2");
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadMessage, setLoadMessage] = useState<string | null>(null);
@@ -312,6 +664,80 @@ function StudentProfilePage() {
       },
     ],
     [],
+  );
+
+  const historyColumns = useMemo<UiTableColumn<StudentHistoryEntry>[]>(
+    () => [
+      {
+        id: "label",
+        header: "Test",
+        render: (row) => row.label,
+      },
+      {
+        id: "completedOn",
+        header: "Completed",
+        render: (row) => formatDateLabel(row.completedOn),
+      },
+      {
+        id: "raw",
+        header: "Avg Raw %",
+        render: (row) => formatPercent(row.rawScorePercent),
+      },
+      {
+        id: "accuracy",
+        header: "Avg Accuracy %",
+        render: (row) => formatPercent(row.accuracyPercent),
+      },
+    ],
+    [],
+  );
+
+  const l1DiagnosticRows = useMemo(
+    () =>
+      student ?
+        [
+          {
+            metric: "Phase adherence",
+            value: formatPercent(student.phaseAdherencePercent),
+            helper: "current-year average phase adherence",
+          },
+          {
+            metric: "Easy neglect frequency",
+            value: formatPercent(student.easyNeglectRate),
+            helper: "runs flagged for easy-question under-attempt",
+          },
+          {
+            metric: "Hard bias frequency",
+            value: formatPercent(student.hardBiasRate),
+            helper: "runs skewed beyond expected hard-question ratio",
+          },
+          {
+            metric: "Topic weakness summary",
+            value: student.topicWeaknessSummary,
+            helper: "most persistent weak-topic pattern from summary rollups",
+          },
+          {
+            metric: "Time misallocation",
+            value: formatPercent(student.timeMisallocationPercent),
+            helper: "deviation from recommended time allocation by difficulty",
+          },
+        ] :
+        [],
+    [student],
+  );
+
+  const rawChartPoints = useMemo(() => (student ? buildChartPoints(student.testHistory, (entry) => entry.rawScorePercent) : []), [student]);
+  const accuracyChartPoints = useMemo(
+    () => (student ? buildChartPoints(student.testHistory, (entry) => entry.accuracyPercent) : []),
+    [student],
+  );
+  const disciplineTrendData = useMemo<UiChartPoint[]>(
+    () => (student ? student.disciplineTrend.map((entry) => ({ label: entry.label, value: entry.value })) : []),
+    [student],
+  );
+  const guessRateTrendData = useMemo<UiChartPoint[]>(
+    () => (student ? student.guessRateTrend.map((entry) => ({ label: entry.label, value: entry.value })) : []),
+    [student],
   );
 
   if (!student && !isLoading) {
@@ -396,7 +822,179 @@ function StudentProfilePage() {
               value={formatPercent(student.scorePercentile)}
               helper="Batch-relative summary"
             />
+            <UiStatCard
+              title="Rank in Batch"
+              value={student.rankInBatch === null ? "Not available" : `#${student.rankInBatch}`}
+              helper="Current-year batch rank"
+            />
           </div>
+
+          <section className="admin-student-combo-chart-card" aria-label="Student performance combo chart">
+            <header className="admin-student-combo-chart-header">
+              <h3>Performance Combo Chart</h3>
+              <p>Current-year test history with Avg Raw % and Avg Accuracy %.</p>
+            </header>
+            {student.testHistory.length > 0 ? (
+              <div className="admin-student-combo-chart-layout">
+                <svg className="admin-student-combo-chart" viewBox="0 0 320 180" role="img" aria-label="Raw and accuracy trend chart">
+                  <line x1="24" y1="162" x2="296" y2="162" className="admin-student-combo-axis" />
+                  <line x1="24" y1="18" x2="24" y2="162" className="admin-student-combo-axis" />
+                  {rawChartPoints.length > 1 ? <path d={linePath(rawChartPoints)} className="admin-student-combo-line-raw" /> : null}
+                  {accuracyChartPoints.length > 1 ? <path d={linePath(accuracyChartPoints)} className="admin-student-combo-line-accuracy" /> : null}
+                  {rawChartPoints.map((point) => (
+                    <circle key={`${point.label}-raw`} cx={point.x} cy={point.y} r="4" className="admin-student-combo-dot-raw" />
+                  ))}
+                  {accuracyChartPoints.map((point) => (
+                    <circle
+                      key={`${point.label}-accuracy`}
+                      cx={point.x}
+                      cy={point.y}
+                      r="4"
+                      className="admin-student-combo-dot-accuracy"
+                    />
+                  ))}
+                </svg>
+                <div className="admin-student-combo-legend">
+                  <div className="admin-student-combo-legend-row">
+                    <span className="admin-student-combo-swatch admin-student-combo-swatch-raw" />
+                    <strong>Avg Raw %</strong>
+                  </div>
+                  <div className="admin-student-combo-legend-row">
+                    <span className="admin-student-combo-swatch admin-student-combo-swatch-accuracy" />
+                    <strong>Avg Accuracy %</strong>
+                  </div>
+                  {student.testHistory.map((entry) => (
+                    <div key={entry.id} className="admin-student-combo-legend-entry">
+                      <span>{entry.label}</span>
+                      <strong>
+                        Raw {formatPercent(entry.rawScorePercent)} | Accuracy {formatPercent(entry.accuracyPercent)}
+                      </strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="admin-student-inline-note">No current-year history is available for the combo chart yet.</p>
+            )}
+          </section>
+
+          <section className="admin-student-l1-card" aria-label="Student profile L1 intelligence">
+            <header className="admin-student-l1-header">
+              <h3>L1 Intelligence</h3>
+              <p>Constructive current-year diagnostic summaries drawn from precomputed student metrics.</p>
+            </header>
+            <div className="admin-student-l1-grid">
+              <div className="admin-student-l1-kpis">
+                <article className="admin-student-l1-kpi">
+                  <span>Phase Adherence</span>
+                  <strong>{formatPercent(student.phaseAdherencePercent)}</strong>
+                </article>
+                <article className="admin-student-l1-kpi">
+                  <span>Easy Neglect</span>
+                  <strong>{formatPercent(student.easyNeglectRate)}</strong>
+                </article>
+                <article className="admin-student-l1-kpi">
+                  <span>Hard Bias</span>
+                  <strong>{formatPercent(student.hardBiasRate)}</strong>
+                </article>
+                <article className="admin-student-l1-kpi">
+                  <span>Time Misallocation</span>
+                  <strong>{formatPercent(student.timeMisallocationPercent)}</strong>
+                </article>
+              </div>
+              <div className="admin-student-summary-card">
+                <h3>Topic Weakness Summary</h3>
+                <p>{student.topicWeaknessSummary}</p>
+              </div>
+            </div>
+          </section>
+
+          {hasL2Insights ? (
+            <section className="admin-student-l2-card" aria-label="Student profile L2 intelligence">
+              <header className="admin-student-l2-header">
+                <h3>L2 Intelligence</h3>
+                <p>Advanced execution signals rendered from yearly aggregates and summary-safe trend snapshots.</p>
+              </header>
+
+              <div className="admin-student-l2-kpis">
+                <article className="admin-student-l2-kpi">
+                  <span>MinTime Violations</span>
+                  <strong>{formatPercent(student.minTimeViolationPercent)}</strong>
+                </article>
+                <article className="admin-student-l2-kpi">
+                  <span>MaxTime Violations</span>
+                  <strong>{formatPercent(student.maxTimeViolationPercent)}</strong>
+                </article>
+                <article className="admin-student-l2-kpi">
+                  <span>Controlled Mode Delta</span>
+                  <strong>{formatSignedPercent(student.controlledModeDelta)}</strong>
+                </article>
+                <article className="admin-student-l2-kpi">
+                  <span>Current Guess Rate</span>
+                  <strong>{formatPercent(student.guessRatePercent)}</strong>
+                </article>
+              </div>
+
+              <div className="admin-student-l2-grid">
+                <div className="admin-student-summary-card">
+                  <h3>Risk Timeline</h3>
+                  <div className="admin-student-risk-timeline">
+                    {student.riskTimeline.length > 0 ? (
+                      student.riskTimeline.map((entry) => (
+                        <div key={entry.id} className="admin-student-risk-timeline-row">
+                          <span>{entry.label}</span>
+                          <strong className={`admin-student-risk-pill admin-student-risk-pill-${entry.riskState}`}>{entry.riskState}</strong>
+                        </div>
+                      ))
+                    ) : (
+                      <p>No risk timeline is available.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="admin-student-summary-card">
+                  <h3>Override Records</h3>
+                  <div className="admin-student-override-list">
+                    {student.overrideRecords.length > 0 ? (
+                      student.overrideRecords.map((entry) => (
+                        <div key={entry.id} className="admin-student-override-row">
+                          <span>{entry.label}</span>
+                          <strong>{entry.count}</strong>
+                        </div>
+                      ))
+                    ) : (
+                      <p>No override records are available.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="admin-analytics-chart-grid">
+                <UiChartContainer
+                  title="Discipline Trend"
+                  subtitle="Current-year discipline trajectory"
+                  data={disciplineTrendData}
+                  variant="line"
+                  maxValue={100}
+                />
+                <UiChartContainer
+                  title="Guess Rate Trend"
+                  subtitle="Current-year guess-rate trajectory"
+                  data={guessRateTrendData}
+                  variant="line"
+                  maxValue={100}
+                />
+              </div>
+            </section>
+          ) : (
+            <section className="admin-student-l2-card" aria-label="Student profile L2 intelligence locked">
+              <header className="admin-student-l2-header">
+                <h3>L2 Intelligence</h3>
+                <p>Risk timelines, discipline trends, guess-rate trends, and override records unlock at <strong>L2</strong>.</p>
+              </header>
+              <p className="admin-student-inline-note">Current access layer: <strong>{currentLayer}</strong>.</p>
+            </section>
+          )}
 
           <div className="admin-student-grid">
             <UiTable
@@ -424,6 +1022,11 @@ function StudentProfilePage() {
                   helper: "summary-only studentYearMetrics contract",
                 },
                 {
+                  metric: "Batch rank",
+                  value: student.rankInBatch === null ? "Not available" : `#${student.rankInBatch}`,
+                  helper: "current-year batch-relative placement",
+                },
+                {
                   metric: "Execution posture",
                   value: `Risk ${student.riskState} · Discipline ${student.disciplineIndex.toFixed(0)}`,
                   helper: "layer-aware execution summary",
@@ -439,10 +1042,24 @@ function StudentProfilePage() {
             />
 
             <div className="admin-student-stack">
+              <UiTable
+                caption="L1 diagnostic summary"
+                columns={summaryColumns}
+                rows={l1DiagnosticRows}
+                rowKey={(row) => row.metric}
+                emptyStateText="No L1 diagnostics are available."
+              />
+              <UiTable
+                caption="Current-year test history"
+                columns={historyColumns}
+                rows={student.testHistory}
+                rowKey={(row) => row.id}
+                emptyStateText="No current-year test history is available."
+              />
               <div className="admin-student-summary-card">
                 <h3>Operator Guardrails</h3>
                 <p>This dedicated screen is for profile drill-down and summary review only.</p>
-                <p>Deeper charts, trend analytics, and risk timelines remain tracked separately in STU-008 through STU-010.</p>
+                <p>Deeper L2 trends, risk timelines, and override history remain tracked separately in STU-010.</p>
               </div>
               <div className="admin-student-summary-card">
                 <h3>Next Actions</h3>

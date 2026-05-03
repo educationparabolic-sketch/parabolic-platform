@@ -1,4 +1,5 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { NavLink, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import {
@@ -22,6 +23,7 @@ import {
 const apiClient = getPortalApiClient("admin");
 
 type TemplateStatus = "draft" | "ready" | "assigned" | "archived" | "deprecated";
+type TestSubpage = "create" | "library" | "analytics" | "distribution" | "settings";
 
 interface TimingWindow {
   minSeconds: number;
@@ -134,6 +136,23 @@ function formatIsoDate(value: string): string {
   return Number.isNaN(parsed) ? value : new Date(parsed).toISOString().slice(0, 10);
 }
 
+function resolveTestSubpage(pathname: string): TestSubpage {
+  if (pathname.includes("/tests/create")) {
+    return "create";
+  }
+  if (pathname.includes("/tests/analytics")) {
+    return "analytics";
+  }
+  if (pathname.includes("/tests/distribution")) {
+    return "distribution";
+  }
+  if (pathname.includes("/tests/settings")) {
+    return "settings";
+  }
+
+  return "library";
+}
+
 function buildPayload(draft: TemplateDraft, publish: boolean): TemplateSubmitPayload {
   return {
     templateName: draft.templateName.trim(),
@@ -185,6 +204,9 @@ async function submitTemplateToApi(payload: TemplateSubmitPayload): Promise<void
 }
 
 function TestTemplateManagementPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const params = useParams<{ testId?: string }>();
   const [templates, setTemplates] = useState<TestTemplateRecord[]>(FALLBACK_TEMPLATES);
   const [draft, setDraft] = useState<TemplateDraft>(INITIAL_DRAFT);
   const [duplicateTemplate, setDuplicateTemplate] = useState<TestTemplateRecord | null>(null);
@@ -199,6 +221,9 @@ function TestTemplateManagementPage() {
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [publishTargetId, setPublishTargetId] = useState<string | null>(null);
+  const [inspectedTemplateId, setInspectedTemplateId] = useState<string>(FALLBACK_TEMPLATES[0]?.id ?? "");
+
+  const currentSubpage = useMemo(() => resolveTestSubpage(location.pathname), [location.pathname]);
 
   const visibleQuestions = useMemo(() => {
     const query = questionQuery.trim().toLowerCase();
@@ -230,6 +255,26 @@ function TestTemplateManagementPage() {
       { easy: 0, medium: 0, hard: 0 },
     );
   }, [draft.selectedQuestionIds]);
+
+  useEffect(() => {
+    if (templates.length === 0) {
+      setInspectedTemplateId("");
+      return;
+    }
+
+    if (params.testId && templates.some((template) => template.id === params.testId)) {
+      setInspectedTemplateId(params.testId);
+      return;
+    }
+
+    setInspectedTemplateId((current) =>
+      current && templates.some((template) => template.id === current) ? current : templates[0]?.id ?? "",
+    );
+  }, [params.testId, templates]);
+
+  const inspectedTemplate = useMemo(() => {
+    return templates.find((template) => template.id === inspectedTemplateId) ?? templates[0] ?? null;
+  }, [inspectedTemplateId, templates]);
 
   function updateTiming(
     difficulty: DifficultyLevel,
@@ -312,6 +357,8 @@ function TestTemplateManagementPage() {
     });
     setEditingTemplateId(target.id);
     setErrorMessage(null);
+    setInspectedTemplateId(target.id);
+    navigate("/admin/tests/create");
   }
 
   async function saveDraftTemplate(event: FormEvent<HTMLFormElement>) {
@@ -474,6 +521,14 @@ function TestTemplateManagementPage() {
     setErrorMessage(null);
   }
 
+  const subpageLinks: Array<{ id: TestSubpage; label: string; to: string }> = [
+    { id: "create", label: "Create Test", to: "/admin/tests/create" },
+    { id: "library", label: "Test Library", to: "/admin/tests/library" },
+    { id: "analytics", label: "Template Analytics", to: "/admin/tests/analytics" },
+    { id: "distribution", label: "Distribution Review", to: "/admin/tests/distribution" },
+    { id: "settings", label: "Template Settings", to: "/admin/tests/settings" },
+  ];
+
   const templateColumns: UiTableColumn<TestTemplateRecord>[] = [
     {
       id: "name",
@@ -528,6 +583,12 @@ function TestTemplateManagementPage() {
         const editable = isDraftEditable(template.status);
         return (
           <div className="admin-tests-row-actions">
+            <button type="button" onClick={() => navigate(`/admin/tests/${template.id}`)}>
+              Open Detail
+            </button>
+            <button type="button" onClick={() => navigate(`/admin/tests/analytics/${template.id}`)}>
+              Analytics
+            </button>
             <button type="button" onClick={() => startEditingTemplate(template.id)} disabled={!editable}>
               Edit Draft
             </button>
@@ -540,215 +601,448 @@ function TestTemplateManagementPage() {
     },
   ];
 
+  const analyticsColumns: UiTableColumn<TestTemplateRecord>[] = [
+    {
+      id: "template",
+      header: "Template",
+      render: (template) => template.templateName,
+    },
+    {
+      id: "status",
+      header: "Status",
+      render: (template) => template.status,
+    },
+    {
+      id: "questions",
+      header: "Questions",
+      render: (template) => template.selectedQuestionIds.length,
+    },
+    {
+      id: "distribution",
+      header: "Difficulty Mix",
+      render: (template) =>
+        `E:${template.difficultyDistribution.easy} M:${template.difficultyDistribution.medium} H:${template.difficultyDistribution.hard}`,
+    },
+    {
+      id: "selectionMethod",
+      header: "Selection",
+      render: (template) => template.selectionMethod,
+    },
+  ];
+
+  const selectedTemplateDifficultyRows =
+    inspectedTemplate ?
+      DIFFICULTY_LEVELS.map((difficulty) => ({
+        difficulty,
+        count: inspectedTemplate.difficultyDistribution[difficulty],
+        minSeconds: inspectedTemplate.timingProfile[difficulty].minSeconds,
+        maxSeconds: inspectedTemplate.timingProfile[difficulty].maxSeconds,
+      })) :
+      [];
+
+  const totalQuestionCount = templates.reduce((total, template) => total + template.selectedQuestionIds.length, 0);
+  const readyOrAssignedCount = templates.filter((template) => template.status === "ready" || template.status === "assigned").length;
+
+  function renderCreateView() {
+    return (
+      <>
+        <div className="admin-tests-grid">
+          <UiForm
+            title={editingTemplateId ? "Edit Draft Template" : "Create Test Template"}
+            description="Configure template metadata, duration, and selection method before saving as draft."
+            submitLabel={isSubmitting ? "Saving..." : editingTemplateId ? "Save Draft Changes" : "Save Draft"}
+            onSubmit={saveDraftTemplate}
+            footer={
+              editingTemplateId ?
+                <button type="button" onClick={resetEditor} disabled={isSubmitting}>
+                  Cancel Edit
+                </button> :
+                <span className="admin-tests-form-footnote">Drafts remain editable until published.</span>
+            }
+          >
+            <UiFormField label="Template Name" htmlFor="admin-tests-template-name">
+              <input
+                id="admin-tests-template-name"
+                type="text"
+                value={draft.templateName}
+                onChange={(event) => setDraft((current) => ({ ...current, templateName: event.target.value }))}
+                placeholder="JEE Mains Mock - Set C"
+                required
+              />
+            </UiFormField>
+            <UiFormField label="Exam Type" htmlFor="admin-tests-exam-type">
+              <select
+                id="admin-tests-exam-type"
+                value={draft.examType}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    examType: event.target.value as ExamType,
+                  }))
+                }
+              >
+                {EXAM_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+            </UiFormField>
+            <UiFormField label="Selection Method" htmlFor="admin-tests-selection-method">
+              <select
+                id="admin-tests-selection-method"
+                value={draft.selectionMethod}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    selectionMethod: event.target.value as SelectionMethod,
+                  }))
+                }
+              >
+                {SELECTION_METHODS.map((method) => (
+                  <option key={method} value={method}>
+                    {method}
+                  </option>
+                ))}
+              </select>
+            </UiFormField>
+            <UiFormField label="Total Duration (minutes)" htmlFor="admin-tests-duration">
+              <input
+                id="admin-tests-duration"
+                type="number"
+                min={30}
+                step={5}
+                value={draft.totalDurationMinutes}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    totalDurationMinutes: Math.max(30, Number(event.target.value) || 30),
+                  }))
+                }
+              />
+            </UiFormField>
+          </UiForm>
+
+          <UiForm
+            title="Question Selection"
+            description="Select question IDs for this template. Distribution totals must match selected count."
+            submitLabel="Sync Difficulty Distribution"
+            onSubmit={(event) => {
+              event.preventDefault();
+              syncDistributionToSelectedPool();
+            }}
+            footer={
+              <span className="admin-tests-form-footnote">
+                Selected: {selectedQuestionCount} | Easy: {selectedDifficultyCount.easy} | Medium:{" "}
+                {selectedDifficultyCount.medium} | Hard: {selectedDifficultyCount.hard}
+              </span>
+            }
+          >
+            <UiFormField label="Search Question Pool" htmlFor="admin-tests-question-search">
+              <input
+                id="admin-tests-question-search"
+                type="search"
+                value={questionQuery}
+                onChange={(event) => setQuestionQuery(event.target.value)}
+                placeholder="Search by id, subject, chapter, or prompt"
+              />
+            </UiFormField>
+            <div className="admin-tests-question-list" role="group" aria-label="Template question selection">
+              {visibleQuestions.map((question) => {
+                const checked = draft.selectedQuestionIds.includes(question.id);
+                return (
+                  <label key={question.id} className="admin-tests-question-option">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleQuestionSelection(question.id)}
+                    />
+                    <span>
+                      <strong>{question.id}</strong> {question.subject} / {question.chapter} / {question.difficulty}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </UiForm>
+        </div>
+
+        <div className="admin-tests-config-grid">
+          <UiForm
+            title="Difficulty Distribution"
+            description="Configure easy, medium, and hard counts."
+            submitLabel="Apply Distribution"
+            onSubmit={(event) => event.preventDefault()}
+            footer={
+              <span className="admin-tests-form-footnote">
+                Total configured:{" "}
+                {draft.difficultyDistribution.easy +
+                  draft.difficultyDistribution.medium +
+                  draft.difficultyDistribution.hard}
+              </span>
+            }
+          >
+            {DIFFICULTY_LEVELS.map((difficulty) => (
+              <UiFormField
+                key={difficulty}
+                label={`${difficulty.charAt(0).toUpperCase()}${difficulty.slice(1)} count`}
+                htmlFor={`admin-tests-distribution-${difficulty}`}
+              >
+                <input
+                  id={`admin-tests-distribution-${difficulty}`}
+                  type="number"
+                  min={0}
+                  value={draft.difficultyDistribution[difficulty]}
+                  onChange={(event) => updateDistribution(difficulty, event.target.value)}
+                />
+              </UiFormField>
+            ))}
+          </UiForm>
+
+          <UiForm
+            title="Timing Profile"
+            description="Set min/max time windows (seconds) for each difficulty."
+            submitLabel="Keep Timing Profile"
+            onSubmit={(event) => event.preventDefault()}
+          >
+            {DIFFICULTY_LEVELS.map((difficulty) => (
+              <div key={difficulty} className="admin-tests-timing-row">
+                <UiFormField
+                  label={`${difficulty.charAt(0).toUpperCase()} min`}
+                  htmlFor={`admin-tests-timing-min-${difficulty}`}
+                >
+                  <input
+                    id={`admin-tests-timing-min-${difficulty}`}
+                    type="number"
+                    min={1}
+                    value={draft.timingProfile[difficulty].minSeconds}
+                    onChange={(event) => updateTiming(difficulty, "minSeconds", event.target.value)}
+                  />
+                </UiFormField>
+                <UiFormField
+                  label={`${difficulty.charAt(0).toUpperCase()} max`}
+                  htmlFor={`admin-tests-timing-max-${difficulty}`}
+                >
+                  <input
+                    id={`admin-tests-timing-max-${difficulty}`}
+                    type="number"
+                    min={1}
+                    value={draft.timingProfile[difficulty].maxSeconds}
+                    onChange={(event) => updateTiming(difficulty, "maxSeconds", event.target.value)}
+                  />
+                </UiFormField>
+              </div>
+            ))}
+          </UiForm>
+        </div>
+      </>
+    );
+  }
+
+  function renderLibraryView() {
+    return (
+      <>
+        <div className="admin-tests-summary-grid">
+          <article className="admin-tests-summary-card">
+            <h3>Library Status</h3>
+            <p>{templates.length} saved templates across draft, ready, and assigned states.</p>
+          </article>
+          <article className="admin-tests-summary-card">
+            <h3>Publishable Templates</h3>
+            <p>{templates.filter((template) => template.status === "draft").length} drafts remain editable.</p>
+          </article>
+          <article className="admin-tests-summary-card">
+            <h3>Structure Locked</h3>
+            <p>{readyOrAssignedCount} templates are ready/assigned and treated as lifecycle-locked snapshots.</p>
+          </article>
+        </div>
+
+        {inspectedTemplate ? (
+          <article className="admin-tests-summary-card admin-tests-detail-card">
+            <h3>Focused Template</h3>
+            <p>
+              <strong>{inspectedTemplate.templateName}</strong> · {inspectedTemplate.examType} ·{" "}
+              {inspectedTemplate.selectedQuestionIds.length} questions
+            </p>
+            <div className="admin-tests-row-actions">
+              <button type="button" onClick={() => navigate(`/admin/tests/analytics/${inspectedTemplate.id}`)}>
+                Open Analytics
+              </button>
+              <button type="button" onClick={() => navigate("/admin/tests/distribution")}>
+                Open Distribution Review
+              </button>
+              <button type="button" onClick={() => navigate("/admin/tests/settings")}>
+                Open Template Settings
+              </button>
+            </div>
+          </article>
+        ) : null}
+
+        <UiTable
+          caption="Saved Test Templates"
+          columns={templateColumns}
+          rows={templates}
+          rowKey={(row) => row.id}
+          emptyStateText="No templates created yet."
+        />
+      </>
+    );
+  }
+
+  function renderAnalyticsView() {
+    return (
+      <>
+        <div className="admin-tests-summary-grid">
+          <article className="admin-tests-summary-card">
+            <h3>Templates Tracked</h3>
+            <p>{templates.length} templates are available for structural analytics drill-in.</p>
+          </article>
+          <article className="admin-tests-summary-card">
+            <h3>Question Coverage</h3>
+            <p>{totalQuestionCount} frozen question slots are currently represented across library templates.</p>
+          </article>
+          <article className="admin-tests-summary-card">
+            <h3>Focused Template</h3>
+            <p>{inspectedTemplate ? inspectedTemplate.templateName : "No template selected for analytics."}</p>
+          </article>
+        </div>
+
+        {inspectedTemplate ? (
+          <article className="admin-tests-summary-card admin-tests-detail-card">
+            <h3>Focused Analytics Snapshot</h3>
+            <p>
+              Selection: {inspectedTemplate.selectionMethod} · Status: {inspectedTemplate.status} · Last updated:{" "}
+              {formatIsoDate(inspectedTemplate.updatedAt)}
+            </p>
+            <p className="admin-tests-form-footnote">
+              This dedicated analytics route now separates template analysis from create/library flows. Deeper L1/L2
+              metric depth remains tracked separately under `TST-015`.
+            </p>
+          </article>
+        ) : null}
+
+        <UiTable
+          caption="Template analytics workspace"
+          columns={analyticsColumns}
+          rows={templates}
+          rowKey={(row) => row.id}
+          emptyStateText="No templates available for analytics."
+        />
+      </>
+    );
+  }
+
+  function renderDistributionView() {
+    return (
+      <>
+        <article className="admin-tests-summary-card admin-tests-detail-card">
+          <h3>Distribution Review</h3>
+          <p>
+            {inspectedTemplate ?
+              `${inspectedTemplate.templateName} keeps a frozen ${inspectedTemplate.selectedQuestionIds.length}-question structural snapshot.` :
+              "No template selected for structural review."}
+          </p>
+          {inspectedTemplate ? (
+            <UiFormField label="Template" htmlFor="admin-tests-distribution-template">
+              <select
+                id="admin-tests-distribution-template"
+                value={inspectedTemplate.id}
+                onChange={(event) => setInspectedTemplateId(event.target.value)}
+              >
+                {templates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.templateName}
+                  </option>
+                ))}
+              </select>
+            </UiFormField>
+          ) : null}
+        </article>
+
+        <UiTable
+          caption="Difficulty and timing review"
+          columns={[
+            { id: "difficulty", header: "Difficulty", render: (row) => row.difficulty },
+            { id: "count", header: "Question Count", render: (row) => row.count },
+            { id: "min", header: "Min Seconds", render: (row) => row.minSeconds },
+            { id: "max", header: "Max Seconds", render: (row) => row.maxSeconds },
+          ]}
+          rows={selectedTemplateDifficultyRows}
+          rowKey={(row) => row.difficulty}
+          emptyStateText="No template is currently available for distribution review."
+        />
+      </>
+    );
+  }
+
+  function renderSettingsView() {
+    return (
+      <>
+        <div className="admin-tests-summary-grid">
+          <article className="admin-tests-summary-card">
+            <h3>Lifecycle Rules</h3>
+            <p>`draft` and `ready` remain editable. First assignment locks structure permanently.</p>
+          </article>
+          <article className="admin-tests-summary-card">
+            <h3>Mode Ceiling</h3>
+            <p>L0 allows Operational. L1 adds Diagnostic. L2+ adds Controlled and Hard capability.</p>
+          </article>
+          <article className="admin-tests-summary-card">
+            <h3>Focused Status</h3>
+            <p>{inspectedTemplate ? `${inspectedTemplate.templateName}: ${inspectedTemplate.status}` : "No template selected."}</p>
+          </article>
+        </div>
+
+        <UiTable
+          caption="Template settings and lock guidance"
+          columns={[
+            { id: "rule", header: "Rule", render: (row) => row.rule },
+            { id: "value", header: "Value", render: (row) => row.value },
+          ]}
+          rows={[
+            { rule: "Capability ceiling", value: "Configured at template creation and reused during assignment" },
+            { rule: "Structural lock", value: "Applied after first assignment to preserve canonical identity" },
+            { rule: "Timing profile", value: "Stored per difficulty and treated as immutable snapshot post-assignment" },
+            { rule: "Duplicate handling", value: "Canonical ID comparison allows reuse or intentional duplication" },
+          ]}
+          rowKey={(row) => row.rule}
+          emptyStateText="No template settings are currently available."
+        />
+      </>
+    );
+  }
+
   return (
     <section className="admin-content-card" aria-labelledby="admin-tests-title">
       <p className="admin-content-eyebrow">Build 118</p>
       <h2 id="admin-tests-title">Test Template Management UI</h2>
       <p className="admin-content-copy">
-        Create and manage template drafts with architecture-aligned question selection, timing profile configuration,
-        and difficulty distribution controls before publish.
+        Create and manage template drafts through dedicated mounted subpages for authoring, library review, analytics,
+        distribution review, and template settings.
       </p>
+
+      <div className="admin-tests-subnav" aria-label="Tests subpages">
+        {subpageLinks.map((link) => (
+          <NavLink
+            key={link.id}
+            className={({ isActive }) =>
+              `admin-tests-subnav-link${isActive || currentSubpage === link.id ? " admin-tests-subnav-link-active" : ""}`
+            }
+            to={link.to}
+          >
+            {link.label}
+          </NavLink>
+        ))}
+      </div>
 
       <p className="admin-tests-inline-note">{inlineMessage}</p>
       {errorMessage ? <p className="admin-tests-inline-error">{errorMessage}</p> : null}
 
-      <div className="admin-tests-grid">
-        <UiForm
-          title={editingTemplateId ? "Edit Draft Template" : "Create Test Template"}
-          description="Configure template metadata, duration, and selection method before saving as draft."
-          submitLabel={isSubmitting ? "Saving..." : editingTemplateId ? "Save Draft Changes" : "Save Draft"}
-          onSubmit={saveDraftTemplate}
-          footer={
-            editingTemplateId ?
-              <button type="button" onClick={resetEditor} disabled={isSubmitting}>
-                Cancel Edit
-              </button> :
-              <span className="admin-tests-form-footnote">Drafts remain editable until published.</span>
-          }
-        >
-          <UiFormField label="Template Name" htmlFor="admin-tests-template-name">
-            <input
-              id="admin-tests-template-name"
-              type="text"
-              value={draft.templateName}
-              onChange={(event) => setDraft((current) => ({ ...current, templateName: event.target.value }))}
-              placeholder="JEE Mains Mock - Set C"
-              required
-            />
-          </UiFormField>
-          <UiFormField label="Exam Type" htmlFor="admin-tests-exam-type">
-            <select
-              id="admin-tests-exam-type"
-              value={draft.examType}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  examType: event.target.value as ExamType,
-                }))
-              }
-            >
-              {EXAM_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
-            </select>
-          </UiFormField>
-          <UiFormField label="Selection Method" htmlFor="admin-tests-selection-method">
-            <select
-              id="admin-tests-selection-method"
-              value={draft.selectionMethod}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  selectionMethod: event.target.value as SelectionMethod,
-                }))
-              }
-            >
-              {SELECTION_METHODS.map((method) => (
-                <option key={method} value={method}>
-                  {method}
-                </option>
-              ))}
-            </select>
-          </UiFormField>
-          <UiFormField label="Total Duration (minutes)" htmlFor="admin-tests-duration">
-            <input
-              id="admin-tests-duration"
-              type="number"
-              min={30}
-              step={5}
-              value={draft.totalDurationMinutes}
-              onChange={(event) =>
-                setDraft((current) => ({
-                  ...current,
-                  totalDurationMinutes: Math.max(30, Number(event.target.value) || 30),
-                }))
-              }
-            />
-          </UiFormField>
-        </UiForm>
-
-        <UiForm
-          title="Question Selection"
-          description="Select question IDs for this template. Distribution totals must match selected count."
-          submitLabel="Sync Difficulty Distribution"
-          onSubmit={(event) => {
-            event.preventDefault();
-            syncDistributionToSelectedPool();
-          }}
-          footer={
-            <span className="admin-tests-form-footnote">
-              Selected: {selectedQuestionCount} | Easy: {selectedDifficultyCount.easy} | Medium:{" "}
-              {selectedDifficultyCount.medium} | Hard: {selectedDifficultyCount.hard}
-            </span>
-          }
-        >
-          <UiFormField label="Search Question Pool" htmlFor="admin-tests-question-search">
-            <input
-              id="admin-tests-question-search"
-              type="search"
-              value={questionQuery}
-              onChange={(event) => setQuestionQuery(event.target.value)}
-              placeholder="Search by id, subject, chapter, or prompt"
-            />
-          </UiFormField>
-          <div className="admin-tests-question-list" role="group" aria-label="Template question selection">
-            {visibleQuestions.map((question) => {
-              const checked = draft.selectedQuestionIds.includes(question.id);
-              return (
-                <label key={question.id} className="admin-tests-question-option">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleQuestionSelection(question.id)}
-                  />
-                  <span>
-                    <strong>{question.id}</strong> {question.subject} / {question.chapter} / {question.difficulty}
-                  </span>
-                </label>
-              );
-            })}
-          </div>
-        </UiForm>
-      </div>
-
-      <div className="admin-tests-config-grid">
-        <UiForm
-          title="Difficulty Distribution"
-          description="Configure easy, medium, and hard counts."
-          submitLabel="Apply Distribution"
-          onSubmit={(event) => event.preventDefault()}
-          footer={
-            <span className="admin-tests-form-footnote">
-              Total configured:{" "}
-              {draft.difficultyDistribution.easy +
-                draft.difficultyDistribution.medium +
-                draft.difficultyDistribution.hard}
-            </span>
-          }
-        >
-          {DIFFICULTY_LEVELS.map((difficulty) => (
-            <UiFormField
-              key={difficulty}
-              label={`${difficulty.charAt(0).toUpperCase()}${difficulty.slice(1)} count`}
-              htmlFor={`admin-tests-distribution-${difficulty}`}
-            >
-              <input
-                id={`admin-tests-distribution-${difficulty}`}
-                type="number"
-                min={0}
-                value={draft.difficultyDistribution[difficulty]}
-                onChange={(event) => updateDistribution(difficulty, event.target.value)}
-              />
-            </UiFormField>
-          ))}
-        </UiForm>
-
-        <UiForm
-          title="Timing Profile"
-          description="Set min/max time windows (seconds) for each difficulty."
-          submitLabel="Keep Timing Profile"
-          onSubmit={(event) => event.preventDefault()}
-        >
-          {DIFFICULTY_LEVELS.map((difficulty) => (
-            <div key={difficulty} className="admin-tests-timing-row">
-              <UiFormField
-                label={`${difficulty.charAt(0).toUpperCase()} min`}
-                htmlFor={`admin-tests-timing-min-${difficulty}`}
-              >
-                <input
-                  id={`admin-tests-timing-min-${difficulty}`}
-                  type="number"
-                  min={1}
-                  value={draft.timingProfile[difficulty].minSeconds}
-                  onChange={(event) => updateTiming(difficulty, "minSeconds", event.target.value)}
-                />
-              </UiFormField>
-              <UiFormField
-                label={`${difficulty.charAt(0).toUpperCase()} max`}
-                htmlFor={`admin-tests-timing-max-${difficulty}`}
-              >
-                <input
-                  id={`admin-tests-timing-max-${difficulty}`}
-                  type="number"
-                  min={1}
-                  value={draft.timingProfile[difficulty].maxSeconds}
-                  onChange={(event) => updateTiming(difficulty, "maxSeconds", event.target.value)}
-                />
-              </UiFormField>
-            </div>
-          ))}
-        </UiForm>
-      </div>
-
-      <UiTable
-        caption="Saved Test Templates"
-        columns={templateColumns}
-        rows={templates}
-        rowKey={(row) => row.id}
-        emptyStateText="No templates created yet."
-      />
+      {currentSubpage === "create" ? renderCreateView() : null}
+      {currentSubpage === "library" ? renderLibraryView() : null}
+      {currentSubpage === "analytics" ? renderAnalyticsView() : null}
+      {currentSubpage === "distribution" ? renderDistributionView() : null}
+      {currentSubpage === "settings" ? renderSettingsView() : null}
 
       <UiModal
         isOpen={Boolean(publishTargetId)}

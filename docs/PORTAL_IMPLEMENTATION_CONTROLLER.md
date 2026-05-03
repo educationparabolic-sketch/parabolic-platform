@@ -10,7 +10,10 @@ Persistent run state is stored in:
 
 ## Latest Checkpoint
 
-- `2026-05-03`: Completed `OVR-008` in the admin overview. The next suggested item is `OVR-009`.
+- `2026-05-03`: Corrected the stale saved checkpoint so unresolved `P0` work took precedence over the older `P1` suggestion, then completed `STU-011` in the admin students module.
+- `2026-05-03`: Completed `QB-006` in the admin question bank module by adding ZIP root validation, nested-folder rejection, workbook sheet checks, and downloadable row-level CSV errors. The next suggested item is `QB-007`.
+- `2026-05-03`: Completed `QB-007` in the admin question bank module by validating workbook image references against ZIP-root assets and blocking external URLs/data URLs. The next suggested item is `TST-002`.
+- `2026-05-03`: Completed `TST-002` in the admin tests module by mounting dedicated create, library, analytics, distribution review, and settings subpages under `/admin/tests/*`. The next suggested item is `ASN-002`.
 
 ## Goal
 
@@ -65,6 +68,7 @@ When this controller is used:
 2. Read all four checklist files, or at minimum the files needed to validate the current recorded state.
 3. Find unresolved items where status is `missing` or `partial`.
 4. If `Next Suggested Checklist ID` in `docs/PORTAL_PROGRESS_STATE.md` is still unresolved and still matches current scope restrictions, use it.
+   - except when an unresolved `P0` item exists and the saved suggestion is only `P1` or `P2`; in that case, promote the `P0` item first and update the saved state
 5. If the suggested item is stale, including because it uses a legacy checklist ID that no longer exists in the current checklist, and `Current Target Portal` and `Current Priority Band` are explicitly set in `docs/PORTAL_PROGRESS_STATE.md`, recompute inside that saved portal/priority scope first before switching portals.
 6. Otherwise recompute the next item using this order:
    - highest priority first: `P0`, then `P1`, then `P2`

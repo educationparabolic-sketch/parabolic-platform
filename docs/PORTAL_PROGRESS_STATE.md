@@ -5,9 +5,9 @@ This file is the persistent handoff state for portal checklist implementation ac
 ## Current State
 
 - `Current Target Portal`: `admin`
-- `Current Priority Band`: `P1`
-- `Last Completed Checklist ID`: `OVR-008`
-- `Next Suggested Checklist ID`: `OVR-009`
+- `Current Priority Band`: `P0`
+- `Last Completed Checklist ID`: `TST-002`
+- `Next Suggested Checklist ID`: `ASN-002`
 - `Last Updated`: `2026-05-03`
 
 ## Active Checklist Set
@@ -21,6 +21,7 @@ This file is the persistent handoff state for portal checklist implementation ac
 
 - If `Current Target Portal` is `auto`, choose according to `docs/PORTAL_IMPLEMENTATION_CONTROLLER.md`.
 - If `Current Priority Band` is set, prefer unresolved items from that priority first.
+- If an unresolved `P0` item exists, it takes precedence over any saved `P1` or `P2` suggestion from an older checkpoint.
 - If `Next Suggested Checklist ID` is not `auto`, try that item first if it is still unresolved and still valid.
 - If the suggested item is already completed or no longer valid, recompute from the controller rules and update this file.
 
