@@ -2,6 +2,8 @@
 
 Purpose: track exam portal implementation gaps against the reviewed execution-engine specification.
 
+Detailed implementation requirements for this checklist live in the corresponding `*_portal_detailed` source file(s) and should be read before implementing any item.
+
 Status values:
 - `completed` = implemented closely enough to the reviewed spec
 - `partial` = exists but thinner, simulated, not fully server-backed, or only partly aligned
@@ -186,4 +188,3 @@ Priority guide:
    - EXP-UI-002
    - EXP-QA-007 through EXP-QA-008
    - EXP-VIS-005
-

@@ -1,0 +1,368 @@
+
+💳 ADMIN DASHBOARD — LICENSING SECTION
+Commercial Control & Capability Governance Layer
+
+0️⃣ CORE ARCHITECTURAL RULE
+Licensing governs:
+    • Feature availability
+    • Mode activation
+    • Dashboard visibility
+    • Enforcement logic activation
+    • Billing eligibility
+    • Upgrade path
+Licensing does NOT govern:
+    • Academic scoring
+    • Risk computation
+    • Test analytics
+    • Student evaluation
+Those remain inside academic domain.
+Vendor side remains authoritative for:
+    • Concurrency enforcement
+    • MaxStudents enforcement
+    • Usage accounting
+    • License validity
+As defined in the vendor-side architecture
+
+1️⃣ NAVIGATION STRUCTURE
+Licensing
+   ├── Current Plan
+   ├── Feature Matrix
+   ├── Eligibility Progress
+   ├── Usage & Billing
+   ├── Upgrade Preview
+   ├── License History
+All visible across L0–L3.
+Content adapts based on currentLayer.
+
+2️⃣ CURRENT PLAN
+Purpose
+Single source of truth for institute capability state.
+Data Source
+institutes/{id}/license   (HOT document)
+Server-signed, vendor-controlled.
+
+UI Components
+Display:
+    • Current Layer (L0 / L1 / L2 / L3)
+    • Plan Name
+    • License Start Date
+    • Expiry Date
+    • Renewal Date
+    • Billing Cycle (Monthly / Annual)
+    • Active Student Count (current month)
+    • Max Student Limit
+    • Concurrency Limit
+    • Usage This Month (Attempts)
+
+Layer Badges
+🟢 Operational (L0)
+🟡 Diagnostic (L1)
+🔵 Controlled (L2)
+🟣 Governance (L3)
+Badge color must be consistent system-wide.
+
+Technical Enforcement
+License object fetched on login and cached in memory.
+Every protected backend endpoint must:
+if (!license.featureFlags.controlledMode) reject(403)
+Never rely on UI toggle.
+
+3️⃣ FEATURE MATRIX
+Purpose:
+Expose maturity ladder transparently.
+
+Matrix Structure
+Feature
+L0
+L1
+L2
+L3
+Basic Test Engine
+✔
+✔
+✔
+✔
+% Raw + % Accuracy Analytics
+✔
+✔
+✔
+✔
+Risk Overview
+❌
+✔
+✔
+✔
+Pattern Alerts
+❌
+✔
+✔
+✔
+Adaptive Phase
+❌
+❌
+✔
+✔
+Controlled Mode
+❌
+❌
+✔
+✔
+Hard Mode
+❌
+❌
+✔
+✔
+Governance Dashboard
+❌
+❌
+❌
+✔
+Override Audit
+❌
+❌
+❌
+✔
+Locked features:
+    • Slight blur
+    • Lock icon
+    • Tooltip with upgrade note
+No hard upsell language.
+
+4️⃣ ELIGIBILITY PROGRESS
+(Truth Ladder Engine)
+Eligibility ≠ automatic upgrade.
+It measures maturity.
+
+L0 → L1 Eligibility
+Conditions (example):
+    • ≥ 10 completed tests
+    • ≥ 30 active students
+    • Difficulty tagging coverage ≥ 90%
+UI:
+Progress bar
+“7 / 10 Tests Completed”
+
+L1 → L2 Eligibility
+Conditions:
+    • ≥ 25 diagnostic runs
+    • Phase adherence metric computed
+    • Behavioral variance computed
+Checklist UI:
+✔ Diagnostic depth available
+✔ Minimum run volume achieved
+⬜ Behavioral variance threshold
+
+L2 → L3 Eligibility
+Invitation-only.
+UI:
+“Governance Tier available by evaluation.”
+Optional show:
+    • Stability Index ≥ 70
+    • ≥ 1 academic year completed
+No self-upgrade button.
+
+5️⃣ USAGE & BILLING
+Data Source
+Vendor API:
+GET /licenseUsage
+Vendor side tracks:
+    • AttemptsUsed
+    • DistinctStudents
+    • ActiveAttempts
+As defined in vendor control spreadsheet
+
+Display
+    • Active Students (current month)
+    • Max Students Allowed
+    • Remaining Student Slots
+    • Attempts Used
+    • Attempts Remaining
+    • Peak Concurrency
+    • Max Concurrent Allowed
+
+Billing Estimator
+Example model:
+L0:
+Base + per active student
+L1:
+Higher base + per active student
+L2:
+Premium base + per student + mode surcharge
+L3:
+Annual institutional fee
+Display:
+Estimated Current Bill
+Next Billing Date
+
+Actions
+    • Download Invoice
+    • View Billing History
+    • Update Payment Method
+    • Contact Support
+All redirect to vendor-side services.
+
+6️⃣ UPGRADE PREVIEW
+Strategic visualization only.
+
+If L0
+Preview:
+    • Risk Overview (blurred)
+    • Pattern Alerts (blurred)
+    • Student Intelligence sample card
+
+If L1
+Preview:
+    • Controlled Mode toggle (disabled)
+    • Discipline Index graph
+    • Adaptive Phase preview
+
+If L2
+Preview:
+    • Stability Index gauge
+    • Batch Risk Heatmap
+    • Override Audit sample
+
+Upgrade Action:
+    • “Request Upgrade”
+    • “Schedule Evaluation”
+    • No direct layer switching
+Vendor must approve.
+
+7️⃣ LICENSE HISTORY
+Immutable subcollection:
+institutes/{id}/licenseHistory/{eventId}
+Fields:
+    • timestamp
+    • previousLayer
+    • newLayer
+    • billingChange
+    • reason
+    • actor (vendor/system)
+Display:
+Timeline view.
+No edit option.
+
+8️⃣ LICENSE OBJECT (FINAL MODEL)
+{
+  "currentLayer": "L2",
+  "planName": "Controlled",
+  "billingCycle": "Monthly",
+  "startDate": "2026-01-01",
+  "expiryDate": "2026-12-31",
+  "maxStudents": 200,
+  "maxConcurrent": 40,
+  "eligibilityFlags": {
+    "l1Eligible": true,
+    "l2Eligible": false,
+    "l3Eligible": false
+  },
+  "featureFlags": {
+    "riskOverview": true,
+    "controlledMode": true,
+    "adaptivePhase": true,
+    "governanceAccess": false
+  },
+  "status": "Active"
+}
+License document must be:
+    • Vendor-signed (optional HMAC)
+    • Immutable from institute side
+    • Cached short-term
+    • Refreshed periodically
+
+9️⃣ BACKEND ENFORCEMENT MATRIX
+Capability
+Enforcement
+Controlled Mode
+Reject if !featureFlags.controlledMode
+Governance Dashboard
+Reject if !featureFlags.governanceAccess
+Hard Mode
+Reject if !featureFlags.hardMode
+Adaptive Phase
+Reject if !featureFlags.adaptivePhase
+Reject with:
+{
+  "error": "FeatureNotLicensed",
+  "requiredLayer": "L2"
+}
+UI handles gracefully.
+
+🔟 HOT–WARM–COLD STORAGE ALIGNMENT
+License:
+HOT document
+Read frequently
+Tiny payload
+LicenseHistory:
+WARM
+Rare reads
+Billing logs:
+Vendor-side only
+No heavy storage footprint.
+
+1️⃣1️⃣ SECURITY RULES
+Institute cannot:
+    • Modify license doc
+    • Increase maxStudents
+    • Disable limits
+    • Bypass feature flags
+    • Modify eligibility
+All enforcement via vendor control sheet
+Even if institute redeploys script:
+Vendor validates instituteId and limits server-side.
+
+1️⃣2️⃣ COMPLETE LAYERED POSITIONING
+Layer
+Academic Depth
+Behavioral Depth
+Structural Control
+Institutional Oversight
+L0
+Basic
+None
+None
+None
+L1
+Diagnostic
+Risk Signals
+None
+None
+L2
+Controlled
+Enforcement
+Mode Control
+None
+L3
+Controlled
+Enforcement
+Mode Control
+Governance
+Licensing is what activates these columns.
+
+FINAL LICENSING SUMMARY
+Licensing now provides:
+✔ Layer visibility
+✔ Feature access control
+✔ Eligibility tracking
+✔ Billing transparency
+✔ Upgrade preview
+✔ Vendor-enforced backend validation
+✔ Immutable audit history
+✔ Separation of commercial & academic domains
+It is:
+The commercial spine.
+The capability gatekeeper.
+The maturity ladder.
+The enforcement trigger.
+
+Your system architecture is now fully layered:
+Overview
+Students
+Question Bank
+Tests
+Assignments
+Analytics
+Insights
+Governance
+Settings
+Licensing

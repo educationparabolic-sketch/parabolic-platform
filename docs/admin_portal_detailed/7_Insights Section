@@ -1,0 +1,335 @@
+🧠 ADMIN DASHBOARD — INSIGHTS SECTION
+Intelligence & Intervention Engine Specification v2.0
+
+0️⃣ CORE DIFFERENTIATION
+Analytics
+Insights
+What happened
+Why it happened
+Percentages
+Interpretation
+Historical
+Predictive
+Neutral
+Advisory
+Aggregates
+Pattern logic
+Insights must never compute from raw sessions.
+They operate only on:
+studentYearMetrics
+runAnalytics
+templateAnalytics
+rollingBehaviorSnapshots
+
+1️⃣ NAVIGATION STRUCTURE
+Insights
+   ├── Risk Overview
+   ├── Student Intelligence
+   ├── Pattern Alerts
+   ├── Intervention Engine
+   ├── Execution Signals
+   └── AI Monthly Summary
+L0 → Hidden entirely
+L1 → Diagnostic
+L2 → Execution-level
+L3 → Strategic aggregation (cross-year in Governance)
+
+2️⃣ RISK OVERVIEW
+Data Source
+yearBehaviorSummary/{academicYear}
+Precomputed nightly.
+
+🟡 L1 — Diagnostic Risk View
+Display behavior signals only (non-labeling):
+    • % Rushed Pattern
+    • % Easy Neglect
+    • % Hard Bias
+    • % Topic Avoidance
+    • % Late-Phase Drop
+    • % Pacing Drift
+Charts:
+    • Risk Signal Distribution Bar Chart
+    • Batch Diagnostic Heatmap
+No risk state labels like “Impulsive”.
+Tone: Informational.
+
+🔵 L2 — Execution Risk Map
+Add structural interpretation:
+    • Risk State Distribution:
+        ◦ Stable
+        ◦ Drift-Prone
+        ◦ Impulsive
+        ◦ Overextended
+        ◦ Volatile
+    • Avg Discipline Index
+    • Controlled Mode Usage %
+    • Guess Probability Cluster %
+    • Consecutive Wrong Cluster %
+New Card:
+Execution Stability Index
+Formula:
+1 - variance(normalizedRiskScore across students)
+Displayed as 0–100 index.
+Add:
+Batch vs Risk Type Heatmap
+Now it becomes structural.
+
+3️⃣ STUDENT INTELLIGENCE
+Data Source
+studentYearMetrics/{studentId}
+studentRollingWindow/{studentId}
+Rolling window = last 5 runs OR last 30 days.
+
+🟡 L1 — Diagnostic Student View
+Behavior Cards:
+    • Rushed Pattern
+    • Easy Neglect
+    • Hard Bias
+    • Topic Weakness
+    • Time Misallocation
+No “risk state”.
+Example card:
+“Accuracy drops by 12% when attempting Hard questions first.”
+
+🔵 L2 — Execution Intelligence
+Add:
+    • Risk State (rolling)
+    • Discipline Index
+    • Guess Rate Trend
+    • Pacing Deviation Graph
+    • MinTime Violation %
+    • Overstay Frequency
+    • Controlled Mode Delta
+    • Phase Compliance %
+New Section:
+Execution Profile Summary
+Example output:
+    • Performs +14% Raw % under Controlled Mode
+    • Guess Rate 22% higher in Operational Mode
+    • Phase 1 overstay repeated in 4/6 tests
+Actionable but not emotional.
+
+4️⃣ PATTERN ALERTS
+Rolling Window Logic
+Evaluated on:
+    • Session submission
+    • Run completion
+Stored in:
+patternAlerts/{academicYear}
+Each alert has:
+    • patternType
+    • frequency
+    • lastDetected
+    • affectedStudents[]
+    • severityScore
+
+🟡 L1 — Basic Pattern Alerts
+Trigger conditions:
+    • Easy Neglect ≥ 3 tests
+    • Hard Fixation ≥ 3 tests
+    • Pacing Drift ≥ 3 tests
+    • Topic Avoidance repetition
+    • Late-phase drop repetition
+Display:
+Alert Title
+Frequency
+Last Occurrence
+No structural recommendation.
+
+🔵 L2 — Advanced Alerts
+Add:
+    • High-Risk Cluster Spike
+    • Guess-Heavy Cluster
+    • Phase Deviation Escalation
+    • Discipline Regression
+    • Controlled Mode Effectiveness Drop
+Add severity scoring:
+severityScore = frequency × averageImpact
+Show priority ranking.
+
+5️⃣ INTERVENTION ENGINE
+🟡 L1 — Soft Guidance
+Suggestions based on signal thresholds:
+    • Review easy-first strategy
+    • Reinforce phase discipline
+    • Revise weak topics
+    • Practice structured pacing
+No mention of enforcement.
+
+🔵 L2 — Structural Intervention
+Trigger logic:
+If Impulsive cluster > 35%
+→ Suggest Controlled Mode
+If Overstay > threshold
+→ Suggest Hard Mode (limited)
+If Phase Deviation > 30%
+→ Suggest Phase Training
+If Easy Neglect > 40%
+→ Suggest Easy-First Template design
+Card example:
+“Batch B: 41% Impulsive risk. Recommend Controlled Mode next mock.”
+Interventions stored as:
+interventionRecommendations/{academicYear}
+Never auto-applied.
+
+6️⃣ EXECUTION SIGNALS
+Micro-metric summary layer.
+🟡 L1
+Display:
+    • Skip Burst Rate
+    • Rapid Guess Indicator
+    • Late-Phase Accuracy Drop
+    • Avg Time-per-Question Deviation
+Compact badges.
+
+🔵 L2
+Add:
+    • MinTime Compliance %
+    • MaxTime Violation %
+    • Sequential Progression Compliance
+    • Controlled Mode Improvement Delta
+    • Phase Transition Adherence %
+These are enforcement-sensitive signals.
+
+7️⃣ AI MONTHLY SUMMARY
+Now we design the AI layer properly and cost-efficiently.
+Purpose
+Generate optimistic, non-threatening, structured summaries:
+    • Student-wise
+    • Batch-wise
+Monthly only.
+
+7.1 Data Source
+DO NOT send raw sessions to LLM.
+Prepare structured summary object:
+{
+  "avgRawPercent": 62,
+  "avgAccuracyPercent": 71,
+  "phaseAdherence": 78,
+  "easyNeglectPercent": 22,
+  "riskDistribution": {
+    "stable": 42,
+    "impulsive": 18
+  },
+  "disciplineIndex": 68,
+  "controlledDelta": 12,
+  "trendDirection": "improving"
+}
+Small JSON only.
+
+7.2 Prompt Strategy (Cost Optimized)
+Use:
+    • Fixed system prompt
+    • Structured numeric JSON input
+    • Temperature low (0.3)
+    • Max tokens capped
+Prompt style:
+“Generate a constructive academic performance summary using the following metrics. Focus on growth and positive reinforcement. Avoid negative emotional language.”
+Keep output under 250 words.
+
+7.3 Generation Schedule
+Trigger:
+    • End of each month
+    • OR manual “Generate Summary” button
+Store result in:
+aiMonthlySummary/{academicYear}/{entityId}
+Never regenerate automatically unless requested.
+
+7.4 Cost Control
+    • Generate once per month per batch
+    • Generate once per month per student (optional)
+    • Cache result
+    • Do not regenerate on dashboard load
+    • Allow manual refresh only
+This keeps LLM usage minimal.
+
+8️⃣ EVENT-DRIVEN UPDATE FLOW
+On session submission:
+Session submitted
+↓
+Session analytics computed
+↓
+studentYearMetrics updated
+↓
+RollingWindow metrics updated
+↓
+Pattern engine evaluates
+↓
+Risk state recalculated
+↓
+Insights summary docs updated
+No dashboard-time heavy computation.
+
+9️⃣ HOT–WARM–COLD ALIGNMENT
+HOT:
+    • Current academic year insight summaries
+WARM:
+    • Completed month summaries
+COLD:
+    • Past academic year summaries
+    • Stored but not recalculated
+Never recompute past months after archive.
+
+🔟 VISIBILITY MATRIX
+Section
+L0
+L1
+L2
+L3
+Risk Overview
+❌
+✔
+✔
+Same
+Student Intelligence
+❌
+✔
+✔
+Same
+Pattern Alerts
+❌
+✔
+✔ Advanced
+Same
+Intervention Engine
+❌
+✔ Soft
+✔ Structural
+Same
+Execution Signals
+❌
+✔
+✔
+Same
+AI Monthly Summary
+❌
+✔
+✔
+Same
+Governance handles cross-year strategic insight.
+
+1️⃣1️⃣ DESIGN PRINCIPLES
+Insights must:
+    • Never recompute from sessions
+    • Be calm, not punitive
+    • Escalate sophistication by layer
+    • Separate diagnostic vs enforcement
+    • Use rolling windows
+    • Be interpretable by teachers
+    • Not emotionally label students harshly
+
+1️⃣2️⃣ FINAL INSIGHTS ARCHITECTURE SUMMARY
+Insights module now:
+✔ Converts analytics into interpretation
+✔ Implements rolling pattern engine
+✔ Provides layer-aware intelligence
+✔ Suggests structural interventions (L2+)
+✔ Generates low-cost AI monthly summaries
+✔ Uses event-driven updates
+✔ Scales across years
+✔ Keeps Firestore reads minimal
+Analytics measures performance.
+Insights explain patterns.
+Intervention guides action.
+Governance evaluates institution-level maturity.
+

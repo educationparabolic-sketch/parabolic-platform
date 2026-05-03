@@ -1,0 +1,296 @@
+🏠 ADMIN DASHBOARD — OVERVIEW SECTION
+Operational + Maturity Snapshot Layer
+
+0️⃣ CORE DESIGN RULE
+Overview answers:
+    1. What is happening right now?
+    2. Are we stable?
+    3. Is execution healthy?
+    4. Do we need intervention?
+    5. Where are we in maturity (L0 → L3)?
+
+Data Sources (Strict)
+Allowed:
+students (HOT aggregate fields only)
+runAnalytics (current academic year)
+studentYearMetrics (aggregated)
+governanceSnapshots (L3 only)
+license document
+Not allowed:
+sessions
+rawAttempts
+per-question logs
+Everything must be precomputed.
+
+1️⃣ LAYOUT STRUCTURE
+Overview
+   ├── Operational Snapshot
+   ├── Current Activity
+   ├── Performance Summary (30-day)
+   ├── Execution Summary (L1+)
+   ├── Risk Snapshot (L2+)
+   ├── Governance Snapshot (L3)
+   ├── System Health & Licensing
+Responsive grid.
+Max 8–12 cards visible at once.
+
+2️⃣ OPERATIONAL SNAPSHOT (ALL LAYERS)
+Pure operational health.
+Cards
+    • Active Students (current month)
+    • Tests Conducted (current month)
+    • Tests Scheduled (next 7 days)
+    • Current Academic Year
+    • Last Test Completion Rate
+    • Billing Count (active student count)
+    • Active Concurrent Sessions (if any)
+All numbers — no graphs here.
+Purpose:
+Immediate clarity.
+
+3️⃣ CURRENT ACTIVITY
+Live operational state.
+
+🟢 L0
+    • Active Test Sessions
+    • Students Currently in Test
+    • Upcoming Test (<24 hours)
+    • Last 5 Submissions
+Link:
+“Go to Live Monitor”
+
+🟡 L1 Adds
+    • Live Behavior Alert Count
+    • % Pacing Drift (active)
+    • % Skip Burst Detected
+No risk labels yet.
+
+🔵 L2 Adds
+    • Live Risk Count
+    • Controlled Mode Compliance %
+    • MinTime Violations (live)
+Displayed as small indicator badges.
+
+🟣 L3
+Same as L2.
+Deep strategic analysis stays in Governance.
+
+4️⃣ PERFORMANCE SUMMARY (LAST 30 DAYS)
+Replace “Score” everywhere with:
+    • Avg % Raw Marks
+    • Avg % Accuracy
+Never show legacy score.
+
+🟢 L0
+Show:
+    • Avg % Raw (30 days)
+    • Avg % Accuracy (30 days)
+    • Highest Performing Batch
+    • Lowest Performing Batch
+    • Participation Rate
+    • Distribution Chart (simple histogram)
+No behavioral metrics.
+
+🟡 L1 Adds
+Behavior overlays:
+    • Avg Phase Adherence %
+    • Easy Neglect %
+    • Hard Bias %
+    • Time Misallocation %
+Now performance becomes interpretive.
+
+🔵 L2 Adds
+Structural compliance:
+    • Risk Distribution
+    • Avg Discipline Index
+    • Controlled Mode Improvement Delta
+    • Execution Stability Badge
+Badge Logic:
+Stable ≥ 75
+Moderate 60–75
+High Variance < 60
+
+🟣 L3
+Same operational performance summary.
+Longitudinal analysis handled in Governance.
+
+5️⃣ EXECUTION SUMMARY (L1+)
+Hidden in L0.
+
+🟡 L1
+Cards:
+    • % Students with Repeated Behavioral Pattern
+    • Most Common Diagnostic Signal
+    • Topic with Highest Weakness Cluster
+Example:
+“32% show late-phase drop.”
+Tone:
+Neutral.
+
+🔵 L2
+Add:
+    • Risk Cluster Breakdown
+    • High-Risk Student Count
+    • Phase Compliance %
+    • Discipline Regression Alerts
+    • Controlled Mode Impact Card
+Example:
+“Controlled Mode improved Raw % by +14% this month.”
+
+6️⃣ RISK SNAPSHOT (L2+)
+Hidden in L0 & L1.
+
+🔵 L2
+Display:
+    • Risk Distribution Pie
+    • Discipline Index 7-day Trend
+    • Overstay Rate %
+    • Guess Cluster %
+Top 5 Students Requiring Attention
+(Only name + risk state — no shaming)
+
+🟣 L3
+Same risk snapshot.
+Strategic trend analysis is elsewhere.
+
+7️⃣ GOVERNANCE SNAPSHOT (L3 ONLY)
+Executive indicators only.
+
+Display
+    • Institutional Stability Index
+    • MoM Stability Change
+    • Override Frequency Trend
+    • Discipline Trajectory Arrow (↑ ↓ →)
+Mini trend sparkline.
+No student detail here.
+Purpose:
+Strategic confidence signal.
+
+8️⃣ SYSTEM HEALTH & LICENSING
+Visible to all layers.
+
+Display
+    • Current Layer Badge
+    • Eligibility Progress
+        ◦ L1 %
+        ◦ L2 %
+    • Active Student Count
+    • Peak Concurrency This Month
+    • Storage Usage (summary only)
+    • Last Archive Date
+    • Academic Year Lock Status
+Upgrade Awareness Card:
+“You are 2 tests away from L1 eligibility.”
+Must not feel sales-heavy.
+
+9️⃣ LAYER VISIBILITY MATRIX
+Component
+L0
+L1
+L2
+L3
+Operational Snapshot
+✔
+✔
+✔
+✔
+Current Activity
+✔
+✔ + Behavior
+✔ + Risk
+✔
+Performance Summary
+✔
+✔ + Diagnostic
+✔ + Discipline
+✔
+Execution Summary
+❌
+✔
+✔ Advanced
+✔
+Risk Snapshot
+❌
+❌
+✔
+✔
+Governance Snapshot
+❌
+❌
+❌
+✔
+Licensing Status
+✔
+✔
+✔
+✔
+
+🔟 PERFORMANCE RULES
+Overview must:
+    • Load < 300ms
+    • Use only summary documents
+    • Never aggregate on read
+    • Cache risk distribution daily
+    • Use small payload documents
+Firestore reads target:
+≤ 8 documents per load.
+
+1️⃣1️⃣ DATA FLOW
+On session submit:
+Session completed
+↓
+runAnalytics updated
+↓
+studentYearMetrics updated
+↓
+Pattern engine updated
+↓
+Governance accumulator updated
+↓
+Overview reflects change instantly
+No recalculation on Overview load.
+
+1️⃣2️⃣ UX PRINCIPLES
+L0:
+Operational clarity.
+L1:
+Pattern awareness.
+L2:
+Execution discipline visibility.
+L3:
+Institutional maturity confidence.
+Avoid:
+    • Chart overload
+    • Red flashing warnings
+    • Emotional labeling
+    • Excessive drill-down links
+Overview is:
+Calm.
+Fast.
+Executive.
+Layer-progressive.
+
+FINAL OVERVIEW SUMMARY
+Overview provides:
+✔ Real-time operational status
+✔ 30-day performance health
+✔ Behavioral awareness (L1)
+✔ Execution discipline insight (L2)
+✔ Institutional stability indicator (L3)
+✔ Billing & licensing visibility
+✔ Fast, summary-based UI
+Overview is the dashboard heartbeat.
+It sets the psychological tone of the platform.
+
+At this point, your Admin system specification is fully architected:
+    • Overview
+    • Students
+    • Question Bank
+    • Tests
+    • Assignments
+    • Analytics
+    • Insights
+    • Governance
+    • Licensing
+    • Settings
+

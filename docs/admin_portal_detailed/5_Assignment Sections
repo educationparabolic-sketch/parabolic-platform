@@ -1,0 +1,375 @@
+📌 ADMIN DASHBOARD — ASSIGNMENTS SECTION
+Execution Instance Engine Specification v2.0
+
+0️⃣ CORE PRINCIPLE
+Assignment = Timestamped Execution Instance of a Test Template.
+Assignment does NOT modify template.
+Assignment creates:
+Run
+ └── Sessions (per student)
+      └── Attempt data
+Each assignment generates a unique:
+runId
+Even if same template reused.
+
+1️⃣ NAVIGATION STRUCTURE
+Assignments
+   ├── Create Assignment
+   ├── Assignment List
+   ├── Live Monitor
+   ├── Assignment History
+   └── Bulk Operations
+
+2️⃣ CREATE ASSIGNMENT FLOW
+Creates:
+institutes/{id}/academicYears/{year}/runs/{runId}
+Initial state:
+status = scheduled
+
+STEP 1 — Select Test Template
+Dropdown displays:
+    • Template Name
+    • Exam Type
+    • Difficulty Distribution
+    • Allowed Modes
+    • Canonical ID (hidden)
+    • Last Used
+Template must be:
+status ∈ {ready, assigned}
+Cannot assign draft.
+
+STEP 2 — Select Mode (Layer-Aware)
+Mode selection is execution behavior selector.
+Layer
+Modes
+L0
+Operational
+L1
+Operational / Diagnostic
+L2
+Operational / Diagnostic / Controlled / Hard
+L3
+Same as L2
+Mode selection locks:
+    • Phase engine activation
+    • Timing enforcement
+    • Alert engine configuration
+    • Min/Max enforcement
+    • Revisit rules
+    • Early submit policy
+Store in run snapshot:
+modeSnapshot
+Cannot change after activation.
+
+STEP 3 — Select Recipients
+Options:
+    • Entire batch
+    • Multiple batches
+    • Individual students
+    • Filter by:
+        ◦ Risk State (L2+)
+        ◦ Discipline Index Range (L2+)
+        ◦ Avg Raw % range
+        ◦ Avg Accuracy % range
+        ◦ Performance percentile (optional)
+Important:
+Only students with:
+status == active
+are eligible.
+Recipient list stored explicitly:
+recipientStudentIds[]
+Never dynamically computed after creation.
+
+STEP 4 — Time Window
+Fields:
+    • startWindow
+    • endWindow
+    • timezone
+Optional:
+    • attemptLimit (default = 1)
+    • gracePeriod (minutes)
+    • Shuffle Question Order (boolean)
+Shuffle logic:
+Only changes display order.
+Does NOT change canonical structure.
+
+STEP 5 — Confirmation Screen
+Displays snapshot:
+    • Template name
+    • Mode
+    • Phase config snapshot
+    • Timing profile snapshot
+    • Recipient count
+    • Window
+    • Academic year
+    • Shuffle status
+After confirm:
+status = scheduled
+Immutable fields from this point:
+    • testId
+    • modeSnapshot
+    • phaseConfigSnapshot
+    • timingProfileSnapshot
+    • canonicalId
+    • academicYear
+
+3️⃣ ASSIGNMENT STATE MACHINE
+scheduled → active → collecting → completed → archived
+                    ↓
+                cancelled
+                    ↓
+                terminated
+
+scheduled
+Window in future.
+Editable:
+    • Start time
+    • End time
+    • Recipients (before activation only)
+
+active
+Current time within window.
+Sessions may start.
+No structural edits allowed.
+
+collecting
+Some sessions still ongoing (window expired but grace active).
+
+completed
+All sessions ended.
+Analytics finalized.
+Immutable.
+
+archived
+Visibility only change.
+No data mutation.
+
+cancelled
+Before activation.
+No sessions allowed.
+
+terminated
+Manually stopped during active.
+All open sessions force submitted.
+
+4️⃣ ASSIGNMENT LIST
+Filters:
+    • Academic Year
+    • Status
+    • Mode
+    • Batch
+    • Date range
+
+L0 Columns
+    • Run Name
+    • Template
+    • Mode
+    • Start
+    • End
+    • Completion %
+    • Avg Raw Score %
+    • Avg Accuracy %
+No raw marks anywhere.
+
+L1 Adds
+    • Avg Phase Adherence %
+    • Easy Neglect %
+    • Hard Bias %
+    • Behavior Summary Badge
+
+L2 Adds
+    • Risk Distribution Summary
+    • Avg Discipline Index
+    • Controlled Compliance %
+    • Guess Rate %
+    • Execution Stability Badge
+    • Override Count
+All metrics read from:
+runAnalytics/{runId}
+Never computed from sessions live.
+
+5️⃣ LIVE MONITOR
+Visible only when:
+status == active
+
+L0
+Per student row:
+    • Name
+    • Progress %
+    • Time Remaining
+    • Submitted / In Progress
+
+L1 Adds
+    • Current Phase
+    • Pacing Drift Flag
+    • Skip Burst Flag
+    • Rapid Guess Flag
+Flags derived from session snapshot updated every few seconds.
+
+L2 Adds
+    • MinTime Violations (live counter)
+    • MaxTime Violations (Hard mode)
+    • Consecutive Wrong Indicator
+    • Provisional Risk Score
+    • Controlled Compliance %
+Color coding:
+    • Green → Stable
+    • Yellow → Drift
+    • Red → High Risk
+Important:
+No question content visible.
+
+6️⃣ ASSIGNMENT HISTORY
+Historical runs.
+Columns:
+    • Run Name
+    • Mode
+    • Avg Raw %
+    • Avg Accuracy %
+    • Risk Distribution
+    • Stability Index
+    • Discipline Index
+    • Completion %
+Immutable.
+Read-only.
+
+7️⃣ BULK OPERATIONS
+Available:
+    • Duplicate Run (new runId)
+    • Extend Window (if active)
+    • Cancel (if scheduled)
+    • Terminate (if active)
+    • Archive
+    • Export Run Summary (CSV / PDF)
+    • Resend Notification Email
+    • Reassign to different batch (creates new runId)
+Never modify existing run to serve new batch.
+Always create new runId.
+
+8️⃣ RUN DATA MODEL
+institutes/{id}/academicYears/{year}/runs/{runId}
+{
+  testId,
+  canonicalId,
+  modeSnapshot,
+  phaseConfigSnapshot,
+  timingProfileSnapshot,
+  shuffleEnabled,
+  recipientStudentIds[],
+  startWindow,
+  endWindow,
+  attemptLimit,
+  status,
+  academicYear,
+  createdAt
+}
+
+9️⃣ SESSION MODEL
+runs/{runId}/sessions/{sessionId}
+{
+  studentId,
+  startTime,
+  endTime,
+  status,
+  answers[],
+  difficultyTimeSpent[],
+  phaseTimes[],
+  minTimeViolations,
+  maxTimeViolations,
+  guessCount,
+  overrideFlags,
+  rawScorePercent,
+  accuracyPercent,
+  phaseAdherencePercent,
+  disciplineScoreSnapshot,
+  riskScoreSnapshot
+}
+Session immutable after submission.
+
+🔟 RUN ANALYTICS MODEL
+Stored separately:
+runAnalytics/{runId}
+{
+  avgRawScorePercent,
+  avgAccuracyPercent,
+  avgPhaseAdherence,
+  easyNeglectPercent,
+  hardBiasPercent,
+  guessRatePercent,
+  riskDistribution,
+  avgDisciplineIndex,
+  stabilityVariance,
+  controlledCompliancePercent,
+  overrideCount,
+  totalParticipants
+}
+Computed once after completion.
+Never recomputed dynamically.
+
+11️⃣ HOT–WARM–COLD STRATEGY
+HOT
+Active runs + active sessions.
+WARM
+Completed runs (current academic year).
+COLD
+Past academic year:
+    • Sessions exported to BigQuery
+    • runAnalytics retained
+    • Session collections optionally deleted from Firestore
+    • Year marked archived
+This prevents Firestore bloat.
+
+12️⃣ SECURITY RULES
+Assignment must enforce:
+    • One active session per student per run
+    • Server-authoritative timer
+    • Window enforcement server-side
+    • Signed session token
+    • No direct exam link via email
+    • Portal-based entry only
+    • Session cannot change mode mid-run
+    • Student cannot modify shuffle
+
+13️⃣ SCORE NORMALIZATION RULE
+Across Assignment module:
+Always display:
+    • Avg Raw Score %
+    • Avg Accuracy %
+Never display:
+    • Raw marks
+    • Total marks comparison
+Normalization protects:
+    • Chapter tests
+    • Full mocks
+    • Mixed difficulty tests
+
+14️⃣ DESIGN PRINCIPLES
+Assignment Section must:
+    • Be state-driven
+    • Lock structure early
+    • Avoid session scanning queries
+    • Use precomputed analytics
+    • Separate structural vs operational concerns
+    • Preserve audit integrity
+    • Scale horizontally across institutes
+
+15️⃣ FINAL ASSIGNMENT MODULE SUMMARY
+Assignment module now:
+✔ Creates timestamped run instances
+✔ Snapshots structural configuration
+✔ Enforces strict state machine
+✔ Supports shuffle safely
+✔ Uses % Raw + % Accuracy everywhere
+✔ Provides live discipline monitoring
+✔ Locks structure after activation
+✔ Stores analytics separately
+✔ HOT–WARM–COLD aligned
+✔ 10-year governance safe
+Tests define structure.
+Assignments execute structure.
+Sessions capture behavior.
+Analytics summarize execution.
+Insights interpret patterns.
+Governance evaluates maturity.
+
+

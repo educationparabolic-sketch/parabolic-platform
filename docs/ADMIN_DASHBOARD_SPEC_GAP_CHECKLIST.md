@@ -2,6 +2,8 @@
 
 Purpose: track admin dashboard implementation gaps against the reviewed sitemap/spec sections.
 
+Detailed implementation requirements for this checklist live in the corresponding `*_portal_detailed` source file(s) and should be read before implementing any item.
+
 Status values:
 - `completed` = implemented closely enough to the reviewed spec
 - `partial` = exists but merged, thinner, redirected, or only partly wired
@@ -34,7 +36,7 @@ Priority guide:
 | ID | Module | Item | Status | Priority | Notes |
 |---|---|---|---|---|---|
 | STU-001 | Students | Students module shell and route registry structure | completed | P0 | Core module exists |
-| STU-002 | Students | Dedicated mounted subpages for Student List, Bulk Upload, Lifecycle, Profile, Batch Management, Archive | partial | P0 | Registry exists; several subroutes collapse into one page |
+| STU-002 | Students | Dedicated mounted subpages for Student List, Bulk Upload, Lifecycle, Profile, Batch Management, Archive | completed | P0 | Dedicated `/admin/students/*` subroutes now mount route-specific screens; deeper profile analytics remain tracked under STU-007 |
 | STU-003 | Students | Student list basic filters and L0 columns | completed | P0 | Present in mounted UI |
 | STU-004 | Students | L2-gated risk state and discipline filters enforced in UI | partial | P1 | Filters exist but not cleanly gated by layer |
 | STU-005 | Students | L1 student list badges: phase adherence, easy neglect, hard bias, behaviour tag summary | missing | P1 | Not present |
@@ -230,4 +232,3 @@ Priority guide:
    - Fill out module-specific analytics, insights, governance, and structural preview gaps
 3. `P2`
    - Add polish, archive/thermal lifecycle UX, support/help, and richer institutional reporting surfaces
-

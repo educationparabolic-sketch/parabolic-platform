@@ -1,0 +1,346 @@
+⚙️ ADMIN DASHBOARD — SETTINGS SECTION
+Operational Configuration & Data Governance Layer
+
+0️⃣ NAVIGATION STRUCTURE
+Settings
+   ├── Institute Profile
+   ├── Academic Year Management
+   ├── Default Execution Policies
+   ├── User & Role Management
+   ├── Security & Access
+   ├── Data & Archive Controls
+   ├── System Configuration
+Access Control:
+    • Admin → Full access
+    • Director (L3) → View most, limited edit
+    • Teacher → No access
+All mutations logged in:
+institutes/{id}/settingsAudit/{eventId}
+
+1️⃣ INSTITUTE PROFILE
+Purpose
+Define institute identity metadata.
+Editable Fields
+    • Institute Name
+    • Institute Logo (storage reference only)
+    • Contact Email
+    • Contact Phone
+    • Time Zone
+    • Default Exam Type
+    • Academic Year Format (e.g., 2025–2026)
+Stored at:
+institutes/{id}/profile
+No analytics recomputation triggered.
+Logo change does NOT regenerate reports automatically.
+
+2️⃣ ACADEMIC YEAR MANAGEMENT
+This is structurally critical.
+Data Model
+institutes/{id}/academicYears/{yearId}
+{
+  startDate,
+  endDate,
+  status: "Active | Locked | Archived",
+  archivedAt,
+  snapshotId
+}
+
+2.1 View Current Year
+Display:
+    • Academic Year Label
+    • Status Badge:
+        ◦ 🟢 Active
+        ◦ 🟡 Locked
+        ◦ ⚫ Archived
+    • Student Count
+    • Run Count
+    • Snapshot status
+
+2.2 Lock Academic Year
+Effect:
+    • Prevent new test generation under this year
+    • Prevent new assignments
+    • Freeze studentYearMetrics
+    • Disable execution mode toggles
+Allowed only if:
+noActiveAttempts == true
+Lock action logs audit event.
+
+2.3 Archive Academic Year (HIGH-RISK ACTION)
+Irreversible.
+Double confirmation required:
+    1. Confirm no active tests
+    2. Confirm archive action
+Trigger sequence:
+1. Generate final governance snapshot
+2. Seal studentYearMetrics
+3. Export session data to BigQuery
+4. Move Firestore HOT collections to WARM partition
+5. Clear HOT session collections
+6. Initialize new academic year
+After archive:
+    • Year becomes read-only
+    • Appears in Governance longitudinal comparison
+    • No recalculation allowed
+
+3️⃣ DEFAULT EXECUTION POLICIES
+This controls structural behavior — not performance history.
+
+3.1 Phase Defaults
+L0 / L1
+Admin can set:
+    • Phase 1 %
+    • Phase 2 %
+    • Phase 3 %
+Validation:
+Must sum to 100%.
+Stored as:
+executionDefaults.phaseSplit
+
+L2+
+Additional Controls:
+    • Enable Adaptive Phase Engine (default ON)
+    • Allow Manual Override? (Boolean)
+    • Hard Mode Availability (license dependent)
+Manual override must not break test integrity.
+
+3.2 Timing Policy (L2+ Only)
+Define preset timing windows per difficulty.
+Example schema:
+timingPresets: {
+  "JEE_MAIN": {
+      easy: { min: 30, max: 60 },
+      medium: { min: 60, max: 150 },
+      hard: { min: 150, max: 210 }
+  }
+}
+Guardrails:
+    • No per-question arbitrary timing edits
+    • Reset to system defaults option available
+
+3.3 Alert Frequency Policy (L1+)
+Admin controls:
+    • Alert cooldown interval
+    • Max alerts per test section
+    • Escalation threshold
+Purpose:
+Prevent alert fatigue.
+Stored separately from Insights logic.
+
+4️⃣ USER & ROLE MANAGEMENT
+Access control boundary.
+
+Roles
+    • Admin
+    • Teacher
+    • Director (L3 only)
+    • Support (optional)
+
+Capability Matrix
+Role
+Generate Test
+Assign
+View Analytics
+Governance
+Admin
+✔
+✔
+✔
+✔ (if L3)
+Teacher
+✔
+✔
+Limited
+❌
+Director
+❌
+❌
+✔
+✔
+Support
+❌
+❌
+Debug Only
+❌
+
+Actions
+    • Add User
+    • Remove User
+    • Change Role
+    • Reset Password
+    • Suspend User
+All changes require:
+    • Admin authentication
+    • Audit log entry
+Passwords handled via auth provider (not custom stored).
+
+5️⃣ SECURITY & ACCESS
+Critical integrity area.
+
+Session Controls
+    • Allow Multiple Concurrent Admin Sessions (default: No)
+    • Session Timeout Duration
+    • Force Logout on Password Change
+
+Exam Subdomain Controls
+Frontend behavior toggles:
+    • Enforce Fullscreen Mode
+    • Block Right-Click (UI-level)
+    • Tab Switching Warning
+    • Tamper Detection Alerts (L2+)
+Note:
+These are deterrent mechanisms, not full security.
+
+Email Configuration
+    • Sender Name
+    • SMTP Settings (if custom)
+    • Notification Toggles
+Email sending still separated from vendor licensing emails
+
+6️⃣ DATA & ARCHIVE CONTROLS
+Aligns with HOT–WARM–COLD architecture.
+
+6.1 Storage Summary (Read-Only)
+Display:
+    • Firestore HOT storage usage
+    • BigQuery archive size
+    • Active session count
+    • Archived academic years
+No direct editing.
+
+6.2 Export Controls
+    • Export Students (CSV)
+    • Export Run Analytics
+    • Export Governance Snapshot
+    • Full Academic Year Export
+Exports must pull from snapshot collections, not sessions.
+
+6.3 Data Retention Policy
+Configurable:
+    • Years to retain raw sessions
+    • Auto-export threshold
+    • Auto-archive schedule
+Default recommendation:
+    • Keep only current year HOT
+    • Archive yearly
+System validates:
+Retention cannot delete active year data.
+
+7️⃣ SYSTEM CONFIGURATION
+Low-level feature control.
+
+7.1 Layer Configuration (Read-Only)
+Displays:
+    • Current Layer
+    • Eligibility Status
+    • Feature Flags
+Cannot modify — controlled via Licensing section.
+
+7.2 Feature Flags (Admin Only)
+For controlled rollouts:
+    • Enable Experimental Analytics
+    • Enable Beta UI
+    • Toggle Advanced Phase Visualization
+    • Enable LLM Monthly Summary (cost-controlled)
+Feature flags stored separately from license flags.
+
+8️⃣ LAYER VISIBILITY MATRIX
+Settings Area
+L0
+L1
+L2
+L3
+Institute Profile
+✔
+✔
+✔
+✔
+Academic Year
+✔
+✔
+✔
+✔
+Execution Policies
+Basic
+Basic
+Advanced
+Advanced
+Timing Policies
+❌
+❌
+✔
+✔
+User Management
+✔
+✔
+✔
+✔
+Governance Snapshot Trigger
+❌
+❌
+❌
+✔
+Archive Controls
+✔
+✔
+✔
+✔
+
+9️⃣ SAFETY RULES
+Settings must:
+    • Never mutate completed run data
+    • Never delete session records directly
+    • Never allow downgrade to break historical structure
+    • Require confirmation for archive
+    • Require Admin privilege for mutation
+    • Log every configuration change
+
+🔟 HOT–WARM–COLD CONTROL FLOW
+Settings triggers:
+Active Year → Lock
+Lock → Archive
+Archive → BigQuery export
+BigQuery export → Clear HOT partition
+Initialize new HOT partition
+Settings never directly queries sessions.
+All archival done via batch jobs.
+
+1️⃣1️⃣ UX PRINCIPLES
+Settings must:
+    • Separate operational from destructive actions
+    • Clearly label irreversible operations
+    • Group high-risk under “Advanced”
+    • Provide preview before archive
+    • Provide export backup option
+No analytics content mixed here.
+
+FINAL SETTINGS SUMMARY
+Settings now provides:
+✔ Institute identity configuration
+✔ Academic year lifecycle control
+✔ Phase & timing structural defaults
+✔ Alert tuning controls
+✔ Role & access management
+✔ Security configuration
+✔ HOT–WARM–COLD lifecycle triggers
+✔ Data retention management
+✔ Feature flags for safe rollout
+✔ Audit-safe mutation logging
+Settings is:
+The operational control tower.
+The structural safety guard.
+The lifecycle manager.
+The configuration boundary layer.
+
+Your Admin architecture is now structurally complete and layered:
+Overview
+Students
+Question Bank
+Tests
+Assignments
+Analytics
+Insights
+Governance
+Licensing
+Settings
+

@@ -1,0 +1,303 @@
+Excellent.
+Now we formalize the Test Portal (Execution Engine) — JEE-Mains Style Implementation with:
+    • Instruction screen first
+    • Built-in scientific calculator
+    • JEE-style navigation palette
+    • 99% JEE-Mains visual mimic (UI structure only, not branding)
+    • Layer-based enforcement engine intact
+    • Server-authoritative timing
+    • Token-isolated execution
+This is production-grade specification.
+
+🧪 TEST PORTAL — FINAL ARCHITECTURE
+Domain: exam.yourdomain.com
+Frontend: Separate build (isolated app)
+Design Language: JEE Main-style exam UI
+
+1️⃣ ENTRY FLOW (UPDATED)
+Student clicks Start Test
+Backend:
+    1. Validate assignment window
+    2. Validate student active status
+    3. Ensure no parallel active session
+    4. Create session:
+       runs/{runId}/sessions/{sessionId}
+    5. Attach:
+        ◦ templateSnapshot
+        ◦ phaseConfigSnapshot (if L2)
+        ◦ timingProfile
+        ◦ mode
+        ◦ license flags
+    6. Return signed short-lived JWT
+    7. Redirect to:
+https://exam.yourdomain.com/session/{sessionId}?token=xyz
+Exam portal validates token server-side before loading.
+
+2️⃣ FIRST SCREEN — INSTRUCTIONS PAGE (MANDATORY)
+This must appear BEFORE test loads.
+Structure (JEE-style):
+
+📝 Instructions Screen Layout
+Sections:
+    1. General Instructions
+    2. Marking Scheme
+    3. Question Palette Explanation
+    4. Navigation Instructions
+    5. Mode-Specific Instructions (Layer-aware)
+    6. Declaration Checkbox
+    7. “Start Test” Button
+
+Example Sections
+General Instructions
+    • Total Questions
+    • Total Duration
+    • Negative Marking Rule
+    • Attempt Limit
+Question Palette Explanation (Color Legend)
+    • Gray → Not Visited
+    • Red → Not Answered
+    • Green → Answered
+    • Purple → Marked for Review
+    • Purple with Tick → Answered & Marked
+Must visually match JEE portal structure.
+
+Mode-Specific Instruction Injection
+🟡 L1:
+“This test provides pacing guidance but does not restrict navigation.”
+🔵 L2 Controlled:
+“Minimum time per question will be enforced based on difficulty.”
+🔴 Hard Mode:
+“You may not revisit questions once answered.”
+
+Checkbox:
+☐ I have read and understood the instructions.
+Button enabled only after checkbox.
+
+3️⃣ MAIN TEST INTERFACE STRUCTURE
+(JEE Mains Layout Replica Structure)
+┌─────────────────────────────────────────────┐
+│ Header                                      │
+├───────────────┬─────────────────────────────┤
+│ Question      │ Question Area               │
+│ Navigation    │                             │
+│ Palette       │                             │
+├───────────────┴─────────────────────────────┤
+│ Footer Controls                             │
+└─────────────────────────────────────────────┘
+
+4️⃣ HEADER (JEE STYLE)
+Contains:
+    • Candidate Name
+    • Subject Tabs (Physics / Chemistry / Mathematics)
+    • Question Count
+    • Global Timer (Top Right, Red)
+    • Phase Indicator (L1+)
+    • Calculator Button
+Timer:
+    • Server-authoritative
+    • Sync every 10 seconds
+    • Visible countdown
+    • Color turns red at last 10 minutes
+
+5️⃣ QUESTION NAVIGATION PALETTE (JEE-IDENTICAL BEHAVIOR)
+Left side vertical panel.
+Each question displayed as numbered tile.
+Color-coded status exactly like JEE:
+Status
+Color
+Not Visited
+Gray
+Not Answered
+Red
+Answered
+Green
+Marked for Review
+Purple
+Answered + Marked
+Purple + Tick
+Section tabs above palette.
+Must behave like JEE:
+    • Click number → Jump
+    • Status updates on save
+    • Review markers allowed (unless Hard mode disables)
+
+6️⃣ QUESTION AREA
+Contains:
+    • Question Image (lazy loaded)
+    • Answer Options (Radio / Numeric / Matrix)
+    • Clear Response button
+    • Mark for Review checkbox
+    • Save & Next
+    • Previous
+
+7️⃣ BUILT-IN CALCULATOR
+Simple scientific calculator.
+Accessible via header button.
+Popup modal (non-draggable, JEE style).
+Functions required:
+        ◦ − × ÷
+    • √ (Square root)
+    • x²
+    • ∛ (Cube root)
+    • x³
+    • log
+    • ln
+    • sin
+    • cos
+    • tan
+    • π
+    • e
+No advanced graphing.
+All calculations client-side only.
+No history saved to backend.
+
+8️⃣ LAYER-SPECIFIC BEHAVIOR ENGINE
+
+🟢 L0 — Operational
+    • Free navigation
+    • Global timer
+    • Submit anytime
+    • No pacing alerts
+    • No timing gating
+    • Palette fully clickable
+
+🟡 L1 — Diagnostic
+Adds:
+    • Phase indicator (top)
+    • Yellow pacing advisory banner
+    • Easy remaining reminder
+    • Rapid answering advisory
+    • Submit warning if <50% attempted
+No blocking.
+
+🔵 L2 — Controlled Mode
+Adds enforcement:
+Adaptive Phase Engine Active
+Phase displayed:
+Phase 1 — Rapid Sweep
+Time Remaining: 22:14
+MinTime Enforcement
+    • Save & Next disabled until MinTime reached
+    • Visual countdown per question
+    • Clear message:
+“Minimum engagement time: 12s remaining”
+Consecutive Wrong Slowdown
+If threshold reached:
+    • 3-second forced pause before next question loads
+Overstay Advisory
+If student exceeds recommended average.
+Early Submit Confirmation
+If discipline index provisional low:
+Modal:
+“You have unanswered Easy questions. Are you sure?”
+
+🔴 Hard Mode
+Strict enforcement:
+    • MinTime AND MaxTime enforced
+    • Auto-lock after MaxTime
+    • Sequential navigation only
+    • No revisiting (configurable)
+    • Submit only at end (optional)
+    • No advisory banners
+    • Minimal UI distractions
+This mode feels structured, not guided.
+
+9️⃣ ADAPTIVE PHASE ENGINE (L2)
+On session start:
+Load:
+phaseConfigSnapshot
+timingProfile
+difficultyDistribution
+Engine tracks:
+    • Phase adherence %
+    • Overspend %
+    • Difficulty compliance
+    • Skip patterns
+Stored incrementally in session doc.
+Never computed in real-time UI.
+
+🔟 SESSION STATE MACHINE
+States:
+    • created
+    • started
+    • active
+    • submitted
+    • expired
+    • terminated
+Server authoritative timer.
+Refresh resumes session.
+Disconnect logic:
+    • Local IndexedDB cache
+    • Auto sync on reconnect
+    • Auto-submit on expiry
+
+1️⃣1️⃣ HOT–WARM–COLD ALIGNMENT
+During test:
+HOT:
+    • session doc
+    • incremental answer updates
+On submission:
+    • runAnalytics updated
+    • studentYearMetrics updated
+    • questionAnalytics updated
+Archive year:
+    • export sessions to BigQuery
+    • keep only summary docs
+Test portal never touches BigQuery.
+
+1️⃣2️⃣ SECURITY HARDENING
+    • Signed JWT session token
+    • Token expiration 15 min refreshable
+    • Strict CSP
+    • Disable embedding
+    • No direct questionId exposure
+    • Single session enforcement
+    • Anti-tamper timestamp validation
+    • Server-validated MinTime/MaxTime
+No trust in frontend.
+
+1️⃣3️⃣ PERFORMANCE RULES
+    • Preload next question image
+    • Lazy load large images
+    • Batch write answers every 5–10 sec
+    • Heartbeat ping every 20 sec
+    • Max 1 read per question load
+    • No analytics queries
+
+1️⃣4️⃣ JEE-STYLE VISUAL RULES
+To achieve 99% similarity (without copying brand elements):
+    • White background
+    • Blue section headers
+    • Red countdown timer
+    • Left vertical palette
+    • Square question buttons
+    • Instruction page layout identical structure
+    • Simple sans-serif typography
+    • Minimal animation
+    • Modal confirmations similar structure
+Remove:
+    • Any NTA branding
+    • Logos
+    • Copyright text
+    • Exact fonts
+Structure only, not trademark elements.
+
+FINAL TEST PORTAL SUMMARY
+You now have:
+✔ Mandatory instruction screen
+✔ Scientific calculator
+✔ JEE-style navigation palette
+✔ 99% structural UI similarity
+✔ Layer-based enforcement engine
+✔ Adaptive phase logic
+✔ Min/Max timing enforcement
+✔ Secure token-based isolation
+✔ Server-authoritative timing
+✔ HOT-only data access
+Your execution engine is now:
+Operational (L0)
+Diagnostic (L1)
+Controlled (L2)
+Strict (Hard Mode)
+Fully enterprise-grade.
+

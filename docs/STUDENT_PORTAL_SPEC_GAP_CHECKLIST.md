@@ -2,6 +2,8 @@
 
 Purpose: track student portal implementation gaps against the reviewed planned student-facing portal structure.
 
+Detailed implementation requirements for this checklist live in the corresponding `*_portal_detailed` source file(s) and should be read before implementing any item.
+
 Status values:
 - `completed` = implemented closely enough to the reviewed spec
 - `partial` = exists but merged, thinner, gated differently, or only partly wired
@@ -142,4 +144,3 @@ Priority guide:
    - STP-TST-013
    - STP-DIS-007
    - STP-SEC-004 through STP-SEC-005
-

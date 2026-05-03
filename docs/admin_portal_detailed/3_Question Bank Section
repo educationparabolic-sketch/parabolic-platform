@@ -1,0 +1,357 @@
+
+
+📚 ADMIN DASHBOARD — QUESTION BANK MODULE
+Implementation Specification v2.0
+
+0️⃣ MODULE PURPOSE
+Question Bank is internal content infrastructure.
+Responsibilities:
+    • Structured ingestion (ZIP + Excel + Images)
+    • Exam-aware schema enforcement
+    • Difficulty tagging discipline
+    • Immutable structural logic
+    • Version-safe editing
+    • Filter-ready metadata
+    • Question-level analytics aggregation
+    • Long-term storage safety
+Students never access this collection directly.
+
+1️⃣ NAVIGATION STRUCTURE
+Question Bank
+   ├── Upload Package
+   ├── Question Library
+   ├── Distribution Overview
+   ├── Validation Logs
+   ├── Tag Management
+   └── Archive / Versions
+
+2️⃣ UPLOAD PACKAGE
+2.1 Primary UI
+Two buttons only:
+[ Download Sample ]
+[ Upload ZIP ]
+Clean separation.
+
+2.2 Download Sample — Wizard Flow
+Step 1: Choose Exam Type
+Dropdown:
+    • JEE Mains
+    • NEET
+    • Other
+
+Step 2 (Conditional)
+If JEE Mains:
+Select Subject:
+    • Physics
+    • Chemistry
+    • Mathematics
+If NEET:
+Select Subject:
+    • Physics
+    • Chemistry
+    • Biology
+If Other:
+No subject lock.
+
+2.3 Generated Sample Excel Structure
+
+Case A — JEE / NEET (Simplified Schema)
+Columns EXCLUDED:
+    • Exam
+    • Subject
+    • Marks
+    • NegativeMarks
+Marking scheme auto-applied:
+Correct: +4
+Incorrect: -1
+These are stored in template metadata during upload.
+
+Required Columns
+    • UniqueKey
+    • ChapterName
+    • Difficulty (Easy / Medium / Hard)
+    • QuestionType
+    • QuestionNo
+    • QuestionImageFile
+    • SolutionImageFile
+    • CorrectAnswer
+    • PrimaryTag
+    • SecondaryTag
+
+Optional Columns (Included in Sample)
+    • Topic
+    • TutorialVideoLink
+    • SimulationLink
+    • AdditionalTag
+    • InternalNotes
+These appear in Student Portal after test (L0+).
+
+Case B — Other Exam
+Full schema:
+    • Exam
+    • Subject
+    • Marks
+    • NegativeMarks
+    • All metadata fields
+
+2.4 Excel Workbook Structure
+Workbook must contain:
+Sheet 1: questions
+Sheet 2: Exam Summary
+Sheet 3: INSTRUCTIONS
+
+Exam Summary Sheet
+Displays:
+    • Selected Exam
+    • Selected Subject
+    • Marking Scheme
+    • Difficulty definitions
+    • ZIP creation instructions
+
+INSTRUCTIONS Sheet
+Must include:
+    • Column-by-column explanation
+    • Allowed values
+    • Examples
+    • Image naming rules
+    • ZIP packaging steps
+    • Common error list
+This reduces support load.
+
+3️⃣ Upload ZIP Flow
+Step 1 — Upload ZIP
+Extract:
+    • questions.xlsx
+    • Question images
+    • Solution images
+Reject if nested folders exist.
+
+Step 2 — Schema Validation
+Row-level validation:
+Required fields present
+Allowed difficulty values
+CorrectAnswer format valid
+UniqueKey non-empty
+Errors must be:
+    • Row-specific
+    • Human-readable
+    • Downloadable CSV
+No partial commit.
+
+Step 3 — Image Validation
+For each row:
+    • QuestionImageFile exists
+    • SolutionImageFile exists
+    • File names match Excel
+No external URLs allowed.
+
+Step 4 — Duplicate Handling
+Check:
+    • Duplicate UniqueKey in upload
+    • Existing UniqueKey in database
+Rules:
+If question never used → allow overwrite
+If question used in assigned run → block structural overwrite
+
+Step 5 — Distribution Preview
+Before import, show:
+    • Easy / Medium / Hard %
+    • Chapter balance
+    • Marks balance
+    • Missing difficulty warnings
+    • Extreme imbalance warning
+
+Step 6 — Confirm Import
+Atomic commit:
+institutes/{id}/questions/{questionId}
+Images stored:
+CloudStorage/{instituteId}/questionBank/{questionId}/
+
+4️⃣ QUESTION LIBRARY
+4.1 Filters
+    • Exam
+    • Subject
+    • Chapter
+    • Difficulty
+    • QuestionType
+    • PrimaryTag
+    • SecondaryTag
+    • AdditionalTag
+    • Used in Template (Yes/No)
+    • Academic Year (optional)
+All indexed.
+
+4.2 Columns
+    • UniqueKey
+    • Subject
+    • Chapter
+    • Difficulty Badge
+    • Marks
+    • Used Count
+    • Last Used Date
+    • Version
+    • Status
+
+5️⃣ IMMUTABILITY RULES
+5.1 Structural Fields (Locked After Assignment)
+Cannot edit if question used in any assigned run:
+    • UniqueKey
+    • Difficulty
+    • Marks
+    • NegativeMarks
+    • QuestionType
+    • QuestionImageFile
+    • CorrectAnswer
+    • Exam
+    • Subject
+UI shows lock icon with tooltip:
+“Locked: Used in assigned test.”
+
+5.2 Flexible Fields (Editable with Warning)
+Editable even if used:
+    • SolutionImageFile
+    • TutorialVideoLink
+    • SimulationLink
+    • PrimaryTag
+    • SecondaryTag
+    • AdditionalTag
+    • Topic
+    • InternalNotes
+Show warning:
+“Changes affect future solution view only. Past scoring unaffected.”
+
+6️⃣ VERSIONING MODEL
+If structural change required:
+System must:
+    1. Duplicate question
+    2. Increment version
+    3. Generate new internal ID
+    4. Mark old as deprecated
+    5. Prevent new templates from using deprecated version (optional toggle)
+Never mutate question used in completed run.
+Each run stores:
+questionVersionId
+Ensures 10-year audit integrity.
+
+7️⃣ DISTRIBUTION OVERVIEW
+Displays:
+L0
+    • Global difficulty distribution
+    • Chapter coverage heatmap
+    • Marks distribution chart
+L2 Adds
+    • Overstay frequency per difficulty
+    • Guess rate per difficulty
+    • Risk impact per chapter
+    • Discipline stress per chapter
+All derived from questionAnalytics collection.
+
+8️⃣ VALIDATION LOGS
+Store:
+institutes/{id}/questionUploadLogs/{uploadId}
+Fields:
+    • uploadedBy
+    • timestamp
+    • totalRows
+    • errors
+    • warnings
+    • versionCreated
+Logs immutable.
+Rollback allowed only if:
+    • Questions unused in any assigned template.
+
+9️⃣ TAG MANAGEMENT
+Tag operations allowed:
+    • Create
+    • Rename
+    • Merge
+    • Deprecate
+Cannot delete tag if used in active template.
+Tag updates affect:
+    • Future analytics
+    • Not historical run snapshots
+No retroactive recalculation.
+
+🔟 QUESTION ANALYTICS
+Stored separately:
+questionAnalytics/{questionId}
+Contains:
+    • avgRawPercentWhenUsed
+    • avgAccuracyWhenUsed
+    • guessRate
+    • overstayRate
+    • riskImpactScore
+    • disciplineStressIndex
+Updated on session submission.
+Never calculated on read.
+
+1️⃣1️⃣ HOT–WARM–COLD MODEL
+HOT
+Questions used current year.
+WARM
+Unused recently but active.
+COLD
+Unused > 2 years.
+Images moved to archive storage bucket.
+Metadata retained.
+Never delete questions tied to historical runs.
+
+1️⃣2️⃣ SECURITY RULES
+    • Students cannot query questionBank.
+    • Question editing disabled if assigned.
+    • Versioning enforced server-side.
+    • Upload requires admin role.
+
+1️⃣3️⃣ PERFORMANCE RULES
+Never:
+    • Load full image in table view
+    • Query without filter
+    • Recompute distributions on page load
+Always:
+    • Use indexed filters
+    • Paginate library
+    • Precompute questionAnalytics
+    • Lazy-load image preview
+
+1️⃣4️⃣ LAYER VISIBILITY MATRIX
+Feature
+L0
+L1
+L2
+L3
+Upload
+✔
+✔
+✔
+✔
+Library Basic
+✔
+✔
+✔
+✔
+Question Analytics
+❌
+✔ Basic
+✔ Advanced
+✔
+Risk Impact
+❌
+❌
+✔
+✔
+
+1️⃣5️⃣ FINAL GUARANTEES
+Question Bank Module:
+✔ Exam-aware upload wizard
+✔ Simplified JEE/NEET schema
+✔ Rich metadata support
+✔ Immutable structural fields
+✔ Version-safe editing
+✔ Tag governance discipline
+✔ Filter-ready metadata
+✔ Analytics-ready structure
+✔ HOT–WARM–COLD aligned
+✔ 10-year audit safe
+
+
+

@@ -1,0 +1,291 @@
+Excellent.
+Now we are designing the true control brain of your SaaS.
+What you just said is extremely important:
+“My system’s power remains in the data I collect from institutes. More data → better calibration.”
+That means:
+You are not just building an exam SaaS.
+You are building a data network intelligence platform.
+So the Vendor Dashboard must not be basic admin control.
+It must be:
+A cross-institute behavioral intelligence engine.
+We will now formally define:
+🟣 VENDOR DASHBOARD — FULL ENTERPRISE SPECIFICATION
+Domain suggestion:
+vendor.yourdomain.com
+Access:
+    • Only platform owner
+    • Possibly internal team roles later
+
+🧭 VENDOR DASHBOARD — HIGH LEVEL STRUCTURE
+Vendor Dashboard
+│
+├── Platform Overview
+├── Institutes Management
+├── Licensing & Subscriptions
+├── Global Calibration Control
+│      ├── Parameter Editor
+│      ├── Calibration Simulation Engine
+│      ├── Impact Comparison
+│      ├── Version History
+│
+├── Cross-Institute Intelligence
+├── Revenue & Business Metrics
+├── System Health & Cost Monitoring
+├── Global Feature Flags
+├── Audit & Activity Logs
+└── Data Export & Backups
+Now we define each one clearly.
+
+1️⃣ PLATFORM OVERVIEW (Executive Snapshot)
+Purpose:
+Immediate view of platform health.
+Displays:
+    • Total Institutes
+    • Active Institutes
+    • Total Active Students
+    • Total Monthly Test Runs
+    • Avg Risk Distribution (global)
+    • Avg Discipline Index (global)
+    • Monthly Revenue (MRR)
+    • Infrastructure Cost Estimate
+    • System Error Rate
+Data source:
+    • Aggregated vendorMetrics collection
+    • Not raw institute reads
+
+2️⃣ INSTITUTES MANAGEMENT
+Purpose:
+Control tenants.
+Table columns:
+    • Institute Name
+    • License Layer (L0–L3)
+    • Active Students
+    • Monthly Usage
+    • Last Active Date
+    • Payment Status
+    • Risk Profile (optional)
+    • Stability Index (if L3)
+Actions:
+    • View Institute
+    • Suspend Institute
+    • Upgrade/Downgrade License
+    • Extend License
+    • Force Archive
+    • Delete (hard guard)
+This interacts with:
+institutes/{id}
+institutes/{id}/license
+
+3️⃣ LICENSING & SUBSCRIPTION CONTROL
+This connects Stripe + license object.
+Displays:
+    • Subscription Status
+    • Billing Cycle
+    • Next Invoice Date
+    • Payment Failures
+    • Manual Override Option
+Must include:
+    • Webhook log viewer
+    • License change history
+
+4️⃣ GLOBAL CALIBRATION CONTROL (CORE FEATURE)
+This is your moat.
+Structure:
+Calibration
+│
+├── Current Global Model
+├── Parameter Editor
+├── Calibration Simulation Engine
+├── Impact Preview
+├── Push to Selected Institutes
+└── Version History
+
+🔥 4A️⃣ Parameter Editor
+Editable parameters:
+Risk weights:
+    • GuessWeight
+    • PhaseDeviationWeight
+    • EasyNeglectWeight
+    • HardBiasWeight
+    • ConsecutiveWrongWeight
+Thresholds:
+    • GuessFactor per difficulty
+    • Phase tolerance %
+    • Hard bias deviation allowance
+    • Stability variance thresholds
+Timing multipliers:
+    • MinTime multiplier
+    • MaxTime multiplier
+Guardrails:
+    • Weights must sum to 1
+    • Ranges restricted
+
+🔥 4B️⃣ CALIBRATION SIMULATION ENGINE (CRITICAL)
+This is where your competitive advantage lives.
+Purpose:
+Simulate impact of new calibration model on historical data.
+Simulation modes:
+    • Single institute
+    • Multiple selected institutes
+    • All institutes
+Simulation inputs:
+    • Stored studentYearMetrics
+    • Stored runAnalytics
+    • Stored risk components
+    • Stored discipline components
+⚠ IMPORTANT:
+It must NEVER recompute raw sessions.
+It must use stored components only.
+
+Simulation Flow
+User edits weights → clicks “Simulate”
+System:
+    1. Fetch selected institutes’ summary docs
+    2. Apply new weight model
+    3. Recompute:
+        ◦ riskScore
+        ◦ disciplineIndex
+        ◦ risk cluster assignment
+    4. Generate comparison:
+Metric
+Before
+After
+Delta
+% Stable
+42%
+36%
+-6%
+% Impulsive
+18%
+24%
++6%
+Avg Discipline
+72
+65
+-7
+Also show:
+    • Heatmap shift
+    • Cluster movement
+    • Per-batch delta
+
+🔥 4C️⃣ IMPACT COMPARISON VISUALS
+Must show:
+    • Risk distribution shift
+    • Discipline shift
+    • High-risk cluster change
+    • Controlled Mode delta shift
+    • Estimated alert increase/decrease
+This helps you decide if new model is:
+    • Too aggressive
+    • Too lenient
+    • Balanced
+
+🔥 4D️⃣ PUSH TO SELECTED INSTITUTES
+Options:
+    • Apply globally
+    • Apply to selected
+    • Schedule activation date
+    • Draft mode only
+Every push creates:
+calibrationVersions/{versionId}
+Each run stores:
+run.calibrationVersion
+Never retroactively mutate historical metrics.
+
+🔥 4E️⃣ VERSION HISTORY
+Shows:
+    • Version ID
+    • Created date
+    • Changed parameters
+    • Affected institutes
+    • Activated date
+    • Rolled back?
+Allows rollback.
+
+5️⃣ CROSS-INSTITUTE INTELLIGENCE
+This is aggregated analytics across all institutes.
+Displays:
+    • Avg discipline index by exam type
+    • Risk distribution by region (if applicable)
+    • Hard bias frequency global
+    • Easy neglect frequency global
+    • Controlled Mode effectiveness global
+    • Topic weakness cluster across institutes
+This is your macro intelligence layer.
+Data source:
+    • vendorAggregates collection (precomputed nightly)
+
+6️⃣ REVENUE & BUSINESS METRICS
+Shows:
+    • Monthly recurring revenue
+    • Layer distribution (how many L0, L1, etc)
+    • Upgrade conversion rates
+    • Churn rate
+    • Average revenue per institute
+    • Active student growth
+
+7️⃣ SYSTEM HEALTH & COST MONITORING
+Displays:
+    • Firestore read/write count
+    • Cloud Function invocation count
+    • BigQuery storage size
+    • Hosting bandwidth
+    • Estimated monthly cost
+    • Error rate
+    • Failed function count
+This connects to monitoring logs.
+
+8️⃣ GLOBAL FEATURE FLAGS
+Allows:
+    • Enable beta features
+    • Enable experimental risk engine
+    • Enable new UI
+    • Rollout percentage
+Flag stored in:
+globalFeatureFlags/{flagName}
+
+9️⃣ AUDIT & ACTIVITY LOGS
+Tracks:
+    • License changes
+    • Calibration pushes
+    • Institute suspension
+    • Feature flag changes
+    • Manual overrides
+Must be immutable.
+
+🔟 DATA EXPORT & BACKUP
+Allows:
+    • Export platform metrics
+    • Export institute data
+    • Trigger manual backup
+    • Restore simulation (if needed)
+
+🧠 ARCHITECTURAL IMPLICATIONS
+Vendor dashboard requires:
+    • Global collections:
+        ◦ vendorMetrics
+        ◦ vendorAggregates
+        ◦ calibrationVersions
+        ◦ globalFeatureFlags
+        ◦ auditLogs
+    • Strict RBAC
+    • Strong Firestore rules
+    • Separate middleware enforcement
+
+🧱 NEW SECTIONS ADDED TO MASTER BLUEPRINT
+Add to master list:
+37️⃣ Vendor Dashboard Architecture
+38️⃣ Calibration Simulation Engine Architecture
+39️⃣ Cross-Institute Intelligence Aggregation Model
+40️⃣ Vendor Aggregation Pipeline (nightly job)
+41️⃣ Global Feature Flag Framework
+
+🧠 STRATEGIC NOTE
+The simulation engine makes your SaaS:
+    • Data network driven
+    • Self-improving
+    • Hard to copy
+    • Hard to replace
+This is your moat.
+
+

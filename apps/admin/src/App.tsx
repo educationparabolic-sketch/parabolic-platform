@@ -305,7 +305,31 @@ function App() {
         />
         <Route
           path="students"
+          element={<Navigate to="/admin/students/list" replace />}
+        />
+        <Route
+          path="students/list"
           element={<AdminRouteBoundary label="Loading students"><StudentManagementPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="students/bulk-upload"
+          element={<AdminRouteBoundary label="Loading bulk upload"><StudentManagementPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="students/lifecycle"
+          element={<AdminRouteBoundary label="Loading lifecycle"><StudentManagementPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="students/batches"
+          element={<AdminRouteBoundary label="Loading batch management"><StudentManagementPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="students/archive"
+          element={<AdminRouteBoundary label="Loading archive"><StudentManagementPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="students/:studentId"
+          element={<AdminRouteBoundary label="Loading student profile"><StudentManagementPage /></AdminRouteBoundary>}
         />
         <Route path="students/*" element={<AdminRouteResolutionPage />} />
         <Route

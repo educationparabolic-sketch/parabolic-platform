@@ -2,6 +2,8 @@
 
 Purpose: track vendor portal implementation gaps against the reviewed vendor route and portal structure.
 
+Detailed implementation requirements for this checklist live in the corresponding `*_portal_detailed` source file(s) and should be read before implementing any item.
+
 Status values:
 - `completed` = implemented closely enough to the reviewed spec
 - `partial` = exists in route definitions or page structure, but is not fully mounted or fully wired

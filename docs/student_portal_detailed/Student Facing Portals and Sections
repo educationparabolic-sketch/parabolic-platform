@@ -1,0 +1,296 @@
+🧑‍🎓 STUDENT PORTAL
+Domain: portal.yourdomain.com/student
+Execution Domain: exam.yourdomain.com/session/{sessionId}
+
+0️⃣ CORE PRINCIPLES
+Student Portal must:
+    • Motivate
+    • Simplify
+    • Never intimidate
+    • Never expose raw system logic
+    • Never show commercial licensing
+    • Never query raw sessions
+    • Always use summary documents
+    • Replace “Score” with:
+        ◦ Raw Score %
+        ◦ Accuracy %
+Score (absolute marks) must not appear as cumulative metric anywhere.
+
+1️⃣ STUDENT PORTAL — COMPLETE MAP
+Student Portal
+│
+├── Dashboard
+├── My Tests
+│    ├── Available
+│    ├── In Progress
+│    ├── Completed
+│    └── Archived
+│
+├── Performance
+│
+├── Insights (L1+)
+│
+├── Discipline (L2+)
+│
+└── Profile & Settings
+
+2️⃣ DASHBOARD (MOTIVATION-FIRST DESIGN)
+Purpose:
+Immediate clarity + confidence.
+Data source:
+    • studentYearMetrics
+    • runs (filtered)
+    • recent runAnalytics summary
+
+🟢 L0 Dashboard
+Top Banner (Motivational)
+    • “Keep Building Momentum”
+    • Dynamic message:
+        ◦ “You improved Raw % by +6% in last 3 tests.”
+        ◦ “Consistency is your strength this month.”
+
+Core Cards
+    • 📊 Avg Raw Score % (Last 5 Tests)
+    • 🎯 Avg Accuracy %
+    • 📝 Tests Attempted (Current Year)
+    • ⏳ Upcoming Tests Count
+    • 🏅 Batch Rank (Optional)
+No cumulative “Score”.
+
+🟡 L1 Adds
+    • Phase Adherence %
+    • Easy Neglect %
+    • Hard Bias %
+    • Time Misallocation %
+    • Behavior Summary Tag
+Example:
+“You perform better when attempting Easy questions early.”
+Neutral language only.
+
+🔵 L2 Adds
+    • Risk State Badge
+    • Discipline Index
+    • Controlled Mode Improvement Delta
+    • Guess Probability Indicator
+    • Mini Phase Compliance Trend
+Badge example:
+🟢 Stable
+🟡 Improving
+🔵 Building Discipline
+Never show “Volatile” aggressively.
+
+3️⃣ MY TESTS SECTION
+Purpose:
+Assignment management + execution gateway.
+
+Tabs
+    • Available
+    • In Progress
+    • Completed
+    • Archived
+
+AVAILABLE
+Each Test Card Shows:
+    • Test Name
+    • Duration
+    • Start Window
+    • End Window
+    • Mode Badge (simplified label)
+    • “Start Test” Button
+Start flow:
+Backend → create session
+→ Redirect to exam.yourdomain.com/session/{sessionId}
+No test links in email.
+
+IN PROGRESS
+    • Resume Button
+    • Time Remaining
+    • Attempt Status
+
+COMPLETED (CURRENT YEAR)
+For each test:
+Show:
+    • Raw Score %
+    • Accuracy %
+    • Time Used
+    • Rank in Batch (optional)
+    • Completion Date
+Buttons:
+    • 🔍 View Solutions (preferred over download for speed)
+    • 📥 Download PDF Summary (optional)
+
+SOLUTION VIEW STRUCTURE
+When student clicks View Solutions:
+For each question:
+    • Question Image
+    • Correct Answer
+    • Student Answer
+    • Explanation (SolutionImageFile)
+    • TutorialVideoLink (if exists)
+    • SimulationLink (if exists)
+Show links only if present.
+
+ARCHIVED (PAST ACADEMIC YEAR)
+Show:
+    • Test Name
+    • Raw %
+    • Accuracy %
+    • Date
+Do NOT show:
+    • Solution view
+    • Solution download
+    • TutorialVideoLink
+    • SimulationLink
+Reason:
+Storage in COLD partition.
+Only summary retained in Firestore.
+
+4️⃣ PERFORMANCE SECTION
+Purpose:
+Longitudinal growth visualization.
+
+🟢 L0
+Per test:
+    • Raw %
+    • Accuracy %
+    • Time Spent
+    • Rank
+Charts:
+    • Raw % Trend
+    • Accuracy % Trend
+Two-line combo chart only.
+
+🟡 L1 Adds
+    • Phase Adherence Trend
+    • Easy Neglect Frequency
+    • Hard Bias Frequency
+    • Topic Performance Breakdown
+    • Time Allocation Chart
+
+🔵 L2 Adds
+    • Risk State Timeline
+    • Discipline Index Trend
+    • Guess Rate Trend
+    • MinTime Violation %
+    • MaxTime Violation % (Hard Mode)
+    • Controlled Mode Comparison
+All precomputed.
+
+5️⃣ INSIGHTS (L1+)
+Purpose:
+Reflective intelligence.
+Show:
+    • Most Frequent Behavior Pattern
+    • Topic Weakness Summary
+    • Late-Phase Drop Indicator
+    • Rushed Pattern Frequency
+    • Skip Burst Indicator
+Tone:
+Constructive.
+Example:
+“You gain highest accuracy when pacing evenly.”
+No red alert styling.
+
+6️⃣ DISCIPLINE (L2+)
+Purpose:
+Execution maturity tracking.
+Display:
+    • Discipline Index (0–100)
+    • Phase Compliance %
+    • Controlled Mode Improvement %
+    • Overstay Frequency
+    • Guess Probability Cluster
+Mini progress bars.
+No heavy charts.
+
+7️⃣ PROFILE & SETTINGS
+    • Name
+    • Email
+    • Batch
+    • Academic Year
+    • Change Password
+    • Logout
+Performance data not editable.
+
+8️⃣ DATA FLOW (STUDENT SIDE)
+Session Completed
+↓
+runAnalytics updated
+↓
+studentYearMetrics updated
+↓
+Portal reflects new summary
+Portal never reads:
+    • session logs
+    • per-question timestamps
+    • raw answer arrays
+Only:
+    • summary docs
+    • per-run aggregated metrics
+
+9️⃣ SCORE REPLACEMENT RULE (GLOBAL)
+Everywhere in student portal:
+Replace:
+❌ Score
+With:
+✔ Raw Score %
+✔ Accuracy %
+Combined display example:
+Raw: 72%   |   Accuracy: 81%
+Never show raw marks cumulative across tests.
+
+🔟 MOTIVATIONAL DESIGN STRATEGY
+Student Portal must:
+    • Highlight improvement
+    • Show progress trends
+    • Avoid harsh labels
+    • Show next available test prominently
+    • Encourage participation
+Add dynamic banner:
+“No test in progress. Next test available tomorrow at 5 PM.”
+Or:
+“You’ve completed 4 tests this month. Keep going!”
+
+1️⃣1️⃣ PERFORMANCE REQUIREMENTS
+    • Load < 300ms
+    • Use summary docs only
+    • Paginate completed tests
+    • Lazy-load solution images
+    • Do not load all solution images at once
+    • Use CDN caching for images
+
+1️⃣2️⃣ SECURITY RULES
+    • Student cannot access Question Bank
+    • Student cannot view other students’ data
+    • Session access via signed token only
+    • Archived solution data not accessible
+    • No URL-based direct question access
+
+1️⃣3️⃣ HOT–WARM–COLD ALIGNMENT
+HOT:
+    • Current year studentYearMetrics
+    • Active runs
+    • Current runAnalytics
+WARM:
+    • Completed runs (current year)
+COLD:
+    • Archived sessions in BigQuery
+    • Only summary retained in Firestore
+    • No solution access
+
+FINAL STUDENT PORTAL SUMMARY
+Student Portal now provides:
+✔ Motivating dashboard
+✔ Raw % + Accuracy % everywhere
+✔ Testwise solution view (current year only)
+✔ TutorialVideoLink integration
+✔ SimulationLink integration
+✔ Archived test summary only
+✔ Behavior insight (L1+)
+✔ Discipline tracking (L2+)
+✔ Zero raw session exposure
+✔ HOT–WARM–COLD aligned storage
+The student experience becomes:
+Operational → Reflective → Disciplined → Motivated
+
+

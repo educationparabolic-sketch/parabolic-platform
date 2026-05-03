@@ -1,0 +1,348 @@
+🧩 ADMIN DASHBOARD — TESTS SECTION
+Structural Template Engine Specification v2.0
+
+0️⃣ Core Principle
+Tests = Structural Templates
+Assignments = Execution Instances
+A Test template:
+    • Freezes question set
+    • Freezes difficulty distribution
+    • Freezes timing profile
+    • Freezes phase configuration
+    • Freezes marking scheme
+    • Generates canonical identity
+After first assignment → structure immutable.
+
+1️⃣ NAVIGATION STRUCTURE
+Tests
+   ├── Create Test
+   ├── Test Library
+   ├── Template Analytics
+   ├── Distribution Review
+   └── Template Settings
+
+2️⃣ TESTS → CREATE TEST
+Step 1 — Question Pool Selection
+Teacher applies filters:
+    • Subject
+    • Chapter
+    • Difficulty
+    • Tags
+    • QuestionType
+    • Academic Year
+    • Unused / Used
+    • Custom filters
+System returns:
+X total questions matched
+Now teacher chooses:
+Generate test with Y questions (Y ≤ X)
+
+3️⃣ X → Y SELECTION MECHANISM
+Teacher must select one of the following:
+
+3.1 Deterministic Manual Selection
+UI shows filtered list.
+Teacher manually selects Y questions.
+Use case:
+    • Curated test
+    • Specific concept emphasis
+Store:
+selectionMethod = "manual"
+
+3.2 Statistical Selection Options
+3.2.1 Shuffle + Slice
+    • Shuffle X
+    • Take first Y
+selectionMethod = "shuffle_slice"
+
+3.2.2 Offset + Limit (Slice)
+    • Sorted list (e.g., by createdAt or difficulty)
+    • Take from offset N to N+Y
+selectionMethod = "offset_limit"
+Useful for segmented tests.
+
+3.2.3 Round Robin
+If multiple subjects selected:
+Distribute evenly across:
+    • Subjects
+    • Chapters
+    • Difficulty
+Algorithm:
+For each category:
+    pick 1 question cyclically
+until Y reached
+Ensures structural balance.
+selectionMethod = "round_robin"
+
+4️⃣ CANONICAL TEMPLATE ID (CRITICAL)
+After Y questions finalized:
+Sort question IDs ascending.
+Generate canonical string:
+hash = SHA256(concatenatedQuestionIds)
+Store as:
+canonicalId
+Before saving template:
+Check:
+Does canonicalId already exist?
+If yes:
+Show teacher:
+“Duplicate template detected. Existing template: TEST_023”
+Teacher may:
+    • Reuse existing template
+    • Continue and create duplicate intentionally
+This prevents silent structural duplication.
+
+5️⃣ STEP 2 — Select Exam Type
+Exam Type determines:
+    • Marking scheme
+    • Default timing windows
+    • Default section structure
+    • Difficulty timing mapping
+No manual marks entry allowed for JEE/NEET.
+All stored in template snapshot.
+
+6️⃣ STEP 3 — Set Duration
+Admin sets totalDuration.
+System computes:
+If L2:
+    • Recommended per-difficulty timing
+    • Phase distribution preview
+
+7️⃣ STEP 4 — Mode Capability
+Mode defines allowed execution modes at assignment time.
+Layer
+Allowed Modes
+L0
+Operational
+L1
+Operational + Diagnostic
+L2
+Operational + Diagnostic + Controlled + Hard
+L3
+Same as L2
+Important:
+Mode here defines capability ceiling.
+Actual mode selected during assignment.
+Store:
+allowedModes: []
+
+8️⃣ STEP 5 — Adaptive Phase Snapshot (L2+)
+Using difficulty weights:
+Easy = 1
+Medium = 2.3
+Hard = 4
+Compute load:
+totalLoad = Σ(weight × count)
+Compute recommended phase split.
+Store immutable snapshot:
+phaseConfigSnapshot
+After assignment → locked forever.
+
+9️⃣ STEP 6 — Timing Profile Snapshot (L2+)
+Derived from exam type.
+Example:
+Difficulty
+MinTime
+MaxTime
+Easy
+30s
+60s
+Medium
+60s
+150s
+Hard
+150s
+210s
+Stored in:
+timingProfile
+Never modified post-assignment.
+
+🔟 STEP 7 — Confirm & Save
+Initial status:
+draft
+After confirmation:
+ready
+After first assignment:
+assigned
+Structural edits locked.
+
+11️⃣ TEST LIBRARY
+Columns:
+    • Template Name
+    • Exam Type
+    • Total Questions
+    • Difficulty Distribution Badge
+    • Phase Config Badge (L2)
+    • Mode Capability
+    • Canonical ID (hidden in UI)
+    • Total Runs
+    • Last Used
+    • Status
+
+12️⃣ TEMPLATE STATUS MACHINE
+draft → ready → assigned → archived
+                ↓
+            deprecated
+Rules:
+    • draft → editable
+    • ready → editable
+    • assigned → structure locked
+    • archived → hidden
+    • deprecated → excluded from future comparisons
+
+13️⃣ RANDOMIZATION AT ASSIGNMENT LEVEL
+Important separation.
+Template contains fixed question set.
+At assignment stage:
+Teacher may enable:
+Shuffle Question Order = ON/OFF
+This:
+    • Shuffles display order
+    • Does NOT change canonicalId
+    • Does NOT change structural identity
+    • Does NOT affect analytics normalization
+Each session stores:
+displayOrderMap
+Ensures fairness.
+
+14️⃣ TEMPLATE ANALYTICS
+Cross-run evaluation.
+All metrics must use:
+    • Avg Raw Score %
+    • Avg Accuracy %
+    • Never raw marks.
+L1:
+    • Avg Raw %
+    • Avg Accuracy %
+    • Run count
+L2:
+    • Phase adherence variance
+    • Risk distribution shift
+    • Stability variance
+    • Discipline stress score
+    • Controlled vs Uncontrolled delta
+All aggregated in:
+templateAnalytics/{testId}
+Never recompute from sessions on read.
+
+15️⃣ DISTRIBUTION REVIEW
+Displays:
+    • Difficulty %
+    • Chapter coverage
+    • Marks distribution
+    • Section balance
+L2 adds:
+    • Estimated stress index
+    • Phase load preview
+    • Risk prediction preview
+Purely structural view.
+
+16️⃣ DATA MODEL
+institutes/{id}/tests/{testId}
+{
+  name,
+  canonicalId,
+  examType,
+  totalQuestions,
+  questionIds[],
+  difficultyDistribution,
+  phaseConfigSnapshot,
+  timingProfile,
+  allowedModes[],
+  selectionMethod,
+  totalRuns,
+  status,
+  createdAt
+}
+No session data embedded.
+
+17️⃣ HOT–WARM–COLD MODEL
+HOT:
+Templates used current year.
+WARM:
+Templates unused but recent.
+COLD:
+Unused > 2 years.
+Metadata retained.
+Images may move to archive bucket.
+Never delete template with historical runs.
+
+18️⃣ SECURITY RULES
+    • Students never access template directly.
+    • Session always references templateId.
+    • Structural fields locked post-assignment.
+    • Mode capability cannot be downgraded post-assignment.
+
+19️⃣ PERFORMANCE RULES
+Never:
+    • Query sessions inside Tests section.
+    • Compute distribution dynamically.
+    • Rebuild canonicalId on read.
+Always:
+    • Store difficultyDistribution snapshot.
+    • Store question count snapshot.
+    • Increment totalRuns via atomic counter.
+
+20️⃣ LAYER VISIBILITY
+Feature
+L0
+L1
+L2
+L3
+Create Test
+✔
+✔
+✔
+✔
+Phase Preview
+❌
+❌
+✔
+✔
+Timing Profile
+❌
+❌
+✔
+✔
+Template Analytics
+❌
+✔ Basic
+✔ Advanced
+Same
+Randomization Toggle
+✔
+✔
+✔
+✔
+
+21️⃣ SCORE REPLACEMENT RULE (GLOBAL ENFORCEMENT)
+Throughout Tests module:
+Replace:
+❌ Avg Score
+With:
+✔ Avg Raw Score %
+✔ Avg Accuracy %
+No raw score anywhere in UI or analytics.
+This makes system structurally normalized across:
+    • Chapter tests
+    • Combined tests
+    • Full mocks
+Correct architectural decision.
+
+22️⃣ FINAL TESTS MODULE SUMMARY
+Tests module now:
+✔ Supports X → Y intelligent selection
+✔ Prevents structural duplication via canonicalId
+✔ Snapshots difficulty + timing + phase
+✔ Enforces immutability post-assignment
+✔ Supports shuffle at assignment only
+✔ Uses % Raw + % Accuracy everywhere
+✔ Stores analytics separately
+✔ HOT–WARM–COLD aligned
+✔ 10-year governance safe
+Tests define structure.
+Assignments execute structure.
+Analytics measure execution.
+Insights interpret patterns.
+Governance evaluates maturity.
+

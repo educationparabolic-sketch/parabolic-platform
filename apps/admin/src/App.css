@@ -207,11 +207,65 @@
   overflow-wrap: anywhere;
 }
 
+.admin-student-subnav {
+  margin-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.admin-student-subnav-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(16, 42, 81, 0.16);
+  background: rgba(255, 255, 255, 0.82);
+  color: #23466f;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.admin-student-subnav-link-active {
+  border-color: #1b5fc2;
+  background: rgba(27, 95, 194, 0.12);
+  color: #143d74;
+}
+
 .admin-student-grid {
   margin-top: 18px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.admin-student-stack {
+  margin-top: 18px;
+  display: grid;
+  gap: 16px;
+}
+
+.admin-student-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.admin-student-summary-card {
+  border: 1px solid rgba(16, 42, 81, 0.12);
+  border-radius: 18px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.admin-student-summary-card h3,
+.admin-student-summary-card p {
+  margin: 0;
+}
+
+.admin-student-summary-card p + p,
+.admin-student-summary-card h3 + p {
+  margin-top: 6px;
 }
 
 .admin-student-form-footnote {
@@ -1707,6 +1761,10 @@
   }
 
   .admin-student-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-student-summary-grid {
     grid-template-columns: 1fr;
   }
 

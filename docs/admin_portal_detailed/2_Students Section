@@ -1,0 +1,407 @@
+Good.
+Now I will rewrite your entire Students Section as a clean, developer-grade implementation document incorporating:
+    • Raw % + Accuracy % replacement
+    • All clarified metric formulas
+    • Correct aggregation model
+    • HOT–WARM–COLD compliance
+    • Lifecycle integrity
+    • Immutable history enforcement
+    • Layer gating
+    • Billing awareness
+    • Future calibration compatibility
+No narrative. No philosophy. Only implementable specification.
+
+🎓 ADMIN DASHBOARD — STUDENTS MODULE
+Implementation Specification v2.0
+
+0️⃣ Module Purpose
+Students Module is responsible for:
+    • Identity & onboarding
+    • Lifecycle state enforcement
+    • Year-scoped metric aggregation
+    • Risk & discipline display (layer gated)
+    • Batch cohort management
+    • Billing-relevant active count
+    • Archive-safe long-term scaling
+All analytics shown here must come from precomputed summary documents.
+Never from raw session scans.
+
+1️⃣ NAVIGATION STRUCTURE
+Students
+   ├── Student List
+   ├── Bulk Upload
+   ├── Lifecycle Management
+   ├── Student Profile
+   ├── Batch Management
+   └── Academic Year Archive
+
+2️⃣ STUDENT LIST
+Purpose
+Operational filtering and cohort-level intelligence view.
+
+2.1 Filters
+    • Academic Year (required scope)
+    • Batch
+    • Status (invited / active / inactive / archived / suspended)
+    • Avg Raw Score % range
+    • Avg Accuracy % range
+    • Score Percentile (batch-relative, optional)
+    • Risk State (L2+)
+    • Discipline Index range (L2+)
+    • Last Active Date range
+Filtering must query studentYearMetrics collection.
+
+2.2 Columns
+L0 Columns
+    • StudentID
+    • Name
+    • Batch
+    • Status
+    • Tests Attempted (current year)
+    • Avg Raw Score %
+    • Avg Accuracy %
+    • Last Active
+L1 Adds (Badges Only)
+    • Phase Adherence %
+    • Easy Neglect Rate %
+    • Hard Bias Rate %
+    • Behaviour Tag Summary (most frequent tag)
+L2 Adds
+    • Risk State Badge
+    • Discipline Index (0–100)
+    • Controlled Mode Performance Delta
+    • Guess Rate %
+    • Execution Stability Flag
+L3 same as L2 (Governance is separate).
+
+2.3 Metric Definitions (Stored in studentYearMetrics)
+All metrics are computed on session submission and aggregated.
+
+Avg Raw Score %
+For each run:
+rawPercent = (obtainedMarks / totalMarks) × 100
+Year aggregation:
+avgRawScorePercent = mean(rawPercent across runs)
+
+Avg Accuracy %
+For each run:
+accuracyPercent = (correctAnswers / attemptedQuestions) × 100
+Year aggregation:
+avgAccuracyPercent = mean(accuracyPercent across runs)
+
+Phase Adherence %
+For each run:
+phaseDeviation =
+|actualPhaseTime - recommendedPhaseTime| / recommendedPhaseTime
+
+phaseAdherenceRun =
+100 - (mean phaseDeviation × 100)
+Year:
+avgPhaseAdherence = mean(phaseAdherenceRun)
+
+Easy Neglect Rate %
+Per run:
+easyAttemptRate = easyAttempted / easyTotal
+
+if easyAttemptRate < threshold:
+   mark easyNeglectRun = 1
+else:
+   easyNeglectRun = 0
+Year:
+easyNeglectRate =
+(sum easyNeglectRun / totalRuns) × 100
+
+Hard Bias Rate %
+ExpectedHardRatio:
+expectedHardRatio =
+totalHardQuestions / totalQuestions
+DeviationAllowance:
+0.10 × expectedHardRatio
+Hard bias if:
+studentHardRatio >
+(expectedHardRatio + deviationAllowance)
+Year:
+hardBiasRate =
+(runsWithHardBias / totalRuns) × 100
+
+Behaviour Tag Summary
+For each run compute normalized scores:
+rushScore
+overextensionScore
+phaseDriftScore
+impulsivityScore
+Select highest per run.
+Year summary:
+mostFrequentTag
+
+Guess Rate %
+Per run:
+if timeSpent < (minTime × guessFactor)
+AND incorrect:
+   mark guess
+Difficulty-specific guessFactor:
+    • Easy: 0.5
+    • Medium: 0.6
+    • Hard: 0.7
+Run guessRate:
+guesses / totalAttempted
+Year:
+avgGuessRate = mean(guessRate)
+
+Risk Score
+Normalized components 0–1.
+riskScore =
+0.30 × guessRate +
+0.20 × phaseDeviation +
+0.20 × easyNeglectRate +
+0.15 × hardBiasRate +
+0.15 × consecutiveWrongRate
+Convert:
+normalizedRiskScore = riskScore × 100
+
+Discipline Index
+disciplineIndex = 100 - normalizedRiskScore
+
+Controlled Mode Performance Delta
+If ≥ 3 runs in each mode:
+delta =
+avgRawPercentControlled -
+avgRawPercentUncontrolled
+Else null.
+
+Execution Stability Flag
+stdDev = standardDeviation(rawPercent across runs)
+Bands:
+    • Low → Stable
+    • Medium → Moderate
+    • High → Unstable
+
+3️⃣ BULK UPLOAD
+Flow
+Upload → Validate → Duplicate Resolve → Confirm → Create Accounts
+
+Required Fields
+    • StudentID
+    • FullName
+    • Email
+    • Batch
+Optional:
+    • ParentEmail
+    • Class
+    • Phone
+    • EnrollmentYear
+
+Validation
+    1. Column validation
+    2. Duplicate StudentID in file
+    3. Duplicate email in file
+    4. DB-level StudentID match
+    5. DB-level email mismatch conflict
+
+Reupload Logic
+Match by StudentID:
+If exists:
+    • Update mutable fields
+    • Preserve sessions
+    • Preserve metrics
+Optional checkbox:
+“Deactivate students not in file”
+Used for roster sync.
+
+Account Creation
+After confirmation only:
+    • Create Firebase Auth user
+    • Set custom claims
+    • Create Firestore student doc
+    • Send onboarding email
+Atomic transaction.
+
+4️⃣ LIFECYCLE MANAGEMENT
+States
+    • invited
+    • active
+    • inactive
+    • archived
+    • suspended
+
+Rules
+    • archived excluded from billing
+    • archived included in historical analytics
+    • deletion allowed only if totalRuns = 0
+    • lifecycle transitions logged
+
+5️⃣ STUDENT PROFILE
+L0
+    • Profile info
+    • Test history
+    • Combo chart:
+        ◦ Avg Raw %
+        ◦ Avg Accuracy %
+    • Rank in batch
+
+L1
+    • Phase adherence trend
+    • Easy neglect frequency
+    • Hard bias frequency
+    • Topic Weakness Summary
+    • Time Misallocation Summary
+
+Topic Weakness Summary
+Per topic:
+topicAccuracy =
+correctTopic / attemptedTopic
+If < threshold → mark weak.
+Aggregate by frequency.
+
+Time Misallocation
+Compare:
+actualTimePerDifficulty
+vs
+recommendedTimePerDifficulty
+Display deviation %.
+
+L2
+    • Risk state timeline
+    • Discipline trend
+    • Guess rate trend
+    • MinTime Violation %
+    • MaxTime Violation %
+    • Controlled Mode Delta
+    • Override Records
+
+MinTime Violation %
+minTimeViolations / totalQuestionsAttempted × 100
+
+MaxTime Violation %
+Hard Mode only:
+maxTimeExceeded / totalQuestions × 100
+
+Override Records
+Count of:
+    • Early termination
+    • Manual submission
+    • Phase override
+    • Hard mode exit override
+Stored per run.
+
+6️⃣ BATCH MANAGEMENT
+Batch summary must show:
+    • Student Count
+    • Avg Raw Score %
+    • Avg Accuracy %
+    • Avg Discipline Index (L2+)
+    • Risk Distribution (L2+)
+Never show raw marks.
+
+7️⃣ ACADEMIC YEAR ARCHIVE
+30-Day Warning Banner
+Display countdown:
+“Academic Year Ends in X Days”
+
+On Archive
+System:
+    1. Lock year (read-only)
+    2. Export sessions to BigQuery
+    3. Snapshot governance metrics
+    4. Archive graduating batches
+    5. Reset rolling metrics for new year
+
+After Archive
+Accessible:
+    • Student summaries
+    • Governance snapshots
+    • Read-only profiles
+Disabled:
+    • Assignments
+    • Test edits
+    • Student mutations
+    • Template mutations
+
+8️⃣ DATA MODEL
+HOT
+institutes/{id}/students/{studentId}
+Contains:
+    • identity
+    • status
+    • billing-relevant flags
+
+WARM
+academicYears/{year}/studentYearMetrics/{studentId}
+Contains:
+    • avgRawScorePercent
+    • avgAccuracyPercent
+    • avgPhaseAdherence
+    • easyNeglectRate
+    • hardBiasRate
+    • guessRate
+    • disciplineIndex
+    • riskState
+    • controlledDelta
+    • stabilityFlag
+
+COLD
+Raw sessions → BigQuery only.
+Firestore retains summaries only.
+
+9️⃣ PERFORMANCE RULES
+Never:
+    • Query all sessions for aggregation
+    • Compute averages on read
+    • Store session arrays in student doc
+Always:
+    • Update metrics on submission
+    • Store yearly aggregates
+    • Paginate list queries
+    • Index filters
+
+🔟 LAYER VISIBILITY MATRIX
+Feature
+L0
+L1
+L2
+L3
+Student List Basic
+✔
+✔
+✔
+✔
+Behaviour Indicators
+❌
+✔
+✔
+✔
+Risk & Discipline
+❌
+❌
+✔
+✔
+Controlled Delta
+❌
+❌
+✔
+✔
+Lifecycle Mgmt
+✔
+✔
+✔
+✔
+
+1️⃣1️⃣ BILLING LOGIC
+Active count:
+students where status == active
+Archived excluded.
+
+1️⃣2️⃣ FINAL STRUCTURAL GUARANTEES
+Students Module:
+✔ Normalized performance metrics
+✔ Immutable historical data
+✔ Year-scoped aggregation
+✔ Layer-gated visibility
+✔ Billing-safe lifecycle
+✔ Calibration-ready
+✔ No heavy read operations
+✔ 10-year scalable
+
+This is now developer-ready.
+Next module to formalize?
+
