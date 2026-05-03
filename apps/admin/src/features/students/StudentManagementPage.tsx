@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { NavLink, useLocation, useParams } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import {
@@ -261,10 +261,6 @@ function formatDateLabel(value: string | null): string {
   return new Date(parsed).toISOString().slice(0, 10);
 }
 
-function formatPercent(value: number | null): string {
-  return value === null ? "Not available" : `${value.toFixed(1)}%`;
-}
-
 function statusToTone(status: StudentStatus): "live" | "idle" | "alert" {
   if (status === "active") {
     return "live";
@@ -327,7 +323,6 @@ function resolveStudentSubpage(pathname: string): StudentSubpage {
 
 function StudentManagementPage() {
   const location = useLocation();
-  const params = useParams<{ studentId: string }>();
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadMessage, setLoadMessage] = useState<string | null>(null);
@@ -487,14 +482,6 @@ function StudentManagementPage() {
       setPage(totalPages);
     }
   }, [page, totalPages]);
-
-  const selectedProfileStudent = useMemo(() => {
-    if (!params.studentId) {
-      return null;
-    }
-
-    return students.find((student) => student.id === params.studentId || student.studentId === params.studentId) ?? null;
-  }, [params.studentId, students]);
 
   const archivedStudents = useMemo(
     () => students.filter((student) => student.status === "archived" || student.status === "suspended"),
@@ -1210,64 +1197,6 @@ function StudentManagementPage() {
     );
   }
 
-  function renderProfileView() {
-    if (!selectedProfileStudent) {
-      return (
-        <div className="admin-student-stack">
-          <p className="admin-content-copy">
-            No student matched <code>{params.studentId}</code>. Return to the mounted list workspace and choose a valid roster record.
-          </p>
-          <NavLink className="admin-primary-link" to="/admin/students/list">
-            Back to student list
-          </NavLink>
-        </div>
-      );
-    }
-
-    return (
-      <div className="admin-student-stack">
-        <p className="admin-content-copy">
-          Student profile routing is now mounted as its own screen. Full drill-down analytics depth remains tracked separately in STU-007.
-        </p>
-        <div className="admin-student-summary-grid">
-          <article className="admin-student-summary-card">
-            <h3>{selectedProfileStudent.fullName}</h3>
-            <p>{selectedProfileStudent.studentId}</p>
-            <p>{selectedProfileStudent.email}</p>
-          </article>
-          <article className="admin-student-summary-card">
-            <h3>Roster Position</h3>
-            <p>Batch: {selectedProfileStudent.batch}</p>
-            <p>Academic year: {selectedProfileStudent.academicYear}</p>
-            <p>Last active: {formatDateLabel(selectedProfileStudent.lastActive)}</p>
-          </article>
-          <article className="admin-student-summary-card">
-            <h3>Current Metrics</h3>
-            <p>Raw: {selectedProfileStudent.avgRawScorePercent.toFixed(1)}%</p>
-            <p>Accuracy: {selectedProfileStudent.avgAccuracyPercent.toFixed(1)}%</p>
-            <p>Percentile: {formatPercent(selectedProfileStudent.scorePercentile)}</p>
-          </article>
-        </div>
-        <UiTable
-          caption="Student profile summary"
-          columns={[
-            { id: "metric", header: "Metric", render: (row: { metric: string; value: string }) => row.metric },
-            { id: "value", header: "Value", render: (row: { metric: string; value: string }) => row.value },
-          ]}
-          rows={[
-            { metric: "Status", value: selectedProfileStudent.status },
-            { metric: "Risk State", value: selectedProfileStudent.riskState },
-            { metric: "Discipline Index", value: selectedProfileStudent.disciplineIndex.toFixed(0) },
-            { metric: "Tests Attempted", value: String(selectedProfileStudent.testsAttempted) },
-            { metric: "Activation Control", value: selectedProfileStudent.status === "active" ? "Can deactivate" : "Can activate" },
-          ]}
-          rowKey={(row) => row.metric}
-          emptyStateText="No summary metrics are available."
-        />
-      </div>
-    );
-  }
-
   return (
     <section className="admin-content-card" aria-labelledby="admin-students-title">
       <p className="admin-content-eyebrow">Build 117</p>
@@ -1285,11 +1214,6 @@ function StudentManagementPage() {
             {link.label}
           </NavLink>
         ))}
-        {currentSubpage === "profile" && selectedProfileStudent ? (
-          <span className="admin-student-subnav-link admin-student-subnav-link-active">
-            Profile: {selectedProfileStudent.studentId}
-          </span>
-        ) : null}
       </div>
 
       {loadMessage ? <p className="admin-student-inline-note">{loadMessage}</p> : null}
@@ -1300,8 +1224,6 @@ function StudentManagementPage() {
       {currentSubpage === "lifecycle" ? renderLifecycleView() : null}
       {currentSubpage === "batches" ? renderBatchesView() : null}
       {currentSubpage === "archive" ? renderArchiveView() : null}
-      {currentSubpage === "profile" ? renderProfileView() : null}
-
       <UiModal
         isOpen={Boolean(editingStudent)}
         title="Edit Student Details"

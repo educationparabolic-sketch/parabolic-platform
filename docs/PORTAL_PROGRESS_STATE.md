@@ -6,8 +6,8 @@ This file is the persistent handoff state for portal checklist implementation ac
 
 - `Current Target Portal`: `admin`
 - `Current Priority Band`: `P0`
-- `Last Completed Checklist ID`: `STU-002`
-- `Next Suggested Checklist ID`: `STU-007`
+- `Last Completed Checklist ID`: `STU-007`
+- `Next Suggested Checklist ID`: `STU-011`
 - `Last Updated`: `2026-05-03`
 
 ## Active Checklist Set

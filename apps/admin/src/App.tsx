@@ -54,6 +54,7 @@ const AdminLicensingConfigurationPage = lazy(() => import("./features/licensing/
 const AdminOverviewPage = lazy(() => import("./features/overview/AdminOverviewPage"));
 const AdminSettingsConfigurationPage = lazy(() => import("./features/settings/AdminSettingsConfigurationPage"));
 const StudentManagementPage = lazy(() => import("./features/students/StudentManagementPage"));
+const StudentProfilePage = lazy(() => import("./features/students/StudentProfilePage"));
 const QuestionBankManagementPage = lazy(() => import("./features/tests/QuestionBankManagementPage"));
 const TestTemplateManagementPage = lazy(() => import("./features/tests/TestTemplateManagementPage"));
 
@@ -329,7 +330,7 @@ function App() {
         />
         <Route
           path="students/:studentId"
-          element={<AdminRouteBoundary label="Loading student profile"><StudentManagementPage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading student profile"><StudentProfilePage /></AdminRouteBoundary>}
         />
         <Route path="students/*" element={<AdminRouteResolutionPage />} />
         <Route

@@ -41,7 +41,7 @@ Priority guide:
 | STU-004 | Students | L2-gated risk state and discipline filters enforced in UI | partial | P1 | Filters exist but not cleanly gated by layer |
 | STU-005 | Students | L1 student list badges: phase adherence, easy neglect, hard bias, behaviour tag summary | missing | P1 | Not present |
 | STU-006 | Students | L2 student list metrics: risk badge, discipline index, controlled delta, guess rate, stability flag | partial | P1 | Only partial depth currently surfaced |
-| STU-007 | Students | Dedicated student profile screen | missing | P0 | Route exists in registry but no real dedicated drill-down page |
+| STU-007 | Students | Dedicated student profile screen | completed | P0 | `/admin/students/:studentId` now mounts its own dedicated profile workspace; deeper analytics remain tracked under STU-008 through STU-010 |
 | STU-008 | Students | Student profile L0 analytics: history, combo chart, rank in batch | missing | P1 | Not implemented |
 | STU-009 | Students | Student profile L1 intelligence: phase/easy-neglect/hard-bias/topic weakness/time misallocation | missing | P1 | Not implemented |
 | STU-010 | Students | Student profile L2 intelligence: risk timeline, discipline trend, guess rate trend, min/max time violations, controlled delta, overrides | missing | P1 | Not implemented |
