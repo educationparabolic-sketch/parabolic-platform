@@ -4,10 +4,10 @@ This file is the persistent handoff state for portal checklist implementation ac
 
 ## Current State
 
-- `Current Target Portal`: `student`
+- `Current Target Portal`: `admin`
 - `Current Priority Band`: `P1`
-- `Last Completed Checklist ID`: `STP-GLB-003`
-- `Next Suggested Checklist ID`: `STP-TST-006`
+- `Last Completed Checklist ID`: `OVR-008`
+- `Next Suggested Checklist ID`: `OVR-009`
 - `Last Updated`: `2026-05-03`
 
 ## Active Checklist Set

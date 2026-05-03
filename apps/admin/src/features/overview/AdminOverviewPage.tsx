@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
+import UiChartContainer from "../../../../../shared/ui/components/UiChartContainer";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
 import {
   ApiClientError,
@@ -18,6 +19,20 @@ function effectiveLayer(layer: LicenseLayer | null): LicenseLayer {
   return layer ?? "L0";
 }
 
+function formatSubmissionTimestamp(value: string): string {
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("en-IN", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(parsed));
+}
+
 function metricCard(label: string, value: string) {
   return (
     <article key={label} className="admin-analytics-kpi-card">
@@ -25,6 +40,10 @@ function metricCard(label: string, value: string) {
       <h3>{value}</h3>
     </article>
   );
+}
+
+function formatControlledDelta(value: number): string {
+  return `${value >= 0 ? "+" : ""}${Math.round(value)}%`;
 }
 
 function AdminOverviewPage() {
@@ -123,12 +142,67 @@ function AdminOverviewPage() {
           <h3>{String(snapshot.currentActivity.activeTestSessions)} active sessions</h3>
           <small>Students in test: {snapshot.currentActivity.studentsCurrentlyInTest}</small>
           <small>Upcoming: {snapshot.currentActivity.upcomingTestLabel}</small>
+          {hasLayer(currentLayer, "L1") ? (
+            <div className="admin-overview-activity-signals" aria-label="Current activity behavior signals">
+              <div className="admin-overview-activity-signal">
+                <span>Behavior alerts</span>
+                <strong>{String(snapshot.currentActivity.liveBehaviorAlertCount)}</strong>
+              </div>
+              <div className="admin-overview-activity-signal">
+                <span>Pacing drift</span>
+                <strong>{formatPercent(snapshot.currentActivity.pacingDriftPercentage)}</strong>
+              </div>
+              <div className="admin-overview-activity-signal">
+                <span>Skip burst</span>
+                <strong>{formatPercent(snapshot.currentActivity.skipBurstPercentage)}</strong>
+              </div>
+            </div>
+          ) : null}
+          <div className="admin-overview-submission-list" aria-label="Last five submissions">
+            {snapshot.currentActivity.lastFiveSubmissions.map((submission) => (
+              <div
+                key={`${submission.studentName}-${submission.assessmentLabel}-${submission.submittedAt}`}
+                className="admin-overview-submission-item"
+              >
+                <strong>{submission.studentName}</strong>
+                <span>{submission.assessmentLabel}</span>
+                <time dateTime={submission.submittedAt}>{formatSubmissionTimestamp(submission.submittedAt)}</time>
+              </div>
+            ))}
+          </div>
         </article>
         <article className="admin-analytics-kpi-card">
           <p>Performance Summary (30d)</p>
           <h3>Raw {formatPercent(snapshot.performanceSummary.avgRawScorePercentage)} | Accuracy {formatPercent(snapshot.performanceSummary.avgAccuracyPercentage)}</h3>
           <small>Participation: {formatPercent(snapshot.performanceSummary.participationRate)}</small>
           <small>Batches: {snapshot.performanceSummary.highestPerformingBatch} / {snapshot.performanceSummary.lowestPerformingBatch}</small>
+          {hasLayer(currentLayer, "L2") ? (
+            <div className="admin-overview-performance-signals" aria-label="L2 structural compliance metrics">
+              <div className="admin-overview-performance-signal">
+                <span>Risk distribution</span>
+                <strong>{snapshot.performanceSummary.riskDistribution}</strong>
+              </div>
+              <div className="admin-overview-performance-signal">
+                <span>Avg discipline index</span>
+                <strong>{String(snapshot.performanceSummary.avgDisciplineIndex)}</strong>
+              </div>
+              <div className="admin-overview-performance-signal">
+                <span>Controlled delta</span>
+                <strong>{formatControlledDelta(snapshot.performanceSummary.controlledModeImprovementDelta)}</strong>
+              </div>
+              <div className="admin-overview-performance-signal">
+                <span>Execution stability</span>
+                <strong>{snapshot.performanceSummary.executionStabilityBadge}</strong>
+              </div>
+            </div>
+          ) : null}
+          <div className="admin-overview-performance-chart">
+            <UiChartContainer
+              title="Distribution Histogram"
+              subtitle="30-day raw mark distribution"
+              data={snapshot.performanceSummary.distributionHistogram}
+            />
+          </div>
         </article>
       </div>
 
@@ -145,6 +219,7 @@ function AdminOverviewPage() {
             <h3>Phase adherence {formatPercent(snapshot.performanceSummary.avgPhaseAdherencePercentage)}</h3>
             <small>Easy neglect: {formatPercent(snapshot.performanceSummary.easyNeglectPercentage)}</small>
             <small>Hard bias: {formatPercent(snapshot.performanceSummary.hardBiasPercentage)}</small>
+            <small>Time misallocation: {formatPercent(snapshot.performanceSummary.timeMisallocationPercentage)}</small>
           </article>
         </div>
       ) : null}

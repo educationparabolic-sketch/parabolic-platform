@@ -370,6 +370,57 @@
   color: #24426a;
 }
 
+.student-my-tests-lifecycle-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.student-my-tests-lifecycle-card {
+  border: 1px solid #d6e1f1;
+  border-radius: 0.75rem;
+  background: #fbfdff;
+  padding: 0.85rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.student-my-tests-lifecycle-card strong,
+.student-my-tests-lifecycle-card p {
+  margin: 0;
+}
+
+.student-my-tests-lifecycle-card p {
+  color: #3b587f;
+}
+
+.student-my-tests-lifecycle-pill {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.student-my-tests-lifecycle-pill-hot {
+  background: #fff5e2;
+  border-color: #dfc28d;
+  color: #7a5208;
+}
+
+.student-my-tests-lifecycle-pill-warm {
+  background: #e9f7ef;
+  border-color: #8ecfb0;
+  color: #0f6a46;
+}
+
+.student-my-tests-lifecycle-pill-cold {
+  background: #f0f3f8;
+  border-color: #bec8d6;
+  color: #5b667a;
+}
+
 .student-my-tests-filter-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -428,6 +479,11 @@
 
 .student-my-tests-action-stack small {
   color: #5d7698;
+}
+
+.student-my-tests-attempt-status {
+  color: #24426a;
+  font-weight: 600;
 }
 
 .student-my-tests-status {
@@ -621,6 +677,145 @@
 
 .student-performance-run-cell small {
   color: #5d7698;
+}
+
+.student-performance-risk-section {
+  border: 1px solid #d6e1f1;
+  border-radius: 0.75rem;
+  background: linear-gradient(180deg, #f6fbff 0%, #ffffff 100%);
+  padding: 0.95rem;
+  display: grid;
+  gap: 0.8rem;
+}
+
+.student-performance-risk-section h3,
+.student-performance-risk-section p {
+  margin: 0;
+}
+
+.student-performance-risk-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.student-performance-risk-card {
+  border: 1px solid #d9e4f3;
+  border-radius: 0.7rem;
+  background: #ffffff;
+  padding: 0.8rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.student-performance-risk-card header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.student-performance-risk-card p,
+.student-performance-risk-card dt {
+  color: #4b6487;
+}
+
+.student-performance-risk-card p {
+  margin: 0;
+}
+
+.student-performance-risk-card dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.student-performance-risk-card dl div {
+  border-radius: 0.6rem;
+  background: #f4f8fd;
+  padding: 0.55rem 0.6rem;
+}
+
+.student-performance-risk-card dt,
+.student-performance-risk-card dd {
+  margin: 0;
+}
+
+.student-performance-risk-card dd {
+  margin-top: 0.25rem;
+  color: #173a68;
+  font-weight: 700;
+}
+
+.student-performance-risk-pill {
+  border-radius: 999px;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.student-performance-risk-pill-stable {
+  background: #e6f6ee;
+  color: #1f6a46;
+}
+
+.student-performance-risk-pill-improving {
+  background: #eef4ff;
+  color: #2852a0;
+}
+
+.student-performance-risk-pill-building {
+  background: #fff3e3;
+  color: #99611e;
+}
+
+.student-performance-allocation-section {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.student-performance-allocation-card {
+  border: 1px solid #d6e1f1;
+  border-radius: 0.75rem;
+  background: #fbfdff;
+  padding: 0.95rem;
+  display: grid;
+  gap: 0.8rem;
+}
+
+.student-performance-allocation-card h3,
+.student-performance-allocation-card p {
+  margin: 0;
+}
+
+.student-performance-allocation-card dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.student-performance-allocation-card dl div {
+  border-radius: 0.6rem;
+  background: #f4f8fd;
+  padding: 0.55rem 0.6rem;
+}
+
+.student-performance-allocation-card dt,
+.student-performance-allocation-card dd {
+  margin: 0;
+}
+
+.student-performance-allocation-card dt {
+  color: #4b6487;
+}
+
+.student-performance-allocation-card dd {
+  margin-top: 0.25rem;
+  color: #173a68;
+  font-weight: 700;
 }
 
 .student-performance-discipline-section {

@@ -50,6 +50,30 @@ function toTrendPoints(
   }));
 }
 
+function riskStateClass(riskState: StudentPerformancePoint["riskState"]): string {
+  switch (riskState) {
+    case "Stable":
+      return "student-performance-risk-pill student-performance-risk-pill-stable";
+    case "Improving":
+      return "student-performance-risk-pill student-performance-risk-pill-improving";
+    case "Building Discipline":
+    default:
+      return "student-performance-risk-pill student-performance-risk-pill-building";
+  }
+}
+
+function riskStateHelper(riskState: StudentPerformancePoint["riskState"]): string {
+  switch (riskState) {
+    case "Stable":
+      return "Recent execution signals look steady across discipline and timing.";
+    case "Improving":
+      return "Momentum is moving in the right direction across recent runs.";
+    case "Building Discipline":
+    default:
+      return "This phase is about strengthening habits with each new attempt.";
+  }
+}
+
 function StudentPerformancePage() {
   const globalState = useGlobalPortalState();
   const [dataset, setDataset] = useState<StudentPerformanceDataset>(STUDENT_PERFORMANCE_FALLBACK_DATASET);
@@ -126,6 +150,11 @@ function StudentPerformancePage() {
     () => toTrendPoints(timeline, (entry) => entry.maxTimeViolationPercent),
     [timeline],
   );
+  const timeAllocationTrend = useMemo(
+    () => toTrendPoints(timeline, (entry) => entry.timeAllocationBalancePercent),
+    [timeline],
+  );
+  const riskTimeline = useMemo(() => [...timeline].reverse(), [timeline]);
 
   const latestSummaryCards = useMemo(() => {
     return [
@@ -264,14 +293,43 @@ function StudentPerformancePage() {
               data={phaseTrend}
               maxValue={100}
             />
-            <UiChartContainer
-              title="Guess Rate Trend"
-              subtitle="Layer L1 guess behavior"
-              variant="line"
-              data={guessTrend}
-              maxValue={100}
-            />
           </div>
+
+          <section className="student-performance-allocation-section" aria-label="Time allocation overview">
+            <div className="student-performance-chart-grid">
+              <UiChartContainer
+                title="Time Allocation Trend"
+                subtitle="How evenly you pace time across recent runs"
+                variant="line"
+                data={timeAllocationTrend}
+                maxValue={100}
+              />
+              <article className="student-performance-allocation-card">
+                <h3>Time Allocation Balance</h3>
+                <p>
+                  Balance stays strongest when early under-spend and late overstay both remain controlled across the
+                  full test.
+                </p>
+                <div className="student-performance-progress-track" aria-hidden="true">
+                  <span style={{ width: `${Math.round(dataset.timeAllocationBalancePercent)}%` }} />
+                </div>
+                <dl>
+                  <div>
+                    <dt>Current Balance</dt>
+                    <dd>{formatPercent(dataset.timeAllocationBalancePercent)}</dd>
+                  </div>
+                  <div>
+                    <dt>Latest MinTime</dt>
+                    <dd>{latestSnapshot ? formatPercent(latestSnapshot.minTimeViolationPercent) : "N/A"}</dd>
+                  </div>
+                  <div>
+                    <dt>Latest MaxTime</dt>
+                    <dd>{latestSnapshot ? formatPercent(latestSnapshot.maxTimeViolationPercent) : "N/A"}</dd>
+                  </div>
+                </dl>
+              </article>
+            </div>
+          </section>
 
           <div className="student-performance-l1-grid">
             <UiStatCard
@@ -287,7 +345,7 @@ function StudentPerformancePage() {
             <UiStatCard
               title="Time Allocation Balance"
               value={formatPercent(dataset.timeAllocationBalancePercent)}
-              helper="L1 pacing indicator"
+              helper="L1 pacing chart summary"
             />
           </div>
 
@@ -312,6 +370,15 @@ function StudentPerformancePage() {
               maxValue={100}
             />
             <UiChartContainer
+              title="Guess Rate Trend"
+              subtitle="Layer L2 guess behavior"
+              variant="line"
+              data={guessTrend}
+              maxValue={100}
+            />
+          </div>
+          <div className="student-performance-chart-grid">
+            <UiChartContainer
               title="MinTime Violation % Trend"
               subtitle="Layer-aware timing compliance"
               variant="line"
@@ -328,6 +395,42 @@ function StudentPerformancePage() {
               maxValue={100}
             />
           </div>
+
+          <section className="student-performance-risk-section" aria-label="Risk state timeline">
+            <h3>Risk State Timeline</h3>
+            <p>
+              Precomputed run-level risk states stay constructive and help students notice steadier execution patterns
+              over time.
+            </p>
+            <div className="student-performance-risk-grid">
+              {riskTimeline.map((entry) => (
+                <article key={entry.runId} className="student-performance-risk-card">
+                  <header>
+                    <div className="student-performance-run-cell">
+                      <strong>{entry.runLabel}</strong>
+                      <small>{formatDate(entry.completedAt)}</small>
+                    </div>
+                    <span className={riskStateClass(entry.riskState)}>{entry.riskState}</span>
+                  </header>
+                  <p>{riskStateHelper(entry.riskState)}</p>
+                  <dl>
+                    <div>
+                      <dt>Discipline</dt>
+                      <dd>{formatPercent(entry.disciplineIndex)}</dd>
+                    </div>
+                    <div>
+                      <dt>Guess Rate</dt>
+                      <dd>{formatPercent(entry.guessRatePercent)}</dd>
+                    </div>
+                    <div>
+                      <dt>MaxTime Violations</dt>
+                      <dd>{formatPercent(entry.maxTimeViolationPercent)}</dd>
+                    </div>
+                  </dl>
+                </article>
+              ))}
+            </div>
+          </section>
 
           <section className="student-performance-discipline-section" aria-label="Discipline progress overview">
             <h3>Discipline Overview</h3>

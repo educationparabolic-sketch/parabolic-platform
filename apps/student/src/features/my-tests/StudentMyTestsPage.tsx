@@ -27,6 +27,27 @@ const STATUS_FILTERS: StatusFilterChip[] = [
   { id: "archived", label: "Archived" },
 ];
 
+const STORAGE_LIFECYCLE_STEPS = [
+  {
+    id: "hot",
+    label: "HOT",
+    title: "Assigned and live test access",
+    description: "Available and in-progress tests stay action-ready so you can start or resume without delay.",
+  },
+  {
+    id: "warm",
+    label: "WARM",
+    title: "Current-year completed summaries",
+    description: "Completed current-year runs keep solution review and PDF summary access on summary-backed records.",
+  },
+  {
+    id: "cold",
+    label: "COLD",
+    title: "Archived summary-only history",
+    description: "Past-year records retain only summary fields, with solution assets and direct learning links removed.",
+  },
+] as const;
+
 function formatDateTime(value: string | null): string {
   if (!value) {
     return "N/A";
@@ -64,6 +85,38 @@ function formatDuration(minutes: number): string {
   }
 
   return `${hours}h ${remainder}m`;
+}
+
+function formatOptionalDuration(minutes: number | null): string {
+  if (minutes === null) {
+    return "N/A";
+  }
+
+  return formatDuration(minutes);
+}
+
+function formatRank(rank: number | null): string {
+  return rank === null ? "N/A" : `#${Math.round(rank)}`;
+}
+
+function formatAttemptStatus(row: StudentTestRecord): string {
+  if (row.attemptStatusLabel) {
+    return row.attemptStatusLabel;
+  }
+
+  if (row.attemptedQuestions !== null && row.totalQuestions !== null) {
+    return `${Math.round(row.attemptedQuestions)} of ${Math.round(row.totalQuestions)} questions attempted`;
+  }
+
+  return "Attempt in progress";
+}
+
+function formatFlaggedStatus(row: StudentTestRecord): string {
+  if (row.flaggedQuestions === null) {
+    return "Review markers sync from the active session summary.";
+  }
+
+  return `${Math.round(row.flaggedQuestions)} flagged for review`;
 }
 
 function computeTimeRemaining(endWindowIso: string): string {
@@ -331,12 +384,45 @@ function StudentMyTestsPage() {
       {
         id: "result",
         header: "Results Overview",
-        render: (row) => (
-          <div className="student-my-tests-test-cell">
-            <strong>{`Raw ${formatPercent(row.rawScorePercent)} | Accuracy ${formatPercent(row.accuracyPercent)}`}</strong>
-            <small>{row.completedAt ? `Completed ${formatDateTime(row.completedAt)}` : "Awaiting completion"}</small>
-          </div>
-        ),
+        render: (row) => {
+          if (row.status === "completed") {
+            return (
+              <div className="student-my-tests-test-cell">
+                <strong>
+                  {`Raw ${formatPercent(row.rawScorePercent)} | Accuracy ${formatPercent(row.accuracyPercent)}`}
+                </strong>
+                <small>{`Time Used ${formatOptionalDuration(row.timeUsedMinutes)} | Rank ${formatRank(row.rankInBatch)}`}</small>
+                <small>{row.completedAt ? `Completed ${formatDateTime(row.completedAt)}` : "Awaiting completion"}</small>
+              </div>
+            );
+          }
+
+          if (row.status === "archived") {
+            return (
+              <div className="student-my-tests-test-cell">
+                <strong>{`Raw ${formatPercent(row.rawScorePercent)} | Accuracy ${formatPercent(row.accuracyPercent)}`}</strong>
+                <small>{row.completedAt ? `Completed ${formatDateTime(row.completedAt)}` : "Summary retained"}</small>
+              </div>
+            );
+          }
+
+          if (row.status === "active") {
+            return (
+              <div className="student-my-tests-test-cell">
+                <strong>{formatAttemptStatus(row)}</strong>
+                <small>{formatFlaggedStatus(row)}</small>
+                <small>{`Window closes ${formatDateTime(row.endWindow)}`}</small>
+              </div>
+            );
+          }
+
+          return (
+            <div className="student-my-tests-test-cell">
+              <strong>{`Raw ${formatPercent(row.rawScorePercent)} | Accuracy ${formatPercent(row.accuracyPercent)}`}</strong>
+              <small>{row.completedAt ? `Completed ${formatDateTime(row.completedAt)}` : "Awaiting completion"}</small>
+            </div>
+          );
+        },
       },
       {
         id: "actions",
@@ -371,6 +457,7 @@ function StudentMyTestsPage() {
                   {isLaunchingSession === row.testId ? "Resuming..." : "Resume"}
                 </button>
                 <small>{computeTimeRemaining(row.endWindow)}</small>
+                <small className="student-my-tests-attempt-status">{formatAttemptStatus(row)}</small>
               </div>
             );
           }
@@ -432,6 +519,18 @@ function StudentMyTestsPage() {
 
       {inlineMessage ? <p className="student-my-tests-inline-note">{inlineMessage}</p> : null}
 
+      <section className="student-my-tests-lifecycle-strip" aria-label="Test storage lifecycle">
+        {STORAGE_LIFECYCLE_STEPS.map((step) => (
+          <article key={step.id} className="student-my-tests-lifecycle-card">
+            <span className={`student-my-tests-lifecycle-pill student-my-tests-lifecycle-pill-${step.id}`}>
+              {step.label}
+            </span>
+            <strong>{step.title}</strong>
+            <p>{step.description}</p>
+          </article>
+        ))}
+      </section>
+
       <div className="student-my-tests-filter-grid" role="tablist" aria-label="Filter by test status">
         {STATUS_FILTERS.map((filterItem) => {
           const isActive = filterItem.id === activeFilter;
@@ -484,7 +583,8 @@ function StudentMyTestsPage() {
       {activeFilter === "archived" ? (
         <p className="student-content-note">
           Archived view is COLD summary-only and intentionally excludes solution assets, direct question URLs, and
-          tutorial links.
+          tutorial links. Current-year completed items remain WARM with summary-backed review access, while active
+          assignments stay HOT for launch and resume.
         </p>
       ) : null}
 

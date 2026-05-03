@@ -1,8 +1,6 @@
 import { ApiClientError } from "../../../../../shared/services/apiClient";
-import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
-
-const apiClient = getPortalApiClient("student");
+import { getStudentSummaryResource } from "../../services/studentSummaryApi";
 
 export type StudentRiskState = "Stable" | "Drift-Prone" | "Impulsive" | "Volatile" | "Overextended";
 
@@ -275,7 +273,7 @@ export function shouldUseLiveApi(): boolean {
 }
 
 export async function fetchStudentDashboardDataset(): Promise<StudentDashboardDataset> {
-  const payload = await apiClient.get<unknown>("/student/dashboard");
+  const payload = await getStudentSummaryResource("/student/dashboard", "dashboard");
   return normalizeStudentDashboardDataset(payload);
 }
 

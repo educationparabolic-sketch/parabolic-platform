@@ -4,9 +4,11 @@ import {
   buildStudentReportUrl,
   toCdnAssetUrl,
 } from "../../../../../shared/services/cdnAssetDelivery";
-import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
-
-const apiClient = getPortalApiClient("student");
+import {
+  getStudentSolutionSummary,
+  getStudentSummaryResource,
+  studentPortalApiClient,
+} from "../../services/studentSummaryApi";
 
 export type StudentTestStatus = "scheduled" | "active" | "completed" | "archived";
 
@@ -22,12 +24,18 @@ export interface StudentTestRecord {
   durationMinutes: number;
   rawScorePercent: number | null;
   accuracyPercent: number | null;
+  timeUsedMinutes: number | null;
+  rankInBatch: number | null;
   completedAt: string | null;
   sessionLink: string | null;
   academicYear: string;
   currentAcademicYear: boolean;
   archivedSummary: string | null;
   summaryPdfUrl: string | null;
+  attemptStatusLabel: string | null;
+  attemptedQuestions: number | null;
+  totalQuestions: number | null;
+  flaggedQuestions: number | null;
 }
 
 export interface StudentSolutionItem {
@@ -69,12 +77,18 @@ export const STUDENT_MY_TESTS_FALLBACK: StudentTestRecord[] = [
     durationMinutes: 120,
     rawScorePercent: null,
     accuracyPercent: null,
+    timeUsedMinutes: null,
+    rankInBatch: null,
     completedAt: null,
     sessionLink: null,
     academicYear: CURRENT_ACADEMIC_YEAR,
     currentAcademicYear: true,
     archivedSummary: null,
     summaryPdfUrl: null,
+    attemptStatusLabel: null,
+    attemptedQuestions: null,
+    totalQuestions: null,
+    flaggedQuestions: null,
   },
   {
     testId: "test-2026-04-18-b",
@@ -88,12 +102,18 @@ export const STUDENT_MY_TESTS_FALLBACK: StudentTestRecord[] = [
     durationMinutes: 90,
     rawScorePercent: null,
     accuracyPercent: null,
+    timeUsedMinutes: null,
+    rankInBatch: null,
     completedAt: null,
     sessionLink: "/session/session-2026-04-18-b",
     academicYear: CURRENT_ACADEMIC_YEAR,
     currentAcademicYear: true,
     archivedSummary: null,
     summaryPdfUrl: null,
+    attemptStatusLabel: "18 of 30 questions attempted",
+    attemptedQuestions: 18,
+    totalQuestions: 30,
+    flaggedQuestions: 4,
   },
   {
     testId: "test-2026-04-14-c",
@@ -107,6 +127,8 @@ export const STUDENT_MY_TESTS_FALLBACK: StudentTestRecord[] = [
     durationMinutes: 75,
     rawScorePercent: 78,
     accuracyPercent: 84,
+    timeUsedMinutes: 65,
+    rankInBatch: 8,
     completedAt: "2026-04-14T09:05:00.000Z",
     sessionLink: "/session/session-2026-04-14-c",
     academicYear: CURRENT_ACADEMIC_YEAR,
@@ -118,6 +140,10 @@ export const STUDENT_MY_TESTS_FALLBACK: StudentTestRecord[] = [
       month: "04",
       fileName: "student_test_2026_04_14_c_summary.pdf",
     }),
+    attemptStatusLabel: null,
+    attemptedQuestions: null,
+    totalQuestions: null,
+    flaggedQuestions: null,
   },
   {
     testId: "test-2026-04-09-d",
@@ -131,6 +157,8 @@ export const STUDENT_MY_TESTS_FALLBACK: StudentTestRecord[] = [
     durationMinutes: 120,
     rawScorePercent: 72,
     accuracyPercent: 79,
+    timeUsedMinutes: 115,
+    rankInBatch: 11,
     completedAt: "2026-04-09T07:55:00.000Z",
     sessionLink: "/session/session-2026-04-09-d",
     academicYear: CURRENT_ACADEMIC_YEAR,
@@ -142,6 +170,10 @@ export const STUDENT_MY_TESTS_FALLBACK: StudentTestRecord[] = [
       month: "04",
       fileName: "student_test_2026_04_09_d_summary.pdf",
     }),
+    attemptStatusLabel: null,
+    attemptedQuestions: null,
+    totalQuestions: null,
+    flaggedQuestions: null,
   },
   {
     testId: "test-2026-04-05-e",
@@ -155,6 +187,8 @@ export const STUDENT_MY_TESTS_FALLBACK: StudentTestRecord[] = [
     durationMinutes: 105,
     rawScorePercent: 74,
     accuracyPercent: 82,
+    timeUsedMinutes: 99,
+    rankInBatch: null,
     completedAt: "2026-04-05T06:39:00.000Z",
     sessionLink: "/session/session-2026-04-05-e",
     academicYear: CURRENT_ACADEMIC_YEAR,
@@ -166,6 +200,10 @@ export const STUDENT_MY_TESTS_FALLBACK: StudentTestRecord[] = [
       month: "04",
       fileName: "student_test_2026_04_05_e_summary.pdf",
     }),
+    attemptStatusLabel: null,
+    attemptedQuestions: null,
+    totalQuestions: null,
+    flaggedQuestions: null,
   },
   {
     testId: "test-2026-03-30-f",
@@ -179,6 +217,8 @@ export const STUDENT_MY_TESTS_FALLBACK: StudentTestRecord[] = [
     durationMinutes: 105,
     rawScorePercent: 70,
     accuracyPercent: 77,
+    timeUsedMinutes: 94,
+    rankInBatch: 17,
     completedAt: "2026-03-30T07:04:00.000Z",
     sessionLink: "/session/session-2026-03-30-f",
     academicYear: CURRENT_ACADEMIC_YEAR,
@@ -190,6 +230,10 @@ export const STUDENT_MY_TESTS_FALLBACK: StudentTestRecord[] = [
       month: "03",
       fileName: "student_test_2026_03_30_f_summary.pdf",
     }),
+    attemptStatusLabel: null,
+    attemptedQuestions: null,
+    totalQuestions: null,
+    flaggedQuestions: null,
   },
   {
     testId: "test-2026-03-21-g",
@@ -203,6 +247,8 @@ export const STUDENT_MY_TESTS_FALLBACK: StudentTestRecord[] = [
     durationMinutes: 110,
     rawScorePercent: 68,
     accuracyPercent: 75,
+    timeUsedMinutes: 101,
+    rankInBatch: 23,
     completedAt: "2026-03-21T06:41:00.000Z",
     sessionLink: "/session/session-2026-03-21-g",
     academicYear: CURRENT_ACADEMIC_YEAR,
@@ -214,6 +260,10 @@ export const STUDENT_MY_TESTS_FALLBACK: StudentTestRecord[] = [
       month: "03",
       fileName: "student_test_2026_03_21_g_summary.pdf",
     }),
+    attemptStatusLabel: null,
+    attemptedQuestions: null,
+    totalQuestions: null,
+    flaggedQuestions: null,
   },
   {
     testId: "test-2025-01-17-h",
@@ -227,12 +277,18 @@ export const STUDENT_MY_TESTS_FALLBACK: StudentTestRecord[] = [
     durationMinutes: 120,
     rawScorePercent: 71,
     accuracyPercent: 76,
+    timeUsedMinutes: 112,
+    rankInBatch: null,
     completedAt: "2025-01-17T07:52:00.000Z",
     sessionLink: null,
     academicYear: "2025",
     currentAcademicYear: false,
     archivedSummary: "Archived attempt retained as summary-only record. Solution assets are intentionally locked.",
     summaryPdfUrl: null,
+    attemptStatusLabel: null,
+    attemptedQuestions: null,
+    totalQuestions: null,
+    flaggedQuestions: null,
   },
 ];
 
@@ -358,12 +414,18 @@ function normalizeStudentTestRecord(value: unknown, index: number): StudentTestR
     durationMinutes: toNumberOrNull(record.durationMinutes ?? record.duration) ?? 0,
     rawScorePercent: toNumberOrNull(record.rawScorePercent),
     accuracyPercent: toNumberOrNull(record.accuracyPercent),
+    timeUsedMinutes: toNumberOrNull(record.timeUsedMinutes ?? record.timeSpentMinutes),
+    rankInBatch: toNumberOrNull(record.rankInBatch ?? record.batchRank),
     completedAt: toOptionalString(record.completedAt ?? record.submittedAt),
     sessionLink: toSessionLink(record.sessionLink ?? record.examSessionUrl, sessionId),
     academicYear,
     currentAcademicYear: isCurrentAcademicYear(academicYear),
     archivedSummary: toOptionalString(record.archivedSummary),
     summaryPdfUrl: toCdnAssetUrl(toOptionalString(record.summaryPdfUrl)),
+    attemptStatusLabel: toOptionalString(record.attemptStatusLabel ?? record.attemptStatus ?? record.progressLabel),
+    attemptedQuestions: toNumberOrNull(record.attemptedQuestions ?? record.answeredQuestions ?? record.attemptedCount),
+    totalQuestions: toNumberOrNull(record.totalQuestions ?? record.questionCount),
+    flaggedQuestions: toNumberOrNull(record.flaggedQuestions ?? record.reviewLaterCount ?? record.markedForReviewCount),
   };
 }
 
@@ -460,14 +522,11 @@ export async function fetchStudentTestsPage(
     return paginateFallbackByStatus(status, page, pageSize);
   }
 
-  const payload = await apiClient.get<unknown>("/student/tests", {
-    query: {
-      status,
-      page,
-      pageSize,
-    },
+  const payload = await getStudentSummaryResource("/student/tests", "tests", {
+    status,
+    page,
+    pageSize,
   });
-
   const tests = normalizeStudentTestsPayload(payload);
   const maybeResponse = typeof payload === "object" && payload !== null ? payload as Record<string, unknown> : null;
 
@@ -493,7 +552,7 @@ export async function fetchStudentSolutions(testId: string): Promise<StudentSolu
     return FALLBACK_SOLUTIONS[testId] ?? [];
   }
 
-  const payload = await apiClient.get<unknown>(`/student/tests/${encodeURIComponent(testId)}/solutions`);
+  const payload = await getStudentSolutionSummary(testId);
   return normalizeSolutionsPayload(payload);
 }
 
@@ -502,7 +561,7 @@ export async function startStudentExamSession(test: Pick<StudentTestRecord, "run
     return test.sessionLink ?? `/session/mock-${test.runId}`;
   }
 
-  const payload = await apiClient.post<StartSessionResponse, {runId: string; testId: string}>("/exam/start", {
+  const payload = await studentPortalApiClient.post<StartSessionResponse, {runId: string; testId: string}>("/exam/start", {
     body: {
       runId: test.runId,
       testId: test.testId,

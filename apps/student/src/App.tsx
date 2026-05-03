@@ -217,6 +217,10 @@ function StudentLayout() {
             Portal summary refresh.
           </p>
           <p className="student-content-note">
+            Summary-only contract: student routes accept summary resources only and reject raw session logs,
+            per-question timestamps, and raw answer arrays at payload validation.
+          </p>
+          <p className="student-content-note">
             Terminology standard: display only Raw Score % and Accuracy %. Score, Total Marks, and
             cumulative raw marks are not shown.
           </p>

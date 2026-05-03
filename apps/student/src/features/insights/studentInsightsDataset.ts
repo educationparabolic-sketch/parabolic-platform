@@ -1,8 +1,6 @@
 import { ApiClientError } from "../../../../../shared/services/apiClient";
-import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
-
-const apiClient = getPortalApiClient("student");
+import { getStudentSummaryResource } from "../../services/studentSummaryApi";
 
 export type InsightPattern =
   | "Easy Neglect"
@@ -346,7 +344,7 @@ export function shouldUseLiveApi(): boolean {
 
 export async function fetchStudentInsightsDataset(limit = 6): Promise<StudentInsightsDataset> {
   const safeLimit = Math.max(1, Math.round(limit));
-  const payload = await apiClient.get<unknown>(`/student/insights?limit=${safeLimit}`);
+  const payload = await getStudentSummaryResource("/student/insights", "insights", { limit: safeLimit });
   return normalizeDataset(payload);
 }
 

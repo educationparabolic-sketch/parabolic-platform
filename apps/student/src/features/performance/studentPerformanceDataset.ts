@@ -1,13 +1,13 @@
 import { ApiClientError } from "../../../../../shared/services/apiClient";
-import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
-
-const apiClient = getPortalApiClient("student");
+import { getStudentSummaryResource } from "../../services/studentSummaryApi";
 
 export interface StudentPerformancePoint {
   runId: string;
   runLabel: string;
   completedAt: string;
+  riskState: "Stable" | "Improving" | "Building Discipline";
+  timeAllocationBalancePercent: number;
   rawScorePercent: number;
   accuracyPercent: number;
   phaseAdherencePercent: number;
@@ -57,6 +57,8 @@ export const STUDENT_PERFORMANCE_FALLBACK_DATASET: StudentPerformanceDataset = {
       runId: "run-2026-02-14-a",
       runLabel: "Run 1",
       completedAt: "2026-02-14T09:05:00.000Z",
+      riskState: "Building Discipline",
+      timeAllocationBalancePercent: 56,
       rawScorePercent: 63,
       accuracyPercent: 71,
       phaseAdherencePercent: 58,
@@ -72,6 +74,8 @@ export const STUDENT_PERFORMANCE_FALLBACK_DATASET: StudentPerformanceDataset = {
       runId: "run-2026-02-28-b",
       runLabel: "Run 2",
       completedAt: "2026-02-28T09:00:00.000Z",
+      riskState: "Building Discipline",
+      timeAllocationBalancePercent: 61,
       rawScorePercent: 66,
       accuracyPercent: 74,
       phaseAdherencePercent: 61,
@@ -87,6 +91,8 @@ export const STUDENT_PERFORMANCE_FALLBACK_DATASET: StudentPerformanceDataset = {
       runId: "run-2026-03-12-c",
       runLabel: "Run 3",
       completedAt: "2026-03-12T08:46:00.000Z",
+      riskState: "Improving",
+      timeAllocationBalancePercent: 66,
       rawScorePercent: 69,
       accuracyPercent: 77,
       phaseAdherencePercent: 65,
@@ -102,6 +108,8 @@ export const STUDENT_PERFORMANCE_FALLBACK_DATASET: StudentPerformanceDataset = {
       runId: "run-2026-03-26-d",
       runLabel: "Run 4",
       completedAt: "2026-03-26T09:11:00.000Z",
+      riskState: "Improving",
+      timeAllocationBalancePercent: 70,
       rawScorePercent: 72,
       accuracyPercent: 80,
       phaseAdherencePercent: 68,
@@ -117,6 +125,8 @@ export const STUDENT_PERFORMANCE_FALLBACK_DATASET: StudentPerformanceDataset = {
       runId: "run-2026-04-09-e",
       runLabel: "Run 5",
       completedAt: "2026-04-09T07:55:00.000Z",
+      riskState: "Stable",
+      timeAllocationBalancePercent: 73,
       rawScorePercent: 74,
       accuracyPercent: 82,
       phaseAdherencePercent: 71,
@@ -132,6 +142,8 @@ export const STUDENT_PERFORMANCE_FALLBACK_DATASET: StudentPerformanceDataset = {
       runId: "run-2026-04-16-f",
       runLabel: "Run 6",
       completedAt: "2026-04-16T09:03:00.000Z",
+      riskState: "Stable",
+      timeAllocationBalancePercent: 78,
       rawScorePercent: 77,
       accuracyPercent: 84,
       phaseAdherencePercent: 74,
@@ -183,6 +195,46 @@ function toString(value: unknown, fallback: string): string {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
 }
 
+function toRiskState(value: unknown, fallback: StudentPerformancePoint): StudentPerformancePoint["riskState"] {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "stable") {
+      return "Stable";
+    }
+
+    if (normalized === "improving") {
+      return "Improving";
+    }
+
+    if (
+      normalized === "building discipline" ||
+      normalized === "building_discipline" ||
+      normalized === "building-discipline"
+    ) {
+      return "Building Discipline";
+    }
+  }
+
+  if (
+    fallback.disciplineIndex >= 75 &&
+    fallback.phaseAdherencePercent >= 70 &&
+    fallback.guessRatePercent <= 20 &&
+    fallback.maxTimeViolationPercent <= 12
+  ) {
+    return "Stable";
+  }
+
+  if (
+    fallback.disciplineIndex >= 68 &&
+    fallback.phaseAdherencePercent >= 60 &&
+    fallback.guessRatePercent <= 26
+  ) {
+    return "Improving";
+  }
+
+  return "Building Discipline";
+}
+
 function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, value));
 }
@@ -227,6 +279,16 @@ function toGuessCluster(value: unknown, guessProbabilityPercent: number): "Low" 
   return "Low";
 }
 
+function inferTimeAllocationBalance(record: StudentPerformancePoint): number {
+  const timingPenalty =
+    (record.minTimeViolationPercent * 0.35) +
+    (record.maxTimeViolationPercent * 0.35) +
+    (record.overstayFrequencyPercent * 0.2) +
+    (record.guessRatePercent * 0.1);
+
+  return clampPercent(100 - timingPenalty);
+}
+
 function normalizePerformancePoint(value: unknown, index: number): StudentPerformancePoint | null {
   if (!value || typeof value !== "object") {
     return null;
@@ -235,10 +297,12 @@ function normalizePerformancePoint(value: unknown, index: number): StudentPerfor
   const record = value as Record<string, unknown>;
   const runId = toString(record.runId ?? record.testId, `run-${index + 1}`);
 
-  return {
+  const normalizedPoint: StudentPerformancePoint = {
     runId,
     runLabel: toString(record.runLabel ?? record.testName, `Run ${index + 1}`),
     completedAt: toString(record.completedAt ?? record.submittedAt, new Date(0).toISOString()),
+    riskState: "Building Discipline",
+    timeAllocationBalancePercent: 0,
     rawScorePercent: clampPercent(toNumber(record.rawScorePercent)),
     accuracyPercent: clampPercent(toNumber(record.accuracyPercent)),
     phaseAdherencePercent: clampPercent(toNumber(record.phaseAdherencePercent ?? record.phaseCompliancePercent)),
@@ -250,6 +314,12 @@ function normalizePerformancePoint(value: unknown, index: number): StudentPerfor
     timeSpentMinutes: Math.max(0, Math.round(toNumber(record.timeSpentMinutes ?? record.timeUsedMinutes))),
     rankInBatch: toNullableNumber(record.rankInBatch),
   };
+
+  normalizedPoint.riskState = toRiskState(record.riskState ?? record.riskBadge, normalizedPoint);
+  normalizedPoint.timeAllocationBalancePercent = clampPercent(
+    toNumber(record.timeAllocationBalancePercent ?? record.timeAllocationPercent, inferTimeAllocationBalance(normalizedPoint)),
+  );
+  return normalizedPoint;
 }
 
 function normalizeTopicPerformance(value: unknown, index: number): TopicPerformanceEntry | null {
@@ -325,10 +395,7 @@ export function shouldUseLiveApi(): boolean {
 }
 
 export async function fetchStudentPerformanceDataset(lastN = 10): Promise<StudentPerformanceDataset> {
-  const payload = await apiClient.get<unknown>("/student/performance", {
-    query: { lastN },
-  });
-
+  const payload = await getStudentSummaryResource("/student/performance", "performance", { lastN });
   return normalizeDataset(payload);
 }
 

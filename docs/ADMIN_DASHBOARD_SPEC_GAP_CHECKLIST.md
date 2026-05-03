@@ -20,12 +20,12 @@ Priority guide:
 |---|---|---|---|---|---|
 | OVR-001 | Overview | Layer-aware overview shell with operational, activity, performance, execution, risk, governance, and licensing sections | completed | P0 | Core structure is present |
 | OVR-002 | Overview | Current academic year as dedicated operational card | partial | P2 | Present in header copy, not as a dedicated card |
-| OVR-003 | Overview | Current Activity last 5 submissions | missing | P1 | Not present |
-| OVR-004 | Overview | L1 current activity signals: live behavior alert count, pacing drift, skip burst | missing | P1 | Not present in overview |
+| OVR-003 | Overview | Current Activity last 5 submissions | completed | P1 | Added summary-safe last five submission entries with student, assessment, and submission time in the overview current activity card |
+| OVR-004 | Overview | L1 current activity signals: live behavior alert count, pacing drift, skip burst | completed | P1 | Added L1-only behavior signal tiles inside the Current Activity card without introducing L2 risk labels |
 | OVR-005 | Overview | L2 current activity indicators rendered as compact badges | partial | P2 | Metrics exist but not in the exact badge treatment |
-| OVR-006 | Overview | Performance distribution histograms | missing | P1 | Not present in overview |
-| OVR-007 | Overview | L1 time misallocation metric | missing | P1 | Not present in overview |
-| OVR-008 | Overview | L2 performance metrics: avg discipline index, controlled delta, execution stability badge | missing | P1 | Not present in overview performance block |
+| OVR-006 | Overview | Performance distribution histograms | completed | P1 | Added a compact 30-day raw marks distribution histogram inside the overview performance summary card using summary-document data only |
+| OVR-007 | Overview | L1 time misallocation metric | completed | P1 | Added the L1 time misallocation percentage to the overview diagnostics block alongside phase adherence, easy neglect, and hard bias |
+| OVR-008 | Overview | L2 performance metrics: avg discipline index, controlled delta, execution stability badge | completed | P1 | Added L2-only structural compliance metrics in the overview performance card, including risk distribution, discipline index, controlled delta, and stability badge |
 | OVR-009 | Overview | L2 execution summary expansion: risk cluster breakdown, high-risk count, discipline regression, controlled mode impact | missing | P1 | Only L1 execution summary is implemented |
 | OVR-010 | Overview | Risk snapshot: discipline 7-day trend and top-5 attention list | missing | P1 | Current risk snapshot is thinner |
 | OVR-011 | Overview | Governance snapshot: override frequency trend and sparkline | missing | P2 | Governance snapshot exists but is lighter |

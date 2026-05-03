@@ -881,6 +881,100 @@
   color: #5f7697;
 }
 
+.admin-overview-activity-signals {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.admin-overview-activity-signal {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(20, 55, 100, 0.08);
+}
+
+.admin-overview-activity-signal span {
+  color: #486486;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.admin-overview-activity-signal strong {
+  color: #173c68;
+  font-size: 1rem;
+}
+
+.admin-overview-submission-list {
+  margin-top: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.admin-overview-submission-item {
+  display: grid;
+  gap: 2px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(16, 42, 81, 0.12);
+}
+
+.admin-overview-submission-item strong {
+  color: #173c68;
+  font-size: 0.93rem;
+}
+
+.admin-overview-submission-item span,
+.admin-overview-submission-item time {
+  color: #5f7697;
+  font-size: 0.84rem;
+}
+
+.admin-overview-performance-chart {
+  margin-top: 10px;
+}
+
+.admin-overview-performance-signals {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-overview-performance-signal {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(20, 55, 100, 0.08);
+}
+
+.admin-overview-performance-signal span {
+  color: #486486;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.admin-overview-performance-signal strong {
+  color: #173c68;
+  font-size: 0.92rem;
+}
+
+.admin-overview-performance-chart .ui-chart {
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(20, 55, 100, 0.05);
+}
+
+.admin-overview-performance-chart .ui-chart-header h3 {
+  font-size: 0.95rem;
+}
+
+.admin-overview-performance-chart .ui-chart-header p {
+  font-size: 0.78rem;
+}
+
 .admin-analytics-chart-grid {
   margin-top: 16px;
   display: grid;

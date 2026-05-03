@@ -24,9 +24,9 @@ Priority guide:
 | STP-GLB-004 | Global | Insights hidden at L0 and visible from L1+ | completed | P0 | Implemented |
 | STP-GLB-005 | Global | Raw % + Accuracy % terminology used across portal | completed | P0 | Implemented |
 | STP-GLB-006 | Global | No student-facing commercial licensing area | completed | P1 | No licensing module in student nav |
-| STP-GLB-007 | Global | Summary-document-only portal architecture | partial | P1 | Strong UI intent exists; full backend proof is outside current frontend review |
+| STP-GLB-007 | Global | Summary-document-only portal architecture | completed | P1 | Added shared student summary payload guard across dashboard, tests, performance, insights, and solutions to reject raw-session fields at runtime |
 | STP-GLB-008 | Global | No raw session exposure in portal UX | completed | P0 | Current UX keeps raw session details hidden |
-| STP-GLB-009 | Global | HOT/WARM/COLD alignment clearly reflected in UX | partial | P1 | Current-year vs archived behavior is strong; full lifecycle is more architectural |
+| STP-GLB-009 | Global | HOT/WARM/COLD alignment clearly reflected in UX | completed | P1 | Added explicit HOT/WARM/COLD lifecycle guidance in My Tests to clarify launch-ready, current-year review, and archived summary-only states |
 
 ## Dashboard
 
@@ -49,8 +49,8 @@ Priority guide:
 | STP-TST-002 | My Tests | Available test card fields: name, duration, start/end, mode, Start Test | completed | P0 | Implemented |
 | STP-TST-003 | My Tests | Start flow creates session and redirects to exam domain | completed | P0 | Implemented |
 | STP-TST-004 | My Tests | No direct test links in email / token-gated portal launch | completed | P1 | Portal token-gated start flow is implemented |
-| STP-TST-005 | My Tests | In Progress: Resume, Time Remaining, Attempt Status | partial | P1 | Resume and time remaining exist; attempt status is thinner |
-| STP-TST-006 | My Tests | Completed: Raw %, Accuracy %, Time Used, Rank in Batch, Completion Date | partial | P1 | Raw/Accuracy/date are present; Time Used and Rank are incomplete here |
+| STP-TST-005 | My Tests | In Progress: Resume, Time Remaining, Attempt Status | completed | P1 | Added summary-backed attempt status details for active tests, including attempted-count and flagged-review context |
+| STP-TST-006 | My Tests | Completed: Raw %, Accuracy %, Time Used, Rank in Batch, Completion Date | completed | P1 | Implemented completed-row summary with Time Used and optional Rank in Batch from dataset/live payload normalization |
 | STP-TST-007 | My Tests | View Solutions for current-year completed tests only | completed | P0 | Implemented |
 | STP-TST-008 | My Tests | Download PDF Summary | completed | P2 | Present when URL exists |
 | STP-TST-009 | My Tests | Solution view includes question image, correct answer, student answer, explanation image | completed | P1 | Implemented |
@@ -72,10 +72,10 @@ Priority guide:
 | STP-PERF-005 | Performance | L1 easy neglect frequency | completed | P1 | Implemented |
 | STP-PERF-006 | Performance | L1 hard bias frequency | completed | P1 | Implemented |
 | STP-PERF-007 | Performance | L1 topic performance breakdown | completed | P1 | Implemented |
-| STP-PERF-008 | Performance | L1 time allocation chart/balance view | partial | P1 | Time allocation balance exists, but not as a richer chart-driven section |
-| STP-PERF-009 | Performance | L2 risk state timeline | missing | P1 | Not implemented as a distinct timeline |
+| STP-PERF-008 | Performance | L1 time allocation chart/balance view | completed | P1 | Implemented dedicated time allocation chart plus balance summary card using summary-only run signals |
+| STP-PERF-009 | Performance | L2 risk state timeline | completed | P1 | Implemented as a dedicated L2 risk timeline with constructive badges and summary-only run signals |
 | STP-PERF-010 | Performance | L2 discipline index trend | completed | P1 | Implemented |
-| STP-PERF-011 | Performance | L2 guess rate trend | partial | P1 | Guess trend currently appears in L1 area rather than exact planned L2 structure |
+| STP-PERF-011 | Performance | L2 guess rate trend | completed | P1 | Guess rate trend is now presented as a dedicated L2 chart in the L2 performance block |
 | STP-PERF-012 | Performance | L2 min-time violation % | completed | P1 | Implemented |
 | STP-PERF-013 | Performance | L2 max-time violation % | completed | P1 | Implemented |
 | STP-PERF-014 | Performance | L2 controlled mode comparison as dedicated comparison view | partial | P2 | Controlled improvement exists, but not as a full comparison section |
@@ -126,7 +126,7 @@ Priority guide:
 | STP-SEC-004 | Security | No URL-based direct question access guarantee surfaced clearly | partial | P2 | Behavior is implied by gated solution loading, not explicitly surfaced |
 | STP-SEC-005 | Security | Load < 300ms | partial | P2 | Performance goal not proven from current UI alone |
 | STP-SEC-006 | Security | CDN caching/lazy-load behavior for solution images | completed | P1 | Lazy-loading is implemented; CDN behavior is architectural |
-| STP-SEC-007 | Security | No raw session reads guarantee fully proven end-to-end | partial | P1 | Strongly intended, but not fully provable from frontend alone |
+| STP-SEC-007 | Security | No raw session reads guarantee fully proven end-to-end | completed | P1 | Student summary reads now flow through a summary-only endpoint allowlist plus payload guards, blocking direct raw-session read routes in the frontend |
 
 ## Suggested Fix Order
 

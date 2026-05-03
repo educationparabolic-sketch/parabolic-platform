@@ -8,6 +8,10 @@ Persistent run state is stored in:
 
 - `docs/PORTAL_PROGRESS_STATE.md`
 
+## Latest Checkpoint
+
+- `2026-05-03`: Completed `OVR-008` in the admin overview. The next suggested item is `OVR-009`.
+
 ## Goal
 
 Drive implementation directly from the portal spec gap checklists and always work on the next highest-value unresolved slice automatically.

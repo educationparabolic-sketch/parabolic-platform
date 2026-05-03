@@ -4,6 +4,17 @@ import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
 
 const apiClient = getPortalApiClient("admin");
 
+export interface OverviewSubmissionSummary {
+  studentName: string;
+  assessmentLabel: string;
+  submittedAt: string;
+}
+
+export interface OverviewDistributionBin {
+  label: string;
+  value: number;
+}
+
 export interface AdminOverviewSnapshot {
   academicYear: string;
   computedAt: string;
@@ -19,7 +30,7 @@ export interface AdminOverviewSnapshot {
     activeTestSessions: number;
     studentsCurrentlyInTest: number;
     upcomingTestLabel: string;
-    lastFiveSubmissions: number;
+    lastFiveSubmissions: OverviewSubmissionSummary[];
     liveBehaviorAlertCount: number;
     pacingDriftPercentage: number;
     skipBurstPercentage: number;
@@ -33,6 +44,7 @@ export interface AdminOverviewSnapshot {
     participationRate: number;
     highestPerformingBatch: string;
     lowestPerformingBatch: string;
+    distributionHistogram: OverviewDistributionBin[];
     avgPhaseAdherencePercentage: number;
     easyNeglectPercentage: number;
     hardBiasPercentage: number;
@@ -94,7 +106,33 @@ const FALLBACK_OVERVIEW_SNAPSHOT: AdminOverviewSnapshot = {
     activeTestSessions: 4,
     studentsCurrentlyInTest: 28,
     upcomingTestLabel: "JEE Full Length - 2026-04-12 17:00",
-    lastFiveSubmissions: 5,
+    lastFiveSubmissions: [
+      {
+        studentName: "A. Menon",
+        assessmentLabel: "JEE Full Length",
+        submittedAt: "2026-04-10T23:18:00.000Z",
+      },
+      {
+        studentName: "R. Patel",
+        assessmentLabel: "NEET Biology Drill",
+        submittedAt: "2026-04-10T23:11:00.000Z",
+      },
+      {
+        studentName: "S. Khan",
+        assessmentLabel: "Foundation Physics Timed Set",
+        submittedAt: "2026-04-10T22:58:00.000Z",
+      },
+      {
+        studentName: "D. Sharma",
+        assessmentLabel: "JEE Chemistry Sectional",
+        submittedAt: "2026-04-10T22:41:00.000Z",
+      },
+      {
+        studentName: "N. Iyer",
+        assessmentLabel: "NEET Mock 14",
+        submittedAt: "2026-04-10T22:29:00.000Z",
+      },
+    ],
     liveBehaviorAlertCount: 12,
     pacingDriftPercentage: 27,
     skipBurstPercentage: 18,
@@ -108,6 +146,13 @@ const FALLBACK_OVERVIEW_SNAPSHOT: AdminOverviewSnapshot = {
     participationRate: 91,
     highestPerformingBatch: "Batch Alpha",
     lowestPerformingBatch: "Batch Gamma",
+    distributionHistogram: [
+      { label: "<40", value: 18 },
+      { label: "40-55", value: 42 },
+      { label: "56-70", value: 76 },
+      { label: "71-85", value: 58 },
+      { label: "86+", value: 23 },
+    ],
     avgPhaseAdherencePercentage: 74,
     easyNeglectPercentage: 19,
     hardBiasPercentage: 15,
@@ -214,6 +259,37 @@ function toDirection(value: unknown): "Up" | "Down" | "Stable" {
   return "Stable";
 }
 
+function normalizeSubmissionSummary(
+  value: unknown,
+  fallback: OverviewSubmissionSummary,
+): OverviewSubmissionSummary {
+  if (!value || typeof value !== "object") {
+    return fallback;
+  }
+
+  const source = value as Record<string, unknown>;
+  return {
+    studentName: toNonEmptyString(source.studentName, fallback.studentName),
+    assessmentLabel: toNonEmptyString(source.assessmentLabel, fallback.assessmentLabel),
+    submittedAt: toNonEmptyString(source.submittedAt, fallback.submittedAt),
+  };
+}
+
+function normalizeDistributionBin(
+  value: unknown,
+  fallback: OverviewDistributionBin,
+): OverviewDistributionBin {
+  if (!value || typeof value !== "object") {
+    return fallback;
+  }
+
+  const source = value as Record<string, unknown>;
+  return {
+    label: toNonEmptyString(source.label, fallback.label),
+    value: toNumberOrZero(source.value),
+  };
+}
+
 function normalizeOverviewSnapshot(payload: unknown): AdminOverviewSnapshot {
   if (!payload || typeof payload !== "object") {
     throw new Error("GET /admin/overview returned an invalid payload.");
@@ -228,6 +304,22 @@ function normalizeOverviewSnapshot(payload: unknown): AdminOverviewSnapshot {
   const riskSource = source.riskSnapshot as Record<string, unknown> | undefined;
   const governanceSource = source.governanceSnapshot as Record<string, unknown> | undefined;
   const systemSource = source.systemHealthAndLicensing as Record<string, unknown> | undefined;
+  const lastFiveSubmissionsSource = currentActivitySource?.lastFiveSubmissions;
+  const lastFiveSubmissions = Array.isArray(lastFiveSubmissionsSource)
+    ? lastFiveSubmissionsSource
+        .slice(0, 5)
+        .map((entry, index) =>
+          normalizeSubmissionSummary(entry, fallback.currentActivity.lastFiveSubmissions[index] ?? fallback.currentActivity.lastFiveSubmissions.at(-1)!),
+        )
+    : fallback.currentActivity.lastFiveSubmissions.slice(0, Math.max(0, Math.min(5, toNumberOrZero(lastFiveSubmissionsSource))));
+  const distributionHistogramSource = performanceSource?.distributionHistogram;
+  const distributionHistogram = Array.isArray(distributionHistogramSource)
+    ? distributionHistogramSource
+        .slice(0, 6)
+        .map((entry, index) =>
+          normalizeDistributionBin(entry, fallback.performanceSummary.distributionHistogram[index] ?? fallback.performanceSummary.distributionHistogram.at(-1)!),
+        )
+    : fallback.performanceSummary.distributionHistogram;
   const topStudentsSource = Array.isArray(riskSource?.topFiveStudentsRequiringAttention)
     ? riskSource?.topFiveStudentsRequiringAttention
     : fallback.riskSnapshot.topFiveStudentsRequiringAttention;
@@ -247,7 +339,7 @@ function normalizeOverviewSnapshot(payload: unknown): AdminOverviewSnapshot {
       activeTestSessions: toNumberOrZero(currentActivitySource?.activeTestSessions),
       studentsCurrentlyInTest: toNumberOrZero(currentActivitySource?.studentsCurrentlyInTest),
       upcomingTestLabel: toNonEmptyString(currentActivitySource?.upcomingTestLabel, fallback.currentActivity.upcomingTestLabel),
-      lastFiveSubmissions: toNumberOrZero(currentActivitySource?.lastFiveSubmissions),
+      lastFiveSubmissions,
       liveBehaviorAlertCount: toNumberOrZero(currentActivitySource?.liveBehaviorAlertCount),
       pacingDriftPercentage: toNumberOrZero(currentActivitySource?.pacingDriftPercentage),
       skipBurstPercentage: toNumberOrZero(currentActivitySource?.skipBurstPercentage),
@@ -261,6 +353,7 @@ function normalizeOverviewSnapshot(payload: unknown): AdminOverviewSnapshot {
       participationRate: toNumberOrZero(performanceSource?.participationRate),
       highestPerformingBatch: toNonEmptyString(performanceSource?.highestPerformingBatch, fallback.performanceSummary.highestPerformingBatch),
       lowestPerformingBatch: toNonEmptyString(performanceSource?.lowestPerformingBatch, fallback.performanceSummary.lowestPerformingBatch),
+      distributionHistogram,
       avgPhaseAdherencePercentage: toNumberOrZero(performanceSource?.avgPhaseAdherencePercentage),
       easyNeglectPercentage: toNumberOrZero(performanceSource?.easyNeglectPercentage),
       hardBiasPercentage: toNumberOrZero(performanceSource?.hardBiasPercentage),
