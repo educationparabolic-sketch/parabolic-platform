@@ -23,6 +23,7 @@ import {
   evaluateAdminRoutePermissions,
   getVisibleAdminRoutes,
   matchAdminRoute,
+  resolveAdminRouteMountPath,
 } from "./portals/adminRoutes";
 import { resolveAdminAccessContext } from "./portals/adminAccess";
 import "./App.css";
@@ -262,6 +263,17 @@ function AdminRouteAccessGuard(props: { children: ReactElement }) {
   return children;
 }
 
+function AdminRouteResolutionPage() {
+  const location = useLocation();
+  const mountedPath = resolveAdminRouteMountPath(location.pathname);
+
+  if (mountedPath && mountedPath !== location.pathname) {
+    return <Navigate replace to={mountedPath} />;
+  }
+
+  return <NotFoundPage />;
+}
+
 function App() {
   usePortalTitle("admin");
   const loginPath = getPortalLoginPath("admin");
@@ -295,6 +307,7 @@ function App() {
           path="students"
           element={<AdminRouteBoundary label="Loading students"><StudentManagementPage /></AdminRouteBoundary>}
         />
+        <Route path="students/*" element={<AdminRouteResolutionPage />} />
         <Route
           path="question-bank"
           element={<AdminRouteBoundary label="Loading question bank"><QuestionBankManagementPage /></AdminRouteBoundary>}
@@ -303,14 +316,17 @@ function App() {
           path="tests"
           element={<AdminRouteBoundary label="Loading tests"><TestTemplateManagementPage /></AdminRouteBoundary>}
         />
+        <Route path="tests/*" element={<AdminRouteResolutionPage />} />
         <Route
           path="assignments"
           element={<AdminRouteBoundary label="Loading assignments"><AssignmentManagementPage /></AdminRouteBoundary>}
         />
+        <Route path="assignments/*" element={<AdminRouteResolutionPage />} />
         <Route
           path="analytics"
           element={<AdminRouteBoundary label="Loading analytics"><AdminAnalyticsDashboardPage /></AdminRouteBoundary>}
         />
+        <Route path="analytics/*" element={<AdminRouteResolutionPage />} />
         <Route
           path="analytics/risk-insights"
           element={<AdminRouteBoundary label="Loading risk insights"><RiskInsightsDashboardPage /></AdminRouteBoundary>}
@@ -323,6 +339,7 @@ function App() {
           path="governance"
           element={<AdminRouteBoundary label="Loading governance"><GovernanceMonitoringDashboardPage /></AdminRouteBoundary>}
         />
+        <Route path="governance/*" element={<AdminRouteResolutionPage />} />
         <Route
           path="insights/interventions"
           element={<AdminRouteBoundary label="Loading interventions"><InterventionToolsPage /></AdminRouteBoundary>}
@@ -343,6 +360,7 @@ function App() {
           path="insights"
           element={<Navigate to="/admin/insights/risk" replace />}
         />
+        <Route path="insights/*" element={<AdminRouteResolutionPage />} />
         <Route
           path="licensing"
           element={<Navigate to="/admin/licensing/current" replace />}
@@ -371,6 +389,7 @@ function App() {
           path="licensing/history"
           element={<AdminRouteBoundary label="Loading license history"><AdminLicensingConfigurationPage /></AdminRouteBoundary>}
         />
+        <Route path="licensing/*" element={<AdminRouteResolutionPage />} />
         <Route
           path="settings"
           element={<Navigate to="/admin/settings/profile" replace />}
@@ -403,6 +422,8 @@ function App() {
           path="settings/system"
           element={<AdminRouteBoundary label="Loading system settings"><AdminSettingsConfigurationPage /></AdminRouteBoundary>}
         />
+        <Route path="settings/*" element={<AdminRouteResolutionPage />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Route>
 
       <Route path="*" element={<NotFoundPage />} />

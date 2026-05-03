@@ -64,6 +64,15 @@ import {
   handleAdminStudentSoftDeleteRequest,
 } from "./api/adminStudentSoftDelete";
 import {
+  handleAdminStudentsBulkRequest,
+} from "./api/adminStudentsBulk";
+import {
+  handleAdminQuestionAssetsRequest,
+} from "./api/adminQuestionAssets";
+import {
+  handleAdminQuestionsBulkRequest,
+} from "./api/adminQuestionsBulk";
+import {
   handleAdminInterventionsRequest,
 } from "./api/adminInterventions";
 import {
@@ -169,6 +178,15 @@ export const adminStudentDataExport = functions.https.onRequest(
 );
 export const adminStudentSoftDelete = functions.https.onRequest(
   handleAdminStudentSoftDeleteRequest,
+);
+export const adminStudentsBulk = functions.https.onRequest(
+  handleAdminStudentsBulkRequest,
+);
+export const adminQuestionAssets = functions.https.onRequest(
+  handleAdminQuestionAssetsRequest,
+);
+export const adminQuestionsBulk = functions.https.onRequest(
+  handleAdminQuestionsBulkRequest,
 );
 export const adminInterventions = functions.https.onRequest(
   handleAdminInterventionsRequest,

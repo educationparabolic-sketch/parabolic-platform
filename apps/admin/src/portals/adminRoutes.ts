@@ -5,6 +5,7 @@ export interface AdminRouteDefinition {
   title: string;
   section: string;
   description: string;
+  mountedPath?: string;
   allowedRoles: PortalRole[];
   minimumLicenseLayer?: LicenseLayer;
   redirectOnDenied?: string;
@@ -31,6 +32,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Student List",
     section: "Students Management",
     description: "Primary roster view for search, filters, status toggles, and drill-in navigation to individual student profiles.",
+    mountedPath: "/admin/students",
     allowedRoles: ["admin", "teacher"],
   },
   {
@@ -38,6 +40,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Bulk Upload",
     section: "Students Management",
     description: "Bulk import and export entry point for controlled student onboarding workflows.",
+    mountedPath: "/admin/students",
     allowedRoles: ["admin", "teacher"],
   },
   {
@@ -45,6 +48,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Student Lifecycle",
     section: "Students Management",
     description: "Lifecycle management surface for active and archived student records.",
+    mountedPath: "/admin/students",
     allowedRoles: ["admin", "teacher"],
   },
   {
@@ -52,6 +56,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Batch Management",
     section: "Students Management",
     description: "Batch-level student organization and roster views.",
+    mountedPath: "/admin/students",
     allowedRoles: ["admin", "teacher"],
   },
   {
@@ -59,6 +64,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Archived Students",
     section: "Students Management",
     description: "Archive review surface for inactive or historical student records.",
+    mountedPath: "/admin/students",
     allowedRoles: ["admin", "teacher"],
   },
   {
@@ -66,6 +72,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Student Profile",
     section: "Students Management",
     description: "Academic summary, trends, execution profile, risk indicators, and assignment history for an individual student.",
+    mountedPath: "/admin/students",
     allowedRoles: ["admin", "teacher"],
   },
   {
@@ -87,6 +94,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Create Test",
     section: "Test Templates",
     description: "Template generation surface covering filter builders, selection mode, and duplicate detection.",
+    mountedPath: "/admin/tests",
     allowedRoles: ["admin", "teacher"],
   },
   {
@@ -94,6 +102,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Test Detail",
     section: "Test Templates",
     description: "Template preview, management, and lifecycle view for an individual test definition.",
+    mountedPath: "/admin/tests",
     allowedRoles: ["admin", "teacher"],
   },
   {
@@ -101,6 +110,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Template Analytics",
     section: "Test Templates",
     description: "Template effectiveness, difficulty distribution, and outcome summaries for a selected test.",
+    mountedPath: "/admin/tests",
     allowedRoles: ["admin", "teacher"],
   },
   {
@@ -115,6 +125,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Create Assignment",
     section: "Assignments",
     description: "Assignment creation flow with template selection, targeting, scheduling, and mode selection.",
+    mountedPath: "/admin/assignments",
     allowedRoles: ["admin", "teacher"],
   },
   {
@@ -122,6 +133,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Live Assignment Monitor",
     section: "Assignments",
     description: "Run-level live participation, completion tracking, reminders, and operational controls.",
+    mountedPath: "/admin/assignments",
     allowedRoles: ["admin", "teacher"],
   },
   {
@@ -136,6 +148,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Analytics Overview",
     section: "Analytics",
     description: "Performance overview for raw percentage, accuracy, participation, and distribution trends.",
+    mountedPath: "/admin/analytics",
     allowedRoles: ["admin", "teacher", "director"],
   },
   {
@@ -143,6 +156,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Run Analytics",
     section: "Analytics",
     description: "Run-level analytics for participation, outcomes, and timing summaries.",
+    mountedPath: "/admin/analytics",
     allowedRoles: ["admin", "teacher", "director"],
   },
   {
@@ -150,6 +164,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Student Analytics",
     section: "Analytics",
     description: "Student-level performance analytics without exposing raw execution logs.",
+    mountedPath: "/admin/analytics",
     allowedRoles: ["admin", "teacher", "director"],
   },
   {
@@ -157,6 +172,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Template Performance",
     section: "Analytics",
     description: "Template-level performance and effectiveness breakdowns for a selected test.",
+    mountedPath: "/admin/analytics",
     allowedRoles: ["admin", "teacher", "director"],
   },
   {
@@ -164,6 +180,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Analytics Trends",
     section: "Analytics",
     description: "Trend analysis across performance, participation, and difficulty timing signals.",
+    mountedPath: "/admin/analytics",
     allowedRoles: ["admin", "teacher", "director"],
   },
   {
@@ -189,6 +206,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Insights",
     section: "Insights",
     description: "Behavioral intelligence landing route gated to L1+ licenses.",
+    mountedPath: "/admin/insights/risk",
     allowedRoles: ["admin", "teacher", "director"],
     minimumLicenseLayer: "L1",
     redirectOnDenied: "/admin/overview",
@@ -209,6 +227,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Student Intelligence",
     section: "Insights",
     description: "Student-level behavioral intelligence with layered access to diagnostics and discipline metrics.",
+    mountedPath: "/admin/insights/risk",
     allowedRoles: ["admin", "teacher", "director"],
     minimumLicenseLayer: "L1",
     redirectOnDenied: "/admin/overview",
@@ -258,6 +277,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Institutional Stability",
     section: "Governance",
     description: "Institution-level stability and maturity monitoring for director governance workflows.",
+    mountedPath: "/admin/governance",
     allowedRoles: ["director"],
     minimumLicenseLayer: "L3",
     redirectOnDenied: "/admin/overview",
@@ -267,6 +287,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Execution Integrity",
     section: "Governance",
     description: "Integrity monitoring for override risk, execution quality, and system discipline.",
+    mountedPath: "/admin/governance",
     allowedRoles: ["director"],
     minimumLicenseLayer: "L3",
     redirectOnDenied: "/admin/overview",
@@ -276,6 +297,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Override Audit",
     section: "Governance",
     description: "Override audit review surface for institutional governance analysis.",
+    mountedPath: "/admin/governance",
     allowedRoles: ["director"],
     minimumLicenseLayer: "L3",
     redirectOnDenied: "/admin/overview",
@@ -285,6 +307,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Batch Risk",
     section: "Governance",
     description: "Batch-level risk distribution and governance mapping.",
+    mountedPath: "/admin/governance",
     allowedRoles: ["director"],
     minimumLicenseLayer: "L3",
     redirectOnDenied: "/admin/overview",
@@ -294,6 +317,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Governance Trends",
     section: "Governance",
     description: "Longitudinal governance and institutional trend analysis.",
+    mountedPath: "/admin/governance",
     allowedRoles: ["director"],
     minimumLicenseLayer: "L3",
     redirectOnDenied: "/admin/overview",
@@ -303,6 +327,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Governance Reports",
     section: "Governance",
     description: "Director-only governance reporting and export surface.",
+    mountedPath: "/admin/governance",
     allowedRoles: ["director"],
     minimumLicenseLayer: "L3",
     redirectOnDenied: "/admin/overview",
@@ -312,6 +337,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Settings",
     section: "Settings",
     description: "Administrative settings landing route for admin and director roles.",
+    mountedPath: "/admin/settings/profile",
     allowedRoles: ["admin", "director"],
   },
   {
@@ -373,6 +399,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Licensing",
     section: "Licensing",
     description: "Licensing overview route for current plan, eligibility, usage, and feature visibility.",
+    mountedPath: "/admin/licensing/current",
     allowedRoles: ["admin", "director"],
     readOnlyRoles: ["director"],
   },
@@ -471,6 +498,15 @@ export function matchAdminRoute(pathname: string): ResolvedAdminRoute | null {
   }
 
   return null;
+}
+
+export function resolveAdminRouteMountPath(pathname: string): string | null {
+  const matchedRoute = matchAdminRoute(pathname);
+  if (!matchedRoute) {
+    return null;
+  }
+
+  return matchedRoute.definition.mountedPath ?? matchedRoute.definition.path;
 }
 
 export function evaluateAdminRoutePermissions(
