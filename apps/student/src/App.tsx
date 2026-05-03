@@ -32,6 +32,7 @@ const LICENSE_LAYER_ORDER: Record<LicenseLayer, number> = {
 };
 
 const StudentDashboardPage = lazy(() => import("./features/dashboard/StudentDashboardPage"));
+const StudentDisciplinePage = lazy(() => import("./features/discipline/StudentDisciplinePage"));
 const StudentInsightsPage = lazy(() => import("./features/insights/StudentInsightsPage"));
 const StudentMyTestsPage = lazy(() => import("./features/my-tests/StudentMyTestsPage"));
 const StudentPerformancePage = lazy(() => import("./features/performance/StudentPerformancePage"));
@@ -286,6 +287,16 @@ function App() {
             <StudentLicenseRoute minimumLicenseLayer="L1" fallbackPath="/student/dashboard">
               <StudentRouteBoundary label="Loading insights">
                 <StudentInsightsPage />
+              </StudentRouteBoundary>
+            </StudentLicenseRoute>
+          )}
+        />
+        <Route
+          path="discipline"
+          element={(
+            <StudentLicenseRoute minimumLicenseLayer="L2" fallbackPath="/student/dashboard">
+              <StudentRouteBoundary label="Loading discipline">
+                <StudentDisciplinePage />
               </StudentRouteBoundary>
             </StudentLicenseRoute>
           )}

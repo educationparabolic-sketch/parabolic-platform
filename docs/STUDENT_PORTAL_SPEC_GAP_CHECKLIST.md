@@ -20,7 +20,7 @@ Priority guide:
 |---|---|---|---|---|---|
 | STP-GLB-001 | Global | Student portal shell with protected routes | completed | P0 | Implemented |
 | STP-GLB-002 | Global | Top-level modules: Dashboard, My Tests, Performance, Insights, Profile & Settings | completed | P0 | Present |
-| STP-GLB-003 | Global | Dedicated top-level Discipline module (L2+) | missing | P0 | L2 discipline depth is folded into Performance/Insights |
+| STP-GLB-003 | Global | Dedicated top-level Discipline module (L2+) | completed | P0 | Implemented as an L2-guarded top-level `/student/discipline` module with summary-only execution maturity signals |
 | STP-GLB-004 | Global | Insights hidden at L0 and visible from L1+ | completed | P0 | Implemented |
 | STP-GLB-005 | Global | Raw % + Accuracy % terminology used across portal | completed | P0 | Implemented |
 | STP-GLB-006 | Global | No student-facing commercial licensing area | completed | P1 | No licensing module in student nav |
@@ -98,13 +98,13 @@ Priority guide:
 
 | ID | Module | Item | Status | Priority | Notes |
 |---|---|---|---|---|---|
-| STP-DIS-001 | Discipline | Dedicated Discipline top-level section | missing | P0 | Not present in navigation |
-| STP-DIS-002 | Discipline | Discipline Index | partial | P1 | Present in Dashboard/Performance, not separate module |
-| STP-DIS-003 | Discipline | Phase Compliance % | partial | P1 | Present in Performance, not separate module |
-| STP-DIS-004 | Discipline | Controlled Mode Improvement % | partial | P1 | Present in Dashboard/Performance, not separate module |
-| STP-DIS-005 | Discipline | Overstay Frequency | partial | P1 | Present in Performance, not separate module |
-| STP-DIS-006 | Discipline | Guess Probability Cluster | partial | P1 | Present in Performance, not separate module |
-| STP-DIS-007 | Discipline | Mini progress-bar driven discipline page | missing | P2 | Current L2 discipline depth is distributed across other pages |
+| STP-DIS-001 | Discipline | Dedicated Discipline top-level section | completed | P0 | Implemented as a dedicated L2 navigation item and route |
+| STP-DIS-002 | Discipline | Discipline Index | completed | P1 | Exposed on the dedicated Discipline page |
+| STP-DIS-003 | Discipline | Phase Compliance % | completed | P1 | Exposed on the dedicated Discipline page |
+| STP-DIS-004 | Discipline | Controlled Mode Improvement % | completed | P1 | Exposed on the dedicated Discipline page |
+| STP-DIS-005 | Discipline | Overstay Frequency | completed | P1 | Exposed on the dedicated Discipline page |
+| STP-DIS-006 | Discipline | Guess Probability Cluster | completed | P1 | Exposed on the dedicated Discipline page |
+| STP-DIS-007 | Discipline | Mini progress-bar driven discipline page | completed | P2 | Implemented with lightweight progress cards instead of heavy charts |
 
 ## Profile & Settings
 

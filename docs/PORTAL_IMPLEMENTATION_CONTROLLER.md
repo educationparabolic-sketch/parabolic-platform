@@ -61,7 +61,7 @@ When this controller is used:
 2. Read all four checklist files, or at minimum the files needed to validate the current recorded state.
 3. Find unresolved items where status is `missing` or `partial`.
 4. If `Next Suggested Checklist ID` in `docs/PORTAL_PROGRESS_STATE.md` is still unresolved and still matches current scope restrictions, use it.
-5. If the suggested item is stale but `Current Target Portal` and `Current Priority Band` are explicitly set in `docs/PORTAL_PROGRESS_STATE.md`, recompute inside that saved portal/priority scope first before switching portals.
+5. If the suggested item is stale, including because it uses a legacy checklist ID that no longer exists in the current checklist, and `Current Target Portal` and `Current Priority Band` are explicitly set in `docs/PORTAL_PROGRESS_STATE.md`, recompute inside that saved portal/priority scope first before switching portals.
 6. Otherwise recompute the next item using this order:
    - highest priority first: `P0`, then `P1`, then `P2`
    - within the same priority, prefer the checklist's `Suggested Fix Order`

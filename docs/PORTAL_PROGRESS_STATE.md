@@ -4,10 +4,10 @@ This file is the persistent handoff state for portal checklist implementation ac
 
 ## Current State
 
-- `Current Target Portal`: `admin`
-- `Current Priority Band`: `P0`
-- `Last Completed Checklist ID`: `STU-007`
-- `Next Suggested Checklist ID`: `STU-011`
+- `Current Target Portal`: `student`
+- `Current Priority Band`: `P1`
+- `Last Completed Checklist ID`: `STP-GLB-003`
+- `Next Suggested Checklist ID`: `STP-TST-006`
 - `Last Updated`: `2026-05-03`
 
 ## Active Checklist Set
@@ -41,6 +41,7 @@ After every run:
    - advance to the next portal or next priority according to the controller
    - update `Current Target Portal` and `Current Priority Band`
 5. If the user explicitly restricts scope in a prompt, reflect that here for the next handoff.
+6. If a saved checklist ID uses a legacy naming scheme and no longer exists in the active checklist, treat it as stale, recompute from the controller, and save the new canonical ID.
 
 ## Fresh Session Bootstrap
 

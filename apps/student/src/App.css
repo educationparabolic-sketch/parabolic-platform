@@ -700,6 +700,90 @@
   min-width: 780px;
 }
 
+.student-discipline-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.student-discipline-inline-note {
+  margin: 0;
+  padding: 0.75rem;
+  border-left: 4px solid #2f66b3;
+  background: #eef4ff;
+  color: #24426a;
+}
+
+.student-discipline-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.student-discipline-summary-strip,
+.student-discipline-progress-section {
+  border: 1px solid #d6e1f1;
+  border-radius: 0.75rem;
+  background: #fbfdff;
+  padding: 0.95rem;
+  display: grid;
+  gap: 0.7rem;
+}
+
+.student-discipline-summary-strip p,
+.student-discipline-progress-card p {
+  margin: 0;
+  color: #2b456d;
+}
+
+.student-discipline-progress-section h3 {
+  margin: 0;
+}
+
+.student-discipline-progress-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.student-discipline-progress-card {
+  border: 1px solid #d9e4f3;
+  border-radius: 0.65rem;
+  background: #ffffff;
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.student-discipline-progress-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.student-discipline-progress-card header strong {
+  color: #173a68;
+  font-size: 0.9rem;
+}
+
+.student-discipline-progress-card header span {
+  color: #294b75;
+  font-weight: 700;
+}
+
+.student-discipline-progress-track {
+  min-height: 10px;
+  border-radius: 999px;
+  background: #dbe4f3;
+  overflow: hidden;
+}
+
+.student-discipline-progress-track span {
+  display: block;
+  min-height: 10px;
+  background: linear-gradient(90deg, #1f5ca8, #1a7da5);
+}
+
 .student-insights-page {
   display: grid;
   gap: 1rem;
@@ -948,6 +1032,8 @@
   .student-performance-chart-grid,
   .student-performance-l1-grid,
   .student-performance-progress-grid,
+  .student-discipline-kpi-grid,
+  .student-discipline-progress-grid,
   .student-insights-kpi-grid,
   .student-insights-chart-grid,
   .student-insights-l2-grid {

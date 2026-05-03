@@ -83,6 +83,12 @@ export const STUDENT_PRIMARY_NAVIGATION: PortalNavigationItem[] = [
     minimumLicenseLayer: "L1",
   },
   {
+    path: "/student/discipline",
+    label: "Discipline",
+    summary: "Execution maturity view with lightweight progress signals for L2+ learners.",
+    minimumLicenseLayer: "L2",
+  },
+  {
     path: "/student/profile",
     label: "Profile",
     summary: "Student-managed profile and account settings workspace.",
