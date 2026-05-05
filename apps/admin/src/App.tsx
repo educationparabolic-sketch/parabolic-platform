@@ -45,24 +45,45 @@ function resolveAdminRedirectTarget(locationState: unknown, fallbackPath: string
 }
 
 const AdminAnalyticsDashboardPage = lazy(() => import("./features/analytics/AdminAnalyticsDashboardPage"));
+const AdminAnalyticsTrendsPage = lazy(() => import("./features/analytics/AdminAnalyticsTrendsPage"));
+const AdminTemplateAnalyticsPage = lazy(() => import("./features/analytics/AdminTemplateAnalyticsPage"));
 const BatchAnalyticsDashboardPage = lazy(() => import("./features/analytics/BatchAnalyticsDashboardPage"));
 const GovernanceMonitoringDashboardPage = lazy(() => import("./features/analytics/GovernanceMonitoringDashboardPage"));
 const RiskInsightsDashboardPage = lazy(() => import("./features/analytics/RiskInsightsDashboardPage"));
+const AdminAssignmentLiveRunPage = lazy(() => import("./features/assignments/AdminAssignmentLiveRunPage"));
+const AdminAssignmentsLivePage = lazy(() => import("./features/assignments/AdminAssignmentsLivePage"));
 const AssignmentManagementPage = lazy(() => import("./features/assignments/AssignmentManagementPage"));
+const AdminExecutionSignalsPage = lazy(() => import("./features/insights/AdminExecutionSignalsPage"));
+const AdminInsightsLandingPage = lazy(() => import("./features/insights/AdminInsightsLandingPage"));
+const AdminMonthlySummaryPage = lazy(() => import("./features/insights/AdminMonthlySummaryPage"));
+const AdminRiskOverviewPage = lazy(() => import("./features/insights/AdminRiskOverviewPage"));
+const AdminPatternAlertsPage = lazy(() => import("./features/insights/AdminPatternAlertsPage"));
 const InterventionToolsPage = lazy(() => import("./features/insights/InterventionToolsPage"));
 const StudentIntelligencePage = lazy(() => import("./features/insights/StudentIntelligencePage"));
+const AdminCurrentLicensePage = lazy(() => import("./features/licensing/AdminCurrentLicensePage"));
+const AdminLicenseFeaturesPage = lazy(() => import("./features/licensing/AdminLicenseFeaturesPage"));
+const AdminLicensingLandingPage = lazy(() => import("./features/licensing/AdminLicensingLandingPage"));
 const AdminLicensingEligibilityPage = lazy(() => import("./features/licensing/AdminLicensingEligibilityPage"));
 const AdminLicenseHistoryPage = lazy(() => import("./features/licensing/AdminLicenseHistoryPage"));
+const AdminLicenseUpgradePreviewPage = lazy(() => import("./features/licensing/AdminLicenseUpgradePreviewPage"));
 const AdminLicensingUsagePage = lazy(() => import("./features/licensing/AdminLicensingUsagePage"));
-const AdminLicensingConfigurationPage = lazy(() => import("./features/licensing/AdminLicensingConfigurationPage"));
 const AdminOverviewPage = lazy(() => import("./features/overview/AdminOverviewPage"));
 const AdminDataArchiveControlsPage = lazy(() => import("./features/settings/AdminDataArchiveControlsPage"));
 const AdminExecutionPolicyPage = lazy(() => import("./features/settings/AdminExecutionPolicyPage"));
 const AdminAcademicYearPage = lazy(() => import("./features/settings/AdminAcademicYearPage"));
 const AdminInstituteProfilePage = lazy(() => import("./features/settings/AdminInstituteProfilePage"));
+const AdminSettingsLandingPage = lazy(() => import("./features/settings/AdminSettingsLandingPage"));
 const AdminSecurityAccessPage = lazy(() => import("./features/settings/AdminSecurityAccessPage"));
 const AdminSystemConfigurationPage = lazy(() => import("./features/settings/AdminSystemConfigurationPage"));
 const AdminUserRoleManagementPage = lazy(() => import("./features/settings/AdminUserRoleManagementPage"));
+const AdminQuestionBankLandingPage = lazy(() => import("./features/tests/AdminQuestionBankLandingPage"));
+const AdminQuestionBankDistributionPage = lazy(() => import("./features/tests/AdminQuestionBankDistributionPage"));
+const AdminQuestionBankArchiveVersionsPage = lazy(() => import("./features/tests/AdminQuestionBankArchiveVersionsPage"));
+const AdminQuestionBankLibraryPage = lazy(() => import("./features/tests/AdminQuestionBankLibraryPage"));
+const AdminQuestionBankTagManagementPage = lazy(() => import("./features/tests/AdminQuestionBankTagManagementPage"));
+const AdminQuestionBankValidationLogsPage = lazy(() => import("./features/tests/AdminQuestionBankValidationLogsPage"));
+const AdminTestTemplateAnalyticsDetailPage = lazy(() => import("./features/tests/AdminTestTemplateAnalyticsDetailPage"));
+const AdminTestTemplateDetailPage = lazy(() => import("./features/tests/AdminTestTemplateDetailPage"));
 const StudentManagementPage = lazy(() => import("./features/students/StudentManagementPage"));
 const StudentProfilePage = lazy(() => import("./features/students/StudentProfilePage"));
 const QuestionBankManagementPage = lazy(() => import("./features/tests/QuestionBankManagementPage"));
@@ -345,8 +366,33 @@ function App() {
         <Route path="students/*" element={<AdminRouteResolutionPage />} />
         <Route
           path="question-bank"
-          element={<AdminRouteBoundary label="Loading question bank"><QuestionBankManagementPage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading question bank"><AdminQuestionBankLandingPage /></AdminRouteBoundary>}
         />
+        <Route
+          path="question-bank/upload-package"
+          element={<AdminRouteBoundary label="Loading question bank upload"><QuestionBankManagementPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="question-bank/library"
+          element={<AdminRouteBoundary label="Loading question library"><AdminQuestionBankLibraryPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="question-bank/distribution"
+          element={<AdminRouteBoundary label="Loading question distribution"><AdminQuestionBankDistributionPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="question-bank/archive"
+          element={<AdminRouteBoundary label="Loading archive and versions"><AdminQuestionBankArchiveVersionsPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="question-bank/tags"
+          element={<AdminRouteBoundary label="Loading question bank tags"><AdminQuestionBankTagManagementPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="question-bank/validation-logs"
+          element={<AdminRouteBoundary label="Loading validation logs"><AdminQuestionBankValidationLogsPage /></AdminRouteBoundary>}
+        />
+        <Route path="question-bank/*" element={<AdminRouteResolutionPage />} />
         <Route
           path="tests"
           element={<Navigate to="/admin/tests/library" replace />}
@@ -365,7 +411,7 @@ function App() {
         />
         <Route
           path="tests/analytics/:testId"
-          element={<AdminRouteBoundary label="Loading template analytics"><TestTemplateManagementPage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading template analytics"><AdminTestTemplateAnalyticsDetailPage /></AdminRouteBoundary>}
         />
         <Route
           path="tests/distribution"
@@ -377,7 +423,7 @@ function App() {
         />
         <Route
           path="tests/:testId"
-          element={<AdminRouteBoundary label="Loading test detail"><TestTemplateManagementPage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading test detail"><AdminTestTemplateDetailPage /></AdminRouteBoundary>}
         />
         <Route path="tests/*" element={<AdminRouteResolutionPage />} />
         <Route
@@ -394,11 +440,11 @@ function App() {
         />
         <Route
           path="assignments/live"
-          element={<AdminRouteBoundary label="Loading assignment live monitor"><AssignmentManagementPage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading assignment live monitor"><AdminAssignmentsLivePage /></AdminRouteBoundary>}
         />
         <Route
           path="assignments/live/:runId"
-          element={<AdminRouteBoundary label="Loading assignment live monitor"><AssignmentManagementPage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading assignment live monitor"><AdminAssignmentLiveRunPage /></AdminRouteBoundary>}
         />
         <Route
           path="assignments/history"
@@ -424,6 +470,14 @@ function App() {
         <Route
           path="analytics/student/:studentId"
           element={<AdminRouteBoundary label="Loading student analytics"><AdminAnalyticsDashboardPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="analytics/template/:testId"
+          element={<AdminRouteBoundary label="Loading template analytics"><AdminTemplateAnalyticsPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="analytics/trends"
+          element={<AdminRouteBoundary label="Loading analytics trends"><AdminAnalyticsTrendsPage /></AdminRouteBoundary>}
         />
         <Route path="analytics/*" element={<AdminRouteResolutionPage />} />
         <Route
@@ -473,32 +527,36 @@ function App() {
         />
         <Route
           path="insights/patterns"
-          element={<AdminRouteBoundary label="Loading insight patterns"><RiskInsightsDashboardPage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading insight patterns"><AdminPatternAlertsPage /></AdminRouteBoundary>}
         />
         <Route
           path="insights/execution"
-          element={<AdminRouteBoundary label="Loading execution insights"><RiskInsightsDashboardPage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading execution insights"><AdminExecutionSignalsPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="insights/monthly-summary"
+          element={<AdminRouteBoundary label="Loading monthly summaries"><AdminMonthlySummaryPage /></AdminRouteBoundary>}
         />
         <Route
           path="insights/risk"
-          element={<AdminRouteBoundary label="Loading risk insights"><RiskInsightsDashboardPage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading risk overview"><AdminRiskOverviewPage /></AdminRouteBoundary>}
         />
         <Route
           path="insights"
-          element={<Navigate to="/admin/insights/risk" replace />}
+          element={<AdminRouteBoundary label="Loading insights"><AdminInsightsLandingPage /></AdminRouteBoundary>}
         />
         <Route path="insights/*" element={<AdminRouteResolutionPage />} />
         <Route
           path="licensing"
-          element={<Navigate to="/admin/licensing/current" replace />}
+          element={<AdminRouteBoundary label="Loading licensing"><AdminLicensingLandingPage /></AdminRouteBoundary>}
         />
         <Route
           path="licensing/current"
-          element={<AdminRouteBoundary label="Loading licensing"><AdminLicensingConfigurationPage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading current license"><AdminCurrentLicensePage /></AdminRouteBoundary>}
         />
         <Route
           path="licensing/features"
-          element={<AdminRouteBoundary label="Loading feature matrix"><AdminLicensingConfigurationPage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading feature matrix"><AdminLicenseFeaturesPage /></AdminRouteBoundary>}
         />
         <Route
           path="licensing/eligibility"
@@ -510,7 +568,7 @@ function App() {
         />
         <Route
           path="licensing/upgrade-preview"
-          element={<AdminRouteBoundary label="Loading upgrade preview"><AdminLicensingConfigurationPage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading upgrade preview"><AdminLicenseUpgradePreviewPage /></AdminRouteBoundary>}
         />
         <Route
           path="licensing/history"
@@ -519,7 +577,7 @@ function App() {
         <Route path="licensing/*" element={<AdminRouteResolutionPage />} />
         <Route
           path="settings"
-          element={<Navigate to="/admin/settings/profile" replace />}
+          element={<AdminRouteBoundary label="Loading settings"><AdminSettingsLandingPage /></AdminRouteBoundary>}
         />
         <Route
           path="settings/profile"

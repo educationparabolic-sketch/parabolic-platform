@@ -32,6 +32,12 @@ interface OutcomeDraftState {
   };
 }
 
+interface InterventionRecommendationCard {
+  title: string;
+  summary: string;
+  helper: string;
+}
+
 function formatTimestamp(value: string): string {
   const parsed = Date.parse(value);
   return Number.isNaN(parsed) ? value : new Date(parsed).toISOString().replace("T", " ").slice(0, 16);
@@ -59,6 +65,51 @@ function InterventionToolsPage() {
     () => highRiskStudents.slice(0, 12),
     [highRiskStudents],
   );
+
+  const recommendationCards = useMemo<InterventionRecommendationCard[]>(() => {
+    const highestPriorityStudent = highRiskStudents[0] ?? null;
+    const criticalCount = highRiskStudents.filter((entry) => entry.rollingRiskCluster === "critical").length;
+    const alertHeavyCount = highRiskStudents.filter((entry) => entry.guessRatePercent >= 24).length;
+    const lowDisciplineCount = highRiskStudents.filter((entry) => entry.disciplineIndex <= 55).length;
+    const downwardTrendCount = highRiskStudents.filter((entry) => entry.disciplineIndexTrend === "down").length;
+
+    const cards: InterventionRecommendationCard[] = [
+      {
+        title: "Controlled Mode Recommendation",
+        summary:
+          criticalCount > 0 ?
+            `${criticalCount} critical-risk students should be routed into the next controlled remedial cycle.` :
+            "No critical cluster spike detected. Keep intervention handling in advisory mode for now.",
+        helper: "L2 structural suggestion driven by high-risk clustering",
+      },
+      {
+        title: "Phase Discipline Reinforcement",
+        summary:
+          lowDisciplineCount > 0 ?
+            `${lowDisciplineCount} students are below the discipline threshold and should receive phase-training follow-up.` :
+            "Discipline indicators are holding above the intervention threshold across the current queue.",
+        helper: "Derived from discipline index thresholds in studentYearMetrics",
+      },
+      {
+        title: "Alert and Outcome Watch",
+        summary:
+          highestPriorityStudent ?
+            `${highestPriorityStudent.studentName} is the highest-priority candidate; ${alertHeavyCount} queued students also exceed the guess-rate alert threshold.` :
+            "No intervention candidates currently require alert escalation or outcome tracking.",
+        helper: "Summary-safe escalation view for the dedicated intervention workspace",
+      },
+    ];
+
+    if (downwardTrendCount > 0) {
+      cards.push({
+        title: "Trend Regression Monitor",
+        summary: `${downwardTrendCount} students show a declining discipline trend and should remain on the intervention watchlist.`,
+        helper: "Rolling trend follow-up before governance escalation",
+      });
+    }
+
+    return cards;
+  }, [highRiskStudents]);
 
   useEffect(() => {
     let isMounted = true;
@@ -338,11 +389,28 @@ function InterventionToolsPage() {
       <p className="admin-content-eyebrow">Intervention Tools</p>
       <h2 id="admin-intervention-tools-title">High-Risk Intervention Workflow</h2>
       <p className="admin-content-copy">
-        Identify high-risk students from <code>studentYearMetrics</code>, assign targeted remedial tests, send
-        intervention alerts, and track intervention outcomes with immutable audit logs.
+        This dedicated intervention workspace keeps <code>/admin/insights/interventions</code> separate from the
+        shared insights landing page. It uses summary-safe <code>studentYearMetrics</code> signals to stage
+        remedial actions, intervention alerts, and immutable outcome tracking without scanning raw sessions.
       </p>
 
       <p className="admin-analytics-inline-link-row">
+        <NavLink className="admin-primary-link" to="/admin/insights">
+          Insights Landing
+        </NavLink>
+        {" "}
+        <NavLink className="admin-primary-link" to="/admin/insights/risk">
+          Risk Overview
+        </NavLink>
+        {" "}
+        <NavLink className="admin-primary-link" to="/admin/insights/patterns">
+          Pattern Alerts
+        </NavLink>
+        {" "}
+        <NavLink className="admin-primary-link" to="/admin/insights/execution">
+          Execution Signals
+        </NavLink>
+        {" "}
         <NavLink className="admin-primary-link" to="/admin/analytics/risk-insights">
           Back to Risk Insights
         </NavLink>
@@ -355,6 +423,23 @@ function InterventionToolsPage() {
       <p className="admin-analytics-inline-note">
         {isLoading ? "Loading intervention tools..." : inlineMessage ?? "Intervention tools ready."}
       </p>
+
+      <div className="admin-risk-summary-card">
+        <h4>Intervention Engine Scope</h4>
+        <p>
+          Soft guidance remains available from L1 signals, while the recommendation cards below surface L2-style
+          structural follow-up for controlled mode, phase discipline, and outcome review.
+        </p>
+        <small>Route: /admin/insights/interventions</small>
+      </div>
+
+      {recommendationCards.map((card) => (
+        <article key={card.title} className="admin-risk-summary-card">
+          <h4>{card.title}</h4>
+          <p>{card.summary}</p>
+          <small>{card.helper}</small>
+        </article>
+      ))}
 
       <div className="admin-intervention-kpi-grid">
         <article className="admin-intervention-kpi-card">

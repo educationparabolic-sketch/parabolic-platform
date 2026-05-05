@@ -13,13 +13,6 @@ const apiClient = getPortalApiClient("admin");
 
 const EXECUTION_MODES = ["Operational", "Diagnostic", "Controlled", "Hard"] as const;
 const LICENSE_ORDER = ["L0", "L1", "L2", "L3"] as const;
-const ASSIGNMENT_SECTIONS = [
-  "create",
-  "list",
-  "live",
-  "history",
-  "bulk",
-] as const;
 const RUN_STATUSES = ["scheduled", "active", "collecting", "completed", "archived", "cancelled", "terminated"] as const;
 
 const CURRENT_LICENSE_LAYER: LicenseLayer = "L2";
@@ -33,7 +26,7 @@ const MODE_REQUIRED_LAYER: Record<ExecutionMode, LicenseLayer> = {
   Hard: "L2",
 };
 
-type AssignmentSection = (typeof ASSIGNMENT_SECTIONS)[number];
+type AssignmentSection = "create" | "list" | "live" | "history" | "bulk";
 type ExecutionMode = (typeof EXECUTION_MODES)[number];
 type LicenseLayer = (typeof LICENSE_ORDER)[number];
 type RunStatus = (typeof RUN_STATUSES)[number];

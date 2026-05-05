@@ -1409,6 +1409,28 @@
 
 .admin-analytics-inline-link-row {
   margin: 14px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.admin-question-bank-landing-link {
+  border: 1px solid rgba(200, 109, 29, 0.34);
+  border-radius: 999px;
+  background: linear-gradient(180deg, #f4a340, #c86d1d);
+  color: #ffffff;
+  padding: 8px 12px;
+  font: inherit;
+  text-decoration: none;
+  box-shadow: 0 8px 18px rgba(200, 109, 29, 0.24);
+  transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease;
+}
+
+.admin-question-bank-landing-link:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 22px rgba(200, 109, 29, 0.28);
+  filter: saturate(1.08);
 }
 
 .admin-analytics-kpi-grid {

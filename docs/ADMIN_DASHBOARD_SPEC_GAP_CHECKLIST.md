@@ -56,7 +56,7 @@ Priority guide:
 | ID | Module | Item | Status | Priority | Notes |
 |---|---|---|---|---|---|
 | QB-001 | Question Bank | Question Bank module shell | completed | P0 | Core page exists |
-| QB-002 | Question Bank | Dedicated subpages for Upload Package, Question Library, Distribution Overview, Validation Logs, Tag Management, Archive/Versions | partial | P0 | Several concerns are merged into one page |
+| QB-002 | Question Bank | Dedicated subpages for Upload Package, Question Library, Distribution Overview, Validation Logs, Tag Management, Archive/Versions | completed | P0 | `/admin/question-bank` now acts as a dedicated landing workspace, and dedicated routes now mount upload, library, distribution, validation-log, tag-management, and archive/version workspaces instead of merging those flows into one screen |
 | QB-003 | Question Bank | Upload package basic UI with sample guidance and ZIP upload | completed | P1 | Present at a basic level |
 | QB-004 | Question Bank | Exam-aware sample download wizard | missing | P1 | No full wizard flow |
 | QB-005 | Question Bank | Generated workbook structure with `questions`, `Exam Summary`, `INSTRUCTIONS` sheets | missing | P1 | Not implemented |
@@ -215,7 +215,7 @@ Priority guide:
 |---|---|---|---|---|---|
 | GBL-001 | Global | Top-level admin navigation order aligned to sitemap | completed | P0 | Implemented |
 | GBL-002 | Global | Help / Support top-level module | missing | P2 | Not present in current admin navigation |
-| GBL-003 | Global | Separate mounted drill-down pages instead of registry redirects for major submodules | partial | P0 | Dedicated drill-down workspaces now exist for `/admin/insights/student/:studentId`, `/admin/licensing/history`, `/admin/licensing/usage`, `/admin/licensing/eligibility`, `/admin/settings/profile`, `/admin/settings/academic-year`, `/admin/settings/system`, `/admin/settings/data`, `/admin/settings/security`, `/admin/settings/users`, and `/admin/settings/execution-policy`; other major submodules still have drill-down routes that collapse back into shared parent pages |
+| GBL-003 | Global | Separate mounted drill-down pages instead of registry redirects for major submodules | partial | P0 | Dedicated workspaces now exist for `/admin/analytics/template/:testId`, `/admin/analytics/trends`, `/admin/tests/:testId`, `/admin/tests/analytics/:testId`, `/admin/assignments/live`, `/admin/assignments/live/:runId`, `/admin/insights`, `/admin/insights/risk`, `/admin/insights/student/:studentId`, `/admin/insights/patterns`, `/admin/insights/interventions`, `/admin/insights/execution`, `/admin/insights/monthly-summary`, `/admin/licensing`, `/admin/licensing/current`, `/admin/licensing/features`, `/admin/licensing/history`, `/admin/licensing/usage`, `/admin/licensing/eligibility`, `/admin/licensing/upgrade-preview`, `/admin/settings`, `/admin/settings/profile`, `/admin/settings/academic-year`, `/admin/settings/system`, `/admin/settings/data`, `/admin/settings/security`, `/admin/settings/users`, and `/admin/settings/execution-policy`; other major submodules still have drill-down routes that collapse back into shared parent pages |
 | GBL-004 | Global | Full live API/data wiring replacing fixture-backed masking in production-like admin flows | partial | P0 | Several admin modules remain partially fixture-backed |
 
 ## Suggested Fix Order
