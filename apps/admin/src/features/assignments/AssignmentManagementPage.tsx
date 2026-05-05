@@ -1,4 +1,5 @@
 import { useMemo, useState, type FormEvent } from "react";
+import { NavLink, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import {
@@ -13,11 +14,11 @@ const apiClient = getPortalApiClient("admin");
 const EXECUTION_MODES = ["Operational", "Diagnostic", "Controlled", "Hard"] as const;
 const LICENSE_ORDER = ["L0", "L1", "L2", "L3"] as const;
 const ASSIGNMENT_SECTIONS = [
-  "CreateAssignment",
-  "AssignmentList",
-  "LiveMonitor",
-  "AssignmentHistory",
-  "BulkOperations",
+  "create",
+  "list",
+  "live",
+  "history",
+  "bulk",
 ] as const;
 const RUN_STATUSES = ["scheduled", "active", "collecting", "completed", "archived", "cancelled", "terminated"] as const;
 
@@ -177,6 +178,12 @@ interface AssignmentListFilters {
   batchId: string;
   dateStart: string;
   dateEnd: string;
+}
+
+interface AssignmentRouteDefinition {
+  id: AssignmentSection;
+  label: string;
+  to: string;
 }
 
 const TEMPLATE_OPTIONS: TemplateOption[] = [
@@ -526,6 +533,14 @@ const INITIAL_FILTERS: AssignmentListFilters = {
   dateEnd: "",
 };
 
+const ASSIGNMENT_ROUTE_DEFINITIONS: AssignmentRouteDefinition[] = [
+  { id: "create", label: "Create Assignment", to: "/admin/assignments/create" },
+  { id: "list", label: "Assignment List", to: "/admin/assignments/list" },
+  { id: "live", label: "Live Monitor", to: "/admin/assignments/live" },
+  { id: "history", label: "Assignment History", to: "/admin/assignments/history" },
+  { id: "bulk", label: "Bulk Operations", to: "/admin/assignments/bulk" },
+];
+
 function shouldUseLiveApi(): boolean {
   const host = window.location.hostname.toLowerCase();
   return host !== "127.0.0.1" && host !== "localhost";
@@ -839,8 +854,30 @@ function buildFallbackRunRecord(payload: RunCreatePayload, runId: string, create
   };
 }
 
+function resolveAssignmentSection(pathname: string): AssignmentSection {
+  if (pathname.includes("/assignments/list")) {
+    return "list";
+  }
+
+  if (pathname.includes("/assignments/live")) {
+    return "live";
+  }
+
+  if (pathname.includes("/assignments/history")) {
+    return "history";
+  }
+
+  if (pathname.includes("/assignments/bulk")) {
+    return "bulk";
+  }
+
+  return "create";
+}
+
 function AssignmentManagementPage() {
-  const [activeSection, setActiveSection] = useState<AssignmentSection>("CreateAssignment");
+  const location = useLocation();
+  const navigate = useNavigate();
+  const params = useParams<{ runId?: string }>();
   const [draft, setDraft] = useState<AssignmentDraft>(() => {
     const firstReadyTemplate = TEMPLATE_OPTIONS.find((template) => template.status !== "draft");
     return {
@@ -858,6 +895,7 @@ function AssignmentManagementPage() {
       "Local mode detected: using deterministic assignment fixtures for Build 119.",
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const activeSection = useMemo(() => resolveAssignmentSection(location.pathname), [location.pathname]);
 
   const selectedTemplate = useMemo(
     () => TEMPLATE_OPTIONS.find((template) => template.id === draft.templateId) ?? null,
@@ -883,6 +921,20 @@ function AssignmentManagementPage() {
     () => runs.filter((run) => run.status === "active"),
     [runs],
   );
+  const selectedLiveRun = useMemo(() => {
+    if (!params.runId) {
+      return null;
+    }
+
+    return activeRuns.find((run) => run.runId === params.runId) ?? null;
+  }, [activeRuns, params.runId]);
+  const visibleLiveRuns = useMemo(() => {
+    if (selectedLiveRun) {
+      return [selectedLiveRun];
+    }
+
+    return activeRuns;
+  }, [activeRuns, selectedLiveRun]);
 
   const historyRows = useMemo(
     () => runs.filter((run) => run.status === "completed" || run.status === "archived" || run.status === "cancelled" || run.status === "terminated"),
@@ -1257,7 +1309,7 @@ function AssignmentManagementPage() {
         assignmentStartLocal: "",
         assignmentEndLocal: "",
       }));
-      setActiveSection("AssignmentList");
+      navigate("/admin/assignments/list");
     } catch (error) {
       if (error instanceof ApiClientError) {
         setErrorMessage(`POST /admin/runs failed: ${error.code} (${error.status}).`);
@@ -1387,19 +1439,22 @@ function AssignmentManagementPage() {
       {errorMessage ? <p className="admin-assignments-inline-error">{errorMessage}</p> : null}
 
       <nav className="admin-assignments-section-nav" aria-label="Assignments navigation">
-        {ASSIGNMENT_SECTIONS.map((section) => (
-          <button
-            key={section}
-            type="button"
-            className={section === activeSection ? "admin-assignments-nav-pill active" : "admin-assignments-nav-pill"}
-            onClick={() => setActiveSection(section)}
+        {ASSIGNMENT_ROUTE_DEFINITIONS.map((section) => (
+          <NavLink
+            key={section.id}
+            to={section.to}
+            className={({ isActive }) =>
+              isActive || section.id === activeSection ?
+                "admin-assignments-nav-pill active" :
+                "admin-assignments-nav-pill"
+            }
           >
-            {section}
-          </button>
+            {section.label}
+          </NavLink>
         ))}
       </nav>
 
-      {activeSection === "CreateAssignment" ? (
+      {activeSection === "create" ? (
         <UiForm
           title="Create Assignment"
           description="Step flow: Template, mode, recipients, window, and confirmation snapshot before scheduling."
@@ -1803,7 +1858,7 @@ function AssignmentManagementPage() {
         </UiForm>
       ) : null}
 
-      {activeSection === "AssignmentList" ? (
+      {activeSection === "list" ? (
         <section className="admin-assignments-list-shell" aria-label="Assignment list">
           <h3>AssignmentList</h3>
           <p className="admin-content-copy">
@@ -1898,19 +1953,27 @@ function AssignmentManagementPage() {
         </section>
       ) : null}
 
-      {activeSection === "LiveMonitor" ? (
+      {activeSection === "live" ? (
         <section className="admin-assignments-live-shell" aria-label="Live monitor">
           <h3>LiveMonitor</h3>
           <p className="admin-content-copy">Visible only for active runs and never exposes question content.</p>
+          {params.runId && !selectedLiveRun ? (
+            <p className="admin-assignments-inline-error">
+              Requested run <strong>{params.runId}</strong> is not currently active, so the live monitor cannot mount.
+            </p>
+          ) : null}
 
-          {activeRuns.length === 0 ? (
+          {visibleLiveRuns.length === 0 ? (
             <p className="admin-assignments-inline-note">No active runs are currently available.</p>
           ) : (
-            activeRuns.map((run) => (
+            visibleLiveRuns.map((run) => (
               <div key={run.runId} className="admin-assignments-live-run-block">
                 <h4>{run.runName}</h4>
                 <p>
                   Mode <strong>{run.mode}</strong> · Window <strong>{formatDateTime(run.startWindowIso)}</strong> to <strong>{formatDateTime(run.endWindowIso)}</strong>
+                </p>
+                <p>
+                  Dedicated route: <code>/admin/assignments/live/{run.runId}</code>
                 </p>
                 <UiTable
                   caption={`Live monitor for ${run.runId}`}
@@ -1925,7 +1988,7 @@ function AssignmentManagementPage() {
         </section>
       ) : null}
 
-      {activeSection === "AssignmentHistory" ? (
+      {activeSection === "history" ? (
         <section className="admin-assignments-history-shell" aria-label="Assignment history">
           <h3>AssignmentHistory</h3>
           <p className="admin-content-copy">Historical rows are immutable, read-only summaries.</p>
@@ -1939,7 +2002,7 @@ function AssignmentManagementPage() {
         </section>
       ) : null}
 
-      {activeSection === "BulkOperations" ? (
+      {activeSection === "bulk" ? (
         <section className="admin-assignments-bulk-shell" aria-label="Bulk operations">
           <h3>BulkOperations</h3>
           <p className="admin-content-copy">

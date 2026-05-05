@@ -6,9 +6,10 @@ This file is the persistent handoff state for portal checklist implementation ac
 
 - `Current Target Portal`: `admin`
 - `Current Priority Band`: `P0`
-- `Last Completed Checklist ID`: `TST-002`
-- `Next Suggested Checklist ID`: `ASN-002`
-- `Last Updated`: `2026-05-03`
+- `Last Completed Checklist ID`: `GBL-003`
+- `Next Suggested Checklist ID`: `GBL-003`
+- `Last Updated`: `2026-05-05`
+- `Saved Scope Note`: `GBL-003` is still in progress; `/admin/insights/student/:studentId`, `/admin/licensing/history`, `/admin/licensing/usage`, `/admin/licensing/eligibility`, `/admin/settings/profile`, `/admin/settings/academic-year`, `/admin/settings/system`, `/admin/settings/data`, `/admin/settings/security`, `/admin/settings/users`, and `/admin/settings/execution-policy` now mount dedicated workspaces, and the next run should continue the remaining global drill-down route separations.
 
 ## Active Checklist Set
 

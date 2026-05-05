@@ -50,9 +50,19 @@ const GovernanceMonitoringDashboardPage = lazy(() => import("./features/analytic
 const RiskInsightsDashboardPage = lazy(() => import("./features/analytics/RiskInsightsDashboardPage"));
 const AssignmentManagementPage = lazy(() => import("./features/assignments/AssignmentManagementPage"));
 const InterventionToolsPage = lazy(() => import("./features/insights/InterventionToolsPage"));
+const StudentIntelligencePage = lazy(() => import("./features/insights/StudentIntelligencePage"));
+const AdminLicensingEligibilityPage = lazy(() => import("./features/licensing/AdminLicensingEligibilityPage"));
+const AdminLicenseHistoryPage = lazy(() => import("./features/licensing/AdminLicenseHistoryPage"));
+const AdminLicensingUsagePage = lazy(() => import("./features/licensing/AdminLicensingUsagePage"));
 const AdminLicensingConfigurationPage = lazy(() => import("./features/licensing/AdminLicensingConfigurationPage"));
 const AdminOverviewPage = lazy(() => import("./features/overview/AdminOverviewPage"));
-const AdminSettingsConfigurationPage = lazy(() => import("./features/settings/AdminSettingsConfigurationPage"));
+const AdminDataArchiveControlsPage = lazy(() => import("./features/settings/AdminDataArchiveControlsPage"));
+const AdminExecutionPolicyPage = lazy(() => import("./features/settings/AdminExecutionPolicyPage"));
+const AdminAcademicYearPage = lazy(() => import("./features/settings/AdminAcademicYearPage"));
+const AdminInstituteProfilePage = lazy(() => import("./features/settings/AdminInstituteProfilePage"));
+const AdminSecurityAccessPage = lazy(() => import("./features/settings/AdminSecurityAccessPage"));
+const AdminSystemConfigurationPage = lazy(() => import("./features/settings/AdminSystemConfigurationPage"));
+const AdminUserRoleManagementPage = lazy(() => import("./features/settings/AdminUserRoleManagementPage"));
 const StudentManagementPage = lazy(() => import("./features/students/StudentManagementPage"));
 const StudentProfilePage = lazy(() => import("./features/students/StudentProfilePage"));
 const QuestionBankManagementPage = lazy(() => import("./features/tests/QuestionBankManagementPage"));
@@ -372,12 +382,48 @@ function App() {
         <Route path="tests/*" element={<AdminRouteResolutionPage />} />
         <Route
           path="assignments"
-          element={<AdminRouteBoundary label="Loading assignments"><AssignmentManagementPage /></AdminRouteBoundary>}
+          element={<Navigate to="/admin/assignments/create" replace />}
+        />
+        <Route
+          path="assignments/create"
+          element={<AdminRouteBoundary label="Loading create assignment"><AssignmentManagementPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="assignments/list"
+          element={<AdminRouteBoundary label="Loading assignment list"><AssignmentManagementPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="assignments/live"
+          element={<AdminRouteBoundary label="Loading assignment live monitor"><AssignmentManagementPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="assignments/live/:runId"
+          element={<AdminRouteBoundary label="Loading assignment live monitor"><AssignmentManagementPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="assignments/history"
+          element={<AdminRouteBoundary label="Loading assignment history"><AssignmentManagementPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="assignments/bulk"
+          element={<AdminRouteBoundary label="Loading assignment bulk operations"><AssignmentManagementPage /></AdminRouteBoundary>}
         />
         <Route path="assignments/*" element={<AdminRouteResolutionPage />} />
         <Route
           path="analytics"
-          element={<AdminRouteBoundary label="Loading analytics"><AdminAnalyticsDashboardPage /></AdminRouteBoundary>}
+          element={<Navigate to="/admin/analytics/overview" replace />}
+        />
+        <Route
+          path="analytics/overview"
+          element={<AdminRouteBoundary label="Loading analytics overview"><AdminAnalyticsDashboardPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="analytics/run/:runId"
+          element={<AdminRouteBoundary label="Loading run analytics"><AdminAnalyticsDashboardPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="analytics/student/:studentId"
+          element={<AdminRouteBoundary label="Loading student analytics"><AdminAnalyticsDashboardPage /></AdminRouteBoundary>}
         />
         <Route path="analytics/*" element={<AdminRouteResolutionPage />} />
         <Route
@@ -390,12 +436,40 @@ function App() {
         />
         <Route
           path="governance"
-          element={<AdminRouteBoundary label="Loading governance"><GovernanceMonitoringDashboardPage /></AdminRouteBoundary>}
+          element={<Navigate to="/admin/governance/stability" replace />}
+        />
+        <Route
+          path="governance/stability"
+          element={<AdminRouteBoundary label="Loading governance stability"><GovernanceMonitoringDashboardPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="governance/integrity"
+          element={<AdminRouteBoundary label="Loading governance integrity"><GovernanceMonitoringDashboardPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="governance/override-audit"
+          element={<AdminRouteBoundary label="Loading governance override audit"><GovernanceMonitoringDashboardPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="governance/batch-risk"
+          element={<AdminRouteBoundary label="Loading governance batch risk"><GovernanceMonitoringDashboardPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="governance/trends"
+          element={<AdminRouteBoundary label="Loading governance trends"><GovernanceMonitoringDashboardPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="governance/reports"
+          element={<AdminRouteBoundary label="Loading governance reports"><GovernanceMonitoringDashboardPage /></AdminRouteBoundary>}
         />
         <Route path="governance/*" element={<AdminRouteResolutionPage />} />
         <Route
           path="insights/interventions"
           element={<AdminRouteBoundary label="Loading interventions"><InterventionToolsPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="insights/student/:studentId"
+          element={<AdminRouteBoundary label="Loading student intelligence"><StudentIntelligencePage /></AdminRouteBoundary>}
         />
         <Route
           path="insights/patterns"
@@ -428,11 +502,11 @@ function App() {
         />
         <Route
           path="licensing/eligibility"
-          element={<AdminRouteBoundary label="Loading eligibility"><AdminLicensingConfigurationPage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading eligibility"><AdminLicensingEligibilityPage /></AdminRouteBoundary>}
         />
         <Route
           path="licensing/usage"
-          element={<AdminRouteBoundary label="Loading usage"><AdminLicensingConfigurationPage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading usage"><AdminLicensingUsagePage /></AdminRouteBoundary>}
         />
         <Route
           path="licensing/upgrade-preview"
@@ -440,7 +514,7 @@ function App() {
         />
         <Route
           path="licensing/history"
-          element={<AdminRouteBoundary label="Loading license history"><AdminLicensingConfigurationPage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading license history"><AdminLicenseHistoryPage /></AdminRouteBoundary>}
         />
         <Route path="licensing/*" element={<AdminRouteResolutionPage />} />
         <Route
@@ -449,31 +523,31 @@ function App() {
         />
         <Route
           path="settings/profile"
-          element={<AdminRouteBoundary label="Loading settings"><AdminSettingsConfigurationPage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading settings"><AdminInstituteProfilePage /></AdminRouteBoundary>}
         />
         <Route
           path="settings/academic-year"
-          element={<AdminRouteBoundary label="Loading academic year settings"><AdminSettingsConfigurationPage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading academic year settings"><AdminAcademicYearPage /></AdminRouteBoundary>}
         />
         <Route
           path="settings/execution-policy"
-          element={<AdminRouteBoundary label="Loading execution policy"><AdminSettingsConfigurationPage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading execution policy"><AdminExecutionPolicyPage /></AdminRouteBoundary>}
         />
         <Route
           path="settings/users"
-          element={<AdminRouteBoundary label="Loading user settings"><AdminSettingsConfigurationPage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading user settings"><AdminUserRoleManagementPage /></AdminRouteBoundary>}
         />
         <Route
           path="settings/security"
-          element={<AdminRouteBoundary label="Loading security settings"><AdminSettingsConfigurationPage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading security settings"><AdminSecurityAccessPage /></AdminRouteBoundary>}
         />
         <Route
           path="settings/data"
-          element={<AdminRouteBoundary label="Loading data settings"><AdminSettingsConfigurationPage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading data settings"><AdminDataArchiveControlsPage /></AdminRouteBoundary>}
         />
         <Route
           path="settings/system"
-          element={<AdminRouteBoundary label="Loading system settings"><AdminSettingsConfigurationPage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading system settings"><AdminSystemConfigurationPage /></AdminRouteBoundary>}
         />
         <Route path="settings/*" element={<AdminRouteResolutionPage />} />
         <Route path="*" element={<NotFoundPage />} />

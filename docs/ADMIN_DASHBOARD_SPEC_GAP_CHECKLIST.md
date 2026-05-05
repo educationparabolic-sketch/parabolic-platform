@@ -100,7 +100,7 @@ Priority guide:
 | ID | Module | Item | Status | Priority | Notes |
 |---|---|---|---|---|---|
 | ASN-001 | Assignments | Assignments module shell and five core sections | completed | P0 | Present |
-| ASN-002 | Assignments | Dedicated mounted subpages for Create, List, Live Monitor, History, Bulk Operations | partial | P0 | Implemented as one multi-section page |
+| ASN-002 | Assignments | Dedicated mounted subpages for Create, List, Live Monitor, History, Bulk Operations | completed | P0 | Admin assignments now mount dedicated `/admin/assignments/create`, `/list`, `/live`, `/history`, and `/bulk` subpages with route-specific workspace tabs plus focused live-run deep links under `/admin/assignments/live/:runId` |
 | ASN-003 | Assignments | Create assignment flow with template, mode, recipients, time window, confirmation | completed | P0 | Present |
 | ASN-004 | Assignments | Template dropdown richness per spec | partial | P2 | Core fields present, not full metadata richness |
 | ASN-005 | Assignments | Layer-aware mode selection and snapshot locking | completed | P0 | Core behavior present |
@@ -126,8 +126,8 @@ Priority guide:
 | ANL-004 | Analytics | Overview L0 histograms and last-5-runs list | missing | P1 | Not implemented |
 | ANL-005 | Analytics | Overview L1 diagnostics including behavior summary and topic heatmap | missing | P1 | Not implemented fully |
 | ANL-006 | Analytics | Overview L2 execution metrics including stability index | missing | P1 | Not implemented fully |
-| ANL-007 | Analytics | By Run dedicated analytics screen | missing | P0 | Route intent exists; dedicated page/API flow is incomplete |
-| ANL-008 | Analytics | By Student dedicated analytics screen | missing | P0 | Route intent exists; dedicated page/API flow is incomplete |
+| ANL-007 | Analytics | By Run dedicated analytics screen | completed | P0 | `/admin/analytics/run/:runId` now mounts a dedicated runAnalytics-backed workspace with route-level run selection, filter controls, and layered L0/L1/L2 run analytics panels without session scans |
+| ANL-008 | Analytics | By Student dedicated analytics screen | completed | P0 | `/admin/analytics/student/:studentId` now mounts a dedicated studentYearMetrics-backed workspace with route-level student selection, last-N-test filters, summary-safe per-run history, and layered L0/L1/L2 student analytics panels without session scans |
 | ANL-009 | Analytics | By Template dedicated analytics screen | missing | P1 | Not implemented fully |
 | ANL-010 | Analytics | Trends dedicated monthly summary screen | missing | P1 | Not implemented fully |
 | ANL-011 | Analytics | Exact L1/L2 metric layering across all analytics sections | partial | P1 | Partial gating exists |
@@ -158,7 +158,7 @@ Priority guide:
 |---|---|---|---|---|---|
 | GOV-001 | Governance | L3-only governance shell | completed | P0 | Present |
 | GOV-002 | Governance | Read-only institutional governance positioning | completed | P0 | Present |
-| GOV-003 | Governance | Dedicated mounted subpages for stability, integrity, override audit, batch risk, trends, reports | partial | P0 | Route registry exists; mounted separation is incomplete |
+| GOV-003 | Governance | Dedicated mounted subpages for stability, integrity, override audit, batch risk, trends, reports | completed | P0 | Governance now redirects `/admin/governance` to `/admin/governance/stability` and mounts dedicated route-aware workspaces for stability, integrity, override audit, batch risk, trends, and reports using immutable `governanceSnapshots` summary data |
 | GOV-004 | Governance | Institutional Stability full section (gauge, 12-month trend, thresholds) | missing | P1 | Current page is thinner |
 | GOV-005 | Governance | Performance variability charts and heatmaps | missing | P1 | Not implemented |
 | GOV-006 | Governance | Template stability comparison | missing | P1 | Not implemented |
@@ -215,7 +215,7 @@ Priority guide:
 |---|---|---|---|---|---|
 | GBL-001 | Global | Top-level admin navigation order aligned to sitemap | completed | P0 | Implemented |
 | GBL-002 | Global | Help / Support top-level module | missing | P2 | Not present in current admin navigation |
-| GBL-003 | Global | Separate mounted drill-down pages instead of registry redirects for major submodules | partial | P0 | Many subroutes still redirect back to parent pages |
+| GBL-003 | Global | Separate mounted drill-down pages instead of registry redirects for major submodules | partial | P0 | Dedicated drill-down workspaces now exist for `/admin/insights/student/:studentId`, `/admin/licensing/history`, `/admin/licensing/usage`, `/admin/licensing/eligibility`, `/admin/settings/profile`, `/admin/settings/academic-year`, `/admin/settings/system`, `/admin/settings/data`, `/admin/settings/security`, `/admin/settings/users`, and `/admin/settings/execution-policy`; other major submodules still have drill-down routes that collapse back into shared parent pages |
 | GBL-004 | Global | Full live API/data wiring replacing fixture-backed masking in production-like admin flows | partial | P0 | Several admin modules remain partially fixture-backed |
 
 ## Suggested Fix Order

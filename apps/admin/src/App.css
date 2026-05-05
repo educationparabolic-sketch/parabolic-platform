@@ -1616,6 +1616,73 @@
   overflow-x: auto;
 }
 
+.admin-analytics-filter-grid {
+  margin-top: 18px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.admin-analytics-filter-grid label {
+  display: grid;
+  gap: 6px;
+  color: #486486;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.admin-analytics-filter-grid select,
+.admin-analytics-filter-grid input {
+  border: 1px solid rgba(16, 42, 81, 0.16);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #173c68;
+  padding: 9px 10px;
+}
+
+.admin-analytics-run-detail-header {
+  margin-top: 18px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-analytics-run-detail-header h3,
+.admin-analytics-run-detail-header p {
+  margin: 0;
+}
+
+.admin-analytics-run-detail-header p {
+  margin-top: 4px;
+  color: #5f7697;
+}
+
+.admin-analytics-run-source-chip {
+  border: 1px solid rgba(16, 42, 81, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #21456f;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.admin-analytics-compliance-panel {
+  margin-top: 16px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.admin-analytics-insight-list {
+  margin-top: 16px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .admin-analytics-run-cell,
 .admin-analytics-mode-cell,
 .admin-analytics-score-cell,
@@ -2053,6 +2120,57 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.admin-governance-subnav {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.admin-governance-subnav-link {
+  border-radius: 999px;
+  border: 1px solid rgba(16, 42, 81, 0.16);
+  background: rgba(255, 255, 255, 0.82);
+  color: #214771;
+  padding: 8px 12px;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.admin-governance-subnav-link-active {
+  background: linear-gradient(135deg, rgba(20, 73, 123, 0.12), rgba(74, 132, 183, 0.2));
+  border-color: rgba(20, 73, 123, 0.34);
+  color: #143764;
+}
+
+.admin-governance-route-banner {
+  margin-top: 16px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid rgba(16, 42, 81, 0.12);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(247, 250, 255, 0.98), rgba(233, 242, 252, 0.88));
+  padding: 14px 16px;
+}
+
+.admin-governance-route-banner div {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-governance-route-banner strong {
+  color: #365a84;
+  font-size: 0.82rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.admin-governance-route-banner span {
+  color: #163a66;
+  font-weight: 600;
+}
+
 .admin-governance-kpi-card {
   border: 1px solid rgba(16, 42, 81, 0.16);
   border-radius: 14px;
@@ -2159,6 +2277,19 @@
 
 .admin-governance-month-cell small {
   color: #4f688a;
+}
+
+.admin-governance-report-copy {
+  margin-top: 18px;
+  border: 1px solid rgba(16, 42, 81, 0.12);
+  border-radius: 14px;
+  background: rgba(244, 248, 253, 0.9);
+  padding: 14px 16px;
+}
+
+.admin-governance-report-copy p {
+  margin: 0;
+  color: #37597f;
 }
 
 .admin-intervention-kpi-grid {
@@ -2531,6 +2662,16 @@
     grid-template-columns: 1fr;
   }
 
+  .admin-analytics-filter-grid,
+  .admin-analytics-compliance-panel,
+  .admin-analytics-insight-list {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-analytics-run-detail-header {
+    flex-direction: column;
+  }
+
   .admin-risk-trend-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -2564,6 +2705,10 @@
   .admin-governance-kpi-grid,
   .admin-governance-comparison-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-governance-route-banner {
+    grid-template-columns: 1fr;
   }
 
   .admin-governance-chart-grid {
@@ -2624,6 +2769,12 @@
     grid-template-columns: 1fr;
   }
 
+  .admin-analytics-filter-grid,
+  .admin-analytics-compliance-panel,
+  .admin-analytics-insight-list {
+    grid-template-columns: 1fr;
+  }
+
   .admin-risk-trend-grid {
     grid-template-columns: 1fr;
   }
@@ -2643,6 +2794,10 @@
   .admin-governance-kpi-grid,
   .admin-governance-comparison-grid {
     grid-template-columns: 1fr;
+  }
+
+  .admin-governance-subnav {
+    flex-direction: column;
   }
 
   .admin-intervention-kpi-grid {

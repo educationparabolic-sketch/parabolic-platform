@@ -475,6 +475,15 @@ function RiskInsightsDashboardPage() {
         header: "Tests Attempted",
         render: (student) => student.testsAttempted,
       },
+      {
+        id: "detail",
+        header: "Detail",
+        render: (student) => (
+          <NavLink className="admin-primary-link" to={`/admin/insights/student/${student.studentId}`}>
+            Open Student
+          </NavLink>
+        ),
+      },
     ],
     [],
   );
@@ -532,6 +541,15 @@ function RiskInsightsDashboardPage() {
           id: "testsAttempted",
           header: "Runs (Window)",
           render: (row) => row.testsAttempted,
+        },
+        {
+          id: "detail",
+          header: "Detail",
+          render: (row) => (
+            <NavLink className="admin-primary-link" to={`/admin/insights/student/${row.studentId}`}>
+              Open Student
+            </NavLink>
+          ),
         },
       ];
 

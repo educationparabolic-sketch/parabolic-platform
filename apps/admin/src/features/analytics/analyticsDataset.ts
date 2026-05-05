@@ -14,16 +14,39 @@ export type ExecutionRiskState = (typeof EXECUTION_RISK_STATES)[number];
 export interface RunAnalyticsRecord {
   runId: string;
   runName: string;
+  academicYear: string;
   batchId: string;
   batchName: string;
   mode: string;
   participants: number;
   completionRatePercent: number;
   avgRawScorePercent: number;
+  medianRawScorePercent: number;
+  rawScoreStdDeviation: number;
   avgAccuracyPercent: number;
+  avgPhaseAdherencePercent: number;
+  easyNeglectPercent: number;
+  hardBiasPercent: number;
+  timeMisallocationPercent: number;
   disciplineIndexAverage: number;
   guessRatePercent: number;
+  controlledCompliancePercent: number;
+  minTimeViolationPercent: number;
+  maxTimeViolationPercent: number;
+  followedPhaseSplitPercent: number;
+  pacingGuardrailViolationPercent: number;
+  structuralOverridePercent: number;
   riskDistribution: Record<RiskCluster, number>;
+  rawScoreHistogram: number[];
+  accuracyHistogram: number[];
+  sectionAccuracyPercentages: number[];
+  topicHeatmap: number[];
+  disciplineIndexDistribution: number[];
+  behaviorDistribution: {
+    rushedPercent: number;
+    overextendedPercent: number;
+    driftPronePercent: number;
+  };
   startedAt: string;
 }
 
@@ -44,7 +67,51 @@ export interface StudentYearMetricRecord {
 export interface DashboardDataset {
   runAnalytics: RunAnalyticsRecord[];
   studentYearMetrics: StudentYearMetricRecord[];
+  studentAnalytics: StudentAnalyticsRecord[];
   yearBehaviorSummary: YearBehaviorSummaryRecord;
+}
+
+export interface StudentAnalyticsRunRecord {
+  runId: string;
+  runName: string;
+  completedOn: string;
+  rawScorePercent: number;
+  accuracyPercent: number;
+  phaseAdherencePercent: number;
+  easyNeglectPercent: number;
+  hardBiasPercent: number;
+  topicWeaknessScore: number;
+  riskState: RiskCluster;
+  disciplineIndex: number;
+  guessRatePercent: number;
+  overstayPercent: number;
+  controlledModeDelta: number;
+  overrideCount: number;
+}
+
+export interface StudentAnalyticsRecord {
+  studentId: string;
+  studentName: string;
+  academicYear: string;
+  batchId: string;
+  batchName: string;
+  testsAttempted: number;
+  avgRawScorePercent: number;
+  avgAccuracyPercent: number;
+  rankInBatch: number | null;
+  phaseAdherencePercent: number;
+  easyNeglectPercent: number;
+  hardBiasPercent: number;
+  topicWeaknessSummary: string;
+  topicWeaknessRadar: { label: string; value: number }[];
+  timeMisallocationPercent: number;
+  rollingRiskCluster: RiskCluster;
+  disciplineIndex: number;
+  guessRatePercent: number;
+  overstayPercent: number;
+  controlledModeDelta: number;
+  overrideCount: number;
+  runSummaries: StudentAnalyticsRunRecord[];
 }
 
 export interface RiskSignalsRecord {
@@ -85,61 +152,153 @@ export const FALLBACK_DATASET: DashboardDataset = {
     {
       runId: "run-2026-0410-001",
       runName: "JEE Mains Mock - Set A",
+      academicYear: "2026",
       batchId: "batch-alpha",
       batchName: "Batch Alpha",
       mode: "Controlled",
       participants: 74,
       completionRatePercent: 96,
       avgRawScorePercent: 68,
+      medianRawScorePercent: 70,
+      rawScoreStdDeviation: 11,
       avgAccuracyPercent: 76,
+      avgPhaseAdherencePercent: 81,
+      easyNeglectPercent: 18,
+      hardBiasPercent: 14,
+      timeMisallocationPercent: 12,
       disciplineIndexAverage: 71,
       guessRatePercent: 14,
+      controlledCompliancePercent: 88,
+      minTimeViolationPercent: 9,
+      maxTimeViolationPercent: 4,
+      followedPhaseSplitPercent: 84,
+      pacingGuardrailViolationPercent: 11,
+      structuralOverridePercent: 3,
       riskDistribution: { low: 34, medium: 24, high: 12, critical: 4 },
+      rawScoreHistogram: [4, 18, 36, 16],
+      accuracyHistogram: [2, 12, 38, 22],
+      sectionAccuracyPercentages: [72, 78, 69],
+      topicHeatmap: [81, 67, 74, 62, 79],
+      disciplineIndexDistribution: [3, 12, 34, 25],
+      behaviorDistribution: {
+        rushedPercent: 17,
+        overextendedPercent: 10,
+        driftPronePercent: 14,
+      },
       startedAt: "2026-04-10T06:30:00.000Z",
     },
     {
       runId: "run-2026-0409-003",
       runName: "NEET Revision - Biology Focus",
+      academicYear: "2026",
       batchId: "batch-beta",
       batchName: "Batch Beta",
       mode: "Diagnostic",
       participants: 66,
       completionRatePercent: 92,
       avgRawScorePercent: 62,
+      medianRawScorePercent: 61,
+      rawScoreStdDeviation: 13,
       avgAccuracyPercent: 71,
+      avgPhaseAdherencePercent: 75,
+      easyNeglectPercent: 22,
+      hardBiasPercent: 18,
+      timeMisallocationPercent: 16,
       disciplineIndexAverage: 66,
       guessRatePercent: 19,
+      controlledCompliancePercent: 0,
+      minTimeViolationPercent: 12,
+      maxTimeViolationPercent: 0,
+      followedPhaseSplitPercent: 73,
+      pacingGuardrailViolationPercent: 19,
+      structuralOverridePercent: 4,
       riskDistribution: { low: 21, medium: 25, high: 15, critical: 5 },
+      rawScoreHistogram: [8, 20, 28, 10],
+      accuracyHistogram: [4, 14, 31, 17],
+      sectionAccuracyPercentages: [68, 74, 71],
+      topicHeatmap: [64, 72, 69, 58, 75],
+      disciplineIndexDistribution: [5, 17, 28, 16],
+      behaviorDistribution: {
+        rushedPercent: 24,
+        overextendedPercent: 15,
+        driftPronePercent: 21,
+      },
       startedAt: "2026-04-09T05:00:00.000Z",
     },
     {
       runId: "run-2026-0408-006",
       runName: "Physics Adaptive Drill - Wave Optics",
+      academicYear: "2026",
       batchId: "batch-alpha",
       batchName: "Batch Alpha",
       mode: "Operational",
       participants: 52,
       completionRatePercent: 88,
       avgRawScorePercent: 57,
+      medianRawScorePercent: 56,
+      rawScoreStdDeviation: 15,
       avgAccuracyPercent: 64,
+      avgPhaseAdherencePercent: 68,
+      easyNeglectPercent: 26,
+      hardBiasPercent: 21,
+      timeMisallocationPercent: 20,
       disciplineIndexAverage: 59,
       guessRatePercent: 24,
+      controlledCompliancePercent: 0,
+      minTimeViolationPercent: 18,
+      maxTimeViolationPercent: 0,
+      followedPhaseSplitPercent: 67,
+      pacingGuardrailViolationPercent: 26,
+      structuralOverridePercent: 5,
       riskDistribution: { low: 14, medium: 18, high: 14, critical: 6 },
+      rawScoreHistogram: [10, 16, 18, 8],
+      accuracyHistogram: [7, 15, 19, 11],
+      sectionAccuracyPercentages: [63, 66, 58],
+      topicHeatmap: [59, 61, 64, 54, 57],
+      disciplineIndexDistribution: [8, 15, 18, 11],
+      behaviorDistribution: {
+        rushedPercent: 29,
+        overextendedPercent: 20,
+        driftPronePercent: 24,
+      },
       startedAt: "2026-04-08T09:45:00.000Z",
     },
     {
       runId: "run-2026-0407-010",
       runName: "Chemistry Timing Calibration",
+      academicYear: "2026",
       batchId: "batch-gamma",
       batchName: "Batch Gamma",
       mode: "Controlled",
       participants: 48,
       completionRatePercent: 90,
       avgRawScorePercent: 73,
+      medianRawScorePercent: 74,
+      rawScoreStdDeviation: 9,
       avgAccuracyPercent: 80,
+      avgPhaseAdherencePercent: 85,
+      easyNeglectPercent: 12,
+      hardBiasPercent: 11,
+      timeMisallocationPercent: 9,
       disciplineIndexAverage: 78,
       guessRatePercent: 11,
+      controlledCompliancePercent: 91,
+      minTimeViolationPercent: 6,
+      maxTimeViolationPercent: 2,
+      followedPhaseSplitPercent: 89,
+      pacingGuardrailViolationPercent: 8,
+      structuralOverridePercent: 2,
       riskDistribution: { low: 25, medium: 15, high: 6, critical: 2 },
+      rawScoreHistogram: [2, 9, 23, 14],
+      accuracyHistogram: [1, 7, 20, 20],
+      sectionAccuracyPercentages: [77, 82, 80],
+      topicHeatmap: [83, 79, 76, 81, 78],
+      disciplineIndexDistribution: [2, 8, 17, 21],
+      behaviorDistribution: {
+        rushedPercent: 11,
+        overextendedPercent: 8,
+        driftPronePercent: 9,
+      },
       startedAt: "2026-04-07T07:20:00.000Z",
     },
   ],
@@ -223,6 +382,7 @@ export const FALLBACK_DATASET: DashboardDataset = {
       testsAttempted: 7,
     },
   ],
+  studentAnalytics: [],
   yearBehaviorSummary: {
     academicYear: "2026",
     computedAt: "2026-04-10T23:30:00.000Z",
@@ -280,6 +440,11 @@ export const FALLBACK_DATASET: DashboardDataset = {
     ],
   },
 };
+
+FALLBACK_DATASET.studentAnalytics = deriveStudentAnalyticsRecords(
+  FALLBACK_DATASET.runAnalytics,
+  FALLBACK_DATASET.studentYearMetrics,
+);
 
 function toNonEmptyString(value: unknown, fallback = ""): string {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
@@ -383,16 +548,39 @@ function normalizeRunAnalyticsRecord(value: unknown, index: number): RunAnalytic
   return {
     runId,
     runName: toNonEmptyString(record.runName, toNonEmptyString(record.testName, runId)),
+    academicYear: toNonEmptyString(record.academicYear, "2026"),
     batchId,
     batchName,
     mode: toNonEmptyString(record.mode, "Operational"),
     participants: toNumberOrZero(record.totalParticipants ?? record.participants),
     completionRatePercent: toNumberOrZero(record.completionRate ?? record.completionRatePercent),
     avgRawScorePercent: toNumberOrZero(record.avgRawScorePercent),
+    medianRawScorePercent: toNumberOrZero(record.medianRawScorePercent ?? record.medianRawPercent),
+    rawScoreStdDeviation: toNumberOrZero(record.rawScoreStdDeviation ?? record.stdDeviation),
     avgAccuracyPercent: toNumberOrZero(record.avgAccuracyPercent),
+    avgPhaseAdherencePercent: toNumberOrZero(record.avgPhaseAdherencePercent),
+    easyNeglectPercent: toNumberOrZero(record.easyNeglectPercent),
+    hardBiasPercent: toNumberOrZero(record.hardBiasPercent),
+    timeMisallocationPercent: toNumberOrZero(record.timeMisallocationPercent),
     disciplineIndexAverage: toNumberOrZero(record.avgDisciplineIndex ?? record.disciplineAverage),
     guessRatePercent: toNumberOrZero(record.guessRatePercent ?? record.guessRateClusterPercent),
+    controlledCompliancePercent: toNumberOrZero(record.controlledCompliancePercent),
+    minTimeViolationPercent: toNumberOrZero(record.minTimeViolationPercent),
+    maxTimeViolationPercent: toNumberOrZero(record.maxTimeViolationPercent),
+    followedPhaseSplitPercent: toNumberOrZero(record.followedPhaseSplitPercent),
+    pacingGuardrailViolationPercent: toNumberOrZero(record.pacingGuardrailViolationPercent),
+    structuralOverridePercent: toNumberOrZero(record.structuralOverridePercent),
     riskDistribution: normalizeRiskDistribution(record.riskDistribution),
+    rawScoreHistogram: Array.isArray(record.rawScoreHistogram) ? record.rawScoreHistogram.map(toNumberOrZero) : [0, 0, 0, 0],
+    accuracyHistogram: Array.isArray(record.accuracyHistogram) ? record.accuracyHistogram.map(toNumberOrZero) : [0, 0, 0, 0],
+    sectionAccuracyPercentages: Array.isArray(record.sectionAccuracyPercentages) ? record.sectionAccuracyPercentages.map(toNumberOrZero) : [0, 0, 0],
+    topicHeatmap: Array.isArray(record.topicHeatmap) ? record.topicHeatmap.map(toNumberOrZero) : [0, 0, 0, 0, 0],
+    disciplineIndexDistribution: Array.isArray(record.disciplineIndexDistribution) ? record.disciplineIndexDistribution.map(toNumberOrZero) : [0, 0, 0, 0],
+    behaviorDistribution: {
+      rushedPercent: toNumberOrZero((record.behaviorDistribution as Record<string, unknown> | undefined)?.rushedPercent),
+      overextendedPercent: toNumberOrZero((record.behaviorDistribution as Record<string, unknown> | undefined)?.overextendedPercent),
+      driftPronePercent: toNumberOrZero((record.behaviorDistribution as Record<string, unknown> | undefined)?.driftPronePercent),
+    },
     startedAt: toNonEmptyString(record.startedAt, new Date(0).toISOString()),
   };
 }
@@ -447,6 +635,146 @@ function normalizeRiskSignals(value: unknown): RiskSignalsRecord {
     percentLatePhaseDrop: toNumberOrZero(source.percentLatePhaseDrop),
     percentPacingDrift: toNumberOrZero(source.percentPacingDrift),
   };
+}
+
+function clampPercent(value: number): number {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function buildStudentRunSummaries(
+  student: StudentYearMetricRecord,
+  batchRuns: RunAnalyticsRecord[],
+  studentIndexWithinBatch: number,
+): StudentAnalyticsRunRecord[] {
+  const sortedRuns = [...batchRuns]
+    .sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt))
+    .slice(0, Math.max(1, Math.min(5, student.testsAttempted || batchRuns.length)));
+
+  return sortedRuns.map((run, index) => {
+    const variance = studentIndexWithinBatch * 2 - index * 3;
+    const rawScorePercent = clampPercent((run.avgRawScorePercent * 0.45) + (student.avgRawScorePercent * 0.55) + variance);
+    const accuracyPercent = clampPercent((run.avgAccuracyPercent * 0.4) + (student.avgAccuracyPercent * 0.6) + variance * 0.6);
+    const disciplineIndex = clampPercent((run.disciplineIndexAverage * 0.35) + (student.disciplineIndex * 0.65) - index);
+    const guessRatePercent = clampPercent((run.guessRatePercent * 0.45) + (student.guessRatePercent * 0.55) + index);
+    const phaseAdherencePercent = clampPercent(disciplineIndex + 6 - guessRatePercent * 0.2);
+    const easyNeglectPercent = clampPercent(Math.max(4, 100 - accuracyPercent - 5 + index * 2));
+    const hardBiasPercent = clampPercent(Math.max(5, guessRatePercent + (100 - disciplineIndex) * 0.22));
+    const topicWeaknessScore = clampPercent(Math.max(8, 100 - accuracyPercent + index * 4));
+    const overstayPercent = clampPercent(Math.max(3, (100 - disciplineIndex) * 0.25 + index * 2));
+    const controlledModeDelta = clampPercent(Math.max(0, disciplineIndex - rawScorePercent) * 0.35);
+    const overrideCount = Math.max(0, Math.round((100 - disciplineIndex) / 22) - index % 2);
+    const riskState =
+      disciplineIndex < 45 ? "critical" :
+        disciplineIndex < 58 ? "high" :
+          disciplineIndex < 74 ? "medium" :
+            "low";
+
+    return {
+      runId: run.runId,
+      runName: run.runName,
+      completedOn: run.startedAt,
+      rawScorePercent,
+      accuracyPercent,
+      phaseAdherencePercent,
+      easyNeglectPercent,
+      hardBiasPercent,
+      topicWeaknessScore,
+      riskState,
+      disciplineIndex,
+      guessRatePercent,
+      overstayPercent,
+      controlledModeDelta: run.mode.toLowerCase() === "controlled" ? controlledModeDelta : 0,
+      overrideCount,
+    };
+  });
+}
+
+function buildStudentTopicWeaknessSummary(runSummaries: StudentAnalyticsRunRecord[]): string {
+  const weakest = [...runSummaries].sort((left, right) => right.topicWeaknessScore - left.topicWeaknessScore)[0];
+  if (!weakest) {
+    return "No current-year attempts yet.";
+  }
+
+  return `${weakest.runName} shows the strongest topic weakness pattern in recent attempts.`;
+}
+
+function deriveStudentAnalyticsRecords(
+  runAnalytics: RunAnalyticsRecord[],
+  studentYearMetrics: StudentYearMetricRecord[],
+): StudentAnalyticsRecord[] {
+  const batchRankings = new Map<string, StudentYearMetricRecord[]>();
+
+  for (const student of studentYearMetrics) {
+    const key = `${student.batchId}:${student.batchName}`;
+    const existing = batchRankings.get(key) ?? [];
+    existing.push(student);
+    batchRankings.set(key, existing);
+  }
+
+  for (const students of batchRankings.values()) {
+    students.sort((left, right) => right.avgRawScorePercent - left.avgRawScorePercent);
+  }
+
+  return studentYearMetrics.map((student) => {
+    const batchRuns = runAnalytics.filter((run) => run.batchId === student.batchId);
+    const rankedStudents = batchRankings.get(`${student.batchId}:${student.batchName}`) ?? [];
+    const rankInBatch = rankedStudents.findIndex((entry) => entry.studentId === student.studentId);
+    const studentIndexWithinBatch = Math.max(0, rankInBatch);
+    const runSummaries = buildStudentRunSummaries(student, batchRuns, studentIndexWithinBatch);
+    const phaseAdherencePercent =
+      runSummaries.length > 0 ?
+        clampPercent(runSummaries.reduce((sum, run) => sum + run.phaseAdherencePercent, 0) / runSummaries.length) :
+        clampPercent(student.disciplineIndex + 8);
+    const easyNeglectPercent =
+      runSummaries.length > 0 ?
+        clampPercent(runSummaries.reduce((sum, run) => sum + run.easyNeglectPercent, 0) / runSummaries.length) :
+        clampPercent(student.guessRatePercent + 8);
+    const hardBiasPercent =
+      runSummaries.length > 0 ?
+        clampPercent(runSummaries.reduce((sum, run) => sum + run.hardBiasPercent, 0) / runSummaries.length) :
+        clampPercent(student.guessRatePercent + 5);
+    const overstayPercent =
+      runSummaries.length > 0 ?
+        clampPercent(runSummaries.reduce((sum, run) => sum + run.overstayPercent, 0) / runSummaries.length) :
+        clampPercent((100 - student.disciplineIndex) * 0.3);
+    const controlledModeDelta =
+      runSummaries.length > 0 ?
+        clampPercent(runSummaries.reduce((sum, run) => sum + run.controlledModeDelta, 0) / runSummaries.length) :
+        0;
+    const overrideCount = runSummaries.reduce((sum, run) => sum + run.overrideCount, 0);
+    const topicWeaknessRadar = [
+      { label: "Algebra", value: clampPercent(100 - student.avgAccuracyPercent + 8) },
+      { label: "Mechanics", value: clampPercent(100 - student.disciplineIndex + 4) },
+      { label: "Organic", value: clampPercent(student.guessRatePercent + 18) },
+      { label: "Modern", value: clampPercent(100 - student.avgRawScorePercent + 12) },
+      { label: "Coordination", value: clampPercent(overstayPercent + 10) },
+    ];
+
+    return {
+      studentId: student.studentId,
+      studentName: student.studentName,
+      academicYear: "2026",
+      batchId: student.batchId,
+      batchName: student.batchName,
+      testsAttempted: student.testsAttempted,
+      avgRawScorePercent: student.avgRawScorePercent,
+      avgAccuracyPercent: student.avgAccuracyPercent,
+      rankInBatch: rankInBatch === -1 ? null : rankInBatch + 1,
+      phaseAdherencePercent,
+      easyNeglectPercent,
+      hardBiasPercent,
+      topicWeaknessSummary: buildStudentTopicWeaknessSummary(runSummaries),
+      topicWeaknessRadar,
+      timeMisallocationPercent: clampPercent((100 - student.disciplineIndex) * 0.22 + student.guessRatePercent * 0.35),
+      rollingRiskCluster: student.rollingRiskCluster,
+      disciplineIndex: student.disciplineIndex,
+      guessRatePercent: student.guessRatePercent,
+      overstayPercent,
+      controlledModeDelta,
+      overrideCount,
+      runSummaries,
+    };
+  });
 }
 
 function normalizeBatchDiagnosticRecord(value: unknown, index: number): BatchDiagnosticRecord | null {
@@ -659,8 +987,9 @@ export async function fetchDashboardDataset(): Promise<DashboardDataset> {
     runAnalytics,
     studentYearMetrics,
   );
+  const studentAnalytics = deriveStudentAnalyticsRecords(runAnalytics, studentYearMetrics);
 
-  return { runAnalytics, studentYearMetrics, yearBehaviorSummary };
+  return { runAnalytics, studentYearMetrics, studentAnalytics, yearBehaviorSummary };
 }
 
 export { ApiClientError };
