@@ -17,6 +17,7 @@ import {
   type DisciplineTrend,
   type StudentYearMetricRecord,
 } from "./analyticsDataset";
+import AnalyticsWorkspaceNav from "./AnalyticsWorkspaceNav";
 
 interface TrendIndicator {
   label: string;
@@ -632,15 +633,7 @@ function RiskInsightsDashboardPage() {
         Insights are advisory only and remain layer-aware. Raw session documents are never queried on dashboard load.
       </p>
 
-      <p className="admin-analytics-inline-link-row">
-        <NavLink className="admin-primary-link" to="/admin/analytics">
-          Back to Analytics Dashboard
-        </NavLink>
-        {" "}
-        <NavLink className="admin-primary-link" to="/admin/analytics/batch">
-          Open Batch Analytics Dashboard
-        </NavLink>
-      </p>
+      <AnalyticsWorkspaceNav />
 
       <p className="admin-analytics-inline-note">
         {isLoading ? "Loading risk overview..." : inlineMessage ?? "Risk overview ready."}

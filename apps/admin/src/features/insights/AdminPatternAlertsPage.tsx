@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { NavLink } from "react-router-dom";
 import { UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { LICENSE_LAYER_ORDER } from "../../../../../shared/types/portalRouting";
@@ -14,6 +13,7 @@ import {
   type DashboardDataset,
   type StudentYearMetricRecord,
 } from "../analytics/analyticsDataset";
+import InsightsWorkspaceNav from "./InsightsWorkspaceNav";
 
 interface PatternAlertRow {
   patternType: string;
@@ -235,12 +235,7 @@ function AdminPatternAlertsPage() {
         session scans on dashboard load.
       </p>
 
-      <p className="admin-analytics-inline-link-row">
-        <NavLink className="admin-primary-link" to="/admin/insights/risk">Risk Overview</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/insights/interventions">Intervention Engine</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/insights/execution">Execution Signals</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/insights/student/std-1004">Open Sample Student</NavLink>
-      </p>
+      <InsightsWorkspaceNav />
 
       <p className="admin-analytics-inline-note">
         {isLoading ? "Loading pattern alerts..." : inlineMessage ?? "Pattern alerts workspace ready."}

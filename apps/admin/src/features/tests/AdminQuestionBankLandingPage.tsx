@@ -1,76 +1,78 @@
-import { NavLink } from "react-router-dom";
+import { useAuthProvider } from "../../../../../shared/services/authProvider";
+import { resolveAdminAccessContext } from "../../portals/adminAccess";
+import AdminWorkspaceLandingPage from "../shared/AdminWorkspaceLandingPage";
 
-interface QuestionBankWorkspaceCard {
-  title: string;
-  to: string;
-  description: string;
-  status: "available" | "planned";
-}
-
-const QUESTION_BANK_WORKSPACES: QuestionBankWorkspaceCard[] = [
+const QUESTION_BANK_WORKSPACES = [
   {
     title: "Upload Package",
     to: "/admin/question-bank/upload-package",
     description: "Structured ZIP intake, workbook validation, and pre-import package checks.",
-    status: "available",
+    meta: "Workbook and asset intake workflow",
   },
   {
     title: "Validation Logs",
     to: "/admin/question-bank/validation-logs",
     description: "Immutable upload-log review for row errors, warnings, and version history.",
-    status: "available",
+    meta: "Audit-safe validation history",
   },
   {
     title: "Question Library",
     to: "/admin/question-bank/library",
     description: "Indexed question metadata, usage visibility, and structural lock review.",
-    status: "available",
+    meta: "Search and lifecycle visibility",
   },
   {
     title: "Distribution Overview",
     to: "/admin/question-bank/distribution",
     description: "Difficulty, chapter, marks, and imbalance analytics from question summaries.",
-    status: "available",
+    meta: "Coverage and balance review",
   },
   {
     title: "Tag Management",
     to: "/admin/question-bank/tags",
     description: "Create, rename, merge, and deprecate governed tags with template safety rules.",
-    status: "available",
+    meta: "Governed taxonomy controls",
   },
   {
     title: "Archive / Versions",
     to: "/admin/question-bank/archive",
     description: "Thermal-state lifecycle and version-safe historical question management.",
-    status: "available",
+    meta: "Historical and version-safe review",
   },
-];
+] as const;
 
 function AdminQuestionBankLandingPage() {
+  const { session } = useAuthProvider();
+  const accessContext = resolveAdminAccessContext(session);
+
   return (
-    <section className="admin-content-card" aria-labelledby="admin-question-bank-landing-title">
-      <p className="admin-content-eyebrow">Question Bank Workspace</p>
-      <h2 id="admin-question-bank-landing-title">Dedicated Question Bank Landing</h2>
-      <p className="admin-content-copy">
-        This route turns <code>/admin/question-bank</code> into a dedicated workspace index instead of a single merged
-        page. Each workflow below maps to the source-of-truth navigation structure for upload, logs, library,
-        distribution, tags, and archive/version handling.
-      </p>
-      <div className="admin-analytics-compliance-panel">
-        {QUESTION_BANK_WORKSPACES.map((workspace) => (
-          <article key={workspace.title} className="admin-risk-summary-card">
-            <h4>{workspace.title}</h4>
-            <p>{workspace.description}</p>
-            <small>{workspace.status === "available" ? "Available now" : "Remaining QB-002 slice"}</small>
-            {workspace.status === "available" ? (
-              <NavLink className="admin-primary-link" to={workspace.to}>
-                Open workspace
-              </NavLink>
-            ) : null}
-          </article>
-        ))}
-      </div>
-    </section>
+    <AdminWorkspaceLandingPage
+      eyebrow="Question Bank Workspace"
+      title="Dedicated Question Bank Landing Workspace"
+      description={[
+        "This route turns /admin/question-bank into a dedicated workspace index instead of a single merged page.",
+        "Each workflow maps directly to the source-of-truth navigation structure for package intake, validation history, library review, distribution analysis, tag governance, and archive/version handling.",
+      ]}
+      note={`Role: ${accessContext.role ?? "unknown"}. Current layer: ${accessContext.licenseLayer ?? "unlicensed"}. All question bank workspaces are available from this index.`}
+      stats={[
+        {
+          label: "Workspaces",
+          value: String(QUESTION_BANK_WORKSPACES.length),
+          detail: "Dedicated question bank destinations",
+        },
+        {
+          label: "Intake",
+          value: "ZIP",
+          detail: "Structured package upload with validation gates",
+        },
+        {
+          label: "Governance",
+          value: "Tracked",
+          detail: "Tags, logs, and versions stay separated by workflow",
+        },
+      ]}
+      links={QUESTION_BANK_WORKSPACES.map((workspace) => ({ ...workspace }))}
+    />
   );
 }
 

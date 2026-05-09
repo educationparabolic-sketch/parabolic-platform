@@ -1,6 +1,7 @@
 import { useMemo } from "react";
-import { NavLink, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
+import AssignmentsWorkspaceNav from "./AssignmentsWorkspaceNav";
 
 type ExecutionMode = "Operational" | "Diagnostic" | "Controlled" | "Hard";
 type RunStatus = "scheduled" | "active" | "collecting" | "completed" | "archived" | "cancelled" | "terminated";
@@ -250,23 +251,7 @@ function AdminAssignmentLiveRunPage() {
         run-level compliance context.
       </p>
 
-      <p className="admin-analytics-inline-link-row">
-        <NavLink className="admin-primary-link" to="/admin/assignments/live">
-          Live Monitor
-        </NavLink>
-        {" "}
-        <NavLink className="admin-primary-link" to="/admin/assignments/list">
-          Assignment List
-        </NavLink>
-        {" "}
-        <NavLink className="admin-primary-link" to="/admin/assignments/history">
-          Assignment History
-        </NavLink>
-        {" "}
-        <NavLink className="admin-primary-link" to="/admin/assignments/bulk">
-          Bulk Operations
-        </NavLink>
-      </p>
+      <AssignmentsWorkspaceNav />
 
       <div className="admin-risk-summary-card">
         <h4>Focused Run</h4>

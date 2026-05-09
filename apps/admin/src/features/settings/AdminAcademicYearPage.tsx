@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { NavLink } from "react-router-dom";
 import { UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
@@ -12,6 +11,7 @@ import {
   lockAcademicYear,
   type AdminSettingsSnapshot,
 } from "./settingsDataset";
+import SettingsWorkspaceNav from "./SettingsWorkspaceNav";
 
 const SETTINGS_INSTITUTE_ID =
   import.meta.env.VITE_ADMIN_SETTINGS_INSTITUTE_ID ?? "inst-build-125";
@@ -184,14 +184,7 @@ function AdminAcademicYearPage() {
         back into the shared settings workspace.
       </p>
 
-      <p className="admin-analytics-inline-link-row">
-        <NavLink className="admin-primary-link" to="/admin/settings/profile">Institute Profile</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/settings/execution-policy">Execution Policy</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/settings/users">Users & Roles</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/settings/security">Security & Access</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/settings/data">Data & Archive</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/settings/system">System Configuration</NavLink>
-      </p>
+      <SettingsWorkspaceNav />
 
       <p className="admin-settings-inline-note">
         {isLoading ? "Loading academic year settings..." : inlineMessage ?? "Academic year workspace ready."}

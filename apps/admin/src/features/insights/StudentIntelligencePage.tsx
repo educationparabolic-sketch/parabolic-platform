@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { NavLink, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { UiChartContainer, UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { LICENSE_LAYER_ORDER } from "../../../../../shared/types/portalRouting";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
 import {
   ApiClientError,
+  DEFAULT_STUDENT_INTELLIGENCE_ID,
   FALLBACK_DATASET,
   fetchDashboardDataset,
   formatIsoDate,
@@ -20,14 +21,38 @@ import {
   type HighRiskInterventionCandidate,
   type InterventionActionRecord,
 } from "./interventionDataset";
-
-const INTERVENTION_INSTITUTE_ID = "inst-build-124";
-const INTERVENTION_YEAR_ID = "2026";
+import InsightsWorkspaceNav from "./InsightsWorkspaceNav";
 
 interface BehaviorCard {
   label: string;
   value: string;
   helper: string;
+}
+
+interface StudentOption {
+  studentId: string;
+  studentName: string;
+}
+
+function decodeIdTokenClaims(idToken: string | null): Record<string, unknown> | null {
+  if (!idToken) {
+    return null;
+  }
+
+  const segments = idToken.split(".");
+  if (segments.length !== 3) {
+    return null;
+  }
+
+  try {
+    const payloadSegment = segments[1].replace(/-/g, "+").replace(/_/g, "/");
+    const paddedPayload = payloadSegment.padEnd(Math.ceil(payloadSegment.length / 4) * 4, "=");
+    const payload = atob(paddedPayload);
+    const claims = JSON.parse(payload);
+    return claims && typeof claims === "object" ? (claims as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
 }
 
 function riskClusterText(value: StudentAnalyticsRecord["rollingRiskCluster"]): string {
@@ -53,6 +78,7 @@ function average(values: number[]): number {
 
 function StudentIntelligencePage() {
   const { studentId = "" } = useParams<{ studentId: string }>();
+  const navigate = useNavigate();
   const { session } = useAuthProvider();
   const accessContext = resolveAdminAccessContext(session);
   const isL2OrAbove =
@@ -71,14 +97,25 @@ function StudentIntelligencePage() {
       setInlineMessage(null);
 
       try {
-        const [nextDataset, nextHistory] = await Promise.all([
-          shouldUseLiveApi() ? fetchDashboardDataset() : Promise.resolve(FALLBACK_DATASET),
-          listInterventionActions({
-            instituteId: INTERVENTION_INSTITUTE_ID,
-            studentId,
-            yearId: INTERVENTION_YEAR_ID,
-          }),
-        ]);
+        const nextDataset = shouldUseLiveApi() ? await fetchDashboardDataset() : FALLBACK_DATASET;
+        const nextStudent =
+          nextDataset.studentAnalytics.find((entry) => entry.studentId === studentId) ??
+          nextDataset.studentYearMetrics.find((entry) => entry.studentId === studentId) ??
+          null;
+        const claims = decodeIdTokenClaims(session.idToken);
+        const instituteId =
+          typeof claims?.instituteId === "string" && claims.instituteId.trim().length > 0 ?
+            claims.instituteId :
+            "inst-build-125";
+        const yearId =
+          nextStudent && "academicYear" in nextStudent && typeof nextStudent.academicYear === "string" ?
+            nextStudent.academicYear :
+            nextDataset.yearBehaviorSummary.academicYear;
+        const nextHistory = await listInterventionActions({
+          instituteId,
+          studentId,
+          yearId,
+        });
 
         if (!isMounted) {
           return;
@@ -112,7 +149,7 @@ function StudentIntelligencePage() {
     return () => {
       isMounted = false;
     };
-  }, [studentId]);
+  }, [session.idToken, studentId]);
 
   const student = useMemo(
     () => dataset.studentAnalytics.find((entry) => entry.studentId === studentId) ?? null,
@@ -129,9 +166,31 @@ function StudentIntelligencePage() {
     [dataset, studentId],
   );
 
-  const alternativeStudents = useMemo(
-    () => dataset.studentAnalytics.slice(0, 6),
-    [dataset.studentAnalytics],
+  const studentOptions = useMemo<StudentOption[]>(() => {
+    const studentsById = new Map<string, StudentOption>();
+
+    dataset.studentAnalytics.forEach((entry) => {
+      studentsById.set(entry.studentId, {
+        studentId: entry.studentId,
+        studentName: entry.studentName,
+      });
+    });
+
+    dataset.studentYearMetrics.forEach((entry) => {
+      if (!studentsById.has(entry.studentId)) {
+        studentsById.set(entry.studentId, {
+          studentId: entry.studentId,
+          studentName: entry.studentName,
+        });
+      }
+    });
+
+    return Array.from(studentsById.values()).sort((left, right) => left.studentName.localeCompare(right.studentName));
+  }, [dataset.studentAnalytics, dataset.studentYearMetrics]);
+
+  const selectedStudentValue = useMemo(
+    () => (studentOptions.some((option) => option.studentId === studentId) ? studentId : ""),
+    [studentId, studentOptions],
   );
 
   const behaviorCards = useMemo<BehaviorCard[]>(() => {
@@ -256,6 +315,14 @@ function StudentIntelligencePage() {
     [],
   );
 
+  function handleStudentChange(nextStudentId: string): void {
+    if (!nextStudentId || nextStudentId === studentId) {
+      return;
+    }
+
+    navigate(`/admin/insights/student/${nextStudentId}`);
+  }
+
   if (!student || !studentSummary) {
     return (
       <section className="admin-content-card" aria-labelledby="admin-student-intelligence-title">
@@ -264,16 +331,32 @@ function StudentIntelligencePage() {
         <p className="admin-content-copy">
           No summary-safe intelligence record was found for <code>{studentId || "unknown-student"}</code>.
         </p>
+        <div className="admin-student-intelligence-switcher">
+          <label htmlFor="admin-student-intelligence-selector">
+            <span>Student Selector</span>
+            <select
+              id="admin-student-intelligence-selector"
+              value={selectedStudentValue}
+              disabled={studentOptions.length === 0}
+              onChange={(event) => {
+                handleStudentChange(event.target.value);
+              }}
+            >
+              <option value="">
+                {studentOptions.length > 0 ? "Choose a student workspace" : "No students available"}
+              </option>
+              {studentOptions.map((option) => (
+                <option key={option.studentId} value={option.studentId}>
+                  {option.studentName} ({option.studentId})
+                </option>
+              ))}
+            </select>
+          </label>
+          <p>Switch students without editing the route manually.</p>
+        </div>
         <p className="admin-analytics-inline-note">
           {isLoading ? "Loading student intelligence..." : inlineMessage ?? "Student record unavailable."}
         </p>
-        <div className="admin-risk-summary-row">
-          {alternativeStudents.map((entry) => (
-            <NavLink key={entry.studentId} className="admin-risk-summary-button" to={`/admin/insights/student/${entry.studentId}`}>
-              {entry.studentName}
-            </NavLink>
-          ))}
-        </div>
       </section>
     );
   }
@@ -290,16 +373,35 @@ function StudentIntelligencePage() {
         rolling run summaries. Raw session documents are never queried on this route.
       </p>
 
-      <p className="admin-analytics-inline-link-row">
-        <NavLink className="admin-primary-link" to="/admin/insights/risk">Risk Overview</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/insights/patterns">Pattern Alerts</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/insights/interventions">Intervention Engine</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/insights/execution">Execution Signals</NavLink>
-      </p>
+      <InsightsWorkspaceNav activeStudentId={student.studentId || studentId || DEFAULT_STUDENT_INTELLIGENCE_ID} />
 
       <p className="admin-analytics-inline-note">
         {isLoading ? "Loading student intelligence..." : inlineMessage ?? "Student intelligence workspace ready."}
       </p>
+
+      <div className="admin-student-intelligence-switcher">
+        <label htmlFor="admin-student-intelligence-selector">
+          <span>Student Selector</span>
+          <select
+            id="admin-student-intelligence-selector"
+            value={selectedStudentValue}
+            disabled={studentOptions.length === 0}
+            onChange={(event) => {
+              handleStudentChange(event.target.value);
+            }}
+          >
+            <option value="">
+              {studentOptions.length > 0 ? "Choose a student workspace" : "No students available"}
+            </option>
+            {studentOptions.map((option) => (
+              <option key={option.studentId} value={option.studentId}>
+                {option.studentName} ({option.studentId})
+              </option>
+            ))}
+          </select>
+        </label>
+        <p>Switch students without editing the route manually.</p>
+      </div>
 
       <div className="admin-analytics-run-detail-header">
         <div>

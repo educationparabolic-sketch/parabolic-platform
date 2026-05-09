@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { NavLink } from "react-router-dom";
 import { UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
@@ -16,6 +15,7 @@ import {
   type StaffRole,
   type StaffStatus,
 } from "./settingsDataset";
+import SettingsWorkspaceNav from "./SettingsWorkspaceNav";
 
 const SETTINGS_INSTITUTE_ID =
   import.meta.env.VITE_ADMIN_SETTINGS_INSTITUTE_ID ?? "inst-build-125";
@@ -223,14 +223,7 @@ function AdminUserRoleManagementPage() {
         instead of collapsing that drill-down back into the shared settings workspace.
       </p>
 
-      <p className="admin-analytics-inline-link-row">
-        <NavLink className="admin-primary-link" to="/admin/settings/profile">Institute Profile</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/settings/academic-year">Academic Year</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/settings/execution-policy">Execution Policy</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/settings/security">Security & Access</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/settings/data">Data & Archive</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/settings/system">System Configuration</NavLink>
-      </p>
+      <SettingsWorkspaceNav />
 
       <p className="admin-settings-inline-note">
         {isLoading ? "Loading user and role settings..." : inlineMessage ?? "User and role management workspace ready."}

@@ -13,6 +13,7 @@ import {
   type UiTableColumn,
 } from "../../../../../shared/ui/components";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
+import StudentWorkspaceNav from "./StudentWorkspaceNav";
 
 const apiClient = getPortalApiClient("admin");
 const STUDENT_STATUSES = ["invited", "active", "inactive", "archived", "suspended"] as const;
@@ -1547,14 +1548,6 @@ function StudentManagementPage() {
     },
   ];
 
-  const subpageLinks: Array<{ id: Exclude<StudentSubpage, "profile">; label: string; to: string }> = [
-    { id: "list", label: "Student List", to: "/admin/students/list" },
-    { id: "bulk-upload", label: "Bulk Upload", to: "/admin/students/bulk-upload" },
-    { id: "lifecycle", label: "Lifecycle", to: "/admin/students/lifecycle" },
-    { id: "batches", label: "Batch Management", to: "/admin/students/batches" },
-    { id: "archive", label: "Archive", to: "/admin/students/archive" },
-  ];
-
   function renderListView() {
     return (
       <>
@@ -2138,20 +2131,7 @@ function StudentManagementPage() {
     <section className="admin-content-card" aria-labelledby="admin-students-title">
       <p className="admin-content-eyebrow">Build 117</p>
       <h2 id="admin-students-title">Student Management Interface</h2>
-
-      <div className="admin-student-subnav" aria-label="Students subpages">
-        {subpageLinks.map((link) => (
-          <NavLink
-            key={link.id}
-            className={({ isActive }) =>
-              `admin-student-subnav-link${isActive || currentSubpage === link.id ? " admin-student-subnav-link-active" : ""}`
-            }
-            to={link.to}
-          >
-            {link.label}
-          </NavLink>
-        ))}
-      </div>
+      <StudentWorkspaceNav />
 
       {loadMessage ? <p className="admin-student-inline-note">{loadMessage}</p> : null}
       {isLoading ? <p className="admin-student-inline-note">Loading students from GET /admin/students...</p> : null}

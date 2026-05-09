@@ -17,6 +17,7 @@ import {
   type DisciplineTrend,
   type StudentYearMetricRecord,
 } from "../analytics/analyticsDataset";
+import InsightsWorkspaceNav from "./InsightsWorkspaceNav";
 
 interface TrendIndicator {
   label: string;
@@ -271,12 +272,7 @@ function AdminRiskOverviewPage() {
         <code> {dataset.yearBehaviorSummary.academicYear}</code>, computed {formatIsoDate(dataset.yearBehaviorSummary.computedAt)}.
       </p>
 
-      <p className="admin-analytics-inline-link-row">
-        <NavLink className="admin-primary-link" to="/admin/insights/patterns">Pattern Alerts</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/insights/interventions">Intervention Engine</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/insights/execution">Execution Signals</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/analytics">Back to Analytics Dashboard</NavLink>
-      </p>
+      <InsightsWorkspaceNav />
 
       <p className="admin-analytics-inline-note">
         {isLoading ? "Loading risk overview..." : inlineMessage ?? "Risk overview workspace ready."}

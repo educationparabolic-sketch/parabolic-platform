@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { NavLink } from "react-router-dom";
 import { UiChartContainer, UiTable, type UiChartPoint, type UiTableColumn } from "../../../../../shared/ui/components";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { LICENSE_LAYER_ORDER } from "../../../../../shared/types/portalRouting";
@@ -15,6 +14,7 @@ import {
   type DashboardDataset,
   type RiskCluster,
 } from "./analyticsDataset";
+import AnalyticsWorkspaceNav from "./AnalyticsWorkspaceNav";
 
 interface BatchAggregate {
   batchId: string;
@@ -199,8 +199,6 @@ function batchRiskDistributionChart(aggregate: BatchAggregate | null): UiChartPo
 function BatchAnalyticsDashboardPage() {
   const { session } = useAuthProvider();
   const accessContext = resolveAdminAccessContext(session);
-  const isL1OrAbove =
-    accessContext.licenseLayer !== null && LICENSE_LAYER_ORDER[accessContext.licenseLayer] >= LICENSE_LAYER_ORDER.L1;
   const isL2OrAbove =
     accessContext.licenseLayer !== null && LICENSE_LAYER_ORDER[accessContext.licenseLayer] >= LICENSE_LAYER_ORDER.L2;
   const [dataset, setDataset] = useState<DashboardDataset>(FALLBACK_DATASET);
@@ -477,16 +475,7 @@ function BatchAnalyticsDashboardPage() {
         discipline and risk surfaces are shown only at L2+.
       </p>
 
-      <p className="admin-analytics-inline-link-row">
-        <NavLink className="admin-primary-link" to="/admin/analytics">
-          Back to Analytics Dashboard
-        </NavLink>{" "}
-        {isL1OrAbove ? (
-          <NavLink className="admin-primary-link" to="/admin/analytics/risk-insights">
-            Open Risk Insights Dashboard
-          </NavLink>
-        ) : null}
-      </p>
+      <AnalyticsWorkspaceNav />
 
       <p className="admin-analytics-inline-note">
         {isLoading ? "Loading batch analytics dashboard..." : inlineMessage ?? "Batch analytics dashboard ready."}

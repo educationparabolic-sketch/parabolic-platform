@@ -1,6 +1,7 @@
 import { useMemo } from "react";
-import { NavLink, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { UiChartContainer, UiTable, type UiChartPoint, type UiTableColumn } from "../../../../../shared/ui/components";
+import TestsWorkspaceNav from "./TestsWorkspaceNav";
 
 interface TemplateAnalyticsRunRow {
   runId: string;
@@ -210,23 +211,7 @@ function AdminTestTemplateAnalyticsDetailPage() {
         variance, and risk-shift signals.
       </p>
 
-      <p className="admin-analytics-inline-link-row">
-        <NavLink className="admin-primary-link" to="/admin/tests/analytics">
-          Analytics Overview
-        </NavLink>
-        {" "}
-        <NavLink className="admin-primary-link" to={`/admin/tests/${template.id}`}>
-          Template Detail
-        </NavLink>
-        {" "}
-        <NavLink className="admin-primary-link" to="/admin/tests/library">
-          Test Library
-        </NavLink>
-        {" "}
-        <NavLink className="admin-primary-link" to="/admin/tests/distribution">
-          Distribution Review
-        </NavLink>
-      </p>
+      <TestsWorkspaceNav />
 
       <div className="admin-risk-summary-card">
         <h4>Focused Analytics Template</h4>

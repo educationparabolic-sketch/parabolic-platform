@@ -1,6 +1,7 @@
 import { useMemo } from "react";
-import { NavLink, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
+import TestsWorkspaceNav from "./TestsWorkspaceNav";
 
 type TemplateStatus = "draft" | "ready" | "assigned" | "archived" | "deprecated";
 
@@ -123,23 +124,7 @@ function AdminTestTemplateDetailPage() {
         single test template.
       </p>
 
-      <p className="admin-analytics-inline-link-row">
-        <NavLink className="admin-primary-link" to="/admin/tests/library">
-          Test Library
-        </NavLink>
-        {" "}
-        <NavLink className="admin-primary-link" to={`/admin/tests/analytics/${template.id}`}>
-          Template Analytics
-        </NavLink>
-        {" "}
-        <NavLink className="admin-primary-link" to="/admin/tests/distribution">
-          Distribution Review
-        </NavLink>
-        {" "}
-        <NavLink className="admin-primary-link" to="/admin/tests/settings">
-          Template Settings
-        </NavLink>
-      </p>
+      <TestsWorkspaceNav />
 
       <div className="admin-risk-summary-card">
         <h4>Focused Template</h4>

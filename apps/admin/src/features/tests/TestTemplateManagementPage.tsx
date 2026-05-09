@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { NavLink, useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import {
@@ -19,6 +19,7 @@ import {
   type ExamType,
   type SelectionMethod,
 } from "./testTemplateFixtures";
+import TestsWorkspaceNav from "./TestsWorkspaceNav";
 
 const apiClient = getPortalApiClient("admin");
 
@@ -521,14 +522,6 @@ function TestTemplateManagementPage() {
     setErrorMessage(null);
   }
 
-  const subpageLinks: Array<{ id: TestSubpage; label: string; to: string }> = [
-    { id: "create", label: "Create Test", to: "/admin/tests/create" },
-    { id: "library", label: "Test Library", to: "/admin/tests/library" },
-    { id: "analytics", label: "Template Analytics", to: "/admin/tests/analytics" },
-    { id: "distribution", label: "Distribution Review", to: "/admin/tests/distribution" },
-    { id: "settings", label: "Template Settings", to: "/admin/tests/settings" },
-  ];
-
   const templateColumns: UiTableColumn<TestTemplateRecord>[] = [
     {
       id: "name",
@@ -1021,19 +1014,7 @@ function TestTemplateManagementPage() {
         distribution review, and template settings.
       </p>
 
-      <div className="admin-tests-subnav" aria-label="Tests subpages">
-        {subpageLinks.map((link) => (
-          <NavLink
-            key={link.id}
-            className={({ isActive }) =>
-              `admin-tests-subnav-link${isActive || currentSubpage === link.id ? " admin-tests-subnav-link-active" : ""}`
-            }
-            to={link.to}
-          >
-            {link.label}
-          </NavLink>
-        ))}
-      </div>
+      <TestsWorkspaceNav />
 
       <p className="admin-tests-inline-note">{inlineMessage}</p>
       {errorMessage ? <p className="admin-tests-inline-error">{errorMessage}</p> : null}

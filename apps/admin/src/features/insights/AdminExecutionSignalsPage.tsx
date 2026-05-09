@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { NavLink } from "react-router-dom";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { LICENSE_LAYER_ORDER } from "../../../../../shared/types/portalRouting";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
@@ -12,6 +11,7 @@ import {
   shouldUseLiveApi,
   type DashboardDataset,
 } from "../analytics/analyticsDataset";
+import InsightsWorkspaceNav from "./InsightsWorkspaceNav";
 
 interface ExecutionSignalBadge {
   label: string;
@@ -154,12 +154,7 @@ function AdminExecutionSignalsPage() {
         academic year <code>{dataset.yearBehaviorSummary.academicYear}</code>, computed {formatIsoDate(dataset.yearBehaviorSummary.computedAt)}.
       </p>
 
-      <p className="admin-analytics-inline-link-row">
-        <NavLink className="admin-primary-link" to="/admin/insights/risk">Risk Overview</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/insights/patterns">Pattern Alerts</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/insights/interventions">Intervention Engine</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/analytics">Back to Analytics Dashboard</NavLink>
-      </p>
+      <InsightsWorkspaceNav />
 
       <p className="admin-analytics-inline-note">
         {isLoading ? "Loading execution signals..." : inlineMessage ?? "Execution signals workspace ready."}

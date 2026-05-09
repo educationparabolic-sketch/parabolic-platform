@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { NavLink } from "react-router-dom";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
 import UiChartContainer from "../../../../../shared/ui/components/UiChartContainer";
@@ -126,13 +125,6 @@ function AdminOverviewPage() {
       <p className="admin-content-copy">
         Overview reads precomputed summary documents only for academic year <code>{snapshot.academicYear}</code> (updated
         <code> {formatIsoDate(snapshot.computedAt)}</code>). Raw sessions and per-question logs are excluded.
-      </p>
-      <p className="admin-analytics-inline-link-row">
-        <NavLink className="admin-primary-link" to="/admin/tests">Open Live Monitor</NavLink>
-        {" "}
-        <NavLink className="admin-primary-link" to="/admin/analytics">Open Analytics</NavLink>
-        {" "}
-        <NavLink className="admin-primary-link" to="/admin/licensing">Open Licensing</NavLink>
       </p>
       <p className="admin-analytics-inline-note">
         {isLoading ? "Loading overview..." : inlineMessage ?? "Overview summary ready."}

@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { NavLink, useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import {
@@ -8,6 +8,7 @@ import {
   UiTable,
   type UiTableColumn,
 } from "../../../../../shared/ui/components";
+import AssignmentsWorkspaceNav from "./AssignmentsWorkspaceNav";
 
 const apiClient = getPortalApiClient("admin");
 
@@ -171,12 +172,6 @@ interface AssignmentListFilters {
   batchId: string;
   dateStart: string;
   dateEnd: string;
-}
-
-interface AssignmentRouteDefinition {
-  id: AssignmentSection;
-  label: string;
-  to: string;
 }
 
 const TEMPLATE_OPTIONS: TemplateOption[] = [
@@ -526,14 +521,6 @@ const INITIAL_FILTERS: AssignmentListFilters = {
   dateEnd: "",
 };
 
-const ASSIGNMENT_ROUTE_DEFINITIONS: AssignmentRouteDefinition[] = [
-  { id: "create", label: "Create Assignment", to: "/admin/assignments/create" },
-  { id: "list", label: "Assignment List", to: "/admin/assignments/list" },
-  { id: "live", label: "Live Monitor", to: "/admin/assignments/live" },
-  { id: "history", label: "Assignment History", to: "/admin/assignments/history" },
-  { id: "bulk", label: "Bulk Operations", to: "/admin/assignments/bulk" },
-];
-
 function shouldUseLiveApi(): boolean {
   const host = window.location.hostname.toLowerCase();
   return host !== "127.0.0.1" && host !== "localhost";
@@ -615,6 +602,11 @@ function statusClassName(status: RunStatus): string {
     default:
       return "admin-assignments-status admin-assignments-status-cancelled";
   }
+}
+
+function formatBatchLabel(batchId: string): string {
+  const matchedBatch = BATCH_OPTIONS.find((batch) => batch.id === batchId);
+  return matchedBatch?.name ?? batchId;
 }
 
 function classifyLiveRisk(snapshot: LiveMonitorStudentSnapshot): "Stable" | "Drift" | "HighRisk" {
@@ -969,127 +961,74 @@ function AssignmentManagementPage() {
   }, [filters, runs]);
 
   const assignmentColumns = useMemo<UiTableColumn<RunStatusRecord>[]>(() => {
-    const columns: UiTableColumn<RunStatusRecord>[] = [
+    return [
       {
         id: "runName",
-        header: "RunName",
+        header: "Run",
         render: (row) => (
-          <div className="admin-assignments-run-cell">
+          <div className="admin-assignments-run-cell admin-assignments-run-cell-strong">
             <strong>{row.runName}</strong>
             <small>{row.templateName}</small>
+            <small>{row.runId}</small>
           </div>
         ),
       },
       {
-        id: "templateName",
-        header: "TemplateName",
-        render: (row) => row.templateName,
+        id: "delivery",
+        header: "Delivery",
+        render: (row) => (
+          <div className="admin-assignments-table-stack">
+            <div className="admin-assignments-pill-row">
+              <span className="admin-assignments-metric-pill">{row.mode}</span>
+              <span className={statusClassName(row.status)}>{row.status}</span>
+            </div>
+            <small>
+              {row.recipientStudentIds.length} recipients across {row.batchIds.map((batchId) => formatBatchLabel(batchId)).join(", ")}
+            </small>
+          </div>
+        ),
       },
       {
-        id: "mode",
-        header: "Mode",
-        render: (row) => row.mode,
+        id: "window",
+        header: "Window",
+        render: (row) => (
+          <div className="admin-assignments-window-cell">
+            <strong>{formatDateTime(row.startWindowIso)}</strong>
+            <small>Ends {formatDateTime(row.endWindowIso)}</small>
+          </div>
+        ),
       },
       {
-        id: "startWindow",
-        header: "StartWindow",
-        render: (row) => formatDateTime(row.startWindowIso),
+        id: "outcomes",
+        header: "Outcomes",
+        render: (row) => (
+          <div className="admin-assignments-table-stack">
+            <div className="admin-assignments-metric-grid">
+              <span>Completion <strong>{row.completionPercent}%</strong></span>
+              <span>Raw <strong>{row.runAnalyticsSnapshot.avgRawScorePercent}%</strong></span>
+              <span>Accuracy <strong>{row.runAnalyticsSnapshot.avgAccuracyPercent}%</strong></span>
+            </div>
+          </div>
+        ),
       },
       {
-        id: "endWindow",
-        header: "EndWindow",
-        render: (row) => formatDateTime(row.endWindowIso),
-      },
-      {
-        id: "completionPercent",
-        header: "CompletionPercent",
-        render: (row) => `${row.completionPercent}%`,
-      },
-      {
-        id: "avgRawScorePercent",
-        header: "AvgRawScorePercent",
-        render: (row) => `${row.runAnalyticsSnapshot.avgRawScorePercent}%`,
-      },
-      {
-        id: "avgAccuracyPercent",
-        header: "AvgAccuracyPercent",
-        render: (row) => `${row.runAnalyticsSnapshot.avgAccuracyPercent}%`,
+        id: "signals",
+        header: "Signals",
+        className: "admin-assignments-status-col",
+        render: (row) => (
+          <div className="admin-assignments-table-stack">
+            <div className="admin-assignments-pill-row">
+              <span className="admin-assignments-metric-pill">Discipline {row.runAnalyticsSnapshot.avgDisciplineIndex}</span>
+              <span className="admin-assignments-metric-pill">Stability {row.runAnalyticsSnapshot.executionStabilityBadge}</span>
+            </div>
+            <small>
+              Phase {row.runAnalyticsSnapshot.avgPhaseAdherencePercent}% · Guess {row.runAnalyticsSnapshot.guessRatePercent}% · Compliance {row.runAnalyticsSnapshot.controlledCompliancePercent}%
+            </small>
+            <small>{row.runAnalyticsSnapshot.riskDistributionSummary}</small>
+          </div>
+        ),
       },
     ];
-
-    if (hasLicenseAccess(CURRENT_LICENSE_LAYER, "L1")) {
-      columns.push(
-        {
-          id: "avgPhaseAdherencePercent",
-          header: "AvgPhaseAdherencePercent",
-          render: (row) => `${row.runAnalyticsSnapshot.avgPhaseAdherencePercent}%`,
-        },
-        {
-          id: "easyNeglectPercent",
-          header: "EasyNeglectPercent",
-          render: (row) => `${row.runAnalyticsSnapshot.easyNeglectPercent}%`,
-        },
-        {
-          id: "hardBiasPercent",
-          header: "HardBiasPercent",
-          render: (row) => `${row.runAnalyticsSnapshot.hardBiasPercent}%`,
-        },
-        {
-          id: "behaviourSummaryBadge",
-          header: "BehaviourSummaryBadge",
-          render: (row) => row.runAnalyticsSnapshot.executionStabilityBadge,
-        },
-      );
-    }
-
-    if (hasLicenseAccess(CURRENT_LICENSE_LAYER, "L2")) {
-      columns.push(
-        {
-          id: "riskDistributionSummary",
-          header: "RiskDistributionSummary",
-          render: (row) => row.runAnalyticsSnapshot.riskDistributionSummary,
-        },
-        {
-          id: "avgDisciplineIndex",
-          header: "AvgDisciplineIndex",
-          render: (row) => `${row.runAnalyticsSnapshot.avgDisciplineIndex}`,
-        },
-        {
-          id: "controlledCompliancePercent",
-          header: "ControlledCompliancePercent",
-          render: (row) => `${row.runAnalyticsSnapshot.controlledCompliancePercent}%`,
-        },
-        {
-          id: "guessRatePercent",
-          header: "GuessRatePercent",
-          render: (row) => `${row.runAnalyticsSnapshot.guessRatePercent}%`,
-        },
-        {
-          id: "executionStabilityBadge",
-          header: "ExecutionStabilityBadge",
-          render: (row) => row.runAnalyticsSnapshot.executionStabilityBadge,
-        },
-        {
-          id: "overrideCount",
-          header: "OverrideCount",
-          render: (row) => `${row.runAnalyticsSnapshot.overrideCount}`,
-        },
-      );
-    }
-
-    columns.push({
-      id: "status",
-      header: "Status",
-      className: "admin-assignments-status-col",
-      render: (row) => (
-        <div className="admin-assignments-status-cell">
-          <span className={statusClassName(row.status)}>{row.status}</span>
-          <small>{row.recipientStudentIds.length} recipients</small>
-        </div>
-      ),
-    });
-
-    return columns;
   }, []);
 
   const liveColumns = useMemo<UiTableColumn<LiveMonitorStudentSnapshot>[]>(() => {
@@ -1191,43 +1130,63 @@ function AssignmentManagementPage() {
     return [
       {
         id: "runName",
-        header: "RunName",
-        render: (row) => row.runName,
+        header: "Run",
+        render: (row) => (
+          <div className="admin-assignments-run-cell admin-assignments-run-cell-strong">
+            <strong>{row.runName}</strong>
+            <small>{row.templateName}</small>
+            <small>{formatDateTime(row.createdAtIso)}</small>
+          </div>
+        ),
       },
       {
-        id: "mode",
-        header: "Mode",
-        render: (row) => row.mode,
+        id: "delivery",
+        header: "Delivery",
+        render: (row) => (
+          <div className="admin-assignments-table-stack">
+            <div className="admin-assignments-pill-row">
+              <span className="admin-assignments-metric-pill">{row.mode}</span>
+              <span className={statusClassName(row.status)}>{row.status}</span>
+            </div>
+            <small>{row.batchIds.map((batchId) => formatBatchLabel(batchId)).join(", ")}</small>
+          </div>
+        ),
       },
       {
-        id: "avgRawScorePercent",
-        header: "AvgRawScorePercent",
-        render: (row) => `${row.runAnalyticsSnapshot.avgRawScorePercent}%`,
+        id: "performance",
+        header: "Performance",
+        render: (row) => (
+          <div className="admin-assignments-table-stack">
+            <div className="admin-assignments-metric-grid">
+              <span>Raw <strong>{row.runAnalyticsSnapshot.avgRawScorePercent}%</strong></span>
+              <span>Accuracy <strong>{row.runAnalyticsSnapshot.avgAccuracyPercent}%</strong></span>
+              <span>Completion <strong>{row.completionPercent}%</strong></span>
+            </div>
+          </div>
+        ),
       },
       {
-        id: "avgAccuracyPercent",
-        header: "AvgAccuracyPercent",
-        render: (row) => `${row.runAnalyticsSnapshot.avgAccuracyPercent}%`,
+        id: "behaviour",
+        header: "Behaviour",
+        render: (row) => (
+          <div className="admin-assignments-table-stack">
+            <div className="admin-assignments-pill-row">
+              <span className="admin-assignments-metric-pill">Stability {row.runAnalyticsSnapshot.executionStabilityBadge}</span>
+              <span className="admin-assignments-metric-pill">Discipline {row.runAnalyticsSnapshot.avgDisciplineIndex}</span>
+            </div>
+            <small>{row.runAnalyticsSnapshot.riskDistributionSummary}</small>
+          </div>
+        ),
       },
       {
-        id: "riskDistribution",
-        header: "RiskDistribution",
-        render: (row) => row.runAnalyticsSnapshot.riskDistributionSummary,
-      },
-      {
-        id: "stabilityIndex",
-        header: "StabilityIndex",
-        render: (row) => row.runAnalyticsSnapshot.executionStabilityBadge,
-      },
-      {
-        id: "disciplineIndex",
-        header: "DisciplineIndex",
-        render: (row) => `${row.runAnalyticsSnapshot.avgDisciplineIndex}`,
-      },
-      {
-        id: "completionPercent",
-        header: "CompletionPercent",
-        render: (row) => `${row.completionPercent}%`,
+        id: "window",
+        header: "Window",
+        render: (row) => (
+          <div className="admin-assignments-window-cell">
+            <strong>{formatDateTime(row.startWindowIso)}</strong>
+            <small>Ended {formatDateTime(row.endWindowIso)}</small>
+          </div>
+        ),
       },
     ];
   }, []);
@@ -1431,21 +1390,7 @@ function AssignmentManagementPage() {
       {inlineMessage ? <p className="admin-assignments-inline-note">{inlineMessage}</p> : null}
       {errorMessage ? <p className="admin-assignments-inline-error">{errorMessage}</p> : null}
 
-      <nav className="admin-assignments-section-nav" aria-label="Assignments navigation">
-        {ASSIGNMENT_ROUTE_DEFINITIONS.map((section) => (
-          <NavLink
-            key={section.id}
-            to={section.to}
-            className={({ isActive }) =>
-              isActive || section.id === activeSection ?
-                "admin-assignments-nav-pill active" :
-                "admin-assignments-nav-pill"
-            }
-          >
-            {section.label}
-          </NavLink>
-        ))}
-      </nav>
+      <AssignmentsWorkspaceNav />
 
       {activeSection === "create" ? (
         <UiForm

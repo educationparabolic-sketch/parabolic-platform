@@ -1,4 +1,4 @@
-import { Suspense, lazy, useMemo, useState, type FormEvent, type ReactElement } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState, type FormEvent, type ReactElement } from "react";
 import {
   Navigate,
   NavLink,
@@ -18,7 +18,7 @@ import {
   ADMIN_PRIMARY_NAVIGATION,
   findActivePortalNavigationItem,
 } from "../../../shared/ui/portalConsistency";
-import { UiNavBar, UiRouteLoading } from "../../../shared/ui/components";
+import { UiRouteLoading } from "../../../shared/ui/components";
 import {
   evaluateAdminRoutePermissions,
   getVisibleAdminRoutes,
@@ -45,12 +45,14 @@ function resolveAdminRedirectTarget(locationState: unknown, fallbackPath: string
 }
 
 const AdminAnalyticsDashboardPage = lazy(() => import("./features/analytics/AdminAnalyticsDashboardPage"));
+const AdminAnalyticsLandingPage = lazy(() => import("./features/analytics/AdminAnalyticsLandingPage"));
 const AdminAnalyticsTrendsPage = lazy(() => import("./features/analytics/AdminAnalyticsTrendsPage"));
 const AdminTemplateAnalyticsPage = lazy(() => import("./features/analytics/AdminTemplateAnalyticsPage"));
 const BatchAnalyticsDashboardPage = lazy(() => import("./features/analytics/BatchAnalyticsDashboardPage"));
 const GovernanceMonitoringDashboardPage = lazy(() => import("./features/analytics/GovernanceMonitoringDashboardPage"));
 const RiskInsightsDashboardPage = lazy(() => import("./features/analytics/RiskInsightsDashboardPage"));
 const AdminAssignmentLiveRunPage = lazy(() => import("./features/assignments/AdminAssignmentLiveRunPage"));
+const AdminAssignmentsLandingPage = lazy(() => import("./features/assignments/AdminAssignmentsLandingPage"));
 const AdminAssignmentsLivePage = lazy(() => import("./features/assignments/AdminAssignmentsLivePage"));
 const AssignmentManagementPage = lazy(() => import("./features/assignments/AssignmentManagementPage"));
 const AdminExecutionSignalsPage = lazy(() => import("./features/insights/AdminExecutionSignalsPage"));
@@ -68,6 +70,7 @@ const AdminLicenseHistoryPage = lazy(() => import("./features/licensing/AdminLic
 const AdminLicenseUpgradePreviewPage = lazy(() => import("./features/licensing/AdminLicenseUpgradePreviewPage"));
 const AdminLicensingUsagePage = lazy(() => import("./features/licensing/AdminLicensingUsagePage"));
 const AdminOverviewPage = lazy(() => import("./features/overview/AdminOverviewPage"));
+const AdminStudentsLandingPage = lazy(() => import("./features/students/AdminStudentsLandingPage"));
 const AdminDataArchiveControlsPage = lazy(() => import("./features/settings/AdminDataArchiveControlsPage"));
 const AdminExecutionPolicyPage = lazy(() => import("./features/settings/AdminExecutionPolicyPage"));
 const AdminAcademicYearPage = lazy(() => import("./features/settings/AdminAcademicYearPage"));
@@ -82,6 +85,7 @@ const AdminQuestionBankArchiveVersionsPage = lazy(() => import("./features/tests
 const AdminQuestionBankLibraryPage = lazy(() => import("./features/tests/AdminQuestionBankLibraryPage"));
 const AdminQuestionBankTagManagementPage = lazy(() => import("./features/tests/AdminQuestionBankTagManagementPage"));
 const AdminQuestionBankValidationLogsPage = lazy(() => import("./features/tests/AdminQuestionBankValidationLogsPage"));
+const AdminTestsLandingPage = lazy(() => import("./features/tests/AdminTestsLandingPage"));
 const AdminTestTemplateAnalyticsDetailPage = lazy(() => import("./features/tests/AdminTestTemplateAnalyticsDetailPage"));
 const AdminTestTemplateDetailPage = lazy(() => import("./features/tests/AdminTestTemplateDetailPage"));
 const StudentManagementPage = lazy(() => import("./features/students/StudentManagementPage"));
@@ -113,14 +117,201 @@ function NotFoundPage() {
   );
 }
 
+const ADMIN_SIDEBAR_STORAGE_KEY = "admin-sidebar-collapsed";
+
+const ADMIN_NAV_GROUPS = [
+  {
+    id: "overview",
+    label: "Overview",
+    paths: ["/admin/overview"],
+  },
+  {
+    id: "operations",
+    label: "Operations",
+    paths: ["/admin/students", "/admin/question-bank", "/admin/tests", "/admin/assignments"],
+  },
+  {
+    id: "intelligence",
+    label: "Intelligence",
+    paths: ["/admin/analytics", "/admin/insights", "/admin/governance"],
+  },
+  {
+    id: "configuration",
+    label: "Configuration",
+    paths: ["/admin/licensing", "/admin/settings"],
+  },
+] as const;
+
+type AdminVisibleNavItem = {
+  path: string;
+  label: string;
+  summary: string;
+  groupId: string;
+};
+
+function resolveAdminNavGroupId(path: string): string {
+  return ADMIN_NAV_GROUPS.find((group) => group.paths.some((groupPath) => groupPath === path))?.id ?? "other";
+}
+
+function resolveAdminNavShortLabel(label: string): string {
+  return label
+    .split(" ")
+    .map((part) => part[0] ?? "")
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+function AdminSidebarNavigation(props: {
+  activePath?: string;
+  collapsed: boolean;
+  items: AdminVisibleNavItem[];
+  compact: boolean;
+  licenseLayer: string | null;
+  pathname: string;
+  onCloseMobile: () => void;
+  onSignOut: () => void;
+  onToggleCollapsed: () => void;
+  role: string | null;
+  sessionStatus: string;
+}) {
+  const {
+    activePath,
+    collapsed,
+    compact,
+    items,
+    licenseLayer,
+    onCloseMobile,
+    onSignOut,
+    onToggleCollapsed,
+    pathname,
+    role,
+    sessionStatus,
+  } = props;
+  const sections = useMemo(() => {
+    const groupedItems = new Map<string, AdminVisibleNavItem[]>();
+
+    for (const item of items) {
+      const existingItems = groupedItems.get(item.groupId) ?? [];
+      existingItems.push(item);
+      groupedItems.set(item.groupId, existingItems);
+    }
+
+    return ADMIN_NAV_GROUPS.map((group) => ({
+      ...group,
+      items: groupedItems.get(group.id) ?? [],
+    })).filter((group) => group.items.length > 0);
+  }, [items]);
+
+  return (
+    <div className="admin-sidebar-panel">
+      <header className={`admin-sidebar-header${compact ? " admin-sidebar-header-compact" : ""}`}>
+        <div className="admin-sidebar-brand">
+          <p className="admin-sidebar-eyebrow">Parabolic Platform</p>
+          <h1>Admin Console</h1>
+          {!collapsed ? <p className="admin-sidebar-copy">Institute operations with routed, permission-aware workspaces.</p> : null}
+          {!collapsed ? (
+            <div className="admin-sidebar-meta">
+              <p className="admin-sidebar-path" title={pathname}>{pathname}</p>
+              <div className="admin-sidebar-session">
+                <span>Status: {sessionStatus}</span>
+                {role ? <span>Role: {role}</span> : null}
+                {licenseLayer ? <span>Layer: {licenseLayer}</span> : null}
+              </div>
+              <button
+                type="button"
+                className="admin-signout-button admin-sidebar-signout-button"
+                onClick={onSignOut}
+                disabled={sessionStatus !== "authenticated"}
+              >
+                Sign out
+              </button>
+            </div>
+          ) : null}
+        </div>
+        <div className="admin-sidebar-actions">
+          <button
+            type="button"
+            className="admin-sidebar-icon-button admin-sidebar-mobile-close"
+            onClick={onCloseMobile}
+            aria-label="Close navigation menu"
+          >
+            Close
+          </button>
+          <button
+            type="button"
+            className="admin-sidebar-icon-button admin-sidebar-collapse-button"
+            onClick={onToggleCollapsed}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-pressed={collapsed}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {collapsed ? ">>" : "<<"}
+          </button>
+        </div>
+      </header>
+
+      <div className="admin-sidebar-body">
+        <div className="admin-sidebar-nav-scroll">
+          <nav className="admin-sidebar-nav" aria-label="Admin navigation">
+            {sections.map((section) => (
+              <section key={section.id} className="admin-sidebar-section" aria-labelledby={`admin-nav-section-${section.id}`}>
+                <div className="admin-sidebar-section-header">
+                  <h2 id={`admin-nav-section-${section.id}`}>{collapsed ? section.label.slice(0, 1) : section.label}</h2>
+                </div>
+                <div className="admin-sidebar-section-items">
+                  {section.items.map((item) => (
+                    <NavLink
+                      key={item.path}
+                      to={item.path}
+                      className={({ isActive }) =>
+                        `admin-sidebar-link${isActive ? " admin-sidebar-link-active" : ""}`
+                      }
+                      aria-label={collapsed ? item.label : undefined}
+                      title={collapsed ? `${item.label}: ${item.summary}` : undefined}
+                      onClick={onCloseMobile}
+                    >
+                      <span className="admin-sidebar-link-badge" aria-hidden="true">
+                        {resolveAdminNavShortLabel(item.label)}
+                      </span>
+                      <span className="admin-sidebar-link-copy">
+                        <span className="admin-sidebar-link-label">{item.label}</span>
+                        {!collapsed ? <small>{item.summary}</small> : null}
+                      </span>
+                      <span
+                        className="admin-sidebar-link-indicator"
+                        aria-hidden="true"
+                        data-active={item.path === activePath ? "true" : "false"}
+                      />
+                    </NavLink>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </nav>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AdminLayout() {
   const location = useLocation();
-  const navigate = useNavigate();
   const { session, signOut } = useAuthProvider();
   const accessContext = resolveAdminAccessContext(session);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    return window.localStorage.getItem(ADMIN_SIDEBAR_STORAGE_KEY) === "true";
+  });
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [pageScrolled, setPageScrolled] = useState(false);
   const visibleRoutes = useMemo(() => {
     return getVisibleAdminRoutes(accessContext.role, accessContext.licenseLayer);
   }, [accessContext.licenseLayer, accessContext.role]);
+  const matchedRoute = useMemo(() => matchAdminRoute(location.pathname), [location.pathname]);
   const visibleNavItems = useMemo(() => {
     return ADMIN_PRIMARY_NAVIGATION.filter((item) =>
       visibleRoutes.some((route) => route.path === item.path),
@@ -130,46 +321,136 @@ function AdminLayout() {
   const activeItem = useMemo(() => {
     return findActivePortalNavigationItem(visibleNavItems, location.pathname);
   }, [location.pathname, visibleNavItems]);
-  const navItems = useMemo(() => {
-    return visibleNavItems.map((item) => ({
-      id: item.path,
-      label: item.label,
-      hint: item.summary,
-      onClick: () => navigate(item.path),
-    }));
-  }, [navigate, visibleNavItems]);
+  const navItems = useMemo<AdminVisibleNavItem[]>(() => {
+    return visibleNavItems.map((item) => {
+      return {
+        path: item.path,
+        label: item.label,
+        summary: item.summary,
+        groupId: resolveAdminNavGroupId(item.path),
+      };
+    });
+  }, [visibleNavItems, visibleRoutes]);
+  const pageTitle = matchedRoute?.definition.title ?? activeItem?.label ?? "Admin";
+  const pageDescription = matchedRoute?.definition.description ?? activeItem?.summary ?? "Permission-aware admin workspace.";
+
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(ADMIN_SIDEBAR_STORAGE_KEY, String(sidebarCollapsed));
+  }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handleScroll = () => {
+      setPageScrolled(window.scrollY > 48);
+    };
+
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(min-width: 1025px)");
+    const handleChange = (event: MediaQueryListEvent) => {
+      if (event.matches) {
+        setMobileNavOpen(false);
+      }
+    };
+
+    mediaQuery.addEventListener("change", handleChange);
+    return () => {
+      mediaQuery.removeEventListener("change", handleChange);
+    };
+  }, []);
+
+  const sidebarHeaderCompact = pageScrolled;
 
   return (
     <main className="admin-page-shell">
-      <div className="admin-layout-grid">
-        <aside className="admin-sidebar" aria-label="Admin navigation">
-          <UiNavBar
-            title="Admin Dashboard"
-            subtitle="Institute operations navigation"
-            activeItemId={activeItem?.path}
+      <div className={`admin-layout-grid${sidebarCollapsed ? " admin-layout-grid-collapsed" : ""}`}>
+        <button
+          type="button"
+          className={`admin-sidebar-backdrop${mobileNavOpen ? " admin-sidebar-backdrop-visible" : ""}`}
+          onClick={() => {
+            setMobileNavOpen(false);
+          }}
+          aria-label="Close navigation menu"
+        />
+        <aside
+          id="admin-sidebar"
+          className={`admin-sidebar${sidebarCollapsed ? " admin-sidebar-collapsed" : ""}${mobileNavOpen ? " admin-sidebar-open" : ""}`}
+        >
+          <AdminSidebarNavigation
+            activePath={activeItem?.path}
+            collapsed={sidebarCollapsed}
+            compact={sidebarHeaderCompact}
             items={navItems}
+            licenseLayer={accessContext.licenseLayer}
+            pathname={location.pathname}
+            onCloseMobile={() => {
+              setMobileNavOpen(false);
+            }}
+            onSignOut={() => {
+              void signOut();
+            }}
+            onToggleCollapsed={() => {
+              setSidebarCollapsed((currentValue) => !currentValue);
+            }}
+            role={accessContext.role}
+            sessionStatus={session.status}
           />
         </aside>
 
         <div className="admin-main-area">
-          <header className="admin-topbar">
-            <div>
-              <p className="admin-topbar-eyebrow">Current Route</p>
-              <h2>{activeItem?.label ?? "Admin"}</h2>
-              <p className="admin-topbar-path">{location.pathname}</p>
-            </div>
-            <div className="admin-session-pill">
-              <span>Status: {session.status}</span>
-              <button
-                type="button"
-                className="admin-signout-button"
-                onClick={() => {
-                  void signOut();
-                }}
-                disabled={session.status !== "authenticated"}
-              >
-                Sign out
-              </button>
+          <header className="admin-topbar admin-topbar-compact">
+            <div className="admin-topbar-leading">
+              <div className="admin-topbar-actions">
+                <button
+                  type="button"
+                  className="admin-topbar-menu-button"
+                  onClick={() => {
+                    setMobileNavOpen((currentValue) => !currentValue);
+                  }}
+                  aria-label="Toggle navigation menu"
+                  aria-controls="admin-sidebar"
+                  aria-expanded={mobileNavOpen}
+                >
+                  Menu
+                </button>
+                <button
+                  type="button"
+                  className="admin-topbar-collapse-toggle"
+                  onClick={() => {
+                    setSidebarCollapsed((currentValue) => !currentValue);
+                  }}
+                  aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                >
+                  {sidebarCollapsed ? "Expand nav" : "Collapse nav"}
+                </button>
+              </div>
+
+              <div className="admin-topbar-title-block">
+                <h2>{pageTitle}</h2>
+                <p className="admin-topbar-description">{pageDescription}</p>
+              </div>
             </div>
           </header>
 
@@ -337,7 +618,7 @@ function App() {
         />
         <Route
           path="students"
-          element={<Navigate to="/admin/students/list" replace />}
+          element={<AdminRouteBoundary label="Loading students landing"><AdminStudentsLandingPage /></AdminRouteBoundary>}
         />
         <Route
           path="students/list"
@@ -395,7 +676,7 @@ function App() {
         <Route path="question-bank/*" element={<AdminRouteResolutionPage />} />
         <Route
           path="tests"
-          element={<Navigate to="/admin/tests/library" replace />}
+          element={<AdminRouteBoundary label="Loading tests landing"><AdminTestsLandingPage /></AdminRouteBoundary>}
         />
         <Route
           path="tests/create"
@@ -428,7 +709,7 @@ function App() {
         <Route path="tests/*" element={<AdminRouteResolutionPage />} />
         <Route
           path="assignments"
-          element={<Navigate to="/admin/assignments/create" replace />}
+          element={<AdminRouteBoundary label="Loading assignments landing"><AdminAssignmentsLandingPage /></AdminRouteBoundary>}
         />
         <Route
           path="assignments/create"
@@ -457,7 +738,7 @@ function App() {
         <Route path="assignments/*" element={<AdminRouteResolutionPage />} />
         <Route
           path="analytics"
-          element={<Navigate to="/admin/analytics/overview" replace />}
+          element={<AdminRouteBoundary label="Loading analytics landing"><AdminAnalyticsLandingPage /></AdminRouteBoundary>}
         />
         <Route
           path="analytics/overview"

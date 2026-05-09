@@ -1,10 +1,10 @@
 import { useMemo } from "react";
-import { NavLink } from "react-router-dom";
 import { UiChartContainer, UiTable, type UiChartPoint, type UiTableColumn } from "../../../../../shared/ui/components";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { LICENSE_LAYER_ORDER } from "../../../../../shared/types/portalRouting";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
 import { formatPercent, shouldUseLiveApi } from "./analyticsDataset";
+import AnalyticsWorkspaceNav from "./AnalyticsWorkspaceNav";
 
 interface MonthlyTrendRecord {
   monthId: string;
@@ -205,25 +205,7 @@ function AdminAnalyticsTrendsPage() {
         recomputing trends from run-level data.
       </p>
 
-      <p className="admin-analytics-inline-link-row">
-        <NavLink className="admin-primary-link" to="/admin/analytics/overview">
-          Analytics Overview
-        </NavLink>
-        {" "}
-        <NavLink className="admin-primary-link" to="/admin/analytics/template/tmpl-001">
-          Template Performance
-        </NavLink>
-        {" "}
-        <NavLink className="admin-primary-link" to="/admin/analytics/batch">
-          Batch Analytics
-        </NavLink>
-        {" "}
-        {isL1OrAbove ? (
-          <NavLink className="admin-primary-link" to="/admin/analytics/risk-insights">
-            Risk Insights
-          </NavLink>
-        ) : null}
-      </p>
+      <AnalyticsWorkspaceNav />
 
       <p className="admin-analytics-inline-note">{inlineMessage}</p>
 

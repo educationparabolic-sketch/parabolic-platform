@@ -18,6 +18,7 @@ import {
   type StudentAnalyticsRecord,
   type StudentYearMetricRecord,
 } from "./analyticsDataset";
+import AnalyticsWorkspaceNav from "./AnalyticsWorkspaceNav";
 
 interface DashboardKpi {
   label: string;
@@ -528,19 +529,7 @@ function AdminAnalyticsDashboardPage() {
             <>Summary dashboard for measurable outcomes using <code>runAnalytics</code> and<code> studentYearMetrics</code> only. Raw session scans are not used.</>}
       </p>
 
-      <p className="admin-analytics-inline-link-row">
-        <NavLink className="admin-primary-link" to="/admin/analytics/overview">Overview</NavLink>{" "}
-        <NavLink className="admin-primary-link" to={selectedRun ? `/admin/analytics/run/${selectedRun.runId}` : "/admin/analytics/run/run-2026-0410-001"}>
-          By Run
-        </NavLink>
-        {" "}
-        <NavLink
-          className="admin-primary-link"
-          to={selectedStudent ? `/admin/analytics/student/${selectedStudent.studentId}` : "/admin/analytics/student/STU-001"}
-        >
-          By Student
-        </NavLink>
-      </p>
+      <AnalyticsWorkspaceNav />
 
       <p className="admin-analytics-inline-note">
         {isLoading ?

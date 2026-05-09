@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { NavLink } from "react-router-dom";
 import { UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
@@ -12,6 +11,7 @@ import {
   type AdminLicensingSnapshot,
   type LicensingFeatureRow,
 } from "./licensingDataset";
+import LicensingWorkspaceNav from "./LicensingWorkspaceNav";
 
 const LICENSING_INSTITUTE_ID =
   import.meta.env.VITE_ADMIN_SETTINGS_INSTITUTE_ID ?? "inst-build-125";
@@ -114,13 +114,7 @@ function AdminLicenseFeaturesPage() {
         drill-down back into the shared licensing workspace.
       </p>
 
-      <p className="admin-analytics-inline-link-row">
-        <NavLink className="admin-primary-link" to="/admin/licensing/current">Current Plan</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/licensing/eligibility">Eligibility Progress</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/licensing/usage">Usage & Billing</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/licensing/upgrade-preview">Upgrade Preview</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/licensing/history">License History</NavLink>
-      </p>
+      <LicensingWorkspaceNav />
 
       <p className="admin-settings-inline-note">
         {isLoading ? "Loading license feature matrix..." : inlineMessage ?? "License features workspace ready."}

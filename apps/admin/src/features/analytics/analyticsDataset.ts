@@ -992,4 +992,6 @@ export async function fetchDashboardDataset(): Promise<DashboardDataset> {
   return { runAnalytics, studentYearMetrics, studentAnalytics, yearBehaviorSummary };
 }
 
+export const DEFAULT_STUDENT_INTELLIGENCE_ID = FALLBACK_DATASET.studentAnalytics[0]?.studentId ?? "";
+
 export { ApiClientError };

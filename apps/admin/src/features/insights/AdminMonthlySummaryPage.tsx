@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { NavLink } from "react-router-dom";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
 import {
@@ -11,6 +10,7 @@ import {
   type DashboardDataset,
   type StudentYearMetricRecord,
 } from "../analytics/analyticsDataset";
+import InsightsWorkspaceNav from "./InsightsWorkspaceNav";
 
 interface MonthlySummaryAccessRow {
   id: string;
@@ -132,12 +132,7 @@ function AdminMonthlySummaryPage() {
         regenerated on dashboard load.
       </p>
 
-      <p className="admin-analytics-inline-link-row">
-        <NavLink className="admin-primary-link" to="/admin/insights/risk">Risk Overview</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/insights/patterns">Pattern Alerts</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/insights/execution">Execution Signals</NavLink>{" "}
-        <NavLink className="admin-primary-link" to="/admin/analytics/risk-insights">Back to Analytics Risk Insights</NavLink>
-      </p>
+      <InsightsWorkspaceNav />
 
       <p className="admin-analytics-inline-note">
         {isLoading ? "Loading AI monthly summaries..." : inlineMessage ?? "AI monthly summary workspace ready."}

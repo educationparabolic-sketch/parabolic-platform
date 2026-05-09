@@ -1,5 +1,4 @@
 import {useCallback, useEffect, useMemo, useState} from "react";
-import {NavLink} from "react-router-dom";
 import {UiTable, type UiTableColumn} from "../../../../../shared/ui/components";
 import {
   ApiClientError,
@@ -13,6 +12,7 @@ import {
   type InterventionActionRecord,
   type InterventionOutcomeStatus,
 } from "./interventionDataset";
+import InsightsWorkspaceNav from "./InsightsWorkspaceNav";
 
 const INTERVENTION_INSTITUTE_ID = "inst-build-124";
 const INTERVENTION_YEAR_ID = "2026";
@@ -394,31 +394,7 @@ function InterventionToolsPage() {
         remedial actions, intervention alerts, and immutable outcome tracking without scanning raw sessions.
       </p>
 
-      <p className="admin-analytics-inline-link-row">
-        <NavLink className="admin-primary-link" to="/admin/insights">
-          Insights Landing
-        </NavLink>
-        {" "}
-        <NavLink className="admin-primary-link" to="/admin/insights/risk">
-          Risk Overview
-        </NavLink>
-        {" "}
-        <NavLink className="admin-primary-link" to="/admin/insights/patterns">
-          Pattern Alerts
-        </NavLink>
-        {" "}
-        <NavLink className="admin-primary-link" to="/admin/insights/execution">
-          Execution Signals
-        </NavLink>
-        {" "}
-        <NavLink className="admin-primary-link" to="/admin/analytics/risk-insights">
-          Back to Risk Insights
-        </NavLink>
-        {" "}
-        <NavLink className="admin-primary-link" to="/admin/governance">
-          Open Governance Dashboard
-        </NavLink>
-      </p>
+      <InsightsWorkspaceNav />
 
       <p className="admin-analytics-inline-note">
         {isLoading ? "Loading intervention tools..." : inlineMessage ?? "Intervention tools ready."}

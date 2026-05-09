@@ -2,6 +2,7 @@ import { NavLink } from "react-router-dom";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { LICENSE_LAYER_ORDER } from "../../../../../shared/types/portalRouting";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
+import { DEFAULT_STUDENT_INTELLIGENCE_ID } from "../analytics/analyticsDataset";
 
 interface InsightWorkspaceLink {
   title: string;
@@ -20,7 +21,7 @@ const INSIGHT_WORKSPACES: InsightWorkspaceLink[] = [
   {
     title: "Student Intelligence",
     description: "Student-level behavioral intelligence, rolling trend signals, and layered execution guidance.",
-    to: "/admin/insights/student/std-1004",
+    to: `/admin/insights/student/${DEFAULT_STUDENT_INTELLIGENCE_ID}`,
     minimumLayer: "L1",
   },
   {
