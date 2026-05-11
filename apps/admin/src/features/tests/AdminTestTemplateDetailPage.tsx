@@ -1,7 +1,11 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { ApiClientError } from "../../../../../shared/services/apiClient";
+import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import { UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
 import TestsWorkspaceNav from "./TestsWorkspaceNav";
+
+const apiClient = getPortalApiClient("admin");
 
 type TemplateStatus = "draft" | "ready" | "assigned" | "archived" | "deprecated";
 
@@ -76,6 +80,110 @@ const TEMPLATE_DETAILS: TestTemplateDetailRecord[] = [
   },
 ];
 
+function shouldUseLiveApi(): boolean {
+  const host = window.location.hostname.toLowerCase();
+  return host !== "127.0.0.1" && host !== "localhost";
+}
+
+function toNonEmptyString(value: unknown, fallback = ""): string {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
+}
+
+function toNumberOrZero(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+function toTemplateStatus(value: unknown): TemplateStatus {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (normalized === "draft" || normalized === "ready" || normalized === "assigned" || normalized === "archived" || normalized === "deprecated") {
+    return normalized;
+  }
+  return "draft";
+}
+
+function normalizeTimingWindow(value: unknown, fallback: TimingWindow): TimingWindow {
+  if (!value || typeof value !== "object") {
+    return fallback;
+  }
+
+  const source = value as Record<string, unknown>;
+  return {
+    minSeconds: toNumberOrZero(source.minSeconds ?? source.min ?? fallback.minSeconds),
+    maxSeconds: toNumberOrZero(source.maxSeconds ?? source.max ?? fallback.maxSeconds),
+  };
+}
+
+function normalizeTemplateDetailRecord(value: unknown, index: number): TestTemplateDetailRecord | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const fallback = TEMPLATE_DETAILS[index] ?? TEMPLATE_DETAILS[0];
+  const timingProfileSource =
+    record.timingProfile && typeof record.timingProfile === "object" ?
+      (record.timingProfile as Record<string, unknown>) :
+      {};
+  const distributionSource =
+    record.difficultyDistribution && typeof record.difficultyDistribution === "object" ?
+      (record.difficultyDistribution as Record<string, unknown>) :
+      {};
+  const questionIdsSource = record.selectedQuestionIds ?? record.questionIds;
+  const allowedModes = Array.isArray(record.allowedModes) ?
+    record.allowedModes.filter((value): value is string => typeof value === "string" && value.trim().length > 0) :
+    fallback?.allowedModes ?? [];
+  const selectedQuestionIds = Array.isArray(questionIdsSource) ?
+    questionIdsSource.filter((value): value is string => typeof value === "string" && value.trim().length > 0) :
+    fallback?.selectedQuestionIds ?? [];
+
+  return {
+    id: toNonEmptyString(record.id, `template-${index + 1}`),
+    templateName: toNonEmptyString(record.templateName, fallback?.templateName ?? `Template ${index + 1}`),
+    examType: toNonEmptyString(record.examType, fallback?.examType ?? "General"),
+    selectionMethod: toNonEmptyString(record.selectionMethod, fallback?.selectionMethod ?? "manual"),
+    totalDurationMinutes: toNumberOrZero(record.totalDurationMinutes ?? record.durationMinutes),
+    selectedQuestionIds,
+    difficultyDistribution: {
+      easy: toNumberOrZero(distributionSource.easy),
+      medium: toNumberOrZero(distributionSource.medium),
+      hard: toNumberOrZero(distributionSource.hard),
+    },
+    allowedModes,
+    timingProfile: {
+      easy: normalizeTimingWindow(timingProfileSource.easy, fallback?.timingProfile.easy ?? { minSeconds: 30, maxSeconds: 60 }),
+      medium: normalizeTimingWindow(timingProfileSource.medium, fallback?.timingProfile.medium ?? { minSeconds: 60, maxSeconds: 150 }),
+      hard: normalizeTimingWindow(timingProfileSource.hard, fallback?.timingProfile.hard ?? { minSeconds: 150, maxSeconds: 210 }),
+    },
+    status: toTemplateStatus(record.status),
+    updatedAt: toNonEmptyString(record.updatedAt, fallback?.updatedAt ?? new Date(0).toISOString()),
+    canonicalId: toNonEmptyString(record.canonicalId, fallback?.canonicalId ?? `canonical-${index + 1}`),
+  };
+}
+
+async function fetchTemplateDetails(): Promise<TestTemplateDetailRecord[]> {
+  const payload = await apiClient.get<unknown>("/admin/tests");
+  if (!Array.isArray(payload)) {
+    throw new Error("GET /admin/tests returned an invalid payload.");
+  }
+
+  const templates = payload
+    .map((entry, index) => normalizeTemplateDetailRecord(entry, index))
+    .filter((entry): entry is TestTemplateDetailRecord => Boolean(entry));
+
+  if (templates.length === 0) {
+    throw new Error("GET /admin/tests did not include any templates.");
+  }
+
+  return templates;
+}
+
 function formatIsoDate(value: string): string {
   const parsed = Date.parse(value);
   return Number.isNaN(parsed) ? value : new Date(parsed).toISOString().slice(0, 10);
@@ -84,10 +192,57 @@ function formatIsoDate(value: string): string {
 function AdminTestTemplateDetailPage() {
   const navigate = useNavigate();
   const params = useParams<{ testId?: string }>();
+  const [templates, setTemplates] = useState<TestTemplateDetailRecord[]>(TEMPLATE_DETAILS);
+  const [isLoading, setIsLoading] = useState(true);
+  const [inlineMessage, setInlineMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadTemplateDetail() {
+      setIsLoading(true);
+      setInlineMessage(null);
+
+      if (!shouldUseLiveApi()) {
+        setTemplates(TEMPLATE_DETAILS);
+        setInlineMessage("Local mode detected. Loaded deterministic template detail fixtures for the dedicated tests workspace.");
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const liveTemplates = await fetchTemplateDetails();
+        if (!isMounted) {
+          return;
+        }
+
+        setTemplates(liveTemplates);
+        setInlineMessage("Live mode enabled: test template detail hydrated from GET /admin/tests.");
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        const reason = error instanceof ApiClientError ? error.message : "Failed to load test template detail.";
+        setTemplates(TEMPLATE_DETAILS);
+        setInlineMessage(`${reason} Falling back to deterministic template detail fixtures.`);
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void loadTemplateDetail();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const template = useMemo(() => {
-    return TEMPLATE_DETAILS.find((entry) => entry.id === params.testId) ?? TEMPLATE_DETAILS[0] ?? null;
-  }, [params.testId]);
+    return templates.find((entry) => entry.id === params.testId) ?? templates[0] ?? null;
+  }, [params.testId, templates]);
 
   const timingRows = useMemo(
     () =>
@@ -121,10 +276,12 @@ function AdminTestTemplateDetailPage() {
       <p className="admin-content-copy">
         This dedicated route keeps <code>/admin/tests/{`{testId}`}</code> separate from the shared test library and
         create flows. It surfaces the immutable structural snapshot, capability ceiling, and lifecycle state for a
-        single test template.
+        single test template, now hydrating from the live admin tests payload when available.
       </p>
 
       <TestsWorkspaceNav />
+
+      {inlineMessage ? <p className="admin-analytics-inline-note">{inlineMessage}</p> : null}
 
       <div className="admin-risk-summary-card">
         <h4>Focused Template</h4>
@@ -133,6 +290,8 @@ function AdminTestTemplateDetailPage() {
         </p>
         <small>Route: /admin/tests/{template.id}</small>
       </div>
+
+      {isLoading ? <p className="admin-analytics-inline-note">Loading test template detail...</p> : null}
 
       <div className="admin-analytics-kpi-grid">
         <article className="admin-analytics-kpi-card">

@@ -6,10 +6,10 @@ This file is the persistent handoff state for portal checklist implementation ac
 
 - `Current Target Portal`: `admin`
 - `Current Priority Band`: `P0`
-- `Last Completed Checklist ID`: `QB-002`
+- `Last Completed Checklist ID`: `GBL-004`
 - `Next Suggested Checklist ID`: `GBL-004`
-- `Last Updated`: `2026-05-05`
-- `Saved Scope Note`: `QB-002` is now complete. `/admin/question-bank/archive` mounts the remaining dedicated archive/version workspace for HOT/WARM/COLD lifecycle review and successor-version controls, so the next unresolved admin `P0` item has advanced to `GBL-004`.
+- `Last Updated`: `2026-05-11`
+- `Saved Scope Note`: `GBL-004` advanced again by wiring the recipient and batch selection data on `/admin/assignments/create` to hydrate from `GET /admin/students` in live mode while preserving deterministic local fallback behavior and keeping template selection on `GET /admin/tests` plus run scheduling on `POST /admin/runs`. The checklist item remains partial because other production-like admin flows are still fixture-backed, so the next suggested item stays `GBL-004`.
 
 ## Active Checklist Set
 

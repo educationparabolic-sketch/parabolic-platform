@@ -1,10 +1,15 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
+import {
+  ApiClientError,
+  fetchDashboardDataset,
+  shouldUseLiveApi,
+  type RunAnalyticsRecord,
+} from "../analytics/analyticsDataset";
 import AssignmentsWorkspaceNav from "./AssignmentsWorkspaceNav";
 
 type ExecutionMode = "Operational" | "Diagnostic" | "Controlled" | "Hard";
-type RunStatus = "scheduled" | "active" | "collecting" | "completed" | "archived" | "cancelled" | "terminated";
 
 interface RunAnalyticsSnapshot {
   avgRawScorePercent: number;
@@ -18,13 +23,11 @@ interface RunAnalyticsSnapshot {
 interface RunStatusRecord {
   runId: string;
   runName: string;
-  templateName: string;
+  batchName: string;
   mode: ExecutionMode;
-  startWindowIso: string;
-  endWindowIso: string;
-  status: RunStatus;
+  startedAtIso: string;
   completionPercent: number;
-  recipientStudentIds: string[];
+  participants: number;
   runAnalyticsSnapshot: RunAnalyticsSnapshot;
 }
 
@@ -32,13 +35,11 @@ const LIVE_RUNS: RunStatusRecord[] = [
   {
     runId: "run-2026-0416-003",
     runName: "Run 2026-0416-003",
-    templateName: "NEET Revision - Biology Focus",
+    batchName: "Batch-C",
     mode: "Controlled",
-    startWindowIso: "2026-04-16T04:00:00.000Z",
-    endWindowIso: "2026-04-16T07:00:00.000Z",
-    status: "active",
+    startedAtIso: "2026-04-16T04:00:00.000Z",
     completionPercent: 64,
-    recipientStudentIds: ["STU-021", "STU-022", "STU-023"],
+    participants: 3,
     runAnalyticsSnapshot: {
       avgRawScorePercent: 63,
       avgAccuracyPercent: 68,
@@ -51,13 +52,11 @@ const LIVE_RUNS: RunStatusRecord[] = [
   {
     runId: "run-2026-0418-001",
     runName: "Run 2026-0418-001",
-    templateName: "JEE Mains Mock - Set A",
+    batchName: "Batch-A",
     mode: "Diagnostic",
-    startWindowIso: "2026-04-18T05:00:00.000Z",
-    endWindowIso: "2026-04-18T08:00:00.000Z",
-    status: "active",
+    startedAtIso: "2026-04-18T05:00:00.000Z",
     completionPercent: 42,
-    recipientStudentIds: ["STU-001", "STU-002", "STU-011"],
+    participants: 3,
     runAnalyticsSnapshot: {
       avgRawScorePercent: 67,
       avgAccuracyPercent: 72,
@@ -78,26 +77,123 @@ function formatDateTime(value: string): string {
   return new Date(parsed).toISOString().slice(0, 16).replace("T", " ");
 }
 
+function toExecutionMode(mode: string): ExecutionMode {
+  if (mode === "Operational" || mode === "Diagnostic" || mode === "Controlled" || mode === "Hard") {
+    return mode;
+  }
+
+  return "Operational";
+}
+
+function toStabilityBadge(record: RunAnalyticsRecord): string {
+  if (record.controlledCompliancePercent >= 80 && record.pacingGuardrailViolationPercent <= 12) {
+    return "Stable";
+  }
+
+  if (record.controlledCompliancePercent >= 55 && record.pacingGuardrailViolationPercent <= 22) {
+    return "Drift";
+  }
+
+  return "Escalated";
+}
+
+function buildLiveRunRows(runAnalytics: RunAnalyticsRecord[]): RunStatusRecord[] {
+  const recentRuns = [...runAnalytics].sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt));
+  const candidateRuns = recentRuns.filter((run) => run.completionRatePercent < 100);
+  const sourceRuns = (candidateRuns.length > 0 ? candidateRuns : recentRuns).slice(0, 6);
+
+  return sourceRuns.map((run) => ({
+    runId: run.runId,
+    runName: run.runName,
+    batchName: run.batchName,
+    mode: toExecutionMode(run.mode),
+    startedAtIso: run.startedAt,
+    completionPercent: Math.round(run.completionRatePercent),
+    participants: run.participants,
+    runAnalyticsSnapshot: {
+      avgRawScorePercent: Math.round(run.avgRawScorePercent),
+      avgAccuracyPercent: Math.round(run.avgAccuracyPercent),
+      avgPhaseAdherencePercent: Math.round(run.avgPhaseAdherencePercent),
+      avgDisciplineIndex: Math.round(run.disciplineIndexAverage),
+      controlledCompliancePercent: Math.round(run.controlledCompliancePercent),
+      executionStabilityBadge: toStabilityBadge(run),
+    },
+  }));
+}
+
 function AdminAssignmentsLivePage() {
+  const [liveRuns, setLiveRuns] = useState<RunStatusRecord[]>(LIVE_RUNS);
+  const [isLoading, setIsLoading] = useState(true);
+  const [inlineMessage, setInlineMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadLiveRuns() {
+      setIsLoading(true);
+      setInlineMessage(null);
+
+      if (!shouldUseLiveApi()) {
+        setLiveRuns(LIVE_RUNS);
+        setInlineMessage(
+          "Local mode detected. Loaded deterministic active-run fixtures for the dedicated live monitor landing.",
+        );
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const dataset = await fetchDashboardDataset();
+        if (!isMounted) {
+          return;
+        }
+
+        const nextRuns = buildLiveRunRows(dataset.runAnalytics);
+        setLiveRuns(nextRuns.length > 0 ? nextRuns : LIVE_RUNS);
+        setInlineMessage(
+          "Live mode enabled: live monitor landing hydrated from GET /admin/analytics runAnalytics summaries.",
+        );
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        const reason = error instanceof ApiClientError ? error.message : "Failed to load live monitor data.";
+        setLiveRuns(LIVE_RUNS);
+        setInlineMessage(`${reason} Falling back to deterministic live-run fixtures.`);
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void loadLiveRuns();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const summaryCards = useMemo(() => {
-    const activeRunCount = LIVE_RUNS.length;
-    const totalRecipients = LIVE_RUNS.reduce((sum, run) => sum + run.recipientStudentIds.length, 0);
+    const activeRunCount = liveRuns.length;
+    const totalRecipients = liveRuns.reduce((sum, run) => sum + run.participants, 0);
     const avgCompletion =
       activeRunCount > 0 ?
-        Math.round(LIVE_RUNS.reduce((sum, run) => sum + run.completionPercent, 0) / activeRunCount) :
+        Math.round(liveRuns.reduce((sum, run) => sum + run.completionPercent, 0) / activeRunCount) :
         0;
     const avgDiscipline =
       activeRunCount > 0 ?
-        Math.round(LIVE_RUNS.reduce((sum, run) => sum + run.runAnalyticsSnapshot.avgDisciplineIndex, 0) / activeRunCount) :
+        Math.round(liveRuns.reduce((sum, run) => sum + run.runAnalyticsSnapshot.avgDisciplineIndex, 0) / activeRunCount) :
         0;
 
     return [
-      { label: "Active Runs", value: String(activeRunCount), helper: "runs currently in active window" },
-      { label: "Recipients In Flight", value: String(totalRecipients), helper: "explicit live recipients" },
-      { label: "Average Completion", value: `${avgCompletion}%`, helper: "live execution progress" },
-      { label: "Average Discipline", value: String(avgDiscipline), helper: "summary-safe execution quality" },
+      { label: "Runs In Scope", value: String(activeRunCount), helper: "recent live-monitor summaries" },
+      { label: "Participants In Scope", value: String(totalRecipients), helper: "runAnalytics participant totals" },
+      { label: "Average Completion", value: `${avgCompletion}%`, helper: "summary-safe execution progress" },
+      { label: "Average Discipline", value: String(avgDiscipline), helper: "runAnalytics discipline average" },
     ];
-  }, []);
+  }, [liveRuns]);
 
   const liveColumns = useMemo<UiTableColumn<RunStatusRecord>[]>(
     () => [
@@ -107,7 +203,7 @@ function AdminAssignmentsLivePage() {
         render: (row) => (
           <div className="admin-assignments-run-cell">
             <strong>{row.runName}</strong>
-            <small>{row.templateName}</small>
+            <small>{row.batchName}</small>
           </div>
         ),
       },
@@ -117,14 +213,14 @@ function AdminAssignmentsLivePage() {
         render: (row) => row.mode,
       },
       {
-        id: "window",
-        header: "Window",
-        render: (row) => (
-          <div className="admin-assignments-window-cell">
-            <strong>{formatDateTime(row.startWindowIso)}</strong>
-            <small>{formatDateTime(row.endWindowIso)}</small>
-          </div>
-        ),
+        id: "startedAt",
+        header: "Started",
+        render: (row) => formatDateTime(row.startedAtIso),
+      },
+      {
+        id: "participants",
+        header: "Participants",
+        render: (row) => row.participants,
       },
       {
         id: "completion",
@@ -160,17 +256,22 @@ function AdminAssignmentsLivePage() {
       <h2 id="admin-assignments-live-title">Dedicated Live Monitor Landing</h2>
       <p className="admin-content-copy">
         This dedicated route keeps <code>/admin/assignments/live</code> separate from the broader assignment-management
-        shell. It focuses on active execution instances only, then routes deeper into run-specific monitoring without
+        shell. It focuses on active execution visibility first, then routes deeper into run-specific monitoring without
         exposing question content.
       </p>
 
       <AssignmentsWorkspaceNav />
 
+      {inlineMessage ? <p className="admin-assignments-inline-note">{inlineMessage}</p> : null}
+      {isLoading ? (
+        <p className="admin-assignments-inline-note">Loading live monitor summaries from GET /admin/analytics...</p>
+      ) : null}
+
       <div className="admin-risk-summary-card">
         <h4>Live Monitor Scope</h4>
         <p>
-          This landing workspace lists only active runs, surfaces summary-safe live execution health, and pushes run
-          detail into dedicated <code>/admin/assignments/live/:runId</code> pages.
+          This landing workspace surfaces summary-safe live execution health from centralized run analytics and pushes
+          run detail into dedicated <code>/admin/assignments/live/:runId</code> pages.
         </p>
         <small>Route: /admin/assignments/live</small>
       </div>
@@ -188,7 +289,7 @@ function AdminAssignmentsLivePage() {
       <div className="admin-analytics-compliance-panel">
         <article className="admin-risk-summary-card">
           <h4>L0 Live Snapshot</h4>
-          <p>Run completion and recipient-in-flight visibility stay centralized here for currently active windows.</p>
+          <p>Run completion and participant-in-scope visibility stay centralized here for the current monitor set.</p>
           <small>Active-run landing view</small>
         </article>
         <article className="admin-risk-summary-card">
@@ -211,7 +312,7 @@ function AdminAssignmentsLivePage() {
         <UiTable
           caption="Active assignments live monitor"
           columns={liveColumns}
-          rows={LIVE_RUNS}
+          rows={liveRuns}
           rowKey={(row) => row.runId}
           emptyStateText="No active runs are currently available."
         />

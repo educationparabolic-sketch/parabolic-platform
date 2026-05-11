@@ -1,10 +1,17 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { UiChartContainer, UiTable, type UiChartPoint, type UiTableColumn } from "../../../../../shared/ui/components";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { LICENSE_LAYER_ORDER } from "../../../../../shared/types/portalRouting";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
-import { formatIsoDate, formatPercent, shouldUseLiveApi } from "./analyticsDataset";
+import {
+  ApiClientError,
+  fetchDashboardDataset,
+  formatIsoDate,
+  formatPercent,
+  shouldUseLiveApi,
+  type RunAnalyticsRecord,
+} from "./analyticsDataset";
 import AnalyticsWorkspaceNav from "./AnalyticsWorkspaceNav";
 
 interface TemplateAnalyticsRunRecord {
@@ -180,6 +187,123 @@ function buildRiskShiftChart(template: TemplateAnalyticsRecord): UiChartPoint[] 
   }));
 }
 
+function normalizeTemplateName(runName: string): string {
+  return runName.split("/")[0]?.trim() || runName.trim();
+}
+
+function inferExamType(templateName: string): string {
+  const normalized = templateName.toLowerCase();
+  if (normalized.includes("neet")) {
+    return "NEET";
+  }
+  if (normalized.includes("jee")) {
+    return "JEEMains";
+  }
+  if (normalized.includes("foundation")) {
+    return "Foundation";
+  }
+  return "General";
+}
+
+function toTemplateId(templateName: string, index: number): string {
+  const slug = templateName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug.length > 0 ? `tmpl-live-${slug}` : `tmpl-live-${index + 1}`;
+}
+
+function average(values: number[]): number {
+  if (values.length === 0) {
+    return 0;
+  }
+
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function variance(values: number[]): number {
+  if (values.length === 0) {
+    return 0;
+  }
+
+  const mean = average(values);
+  return average(values.map((value) => (value - mean) ** 2));
+}
+
+function buildTemplateRunRecord(run: RunAnalyticsRecord): TemplateAnalyticsRunRecord {
+  const riskShiftPercent =
+    run.riskDistribution.high + run.riskDistribution.critical + Math.round(run.guessRatePercent * 0.25);
+  const stabilityIndex = Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(
+        run.disciplineIndexAverage -
+          ((run.guessRatePercent + run.pacingGuardrailViolationPercent + run.structuralOverridePercent) / 3),
+      ),
+    ),
+  );
+
+  return {
+    runId: run.runId,
+    runName: run.runName,
+    completedOn: run.startedAt,
+    mode: run.mode,
+    avgRawScorePercent: run.avgRawScorePercent,
+    avgAccuracyPercent: run.avgAccuracyPercent,
+    phaseAdherencePercent: run.avgPhaseAdherencePercent,
+    stabilityIndex,
+    riskShiftPercent: Math.max(0, Math.min(100, riskShiftPercent)),
+    disciplineStressScore: Math.max(0, Math.min(100, Math.round(100 - run.disciplineIndexAverage + run.guessRatePercent * 0.4))),
+  };
+}
+
+function buildTemplateAnalyticsFromRuns(runs: RunAnalyticsRecord[]): TemplateAnalyticsRecord[] {
+  const groupedRuns = new Map<string, RunAnalyticsRecord[]>();
+
+  for (const run of runs) {
+    const templateName = normalizeTemplateName(run.runName);
+    const existing = groupedRuns.get(templateName) ?? [];
+    existing.push(run);
+    groupedRuns.set(templateName, existing);
+  }
+
+  return [...groupedRuns.entries()]
+    .map(([templateName, templateRuns], index) => {
+      const sortedRuns = [...templateRuns].sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt));
+      const runRecords = sortedRuns.map(buildTemplateRunRecord);
+      const avgRawScorePercent = Math.round(average(runRecords.map((run) => run.avgRawScorePercent)));
+      const avgAccuracyPercent = Math.round(average(runRecords.map((run) => run.avgAccuracyPercent)));
+      const avgDisciplineIndex = Math.round(average(sortedRuns.map((run) => run.disciplineIndexAverage)));
+      const rawVariance = Math.round(variance(runRecords.map((run) => run.avgRawScorePercent)));
+      const phaseAdherenceVariance = Math.round(variance(runRecords.map((run) => run.phaseAdherencePercent)));
+      const averageRiskShift = average(runRecords.map((run) => run.riskShiftPercent));
+      const templateEffectivenessRating = Math.max(
+        0,
+        Math.min(
+          100,
+          Math.round((avgRawScorePercent * 0.4) + (avgDisciplineIndex * 0.3) + ((100 - averageRiskShift) * 0.3)),
+        ),
+      );
+
+      return {
+        templateId: toTemplateId(templateName, index),
+        templateName,
+        academicYear: sortedRuns[0]?.academicYear ?? "2026",
+        examType: inferExamType(templateName),
+        totalRuns: runRecords.length,
+        avgRawScorePercent,
+        avgAccuracyPercent,
+        rawVariance,
+        phaseAdherenceVariance,
+        avgDisciplineIndex,
+        templateEffectivenessRating,
+        runs: runRecords,
+      };
+    })
+    .sort((left, right) => right.totalRuns - left.totalRuns || left.templateName.localeCompare(right.templateName));
+}
+
 function AdminTemplateAnalyticsPage() {
   const navigate = useNavigate();
   const params = useParams<{ testId?: string }>();
@@ -187,14 +311,62 @@ function AdminTemplateAnalyticsPage() {
   const accessContext = resolveAdminAccessContext(session);
   const isL2OrAbove =
     accessContext.licenseLayer !== null && LICENSE_LAYER_ORDER[accessContext.licenseLayer] >= LICENSE_LAYER_ORDER.L2;
+  const [templates, setTemplates] = useState<TemplateAnalyticsRecord[]>(TEMPLATE_ANALYTICS_FIXTURES);
+  const [isLoading, setIsLoading] = useState(true);
+  const [inlineMessage, setInlineMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadTemplates() {
+      setIsLoading(true);
+      setInlineMessage(null);
+
+      if (!shouldUseLiveApi()) {
+        setTemplates(TEMPLATE_ANALYTICS_FIXTURES);
+        setInlineMessage("Local mode detected. Loaded deterministic templateAnalytics fixtures for the dedicated template workspace.");
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const dataset = await fetchDashboardDataset();
+        if (!isMounted) {
+          return;
+        }
+
+        const liveTemplates = buildTemplateAnalyticsFromRuns(dataset.runAnalytics);
+        setTemplates(liveTemplates.length > 0 ? liveTemplates : TEMPLATE_ANALYTICS_FIXTURES);
+        setInlineMessage("Live mode enabled: template analytics hydrated from GET /admin/analytics summary payload.");
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        const reason = error instanceof ApiClientError ? error.message : "Failed to load template analytics data.";
+        setTemplates(TEMPLATE_ANALYTICS_FIXTURES);
+        setInlineMessage(`${reason} Falling back to deterministic templateAnalytics fixtures.`);
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void loadTemplates();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const selectedTemplate = useMemo(() => {
     return (
-      TEMPLATE_ANALYTICS_FIXTURES.find((entry) => entry.templateId === params.testId) ??
-      TEMPLATE_ANALYTICS_FIXTURES[0] ??
+      templates.find((entry) => entry.templateId === params.testId) ??
+      templates[0] ??
       null
     );
-  }, [params.testId]);
+  }, [params.testId, templates]);
 
   const runComparisonChart = useMemo(
     () => (selectedTemplate ? buildRunComparisonChart(selectedTemplate) : []),
@@ -316,23 +488,19 @@ function AdminTemplateAnalyticsPage() {
     [],
   );
 
-  const inlineMessage = shouldUseLiveApi() ?
-    "Dedicated template route is mounted. Live templateAnalytics hydration remains tracked separately while this workspace uses summary-safe structural fixtures." :
-    "Local mode detected. Loaded deterministic templateAnalytics fixtures for the dedicated template workspace.";
-
   return (
     <section className="admin-content-card" aria-labelledby="admin-template-analytics-title">
       <p className="admin-content-eyebrow">Analytics Template Workspace</p>
       <h2 id="admin-template-analytics-title">Template Performance Drill-Down</h2>
       <p className="admin-content-copy">
         This dedicated analytics route isolates <code>/admin/analytics/template/:testId</code> from overview, run,
-        and student analytics. It stays on summary-safe <code>templateAnalytics</code> style inputs for structural
-        quality review instead of recomputing from raw sessions.
+        and student analytics. It now hydrates template-level structural summaries from the live admin analytics
+        payload when available, while preserving deterministic fixture coverage in local mode.
       </p>
 
       <AnalyticsWorkspaceNav />
 
-      <p className="admin-analytics-inline-note">{inlineMessage}</p>
+      {inlineMessage ? <p className="admin-analytics-inline-note">{inlineMessage}</p> : null}
 
       <div className="admin-risk-summary-card">
         <h4>Template Selection</h4>
@@ -342,6 +510,8 @@ function AdminTemplateAnalyticsPage() {
         </p>
         <small>Route: /admin/analytics/template/{selectedTemplate?.templateId ?? "templateId"}</small>
       </div>
+
+      {isLoading ? <p className="admin-analytics-inline-note">Loading template analytics summaries...</p> : null}
 
       <div className="admin-analytics-filter-grid">
         <label htmlFor="admin-template-analytics-template">
@@ -353,7 +523,7 @@ function AdminTemplateAnalyticsPage() {
               navigate(`/admin/analytics/template/${event.target.value}`);
             }}
           >
-            {TEMPLATE_ANALYTICS_FIXTURES.map((entry) => (
+            {templates.map((entry) => (
               <option key={entry.templateId} value={entry.templateId}>
                 {entry.templateName}
               </option>

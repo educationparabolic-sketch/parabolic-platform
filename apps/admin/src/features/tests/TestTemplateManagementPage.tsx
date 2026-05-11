@@ -123,6 +123,117 @@ const INITIAL_DRAFT: TemplateDraft = {
   },
 };
 
+function toNonEmptyString(value: unknown, fallback = ""): string {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
+}
+
+function toNumberOrZero(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+function toTemplateStatus(value: unknown): TemplateStatus {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (normalized === "draft" || normalized === "ready" || normalized === "assigned" || normalized === "archived" || normalized === "deprecated") {
+    return normalized;
+  }
+  return "draft";
+}
+
+function normalizeSelectionMethod(value: unknown, fallback: SelectionMethod): SelectionMethod {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+
+  return SELECTION_METHODS.includes(value as SelectionMethod) ? (value as SelectionMethod) : fallback;
+}
+
+function normalizeExamType(value: unknown, fallback: ExamType): ExamType {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+
+  return EXAM_TYPES.includes(value as ExamType) ? (value as ExamType) : fallback;
+}
+
+function normalizeTimingWindow(value: unknown, fallback: TimingWindow): TimingWindow {
+  if (!value || typeof value !== "object") {
+    return fallback;
+  }
+
+  const source = value as Record<string, unknown>;
+  return {
+    minSeconds: Math.max(1, toNumberOrZero(source.minSeconds ?? source.min ?? fallback.minSeconds)),
+    maxSeconds: Math.max(1, toNumberOrZero(source.maxSeconds ?? source.max ?? fallback.maxSeconds)),
+  };
+}
+
+function normalizeTemplateRecord(value: unknown, index: number): TestTemplateRecord | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const fallback = FALLBACK_TEMPLATES[index] ?? FALLBACK_TEMPLATES[0];
+  const difficultySource =
+    record.difficultyDistribution && typeof record.difficultyDistribution === "object" ?
+      (record.difficultyDistribution as Record<string, unknown>) :
+      {};
+  const timingProfileSource =
+    record.timingProfile && typeof record.timingProfile === "object" ?
+      (record.timingProfile as Record<string, unknown>) :
+      {};
+  const questionIdsSource = record.selectedQuestionIds ?? record.questionIds;
+  const selectedQuestionIds = Array.isArray(questionIdsSource) ?
+    questionIdsSource.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0) :
+    fallback?.selectedQuestionIds ?? [];
+
+  return {
+    id: toNonEmptyString(record.id, `tmpl-${index + 1}`),
+    canonicalId: toNonEmptyString(record.canonicalId, fallback?.canonicalId ?? `canonical-${index + 1}`),
+    templateName: toNonEmptyString(record.templateName, fallback?.templateName ?? `Template ${index + 1}`),
+    examType: normalizeExamType(record.examType, fallback?.examType ?? "JEEMains"),
+    selectionMethod: normalizeSelectionMethod(record.selectionMethod, fallback?.selectionMethod ?? "manual"),
+    totalDurationMinutes: Math.max(30, toNumberOrZero(record.totalDurationMinutes ?? record.durationMinutes)),
+    selectedQuestionIds,
+    difficultyDistribution: {
+      easy: Math.max(0, toNumberOrZero(difficultySource.easy)),
+      medium: Math.max(0, toNumberOrZero(difficultySource.medium)),
+      hard: Math.max(0, toNumberOrZero(difficultySource.hard)),
+    },
+    timingProfile: {
+      easy: normalizeTimingWindow(timingProfileSource.easy, fallback?.timingProfile.easy ?? { minSeconds: 30, maxSeconds: 60 }),
+      medium: normalizeTimingWindow(timingProfileSource.medium, fallback?.timingProfile.medium ?? { minSeconds: 60, maxSeconds: 150 }),
+      hard: normalizeTimingWindow(timingProfileSource.hard, fallback?.timingProfile.hard ?? { minSeconds: 150, maxSeconds: 210 }),
+    },
+    status: toTemplateStatus(record.status),
+    updatedAt: toNonEmptyString(record.updatedAt, fallback?.updatedAt ?? new Date(0).toISOString()),
+  };
+}
+
+async function fetchTemplatesFromApi(): Promise<TestTemplateRecord[]> {
+  const payload = await apiClient.get<unknown>("/admin/tests");
+  if (!Array.isArray(payload)) {
+    throw new Error("GET /admin/tests returned an invalid payload.");
+  }
+
+  const templates = payload
+    .map((entry, index) => normalizeTemplateRecord(entry, index))
+    .filter((entry): entry is TestTemplateRecord => Boolean(entry));
+
+  if (templates.length === 0) {
+    throw new Error("GET /admin/tests did not include any templates.");
+  }
+
+  return templates;
+}
+
 function isDraftEditable(status: TemplateStatus): boolean {
   return status === "draft";
 }
@@ -215,6 +326,7 @@ function TestTemplateManagementPage() {
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [questionQuery, setQuestionQuery] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingTemplates, setIsLoadingTemplates] = useState(true);
   const [inlineMessage, setInlineMessage] = useState<string>(
     shouldUseLiveApi() ?
       "Live mode enabled: template create/publish sends POST /admin/tests." :
@@ -223,6 +335,52 @@ function TestTemplateManagementPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [publishTargetId, setPublishTargetId] = useState<string | null>(null);
   const [inspectedTemplateId, setInspectedTemplateId] = useState<string>(FALLBACK_TEMPLATES[0]?.id ?? "");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadTemplates() {
+      setIsLoadingTemplates(true);
+
+      if (!shouldUseLiveApi()) {
+        setTemplates(FALLBACK_TEMPLATES);
+        setInlineMessage("Local mode detected: using deterministic question bank and template fixtures for Build 118.");
+        setIsLoadingTemplates(false);
+        return;
+      }
+
+      try {
+        const liveTemplates = await fetchTemplatesFromApi();
+        if (!isMounted) {
+          return;
+        }
+
+        setTemplates(liveTemplates);
+        setInlineMessage("Live mode enabled: template library hydrated from GET /admin/tests, and create/publish sends POST /admin/tests.");
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        const reason =
+          error instanceof ApiClientError ?
+            `GET /admin/tests failed with ${error.code} (${error.status}).` :
+            "Failed to load template library.";
+        setTemplates(FALLBACK_TEMPLATES);
+        setInlineMessage(`${reason} Falling back to deterministic Build 118 fixtures.`);
+      } finally {
+        if (isMounted) {
+          setIsLoadingTemplates(false);
+        }
+      }
+    }
+
+    void loadTemplates();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const currentSubpage = useMemo(() => resolveTestSubpage(location.pathname), [location.pathname]);
 
@@ -1017,6 +1175,7 @@ function TestTemplateManagementPage() {
       <TestsWorkspaceNav />
 
       <p className="admin-tests-inline-note">{inlineMessage}</p>
+      {isLoadingTemplates ? <p className="admin-tests-inline-note">Loading template library from GET /admin/tests...</p> : null}
       {errorMessage ? <p className="admin-tests-inline-error">{errorMessage}</p> : null}
 
       {currentSubpage === "create" ? renderCreateView() : null}

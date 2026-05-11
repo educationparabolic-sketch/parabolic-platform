@@ -1,9 +1,16 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { UiChartContainer, UiTable, type UiChartPoint, type UiTableColumn } from "../../../../../shared/ui/components";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { LICENSE_LAYER_ORDER } from "../../../../../shared/types/portalRouting";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
-import { formatPercent, shouldUseLiveApi } from "./analyticsDataset";
+import {
+  ApiClientError,
+  fetchDashboardDataset,
+  formatPercent,
+  shouldUseLiveApi,
+  type DashboardDataset,
+  type RunAnalyticsRecord,
+} from "./analyticsDataset";
 import AnalyticsWorkspaceNav from "./AnalyticsWorkspaceNav";
 
 interface MonthlyTrendRecord {
@@ -98,6 +105,79 @@ function toChartPoints(
   }));
 }
 
+function formatMonthLabel(monthId: string): string {
+  const parsed = Date.parse(`${monthId}-01T00:00:00.000Z`);
+  if (Number.isNaN(parsed)) {
+    return monthId;
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(parsed));
+}
+
+function groupRunsByMonth(runs: RunAnalyticsRecord[]): Map<string, RunAnalyticsRecord[]> {
+  const monthGroups = new Map<string, RunAnalyticsRecord[]>();
+
+  for (const run of runs) {
+    const parsed = Date.parse(run.startedAt);
+    if (Number.isNaN(parsed)) {
+      continue;
+    }
+
+    const monthId = new Date(parsed).toISOString().slice(0, 7);
+    const existing = monthGroups.get(monthId) ?? [];
+    existing.push(run);
+    monthGroups.set(monthId, existing);
+  }
+
+  return monthGroups;
+}
+
+function average(values: number[]): number {
+  if (values.length === 0) {
+    return 0;
+  }
+
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function buildMonthlyTrendRows(dataset: DashboardDataset): MonthlyTrendRecord[] {
+  const monthGroups = groupRunsByMonth(dataset.runAnalytics);
+
+  return [...monthGroups.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([monthId, runs]) => ({
+      monthId,
+      monthLabel: formatMonthLabel(monthId),
+      avgRawScorePercent: Math.round(average(runs.map((run) => run.avgRawScorePercent))),
+      avgAccuracyPercent: Math.round(average(runs.map((run) => run.avgAccuracyPercent))),
+      participationRatePercent: Math.round(average(runs.map((run) => run.completionRatePercent))),
+      phaseAdherencePercent: Math.round(average(runs.map((run) => run.avgPhaseAdherencePercent))),
+      easyNeglectPercent: Math.round(average(runs.map((run) => run.easyNeglectPercent))),
+      topicWeaknessPercent: Math.round(average(runs.map((run) => run.timeMisallocationPercent))),
+      disciplineIndexPercent: Math.round(average(runs.map((run) => run.disciplineIndexAverage))),
+      controlledModeEffectivenessPercent: Math.round(average(runs.map((run) => run.controlledCompliancePercent))),
+      stabilityTrajectoryPercent: Math.round(
+        average(
+          runs.map(
+            (run) =>
+              Math.max(
+                0,
+                Math.min(
+                  100,
+                  run.disciplineIndexAverage -
+                    ((run.pacingGuardrailViolationPercent + run.structuralOverridePercent + run.guessRatePercent) / 3),
+                ),
+              ),
+          ),
+        ),
+      ),
+    }));
+}
+
 function AdminAnalyticsTrendsPage() {
   const { session } = useAuthProvider();
   const accessContext = resolveAdminAccessContext(session);
@@ -105,44 +185,94 @@ function AdminAnalyticsTrendsPage() {
     accessContext.licenseLayer !== null && LICENSE_LAYER_ORDER[accessContext.licenseLayer] >= LICENSE_LAYER_ORDER.L1;
   const isL2OrAbove =
     accessContext.licenseLayer !== null && LICENSE_LAYER_ORDER[accessContext.licenseLayer] >= LICENSE_LAYER_ORDER.L2;
+  const [rows, setRows] = useState<MonthlyTrendRecord[]>(MONTHLY_TREND_FIXTURES);
+  const [isLoading, setIsLoading] = useState(true);
+  const [inlineMessage, setInlineMessage] = useState<string | null>(null);
 
-  const latestMonth = MONTHLY_TREND_FIXTURES[MONTHLY_TREND_FIXTURES.length - 1] ?? null;
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadTrends() {
+      setIsLoading(true);
+      setInlineMessage(null);
+
+      if (!shouldUseLiveApi()) {
+        setRows(MONTHLY_TREND_FIXTURES);
+        setInlineMessage(
+          "Local mode detected. Loaded deterministic monthlySummary fixtures for the dedicated analytics trends workspace.",
+        );
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const dataset = await fetchDashboardDataset();
+        if (!isMounted) {
+          return;
+        }
+
+        const monthlyRows = buildMonthlyTrendRows(dataset);
+        setRows(monthlyRows.length > 0 ? monthlyRows : MONTHLY_TREND_FIXTURES);
+        setInlineMessage("Live mode enabled: trends hydrated from GET /admin/analytics summary payload.");
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        const reason = error instanceof ApiClientError ? error.message : "Failed to load analytics trend data.";
+        setRows(MONTHLY_TREND_FIXTURES);
+        setInlineMessage(`${reason} Falling back to deterministic monthlySummary fixtures.`);
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void loadTrends();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const latestMonth = rows[rows.length - 1] ?? null;
 
   const rawTrend = useMemo(
-    () => toChartPoints(MONTHLY_TREND_FIXTURES, (row) => row.avgRawScorePercent),
-    [],
+    () => toChartPoints(rows, (row) => row.avgRawScorePercent),
+    [rows],
   );
   const accuracyTrend = useMemo(
-    () => toChartPoints(MONTHLY_TREND_FIXTURES, (row) => row.avgAccuracyPercent),
-    [],
+    () => toChartPoints(rows, (row) => row.avgAccuracyPercent),
+    [rows],
   );
   const participationTrend = useMemo(
-    () => toChartPoints(MONTHLY_TREND_FIXTURES, (row) => row.participationRatePercent),
-    [],
+    () => toChartPoints(rows, (row) => row.participationRatePercent),
+    [rows],
   );
   const phaseTrend = useMemo(
-    () => toChartPoints(MONTHLY_TREND_FIXTURES, (row) => row.phaseAdherencePercent),
-    [],
+    () => toChartPoints(rows, (row) => row.phaseAdherencePercent),
+    [rows],
   );
   const neglectTrend = useMemo(
-    () => toChartPoints(MONTHLY_TREND_FIXTURES, (row) => row.easyNeglectPercent),
-    [],
+    () => toChartPoints(rows, (row) => row.easyNeglectPercent),
+    [rows],
   );
   const weaknessTrend = useMemo(
-    () => toChartPoints(MONTHLY_TREND_FIXTURES, (row) => row.topicWeaknessPercent),
-    [],
+    () => toChartPoints(rows, (row) => row.topicWeaknessPercent),
+    [rows],
   );
   const disciplineTrend = useMemo(
-    () => toChartPoints(MONTHLY_TREND_FIXTURES, (row) => row.disciplineIndexPercent),
-    [],
+    () => toChartPoints(rows, (row) => row.disciplineIndexPercent),
+    [rows],
   );
   const controlledModeTrend = useMemo(
-    () => toChartPoints(MONTHLY_TREND_FIXTURES, (row) => row.controlledModeEffectivenessPercent),
-    [],
+    () => toChartPoints(rows, (row) => row.controlledModeEffectivenessPercent),
+    [rows],
   );
   const stabilityTrend = useMemo(
-    () => toChartPoints(MONTHLY_TREND_FIXTURES, (row) => row.stabilityTrajectoryPercent),
-    [],
+    () => toChartPoints(rows, (row) => row.stabilityTrajectoryPercent),
+    [rows],
   );
 
   const monthlyColumns = useMemo<UiTableColumn<MonthlyTrendRecord>[]>(
@@ -191,32 +321,30 @@ function AdminAnalyticsTrendsPage() {
     [isL2OrAbove],
   );
 
-  const inlineMessage = shouldUseLiveApi() ?
-    "Dedicated trends route is mounted. Live monthlySummary hydration remains tracked separately while this workspace uses summary-safe monthly fixtures." :
-    "Local mode detected. Loaded deterministic monthlySummary fixtures for the dedicated analytics trends workspace.";
-
   return (
     <section className="admin-content-card" aria-labelledby="admin-analytics-trends-title">
       <p className="admin-content-eyebrow">Analytics Trends Workspace</p>
       <h2 id="admin-analytics-trends-title">Monthly Performance and Stability Trends</h2>
       <p className="admin-content-copy">
         This dedicated analytics trends route keeps <code>/admin/analytics/trends</code> separate from the overview
-        shell. It uses summary-safe <code>monthlySummary</code> style records for time-based aggregation rather than
-        recomputing trends from run-level data.
+        shell. It now hydrates from the live admin analytics summary payload when available, while preserving
+        deterministic local fallback coverage for development.
       </p>
 
       <AnalyticsWorkspaceNav />
 
-      <p className="admin-analytics-inline-note">{inlineMessage}</p>
+      {inlineMessage ? <p className="admin-analytics-inline-note">{inlineMessage}</p> : null}
 
       <div className="admin-risk-summary-card">
         <h4>Monthly Summary Scope</h4>
         <p>
-          Trend cards below track month-over-month performance, participation, and execution quality using immutable
-          summary documents for the current academic year.
+          Trend cards below track month-over-month performance, participation, and execution quality using admin
+          analytics summary fields for the current academic year.
         </p>
         <small>Route: /admin/analytics/trends</small>
       </div>
+
+      {isLoading ? <p className="admin-analytics-inline-note">Loading monthly trend summaries...</p> : null}
 
       {latestMonth ? (
         <div className="admin-analytics-kpi-grid">
@@ -260,14 +388,14 @@ function AdminAnalyticsTrendsPage() {
       <div className="admin-analytics-chart-grid">
         <UiChartContainer
           title="Monthly Avg Raw Score"
-          subtitle="L0 trend from monthly summary documents"
+          subtitle="L0 trend from admin analytics summary payload"
           data={rawTrend}
           maxValue={100}
           variant="line"
         />
         <UiChartContainer
           title="Monthly Avg Accuracy"
-          subtitle="L0 trend from monthly summary documents"
+          subtitle="L0 trend from admin analytics summary payload"
           data={accuracyTrend}
           maxValue={100}
           variant="line"
@@ -339,10 +467,10 @@ function AdminAnalyticsTrendsPage() {
         <article className="admin-risk-summary-card">
           <h4>Operational Trend Layer</h4>
           <p>
-            L0 trendlines show month-over-month raw score, accuracy, and participation shifts without dropping into
-            run-level recomputation.
+            L0 trendlines show month-over-month raw score, accuracy, and participation shifts through the admin
+            analytics summary feed.
           </p>
-          <small>monthlySummary aggregation only</small>
+          <small>Live summary payload with deterministic local fallback</small>
         </article>
         {isL1OrAbove ? (
           <article className="admin-risk-summary-card">
@@ -371,7 +499,7 @@ function AdminAnalyticsTrendsPage() {
         <UiTable
           caption="Monthly analytics trend summary"
           columns={monthlyColumns}
-          rows={MONTHLY_TREND_FIXTURES}
+          rows={rows}
           rowKey={(row) => row.monthId}
           emptyStateText="No monthly trend summaries are available."
         />

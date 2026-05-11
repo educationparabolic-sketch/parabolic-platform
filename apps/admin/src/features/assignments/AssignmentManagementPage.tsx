@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
@@ -8,6 +8,10 @@ import {
   UiTable,
   type UiTableColumn,
 } from "../../../../../shared/ui/components";
+import {
+  fetchDashboardDataset,
+  type RunAnalyticsRecord,
+} from "../analytics/analyticsDataset";
 import AssignmentsWorkspaceNav from "./AssignmentsWorkspaceNav";
 
 const apiClient = getPortalApiClient("admin");
@@ -172,6 +176,41 @@ interface AssignmentListFilters {
   batchId: string;
   dateStart: string;
   dateEnd: string;
+}
+
+interface AdminStudentRecord {
+  id: string;
+  studentId: string;
+  fullName: string;
+  batch: string;
+  status: "invited" | "active" | "inactive" | "archived" | "suspended";
+  avgRawScorePercent: number;
+  avgAccuracyPercent: number;
+  scorePercentile: number | null;
+  riskState: "low" | "moderate" | "high" | "critical";
+  disciplineIndex: number;
+}
+
+interface AdminTestTemplateRecord {
+  id: string;
+  canonicalId: string;
+  templateName: string;
+  examType: string;
+  selectionMethod: string;
+  totalDurationMinutes: number;
+  selectedQuestionIds: string[];
+  difficultyDistribution: {
+    easy: number;
+    medium: number;
+    hard: number;
+  };
+  timingProfile: {
+    easy: { minSeconds: number; maxSeconds: number };
+    medium: { minSeconds: number; maxSeconds: number };
+    hard: { minSeconds: number; maxSeconds: number };
+  };
+  status: "draft" | "ready" | "assigned" | "archived" | "deprecated";
+  updatedAt: string;
 }
 
 const TEMPLATE_OPTIONS: TemplateOption[] = [
@@ -526,6 +565,257 @@ function shouldUseLiveApi(): boolean {
   return host !== "127.0.0.1" && host !== "localhost";
 }
 
+function toNonEmptyString(value: unknown, fallback = ""): string {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
+}
+
+function toNumberOrZero(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  return 0;
+}
+
+function toTemplateStatus(value: unknown): AdminTestTemplateRecord["status"] {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (normalized === "draft" || normalized === "ready" || normalized === "assigned" || normalized === "archived" || normalized === "deprecated") {
+    return normalized;
+  }
+
+  return "draft";
+}
+
+function toStudentStatus(value: unknown): AdminStudentRecord["status"] {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (normalized === "invited" || normalized === "active" || normalized === "inactive" || normalized === "archived" || normalized === "suspended") {
+    return normalized;
+  }
+
+  return "inactive";
+}
+
+function toStudentRiskState(value: unknown): StudentOption["riskState"] {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (normalized === "medium") {
+    return "moderate";
+  }
+  if (normalized === "low" || normalized === "high" || normalized === "critical") {
+    return normalized;
+  }
+
+  return "moderate";
+}
+
+function normalizeTestTemplateRecord(value: unknown, index: number): AdminTestTemplateRecord | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const fallback = TEMPLATE_OPTIONS[index] ?? TEMPLATE_OPTIONS[0];
+  const difficultySource =
+    record.difficultyDistribution && typeof record.difficultyDistribution === "object" ?
+      (record.difficultyDistribution as Record<string, unknown>) :
+      {};
+  const timingProfileSource =
+    record.timingProfile && typeof record.timingProfile === "object" ?
+      (record.timingProfile as Record<string, unknown>) :
+      {};
+  const questionIdsSource = record.selectedQuestionIds ?? record.questionIds;
+  const selectedQuestionIds = Array.isArray(questionIdsSource) ?
+    questionIdsSource.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0) :
+    [];
+
+  return {
+    id: toNonEmptyString(record.id, fallback?.id ?? `tmpl-${index + 1}`),
+    canonicalId: toNonEmptyString(record.canonicalId, fallback?.canonicalId ?? `canonical-${index + 1}`),
+    templateName: toNonEmptyString(record.templateName, fallback?.name ?? `Template ${index + 1}`),
+    examType: toNonEmptyString(record.examType, fallback?.examType ?? "JEEMains"),
+    selectionMethod: toNonEmptyString(record.selectionMethod, "manual"),
+    totalDurationMinutes: Math.max(30, toNumberOrZero(record.totalDurationMinutes ?? record.durationMinutes)),
+    selectedQuestionIds,
+    difficultyDistribution: {
+      easy: Math.max(0, toNumberOrZero(difficultySource.easy)),
+      medium: Math.max(0, toNumberOrZero(difficultySource.medium)),
+      hard: Math.max(0, toNumberOrZero(difficultySource.hard)),
+    },
+    timingProfile: {
+      easy: {
+        minSeconds: Math.max(1, toNumberOrZero((timingProfileSource.easy as Record<string, unknown> | undefined)?.minSeconds ?? 30)),
+        maxSeconds: Math.max(1, toNumberOrZero((timingProfileSource.easy as Record<string, unknown> | undefined)?.maxSeconds ?? 60)),
+      },
+      medium: {
+        minSeconds: Math.max(1, toNumberOrZero((timingProfileSource.medium as Record<string, unknown> | undefined)?.minSeconds ?? 60)),
+        maxSeconds: Math.max(1, toNumberOrZero((timingProfileSource.medium as Record<string, unknown> | undefined)?.maxSeconds ?? 150)),
+      },
+      hard: {
+        minSeconds: Math.max(1, toNumberOrZero((timingProfileSource.hard as Record<string, unknown> | undefined)?.minSeconds ?? 150)),
+        maxSeconds: Math.max(1, toNumberOrZero((timingProfileSource.hard as Record<string, unknown> | undefined)?.maxSeconds ?? 210)),
+      },
+    },
+    status: toTemplateStatus(record.status),
+    updatedAt: toNonEmptyString(record.updatedAt, fallback?.lastUsedIso ?? new Date(0).toISOString()),
+  };
+}
+
+function deriveDifficultyDistributionLabel(distribution: AdminTestTemplateRecord["difficultyDistribution"]): string {
+  const total = distribution.easy + distribution.medium + distribution.hard;
+  if (total <= 0) {
+    return "Easy 0% / Medium 0% / Hard 0%";
+  }
+
+  return [
+    `Easy ${Math.round((distribution.easy / total) * 100)}%`,
+    `Medium ${Math.round((distribution.medium / total) * 100)}%`,
+    `Hard ${Math.round((distribution.hard / total) * 100)}%`,
+  ].join(" / ");
+}
+
+function deriveAllowedModes(examType: string): ExecutionMode[] {
+  const normalized = examType.trim().toLowerCase();
+  if (normalized.includes("neet")) {
+    return ["Operational", "Diagnostic", "Controlled", "Hard"];
+  }
+
+  return ["Operational", "Diagnostic", "Controlled"];
+}
+
+function derivePhaseSnapshot(distribution: AdminTestTemplateRecord["difficultyDistribution"]): string {
+  const total = distribution.easy + distribution.medium + distribution.hard;
+  if (total <= 0) {
+    return "P1 33% | P2 33% | P3 34%";
+  }
+
+  const p1 = Math.round((distribution.easy / total) * 100);
+  const p3 = Math.round((distribution.hard / total) * 100);
+  const p2 = Math.max(0, 100 - p1 - p3);
+  return `P1 ${p1}% | P2 ${p2}% | P3 ${p3}%`;
+}
+
+function deriveTimingProfileSnapshot(timingProfile: AdminTestTemplateRecord["timingProfile"]): string {
+  return [
+    `Easy ${timingProfile.easy.minSeconds}-${timingProfile.easy.maxSeconds}s`,
+    `Medium ${timingProfile.medium.minSeconds}-${timingProfile.medium.maxSeconds}s`,
+    `Hard ${timingProfile.hard.minSeconds}-${timingProfile.hard.maxSeconds}s`,
+  ].join(" | ");
+}
+
+function toTemplateOption(record: AdminTestTemplateRecord): TemplateOption {
+  return {
+    id: record.id,
+    canonicalId: record.canonicalId,
+    name: record.templateName,
+    examType: record.examType === "NEET" ? "NEET" : "JEEMains",
+    status: record.status === "draft" ? "draft" : record.status === "assigned" ? "assigned" : "ready",
+    difficultyDistribution: deriveDifficultyDistributionLabel(record.difficultyDistribution),
+    allowedModes: deriveAllowedModes(record.examType),
+    lastUsedIso: record.updatedAt,
+    phaseConfigSnapshot: derivePhaseSnapshot(record.difficultyDistribution),
+    timingProfileSnapshot: deriveTimingProfileSnapshot(record.timingProfile),
+  };
+}
+
+async function fetchTemplateOptionsFromApi(): Promise<TemplateOption[]> {
+  const payload = await apiClient.get<unknown>("/admin/tests");
+  if (!Array.isArray(payload)) {
+    throw new Error("GET /admin/tests returned an invalid payload.");
+  }
+
+  const templates = payload
+    .map((entry, index) => normalizeTestTemplateRecord(entry, index))
+    .filter((entry): entry is AdminTestTemplateRecord => Boolean(entry))
+    .map((entry) => toTemplateOption(entry));
+
+  const usableTemplates = templates.filter((template) => template.status === "ready" || template.status === "assigned");
+  if (usableTemplates.length === 0) {
+    throw new Error("GET /admin/tests did not include any assignment-ready templates.");
+  }
+
+  return templates;
+}
+
+function extractStudentArray(payload: unknown): unknown[] {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (payload && typeof payload === "object") {
+    const wrapped = (payload as Record<string, unknown>).students;
+    if (Array.isArray(wrapped)) {
+      return wrapped;
+    }
+  }
+
+  return [];
+}
+
+function normalizeAdminStudentRecord(value: unknown, index: number): AdminStudentRecord | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const studentId =
+    toNonEmptyString(record.studentId) ??
+    toNonEmptyString(record.id) ??
+    toNonEmptyString(record.uid) ??
+    `student-${index + 1}`;
+
+  return {
+    id: toNonEmptyString(record.id, studentId),
+    studentId,
+    fullName: toNonEmptyString(record.fullName ?? record.name, `Student ${index + 1}`),
+    batch: toNonEmptyString(record.batch ?? record.batchId, "Unassigned"),
+    status: toStudentStatus(record.status),
+    avgRawScorePercent: toNumberOrZero(record.avgRawScorePercent),
+    avgAccuracyPercent: toNumberOrZero(record.avgAccuracyPercent),
+    scorePercentile:
+      record.scorePercentile === null || typeof record.scorePercentile === "undefined" ?
+        null :
+        toNumberOrZero(record.scorePercentile),
+    riskState: toStudentRiskState(record.riskState ?? record.rollingRiskCluster),
+    disciplineIndex: toNumberOrZero(record.disciplineIndex),
+  };
+}
+
+function toBatchId(batchName: string): string {
+  return batchName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "unassigned";
+}
+
+function toStudentOption(record: AdminStudentRecord): StudentOption {
+  return {
+    id: record.studentId,
+    name: record.fullName,
+    batchId: toBatchId(record.batch),
+    status: record.status === "active" ? "active" : "archived",
+    riskState: record.riskState,
+    disciplineIndex: record.disciplineIndex,
+    avgRawScorePercent: record.avgRawScorePercent,
+    avgAccuracyPercent: record.avgAccuracyPercent,
+    performancePercentile: record.scorePercentile ?? 0,
+  };
+}
+
+async function fetchStudentOptionsFromApi(): Promise<StudentOption[]> {
+  const payload = await apiClient.get<unknown>("/admin/students");
+  const students = extractStudentArray(payload)
+    .map((entry, index) => normalizeAdminStudentRecord(entry, index))
+    .filter((entry): entry is AdminStudentRecord => Boolean(entry))
+    .map((entry) => toStudentOption(entry));
+
+  if (students.length === 0) {
+    throw new Error("No students were returned by GET /admin/students.");
+  }
+
+  return students;
+}
+
 function formatDateTime(value: string): string {
   const parsed = Date.parse(value);
   if (Number.isNaN(parsed)) {
@@ -604,8 +894,8 @@ function statusClassName(status: RunStatus): string {
   }
 }
 
-function formatBatchLabel(batchId: string): string {
-  const matchedBatch = BATCH_OPTIONS.find((batch) => batch.id === batchId);
+function formatBatchLabel(batchId: string, batches: BatchOption[]): string {
+  const matchedBatch = batches.find((batch) => batch.id === batchId);
   return matchedBatch?.name ?? batchId;
 }
 
@@ -644,8 +934,91 @@ function analyticsForRecipientCount(recipientCount: number, mode: ExecutionMode)
   };
 }
 
-function recipientIdsFromMode(draft: AssignmentDraft): string[] {
-  const activeStudents = STUDENT_OPTIONS.filter((student) => student.status === "active");
+function toExecutionMode(mode: string): ExecutionMode {
+  if (mode === "Operational" || mode === "Diagnostic" || mode === "Controlled" || mode === "Hard") {
+    return mode;
+  }
+
+  return "Operational";
+}
+
+function toRiskDistributionSummary(record: RunAnalyticsRecord): string {
+  return `L ${Math.round(record.riskDistribution.low)}% / M ${Math.round(record.riskDistribution.medium)}% / H ${Math.round(record.riskDistribution.high)}% / C ${Math.round(record.riskDistribution.critical)}%`;
+}
+
+function toExecutionStabilityBadge(record: RunAnalyticsRecord): string {
+  if (record.controlledCompliancePercent >= 80 && record.pacingGuardrailViolationPercent <= 12) {
+    return "Stable";
+  }
+
+  if (record.controlledCompliancePercent >= 55 && record.pacingGuardrailViolationPercent <= 22) {
+    return "Drift";
+  }
+
+  return "Escalated";
+}
+
+function inferRunStatus(record: RunAnalyticsRecord): RunStatus {
+  if (record.completionRatePercent >= 100) {
+    return "completed";
+  }
+
+  return "active";
+}
+
+function deriveRecipientIds(batchId: string, participantCount: number, students: StudentOption[]): string[] {
+  const matchingStudents = students
+    .filter((student) => student.status === "active" && student.batchId === batchId)
+    .slice(0, Math.max(1, participantCount));
+
+  if (matchingStudents.length > 0) {
+    return matchingStudents.map((student) => student.id);
+  }
+
+  return Array.from({ length: Math.max(1, participantCount) }, (_, index) => `${batchId}-student-${index + 1}`);
+}
+
+function buildRunRecordFromAnalytics(record: RunAnalyticsRecord, students: StudentOption[]): RunStatusRecord {
+  const mode = toExecutionMode(record.mode);
+  const recipientStudentIds = deriveRecipientIds(record.batchId, record.participants, students);
+
+  return {
+    runId: record.runId,
+    runName: record.runName,
+    templateId: record.runId,
+    canonicalId: `analytics-${record.runId}`,
+    templateName: record.runName,
+    academicYear: record.academicYear,
+    mode,
+    batchIds: [record.batchId],
+    recipientStudentIds,
+    startWindowIso: record.startedAt,
+    endWindowIso: new Date(Date.parse(record.startedAt) + (3 * 60 * 60 * 1000)).toISOString(),
+    timezone: CURRENT_INSTITUTE_TIMEZONE,
+    attemptLimit: 1,
+    gracePeriodMinutes: 0,
+    shuffleEnabled: false,
+    status: inferRunStatus(record),
+    completionPercent: Math.round(record.completionRatePercent),
+    createdAtIso: record.startedAt,
+    runAnalyticsSnapshot: {
+      avgRawScorePercent: Math.round(record.avgRawScorePercent),
+      avgAccuracyPercent: Math.round(record.avgAccuracyPercent),
+      avgPhaseAdherencePercent: Math.round(record.avgPhaseAdherencePercent),
+      easyNeglectPercent: Math.round(record.easyNeglectPercent),
+      hardBiasPercent: Math.round(record.hardBiasPercent),
+      riskDistributionSummary: toRiskDistributionSummary(record),
+      avgDisciplineIndex: Math.round(record.disciplineIndexAverage),
+      controlledCompliancePercent: Math.round(record.controlledCompliancePercent),
+      guessRatePercent: Math.round(record.guessRatePercent),
+      executionStabilityBadge: toExecutionStabilityBadge(record),
+      overrideCount: Math.round(record.structuralOverridePercent),
+    },
+  };
+}
+
+function recipientIdsFromMode(draft: AssignmentDraft, students: StudentOption[]): string[] {
+  const activeStudents = students.filter((student) => student.status === "active");
 
   if (draft.recipientSelectionMode === "IndividualStudents") {
     const allowedActiveIds = new Set(activeStudents.map((student) => student.id));
@@ -706,12 +1079,12 @@ function recipientIdsFromMode(draft: AssignmentDraft): string[] {
     .map((student) => student.id);
 }
 
-function validateDraft(draft: AssignmentDraft): string | null {
+function validateDraft(draft: AssignmentDraft, templates: TemplateOption[], students: StudentOption[]): string | null {
   if (draft.templateId.trim().length === 0) {
     return "Select a test template before scheduling the run.";
   }
 
-  const template = TEMPLATE_OPTIONS.find((entry) => entry.id === draft.templateId);
+  const template = templates.find((entry) => entry.id === draft.templateId);
   if (!template) {
     return "The selected template is not recognized.";
   }
@@ -737,7 +1110,7 @@ function validateDraft(draft: AssignmentDraft): string | null {
     return "FilterByMetrics recipient selection is available for L2+ only.";
   }
 
-  const recipients = recipientIdsFromMode(draft);
+  const recipients = recipientIdsFromMode(draft, students);
   if (recipients.length === 0) {
     return "Recipient selection must resolve to at least one active student.";
   }
@@ -774,10 +1147,10 @@ function validateDraft(draft: AssignmentDraft): string | null {
   return null;
 }
 
-function buildRunPayload(draft: AssignmentDraft): RunCreatePayload {
+function buildRunPayload(draft: AssignmentDraft, templates: TemplateOption[], students: StudentOption[]): RunCreatePayload {
   const startWindow = normalizeIsoDatetime(draft.assignmentStartLocal);
   const endWindow = normalizeIsoDatetime(draft.assignmentEndLocal);
-  const template = TEMPLATE_OPTIONS.find((entry) => entry.id === draft.templateId);
+  const template = templates.find((entry) => entry.id === draft.templateId);
 
   if (!startWindow || !endWindow || !template) {
     throw new Error("Assignment payload values are invalid.");
@@ -788,7 +1161,7 @@ function buildRunPayload(draft: AssignmentDraft): RunCreatePayload {
     canonicalId: template.canonicalId,
     mode: draft.executionMode,
     modeSnapshot: draft.executionMode,
-    recipientStudentIds: recipientIdsFromMode(draft),
+    recipientStudentIds: recipientIdsFromMode(draft, students),
     startWindow,
     endWindow,
     timezone: draft.timezone,
@@ -799,11 +1172,11 @@ function buildRunPayload(draft: AssignmentDraft): RunCreatePayload {
   };
 }
 
-function deriveBatchIds(recipientIds: string[]): string[] {
+function deriveBatchIds(recipientIds: string[], students: StudentOption[]): string[] {
   const seen = new Set<string>();
 
   for (const recipientId of recipientIds) {
-    const student = STUDENT_OPTIONS.find((candidate) => candidate.id === recipientId);
+    const student = students.find((candidate) => candidate.id === recipientId);
     if (student) {
       seen.add(student.batchId);
     }
@@ -812,9 +1185,15 @@ function deriveBatchIds(recipientIds: string[]): string[] {
   return Array.from(seen);
 }
 
-function buildFallbackRunRecord(payload: RunCreatePayload, runId: string, createdAtIso: string): RunStatusRecord {
-  const template = TEMPLATE_OPTIONS.find((entry) => entry.id === payload.testId);
-  const batchIds = deriveBatchIds(payload.recipientStudentIds);
+function buildFallbackRunRecord(
+  payload: RunCreatePayload,
+  runId: string,
+  createdAtIso: string,
+  templates: TemplateOption[],
+  students: StudentOption[],
+): RunStatusRecord {
+  const template = templates.find((entry) => entry.id === payload.testId);
+  const batchIds = deriveBatchIds(payload.recipientStudentIds, students);
 
   return {
     runId,
@@ -863,6 +1242,8 @@ function AssignmentManagementPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const params = useParams<{ runId?: string }>();
+  const [templateOptions, setTemplateOptions] = useState<TemplateOption[]>(TEMPLATE_OPTIONS);
+  const [studentOptions, setStudentOptions] = useState<StudentOption[]>(STUDENT_OPTIONS);
   const [draft, setDraft] = useState<AssignmentDraft>(() => {
     const firstReadyTemplate = TEMPLATE_OPTIONS.find((template) => template.status !== "draft");
     return {
@@ -882,24 +1263,197 @@ function AssignmentManagementPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const activeSection = useMemo(() => resolveAssignmentSection(location.pathname), [location.pathname]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    async function hydrateTemplates(): Promise<void> {
+      if (!shouldUseLiveApi()) {
+        return;
+      }
+
+      try {
+        const liveTemplates = await fetchTemplateOptionsFromApi();
+        if (!isMounted) {
+          return;
+        }
+
+        setTemplateOptions(liveTemplates);
+        setDraft((current) => {
+          const availableTemplate =
+            liveTemplates.find((template) => template.id === current.templateId && template.status !== "draft") ??
+            liveTemplates.find((template) => template.status !== "draft") ??
+            null;
+
+          if (!availableTemplate) {
+            return current;
+          }
+
+          return {
+            ...current,
+            templateId: availableTemplate.id,
+            executionMode: availableTemplate.allowedModes.includes(current.executionMode) ?
+              current.executionMode :
+              availableTemplate.allowedModes[0] ?? "Operational",
+          };
+        });
+        setInlineMessage(
+          "Live mode enabled: assignment template selection hydrated from GET /admin/tests while run views remain backed by GET /admin/analytics and scheduling continues through POST /admin/runs.",
+        );
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        const reason =
+          error instanceof ApiClientError ?
+            `GET /admin/tests failed with ${error.code} (${error.status}).` :
+            "Failed to hydrate assignment template options from GET /admin/tests.";
+        setTemplateOptions(TEMPLATE_OPTIONS);
+        setInlineMessage(`${reason} Falling back to deterministic assignment template fixtures.`);
+      }
+    }
+
+    void hydrateTemplates();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function hydrateStudents(): Promise<void> {
+      if (!shouldUseLiveApi()) {
+        return;
+      }
+
+      try {
+        const liveStudents = await fetchStudentOptionsFromApi();
+        if (!isMounted) {
+          return;
+        }
+
+        setStudentOptions(liveStudents);
+        setDraft((current) => {
+          const availableBatchIds = Array.from(new Set(liveStudents.map((student) => student.batchId)));
+          const filteredBatchIds = current.selectedBatchIds.filter((batchId) => availableBatchIds.includes(batchId));
+          const nextBatchIds =
+            filteredBatchIds.length > 0 ?
+              filteredBatchIds :
+            availableBatchIds[0] ?
+              [availableBatchIds[0]] :
+              [];
+          const activeStudentIds = new Set(
+            liveStudents.filter((student) => student.status === "active").map((student) => student.id),
+          );
+
+          return {
+            ...current,
+            selectedBatchIds: nextBatchIds,
+            selectedStudentIds: current.selectedStudentIds.filter((studentId) => activeStudentIds.has(studentId)),
+          };
+        });
+        setInlineMessage(
+          "Live mode enabled: assignment recipient and batch selection hydrated from GET /admin/students while templates stay backed by GET /admin/tests and scheduling continues through POST /admin/runs.",
+        );
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        const reason =
+          error instanceof ApiClientError ?
+            `GET /admin/students failed with ${error.code} (${error.status}).` :
+            "Failed to hydrate assignment recipient data from GET /admin/students.";
+        setStudentOptions(STUDENT_OPTIONS);
+        setInlineMessage(`${reason} Falling back to deterministic assignment recipient fixtures.`);
+      }
+    }
+
+    void hydrateStudents();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function hydrateRuns(): Promise<void> {
+      if (!shouldUseLiveApi()) {
+        return;
+      }
+
+      try {
+        const dataset = await fetchDashboardDataset();
+        if (!isMounted) {
+          return;
+        }
+
+        const liveRuns = dataset.runAnalytics.map((record) => buildRunRecordFromAnalytics(record, studentOptions));
+        if (liveRuns.length === 0) {
+          return;
+        }
+
+        setRuns(liveRuns);
+        setInlineMessage("Live mode enabled: assignment list, history, and bulk views hydrated from GET /admin/analytics while scheduling continues through POST /admin/runs.");
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        const reason =
+          error instanceof ApiClientError ?
+            `GET /admin/analytics failed with ${error.code} (${error.status}).` :
+            "Failed to hydrate assignment list data from GET /admin/analytics.";
+        setRuns(FALLBACK_RUNS);
+        setInlineMessage(`${reason} Falling back to deterministic assignment fixtures for list, history, and bulk views.`);
+      }
+    }
+
+    void hydrateRuns();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [studentOptions]);
+
+  const batchOptions = useMemo(() => {
+    const byId = new Map<string, string>();
+    studentOptions.forEach((student) => {
+      if (!byId.has(student.batchId)) {
+        const label =
+          student.batchId === "unassigned" ?
+            "Unassigned" :
+            student.batchId.replace(/(^|-)([a-z])/g, (_, prefix: string, char: string) => `${prefix}${char.toUpperCase()}`);
+        byId.set(student.batchId, label);
+      }
+    });
+
+    const liveBatches = Array.from(byId.entries()).map(([id, name]) => ({ id, name }));
+    return liveBatches.length > 0 ? liveBatches : BATCH_OPTIONS;
+  }, [studentOptions]);
+
   const selectedTemplate = useMemo(
-    () => TEMPLATE_OPTIONS.find((template) => template.id === draft.templateId) ?? null,
-    [draft.templateId],
+    () => templateOptions.find((template) => template.id === draft.templateId) ?? null,
+    [draft.templateId, templateOptions],
   );
 
   const templateOptionsForAssignment = useMemo(
-    () => TEMPLATE_OPTIONS.filter((template) => template.status === "ready" || template.status === "assigned"),
-    [],
+    () => templateOptions.filter((template) => template.status === "ready" || template.status === "assigned"),
+    [templateOptions],
   );
 
   const recipientIds = useMemo(
-    () => recipientIdsFromMode(draft),
-    [draft],
+    () => recipientIdsFromMode(draft, studentOptions),
+    [draft, studentOptions],
   );
 
   const recipientStudents = useMemo(
-    () => STUDENT_OPTIONS.filter((student) => recipientIds.includes(student.id)),
-    [recipientIds],
+    () => studentOptions.filter((student) => recipientIds.includes(student.id)),
+    [recipientIds, studentOptions],
   );
 
   const activeRuns = useMemo(
@@ -983,7 +1537,7 @@ function AssignmentManagementPage() {
               <span className={statusClassName(row.status)}>{row.status}</span>
             </div>
             <small>
-              {row.recipientStudentIds.length} recipients across {row.batchIds.map((batchId) => formatBatchLabel(batchId)).join(", ")}
+              {row.recipientStudentIds.length} recipients across {row.batchIds.map((batchId) => formatBatchLabel(batchId, batchOptions)).join(", ")}
             </small>
           </div>
         ),
@@ -1148,7 +1702,7 @@ function AssignmentManagementPage() {
               <span className="admin-assignments-metric-pill">{row.mode}</span>
               <span className={statusClassName(row.status)}>{row.status}</span>
             </div>
-            <small>{row.batchIds.map((batchId) => formatBatchLabel(batchId)).join(", ")}</small>
+            <small>{row.batchIds.map((batchId) => formatBatchLabel(batchId, batchOptions)).join(", ")}</small>
           </div>
         ),
       },
@@ -1229,13 +1783,13 @@ function AssignmentManagementPage() {
     setErrorMessage(null);
     setInlineMessage(null);
 
-    const validationError = validateDraft(draft);
+    const validationError = validateDraft(draft, templateOptions, studentOptions);
     if (validationError) {
       setErrorMessage(validationError);
       return;
     }
 
-    const payload = buildRunPayload(draft);
+    const payload = buildRunPayload(draft, templateOptions, studentOptions);
     const createdAtIso = new Date().toISOString();
     setIsSubmitting(true);
 
@@ -1249,7 +1803,7 @@ function AssignmentManagementPage() {
         runId = parseRunIdFromApiResponse(apiResponse) ?? runId;
       }
 
-      const nextRun = buildFallbackRunRecord(payload, runId, createdAtIso);
+      const nextRun = buildFallbackRunRecord(payload, runId, createdAtIso, templateOptions, studentOptions);
       setRuns((current) => [nextRun, ...current]);
       setInlineMessage(
         shouldUseLiveApi() ?
@@ -1294,8 +1848,8 @@ function AssignmentManagementPage() {
 
       if (operation === "ReassignToBatch") {
         const reassignId = `run-${Date.now()}-batch`;
-        const fallbackBatchId = BATCH_OPTIONS[0]?.id ?? "batch-a";
-        const recipients = STUDENT_OPTIONS
+        const fallbackBatchId = batchOptions[0]?.id ?? "batch-a";
+        const recipients = studentOptions
           .filter((student) => student.status === "active" && student.batchId === fallbackBatchId)
           .map((student) => student.id);
 
@@ -1367,7 +1921,7 @@ function AssignmentManagementPage() {
 
   function updateRecipientMode(nextMode: RecipientSelectionMode) {
     setDraft((current) => {
-      const firstBatch = BATCH_OPTIONS[0]?.id ?? "";
+      const firstBatch = batchOptions[0]?.id ?? "";
       return {
         ...current,
         recipientSelectionMode: nextMode,
@@ -1483,10 +2037,10 @@ function AssignmentManagementPage() {
 
               {draft.recipientSelectionMode === "IndividualStudents" ? (
                 <div className="admin-assignments-student-list">
-                  {STUDENT_OPTIONS.map((student) => {
+                  {studentOptions.map((student) => {
                     const checked = draft.selectedStudentIds.includes(student.id);
                     const disabled = student.status !== "active";
-                    const batchName = BATCH_OPTIONS.find((batch) => batch.id === student.batchId)?.name ?? student.batchId;
+                    const batchName = batchOptions.find((batch) => batch.id === student.batchId)?.name ?? student.batchId;
 
                     return (
                       <label key={student.id} className="admin-assignments-batch-option">
@@ -1641,7 +2195,7 @@ function AssignmentManagementPage() {
 
               {draft.recipientSelectionMode !== "IndividualStudents" ? (
                 <div className="admin-assignments-batch-list">
-                  {BATCH_OPTIONS.map((batch) => {
+                  {batchOptions.map((batch) => {
                     const isChecked = draft.selectedBatchIds.includes(batch.id);
                     return (
                       <label key={batch.id} className="admin-assignments-batch-option">
@@ -1654,7 +2208,7 @@ function AssignmentManagementPage() {
                         />
                         <span>
                           <strong>{batch.name}</strong>
-                          <small>{STUDENT_OPTIONS.filter((student) => student.batchId === batch.id && student.status === "active").length} active students</small>
+                          <small>{studentOptions.filter((student) => student.batchId === batch.id && student.status === "active").length} active students</small>
                         </span>
                       </label>
                     );
@@ -1854,7 +2408,7 @@ function AssignmentManagementPage() {
                 }}
               >
                 <option value="all">All</option>
-                {BATCH_OPTIONS.map((batch) => (
+                {batchOptions.map((batch) => (
                   <option key={batch.id} value={batch.id}>{batch.name}</option>
                 ))}
               </select>
