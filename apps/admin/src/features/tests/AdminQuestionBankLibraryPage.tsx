@@ -1,4 +1,6 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { ApiClientError } from "../../../../../shared/services/apiClient";
+import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import {
   UiForm,
   UiFormField,
@@ -13,6 +15,8 @@ import {
   type QuestionBankRecord,
 } from "./testTemplateFixtures";
 import QuestionBankWorkspaceNav from "./QuestionBankWorkspaceNav";
+
+const apiClient = getPortalApiClient("admin");
 
 interface QuestionFilterDraft {
   query: string;
@@ -34,6 +38,95 @@ const INITIAL_FILTERS: QuestionFilterDraft = {
   thermalState: "all",
 };
 
+function shouldUseLiveApi(): boolean {
+  const host = window.location.hostname.toLowerCase();
+  return host !== "127.0.0.1" && host !== "localhost";
+}
+
+function toNonEmptyString(value: unknown, fallback = ""): string {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
+}
+
+function toNumberOrZero(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  return 0;
+}
+
+function normalizeDifficulty(value: unknown, fallback: DifficultyLevel): DifficultyLevel {
+  return value === "easy" || value === "medium" || value === "hard" ? value : fallback;
+}
+
+function normalizeThermalState(
+  value: unknown,
+  fallback: QuestionBankRecord["thermalState"],
+): QuestionBankRecord["thermalState"] {
+  return value === "hot" || value === "warm" || value === "cold" ? value : fallback;
+}
+
+function normalizeStatus(
+  value: unknown,
+  fallback: QuestionBankRecord["status"],
+): QuestionBankRecord["status"] {
+  return value === "active" || value === "used" || value === "archived" || value === "deprecated" ? value : fallback;
+}
+
+function normalizeQuestionRecord(value: unknown, index: number): QuestionBankRecord | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const fallback = QUESTION_BANK[index] ?? QUESTION_BANK[0];
+
+  return {
+    chapter: toNonEmptyString(record.chapter, fallback?.chapter ?? `Chapter ${index + 1}`),
+    difficulty: normalizeDifficulty(record.difficulty, fallback?.difficulty ?? "medium"),
+    id: toNonEmptyString(record.id, fallback?.id ?? `q-${index + 1}`),
+    marks: Math.max(0, toNumberOrZero(record.marks ?? fallback?.marks ?? 0)),
+    negativeMarks: Math.max(0, toNumberOrZero(record.negativeMarks ?? fallback?.negativeMarks ?? 0)),
+    primaryTag: toNonEmptyString(record.primaryTag, fallback?.primaryTag ?? "untagged"),
+    prompt: toNonEmptyString(record.prompt, fallback?.prompt ?? ""),
+    secondaryTag: toNonEmptyString(record.secondaryTag, fallback?.secondaryTag ?? "none"),
+    status: normalizeStatus(record.status, fallback?.status ?? "active"),
+    subject: toNonEmptyString(record.subject, fallback?.subject ?? "General"),
+    thermalState: normalizeThermalState(record.thermalState, fallback?.thermalState ?? "warm"),
+    uniqueKey: toNonEmptyString(record.uniqueKey, fallback?.uniqueKey ?? `Q-${index + 1}`),
+    usedCount: Math.max(0, toNumberOrZero(record.usedCount ?? fallback?.usedCount ?? 0)),
+    version: Math.max(1, toNumberOrZero(record.version ?? fallback?.version ?? 1)),
+  };
+}
+
+async function fetchLibraryFromApi(): Promise<QuestionBankRecord[]> {
+  const payload = await apiClient.get<unknown>("/admin/questions/library", {
+    query: {
+      limit: "250",
+    },
+  });
+  if (!payload || typeof payload !== "object") {
+    throw new Error("GET /admin/questions/library returned an invalid payload.");
+  }
+
+  const response = payload as {
+    data?: {
+      questions?: unknown;
+    };
+  };
+  const questions = Array.isArray(response.data?.questions) ? response.data?.questions : [];
+  const normalizedQuestions = questions
+    .map((entry, index) => normalizeQuestionRecord(entry, index))
+    .filter((entry): entry is QuestionBankRecord => Boolean(entry));
+
+  return normalizedQuestions;
+}
+
 function AdminQuestionBankLibraryPage() {
   const [questions, setQuestions] = useState<QuestionBankRecord[]>(QUESTION_BANK);
   const [filters, setFilters] = useState<QuestionFilterDraft>(INITIAL_FILTERS);
@@ -42,6 +135,47 @@ function AdminQuestionBankLibraryPage() {
     "Question library now has its own mounted workspace with indexed filters, pagination, and structural lock review.",
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadLibrary(): Promise<void> {
+      if (!shouldUseLiveApi()) {
+        setQuestions(QUESTION_BANK);
+        setInlineMessage("Local mode detected. Loaded deterministic question library fixtures.");
+        return;
+      }
+
+      try {
+        const nextQuestions = await fetchLibraryFromApi();
+        if (!isActive) {
+          return;
+        }
+
+        setQuestions(nextQuestions.length > 0 ? nextQuestions : QUESTION_BANK);
+        setInlineMessage(
+          nextQuestions.length > 0 ?
+            "Live mode enabled: question library hydrated from GET /admin/questions/library." :
+            "Live mode enabled, but no persisted question library records were returned yet.",
+        );
+      } catch (error) {
+        if (!isActive) {
+          return;
+        }
+
+        const reason =
+          error instanceof ApiClientError ? error.message : "Failed to load question library.";
+        setQuestions(QUESTION_BANK);
+        setInlineMessage(`${reason} Falling back to deterministic question library fixtures.`);
+      }
+    }
+
+    void loadLibrary();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   const subjects = useMemo(() => {
     return ["all", ...new Set(questions.map((question) => question.subject))];

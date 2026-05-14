@@ -70,6 +70,15 @@ import {
   handleAdminQuestionAssetsRequest,
 } from "./api/adminQuestionAssets";
 import {
+  handleAdminQuestionLibraryRequest,
+} from "./api/adminQuestionLibrary";
+import {
+  handleAdminQuestionUploadLogsRequest,
+} from "./api/adminQuestionUploadLogs";
+import {
+  handleAdminQuestionDistributionRequest,
+} from "./api/adminQuestionDistribution";
+import {
   handleAdminQuestionsBulkRequest,
 } from "./api/adminQuestionsBulk";
 import {
@@ -78,6 +87,9 @@ import {
 import {
   handleAdminSettingsRequest,
 } from "./api/adminSettings";
+import {
+  handleAdminLicensingRequest,
+} from "./api/adminLicensing";
 import {runAssignmentOnCreate} from "./triggers/assignmentCreation";
 import {
   questionBankOnCreate,
@@ -185,6 +197,15 @@ export const adminStudentsBulk = functions.https.onRequest(
 export const adminQuestionAssets = functions.https.onRequest(
   handleAdminQuestionAssetsRequest,
 );
+export const adminQuestionLibrary = functions.https.onRequest(
+  handleAdminQuestionLibraryRequest,
+);
+export const adminQuestionUploadLogs = functions.https.onRequest(
+  handleAdminQuestionUploadLogsRequest,
+);
+export const adminQuestionDistribution = functions.https.onRequest(
+  handleAdminQuestionDistributionRequest,
+);
 export const adminQuestionsBulk = functions.https.onRequest(
   handleAdminQuestionsBulkRequest,
 );
@@ -193,6 +214,9 @@ export const adminInterventions = functions.https.onRequest(
 );
 export const adminSettings = functions.https.onRequest(
   handleAdminSettingsRequest,
+);
+export const adminLicensing = functions.https.onRequest(
+  handleAdminLicensingRequest,
 );
 
 export const helloWorld = functions.https.onRequest(async (

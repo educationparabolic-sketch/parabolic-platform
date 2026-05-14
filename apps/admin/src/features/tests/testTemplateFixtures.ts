@@ -20,7 +20,7 @@ export interface QuestionBankRecord {
   usedCount: number;
   version: number;
   thermalState: "hot" | "warm" | "cold";
-  status: "active" | "deprecated";
+  status: "active" | "used" | "archived" | "deprecated";
 }
 
 export const QUESTION_BANK: QuestionBankRecord[] = [

@@ -1,4 +1,6 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { useAuthProvider } from "../../../../../shared/services/authProvider";
+import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import {
   UiForm,
   UiFormField,
@@ -9,6 +11,12 @@ import {
   type ExamType,
 } from "./testTemplateFixtures";
 import QuestionBankWorkspaceNav from "./QuestionBankWorkspaceNav";
+
+const apiClient = getPortalApiClient("admin");
+const EXAM_SUBJECTS: Record<ExamType, string[]> = {
+  JEEMains: ["Physics", "Chemistry", "Mathematics"],
+  NEET: ["Physics", "Chemistry", "Biology"],
+};
 
 type UploadLogRecord = {
   id: string;
@@ -34,6 +42,65 @@ interface QuestionPackageValidationRow {
   uniqueKey: string;
 }
 
+interface QuestionUploadWorkbookRow {
+  additionalTag: string;
+  chapter: string;
+  correctAnswer: string;
+  difficulty: string;
+  internalNotes: string;
+  primaryTag: string;
+  questionImageFile: string;
+  questionNo: string;
+  questionType: string;
+  secondaryTag: string;
+  simulationLink: string;
+  solutionImageFile: string;
+  topic: string;
+  tutorialVideoLink: string;
+  uniqueKey: string;
+}
+
+interface AdminQuestionsBulkRequestRow {
+  chapter: string;
+  correctAnswer: string;
+  difficulty: "Easy" | "Medium" | "Hard";
+  examType: ExamType;
+  marks: number;
+  negativeMarks: number;
+  questionTextKeywords?: string[];
+  questionType: string;
+  simulationLink?: string | null;
+  status: "active";
+  subject: string;
+  tags: string[];
+  tutorialVideoLink?: string | null;
+  uniqueKey: string;
+  version: number;
+}
+
+interface AdminQuestionsBulkValidationResult {
+  commitRequested: boolean;
+  committed: boolean;
+  rows: Array<{
+    action: "create" | "update" | "none";
+    errors: string[];
+    questionId: string | null;
+    rowNumber: number;
+    uniqueKey: string | null;
+    warnings: string[];
+  }>;
+  summary: {
+    created: number;
+    invalid: number;
+    received: number;
+    updated: number;
+    valid: number;
+    warnings: number;
+  };
+  uploadLogId: string | null;
+  uploadLogPath: string | null;
+}
+
 interface QuestionPackageValidationResult {
   archiveEntries: string[];
   errors: string[];
@@ -41,8 +108,10 @@ interface QuestionPackageValidationResult {
   nestedFolderEntries: string[];
   rowErrors: QuestionPackageValidationRow[];
   sheetNames: string[];
+  serverValidation: AdminQuestionsBulkValidationResult | null;
   totalRows: number;
   warnings: string[];
+  workbookRows: QuestionUploadWorkbookRow[];
 }
 
 function formatIsoDate(value: string): string {
@@ -119,6 +188,165 @@ function readXmlText(node: Element | null): string {
     .map((child) => child.textContent ?? "")
     .join("")
     .trim();
+}
+
+function shouldUseLiveApi(): boolean {
+  const host = window.location.hostname.toLowerCase();
+  return host !== "127.0.0.1" && host !== "localhost";
+}
+
+function decodeIdTokenClaims(idToken: string | null): Record<string, unknown> | null {
+  if (!idToken) {
+    return null;
+  }
+
+  const segments = idToken.split(".");
+  if (segments.length !== 3) {
+    return null;
+  }
+
+  try {
+    const payloadSegment = segments[1].replace(/-/g, "+").replace(/_/g, "/");
+    const paddedPayload = payloadSegment.padEnd(Math.ceil(payloadSegment.length / 4) * 4, "=");
+    const payload = atob(paddedPayload);
+    const claims = JSON.parse(payload);
+    return claims && typeof claims === "object" ? (claims as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeWorkbookRow(row: Record<string, string>): QuestionUploadWorkbookRow {
+  return {
+    additionalTag: (row.AdditionalTag ?? "").trim(),
+    chapter: (row.ChapterName ?? "").trim(),
+    correctAnswer: (row.CorrectAnswer ?? "").trim(),
+    difficulty: (row.Difficulty ?? "").trim(),
+    internalNotes: (row.InternalNotes ?? "").trim(),
+    primaryTag: (row.PrimaryTag ?? "").trim(),
+    questionImageFile: (row.QuestionImageFile ?? "").trim(),
+    questionNo: (row.QuestionNo ?? "").trim(),
+    questionType: (row.QuestionType ?? "").trim(),
+    secondaryTag: (row.SecondaryTag ?? "").trim(),
+    simulationLink: (row.SimulationLink ?? "").trim(),
+    solutionImageFile: (row.SolutionImageFile ?? "").trim(),
+    topic: (row.Topic ?? "").trim(),
+    tutorialVideoLink: (row.TutorialVideoLink ?? "").trim(),
+    uniqueKey: (row.UniqueKey ?? "").trim(),
+  };
+}
+
+function normalizeDifficultyForApi(value: string): "Easy" | "Medium" | "Hard" {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "hard") {
+    return "Hard";
+  }
+  if (normalized === "medium") {
+    return "Medium";
+  }
+  return "Easy";
+}
+
+function buildTags(row: QuestionUploadWorkbookRow): string[] {
+  return [row.primaryTag, row.secondaryTag, row.additionalTag]
+    .map((value) => value.trim())
+    .filter((value, index, values) => value.length > 0 && values.indexOf(value) === index);
+}
+
+function buildKeywordHints(row: QuestionUploadWorkbookRow): string[] {
+  return [row.chapter, row.topic, row.questionType]
+    .map((value) => value.trim())
+    .filter((value, index, values) => value.length > 0 && values.indexOf(value) === index);
+}
+
+function normalizeQuestionsBulkResponse(payload: unknown): AdminQuestionsBulkValidationResult {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("POST /admin/questions/bulk returned an invalid response.");
+  }
+
+  const response = payload as {
+    data?: {
+      committed?: unknown;
+      commitRequested?: unknown;
+      rows?: unknown;
+      summary?: unknown;
+      uploadLogId?: unknown;
+      uploadLogPath?: unknown;
+    };
+  };
+  const data = response.data;
+  if (!data || typeof data !== "object") {
+    throw new Error("POST /admin/questions/bulk did not include validation data.");
+  }
+
+  const rows = Array.isArray(data.rows) ? data.rows : [];
+  const summary = data.summary && typeof data.summary === "object" ? data.summary as Record<string, unknown> : {};
+
+  return {
+    commitRequested: data.commitRequested === true,
+    committed: data.committed === true,
+    rows: rows.map((row, index) => {
+      const record = row && typeof row === "object" ? row as Record<string, unknown> : {};
+      return {
+        action:
+          record.action === "create" || record.action === "update" || record.action === "none" ?
+            record.action :
+            "none",
+        errors: Array.isArray(record.errors) ? record.errors.filter((value): value is string => typeof value === "string") : [],
+        questionId: typeof record.questionId === "string" ? record.questionId : null,
+        rowNumber: typeof record.rowNumber === "number" ? record.rowNumber : index + 1,
+        uniqueKey: typeof record.uniqueKey === "string" ? record.uniqueKey : null,
+        warnings: Array.isArray(record.warnings) ? record.warnings.filter((value): value is string => typeof value === "string") : [],
+      };
+    }),
+    summary: {
+      created: typeof summary.created === "number" ? summary.created : 0,
+      invalid: typeof summary.invalid === "number" ? summary.invalid : 0,
+      received: typeof summary.received === "number" ? summary.received : 0,
+      updated: typeof summary.updated === "number" ? summary.updated : 0,
+      valid: typeof summary.valid === "number" ? summary.valid : 0,
+      warnings: typeof summary.warnings === "number" ? summary.warnings : 0,
+    },
+    uploadLogId: typeof data.uploadLogId === "string" ? data.uploadLogId : null,
+    uploadLogPath: typeof data.uploadLogPath === "string" ? data.uploadLogPath : null,
+  };
+}
+
+async function validateQuestionsWithApi(input: {
+  examType: ExamType;
+  instituteId: string;
+  subject: string;
+  workbookRows: QuestionUploadWorkbookRow[];
+}): Promise<AdminQuestionsBulkValidationResult> {
+  const questions: AdminQuestionsBulkRequestRow[] = input.workbookRows.map((row) => ({
+    chapter: row.chapter,
+    correctAnswer: row.correctAnswer,
+    difficulty: normalizeDifficultyForApi(row.difficulty),
+    examType: input.examType,
+    marks: 4,
+    negativeMarks: 1,
+    questionTextKeywords: buildKeywordHints(row),
+    questionType: row.questionType,
+    simulationLink: row.simulationLink || null,
+    status: "active",
+    subject: input.subject,
+    tags: buildTags(row),
+    tutorialVideoLink: row.tutorialVideoLink || null,
+    uniqueKey: row.uniqueKey,
+    version: 1,
+  }));
+  const response = await apiClient.post<unknown, { commit: boolean; instituteId: string; questions: AdminQuestionsBulkRequestRow[] }>(
+    "/admin/questions/bulk",
+    {
+      body: {
+        commit: false,
+        instituteId: input.instituteId,
+        questions,
+      },
+    },
+  );
+
+  return normalizeQuestionsBulkResponse(response);
 }
 
 function normalizeWorkbookPath(target: string): string {
@@ -371,9 +599,11 @@ async function validateQuestionPackage(
       imageAssetCount: rootAssetEntries.length,
       nestedFolderEntries,
       rowErrors: [],
+      serverValidation: null,
       sheetNames: [],
       totalRows: 0,
       warnings,
+      workbookRows: [],
     };
   }
 
@@ -388,6 +618,7 @@ async function validateQuestionPackage(
   });
 
   const rows = workbook.rows;
+  const workbookRows = rows.map(normalizeWorkbookRow);
   const normalizedHeaders = new Set(
     Object.keys(rows[0] ?? {}).map((header) => normalizeColumnName(header)),
   );
@@ -482,14 +713,18 @@ async function validateQuestionPackage(
     nestedFolderEntries,
     rowErrors,
     sheetNames: workbook.sheetNames,
+    serverValidation: null,
     totalRows: rows.length,
     warnings,
+    workbookRows,
   };
 }
 
 function QuestionBankManagementPage() {
+  const { session } = useAuthProvider();
   const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null);
   const [uploadExamType, setUploadExamType] = useState<ExamType>("JEEMains");
+  const [uploadSubject, setUploadSubject] = useState<string>(EXAM_SUBJECTS.JEEMains[0]);
   const [uploadLogs, setUploadLogs] = useState<UploadLogRecord[]>([]);
   const [uploadValidation, setUploadValidation] = useState<QuestionPackageValidationResult | null>(null);
   const [isValidatingUpload, setIsValidatingUpload] = useState(false);
@@ -497,6 +732,11 @@ function QuestionBankManagementPage() {
     "Upload Package now runs as its own workspace with navigation back to the other Question Bank routes.",
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const nextSubject = EXAM_SUBJECTS[uploadExamType][0];
+    setUploadSubject((current) => (EXAM_SUBJECTS[uploadExamType].includes(current) ? current : nextSubject));
+  }, [uploadExamType]);
 
   async function handleUploadSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -512,22 +752,51 @@ function QuestionBankManagementPage() {
 
     try {
       const validation = await validateQuestionPackage(selectedUploadFile);
-      setUploadValidation(validation);
+      const hasLocalErrors = validation.errors.length > 0 || validation.rowErrors.length > 0;
+      let serverValidation: AdminQuestionsBulkValidationResult | null = null;
+      const claims = decodeIdTokenClaims(session.idToken);
+
+      if (!hasLocalErrors && shouldUseLiveApi()) {
+        const instituteId =
+          typeof claims?.instituteId === "string" && claims.instituteId.trim().length > 0 ?
+            claims.instituteId :
+            "inst-build-125";
+        serverValidation = await validateQuestionsWithApi({
+          examType: uploadExamType,
+          instituteId,
+          subject: uploadSubject,
+          workbookRows: validation.workbookRows,
+        });
+      }
+
+      const finalValidation: QuestionPackageValidationResult = {
+        ...validation,
+        serverValidation,
+      };
+      setUploadValidation(finalValidation);
+      const actorEmail =
+        session.user?.email ??
+        (typeof claims?.sub === "string" ? claims.sub : "admin@parabolic.local");
 
       const nextLog: UploadLogRecord = {
-        errors: validation.errors.length + validation.rowErrors.length,
+        errors:
+          validation.errors.length +
+          validation.rowErrors.length +
+          (serverValidation?.summary.invalid ?? 0),
         id: `upl-${Date.now()}`,
         timestamp: new Date().toISOString(),
-        totalRows: validation.totalRows,
-        uploadedBy: "admin@parabolic.local",
-        versionCreated: 0,
-        warnings: validation.warnings.length,
+        totalRows: finalValidation.totalRows,
+        uploadedBy: actorEmail,
+        versionCreated: serverValidation?.summary.updated ?? 0,
+        warnings: validation.warnings.length + (serverValidation?.summary.warnings ?? 0),
       };
 
       setUploadLogs((current) => [nextLog, ...current]);
       setInlineMessage(
         validation.errors.length > 0 || validation.rowErrors.length > 0 ?
           `Validated ${selectedUploadFile.name}. Package-level issues: ${validation.errors.length}; row-level issues: ${validation.rowErrors.length}. Download the CSV to resolve before any import.` :
+        serverValidation ?
+          `Validated ${selectedUploadFile.name}. Local ZIP checks passed, then live validate-only ingestion checked ${serverValidation.summary.received} rows with ${serverValidation.summary.invalid} invalid rows.` :
           `Validated ${selectedUploadFile.name}. Workbook image references matched ${validation.imageAssetCount} ZIP root assets with no external URLs.`,
       );
       setSelectedUploadFile(null);
@@ -623,12 +892,12 @@ function QuestionBankManagementPage() {
 
       <UiForm
         title="Upload Question Package"
-        description="ZIP upload now validates root packaging, workbook sheets, workbook image references, and row-level schema errors before any import can proceed."
+        description="ZIP upload now validates root packaging, workbook sheets, workbook image references, and row-level schema errors before any import can proceed. Live mode also runs validate-only backend ingestion checks."
         submitLabel={isValidatingUpload ? "Validating..." : "Validate ZIP Package"}
         onSubmit={handleUploadSubmit}
         footer={
           <span className="admin-tests-form-footnote">
-            Validation rejects nested folders, blocks external image URLs, and generates a downloadable row-level CSV error report. No partial commit.
+            Validation rejects nested folders, blocks external image URLs, generates a downloadable row-level CSV error report, and in live mode also verifies duplicate/ingestion readiness against the admin bulk API. No partial commit.
           </span>
         }
       >
@@ -641,6 +910,19 @@ function QuestionBankManagementPage() {
             {EXAM_TYPES.map((type) => (
               <option key={type} value={type}>
                 {type}
+              </option>
+            ))}
+          </select>
+        </UiFormField>
+        <UiFormField label="Subject" htmlFor="admin-question-upload-subject">
+          <select
+            id="admin-question-upload-subject"
+            value={uploadSubject}
+            onChange={(event) => setUploadSubject(event.target.value)}
+          >
+            {EXAM_SUBJECTS[uploadExamType].map((subject) => (
+              <option key={subject} value={subject}>
+                {subject}
               </option>
             ))}
           </select>
@@ -669,7 +951,11 @@ function QuestionBankManagementPage() {
           <div className="admin-question-validation-grid">
             <article className="admin-question-validation-card">
               <h3>Package Status</h3>
-              <p>{uploadValidation.errors.length > 0 || uploadValidation.rowErrors.length > 0 ? "Blocked" : "Ready for next validation stage"}</p>
+              <p>
+                {uploadValidation.errors.length > 0 || uploadValidation.rowErrors.length > 0 || (uploadValidation.serverValidation?.summary.invalid ?? 0) > 0 ?
+                  "Blocked" :
+                  "Ready for next validation stage"}
+              </p>
               <p>{uploadValidation.totalRows} workbook rows checked.</p>
             </article>
             <article className="admin-question-validation-card">
@@ -685,6 +971,18 @@ function QuestionBankManagementPage() {
               <p>{uploadValidation.imageAssetCount} ZIP root asset files available for workbook references.</p>
             </article>
           </div>
+
+          {uploadValidation.serverValidation ? (
+            <div className="admin-question-validation-block">
+              <h3>Live Validate-Only Ingestion</h3>
+              <ul className="admin-question-validation-list">
+                <li>{uploadValidation.serverValidation.summary.received} rows submitted to `POST /admin/questions/bulk`.</li>
+                <li>{uploadValidation.serverValidation.summary.valid} rows passed backend ingestion validation.</li>
+                <li>{uploadValidation.serverValidation.summary.invalid} rows were rejected by backend duplicate/schema checks.</li>
+                <li>{uploadValidation.serverValidation.summary.warnings} backend warnings returned.</li>
+              </ul>
+            </div>
+          ) : null}
 
           {uploadValidation.errors.length > 0 ? (
             <div className="admin-question-validation-block">
@@ -728,6 +1026,22 @@ function QuestionBankManagementPage() {
             rowKey={(row) => `${row.rowNumber}-${row.uniqueKey || "missing"}`}
             emptyStateText="No row-level schema or image-reference errors were found."
           />
+
+          {uploadValidation.serverValidation ? (
+            <UiTable
+              caption="Question upload backend validate-only results"
+              columns={[
+                { id: "row", header: "Row", render: (row) => row.rowNumber },
+                { id: "uniqueKey", header: "UniqueKey", render: (row) => row.uniqueKey ?? "Missing" },
+                { id: "action", header: "Action", render: (row) => row.action },
+                { id: "errors", header: "Errors", render: (row) => row.errors.join(" ") || "None" },
+                { id: "warnings", header: "Warnings", render: (row) => row.warnings.join(" ") || "None" },
+              ]}
+              rows={uploadValidation.serverValidation.rows}
+              rowKey={(row) => `${row.rowNumber}-${row.questionId ?? row.uniqueKey ?? "pending"}`}
+              emptyStateText="No backend validate-only results were returned."
+            />
+          ) : null}
         </section>
       ) : null}
       {uploadLogs.length > 0 ? (

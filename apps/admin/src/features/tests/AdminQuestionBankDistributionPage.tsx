@@ -1,12 +1,17 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { ApiClientError } from "../../../../../shared/services/apiClient";
+import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import { UiChartContainer, UiTable, type UiChartPoint, type UiTableColumn } from "../../../../../shared/ui/components";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { LICENSE_LAYER_ORDER } from "../../../../../shared/types/portalRouting";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
 import QuestionBankWorkspaceNav from "./QuestionBankWorkspaceNav";
 
+const apiClient = getPortalApiClient("admin");
+
 interface DifficultyBandMetric {
   difficulty: "Easy" | "Medium" | "Hard";
+  questionCount: number;
   sharePercent: number;
   marksPercent: number;
   overstayPercent: number;
@@ -26,7 +31,7 @@ interface ChapterCoverageRecord {
 }
 
 interface QuestionDistributionSnapshot {
-  academicYear: string;
+  computedAt: string;
   examType: string;
   totalQuestions: number;
   missingDifficultyWarnings: number;
@@ -35,107 +40,240 @@ interface QuestionDistributionSnapshot {
   chapters: ChapterCoverageRecord[];
 }
 
-const DISTRIBUTION_SNAPSHOT: QuestionDistributionSnapshot = {
-  academicYear: "2026",
-  examType: "JEEMains",
-  totalQuestions: 1248,
-  missingDifficultyWarnings: 3,
-  imbalanceWarnings: 2,
-  difficulties: [
-    {
-      difficulty: "Easy",
-      sharePercent: 34,
-      marksPercent: 31,
-      overstayPercent: 11,
-      guessRatePercent: 18,
-    },
-    {
-      difficulty: "Medium",
-      sharePercent: 43,
-      marksPercent: 45,
-      overstayPercent: 22,
-      guessRatePercent: 12,
-    },
-    {
-      difficulty: "Hard",
-      sharePercent: 23,
-      marksPercent: 24,
-      overstayPercent: 37,
-      guessRatePercent: 9,
-    },
-  ],
+const FALLBACK_DISTRIBUTION_SNAPSHOT: QuestionDistributionSnapshot = {
   chapters: [
     {
       chapter: "Kinematics",
-      subject: "Physics",
-      questionCount: 144,
+      disciplineStressIndex: 38,
       easyPercent: 36,
-      mediumPercent: 44,
       hardPercent: 20,
       marksPercent: 12,
+      mediumPercent: 44,
+      questionCount: 144,
       riskImpactScore: 42,
-      disciplineStressIndex: 38,
-    },
-    {
-      chapter: "Thermodynamics",
-      subject: "Chemistry",
-      questionCount: 121,
-      easyPercent: 22,
-      mediumPercent: 46,
-      hardPercent: 32,
-      marksPercent: 10,
-      riskImpactScore: 58,
-      disciplineStressIndex: 54,
+      subject: "Physics",
     },
     {
       chapter: "Quadratic Equations",
-      subject: "Mathematics",
-      questionCount: 138,
+      disciplineStressIndex: 35,
       easyPercent: 41,
-      mediumPercent: 39,
       hardPercent: 20,
       marksPercent: 11,
+      mediumPercent: 39,
+      questionCount: 138,
       riskImpactScore: 33,
-      disciplineStressIndex: 35,
-    },
-    {
-      chapter: "Electrostatics",
-      subject: "Physics",
-      questionCount: 107,
-      easyPercent: 18,
-      mediumPercent: 41,
-      hardPercent: 41,
-      marksPercent: 9,
-      riskImpactScore: 64,
-      disciplineStressIndex: 61,
+      subject: "Mathematics",
     },
     {
       chapter: "Organic Chemistry",
-      subject: "Chemistry",
-      questionCount: 129,
+      disciplineStressIndex: 43,
       easyPercent: 29,
-      mediumPercent: 45,
       hardPercent: 26,
       marksPercent: 10,
+      mediumPercent: 45,
+      questionCount: 129,
       riskImpactScore: 48,
-      disciplineStressIndex: 43,
+      subject: "Chemistry",
+    },
+    {
+      chapter: "Thermodynamics",
+      disciplineStressIndex: 54,
+      easyPercent: 22,
+      hardPercent: 32,
+      marksPercent: 10,
+      mediumPercent: 46,
+      questionCount: 121,
+      riskImpactScore: 58,
+      subject: "Chemistry",
+    },
+    {
+      chapter: "Electrostatics",
+      disciplineStressIndex: 61,
+      easyPercent: 18,
+      hardPercent: 41,
+      marksPercent: 9,
+      mediumPercent: 41,
+      questionCount: 107,
+      riskImpactScore: 64,
+      subject: "Physics",
     },
     {
       chapter: "Definite Integration",
-      subject: "Mathematics",
-      questionCount: 96,
+      disciplineStressIndex: 49,
       easyPercent: 21,
-      mediumPercent: 48,
       hardPercent: 31,
       marksPercent: 8,
+      mediumPercent: 48,
+      questionCount: 96,
       riskImpactScore: 55,
-      disciplineStressIndex: 49,
+      subject: "Mathematics",
     },
   ],
+  computedAt: "2026-05-14T00:00:00.000Z",
+  difficulties: [
+    {
+      difficulty: "Easy",
+      guessRatePercent: 18,
+      marksPercent: 31,
+      overstayPercent: 11,
+      questionCount: 424,
+      sharePercent: 34,
+    },
+    {
+      difficulty: "Medium",
+      guessRatePercent: 12,
+      marksPercent: 45,
+      overstayPercent: 22,
+      questionCount: 537,
+      sharePercent: 43,
+    },
+    {
+      difficulty: "Hard",
+      guessRatePercent: 9,
+      marksPercent: 24,
+      overstayPercent: 37,
+      questionCount: 287,
+      sharePercent: 23,
+    },
+  ],
+  examType: "JEEMains",
+  imbalanceWarnings: 2,
+  missingDifficultyWarnings: 3,
+  totalQuestions: 1248,
 };
+
+function shouldUseLiveApi(): boolean {
+  const host = window.location.hostname.toLowerCase();
+  return host !== "127.0.0.1" && host !== "localhost";
+}
+
+function toNumberOrZero(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  return 0;
+}
+
+function toNonEmptyString(value: unknown, fallback = ""): string {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
+}
 
 function formatPercent(value: number): string {
   return `${value}%`;
+}
+
+function formatIsoDate(value: string): string {
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? value : new Date(parsed).toISOString().slice(0, 10);
+}
+
+function normalizeDifficultyMetric(value: unknown, index: number): DifficultyBandMetric | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const fallback =
+    FALLBACK_DISTRIBUTION_SNAPSHOT.difficulties[index] ??
+    FALLBACK_DISTRIBUTION_SNAPSHOT.difficulties[0];
+  const difficulty = record.difficulty;
+
+  return {
+    difficulty:
+      difficulty === "Easy" || difficulty === "Medium" || difficulty === "Hard" ?
+        difficulty :
+        fallback?.difficulty ?? "Easy",
+    guessRatePercent: Math.max(0, toNumberOrZero(record.guessRatePercent ?? fallback?.guessRatePercent ?? 0)),
+    marksPercent: Math.max(0, toNumberOrZero(record.marksPercent ?? fallback?.marksPercent ?? 0)),
+    overstayPercent: Math.max(0, toNumberOrZero(record.overstayPercent ?? fallback?.overstayPercent ?? 0)),
+    questionCount: Math.max(0, toNumberOrZero(record.questionCount ?? fallback?.questionCount ?? 0)),
+    sharePercent: Math.max(0, toNumberOrZero(record.sharePercent ?? fallback?.sharePercent ?? 0)),
+  };
+}
+
+function normalizeChapterCoverageRecord(value: unknown, index: number): ChapterCoverageRecord | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const fallback =
+    FALLBACK_DISTRIBUTION_SNAPSHOT.chapters[index] ??
+    FALLBACK_DISTRIBUTION_SNAPSHOT.chapters[0];
+
+  return {
+    chapter: toNonEmptyString(record.chapter, fallback?.chapter ?? `Chapter ${index + 1}`),
+    disciplineStressIndex: Math.max(
+      0,
+      toNumberOrZero(record.disciplineStressIndex ?? fallback?.disciplineStressIndex ?? 0),
+    ),
+    easyPercent: Math.max(0, toNumberOrZero(record.easyPercent ?? fallback?.easyPercent ?? 0)),
+    hardPercent: Math.max(0, toNumberOrZero(record.hardPercent ?? fallback?.hardPercent ?? 0)),
+    marksPercent: Math.max(0, toNumberOrZero(record.marksPercent ?? fallback?.marksPercent ?? 0)),
+    mediumPercent: Math.max(0, toNumberOrZero(record.mediumPercent ?? fallback?.mediumPercent ?? 0)),
+    questionCount: Math.max(0, toNumberOrZero(record.questionCount ?? fallback?.questionCount ?? 0)),
+    riskImpactScore: Math.max(0, toNumberOrZero(record.riskImpactScore ?? fallback?.riskImpactScore ?? 0)),
+    subject: toNonEmptyString(record.subject, fallback?.subject ?? "General"),
+  };
+}
+
+function normalizeDistributionSnapshot(payload: unknown): QuestionDistributionSnapshot {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("GET /admin/questions/distribution returned an invalid payload.");
+  }
+
+  const response = payload as {
+    data?: {
+      summary?: unknown;
+    };
+  };
+  const summary = response.data?.summary;
+  if (!summary || typeof summary !== "object") {
+    throw new Error("GET /admin/questions/distribution did not include a summary payload.");
+  }
+
+  const record = summary as Record<string, unknown>;
+  const difficultiesSource = Array.isArray(record.difficulties) ? record.difficulties : [];
+  const chaptersSource = Array.isArray(record.chapters) ? record.chapters : [];
+  const difficulties = difficultiesSource
+    .map((entry, index) => normalizeDifficultyMetric(entry, index))
+    .filter((entry): entry is DifficultyBandMetric => Boolean(entry));
+  const chapters = chaptersSource
+    .map((entry, index) => normalizeChapterCoverageRecord(entry, index))
+    .filter((entry): entry is ChapterCoverageRecord => Boolean(entry));
+
+  return {
+    chapters: chapters.length > 0 ? chapters : FALLBACK_DISTRIBUTION_SNAPSHOT.chapters,
+    computedAt: toNonEmptyString(record.computedAt, FALLBACK_DISTRIBUTION_SNAPSHOT.computedAt),
+    difficulties: difficulties.length > 0 ? difficulties : FALLBACK_DISTRIBUTION_SNAPSHOT.difficulties,
+    examType: toNonEmptyString(record.examType, FALLBACK_DISTRIBUTION_SNAPSHOT.examType),
+    imbalanceWarnings: Math.max(
+      0,
+      toNumberOrZero(record.imbalanceWarnings ?? FALLBACK_DISTRIBUTION_SNAPSHOT.imbalanceWarnings),
+    ),
+    missingDifficultyWarnings: Math.max(
+      0,
+      toNumberOrZero(
+        record.missingDifficultyWarnings ?? FALLBACK_DISTRIBUTION_SNAPSHOT.missingDifficultyWarnings,
+      ),
+    ),
+    totalQuestions: Math.max(0, toNumberOrZero(record.totalQuestions ?? FALLBACK_DISTRIBUTION_SNAPSHOT.totalQuestions)),
+  };
+}
+
+async function fetchDistributionSnapshotFromApi(): Promise<QuestionDistributionSnapshot> {
+  const payload = await apiClient.get<unknown>("/admin/questions/distribution", {
+    query: {
+      limit: "6",
+    },
+  });
+  return normalizeDistributionSnapshot(payload);
 }
 
 function AdminQuestionBankDistributionPage() {
@@ -143,59 +281,110 @@ function AdminQuestionBankDistributionPage() {
   const accessContext = resolveAdminAccessContext(session);
   const isL2OrAbove =
     accessContext.licenseLayer !== null && LICENSE_LAYER_ORDER[accessContext.licenseLayer] >= LICENSE_LAYER_ORDER.L2;
+  const [snapshot, setSnapshot] = useState<QuestionDistributionSnapshot>(FALLBACK_DISTRIBUTION_SNAPSHOT);
+  const [inlineMessage, setInlineMessage] = useState(
+    "Question distribution now has a dedicated mounted workspace with precomputed difficulty, chapter, and marks summaries.",
+  );
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadDistributionSnapshot(): Promise<void> {
+      if (!shouldUseLiveApi()) {
+        if (!isActive) {
+          return;
+        }
+
+        setSnapshot(FALLBACK_DISTRIBUTION_SNAPSHOT);
+        setInlineMessage("Local mode detected. Loaded deterministic question distribution fixtures.");
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const nextSnapshot = await fetchDistributionSnapshotFromApi();
+        if (!isActive) {
+          return;
+        }
+
+        setSnapshot(nextSnapshot);
+        setInlineMessage("Live mode enabled: question distribution hydrated from GET /admin/questions/distribution.");
+      } catch (error) {
+        if (!isActive) {
+          return;
+        }
+
+        const reason =
+          error instanceof ApiClientError ? error.message : "Failed to load question distribution summary.";
+        setSnapshot(FALLBACK_DISTRIBUTION_SNAPSHOT);
+        setInlineMessage(`${reason} Falling back to deterministic question distribution fixtures.`);
+      } finally {
+        if (isActive) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void loadDistributionSnapshot();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   const difficultyDistributionChart = useMemo<UiChartPoint[]>(
     () =>
-      DISTRIBUTION_SNAPSHOT.difficulties.map((entry) => ({
+      snapshot.difficulties.map((entry) => ({
         label: entry.difficulty,
         value: entry.sharePercent,
       })),
-    [],
+    [snapshot.difficulties],
   );
 
   const marksDistributionChart = useMemo<UiChartPoint[]>(
     () =>
-      DISTRIBUTION_SNAPSHOT.difficulties.map((entry) => ({
+      snapshot.difficulties.map((entry) => ({
         label: entry.difficulty,
         value: entry.marksPercent,
       })),
-    [],
+    [snapshot.difficulties],
   );
 
   const overstayChart = useMemo<UiChartPoint[]>(
     () =>
-      DISTRIBUTION_SNAPSHOT.difficulties.map((entry) => ({
+      snapshot.difficulties.map((entry) => ({
         label: entry.difficulty,
         value: entry.overstayPercent,
       })),
-    [],
+    [snapshot.difficulties],
   );
 
   const guessRateChart = useMemo<UiChartPoint[]>(
     () =>
-      DISTRIBUTION_SNAPSHOT.difficulties.map((entry) => ({
+      snapshot.difficulties.map((entry) => ({
         label: entry.difficulty,
         value: entry.guessRatePercent,
       })),
-    [],
+    [snapshot.difficulties],
   );
 
   const riskImpactChart = useMemo<UiChartPoint[]>(
     () =>
-      DISTRIBUTION_SNAPSHOT.chapters.map((entry) => ({
+      snapshot.chapters.map((entry) => ({
         label: entry.chapter,
         value: entry.riskImpactScore,
       })),
-    [],
+    [snapshot.chapters],
   );
 
   const disciplineStressChart = useMemo<UiChartPoint[]>(
     () =>
-      DISTRIBUTION_SNAPSHOT.chapters.map((entry) => ({
+      snapshot.chapters.map((entry) => ({
         label: entry.chapter,
         value: entry.disciplineStressIndex,
       })),
-    [],
+    [snapshot.chapters],
   );
 
   const chapterColumns = useMemo<UiTableColumn<ChapterCoverageRecord>[]>(
@@ -246,6 +435,16 @@ function AdminQuestionBankDistributionPage() {
     [isL2OrAbove],
   );
 
+  const topCoverageChapter = snapshot.chapters[0] ?? null;
+  const highestRiskChapter = snapshot.chapters.reduce<ChapterCoverageRecord | null>((highest, chapter) => {
+    if (!highest || chapter.riskImpactScore > highest.riskImpactScore) {
+      return chapter;
+    }
+
+    return highest;
+  }, null);
+  const difficultyMixLabel = snapshot.difficulties.map((entry) => Math.round(entry.sharePercent)).join(" / ");
+
   return (
     <section className="admin-content-card" aria-labelledby="admin-question-bank-distribution-title">
       <p className="admin-content-eyebrow">Question Bank Distribution</p>
@@ -258,15 +457,14 @@ function AdminQuestionBankDistributionPage() {
 
       <QuestionBankWorkspaceNav />
 
-      <p className="admin-analytics-inline-note">
-        Summary-safe distribution fixtures are loaded for this dedicated workspace. Advanced risk-impact analytics unlock at <strong>L2</strong>.
-      </p>
+      <p className="admin-analytics-inline-note">{inlineMessage}</p>
+      {isLoading ? <p className="admin-analytics-inline-note">Loading question distribution from GET /admin/questions/distribution...</p> : null}
 
       <div className="admin-analytics-run-detail-header">
         <div>
-          <h3>{DISTRIBUTION_SNAPSHOT.examType} Distribution Summary</h3>
+          <h3>{snapshot.examType} Distribution Summary</h3>
           <p>
-            {DISTRIBUTION_SNAPSHOT.academicYear} academic year · {DISTRIBUTION_SNAPSHOT.totalQuestions} tracked questions
+            Snapshot updated {formatIsoDate(snapshot.computedAt)} · {snapshot.totalQuestions} tracked questions
           </p>
         </div>
         <div className="admin-analytics-run-source-chip">questionAnalytics summary</div>
@@ -275,22 +473,22 @@ function AdminQuestionBankDistributionPage() {
       <div className="admin-analytics-kpi-grid">
         <article className="admin-analytics-kpi-card">
           <p>Total Questions</p>
-          <h3>{DISTRIBUTION_SNAPSHOT.totalQuestions}</h3>
+          <h3>{snapshot.totalQuestions}</h3>
           <small>distribution-ready inventory</small>
         </article>
         <article className="admin-analytics-kpi-card">
           <p>Easy / Medium / Hard</p>
-          <h3>34 / 43 / 23</h3>
+          <h3>{difficultyMixLabel}</h3>
           <small>global difficulty share</small>
         </article>
         <article className="admin-analytics-kpi-card">
           <p>Missing Difficulty Warnings</p>
-          <h3>{DISTRIBUTION_SNAPSHOT.missingDifficultyWarnings}</h3>
+          <h3>{snapshot.missingDifficultyWarnings}</h3>
           <small>content hygiene follow-up</small>
         </article>
         <article className="admin-analytics-kpi-card">
           <p>Imbalance Warnings</p>
-          <h3>{DISTRIBUTION_SNAPSHOT.imbalanceWarnings}</h3>
+          <h3>{snapshot.imbalanceWarnings}</h3>
           <small>chapter or marks skew detected</small>
         </article>
       </div>
@@ -330,16 +528,17 @@ function AdminQuestionBankDistributionPage() {
         <article className="admin-risk-summary-card">
           <h4>L0 Distribution View</h4>
           <p>
-            The current bank leans medium-heavy, with marks share closely mirroring question mix while still surfacing
-            three missing-difficulty warnings for cleanup.
+            {snapshot.examType} currently spans {snapshot.totalQuestions} retained questions with
+            {" "}{snapshot.missingDifficultyWarnings} difficulty hygiene follow-ups still visible in the summary layer.
           </p>
           <small>Global balance without raw-session reads</small>
         </article>
         <article className="admin-risk-summary-card">
           <h4>Chapter Coverage</h4>
           <p>
-            Kinematics and Quadratic Equations are broad-coverage chapters, while Electrostatics carries the sharpest
-            hard-question concentration.
+            {topCoverageChapter ?
+              `${topCoverageChapter.chapter} carries the widest retained coverage, while marks share and difficulty mix stay visible for rapid review.` :
+              "No retained chapter coverage records are available yet."}
           </p>
           <small>Useful for pre-import and template-balance review</small>
         </article>
@@ -347,8 +546,9 @@ function AdminQuestionBankDistributionPage() {
           <article className="admin-risk-summary-card">
             <h4>L2 Risk Impact</h4>
             <p>
-              Electrostatics and Thermodynamics show the highest risk-impact and discipline-stress scores, making them
-              the first candidates for structural review.
+              {highestRiskChapter ?
+                `${highestRiskChapter.chapter} currently carries the sharpest risk-impact footprint in the live summary.` :
+                "Risk-impact analytics will appear once questionAnalytics records are available."}
             </p>
             <small>Advanced chapter stress metrics unlock at L2+</small>
           </article>
@@ -366,7 +566,7 @@ function AdminQuestionBankDistributionPage() {
         <UiTable
           caption="Question bank chapter coverage and balance"
           columns={chapterColumns}
-          rows={DISTRIBUTION_SNAPSHOT.chapters}
+          rows={snapshot.chapters}
           rowKey={(row) => `${row.subject}-${row.chapter}`}
           emptyStateText="No chapter distribution records are available."
         />

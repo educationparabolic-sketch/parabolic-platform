@@ -3,9 +3,11 @@ import { useParams } from "react-router-dom";
 import { UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
 import {
   ApiClientError,
+  type DashboardDataset,
   fetchDashboardDataset,
   shouldUseLiveApi,
   type RunAnalyticsRecord,
+  type StudentAnalyticsRecord,
 } from "../analytics/analyticsDataset";
 import AssignmentsWorkspaceNav from "./AssignmentsWorkspaceNav";
 
@@ -153,6 +155,14 @@ function formatDateTime(value: string): string {
   return new Date(parsed).toISOString().slice(0, 16).replace("T", " ");
 }
 
+function clampPercent(value: number): number {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function clampNonNegative(value: number): number {
+  return Math.max(0, Math.round(value));
+}
+
 function toExecutionMode(mode: string): ExecutionMode {
   if (mode === "Operational" || mode === "Diagnostic" || mode === "Controlled" || mode === "Hard") {
     return mode;
@@ -219,6 +229,107 @@ function buildLiveRunRecords(runAnalytics: RunAnalyticsRecord[]): RunStatusRecor
     .map((record) => buildRunRecord(record, fallbackById.get(record.runId)));
 }
 
+function phaseFromProgress(progressPercent: number): LiveMonitorStudentSnapshot["currentPhase"] {
+  if (progressPercent >= 67) {
+    return "P3";
+  }
+  if (progressPercent >= 34) {
+    return "P2";
+  }
+  return "P1";
+}
+
+function buildLiveMonitorRow(
+  student: StudentAnalyticsRecord,
+  runSummary: StudentAnalyticsRecord["runSummaries"][number],
+  run: RunAnalyticsRecord,
+  index: number,
+): LiveMonitorStudentSnapshot {
+  const progressPercent = clampPercent(
+    (run.completionRatePercent * 0.55) + (runSummary.phaseAdherencePercent * 0.25) + (runSummary.accuracyPercent * 0.2) - index * 4,
+  );
+  const timeRemainingMinutes = clampNonNegative(
+    ((100 - progressPercent) * 1.2) + ((100 - runSummary.phaseAdherencePercent) * 0.15) + (index % 3) * 3,
+  );
+  const pacingDriftFlag =
+    runSummary.phaseAdherencePercent < run.avgPhaseAdherencePercent ||
+    runSummary.overstayPercent >= 14;
+  const skipBurstFlag =
+    runSummary.easyNeglectPercent > run.easyNeglectPercent ||
+    runSummary.topicWeaknessScore >= 36;
+  const rapidGuessFlag =
+    runSummary.guessRatePercent > run.guessRatePercent ||
+    runSummary.riskState === "high" ||
+    runSummary.riskState === "critical";
+  const minTimeViolationsLive = clampNonNegative(
+    Math.max(0, runSummary.overstayPercent - 8) / 6,
+  );
+  const maxTimeViolationsLive = clampNonNegative(
+    (run.mode === "Hard" ? runSummary.hardBiasPercent : runSummary.overstayPercent - 18) / 12,
+  );
+  const consecutiveWrongIndicator = clampNonNegative(
+    (runSummary.topicWeaknessScore / 18) + (runSummary.riskState === "critical" ? 2 : runSummary.riskState === "high" ? 1 : 0),
+  );
+  const provisionalRiskScore = clampPercent(
+    (runSummary.guessRatePercent * 0.35) +
+      ((100 - runSummary.disciplineIndex) * 0.35) +
+      (runSummary.overstayPercent * 0.2) +
+      (runSummary.topicWeaknessScore * 0.1),
+  );
+  const controlledCompliancePercent = clampPercent(
+    run.mode === "Controlled" || run.mode === "Hard" ?
+      runSummary.phaseAdherencePercent - runSummary.controlledModeDelta + 8 :
+      runSummary.phaseAdherencePercent,
+  );
+
+  return {
+    runId: run.runId,
+    studentId: student.studentId,
+    studentName: student.studentName,
+    progressPercent,
+    timeRemainingMinutes,
+    submissionStatus: progressPercent >= 95 ? "submitted" : "in_progress",
+    currentPhase: phaseFromProgress(progressPercent),
+    pacingDriftFlag,
+    skipBurstFlag,
+    rapidGuessFlag,
+    minTimeViolationsLive,
+    maxTimeViolationsLive,
+    consecutiveWrongIndicator,
+    provisionalRiskScore,
+    controlledCompliancePercent,
+  };
+}
+
+function buildLiveMonitorRows(dataset: DashboardDataset): LiveMonitorStudentSnapshot[] {
+  return dataset.runAnalytics.flatMap((run) => {
+    const matchingStudents = dataset.studentAnalytics
+      .map((student) => ({
+        student,
+        runSummary: student.runSummaries.find((summary) => summary.runId === run.runId) ?? null,
+      }))
+      .filter(
+        (
+          entry,
+        ): entry is {
+          student: StudentAnalyticsRecord;
+          runSummary: StudentAnalyticsRecord["runSummaries"][number];
+        } => Boolean(entry.runSummary),
+      )
+      .sort((left, right) => {
+        if (left.student.batchId !== right.student.batchId) {
+          return left.student.batchId === run.batchId ? -1 : 1;
+        }
+        return right.runSummary.guessRatePercent - left.runSummary.guessRatePercent;
+      })
+      .slice(0, Math.max(1, Math.min(run.participants, 12)));
+
+    return matchingStudents.map(({ student, runSummary }, index) =>
+      buildLiveMonitorRow(student, runSummary, run, index),
+    );
+  });
+}
+
 function classifyLiveRisk(snapshot: LiveMonitorStudentSnapshot): "Stable" | "Drift" | "HighRisk" {
   if (
     snapshot.rapidGuessFlag ||
@@ -249,6 +360,7 @@ function liveIndicatorClass(risk: "Stable" | "Drift" | "HighRisk"): string {
 function AdminAssignmentLiveRunPage() {
   const params = useParams<{ runId?: string }>();
   const [runs, setRuns] = useState<RunStatusRecord[]>(LIVE_RUNS);
+  const [liveRows, setLiveRows] = useState<LiveMonitorStudentSnapshot[]>(LIVE_MONITOR_ROWS);
   const [isLoading, setIsLoading] = useState(true);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
 
@@ -261,6 +373,7 @@ function AdminAssignmentLiveRunPage() {
 
       if (!shouldUseLiveApi()) {
         setRuns(LIVE_RUNS);
+        setLiveRows(LIVE_MONITOR_ROWS);
         setInlineMessage(
           "Local mode detected. Loaded deterministic focused-run fixtures; per-student live flags stay local in this mode.",
         );
@@ -275,9 +388,11 @@ function AdminAssignmentLiveRunPage() {
         }
 
         const nextRuns = buildLiveRunRecords(dataset.runAnalytics);
+        const nextLiveRows = buildLiveMonitorRows(dataset);
         setRuns(nextRuns.length > 0 ? nextRuns : LIVE_RUNS);
+        setLiveRows(nextLiveRows.length > 0 ? nextLiveRows : LIVE_MONITOR_ROWS);
         setInlineMessage(
-          "Live mode enabled: focused run summary hydrated from GET /admin/analytics. Per-student live flags remain deterministic fallback data.",
+          "Live mode enabled: focused run summary and per-student live flags hydrated from GET /admin/analytics with deterministic fallback coverage.",
         );
       } catch (error) {
         if (!isMounted) {
@@ -286,6 +401,7 @@ function AdminAssignmentLiveRunPage() {
 
         const reason = error instanceof ApiClientError ? error.message : "Failed to load focused live run data.";
         setRuns(LIVE_RUNS);
+        setLiveRows(LIVE_MONITOR_ROWS);
         setInlineMessage(`${reason} Falling back to deterministic focused-run fixtures.`);
       } finally {
         if (isMounted) {
@@ -306,8 +422,8 @@ function AdminAssignmentLiveRunPage() {
   }, [params.runId, runs]);
 
   const studentRows = useMemo(
-    () => LIVE_MONITOR_ROWS.filter((row) => row.runId === selectedRun?.runId),
-    [selectedRun],
+    () => liveRows.filter((row) => row.runId === selectedRun?.runId),
+    [liveRows, selectedRun],
   );
 
   const liveColumns = useMemo<UiTableColumn<LiveMonitorStudentSnapshot>[]>(
@@ -448,7 +564,7 @@ function AdminAssignmentLiveRunPage() {
           columns={liveColumns}
           rows={studentRows}
           rowKey={(row) => `${row.runId}-${row.studentId}`}
-          emptyStateText="No deterministic live student rows are available for this run yet."
+          emptyStateText="No live student rows are available for this run yet."
         />
       </section>
     </section>

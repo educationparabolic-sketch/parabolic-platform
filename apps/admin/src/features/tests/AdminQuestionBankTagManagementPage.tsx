@@ -1,25 +1,145 @@
-import { useState, type FormEvent } from "react";
-import { UiForm, UiFormField } from "../../../../../shared/ui/components";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { ApiClientError } from "../../../../../shared/services/apiClient";
+import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
+import { UiForm, UiFormField, UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
 import QuestionBankWorkspaceNav from "./QuestionBankWorkspaceNav";
+import { QUESTION_BANK, type DifficultyLevel, type QuestionBankRecord } from "./testTemplateFixtures";
+
+const apiClient = getPortalApiClient("admin");
 
 type TagOperation = "create" | "rename" | "merge" | "deprecate";
 
 interface TagRecord {
   id: string;
   name: string;
+  questionCount: number;
   status: "active" | "deprecated";
   usedInActiveTemplate: boolean;
 }
 
-const INITIAL_TAGS: TagRecord[] = [
-  { id: "tag-1", name: "motion", status: "active", usedInActiveTemplate: true },
-  { id: "tag-2", name: "thermo", status: "active", usedInActiveTemplate: false },
-  { id: "tag-3", name: "advanced", status: "active", usedInActiveTemplate: true },
-  { id: "tag-4", name: "foundation", status: "active", usedInActiveTemplate: false },
-];
+function shouldUseLiveApi(): boolean {
+  const host = window.location.hostname.toLowerCase();
+  return host !== "127.0.0.1" && host !== "localhost";
+}
+
+function toNonEmptyString(value: unknown, fallback = ""): string {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
+}
+
+function toNumberOrZero(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  return 0;
+}
+
+function normalizeDifficulty(value: unknown, fallback: DifficultyLevel): DifficultyLevel {
+  return value === "easy" || value === "medium" || value === "hard" ? value : fallback;
+}
+
+function normalizeThermalState(
+  value: unknown,
+  fallback: QuestionBankRecord["thermalState"],
+): QuestionBankRecord["thermalState"] {
+  return value === "hot" || value === "warm" || value === "cold" ? value : fallback;
+}
+
+function normalizeStatus(
+  value: unknown,
+  fallback: QuestionBankRecord["status"],
+): QuestionBankRecord["status"] {
+  return value === "active" || value === "used" || value === "archived" || value === "deprecated" ? value : fallback;
+}
+
+function normalizeQuestionRecord(value: unknown, index: number): QuestionBankRecord | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const fallback = QUESTION_BANK[index] ?? QUESTION_BANK[0];
+
+  return {
+    chapter: toNonEmptyString(record.chapter, fallback?.chapter ?? `Chapter ${index + 1}`),
+    difficulty: normalizeDifficulty(record.difficulty, fallback?.difficulty ?? "medium"),
+    id: toNonEmptyString(record.id, fallback?.id ?? `q-${index + 1}`),
+    marks: Math.max(0, toNumberOrZero(record.marks ?? fallback?.marks ?? 0)),
+    negativeMarks: Math.max(0, toNumberOrZero(record.negativeMarks ?? fallback?.negativeMarks ?? 0)),
+    primaryTag: toNonEmptyString(record.primaryTag, fallback?.primaryTag ?? "untagged"),
+    prompt: toNonEmptyString(record.prompt, fallback?.prompt ?? ""),
+    secondaryTag: toNonEmptyString(record.secondaryTag, fallback?.secondaryTag ?? "none"),
+    status: normalizeStatus(record.status, fallback?.status ?? "active"),
+    subject: toNonEmptyString(record.subject, fallback?.subject ?? "General"),
+    thermalState: normalizeThermalState(record.thermalState, fallback?.thermalState ?? "warm"),
+    uniqueKey: toNonEmptyString(record.uniqueKey, fallback?.uniqueKey ?? `Q-${index + 1}`),
+    usedCount: Math.max(0, toNumberOrZero(record.usedCount ?? fallback?.usedCount ?? 0)),
+    version: Math.max(1, toNumberOrZero(record.version ?? fallback?.version ?? 1)),
+  };
+}
+
+function buildTagRecordsFromQuestions(questions: QuestionBankRecord[]): TagRecord[] {
+  const tagMap = new Map<string, TagRecord>();
+
+  const registerTag = (rawTag: string, question: QuestionBankRecord, fallbackId: string): void => {
+    const normalizedTag = rawTag.trim().toLowerCase();
+    if (normalizedTag.length === 0 || normalizedTag === "none") {
+      return;
+    }
+
+    const existing = tagMap.get(normalizedTag);
+    const status =
+      existing?.status === "active" || question.status !== "deprecated" ? "active" : "deprecated";
+
+    tagMap.set(normalizedTag, {
+      id: existing?.id ?? fallbackId,
+      name: normalizedTag,
+      questionCount: (existing?.questionCount ?? 0) + 1,
+      status,
+      usedInActiveTemplate:
+        (existing?.usedInActiveTemplate ?? false) ||
+        (question.status !== "deprecated" && question.usedCount > 0),
+    });
+  };
+
+  questions.forEach((question, index) => {
+    registerTag(question.primaryTag, question, `tag-primary-${index + 1}`);
+    registerTag(question.secondaryTag, question, `tag-secondary-${index + 1}`);
+  });
+
+  return Array.from(tagMap.values()).sort((left, right) => left.name.localeCompare(right.name));
+}
+
+async function fetchTagRecordsFromApi(): Promise<TagRecord[]> {
+  const payload = await apiClient.get<unknown>("/admin/questions/library", {
+    query: {
+      limit: "250",
+    },
+  });
+  if (!payload || typeof payload !== "object") {
+    throw new Error("GET /admin/questions/library returned an invalid payload.");
+  }
+
+  const response = payload as {
+    data?: {
+      questions?: unknown;
+    };
+  };
+  const questions = Array.isArray(response.data?.questions) ? response.data.questions : [];
+  const normalizedQuestions = questions
+    .map((entry, index) => normalizeQuestionRecord(entry, index))
+    .filter((entry): entry is QuestionBankRecord => Boolean(entry));
+
+  return buildTagRecordsFromQuestions(normalizedQuestions);
+}
 
 function AdminQuestionBankTagManagementPage() {
-  const [tagRecords, setTagRecords] = useState<TagRecord[]>(INITIAL_TAGS);
+  const [tagRecords, setTagRecords] = useState<TagRecord[]>(() => buildTagRecordsFromQuestions(QUESTION_BANK));
   const [tagOperation, setTagOperation] = useState<TagOperation>("create");
   const [tagPrimaryValue, setTagPrimaryValue] = useState("");
   const [tagSecondaryValue, setTagSecondaryValue] = useState("");
@@ -31,6 +151,62 @@ function AdminQuestionBankTagManagementPage() {
   const activeTagCount = tagRecords.filter((tag) => tag.status === "active").length;
   const deprecatedTagCount = tagRecords.filter((tag) => tag.status === "deprecated").length;
   const lockedTagCount = tagRecords.filter((tag) => tag.usedInActiveTemplate).length;
+  const coveredQuestionCount = useMemo(
+    () => tagRecords.reduce((sum, tag) => sum + tag.questionCount, 0),
+    [tagRecords],
+  );
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadTagRecords(): Promise<void> {
+      if (!shouldUseLiveApi()) {
+        setTagRecords(buildTagRecordsFromQuestions(QUESTION_BANK));
+        setInlineMessage("Local mode detected. Loaded deterministic governed-tag fixtures from question library data.");
+        return;
+      }
+
+      try {
+        const nextTagRecords = await fetchTagRecordsFromApi();
+        if (!isActive) {
+          return;
+        }
+
+        setTagRecords(nextTagRecords.length > 0 ? nextTagRecords : buildTagRecordsFromQuestions(QUESTION_BANK));
+        setInlineMessage(
+          nextTagRecords.length > 0 ?
+            "Live mode enabled: governed tag inventory hydrated from GET /admin/questions/library." :
+            "Live mode enabled, but no persisted governed tags were returned yet.",
+        );
+      } catch (error) {
+        if (!isActive) {
+          return;
+        }
+
+        const reason =
+          error instanceof ApiClientError ? error.message : "Failed to load governed tag inventory.";
+        setTagRecords(buildTagRecordsFromQuestions(QUESTION_BANK));
+        setInlineMessage(`${reason} Falling back to deterministic governed-tag fixtures.`);
+      }
+    }
+
+    void loadTagRecords();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  const tagColumns: UiTableColumn<TagRecord>[] = [
+    { id: "name", header: "Tag", render: (tag) => tag.name },
+    { id: "status", header: "Status", render: (tag) => tag.status },
+    { id: "questionCount", header: "Questions", render: (tag) => tag.questionCount },
+    {
+      id: "protected",
+      header: "Protected",
+      render: (tag) => (tag.usedInActiveTemplate ? "Yes" : "No"),
+    },
+  ];
 
   function applyTagOperation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -54,6 +230,7 @@ function AdminQuestionBankTagManagementPage() {
         {
           id: `tag-${Date.now()}`,
           name: primary,
+          questionCount: 0,
           status: "active",
           usedInActiveTemplate: false,
         },
@@ -108,7 +285,7 @@ function AdminQuestionBankTagManagementPage() {
     }
 
     if (target.usedInActiveTemplate) {
-      setErrorMessage("Cannot deprecate a tag referenced by active templates.");
+      setErrorMessage("Cannot deprecate a tag that still appears in live in-use question coverage.");
       return;
     }
 
@@ -149,12 +326,17 @@ function AdminQuestionBankTagManagementPage() {
         <article className="admin-analytics-kpi-card">
           <p>Protected Tags</p>
           <h3>{lockedTagCount}</h3>
-          <small>referenced by active templates</small>
+          <small>live in-use question coverage blocks risky deprecation</small>
         </article>
         <article className="admin-analytics-kpi-card">
           <p>Allowed Operations</p>
           <h3>4</h3>
           <small>create, rename, merge, deprecate</small>
+        </article>
+        <article className="admin-analytics-kpi-card">
+          <p>Tagged Links</p>
+          <h3>{coveredQuestionCount}</h3>
+          <small>question-tag relationships loaded into this workspace</small>
         </article>
       </div>
 
@@ -165,9 +347,9 @@ function AdminQuestionBankTagManagementPage() {
           <small>Matches the source spec governance rule.</small>
         </article>
         <article className="admin-risk-summary-card">
-          <h4>Template Safety</h4>
-          <p>Delete is not offered, and deprecate is blocked when a tag is referenced by active templates.</p>
-          <small>Active template stability stays intact.</small>
+          <h4>Live Coverage Safety</h4>
+          <p>This workspace now prefers persisted question library data when available before falling back to deterministic tag fixtures.</p>
+          <small>Risky deprecations stay blocked when tags remain in active question coverage.</small>
         </article>
       </div>
 
@@ -176,7 +358,7 @@ function AdminQuestionBankTagManagementPage() {
         description="Supported operations: Create, Rename, Merge, Deprecate."
         submitLabel="Apply Tag Operation"
         onSubmit={applyTagOperation}
-        footer={<span className="admin-tests-form-footnote">Delete is blocked when a tag is used in active templates.</span>}
+        footer={<span className="admin-tests-form-footnote">Delete is blocked when a tag still appears in live in-use question coverage.</span>}
       >
         <UiFormField label="Operation" htmlFor="admin-question-tags-operation">
           <select
@@ -216,6 +398,14 @@ function AdminQuestionBankTagManagementPage() {
           ))}
         </div>
       </UiForm>
+
+      <UiTable
+        caption="Governed tag coverage"
+        columns={tagColumns}
+        rows={tagRecords}
+        rowKey={(row) => row.id}
+        emptyStateText="No governed tags are available yet."
+      />
     </section>
   );
 }

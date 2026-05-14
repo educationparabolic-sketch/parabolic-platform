@@ -8,8 +8,8 @@ This file is the persistent handoff state for portal checklist implementation ac
 - `Current Priority Band`: `P0`
 - `Last Completed Checklist ID`: `GBL-004`
 - `Next Suggested Checklist ID`: `GBL-004`
-- `Last Updated`: `2026-05-11`
-- `Saved Scope Note`: `GBL-004` advanced again by wiring the recipient and batch selection data on `/admin/assignments/create` to hydrate from `GET /admin/students` in live mode while preserving deterministic local fallback behavior and keeping template selection on `GET /admin/tests` plus run scheduling on `POST /admin/runs`. The checklist item remains partial because other production-like admin flows are still fixture-backed, so the next suggested item stays `GBL-004`.
+- `Last Updated`: `2026-05-14`
+- `Saved Scope Note`: `GBL-004` advanced again by keeping `/admin/students/:studentId` on `GET /admin/students` in live mode while deterministically backfilling missing deep profile panels like history, trend, override, and last-active fields from the matched local fixture shape, instead of letting sparse live payloads collapse that dedicated student workspace into empty charts and tables. The checklist item remains partial because other production-like admin flows are still fixture-backed, so the next suggested item stays `GBL-004`.
 
 ## Active Checklist Set
 

@@ -4,6 +4,7 @@ interface MockRequestOverrides {
   method?: string;
   originalUrl?: string;
   path?: string;
+  query?: Record<string, string>;
   rawBody?: Buffer | string;
   url?: string;
 }
@@ -56,6 +57,7 @@ export const createMockRequest = (
     method: overrides.method ?? "POST",
     originalUrl: overrides.originalUrl ?? path,
     path,
+    query: overrides.query ?? {},
     rawBody:
       overrides.rawBody instanceof Buffer ?
         overrides.rawBody :
