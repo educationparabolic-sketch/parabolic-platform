@@ -3,6 +3,7 @@ import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
 import {
   ApiClientError,
+  DEFAULT_STUDENT_INTELLIGENCE_ID,
   FALLBACK_DATASET,
   fetchDashboardDataset,
   formatIsoDate,
@@ -114,6 +115,10 @@ function AdminMonthlySummaryPage() {
   }, []);
 
   const monthlySummaryRows = useMemo(() => buildMonthlySummaryRows(dataset), [dataset]);
+  const studentRouteTarget = useMemo(
+    () => dataset.studentYearMetrics[0]?.studentId ?? DEFAULT_STUDENT_INTELLIGENCE_ID,
+    [dataset.studentYearMetrics],
+  );
   const selectedMonthlySummary = useMemo(
     () => monthlySummaryRows.find((summary) => summary.id === selectedMonthlySummaryId) ?? monthlySummaryRows[0] ?? null,
     [monthlySummaryRows, selectedMonthlySummaryId],
@@ -132,7 +137,7 @@ function AdminMonthlySummaryPage() {
         regenerated on dashboard load.
       </p>
 
-      <InsightsWorkspaceNav />
+      <InsightsWorkspaceNav studentRouteTarget={studentRouteTarget} />
 
       <p className="admin-analytics-inline-note">
         {isLoading ? "Loading AI monthly summaries..." : inlineMessage ?? "AI monthly summary workspace ready."}

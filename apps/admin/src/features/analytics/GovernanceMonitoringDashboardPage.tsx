@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
+import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { UiChartContainer, UiTable, type UiChartPoint, type UiTableColumn } from "../../../../../shared/ui/components";
+import { fetchSettingsSnapshot } from "../settings/settingsDataset";
 import {
   ApiClientError,
   FALLBACK_GOVERNANCE_DATASET,
@@ -9,6 +11,7 @@ import {
   formatPercent,
   shouldUseLiveApi,
   type GovernanceDashboardDataset,
+  type GovernanceRequestContext,
   type GovernanceRiskCluster,
   type GovernanceSnapshotRecord,
 } from "./governanceDataset";
@@ -51,6 +54,9 @@ interface GovernanceReportRow {
   executionIntegrity: number;
   overrideFrequency: number;
 }
+
+const FALLBACK_GOVERNANCE_INSTITUTE_ID = "demo-institute";
+const FALLBACK_GOVERNANCE_YEAR_ID = "2026";
 
 const GOVERNANCE_SECTIONS: GovernanceSectionDefinition[] = [
   {
@@ -170,7 +176,47 @@ function buildRiskHistory(
   }));
 }
 
+function decodeIdTokenClaims(idToken: string | null): Record<string, unknown> | null {
+  if (!idToken) {
+    return null;
+  }
+
+  const segments = idToken.split(".");
+  if (segments.length !== 3) {
+    return null;
+  }
+
+  try {
+    const payloadSegment = segments[1].replace(/-/g, "+").replace(/_/g, "/");
+    const paddedPayload = payloadSegment.padEnd(Math.ceil(payloadSegment.length / 4) * 4, "=");
+    const payload = atob(paddedPayload);
+    const claims = JSON.parse(payload);
+    return claims && typeof claims === "object" ? (claims as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveGovernanceRequestContext(idToken: string | null): Promise<GovernanceRequestContext> {
+  const claims = decodeIdTokenClaims(idToken);
+  const instituteId =
+    typeof claims?.instituteId === "string" && claims.instituteId.trim().length > 0 ?
+      claims.instituteId :
+      FALLBACK_GOVERNANCE_INSTITUTE_ID;
+  const settingsSnapshot = await fetchSettingsSnapshot(instituteId);
+  const activeAcademicYear =
+    settingsSnapshot.academicYears.find((entry) => entry.status === "Active") ??
+    settingsSnapshot.academicYears[0] ??
+    null;
+
+  return {
+    instituteId,
+    yearId: activeAcademicYear?.yearId?.trim() || FALLBACK_GOVERNANCE_YEAR_ID,
+  };
+}
+
 function GovernanceMonitoringDashboardPage() {
+  const { session } = useAuthProvider();
   const location = useLocation();
   const [dataset, setDataset] = useState<GovernanceDashboardDataset>(FALLBACK_GOVERNANCE_DATASET);
   const [isLoading, setIsLoading] = useState(true);
@@ -191,13 +237,16 @@ function GovernanceMonitoringDashboardPage() {
       }
 
       try {
-        const apiDataset = await fetchGovernanceDataset();
+        const requestContext = await resolveGovernanceRequestContext(session.idToken);
+        const apiDataset = await fetchGovernanceDataset(requestContext);
         if (!isMounted) {
           return;
         }
 
         setDataset(apiDataset);
-        setInlineMessage("Live mode enabled: governance dashboard hydrated from POST /admin/governance/snapshots.");
+        setInlineMessage(
+          `Live mode enabled: governance dashboard hydrated from POST /admin/governance/snapshots for ${requestContext.instituteId} (${requestContext.yearId}).`,
+        );
       } catch (error) {
         if (!isMounted) {
           return;
@@ -218,7 +267,7 @@ function GovernanceMonitoringDashboardPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [session.idToken]);
 
   const currentSubpage = useMemo(() => resolveGovernanceSubpage(location.pathname), [location.pathname]);
   const currentSection = GOVERNANCE_SECTIONS.find((section) => section.id === currentSubpage) ?? GOVERNANCE_SECTIONS[0];

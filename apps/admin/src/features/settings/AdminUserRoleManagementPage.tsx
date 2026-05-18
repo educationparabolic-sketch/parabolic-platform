@@ -8,6 +8,7 @@ import {
   fetchSettingsSnapshot,
   isLocalSettingsReadMode,
   removeUserAccess,
+  resolveAdminInstituteId,
   resetUserPassword,
   upsertUserAccess,
   type AdminSettingsSnapshot,
@@ -16,9 +17,6 @@ import {
   type StaffStatus,
 } from "./settingsDataset";
 import SettingsWorkspaceNav from "./SettingsWorkspaceNav";
-
-const SETTINGS_INSTITUTE_ID =
-  import.meta.env.VITE_ADMIN_SETTINGS_INSTITUTE_ID ?? "inst-build-125";
 
 interface UserDraft {
   userId: string;
@@ -54,6 +52,7 @@ function AdminUserRoleManagementPage() {
   const accessContext = resolveAdminAccessContext(session);
   const isDirector = accessContext.role === "director";
   const canEditUsers = !isDirector;
+  const settingsInstituteId = useMemo(() => resolveAdminInstituteId(session.idToken), [session.idToken]);
 
   const [snapshot, setSnapshot] = useState<AdminSettingsSnapshot>(FALLBACK_SNAPSHOT);
   const [userDraft, setUserDraft] = useState<UserDraft>(DEFAULT_USER_DRAFT);
@@ -74,7 +73,7 @@ function AdminUserRoleManagementPage() {
       setInlineMessage(null);
 
       try {
-        const nextSnapshot = await fetchSettingsSnapshot(SETTINGS_INSTITUTE_ID);
+        const nextSnapshot = await fetchSettingsSnapshot(settingsInstituteId);
         if (!isMounted) {
           return;
         }
@@ -104,7 +103,7 @@ function AdminUserRoleManagementPage() {
     return () => {
       isMounted = false;
     };
-  }, [applySnapshot]);
+  }, [applySnapshot, settingsInstituteId]);
 
   const userColumns = useMemo<UiTableColumn<StaffAccessRecord>[]>(
     () => [
@@ -154,7 +153,7 @@ function AdminUserRoleManagementPage() {
     setInlineMessage(null);
 
     try {
-      const nextSnapshot = await upsertUserAccess(SETTINGS_INSTITUTE_ID, userDraft);
+      const nextSnapshot = await upsertUserAccess(settingsInstituteId, userDraft);
       applySnapshot(nextSnapshot, `User ${userDraft.userId} access updated.`);
     } catch (error) {
       const reason = error instanceof ApiClientError ? error.message : "User access update failed.";
@@ -179,7 +178,7 @@ function AdminUserRoleManagementPage() {
     setInlineMessage(null);
 
     try {
-      const nextSnapshot = await removeUserAccess(SETTINGS_INSTITUTE_ID, userId);
+      const nextSnapshot = await removeUserAccess(settingsInstituteId, userId);
       applySnapshot(nextSnapshot, `User ${userId} removed from institute role registry.`);
     } catch (error) {
       const reason = error instanceof ApiClientError ? error.message : "User removal failed.";
@@ -204,7 +203,7 @@ function AdminUserRoleManagementPage() {
     setInlineMessage(null);
 
     try {
-      const nextSnapshot = await resetUserPassword(SETTINGS_INSTITUTE_ID, userId);
+      const nextSnapshot = await resetUserPassword(settingsInstituteId, userId);
       applySnapshot(nextSnapshot, `Password reset request logged for ${userId}.`);
     } catch (error) {
       const reason = error instanceof ApiClientError ? error.message : "Password reset request failed.";

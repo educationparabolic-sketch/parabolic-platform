@@ -9,18 +9,17 @@ import {
   fetchSettingsSnapshot,
   isLocalSettingsReadMode,
   lockAcademicYear,
+  resolveAdminInstituteId,
   type AdminSettingsSnapshot,
 } from "./settingsDataset";
 import SettingsWorkspaceNav from "./SettingsWorkspaceNav";
-
-const SETTINGS_INSTITUTE_ID =
-  import.meta.env.VITE_ADMIN_SETTINGS_INSTITUTE_ID ?? "inst-build-125";
 
 function AdminAcademicYearPage() {
   const { session } = useAuthProvider();
   const accessContext = resolveAdminAccessContext(session);
   const isDirector = accessContext.role === "director";
   const canEditAcademicYear = !isDirector;
+  const settingsInstituteId = useMemo(() => resolveAdminInstituteId(session.idToken), [session.idToken]);
 
   const [snapshot, setSnapshot] = useState<AdminSettingsSnapshot>(FALLBACK_SNAPSHOT);
   const [isLoading, setIsLoading] = useState(true);
@@ -55,7 +54,7 @@ function AdminAcademicYearPage() {
       setInlineMessage(null);
 
       try {
-        const nextSnapshot = await fetchSettingsSnapshot(SETTINGS_INSTITUTE_ID);
+        const nextSnapshot = await fetchSettingsSnapshot(settingsInstituteId);
         if (!isMounted) {
           return;
         }
@@ -85,7 +84,7 @@ function AdminAcademicYearPage() {
     return () => {
       isMounted = false;
     };
-  }, [applySnapshot]);
+  }, [applySnapshot, settingsInstituteId]);
 
   const yearColumns = useMemo<UiTableColumn<AdminSettingsSnapshot["academicYears"][number]>[]>(
     () => [
@@ -132,7 +131,7 @@ function AdminAcademicYearPage() {
     setInlineMessage(null);
 
     try {
-      const nextSnapshot = await lockAcademicYear(SETTINGS_INSTITUTE_ID, currentAcademicYear.yearId);
+      const nextSnapshot = await lockAcademicYear(settingsInstituteId, currentAcademicYear.yearId);
       applySnapshot(nextSnapshot, `Academic year ${currentAcademicYear.academicYearLabel} locked successfully.`);
     } catch (error) {
       const reason = error instanceof ApiClientError ? error.message : "Academic year lock failed.";
@@ -164,8 +163,8 @@ function AdminAcademicYearPage() {
     setInlineMessage(null);
 
     try {
-      await archiveAcademicYear(SETTINGS_INSTITUTE_ID, currentAcademicYear.yearId);
-      const nextSnapshot = await fetchSettingsSnapshot(SETTINGS_INSTITUTE_ID);
+      await archiveAcademicYear(settingsInstituteId, currentAcademicYear.yearId);
+      const nextSnapshot = await fetchSettingsSnapshot(settingsInstituteId);
       applySnapshot(nextSnapshot, `Archive requested for ${currentAcademicYear.academicYearLabel} through secured archive API.`);
     } catch (error) {
       const reason = error instanceof ApiClientError ? error.message : "Academic year archive failed.";

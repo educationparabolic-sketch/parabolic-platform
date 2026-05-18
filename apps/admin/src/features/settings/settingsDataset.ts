@@ -2,6 +2,8 @@ import {ApiClientError} from "../../../../../shared/services/apiClient";
 import {getPortalApiClient} from "../../../../../shared/services/portalIntegration";
 
 const apiClient = getPortalApiClient("admin");
+const DEFAULT_SETTINGS_INSTITUTE_ID =
+  import.meta.env.VITE_ADMIN_SETTINGS_INSTITUTE_ID ?? "inst-build-125";
 
 export type SettingsActionType =
   | "GET_SETTINGS_SNAPSHOT"
@@ -286,6 +288,27 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function decodeIdTokenClaims(idToken: string | null): Record<string, unknown> | null {
+  if (!idToken) {
+    return null;
+  }
+
+  const segments = idToken.split(".");
+  if (segments.length !== 3) {
+    return null;
+  }
+
+  try {
+    const payloadSegment = segments[1].replace(/-/g, "+").replace(/_/g, "/");
+    const paddedPayload = payloadSegment.padEnd(Math.ceil(payloadSegment.length / 4) * 4, "=");
+    const payload = atob(paddedPayload);
+    const claims = JSON.parse(payload);
+    return claims && typeof claims === "object" ? (claims as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
 function normalizeSnapshot(value: unknown): AdminSettingsSnapshot | null {
   if (!isPlainObject(value)) {
     return null;
@@ -517,6 +540,14 @@ async function settingsAction(
 export function isLocalSettingsReadMode(): boolean {
   const host = window.location.hostname.toLowerCase();
   return host === "127.0.0.1" || host === "localhost";
+}
+
+export function resolveAdminInstituteId(idToken: string | null): string {
+  const claims = decodeIdTokenClaims(idToken);
+  const instituteId = claims?.instituteId;
+  return typeof instituteId === "string" && instituteId.trim().length > 0 ?
+      instituteId.trim() :
+      DEFAULT_SETTINGS_INSTITUTE_ID;
 }
 
 export async function fetchSettingsSnapshot(instituteId: string): Promise<AdminSettingsSnapshot> {

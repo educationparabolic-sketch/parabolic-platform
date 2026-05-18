@@ -1,4 +1,5 @@
 import {useCallback, useEffect, useMemo, useState} from "react";
+import {useAuthProvider} from "../../../../../shared/services/authProvider";
 import {UiTable, type UiTableColumn} from "../../../../../shared/ui/components";
 import {
   ApiClientError,
@@ -14,8 +15,8 @@ import {
 } from "./interventionDataset";
 import InsightsWorkspaceNav from "./InsightsWorkspaceNav";
 
-const INTERVENTION_INSTITUTE_ID = "inst-build-124";
-const INTERVENTION_YEAR_ID = "2026";
+const FALLBACK_INTERVENTION_INSTITUTE_ID = "inst-build-125";
+const FALLBACK_INTERVENTION_YEAR_ID = "2026";
 
 const OUTCOME_OPTIONS: InterventionOutcomeStatus[] = [
   "pending",
@@ -38,18 +39,65 @@ interface InterventionRecommendationCard {
   helper: string;
 }
 
+interface InterventionRequestContext {
+  instituteId: string;
+  yearId: string;
+}
+
+function decodeIdTokenClaims(idToken: string | null): Record<string, unknown> | null {
+  if (!idToken) {
+    return null;
+  }
+
+  const segments = idToken.split(".");
+  if (segments.length !== 3) {
+    return null;
+  }
+
+  try {
+    const payloadSegment = segments[1].replace(/-/g, "+").replace(/_/g, "/");
+    const paddedPayload = payloadSegment.padEnd(Math.ceil(payloadSegment.length / 4) * 4, "=");
+    const payload = atob(paddedPayload);
+    const claims = JSON.parse(payload);
+    return claims && typeof claims === "object" ? (claims as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveInterventionContext(
+  idToken: string | null,
+  fallbackYearId: string,
+): InterventionRequestContext {
+  const claims = decodeIdTokenClaims(idToken);
+  const instituteId =
+    typeof claims?.instituteId === "string" && claims.instituteId.trim().length > 0 ?
+      claims.instituteId :
+      FALLBACK_INTERVENTION_INSTITUTE_ID;
+
+  return {
+    instituteId,
+    yearId: fallbackYearId.trim().length > 0 ? fallbackYearId : FALLBACK_INTERVENTION_YEAR_ID,
+  };
+}
+
 function formatTimestamp(value: string): string {
   const parsed = Date.parse(value);
   return Number.isNaN(parsed) ? value : new Date(parsed).toISOString().replace("T", " ").slice(0, 16);
 }
 
 function InterventionToolsPage() {
+  const {session} = useAuthProvider();
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmittingByStudent, setIsSubmittingByStudent] = useState<Record<string, boolean>>({});
   const [highRiskStudents, setHighRiskStudents] = useState<HighRiskInterventionCandidate[]>([]);
   const [history, setHistory] = useState<InterventionActionRecord[]>([]);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
   const [outcomeDrafts, setOutcomeDrafts] = useState<OutcomeDraftState>({});
+  const [requestContext, setRequestContext] = useState<InterventionRequestContext>({
+    instituteId: FALLBACK_INTERVENTION_INSTITUTE_ID,
+    yearId: FALLBACK_INTERVENTION_YEAR_ID,
+  });
 
   const totalPendingOutcomes = useMemo(
     () => history.filter((entry) => entry.actionType === "TRACK_OUTCOME" && entry.outcomeStatus === "pending").length,
@@ -64,6 +112,10 @@ function InterventionToolsPage() {
   const hydratedStudents = useMemo(
     () => highRiskStudents.slice(0, 12),
     [highRiskStudents],
+  );
+  const studentRouteTarget = useMemo(
+    () => highRiskStudents[0]?.studentId ?? history[0]?.studentId ?? "",
+    [highRiskStudents, history],
   );
 
   const recommendationCards = useMemo<InterventionRecommendationCard[]>(() => {
@@ -119,19 +171,19 @@ function InterventionToolsPage() {
       setInlineMessage(null);
 
       try {
-        const [dataset, interventionHistory] = await Promise.all([
-          fetchInterventionDataset(),
-          listInterventionActions({
-            instituteId: INTERVENTION_INSTITUTE_ID,
-            yearId: INTERVENTION_YEAR_ID,
-          }),
-        ]);
+        const dataset = await fetchInterventionDataset();
+        const nextContext = resolveInterventionContext(
+          session.idToken,
+          dataset.yearBehaviorSummary.academicYear,
+        );
+        const interventionHistory = await listInterventionActions(nextContext);
 
         if (!isMounted) {
           return;
         }
 
         const candidates = buildHighRiskCandidates(dataset);
+        setRequestContext(nextContext);
         setHighRiskStudents(candidates);
         setHistory(interventionHistory);
         setOutcomeDrafts(
@@ -151,7 +203,9 @@ function InterventionToolsPage() {
             "Local mode detected. Loaded deterministic intervention candidates and audit-history fixtures for Build 124.",
           );
         } else {
-          setInlineMessage("Live mode enabled: intervention tools hydrated from GET /admin/analytics and POST /admin/interventions.");
+          setInlineMessage(
+            `Live mode enabled: intervention tools hydrated from GET /admin/analytics and POST /admin/interventions for ${nextContext.instituteId} (${nextContext.yearId}).`,
+          );
         }
       } catch (error) {
         if (!isMounted) {
@@ -172,7 +226,7 @@ function InterventionToolsPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [session.idToken]);
 
   const submitAction = useCallback(async (
     student: HighRiskInterventionCandidate,
@@ -196,7 +250,7 @@ function InterventionToolsPage() {
           actionType === "SEND_ALERT" ?
             student.suggestedAlertMessage :
             undefined,
-        instituteId: INTERVENTION_INSTITUTE_ID,
+        instituteId: requestContext.instituteId,
         outcomeNotes:
           actionType === "TRACK_OUTCOME" ?
             draft.notes || `Outcome updated for ${student.studentName}.` :
@@ -210,7 +264,7 @@ function InterventionToolsPage() {
             student.suggestedRemedialTestId :
             undefined,
         studentId: student.studentId,
-        yearId: INTERVENTION_YEAR_ID,
+        yearId: requestContext.yearId,
       });
 
       setHistory((current) => [action, ...current]);
@@ -224,7 +278,7 @@ function InterventionToolsPage() {
         [student.studentId]: false,
       }));
     }
-  }, [outcomeDrafts]);
+  }, [outcomeDrafts, requestContext.instituteId, requestContext.yearId]);
 
   const interventionColumns = useMemo<UiTableColumn<HighRiskInterventionCandidate>[]>(
     () => [
@@ -393,8 +447,11 @@ function InterventionToolsPage() {
         shared insights landing page. It uses summary-safe <code>studentYearMetrics</code> signals to stage
         remedial actions, intervention alerts, and immutable outcome tracking without scanning raw sessions.
       </p>
+      <p className="admin-settings-inline-note">
+        Context: {requestContext.instituteId} · Academic year {requestContext.yearId}
+      </p>
 
-      <InsightsWorkspaceNav />
+      <InsightsWorkspaceNav studentRouteTarget={studentRouteTarget} />
 
       <p className="admin-analytics-inline-note">
         {isLoading ? "Loading intervention tools..." : inlineMessage ?? "Intervention tools ready."}

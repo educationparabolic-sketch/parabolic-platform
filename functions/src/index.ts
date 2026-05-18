@@ -82,6 +82,9 @@ import {
   handleAdminQuestionsBulkRequest,
 } from "./api/adminQuestionsBulk";
 import {
+  handleAdminQuestionTagsRequest,
+} from "./api/adminQuestionTags";
+import {
   handleAdminInterventionsRequest,
 } from "./api/adminInterventions";
 import {
@@ -208,6 +211,9 @@ export const adminQuestionDistribution = functions.https.onRequest(
 );
 export const adminQuestionsBulk = functions.https.onRequest(
   handleAdminQuestionsBulkRequest,
+);
+export const adminQuestionTags = functions.https.onRequest(
+  handleAdminQuestionTagsRequest,
 );
 export const adminInterventions = functions.https.onRequest(
   handleAdminInterventionsRequest,

@@ -28,6 +28,11 @@ export interface GovernanceDashboardDataset {
   snapshots: GovernanceSnapshotRecord[];
 }
 
+export interface GovernanceRequestContext {
+  instituteId: string;
+  yearId: string;
+}
+
 export const FALLBACK_GOVERNANCE_DATASET: GovernanceDashboardDataset = {
   snapshots: [
     {
@@ -229,14 +234,11 @@ function resolvePayloadSnapshots(payload: GovernanceSnapshotsApiResult): unknown
   return [];
 }
 
-export async function fetchGovernanceDataset(): Promise<GovernanceDashboardDataset> {
-  const instituteId = import.meta.env.VITE_GOVERNANCE_INSTITUTE_ID ?? "demo-institute";
-  const yearId = import.meta.env.VITE_GOVERNANCE_YEAR_ID ?? "2025-26";
-
+export async function fetchGovernanceDataset(context: GovernanceRequestContext): Promise<GovernanceDashboardDataset> {
   const payload = await apiClient.post<GovernanceSnapshotsApiResult>("/admin/governance/snapshots", {
     body: {
-      instituteId,
-      yearId,
+      instituteId: context.instituteId,
+      yearId: context.yearId,
       limit: 10,
     },
   });

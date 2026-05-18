@@ -3,6 +3,7 @@ import {NavLink, useLocation} from "react-router-dom";
 import {useAuthProvider} from "../../../../../shared/services/authProvider";
 import {UiTable, type UiTableColumn} from "../../../../../shared/ui/components";
 import {resolveAdminAccessContext} from "../../portals/adminAccess";
+import {resolveAdminInstituteId} from "../settings/settingsDataset";
 import {
   ApiClientError,
   FALLBACK_SNAPSHOT,
@@ -14,9 +15,6 @@ import {
   type LicensingFeatureRow,
   type LicensingHistoryEntry,
 } from "./licensingDataset";
-
-const LICENSING_INSTITUTE_ID =
-  import.meta.env.VITE_ADMIN_SETTINGS_INSTITUTE_ID ?? "inst-build-125";
 
 interface LicensingSection {
   id: string;
@@ -60,6 +58,7 @@ function AdminLicensingConfigurationPage() {
   const {session} = useAuthProvider();
   const accessContext = resolveAdminAccessContext(session);
   const activeSection = sectionFromPath(location.pathname);
+  const licensingInstituteId = useMemo(() => resolveAdminInstituteId(session.idToken), [session.idToken]);
 
   const [snapshot, setSnapshot] = useState<AdminLicensingSnapshot>(FALLBACK_SNAPSHOT);
   const [isLoading, setIsLoading] = useState(true);
@@ -73,7 +72,7 @@ function AdminLicensingConfigurationPage() {
       setInlineMessage(null);
 
       try {
-        const nextSnapshot = await fetchLicensingSnapshot(LICENSING_INSTITUTE_ID);
+        const nextSnapshot = await fetchLicensingSnapshot(licensingInstituteId);
         if (!mounted) {
           return;
         }
@@ -104,7 +103,7 @@ function AdminLicensingConfigurationPage() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [licensingInstituteId]);
 
   const currentPlan = snapshot.currentPlan;
   const featureColumns = useMemo<UiTableColumn<LicensingFeatureRow>[]>(

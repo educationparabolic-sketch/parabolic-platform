@@ -3,7 +3,7 @@ import { ApiClientError } from "../../../../../shared/services/apiClient";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import { UiForm, UiFormField, UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
 import QuestionBankWorkspaceNav from "./QuestionBankWorkspaceNav";
-import { QUESTION_BANK, type DifficultyLevel, type QuestionBankRecord } from "./testTemplateFixtures";
+import { QUESTION_BANK, type QuestionBankRecord } from "./testTemplateFixtures";
 
 const apiClient = getPortalApiClient("admin");
 
@@ -39,50 +39,6 @@ function toNumberOrZero(value: unknown): number {
   return 0;
 }
 
-function normalizeDifficulty(value: unknown, fallback: DifficultyLevel): DifficultyLevel {
-  return value === "easy" || value === "medium" || value === "hard" ? value : fallback;
-}
-
-function normalizeThermalState(
-  value: unknown,
-  fallback: QuestionBankRecord["thermalState"],
-): QuestionBankRecord["thermalState"] {
-  return value === "hot" || value === "warm" || value === "cold" ? value : fallback;
-}
-
-function normalizeStatus(
-  value: unknown,
-  fallback: QuestionBankRecord["status"],
-): QuestionBankRecord["status"] {
-  return value === "active" || value === "used" || value === "archived" || value === "deprecated" ? value : fallback;
-}
-
-function normalizeQuestionRecord(value: unknown, index: number): QuestionBankRecord | null {
-  if (!value || typeof value !== "object") {
-    return null;
-  }
-
-  const record = value as Record<string, unknown>;
-  const fallback = QUESTION_BANK[index] ?? QUESTION_BANK[0];
-
-  return {
-    chapter: toNonEmptyString(record.chapter, fallback?.chapter ?? `Chapter ${index + 1}`),
-    difficulty: normalizeDifficulty(record.difficulty, fallback?.difficulty ?? "medium"),
-    id: toNonEmptyString(record.id, fallback?.id ?? `q-${index + 1}`),
-    marks: Math.max(0, toNumberOrZero(record.marks ?? fallback?.marks ?? 0)),
-    negativeMarks: Math.max(0, toNumberOrZero(record.negativeMarks ?? fallback?.negativeMarks ?? 0)),
-    primaryTag: toNonEmptyString(record.primaryTag, fallback?.primaryTag ?? "untagged"),
-    prompt: toNonEmptyString(record.prompt, fallback?.prompt ?? ""),
-    secondaryTag: toNonEmptyString(record.secondaryTag, fallback?.secondaryTag ?? "none"),
-    status: normalizeStatus(record.status, fallback?.status ?? "active"),
-    subject: toNonEmptyString(record.subject, fallback?.subject ?? "General"),
-    thermalState: normalizeThermalState(record.thermalState, fallback?.thermalState ?? "warm"),
-    uniqueKey: toNonEmptyString(record.uniqueKey, fallback?.uniqueKey ?? `Q-${index + 1}`),
-    usedCount: Math.max(0, toNumberOrZero(record.usedCount ?? fallback?.usedCount ?? 0)),
-    version: Math.max(1, toNumberOrZero(record.version ?? fallback?.version ?? 1)),
-  };
-}
-
 function buildTagRecordsFromQuestions(questions: QuestionBankRecord[]): TagRecord[] {
   const tagMap = new Map<string, TagRecord>();
 
@@ -93,14 +49,11 @@ function buildTagRecordsFromQuestions(questions: QuestionBankRecord[]): TagRecor
     }
 
     const existing = tagMap.get(normalizedTag);
-    const status =
-      existing?.status === "active" || question.status !== "deprecated" ? "active" : "deprecated";
-
     tagMap.set(normalizedTag, {
       id: existing?.id ?? fallbackId,
       name: normalizedTag,
       questionCount: (existing?.questionCount ?? 0) + 1,
-      status,
+      status: existing?.status ?? "active",
       usedInActiveTemplate:
         (existing?.usedInActiveTemplate ?? false) ||
         (question.status !== "deprecated" && question.usedCount > 0),
@@ -115,27 +68,77 @@ function buildTagRecordsFromQuestions(questions: QuestionBankRecord[]): TagRecor
   return Array.from(tagMap.values()).sort((left, right) => left.name.localeCompare(right.name));
 }
 
+function normalizeApiTagRecord(value: unknown, index: number): TagRecord | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  return {
+    id: toNonEmptyString(record.id, `tag-${index + 1}`),
+    name: toNonEmptyString(record.name, `tag-${index + 1}`),
+    questionCount: Math.max(0, toNumberOrZero(record.questionCount)),
+    status: record.status === "deprecated" ? "deprecated" : "active",
+    usedInActiveTemplate: record.usedInActiveTemplate === true,
+  };
+}
+
 async function fetchTagRecordsFromApi(): Promise<TagRecord[]> {
-  const payload = await apiClient.get<unknown>("/admin/questions/library", {
-    query: {
-      limit: "250",
-    },
-  });
+  const payload = await apiClient.get<unknown>("/admin/questions/tags");
   if (!payload || typeof payload !== "object") {
-    throw new Error("GET /admin/questions/library returned an invalid payload.");
+    throw new Error("GET /admin/questions/tags returned an invalid payload.");
   }
 
   const response = payload as {
     data?: {
-      questions?: unknown;
+      tags?: unknown;
     };
   };
-  const questions = Array.isArray(response.data?.questions) ? response.data.questions : [];
-  const normalizedQuestions = questions
-    .map((entry, index) => normalizeQuestionRecord(entry, index))
-    .filter((entry): entry is QuestionBankRecord => Boolean(entry));
+  const tags = Array.isArray(response.data?.tags) ? response.data.tags : [];
 
-  return buildTagRecordsFromQuestions(normalizedQuestions);
+  return tags
+    .map((entry, index) => normalizeApiTagRecord(entry, index))
+    .filter((entry): entry is TagRecord => Boolean(entry));
+}
+
+async function applyTagOperationInApi(
+  operation: TagOperation,
+  primaryTag: string,
+  secondaryTag: string,
+): Promise<{message: string; tags: TagRecord[]}> {
+  const payload = await apiClient.post<unknown, {
+    actionType: TagOperation;
+    primaryTag: string;
+    secondaryTag?: string;
+  }>("/admin/questions/tags", {
+    body: {
+      actionType: operation,
+      primaryTag,
+      secondaryTag: secondaryTag.length > 0 ? secondaryTag : undefined,
+    },
+  });
+
+  if (!payload || typeof payload !== "object") {
+    throw new Error("POST /admin/questions/tags returned an invalid payload.");
+  }
+
+  const response = payload as {
+    data?: {
+      tags?: unknown;
+    };
+    message?: unknown;
+  };
+  const tags = Array.isArray(response.data?.tags) ? response.data.tags : [];
+
+  return {
+    message:
+      typeof response.message === "string" && response.message.trim().length > 0 ?
+        response.message :
+        "Question tag operation completed.",
+    tags: tags
+      .map((entry, index) => normalizeApiTagRecord(entry, index))
+      .filter((entry): entry is TagRecord => Boolean(entry)),
+  };
 }
 
 function AdminQuestionBankTagManagementPage() {
@@ -147,6 +150,7 @@ function AdminQuestionBankTagManagementPage() {
     "Tag management now has its own mounted workspace for create, rename, merge, and deprecate controls.",
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const activeTagCount = tagRecords.filter((tag) => tag.status === "active").length;
   const deprecatedTagCount = tagRecords.filter((tag) => tag.status === "deprecated").length;
@@ -175,7 +179,7 @@ function AdminQuestionBankTagManagementPage() {
         setTagRecords(nextTagRecords.length > 0 ? nextTagRecords : buildTagRecordsFromQuestions(QUESTION_BANK));
         setInlineMessage(
           nextTagRecords.length > 0 ?
-            "Live mode enabled: governed tag inventory hydrated from GET /admin/questions/library." :
+            "Live mode enabled: governed tag inventory hydrated from GET /admin/questions/tags." :
             "Live mode enabled, but no persisted governed tags were returned yet.",
         );
       } catch (error) {
@@ -208,7 +212,35 @@ function AdminQuestionBankTagManagementPage() {
     },
   ];
 
-  function applyTagOperation(event: FormEvent<HTMLFormElement>) {
+  async function runLiveTagOperation(
+    operation: TagOperation,
+    primary: string,
+    secondary: string,
+  ): Promise<boolean> {
+    if (!shouldUseLiveApi()) {
+      return false;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const result = await applyTagOperationInApi(operation, primary, secondary);
+      setTagRecords(result.tags);
+      setInlineMessage(result.message);
+      setErrorMessage(null);
+      setTagPrimaryValue("");
+      setTagSecondaryValue("");
+      return true;
+    } catch (error) {
+      const reason =
+        error instanceof ApiClientError ? error.message : "Failed to apply governed tag operation.";
+      setErrorMessage(reason);
+      return true;
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function applyTagOperation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const primary = tagPrimaryValue.trim().toLowerCase();
@@ -222,6 +254,10 @@ function AdminQuestionBankTagManagementPage() {
     if (tagOperation === "create") {
       if (tagRecords.some((tag) => tag.name.toLowerCase() === primary)) {
         setErrorMessage("Tag already exists.");
+        return;
+      }
+
+      if (await runLiveTagOperation(tagOperation, primary, secondary)) {
         return;
       }
 
@@ -253,6 +289,10 @@ function AdminQuestionBankTagManagementPage() {
         return;
       }
 
+      if (await runLiveTagOperation(tagOperation, primary, secondary)) {
+        return;
+      }
+
       setTagRecords((current) => current.map((tag) => (
         tag.id === target.id ? { ...tag, name: secondary } : tag
       )));
@@ -274,6 +314,10 @@ function AdminQuestionBankTagManagementPage() {
         return;
       }
 
+      if (await runLiveTagOperation(tagOperation, primary, secondary)) {
+        return;
+      }
+
       setTagRecords((current) => current.map((tag) => (
         tag.id === target.id ? { ...tag, status: "deprecated" } : tag
       )));
@@ -286,6 +330,10 @@ function AdminQuestionBankTagManagementPage() {
 
     if (target.usedInActiveTemplate) {
       setErrorMessage("Cannot deprecate a tag that still appears in live in-use question coverage.");
+      return;
+    }
+
+    if (await runLiveTagOperation(tagOperation, primary, secondary)) {
       return;
     }
 
@@ -348,7 +396,7 @@ function AdminQuestionBankTagManagementPage() {
         </article>
         <article className="admin-risk-summary-card">
           <h4>Live Coverage Safety</h4>
-          <p>This workspace now prefers persisted question library data when available before falling back to deterministic tag fixtures.</p>
+          <p>This workspace now prefers persisted governed-tag data when available before falling back to deterministic tag fixtures.</p>
           <small>Risky deprecations stay blocked when tags remain in active question coverage.</small>
         </article>
       </div>
@@ -356,7 +404,7 @@ function AdminQuestionBankTagManagementPage() {
       <UiForm
         title="Tag Operations"
         description="Supported operations: Create, Rename, Merge, Deprecate."
-        submitLabel="Apply Tag Operation"
+        submitLabel={isSubmitting ? "Applying..." : "Apply Tag Operation"}
         onSubmit={applyTagOperation}
         footer={<span className="admin-tests-form-footnote">Delete is blocked when a tag still appears in live in-use question coverage.</span>}
       >
@@ -364,6 +412,7 @@ function AdminQuestionBankTagManagementPage() {
           <select
             id="admin-question-tags-operation"
             value={tagOperation}
+            disabled={isSubmitting}
             onChange={(event) => setTagOperation(event.target.value as TagOperation)}
           >
             <option value="create">Create</option>
@@ -377,6 +426,7 @@ function AdminQuestionBankTagManagementPage() {
             id="admin-question-tags-primary"
             type="text"
             value={tagPrimaryValue}
+            disabled={isSubmitting}
             onChange={(event) => setTagPrimaryValue(event.target.value)}
             placeholder="motion"
           />
@@ -386,6 +436,7 @@ function AdminQuestionBankTagManagementPage() {
             id="admin-question-tags-secondary"
             type="text"
             value={tagSecondaryValue}
+            disabled={isSubmitting}
             onChange={(event) => setTagSecondaryValue(event.target.value)}
             placeholder="Required for rename/merge"
           />

@@ -17,6 +17,7 @@ import {
   deriveCanonicalTemplateId,
   type DifficultyLevel,
   type ExamType,
+  type QuestionBankRecord,
   type SelectionMethod,
 } from "./testTemplateFixtures";
 import TestsWorkspaceNav from "./TestsWorkspaceNav";
@@ -70,6 +71,11 @@ interface TemplateSubmitPayload {
   difficultyDistribution: DifficultyDistribution;
   timingProfile: TimingProfile;
   publish: boolean;
+}
+
+interface QuestionPoolLoadState {
+  questions: QuestionBankRecord[];
+  source: "local" | "live";
 }
 
 const FALLBACK_TEMPLATES: TestTemplateRecord[] = [
@@ -174,6 +180,56 @@ function normalizeTimingWindow(value: unknown, fallback: TimingWindow): TimingWi
   };
 }
 
+function normalizeDifficulty(
+  value: unknown,
+  fallback: DifficultyLevel,
+): DifficultyLevel {
+  return value === "easy" || value === "medium" || value === "hard" ? value : fallback;
+}
+
+function normalizeThermalState(
+  value: unknown,
+  fallback: QuestionBankRecord["thermalState"],
+): QuestionBankRecord["thermalState"] {
+  return value === "hot" || value === "warm" || value === "cold" ? value : fallback;
+}
+
+function normalizeQuestionStatus(
+  value: unknown,
+  fallback: QuestionBankRecord["status"],
+): QuestionBankRecord["status"] {
+  return value === "active" || value === "used" || value === "archived" || value === "deprecated" ? value : fallback;
+}
+
+function normalizeQuestionRecord(
+  value: unknown,
+  index: number,
+): QuestionBankRecord | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const fallback = QUESTION_BANK[index] ?? QUESTION_BANK[0];
+
+  return {
+    chapter: toNonEmptyString(record.chapter, fallback?.chapter ?? `Chapter ${index + 1}`),
+    difficulty: normalizeDifficulty(record.difficulty, fallback?.difficulty ?? "medium"),
+    id: toNonEmptyString(record.id, fallback?.id ?? `q-${index + 1}`),
+    marks: Math.max(0, toNumberOrZero(record.marks ?? fallback?.marks ?? 0)),
+    negativeMarks: Math.max(0, toNumberOrZero(record.negativeMarks ?? fallback?.negativeMarks ?? 0)),
+    primaryTag: toNonEmptyString(record.primaryTag, fallback?.primaryTag ?? "untagged"),
+    prompt: toNonEmptyString(record.prompt, fallback?.prompt ?? ""),
+    secondaryTag: toNonEmptyString(record.secondaryTag, fallback?.secondaryTag ?? "none"),
+    status: normalizeQuestionStatus(record.status, fallback?.status ?? "active"),
+    subject: toNonEmptyString(record.subject, fallback?.subject ?? "General"),
+    thermalState: normalizeThermalState(record.thermalState, fallback?.thermalState ?? "warm"),
+    uniqueKey: toNonEmptyString(record.uniqueKey, fallback?.uniqueKey ?? `Q-${index + 1}`),
+    usedCount: Math.max(0, toNumberOrZero(record.usedCount ?? fallback?.usedCount ?? 0)),
+    version: Math.max(1, toNumberOrZero(record.version ?? fallback?.version ?? 1)),
+  };
+}
+
 function normalizeTemplateRecord(value: unknown, index: number): TestTemplateRecord | null {
   if (!value || typeof value !== "object") {
     return null;
@@ -232,6 +288,32 @@ async function fetchTemplatesFromApi(): Promise<TestTemplateRecord[]> {
   }
 
   return templates;
+}
+
+async function fetchQuestionPoolFromApi(): Promise<QuestionPoolLoadState> {
+  const payload = await apiClient.get<unknown>("/admin/questions/library", {
+    query: {
+      limit: "250",
+    },
+  });
+  if (!payload || typeof payload !== "object") {
+    throw new Error("GET /admin/questions/library returned an invalid payload.");
+  }
+
+  const response = payload as {
+    data?: {
+      questions?: unknown;
+    };
+  };
+  const questions = Array.isArray(response.data?.questions) ? response.data?.questions : [];
+  const normalizedQuestions = questions
+    .map((entry, index) => normalizeQuestionRecord(entry, index))
+    .filter((entry): entry is QuestionBankRecord => Boolean(entry));
+
+  return {
+    questions: normalizedQuestions.length > 0 ? normalizedQuestions : QUESTION_BANK,
+    source: normalizedQuestions.length > 0 ? "live" : "local",
+  };
 }
 
 function isDraftEditable(status: TemplateStatus): boolean {
@@ -320,6 +402,7 @@ function TestTemplateManagementPage() {
   const navigate = useNavigate();
   const params = useParams<{ testId?: string }>();
   const [templates, setTemplates] = useState<TestTemplateRecord[]>(FALLBACK_TEMPLATES);
+  const [questionPool, setQuestionPool] = useState<QuestionBankRecord[]>(QUESTION_BANK);
   const [draft, setDraft] = useState<TemplateDraft>(INITIAL_DRAFT);
   const [duplicateTemplate, setDuplicateTemplate] = useState<TestTemplateRecord | null>(null);
   const [pendingDuplicateRecord, setPendingDuplicateRecord] = useState<TestTemplateRecord | null>(null);
@@ -382,15 +465,66 @@ function TestTemplateManagementPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadQuestionPool() {
+      if (!shouldUseLiveApi()) {
+        setQuestionPool(QUESTION_BANK);
+        return;
+      }
+
+      try {
+        const nextQuestionPool = await fetchQuestionPoolFromApi();
+        if (!isMounted) {
+          return;
+        }
+
+        setQuestionPool(nextQuestionPool.questions);
+        setInlineMessage((current) => {
+          const suffix =
+            nextQuestionPool.source === "live" ?
+              " Question-pool selection now hydrates from GET /admin/questions/library." :
+              " GET /admin/questions/library returned no persisted records yet, so question-pool selection stayed on deterministic fallback data.";
+          return current.includes("Question-pool selection now hydrates from GET /admin/questions/library.")
+            || current.includes("question-pool selection stayed on deterministic fallback data.")
+            ? current
+            : `${current}${suffix}`;
+        });
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setQuestionPool(QUESTION_BANK);
+        const reason =
+          error instanceof ApiClientError ?
+            `GET /admin/questions/library failed with ${error.code} (${error.status}).` :
+            "Failed to load the question pool.";
+        setInlineMessage((current) =>
+          current.includes("question-pool selection")
+            ? current
+            : `${current} ${reason} Question-pool selection fell back to deterministic fixtures.`,
+        );
+      }
+    }
+
+    void loadQuestionPool();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const currentSubpage = useMemo(() => resolveTestSubpage(location.pathname), [location.pathname]);
 
   const visibleQuestions = useMemo(() => {
     const query = questionQuery.trim().toLowerCase();
     if (query.length === 0) {
-      return QUESTION_BANK;
+      return questionPool;
     }
 
-    return QUESTION_BANK.filter((question) => {
+    return questionPool.filter((question) => {
       return (
         question.id.toLowerCase().includes(query) ||
         question.subject.toLowerCase().includes(query) ||
@@ -398,22 +532,34 @@ function TestTemplateManagementPage() {
         question.prompt.toLowerCase().includes(query)
       );
     });
-  }, [questionQuery]);
+  }, [questionPool, questionQuery]);
+
+  const questionPoolById = useMemo(() => {
+    const byId = new Map<string, QuestionBankRecord>();
+    for (const question of QUESTION_BANK) {
+      byId.set(question.id, question);
+    }
+    for (const question of questionPool) {
+      byId.set(question.id, question);
+    }
+    return byId;
+  }, [questionPool]);
 
   const selectedQuestionCount = draft.selectedQuestionIds.length;
   const selectedDifficultyCount = useMemo(() => {
-    return QUESTION_BANK.reduce<DifficultyDistribution>(
+    return draft.selectedQuestionIds.reduce<DifficultyDistribution>(
       (accumulator, question) => {
-        if (!draft.selectedQuestionIds.includes(question.id)) {
+        const resolvedQuestion = questionPoolById.get(question);
+        if (!resolvedQuestion) {
           return accumulator;
         }
 
-        accumulator[question.difficulty] += 1;
+        accumulator[resolvedQuestion.difficulty] += 1;
         return accumulator;
       },
       { easy: 0, medium: 0, hard: 0 },
     );
-  }, [draft.selectedQuestionIds]);
+  }, [draft.selectedQuestionIds, questionPoolById]);
 
   useEffect(() => {
     if (templates.length === 0) {

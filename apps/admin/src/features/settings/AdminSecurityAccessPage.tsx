@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
 import {
@@ -6,20 +6,19 @@ import {
   FALLBACK_SNAPSHOT,
   fetchSettingsSnapshot,
   isLocalSettingsReadMode,
+  resolveAdminInstituteId,
   updateSecuritySettings,
   type AdminSettingsSnapshot,
   type SecuritySettings,
 } from "./settingsDataset";
 import SettingsWorkspaceNav from "./SettingsWorkspaceNav";
 
-const SETTINGS_INSTITUTE_ID =
-  import.meta.env.VITE_ADMIN_SETTINGS_INSTITUTE_ID ?? "inst-build-125";
-
 function AdminSecurityAccessPage() {
   const { session } = useAuthProvider();
   const accessContext = resolveAdminAccessContext(session);
   const isDirector = accessContext.role === "director";
   const canEditSecurity = !isDirector;
+  const settingsInstituteId = useMemo(() => resolveAdminInstituteId(session.idToken), [session.idToken]);
 
   const [snapshot, setSnapshot] = useState<AdminSettingsSnapshot>(FALLBACK_SNAPSHOT);
   const [securityForm, setSecurityForm] = useState<SecuritySettings>(FALLBACK_SNAPSHOT.security);
@@ -41,7 +40,7 @@ function AdminSecurityAccessPage() {
       setInlineMessage(null);
 
       try {
-        const nextSnapshot = await fetchSettingsSnapshot(SETTINGS_INSTITUTE_ID);
+        const nextSnapshot = await fetchSettingsSnapshot(settingsInstituteId);
         if (!isMounted) {
           return;
         }
@@ -71,7 +70,7 @@ function AdminSecurityAccessPage() {
     return () => {
       isMounted = false;
     };
-  }, [applySnapshot]);
+  }, [applySnapshot, settingsInstituteId]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -85,7 +84,7 @@ function AdminSecurityAccessPage() {
     setInlineMessage(null);
 
     try {
-      const nextSnapshot = await updateSecuritySettings(SETTINGS_INSTITUTE_ID, securityForm);
+      const nextSnapshot = await updateSecuritySettings(settingsInstituteId, securityForm);
       applySnapshot(nextSnapshot, "Security and access policies updated.");
     } catch (error) {
       const reason = error instanceof ApiClientError ? error.message : "Security settings update failed.";

@@ -143,6 +143,10 @@ function AdminRiskOverviewPage() {
 
   const riskClusterPieData = useMemo(() => buildRiskClusterDistribution(dataset), [dataset]);
   const riskSignalDistribution = useMemo(() => buildRiskSignalDistribution(dataset), [dataset]);
+  const studentRouteTarget = useMemo(
+    () => dataset.studentYearMetrics[0]?.studentId ?? "",
+    [dataset.studentYearMetrics],
+  );
 
   const highRiskStudents = useMemo(
     () =>
@@ -272,7 +276,7 @@ function AdminRiskOverviewPage() {
         <code> {dataset.yearBehaviorSummary.academicYear}</code>, computed {formatIsoDate(dataset.yearBehaviorSummary.computedAt)}.
       </p>
 
-      <InsightsWorkspaceNav />
+      <InsightsWorkspaceNav studentRouteTarget={studentRouteTarget} />
 
       <p className="admin-analytics-inline-note">
         {isLoading ? "Loading risk overview..." : inlineMessage ?? "Risk overview workspace ready."}

@@ -137,6 +137,10 @@ function AdminExecutionSignalsPage() {
     () => buildExecutionSignals(dataset, isL2OrAbove),
     [dataset, isL2OrAbove],
   );
+  const studentRouteTarget = useMemo(
+    () => dataset.studentYearMetrics[0]?.studentId ?? "",
+    [dataset.studentYearMetrics],
+  );
 
   const baseSignals = executionSignals.slice(0, 4);
   const advancedSignals = executionSignals.slice(4);
@@ -154,7 +158,7 @@ function AdminExecutionSignalsPage() {
         academic year <code>{dataset.yearBehaviorSummary.academicYear}</code>, computed {formatIsoDate(dataset.yearBehaviorSummary.computedAt)}.
       </p>
 
-      <InsightsWorkspaceNav />
+      <InsightsWorkspaceNav studentRouteTarget={studentRouteTarget} />
 
       <p className="admin-analytics-inline-note">
         {isLoading ? "Loading execution signals..." : inlineMessage ?? "Execution signals workspace ready."}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
 import {
@@ -6,20 +6,19 @@ import {
   FALLBACK_SNAPSHOT,
   fetchSettingsSnapshot,
   isLocalSettingsReadMode,
+  resolveAdminInstituteId,
   updateDataRetentionPolicy,
   type AdminSettingsSnapshot,
   type DataRetentionPolicySettings,
 } from "./settingsDataset";
 import SettingsWorkspaceNav from "./SettingsWorkspaceNav";
 
-const SETTINGS_INSTITUTE_ID =
-  import.meta.env.VITE_ADMIN_SETTINGS_INSTITUTE_ID ?? "inst-build-125";
-
 function AdminDataArchiveControlsPage() {
   const { session } = useAuthProvider();
   const accessContext = resolveAdminAccessContext(session);
   const isDirector = accessContext.role === "director";
   const canEditDataRetention = !isDirector;
+  const settingsInstituteId = useMemo(() => resolveAdminInstituteId(session.idToken), [session.idToken]);
 
   const [snapshot, setSnapshot] = useState<AdminSettingsSnapshot>(FALLBACK_SNAPSHOT);
   const [dataRetentionForm, setDataRetentionForm] = useState<DataRetentionPolicySettings>(
@@ -43,7 +42,7 @@ function AdminDataArchiveControlsPage() {
       setInlineMessage(null);
 
       try {
-        const nextSnapshot = await fetchSettingsSnapshot(SETTINGS_INSTITUTE_ID);
+        const nextSnapshot = await fetchSettingsSnapshot(settingsInstituteId);
         if (!isMounted) {
           return;
         }
@@ -73,7 +72,7 @@ function AdminDataArchiveControlsPage() {
     return () => {
       isMounted = false;
     };
-  }, [applySnapshot]);
+  }, [applySnapshot, settingsInstituteId]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -87,7 +86,7 @@ function AdminDataArchiveControlsPage() {
     setInlineMessage(null);
 
     try {
-      const nextSnapshot = await updateDataRetentionPolicy(SETTINGS_INSTITUTE_ID, dataRetentionForm);
+      const nextSnapshot = await updateDataRetentionPolicy(settingsInstituteId, dataRetentionForm);
       applySnapshot(nextSnapshot, "Data retention policy updated through secured backend API.");
     } catch (error) {
       const reason = error instanceof ApiClientError ? error.message : "Data retention update failed.";

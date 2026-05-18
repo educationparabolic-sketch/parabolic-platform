@@ -119,10 +119,23 @@ function AdminInsightsLandingPage() {
       ).length,
     [currentLayer],
   );
+  const studentRouteTarget = useMemo(
+    () => dataset.studentYearMetrics[0]?.studentId ?? DEFAULT_STUDENT_INTELLIGENCE_ID,
+    [dataset.studentYearMetrics],
+  );
   const highRiskStudents = dataset.studentYearMetrics.filter(
     (student) => student.rollingRiskCluster === "high" || student.rollingRiskCluster === "critical",
   ).length;
   const riskSignals = dataset.yearBehaviorSummary.riskSignals;
+  const insightWorkspaces = useMemo(
+    () =>
+      INSIGHT_WORKSPACES.map((workspace) =>
+        workspace.title === "Student Intelligence" ?
+          { ...workspace, to: `/admin/insights/student/${studentRouteTarget}` } :
+          workspace,
+      ),
+    [studentRouteTarget],
+  );
 
   return (
     <section className="admin-content-card" aria-labelledby="admin-insights-landing-title">
@@ -192,7 +205,7 @@ function AdminInsightsLandingPage() {
       </div>
 
       <div className="admin-analytics-insight-list">
-        {INSIGHT_WORKSPACES.map((workspace) => {
+        {insightWorkspaces.map((workspace) => {
           const isAvailable =
             LICENSE_LAYER_ORDER[currentLayer] >= LICENSE_LAYER_ORDER[workspace.minimumLayer];
 

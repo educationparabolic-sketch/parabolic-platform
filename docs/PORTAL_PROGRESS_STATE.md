@@ -8,8 +8,8 @@ This file is the persistent handoff state for portal checklist implementation ac
 - `Current Priority Band`: `P0`
 - `Last Completed Checklist ID`: `GBL-004`
 - `Next Suggested Checklist ID`: `GBL-004`
-- `Last Updated`: `2026-05-14`
-- `Saved Scope Note`: `GBL-004` advanced again by keeping `/admin/students/:studentId` on `GET /admin/students` in live mode while deterministically backfilling missing deep profile panels like history, trend, override, and last-active fields from the matched local fixture shape, instead of letting sparse live payloads collapse that dedicated student workspace into empty charts and tables. The checklist item remains partial because other production-like admin flows are still fixture-backed, so the next suggested item stays `GBL-004`.
+- `Last Updated`: `2026-05-18`
+- `Saved Scope Note`: `GBL-004` advanced again by wiring `/admin/question-bank/tags` to hydrate and mutate governed tag inventory through new secured `GET /admin/questions/tags` and `POST /admin/questions/tags` flows, persisting create/rename/merge/deprecate operations in institute `tagDictionary` metadata while rewriting affected `questionBank` tag references for rename/merge actions instead of keeping those taxonomy controls local-only after the initial live-read hydration. The checklist item remains partial because other production-like admin flows are still fixture-backed, so the next suggested item stays `GBL-004`.
 
 ## Active Checklist Set
 

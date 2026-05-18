@@ -14,23 +14,24 @@ const INSIGHTS_WORKSPACE_LINKS = [
 
 interface InsightsWorkspaceNavProps {
   activeStudentId?: string;
+  studentRouteTarget?: string;
 }
 
-function InsightsWorkspaceNav({ activeStudentId }: InsightsWorkspaceNavProps) {
+function InsightsWorkspaceNav({ activeStudentId, studentRouteTarget }: InsightsWorkspaceNavProps) {
   const { session } = useAuthProvider();
   const accessContext = resolveAdminAccessContext(session);
   const showExecutionSignals =
     accessContext.licenseLayer !== null && LICENSE_LAYER_ORDER[accessContext.licenseLayer] >= LICENSE_LAYER_ORDER.L2;
-  const studentRouteTarget = activeStudentId || DEFAULT_STUDENT_INTELLIGENCE_ID;
+  const resolvedStudentRouteTarget = studentRouteTarget || activeStudentId || DEFAULT_STUDENT_INTELLIGENCE_ID;
   const workspaceLinks = useMemo(() => {
     const links = [
       ...INSIGHTS_WORKSPACE_LINKS.slice(0, 1),
-      { label: "Student Intelligence", to: `/admin/insights/student/${studentRouteTarget}` },
+      { label: "Student Intelligence", to: `/admin/insights/student/${resolvedStudentRouteTarget}` },
       ...INSIGHTS_WORKSPACE_LINKS.slice(1),
     ];
 
     return showExecutionSignals ? [...links, { label: "Execution Signals", to: "/admin/insights/execution" }] : links;
-  }, [showExecutionSignals, studentRouteTarget]);
+  }, [resolvedStudentRouteTarget, showExecutionSignals]);
 
   return (
     <div className="admin-analytics-inline-link-row">

@@ -178,6 +178,10 @@ function AdminPatternAlertsPage() {
     () => buildPatternAlerts(dataset, highRiskStudents, isL2OrAbove),
     [dataset, highRiskStudents, isL2OrAbove],
   );
+  const studentRouteTarget = useMemo(
+    () => highRiskStudents[0]?.studentId ?? dataset.studentYearMetrics[0]?.studentId ?? "",
+    [dataset.studentYearMetrics, highRiskStudents],
+  );
 
   const patternAlertColumns = useMemo<UiTableColumn<PatternAlertRow>[]>(
     () => {
@@ -235,7 +239,7 @@ function AdminPatternAlertsPage() {
         session scans on dashboard load.
       </p>
 
-      <InsightsWorkspaceNav />
+      <InsightsWorkspaceNav studentRouteTarget={studentRouteTarget} />
 
       <p className="admin-analytics-inline-note">
         {isLoading ? "Loading pattern alerts..." : inlineMessage ?? "Pattern alerts workspace ready."}

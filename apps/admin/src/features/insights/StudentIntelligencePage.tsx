@@ -4,6 +4,7 @@ import { UiChartContainer, UiTable, type UiTableColumn } from "../../../../../sh
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { LICENSE_LAYER_ORDER } from "../../../../../shared/types/portalRouting";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
+import { resolveAdminInstituteId } from "../settings/settingsDataset";
 import {
   ApiClientError,
   DEFAULT_STUDENT_INTELLIGENCE_ID,
@@ -34,27 +35,6 @@ interface StudentOption {
   studentName: string;
 }
 
-function decodeIdTokenClaims(idToken: string | null): Record<string, unknown> | null {
-  if (!idToken) {
-    return null;
-  }
-
-  const segments = idToken.split(".");
-  if (segments.length !== 3) {
-    return null;
-  }
-
-  try {
-    const payloadSegment = segments[1].replace(/-/g, "+").replace(/_/g, "/");
-    const paddedPayload = payloadSegment.padEnd(Math.ceil(payloadSegment.length / 4) * 4, "=");
-    const payload = atob(paddedPayload);
-    const claims = JSON.parse(payload);
-    return claims && typeof claims === "object" ? (claims as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
-}
-
 function riskClusterText(value: StudentAnalyticsRecord["rollingRiskCluster"]): string {
   if (value === "critical") {
     return "Critical";
@@ -83,6 +63,7 @@ function StudentIntelligencePage() {
   const accessContext = resolveAdminAccessContext(session);
   const isL2OrAbove =
     accessContext.licenseLayer !== null && LICENSE_LAYER_ORDER[accessContext.licenseLayer] >= LICENSE_LAYER_ORDER.L2;
+  const insightsInstituteId = useMemo(() => resolveAdminInstituteId(session.idToken), [session.idToken]);
 
   const [dataset, setDataset] = useState<DashboardDataset>(FALLBACK_DATASET);
   const [interventionHistory, setInterventionHistory] = useState<InterventionActionRecord[]>([]);
@@ -102,17 +83,12 @@ function StudentIntelligencePage() {
           nextDataset.studentAnalytics.find((entry) => entry.studentId === studentId) ??
           nextDataset.studentYearMetrics.find((entry) => entry.studentId === studentId) ??
           null;
-        const claims = decodeIdTokenClaims(session.idToken);
-        const instituteId =
-          typeof claims?.instituteId === "string" && claims.instituteId.trim().length > 0 ?
-            claims.instituteId :
-            "inst-build-125";
         const yearId =
           nextStudent && "academicYear" in nextStudent && typeof nextStudent.academicYear === "string" ?
             nextStudent.academicYear :
             nextDataset.yearBehaviorSummary.academicYear;
         const nextHistory = await listInterventionActions({
-          instituteId,
+          instituteId: insightsInstituteId,
           studentId,
           yearId,
         });
@@ -149,7 +125,7 @@ function StudentIntelligencePage() {
     return () => {
       isMounted = false;
     };
-  }, [session.idToken, studentId]);
+  }, [insightsInstituteId, studentId]);
 
   const student = useMemo(
     () => dataset.studentAnalytics.find((entry) => entry.studentId === studentId) ?? null,

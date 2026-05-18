@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
+import { resolveAdminInstituteId } from "../settings/settingsDataset";
 import {
   ApiClientError,
   FALLBACK_SNAPSHOT,
@@ -10,9 +11,6 @@ import {
   type AdminLicensingSnapshot,
 } from "./licensingDataset";
 import LicensingWorkspaceNav from "./LicensingWorkspaceNav";
-
-const LICENSING_INSTITUTE_ID =
-  import.meta.env.VITE_ADMIN_SETTINGS_INSTITUTE_ID ?? "inst-build-125";
 
 function percent(value: number, total: number): number {
   if (total <= 0) {
@@ -25,6 +23,7 @@ function percent(value: number, total: number): number {
 function AdminLicensingEligibilityPage() {
   const { session } = useAuthProvider();
   const accessContext = resolveAdminAccessContext(session);
+  const licensingInstituteId = useMemo(() => resolveAdminInstituteId(session.idToken), [session.idToken]);
   const [snapshot, setSnapshot] = useState<AdminLicensingSnapshot>(FALLBACK_SNAPSHOT);
   const [isLoading, setIsLoading] = useState(true);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
@@ -37,7 +36,7 @@ function AdminLicensingEligibilityPage() {
       setInlineMessage(null);
 
       try {
-        const nextSnapshot = await fetchLicensingSnapshot(LICENSING_INSTITUTE_ID);
+        const nextSnapshot = await fetchLicensingSnapshot(licensingInstituteId);
         if (!mounted) {
           return;
         }
@@ -68,7 +67,7 @@ function AdminLicensingEligibilityPage() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [licensingInstituteId]);
 
   const currentPlan = snapshot.currentPlan;
 

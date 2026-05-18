@@ -11,6 +11,7 @@ import {
   isLocalSettingsReadMode,
   lockAcademicYear,
   removeUserAccess,
+  resolveAdminInstituteId,
   resetUserPassword,
   type SettingsActionType,
   type AdminSettingsSnapshot,
@@ -23,9 +24,6 @@ import {
   updateSecuritySettings,
   upsertUserAccess,
 } from "./settingsDataset";
-
-const SETTINGS_INSTITUTE_ID =
-  import.meta.env.VITE_ADMIN_SETTINGS_INSTITUTE_ID ?? "inst-build-125";
 
 interface SettingsSection {
   id: string;
@@ -93,6 +91,7 @@ function AdminSettingsConfigurationPage() {
   const accessContext = resolveAdminAccessContext(session);
   const activeSection = sectionFromPath(location.pathname);
   const isDirector = accessContext.role === "director";
+  const settingsInstituteId = useMemo(() => resolveAdminInstituteId(session.idToken), [session.idToken]);
 
   const [snapshot, setSnapshot] = useState<AdminSettingsSnapshot>(FALLBACK_SNAPSHOT);
   const [isLoading, setIsLoading] = useState(true);
@@ -149,7 +148,7 @@ function AdminSettingsConfigurationPage() {
       setInlineMessage(null);
 
       try {
-        const nextSnapshot = await fetchSettingsSnapshot(SETTINGS_INSTITUTE_ID);
+        const nextSnapshot = await fetchSettingsSnapshot(settingsInstituteId);
 
         if (!isMounted) {
           return;
@@ -180,7 +179,7 @@ function AdminSettingsConfigurationPage() {
     return () => {
       isMounted = false;
     };
-  }, [applySnapshot]);
+  }, [applySnapshot, settingsInstituteId]);
 
   const canMutate = useCallback((actionType: SettingsActionType): boolean => {
     if (!isDirector) {
@@ -331,7 +330,7 @@ function AdminSettingsConfigurationPage() {
             event.preventDefault();
             void withSubmitGuard(
               async () =>
-                updateInstituteProfile(SETTINGS_INSTITUTE_ID, profileForm),
+                updateInstituteProfile(settingsInstituteId, profileForm),
               "Institute profile updated via secured admin settings API.",
               "UPDATE_INSTITUTE_PROFILE",
             );
@@ -476,7 +475,7 @@ function AdminSettingsConfigurationPage() {
                 }
 
                 void withSubmitGuard(
-                  async () => lockAcademicYear(SETTINGS_INSTITUTE_ID, currentAcademicYear.yearId),
+                  async () => lockAcademicYear(settingsInstituteId, currentAcademicYear.yearId),
                   `Academic year ${currentAcademicYear.academicYearLabel} locked successfully.`,
                   "LOCK_ACADEMIC_YEAR",
                 );
@@ -503,8 +502,8 @@ function AdminSettingsConfigurationPage() {
 
                 void withSubmitGuard(
                   async () => {
-                    await archiveAcademicYear(SETTINGS_INSTITUTE_ID, currentAcademicYear.yearId);
-                    return fetchSettingsSnapshot(SETTINGS_INSTITUTE_ID);
+                    await archiveAcademicYear(settingsInstituteId, currentAcademicYear.yearId);
+                    return fetchSettingsSnapshot(settingsInstituteId);
                   },
                   `Archive requested for ${currentAcademicYear.academicYearLabel} through secured archive API.`,
                   "LOCK_ACADEMIC_YEAR",
@@ -526,7 +525,7 @@ function AdminSettingsConfigurationPage() {
             event.preventDefault();
 
             void withSubmitGuard(
-              async () => updateExecutionPolicy(SETTINGS_INSTITUTE_ID, executionForm),
+              async () => updateExecutionPolicy(settingsInstituteId, executionForm),
               "Execution defaults saved through secured backend policy API.",
               "UPDATE_EXECUTION_POLICY",
             );
@@ -737,7 +736,7 @@ function AdminSettingsConfigurationPage() {
 
               void withSubmitGuard(
                 async () =>
-                  upsertUserAccess(SETTINGS_INSTITUTE_ID, userDraft),
+                  upsertUserAccess(settingsInstituteId, userDraft),
                 `User ${userDraft.userId} access updated.`,
                 "UPSERT_USER_ACCESS",
               );
@@ -833,7 +832,7 @@ function AdminSettingsConfigurationPage() {
                 }
 
                 void withSubmitGuard(
-                  async () => removeUserAccess(SETTINGS_INSTITUTE_ID, userId),
+                  async () => removeUserAccess(settingsInstituteId, userId),
                   `User ${userId} removed from institute role registry.`,
                   "REMOVE_USER_ACCESS",
                 );
@@ -852,7 +851,7 @@ function AdminSettingsConfigurationPage() {
                 }
 
                 void withSubmitGuard(
-                  async () => resetUserPassword(SETTINGS_INSTITUTE_ID, userId),
+                  async () => resetUserPassword(settingsInstituteId, userId),
                   `Password reset request logged for ${userId}.`,
                   "RESET_USER_PASSWORD",
                 );
@@ -873,7 +872,7 @@ function AdminSettingsConfigurationPage() {
             event.preventDefault();
 
             void withSubmitGuard(
-              async () => updateSecuritySettings(SETTINGS_INSTITUTE_ID, securityForm),
+              async () => updateSecuritySettings(settingsInstituteId, securityForm),
               "Security and access policies updated.",
               "UPDATE_SECURITY_SETTINGS",
             );
@@ -1083,7 +1082,7 @@ function AdminSettingsConfigurationPage() {
             event.preventDefault();
 
             void withSubmitGuard(
-              async () => updateDataRetentionPolicy(SETTINGS_INSTITUTE_ID, dataRetentionForm),
+              async () => updateDataRetentionPolicy(settingsInstituteId, dataRetentionForm),
               "Data retention policy updated through secured backend API.",
               "UPDATE_DATA_RETENTION_POLICY",
             );
@@ -1174,7 +1173,7 @@ function AdminSettingsConfigurationPage() {
             event.preventDefault();
 
             void withSubmitGuard(
-              async () => updateFeatureFlags(SETTINGS_INSTITUTE_ID, featureFlagsForm),
+              async () => updateFeatureFlags(settingsInstituteId, featureFlagsForm),
               "System feature flags updated via secured backend API.",
               "UPDATE_FEATURE_FLAGS",
             );
