@@ -17,6 +17,8 @@ const EXAM_SUBJECTS: Record<ExamType, string[]> = {
   JEEMains: ["Physics", "Chemistry", "Mathematics"],
   NEET: ["Physics", "Chemistry", "Biology"],
 };
+const SAMPLE_EXAM_TYPES = [...EXAM_TYPES, "Other"] as const;
+const SAMPLE_OTHER_SUBJECT = "No subject lock";
 
 type UploadLogRecord = {
   id: string;
@@ -48,6 +50,8 @@ interface QuestionUploadWorkbookRow {
   correctAnswer: string;
   difficulty: string;
   internalNotes: string;
+  marks: number;
+  negativeMarks: number;
   primaryTag: string;
   questionImageFile: string;
   questionNo: string;
@@ -101,6 +105,16 @@ interface AdminQuestionsBulkValidationResult {
   uploadLogPath: string | null;
 }
 
+type SampleExamType = (typeof SAMPLE_EXAM_TYPES)[number];
+
+interface SampleWorkbookProfile {
+  columns: string[];
+  fileName: string;
+  markingScheme: string;
+  sampleRow: Record<string, string>;
+  subjectLabel: string;
+}
+
 interface QuestionPackageValidationResult {
   archiveEntries: string[];
   errors: string[];
@@ -114,9 +128,33 @@ interface QuestionPackageValidationResult {
   workbookRows: QuestionUploadWorkbookRow[];
 }
 
+interface DistributionPreviewBucket {
+  count: number;
+  label: string;
+  marks: number;
+  percent: number;
+}
+
+interface DistributionPreview {
+  chapterBuckets: DistributionPreviewBucket[];
+  difficultyBuckets: DistributionPreviewBucket[];
+  marksBuckets: DistributionPreviewBucket[];
+  totalMarks: number;
+  totalRows: number;
+  warnings: string[];
+}
+
 function formatIsoDate(value: string): string {
   const parsed = Date.parse(value);
   return Number.isNaN(parsed) ? value : new Date(parsed).toISOString().slice(0, 10);
+}
+
+function formatExamTypeLabel(value: SampleExamType): string {
+  if (value === "JEEMains") {
+    return "JEE Mains";
+  }
+
+  return value;
 }
 
 function toUint16(view: DataView, offset: number): number {
@@ -139,12 +177,134 @@ function toArrayBuffer(bufferLike: ArrayBuffer | SharedArrayBuffer): ArrayBuffer
   return new Uint8Array(bufferLike).slice().buffer;
 }
 
+function toFiniteNumber(value: string, fallback: number): number {
+  const parsed = Number(value.trim());
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 function encodeCsvCell(value: string): string {
   if (/[,"\n]/.test(value)) {
     return `"${value.replace(/"/g, "\"\"")}"`;
   }
 
   return value;
+}
+
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function getExcelColumnName(columnIndex: number): string {
+  let current = columnIndex + 1;
+  let columnName = "";
+
+  while (current > 0) {
+    const remainder = (current - 1) % 26;
+    columnName = String.fromCharCode(65 + remainder) + columnName;
+    current = Math.floor((current - 1) / 26);
+  }
+
+  return columnName;
+}
+
+function buildWorksheetXml(rows: string[][]): string {
+  const rowXml = rows
+    .map((row, rowIndex) => {
+      const rowNumber = rowIndex + 1;
+      const cellXml = row
+        .map((value, columnIndex) => {
+          const cellReference = `${getExcelColumnName(columnIndex)}${rowNumber}`;
+          return `<c r="${cellReference}" t="inlineStr"><is><t>${escapeXml(value)}</t></is></c>`;
+        })
+        .join("");
+      return `<row r="${rowNumber}">${cellXml}</row>`;
+    })
+    .join("");
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${rowXml}</sheetData></worksheet>`;
+}
+
+function buildCrc32(bytes: Uint8Array): number {
+  let crc = 0xffffffff;
+
+  bytes.forEach((byte) => {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+    }
+  });
+
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function writeUint16(output: number[], value: number): void {
+  output.push(value & 0xff, (value >>> 8) & 0xff);
+}
+
+function writeUint32(output: number[], value: number): void {
+  output.push(value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff);
+}
+
+function createStoredZip(files: Array<{ name: string; content: string }>): Uint8Array {
+  const encoder = new TextEncoder();
+  const output: number[] = [];
+  const centralDirectory: number[] = [];
+
+  files.forEach((file) => {
+    const nameBytes = encoder.encode(file.name);
+    const contentBytes = encoder.encode(file.content);
+    const crc32 = buildCrc32(contentBytes);
+    const localHeaderOffset = output.length;
+
+    writeUint32(output, 0x04034b50);
+    writeUint16(output, 20);
+    writeUint16(output, 0);
+    writeUint16(output, 0);
+    writeUint16(output, 0);
+    writeUint16(output, 0);
+    writeUint32(output, crc32);
+    writeUint32(output, contentBytes.length);
+    writeUint32(output, contentBytes.length);
+    writeUint16(output, nameBytes.length);
+    writeUint16(output, 0);
+    output.push(...nameBytes, ...contentBytes);
+
+    writeUint32(centralDirectory, 0x02014b50);
+    writeUint16(centralDirectory, 20);
+    writeUint16(centralDirectory, 20);
+    writeUint16(centralDirectory, 0);
+    writeUint16(centralDirectory, 0);
+    writeUint16(centralDirectory, 0);
+    writeUint16(centralDirectory, 0);
+    writeUint32(centralDirectory, crc32);
+    writeUint32(centralDirectory, contentBytes.length);
+    writeUint32(centralDirectory, contentBytes.length);
+    writeUint16(centralDirectory, nameBytes.length);
+    writeUint16(centralDirectory, 0);
+    writeUint16(centralDirectory, 0);
+    writeUint16(centralDirectory, 0);
+    writeUint16(centralDirectory, 0);
+    writeUint32(centralDirectory, 0);
+    writeUint32(centralDirectory, localHeaderOffset);
+    centralDirectory.push(...nameBytes);
+  });
+
+  const centralDirectoryOffset = output.length;
+  output.push(...centralDirectory);
+  writeUint32(output, 0x06054b50);
+  writeUint16(output, 0);
+  writeUint16(output, 0);
+  writeUint16(output, files.length);
+  writeUint16(output, files.length);
+  writeUint32(output, centralDirectory.length);
+  writeUint32(output, centralDirectoryOffset);
+  writeUint16(output, 0);
+
+  return new Uint8Array(output);
 }
 
 function getWorkbookRequiredColumns(): string[] {
@@ -160,6 +320,127 @@ function getWorkbookRequiredColumns(): string[] {
     "PrimaryTag",
     "SecondaryTag",
   ];
+}
+
+function getSimplifiedSampleColumns(): string[] {
+  return [
+    ...getWorkbookRequiredColumns(),
+    "Topic",
+    "TutorialVideoLink",
+    "SimulationLink",
+    "AdditionalTag",
+    "InternalNotes",
+  ];
+}
+
+function getFullSampleColumns(): string[] {
+  return [
+    "Exam",
+    "Subject",
+    "Marks",
+    "NegativeMarks",
+    ...getSimplifiedSampleColumns(),
+  ];
+}
+
+function buildSampleWorkbookProfile(examType: SampleExamType, subject: string): SampleWorkbookProfile {
+  const simplified = examType !== "Other";
+  const subjectLabel = simplified ? subject : SAMPLE_OTHER_SUBJECT;
+  const columns = simplified ? getSimplifiedSampleColumns() : getFullSampleColumns();
+  const baseRow: Record<string, string> = {
+    AdditionalTag: "formula-application",
+    ChapterName: examType === "NEET" && subject === "Biology" ? "Cell Structure" : "Kinematics",
+    CorrectAnswer: "A",
+    Difficulty: "Medium",
+    InternalNotes: "Optional reviewer note",
+    PrimaryTag: "conceptual",
+    QuestionImageFile: "question-001.png",
+    QuestionNo: "1",
+    QuestionType: "single_correct",
+    SecondaryTag: "moderate-time",
+    SimulationLink: "",
+    SolutionImageFile: "solution-001.png",
+    Topic: examType === "NEET" && subject === "Biology" ? "Cell organelles" : "Projectile motion",
+    TutorialVideoLink: "",
+    UniqueKey: `${examType.toLowerCase()}-${subjectLabel.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-001`,
+  };
+
+  if (!simplified) {
+    baseRow.Exam = "Custom Exam";
+    baseRow.Subject = "Custom Subject";
+    baseRow.Marks = "4";
+    baseRow.NegativeMarks = "-1";
+  }
+
+  return {
+    columns,
+    fileName: `question-bank-sample-${examType.toLowerCase()}-${subjectLabel.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.csv`,
+    markingScheme: simplified ? "Auto-applied during upload: correct +4, incorrect -1" : "Provided per row using Marks and NegativeMarks",
+    sampleRow: baseRow,
+    subjectLabel,
+  };
+}
+
+function buildSampleWorkbookXlsx(profile: SampleWorkbookProfile, examType: SampleExamType): Uint8Array {
+  const questionRows = [
+    profile.columns,
+    profile.columns.map((columnName) => profile.sampleRow[columnName] ?? ""),
+  ];
+  const summaryRows = [
+    ["Field", "Value"],
+    ["Selected Exam", formatExamTypeLabel(examType)],
+    ["Selected Subject", profile.subjectLabel],
+    ["Marking Scheme", profile.markingScheme],
+    ["Difficulty Definitions", "Easy = direct recall; Medium = standard application; Hard = multi-step or high discrimination"],
+    ["ZIP Creation", "Place this workbook as questions.xlsx at ZIP root with referenced image files beside it."],
+  ];
+  const instructionRows = [
+    ["Topic", "Instruction"],
+    ["Required columns", getWorkbookRequiredColumns().join(", ")],
+    ["Allowed Difficulty", "Easy, Medium, Hard"],
+    ["QuestionType examples", "single_correct, multiple_correct, integer, numerical"],
+    ["Image naming rules", "Use flat root-level file names such as question-001.png and solution-001.png. No folders or external URLs."],
+    ["ZIP packaging steps", "Rename this workbook to questions.xlsx, add referenced images at ZIP root, then upload the flat ZIP package."],
+    ["Common errors", "Missing UniqueKey, missing image file, invalid difficulty, nested folder, external image URL."],
+  ];
+
+  const contentTypes =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+    '<Default Extension="xml" ContentType="application/xml"/>' +
+    '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+    '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+    '<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+    '<Override PartName="/xl/worksheets/sheet3.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+    "</Types>";
+  const rootRels =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+    "</Relationships>";
+  const workbook =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+    '<sheets><sheet name="questions" sheetId="1" r:id="rId1"/><sheet name="Exam Summary" sheetId="2" r:id="rId2"/><sheet name="INSTRUCTIONS" sheetId="3" r:id="rId3"/></sheets>' +
+    "</workbook>";
+  const workbookRels =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+    '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>' +
+    '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/>' +
+    "</Relationships>";
+
+  return createStoredZip([
+    { name: "[Content_Types].xml", content: contentTypes },
+    { name: "_rels/.rels", content: rootRels },
+    { name: "xl/workbook.xml", content: workbook },
+    { name: "xl/_rels/workbook.xml.rels", content: workbookRels },
+    { name: "xl/worksheets/sheet1.xml", content: buildWorksheetXml(questionRows) },
+    { name: "xl/worksheets/sheet2.xml", content: buildWorksheetXml(summaryRows) },
+    { name: "xl/worksheets/sheet3.xml", content: buildWorksheetXml(instructionRows) },
+  ]);
 }
 
 function normalizeColumnName(value: string): string {
@@ -223,6 +504,8 @@ function normalizeWorkbookRow(row: Record<string, string>): QuestionUploadWorkbo
     correctAnswer: (row.CorrectAnswer ?? "").trim(),
     difficulty: (row.Difficulty ?? "").trim(),
     internalNotes: (row.InternalNotes ?? "").trim(),
+    marks: toFiniteNumber(row.Marks ?? "", 4),
+    negativeMarks: toFiniteNumber(row.NegativeMarks ?? "", -1),
     primaryTag: (row.PrimaryTag ?? "").trim(),
     questionImageFile: (row.QuestionImageFile ?? "").trim(),
     questionNo: (row.QuestionNo ?? "").trim(),
@@ -233,6 +516,70 @@ function normalizeWorkbookRow(row: Record<string, string>): QuestionUploadWorkbo
     topic: (row.Topic ?? "").trim(),
     tutorialVideoLink: (row.TutorialVideoLink ?? "").trim(),
     uniqueKey: (row.UniqueKey ?? "").trim(),
+  };
+}
+
+function buildDistributionBuckets(
+  rows: QuestionUploadWorkbookRow[],
+  readLabel: (row: QuestionUploadWorkbookRow) => string,
+): DistributionPreviewBucket[] {
+  const buckets = new Map<string, { count: number; marks: number }>();
+  const totalRows = rows.length;
+
+  rows.forEach((row) => {
+    const label = readLabel(row).trim() || "Missing";
+    const current = buckets.get(label) ?? { count: 0, marks: 0 };
+    current.count += 1;
+    current.marks += row.marks;
+    buckets.set(label, current);
+  });
+
+  return Array.from(buckets.entries())
+    .map(([label, bucket]) => ({
+      count: bucket.count,
+      label,
+      marks: bucket.marks,
+      percent: totalRows > 0 ? (bucket.count / totalRows) * 100 : 0,
+    }))
+    .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
+}
+
+function buildDistributionPreview(rows: QuestionUploadWorkbookRow[]): DistributionPreview {
+  const difficultyBuckets = buildDistributionBuckets(rows, (row) => normalizeDifficultyForApi(row.difficulty));
+  const chapterBuckets = buildDistributionBuckets(rows, (row) => row.chapter);
+  const marksBuckets = buildDistributionBuckets(rows, (row) => `${row.marks} mark${row.marks === 1 ? "" : "s"}`);
+  const totalMarks = rows.reduce((sum, row) => sum + row.marks, 0);
+  const warnings: string[] = [];
+  const expectedDifficulties = ["Easy", "Medium", "Hard"];
+  const presentDifficulties = new Set(difficultyBuckets.map((bucket) => bucket.label));
+
+  expectedDifficulties.forEach((difficulty) => {
+    if (!presentDifficulties.has(difficulty)) {
+      warnings.push(`${difficulty} questions are missing from this package.`);
+    }
+  });
+
+  const dominantDifficulty = difficultyBuckets.find((bucket) => bucket.percent >= 70);
+  if (dominantDifficulty) {
+    warnings.push(`${dominantDifficulty.label} questions make up ${Math.round(dominantDifficulty.percent)}% of the package.`);
+  }
+
+  const dominantChapter = chapterBuckets.find((bucket) => bucket.percent >= 50);
+  if (dominantChapter && rows.length > 1) {
+    warnings.push(`${dominantChapter.label} covers ${Math.round(dominantChapter.percent)}% of rows; review chapter balance before import.`);
+  }
+
+  if (marksBuckets.length > 1) {
+    warnings.push("Multiple marks values are present; confirm the marks balance before import.");
+  }
+
+  return {
+    chapterBuckets,
+    difficultyBuckets,
+    marksBuckets,
+    totalMarks,
+    totalRows: rows.length,
+    warnings,
   };
 }
 
@@ -323,8 +670,8 @@ async function validateQuestionsWithApi(input: {
     correctAnswer: row.correctAnswer,
     difficulty: normalizeDifficultyForApi(row.difficulty),
     examType: input.examType,
-    marks: 4,
-    negativeMarks: 1,
+    marks: row.marks,
+    negativeMarks: Math.abs(row.negativeMarks),
     questionTextKeywords: buildKeywordHints(row),
     questionType: row.questionType,
     simulationLink: row.simulationLink || null,
@@ -725,6 +1072,8 @@ function QuestionBankManagementPage() {
   const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null);
   const [uploadExamType, setUploadExamType] = useState<ExamType>("JEEMains");
   const [uploadSubject, setUploadSubject] = useState<string>(EXAM_SUBJECTS.JEEMains[0]);
+  const [sampleExamType, setSampleExamType] = useState<SampleExamType>("JEEMains");
+  const [sampleSubject, setSampleSubject] = useState<string>(EXAM_SUBJECTS.JEEMains[0]);
   const [uploadLogs, setUploadLogs] = useState<UploadLogRecord[]>([]);
   const [uploadValidation, setUploadValidation] = useState<QuestionPackageValidationResult | null>(null);
   const [isValidatingUpload, setIsValidatingUpload] = useState(false);
@@ -737,6 +1086,18 @@ function QuestionBankManagementPage() {
     const nextSubject = EXAM_SUBJECTS[uploadExamType][0];
     setUploadSubject((current) => (EXAM_SUBJECTS[uploadExamType].includes(current) ? current : nextSubject));
   }, [uploadExamType]);
+
+  useEffect(() => {
+    if (sampleExamType === "Other") {
+      setSampleSubject(SAMPLE_OTHER_SUBJECT);
+      return;
+    }
+
+    const nextSubject = EXAM_SUBJECTS[sampleExamType][0];
+    setSampleSubject((current) => (EXAM_SUBJECTS[sampleExamType].includes(current) ? current : nextSubject));
+  }, [sampleExamType]);
+
+  const sampleWorkbookProfile = buildSampleWorkbookProfile(sampleExamType, sampleSubject);
 
   async function handleUploadSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -833,6 +1194,112 @@ function QuestionBankManagementPage() {
     URL.revokeObjectURL(downloadUrl);
   }
 
+  function downloadSampleWorkbookCsv() {
+    const lines = [
+      sampleWorkbookProfile.columns.join(","),
+      sampleWorkbookProfile.columns.map((columnName) => encodeCsvCell(sampleWorkbookProfile.sampleRow[columnName] ?? "")).join(","),
+    ];
+    const csvBlob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const downloadUrl = URL.createObjectURL(csvBlob);
+    const anchor = document.createElement("a");
+    anchor.href = downloadUrl;
+    anchor.download = sampleWorkbookProfile.fileName;
+    anchor.click();
+    URL.revokeObjectURL(downloadUrl);
+    setInlineMessage(
+      `Downloaded ${formatExamTypeLabel(sampleExamType)} sample schema for ${sampleWorkbookProfile.subjectLabel}. ${sampleWorkbookProfile.markingScheme}.`,
+    );
+  }
+
+  function downloadSampleWorkbookXlsx() {
+    const xlsxBytes = buildSampleWorkbookXlsx(sampleWorkbookProfile, sampleExamType);
+    const xlsxBuffer = toArrayBuffer(xlsxBytes.buffer).slice(
+      xlsxBytes.byteOffset,
+      xlsxBytes.byteOffset + xlsxBytes.byteLength,
+    );
+    const xlsxBlob = new Blob([xlsxBuffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const downloadUrl = URL.createObjectURL(xlsxBlob);
+    const anchor = document.createElement("a");
+    anchor.href = downloadUrl;
+    anchor.download = sampleWorkbookProfile.fileName.replace(/\.csv$/, ".xlsx");
+    anchor.click();
+    URL.revokeObjectURL(downloadUrl);
+    setInlineMessage(
+      `Downloaded workbook sample with questions, Exam Summary, and INSTRUCTIONS sheets for ${formatExamTypeLabel(sampleExamType)}.`,
+    );
+  }
+
+  function renderDistributionPreview(validation: QuestionPackageValidationResult) {
+    const preview = buildDistributionPreview(validation.workbookRows);
+
+    return (
+      <div className="admin-question-validation-block">
+        <h3>Pre-Import Distribution Preview</h3>
+        <div className="admin-question-validation-grid">
+          <article className="admin-question-validation-card">
+            <h3>{preview.totalRows}</h3>
+            <p>Rows included in the distribution preview.</p>
+          </article>
+          <article className="admin-question-validation-card">
+            <h3>{preview.totalMarks}</h3>
+            <p>Total marks represented by this upload package.</p>
+          </article>
+          <article className="admin-question-validation-card">
+            <h3>{preview.warnings.length}</h3>
+            <p>Balance warnings to review before import confirmation.</p>
+          </article>
+        </div>
+        {preview.warnings.length > 0 ? (
+          <ul className="admin-question-validation-list">
+            {preview.warnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="admin-tests-inline-note">No difficulty, chapter, or marks imbalance warnings were detected.</p>
+        )}
+        <UiTable
+          caption="Difficulty distribution preview"
+          columns={[
+            { id: "difficulty", header: "Difficulty", render: (bucket) => bucket.label },
+            { id: "count", header: "Rows", render: (bucket) => bucket.count },
+            { id: "percent", header: "Share", render: (bucket) => `${bucket.percent.toFixed(1)}%` },
+            { id: "marks", header: "Marks", render: (bucket) => bucket.marks },
+          ]}
+          rows={preview.difficultyBuckets}
+          rowKey={(bucket) => bucket.label}
+          emptyStateText="No difficulty rows are available for preview."
+        />
+        <UiTable
+          caption="Chapter balance preview"
+          columns={[
+            { id: "chapter", header: "Chapter", render: (bucket) => bucket.label },
+            { id: "count", header: "Rows", render: (bucket) => bucket.count },
+            { id: "percent", header: "Share", render: (bucket) => `${bucket.percent.toFixed(1)}%` },
+            { id: "marks", header: "Marks", render: (bucket) => bucket.marks },
+          ]}
+          rows={preview.chapterBuckets}
+          rowKey={(bucket) => bucket.label}
+          emptyStateText="No chapter rows are available for preview."
+        />
+        <UiTable
+          caption="Marks balance preview"
+          columns={[
+            { id: "marks", header: "Marks Bucket", render: (bucket) => bucket.label },
+            { id: "count", header: "Rows", render: (bucket) => bucket.count },
+            { id: "percent", header: "Share", render: (bucket) => `${bucket.percent.toFixed(1)}%` },
+            { id: "totalMarks", header: "Total Marks", render: (bucket) => bucket.marks },
+          ]}
+          rows={preview.marksBuckets}
+          rowKey={(bucket) => bucket.label}
+          emptyStateText="No marks rows are available for preview."
+        />
+      </div>
+    );
+  }
+
   function clearUploadValidation() {
     setSelectedUploadFile(null);
     setUploadValidation(null);
@@ -889,6 +1356,109 @@ function QuestionBankManagementPage() {
           <small>No partial commit path is exposed here.</small>
         </article>
       </div>
+
+      <section className="admin-question-validation-shell" aria-label="Exam-aware sample download wizard">
+        <div className="admin-student-bulk-review-header">
+          <div>
+            <h3>Download Sample Wizard</h3>
+            <p>
+              Choose the exam context first. JEE Mains and NEET samples omit Exam, Subject, Marks, and NegativeMarks
+              because the upload flow applies the fixed marking scheme from this selection.
+            </p>
+          </div>
+          <div className="admin-student-bulk-actions">
+            <button type="button" onClick={downloadSampleWorkbookCsv}>
+              Download CSV
+            </button>
+            <button type="button" onClick={downloadSampleWorkbookXlsx}>
+              Download Workbook
+            </button>
+          </div>
+        </div>
+        <div className="admin-student-bulk-stage-row" aria-label="Sample download wizard steps">
+          <article className="admin-student-bulk-stage admin-student-bulk-stage-active">
+            <span>1</span>
+            <strong>Choose Exam Type</strong>
+          </article>
+          <article className={`admin-student-bulk-stage ${sampleExamType === "Other" ? "" : "admin-student-bulk-stage-active"}`}>
+            <span>2</span>
+            <strong>{sampleExamType === "Other" ? "No Subject Lock" : "Choose Subject"}</strong>
+          </article>
+          <article className="admin-student-bulk-stage admin-student-bulk-stage-complete">
+            <span>3</span>
+            <strong>Download Sample</strong>
+          </article>
+        </div>
+        <div className="admin-student-grid">
+          <UiForm
+            title="Sample Context"
+            description="Generate the sample schema from the same exam context admins will use during upload validation."
+            submitLabel="Download Workbook"
+            onSubmit={(event) => {
+              event.preventDefault();
+              downloadSampleWorkbookXlsx();
+            }}
+            footer={<span className="admin-tests-form-footnote">{sampleWorkbookProfile.markingScheme}</span>}
+          >
+            <UiFormField label="Exam Type" htmlFor="admin-question-sample-exam-type">
+              <select
+                id="admin-question-sample-exam-type"
+                value={sampleExamType}
+                onChange={(event) => setSampleExamType(event.target.value as SampleExamType)}
+              >
+                {SAMPLE_EXAM_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {formatExamTypeLabel(type)}
+                  </option>
+                ))}
+              </select>
+            </UiFormField>
+            {sampleExamType === "Other" ? (
+              <UiFormField label="Subject" htmlFor="admin-question-sample-subject-unlocked" helper="Other exam samples include Subject as a workbook column.">
+                <input id="admin-question-sample-subject-unlocked" type="text" value={SAMPLE_OTHER_SUBJECT} readOnly />
+              </UiFormField>
+            ) : (
+              <UiFormField label="Subject" htmlFor="admin-question-sample-subject">
+                <select
+                  id="admin-question-sample-subject"
+                  value={sampleSubject}
+                  onChange={(event) => setSampleSubject(event.target.value)}
+                >
+                  {EXAM_SUBJECTS[sampleExamType].map((subject) => (
+                    <option key={subject} value={subject}>
+                      {subject}
+                    </option>
+                  ))}
+                </select>
+              </UiFormField>
+            )}
+          </UiForm>
+          <article className="admin-question-validation-card">
+            <h3>Sample Preview</h3>
+            <p>{formatExamTypeLabel(sampleExamType)} · {sampleWorkbookProfile.subjectLabel}</p>
+            <p>{sampleWorkbookProfile.columns.length} columns generated for this sample.</p>
+            <small>{sampleWorkbookProfile.fileName.replace(/\.csv$/, ".xlsx")} includes questions, Exam Summary, and INSTRUCTIONS sheets.</small>
+          </article>
+        </div>
+        <UiTable
+          caption="Sample workbook columns"
+          columns={[
+            { id: "column", header: "Column", render: (columnName) => columnName },
+            {
+              id: "treatment",
+              header: "Treatment",
+              render: (columnName) =>
+                getWorkbookRequiredColumns().includes(columnName) ||
+                (sampleExamType === "Other" && ["Exam", "Subject", "Marks", "NegativeMarks"].includes(columnName)) ?
+                  "Required" :
+                  "Optional",
+            },
+          ]}
+          rows={sampleWorkbookProfile.columns}
+          rowKey={(columnName) => columnName}
+          emptyStateText="Choose an exam type to preview sample columns."
+        />
+      </section>
 
       <UiForm
         title="Upload Question Package"
@@ -971,6 +1541,8 @@ function QuestionBankManagementPage() {
               <p>{uploadValidation.imageAssetCount} ZIP root asset files available for workbook references.</p>
             </article>
           </div>
+
+          {renderDistributionPreview(uploadValidation)}
 
           {uploadValidation.serverValidation ? (
             <div className="admin-question-validation-block">

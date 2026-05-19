@@ -7,6 +7,8 @@ export type QuestionStatus =
   "deprecated";
 
 export interface QuestionBankDocument {
+  academicYear: string | null;
+  additionalTag: string | null;
   questionId: string;
   uniqueKey: string;
   version: number;

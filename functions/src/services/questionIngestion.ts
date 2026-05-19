@@ -292,6 +292,8 @@ const normalizeQuestionDocument = (
     Timestamp.now();
 
   const normalizedQuestion: QuestionBankDocument = {
+    academicYear: normalizeOptionalString(data.academicYear, "academicYear"),
+    additionalTag: normalizeOptionalString(data.additionalTag, "additionalTag"),
     chapter,
     correctAnswer: normalizeRequiredString(data.correctAnswer, "correctAnswer"),
     createdAt,

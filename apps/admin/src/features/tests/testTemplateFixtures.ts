@@ -7,7 +7,11 @@ export type SelectionMethod = (typeof SELECTION_METHODS)[number];
 export type DifficultyLevel = (typeof DIFFICULTY_LEVELS)[number];
 
 export interface QuestionBankRecord {
+  academicYear: string;
+  additionalTag: string;
+  examType: string;
   id: string;
+  lastUsedDate: string | null;
   uniqueKey: string;
   subject: string;
   chapter: string;
@@ -16,6 +20,7 @@ export interface QuestionBankRecord {
   negativeMarks: number;
   prompt: string;
   primaryTag: string;
+  questionType: string;
   secondaryTag: string;
   usedCount: number;
   version: number;
@@ -25,7 +30,11 @@ export interface QuestionBankRecord {
 
 export const QUESTION_BANK: QuestionBankRecord[] = [
   {
+    academicYear: "2026-27",
+    additionalTag: "jee-main",
+    examType: "JEEMains",
     id: "q-101",
+    lastUsedDate: "2026-05-10",
     uniqueKey: "PH-KIN-001",
     subject: "Physics",
     chapter: "Kinematics",
@@ -34,6 +43,7 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     negativeMarks: 1,
     prompt: "Uniform acceleration and displacement relation",
     primaryTag: "motion",
+    questionType: "MCQ",
     secondaryTag: "basics",
     usedCount: 3,
     version: 2,
@@ -41,7 +51,11 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     status: "active",
   },
   {
+    academicYear: "2026-27",
+    additionalTag: "jee-main",
+    examType: "JEEMains",
     id: "q-102",
+    lastUsedDate: null,
     uniqueKey: "PH-LOM-002",
     subject: "Physics",
     chapter: "Laws of Motion",
@@ -50,6 +64,7 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     negativeMarks: 1,
     prompt: "Block and pulley force balance",
     primaryTag: "dynamics",
+    questionType: "MCQ",
     secondaryTag: "force",
     usedCount: 0,
     version: 1,
@@ -57,7 +72,11 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     status: "active",
   },
   {
+    academicYear: "2026-27",
+    additionalTag: "jee-advanced",
+    examType: "JEEMains",
     id: "q-103",
+    lastUsedDate: "2026-04-28",
     uniqueKey: "PH-ELE-003",
     subject: "Physics",
     chapter: "Electrostatics",
@@ -66,6 +85,7 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     negativeMarks: 1,
     prompt: "Potential due to charged ring on axis",
     primaryTag: "electrostatics",
+    questionType: "Integer",
     secondaryTag: "advanced",
     usedCount: 1,
     version: 1,
@@ -73,7 +93,11 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     status: "active",
   },
   {
+    academicYear: "2026-27",
+    additionalTag: "neet",
+    examType: "NEET",
     id: "q-104",
+    lastUsedDate: null,
     uniqueKey: "CH-MOL-004",
     subject: "Chemistry",
     chapter: "Mole Concept",
@@ -82,6 +106,7 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     negativeMarks: 1,
     prompt: "Molarity and dilution",
     primaryTag: "stoichiometry",
+    questionType: "MCQ",
     secondaryTag: "foundation",
     usedCount: 0,
     version: 1,
@@ -89,7 +114,11 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     status: "active",
   },
   {
+    academicYear: "2026-27",
+    additionalTag: "neet",
+    examType: "NEET",
     id: "q-105",
+    lastUsedDate: "2026-05-02",
     uniqueKey: "CH-THM-005",
     subject: "Chemistry",
     chapter: "Thermodynamics",
@@ -98,6 +127,7 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     negativeMarks: 1,
     prompt: "Sign convention for heat and work",
     primaryTag: "thermo",
+    questionType: "MCQ",
     secondaryTag: "conceptual",
     usedCount: 2,
     version: 1,
@@ -105,7 +135,11 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     status: "active",
   },
   {
+    academicYear: "2025-26",
+    additionalTag: "neet-repeaters",
+    examType: "NEET",
     id: "q-106",
+    lastUsedDate: null,
     uniqueKey: "CH-ORG-006",
     subject: "Chemistry",
     chapter: "Organic Chemistry",
@@ -114,6 +148,7 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     negativeMarks: 1,
     prompt: "Reaction mechanism selection",
     primaryTag: "organic",
+    questionType: "Assertion Reason",
     secondaryTag: "mechanism",
     usedCount: 0,
     version: 1,
@@ -121,7 +156,11 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     status: "active",
   },
   {
+    academicYear: "2026-27",
+    additionalTag: "jee-main",
+    examType: "JEEMains",
     id: "q-107",
+    lastUsedDate: "2026-05-12",
     uniqueKey: "MA-QUA-007",
     subject: "Mathematics",
     chapter: "Quadratic Equations",
@@ -130,6 +169,7 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     negativeMarks: 1,
     prompt: "Roots and coefficient relation",
     primaryTag: "algebra",
+    questionType: "MCQ",
     secondaryTag: "roots",
     usedCount: 4,
     version: 2,
@@ -137,7 +177,11 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     status: "active",
   },
   {
+    academicYear: "2026-27",
+    additionalTag: "jee-main",
+    examType: "JEEMains",
     id: "q-108",
+    lastUsedDate: "2026-04-20",
     uniqueKey: "MA-FUN-008",
     subject: "Mathematics",
     chapter: "Functions",
@@ -146,6 +190,7 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     negativeMarks: 1,
     prompt: "Domain and range mapping",
     primaryTag: "functions",
+    questionType: "MCQ",
     secondaryTag: "mapping",
     usedCount: 1,
     version: 1,
@@ -153,7 +198,11 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     status: "active",
   },
   {
+    academicYear: "2025-26",
+    additionalTag: "jee-advanced",
+    examType: "Other",
     id: "q-109",
+    lastUsedDate: null,
     uniqueKey: "MA-INT-009",
     subject: "Mathematics",
     chapter: "Definite Integration",
@@ -162,6 +211,7 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     negativeMarks: 1,
     prompt: "Area under transformed curve",
     primaryTag: "calculus",
+    questionType: "Integer",
     secondaryTag: "definite-integral",
     usedCount: 0,
     version: 1,
@@ -169,7 +219,11 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     status: "active",
   },
   {
+    academicYear: "2026-27",
+    additionalTag: "jee-main",
+    examType: "JEEMains",
     id: "q-110",
+    lastUsedDate: null,
     uniqueKey: "PH-OPT-010",
     subject: "Physics",
     chapter: "Ray Optics",
@@ -178,6 +232,7 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     negativeMarks: 1,
     prompt: "Lens formula and image formation",
     primaryTag: "optics",
+    questionType: "MCQ",
     secondaryTag: "application",
     usedCount: 0,
     version: 1,
@@ -185,7 +240,11 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     status: "active",
   },
   {
+    academicYear: "2025-26",
+    additionalTag: "neet-repeaters",
+    examType: "NEET",
     id: "q-111",
+    lastUsedDate: null,
     uniqueKey: "CH-ION-011",
     subject: "Chemistry",
     chapter: "Ionic Equilibrium",
@@ -194,6 +253,7 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     negativeMarks: 1,
     prompt: "pH from mixed weak acid/base",
     primaryTag: "equilibrium",
+    questionType: "Numerical",
     secondaryTag: "advanced",
     usedCount: 0,
     version: 1,
@@ -201,7 +261,11 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     status: "active",
   },
   {
+    academicYear: "2026-27",
+    additionalTag: "jee-main",
+    examType: "JEEMains",
     id: "q-112",
+    lastUsedDate: null,
     uniqueKey: "MA-PNC-012",
     subject: "Mathematics",
     chapter: "Permutation and Combination",
@@ -210,6 +274,7 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     negativeMarks: 1,
     prompt: "Arrangement constraints with repetition",
     primaryTag: "combinatorics",
+    questionType: "MCQ",
     secondaryTag: "counting",
     usedCount: 0,
     version: 1,

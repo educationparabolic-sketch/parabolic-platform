@@ -19,22 +19,32 @@ import QuestionBankWorkspaceNav from "./QuestionBankWorkspaceNav";
 const apiClient = getPortalApiClient("admin");
 
 interface QuestionFilterDraft {
+  academicYear: string;
+  additionalTag: string;
+  examType: string;
   query: string;
+  questionType: string;
   subject: string;
   chapter: string;
   difficulty: "all" | DifficultyLevel;
   tag: string;
+  usedInTemplate: "all" | "yes" | "no";
   thermalState: "all" | "hot" | "warm" | "cold";
 }
 
 const PAGE_SIZE = 6;
 
 const INITIAL_FILTERS: QuestionFilterDraft = {
+  academicYear: "all",
+  additionalTag: "all",
+  examType: "all",
   query: "",
+  questionType: "all",
   subject: "all",
   chapter: "all",
   difficulty: "all",
   tag: "all",
+  usedInTemplate: "all",
   thermalState: "all",
 };
 
@@ -58,6 +68,10 @@ function toNumberOrZero(value: unknown): number {
   }
 
   return 0;
+}
+
+function toOptionalDateString(value: unknown, fallback: string | null): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
 }
 
 function normalizeDifficulty(value: unknown, fallback: DifficultyLevel): DifficultyLevel {
@@ -87,13 +101,18 @@ function normalizeQuestionRecord(value: unknown, index: number): QuestionBankRec
   const fallback = QUESTION_BANK[index] ?? QUESTION_BANK[0];
 
   return {
+    academicYear: toNonEmptyString(record.academicYear, fallback?.academicYear ?? "unassigned"),
+    additionalTag: toNonEmptyString(record.additionalTag, fallback?.additionalTag ?? "none"),
     chapter: toNonEmptyString(record.chapter, fallback?.chapter ?? `Chapter ${index + 1}`),
     difficulty: normalizeDifficulty(record.difficulty, fallback?.difficulty ?? "medium"),
+    examType: toNonEmptyString(record.examType, fallback?.examType ?? "General"),
     id: toNonEmptyString(record.id, fallback?.id ?? `q-${index + 1}`),
+    lastUsedDate: toOptionalDateString(record.lastUsedDate, fallback?.lastUsedDate ?? null),
     marks: Math.max(0, toNumberOrZero(record.marks ?? fallback?.marks ?? 0)),
     negativeMarks: Math.max(0, toNumberOrZero(record.negativeMarks ?? fallback?.negativeMarks ?? 0)),
     primaryTag: toNonEmptyString(record.primaryTag, fallback?.primaryTag ?? "untagged"),
     prompt: toNonEmptyString(record.prompt, fallback?.prompt ?? ""),
+    questionType: toNonEmptyString(record.questionType, fallback?.questionType ?? "Question"),
     secondaryTag: toNonEmptyString(record.secondaryTag, fallback?.secondaryTag ?? "none"),
     status: normalizeStatus(record.status, fallback?.status ?? "active"),
     subject: toNonEmptyString(record.subject, fallback?.subject ?? "General"),
@@ -181,12 +200,28 @@ function AdminQuestionBankLibraryPage() {
     return ["all", ...new Set(questions.map((question) => question.subject))];
   }, [questions]);
 
+  const examTypes = useMemo(() => {
+    return ["all", ...new Set(questions.map((question) => question.examType))];
+  }, [questions]);
+
   const chapters = useMemo(() => {
     return ["all", ...new Set(questions.map((question) => question.chapter))];
   }, [questions]);
 
+  const questionTypes = useMemo(() => {
+    return ["all", ...new Set(questions.map((question) => question.questionType))];
+  }, [questions]);
+
   const tags = useMemo(() => {
     return ["all", ...new Set(questions.flatMap((question) => [question.primaryTag, question.secondaryTag]))];
+  }, [questions]);
+
+  const additionalTags = useMemo(() => {
+    return ["all", ...new Set(questions.map((question) => question.additionalTag))];
+  }, [questions]);
+
+  const academicYears = useMemo(() => {
+    return ["all", ...new Set(questions.map((question) => question.academicYear))];
   }, [questions]);
 
   const filteredQuestions = useMemo(() => {
@@ -197,22 +232,49 @@ function AdminQuestionBankLibraryPage() {
         query.length === 0 ||
         question.id.toLowerCase().includes(query) ||
         question.uniqueKey.toLowerCase().includes(query) ||
+        question.examType.toLowerCase().includes(query) ||
         question.subject.toLowerCase().includes(query) ||
         question.chapter.toLowerCase().includes(query) ||
         question.prompt.toLowerCase().includes(query) ||
         question.primaryTag.toLowerCase().includes(query) ||
-        question.secondaryTag.toLowerCase().includes(query);
+        question.secondaryTag.toLowerCase().includes(query) ||
+        question.additionalTag.toLowerCase().includes(query) ||
+        question.questionType.toLowerCase().includes(query) ||
+        question.academicYear.toLowerCase().includes(query);
 
+      const examMatches = filters.examType === "all" || question.examType === filters.examType;
       const subjectMatches = filters.subject === "all" || question.subject === filters.subject;
       const chapterMatches = filters.chapter === "all" || question.chapter === filters.chapter;
       const difficultyMatches = filters.difficulty === "all" || question.difficulty === filters.difficulty;
+      const questionTypeMatches =
+        filters.questionType === "all" || question.questionType === filters.questionType;
       const tagMatches =
         filters.tag === "all" ||
         question.primaryTag === filters.tag ||
         question.secondaryTag === filters.tag;
+      const additionalTagMatches =
+        filters.additionalTag === "all" || question.additionalTag === filters.additionalTag;
+      const usedInTemplateMatches =
+        filters.usedInTemplate === "all" ||
+        (filters.usedInTemplate === "yes" && question.usedCount > 0) ||
+        (filters.usedInTemplate === "no" && question.usedCount === 0);
+      const academicYearMatches =
+        filters.academicYear === "all" || question.academicYear === filters.academicYear;
       const thermalMatches = filters.thermalState === "all" || question.thermalState === filters.thermalState;
 
-      return queryMatches && subjectMatches && chapterMatches && difficultyMatches && tagMatches && thermalMatches;
+      return (
+        queryMatches &&
+        examMatches &&
+        subjectMatches &&
+        chapterMatches &&
+        difficultyMatches &&
+        questionTypeMatches &&
+        tagMatches &&
+        additionalTagMatches &&
+        usedInTemplateMatches &&
+        academicYearMatches &&
+        thermalMatches
+      );
     });
   }, [filters, questions]);
 
@@ -288,8 +350,13 @@ function AdminQuestionBankLibraryPage() {
     },
     {
       id: "subject",
-      header: "Subject / Chapter",
-      render: (question) => `${question.subject} / ${question.chapter}`,
+      header: "Subject",
+      render: (question) => question.subject,
+    },
+    {
+      id: "chapter",
+      header: "Chapter",
+      render: (question) => question.chapter,
     },
     {
       id: "difficulty",
@@ -297,14 +364,24 @@ function AdminQuestionBankLibraryPage() {
       render: (question) => question.difficulty,
     },
     {
-      id: "tags",
-      header: "Tags",
-      render: (question) => `${question.primaryTag}, ${question.secondaryTag}`,
+      id: "marks",
+      header: "Marks",
+      render: (question) => `${question.marks}`,
     },
     {
-      id: "usage",
-      header: "Used / Version / Tier",
-      render: (question) => `${question.usedCount} / v${question.version} / ${question.thermalState}`,
+      id: "usedCount",
+      header: "Used Count",
+      render: (question) => `${question.usedCount}`,
+    },
+    {
+      id: "lastUsedDate",
+      header: "Last Used Date",
+      render: (question) => question.lastUsedDate ?? "Never",
+    },
+    {
+      id: "version",
+      header: "Version",
+      render: (question) => `v${question.version}`,
     },
     {
       id: "status",
@@ -385,7 +462,10 @@ function AdminQuestionBankLibraryPage() {
       <div className="admin-analytics-compliance-panel">
         <article className="admin-risk-summary-card">
           <h4>Indexed Filters Only</h4>
-          <p>Exam-facing operators work through search, subject, chapter, difficulty, tag, and HOT/WARM/COLD filters.</p>
+          <p>
+            Exam-facing operators work through search, exam, subject, chapter, difficulty, type, tag, usage, year, and
+            HOT/WARM/COLD filters.
+          </p>
           <small>Aligned with the source spec performance rules.</small>
         </article>
         <article className="admin-risk-summary-card">
@@ -397,7 +477,7 @@ function AdminQuestionBankLibraryPage() {
 
       <UiForm
         title="Question Library Filters"
-        description="Filter by indexed fields only: subject, chapter, difficulty, tag, thermal state, and text query."
+        description="Filter by indexed fields only: exam, subject, chapter, difficulty, question type, tags, usage, academic year, thermal state, and text query."
         submitLabel="Apply Filters"
         onSubmit={handleIndexedFiltersSubmit}
       >
@@ -410,6 +490,19 @@ function AdminQuestionBankLibraryPage() {
               onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
               placeholder="id, key, subject, chapter, prompt"
             />
+          </UiFormField>
+          <UiFormField label="Exam" htmlFor="admin-question-library-filter-exam">
+            <select
+              id="admin-question-library-filter-exam"
+              value={filters.examType}
+              onChange={(event) => setFilters((current) => ({ ...current, examType: event.target.value }))}
+            >
+              {examTypes.map((examType) => (
+                <option key={examType} value={examType}>
+                  {examType}
+                </option>
+              ))}
+            </select>
           </UiFormField>
           <UiFormField label="Subject" htmlFor="admin-question-library-filter-subject">
             <select
@@ -454,6 +547,19 @@ function AdminQuestionBankLibraryPage() {
               ))}
             </select>
           </UiFormField>
+          <UiFormField label="Question Type" htmlFor="admin-question-library-filter-question-type">
+            <select
+              id="admin-question-library-filter-question-type"
+              value={filters.questionType}
+              onChange={(event) => setFilters((current) => ({ ...current, questionType: event.target.value }))}
+            >
+              {questionTypes.map((questionType) => (
+                <option key={questionType} value={questionType}>
+                  {questionType}
+                </option>
+              ))}
+            </select>
+          </UiFormField>
           <UiFormField label="Tag" htmlFor="admin-question-library-filter-tag">
             <select
               id="admin-question-library-filter-tag"
@@ -463,6 +569,46 @@ function AdminQuestionBankLibraryPage() {
               {tags.map((tag) => (
                 <option key={tag} value={tag}>
                   {tag}
+                </option>
+              ))}
+            </select>
+          </UiFormField>
+          <UiFormField label="Additional Tag" htmlFor="admin-question-library-filter-additional-tag">
+            <select
+              id="admin-question-library-filter-additional-tag"
+              value={filters.additionalTag}
+              onChange={(event) => setFilters((current) => ({ ...current, additionalTag: event.target.value }))}
+            >
+              {additionalTags.map((tag) => (
+                <option key={tag} value={tag}>
+                  {tag}
+                </option>
+              ))}
+            </select>
+          </UiFormField>
+          <UiFormField label="Used in Template" htmlFor="admin-question-library-filter-used">
+            <select
+              id="admin-question-library-filter-used"
+              value={filters.usedInTemplate}
+              onChange={(event) => setFilters((current) => ({
+                ...current,
+                usedInTemplate: event.target.value as "all" | "yes" | "no",
+              }))}
+            >
+              <option value="all">all</option>
+              <option value="yes">yes</option>
+              <option value="no">no</option>
+            </select>
+          </UiFormField>
+          <UiFormField label="Academic Year" htmlFor="admin-question-library-filter-academic-year">
+            <select
+              id="admin-question-library-filter-academic-year"
+              value={filters.academicYear}
+              onChange={(event) => setFilters((current) => ({ ...current, academicYear: event.target.value }))}
+            >
+              {academicYears.map((academicYear) => (
+                <option key={academicYear} value={academicYear}>
+                  {academicYear}
                 </option>
               ))}
             </select>

@@ -6,10 +6,10 @@ This file is the persistent handoff state for portal checklist implementation ac
 
 - `Current Target Portal`: `admin`
 - `Current Priority Band`: `P1`
-- `Last Completed Checklist ID`: `GBL-004`
-- `Next Suggested Checklist ID`: `STU-012`
+- `Last Completed Checklist ID`: `QB-011`
+- `Next Suggested Checklist ID`: `QB-012`
 - `Last Updated`: `2026-05-19`
-- `Saved Scope Note`: `GBL-004` is complete enough for admin P0 after verifying secured `GET /admin/students` and secured `POST /admin/runs` coverage, enriching the live student roster/profile payload with rolling summary history, risk/discipline/guess trends, per-student override summaries, and last-active data for `/admin/students/:studentId`, and removing production fallback from that deep profile route to deterministic fixtures when live reads fail. The next checkpoint moves to admin P1 at `STU-012`; deterministic local fallbacks or deeper summary-source parity should not reopen `GBL-004` unless they mask missing production backend coverage.
+- `Saved Scope Note`: `QB-011` is complete after expanding Question Library columns to UniqueKey, Subject, Chapter, Difficulty, Marks, Used Count, Last Used Date, Version, and Status, with last-used date carried through the live API and fixtures. Continue admin P1 with `QB-012`.
 
 ## Active Checklist Set
 

@@ -42,6 +42,10 @@ function toNumberOrZero(value: unknown): number {
   return 0;
 }
 
+function toOptionalDateString(value: unknown, fallback: string | null): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
+}
+
 function normalizeThermalState(
   value: unknown,
   fallback: QuestionBankRecord["thermalState"],
@@ -112,16 +116,21 @@ function normalizeQuestionRecord(value: unknown, index: number): QuestionBankRec
   const fallback = QUESTION_BANK[index] ?? QUESTION_BANK[0];
 
   return {
+    academicYear: toNonEmptyString(record.academicYear, fallback?.academicYear ?? "unassigned"),
+    additionalTag: toNonEmptyString(record.additionalTag, fallback?.additionalTag ?? "none"),
     chapter: toNonEmptyString(record.chapter, fallback?.chapter ?? `Chapter ${index + 1}`),
     difficulty:
       record.difficulty === "easy" || record.difficulty === "medium" || record.difficulty === "hard" ?
         record.difficulty :
         (fallback?.difficulty ?? "medium"),
+    examType: toNonEmptyString(record.examType, fallback?.examType ?? "General"),
     id: toNonEmptyString(record.id, fallback?.id ?? `q-${index + 1}`),
+    lastUsedDate: toOptionalDateString(record.lastUsedDate, fallback?.lastUsedDate ?? null),
     marks: Math.max(0, toNumberOrZero(record.marks ?? fallback?.marks ?? 0)),
     negativeMarks: Math.max(0, toNumberOrZero(record.negativeMarks ?? fallback?.negativeMarks ?? 0)),
     primaryTag: toNonEmptyString(record.primaryTag, fallback?.primaryTag ?? "untagged"),
     prompt: toNonEmptyString(record.prompt, fallback?.prompt ?? ""),
+    questionType: toNonEmptyString(record.questionType, fallback?.questionType ?? "Question"),
     secondaryTag: toNonEmptyString(record.secondaryTag, fallback?.secondaryTag ?? "none"),
     status: normalizeStatus(record.status, fallback?.status ?? "active"),
     subject: toNonEmptyString(record.subject, fallback?.subject ?? "General"),

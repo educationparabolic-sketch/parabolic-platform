@@ -10,6 +10,10 @@ function createFirestoreMock(): FirebaseFirestore.Firestore {
         chapter: "Kinematics",
         createdAt: Timestamp.fromDate(new Date("2026-05-10T00:00:00.000Z")),
         difficulty: "Easy",
+        academicYear: "2026-27",
+        additionalTag: "jee-main",
+        examType: "JEEMains",
+        lastUsedAt: Timestamp.fromDate(new Date("2026-05-10T08:30:00.000Z")),
         marks: 4,
         negativeMarks: 1,
         primaryTag: "motion",
@@ -29,6 +33,7 @@ function createFirestoreMock(): FirebaseFirestore.Firestore {
         chapter: "Thermodynamics",
         createdAt: Timestamp.fromDate(new Date("2025-12-01T00:00:00.000Z")),
         difficulty: "Hard",
+        examType: "NEET",
         lastUsedAt: Timestamp.fromDate(new Date("2024-01-01T00:00:00.000Z")),
         marks: 4,
         negativeMarks: 1,
@@ -77,13 +82,18 @@ test("admin question library service maps persisted question records", async () 
 
   assert.equal(result.questions.length, 2);
   assert.deepEqual(result.questions[0], {
+    academicYear: "2026-27",
+    additionalTag: "jee-main",
     chapter: "Kinematics",
     difficulty: "easy",
+    examType: "JEEMains",
     id: "q-001",
+    lastUsedDate: "2026-05-10",
     marks: 4,
     negativeMarks: 1,
     primaryTag: "motion",
     prompt: "Physics Kinematics MCQ",
+    questionType: "MCQ",
     secondaryTag: "basics",
     status: "active",
     subject: "Physics",
@@ -95,4 +105,7 @@ test("admin question library service maps persisted question records", async () 
   assert.equal(result.questions[1]?.status, "archived");
   assert.equal(result.questions[1]?.thermalState, "cold");
   assert.equal(result.questions[1]?.secondaryTag, "none");
+  assert.equal(result.questions[1]?.academicYear, "unassigned");
+  assert.equal(result.questions[1]?.additionalTag, "none");
+  assert.equal(result.questions[1]?.lastUsedDate, "2024-01-01");
 });

@@ -1,12 +1,17 @@
 import {StandardApiErrorCode} from "./apiResponse";
 
 export interface AdminQuestionLibraryRecord {
+  academicYear: string;
+  additionalTag: string;
   difficulty: "easy" | "medium" | "hard";
+  examType: string;
   id: string;
+  lastUsedDate: string | null;
   marks: number;
   negativeMarks: number;
   primaryTag: string;
   prompt: string;
+  questionType: string;
   secondaryTag: string;
   status: "active" | "used" | "archived" | "deprecated";
   subject: string;

@@ -121,6 +121,12 @@ function toThermalState(
   return "warm";
 }
 
+function toIsoDate(timestamp: Timestamp | null): string | null {
+  return timestamp instanceof Timestamp ?
+    timestamp.toDate().toISOString().slice(0, 10) :
+    null;
+}
+
 function toQuestionBankDocument(
   snapshot: FirebaseFirestore.QueryDocumentSnapshot,
 ): QuestionBankDocument {
@@ -130,6 +136,14 @@ function toQuestionBankDocument(
     [];
 
   return {
+    academicYear:
+      typeof payload.academicYear === "string" && payload.academicYear.trim().length > 0 ?
+        payload.academicYear.trim() :
+        null,
+    additionalTag:
+      typeof payload.additionalTag === "string" && payload.additionalTag.trim().length > 0 ?
+        payload.additionalTag.trim() :
+        null,
     chapter: toNonEmptyString(payload.chapter, "Unknown Chapter"),
     correctAnswer: toNonEmptyString(payload.correctAnswer, ""),
     createdAt:
@@ -185,15 +199,24 @@ function toLibraryRecord(
     question.tags.find((tag) => tag !== primaryTag) ??
     question.tags[1] ??
     "none";
+  const additionalTag =
+    question.additionalTag ??
+    question.tags.find((tag) => tag !== primaryTag && tag !== secondaryTag) ??
+    "none";
 
   return {
+    academicYear: question.academicYear ?? "unassigned",
+    additionalTag,
     chapter: question.chapter,
     difficulty: toDifficulty(question.difficulty),
+    examType: question.examType,
     id: question.questionId,
+    lastUsedDate: toIsoDate(question.lastUsedAt),
     marks: question.marks,
     negativeMarks: question.negativeMarks,
     primaryTag,
     prompt: `${question.subject} ${question.chapter} ${question.questionType}`,
+    questionType: question.questionType,
     secondaryTag,
     status: question.status,
     subject: question.subject,

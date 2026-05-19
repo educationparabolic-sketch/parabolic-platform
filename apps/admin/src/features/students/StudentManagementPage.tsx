@@ -251,6 +251,31 @@ interface StudentBulkUploadPreviewSummary {
   valid: number;
 }
 
+interface StudentAccountRosterSummary {
+  activeCount: number;
+  archivedOrSuspendedCount: number;
+  currentYear: string;
+  inactiveCount: number;
+  invitedCount: number;
+  rosterSyncCandidates: StudentRecord[];
+  totalMutableCount: number;
+}
+
+interface StudentLifecycleRuleSummary {
+  billingTreatment: string;
+  deleteEligibility: string;
+  historicalAnalytics: string;
+  nextAction: string;
+  transitionAudit: string;
+}
+
+interface BatchRiskDistribution {
+  critical: number;
+  high: number;
+  low: number;
+  medium: number;
+}
+
 function toNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
@@ -428,6 +453,59 @@ function statusToTone(status: StudentStatus): "live" | "idle" | "alert" {
   }
 
   return "alert";
+}
+
+function resolveLifecycleRuleSummary(student: StudentRecord): StudentLifecycleRuleSummary {
+  const hasRunHistory = student.testsAttempted > 0;
+  const deleteEligibility = hasRunHistory ? "Deletion blocked; retain summary history" : "Deletion eligible before first run";
+
+  if (student.status === "invited") {
+    return {
+      billingTreatment: "Excluded until active",
+      deleteEligibility,
+      historicalAnalytics: "No historical analytics until first submission",
+      nextAction: "Send activation reminder or reissue invite",
+      transitionAudit: "Log invite resend, activation, or removal",
+    };
+  }
+
+  if (student.status === "active") {
+    return {
+      billingTreatment: "Included in active billing count",
+      deleteEligibility,
+      historicalAnalytics: "Included in current-year analytics",
+      nextAction: "Monitor activity health",
+      transitionAudit: "Log deactivation, suspension, or archive transition",
+    };
+  }
+
+  if (student.status === "inactive") {
+    return {
+      billingTreatment: "Excluded from active billing count",
+      deleteEligibility,
+      historicalAnalytics: "Retained in historical analytics",
+      nextAction: "Review roster sync before reactivation",
+      transitionAudit: "Log reactivation or roster-sync deactivation",
+    };
+  }
+
+  if (student.status === "archived") {
+    return {
+      billingTreatment: "Excluded from billing",
+      deleteEligibility,
+      historicalAnalytics: "Included in read-only historical analytics",
+      nextAction: "Keep read-only; no roster mutation",
+      transitionAudit: "Archive transition remains immutable",
+    };
+  }
+
+  return {
+    billingTreatment: "Excluded while suspended",
+    deleteEligibility,
+    historicalAnalytics: "Retained for audit and historical analytics",
+    nextAction: "Resolve suspension before activation",
+    transitionAudit: "Log suspension resolution or archive transition",
+  };
 }
 
 function isWithinNumberRange(value: number, minRaw: string, maxRaw: string): boolean {
@@ -965,6 +1043,36 @@ function StudentManagementPage() {
     () => students.filter((student) => student.status === "active" || student.status === "inactive" || student.status === "invited"),
     [students],
   );
+  const lifecycleRuleCards = useMemo(
+    () => [
+      {
+        label: "Invited",
+        value: students.filter((student) => student.status === "invited").length,
+        helper: "Pending first login; excluded from billing until active.",
+      },
+      {
+        label: "Active",
+        value: students.filter((student) => student.status === "active").length,
+        helper: "Included in active billing and current-year operations.",
+      },
+      {
+        label: "Inactive",
+        value: students.filter((student) => student.status === "inactive").length,
+        helper: "Excluded from active billing; retained for historical analytics.",
+      },
+      {
+        label: "Archived",
+        value: students.filter((student) => student.status === "archived").length,
+        helper: "Read-only historical state with no student mutations.",
+      },
+      {
+        label: "Suspended",
+        value: students.filter((student) => student.status === "suspended").length,
+        helper: "Operationally blocked until resolved or archived.",
+      },
+    ],
+    [students],
+  );
   const batchSummaries = useMemo(() => {
     const summaries = new Map<string, {
       batch: string;
@@ -975,6 +1083,7 @@ function StudentManagementPage() {
       averageRawScore: number;
       averageAccuracy: number;
       averageDisciplineIndex: number;
+      riskDistribution: BatchRiskDistribution;
     }>();
 
     students.forEach((student) => {
@@ -987,6 +1096,12 @@ function StudentManagementPage() {
         averageRawScore: 0,
         averageAccuracy: 0,
         averageDisciplineIndex: 0,
+        riskDistribution: {
+          critical: 0,
+          high: 0,
+          low: 0,
+          medium: 0,
+        },
       };
 
       current.totalStudents += 1;
@@ -996,6 +1111,7 @@ function StudentManagementPage() {
       current.averageRawScore += student.avgRawScorePercent;
       current.averageAccuracy += student.avgAccuracyPercent;
       current.averageDisciplineIndex += student.disciplineIndex;
+      current.riskDistribution[student.riskState] += 1;
       summaries.set(student.batch, current);
     });
 
@@ -1008,6 +1124,76 @@ function StudentManagementPage() {
       }))
       .sort((left, right) => left.batch.localeCompare(right.batch));
   }, [students]);
+  const batchManagementTotals = useMemo(() => {
+    const batchCount = batchSummaries.length;
+    const studentCount = batchSummaries.reduce((sum, batch) => sum + batch.totalStudents, 0);
+    const activeCount = batchSummaries.reduce((sum, batch) => sum + batch.activeStudents, 0);
+    const invitedCount = batchSummaries.reduce((sum, batch) => sum + batch.invitedStudents, 0);
+    const averageRawScore =
+      studentCount > 0 ?
+        batchSummaries.reduce((sum, batch) => sum + batch.averageRawScore * batch.totalStudents, 0) / studentCount :
+        0;
+    const averageAccuracy =
+      studentCount > 0 ?
+        batchSummaries.reduce((sum, batch) => sum + batch.averageAccuracy * batch.totalStudents, 0) / studentCount :
+        0;
+    const averageDiscipline =
+      studentCount > 0 ?
+        batchSummaries.reduce((sum, batch) => sum + batch.averageDisciplineIndex * batch.totalStudents, 0) / studentCount :
+        0;
+    const riskDistribution = batchSummaries.reduce<BatchRiskDistribution>(
+      (summary, batch) => ({
+        critical: summary.critical + batch.riskDistribution.critical,
+        high: summary.high + batch.riskDistribution.high,
+        low: summary.low + batch.riskDistribution.low,
+        medium: summary.medium + batch.riskDistribution.medium,
+      }),
+      {
+        critical: 0,
+        high: 0,
+        low: 0,
+        medium: 0,
+      },
+    );
+
+    return {
+      activeCount,
+      averageAccuracy,
+      averageDiscipline,
+      averageRawScore,
+      batchCount,
+      invitedCount,
+      riskDistribution,
+      studentCount,
+    };
+  }, [batchSummaries]);
+  const accountRosterSummary = useMemo<StudentAccountRosterSummary>(() => {
+    const currentYear = filters.academicYear || uniqueAcademicYears[0] || "Current year";
+    const currentYearStudents = students.filter((student) => student.academicYear === currentYear);
+    const mutableStudents = currentYearStudents.filter(
+      (student) => student.status !== "archived" && student.status !== "suspended",
+    );
+    const rosterSyncCandidates = mutableStudents
+      .filter((student) => student.status === "inactive" || student.status === "invited" || !student.lastActive)
+      .sort((left, right) => {
+        const leftStatusWeight = left.status === "inactive" ? 0 : left.status === "invited" ? 1 : 2;
+        const rightStatusWeight = right.status === "inactive" ? 0 : right.status === "invited" ? 1 : 2;
+        return leftStatusWeight - rightStatusWeight || left.fullName.localeCompare(right.fullName);
+      })
+      .slice(0, 5);
+
+    return {
+      activeCount: currentYearStudents.filter((student) => student.status === "active").length,
+      archivedOrSuspendedCount: currentYearStudents.filter(
+        (student) => student.status === "archived" || student.status === "suspended",
+      ).length,
+      currentYear,
+      inactiveCount: currentYearStudents.filter((student) => student.status === "inactive").length,
+      invitedCount: currentYearStudents.filter((student) => student.status === "invited").length,
+      rosterSyncCandidates,
+      totalMutableCount: mutableStudents.length,
+    };
+  }, [filters.academicYear, students, uniqueAcademicYears]);
 
   const allVisibleSelected =
     pageRows.length > 0 && pageRows.every((student) => selectedStudentIds.includes(student.id));
@@ -1050,6 +1236,103 @@ function StudentManagementPage() {
       },
     );
   }, [bulkUploadResult]);
+
+  function renderAccountRosterOperationsPanel() {
+    return (
+      <section className="admin-student-bulk-review-card" aria-label="Account creation and roster sync operations">
+        <div className="admin-student-bulk-review-header">
+          <div>
+            <h3>Account Creation & Roster Sync</h3>
+            <p>
+              New accounts are created only after confirmed roster validation. Roster sync reviews invited and inactive
+              records before any deactivate-missing commit is applied.
+            </p>
+          </div>
+          <div className="admin-student-bulk-actions">
+            <NavLink className="admin-primary-link" to="/admin/students/bulk-upload">
+              Open Bulk Upload
+            </NavLink>
+            <NavLink className="admin-primary-link" to="/admin/students/lifecycle">
+              Review Lifecycle
+            </NavLink>
+          </div>
+        </div>
+        <div className="admin-student-summary-grid">
+          <article className="admin-student-summary-card">
+            <h3>{accountRosterSummary.invitedCount}</h3>
+            <p>Invited accounts awaiting first login in {accountRosterSummary.currentYear}.</p>
+          </article>
+          <article className="admin-student-summary-card">
+            <h3>{accountRosterSummary.inactiveCount}</h3>
+            <p>Inactive roster records to review before reactivation or sync deactivation.</p>
+          </article>
+          <article className="admin-student-summary-card">
+            <h3>{accountRosterSummary.totalMutableCount}</h3>
+            <p>Mutable current-year records eligible for roster sync checks.</p>
+          </article>
+        </div>
+        <div className="admin-student-summary-grid">
+          <article className="admin-student-summary-card">
+            <h3>Confirm Gate</h3>
+            <p>Create Firebase Auth users, set claims, write student docs, and send onboarding email after validation only.</p>
+          </article>
+          <article className="admin-student-summary-card">
+            <h3>Roster Sync</h3>
+            <p>Deactivate students not in file is a confirm-time operation; archived and suspended records stay protected.</p>
+          </article>
+          <article className="admin-student-summary-card">
+            <h3>Billing Count</h3>
+            <p>{accountRosterSummary.activeCount} active students count toward usage; {accountRosterSummary.archivedOrSuspendedCount} archived or suspended records do not.</p>
+          </article>
+        </div>
+        <UiTable
+          caption="Roster sync review queue"
+          columns={[
+            {
+              id: "student",
+              header: "Student",
+              render: (student) => (
+                <div className="admin-student-name-cell">
+                  <strong>{student.fullName}</strong>
+                  <small>{student.studentId}</small>
+                </div>
+              ),
+            },
+            {
+              id: "status",
+              header: "Status",
+              render: (student) => (
+                <span className={`admin-student-status admin-student-status-${statusToTone(student.status)}`}>
+                  {student.status}
+                </span>
+              ),
+            },
+            {
+              id: "batch",
+              header: "Batch",
+              render: (student) => student.batch,
+            },
+            {
+              id: "syncReason",
+              header: "Sync Review Reason",
+              render: (student) => {
+                if (student.status === "inactive") {
+                  return "Inactive in current roster";
+                }
+                if (student.status === "invited") {
+                  return "Account invite pending";
+                }
+                return "No last-active signal";
+              },
+            },
+          ]}
+          rows={accountRosterSummary.rosterSyncCandidates}
+          rowKey={(row) => row.id}
+          emptyStateText="No invited, inactive, or never-active students need roster sync review."
+        />
+      </section>
+    );
+  }
 
   function toggleVisibleSelection() {
     if (pageRows.length === 0) {
@@ -1460,19 +1743,24 @@ function StudentManagementPage() {
       render: (student) => formatDateLabel(student.lastActive),
     },
     {
+      id: "billing",
+      header: "Billing Rule",
+      render: (student) => resolveLifecycleRuleSummary(student).billingTreatment,
+    },
+    {
+      id: "deleteRule",
+      header: "Deletion Rule",
+      render: (student) => resolveLifecycleRuleSummary(student).deleteEligibility,
+    },
+    {
       id: "nextAction",
       header: "Next Operator Action",
-      render: (student) => {
-        if (student.status === "invited") {
-          return "Send activation reminder";
-        }
-
-        if (student.status === "inactive") {
-          return "Review roster sync before reactivation";
-        }
-
-        return "Track activity health";
-      },
+      render: (student) => resolveLifecycleRuleSummary(student).nextAction,
+    },
+    {
+      id: "audit",
+      header: "Transition Audit",
+      render: (student) => resolveLifecycleRuleSummary(student).transitionAudit,
     },
   ];
 
@@ -1542,10 +1830,24 @@ function StudentManagementPage() {
         <div className="admin-student-metrics-cell">
           <span>Raw: {summary.averageRawScore.toFixed(1)}%</span>
           <span>Accuracy: {summary.averageAccuracy.toFixed(1)}%</span>
-          <span>Discipline: {summary.averageDisciplineIndex.toFixed(0)}</span>
+          {canUseL2Filters ? <span>Discipline: {summary.averageDisciplineIndex.toFixed(0)}</span> : null}
         </div>
       ),
     },
+    ...(canUseL2Filters ?
+      [{
+        id: "riskDistribution",
+        header: "Risk Distribution",
+        render: (summary: BatchSummary) => (
+          <div className="admin-student-l2-cell">
+            <span className="admin-student-risk-pill admin-student-risk-pill-low">Low {summary.riskDistribution.low}</span>
+            <span className="admin-student-risk-pill admin-student-risk-pill-medium">Medium {summary.riskDistribution.medium}</span>
+            <span className="admin-student-risk-pill admin-student-risk-pill-high">High {summary.riskDistribution.high}</span>
+            <span className="admin-student-risk-pill admin-student-risk-pill-critical">Critical {summary.riskDistribution.critical}</span>
+          </div>
+        ),
+      }] :
+      []),
   ];
 
   function renderListView() {
@@ -1555,6 +1857,7 @@ function StudentManagementPage() {
           Manage institute students with architecture-aligned list operations: filtering, batch assignment,
           activation controls, and profile editing.
         </p>
+        {renderAccountRosterOperationsPanel()}
 
         <div className="admin-student-grid">
           <UiForm
@@ -2069,17 +2372,26 @@ function StudentManagementPage() {
           Lifecycle operations are now mounted separately for active, invited, inactive, and transition-ready student records.
         </p>
         <div className="admin-student-summary-grid">
+          {lifecycleRuleCards.map((card) => (
+            <article key={card.label} className="admin-student-summary-card">
+              <h3>{card.value}</h3>
+              <p>{card.label}: {card.helper}</p>
+            </article>
+          ))}
+        </div>
+        {renderAccountRosterOperationsPanel()}
+        <div className="admin-student-summary-grid">
           <article className="admin-student-summary-card">
-            <h3>Active</h3>
-            <p>{students.filter((student) => student.status === "active").length} learners are active in the current academic year.</p>
+            <h3>Historical Analytics</h3>
+            <p>Inactive, archived, and suspended records remain available to summary analytics; raw session scans are not used here.</p>
           </article>
           <article className="admin-student-summary-card">
-            <h3>Inactive</h3>
-            <p>{students.filter((student) => student.status === "inactive").length} learners need reactivation review.</p>
+            <h3>Deletion Guard</h3>
+            <p>Deletion is allowed only before any run history exists. Students with tests attempted are retained or archived.</p>
           </article>
           <article className="admin-student-summary-card">
-            <h3>Invited</h3>
-            <p>{students.filter((student) => student.status === "invited").length} invited learners are pending first login.</p>
+            <h3>Transition Log</h3>
+            <p>Every activate, deactivate, suspend, archive, or invite action must leave an auditable lifecycle transition.</p>
           </article>
         </div>
         <UiTable
@@ -2099,6 +2411,44 @@ function StudentManagementPage() {
         <p className="admin-content-copy">
           Batch management is mounted as a dedicated cohort workspace with roster and current-year metric summaries.
         </p>
+        <div className="admin-student-summary-grid">
+          <article className="admin-student-summary-card">
+            <h3>{batchManagementTotals.batchCount}</h3>
+            <p>Batches with current-year student summary coverage.</p>
+          </article>
+          <article className="admin-student-summary-card">
+            <h3>{batchManagementTotals.studentCount}</h3>
+            <p>Total students represented across batch summaries.</p>
+          </article>
+          <article className="admin-student-summary-card">
+            <h3>{batchManagementTotals.averageRawScore.toFixed(1)}%</h3>
+            <p>Weighted average raw score across visible cohorts.</p>
+          </article>
+          <article className="admin-student-summary-card">
+            <h3>{batchManagementTotals.averageAccuracy.toFixed(1)}%</h3>
+            <p>Weighted average accuracy across visible cohorts.</p>
+          </article>
+        </div>
+        {canUseL2Filters ? (
+          <div className="admin-student-summary-grid">
+            <article className="admin-student-summary-card">
+              <h3>{batchManagementTotals.averageDiscipline.toFixed(0)}</h3>
+              <p>Average discipline index across batch summaries.</p>
+            </article>
+            <article className="admin-student-summary-card">
+              <h3>{batchManagementTotals.riskDistribution.high + batchManagementTotals.riskDistribution.critical}</h3>
+              <p>High or critical risk students across all batches.</p>
+            </article>
+            <article className="admin-student-summary-card">
+              <h3>{batchManagementTotals.riskDistribution.low}</h3>
+              <p>Low-risk students across all batches.</p>
+            </article>
+          </div>
+        ) : (
+          <p className="admin-student-inline-note">
+            Discipline index and risk distribution are L2 cohort metrics. Current access layer: {currentLayer}.
+          </p>
+        )}
         <UiTable
           caption="Batch summaries"
           columns={batchColumns}

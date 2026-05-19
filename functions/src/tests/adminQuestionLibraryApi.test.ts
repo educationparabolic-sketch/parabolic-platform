@@ -46,13 +46,18 @@ test("admin question library handler accepts read requests", async () => {
       return {
         questions: [
           {
+            academicYear: "2026-27",
+            additionalTag: "jee-main",
             chapter: "Kinematics",
             difficulty: "easy",
+            examType: "JEEMains",
             id: "q-101",
+            lastUsedDate: "2026-05-10",
             marks: 4,
             negativeMarks: 1,
             primaryTag: "motion",
             prompt: "Physics Kinematics MCQ",
+            questionType: "MCQ",
             secondaryTag: "basics",
             status: "active",
             subject: "Physics",
