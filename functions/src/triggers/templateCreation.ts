@@ -86,7 +86,7 @@ export const handleTemplateCreated = async (
           academicYear: extractOptionalString(templatePayload?.academicYear),
           difficultyDistribution: templateCreationResult.difficultyDistribution,
           phaseConfigSnapshot: templateCreationResult.phaseConfigSnapshot,
-          status: "draft",
+          status: templatePayload?.status === "ready" ? "ready" : "draft",
           testId,
           timingProfile: templateCreationResult.timingProfile,
           totalQuestions: templateCreationResult.totalQuestions,

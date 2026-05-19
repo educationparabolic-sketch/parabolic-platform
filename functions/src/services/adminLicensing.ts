@@ -495,8 +495,7 @@ export class AdminLicensingService {
         normalizeOptionalNumber(typedLicenseData.activeStudentLimit) ??
         normalizeOptionalNumber(typedLicenseData.studentLimit) ??
         normalizeOptionalNumber(typedLicenseData.maxStudents) ??
-        activeStudentCount ||
-        1,
+        (activeStudentCount || 1),
       ),
     );
     const attemptsUsed = Math.max(

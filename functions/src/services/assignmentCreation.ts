@@ -56,7 +56,7 @@ const LAYER_ORDER: Record<LicenseLayer, number> = {
 /**
  * Raised when assignment creation input violates architecture constraints.
  */
-class AssignmentCreationValidationError extends Error {
+export class AssignmentCreationValidationError extends Error {
   /**
    * @param {string} message Validation failure detail.
    */
@@ -244,6 +244,47 @@ const normalizePositiveInteger = (
   ) {
     throw new AssignmentCreationValidationError(
       `Template field "${fieldName}" must be a positive integer.`,
+    );
+  }
+
+  return value;
+};
+
+const normalizeOptionalPositiveInteger = (
+  value: unknown,
+  fieldName: string,
+  defaultValue: number,
+): number => {
+  if (typeof value === "undefined") {
+    return defaultValue;
+  }
+
+  return normalizePositiveInteger(value, fieldName);
+};
+
+const normalizeOptionalNonNegativeInteger = (
+  value: unknown,
+  fieldName: string,
+  defaultValue: number,
+): number => {
+  if (typeof value === "undefined") {
+    return defaultValue;
+  }
+
+  return normalizeNonNegativeInteger(value, fieldName);
+};
+
+const normalizeOptionalBoolean = (
+  value: unknown,
+  defaultValue: boolean,
+): boolean => {
+  if (typeof value === "undefined") {
+    return defaultValue;
+  }
+
+  if (typeof value !== "boolean") {
+    throw new AssignmentCreationValidationError(
+      "Assignment field \"shuffleQuestionOrder\" must be a boolean.",
     );
   }
 
@@ -443,6 +484,23 @@ export class AssignmentCreationService {
     const recipientStudentIds = normalizeRecipientStudentIds(
       data.recipientStudentIds,
     );
+    const attemptLimit = normalizeOptionalPositiveInteger(
+      data.attemptLimit,
+      "attemptLimit",
+      1,
+    );
+    const gracePeriodMinutes = normalizeOptionalNonNegativeInteger(
+      data.gracePeriodMinutes,
+      "gracePeriodMinutes",
+      0,
+    );
+    const shuffleQuestionOrder = normalizeOptionalBoolean(
+      data.shuffleQuestionOrder ?? data.shuffleEnabled,
+      false,
+    );
+    const timezone = typeof data.timezone === "undefined" ?
+      "UTC" :
+      normalizeRequiredString(data.timezone, "timezone");
 
     if (payloadRunId !== runId) {
       throw new AssignmentCreationValidationError(
@@ -637,6 +695,12 @@ export class AssignmentCreationService {
     );
     const templateVersion = normalizeTemplateVersion(templateData);
     const riskModelVersion = normalizeRiskModelVersion(data.riskModelVersion);
+    const canonicalId = typeof data.canonicalId === "undefined" ?
+      normalizeRequiredString(
+        templateData?.canonicalId ?? testId,
+        "template.canonicalId",
+      ) :
+      normalizeRequiredString(data.canonicalId, "canonicalId");
 
     const normalizedTotalSessions = typeof data.totalSessions === "number" &&
       Number.isFinite(data.totalSessions) &&
@@ -649,23 +713,31 @@ export class AssignmentCreationService {
 
     await this.firestore.runTransaction(async (transaction) => {
       transaction.set(runReference, {
+        academicYear: yearId,
+        attemptLimit,
         calibrationVersion,
+        canonicalId,
         createdAt,
         difficultyDistribution:
           capturedTemplateSnapshot.difficultyDistribution,
         endWindow,
+        gracePeriodMinutes,
         licenseLayer: currentLayer,
         mode,
+        modeSnapshot: mode,
         phaseConfigSnapshot: capturedTemplateSnapshot.phaseConfigSnapshot,
         questionIds: capturedTemplateSnapshot.questionIds,
         recipientCount: recipientStudentIds.length,
         recipientStudentIds,
         riskModelVersion,
         runId,
+        shuffleEnabled: shuffleQuestionOrder,
+        shuffleQuestionOrder,
         startWindow,
         status: "scheduled",
         testId,
         templateVersion,
+        timezone,
         timingProfileSnapshot:
           capturedTemplateSnapshot.timingProfileSnapshot,
         totalSessions: normalizedTotalSessions,

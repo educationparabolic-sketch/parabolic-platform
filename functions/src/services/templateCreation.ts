@@ -360,6 +360,14 @@ const getQuestionPath = (instituteId: string, questionId: string): string =>
   `${INSTITUTES_COLLECTION}/${instituteId}/${QUESTION_BANK_COLLECTION}/` +
   `${questionId}`;
 
+const normalizeInitialTemplateStatus = (data: unknown): "draft" | "ready" => {
+  if (isPlainObject(data) && data.status === "ready") {
+    return "ready";
+  }
+
+  return "draft";
+};
+
 /**
  * Validates and normalizes newly created test templates.
  */
@@ -444,13 +452,14 @@ export class TemplateCreationService {
       data.totalRuns >= 0 ?
       Math.floor(data.totalRuns) :
       0;
+    const normalizedStatus = normalizeInitialTemplateStatus(data);
 
     await templateReference.set({
       createdAt,
       difficultyDistribution: normalizedTemplate.difficultyDistribution,
       phaseConfigSnapshot: normalizedTemplate.phaseConfigSnapshot,
       questionIds: normalizedTemplate.questionIds,
-      status: "draft",
+      status: normalizedStatus,
       testId,
       timingProfile: normalizedTemplate.timingProfile,
       totalQuestions: normalizedTemplate.totalQuestions,
