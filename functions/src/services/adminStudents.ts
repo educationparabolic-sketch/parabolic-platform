@@ -15,6 +15,7 @@ const ACADEMIC_YEARS_COLLECTION = "academicYears";
 const INSTITUTES_COLLECTION = "institutes";
 const STUDENTS_COLLECTION = "students";
 const STUDENT_YEAR_METRICS_COLLECTION = "studentYearMetrics";
+const OVERRIDE_LOGS_COLLECTION = "overrideLogs";
 
 function normalizeRequiredString(value: unknown, fieldName: string): string {
   if (typeof value !== "string" || value.trim().length === 0) {
@@ -93,6 +94,309 @@ function toIsoString(value: unknown): string | null {
 
 function toStringArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
+}
+
+function toPlainObject(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ?
+    value as Record<string, unknown> :
+    null;
+}
+
+function toProcessingMarker(
+  metricsData: Record<string, unknown>,
+): Record<string, unknown> {
+  const processingMarkers = toPlainObject(metricsData.processingMarkers);
+  const studentMetricsEngine = toPlainObject(
+    processingMarkers?.studentMetricsEngine,
+  );
+
+  return studentMetricsEngine ?? {};
+}
+
+function toPatternMarker(
+  metricsData: Record<string, unknown>,
+): Record<string, unknown> {
+  const processingMarkers = toPlainObject(metricsData.processingMarkers);
+  const patternEngine = toPlainObject(processingMarkers?.patternEngine);
+
+  return patternEngine ?? {};
+}
+
+function roundToTwo(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function deriveRiskStateFromDiscipline(
+  disciplineIndex: number,
+): AdminStudentRiskState {
+  if (disciplineIndex < 45) {
+    return "critical";
+  }
+  if (disciplineIndex < 60) {
+    return "high";
+  }
+  if (disciplineIndex < 75) {
+    return "medium";
+  }
+
+  return "low";
+}
+
+function trendLabel(value: unknown, fallback: string): string {
+  const isoValue = toIsoString(value);
+  if (isoValue) {
+    return isoValue.slice(0, 10);
+  }
+
+  return fallback;
+}
+
+function normalizeTrendArray(input: {
+  currentValue: number;
+  fallbackLabel: string;
+  source: unknown;
+  trendDelta: unknown;
+}): unknown[] {
+  const explicitSource = toStringArray(input.source);
+  if (explicitSource.length > 0) {
+    return explicitSource;
+  }
+
+  const delta = toNumberOrZero(input.trendDelta);
+  if (delta === 0 && input.currentValue === 0) {
+    return [];
+  }
+
+  const previousValue = Math.max(0, input.currentValue - delta);
+  return [
+    {
+      label: "Previous",
+      value: roundToTwo(previousValue),
+    },
+    {
+      label: input.fallbackLabel,
+      value: roundToTwo(input.currentValue),
+    },
+  ];
+}
+
+function deriveRiskTimeline(input: {
+  currentRiskState: AdminStudentRiskState;
+  metricsData: Record<string, unknown>;
+  processingMarker: Record<string, unknown>;
+}): unknown[] {
+  const explicitSource = toStringArray(input.metricsData.riskTimeline);
+  if (explicitSource.length > 0) {
+    return explicitSource;
+  }
+
+  const recentGovernanceMetrics = toStringArray(
+    input.processingMarker.recentGovernanceMetrics,
+  );
+  const timeline = recentGovernanceMetrics
+    .map((entry, index) => {
+      const record = toPlainObject(entry);
+      if (!record) {
+        return null;
+      }
+
+      const disciplineIndex = toNumberOrZero(record.disciplineIndex);
+      return {
+        id: toNonEmptyString(
+          record.sessionId,
+          `risk-point-${index + 1}`,
+        ),
+        label: trendLabel(record.submittedAt, `Point ${index + 1}`),
+        riskState: deriveRiskStateFromDiscipline(disciplineIndex),
+      };
+    })
+    .filter((entry) => entry !== null);
+
+  if (timeline.length > 0) {
+    return timeline;
+  }
+
+  return [
+    {
+      id: "current-risk",
+      label: "Current",
+      riskState: input.currentRiskState,
+    },
+  ];
+}
+
+function deriveMetricTrendFromGovernance(input: {
+  currentValue: number;
+  fallbackLabel: string;
+  metricName: "disciplineIndex" | "guessRate";
+  processingMarker: Record<string, unknown>;
+}): unknown[] {
+  const recentGovernanceMetrics = toStringArray(
+    input.processingMarker.recentGovernanceMetrics,
+  );
+  const trend = recentGovernanceMetrics
+    .map((entry, index) => {
+      const record = toPlainObject(entry);
+      if (!record) {
+        return null;
+      }
+
+      return {
+        label: trendLabel(record.submittedAt, `Point ${index + 1}`),
+        value: roundToTwo(toNumberOrZero(record[input.metricName])),
+      };
+    })
+    .filter((entry) => entry !== null);
+
+  return trend.length > 0 ?
+    trend :
+    [{label: input.fallbackLabel, value: roundToTwo(input.currentValue)}];
+}
+
+function deriveTestHistory(input: {
+  metricsData: Record<string, unknown>;
+  patternMarker: Record<string, unknown>;
+  processingMarker: Record<string, unknown>;
+}): unknown[] {
+  const explicitSource = toStringArray(
+    input.metricsData.testHistory ??
+      input.metricsData.history ??
+      input.metricsData.recentTests,
+  );
+  if (explicitSource.length > 0) {
+    return explicitSource;
+  }
+
+  const recentSessionSummaries = toStringArray(
+    input.patternMarker.recentSessionSummaries ??
+      input.processingMarker.recentSessionSummaries,
+  );
+  const recentHistory = recentSessionSummaries
+    .map((entry, index) => {
+      const record = toPlainObject(entry);
+      if (!record) {
+        return null;
+      }
+
+      const id = toNonEmptyString(
+        record.sessionId ?? record.runId,
+        `session-summary-${index + 1}`,
+      );
+      return {
+        accuracyPercent: toNumberOrZero(record.accuracyPercent),
+        completedOn: toIsoString(record.submittedAt),
+        id,
+        label: toNonEmptyString(
+          record.runName ?? record.testName ?? record.runId,
+          id,
+        ),
+        rawScorePercent: toNumberOrZero(record.rawScorePercent),
+      };
+    })
+    .filter((entry) => entry !== null);
+
+  if (recentHistory.length > 0) {
+    return recentHistory;
+  }
+
+  const latestSessionSummary = toPlainObject(
+    input.processingMarker.latestSessionSummary,
+  );
+  if (!latestSessionSummary) {
+    return [];
+  }
+
+  const id = toNonEmptyString(
+    latestSessionSummary.sessionId,
+    "latest-session",
+  );
+  return [
+    {
+      accuracyPercent: toNumberOrZero(latestSessionSummary.accuracyPercent),
+      completedOn: toIsoString(latestSessionSummary.submittedAt),
+      id,
+      label: toNonEmptyString(
+        latestSessionSummary.runName ?? latestSessionSummary.testName,
+        id,
+      ),
+      rawScorePercent: toNumberOrZero(latestSessionSummary.rawScorePercent),
+    },
+  ];
+}
+
+function normalizeOverrideLabel(type: string): string {
+  if (type === "FORCE_SUBMIT") {
+    return "Manual submission";
+  }
+  if (type === "MIN_TIME_BYPASS") {
+    return "Early termination";
+  }
+  if (type === "MODE_CHANGE") {
+    return "Phase override";
+  }
+
+  return type
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function deriveOverrideRecords(
+  metricsData: Record<string, unknown>,
+  liveOverrideSummary: Map<string, number> | null,
+): unknown[] {
+  const explicitSource = toStringArray(
+    metricsData.overrideRecords ?? metricsData.overrides,
+  );
+  if (explicitSource.length > 0) {
+    return explicitSource;
+  }
+
+  if (liveOverrideSummary && liveOverrideSummary.size > 0) {
+    return [...liveOverrideSummary.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([type, count]) => ({
+        count,
+        id: type.toLowerCase().replace(/_/g, "-"),
+        label: normalizeOverrideLabel(type),
+      }));
+  }
+
+  return [
+    {
+      count: toNumberOrZero(
+        metricsData.earlyTerminationOverrideCount ??
+          metricsData.earlyTerminationCount,
+      ),
+      id: "early-termination",
+      label: "Early termination",
+    },
+    {
+      count: toNumberOrZero(
+        metricsData.manualSubmissionOverrideCount ??
+          metricsData.manualSubmissionCount,
+      ),
+      id: "manual-submission",
+      label: "Manual submission",
+    },
+    {
+      count: toNumberOrZero(
+        metricsData.phaseOverrideCount ??
+          metricsData.phaseOverrides,
+      ),
+      id: "phase-override",
+      label: "Phase override",
+    },
+    {
+      count: toNumberOrZero(
+        metricsData.hardModeExitOverrideCount ??
+          metricsData.hardModeExitCount,
+      ),
+      id: "hard-mode-exit",
+      label: "Hard mode exit",
+    },
+  ];
 }
 
 function toStudentStatus(value: unknown): AdminStudentStatus {
@@ -175,6 +479,7 @@ function resolveCurrentYearId(
 
 function normalizeStudentRecord(input: {
   academicYear: string;
+  liveOverrideSummary: Map<string, number> | null;
   metricsData: Record<string, unknown>;
   rankInBatch: number | null;
   studentData: Record<string, unknown>;
@@ -209,11 +514,22 @@ function normalizeStudentRecord(input: {
     batchId,
   );
   const disciplineIndex = toNumberOrZero(input.metricsData.disciplineIndex);
+  const processingMarker = toProcessingMarker(input.metricsData);
+  const patternMarker = toPatternMarker(input.metricsData);
   const lastActive =
     toIsoString(input.metricsData.lastActive) ??
     toIsoString(input.metricsData.lastActiveAt) ??
+    toIsoString(input.metricsData.lastUpdated) ??
+    toIsoString(processingMarker.lastProcessedSubmittedAt) ??
+    toIsoString(
+      toPlainObject(processingMarker.latestSessionSummary)?.submittedAt,
+    ) ??
     toIsoString(input.studentData.lastActive) ??
     toIsoString(input.studentData.lastActiveAt);
+  const riskState = toRiskState(
+    input.metricsData.riskState ?? input.metricsData.rollingRiskCluster,
+    disciplineIndex,
+  );
 
   return {
     academicYear: input.academicYear,
@@ -240,7 +556,21 @@ function normalizeStudentRecord(input: {
         input.metricsData.controlledModeImprovementDelta,
     ),
     disciplineIndex,
-    disciplineTrend: toStringArray(input.metricsData.disciplineTrend),
+    disciplineTrend: toStringArray(input.metricsData.disciplineTrend).length > 0 ?
+      normalizeTrendArray({
+        currentValue: disciplineIndex,
+        fallbackLabel: lastActive?.slice(0, 10) ?? "Current",
+        source: input.metricsData.disciplineTrend,
+        trendDelta:
+          input.metricsData.disciplineIndexTrend ??
+          input.metricsData.disciplineIndexTrendDelta,
+      }) :
+      deriveMetricTrendFromGovernance({
+        currentValue: disciplineIndex,
+        fallbackLabel: lastActive?.slice(0, 10) ?? "Current",
+        metricName: "disciplineIndex",
+        processingMarker,
+      }),
     easyNeglectRate: toNumberOrZero(
       input.metricsData.easyNeglectRate ??
         input.metricsData.easyNeglectPercent,
@@ -260,7 +590,27 @@ function normalizeStudentRecord(input: {
         input.metricsData.guessRate ??
         input.metricsData.avgGuessRatePercent,
     ),
-    guessRateTrend: toStringArray(input.metricsData.guessRateTrend),
+    guessRateTrend: toStringArray(input.metricsData.guessRateTrend).length > 0 ?
+      normalizeTrendArray({
+        currentValue: toNumberOrZero(
+          input.metricsData.guessRatePercent ??
+            input.metricsData.guessRate ??
+            input.metricsData.avgGuessRatePercent,
+        ),
+        fallbackLabel: lastActive?.slice(0, 10) ?? "Current",
+        source: input.metricsData.guessRateTrend,
+        trendDelta: input.metricsData.guessRateTrend,
+      }) :
+      deriveMetricTrendFromGovernance({
+        currentValue: toNumberOrZero(
+          input.metricsData.guessRatePercent ??
+            input.metricsData.guessRate ??
+            input.metricsData.avgGuessRatePercent,
+        ),
+        fallbackLabel: lastActive?.slice(0, 10) ?? "Current",
+        metricName: "guessRate",
+        processingMarker,
+      }),
     hardBiasRate: toNumberOrZero(
       input.metricsData.hardBiasRate ??
         input.metricsData.hardBiasPercent,
@@ -275,8 +625,9 @@ function normalizeStudentRecord(input: {
       input.metricsData.minTimeViolationPercent ??
         input.metricsData.minTimeViolationsPercent,
     ),
-    overrideRecords: toStringArray(
-      input.metricsData.overrideRecords ?? input.metricsData.overrides,
+    overrideRecords: deriveOverrideRecords(
+      input.metricsData,
+      input.liveOverrideSummary,
     ),
     phaseAdherencePercent: toNumberOrZero(
       input.metricsData.phaseAdherencePercent ??
@@ -284,22 +635,23 @@ function normalizeStudentRecord(input: {
         input.metricsData.phaseAdherenceAverage,
     ),
     rankInBatch: input.rankInBatch,
-    riskState: toRiskState(
-      input.metricsData.riskState ?? input.metricsData.rollingRiskCluster,
-      disciplineIndex,
-    ),
-    riskTimeline: toStringArray(input.metricsData.riskTimeline),
+    riskState,
+    riskTimeline: deriveRiskTimeline({
+      currentRiskState: riskState,
+      metricsData: input.metricsData,
+      processingMarker,
+    }),
     scorePercentile: toOptionalNumber(
       input.metricsData.scorePercentile ??
         input.metricsData.batchRelativePercentile,
     ),
     status: toStudentStatus(input.studentData.status),
     studentId,
-    testHistory: toStringArray(
-      input.metricsData.testHistory ??
-        input.metricsData.history ??
-        input.metricsData.recentTests,
-    ),
+    testHistory: deriveTestHistory({
+      metricsData: input.metricsData,
+      patternMarker,
+      processingMarker,
+    }),
     testsAttempted: toNumberOrZero(
       input.metricsData.testsAttempted ?? input.metricsData.totalTests,
     ),
@@ -314,6 +666,37 @@ function normalizeStudentRecord(input: {
       "No topic weakness summary",
     ),
   };
+}
+
+async function loadOverrideSummaries(input: {
+  firestore: FirebaseFirestore.Firestore;
+  instituteId: string;
+  studentIds: string[];
+}): Promise<Map<string, Map<string, number>>> {
+  const uniqueStudentIds = [...new Set(input.studentIds)]
+    .filter((studentId) => studentId.length > 0);
+  const summaryByStudentId = new Map<string, Map<string, number>>();
+
+  for (let index = 0; index < uniqueStudentIds.length; index += 30) {
+    const chunk = uniqueStudentIds.slice(index, index + 30);
+    const snapshot = await input.firestore
+      .collection(INSTITUTES_COLLECTION)
+      .doc(input.instituteId)
+      .collection(OVERRIDE_LOGS_COLLECTION)
+      .where("studentId", "in", chunk)
+      .get();
+
+    for (const document of snapshot.docs) {
+      const data = document.data();
+      const studentId = toNonEmptyString(data.studentId, "");
+      const overrideType = toNonEmptyString(data.overrideType, "UNKNOWN");
+      const current = summaryByStudentId.get(studentId) ?? new Map();
+      current.set(overrideType, (current.get(overrideType) ?? 0) + 1);
+      summaryByStudentId.set(studentId, current);
+    }
+  }
+
+  return summaryByStudentId;
 }
 
 function deriveBatchRanks(
@@ -391,6 +774,15 @@ export class AdminStudentsService {
     }
 
     const rankByStudentId = deriveBatchRanks(metricsByStudentId);
+    const studentIds = studentsSnapshot.docs.map((studentDoc) => {
+      const studentData = studentDoc.data();
+      return toNonEmptyString(studentData.studentId, studentDoc.id);
+    });
+    const overrideSummariesByStudentId = await loadOverrideSummaries({
+      firestore: this.firestore,
+      instituteId: request.instituteId,
+      studentIds,
+    });
     const students = studentsSnapshot.docs
       .map((studentDoc) => {
         const studentData = studentDoc.data();
@@ -405,6 +797,10 @@ export class AdminStudentsService {
 
         return normalizeStudentRecord({
           academicYear: currentYearId,
+          liveOverrideSummary:
+            overrideSummariesByStudentId.get(studentId) ??
+            overrideSummariesByStudentId.get(studentDoc.id) ??
+            null,
           metricsData,
           rankInBatch:
             rankByStudentId.get(studentId) ??

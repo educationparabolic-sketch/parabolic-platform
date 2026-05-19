@@ -5,11 +5,11 @@ This file is the persistent handoff state for portal checklist implementation ac
 ## Current State
 
 - `Current Target Portal`: `admin`
-- `Current Priority Band`: `P0`
+- `Current Priority Band`: `P1`
 - `Last Completed Checklist ID`: `GBL-004`
-- `Next Suggested Checklist ID`: `GBL-004`
+- `Next Suggested Checklist ID`: `STU-012`
 - `Last Updated`: `2026-05-19`
-- `Saved Scope Note`: `GBL-004` advanced again by adding the secured `POST /admin/runs` backend used by `/admin/assignments/create`, resolving the authenticated tenant's active academic year, persisting scheduled run snapshots through the shared assignment creation service, and preserving immutable scheduling fields like mode, window, recipients, attempt limit, grace period, timezone, and shuffle state instead of leaving scheduling pointed at a missing production endpoint behind deterministic fallback masking. The checklist item remains partial because truly live deep student-profile panel coverage is still unresolved, so the next suggested item stays `GBL-004`.
+- `Saved Scope Note`: `GBL-004` is complete enough for admin P0 after verifying secured `GET /admin/students` and secured `POST /admin/runs` coverage, enriching the live student roster/profile payload with rolling summary history, risk/discipline/guess trends, per-student override summaries, and last-active data for `/admin/students/:studentId`, and removing production fallback from that deep profile route to deterministic fixtures when live reads fail. The next checkpoint moves to admin P1 at `STU-012`; deterministic local fallbacks or deeper summary-source parity should not reopen `GBL-004` unless they mask missing production backend coverage.
 
 ## Active Checklist Set
 
