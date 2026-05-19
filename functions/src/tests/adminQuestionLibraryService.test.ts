@@ -13,15 +13,20 @@ function createFirestoreMock(): FirebaseFirestore.Firestore {
         academicYear: "2026-27",
         additionalTag: "jee-main",
         examType: "JEEMains",
+        internalNotes: "Review after next mock test.",
         lastUsedAt: Timestamp.fromDate(new Date("2026-05-10T08:30:00.000Z")),
         marks: 4,
         negativeMarks: 1,
         primaryTag: "motion",
         questionId: "q-001",
         questionType: "MCQ",
+        simulationLink: "https://sim.example.com/motion",
+        solutionImageUrl: "solutions/ph-kin-001.png",
         status: "active",
         subject: "Physics",
         tags: ["motion", "basics"],
+        topic: "Uniform acceleration",
+        tutorialVideoLink: "https://learning.example.com/motion",
         uniqueKey: "PH-KIN-001",
         usedCount: 4,
         version: 2,
@@ -88,6 +93,7 @@ test("admin question library service maps persisted question records", async () 
     difficulty: "easy",
     examType: "JEEMains",
     id: "q-001",
+    internalNotes: "Review after next mock test.",
     lastUsedDate: "2026-05-10",
     marks: 4,
     negativeMarks: 1,
@@ -95,10 +101,14 @@ test("admin question library service maps persisted question records", async () 
     prompt: "Physics Kinematics MCQ",
     questionType: "MCQ",
     secondaryTag: "basics",
+    simulationLink: "https://sim.example.com/motion",
+    solutionImageFile: "solutions/ph-kin-001.png",
     status: "active",
     subject: "Physics",
     thermalState: "hot",
+    topic: "Uniform acceleration",
     uniqueKey: "PH-KIN-001",
+    tutorialVideoLink: "https://learning.example.com/motion",
     usedCount: 4,
     version: 2,
   });
@@ -108,4 +118,6 @@ test("admin question library service maps persisted question records", async () 
   assert.equal(result.questions[1]?.academicYear, "unassigned");
   assert.equal(result.questions[1]?.additionalTag, "none");
   assert.equal(result.questions[1]?.lastUsedDate, "2024-01-01");
+  assert.equal(result.questions[1]?.internalNotes, "");
+  assert.equal(result.questions[1]?.topic, "");
 });

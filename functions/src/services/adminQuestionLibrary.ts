@@ -158,6 +158,10 @@ function toQuestionBankDocument(
         "Medium",
     examType: toNonEmptyString(payload.examType, "General"),
     lastUsedAt: payload.lastUsedAt instanceof Timestamp ? payload.lastUsedAt : null,
+    internalNotes:
+      typeof payload.internalNotes === "string" && payload.internalNotes.trim().length > 0 ?
+        payload.internalNotes.trim() :
+        null,
     marks: toNonNegativeNumber(payload.marks),
     negativeMarks: toNonNegativeNumber(payload.negativeMarks),
     parentQuestionId:
@@ -178,6 +182,10 @@ function toQuestionBankDocument(
     status: toStatus(payload.status),
     subject: toNonEmptyString(payload.subject, "General"),
     tags,
+    topic:
+      typeof payload.topic === "string" && payload.topic.trim().length > 0 ?
+        payload.topic.trim() :
+        null,
     tutorialVideoLink:
       typeof payload.tutorialVideoLink === "string" ?
         payload.tutorialVideoLink :
@@ -211,6 +219,7 @@ function toLibraryRecord(
     difficulty: toDifficulty(question.difficulty),
     examType: question.examType,
     id: question.questionId,
+    internalNotes: question.internalNotes ?? "",
     lastUsedDate: toIsoDate(question.lastUsedAt),
     marks: question.marks,
     negativeMarks: question.negativeMarks,
@@ -218,10 +227,14 @@ function toLibraryRecord(
     prompt: `${question.subject} ${question.chapter} ${question.questionType}`,
     questionType: question.questionType,
     secondaryTag,
+    simulationLink: question.simulationLink ?? "",
+    solutionImageFile: question.solutionImageUrl,
     status: question.status,
     subject: question.subject,
     thermalState: toThermalState(question),
+    topic: question.topic ?? "",
     uniqueKey: question.uniqueKey,
+    tutorialVideoLink: question.tutorialVideoLink ?? "",
     usedCount: question.usedCount,
     version: question.version,
   };

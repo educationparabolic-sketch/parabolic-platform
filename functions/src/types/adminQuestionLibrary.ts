@@ -6,6 +6,7 @@ export interface AdminQuestionLibraryRecord {
   difficulty: "easy" | "medium" | "hard";
   examType: string;
   id: string;
+  internalNotes: string;
   lastUsedDate: string | null;
   marks: number;
   negativeMarks: number;
@@ -13,11 +14,15 @@ export interface AdminQuestionLibraryRecord {
   prompt: string;
   questionType: string;
   secondaryTag: string;
+  simulationLink: string;
+  solutionImageFile: string;
   status: "active" | "used" | "archived" | "deprecated";
   subject: string;
   chapter: string;
   thermalState: "hot" | "warm" | "cold";
+  topic: string;
   uniqueKey: string;
+  tutorialVideoLink: string;
   usedCount: number;
   version: number;
 }

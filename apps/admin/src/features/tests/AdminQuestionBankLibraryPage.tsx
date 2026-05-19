@@ -33,6 +33,40 @@ interface QuestionFilterDraft {
 }
 
 const PAGE_SIZE = 6;
+const STRUCTURAL_LOCK_TOOLTIP = "Locked: Used in assigned test.";
+const STRUCTURAL_LOCK_FIELDS = [
+  "UniqueKey",
+  "Difficulty",
+  "Marks",
+  "NegativeMarks",
+  "QuestionType",
+  "QuestionImageFile",
+  "CorrectAnswer",
+  "Exam",
+  "Subject",
+];
+const FLEXIBLE_FIELD_WARNING = "Changes affect future solution view only. Past scoring unaffected.";
+const FLEXIBLE_FIELD_LABELS = [
+  "SolutionImageFile",
+  "TutorialVideoLink",
+  "SimulationLink",
+  "PrimaryTag",
+  "SecondaryTag",
+  "AdditionalTag",
+  "Topic",
+  "InternalNotes",
+];
+
+interface FlexibleFieldDraft {
+  additionalTag: string;
+  internalNotes: string;
+  primaryTag: string;
+  secondaryTag: string;
+  simulationLink: string;
+  solutionImageFile: string;
+  topic: string;
+  tutorialVideoLink: string;
+}
 
 const INITIAL_FILTERS: QuestionFilterDraft = {
   academicYear: "all",
@@ -114,12 +148,30 @@ function normalizeQuestionRecord(value: unknown, index: number): QuestionBankRec
     prompt: toNonEmptyString(record.prompt, fallback?.prompt ?? ""),
     questionType: toNonEmptyString(record.questionType, fallback?.questionType ?? "Question"),
     secondaryTag: toNonEmptyString(record.secondaryTag, fallback?.secondaryTag ?? "none"),
+    simulationLink: toNonEmptyString(record.simulationLink, fallback?.simulationLink ?? ""),
+    solutionImageFile: toNonEmptyString(record.solutionImageFile, fallback?.solutionImageFile ?? ""),
     status: normalizeStatus(record.status, fallback?.status ?? "active"),
     subject: toNonEmptyString(record.subject, fallback?.subject ?? "General"),
     thermalState: normalizeThermalState(record.thermalState, fallback?.thermalState ?? "warm"),
+    topic: toNonEmptyString(record.topic, fallback?.topic ?? ""),
     uniqueKey: toNonEmptyString(record.uniqueKey, fallback?.uniqueKey ?? `Q-${index + 1}`),
+    tutorialVideoLink: toNonEmptyString(record.tutorialVideoLink, fallback?.tutorialVideoLink ?? ""),
+    internalNotes: toNonEmptyString(record.internalNotes, fallback?.internalNotes ?? ""),
     usedCount: Math.max(0, toNumberOrZero(record.usedCount ?? fallback?.usedCount ?? 0)),
     version: Math.max(1, toNumberOrZero(record.version ?? fallback?.version ?? 1)),
+  };
+}
+
+function toFlexibleFieldDraft(question: QuestionBankRecord): FlexibleFieldDraft {
+  return {
+    additionalTag: question.additionalTag,
+    internalNotes: question.internalNotes,
+    primaryTag: question.primaryTag,
+    secondaryTag: question.secondaryTag,
+    simulationLink: question.simulationLink,
+    solutionImageFile: question.solutionImageFile,
+    topic: question.topic,
+    tutorialVideoLink: question.tutorialVideoLink,
   };
 }
 
@@ -154,6 +206,8 @@ function AdminQuestionBankLibraryPage() {
     "Question library now has its own mounted workspace with indexed filters, pagination, and structural lock review.",
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [flexibleEditQuestionId, setFlexibleEditQuestionId] = useState<string | null>(null);
+  const [flexibleDraft, setFlexibleDraft] = useState<FlexibleFieldDraft | null>(null);
 
   useEffect(() => {
     let isActive = true;
@@ -296,12 +350,58 @@ function AdminQuestionBankLibraryPage() {
 
   function requestStructuralEdit(question: QuestionBankRecord) {
     if (question.usedCount > 0) {
-      setErrorMessage("Structural fields are locked once a question is used in assigned runs. Use Create Version instead.");
+      setErrorMessage(
+        `${STRUCTURAL_LOCK_TOOLTIP} Locked fields: ${STRUCTURAL_LOCK_FIELDS.join(", ")}. Use Create Version instead.`,
+      );
       return;
     }
 
     setInlineMessage(`Structural edit allowed for ${question.id}; no assigned-run linkage detected.`);
     setErrorMessage(null);
+  }
+
+  function openFlexibleFieldEditor(question: QuestionBankRecord) {
+    setFlexibleEditQuestionId(question.id);
+    setFlexibleDraft(toFlexibleFieldDraft(question));
+    setInlineMessage(FLEXIBLE_FIELD_WARNING);
+    setErrorMessage(null);
+  }
+
+  function updateFlexibleDraft(field: keyof FlexibleFieldDraft, value: string) {
+    setFlexibleDraft((current) => current ? { ...current, [field]: value } : current);
+  }
+
+  function saveFlexibleFieldEdits(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!flexibleEditQuestionId || !flexibleDraft) {
+      return;
+    }
+
+    setQuestions((current) =>
+      current.map((question) =>
+        question.id === flexibleEditQuestionId ?
+          {
+            ...question,
+            additionalTag: flexibleDraft.additionalTag.trim() || "none",
+            internalNotes: flexibleDraft.internalNotes.trim(),
+            primaryTag: flexibleDraft.primaryTag.trim() || "untagged",
+            secondaryTag: flexibleDraft.secondaryTag.trim() || "none",
+            simulationLink: flexibleDraft.simulationLink.trim(),
+            solutionImageFile: flexibleDraft.solutionImageFile.trim(),
+            topic: flexibleDraft.topic.trim(),
+            tutorialVideoLink: flexibleDraft.tutorialVideoLink.trim(),
+          } :
+          question,
+      ),
+    );
+    setInlineMessage(`${FLEXIBLE_FIELD_WARNING} Flexible metadata saved for ${flexibleEditQuestionId}.`);
+    setErrorMessage(null);
+  }
+
+  function closeFlexibleFieldEditor() {
+    setFlexibleEditQuestionId(null);
+    setFlexibleDraft(null);
+    setInlineMessage("Flexible metadata editor closed.");
   }
 
   function createQuestionVersion(questionId: string) {
@@ -391,6 +491,27 @@ function AdminQuestionBankLibraryPage() {
       ),
     },
     {
+      id: "structuralLock",
+      header: "Structure Lock",
+      render: (question) => {
+        const structuralLocked = question.usedCount > 0;
+
+        return (
+          <div className="admin-question-structural-lock">
+            {structuralLocked ? (
+              <span className="admin-question-lock-pill" title={STRUCTURAL_LOCK_TOOLTIP} aria-label={STRUCTURAL_LOCK_TOOLTIP}>
+                <span aria-hidden="true">🔒</span>
+                Locked
+              </span>
+            ) : (
+              <span className="admin-question-unlocked-pill">Editable</span>
+            )}
+            <small>{structuralLocked ? STRUCTURAL_LOCK_FIELDS.join(", ") : "Locks after first assigned test use"}</small>
+          </div>
+        );
+      },
+    },
+    {
       id: "actions",
       header: "Actions",
       className: "admin-tests-actions-col",
@@ -399,17 +520,12 @@ function AdminQuestionBankLibraryPage() {
 
         return (
           <div className="admin-tests-row-actions">
-            <button type="button" onClick={() => requestStructuralEdit(question)}>
+            <button type="button" onClick={() => requestStructuralEdit(question)} title={structuralLocked ? STRUCTURAL_LOCK_TOOLTIP : undefined}>
               {structuralLocked ? "Structure Locked" : "Edit Structure"}
             </button>
             <button
               type="button"
-              onClick={() => {
-                setInlineMessage(
-                  `Metadata warning: edits to tags/notes for ${question.id} affect future solution view only.`,
-                );
-                setErrorMessage(null);
-              }}
+              onClick={() => openFlexibleFieldEditor(question)}
             >
               Edit Metadata
             </button>
@@ -471,9 +587,94 @@ function AdminQuestionBankLibraryPage() {
         <article className="admin-risk-summary-card">
           <h4>Immutable Structure Rules</h4>
           <p>Questions already used in assigned runs surface a structure lock and must branch through version creation.</p>
-          <small>Future metadata edits remain separate from historical scoring.</small>
+          <small>{STRUCTURAL_LOCK_FIELDS.join(", ")}</small>
+        </article>
+        <article className="admin-risk-summary-card">
+          <h4>Flexible Field Edits</h4>
+          <p>{FLEXIBLE_FIELD_WARNING}</p>
+          <small>{FLEXIBLE_FIELD_LABELS.join(", ")}</small>
         </article>
       </div>
+
+      {flexibleDraft && flexibleEditQuestionId ? (
+        <UiForm
+          title={`Flexible Metadata: ${flexibleEditQuestionId}`}
+          description={FLEXIBLE_FIELD_WARNING}
+          submitLabel="Save Future-Only Metadata"
+          onSubmit={saveFlexibleFieldEdits}
+          footer={
+            <button type="button" onClick={closeFlexibleFieldEditor}>
+              Close
+            </button>
+          }
+        >
+          <div className="admin-tests-grid">
+            <UiFormField label="SolutionImageFile" htmlFor="admin-question-flex-solution-image">
+              <input
+                id="admin-question-flex-solution-image"
+                type="text"
+                value={flexibleDraft.solutionImageFile}
+                onChange={(event) => updateFlexibleDraft("solutionImageFile", event.target.value)}
+              />
+            </UiFormField>
+            <UiFormField label="TutorialVideoLink" htmlFor="admin-question-flex-tutorial">
+              <input
+                id="admin-question-flex-tutorial"
+                type="url"
+                value={flexibleDraft.tutorialVideoLink}
+                onChange={(event) => updateFlexibleDraft("tutorialVideoLink", event.target.value)}
+              />
+            </UiFormField>
+            <UiFormField label="SimulationLink" htmlFor="admin-question-flex-simulation">
+              <input
+                id="admin-question-flex-simulation"
+                type="url"
+                value={flexibleDraft.simulationLink}
+                onChange={(event) => updateFlexibleDraft("simulationLink", event.target.value)}
+              />
+            </UiFormField>
+            <UiFormField label="PrimaryTag" htmlFor="admin-question-flex-primary-tag">
+              <input
+                id="admin-question-flex-primary-tag"
+                type="text"
+                value={flexibleDraft.primaryTag}
+                onChange={(event) => updateFlexibleDraft("primaryTag", event.target.value)}
+              />
+            </UiFormField>
+            <UiFormField label="SecondaryTag" htmlFor="admin-question-flex-secondary-tag">
+              <input
+                id="admin-question-flex-secondary-tag"
+                type="text"
+                value={flexibleDraft.secondaryTag}
+                onChange={(event) => updateFlexibleDraft("secondaryTag", event.target.value)}
+              />
+            </UiFormField>
+            <UiFormField label="AdditionalTag" htmlFor="admin-question-flex-additional-tag">
+              <input
+                id="admin-question-flex-additional-tag"
+                type="text"
+                value={flexibleDraft.additionalTag}
+                onChange={(event) => updateFlexibleDraft("additionalTag", event.target.value)}
+              />
+            </UiFormField>
+            <UiFormField label="Topic" htmlFor="admin-question-flex-topic">
+              <input
+                id="admin-question-flex-topic"
+                type="text"
+                value={flexibleDraft.topic}
+                onChange={(event) => updateFlexibleDraft("topic", event.target.value)}
+              />
+            </UiFormField>
+            <UiFormField label="InternalNotes" htmlFor="admin-question-flex-internal-notes">
+              <textarea
+                id="admin-question-flex-internal-notes"
+                value={flexibleDraft.internalNotes}
+                onChange={(event) => updateFlexibleDraft("internalNotes", event.target.value)}
+              />
+            </UiFormField>
+          </div>
+        </UiForm>
+      ) : null}
 
       <UiForm
         title="Question Library Filters"

@@ -294,6 +294,7 @@ const normalizeQuestionDocument = (
   const normalizedQuestion: QuestionBankDocument = {
     academicYear: normalizeOptionalString(data.academicYear, "academicYear"),
     additionalTag: normalizeOptionalString(data.additionalTag, "additionalTag"),
+    internalNotes: normalizeOptionalString(data.internalNotes, "internalNotes"),
     chapter,
     correctAnswer: normalizeRequiredString(data.correctAnswer, "correctAnswer"),
     createdAt,
@@ -328,6 +329,7 @@ const normalizeQuestionDocument = (
     status: normalizeStatus(data.status),
     subject,
     tags: normalizedTags,
+    topic: normalizeOptionalString(data.topic, "topic"),
     tutorialVideoLink: normalizeOptionalString(
       data.tutorialVideoLink,
       "tutorialVideoLink",

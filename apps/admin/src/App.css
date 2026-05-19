@@ -917,6 +917,38 @@
   background: rgba(196, 56, 56, 0.14);
 }
 
+.admin-question-structural-lock {
+  display: grid;
+  gap: 4px;
+  min-width: 190px;
+}
+
+.admin-question-structural-lock small {
+  color: #4f688a;
+  line-height: 1.35;
+}
+
+.admin-question-lock-pill,
+.admin-question-unlocked-pill {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-weight: 700;
+}
+
+.admin-question-lock-pill {
+  color: #8a2431;
+  background: rgba(196, 56, 56, 0.14);
+}
+
+.admin-question-unlocked-pill {
+  color: #0f6a41;
+  background: rgba(15, 146, 85, 0.14);
+}
+
 .admin-tests-actions-col {
   min-width: 180px;
 }

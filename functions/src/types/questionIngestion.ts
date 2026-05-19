@@ -9,6 +9,7 @@ export type QuestionStatus =
 export interface QuestionBankDocument {
   academicYear: string | null;
   additionalTag: string | null;
+  internalNotes: string | null;
   questionId: string;
   uniqueKey: string;
   version: number;
@@ -25,6 +26,7 @@ export interface QuestionBankDocument {
   solutionImageUrl: string;
   tutorialVideoLink: string | null;
   simulationLink: string | null;
+  topic: string | null;
   primaryTag: string | null;
   tags: string[];
   usedCount: number;
