@@ -854,6 +854,17 @@
   font-size: 0.88rem;
 }
 
+.admin-tests-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-tests-filter-reset {
+  align-self: end;
+  min-height: 42px;
+}
+
 .admin-tests-question-list {
   max-height: 220px;
   overflow: auto;
@@ -2809,6 +2820,7 @@
 
   .admin-tests-grid,
   .admin-tests-config-grid,
+  .admin-tests-filter-grid,
   .admin-tests-summary-grid {
     grid-template-columns: 1fr;
   }

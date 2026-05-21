@@ -44,6 +44,7 @@ test("admin question distribution handler accepts read requests", async () => {
       assert.equal(request.limit, 6);
 
       return {
+        analyticsQuestionCount: 12,
         chapters: [],
         computedAt: "2026-05-14T00:00:00.000Z",
         difficulties: [],

@@ -69,7 +69,7 @@ Priority guide:
 | QB-012 | Question Bank | Structural lock rules with exact field coverage and lock icon tooltip | completed | P1 | Question Library now surfaces row-level structural lock state with the required `Locked: Used in assigned test.` tooltip, exact locked-field coverage for UniqueKey, Difficulty, Marks, NegativeMarks, QuestionType, QuestionImageFile, CorrectAnswer, Exam, and Subject, and lock-aware structural edit messaging that routes used questions to version creation |
 | QB-013 | Question Bank | Flexible field editing model with future-only warning | completed | P1 | Question Library now provides a focused flexible metadata editor for SolutionImageFile, TutorialVideoLink, SimulationLink, PrimaryTag, SecondaryTag, AdditionalTag, Topic, and InternalNotes, shows the exact `Changes affect future solution view only. Past scoring unaffected.` warning, and keeps structural fields separate from future-only metadata updates |
 | QB-014 | Question Bank | Versioning workflow and deprecated version controls | completed | P1 | Core versioning flow exists |
-| QB-015 | Question Bank | Distribution Overview analytics page using `questionAnalytics` | missing | P1 | Not implemented |
+| QB-015 | Question Bank | Distribution Overview analytics page using `questionAnalytics` | completed | P1 | Distribution Overview now uses the live `GET /admin/questions/distribution` questionAnalytics-backed summary for global difficulty distribution, marks distribution, chapter coverage, and L2-gated overstay, guess-rate, risk-impact, and discipline-stress views, with visible analytics coverage counts |
 | QB-016 | Question Bank | Validation Logs dedicated view with immutable upload history | partial | P2 | Logs exist conceptually, not as a full screen |
 | QB-017 | Question Bank | HOT/WARM/COLD archive/version lifecycle surfaced in UI | partial | P2 | Thermal-state concepts exist, not full lifecycle UI |
 
@@ -80,7 +80,7 @@ Priority guide:
 | TST-001 | Tests | Tests module shell | completed | P0 | Core module exists |
 | TST-002 | Tests | Dedicated subpages for Create Test, Test Library, Template Analytics, Distribution Review, Template Settings | completed | P0 | Admin tests now mount dedicated `/admin/tests/*` subpages for create, library, analytics, distribution review, and settings, with route-specific workspaces and test sub-navigation instead of collapsing into one merged screen |
 | TST-003 | Tests | Create Test basic question-pool selection and manual selection | completed | P0 | Present |
-| TST-004 | Tests | Full filter set for question-pool selection | partial | P1 | Basic filters exist; full spec set does not |
+| TST-004 | Tests | Full filter set for question-pool selection | completed | P1 | Create Test question-pool selection now includes the full spec filter matrix: subject, chapter, difficulty, tags, question type, academic year, used/unused state, and custom text search, with matched-count feedback before choosing Y questions |
 | TST-005 | Tests | Explicit X matched -> choose Y flow | partial | P1 | Concept exists but not exactly as specified |
 | TST-006 | Tests | Statistical selection options: shuffle_slice and offset_limit | missing | P1 | Round robin and manual are stronger than other methods |
 | TST-007 | Tests | Round robin selection | completed | P1 | Present |

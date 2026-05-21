@@ -6,10 +6,10 @@ This file is the persistent handoff state for portal checklist implementation ac
 
 - `Current Target Portal`: `admin`
 - `Current Priority Band`: `P1`
-- `Last Completed Checklist ID`: `QB-013`
-- `Next Suggested Checklist ID`: `QB-015`
-- `Last Updated`: `2026-05-19`
-- `Saved Scope Note`: `QB-013` is complete after adding the Question Library flexible metadata editor for SolutionImageFile, TutorialVideoLink, SimulationLink, PrimaryTag, SecondaryTag, AdditionalTag, Topic, and InternalNotes with the exact future-only warning. `QB-014` is already complete, so continue admin P1 with `QB-015`.
+- `Last Completed Checklist ID`: `TST-004`
+- `Next Suggested Checklist ID`: `TST-005`
+- `Last Updated`: `2026-05-21`
+- `Saved Scope Note`: `TST-004` is complete after adding the full Create Test question-pool filter matrix for subject, chapter, difficulty, tags, question type, academic year, used/unused state, and custom text search with matched-count feedback. Continue admin P1 with `TST-005`.
 
 ## Active Checklist Set
 

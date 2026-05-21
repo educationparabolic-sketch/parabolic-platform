@@ -78,6 +78,26 @@ interface QuestionPoolLoadState {
   source: "local" | "live";
 }
 
+interface QuestionPoolFilters {
+  academicYear: string;
+  chapter: string;
+  difficulty: "all" | DifficultyLevel;
+  questionType: string;
+  subject: string;
+  tag: string;
+  usageState: "all" | "used" | "unused";
+}
+
+const EMPTY_QUESTION_POOL_FILTERS: QuestionPoolFilters = {
+  academicYear: "all",
+  chapter: "all",
+  difficulty: "all",
+  questionType: "all",
+  subject: "all",
+  tag: "all",
+  usageState: "all",
+};
+
 const FALLBACK_TEMPLATES: TestTemplateRecord[] = [
   {
     id: "tmpl-001",
@@ -422,6 +442,7 @@ function TestTemplateManagementPage() {
   const [pendingDuplicateRecord, setPendingDuplicateRecord] = useState<TestTemplateRecord | null>(null);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [questionQuery, setQuestionQuery] = useState("");
+  const [questionPoolFilters, setQuestionPoolFilters] = useState<QuestionPoolFilters>(EMPTY_QUESTION_POOL_FILTERS);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(true);
   const [inlineMessage, setInlineMessage] = useState<string>(
@@ -532,21 +553,64 @@ function TestTemplateManagementPage() {
 
   const currentSubpage = useMemo(() => resolveTestSubpage(location.pathname), [location.pathname]);
 
+  const questionPoolFilterOptions = useMemo(() => {
+    const toSortedValues = (values: string[]) =>
+      Array.from(new Set(values.filter((value) => value.trim().length > 0))).sort((left, right) =>
+        left.localeCompare(right),
+      );
+
+    return {
+      academicYears: toSortedValues(questionPool.map((question) => question.academicYear)),
+      chapters: toSortedValues(questionPool.map((question) => question.chapter)),
+      questionTypes: toSortedValues(questionPool.map((question) => question.questionType)),
+      subjects: toSortedValues(questionPool.map((question) => question.subject)),
+      tags: toSortedValues(
+        questionPool.flatMap((question) => [
+          question.primaryTag,
+          question.secondaryTag,
+          question.additionalTag,
+        ]),
+      ),
+    };
+  }, [questionPool]);
+
   const visibleQuestions = useMemo(() => {
     const query = questionQuery.trim().toLowerCase();
-    if (query.length === 0) {
-      return questionPool;
-    }
 
     return questionPool.filter((question) => {
+      const tags = [question.primaryTag, question.secondaryTag, question.additionalTag];
+      const matchesStructuredFilters =
+        (questionPoolFilters.subject === "all" || question.subject === questionPoolFilters.subject) &&
+        (questionPoolFilters.chapter === "all" || question.chapter === questionPoolFilters.chapter) &&
+        (questionPoolFilters.difficulty === "all" || question.difficulty === questionPoolFilters.difficulty) &&
+        (questionPoolFilters.tag === "all" || tags.includes(questionPoolFilters.tag)) &&
+        (questionPoolFilters.questionType === "all" || question.questionType === questionPoolFilters.questionType) &&
+        (questionPoolFilters.academicYear === "all" || question.academicYear === questionPoolFilters.academicYear) &&
+        (
+          questionPoolFilters.usageState === "all" ||
+          (questionPoolFilters.usageState === "used" && question.usedCount > 0) ||
+          (questionPoolFilters.usageState === "unused" && question.usedCount === 0)
+        );
+
+      if (!matchesStructuredFilters) {
+        return false;
+      }
+
+      if (query.length === 0) {
+        return true;
+      }
+
       return (
         question.id.toLowerCase().includes(query) ||
         question.subject.toLowerCase().includes(query) ||
         question.chapter.toLowerCase().includes(query) ||
-        question.prompt.toLowerCase().includes(query)
+        question.prompt.toLowerCase().includes(query) ||
+        question.questionType.toLowerCase().includes(query) ||
+        tags.some((tag) => tag.toLowerCase().includes(query)) ||
+        question.academicYear.toLowerCase().includes(query)
       );
     });
-  }, [questionPool, questionQuery]);
+  }, [questionPool, questionPoolFilters, questionQuery]);
 
   const questionPoolById = useMemo(() => {
     const byId = new Map<string, QuestionBankRecord>();
@@ -1058,6 +1122,124 @@ function TestTemplateManagementPage() {
                 placeholder="Search by id, subject, chapter, or prompt"
               />
             </UiFormField>
+            <div className="admin-tests-filter-grid">
+              <UiFormField label="Subject" htmlFor="admin-tests-filter-subject">
+                <select
+                  id="admin-tests-filter-subject"
+                  value={questionPoolFilters.subject}
+                  onChange={(event) =>
+                    setQuestionPoolFilters((current) => ({ ...current, subject: event.target.value }))
+                  }
+                >
+                  <option value="all">All subjects</option>
+                  {questionPoolFilterOptions.subjects.map((subject) => (
+                    <option key={subject} value={subject}>{subject}</option>
+                  ))}
+                </select>
+              </UiFormField>
+              <UiFormField label="Chapter" htmlFor="admin-tests-filter-chapter">
+                <select
+                  id="admin-tests-filter-chapter"
+                  value={questionPoolFilters.chapter}
+                  onChange={(event) =>
+                    setQuestionPoolFilters((current) => ({ ...current, chapter: event.target.value }))
+                  }
+                >
+                  <option value="all">All chapters</option>
+                  {questionPoolFilterOptions.chapters.map((chapter) => (
+                    <option key={chapter} value={chapter}>{chapter}</option>
+                  ))}
+                </select>
+              </UiFormField>
+              <UiFormField label="Difficulty" htmlFor="admin-tests-filter-difficulty">
+                <select
+                  id="admin-tests-filter-difficulty"
+                  value={questionPoolFilters.difficulty}
+                  onChange={(event) =>
+                    setQuestionPoolFilters((current) => ({
+                      ...current,
+                      difficulty: event.target.value as QuestionPoolFilters["difficulty"],
+                    }))
+                  }
+                >
+                  <option value="all">All difficulties</option>
+                  {DIFFICULTY_LEVELS.map((difficulty) => (
+                    <option key={difficulty} value={difficulty}>{difficulty}</option>
+                  ))}
+                </select>
+              </UiFormField>
+              <UiFormField label="Tags" htmlFor="admin-tests-filter-tag">
+                <select
+                  id="admin-tests-filter-tag"
+                  value={questionPoolFilters.tag}
+                  onChange={(event) =>
+                    setQuestionPoolFilters((current) => ({ ...current, tag: event.target.value }))
+                  }
+                >
+                  <option value="all">All tags</option>
+                  {questionPoolFilterOptions.tags.map((tag) => (
+                    <option key={tag} value={tag}>{tag}</option>
+                  ))}
+                </select>
+              </UiFormField>
+              <UiFormField label="Question Type" htmlFor="admin-tests-filter-question-type">
+                <select
+                  id="admin-tests-filter-question-type"
+                  value={questionPoolFilters.questionType}
+                  onChange={(event) =>
+                    setQuestionPoolFilters((current) => ({ ...current, questionType: event.target.value }))
+                  }
+                >
+                  <option value="all">All types</option>
+                  {questionPoolFilterOptions.questionTypes.map((questionType) => (
+                    <option key={questionType} value={questionType}>{questionType}</option>
+                  ))}
+                </select>
+              </UiFormField>
+              <UiFormField label="Academic Year" htmlFor="admin-tests-filter-academic-year">
+                <select
+                  id="admin-tests-filter-academic-year"
+                  value={questionPoolFilters.academicYear}
+                  onChange={(event) =>
+                    setQuestionPoolFilters((current) => ({ ...current, academicYear: event.target.value }))
+                  }
+                >
+                  <option value="all">All years</option>
+                  {questionPoolFilterOptions.academicYears.map((academicYear) => (
+                    <option key={academicYear} value={academicYear}>{academicYear}</option>
+                  ))}
+                </select>
+              </UiFormField>
+              <UiFormField label="Used / Unused" htmlFor="admin-tests-filter-usage">
+                <select
+                  id="admin-tests-filter-usage"
+                  value={questionPoolFilters.usageState}
+                  onChange={(event) =>
+                    setQuestionPoolFilters((current) => ({
+                      ...current,
+                      usageState: event.target.value as QuestionPoolFilters["usageState"],
+                    }))
+                  }
+                >
+                  <option value="all">All usage states</option>
+                  <option value="unused">Unused only</option>
+                  <option value="used">Used only</option>
+                </select>
+              </UiFormField>
+              <button
+                type="button"
+                className="admin-tests-filter-reset"
+                onClick={() => {
+                  setQuestionQuery("");
+                  setQuestionPoolFilters(EMPTY_QUESTION_POOL_FILTERS);
+                }}
+              >
+                Reset Filters
+              </button>
+            </div>
+            <p className="admin-tests-form-footnote">
+              {visibleQuestions.length} of {questionPool.length} questions matched. Choose Y questions from this filtered pool.
+            </p>
             <div className="admin-tests-question-list" role="group" aria-label="Template question selection">
               {visibleQuestions.map((question) => {
                 const checked = draft.selectedQuestionIds.includes(question.id);

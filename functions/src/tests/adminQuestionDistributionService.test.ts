@@ -107,6 +107,7 @@ test("admin question distribution service aggregates question bank analytics", a
   });
 
   assert.equal(summary.totalQuestions, 3);
+  assert.equal(summary.analyticsQuestionCount, 3);
   assert.equal(summary.examType, "JEEMains");
   assert.equal(summary.missingDifficultyWarnings, 0);
   assert.equal(summary.difficulties[0]?.difficulty, "Easy");

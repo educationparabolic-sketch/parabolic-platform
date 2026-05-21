@@ -31,6 +31,7 @@ interface ChapterCoverageRecord {
 }
 
 interface QuestionDistributionSnapshot {
+  analyticsQuestionCount: number;
   computedAt: string;
   examType: string;
   totalQuestions: number;
@@ -41,6 +42,7 @@ interface QuestionDistributionSnapshot {
 }
 
 const FALLBACK_DISTRIBUTION_SNAPSHOT: QuestionDistributionSnapshot = {
+  analyticsQuestionCount: 1186,
   chapters: [
     {
       chapter: "Kinematics",
@@ -250,6 +252,10 @@ function normalizeDistributionSnapshot(payload: unknown): QuestionDistributionSn
 
   return {
     chapters: chapters.length > 0 ? chapters : FALLBACK_DISTRIBUTION_SNAPSHOT.chapters,
+    analyticsQuestionCount: Math.max(
+      0,
+      toNumberOrZero(record.analyticsQuestionCount ?? FALLBACK_DISTRIBUTION_SNAPSHOT.analyticsQuestionCount),
+    ),
     computedAt: toNonEmptyString(record.computedAt, FALLBACK_DISTRIBUTION_SNAPSHOT.computedAt),
     difficulties: difficulties.length > 0 ? difficulties : FALLBACK_DISTRIBUTION_SNAPSHOT.difficulties,
     examType: toNonEmptyString(record.examType, FALLBACK_DISTRIBUTION_SNAPSHOT.examType),
@@ -436,6 +442,8 @@ function AdminQuestionBankDistributionPage() {
   );
 
   const topCoverageChapter = snapshot.chapters[0] ?? null;
+  const analyticsCoveragePercent =
+    snapshot.totalQuestions > 0 ? Math.round((snapshot.analyticsQuestionCount / snapshot.totalQuestions) * 100) : 0;
   const highestRiskChapter = snapshot.chapters.reduce<ChapterCoverageRecord | null>((highest, chapter) => {
     if (!highest || chapter.riskImpactScore > highest.riskImpactScore) {
       return chapter;
@@ -472,9 +480,9 @@ function AdminQuestionBankDistributionPage() {
 
       <div className="admin-analytics-kpi-grid">
         <article className="admin-analytics-kpi-card">
-          <p>Total Questions</p>
-          <h3>{snapshot.totalQuestions}</h3>
-          <small>distribution-ready inventory</small>
+          <p>Analytics Coverage</p>
+          <h3>{analyticsCoveragePercent}%</h3>
+          <small>{snapshot.analyticsQuestionCount} of {snapshot.totalQuestions} questions with questionAnalytics</small>
         </article>
         <article className="admin-analytics-kpi-card">
           <p>Easy / Medium / Hard</p>
@@ -529,6 +537,7 @@ function AdminQuestionBankDistributionPage() {
           <h4>L0 Distribution View</h4>
           <p>
             {snapshot.examType} currently spans {snapshot.totalQuestions} retained questions with
+            {" "}{snapshot.analyticsQuestionCount} backed by precomputed questionAnalytics records and
             {" "}{snapshot.missingDifficultyWarnings} difficulty hygiene follow-ups still visible in the summary layer.
           </p>
           <small>Global balance without raw-session reads</small>

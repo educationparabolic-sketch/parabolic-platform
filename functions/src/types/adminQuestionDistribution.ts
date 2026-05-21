@@ -22,6 +22,7 @@ export interface AdminQuestionDistributionChapterRecord {
 }
 
 export interface AdminQuestionDistributionResult {
+  analyticsQuestionCount: number;
   chapters: AdminQuestionDistributionChapterRecord[];
   computedAt: string;
   difficulties: AdminQuestionDistributionDifficultyMetric[];

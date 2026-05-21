@@ -360,6 +360,7 @@ export class AdminQuestionDistributionService {
       chapterState.riskImpactScoreSum += analytics.riskImpactScore;
     });
 
+    const analyticsQuestionCount = analyticsByQuestionId.size;
     const totalQuestions = retainedQuestionDocs.length;
     const chapters = Array.from(chapterStates.values())
       .map((state) => toChapterRecord(state, totalMarks))
@@ -371,6 +372,7 @@ export class AdminQuestionDistributionService {
       .slice(0, request.limit);
 
     return {
+      analyticsQuestionCount,
       chapters,
       computedAt: new Date().toISOString(),
       difficulties: toDifficultyMetrics(
