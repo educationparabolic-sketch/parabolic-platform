@@ -103,10 +103,63 @@ export interface AdminAnalyticsYearBehaviorSummary {
   };
 }
 
+export interface AdminAnalyticsMonthlySummaryRecord {
+  avgAccuracyPercent: number;
+  avgRawScorePercent: number;
+  controlledModeEffectivenessPercent: number;
+  disciplineIndexPercent: number;
+  easyNeglectPercent: number;
+  monthId: string;
+  monthLabel: string;
+  participationRatePercent: number;
+  phaseAdherencePercent: number;
+  riskDistributionTrend: {
+    critical: number;
+    high: number;
+    low: number;
+    medium: number;
+  };
+  stabilityTrajectoryPercent: number;
+  topicWeaknessPercent: number;
+}
+
+export interface AdminAnalyticsTemplateRunRecord {
+  avgAccuracyPercent: number;
+  avgRawScorePercent: number;
+  completedOn: string;
+  disciplineStressScore: number;
+  mode: string;
+  phaseAdherencePercent: number;
+  riskShiftPercent: number;
+  runId: string;
+  runName: string;
+  stabilityIndex: number;
+}
+
+export interface AdminAnalyticsTemplateRecord {
+  academicYear: string;
+  avgAccuracyPercent: number;
+  avgDisciplineIndex: number;
+  avgDisciplineStressScore: number;
+  avgRawScorePercent: number;
+  avgRiskShiftPercent: number;
+  examType: string;
+  phaseAdherenceVariance: number;
+  rawVariance: number;
+  runs: AdminAnalyticsTemplateRunRecord[];
+  templateEffectivenessRating: number;
+  templateId: string;
+  templateName: string;
+  totalRuns: number;
+}
+
 export interface AdminAnalyticsSnapshot {
+  monthlySummary: AdminAnalyticsMonthlySummaryRecord[];
   runAnalytics: AdminAnalyticsRunRecord[];
   studentYearMetrics: AdminAnalyticsStudentMetricRecord[];
+  templateAnalytics: AdminAnalyticsTemplateRecord[];
   yearBehaviorSummary: AdminAnalyticsYearBehaviorSummary;
+  yearSummarySnapshots: AdminAnalyticsYearBehaviorSummary[];
 }
 
 export interface AdminAnalyticsSuccessResponse {
@@ -118,7 +171,14 @@ export interface AdminAnalyticsSuccessResponse {
   timestamp: string;
 }
 
+/**
+ * Raised when the admin analytics request cannot be normalized.
+ */
 export class AdminAnalyticsValidationError extends Error {
+  /**
+   * @param {StandardApiErrorCode} code Stable API error code.
+   * @param {string} message Human-readable validation failure.
+   */
   constructor(
     public readonly code: StandardApiErrorCode,
     message: string,

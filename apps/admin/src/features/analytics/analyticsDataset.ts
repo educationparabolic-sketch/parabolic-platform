@@ -65,10 +65,58 @@ export interface StudentYearMetricRecord {
 }
 
 export interface DashboardDataset {
+  monthlySummary: MonthlySummaryRecord[];
   runAnalytics: RunAnalyticsRecord[];
   studentYearMetrics: StudentYearMetricRecord[];
   studentAnalytics: StudentAnalyticsRecord[];
+  templateAnalytics: TemplateAnalyticsRecord[];
   yearBehaviorSummary: YearBehaviorSummaryRecord;
+  yearSummarySnapshots: YearBehaviorSummaryRecord[];
+}
+
+export interface MonthlySummaryRecord {
+  monthId: string;
+  monthLabel: string;
+  avgRawScorePercent: number;
+  avgAccuracyPercent: number;
+  participationRatePercent: number;
+  phaseAdherencePercent: number;
+  easyNeglectPercent: number;
+  topicWeaknessPercent: number;
+  disciplineIndexPercent: number;
+  controlledModeEffectivenessPercent: number;
+  stabilityTrajectoryPercent: number;
+  riskDistributionTrend: Record<RiskCluster, number>;
+}
+
+export interface TemplateAnalyticsRunRecord {
+  runId: string;
+  runName: string;
+  completedOn: string;
+  mode: string;
+  avgRawScorePercent: number;
+  avgAccuracyPercent: number;
+  phaseAdherencePercent: number;
+  stabilityIndex: number;
+  riskShiftPercent: number;
+  disciplineStressScore: number;
+}
+
+export interface TemplateAnalyticsRecord {
+  templateId: string;
+  templateName: string;
+  academicYear: string;
+  examType: string;
+  totalRuns: number;
+  avgRawScorePercent: number;
+  avgAccuracyPercent: number;
+  rawVariance: number;
+  phaseAdherenceVariance: number;
+  avgRiskShiftPercent: number;
+  avgDisciplineStressScore: number;
+  avgDisciplineIndex: number;
+  templateEffectivenessRating: number;
+  runs: TemplateAnalyticsRunRecord[];
 }
 
 export interface StudentAnalyticsRunRecord {
@@ -148,6 +196,79 @@ export interface YearBehaviorSummaryRecord {
 }
 
 export const FALLBACK_DATASET: DashboardDataset = {
+  monthlySummary: [
+    {
+      monthId: "2026-01",
+      monthLabel: "Jan 2026",
+      avgRawScorePercent: 58,
+      avgAccuracyPercent: 67,
+      participationRatePercent: 88,
+      phaseAdherencePercent: 71,
+      easyNeglectPercent: 24,
+      topicWeaknessPercent: 29,
+      disciplineIndexPercent: 62,
+      controlledModeEffectivenessPercent: 10,
+      stabilityTrajectoryPercent: 61,
+      riskDistributionTrend: { low: 31, medium: 28, high: 19, critical: 10 },
+    },
+    {
+      monthId: "2026-02",
+      monthLabel: "Feb 2026",
+      avgRawScorePercent: 61,
+      avgAccuracyPercent: 69,
+      participationRatePercent: 90,
+      phaseAdherencePercent: 74,
+      easyNeglectPercent: 22,
+      topicWeaknessPercent: 27,
+      disciplineIndexPercent: 65,
+      controlledModeEffectivenessPercent: 11,
+      stabilityTrajectoryPercent: 64,
+      riskDistributionTrend: { low: 34, medium: 27, high: 17, critical: 8 },
+    },
+    {
+      monthId: "2026-03",
+      monthLabel: "Mar 2026",
+      avgRawScorePercent: 63,
+      avgAccuracyPercent: 71,
+      participationRatePercent: 91,
+      phaseAdherencePercent: 76,
+      easyNeglectPercent: 20,
+      topicWeaknessPercent: 25,
+      disciplineIndexPercent: 68,
+      controlledModeEffectivenessPercent: 13,
+      stabilityTrajectoryPercent: 68,
+      riskDistributionTrend: { low: 37, medium: 25, high: 15, critical: 7 },
+    },
+    {
+      monthId: "2026-04",
+      monthLabel: "Apr 2026",
+      avgRawScorePercent: 66,
+      avgAccuracyPercent: 74,
+      participationRatePercent: 93,
+      phaseAdherencePercent: 79,
+      easyNeglectPercent: 18,
+      topicWeaknessPercent: 22,
+      disciplineIndexPercent: 71,
+      controlledModeEffectivenessPercent: 15,
+      stabilityTrajectoryPercent: 72,
+      riskDistributionTrend: { low: 40, medium: 23, high: 13, critical: 5 },
+    },
+    {
+      monthId: "2026-05",
+      monthLabel: "May 2026",
+      avgRawScorePercent: 68,
+      avgAccuracyPercent: 76,
+      participationRatePercent: 95,
+      phaseAdherencePercent: 82,
+      easyNeglectPercent: 16,
+      topicWeaknessPercent: 19,
+      disciplineIndexPercent: 74,
+      controlledModeEffectivenessPercent: 17,
+      stabilityTrajectoryPercent: 76,
+      riskDistributionTrend: { low: 44, medium: 21, high: 11, critical: 4 },
+    },
+  ],
+  templateAnalytics: [],
   runAnalytics: [
     {
       runId: "run-2026-0410-001",
@@ -439,12 +560,14 @@ export const FALLBACK_DATASET: DashboardDataset = {
       },
     ],
   },
+  yearSummarySnapshots: [],
 };
 
 FALLBACK_DATASET.studentAnalytics = deriveStudentAnalyticsRecords(
   FALLBACK_DATASET.runAnalytics,
   FALLBACK_DATASET.studentYearMetrics,
 );
+FALLBACK_DATASET.yearSummarySnapshots = [FALLBACK_DATASET.yearBehaviorSummary];
 
 function toNonEmptyString(value: unknown, fallback = ""): string {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
@@ -799,6 +922,88 @@ function normalizeBatchDiagnosticRecord(value: unknown, index: number): BatchDia
   };
 }
 
+function normalizeMonthlySummaryRecord(value: unknown, index: number): MonthlySummaryRecord | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const source = value as Record<string, unknown>;
+  const monthId = toNonEmptyString(source.monthId ?? source.month, `month-${index + 1}`);
+
+  return {
+    monthId,
+    monthLabel: toNonEmptyString(source.monthLabel, monthId),
+    avgRawScorePercent: toNumberOrZero(source.avgRawScorePercent),
+    avgAccuracyPercent: toNumberOrZero(source.avgAccuracyPercent),
+    participationRatePercent: toNumberOrZero(source.participationRatePercent),
+    phaseAdherencePercent: toNumberOrZero(source.phaseAdherencePercent),
+    easyNeglectPercent: toNumberOrZero(source.easyNeglectPercent),
+    topicWeaknessPercent: toNumberOrZero(source.topicWeaknessPercent),
+    disciplineIndexPercent: toNumberOrZero(source.disciplineIndexPercent),
+    controlledModeEffectivenessPercent: toNumberOrZero(source.controlledModeEffectivenessPercent),
+    stabilityTrajectoryPercent: toNumberOrZero(source.stabilityTrajectoryPercent),
+    riskDistributionTrend: normalizeRiskDistribution(source.riskDistributionTrend),
+  };
+}
+
+function normalizeTemplateAnalyticsRunRecord(value: unknown, index: number): TemplateAnalyticsRunRecord {
+  const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
+
+  return {
+    runId: toNonEmptyString(source.runId, `run-${index + 1}`),
+    runName: toNonEmptyString(source.runName, `Run ${index + 1}`),
+    completedOn: toNonEmptyString(
+      source.completedOn ?? source.startedAt,
+      new Date(0).toISOString(),
+    ),
+    mode: toNonEmptyString(source.mode, "Operational"),
+    avgRawScorePercent: toNumberOrZero(source.avgRawScorePercent),
+    avgAccuracyPercent: toNumberOrZero(source.avgAccuracyPercent),
+    phaseAdherencePercent: toNumberOrZero(source.phaseAdherencePercent ?? source.avgPhaseAdherencePercent),
+    stabilityIndex: toNumberOrZero(source.stabilityIndex),
+    riskShiftPercent: toNumberOrZero(source.riskShiftPercent ?? source.riskShiftIndex),
+    disciplineStressScore: toNumberOrZero(source.disciplineStressScore),
+  };
+}
+
+function normalizeTemplateAnalyticsRecord(value: unknown, index: number): TemplateAnalyticsRecord | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const source = value as Record<string, unknown>;
+  const runs = Array.isArray(source.runs) ?
+    source.runs.map(normalizeTemplateAnalyticsRunRecord) :
+    [];
+  const totalRuns = toNumberOrZero(source.totalRuns) || runs.length;
+  const avgRiskShiftPercent = toNumberOrZero(source.avgRiskShiftPercent ?? source.riskShiftIndex);
+  const avgDisciplineIndex = toNumberOrZero(source.avgDisciplineIndex);
+  const templateEffectivenessRating =
+    toNumberOrZero(source.templateEffectivenessRating ?? source.effectivenessRating) ||
+    clampPercent(
+      (toNumberOrZero(source.avgRawScorePercent) * 0.4) +
+        (avgDisciplineIndex * 0.3) +
+        ((100 - avgRiskShiftPercent) * 0.3),
+    );
+
+  return {
+    templateId: toNonEmptyString(source.templateId, `template-${index + 1}`),
+    templateName: toNonEmptyString(source.templateName ?? source.testName ?? source.name, `Template ${index + 1}`),
+    academicYear: toNonEmptyString(source.academicYear, "2026"),
+    examType: toNonEmptyString(source.examType, "General"),
+    totalRuns,
+    avgRawScorePercent: toNumberOrZero(source.avgRawScorePercent),
+    avgAccuracyPercent: toNumberOrZero(source.avgAccuracyPercent),
+    rawVariance: toNumberOrZero(source.rawVariance),
+    phaseAdherenceVariance: toNumberOrZero(source.phaseAdherenceVariance ?? source.phaseVariance),
+    avgRiskShiftPercent,
+    avgDisciplineStressScore: toNumberOrZero(source.avgDisciplineStressScore),
+    avgDisciplineIndex,
+    templateEffectivenessRating,
+    runs,
+  };
+}
+
 function deriveYearBehaviorSummary(
   runAnalytics: RunAnalyticsRecord[],
   studentYearMetrics: StudentYearMetricRecord[],
@@ -967,8 +1172,13 @@ export async function fetchDashboardDataset(): Promise<DashboardDataset> {
   }
 
   const typedPayload = payload as Record<string, unknown>;
+  const monthlySummarySource = Array.isArray(typedPayload.monthlySummary) ? typedPayload.monthlySummary : [];
   const runAnalyticsSource = Array.isArray(typedPayload.runAnalytics) ? typedPayload.runAnalytics : [];
   const studentMetricsSource = Array.isArray(typedPayload.studentYearMetrics) ? typedPayload.studentYearMetrics : [];
+  const templateAnalyticsSource = Array.isArray(typedPayload.templateAnalytics) ? typedPayload.templateAnalytics : [];
+  const yearSummarySnapshotsSource = Array.isArray(typedPayload.yearSummarySnapshots) ?
+    typedPayload.yearSummarySnapshots :
+    [];
 
   const runAnalytics = runAnalyticsSource
     .map((entry, index) => normalizeRunAnalyticsRecord(entry, index))
@@ -977,19 +1187,40 @@ export async function fetchDashboardDataset(): Promise<DashboardDataset> {
   const studentYearMetrics = studentMetricsSource
     .map((entry, index) => normalizeStudentMetricRecord(entry, index))
     .filter((entry): entry is StudentYearMetricRecord => Boolean(entry));
+  const monthlySummary = monthlySummarySource
+    .map((entry, index) => normalizeMonthlySummaryRecord(entry, index))
+    .filter((entry): entry is MonthlySummaryRecord => Boolean(entry))
+    .sort((left, right) => left.monthId.localeCompare(right.monthId));
+  const templateAnalytics = templateAnalyticsSource
+    .map((entry, index) => normalizeTemplateAnalyticsRecord(entry, index))
+    .filter((entry): entry is TemplateAnalyticsRecord => Boolean(entry))
+    .sort((left, right) => right.totalRuns - left.totalRuns || left.templateName.localeCompare(right.templateName));
 
   if (runAnalytics.length === 0 || studentYearMetrics.length === 0) {
     throw new Error("GET /admin/analytics did not include runAnalytics and studentYearMetrics arrays.");
   }
 
-  const yearBehaviorSummary = normalizeYearBehaviorSummaryRecord(
-    typedPayload.yearBehaviorSummary,
-    runAnalytics,
-    studentYearMetrics,
-  );
+  const yearSummarySnapshots = yearSummarySnapshotsSource
+    .map((entry) => normalizeYearBehaviorSummaryRecord(entry, runAnalytics, studentYearMetrics))
+    .sort((left, right) => Date.parse(right.computedAt) - Date.parse(left.computedAt));
+  const yearBehaviorSummary =
+    yearSummarySnapshots[0] ??
+    normalizeYearBehaviorSummaryRecord(
+      typedPayload.yearBehaviorSummary,
+      runAnalytics,
+      studentYearMetrics,
+    );
   const studentAnalytics = deriveStudentAnalyticsRecords(runAnalytics, studentYearMetrics);
 
-  return { runAnalytics, studentYearMetrics, studentAnalytics, yearBehaviorSummary };
+  return {
+    monthlySummary,
+    runAnalytics,
+    studentYearMetrics,
+    studentAnalytics,
+    templateAnalytics,
+    yearBehaviorSummary,
+    yearSummarySnapshots,
+  };
 }
 
 export const DEFAULT_STUDENT_INTELLIGENCE_ID = FALLBACK_DATASET.studentAnalytics[0]?.studentId ?? "";

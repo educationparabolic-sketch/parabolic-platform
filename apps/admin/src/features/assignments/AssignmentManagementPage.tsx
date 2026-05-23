@@ -1685,19 +1685,22 @@ function AssignmentManagementPage() {
         },
       },
       {
-        id: "signals",
-        header: "Signals",
+        id: "l2Execution",
+        header: "L2 Execution",
         className: "admin-assignments-status-col",
         render: (row) => (
           <div className="admin-assignments-table-stack">
-            <div className="admin-assignments-pill-row">
-              <span className="admin-assignments-metric-pill">Discipline {row.runAnalyticsSnapshot.avgDisciplineIndex}</span>
-              <span className="admin-assignments-metric-pill">Stability {row.runAnalyticsSnapshot.executionStabilityBadge}</span>
+            <div className="admin-assignments-metric-grid">
+              <span>Risk <strong>{row.runAnalyticsSnapshot.riskDistributionSummary}</strong></span>
+              <span>Discipline <strong>{row.runAnalyticsSnapshot.avgDisciplineIndex}</strong></span>
+              <span>Compliance <strong>{row.runAnalyticsSnapshot.controlledCompliancePercent}%</strong></span>
+              <span>Guess rate <strong>{row.runAnalyticsSnapshot.guessRatePercent}%</strong></span>
+              <span>Overrides <strong>{row.runAnalyticsSnapshot.overrideCount}</strong></span>
             </div>
-            <small>
-              Guess {row.runAnalyticsSnapshot.guessRatePercent}% · Compliance {row.runAnalyticsSnapshot.controlledCompliancePercent}%
-            </small>
-            <small>{row.runAnalyticsSnapshot.riskDistributionSummary}</small>
+            <span className="admin-assignments-metric-pill">
+              Execution stability {row.runAnalyticsSnapshot.executionStabilityBadge}
+            </span>
+            <small>Source: runAnalytics/{row.runId}</small>
           </div>
         ),
       },
@@ -1732,23 +1735,20 @@ function AssignmentManagementPage() {
       columns.push(
         {
           id: "currentPhase",
-          header: "CurrentPhase",
+          header: "Current Phase",
           render: (row) => row.currentPhase,
         },
         {
-          id: "pacingDriftFlag",
-          header: "PacingDriftFlag",
-          render: (row) => (row.pacingDriftFlag ? "Yes" : "No"),
-        },
-        {
-          id: "skipBurstFlag",
-          header: "SkipBurstFlag",
-          render: (row) => (row.skipBurstFlag ? "Yes" : "No"),
-        },
-        {
-          id: "rapidGuessFlag",
-          header: "RapidGuessFlag",
-          render: (row) => (row.rapidGuessFlag ? "Yes" : "No"),
+          id: "l1BehavioralFlags",
+          header: "L1 Behavioral Flags",
+          render: (row) => (
+            <div className="admin-assignments-table-stack">
+              <span>Pacing drift: <strong>{formatLiveFlag(row.pacingDriftFlag)}</strong></span>
+              <span>Skip burst: <strong>{formatLiveFlag(row.skipBurstFlag)}</strong></span>
+              <span>Rapid guess: <strong>{formatLiveFlag(row.rapidGuessFlag)}</strong></span>
+              <small>Derived from refreshed session snapshot.</small>
+            </div>
+          ),
         },
       );
     }
@@ -1756,29 +1756,17 @@ function AssignmentManagementPage() {
     if (hasLicenseAccess(CURRENT_LICENSE_LAYER, "L2")) {
       columns.push(
         {
-          id: "minViolations",
-          header: "MinTimeViolationsLive",
-          render: (row) => `${row.minTimeViolationsLive}`,
-        },
-        {
-          id: "maxViolations",
-          header: "MaxTimeViolationsLive",
-          render: (row) => `${row.maxTimeViolationsLive}`,
-        },
-        {
-          id: "consecutiveWrong",
-          header: "ConsecutiveWrongIndicator",
-          render: (row) => `${row.consecutiveWrongIndicator}`,
-        },
-        {
-          id: "provisionalRisk",
-          header: "ProvisionalRiskScore",
-          render: (row) => `${row.provisionalRiskScore}`,
-        },
-        {
-          id: "controlledCompliancePercent",
-          header: "ControlledCompliancePercent",
-          render: (row) => `${row.controlledCompliancePercent}%`,
+          id: "l2ExecutionCounters",
+          header: "L2 Execution Counters",
+          render: (row) => (
+            <div className="admin-assignments-table-stack">
+              <span>Min time: <strong>{row.minTimeViolationsLive}</strong></span>
+              <span>Max time: <strong>{row.maxTimeViolationsLive}</strong></span>
+              <span>Consecutive wrong: <strong>{row.consecutiveWrongIndicator}</strong></span>
+              <span>Provisional risk: <strong>{row.provisionalRiskScore}</strong></span>
+              <span>Controlled compliance: <strong>{row.controlledCompliancePercent}%</strong></span>
+            </div>
+          ),
         },
       );
     }
@@ -1798,6 +1786,10 @@ function AssignmentManagementPage() {
 
     return columns;
   }, []);
+
+  function formatLiveFlag(isActive: boolean): string {
+    return isActive ? "Flagged" : "Clear";
+  }
 
   const historyColumns = useMemo<UiTableColumn<RunStatusRecord>[]>(() => {
     return [
@@ -2667,6 +2659,16 @@ function AssignmentManagementPage() {
                 <p>
                   Mode <strong>{run.mode}</strong> · Window <strong>{formatDateTime(run.startWindowIso)}</strong> to <strong>{formatDateTime(run.endWindowIso)}</strong>
                 </p>
+                <div className="admin-analytics-compliance-panel" aria-label={`L2 compliance panel for ${run.runId}`}>
+                  <article className="admin-risk-summary-card">
+                    <h4>L2 Compliance Panel</h4>
+                    <p>
+                      Min/max time counters, consecutive-wrong indicators, provisional risk scores, and controlled
+                      compliance are rendered from live session snapshots only.
+                    </p>
+                    <small>Color-coded indicator: Stable, Drift, or High Risk. No question content is visible.</small>
+                  </article>
+                </div>
                 <p>
                   Dedicated route: <code>/admin/assignments/live/{run.runId}</code>
                 </p>

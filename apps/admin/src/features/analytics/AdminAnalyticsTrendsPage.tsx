@@ -9,25 +9,11 @@ import {
   formatPercent,
   shouldUseLiveApi,
   type DashboardDataset,
-  type RunAnalyticsRecord,
+  type MonthlySummaryRecord,
 } from "./analyticsDataset";
 import AnalyticsWorkspaceNav from "./AnalyticsWorkspaceNav";
 
-interface MonthlyTrendRecord {
-  monthId: string;
-  monthLabel: string;
-  avgRawScorePercent: number;
-  avgAccuracyPercent: number;
-  participationRatePercent: number;
-  phaseAdherencePercent: number;
-  easyNeglectPercent: number;
-  topicWeaknessPercent: number;
-  disciplineIndexPercent: number;
-  controlledModeEffectivenessPercent: number;
-  stabilityTrajectoryPercent: number;
-}
-
-const MONTHLY_TREND_FIXTURES: MonthlyTrendRecord[] = [
+const MONTHLY_TREND_FIXTURES: MonthlySummaryRecord[] = [
   {
     monthId: "2026-01",
     monthLabel: "Jan 2026",
@@ -40,6 +26,7 @@ const MONTHLY_TREND_FIXTURES: MonthlyTrendRecord[] = [
     disciplineIndexPercent: 62,
     controlledModeEffectivenessPercent: 10,
     stabilityTrajectoryPercent: 61,
+    riskDistributionTrend: { low: 31, medium: 28, high: 19, critical: 10 },
   },
   {
     monthId: "2026-02",
@@ -53,6 +40,7 @@ const MONTHLY_TREND_FIXTURES: MonthlyTrendRecord[] = [
     disciplineIndexPercent: 65,
     controlledModeEffectivenessPercent: 11,
     stabilityTrajectoryPercent: 64,
+    riskDistributionTrend: { low: 34, medium: 27, high: 17, critical: 8 },
   },
   {
     monthId: "2026-03",
@@ -66,6 +54,7 @@ const MONTHLY_TREND_FIXTURES: MonthlyTrendRecord[] = [
     disciplineIndexPercent: 68,
     controlledModeEffectivenessPercent: 13,
     stabilityTrajectoryPercent: 68,
+    riskDistributionTrend: { low: 37, medium: 25, high: 15, critical: 7 },
   },
   {
     monthId: "2026-04",
@@ -79,6 +68,7 @@ const MONTHLY_TREND_FIXTURES: MonthlyTrendRecord[] = [
     disciplineIndexPercent: 71,
     controlledModeEffectivenessPercent: 15,
     stabilityTrajectoryPercent: 72,
+    riskDistributionTrend: { low: 40, medium: 23, high: 13, critical: 5 },
   },
   {
     monthId: "2026-05",
@@ -92,12 +82,13 @@ const MONTHLY_TREND_FIXTURES: MonthlyTrendRecord[] = [
     disciplineIndexPercent: 74,
     controlledModeEffectivenessPercent: 17,
     stabilityTrajectoryPercent: 76,
+    riskDistributionTrend: { low: 44, medium: 21, high: 11, critical: 4 },
   },
 ];
 
 function toChartPoints(
-  rows: MonthlyTrendRecord[],
-  selector: (row: MonthlyTrendRecord) => number,
+  rows: MonthlySummaryRecord[],
+  selector: (row: MonthlySummaryRecord) => number,
 ): UiChartPoint[] {
   return rows.map((row) => ({
     label: row.monthLabel,
@@ -105,77 +96,8 @@ function toChartPoints(
   }));
 }
 
-function formatMonthLabel(monthId: string): string {
-  const parsed = Date.parse(`${monthId}-01T00:00:00.000Z`);
-  if (Number.isNaN(parsed)) {
-    return monthId;
-  }
-
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(parsed));
-}
-
-function groupRunsByMonth(runs: RunAnalyticsRecord[]): Map<string, RunAnalyticsRecord[]> {
-  const monthGroups = new Map<string, RunAnalyticsRecord[]>();
-
-  for (const run of runs) {
-    const parsed = Date.parse(run.startedAt);
-    if (Number.isNaN(parsed)) {
-      continue;
-    }
-
-    const monthId = new Date(parsed).toISOString().slice(0, 7);
-    const existing = monthGroups.get(monthId) ?? [];
-    existing.push(run);
-    monthGroups.set(monthId, existing);
-  }
-
-  return monthGroups;
-}
-
-function average(values: number[]): number {
-  if (values.length === 0) {
-    return 0;
-  }
-
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-function buildMonthlyTrendRows(dataset: DashboardDataset): MonthlyTrendRecord[] {
-  const monthGroups = groupRunsByMonth(dataset.runAnalytics);
-
-  return [...monthGroups.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([monthId, runs]) => ({
-      monthId,
-      monthLabel: formatMonthLabel(monthId),
-      avgRawScorePercent: Math.round(average(runs.map((run) => run.avgRawScorePercent))),
-      avgAccuracyPercent: Math.round(average(runs.map((run) => run.avgAccuracyPercent))),
-      participationRatePercent: Math.round(average(runs.map((run) => run.completionRatePercent))),
-      phaseAdherencePercent: Math.round(average(runs.map((run) => run.avgPhaseAdherencePercent))),
-      easyNeglectPercent: Math.round(average(runs.map((run) => run.easyNeglectPercent))),
-      topicWeaknessPercent: Math.round(average(runs.map((run) => run.timeMisallocationPercent))),
-      disciplineIndexPercent: Math.round(average(runs.map((run) => run.disciplineIndexAverage))),
-      controlledModeEffectivenessPercent: Math.round(average(runs.map((run) => run.controlledCompliancePercent))),
-      stabilityTrajectoryPercent: Math.round(
-        average(
-          runs.map(
-            (run) =>
-              Math.max(
-                0,
-                Math.min(
-                  100,
-                  run.disciplineIndexAverage -
-                    ((run.pacingGuardrailViolationPercent + run.structuralOverridePercent + run.guessRatePercent) / 3),
-                ),
-              ),
-          ),
-        ),
-      ),
-    }));
+function buildMonthlyTrendRows(dataset: DashboardDataset): MonthlySummaryRecord[] {
+  return [...dataset.monthlySummary].sort((left, right) => left.monthId.localeCompare(right.monthId));
 }
 
 function AdminAnalyticsTrendsPage() {
@@ -185,7 +107,7 @@ function AdminAnalyticsTrendsPage() {
     accessContext.licenseLayer !== null && LICENSE_LAYER_ORDER[accessContext.licenseLayer] >= LICENSE_LAYER_ORDER.L1;
   const isL2OrAbove =
     accessContext.licenseLayer !== null && LICENSE_LAYER_ORDER[accessContext.licenseLayer] >= LICENSE_LAYER_ORDER.L2;
-  const [rows, setRows] = useState<MonthlyTrendRecord[]>(MONTHLY_TREND_FIXTURES);
+  const [rows, setRows] = useState<MonthlySummaryRecord[]>(MONTHLY_TREND_FIXTURES);
   const [isLoading, setIsLoading] = useState(true);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
 
@@ -213,7 +135,7 @@ function AdminAnalyticsTrendsPage() {
 
         const monthlyRows = buildMonthlyTrendRows(dataset);
         setRows(monthlyRows.length > 0 ? monthlyRows : MONTHLY_TREND_FIXTURES);
-        setInlineMessage("Live mode enabled: trends hydrated from GET /admin/analytics summary payload.");
+        setInlineMessage("Live mode enabled: trends hydrated from monthlySummary records in GET /admin/analytics.");
       } catch (error) {
         if (!isMounted) {
           return;
@@ -274,10 +196,14 @@ function AdminAnalyticsTrendsPage() {
     () => toChartPoints(rows, (row) => row.stabilityTrajectoryPercent),
     [rows],
   );
+  const riskDistributionTrend = useMemo(
+    () => toChartPoints(rows, (row) => row.riskDistributionTrend.high + row.riskDistributionTrend.critical),
+    [rows],
+  );
 
-  const monthlyColumns = useMemo<UiTableColumn<MonthlyTrendRecord>[]>(
+  const monthlyColumns = useMemo<UiTableColumn<MonthlySummaryRecord>[]>(
     () => {
-      const baseColumns: UiTableColumn<MonthlyTrendRecord>[] = [
+      const baseColumns: UiTableColumn<MonthlySummaryRecord>[] = [
         {
           id: "month",
           header: "Month",
@@ -315,6 +241,11 @@ function AdminAnalyticsTrendsPage() {
           id: "stability",
           header: "Stability",
           render: (row) => formatPercent(row.stabilityTrajectoryPercent),
+        },
+        {
+          id: "risk",
+          header: "High/Critical Risk",
+          render: (row) => formatPercent(row.riskDistributionTrend.high + row.riskDistributionTrend.critical),
         },
       ];
     },
@@ -430,6 +361,15 @@ function AdminAnalyticsTrendsPage() {
             title="Topic Weakness Trend"
             subtitle="L1 topic weakness trend"
             data={weaknessTrend}
+            maxValue={100}
+            variant="line"
+          />
+        ) : null}
+        {isL2OrAbove ? (
+          <UiChartContainer
+            title="Risk Distribution Trend"
+            subtitle="L2 high and critical monthly risk movement"
+            data={riskDistributionTrend}
             maxValue={100}
             variant="line"
           />

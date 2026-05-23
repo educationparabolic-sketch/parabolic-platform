@@ -27,6 +27,7 @@ import InsightsWorkspaceNav from "./InsightsWorkspaceNav";
 interface BehaviorCard {
   label: string;
   value: string;
+  source: string;
   helper: string;
 }
 
@@ -54,6 +55,11 @@ function average(values: number[]): number {
   }
 
   return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function formatSignedPercent(value: number): string {
+  const rounded = Math.round(value);
+  return `${rounded >= 0 ? "+" : ""}${rounded}%`;
 }
 
 function StudentIntelligencePage() {
@@ -178,29 +184,54 @@ function StudentIntelligencePage() {
       {
         label: "Rushed Pattern",
         value: `${Math.max(0, Math.round(100 - student.phaseAdherencePercent))}%`,
+        source: "studentRollingWindow.phaseAdherencePercent",
         helper: "Derived from rolling phase adherence over the recent summary window.",
       },
       {
         label: "Easy Neglect",
         value: formatPercent(student.easyNeglectPercent),
+        source: "studentYearMetrics.easyNeglectPercent",
         helper: "Behavioral signal from studentYearMetrics snapshots.",
       },
       {
         label: "Hard Bias",
         value: formatPercent(student.hardBiasPercent),
+        source: "studentYearMetrics.hardBiasPercent",
         helper: "Difficulty-order preference trend across recent runs.",
       },
       {
         label: "Topic Weakness",
         value: student.topicWeaknessSummary,
+        source: "studentYearMetrics.topicWeaknessSummary",
         helper: "Summary-safe weakness interpretation without raw session scans.",
       },
       {
         label: "Time Misallocation",
         value: formatPercent(student.timeMisallocationPercent),
+        source: "studentYearMetrics.timeMisallocationPercent",
         helper: "Rolling timing inefficiency from recent summary runs.",
       },
     ];
+  }, [student]);
+
+  const l1DiagnosticInsight = useMemo(() => {
+    if (!student) {
+      return "";
+    }
+
+    const hardBiasDelta = student.hardBiasPercent - student.easyNeglectPercent;
+    const timingSignal = Math.max(0, Math.round(student.timeMisallocationPercent));
+    const rushedSignal = Math.max(0, Math.round(100 - student.phaseAdherencePercent));
+
+    if (Math.abs(hardBiasDelta) >= 8) {
+      return `Hard-bias signal is ${formatSignedPercent(hardBiasDelta)} compared with easy-neglect signal in the rolling window.`;
+    }
+
+    if (timingSignal >= rushedSignal) {
+      return `Time misallocation is the stronger diagnostic timing signal at ${formatPercent(timingSignal)} in the rolling window.`;
+    }
+
+    return `Rushed pattern is the stronger diagnostic timing signal at ${formatPercent(rushedSignal)} in the rolling window.`;
   }, [student]);
 
   const studentGuessTrend = useMemo(
@@ -407,11 +438,13 @@ function StudentIntelligencePage() {
           <h3>{formatPercent(student.avgAccuracyPercent)}</h3>
           <small>Summary-safe performance metric</small>
         </article>
-        <article className="admin-analytics-kpi-card">
-          <p>Rolling Risk State</p>
-          <h3>{riskClusterText(student.rollingRiskCluster)}</h3>
-          <small>Shown only as advisory intelligence</small>
-        </article>
+        {isL2OrAbove ? (
+          <article className="admin-analytics-kpi-card">
+            <p>Rolling Risk State</p>
+            <h3>{riskClusterText(student.rollingRiskCluster)}</h3>
+            <small>L2 execution intelligence</small>
+          </article>
+        ) : null}
       </div>
 
       <div className="admin-risk-signal-grid">
@@ -419,29 +452,41 @@ function StudentIntelligencePage() {
           <article key={card.label} className="admin-risk-signal-card">
             <p>{card.label}</p>
             <h4>{card.value}</h4>
+            <small>{card.source}</small>
             <small>{card.helper}</small>
           </article>
         ))}
       </div>
 
       <div className="admin-risk-table-section">
-        <h3>Recent Run Trendlines</h3>
-        <div className="admin-risk-chart-grid">
-          <UiChartContainer
-            title="Guess Rate Trend"
-            subtitle="Rolling guess-rate by recent summary runs"
-            data={studentGuessTrend}
-          />
-          <UiChartContainer
-            title="Pacing Deviation Graph"
-            subtitle="Phase compliance trend across the rolling intelligence window"
-            data={studentPacingTrend}
-          />
-        </div>
+        <h3>L1 Diagnostic View</h3>
+        <p className="admin-risk-heatmap-copy">
+          Rolling window: last 5 runs or last 30 days. The L1 view keeps to behavior diagnostics only and does not
+          assign a risk state.
+        </p>
+        <article className="admin-risk-summary-card">
+          <p>{l1DiagnosticInsight}</p>
+          <small>Diagnostic interpretation from studentYearMetrics and studentRollingWindow summaries.</small>
+        </article>
       </div>
 
       {isL2OrAbove ? (
         <>
+          <div className="admin-risk-table-section">
+            <h3>Execution Trendlines</h3>
+            <div className="admin-risk-chart-grid">
+              <UiChartContainer
+                title="Guess Rate Trend"
+                subtitle="Rolling guess-rate by recent summary runs"
+                data={studentGuessTrend}
+              />
+              <UiChartContainer
+                title="Pacing Deviation Graph"
+                subtitle="Phase compliance trend across the rolling intelligence window"
+                data={studentPacingTrend}
+              />
+            </div>
+          </div>
           <div className="admin-risk-table-section">
             <h3>Execution Intelligence</h3>
             <div className="admin-analytics-compliance-panel">

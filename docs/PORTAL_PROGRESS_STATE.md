@@ -6,10 +6,10 @@ This file is the persistent handoff state for portal checklist implementation ac
 
 - `Current Target Portal`: `admin`
 - `Current Priority Band`: `P1`
-- `Last Completed Checklist ID`: `ASN-009`
-- `Next Suggested Checklist ID`: `ASN-010`
+- `Last Completed Checklist ID`: `INS-005`
+- `Next Suggested Checklist ID`: `INS-006`
 - `Last Updated`: `2026-05-23`
-- `Saved Scope Note`: `ASN-009` is complete after adding a dedicated Assignment List L1 diagnostics column backed by `runAnalytics/{runId}` fields for Avg Phase Adherence %, Easy Neglect %, Hard Bias %, and a derived Behavior Summary Badge. Continue admin P1 with `ASN-010`.
+- `Saved Scope Note`: `INS-005` is complete after tightening `/admin/insights/student/:studentId` into the L1 diagnostic student view from `studentYearMetrics` plus rolling-window summaries: Rushed Pattern, Easy Neglect, Hard Bias, Topic Weakness, and Time Misallocation behavior cards now include source fields and no risk-state label, the page states the last-5-runs-or-last-30-days rolling model, and execution-only trendlines/risk state are kept behind L2 access. Continue admin Insights P1 with `INS-006`.
 
 ## Active Checklist Set
 

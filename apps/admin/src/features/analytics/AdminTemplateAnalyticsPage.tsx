@@ -11,36 +11,10 @@ import {
   formatPercent,
   shouldUseLiveApi,
   type RunAnalyticsRecord,
+  type TemplateAnalyticsRecord,
+  type TemplateAnalyticsRunRecord,
 } from "./analyticsDataset";
 import AnalyticsWorkspaceNav from "./AnalyticsWorkspaceNav";
-
-interface TemplateAnalyticsRunRecord {
-  runId: string;
-  runName: string;
-  completedOn: string;
-  mode: string;
-  avgRawScorePercent: number;
-  avgAccuracyPercent: number;
-  phaseAdherencePercent: number;
-  stabilityIndex: number;
-  riskShiftPercent: number;
-  disciplineStressScore: number;
-}
-
-interface TemplateAnalyticsRecord {
-  templateId: string;
-  templateName: string;
-  academicYear: string;
-  examType: string;
-  totalRuns: number;
-  avgRawScorePercent: number;
-  avgAccuracyPercent: number;
-  rawVariance: number;
-  phaseAdherenceVariance: number;
-  avgDisciplineIndex: number;
-  templateEffectivenessRating: number;
-  runs: TemplateAnalyticsRunRecord[];
-}
 
 const TEMPLATE_ANALYTICS_FIXTURES: TemplateAnalyticsRecord[] = [
   {
@@ -53,6 +27,8 @@ const TEMPLATE_ANALYTICS_FIXTURES: TemplateAnalyticsRecord[] = [
     avgAccuracyPercent: 74,
     rawVariance: 10,
     phaseAdherenceVariance: 7,
+    avgRiskShiftPercent: 14,
+    avgDisciplineStressScore: 31,
     avgDisciplineIndex: 71,
     templateEffectivenessRating: 73,
     runs: [
@@ -104,6 +80,8 @@ const TEMPLATE_ANALYTICS_FIXTURES: TemplateAnalyticsRecord[] = [
     avgAccuracyPercent: 70,
     rawVariance: 14,
     phaseAdherenceVariance: 9,
+    avgRiskShiftPercent: 19,
+    avgDisciplineStressScore: 37,
     avgDisciplineIndex: 66,
     templateEffectivenessRating: 66,
     runs: [
@@ -278,6 +256,8 @@ function buildTemplateAnalyticsFromRuns(runs: RunAnalyticsRecord[]): TemplateAna
       const rawVariance = Math.round(variance(runRecords.map((run) => run.avgRawScorePercent)));
       const phaseAdherenceVariance = Math.round(variance(runRecords.map((run) => run.phaseAdherencePercent)));
       const averageRiskShift = average(runRecords.map((run) => run.riskShiftPercent));
+      const avgRiskShiftPercent = Math.round(averageRiskShift);
+      const avgDisciplineStressScore = Math.round(average(runRecords.map((run) => run.disciplineStressScore)));
       const templateEffectivenessRating = Math.max(
         0,
         Math.min(
@@ -296,6 +276,8 @@ function buildTemplateAnalyticsFromRuns(runs: RunAnalyticsRecord[]): TemplateAna
         avgAccuracyPercent,
         rawVariance,
         phaseAdherenceVariance,
+        avgRiskShiftPercent,
+        avgDisciplineStressScore,
         avgDisciplineIndex,
         templateEffectivenessRating,
         runs: runRecords,
@@ -309,6 +291,8 @@ function AdminTemplateAnalyticsPage() {
   const params = useParams<{ testId?: string }>();
   const { session } = useAuthProvider();
   const accessContext = resolveAdminAccessContext(session);
+  const isL1OrAbove =
+    accessContext.licenseLayer !== null && LICENSE_LAYER_ORDER[accessContext.licenseLayer] >= LICENSE_LAYER_ORDER.L1;
   const isL2OrAbove =
     accessContext.licenseLayer !== null && LICENSE_LAYER_ORDER[accessContext.licenseLayer] >= LICENSE_LAYER_ORDER.L2;
   const [templates, setTemplates] = useState<TemplateAnalyticsRecord[]>(TEMPLATE_ANALYTICS_FIXTURES);
@@ -335,9 +319,15 @@ function AdminTemplateAnalyticsPage() {
           return;
         }
 
-        const liveTemplates = buildTemplateAnalyticsFromRuns(dataset.runAnalytics);
+        const liveTemplates = dataset.templateAnalytics.length > 0 ?
+          dataset.templateAnalytics :
+          buildTemplateAnalyticsFromRuns(dataset.runAnalytics);
         setTemplates(liveTemplates.length > 0 ? liveTemplates : TEMPLATE_ANALYTICS_FIXTURES);
-        setInlineMessage("Live mode enabled: template analytics hydrated from GET /admin/analytics summary payload.");
+        setInlineMessage(
+          dataset.templateAnalytics.length > 0 ?
+            "Live mode enabled: template analytics hydrated from templateAnalytics summaries in GET /admin/analytics." :
+            "Live mode enabled: templateAnalytics was empty, so the workspace derived a temporary summary from runAnalytics.",
+        );
       } catch (error) {
         if (!isMounted) {
           return;
@@ -385,54 +375,65 @@ function AdminTemplateAnalyticsPage() {
     [selectedTemplate],
   );
 
-  const kpis = useMemo(() => {
+  const l1Kpis = useMemo(() => {
     if (!selectedTemplate) {
       return [];
     }
 
-    const base = [
+    return [
       {
-        label: "Tracked Runs",
+        label: "Number of Runs",
         value: String(selectedTemplate.totalRuns),
-        helper: "templateAnalytics summary",
+        helper: "templateAnalytics run count",
       },
       {
         label: "Avg Raw Score",
         value: formatPercent(selectedTemplate.avgRawScorePercent),
-        helper: "cross-run template outcome",
+        helper: "L1 cross-run outcome",
       },
       {
         label: "Avg Accuracy",
         value: formatPercent(selectedTemplate.avgAccuracyPercent),
-        helper: "cross-run template outcome",
+        helper: "L1 cross-run outcome",
       },
       {
         label: "Raw Variance",
         value: String(selectedTemplate.rawVariance),
-        helper: "structural consistency indicator",
+        helper: "L1 structural consistency",
       },
     ];
+  }, [selectedTemplate]);
 
-    if (!isL2OrAbove) {
-      return base;
+  const l2Kpis = useMemo(() => {
+    if (!selectedTemplate || !isL2OrAbove) {
+      return [];
     }
 
     return [
-      ...base,
       {
-        label: "Effectiveness Rating",
-        value: String(selectedTemplate.templateEffectivenessRating),
-        helper: "precomputed structural score",
-      },
-      {
-        label: "Avg Discipline Index",
-        value: formatPercent(selectedTemplate.avgDisciplineIndex),
-        helper: "L2 discipline view",
+        label: "Stability Index",
+        value: String(Math.round(average(selectedTemplate.runs.map((run) => run.stabilityIndex)))),
+        helper: "average stability per run",
       },
       {
         label: "Phase Variance",
         value: String(selectedTemplate.phaseAdherenceVariance),
         helper: "phase adherence spread",
+      },
+      {
+        label: "Risk Shift",
+        value: formatPercent(selectedTemplate.avgRiskShiftPercent),
+        helper: "average risk movement",
+      },
+      {
+        label: "Discipline Stress",
+        value: String(selectedTemplate.avgDisciplineStressScore),
+        helper: "execution strain score",
+      },
+      {
+        label: "Effectiveness Rating",
+        value: String(selectedTemplate.templateEffectivenessRating),
+        helper: "precomputed template score",
       },
     ];
   }, [isL2OrAbove, selectedTemplate]);
@@ -469,23 +470,32 @@ function AdminTemplateAnalyticsPage() {
           </div>
         ),
       },
-      {
-        id: "phase",
-        header: "Phase Adherence",
-        render: (run) => formatPercent(run.phaseAdherencePercent),
-      },
-      {
-        id: "stability",
-        header: "Stability Index",
-        render: (run) => run.stabilityIndex,
-      },
-      {
-        id: "risk",
-        header: "Risk Shift",
-        render: (run) => formatPercent(run.riskShiftPercent),
-      },
+      ...(isL2OrAbove
+        ? [
+            {
+              id: "phase",
+              header: "Phase Adherence",
+              render: (run: TemplateAnalyticsRunRecord) => formatPercent(run.phaseAdherencePercent),
+            },
+            {
+              id: "stability",
+              header: "Stability Index",
+              render: (run: TemplateAnalyticsRunRecord) => run.stabilityIndex,
+            },
+            {
+              id: "risk",
+              header: "Risk Shift",
+              render: (run: TemplateAnalyticsRunRecord) => formatPercent(run.riskShiftPercent),
+            },
+            {
+              id: "discipline",
+              header: "Discipline Stress",
+              render: (run: TemplateAnalyticsRunRecord) => run.disciplineStressScore,
+            },
+          ]
+        : []),
     ],
-    [],
+    [isL2OrAbove],
   );
 
   return (
@@ -532,7 +542,16 @@ function AdminTemplateAnalyticsPage() {
         </label>
       </div>
 
-      {selectedTemplate ? (
+      {!isL1OrAbove ? (
+        <div className="admin-risk-summary-card">
+          <h4>Template Analytics Locked</h4>
+          <p>
+            The By Template workspace starts at L1. L0 users keep the clean yearly overview without cross-run
+            structural quality or execution diagnostics.
+          </p>
+          <small>Visibility matrix: By Template has no L0 metric surface.</small>
+        </div>
+      ) : selectedTemplate ? (
         <>
           <div className="admin-analytics-run-detail-header">
             <div>
@@ -545,8 +564,9 @@ function AdminTemplateAnalyticsPage() {
             <div className="admin-analytics-run-source-chip">templateAnalytics summary</div>
           </div>
 
+          <h3 className="admin-tests-analytics-section-title">L1 Structural Quality</h3>
           <div className="admin-analytics-kpi-grid">
-            {kpis.map((kpi) => (
+            {l1Kpis.map((kpi) => (
               <article key={kpi.label} className="admin-analytics-kpi-card">
                 <p>{kpi.label}</p>
                 <h3>{kpi.value}</h3>
@@ -554,6 +574,21 @@ function AdminTemplateAnalyticsPage() {
               </article>
             ))}
           </div>
+
+          {isL2OrAbove ? (
+            <>
+              <h3 className="admin-tests-analytics-section-title">L2 Execution Quality</h3>
+              <div className="admin-analytics-kpi-grid">
+                {l2Kpis.map((kpi) => (
+                  <article key={kpi.label} className="admin-analytics-kpi-card">
+                    <p>{kpi.label}</p>
+                    <h3>{kpi.value}</h3>
+                    <small>{kpi.helper}</small>
+                  </article>
+                ))}
+              </div>
+            </>
+          ) : null}
 
           <div className="admin-analytics-chart-grid">
             <UiChartContainer
@@ -570,20 +605,22 @@ function AdminTemplateAnalyticsPage() {
               maxValue={100}
               variant="line"
             />
-            <UiChartContainer
-              title="Risk Shift Per Run"
-              subtitle="Structural risk movement across template usage"
-              data={riskShiftChart}
-              maxValue={100}
-            />
             {isL2OrAbove ? (
-              <UiChartContainer
-                title="Stability Index"
-                subtitle="Execution stability trajectory across runs"
-                data={stabilityChart}
-                maxValue={100}
-                variant="line"
-              />
+              <>
+                <UiChartContainer
+                  title="Risk Shift Per Run"
+                  subtitle="Structural risk movement across template usage"
+                  data={riskShiftChart}
+                  maxValue={100}
+                />
+                <UiChartContainer
+                  title="Stability Index Per Run"
+                  subtitle="Execution stability trajectory across runs"
+                  data={stabilityChart}
+                  maxValue={100}
+                  variant="line"
+                />
+              </>
             ) : null}
           </div>
 
@@ -597,23 +634,26 @@ function AdminTemplateAnalyticsPage() {
               </p>
               <small>Cross-run structural quality evaluation</small>
             </article>
-            <article className="admin-risk-summary-card">
-              <h4>Phase Consistency</h4>
-              <p>
-                Phase adherence variance is {selectedTemplate.phaseAdherenceVariance}, showing how evenly this template
-                holds timing structure from one run to the next.
-              </p>
-              <small>Derived from summary-only phase adherence snapshots</small>
-            </article>
             {isL2OrAbove ? (
-              <article className="admin-risk-summary-card">
-                <h4>L2 Effectiveness</h4>
-                <p>
-                  Template effectiveness is rated {selectedTemplate.templateEffectivenessRating} with an average
-                  discipline index of {formatPercent(selectedTemplate.avgDisciplineIndex)}.
-                </p>
-                <small>Structural stress and discipline signals unlock at L2+</small>
-              </article>
+              <>
+                <article className="admin-risk-summary-card">
+                  <h4>Phase Consistency</h4>
+                  <p>
+                    Phase adherence variance is {selectedTemplate.phaseAdherenceVariance}, showing how evenly this
+                    template holds timing structure from one run to the next.
+                  </p>
+                  <small>Derived from summary-only phase adherence snapshots</small>
+                </article>
+                <article className="admin-risk-summary-card">
+                  <h4>L2 Effectiveness</h4>
+                  <p>
+                    Template effectiveness is rated {selectedTemplate.templateEffectivenessRating} with an average
+                    discipline index of {formatPercent(selectedTemplate.avgDisciplineIndex)} and discipline stress score
+                    of {selectedTemplate.avgDisciplineStressScore}.
+                  </p>
+                  <small>Structural stress and discipline signals unlock at L2+</small>
+                </article>
+              </>
             ) : null}
           </div>
 

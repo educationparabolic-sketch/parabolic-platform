@@ -1,10 +1,14 @@
+/* eslint-disable require-jsdoc */
 import {Timestamp} from "firebase-admin/firestore";
 import {adminSettingsService} from "./adminSettings";
 import {getFirestore} from "../utils/firebaseAdmin";
 import {
   AdminAnalyticsRunRecord,
+  AdminAnalyticsMonthlySummaryRecord,
   AdminAnalyticsSnapshot,
   AdminAnalyticsStudentMetricRecord,
+  AdminAnalyticsTemplateRecord,
+  AdminAnalyticsTemplateRunRecord,
   AdminAnalyticsValidatedRequest,
   AdminAnalyticsValidationError,
   AdminAnalyticsYearBehaviorSummary,
@@ -13,8 +17,11 @@ import {
 const INSTITUTES_COLLECTION = "institutes";
 const ACADEMIC_YEARS_COLLECTION = "academicYears";
 const GOVERNANCE_SNAPSHOTS_COLLECTION = "governanceSnapshots";
+const MONTHLY_SUMMARY_COLLECTION = "monthlySummary";
 const RUN_ANALYTICS_COLLECTION = "runAnalytics";
 const STUDENT_YEAR_METRICS_COLLECTION = "studentYearMetrics";
+const TEMPLATE_ANALYTICS_COLLECTION = "templateAnalytics";
+const YEAR_SUMMARY_SNAPSHOTS_COLLECTION = "yearSummarySnapshots";
 
 function normalizeRequiredString(value: unknown, fieldName: string): string {
   if (typeof value !== "string" || value.trim().length === 0) {
@@ -132,7 +139,9 @@ function toRiskCluster(
   return "low";
 }
 
-function normalizeRiskDistribution(value: unknown): AdminAnalyticsRunRecord["riskDistribution"] {
+function normalizeRiskDistribution(
+  value: unknown,
+): AdminAnalyticsRunRecord["riskDistribution"] {
   const defaultDistribution = {
     critical: 0,
     high: 0,
@@ -186,7 +195,9 @@ function normalizeRunRecord(
   const accuracyHistogram = Array.isArray(data.accuracyHistogram) ?
     data.accuracyHistogram.map(toNumberOrZero) :
     percentileBuckets([toNumberOrZero(data.avgAccuracyPercent)]);
-  const sectionAccuracyPercentages = Array.isArray(data.sectionAccuracyPercentages) ?
+  const sectionAccuracyPercentages = Array.isArray(
+    data.sectionAccuracyPercentages,
+  ) ?
     data.sectionAccuracyPercentages.map(toNumberOrZero) :
     [toNumberOrZero(data.avgAccuracyPercent)];
   const topicHeatmap = Array.isArray(data.topicHeatmap) ?
@@ -234,7 +245,9 @@ function normalizeRunRecord(
     completionRatePercent: toNumberOrZero(
       data.completionRatePercent ?? data.completionRate,
     ),
-    controlledCompliancePercent: toNumberOrZero(data.controlledCompliancePercent),
+    controlledCompliancePercent: toNumberOrZero(
+      data.controlledCompliancePercent,
+    ),
     disciplineIndexAverage: toNumberOrZero(
       data.disciplineIndexAverage ?? data.disciplineAverage,
     ),
@@ -301,7 +314,9 @@ function normalizeStudentMetricRecord(
       data.disciplineIndexTrend ?? data.disciplineIndexTrendDelta,
     ),
     guessRatePercent: toNumberOrZero(
-      data.guessRatePercent ?? data.guessRateAverage ?? data.avgGuessRatePercent,
+      data.guessRatePercent ??
+        data.guessRateAverage ??
+        data.avgGuessRatePercent,
     ),
     rollingRiskCluster: toRiskCluster(
       data.rollingRiskCluster ?? data.riskState,
@@ -314,6 +329,131 @@ function normalizeStudentMetricRecord(
     testsAttempted: toNumberOrZero(
       data.testsAttempted ?? data.totalTests,
     ),
+  };
+}
+
+function formatMonthLabel(monthId: string): string {
+  const parsed = Date.parse(`${monthId}-01T00:00:00.000Z`);
+  if (Number.isNaN(parsed)) {
+    return monthId;
+  }
+
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    timeZone: "UTC",
+    year: "numeric",
+  }).format(new Date(parsed));
+}
+
+function normalizeMonthlySummaryRecord(
+  document: FirebaseFirestore.QueryDocumentSnapshot,
+): AdminAnalyticsMonthlySummaryRecord {
+  const data = document.data();
+  const monthId = toNonEmptyString(
+    data.monthId ?? data.month ?? data.summaryMonth,
+    document.id,
+  );
+
+  return {
+    avgAccuracyPercent: toNumberOrZero(data.avgAccuracyPercent),
+    avgRawScorePercent: toNumberOrZero(data.avgRawScorePercent),
+    controlledModeEffectivenessPercent: toNumberOrZero(
+      data.controlledModeEffectivenessPercent ??
+        data.controlledCompliancePercent,
+    ),
+    disciplineIndexPercent: toNumberOrZero(
+      data.disciplineIndexPercent ?? data.avgDisciplineIndex,
+    ),
+    easyNeglectPercent: toNumberOrZero(data.easyNeglectPercent),
+    monthId,
+    monthLabel: toNonEmptyString(data.monthLabel, formatMonthLabel(monthId)),
+    participationRatePercent: toNumberOrZero(
+      data.participationRatePercent ?? data.completionRatePercent,
+    ),
+    phaseAdherencePercent: toNumberOrZero(
+      data.phaseAdherencePercent ?? data.avgPhaseAdherencePercent,
+    ),
+    riskDistributionTrend: normalizeRiskDistribution(
+      data.riskDistributionTrend ?? data.riskDistribution,
+    ),
+    stabilityTrajectoryPercent: toNumberOrZero(
+      data.stabilityTrajectoryPercent ?? data.executionStabilityIndex,
+    ),
+    topicWeaknessPercent: toNumberOrZero(
+      data.topicWeaknessPercent ?? data.topicAvoidancePercent,
+    ),
+  };
+}
+
+function normalizeTemplateAnalyticsRunRecord(
+  value: unknown,
+  index: number,
+): AdminAnalyticsTemplateRunRecord {
+  const data = value && typeof value === "object" ?
+    value as Record<string, unknown> :
+    {};
+
+  return {
+    avgAccuracyPercent: toNumberOrZero(data.avgAccuracyPercent),
+    avgRawScorePercent: toNumberOrZero(data.avgRawScorePercent),
+    completedOn:
+      toIsoString(data.completedOn) ??
+      toIsoString(data.startedAt) ??
+      new Date(0).toISOString(),
+    disciplineStressScore: toNumberOrZero(data.disciplineStressScore),
+    mode: toNonEmptyString(data.mode, "Operational"),
+    phaseAdherencePercent: toNumberOrZero(
+      data.phaseAdherencePercent ?? data.avgPhaseAdherencePercent,
+    ),
+    riskShiftPercent: toNumberOrZero(
+      data.riskShiftPercent ?? data.riskShiftIndex,
+    ),
+    runId: toNonEmptyString(data.runId, `run-${index + 1}`),
+    runName: toNonEmptyString(data.runName ?? data.name, `Run ${index + 1}`),
+    stabilityIndex: toNumberOrZero(data.stabilityIndex),
+  };
+}
+
+function normalizeTemplateAnalyticsRecord(
+  document: FirebaseFirestore.QueryDocumentSnapshot,
+  academicYear: string,
+): AdminAnalyticsTemplateRecord {
+  const data = document.data();
+  const runsSource = Array.isArray(data.runs) ? data.runs : [];
+  const runs = runsSource.map(normalizeTemplateAnalyticsRunRecord);
+  const totalRuns = toNumberOrZero(data.totalRuns) || runs.length;
+  const avgDisciplineIndex = toNumberOrZero(data.avgDisciplineIndex);
+  const averageRiskShift = toNumberOrZero(
+    data.avgRiskShiftPercent ?? data.riskShiftIndex,
+  );
+  const templateEffectivenessRating = toNumberOrZero(
+    data.templateEffectivenessRating ?? data.effectivenessRating,
+  ) || clampPercent(
+    (toNumberOrZero(data.avgRawScorePercent) * 0.4) +
+      (avgDisciplineIndex * 0.3) +
+      ((100 - averageRiskShift) * 0.3),
+  );
+
+  return {
+    academicYear: toNonEmptyString(data.academicYear, academicYear),
+    avgAccuracyPercent: toNumberOrZero(data.avgAccuracyPercent),
+    avgDisciplineIndex,
+    avgDisciplineStressScore: toNumberOrZero(data.avgDisciplineStressScore),
+    avgRawScorePercent: toNumberOrZero(data.avgRawScorePercent),
+    avgRiskShiftPercent: averageRiskShift,
+    examType: toNonEmptyString(data.examType, "General"),
+    phaseAdherenceVariance: toNumberOrZero(
+      data.phaseAdherenceVariance ?? data.phaseVariance,
+    ),
+    rawVariance: toNumberOrZero(data.rawVariance),
+    runs,
+    templateEffectivenessRating,
+    templateId: toNonEmptyString(data.templateId, document.id),
+    templateName: toNonEmptyString(
+      data.templateName ?? data.testName ?? data.name,
+      document.id,
+    ),
+    totalRuns,
   };
 }
 
@@ -358,7 +498,10 @@ function deriveYearBehaviorSummary(
   }
 
   const studentTotal = Math.max(1, studentYearMetrics.length);
-  const batchMap = new Map<string, AdminAnalyticsYearBehaviorSummary["batchDiagnosticHeatmap"][number]>();
+  const batchMap = new Map<
+    string,
+    AdminAnalyticsYearBehaviorSummary["batchDiagnosticHeatmap"][number]
+  >();
   for (const run of runAnalytics) {
     const key = `${run.batchId}:${run.batchName}`;
     const current = batchMap.get(key) ?? {
@@ -444,13 +587,119 @@ function deriveYearBehaviorSummary(
     riskStateDistribution: {
       critical: clampPercent((riskCounts.critical / studentTotal) * 100),
       driftProne: clampPercent((riskCounts.driftProne / studentTotal) * 100),
-      high: clampPercent(((riskCounts.high || runRiskDistribution.high) / studentTotal) * 100),
+      high: clampPercent(
+        ((riskCounts.high || runRiskDistribution.high) / studentTotal) * 100,
+      ),
       impulsive: clampPercent((riskCounts.impulsive / studentTotal) * 100),
-      low: clampPercent(((riskCounts.low || runRiskDistribution.low) / studentTotal) * 100),
-      medium: clampPercent(((riskCounts.medium || runRiskDistribution.medium) / studentTotal) * 100),
-      overextended: clampPercent((riskCounts.overextended / studentTotal) * 100),
+      low: clampPercent(
+        ((riskCounts.low || runRiskDistribution.low) / studentTotal) * 100,
+      ),
+      medium: clampPercent(
+        ((riskCounts.medium || runRiskDistribution.medium) / studentTotal) *
+          100,
+      ),
+      overextended: clampPercent(
+        (riskCounts.overextended / studentTotal) * 100,
+      ),
       stable: clampPercent((riskCounts.stable / studentTotal) * 100),
       volatile: clampPercent((riskCounts.volatile / studentTotal) * 100),
+    },
+  };
+}
+
+function normalizeYearSummarySnapshot(
+  document: FirebaseFirestore.QueryDocumentSnapshot,
+  fallback: AdminAnalyticsYearBehaviorSummary,
+): AdminAnalyticsYearBehaviorSummary {
+  const data = document.data();
+  const riskSignals = data.riskSignals && typeof data.riskSignals === "object" ?
+    data.riskSignals as Record<string, unknown> :
+    data.behaviorSummary && typeof data.behaviorSummary === "object" ?
+      data.behaviorSummary as Record<string, unknown> :
+      {};
+  const riskStateDistribution =
+      data.riskStateDistribution &&
+        typeof data.riskStateDistribution === "object" ?
+      data.riskStateDistribution as Record<string, unknown> :
+        {};
+  const batchSource = Array.isArray(data.batchDiagnosticHeatmap) ?
+    data.batchDiagnosticHeatmap :
+    [];
+
+  return {
+    academicYear: toNonEmptyString(data.academicYear, fallback.academicYear),
+    avgDisciplineIndex: toNumberOrZero(
+      data.avgDisciplineIndex ?? fallback.avgDisciplineIndex,
+    ),
+    batchDiagnosticHeatmap: batchSource.map((entry, index) => {
+      const source = entry && typeof entry === "object" ?
+        entry as Record<string, unknown> :
+        {};
+      return {
+        batchId: toNonEmptyString(source.batchId, `batch-${index + 1}`),
+        batchName: toNonEmptyString(source.batchName, `Batch ${index + 1}`),
+        percentEasyNeglect: toNumberOrZero(source.percentEasyNeglect),
+        percentHardBias: toNumberOrZero(source.percentHardBias),
+        percentLatePhaseDrop: toNumberOrZero(source.percentLatePhaseDrop),
+        percentPacingDrift: toNumberOrZero(source.percentPacingDrift),
+        percentRushedPattern: toNumberOrZero(source.percentRushedPattern),
+        percentTopicAvoidance: toNumberOrZero(source.percentTopicAvoidance),
+      };
+    }),
+    computedAt:
+      toIsoString(data.computedAt) ??
+      toIsoString(data.generatedAt) ??
+      fallback.computedAt,
+    consecutiveWrongClusterPercent: toNumberOrZero(
+      data.consecutiveWrongClusterPercent ??
+        fallback.consecutiveWrongClusterPercent,
+    ),
+    controlledModeUsagePercent: toNumberOrZero(
+      data.controlledModeUsagePercent ?? fallback.controlledModeUsagePercent,
+    ),
+    executionStabilityIndex: toNumberOrZero(
+      data.executionStabilityIndex ?? fallback.executionStabilityIndex,
+    ),
+    guessProbabilityClusterPercent: toNumberOrZero(
+      data.guessProbabilityClusterPercent ??
+        fallback.guessProbabilityClusterPercent,
+    ),
+    riskSignals: {
+      percentEasyNeglect: toNumberOrZero(
+        riskSignals.percentEasyNeglect ??
+          fallback.riskSignals.percentEasyNeglect,
+      ),
+      percentHardBias: toNumberOrZero(
+        riskSignals.percentHardBias ?? fallback.riskSignals.percentHardBias,
+      ),
+      percentLatePhaseDrop: toNumberOrZero(
+        riskSignals.percentLatePhaseDrop ??
+          fallback.riskSignals.percentLatePhaseDrop,
+      ),
+      percentPacingDrift: toNumberOrZero(
+        riskSignals.percentPacingDrift ??
+          fallback.riskSignals.percentPacingDrift,
+      ),
+      percentRushedPattern: toNumberOrZero(
+        riskSignals.percentRushedPattern ??
+          riskSignals.percentRushed ??
+          fallback.riskSignals.percentRushedPattern,
+      ),
+      percentTopicAvoidance: toNumberOrZero(
+        riskSignals.percentTopicAvoidance ??
+          fallback.riskSignals.percentTopicAvoidance,
+      ),
+    },
+    riskStateDistribution: {
+      critical: toNumberOrZero(riskStateDistribution.critical),
+      driftProne: toNumberOrZero(riskStateDistribution.driftProne),
+      high: toNumberOrZero(riskStateDistribution.high),
+      impulsive: toNumberOrZero(riskStateDistribution.impulsive),
+      low: toNumberOrZero(riskStateDistribution.low),
+      medium: toNumberOrZero(riskStateDistribution.medium),
+      overextended: toNumberOrZero(riskStateDistribution.overextended),
+      stable: toNumberOrZero(riskStateDistribution.stable),
+      volatile: toNumberOrZero(riskStateDistribution.volatile),
     },
   };
 }
@@ -485,10 +734,20 @@ export class AdminAnalyticsService {
       .collection(ACADEMIC_YEARS_COLLECTION)
       .doc(currentYearId);
 
-    const [runAnalyticsSnapshot, studentMetricsSnapshot, governanceSnapshot] =
+    const [
+      runAnalyticsSnapshot,
+      studentMetricsSnapshot,
+      templateAnalyticsSnapshot,
+      monthlySummarySnapshot,
+      yearSummarySnapshot,
+      governanceSnapshot,
+    ] =
       await Promise.all([
         currentYearRef.collection(RUN_ANALYTICS_COLLECTION).get(),
         currentYearRef.collection(STUDENT_YEAR_METRICS_COLLECTION).get(),
+        currentYearRef.collection(TEMPLATE_ANALYTICS_COLLECTION).get(),
+        currentYearRef.collection(MONTHLY_SUMMARY_COLLECTION).get(),
+        currentYearRef.collection(YEAR_SUMMARY_SNAPSHOTS_COLLECTION).get(),
         currentYearRef
           .collection(GOVERNANCE_SNAPSHOTS_COLLECTION)
           .orderBy("month", "desc")
@@ -498,28 +757,57 @@ export class AdminAnalyticsService {
 
     const runAnalytics = runAnalyticsSnapshot.docs
       .map((document) => normalizeRunRecord(document, currentYearId))
-      .sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt));
+      .sort((left, right) =>
+        Date.parse(right.startedAt) - Date.parse(left.startedAt)
+      );
     const studentYearMetrics = studentMetricsSnapshot.docs
       .map((document) => normalizeStudentMetricRecord(document))
       .sort((left, right) => left.studentId.localeCompare(right.studentId));
+    const monthlySummary = monthlySummarySnapshot.docs
+      .map((document) => normalizeMonthlySummaryRecord(document))
+      .sort((left, right) => left.monthId.localeCompare(right.monthId));
+    const templateAnalytics = templateAnalyticsSnapshot.docs
+      .map((document) =>
+        normalizeTemplateAnalyticsRecord(document, currentYearId)
+      )
+      .sort((left, right) =>
+        right.totalRuns - left.totalRuns ||
+          left.templateName.localeCompare(right.templateName),
+      );
     const latestGovernance = governanceSnapshot.docs[0]?.data() ?? null;
     const computedAt =
       toIsoString(latestGovernance?.generatedAt) ??
       runAnalytics[0]?.startedAt ??
       new Date().toISOString();
 
-    const yearBehaviorSummary = deriveYearBehaviorSummary(
+    const derivedYearBehaviorSummary = deriveYearBehaviorSummary(
       currentYearId,
       computedAt,
       latestGovernance,
       runAnalytics,
       studentYearMetrics,
     );
+    const yearSummarySnapshots = yearSummarySnapshot.docs
+      .map((document) =>
+        normalizeYearSummarySnapshot(document, derivedYearBehaviorSummary)
+      )
+      .sort((left, right) =>
+        Date.parse(right.computedAt) - Date.parse(left.computedAt)
+      );
+    const yearBehaviorSummary =
+      yearSummarySnapshots.find((snapshot) =>
+        snapshot.academicYear === currentYearId
+      ) ??
+      yearSummarySnapshots[0] ??
+      derivedYearBehaviorSummary;
 
     return {
+      monthlySummary,
       runAnalytics,
       studentYearMetrics,
+      templateAnalytics,
       yearBehaviorSummary,
+      yearSummarySnapshots,
     };
   }
 }

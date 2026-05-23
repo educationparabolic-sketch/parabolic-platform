@@ -13,10 +13,8 @@ import {
   formatPercent,
   shouldUseLiveApi,
   type DashboardDataset,
-  type RiskCluster,
   type RunAnalyticsRecord,
   type StudentAnalyticsRecord,
-  type StudentYearMetricRecord,
 } from "./analyticsDataset";
 import AnalyticsWorkspaceNav from "./AnalyticsWorkspaceNav";
 
@@ -66,7 +64,7 @@ function buildScoreDistribution(runAnalytics: RunAnalyticsRecord[]): UiChartPoin
   return Object.entries(buckets).map(([label, count]) => ({ label, value: count }));
 }
 
-function buildAccuracyMetrics(studentMetrics: StudentYearMetricRecord[]): UiChartPoint[] {
+function buildAccuracyDistribution(runAnalytics: RunAnalyticsRecord[]): UiChartPoint[] {
   const buckets: Record<string, number> = {
     "0-49": 0,
     "50-64": 0,
@@ -74,65 +72,14 @@ function buildAccuracyMetrics(studentMetrics: StudentYearMetricRecord[]): UiChar
     "80-100": 0,
   };
 
-  for (const metric of studentMetrics) {
-    const value = metric.avgAccuracyPercent;
+  for (const run of runAnalytics) {
+    const value = run.avgAccuracyPercent;
     if (value < 50) {
       buckets["0-49"] += 1;
     } else if (value < 65) {
       buckets["50-64"] += 1;
     } else if (value < 80) {
       buckets["65-79"] += 1;
-    } else {
-      buckets["80-100"] += 1;
-    }
-  }
-
-  return Object.entries(buckets).map(([label, count]) => ({ label, value: count }));
-}
-
-function buildRiskClusterVisualization(
-  runAnalytics: RunAnalyticsRecord[],
-  studentMetrics: StudentYearMetricRecord[],
-): UiChartPoint[] {
-  const clusterCounts: Record<RiskCluster, number> = {
-    low: 0,
-    medium: 0,
-    high: 0,
-    critical: 0,
-  };
-
-  for (const run of runAnalytics) {
-    for (const cluster of RISK_CLUSTERS) {
-      clusterCounts[cluster] += run.riskDistribution[cluster];
-    }
-  }
-
-  for (const metric of studentMetrics) {
-    clusterCounts[metric.rollingRiskCluster] += 1;
-  }
-
-  return RISK_CLUSTERS.map((cluster) => ({
-    label: cluster.charAt(0).toUpperCase() + cluster.slice(1),
-    value: clusterCounts[cluster],
-  }));
-}
-
-function buildDisciplineIndexStatistics(studentMetrics: StudentYearMetricRecord[]): UiChartPoint[] {
-  const buckets: Record<string, number> = {
-    "0-39": 0,
-    "40-59": 0,
-    "60-79": 0,
-    "80-100": 0,
-  };
-
-  for (const metric of studentMetrics) {
-    const value = metric.disciplineIndex;
-    if (value < 40) {
-      buckets["0-39"] += 1;
-    } else if (value < 60) {
-      buckets["40-59"] += 1;
-    } else if (value < 80) {
-      buckets["60-79"] += 1;
     } else {
       buckets["80-100"] += 1;
     }
@@ -168,6 +115,31 @@ function calculateStandardDeviation(values: number[]): number {
   const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
   const variance = values.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / values.length;
   return Math.sqrt(variance);
+}
+
+function averageRunMetric(
+  runAnalytics: RunAnalyticsRecord[],
+  selector: (run: RunAnalyticsRecord) => number,
+): number {
+  if (runAnalytics.length === 0) {
+    return 0;
+  }
+
+  return runAnalytics.reduce((sum, run) => sum + selector(run), 0) / runAnalytics.length;
+}
+
+function buildOverviewTopicHeatmap(runAnalytics: RunAnalyticsRecord[]): UiChartPoint[] {
+  const labels = ["Algebra", "Mechanics", "Organic", "Modern", "Coordination"];
+  if (runAnalytics.length === 0) {
+    return labels.map((label) => ({ label, value: 0 }));
+  }
+
+  return labels.map((label, index) => ({
+    label,
+    value: Math.round(
+      runAnalytics.reduce((sum, run) => sum + (run.topicHeatmap[index] ?? 0), 0) / runAnalytics.length,
+    ),
+  }));
 }
 
 function AdminAnalyticsDashboardPage() {
@@ -249,9 +221,13 @@ function AdminAnalyticsDashboardPage() {
     const sumRaw = dataset.runAnalytics.reduce((sum, run) => sum + run.avgRawScorePercent, 0);
     const sumAccuracy = dataset.runAnalytics.reduce((sum, run) => sum + run.avgAccuracyPercent, 0);
     const sumCompletion = dataset.runAnalytics.reduce((sum, run) => sum + run.completionRatePercent, 0);
-    const sumDiscipline = dataset.studentYearMetrics.reduce((sum, metric) => sum + metric.disciplineIndex, 0);
 
     return [
+      {
+        label: "Total Runs",
+        value: String(totalRuns),
+        helper: "current-year runAnalytics count",
+      },
       {
         label: "Avg Raw Score",
         value: formatPercent(totalRuns > 0 ? sumRaw / totalRuns : 0),
@@ -268,9 +244,9 @@ function AdminAnalyticsDashboardPage() {
         helper: "runAnalytics summary",
       },
       {
-        label: "Avg Discipline Index",
-        value: formatPercent(totalStudents > 0 ? sumDiscipline / totalStudents : 0),
-        helper: "studentYearMetrics summary",
+        label: "Active Students",
+        value: String(totalStudents),
+        helper: "studentYearMetrics current-year count",
       },
     ];
   }, [dataset.runAnalytics, dataset.studentYearMetrics]);
@@ -279,19 +255,10 @@ function AdminAnalyticsDashboardPage() {
     () => buildScoreDistribution(dataset.runAnalytics),
     [dataset.runAnalytics],
   );
-  const accuracyMetricsChart = useMemo(
-    () => buildAccuracyMetrics(dataset.studentYearMetrics),
-    [dataset.studentYearMetrics],
+  const accuracyDistributionChart = useMemo(
+    () => buildAccuracyDistribution(dataset.runAnalytics),
+    [dataset.runAnalytics],
   );
-  const riskClusterChart = useMemo(
-    () => buildRiskClusterVisualization(dataset.runAnalytics, dataset.studentYearMetrics),
-    [dataset.runAnalytics, dataset.studentYearMetrics],
-  );
-  const disciplineIndexChart = useMemo(
-    () => buildDisciplineIndexStatistics(dataset.studentYearMetrics),
-    [dataset.studentYearMetrics],
-  );
-
   const runSummaryColumns = useMemo<UiTableColumn<RunAnalyticsRecord>[]>(
     () => [
       {
@@ -325,12 +292,12 @@ function AdminAnalyticsDashboardPage() {
         ),
       },
       {
-        id: "discipline",
-        header: "Discipline",
+        id: "completion",
+        header: "Completion",
         render: (run) => (
           <div className="admin-analytics-discipline-cell">
-            <strong>{formatPercent(run.disciplineIndexAverage)}</strong>
-            <small>Completion {formatPercent(run.completionRatePercent)}</small>
+            <strong>{formatPercent(run.completionRatePercent)}</strong>
+            <small>L0 run summary</small>
           </div>
         ),
       },
@@ -351,6 +318,36 @@ function AdminAnalyticsDashboardPage() {
   const runRows = useMemo(
     () => [...dataset.runAnalytics].sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt)),
     [dataset.runAnalytics],
+  );
+  const overviewLastFiveRuns = useMemo(
+    () => runRows.slice(0, 5),
+    [runRows],
+  );
+  const overviewL1Diagnostics = useMemo(() => ({
+    avgPhaseAdherencePercent: averageRunMetric(dataset.runAnalytics, (run) => run.avgPhaseAdherencePercent),
+    easyNeglectPercent: averageRunMetric(dataset.runAnalytics, (run) => run.easyNeglectPercent),
+    hardBiasPercent: averageRunMetric(dataset.runAnalytics, (run) => run.hardBiasPercent),
+    timeMisallocationPercent: averageRunMetric(dataset.runAnalytics, (run) => run.timeMisallocationPercent),
+  }), [dataset.runAnalytics]);
+  const overviewTopicHeatmap = useMemo(
+    () => buildOverviewTopicHeatmap(dataset.runAnalytics),
+    [dataset.runAnalytics],
+  );
+  const overviewBehaviorSummary = useMemo(
+    () => [
+      { label: "Rushed", value: dataset.yearBehaviorSummary.riskSignals.percentRushedPattern },
+      { label: "Hard Fixation", value: dataset.yearBehaviorSummary.riskSignals.percentHardBias },
+      { label: "Topic Avoidance", value: dataset.yearBehaviorSummary.riskSignals.percentTopicAvoidance },
+    ],
+    [dataset.yearBehaviorSummary.riskSignals],
+  );
+  const overviewRiskDistribution = useMemo(
+    () =>
+      Object.entries(dataset.yearBehaviorSummary.riskStateDistribution).map(([label, value]) => ({
+        label: label.replace(/([A-Z])/g, " $1").replace(/^./, (char) => char.toUpperCase()),
+        value,
+      })),
+    [dataset.yearBehaviorSummary.riskStateDistribution],
   );
 
   const runRowsForDetail = useMemo(() => {
@@ -526,7 +523,7 @@ function AdminAnalyticsDashboardPage() {
           <>Dedicated run analytics view sourced from <code>runAnalytics</code> summaries only. Session scans are never used.</> :
           currentSubpage === "student" ?
             <>Dedicated student analytics view sourced from <code>studentYearMetrics</code> plus summary-safe <code>studentRunSummary</code> trend records. Raw session scans are never used.</> :
-            <>Summary dashboard for measurable outcomes using <code>runAnalytics</code> and<code> studentYearMetrics</code> only. Raw session scans are not used.</>}
+            <>Summary dashboard for measurable outcomes using <code>yearSummarySnapshots</code>, <code>runAnalytics</code>, and <code>studentYearMetrics</code>. Raw session scans are not used.</>}
       </p>
 
       <AnalyticsWorkspaceNav />
@@ -539,6 +536,36 @@ function AdminAnalyticsDashboardPage() {
 
       {currentSubpage === "overview" ? (
         <>
+          <div className="admin-analytics-compliance-panel">
+            <article className="admin-risk-summary-card">
+              <h4>Dedicated Overview Source</h4>
+              <p>
+                This route represents the yearly analytics overview contract and reads summary-safe current-year
+                aggregates from <code>yearSummarySnapshots</code> in <code>GET /admin/analytics</code>.
+              </p>
+              <small>
+                Academic year {dataset.yearBehaviorSummary.academicYear} · computed{" "}
+                {formatIsoDate(dataset.yearBehaviorSummary.computedAt)}
+              </small>
+            </article>
+            <article className="admin-risk-summary-card">
+              <h4>L0 Operational Snapshot</h4>
+              <p>
+                Total runs, average raw score, average accuracy, completion rate, and active students stay visible
+                without behavior or risk interpretation.
+              </p>
+              <small>Source: yearSummarySnapshots plus runAnalytics and studentYearMetrics summaries.</small>
+            </article>
+            <article className="admin-risk-summary-card">
+              <h4>Layered Expansion</h4>
+              <p>
+                L1 diagnostic and L2 execution panels unlock progressively and remain separate from the L0 overview
+                contract.
+              </p>
+              <small>No raw session scans or raw marks are used on this page.</small>
+            </article>
+          </div>
+
           <div className="admin-analytics-kpi-grid">
             {dashboardKpis.map((kpi) => (
               <article key={kpi.label} className="admin-analytics-kpi-card">
@@ -551,36 +578,101 @@ function AdminAnalyticsDashboardPage() {
 
           <div className="admin-analytics-chart-grid">
             <UiChartContainer
-              title="Score Distribution"
-              subtitle="Run-level average raw score percentages"
+              title="Raw Score % Histogram"
+              subtitle="L0 run-level average raw score percentage bands"
               data={scoreDistributionChart}
             />
             <UiChartContainer
-              title="Accuracy Metrics"
-              subtitle="Student-level accuracy percentage bands"
-              data={accuracyMetricsChart}
-            />
-            <UiChartContainer
-              title="Risk Cluster Visualization"
-              subtitle="Aggregated run + student risk clusters"
-              data={riskClusterChart}
-            />
-            <UiChartContainer
-              title="Discipline Index Statistics"
-              subtitle="Student discipline index spread"
-              data={disciplineIndexChart}
+              title="Accuracy % Histogram"
+              subtitle="L0 run-level average accuracy percentage bands"
+              data={accuracyDistributionChart}
             />
           </div>
 
           <div className="admin-analytics-run-summary">
-            <h3>Run Performance Summaries</h3>
+            <h3>Last 5 Runs Summary</h3>
             <UiTable
-              caption="Recent assignment runs and normalized performance summaries"
+              caption="Last five assignment runs and normalized L0 performance summaries"
               columns={runSummaryColumns}
-              rows={runRows}
+              rows={overviewLastFiveRuns}
               rowKey={(row) => row.runId}
             />
           </div>
+
+          {isL1OrAbove ? (
+            <>
+              <div className="admin-analytics-kpi-grid">
+                <article className="admin-analytics-kpi-card">
+                  <p>Avg Phase Adherence</p>
+                  <h3>{formatPercent(overviewL1Diagnostics.avgPhaseAdherencePercent)}</h3>
+                  <small>L1 year summary</small>
+                </article>
+                <article className="admin-analytics-kpi-card">
+                  <p>Easy Neglect</p>
+                  <h3>{formatPercent(overviewL1Diagnostics.easyNeglectPercent)}</h3>
+                  <small>L1 year summary</small>
+                </article>
+                <article className="admin-analytics-kpi-card">
+                  <p>Hard Bias</p>
+                  <h3>{formatPercent(overviewL1Diagnostics.hardBiasPercent)}</h3>
+                  <small>L1 year summary</small>
+                </article>
+                <article className="admin-analytics-kpi-card">
+                  <p>Time Misallocation</p>
+                  <h3>{formatPercent(overviewL1Diagnostics.timeMisallocationPercent)}</h3>
+                  <small>L1 year summary</small>
+                </article>
+              </div>
+
+              <div className="admin-analytics-chart-grid">
+                <UiChartContainer
+                  title="Topic Performance Heatmap"
+                  subtitle="L1 topic strength averaged from summary records"
+                  data={overviewTopicHeatmap}
+                />
+                <UiChartContainer
+                  title="Behavior Summary"
+                  subtitle="Rushed, hard fixation, and topic avoidance prevalence"
+                  data={overviewBehaviorSummary}
+                />
+              </div>
+            </>
+          ) : null}
+
+          {isL2OrAbove ? (
+            <>
+              <div className="admin-analytics-kpi-grid">
+                <article className="admin-analytics-kpi-card">
+                  <p>Avg Discipline Index</p>
+                  <h3>{formatPercent(dataset.yearBehaviorSummary.avgDisciplineIndex)}</h3>
+                  <small>L2 year summary</small>
+                </article>
+                <article className="admin-analytics-kpi-card">
+                  <p>Controlled Mode Usage</p>
+                  <h3>{formatPercent(dataset.yearBehaviorSummary.controlledModeUsagePercent)}</h3>
+                  <small>L2 year summary</small>
+                </article>
+                <article className="admin-analytics-kpi-card">
+                  <p>Guess Rate Cluster</p>
+                  <h3>{formatPercent(dataset.yearBehaviorSummary.guessProbabilityClusterPercent)}</h3>
+                  <small>L2 year summary</small>
+                </article>
+                <article className="admin-analytics-kpi-card">
+                  <p>Execution Stability Index</p>
+                  <h3>{formatPercent(dataset.yearBehaviorSummary.executionStabilityIndex)}</h3>
+                  <small>Precomputed stability metric</small>
+                </article>
+              </div>
+
+              <div className="admin-analytics-chart-grid">
+                <UiChartContainer
+                  title="Risk Distribution"
+                  subtitle="L2 execution risk distribution from yearly summary"
+                  data={overviewRiskDistribution}
+                />
+              </div>
+            </>
+          ) : null}
         </>
       ) : currentSubpage === "run" ? (
         <>

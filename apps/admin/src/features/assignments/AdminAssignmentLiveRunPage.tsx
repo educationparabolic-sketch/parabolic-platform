@@ -357,6 +357,10 @@ function liveIndicatorClass(risk: "Stable" | "Drift" | "HighRisk"): string {
   return "admin-live-indicator admin-live-indicator-stable";
 }
 
+function formatLiveFlag(isActive: boolean): string {
+  return isActive ? "Flagged" : "Clear";
+}
+
 function AdminAssignmentLiveRunPage() {
   const params = useParams<{ runId?: string }>();
   const [runs, setRuns] = useState<RunStatusRecord[]>(LIVE_RUNS);
@@ -450,13 +454,25 @@ function AdminAssignmentLiveRunPage() {
       },
       {
         id: "phase",
-        header: "Phase",
+        header: "Current Phase",
         render: (row) => row.currentPhase,
       },
       {
         id: "status",
         header: "Submission",
         render: (row) => row.submissionStatus,
+      },
+      {
+        id: "l1BehavioralFlags",
+        header: "L1 Behavioral Flags",
+        render: (row) => (
+          <div className="admin-assignments-table-stack">
+            <span>Pacing drift: <strong>{formatLiveFlag(row.pacingDriftFlag)}</strong></span>
+            <span>Skip burst: <strong>{formatLiveFlag(row.skipBurstFlag)}</strong></span>
+            <span>Rapid guess: <strong>{formatLiveFlag(row.rapidGuessFlag)}</strong></span>
+            <small>Derived from refreshed session snapshot.</small>
+          </div>
+        ),
       },
       {
         id: "risk",
@@ -467,9 +483,17 @@ function AdminAssignmentLiveRunPage() {
         },
       },
       {
-        id: "compliance",
-        header: "Controlled Compliance",
-        render: (row) => `${row.controlledCompliancePercent}%`,
+        id: "l2ExecutionCounters",
+        header: "L2 Execution Counters",
+        render: (row) => (
+          <div className="admin-assignments-table-stack">
+            <span>Min time: <strong>{row.minTimeViolationsLive}</strong></span>
+            <span>Max time: <strong>{row.maxTimeViolationsLive}</strong></span>
+            <span>Consecutive wrong: <strong>{row.consecutiveWrongIndicator}</strong></span>
+            <span>Provisional risk: <strong>{row.provisionalRiskScore}</strong></span>
+            <span>Controlled compliance: <strong>{row.controlledCompliancePercent}%</strong></span>
+          </div>
+        ),
       },
     ],
     [],
@@ -547,13 +571,12 @@ function AdminAssignmentLiveRunPage() {
           <small>{selectedRun.runAnalyticsSnapshot.riskDistributionSummary}</small>
         </article>
         <article className="admin-risk-summary-card">
-          <h4>Control Signals</h4>
+          <h4>L2 Compliance Panel</h4>
           <p>
-            Controlled compliance {selectedRun.runAnalyticsSnapshot.controlledCompliancePercent}% · override count{" "}
-            {selectedRun.runAnalyticsSnapshot.overrideCount} · stability{" "}
-            {selectedRun.runAnalyticsSnapshot.executionStabilityBadge}
+            Per-student min/max time counters, consecutive-wrong indicators, provisional risk scores, and controlled
+            compliance stay visible in the live table beside the color-coded risk state.
           </p>
-          <small>Dedicated live-run drill-down instead of shared monitor reuse.</small>
+          <small>No question content is visible; live counters are derived from refreshed session snapshots.</small>
         </article>
       </div>
 

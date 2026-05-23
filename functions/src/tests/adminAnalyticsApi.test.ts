@@ -38,8 +38,47 @@ test("admin analytics handler accepts summary reads", async () => {
       assert.equal(request.instituteId, "inst_build_m128_api");
 
       return {
+        monthlySummary: [
+          {
+            avgAccuracyPercent: 76,
+            avgRawScorePercent: 68,
+            controlledModeEffectivenessPercent: 17,
+            disciplineIndexPercent: 74,
+            easyNeglectPercent: 16,
+            monthId: "2026-05",
+            monthLabel: "May 2026",
+            participationRatePercent: 95,
+            phaseAdherencePercent: 82,
+            riskDistributionTrend: {
+              critical: 4,
+              high: 11,
+              low: 44,
+              medium: 21,
+            },
+            stabilityTrajectoryPercent: 76,
+            topicWeaknessPercent: 19,
+          },
+        ],
         runAnalytics: [],
         studentYearMetrics: [],
+        templateAnalytics: [
+          {
+            academicYear: "2026",
+            avgAccuracyPercent: 76,
+            avgDisciplineIndex: 72,
+            avgDisciplineStressScore: 28,
+            avgRawScorePercent: 68,
+            avgRiskShiftPercent: 12,
+            examType: "JEEMains",
+            phaseAdherenceVariance: 6,
+            rawVariance: 10,
+            runs: [],
+            templateEffectivenessRating: 74,
+            templateId: "tmpl-001",
+            templateName: "JEE Mains Mock - Set A",
+            totalRuns: 3,
+          },
+        ],
         yearBehaviorSummary: {
           academicYear: "2026",
           avgDisciplineIndex: 73,
@@ -69,6 +108,7 @@ test("admin analytics handler accepts summary reads", async () => {
             volatile: 15,
           },
         },
+        yearSummarySnapshots: [],
       };
     },
     verifyIdToken: async () => createAdminToken() as never,
