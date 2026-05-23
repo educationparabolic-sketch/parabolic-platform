@@ -83,6 +83,7 @@ interface MetricsFilter {
   accuracyMin: string;
   accuracyMax: string;
   performancePercentileMin: string;
+  performancePercentileMax: string;
 }
 
 interface AssignmentDraft {
@@ -122,6 +123,9 @@ interface RunStatusRecord {
   templateName: string;
   academicYear: string;
   mode: ExecutionMode;
+  modeSnapshot: ExecutionMode;
+  phaseConfigSnapshot: string;
+  timingProfileSnapshot: string;
   batchIds: string[];
   recipientStudentIds: string[];
   startWindowIso: string;
@@ -154,11 +158,23 @@ interface LiveMonitorStudentSnapshot {
   controlledCompliancePercent: number;
 }
 
+interface RecipientPreviewRow {
+  accuracy: number;
+  batch: string;
+  discipline: number;
+  percentile: number;
+  raw: number;
+  risk: RiskState;
+  student: string;
+}
+
 interface RunCreatePayload {
   testId: string;
   canonicalId: string;
   mode: ExecutionMode;
   modeSnapshot: ExecutionMode;
+  phaseConfigSnapshot: string;
+  timingProfileSnapshot: string;
   recipientStudentIds: string[];
   startWindow: string;
   endWindow: string;
@@ -380,6 +396,9 @@ const FALLBACK_RUNS: RunStatusRecord[] = [
     templateName: "NEET Revision - Biology Focus",
     academicYear: "2026",
     mode: "Controlled",
+    modeSnapshot: "Controlled",
+    phaseConfigSnapshot: "P1 30% | P2 35% | P3 35%",
+    timingProfileSnapshot: "Easy 35-75s | Medium 65-105s | Hard 95-150s",
     batchIds: ["batch-c"],
     recipientStudentIds: ["STU-021", "STU-022", "STU-023"],
     startWindowIso: "2026-04-16T04:00:00.000Z",
@@ -413,6 +432,9 @@ const FALLBACK_RUNS: RunStatusRecord[] = [
     templateName: "JEE Mains Mock - Set A",
     academicYear: "2026",
     mode: "Controlled",
+    modeSnapshot: "Controlled",
+    phaseConfigSnapshot: "P1 34% | P2 33% | P3 33%",
+    timingProfileSnapshot: "Easy 45-90s | Medium 75-120s | Hard 105-180s",
     batchIds: ["batch-a", "batch-b"],
     recipientStudentIds: ["STU-001", "STU-002", "STU-003", "STU-005", "STU-010", "STU-011"],
     startWindowIso: "2026-04-11T03:30:00.000Z",
@@ -446,6 +468,9 @@ const FALLBACK_RUNS: RunStatusRecord[] = [
     templateName: "NEET Revision - Biology Focus",
     academicYear: "2026",
     mode: "Diagnostic",
+    modeSnapshot: "Diagnostic",
+    phaseConfigSnapshot: "P1 30% | P2 35% | P3 35%",
+    timingProfileSnapshot: "Easy 35-75s | Medium 65-105s | Hard 95-150s",
     batchIds: ["batch-c"],
     recipientStudentIds: ["STU-021", "STU-022", "STU-023"],
     startWindowIso: "2026-04-09T04:00:00.000Z",
@@ -542,6 +567,7 @@ const INITIAL_DRAFT: AssignmentDraft = {
     accuracyMin: "",
     accuracyMax: "",
     performancePercentileMin: "",
+    performancePercentileMax: "",
   },
   assignmentStartLocal: "",
   assignmentEndLocal: "",
@@ -916,6 +942,22 @@ function classifyLiveRisk(snapshot: LiveMonitorStudentSnapshot): "Stable" | "Dri
   return "Stable";
 }
 
+function behaviorSummaryBadge(snapshot: RunAnalyticsSnapshot): "Stable" | "Phase Drift" | "Easy Neglect" | "Hard Bias" {
+  if (snapshot.easyNeglectPercent >= 20) {
+    return "Easy Neglect";
+  }
+
+  if (snapshot.hardBiasPercent >= 24) {
+    return "Hard Bias";
+  }
+
+  if (snapshot.avgPhaseAdherencePercent < 70) {
+    return "Phase Drift";
+  }
+
+  return "Stable";
+}
+
 function analyticsForRecipientCount(recipientCount: number, mode: ExecutionMode): RunAnalyticsSnapshot {
   const normalizedCount = Math.max(1, recipientCount);
 
@@ -990,6 +1032,9 @@ function buildRunRecordFromAnalytics(record: RunAnalyticsRecord, students: Stude
     templateName: record.runName,
     academicYear: record.academicYear,
     mode,
+    modeSnapshot: mode,
+    phaseConfigSnapshot: "Captured from assigned template at scheduling",
+    timingProfileSnapshot: "Captured from assigned template at scheduling",
     batchIds: [record.batchId],
     recipientStudentIds,
     startWindowIso: record.startedAt,
@@ -1033,8 +1078,13 @@ function recipientIdsFromMode(draft: AssignmentDraft, students: StudentOption[])
     const accuracyMin = parseRangeNumber(draft.metricsFilter.accuracyMin);
     const accuracyMax = parseRangeNumber(draft.metricsFilter.accuracyMax);
     const percentileMin = parseRangeNumber(draft.metricsFilter.performancePercentileMin);
+    const percentileMax = parseRangeNumber(draft.metricsFilter.performancePercentileMax);
+    const scopedActiveStudents =
+      draft.selectedBatchIds.length > 0 ?
+        activeStudents.filter((student) => draft.selectedBatchIds.includes(student.batchId)) :
+        activeStudents;
 
-    return activeStudents
+    return scopedActiveStudents
       .filter((student) => {
         if (draft.metricsFilter.riskState !== "all" && student.riskState !== draft.metricsFilter.riskState) {
           return false;
@@ -1068,12 +1118,19 @@ function recipientIdsFromMode(draft: AssignmentDraft, students: StudentOption[])
           return false;
         }
 
+        if (percentileMax !== null && student.performancePercentile > percentileMax) {
+          return false;
+        }
+
         return true;
       })
       .map((student) => student.id);
   }
 
-  const targetBatchIds = draft.selectedBatchIds;
+  const targetBatchIds =
+    draft.recipientSelectionMode === "EntireBatch" ?
+      draft.selectedBatchIds.slice(0, 1) :
+      draft.selectedBatchIds;
   return activeStudents
     .filter((student) => targetBatchIds.includes(student.batchId))
     .map((student) => student.id);
@@ -1102,7 +1159,10 @@ function validateDraft(draft: AssignmentDraft, templates: TemplateOption[], stud
     return `Template "${template.name}" does not allow ${draft.executionMode} mode.`;
   }
 
-  if (draft.recipientSelectionMode !== "IndividualStudents" && draft.selectedBatchIds.length === 0) {
+  if (
+    (draft.recipientSelectionMode === "EntireBatch" || draft.recipientSelectionMode === "MultipleBatches") &&
+    draft.selectedBatchIds.length === 0
+  ) {
     return "Select at least one target batch for batch-level assignment.";
   }
 
@@ -1161,6 +1221,8 @@ function buildRunPayload(draft: AssignmentDraft, templates: TemplateOption[], st
     canonicalId: template.canonicalId,
     mode: draft.executionMode,
     modeSnapshot: draft.executionMode,
+    phaseConfigSnapshot: template.phaseConfigSnapshot,
+    timingProfileSnapshot: template.timingProfileSnapshot,
     recipientStudentIds: recipientIdsFromMode(draft, students),
     startWindow,
     endWindow,
@@ -1203,6 +1265,9 @@ function buildFallbackRunRecord(
     templateName: template?.name ?? payload.testId,
     academicYear: payload.academicYear,
     mode: payload.mode,
+    modeSnapshot: payload.modeSnapshot,
+    phaseConfigSnapshot: payload.phaseConfigSnapshot,
+    timingProfileSnapshot: payload.timingProfileSnapshot,
     batchIds,
     recipientStudentIds: payload.recipientStudentIds,
     startWindowIso: payload.startWindow,
@@ -1455,6 +1520,28 @@ function AssignmentManagementPage() {
     () => studentOptions.filter((student) => recipientIds.includes(student.id)),
     [recipientIds, studentOptions],
   );
+  const recipientPreviewRows = useMemo<RecipientPreviewRow[]>(
+    () =>
+      recipientStudents.map((student) => ({
+        accuracy: student.avgAccuracyPercent,
+        batch: batchOptions.find((batch) => batch.id === student.batchId)?.name ?? student.batchId,
+        discipline: student.disciplineIndex,
+        percentile: student.performancePercentile,
+        raw: student.avgRawScorePercent,
+        risk: student.riskState,
+        student: `${student.name} (${student.id})`,
+      })),
+    [batchOptions, recipientStudents],
+  );
+  const activeEligibleCount = useMemo(
+    () => studentOptions.filter((student) => student.status === "active").length,
+    [studentOptions],
+  );
+  const inactiveExcludedCount = Math.max(0, studentOptions.length - activeEligibleCount);
+  const recipientScopeLabel =
+    draft.selectedBatchIds.length > 0 ?
+      draft.selectedBatchIds.map((batchId) => formatBatchLabel(batchId, batchOptions)).join(", ") :
+      "All active batches";
 
   const activeRuns = useMemo(
     () => runs.filter((run) => run.status === "active"),
@@ -1543,6 +1630,18 @@ function AssignmentManagementPage() {
         ),
       },
       {
+        id: "lockedSnapshot",
+        header: "Locked Snapshot",
+        render: (row) => (
+          <div className="admin-assignments-lock-stack">
+            <span>testId <strong>{row.templateId}</strong></span>
+            <span>modeSnapshot <strong>{row.modeSnapshot}</strong></span>
+            <span>academicYear <strong>{row.academicYear}</strong></span>
+            <small>canonicalId {row.canonicalId}</small>
+          </div>
+        ),
+      },
+      {
         id: "window",
         header: "Window",
         render: (row) => (
@@ -1566,6 +1665,26 @@ function AssignmentManagementPage() {
         ),
       },
       {
+        id: "l1Diagnostics",
+        header: "L1 Diagnostics",
+        render: (row) => {
+          const behaviorBadge = behaviorSummaryBadge(row.runAnalyticsSnapshot);
+          return (
+            <div className="admin-assignments-table-stack">
+              <div className="admin-assignments-metric-grid">
+                <span>Phase adherence <strong>{row.runAnalyticsSnapshot.avgPhaseAdherencePercent}%</strong></span>
+                <span>Easy neglect <strong>{row.runAnalyticsSnapshot.easyNeglectPercent}%</strong></span>
+                <span>Hard bias <strong>{row.runAnalyticsSnapshot.hardBiasPercent}%</strong></span>
+              </div>
+              <span className={`admin-assignments-behavior-badge admin-assignments-behavior-${behaviorBadge.toLowerCase().replace(/\s+/g, "-")}`}>
+                {behaviorBadge}
+              </span>
+              <small>Source: runAnalytics/{row.runId}</small>
+            </div>
+          );
+        },
+      },
+      {
         id: "signals",
         header: "Signals",
         className: "admin-assignments-status-col",
@@ -1576,14 +1695,14 @@ function AssignmentManagementPage() {
               <span className="admin-assignments-metric-pill">Stability {row.runAnalyticsSnapshot.executionStabilityBadge}</span>
             </div>
             <small>
-              Phase {row.runAnalyticsSnapshot.avgPhaseAdherencePercent}% · Guess {row.runAnalyticsSnapshot.guessRatePercent}% · Compliance {row.runAnalyticsSnapshot.controlledCompliancePercent}%
+              Guess {row.runAnalyticsSnapshot.guessRatePercent}% · Compliance {row.runAnalyticsSnapshot.controlledCompliancePercent}%
             </small>
             <small>{row.runAnalyticsSnapshot.riskDistributionSummary}</small>
           </div>
         ),
       },
     ];
-  }, []);
+  }, [batchOptions]);
 
   const liveColumns = useMemo<UiTableColumn<LiveMonitorStudentSnapshot>[]>(() => {
     const columns: UiTableColumn<LiveMonitorStudentSnapshot>[] = [
@@ -1747,6 +1866,13 @@ function AssignmentManagementPage() {
 
   function toggleBatch(batchId: string) {
     setDraft((current) => {
+      if (current.recipientSelectionMode === "EntireBatch") {
+        return {
+          ...current,
+          selectedBatchIds: [batchId],
+        };
+      }
+
       if (current.selectedBatchIds.includes(batchId)) {
         return {
           ...current,
@@ -1922,12 +2048,19 @@ function AssignmentManagementPage() {
   function updateRecipientMode(nextMode: RecipientSelectionMode) {
     setDraft((current) => {
       const firstBatch = batchOptions[0]?.id ?? "";
+      const selectedBatchIds =
+        nextMode === "IndividualStudents" ?
+          current.selectedBatchIds :
+        nextMode === "EntireBatch" ?
+          [current.selectedBatchIds[0] ?? firstBatch].filter((batchId) => batchId.length > 0) :
+        current.selectedBatchIds.length > 0 ?
+          current.selectedBatchIds :
+          firstBatch ? [firstBatch] : [];
+
       return {
         ...current,
         recipientSelectionMode: nextMode,
-        selectedBatchIds: nextMode === "IndividualStudents" ? current.selectedBatchIds :
-          current.selectedBatchIds.length > 0 ? current.selectedBatchIds :
-            firstBatch ? [firstBatch] : [],
+        selectedBatchIds,
       };
     });
   }
@@ -2190,6 +2323,21 @@ function AssignmentManagementPage() {
                       }}
                     />
                   </label>
+                  <label>
+                    PerformancePercentile Max
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={draft.metricsFilter.performancePercentileMax}
+                      onChange={(event) => {
+                        setDraft((current) => ({
+                          ...current,
+                          metricsFilter: { ...current.metricsFilter, performancePercentileMax: event.target.value },
+                        }));
+                      }}
+                    />
+                  </label>
                 </div>
               ) : null}
 
@@ -2215,6 +2363,41 @@ function AssignmentManagementPage() {
                   })}
                 </div>
               ) : null}
+
+              <section className="admin-assignments-recipient-review" aria-label="Recipient resolution preview">
+                <div>
+                  <strong>{recipientIds.length}</strong>
+                  <span>recipientStudentIds resolved</span>
+                </div>
+                <div>
+                  <strong>{activeEligibleCount}</strong>
+                  <span>active eligible students</span>
+                </div>
+                <div>
+                  <strong>{inactiveExcludedCount}</strong>
+                  <span>inactive or archived excluded</span>
+                </div>
+                <p>
+                  Scope: {recipientScopeLabel}. This explicit recipient list is saved with the run and is not
+                  recomputed after scheduling.
+                </p>
+              </section>
+
+              <UiTable
+                caption="Resolved recipientStudentIds preview"
+                columns={[
+                  { id: "student", header: "Student", render: (row) => row.student },
+                  { id: "batch", header: "Batch", render: (row) => row.batch },
+                  { id: "risk", header: "Risk State", render: (row) => row.risk },
+                  { id: "discipline", header: "Discipline Index", render: (row) => row.discipline },
+                  { id: "raw", header: "Avg Raw %", render: (row) => row.raw },
+                  { id: "accuracy", header: "Avg Accuracy %", render: (row) => row.accuracy },
+                  { id: "percentile", header: "Percentile", render: (row) => row.percentile },
+                ]}
+                rows={recipientPreviewRows}
+                rowKey={(row) => row.student}
+                emptyStateText="No active recipients match the current selection."
+              />
             </div>
           </UiFormField>
 
@@ -2345,6 +2528,26 @@ function AssignmentManagementPage() {
             </p>
             <p>
               ShuffleStatus: <strong>{draft.shuffleQuestionOrder ? "Enabled" : "Disabled"}</strong>
+            </p>
+            <div className="admin-assignments-immutable-grid" aria-label="Immutable fields after confirmation">
+              {[
+                { field: "testId", value: selectedTemplate?.id ?? "N/A" },
+                { field: "modeSnapshot", value: draft.executionMode },
+                { field: "phaseConfigSnapshot", value: selectedTemplate?.phaseConfigSnapshot ?? "N/A" },
+                { field: "timingProfileSnapshot", value: selectedTemplate?.timingProfileSnapshot ?? "N/A" },
+                { field: "canonicalId", value: selectedTemplate?.canonicalId ?? "N/A" },
+                { field: "academicYear", value: CURRENT_ACADEMIC_YEAR },
+              ].map((item) => (
+                <div key={item.field} className="admin-assignments-immutable-item">
+                  <strong>{item.field}</strong>
+                  <span>{item.value}</span>
+                  <small>Locks when Schedule Run confirms status = scheduled.</small>
+                </div>
+              ))}
+            </div>
+            <p className="admin-assignments-form-footnote">
+              After confirmation, only scheduled-run operational fields such as start window, end window, and
+              recipients remain editable before activation. Structural snapshot fields above are displayed as locked.
             </p>
           </section>
         </UiForm>

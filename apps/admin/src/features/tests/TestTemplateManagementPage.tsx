@@ -54,9 +54,62 @@ interface TemplateDraft {
   timingProfile: TimingProfile;
 }
 
+interface ExamTypeSnapshot {
+  defaultDurationMinutes: number;
+  difficultyTimingMapping: TimingProfile;
+  markingScheme: string;
+  sectionStructure: string[];
+}
+
+interface PhaseSplitRow {
+  difficulty: DifficultyLevel;
+  focus: string;
+  load: number;
+  minutes: number;
+  phase: string;
+  percent: number;
+  questionCount: number;
+  weight: number;
+}
+
+interface PhaseConfigSnapshot {
+  difficultyWeights: Record<DifficultyLevel, number>;
+  phaseSplit: PhaseSplitRow[];
+  totalLoad: number;
+}
+
+interface DistributionDifficultyRow {
+  count: number;
+  difficulty: DifficultyLevel;
+  maxSeconds: number;
+  minSeconds: number;
+  percent: number;
+}
+
+interface ChapterCoverageRow {
+  chapter: string;
+  count: number;
+  percent: number;
+  subjects: string;
+}
+
+interface MarksDistributionRow {
+  marks: string;
+  count: number;
+  percent: number;
+}
+
+interface SectionBalanceRow {
+  count: number;
+  percent: number;
+  section: string;
+}
+
 interface TestTemplateRecord extends TemplateDraft {
   id: string;
   canonicalId: string;
+  examSnapshot?: ExamTypeSnapshot;
+  phaseConfigSnapshot?: PhaseConfigSnapshot;
   status: TemplateStatus;
   updatedAt: string;
 }
@@ -70,6 +123,8 @@ interface TemplateSubmitPayload {
   questionIds: string[];
   difficultyDistribution: DifficultyDistribution;
   timingProfile: TimingProfile;
+  examSnapshot: ExamTypeSnapshot;
+  phaseConfigSnapshot: PhaseConfigSnapshot;
   publish: boolean;
 }
 
@@ -97,6 +152,32 @@ const EMPTY_QUESTION_POOL_FILTERS: QuestionPoolFilters = {
   tag: "all",
   usageState: "all",
 };
+
+function hashString(value: string): number {
+  let hash = 2166136261;
+  for (const character of value) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function compareQuestionsBySegmentOrder(left: QuestionBankRecord, right: QuestionBankRecord): number {
+  return (
+    left.difficulty.localeCompare(right.difficulty) ||
+    left.subject.localeCompare(right.subject) ||
+    left.chapter.localeCompare(right.chapter) ||
+    left.id.localeCompare(right.id)
+  );
+}
+
+function buildShuffleSliceQuestions(questions: QuestionBankRecord[], seed: string): QuestionBankRecord[] {
+  return [...questions].sort((left, right) => {
+    const leftHash = hashString(`${seed}:${left.id}`);
+    const rightHash = hashString(`${seed}:${right.id}`);
+    return leftHash - rightHash || left.id.localeCompare(right.id);
+  });
+}
 
 const FALLBACK_TEMPLATES: TestTemplateRecord[] = [
   {
@@ -148,6 +229,103 @@ const INITIAL_DRAFT: TemplateDraft = {
     hard: { minSeconds: 150, maxSeconds: 210 },
   },
 };
+
+const EXAM_TYPE_SNAPSHOTS: Record<ExamType, ExamTypeSnapshot> = {
+  JEEMains: {
+    defaultDurationMinutes: 180,
+    difficultyTimingMapping: {
+      easy: { minSeconds: 30, maxSeconds: 60 },
+      medium: { minSeconds: 60, maxSeconds: 150 },
+      hard: { minSeconds: 150, maxSeconds: 210 },
+    },
+    markingScheme: "Fixed JEE snapshot: +4 correct, -1 incorrect, 0 unanswered. Manual marks entry is locked.",
+    sectionStructure: ["Physics", "Chemistry", "Mathematics"],
+  },
+  NEET: {
+    defaultDurationMinutes: 200,
+    difficultyTimingMapping: {
+      easy: { minSeconds: 25, maxSeconds: 55 },
+      medium: { minSeconds: 55, maxSeconds: 135 },
+      hard: { minSeconds: 135, maxSeconds: 210 },
+    },
+    markingScheme: "Fixed NEET snapshot: +4 correct, -1 incorrect, 0 unanswered. Manual marks entry is locked.",
+    sectionStructure: ["Physics", "Chemistry", "Botany", "Zoology"],
+  },
+};
+
+const DIFFICULTY_PHASE_WEIGHTS: Record<DifficultyLevel, number> = {
+  easy: 1,
+  medium: 2.3,
+  hard: 4,
+};
+
+const DIFFICULTY_PHASE_LABELS: Record<DifficultyLevel, { phase: string; focus: string }> = {
+  easy: {
+    phase: "Foundation",
+    focus: "Warm-up and confidence-building questions",
+  },
+  medium: {
+    phase: "Diagnostic Core",
+    focus: "Main concept discrimination and pacing signal",
+  },
+  hard: {
+    phase: "Challenge Control",
+    focus: "High-load controlled/hard-mode readiness",
+  },
+};
+
+function cloneTimingProfile(value: TimingProfile): TimingProfile {
+  return {
+    easy: { ...value.easy },
+    hard: { ...value.hard },
+    medium: { ...value.medium },
+  };
+}
+
+function getExamTypeSnapshot(examType: ExamType): ExamTypeSnapshot {
+  const snapshot = EXAM_TYPE_SNAPSHOTS[examType];
+  return {
+    ...snapshot,
+    difficultyTimingMapping: cloneTimingProfile(snapshot.difficultyTimingMapping),
+    sectionStructure: [...snapshot.sectionStructure],
+  };
+}
+
+function buildPhaseConfigSnapshot(
+  difficultyDistribution: DifficultyDistribution,
+  totalDurationMinutes: number,
+): PhaseConfigSnapshot {
+  const totalLoad = DIFFICULTY_LEVELS.reduce(
+    (total, difficulty) =>
+      total + difficultyDistribution[difficulty] * DIFFICULTY_PHASE_WEIGHTS[difficulty],
+    0,
+  );
+  const phaseSplit = DIFFICULTY_LEVELS.map((difficulty) => {
+    const questionCount = difficultyDistribution[difficulty];
+    const weight = DIFFICULTY_PHASE_WEIGHTS[difficulty];
+    const load = questionCount * weight;
+    const percent = totalLoad > 0 ? Math.round((load / totalLoad) * 100) : 0;
+    const minutes = totalLoad > 0 ? Math.round((load / totalLoad) * totalDurationMinutes) : 0;
+    const labels = DIFFICULTY_PHASE_LABELS[difficulty];
+
+    return {
+      difficulty,
+      focus: labels.focus,
+      load: Number(load.toFixed(1)),
+      minutes,
+      phase: labels.phase,
+      percent,
+      questionCount,
+      weight,
+    };
+  });
+
+  return {
+    difficultyWeights: { ...DIFFICULTY_PHASE_WEIGHTS },
+    phaseSplit,
+    totalLoad: Number(totalLoad.toFixed(1)),
+  };
+}
 
 function toNonEmptyString(value: unknown, fallback = ""): string {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
@@ -279,16 +457,42 @@ function normalizeTemplateRecord(value: unknown, index: number): TestTemplateRec
     record.timingProfile && typeof record.timingProfile === "object" ?
       (record.timingProfile as Record<string, unknown>) :
       {};
+  const examType = normalizeExamType(record.examType, fallback?.examType ?? "JEEMains");
+  const fallbackExamSnapshot = getExamTypeSnapshot(examType);
+  const examSnapshotSource =
+    record.examSnapshot && typeof record.examSnapshot === "object" ?
+      (record.examSnapshot as Record<string, unknown>) :
+      {};
+  const difficultyTimingSource =
+    examSnapshotSource.difficultyTimingMapping && typeof examSnapshotSource.difficultyTimingMapping === "object" ?
+      (examSnapshotSource.difficultyTimingMapping as Record<string, unknown>) :
+      fallbackExamSnapshot.difficultyTimingMapping;
   const questionIdsSource = record.selectedQuestionIds ?? record.questionIds;
   const selectedQuestionIds = Array.isArray(questionIdsSource) ?
     questionIdsSource.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0) :
     fallback?.selectedQuestionIds ?? [];
+  const sectionStructure = Array.isArray(examSnapshotSource.sectionStructure) ?
+    examSnapshotSource.sectionStructure.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0) :
+    fallbackExamSnapshot.sectionStructure;
 
   return {
     id: toNonEmptyString(record.id, `tmpl-${index + 1}`),
     canonicalId: toNonEmptyString(record.canonicalId, fallback?.canonicalId ?? `canonical-${index + 1}`),
     templateName: toNonEmptyString(record.templateName, fallback?.templateName ?? `Template ${index + 1}`),
-    examType: normalizeExamType(record.examType, fallback?.examType ?? "JEEMains"),
+    examType,
+    examSnapshot: {
+      defaultDurationMinutes: Math.max(
+        30,
+        toNumberOrZero(examSnapshotSource.defaultDurationMinutes ?? fallbackExamSnapshot.defaultDurationMinutes),
+      ),
+      difficultyTimingMapping: {
+        easy: normalizeTimingWindow(difficultyTimingSource.easy, fallbackExamSnapshot.difficultyTimingMapping.easy),
+        medium: normalizeTimingWindow(difficultyTimingSource.medium, fallbackExamSnapshot.difficultyTimingMapping.medium),
+        hard: normalizeTimingWindow(difficultyTimingSource.hard, fallbackExamSnapshot.difficultyTimingMapping.hard),
+      },
+      markingScheme: toNonEmptyString(examSnapshotSource.markingScheme, fallbackExamSnapshot.markingScheme),
+      sectionStructure,
+    },
     selectionMethod: normalizeSelectionMethod(record.selectionMethod, fallback?.selectionMethod ?? "manual"),
     totalDurationMinutes: Math.max(30, toNumberOrZero(record.totalDurationMinutes ?? record.durationMinutes)),
     selectedQuestionIds,
@@ -364,6 +568,10 @@ function formatIsoDate(value: string): string {
   return Number.isNaN(parsed) ? value : new Date(parsed).toISOString().slice(0, 10);
 }
 
+function formatPercent(value: number): string {
+  return `${Math.round(value)}%`;
+}
+
 function resolveTestSubpage(pathname: string): TestSubpage {
   if (pathname.includes("/tests/create")) {
     return "create";
@@ -382,26 +590,50 @@ function resolveTestSubpage(pathname: string): TestSubpage {
 }
 
 function buildPayload(draft: TemplateDraft, publish: boolean): TemplateSubmitPayload {
+  const examSnapshot = getExamTypeSnapshot(draft.examType);
   return {
     templateName: draft.templateName.trim(),
     canonicalId: "",
     examType: draft.examType,
+    examSnapshot: {
+      ...examSnapshot,
+      difficultyTimingMapping: cloneTimingProfile(draft.timingProfile),
+    },
     selectionMethod: draft.selectionMethod,
     totalDurationMinutes: draft.totalDurationMinutes,
     questionIds: draft.selectedQuestionIds,
     difficultyDistribution: draft.difficultyDistribution,
+    phaseConfigSnapshot: buildPhaseConfigSnapshot(draft.difficultyDistribution, draft.totalDurationMinutes),
     timingProfile: draft.timingProfile,
     publish,
   };
 }
 
-function validateDraft(draft: TemplateDraft): string | null {
+function validateDraft(
+  draft: TemplateDraft,
+  targetQuestionCount?: number,
+  matchedQuestionCount?: number,
+): string | null {
   if (draft.templateName.trim().length < 3) {
     return "Template name must contain at least 3 characters.";
   }
 
+  if (targetQuestionCount !== undefined) {
+    if (!Number.isInteger(targetQuestionCount) || targetQuestionCount <= 0) {
+      return "Set the Y question target before saving.";
+    }
+
+    if (matchedQuestionCount !== undefined && targetQuestionCount > matchedQuestionCount) {
+      return "Y question target must be less than or equal to the matched question count.";
+    }
+  }
+
   if (draft.selectedQuestionIds.length === 0) {
     return "Select at least one question before saving.";
+  }
+
+  if (targetQuestionCount !== undefined && draft.selectedQuestionIds.length !== targetQuestionCount) {
+    return `Choose exactly ${targetQuestionCount} question(s) before saving.`;
   }
 
   const distributionTotal =
@@ -441,6 +673,8 @@ function TestTemplateManagementPage() {
   const [duplicateTemplate, setDuplicateTemplate] = useState<TestTemplateRecord | null>(null);
   const [pendingDuplicateRecord, setPendingDuplicateRecord] = useState<TestTemplateRecord | null>(null);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [targetQuestionCount, setTargetQuestionCount] = useState(0);
+  const [offsetStart, setOffsetStart] = useState(0);
   const [questionQuery, setQuestionQuery] = useState("");
   const [questionPoolFilters, setQuestionPoolFilters] = useState<QuestionPoolFilters>(EMPTY_QUESTION_POOL_FILTERS);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -624,6 +858,29 @@ function TestTemplateManagementPage() {
   }, [questionPool]);
 
   const selectedQuestionCount = draft.selectedQuestionIds.length;
+  const statisticalSelectionPreview = useMemo(() => {
+    if (targetQuestionCount <= 0) {
+      return [];
+    }
+
+    if (draft.selectionMethod === "shuffle_slice") {
+      return buildShuffleSliceQuestions(visibleQuestions, `${draft.templateName}:${draft.examType}`).slice(0, targetQuestionCount);
+    }
+
+    if (draft.selectionMethod === "offset_limit") {
+      return [...visibleQuestions]
+        .sort(compareQuestionsBySegmentOrder)
+        .slice(offsetStart, offsetStart + targetQuestionCount);
+    }
+
+    return [];
+  }, [draft.examType, draft.selectionMethod, draft.templateName, offsetStart, targetQuestionCount, visibleQuestions]);
+  const maxOffsetStart = Math.max(0, visibleQuestions.length - Math.max(targetQuestionCount, 1));
+
+  useEffect(() => {
+    setOffsetStart((current) => Math.min(current, maxOffsetStart));
+  }, [maxOffsetStart]);
+
   const selectedDifficultyCount = useMemo(() => {
     return draft.selectedQuestionIds.reduce<DifficultyDistribution>(
       (accumulator, question) => {
@@ -658,6 +915,11 @@ function TestTemplateManagementPage() {
   const inspectedTemplate = useMemo(() => {
     return templates.find((template) => template.id === inspectedTemplateId) ?? templates[0] ?? null;
   }, [inspectedTemplateId, templates]);
+  const activeExamSnapshot = useMemo(() => getExamTypeSnapshot(draft.examType), [draft.examType]);
+  const phaseConfigPreview = useMemo(
+    () => buildPhaseConfigSnapshot(draft.difficultyDistribution, draft.totalDurationMinutes),
+    [draft.difficultyDistribution, draft.totalDurationMinutes],
+  );
 
   function updateTiming(
     difficulty: DifficultyLevel,
@@ -689,13 +951,30 @@ function TestTemplateManagementPage() {
   }
 
   function toggleQuestionSelection(questionId: string) {
+    if (draft.selectionMethod !== "manual") {
+      setErrorMessage("Use Apply Statistical Selection to choose questions for the selected statistical method.");
+      return;
+    }
+
     setDraft((current) => {
       const isSelected = current.selectedQuestionIds.includes(questionId);
+
+      if (!isSelected && targetQuestionCount <= 0) {
+        setErrorMessage("Set the Y question target before selecting questions.");
+        return current;
+      }
+
+      if (!isSelected && current.selectedQuestionIds.length >= targetQuestionCount) {
+        setErrorMessage(`Y target reached. Increase the target or deselect a question before adding ${questionId}.`);
+        return current;
+      }
+
       const selectedQuestionIds =
         isSelected ?
           current.selectedQuestionIds.filter((id) => id !== questionId) :
           [...current.selectedQuestionIds, questionId];
 
+      setErrorMessage(null);
       return {
         ...current,
         selectedQuestionIds,
@@ -710,8 +989,53 @@ function TestTemplateManagementPage() {
     }));
   }
 
+  function applyStatisticalSelection() {
+    if (draft.selectionMethod !== "shuffle_slice" && draft.selectionMethod !== "offset_limit") {
+      setErrorMessage("Select shuffle_slice or offset_limit before applying statistical selection.");
+      return;
+    }
+
+    if (targetQuestionCount <= 0) {
+      setErrorMessage("Set the Y question target before applying statistical selection.");
+      return;
+    }
+
+    if (targetQuestionCount > visibleQuestions.length) {
+      setErrorMessage("Y question target must be less than or equal to the matched question count.");
+      return;
+    }
+
+    if (statisticalSelectionPreview.length !== targetQuestionCount) {
+      setErrorMessage("The current offset and filter combination does not provide enough matched questions.");
+      return;
+    }
+
+    const selectedQuestionIds = statisticalSelectionPreview.map((question) => question.id);
+    const difficultyDistribution = statisticalSelectionPreview.reduce<DifficultyDistribution>(
+      (accumulator, question) => {
+        accumulator[question.difficulty] += 1;
+        return accumulator;
+      },
+      { easy: 0, medium: 0, hard: 0 },
+    );
+
+    setDraft((current) => ({
+      ...current,
+      selectedQuestionIds,
+      difficultyDistribution,
+    }));
+    setErrorMessage(null);
+    setInlineMessage(
+      draft.selectionMethod === "shuffle_slice" ?
+        `Applied shuffle_slice: shuffled ${visibleQuestions.length} matched questions and selected the first ${targetQuestionCount}.` :
+        `Applied offset_limit: sorted ${visibleQuestions.length} matched questions and selected ${targetQuestionCount} from offset ${offsetStart}.`,
+    );
+  }
+
   function resetEditor() {
     setDraft(INITIAL_DRAFT);
+    setTargetQuestionCount(0);
+    setOffsetStart(0);
     setEditingTemplateId(null);
     setDuplicateTemplate(null);
     setPendingDuplicateRecord(null);
@@ -738,6 +1062,7 @@ function TestTemplateManagementPage() {
       difficultyDistribution: target.difficultyDistribution,
       timingProfile: target.timingProfile,
     });
+    setTargetQuestionCount(target.selectedQuestionIds.length);
     setEditingTemplateId(target.id);
     setErrorMessage(null);
     setInspectedTemplateId(target.id);
@@ -748,7 +1073,26 @@ function TestTemplateManagementPage() {
     event.preventDefault();
     setErrorMessage(null);
 
-    const validationError = validateDraft(draft);
+    const selectedFromMatchedCount = draft.selectedQuestionIds.filter((questionId) =>
+      visibleQuestions.some((question) => question.id === questionId),
+    ).length;
+    if (selectedFromMatchedCount !== draft.selectedQuestionIds.length) {
+      setErrorMessage("All selected questions must come from the current matched pool before saving.");
+      return;
+    }
+
+    if (draft.selectionMethod === "shuffle_slice" || draft.selectionMethod === "offset_limit") {
+      const previewQuestionIds = statisticalSelectionPreview.map((question) => question.id);
+      const selectionStillMatchesMethod =
+        previewQuestionIds.length === draft.selectedQuestionIds.length &&
+        previewQuestionIds.every((questionId, index) => questionId === draft.selectedQuestionIds[index]);
+      if (!selectionStillMatchesMethod) {
+        setErrorMessage("Apply the current statistical selection preview before saving this template.");
+        return;
+      }
+    }
+
+    const validationError = validateDraft(draft, targetQuestionCount, visibleQuestions.length);
     if (validationError) {
       setErrorMessage(validationError);
       return;
@@ -888,6 +1232,10 @@ function TestTemplateManagementPage() {
     }
 
     setDuplicateTemplate(null);
+    setPendingDuplicateRecord(null);
+    setInlineMessage(
+      `Duplicate template intentionally created from canonical ID ${pendingDuplicateRecord.canonicalId.slice(0, 16)}...`,
+    );
     void persistDraftRecord(pendingDuplicateRecord);
   }
 
@@ -898,6 +1246,8 @@ function TestTemplateManagementPage() {
 
     setDuplicateTemplate(null);
     setPendingDuplicateRecord(null);
+    setInspectedTemplateId(duplicateTemplate.id);
+    navigate(`/admin/tests/${duplicateTemplate.id}`);
     setInlineMessage(
       `Duplicate template detected. Reusing existing template ${duplicateTemplate.templateName} (${duplicateTemplate.id}).`,
     );
@@ -1010,10 +1360,86 @@ function TestTemplateManagementPage() {
       DIFFICULTY_LEVELS.map((difficulty) => ({
         difficulty,
         count: inspectedTemplate.difficultyDistribution[difficulty],
+        percent:
+          inspectedTemplate.selectedQuestionIds.length > 0 ?
+            (inspectedTemplate.difficultyDistribution[difficulty] / inspectedTemplate.selectedQuestionIds.length) * 100 :
+            0,
         minSeconds: inspectedTemplate.timingProfile[difficulty].minSeconds,
         maxSeconds: inspectedTemplate.timingProfile[difficulty].maxSeconds,
-      })) :
+      } satisfies DistributionDifficultyRow)) :
       [];
+  const inspectedTemplateQuestions = inspectedTemplate ?
+    inspectedTemplate.selectedQuestionIds
+      .map((questionId) => questionPoolById.get(questionId))
+      .filter((question): question is QuestionBankRecord => Boolean(question)) :
+    [];
+  const inspectedQuestionTotal = inspectedTemplate?.selectedQuestionIds.length ?? 0;
+  const resolvedQuestionTotal = inspectedTemplateQuestions.length;
+  const inspectedPhaseSnapshot = inspectedTemplate ?
+    inspectedTemplate.phaseConfigSnapshot ?? buildPhaseConfigSnapshot(inspectedTemplate.difficultyDistribution, inspectedTemplate.totalDurationMinutes) :
+    null;
+  const chapterCoverageRows = inspectedTemplateQuestions.reduce<ChapterCoverageRow[]>((rows, question) => {
+    const existing = rows.find((row) => row.chapter === question.chapter);
+    if (existing) {
+      existing.count += 1;
+      existing.percent = inspectedQuestionTotal > 0 ? (existing.count / inspectedQuestionTotal) * 100 : 0;
+      existing.subjects = Array.from(new Set([...existing.subjects.split(", "), question.subject])).join(", ");
+      return rows;
+    }
+
+    rows.push({
+      chapter: question.chapter,
+      count: 1,
+      percent: inspectedQuestionTotal > 0 ? (1 / inspectedQuestionTotal) * 100 : 0,
+      subjects: question.subject,
+    });
+    return rows;
+  }, []);
+  const marksDistributionRows = inspectedTemplateQuestions.reduce<MarksDistributionRow[]>((rows, question) => {
+    const marks = `${question.marks} mark${question.marks === 1 ? "" : "s"}`;
+    const existing = rows.find((row) => row.marks === marks);
+    if (existing) {
+      existing.count += 1;
+      existing.percent = inspectedQuestionTotal > 0 ? (existing.count / inspectedQuestionTotal) * 100 : 0;
+      return rows;
+    }
+
+    rows.push({
+      marks,
+      count: 1,
+      percent: inspectedQuestionTotal > 0 ? (1 / inspectedQuestionTotal) * 100 : 0,
+    });
+    return rows;
+  }, []);
+  const sectionBalanceRows =
+    inspectedTemplate ?
+      (inspectedTemplate.examSnapshot?.sectionStructure ?? getExamTypeSnapshot(inspectedTemplate.examType).sectionStructure).map((section) => {
+        const count = inspectedTemplateQuestions.filter((question) => question.subject === section).length;
+        return {
+          section,
+          count,
+          percent: inspectedQuestionTotal > 0 ? (count / inspectedQuestionTotal) * 100 : 0,
+        } satisfies SectionBalanceRow;
+      }) :
+      [];
+  const estimatedStressIndex =
+    inspectedTemplate && inspectedQuestionTotal > 0 && inspectedPhaseSnapshot ?
+      Math.round((inspectedPhaseSnapshot.totalLoad / (inspectedQuestionTotal * DIFFICULTY_PHASE_WEIGHTS.hard)) * 100) :
+      0;
+  const hardQuestionPercent =
+    inspectedTemplate && inspectedQuestionTotal > 0 ?
+      (inspectedTemplate.difficultyDistribution.hard / inspectedQuestionTotal) * 100 :
+      0;
+  const mediumHardPercent =
+    inspectedTemplate && inspectedQuestionTotal > 0 ?
+      ((inspectedTemplate.difficultyDistribution.medium + inspectedTemplate.difficultyDistribution.hard) / inspectedQuestionTotal) * 100 :
+      0;
+  const riskPredictionLabel =
+    estimatedStressIndex >= 65 || hardQuestionPercent >= 35 ?
+      "High structural load: review timing and controlled-mode readiness." :
+      estimatedStressIndex >= 45 || mediumHardPercent >= 60 ?
+        "Moderate structural load: pacing discipline should be watched." :
+        "Balanced structural load: standard operational execution is expected.";
 
   const totalQuestionCount = templates.reduce((total, template) => total + template.selectedQuestionIds.length, 0);
   const readyOrAssignedCount = templates.filter((template) => template.status === "ready" || template.status === "assigned").length;
@@ -1049,12 +1475,16 @@ function TestTemplateManagementPage() {
               <select
                 id="admin-tests-exam-type"
                 value={draft.examType}
-                onChange={(event) =>
+                onChange={(event) => {
+                  const examType = event.target.value as ExamType;
+                  const examSnapshot = getExamTypeSnapshot(examType);
                   setDraft((current) => ({
                     ...current,
-                    examType: event.target.value as ExamType,
-                  }))
-                }
+                    examType,
+                    timingProfile: cloneTimingProfile(examSnapshot.difficultyTimingMapping),
+                    totalDurationMinutes: examSnapshot.defaultDurationMinutes,
+                  }));
+                }}
               >
                 {EXAM_TYPES.map((type) => (
                   <option key={type} value={type}>
@@ -1063,6 +1493,31 @@ function TestTemplateManagementPage() {
                 ))}
               </select>
             </UiFormField>
+            <div className="admin-tests-exam-snapshot" aria-label="Exam type snapshot">
+              <h3>{draft.examType} Snapshot</h3>
+              <dl>
+                <div>
+                  <dt>Marking</dt>
+                  <dd>{activeExamSnapshot.markingScheme}</dd>
+                </div>
+                <div>
+                  <dt>Default Timing</dt>
+                  <dd>{activeExamSnapshot.defaultDurationMinutes} minutes applied from exam type.</dd>
+                </div>
+                <div>
+                  <dt>Sections</dt>
+                  <dd>{activeExamSnapshot.sectionStructure.join(" / ")}</dd>
+                </div>
+                <div>
+                  <dt>Difficulty Timing</dt>
+                  <dd>
+                    Easy {draft.timingProfile.easy.minSeconds}-{draft.timingProfile.easy.maxSeconds}s · Medium{" "}
+                    {draft.timingProfile.medium.minSeconds}-{draft.timingProfile.medium.maxSeconds}s · Hard{" "}
+                    {draft.timingProfile.hard.minSeconds}-{draft.timingProfile.hard.maxSeconds}s
+                  </dd>
+                </div>
+              </dl>
+            </div>
             <UiFormField label="Selection Method" htmlFor="admin-tests-selection-method">
               <select
                 id="admin-tests-selection-method"
@@ -1071,6 +1526,8 @@ function TestTemplateManagementPage() {
                   setDraft((current) => ({
                     ...current,
                     selectionMethod: event.target.value as SelectionMethod,
+                    selectedQuestionIds: [],
+                    difficultyDistribution: { easy: 0, medium: 0, hard: 0 },
                   }))
                 }
               >
@@ -1100,7 +1557,7 @@ function TestTemplateManagementPage() {
 
           <UiForm
             title="Question Selection"
-            description="Select question IDs for this template. Distribution totals must match selected count."
+            description="Apply filters to get X matched questions, set Y, then choose exactly Y questions."
             submitLabel="Sync Difficulty Distribution"
             onSubmit={(event) => {
               event.preventDefault();
@@ -1108,8 +1565,9 @@ function TestTemplateManagementPage() {
             }}
             footer={
               <span className="admin-tests-form-footnote">
-                Selected: {selectedQuestionCount} | Easy: {selectedDifficultyCount.easy} | Medium:{" "}
-                {selectedDifficultyCount.medium} | Hard: {selectedDifficultyCount.hard}
+                X matched: {visibleQuestions.length} | Y target: {targetQuestionCount} | Selected:{" "}
+                {selectedQuestionCount} | Easy: {selectedDifficultyCount.easy} | Medium: {selectedDifficultyCount.medium} | Hard:{" "}
+                {selectedDifficultyCount.hard}
               </span>
             }
           >
@@ -1237,17 +1695,85 @@ function TestTemplateManagementPage() {
                 Reset Filters
               </button>
             </div>
+            <div className="admin-tests-selection-target">
+              <UiFormField label="Y questions to choose" htmlFor="admin-tests-target-question-count">
+                <input
+                  id="admin-tests-target-question-count"
+                  type="number"
+                  min={0}
+                  max={visibleQuestions.length}
+                  value={targetQuestionCount}
+                  onChange={(event) => {
+                    const rawValue = Number(event.target.value);
+                    const nextValue = Number.isFinite(rawValue) ? Math.max(0, Math.floor(rawValue)) : 0;
+                    setTargetQuestionCount(Math.min(nextValue, visibleQuestions.length));
+                    setOffsetStart((current) => Math.min(current, Math.max(0, visibleQuestions.length - Math.max(nextValue, 1))));
+                    setErrorMessage(null);
+                  }}
+                />
+              </UiFormField>
+              <div className="admin-tests-selection-progress" aria-live="polite">
+                <strong>{visibleQuestions.length}</strong>
+                <span>X matched</span>
+                <strong>{targetQuestionCount}</strong>
+                <span>Y requested</span>
+                <strong>{selectedQuestionCount}</strong>
+                <span>chosen</span>
+              </div>
+            </div>
             <p className="admin-tests-form-footnote">
-              {visibleQuestions.length} of {questionPool.length} questions matched. Choose Y questions from this filtered pool.
+              {visibleQuestions.length} of {questionPool.length} questions matched. Choose exactly {targetQuestionCount} from this filtered pool before saving.
             </p>
+            {draft.selectionMethod === "shuffle_slice" || draft.selectionMethod === "offset_limit" ? (
+              <div className="admin-tests-statistical-selection">
+                {draft.selectionMethod === "offset_limit" ? (
+                  <UiFormField label="Offset N" htmlFor="admin-tests-offset-start">
+                    <input
+                      id="admin-tests-offset-start"
+                      type="number"
+                      min={0}
+                      max={maxOffsetStart}
+                      value={offsetStart}
+                      onChange={(event) => {
+                        const rawValue = Number(event.target.value);
+                        const nextValue = Number.isFinite(rawValue) ? Math.max(0, Math.floor(rawValue)) : 0;
+                        setOffsetStart(Math.min(nextValue, maxOffsetStart));
+                        setErrorMessage(null);
+                      }}
+                    />
+                  </UiFormField>
+                ) : null}
+                <div className="admin-tests-statistical-preview">
+                  <strong>
+                    {draft.selectionMethod === "shuffle_slice" ? "Shuffle + Slice" : "Offset + Limit"}
+                  </strong>
+                  <span>
+                    {draft.selectionMethod === "shuffle_slice" ?
+                      `Shuffle X and take first ${targetQuestionCount}.` :
+                      `Sort by difficulty, subject, chapter, id; take offset ${offsetStart} to ${offsetStart + targetQuestionCount}.`}
+                  </span>
+                  <small>
+                    Preview:{" "}
+                    {statisticalSelectionPreview.length > 0 ?
+                      statisticalSelectionPreview.map((question) => question.id).join(", ") :
+                      "Set Y to preview selected question IDs."}
+                  </small>
+                </div>
+                <button type="button" onClick={applyStatisticalSelection}>
+                  Apply Statistical Selection
+                </button>
+              </div>
+            ) : null}
             <div className="admin-tests-question-list" role="group" aria-label="Template question selection">
               {visibleQuestions.map((question) => {
                 const checked = draft.selectedQuestionIds.includes(question.id);
+                const limitReached = !checked && targetQuestionCount > 0 && selectedQuestionCount >= targetQuestionCount;
                 return (
                   <label key={question.id} className="admin-tests-question-option">
                     <input
                       type="checkbox"
                       checked={checked}
+                      disabled={draft.selectionMethod !== "manual" || targetQuestionCount <= 0 || limitReached}
                       onChange={() => toggleQuestionSelection(question.id)}
                     />
                     <span>
@@ -1327,6 +1853,24 @@ function TestTemplateManagementPage() {
               </div>
             ))}
           </UiForm>
+
+          <article className="admin-tests-phase-preview">
+            <h3>L2 Phase Preview</h3>
+            <p>
+              Total load {phaseConfigPreview.totalLoad} from Easy x1, Medium x2.3, and Hard x4. This snapshot is
+              stored with the template and locked after first assignment.
+            </p>
+            <div className="admin-tests-phase-grid">
+              {phaseConfigPreview.phaseSplit.map((phase) => (
+                <div key={phase.difficulty} className="admin-tests-phase-row">
+                  <strong>{phase.phase}</strong>
+                  <span>{phase.questionCount} questions · load {phase.load}</span>
+                  <span>{phase.percent}% · {phase.minutes} min</span>
+                  <small>{phase.focus}</small>
+                </div>
+              ))}
+            </div>
+          </article>
         </div>
       </>
     );
@@ -1428,11 +1972,30 @@ function TestTemplateManagementPage() {
   function renderDistributionView() {
     return (
       <>
+        <div className="admin-tests-summary-grid">
+          <article className="admin-tests-summary-card">
+            <h3>Difficulty %</h3>
+            <p>
+              {inspectedTemplate ?
+                selectedTemplateDifficultyRows.map((row) => `${row.difficulty} ${formatPercent(row.percent)}`).join(" / ") :
+                "No template selected."}
+            </p>
+          </article>
+          <article className="admin-tests-summary-card">
+            <h3>Chapter Coverage</h3>
+            <p>{chapterCoverageRows.length} chapters represented in the frozen question set.</p>
+          </article>
+          <article className="admin-tests-summary-card">
+            <h3>L2 Stress Preview</h3>
+            <p>{estimatedStressIndex}% estimated stress index from structural difficulty load.</p>
+          </article>
+        </div>
+
         <article className="admin-tests-summary-card admin-tests-detail-card">
           <h3>Distribution Review</h3>
           <p>
             {inspectedTemplate ?
-              `${inspectedTemplate.templateName} keeps a frozen ${inspectedTemplate.selectedQuestionIds.length}-question structural snapshot.` :
+              `${inspectedTemplate.templateName} keeps a frozen ${inspectedTemplate.selectedQuestionIds.length}-question structural snapshot. ${resolvedQuestionTotal} questions resolved against the current library metadata for chapter, marks, and section coverage.` :
               "No template selected for structural review."}
           </p>
           {inspectedTemplate ? (
@@ -1453,10 +2016,11 @@ function TestTemplateManagementPage() {
         </article>
 
         <UiTable
-          caption="Difficulty and timing review"
+          caption="Difficulty percentage and timing review"
           columns={[
             { id: "difficulty", header: "Difficulty", render: (row) => row.difficulty },
             { id: "count", header: "Question Count", render: (row) => row.count },
+            { id: "percent", header: "Difficulty %", render: (row) => formatPercent(row.percent) },
             { id: "min", header: "Min Seconds", render: (row) => row.minSeconds },
             { id: "max", header: "Max Seconds", render: (row) => row.maxSeconds },
           ]}
@@ -1464,6 +2028,62 @@ function TestTemplateManagementPage() {
           rowKey={(row) => row.difficulty}
           emptyStateText="No template is currently available for distribution review."
         />
+
+        <div className="admin-tests-config-grid">
+          <UiTable
+            caption="Chapter coverage"
+            columns={[
+              { id: "chapter", header: "Chapter", render: (row) => row.chapter },
+              { id: "subjects", header: "Subject(s)", render: (row) => row.subjects },
+              { id: "count", header: "Question Count", render: (row) => row.count },
+              { id: "percent", header: "Coverage %", render: (row) => formatPercent(row.percent) },
+            ]}
+            rows={chapterCoverageRows}
+            rowKey={(row) => row.chapter}
+            emptyStateText="No chapter metadata resolved for this template."
+          />
+
+          <UiTable
+            caption="Marks distribution"
+            columns={[
+              { id: "marks", header: "Marks Bucket", render: (row) => row.marks },
+              { id: "count", header: "Question Count", render: (row) => row.count },
+              { id: "percent", header: "Distribution %", render: (row) => formatPercent(row.percent) },
+            ]}
+            rows={marksDistributionRows}
+            rowKey={(row) => row.marks}
+            emptyStateText="No marks metadata resolved for this template."
+          />
+        </div>
+
+        <div className="admin-tests-config-grid">
+          <UiTable
+            caption="Section balance"
+            columns={[
+              { id: "section", header: "Section", render: (row) => row.section },
+              { id: "count", header: "Question Count", render: (row) => row.count },
+              { id: "percent", header: "Section %", render: (row) => formatPercent(row.percent) },
+            ]}
+            rows={sectionBalanceRows}
+            rowKey={(row) => row.section}
+            emptyStateText="No exam section snapshot is available for this template."
+          />
+
+          <article className="admin-tests-phase-preview">
+            <h3>L2 Structural Preview</h3>
+            <p>{riskPredictionLabel}</p>
+            <div className="admin-tests-phase-grid">
+              {inspectedPhaseSnapshot?.phaseSplit.map((phase) => (
+                <div key={phase.difficulty} className="admin-tests-phase-row">
+                  <strong>{phase.phase}</strong>
+                  <span>{phase.questionCount} questions · load {phase.load}</span>
+                  <span>{phase.percent}% · {phase.minutes} min</span>
+                  <small>{phase.focus}</small>
+                </div>
+              ))}
+            </div>
+          </article>
+        </div>
       </>
     );
   }
@@ -1553,18 +2173,72 @@ function TestTemplateManagementPage() {
       <UiModal
         isOpen={Boolean(duplicateTemplate)}
         title="Duplicate template detected"
-        description="Canonical template ID already exists. Reuse existing template or proceed intentionally."
+        description="Canonical template ID already exists. Reuse existing template or create a duplicate intentionally."
         onClose={() => {
           setDuplicateTemplate(null);
           setPendingDuplicateRecord(null);
         }}
       >
+        {duplicateTemplate ? (
+          <div className="admin-tests-duplicate-review">
+            <article>
+              <h3>Existing Template</h3>
+              <dl>
+                <div>
+                  <dt>Template</dt>
+                  <dd>{duplicateTemplate.templateName}</dd>
+                </div>
+                <div>
+                  <dt>ID</dt>
+                  <dd>{duplicateTemplate.id}</dd>
+                </div>
+                <div>
+                  <dt>Status</dt>
+                  <dd>{duplicateTemplate.status}</dd>
+                </div>
+                <div>
+                  <dt>Question Count</dt>
+                  <dd>{duplicateTemplate.selectedQuestionIds.length}</dd>
+                </div>
+                <div>
+                  <dt>Canonical ID</dt>
+                  <dd>
+                    <code>{duplicateTemplate.canonicalId}</code>
+                  </dd>
+                </div>
+              </dl>
+            </article>
+            {pendingDuplicateRecord ? (
+              <article>
+                <h3>Pending Duplicate</h3>
+                <dl>
+                  <div>
+                    <dt>Template</dt>
+                    <dd>{pendingDuplicateRecord.templateName}</dd>
+                  </div>
+                  <div>
+                    <dt>Selection</dt>
+                    <dd>{pendingDuplicateRecord.selectionMethod}</dd>
+                  </div>
+                  <div>
+                    <dt>Question Count</dt>
+                    <dd>{pendingDuplicateRecord.selectedQuestionIds.length}</dd>
+                  </div>
+                  <div>
+                    <dt>Decision Required</dt>
+                    <dd>Reuse preserves the existing structural template. Continue creates a second template with the same canonical question set.</dd>
+                  </div>
+                </dl>
+              </article>
+            ) : null}
+          </div>
+        ) : null}
         <div className="admin-tests-publish-actions">
           <button type="button" onClick={reuseExistingDuplicateTemplate} disabled={isSubmitting}>
             Reuse Existing Template
           </button>
           <button type="button" onClick={proceedWithDuplicateSave} disabled={isSubmitting}>
-            Proceed Intentionally
+            Continue and Create Duplicate Intentionally
           </button>
         </div>
       </UiModal>

@@ -6,10 +6,10 @@ This file is the persistent handoff state for portal checklist implementation ac
 
 - `Current Target Portal`: `admin`
 - `Current Priority Band`: `P1`
-- `Last Completed Checklist ID`: `TST-004`
-- `Next Suggested Checklist ID`: `TST-005`
-- `Last Updated`: `2026-05-21`
-- `Saved Scope Note`: `TST-004` is complete after adding the full Create Test question-pool filter matrix for subject, chapter, difficulty, tags, question type, academic year, used/unused state, and custom text search with matched-count feedback. Continue admin P1 with `TST-005`.
+- `Last Completed Checklist ID`: `ASN-009`
+- `Next Suggested Checklist ID`: `ASN-010`
+- `Last Updated`: `2026-05-23`
+- `Saved Scope Note`: `ASN-009` is complete after adding a dedicated Assignment List L1 diagnostics column backed by `runAnalytics/{runId}` fields for Avg Phase Adherence %, Easy Neglect %, Hard Bias %, and a derived Behavior Summary Badge. Continue admin P1 with `ASN-010`.
 
 ## Active Checklist Set
 

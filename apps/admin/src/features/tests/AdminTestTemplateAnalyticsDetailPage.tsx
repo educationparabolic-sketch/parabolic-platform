@@ -15,10 +15,14 @@ interface TemplateAnalyticsRunRow {
   runId: string;
   runName: string;
   completedOn: string;
+  mode: string;
   avgRawScorePercent: number;
   avgAccuracyPercent: number;
   phaseAdherenceVariance: number;
   riskShiftPercent: number;
+  stabilityVariance: number;
+  disciplineStressScore: number;
+  controlledModeDelta: number;
 }
 
 interface TemplateAnalyticsDetailRecord {
@@ -31,6 +35,9 @@ interface TemplateAnalyticsDetailRecord {
   avgAccuracyPercent: number;
   phaseAdherenceVariance: number;
   riskShiftAveragePercent: number;
+  stabilityVariance: number;
+  disciplineStressScore: number;
+  controlledVsUncontrolledDelta: number;
   effectivenessRating: number;
   runs: TemplateAnalyticsRunRow[];
 }
@@ -56,6 +63,10 @@ const TEMPLATE_ANALYTICS_DETAILS: TemplateAnalyticsDetailRecord[] = [
         avgAccuracyPercent: 76,
         phaseAdherenceVariance: 6,
         riskShiftPercent: 12,
+        mode: "Controlled",
+        stabilityVariance: 14,
+        disciplineStressScore: 16,
+        controlledModeDelta: 8,
       },
       {
         runId: "run-2026-0407-002",
@@ -65,6 +76,10 @@ const TEMPLATE_ANALYTICS_DETAILS: TemplateAnalyticsDetailRecord[] = [
         avgAccuracyPercent: 72,
         phaseAdherenceVariance: 8,
         riskShiftPercent: 16,
+        mode: "Diagnostic",
+        stabilityVariance: 18,
+        disciplineStressScore: 21,
+        controlledModeDelta: 0,
       },
       {
         runId: "run-2026-0404-001",
@@ -74,8 +89,15 @@ const TEMPLATE_ANALYTICS_DETAILS: TemplateAnalyticsDetailRecord[] = [
         avgAccuracyPercent: 73,
         phaseAdherenceVariance: 7,
         riskShiftPercent: 14,
+        mode: "Operational",
+        stabilityVariance: 17,
+        disciplineStressScore: 19,
+        controlledModeDelta: 0,
       },
     ],
+    stabilityVariance: 16,
+    disciplineStressScore: 19,
+    controlledVsUncontrolledDelta: 5,
   },
   {
     id: "tmpl-002",
@@ -97,6 +119,10 @@ const TEMPLATE_ANALYTICS_DETAILS: TemplateAnalyticsDetailRecord[] = [
         avgAccuracyPercent: 71,
         phaseAdherenceVariance: 8,
         riskShiftPercent: 18,
+        mode: "Diagnostic",
+        stabilityVariance: 19,
+        disciplineStressScore: 24,
+        controlledModeDelta: 0,
       },
       {
         runId: "run-2026-0406-002",
@@ -106,6 +132,10 @@ const TEMPLATE_ANALYTICS_DETAILS: TemplateAnalyticsDetailRecord[] = [
         avgAccuracyPercent: 68,
         phaseAdherenceVariance: 10,
         riskShiftPercent: 22,
+        mode: "Operational",
+        stabilityVariance: 23,
+        disciplineStressScore: 29,
+        controlledModeDelta: 0,
       },
       {
         runId: "run-2026-0402-001",
@@ -115,6 +145,10 @@ const TEMPLATE_ANALYTICS_DETAILS: TemplateAnalyticsDetailRecord[] = [
         avgAccuracyPercent: 73,
         phaseAdherenceVariance: 7,
         riskShiftPercent: 15,
+        mode: "Controlled",
+        stabilityVariance: 16,
+        disciplineStressScore: 18,
+        controlledModeDelta: 7,
       },
       {
         runId: "run-2026-0329-001",
@@ -124,8 +158,15 @@ const TEMPLATE_ANALYTICS_DETAILS: TemplateAnalyticsDetailRecord[] = [
         avgAccuracyPercent: 69,
         phaseAdherenceVariance: 9,
         riskShiftPercent: 20,
+        mode: "Controlled",
+        stabilityVariance: 20,
+        disciplineStressScore: 26,
+        controlledModeDelta: 6,
       },
     ],
+    stabilityVariance: 20,
+    disciplineStressScore: 24,
+    controlledVsUncontrolledDelta: 6,
   },
 ];
 
@@ -192,20 +233,56 @@ function variance(values: number[]): number {
   return average(values.map((value) => (value - mean) ** 2));
 }
 
+function toControlledVsUncontrolledDelta(runs: RunAnalyticsRecord[]): number {
+  const controlledRuns = runs.filter((run) => run.mode.toLowerCase() === "controlled");
+  const uncontrolledRuns = runs.filter((run) => run.mode.toLowerCase() !== "controlled");
+
+  if (controlledRuns.length === 0 || uncontrolledRuns.length === 0) {
+    return 0;
+  }
+
+  const controlledRawAverage = average(controlledRuns.map((run) => run.avgRawScorePercent));
+  const uncontrolledRawAverage = average(uncontrolledRuns.map((run) => run.avgRawScorePercent));
+  return Math.round(controlledRawAverage - uncontrolledRawAverage);
+}
+
 function buildRunRow(run: RunAnalyticsRecord): TemplateAnalyticsRunRow {
   const riskShiftPercent =
     run.riskDistribution.high + run.riskDistribution.critical + Math.round(run.guessRatePercent * 0.25);
+  const phaseAdherenceVariance = Math.round(
+    Math.abs(run.avgPhaseAdherencePercent - run.followedPhaseSplitPercent),
+  );
+  const disciplineStressScore = Math.round(
+    average([
+      run.guessRatePercent,
+      run.timeMisallocationPercent,
+      run.pacingGuardrailViolationPercent,
+      run.minTimeViolationPercent,
+      run.maxTimeViolationPercent,
+    ]),
+  );
+  const stabilityVariance = Math.round(
+    average([
+      run.rawScoreStdDeviation,
+      phaseAdherenceVariance,
+      run.structuralOverridePercent,
+    ]),
+  );
 
   return {
     runId: run.runId,
     runName: run.runName,
     completedOn: run.startedAt,
+    mode: run.mode,
     avgRawScorePercent: run.avgRawScorePercent,
     avgAccuracyPercent: run.avgAccuracyPercent,
-    phaseAdherenceVariance: Math.round(
-      Math.abs(run.avgPhaseAdherencePercent - run.followedPhaseSplitPercent),
-    ),
+    phaseAdherenceVariance,
     riskShiftPercent: Math.max(0, Math.min(100, riskShiftPercent)),
+    stabilityVariance,
+    disciplineStressScore,
+    controlledModeDelta: run.mode.toLowerCase() === "controlled" ?
+      Math.round(run.controlledCompliancePercent - run.pacingGuardrailViolationPercent) :
+      0,
   };
 }
 
@@ -257,6 +334,9 @@ function buildTemplateAnalyticsDetails(
       const avgAccuracyPercent = Math.round(average(runRows.map((run) => run.avgAccuracyPercent)));
       const phaseAdherenceVariance = Math.round(variance(sortedRuns.map((run) => run.avgPhaseAdherencePercent)));
       const riskShiftAveragePercent = Math.round(average(runRows.map((run) => run.riskShiftPercent)));
+      const stabilityVariance = Math.round(average(runRows.map((run) => run.stabilityVariance)));
+      const disciplineStressScore = Math.round(average(runRows.map((run) => run.disciplineStressScore)));
+      const controlledVsUncontrolledDelta = toControlledVsUncontrolledDelta(sortedRuns);
       const avgDisciplineIndex = Math.round(average(sortedRuns.map((run) => run.disciplineIndexAverage)));
       const effectivenessRating = Math.max(
         0,
@@ -276,6 +356,9 @@ function buildTemplateAnalyticsDetails(
         avgAccuracyPercent,
         phaseAdherenceVariance,
         riskShiftAveragePercent,
+        stabilityVariance,
+        disciplineStressScore,
+        controlledVsUncontrolledDelta,
         effectivenessRating,
         runs: runRows,
       };
@@ -374,6 +457,11 @@ function AdminTestTemplateAnalyticsDetailPage() {
         render: (run) => formatIsoDate(run.completedOn),
       },
       {
+        id: "mode",
+        header: "Mode",
+        render: (run) => run.mode,
+      },
+      {
         id: "raw",
         header: "Avg Raw",
         render: (run) => `${run.avgRawScorePercent}%`,
@@ -393,6 +481,21 @@ function AdminTestTemplateAnalyticsDetailPage() {
         header: "Risk Shift",
         render: (run) => `${run.riskShiftPercent}%`,
       },
+      {
+        id: "stability",
+        header: "Stability Var",
+        render: (run) => run.stabilityVariance,
+      },
+      {
+        id: "discipline",
+        header: "Discipline Stress",
+        render: (run) => run.disciplineStressScore,
+      },
+      {
+        id: "controlled",
+        header: "Controlled Delta",
+        render: (run) => (run.controlledModeDelta === 0 ? "n/a" : `+${run.controlledModeDelta}`),
+      },
     ],
     [],
   );
@@ -407,8 +510,8 @@ function AdminTestTemplateAnalyticsDetailPage() {
       <h2 id="admin-test-template-analytics-detail-title">Cross-Run Template Analytics View</h2>
       <p className="admin-content-copy">
         This dedicated route keeps <code>/admin/tests/analytics/{`{testId}`}</code> separate from the broader test
-        analytics overview. It focuses on a single template’s cross-run outcome quality using summary-safe averages,
-        variance, and risk-shift signals, now hydrating from the live admin analytics payload when available.
+        analytics overview. It focuses on a single template’s cross-run outcome quality using summary-safe averages
+        from <code>templateAnalytics/{`{testId}`}</code> style aggregates, without raw marks or session scans.
       </p>
 
       <TestsWorkspaceNav />
@@ -420,31 +523,61 @@ function AdminTestTemplateAnalyticsDetailPage() {
         <p>
           <strong>{template.templateName}</strong> · {template.examType} · {template.status}
         </p>
-        <small>Route: /admin/tests/analytics/{template.id}</small>
+        <small>Route: /admin/tests/analytics/{template.id} · Source: templateAnalytics/{template.id}</small>
       </div>
 
       {isLoading ? <p className="admin-analytics-inline-note">Loading test template analytics detail...</p> : null}
 
+      <h3 className="admin-tests-analytics-section-title">L1 Outcome Metrics</h3>
       <div className="admin-analytics-kpi-grid">
         <article className="admin-analytics-kpi-card">
           <p>Run Count</p>
           <h3>{template.runCount}</h3>
-          <small>tracked structural comparisons</small>
+          <small>templateAnalytics run count</small>
         </article>
         <article className="admin-analytics-kpi-card">
           <p>Avg Raw Score</p>
           <h3>{template.avgRawScorePercent}%</h3>
-          <small>cross-run average raw percent</small>
+          <small>summary-safe raw percent</small>
         </article>
         <article className="admin-analytics-kpi-card">
           <p>Avg Accuracy</p>
           <h3>{template.avgAccuracyPercent}%</h3>
-          <small>cross-run average accuracy</small>
+          <small>summary-safe accuracy percent</small>
         </article>
         <article className="admin-analytics-kpi-card">
           <p>Effectiveness Rating</p>
           <h3>{template.effectivenessRating}</h3>
-          <small>precomputed structural quality signal</small>
+          <small>derived from aggregate template signals</small>
+        </article>
+      </div>
+
+      <h3 className="admin-tests-analytics-section-title">L2 Execution Metrics</h3>
+      <div className="admin-analytics-kpi-grid">
+        <article className="admin-analytics-kpi-card">
+          <p>Phase Variance</p>
+          <h3>{template.phaseAdherenceVariance}</h3>
+          <small>phase adherence spread</small>
+        </article>
+        <article className="admin-analytics-kpi-card">
+          <p>Risk Shift</p>
+          <h3>{template.riskShiftAveragePercent}%</h3>
+          <small>risk distribution movement</small>
+        </article>
+        <article className="admin-analytics-kpi-card">
+          <p>Stability Variance</p>
+          <h3>{template.stabilityVariance}</h3>
+          <small>cross-run structural stability</small>
+        </article>
+        <article className="admin-analytics-kpi-card">
+          <p>Discipline Stress</p>
+          <h3>{template.disciplineStressScore}</h3>
+          <small>guess, pacing, and timing stress</small>
+        </article>
+        <article className="admin-analytics-kpi-card">
+          <p>Controlled Delta</p>
+          <h3>{template.controlledVsUncontrolledDelta > 0 ? "+" : ""}{template.controlledVsUncontrolledDelta}</h3>
+          <small>controlled vs uncontrolled raw delta</small>
         </article>
       </div>
 
@@ -474,19 +607,19 @@ function AdminTestTemplateAnalyticsDetailPage() {
 
       <div className="admin-analytics-compliance-panel">
         <article className="admin-risk-summary-card">
-          <h4>Phase Adherence Variance</h4>
-          <p>{template.phaseAdherenceVariance} point spread across recent runs.</p>
-          <small>Tracks how consistently the template holds timing structure.</small>
+          <h4>Layer Contract</h4>
+          <p>L1 exposes avg raw %, avg accuracy %, and run count. L2 adds phase, risk, stability, discipline, and controlled-mode deltas.</p>
+          <small>All values are aggregate template analytics, never raw marks.</small>
         </article>
         <article className="admin-risk-summary-card">
-          <h4>Average Risk Shift</h4>
-          <p>{template.riskShiftAveragePercent}% risk-distribution movement across template usage.</p>
+          <h4>Risk Distribution Shift</h4>
+          <p>{template.riskShiftAveragePercent}% high/critical movement across template usage.</p>
           <small>Highlights whether execution risk expands or settles from run to run.</small>
         </article>
         <article className="admin-risk-summary-card">
-          <h4>Single-Template Focus</h4>
-          <p>This workspace isolates one template instead of folding the drill-down back into the shared analytics list.</p>
-          <small>Dedicated route separation for `GBL-003`.</small>
+          <h4>Source Safety</h4>
+          <p>This workspace reads precomputed run/template summaries and does not recompute from submitted sessions.</p>
+          <small>Dedicated tests analytics route for single-template review.</small>
         </article>
       </div>
 

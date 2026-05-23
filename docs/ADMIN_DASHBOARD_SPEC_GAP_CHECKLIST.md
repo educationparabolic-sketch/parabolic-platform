@@ -81,18 +81,18 @@ Priority guide:
 | TST-002 | Tests | Dedicated subpages for Create Test, Test Library, Template Analytics, Distribution Review, Template Settings | completed | P0 | Admin tests now mount dedicated `/admin/tests/*` subpages for create, library, analytics, distribution review, and settings, with route-specific workspaces and test sub-navigation instead of collapsing into one merged screen |
 | TST-003 | Tests | Create Test basic question-pool selection and manual selection | completed | P0 | Present |
 | TST-004 | Tests | Full filter set for question-pool selection | completed | P1 | Create Test question-pool selection now includes the full spec filter matrix: subject, chapter, difficulty, tags, question type, academic year, used/unused state, and custom text search, with matched-count feedback before choosing Y questions |
-| TST-005 | Tests | Explicit X matched -> choose Y flow | partial | P1 | Concept exists but not exactly as specified |
-| TST-006 | Tests | Statistical selection options: shuffle_slice and offset_limit | missing | P1 | Round robin and manual are stronger than other methods |
+| TST-005 | Tests | Explicit X matched -> choose Y flow | completed | P1 | Create Test now makes the X matched -> choose Y contract explicit with a Y target input capped by the matched pool, live X/Y/selected progress, checkbox limiting at Y, and save validation that requires exactly Y selected questions from the current matched pool |
+| TST-006 | Tests | Statistical selection options: shuffle_slice and offset_limit | completed | P1 | Create Test now supports statistical X -> Y selection: `shuffle_slice` deterministically shuffles the matched pool and takes the first Y, while `offset_limit` sorts by difficulty, subject, chapter, and id before taking offset N through N+Y with preview and apply controls |
 | TST-007 | Tests | Round robin selection | completed | P1 | Present |
 | TST-008 | Tests | Canonical ID generation and duplicate detection | completed | P0 | Implemented |
-| TST-009 | Tests | Full duplicate-template decision UX (reuse vs create duplicate) | partial | P1 | Detection exists; decision UX is incomplete |
-| TST-010 | Tests | Exam-type-driven marking/timing/section snapshots surfaced cleanly in UI | partial | P1 | Only partly exposed |
-| TST-011 | Tests | L2 phase preview and timing preview | partial | P1 | Snapshot concepts exist, preview depth is limited |
+| TST-009 | Tests | Full duplicate-template decision UX (reuse vs create duplicate) | completed | P1 | Duplicate detection now opens an explicit decision modal showing the existing template ID, status, question count, canonical ID, and pending duplicate details, with clear actions to reuse the existing template or continue and create a duplicate intentionally |
+| TST-010 | Tests | Exam-type-driven marking/timing/section snapshots surfaced cleanly in UI | completed | P1 | Create Test now surfaces an exam-type snapshot for marking scheme, default duration, section structure, and difficulty timing; changing exam type applies the default duration/timing profile, and `POST /admin/tests` now persists the derived `examSnapshot` with template records |
+| TST-011 | Tests | L2 phase preview and timing preview | completed | P1 | Create Test now includes an L2 phase preview using Easy x1, Medium x2.3, and Hard x4 load weights, showing total load plus recommended phase percentages/minutes alongside per-difficulty timing, and `POST /admin/tests` persists the derived `phaseConfigSnapshot` with template records |
 | TST-012 | Tests | Full timing profile table UI by difficulty | missing | P2 | Not fully surfaced |
 | TST-013 | Tests | Test library core status flow (draft/ready/assigned) | completed | P0 | Present |
 | TST-014 | Tests | Archived/deprecated library behavior | partial | P2 | Only partly surfaced |
-| TST-015 | Tests | Template analytics dedicated screen with L1/L2 metric depth | missing | P1 | Not implemented as a full dedicated screen |
-| TST-016 | Tests | Distribution Review dedicated structural screen | missing | P1 | Not implemented |
+| TST-015 | Tests | Template analytics dedicated screen with L1/L2 metric depth | completed | P1 | Dedicated `/admin/tests/analytics/:testId` now exposes L1 avg raw %, avg accuracy %, and run count plus L2 phase variance, risk shift, stability variance, discipline stress score, and controlled-vs-uncontrolled delta, with expanded per-run comparison columns and source-safe `templateAnalytics/{testId}` contract messaging |
+| TST-016 | Tests | Distribution Review dedicated structural screen | completed | P1 | `/admin/tests/distribution` now presents a dedicated structural review with difficulty percentages, chapter coverage, marks distribution, section balance, L2 estimated stress index, phase load preview, and structural risk prediction derived from frozen template/question snapshots |
 | TST-017 | Tests | HOT/WARM/COLD template lifecycle UI | partial | P2 | More architectural than surfaced |
 
 ## Assignments
@@ -104,10 +104,10 @@ Priority guide:
 | ASN-003 | Assignments | Create assignment flow with template, mode, recipients, time window, confirmation | completed | P0 | Present |
 | ASN-004 | Assignments | Template dropdown richness per spec | partial | P2 | Core fields present, not full metadata richness |
 | ASN-005 | Assignments | Layer-aware mode selection and snapshot locking | completed | P0 | Core behavior present |
-| ASN-006 | Assignments | Recipient filtering including L2 metric-based selection | partial | P1 | Present but not fully spec-complete |
-| ASN-007 | Assignments | Explicit immutable post-confirmation fields surfaced in UI | partial | P1 | Intent is present; full UX clarity is thinner |
+| ASN-006 | Assignments | Recipient filtering including L2 metric-based selection | completed | P1 | Create Assignment now distinguishes entire-batch, multi-batch, individual-student, and L2 metric-filter recipient modes; metric filters support risk state, discipline index range, avg raw % range, avg accuracy % range, and performance percentile range, resolve only active students into explicit `recipientStudentIds[]`, and preview the frozen recipient list before scheduling |
+| ASN-007 | Assignments | Explicit immutable post-confirmation fields surfaced in UI | completed | P1 | Create Assignment now surfaces the post-confirmation lock set for `testId`, `modeSnapshot`, `phaseConfigSnapshot`, `timingProfileSnapshot`, `canonicalId`, and `academicYear`; scheduled run records retain those snapshot fields and the Assignment List displays the locked snapshot beside each run |
 | ASN-008 | Assignments | Assignment list basic filters and L0 metrics | completed | P0 | Present |
-| ASN-009 | Assignments | Assignment list L1 metrics | missing | P1 | Not fully implemented |
+| ASN-009 | Assignments | Assignment list L1 metrics | completed | P1 | Assignment List now surfaces L1 runAnalytics-backed diagnostics with Avg Phase Adherence %, Easy Neglect %, Hard Bias %, and a derived Behavior Summary Badge per run, kept separate from the L0 outcome columns and L2 signal fields |
 | ASN-010 | Assignments | Assignment list L2 metrics | missing | P1 | Not fully implemented |
 | ASN-011 | Assignments | Live monitor L0 progress view | completed | P1 | Present |
 | ASN-012 | Assignments | Live monitor L1 behavioral flags | missing | P1 | Not fully implemented |

@@ -24,11 +24,41 @@ export interface AdminTestTimingProfile {
   hard: AdminTestTimingWindow;
 }
 
+export interface AdminTestExamSnapshot {
+  defaultDurationMinutes: number;
+  difficultyTimingMapping: AdminTestTimingProfile;
+  markingScheme: string;
+  sectionStructure: string[];
+}
+
+export interface AdminTestPhaseSplitRow {
+  difficulty: "easy" | "medium" | "hard";
+  focus: string;
+  load: number;
+  minutes: number;
+  phase: string;
+  percent: number;
+  questionCount: number;
+  weight: number;
+}
+
+export interface AdminTestPhaseConfigSnapshot {
+  difficultyWeights: {
+    easy: number;
+    medium: number;
+    hard: number;
+  };
+  phaseSplit: AdminTestPhaseSplitRow[];
+  totalLoad: number;
+}
+
 export interface AdminTestTemplateRecord {
   id: string;
   canonicalId: string;
   templateName: string;
   examType: string;
+  examSnapshot: AdminTestExamSnapshot;
+  phaseConfigSnapshot: AdminTestPhaseConfigSnapshot;
   selectionMethod: AdminTestSelectionMethod;
   totalDurationMinutes: number;
   selectedQuestionIds: string[];
@@ -49,6 +79,8 @@ export interface AdminTestsCreateRequest {
   canonicalId: string;
   difficultyDistribution: AdminTestDifficultyDistribution;
   examType: string;
+  examSnapshot: AdminTestExamSnapshot;
+  phaseConfigSnapshot: AdminTestPhaseConfigSnapshot;
   instituteId: string;
   ipAddress?: string;
   publish: boolean;

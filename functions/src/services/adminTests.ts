@@ -3,6 +3,9 @@ import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import {getFirestore} from "../utils/firebaseAdmin";
 import {
   AdminTestDifficultyDistribution,
+  AdminTestExamSnapshot,
+  AdminTestPhaseConfigSnapshot,
+  AdminTestPhaseSplitRow,
   AdminTestsCreateRequest,
   AdminTestsCreateResult,
   AdminTestsListRequest,
@@ -24,6 +27,11 @@ const SELECTION_METHODS = new Set<AdminTestSelectionMethod>([
   "round_robin",
   "shuffle_slice",
 ]);
+const DIFFICULTY_WEIGHTS = {
+  easy: 1,
+  hard: 4,
+  medium: 2.3,
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -231,6 +239,249 @@ function normalizeTimingProfile(value: unknown): AdminTestTimingProfile {
   };
 }
 
+function defaultExamSnapshot(examType: string): AdminTestExamSnapshot {
+  if (examType === "NEET") {
+    return {
+      defaultDurationMinutes: 200,
+      difficultyTimingMapping: {
+        easy: {maxSeconds: 55, minSeconds: 25},
+        hard: {maxSeconds: 210, minSeconds: 135},
+        medium: {maxSeconds: 135, minSeconds: 55},
+      },
+      markingScheme:
+        "Fixed NEET snapshot: +4 correct, -1 incorrect, 0 unanswered. " +
+        "Manual marks entry is locked.",
+      sectionStructure: ["Physics", "Chemistry", "Botany", "Zoology"],
+    };
+  }
+
+  return {
+    defaultDurationMinutes: 180,
+    difficultyTimingMapping: {
+      easy: {maxSeconds: 60, minSeconds: 30},
+      hard: {maxSeconds: 210, minSeconds: 150},
+      medium: {maxSeconds: 150, minSeconds: 60},
+    },
+    markingScheme:
+      "Fixed JEE snapshot: +4 correct, -1 incorrect, 0 unanswered. " +
+      "Manual marks entry is locked.",
+    sectionStructure: ["Physics", "Chemistry", "Mathematics"],
+  };
+}
+
+function normalizeStringList(value: unknown, field: string): string[] {
+  if (!Array.isArray(value)) {
+    throw new AdminTestsValidationError(
+      "VALIDATION_ERROR",
+      `Field "${field}" must be an array of strings.`,
+    );
+  }
+
+  const entries = value.map((entry) => normalizeRequiredString(entry, field));
+  if (entries.length === 0) {
+    throw new AdminTestsValidationError(
+      "VALIDATION_ERROR",
+      `Field "${field}" must include at least one entry.`,
+    );
+  }
+
+  return entries;
+}
+
+function normalizeExamSnapshot(
+  value: unknown,
+  examType: string,
+): AdminTestExamSnapshot {
+  const fallback = defaultExamSnapshot(examType);
+  if (!isRecord(value)) {
+    return fallback;
+  }
+
+  return {
+    defaultDurationMinutes: normalizePositiveInteger(
+      value.defaultDurationMinutes ?? fallback.defaultDurationMinutes,
+      "examSnapshot.defaultDurationMinutes",
+    ),
+    difficultyTimingMapping: normalizeTimingProfile(
+      value.difficultyTimingMapping ?? fallback.difficultyTimingMapping,
+    ),
+    markingScheme: normalizeRequiredString(
+      value.markingScheme ?? fallback.markingScheme,
+      "examSnapshot.markingScheme",
+    ),
+    sectionStructure: normalizeStringList(
+      value.sectionStructure ?? fallback.sectionStructure,
+      "examSnapshot.sectionStructure",
+    ),
+  };
+}
+
+function normalizeDifficultyLabel(
+  value: unknown,
+  field: string,
+): "easy" | "medium" | "hard" {
+  const normalized = normalizeRequiredString(value, field);
+  if (normalized !== "easy" && normalized !== "medium" && normalized !== "hard") {
+    throw new AdminTestsValidationError(
+      "VALIDATION_ERROR",
+      `Field "${field}" must be easy, medium, or hard.`,
+    );
+  }
+
+  return normalized;
+}
+
+function normalizeNonNegativeNumber(value: unknown, field: string): number {
+  const parsed = typeof value === "string" ? Number(value) : value;
+  if (typeof parsed !== "number" || !Number.isFinite(parsed) || parsed < 0) {
+    throw new AdminTestsValidationError(
+      "VALIDATION_ERROR",
+      `Field "${field}" must be a non-negative number.`,
+    );
+  }
+
+  return parsed;
+}
+
+function buildDefaultPhaseConfigSnapshot(
+  difficultyDistribution: AdminTestDifficultyDistribution,
+  totalDurationMinutes: number,
+): AdminTestPhaseConfigSnapshot {
+  const totalLoad =
+    difficultyDistribution.easy * DIFFICULTY_WEIGHTS.easy +
+    difficultyDistribution.medium * DIFFICULTY_WEIGHTS.medium +
+    difficultyDistribution.hard * DIFFICULTY_WEIGHTS.hard;
+  const labels = {
+    easy: {
+      focus: "Warm-up and confidence-building questions",
+      phase: "Foundation",
+    },
+    hard: {
+      focus: "High-load controlled/hard-mode readiness",
+      phase: "Challenge Control",
+    },
+    medium: {
+      focus: "Main concept discrimination and pacing signal",
+      phase: "Diagnostic Core",
+    },
+  };
+
+  const phaseSplit = (["easy", "medium", "hard"] as const)
+    .map((difficulty): AdminTestPhaseSplitRow => {
+      const questionCount = difficultyDistribution[difficulty];
+      const weight = DIFFICULTY_WEIGHTS[difficulty];
+      const load = questionCount * weight;
+      return {
+        difficulty,
+        focus: labels[difficulty].focus,
+        load: Number(load.toFixed(1)),
+        minutes: totalLoad > 0 ?
+          Math.round((load / totalLoad) * totalDurationMinutes) :
+          0,
+        percent: totalLoad > 0 ? Math.round((load / totalLoad) * 100) : 0,
+        phase: labels[difficulty].phase,
+        questionCount,
+        weight,
+      };
+    });
+
+  return {
+    difficultyWeights: {...DIFFICULTY_WEIGHTS},
+    phaseSplit,
+    totalLoad: Number(totalLoad.toFixed(1)),
+  };
+}
+
+function normalizePhaseSplitRow(
+  value: unknown,
+  index: number,
+): AdminTestPhaseSplitRow {
+  if (!isRecord(value)) {
+    throw new AdminTestsValidationError(
+      "VALIDATION_ERROR",
+      `Field "phaseConfigSnapshot.phaseSplit[${index}]" must be an object.`,
+    );
+  }
+
+  return {
+    difficulty: normalizeDifficultyLabel(
+      value.difficulty,
+      `phaseConfigSnapshot.phaseSplit[${index}].difficulty`,
+    ),
+    focus: normalizeRequiredString(
+      value.focus,
+      `phaseConfigSnapshot.phaseSplit[${index}].focus`,
+    ),
+    load: normalizeNonNegativeNumber(
+      value.load,
+      `phaseConfigSnapshot.phaseSplit[${index}].load`,
+    ),
+    minutes: normalizeNonNegativeInteger(
+      value.minutes,
+      `phaseConfigSnapshot.phaseSplit[${index}].minutes`,
+    ),
+    percent: normalizeNonNegativeInteger(
+      value.percent,
+      `phaseConfigSnapshot.phaseSplit[${index}].percent`,
+    ),
+    phase: normalizeRequiredString(
+      value.phase,
+      `phaseConfigSnapshot.phaseSplit[${index}].phase`,
+    ),
+    questionCount: normalizeNonNegativeInteger(
+      value.questionCount,
+      `phaseConfigSnapshot.phaseSplit[${index}].questionCount`,
+    ),
+    weight: normalizeNonNegativeNumber(
+      value.weight,
+      `phaseConfigSnapshot.phaseSplit[${index}].weight`,
+    ),
+  };
+}
+
+function normalizePhaseConfigSnapshot(
+  value: unknown,
+  difficultyDistribution: AdminTestDifficultyDistribution,
+  totalDurationMinutes: number,
+): AdminTestPhaseConfigSnapshot {
+  const fallback = buildDefaultPhaseConfigSnapshot(
+    difficultyDistribution,
+    totalDurationMinutes,
+  );
+  if (!isRecord(value)) {
+    return fallback;
+  }
+
+  const weights = isRecord(value.difficultyWeights) ?
+    value.difficultyWeights :
+    fallback.difficultyWeights;
+  const phaseSplit = Array.isArray(value.phaseSplit) ?
+    value.phaseSplit.map(normalizePhaseSplitRow) :
+    fallback.phaseSplit;
+
+  return {
+    difficultyWeights: {
+      easy: normalizeNonNegativeNumber(
+        weights.easy,
+        "phaseConfigSnapshot.difficultyWeights.easy",
+      ),
+      hard: normalizeNonNegativeNumber(
+        weights.hard,
+        "phaseConfigSnapshot.difficultyWeights.hard",
+      ),
+      medium: normalizeNonNegativeNumber(
+        weights.medium,
+        "phaseConfigSnapshot.difficultyWeights.medium",
+      ),
+    },
+    phaseSplit,
+    totalLoad: normalizeNonNegativeNumber(
+      value.totalLoad ?? fallback.totalLoad,
+      "phaseConfigSnapshot.totalLoad",
+    ),
+  };
+}
+
 function toTimingWindow(value: unknown): AdminTestTimingWindow {
   if (!isRecord(value)) {
     return {maxSeconds: 60, minSeconds: 30};
@@ -285,16 +536,31 @@ function toTemplateRecord(
       typeof entry === "string" && entry.trim().length > 0,
     ) :
     [];
+  const examType = toNonEmptyString(data.examType, "JEEMains");
+  const examSnapshot = isRecord(data.examSnapshot) ?
+    normalizeExamSnapshot(data.examSnapshot, examType) :
+    defaultExamSnapshot(examType);
+  const normalizedDifficultyDistribution = {
+    easy: Math.max(0, Math.round(toNumber(difficultyDistribution.easy))),
+    hard: Math.max(0, Math.round(toNumber(difficultyDistribution.hard))),
+    medium: Math.max(0, Math.round(toNumber(difficultyDistribution.medium))),
+  };
+  const totalDurationMinutes = Math.max(30, Math.round(
+    toNumber(data.totalDurationMinutes ?? data.durationMinutes, 180),
+  ));
+  const phaseConfigSnapshot = normalizePhaseConfigSnapshot(
+    data.phaseConfigSnapshot,
+    normalizedDifficultyDistribution,
+    totalDurationMinutes,
+  );
 
   return {
     canonicalId: toNonEmptyString(data.canonicalId, snapshot.id),
-    difficultyDistribution: {
-      easy: Math.max(0, Math.round(toNumber(difficultyDistribution.easy))),
-      hard: Math.max(0, Math.round(toNumber(difficultyDistribution.hard))),
-      medium: Math.max(0, Math.round(toNumber(difficultyDistribution.medium))),
-    },
-    examType: toNonEmptyString(data.examType, "General"),
+    difficultyDistribution: normalizedDifficultyDistribution,
+    examType,
+    examSnapshot,
     id: toNonEmptyString(data.testId, snapshot.id),
+    phaseConfigSnapshot,
     selectedQuestionIds: questionIds,
     selectionMethod: toSelectionMethod(data.selectionMethod),
     status: toStatus(data.status),
@@ -304,9 +570,7 @@ function toTemplateRecord(
       hard: toTimingWindow(timingProfile.hard),
       medium: toTimingWindow(timingProfile.medium),
     },
-    totalDurationMinutes: Math.max(30, Math.round(
-      toNumber(data.totalDurationMinutes ?? data.durationMinutes, 180),
-    )),
+    totalDurationMinutes,
     updatedAt: toIsoString(data.updatedAt ?? data.createdAt),
   };
 }
@@ -318,6 +582,29 @@ function toFirestoreTimingProfile(
     easy: {max: value.easy.maxSeconds, min: value.easy.minSeconds},
     hard: {max: value.hard.maxSeconds, min: value.hard.minSeconds},
     medium: {max: value.medium.maxSeconds, min: value.medium.minSeconds},
+  };
+}
+
+function toFirestoreExamSnapshot(
+  value: AdminTestExamSnapshot,
+): Record<string, unknown> {
+  return {
+    defaultDurationMinutes: value.defaultDurationMinutes,
+    difficultyTimingMapping: toFirestoreTimingProfile(
+      value.difficultyTimingMapping,
+    ),
+    markingScheme: value.markingScheme,
+    sectionStructure: value.sectionStructure,
+  };
+}
+
+function toFirestorePhaseConfigSnapshot(
+  value: AdminTestPhaseConfigSnapshot,
+): Record<string, unknown> {
+  return {
+    difficultyWeights: value.difficultyWeights,
+    phaseSplit: value.phaseSplit.map((phase) => ({...phase})),
+    totalLoad: value.totalLoad,
   };
 }
 
@@ -363,12 +650,24 @@ export class AdminTestsService {
       );
     }
 
+    const examType = normalizeRequiredString(body.examType, "examType");
+    const totalDurationMinutes = normalizePositiveInteger(
+      body.totalDurationMinutes,
+      "totalDurationMinutes",
+    );
+
     return {
       actorId: normalizeRequiredString(input.actorId, "actorId"),
       actorRole: normalizeRequiredString(input.actorRole, "actorRole"),
       canonicalId: normalizeRequiredString(body.canonicalId, "canonicalId"),
       difficultyDistribution,
-      examType: normalizeRequiredString(body.examType, "examType"),
+      examType,
+      examSnapshot: normalizeExamSnapshot(body.examSnapshot, examType),
+      phaseConfigSnapshot: normalizePhaseConfigSnapshot(
+        body.phaseConfigSnapshot,
+        difficultyDistribution,
+        totalDurationMinutes,
+      ),
       instituteId: normalizeRequiredString(input.instituteId, "instituteId"),
       ipAddress: input.ipAddress,
       publish: body.publish === true,
@@ -376,10 +675,7 @@ export class AdminTestsService {
       selectionMethod: normalizeSelectionMethod(body.selectionMethod),
       templateName: normalizeRequiredString(body.templateName, "templateName"),
       timingProfile: normalizeTimingProfile(body.timingProfile),
-      totalDurationMinutes: normalizePositiveInteger(
-        body.totalDurationMinutes,
-        "totalDurationMinutes",
-      ),
+      totalDurationMinutes,
       userAgent: normalizeOptionalString(input.userAgent),
     };
   }
@@ -418,7 +714,11 @@ export class AdminTestsService {
       createdFromIp: request.ipAddress,
       createdFromUserAgent: request.userAgent,
       difficultyDistribution: request.difficultyDistribution,
+      examSnapshot: toFirestoreExamSnapshot(request.examSnapshot),
       examType: request.examType,
+      phaseConfigSnapshot: toFirestorePhaseConfigSnapshot(
+        request.phaseConfigSnapshot,
+      ),
       questionIds: request.questionIds,
       selectionMethod: request.selectionMethod,
       status,
