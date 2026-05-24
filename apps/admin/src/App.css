@@ -2597,29 +2597,6 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-.admin-governance-subnav {
-  margin-top: 16px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.admin-governance-subnav-link {
-  border-radius: 999px;
-  border: 1px solid rgba(16, 42, 81, 0.16);
-  background: rgba(255, 255, 255, 0.82);
-  color: #214771;
-  padding: 8px 12px;
-  text-decoration: none;
-  font-weight: 600;
-}
-
-.admin-governance-subnav-link-active {
-  background: linear-gradient(135deg, rgba(20, 73, 123, 0.12), rgba(74, 132, 183, 0.2));
-  border-color: rgba(20, 73, 123, 0.34);
-  color: #143764;
-}
-
 .admin-governance-route-banner {
   margin-top: 16px;
   display: grid;
@@ -2678,6 +2655,120 @@
 
 .admin-governance-comparison {
   margin-top: 18px;
+}
+
+.admin-governance-stability-overview {
+  margin-top: 18px;
+  border: 1px solid rgba(16, 42, 81, 0.14);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(247, 250, 255, 0.98), rgba(236, 246, 241, 0.9));
+  padding: 18px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 18px;
+  align-items: center;
+}
+
+.admin-governance-stability-overview h3,
+.admin-governance-stability-overview p {
+  margin: 0;
+}
+
+.admin-governance-stability-overview h3 {
+  color: #143764;
+  font-size: 2.5rem;
+  line-height: 1;
+}
+
+.admin-governance-stability-overview p {
+  color: #365a84;
+}
+
+.admin-governance-stability-overview small {
+  color: #5f7697;
+}
+
+.admin-governance-gauge {
+  position: relative;
+  width: 180px;
+  height: 100px;
+  justify-self: center;
+}
+
+.admin-governance-gauge-arc {
+  position: absolute;
+  inset: 0;
+  border-radius: 180px 180px 0 0;
+  background: conic-gradient(from 270deg at 50% 100%, #9a4d58 0deg 108deg, #c69c43 108deg 135deg, #3f8668 135deg 180deg, transparent 180deg 360deg);
+}
+
+.admin-governance-gauge-arc::after {
+  content: "";
+  position: absolute;
+  left: 20px;
+  right: 20px;
+  bottom: 0;
+  height: 80px;
+  border-radius: 140px 140px 0 0;
+  background: #f7faff;
+}
+
+.admin-governance-gauge-needle {
+  position: absolute;
+  left: calc(50% - 2px);
+  bottom: 0;
+  width: 4px;
+  height: 76px;
+  border-radius: 999px;
+  background: #173c68;
+  transform-origin: 50% 100%;
+  transition: transform 160ms ease;
+  z-index: 1;
+}
+
+.admin-governance-gauge-value {
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  transform: translateX(-50%);
+  z-index: 2;
+  color: #143764;
+  font-weight: 800;
+}
+
+.admin-governance-threshold-grid {
+  margin-top: 14px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.admin-governance-threshold-card {
+  border: 1px solid rgba(16, 42, 81, 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  padding: 12px 14px;
+  display: grid;
+  gap: 4px;
+}
+
+.admin-governance-threshold-card p,
+.admin-governance-threshold-card h4,
+.admin-governance-threshold-card small {
+  margin: 0;
+}
+
+.admin-governance-threshold-card p {
+  color: #486486;
+  font-weight: 700;
+}
+
+.admin-governance-threshold-card h4 {
+  color: #173c68;
+}
+
+.admin-governance-threshold-card small {
+  color: #5f7697;
 }
 
 .admin-governance-comparison h3 {
@@ -2745,6 +2836,56 @@
 .admin-governance-table-section h3 {
   margin: 0 0 10px;
   color: #143764;
+}
+
+.admin-governance-section-copy {
+  margin: 0 0 12px;
+  color: #4f688a;
+}
+
+.admin-governance-difficulty-heatmap {
+  border: 1px solid rgba(16, 42, 81, 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.admin-governance-difficulty-heatmap h4 {
+  margin: 0;
+  color: #143764;
+}
+
+.admin-governance-heatmap-cell {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.admin-governance-heatmap-cell span,
+.admin-governance-heatmap-cell strong,
+.admin-governance-heatmap-cell small {
+  margin: 0;
+}
+
+.admin-governance-heatmap-cell span {
+  color: #486486;
+  font-weight: 700;
+}
+
+.admin-governance-heatmap-cell strong {
+  color: #173c68;
+}
+
+.admin-governance-heatmap-cell div {
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #75996f, #2f6f69);
+}
+
+.admin-governance-heatmap-cell small {
+  color: #5f7697;
 }
 
 .admin-governance-month-cell {
@@ -3197,8 +3338,13 @@
   }
 
   .admin-governance-kpi-grid,
-  .admin-governance-comparison-grid {
+  .admin-governance-comparison-grid,
+  .admin-governance-threshold-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-governance-stability-overview {
+    grid-template-columns: 1fr;
   }
 
   .admin-governance-route-banner {
@@ -3286,12 +3432,9 @@
   }
 
   .admin-governance-kpi-grid,
-  .admin-governance-comparison-grid {
+  .admin-governance-comparison-grid,
+  .admin-governance-threshold-grid {
     grid-template-columns: 1fr;
-  }
-
-  .admin-governance-subnav {
-    flex-direction: column;
   }
 
   .admin-intervention-kpi-grid {

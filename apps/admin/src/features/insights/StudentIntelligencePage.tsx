@@ -240,7 +240,7 @@ function StudentIntelligencePage() {
   );
 
   const studentPacingTrend = useMemo(
-    () => student?.runSummaries.map((run) => ({ label: formatIsoDate(run.completedOn), value: run.phaseAdherencePercent })).reverse() ?? [],
+    () => student?.runSummaries.map((run) => ({ label: formatIsoDate(run.completedOn), value: 100 - run.phaseAdherencePercent })).reverse() ?? [],
     [student],
   );
 
@@ -291,6 +291,11 @@ function StudentIntelligencePage() {
         id: "guessRate",
         header: "Guess Rate",
         render: (run) => formatPercent(run.guessRatePercent),
+      },
+      {
+        id: "minTimeViolation",
+        header: "MinTime Violation",
+        render: (run) => formatPercent(run.minTimeViolationPercent),
       },
     ],
     [],
@@ -369,6 +374,7 @@ function StudentIntelligencePage() {
   }
 
   const averageOverstayPercent = average(student.runSummaries.map((run) => run.overstayPercent));
+  const averageMinTimeViolationPercent = average(student.runSummaries.map((run) => run.minTimeViolationPercent));
   const averageControlledDelta = average(student.runSummaries.map((run) => run.controlledModeDelta));
 
   return (
@@ -482,7 +488,7 @@ function StudentIntelligencePage() {
               />
               <UiChartContainer
                 title="Pacing Deviation Graph"
-                subtitle="Phase compliance trend across the rolling intelligence window"
+                subtitle="Deviation from expected phase compliance across the rolling intelligence window"
                 data={studentPacingTrend}
               />
             </div>
@@ -499,6 +505,11 @@ function StudentIntelligencePage() {
                 <p>Overstay Frequency</p>
                 <h3>{formatPercent(student.overstayPercent)}</h3>
                 <small>Execution overstay from summary-safe run history</small>
+              </article>
+              <article className="admin-analytics-kpi-card">
+                <p>MinTime Violation</p>
+                <h3>{formatPercent(averageMinTimeViolationPercent)}</h3>
+                <small>Rolling early-exit pressure from studentRollingWindow run summaries</small>
               </article>
               <article className="admin-analytics-kpi-card">
                 <p>Controlled Mode Delta</p>

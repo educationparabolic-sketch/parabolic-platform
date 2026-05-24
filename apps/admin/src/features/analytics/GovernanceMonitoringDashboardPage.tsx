@@ -11,9 +11,11 @@ import {
   formatPercent,
   shouldUseLiveApi,
   type GovernanceDashboardDataset,
+  type GovernanceBatchRiskSummary,
   type GovernanceRequestContext,
   type GovernanceRiskCluster,
   type GovernanceSnapshotRecord,
+  type GovernanceTemplateStabilityComparison,
 } from "./governanceDataset";
 
 type GovernanceSubpage =
@@ -53,6 +55,32 @@ interface GovernanceReportRow {
   stabilityIndex: number;
   executionIntegrity: number;
   overrideFrequency: number;
+}
+
+interface StabilityThreshold {
+  label: string;
+  range: string;
+  helper: string;
+}
+
+interface DifficultyHeatmapCell {
+  difficulty: string;
+  value: number;
+  helper: string;
+}
+
+interface ControlledModeRow {
+  mode: string;
+  rawPercent: number;
+  accuracyPercent: number;
+  riskReductionPercent: number;
+}
+
+interface OverrideImpactRow {
+  scenario: string;
+  rawPercent: number;
+  accuracyShiftPercent: number;
+  riskEscalationDelta: number;
 }
 
 const FALLBACK_GOVERNANCE_INSTITUTE_ID = "demo-institute";
@@ -147,13 +175,25 @@ function formatTimestamp(value: string): string {
   return new Date(parsed).toISOString().replace("T", " ").slice(0, 16);
 }
 
+function stabilityBand(value: number): string {
+  if (value > 75) {
+    return "Stable";
+  }
+
+  if (value >= 60) {
+    return "Watch zone";
+  }
+
+  return "Unstable";
+}
+
 function resolveGovernanceSubpage(pathname: string): GovernanceSubpage {
   const matched = GOVERNANCE_SECTIONS.find((section) => pathname.startsWith(section.to));
   return matched?.id ?? "stability";
 }
 
-function toTrend(dataset: GovernanceDashboardDataset, selector: (snapshot: GovernanceSnapshotRecord) => number): UiChartPoint[] {
-  return dataset.snapshots.map((snapshot) => ({
+function toTrend(snapshots: GovernanceSnapshotRecord[], selector: (snapshot: GovernanceSnapshotRecord) => number): UiChartPoint[] {
+  return snapshots.map((snapshot) => ({
     label: monthLabel(snapshot.month),
     value: Math.round(selector(snapshot)),
   }));
@@ -174,6 +214,21 @@ function buildRiskHistory(
     label: monthLabel(snapshot.month),
     value: Math.round(snapshot.riskDistribution[cluster] ?? 0),
   }));
+}
+
+function GovernanceWorkspaceNav() {
+  return (
+    <div className="admin-analytics-inline-link-row">
+      <NavLink className="admin-question-bank-landing-link" to="/admin/governance">
+        Governance Landing
+      </NavLink>
+      {GOVERNANCE_SECTIONS.map((section) => (
+        <NavLink key={section.id} className="admin-primary-link" to={section.to}>
+          {section.label}
+        </NavLink>
+      ))}
+    </div>
+  );
 }
 
 function decodeIdTokenClaims(idToken: string | null): Record<string, unknown> | null {
@@ -313,18 +368,45 @@ function GovernanceMonitoringDashboardPage() {
     ];
   }, [latestSnapshot, previousSnapshot]);
 
-  const stabilityTrend = useMemo(() => toTrend({ snapshots: orderedSnapshots }, (snapshot) => snapshot.stabilityIndex), [orderedSnapshots]);
+  const stabilityTrend = useMemo(() => toTrend(orderedSnapshots, (snapshot) => snapshot.stabilityIndex), [orderedSnapshots]);
+  const twelveMonthStabilityTrend = useMemo(
+    () => toTrend(orderedSnapshots.slice(-12), (snapshot) => snapshot.stabilityIndex),
+    [orderedSnapshots],
+  );
+  const rawMarksDeviationTrend = useMemo(
+    () => toTrend(orderedSnapshots.slice(-12), (snapshot) => snapshot.rawMarksStdDeviation),
+    [orderedSnapshots],
+  );
+  const accuracyDeviationTrend = useMemo(
+    () => toTrend(orderedSnapshots.slice(-12), (snapshot) => snapshot.accuracyStdDeviation),
+    [orderedSnapshots],
+  );
+  const batchSpreadTrend = useMemo(
+    () => toTrend(orderedSnapshots.slice(-12), (snapshot) => snapshot.batchToBatchSpreadPercent),
+    [orderedSnapshots],
+  );
   const phaseTrend = useMemo(
-    () => toTrend({ snapshots: orderedSnapshots }, (snapshot) => snapshot.phaseCompliancePercent),
+    () => toTrend(orderedSnapshots, (snapshot) => snapshot.phaseCompliancePercent),
     [orderedSnapshots],
   );
   const overrideTrend = useMemo(
-    () => toTrend({ snapshots: orderedSnapshots }, (snapshot) => snapshot.overrideFrequency),
+    () => toTrend(orderedSnapshots, (snapshot) => snapshot.overrideFrequency),
     [orderedSnapshots],
   );
   const integrityTrend = useMemo(
-    () => toTrend({ snapshots: orderedSnapshots }, (snapshot) => snapshot.executionIntegrityScore),
+    () => toTrend(orderedSnapshots, (snapshot) => snapshot.executionIntegrityScore),
     [orderedSnapshots],
+  );
+  const disciplineRollingTrend = useMemo(
+    () => toTrend(orderedSnapshots, (snapshot) => snapshot.disciplineIndexRolling30Day),
+    [orderedSnapshots],
+  );
+  const riskExposureTrend = useMemo(
+    () => GOVERNANCE_RISK_CLUSTERS.map((cluster) => ({
+      label: clusterLabel(cluster),
+      value: Math.round(latestSnapshot?.riskDistribution[cluster] ?? 0),
+    })),
+    [latestSnapshot],
   );
   const latestRiskDistribution = useMemo<UiChartPoint[]>(
     () => buildRiskDistribution(latestSnapshot),
@@ -333,6 +415,47 @@ function GovernanceMonitoringDashboardPage() {
   const stableRiskTrend = useMemo(
     () => buildRiskHistory(orderedSnapshots, "stable"),
     [orderedSnapshots],
+  );
+
+  const stabilityThresholds = useMemo<StabilityThreshold[]>(
+    () => [
+      {
+        label: "Stable",
+        range: "Above 75",
+        helper: "Low variance across raw score, accuracy, phase adherence, discipline, and risk fluctuation.",
+      },
+      {
+        label: "Watch zone",
+        range: "60-75",
+        helper: "Moderate volatility; monitor cohort consistency before structural escalation.",
+      },
+      {
+        label: "Unstable",
+        range: "Below 60",
+        helper: "High variance signal; review training, template, and execution consistency.",
+      },
+    ],
+    [],
+  );
+  const difficultyHeatmap = useMemo<DifficultyHeatmapCell[]>(
+    () => [
+      {
+        difficulty: "Easy",
+        value: Math.round(latestSnapshot?.stabilityByDifficulty.easy ?? 0),
+        helper: "Stability vs easy-question load",
+      },
+      {
+        difficulty: "Medium",
+        value: Math.round(latestSnapshot?.stabilityByDifficulty.medium ?? 0),
+        helper: "Stability vs medium-question load",
+      },
+      {
+        difficulty: "Hard",
+        value: Math.round(latestSnapshot?.stabilityByDifficulty.hard ?? 0),
+        helper: "Stability vs hard-question load",
+      },
+    ],
+    [latestSnapshot],
   );
   const driftRiskTrend = useMemo(
     () => buildRiskHistory(orderedSnapshots, "driftProne"),
@@ -419,6 +542,209 @@ function GovernanceMonitoringDashboardPage() {
         id: "overrideFrequency",
         header: "Override Share",
         render: (row) => `${row.overrideFrequency}%`,
+      },
+    ],
+    [],
+  );
+
+  const templateStabilityColumns = useMemo<UiTableColumn<GovernanceTemplateStabilityComparison>[]>(
+    () => [
+      {
+        id: "template",
+        header: "Template",
+        render: (row) => (
+          <div className="admin-governance-month-cell">
+            <strong>{row.templateName}</strong>
+            <small>{row.templateId} · {row.runCount} runs</small>
+          </div>
+        ),
+      },
+      {
+        id: "rawDelta",
+        header: "Raw Delta",
+        render: (row) => formatPercent(row.rawDeltaPercent),
+      },
+      {
+        id: "accuracyDelta",
+        header: "Accuracy Delta",
+        render: (row) => formatPercent(row.accuracyDeltaPercent),
+      },
+      {
+        id: "riskShift",
+        header: "Risk Shift",
+        render: (row) => formatPercent(row.riskShiftAcrossBatchesPercent),
+      },
+      {
+        id: "stabilityPair",
+        header: "Template vs Batch",
+        render: (row) => `${Math.round(row.templateStabilityIndex)} / ${Math.round(row.latestBatchStabilityIndex)}`,
+      },
+      {
+        id: "interpretation",
+        header: "Interpretation",
+        render: (row) => row.interpretation,
+      },
+    ],
+    [],
+  );
+
+  const controlledModeRows = useMemo<ControlledModeRow[]>(
+    () => [
+      {
+        mode: "Controlled Mode Lift",
+        rawPercent: latestSnapshot?.controlledModeRawImprovementPercent ?? 0,
+        accuracyPercent: latestSnapshot?.controlledModeAccuracyImprovementPercent ?? 0,
+        riskReductionPercent: latestSnapshot?.riskReductionPercent ?? 0,
+      },
+      {
+        mode: "Operational Baseline",
+        rawPercent: 0,
+        accuracyPercent: 0,
+        riskReductionPercent: 0,
+      },
+    ],
+    [latestSnapshot],
+  );
+
+  const controlledModeColumns = useMemo<UiTableColumn<ControlledModeRow>[]>(
+    () => [
+      {
+        id: "mode",
+        header: "Mode",
+        render: (row) => row.mode,
+      },
+      {
+        id: "raw",
+        header: "Raw %",
+        render: (row) => formatPercent(row.rawPercent),
+      },
+      {
+        id: "accuracy",
+        header: "Accuracy %",
+        render: (row) => formatPercent(row.accuracyPercent),
+      },
+      {
+        id: "riskReduction",
+        header: "Risk Reduction",
+        render: (row) => formatPercent(row.riskReductionPercent),
+      },
+    ],
+    [],
+  );
+
+  const overrideFrequencyBreakdown = useMemo<UiChartPoint[]>(
+    () => [
+      {
+        label: "Per Run",
+        value: Math.round(latestSnapshot?.overrideFrequencyPerRun ?? 0),
+      },
+      {
+        label: "Per Batch",
+        value: Math.round(latestSnapshot?.overrideFrequencyPerBatch ?? 0),
+      },
+      {
+        label: "Per Teacher",
+        value: Math.round(latestSnapshot?.overrideFrequencyPerTeacherAggregated ?? 0),
+      },
+    ],
+    [latestSnapshot],
+  );
+
+  const overrideImpactRows = useMemo<OverrideImpactRow[]>(
+    () => [
+      {
+        scenario: "Override Used",
+        rawPercent: latestSnapshot?.overrideRawMarksWithOverridePercent ?? 0,
+        accuracyShiftPercent: latestSnapshot?.overrideAccuracyShiftPercent ?? 0,
+        riskEscalationDelta: latestSnapshot?.overrideRiskEscalationDelta ?? 0,
+      },
+      {
+        scenario: "No Override",
+        rawPercent: latestSnapshot?.overrideRawMarksWithoutOverridePercent ?? 0,
+        accuracyShiftPercent: 0,
+        riskEscalationDelta: 0,
+      },
+    ],
+    [latestSnapshot],
+  );
+
+  const overrideImpactColumns = useMemo<UiTableColumn<OverrideImpactRow>[]>(
+    () => [
+      {
+        id: "scenario",
+        header: "Scenario",
+        render: (row) => row.scenario,
+      },
+      {
+        id: "raw",
+        header: "Raw Marks",
+        render: (row) => formatPercent(row.rawPercent),
+      },
+      {
+        id: "accuracyShift",
+        header: "Accuracy Shift",
+        render: (row) => `${row.accuracyShiftPercent > 0 ? "+" : ""}${Math.round(row.accuracyShiftPercent)} pts`,
+      },
+      {
+        id: "riskEscalation",
+        header: "Risk Escalation",
+        render: (row) => `${Math.round(row.riskEscalationDelta)} pts`,
+      },
+    ],
+    [],
+  );
+
+  const batchRiskColumns = useMemo<UiTableColumn<GovernanceBatchRiskSummary>[]>(
+    () => [
+      {
+        id: "batch",
+        header: "Batch",
+        render: (row) => (
+          <div className="admin-governance-month-cell">
+            <strong>{row.batchName}</strong>
+            <small>{row.batchId}</small>
+          </div>
+        ),
+      },
+      {
+        id: "stable",
+        header: "Stable",
+        render: (row) => formatPercent(row.riskDistribution.stable),
+      },
+      {
+        id: "drift",
+        header: "Drift",
+        render: (row) => formatPercent(row.riskDistribution.driftProne),
+      },
+      {
+        id: "impulsive",
+        header: "Impulsive",
+        render: (row) => formatPercent(row.riskDistribution.impulsive),
+      },
+      {
+        id: "overextended",
+        header: "Overextended",
+        render: (row) => formatPercent(row.riskDistribution.overextended),
+      },
+      {
+        id: "discipline",
+        header: "Avg Discipline",
+        render: (row) => formatPercent(row.avgDisciplineIndex),
+      },
+      {
+        id: "phase",
+        header: "Avg Phase",
+        render: (row) => formatPercent(row.avgPhaseAdherencePercent),
+      },
+      {
+        id: "rawStability",
+        header: "Raw Stability",
+        render: (row) => formatPercent(row.rawStabilityScorePercent),
+      },
+      {
+        id: "accuracyStability",
+        header: "Accuracy Stability",
+        render: (row) => formatPercent(row.accuracyStabilityScorePercent),
       },
     ],
     [],
@@ -616,14 +942,42 @@ function GovernanceMonitoringDashboardPage() {
 
   function renderSectionContent() {
     if (currentSubpage === "stability") {
+      const stabilityIndex = Math.round(latestSnapshot?.stabilityIndex ?? 0);
+      const gaugeRotation = Math.round((Math.max(0, Math.min(100, stabilityIndex)) / 100) * 180 - 90);
+
       return (
         <>
+          <section className="admin-governance-stability-overview" aria-labelledby="admin-governance-stability-overview-title">
+            <div>
+              <p className="admin-content-eyebrow">Stability Index</p>
+              <h3 id="admin-governance-stability-overview-title">{stabilityIndex}</h3>
+              <p>
+                Current band: <strong>{stabilityBand(stabilityIndex)}</strong>. Composite score derived from normalized
+                variance of raw marks, accuracy, phase adherence, discipline index, and risk-state fluctuation.
+              </p>
+              <small>Source: governanceSnapshots/{latestSnapshot?.documentId ?? "YYYY_MM"}</small>
+            </div>
+            <div className="admin-governance-gauge" aria-label={`Stability index gauge ${stabilityIndex}`}>
+              <div className="admin-governance-gauge-arc" />
+              <div className="admin-governance-gauge-needle" style={{ transform: `rotate(${gaugeRotation}deg)` }} />
+              <div className="admin-governance-gauge-value">{stabilityIndex}</div>
+            </div>
+          </section>
+          <section className="admin-governance-threshold-grid" aria-label="Institutional stability thresholds">
+            {stabilityThresholds.map((threshold) => (
+              <article key={threshold.label} className="admin-governance-threshold-card">
+                <p>{threshold.label}</p>
+                <h4>{threshold.range}</h4>
+                <small>{threshold.helper}</small>
+              </article>
+            ))}
+          </section>
           {renderMonthComparison()}
           <div className="admin-governance-chart-grid">
             <UiChartContainer
-              title="Stability Index Trend"
-              subtitle="Institutional stability trajectory from recent monthly snapshots"
-              data={stabilityTrend}
+              title="12-Month Stability Trend"
+              subtitle="Institutional stability trajectory from the latest 12 immutable monthly snapshots"
+              data={twelveMonthStabilityTrend}
               variant="line"
               maxValue={100}
             />
@@ -634,6 +988,61 @@ function GovernanceMonitoringDashboardPage() {
               variant="pie"
             />
           </div>
+          <section className="admin-governance-table-section" aria-labelledby="admin-governance-variability-title">
+            <h3 id="admin-governance-variability-title">Performance Variability</h3>
+            <p className="admin-governance-section-copy">
+              Variability is read from governance snapshot summaries only: raw marks standard deviation, accuracy
+              standard deviation, batch-to-batch spread, and stability by difficulty level.
+            </p>
+            <div className="admin-governance-chart-grid">
+              <UiChartContainer
+                title="Raw Marks Std Deviation"
+                subtitle="12-month volatility timeline for raw score percentage"
+                data={rawMarksDeviationTrend}
+                variant="line"
+                maxValue={40}
+              />
+              <UiChartContainer
+                title="Accuracy Std Deviation"
+                subtitle="12-month volatility timeline for accuracy percentage"
+                data={accuracyDeviationTrend}
+                variant="line"
+                maxValue={40}
+              />
+              <UiChartContainer
+                title="Batch-to-Batch Spread"
+                subtitle="Institutional cohort spread comparison across snapshots"
+                data={batchSpreadTrend}
+                variant="bar"
+                maxValue={40}
+              />
+              <div className="admin-governance-difficulty-heatmap">
+                <h4>Stability vs Difficulty Level</h4>
+                {difficultyHeatmap.map((cell) => (
+                  <article key={cell.difficulty} className="admin-governance-heatmap-cell">
+                    <span>{cell.difficulty}</span>
+                    <strong>{formatPercent(cell.value)}</strong>
+                    <div style={{ width: `${Math.max(8, Math.min(100, cell.value))}%` }} />
+                    <small>{cell.helper}</small>
+                  </article>
+                ))}
+              </div>
+            </div>
+          </section>
+          <section className="admin-governance-table-section" aria-labelledby="admin-governance-template-stability-title">
+            <h3 id="admin-governance-template-stability-title">Template Stability Comparison</h3>
+            <p className="admin-governance-section-copy">
+              Reused templates are compared from precomputed template stability summaries: raw delta across runs,
+              accuracy delta, risk shift across batches, and the interpretation pair for template-vs-batch stability.
+            </p>
+            <UiTable
+              caption="Template stability comparison from summary snapshots"
+              columns={templateStabilityColumns}
+              rows={dataset.templateStabilityComparisons}
+              rowKey={(row) => row.templateId}
+              emptyStateText="No reused-template stability comparisons are currently available."
+            />
+          </section>
           <section className="admin-governance-table-section" aria-labelledby="admin-governance-table-title">
             <h3 id="admin-governance-table-title">Governance Snapshot Timeline</h3>
             <UiTable
@@ -652,11 +1061,48 @@ function GovernanceMonitoringDashboardPage() {
       return (
         <>
           {renderMonthComparison()}
+          <section className="admin-governance-table-section" aria-labelledby="admin-governance-controlled-mode-title">
+            <h3 id="admin-governance-controlled-mode-title">Controlled Mode Effectiveness</h3>
+            <p className="admin-governance-section-copy">
+              Controlled Mode comparison is read from governance summaries: average raw improvement, average accuracy
+              improvement, and risk reduction. No student-level session records are scanned here.
+            </p>
+            <UiTable
+              caption="Controlled Mode effectiveness comparison"
+              columns={controlledModeColumns}
+              rows={controlledModeRows}
+              rowKey={(row) => row.mode}
+            />
+          </section>
+          <section className="admin-governance-threshold-grid" aria-label="Discipline index trajectory">
+            <article className="admin-governance-threshold-card">
+              <p>Rolling 30-Day</p>
+              <h4>{formatPercent(latestSnapshot?.disciplineIndexRolling30Day ?? 0)}</h4>
+              <small>Institution-wide average discipline index over the latest rolling window.</small>
+            </article>
+            <article className="admin-governance-threshold-card">
+              <p>Year-to-Date</p>
+              <h4>{formatPercent(latestSnapshot?.disciplineIndexYearToDate ?? 0)}</h4>
+              <small>Current-year structural discipline baseline.</small>
+            </article>
+            <article className="admin-governance-threshold-card">
+              <p>YoY Change</p>
+              <h4>{Math.round(latestSnapshot?.disciplineIndexYearOverYear ?? 0)} pts</h4>
+              <small>Comparison against the previous governance year.</small>
+            </article>
+          </section>
           <div className="admin-governance-chart-grid">
             <UiChartContainer
               title="Phase Compliance Trend"
               subtitle="Monthly phase discipline trajectory"
               data={phaseTrend}
+              variant="line"
+              maxValue={100}
+            />
+            <UiChartContainer
+              title="Discipline Index Trajectory"
+              subtitle="Rolling 30-day institution-wide average discipline index"
+              data={disciplineRollingTrend}
               variant="line"
               maxValue={100}
             />
@@ -668,15 +1114,9 @@ function GovernanceMonitoringDashboardPage() {
               maxValue={100}
             />
             <UiChartContainer
-              title="Stable Risk Share"
-              subtitle="Risk-cluster fingerprint for the latest snapshot"
-              data={latestRiskDistribution}
-              variant="pie"
-            />
-            <UiChartContainer
-              title="Drift-Prone Share Trend"
-              subtitle="How often structure drift shows up in monthly governance snapshots"
-              data={driftRiskTrend}
+              title="Structural Risk Exposure"
+              subtitle="Latest institutional behavioral fingerprint by risk state"
+              data={riskExposureTrend}
               variant="bar"
               maxValue={100}
             />
@@ -704,7 +1144,39 @@ function GovernanceMonitoringDashboardPage() {
               variant="bar"
               maxValue={100}
             />
+            <UiChartContainer
+              title="Override Frequency Breakdown"
+              subtitle="Per run, per batch, and per-teacher aggregated share; no teacher names shown"
+              data={overrideFrequencyBreakdown}
+              variant="bar"
+              maxValue={100}
+            />
           </div>
+          <section className="admin-governance-table-section" aria-labelledby="admin-governance-override-impact-title">
+            <h3 id="admin-governance-override-impact-title">Override Impact Analysis</h3>
+            <p className="admin-governance-section-copy">
+              Compare raw marks, accuracy shift, and risk escalation when overrides are used versus the no-override
+              baseline. These are aggregate governance summaries from overrideAuditSummary records.
+            </p>
+            <UiTable
+              caption="Override impact comparison"
+              columns={overrideImpactColumns}
+              rows={overrideImpactRows}
+              rowKey={(row) => row.scenario}
+            />
+          </section>
+          <section className="admin-governance-table-section" aria-labelledby="admin-governance-repeated-override-title">
+            <h3 id="admin-governance-repeated-override-title">Repeated Override Pattern</h3>
+            <article className="admin-governance-report-copy">
+              <p>
+                {latestSnapshot?.repeatedOverridePatternLabel ?? "Controlled Mode bypassed"}{" "}
+                {Math.round(latestSnapshot?.repeatedOverridePatternCount ?? 0)} times this month.
+              </p>
+              <small>
+                Shown as a structural pattern only. No teacher names are surfaced in the main governance dashboard.
+              </small>
+            </article>
+          </section>
           <section className="admin-governance-table-section" aria-labelledby="admin-governance-audit-title">
             <h3 id="admin-governance-audit-title">Override Audit Timeline</h3>
             <UiTable
@@ -746,42 +1218,15 @@ function GovernanceMonitoringDashboardPage() {
           </div>
           <section className="admin-governance-table-section" aria-labelledby="admin-governance-batch-risk-title">
             <h3 id="admin-governance-batch-risk-title">Batch Risk Snapshot Matrix</h3>
+            <p className="admin-governance-section-copy">
+              Batch risk is read from governance snapshot summaries. The matrix compares risk-state intensity and
+              discipline metrics across cohorts to identify training inconsistency.
+            </p>
             <UiTable
-              caption="Institutional risk mix by month from governance snapshots"
-              columns={[
-                {
-                  id: "month",
-                  header: "Month",
-                  render: (snapshot: GovernanceSnapshotRecord) => monthLabel(snapshot.month),
-                },
-                {
-                  id: "stable",
-                  header: "Stable",
-                  render: (snapshot: GovernanceSnapshotRecord) => formatPercent(snapshot.riskDistribution.stable),
-                },
-                {
-                  id: "drift",
-                  header: "Drift Prone",
-                  render: (snapshot: GovernanceSnapshotRecord) => formatPercent(snapshot.riskDistribution.driftProne),
-                },
-                {
-                  id: "impulsive",
-                  header: "Impulsive",
-                  render: (snapshot: GovernanceSnapshotRecord) => formatPercent(snapshot.riskDistribution.impulsive),
-                },
-                {
-                  id: "overextended",
-                  header: "Overextended",
-                  render: (snapshot: GovernanceSnapshotRecord) => formatPercent(snapshot.riskDistribution.overextended),
-                },
-                {
-                  id: "volatile",
-                  header: "Volatile",
-                  render: (snapshot: GovernanceSnapshotRecord) => formatPercent(snapshot.riskDistribution.volatile),
-                },
-              ]}
-              rows={[...orderedSnapshots].reverse()}
-              rowKey={(snapshot) => snapshot.documentId}
+              caption="Batch risk-state matrix and discipline metrics"
+              columns={batchRiskColumns}
+              rows={dataset.batchRiskSummaries}
+              rowKey={(row) => row.batchId}
               emptyStateText="No batch risk records are currently available."
             />
           </section>
@@ -870,25 +1315,7 @@ function GovernanceMonitoringDashboardPage() {
       <h2 id="admin-governance-dashboard-title">{currentSection.title}</h2>
       <p className="admin-content-copy">{currentSection.description}</p>
 
-      <div className="admin-analytics-inline-link-row">
-        <NavLink className="admin-primary-link" to="/admin/analytics">
-          Back to Analytics Dashboard
-        </NavLink>
-      </div>
-
-      <nav className="admin-governance-subnav" aria-label="Governance sections">
-        {GOVERNANCE_SECTIONS.map((section) => (
-          <NavLink
-            key={section.id}
-            className={({ isActive }) =>
-              isActive ? "admin-governance-subnav-link admin-governance-subnav-link-active" : "admin-governance-subnav-link"
-            }
-            to={section.to}
-          >
-            {section.label}
-          </NavLink>
-        ))}
-      </nav>
+      <GovernanceWorkspaceNav />
 
       <p className="admin-analytics-inline-note">
         {isLoading ? "Loading governance monitoring dashboard..." : inlineMessage ?? "Governance dashboard ready."}

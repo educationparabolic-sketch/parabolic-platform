@@ -17,30 +17,52 @@ interface ExecutionSignalBadge {
   label: string;
   value: string;
   helper: string;
+  source: string;
+}
+
+function average(values: number[]): number {
+  if (values.length === 0) {
+    return 0;
+  }
+
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
 function buildExecutionSignals(dataset: DashboardDataset, includeL2Signals: boolean): ExecutionSignalBadge[] {
   const signals = dataset.yearBehaviorSummary.riskSignals;
+  const runAnalytics = dataset.runAnalytics;
+  const minTimeViolationPercent = average(runAnalytics.map((run) => run.minTimeViolationPercent));
+  const maxTimeViolationPercent = average(runAnalytics.map((run) => run.maxTimeViolationPercent));
+  const sequentialProgressionCompliancePercent = average(runAnalytics.map((run) => run.followedPhaseSplitPercent));
+  const controlledModeImprovementDelta =
+    dataset.monthlySummary.at(-1)?.controlledModeEffectivenessPercent ??
+    dataset.yearBehaviorSummary.controlledModeUsagePercent;
+  const phaseTransitionAdherencePercent = average(runAnalytics.map((run) => run.avgPhaseAdherencePercent));
+
   const baseSignals: ExecutionSignalBadge[] = [
     {
       label: "Skip Burst Rate",
       value: formatPercent(signals.percentRushedPattern),
       helper: "L1 compact badge",
+      source: "yearBehaviorSummary.riskSignals.percentRushedPattern",
     },
     {
       label: "Rapid Guess Indicator",
       value: formatPercent(dataset.yearBehaviorSummary.guessProbabilityClusterPercent),
       helper: "L1 compact badge",
+      source: "yearBehaviorSummary.guessProbabilityClusterPercent",
     },
     {
       label: "Late-Phase Accuracy Drop",
       value: formatPercent(signals.percentLatePhaseDrop),
       helper: "L1 compact badge",
+      source: "yearBehaviorSummary.riskSignals.percentLatePhaseDrop",
     },
     {
       label: "Avg Time-per-Question Deviation",
       value: formatPercent(signals.percentPacingDrift),
       helper: "L1 compact badge",
+      source: "yearBehaviorSummary.riskSignals.percentPacingDrift",
     },
   ];
 
@@ -51,29 +73,34 @@ function buildExecutionSignals(dataset: DashboardDataset, includeL2Signals: bool
   return [
     ...baseSignals,
     {
-      label: "MinTime Compliance",
-      value: formatPercent(Math.max(0, 100 - dataset.yearBehaviorSummary.consecutiveWrongClusterPercent)),
+      label: "MinTime Compliance %",
+      value: formatPercent(Math.max(0, 100 - minTimeViolationPercent)),
       helper: "L2 enforcement-sensitive signal",
+      source: "runAnalytics[].minTimeViolationPercent",
     },
     {
-      label: "MaxTime Violation",
-      value: formatPercent(dataset.yearBehaviorSummary.consecutiveWrongClusterPercent),
+      label: "MaxTime Violation %",
+      value: formatPercent(maxTimeViolationPercent),
       helper: "L2 enforcement-sensitive signal",
+      source: "runAnalytics[].maxTimeViolationPercent",
     },
     {
       label: "Sequential Progression Compliance",
-      value: formatPercent(dataset.yearBehaviorSummary.executionStabilityIndex),
+      value: formatPercent(sequentialProgressionCompliancePercent),
       helper: "L2 enforcement-sensitive signal",
+      source: "runAnalytics[].followedPhaseSplitPercent",
     },
     {
       label: "Controlled Mode Improvement Delta",
-      value: formatPercent(dataset.yearBehaviorSummary.controlledModeUsagePercent),
+      value: formatPercent(controlledModeImprovementDelta),
       helper: "L2 enforcement-sensitive signal",
+      source: "monthlySummary[].controlledModeEffectivenessPercent",
     },
     {
-      label: "Phase Transition Adherence",
-      value: formatPercent(dataset.yearBehaviorSummary.avgDisciplineIndex),
+      label: "Phase Transition Adherence %",
+      value: formatPercent(phaseTransitionAdherencePercent),
       helper: "L2 enforcement-sensitive signal",
+      source: "runAnalytics[].avgPhaseAdherencePercent",
     },
   ];
 }
@@ -190,6 +217,7 @@ function AdminExecutionSignalsPage() {
               <p>{signal.label}</p>
               <h4>{signal.value}</h4>
               <small>{signal.helper}</small>
+              <small>{signal.source}</small>
             </article>
           ))}
         </div>
@@ -204,16 +232,26 @@ function AdminExecutionSignalsPage() {
                 <p>{signal.label}</p>
                 <h4>{signal.value}</h4>
                 <small>{signal.helper}</small>
+                <small>{signal.source}</small>
               </article>
             ))}
           </div>
         </div>
-      ) : null}
+      ) : (
+        <div className="admin-risk-table-section">
+          <h3>L2 Enforcement-Sensitive Signals</h3>
+          <p className="admin-risk-heatmap-copy">
+            MinTime compliance, MaxTime violation, sequential progression, controlled-mode delta, and phase transition
+            adherence unlock at L2 because they are enforcement-sensitive execution signals.
+          </p>
+        </div>
+      )}
 
       <p className="admin-settings-inline-note">
         Current signal inputs: rushed pattern {formatPercent(dataset.yearBehaviorSummary.riskSignals.percentRushedPattern)},
         {" "}late-phase drop {formatPercent(dataset.yearBehaviorSummary.riskSignals.percentLatePhaseDrop)},
         {" "}pacing drift {formatPercent(dataset.yearBehaviorSummary.riskSignals.percentPacingDrift)}.
+        L2 uses summary-only <code>runAnalytics</code> and <code>monthlySummary</code> records, never raw sessions.
       </p>
     </section>
   );

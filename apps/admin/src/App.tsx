@@ -49,6 +49,7 @@ const AdminAnalyticsLandingPage = lazy(() => import("./features/analytics/AdminA
 const AdminAnalyticsTrendsPage = lazy(() => import("./features/analytics/AdminAnalyticsTrendsPage"));
 const AdminTemplateAnalyticsPage = lazy(() => import("./features/analytics/AdminTemplateAnalyticsPage"));
 const BatchAnalyticsDashboardPage = lazy(() => import("./features/analytics/BatchAnalyticsDashboardPage"));
+const AdminGovernanceLandingPage = lazy(() => import("./features/analytics/AdminGovernanceLandingPage"));
 const GovernanceMonitoringDashboardPage = lazy(() => import("./features/analytics/GovernanceMonitoringDashboardPage"));
 const RiskInsightsDashboardPage = lazy(() => import("./features/analytics/RiskInsightsDashboardPage"));
 const AdminAssignmentLiveRunPage = lazy(() => import("./features/assignments/AdminAssignmentLiveRunPage"));
@@ -771,7 +772,7 @@ function App() {
         />
         <Route
           path="governance"
-          element={<Navigate to="/admin/governance/stability" replace />}
+          element={<AdminRouteBoundary label="Loading governance landing"><AdminGovernanceLandingPage /></AdminRouteBoundary>}
         />
         <Route
           path="governance/stability"

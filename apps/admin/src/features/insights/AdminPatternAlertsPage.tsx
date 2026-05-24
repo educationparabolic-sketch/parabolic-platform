@@ -17,10 +17,21 @@ import InsightsWorkspaceNav from "./InsightsWorkspaceNav";
 
 interface PatternAlertRow {
   patternType: string;
+  signalFamily: "L1 Diagnostic" | "L2 Advanced";
   frequency: number;
+  averageImpact?: number;
   lastDetected: string;
   affectedStudents: string[];
   severityScore?: number;
+  priorityRank?: number;
+}
+
+function withSeverity(alert: PatternAlertRow, averageImpact: number): PatternAlertRow {
+  return {
+    ...alert,
+    averageImpact,
+    severityScore: Math.round(alert.frequency * averageImpact),
+  };
 }
 
 function buildPatternAlerts(
@@ -30,36 +41,63 @@ function buildPatternAlerts(
 ): PatternAlertRow[] {
   const summary = dataset.yearBehaviorSummary;
   const signals = summary.riskSignals;
-  const topAffectedStudents = highRiskStudents.slice(0, 3).map((student) => student.studentName);
+  const topAffectedStudents =
+    highRiskStudents.length > 0 ?
+      highRiskStudents.slice(0, 4).map((student) => student.studentName) :
+      dataset.studentYearMetrics
+        .slice()
+        .sort((left, right) => right.guessRatePercent - left.guessRatePercent)
+        .slice(0, 4)
+        .map((student) => student.studentName);
   const lastDetected = formatIsoDate(summary.computedAt);
+  const guessHeavyStudents = dataset.studentYearMetrics
+    .slice()
+    .sort((left, right) => right.guessRatePercent - left.guessRatePercent)
+    .slice(0, 4)
+    .map((student) => student.studentName);
+  const disciplineRegressionStudents = dataset.studentYearMetrics
+    .slice()
+    .sort((left, right) => left.disciplineIndex - right.disciplineIndex)
+    .slice(0, 4)
+    .map((student) => student.studentName);
+  const controlledModeStudents = dataset.studentYearMetrics
+    .slice()
+    .sort((left, right) => left.disciplineIndex - right.disciplineIndex || right.testsAttempted - left.testsAttempted)
+    .slice(0, 4)
+    .map((student) => student.studentName);
 
   const l1Alerts: PatternAlertRow[] = [
     {
       patternType: "EasyNeglect",
+      signalFamily: "L1 Diagnostic",
       frequency: Math.max(1, Math.round(signals.percentEasyNeglect / 10)),
       lastDetected,
       affectedStudents: topAffectedStudents,
     },
     {
       patternType: "HardFixation",
+      signalFamily: "L1 Diagnostic",
       frequency: Math.max(1, Math.round(signals.percentHardBias / 10)),
       lastDetected,
       affectedStudents: topAffectedStudents,
     },
     {
       patternType: "PacingDrift",
+      signalFamily: "L1 Diagnostic",
       frequency: Math.max(1, Math.round(signals.percentPacingDrift / 10)),
       lastDetected,
       affectedStudents: topAffectedStudents,
     },
     {
       patternType: "TopicAvoidance",
+      signalFamily: "L1 Diagnostic",
       frequency: Math.max(1, Math.round(signals.percentTopicAvoidance / 10)),
       lastDetected,
       affectedStudents: topAffectedStudents,
     },
     {
       patternType: "LatePhaseDrop",
+      signalFamily: "L1 Diagnostic",
       frequency: Math.max(1, Math.round(signals.percentLatePhaseDrop / 10)),
       lastDetected,
       affectedStudents: topAffectedStudents,
@@ -71,44 +109,53 @@ function buildPatternAlerts(
   }
 
   const l2Alerts: PatternAlertRow[] = [
-    {
+    withSeverity({
       patternType: "HighRiskClusterSpike",
+      signalFamily: "L2 Advanced",
       frequency: Math.max(1, Math.round((highRiskStudents.length / Math.max(1, dataset.studentYearMetrics.length)) * 10)),
       lastDetected,
       affectedStudents: topAffectedStudents,
-      severityScore: Math.round((highRiskStudents.length / Math.max(1, dataset.studentYearMetrics.length)) * 100),
-    },
-    {
+    }, Math.round((highRiskStudents.length / Math.max(1, dataset.studentYearMetrics.length)) * 100)),
+    withSeverity({
       patternType: "GuessHeavyCluster",
       frequency: Math.max(1, Math.round(summary.guessProbabilityClusterPercent / 10)),
+      signalFamily: "L2 Advanced",
       lastDetected,
-      affectedStudents: topAffectedStudents,
-      severityScore: Math.round((summary.guessProbabilityClusterPercent / 10) * summary.guessProbabilityClusterPercent),
-    },
-    {
+      affectedStudents: guessHeavyStudents,
+    }, summary.guessProbabilityClusterPercent),
+    withSeverity({
       patternType: "PhaseDeviationEscalation",
       frequency: Math.max(1, Math.round(signals.percentPacingDrift / 10)),
+      signalFamily: "L2 Advanced",
       lastDetected,
       affectedStudents: topAffectedStudents,
-      severityScore: Math.round((signals.percentPacingDrift / 10) * signals.percentLatePhaseDrop),
-    },
-    {
+    }, Math.max(signals.percentPacingDrift, signals.percentLatePhaseDrop)),
+    withSeverity({
       patternType: "DisciplineRegression",
       frequency: Math.max(1, Math.round((100 - summary.avgDisciplineIndex) / 10)),
+      signalFamily: "L2 Advanced",
       lastDetected,
-      affectedStudents: topAffectedStudents,
-      severityScore: Math.round(((100 - summary.avgDisciplineIndex) / 10) * (100 - summary.avgDisciplineIndex)),
-    },
-    {
+      affectedStudents: disciplineRegressionStudents,
+    }, 100 - summary.avgDisciplineIndex),
+    withSeverity({
       patternType: "ControlledModeEffectivenessDrop",
       frequency: Math.max(1, Math.round((100 - summary.controlledModeUsagePercent) / 10)),
+      signalFamily: "L2 Advanced",
       lastDetected,
-      affectedStudents: topAffectedStudents,
-      severityScore: Math.round(((100 - summary.controlledModeUsagePercent) / 10) * (100 - summary.executionStabilityIndex)),
-    },
+      affectedStudents: controlledModeStudents,
+    }, 100 - summary.executionStabilityIndex),
   ];
 
-  return [...l1Alerts, ...l2Alerts].sort((left, right) => (right.severityScore ?? 0) - (left.severityScore ?? 0));
+  return [
+    withSeverity(l1Alerts[0], signals.percentEasyNeglect),
+    withSeverity(l1Alerts[1], signals.percentHardBias),
+    withSeverity(l1Alerts[2], signals.percentPacingDrift),
+    withSeverity(l1Alerts[3], signals.percentTopicAvoidance),
+    withSeverity(l1Alerts[4], signals.percentLatePhaseDrop),
+    ...l2Alerts,
+  ]
+    .sort((left, right) => (right.severityScore ?? 0) - (left.severityScore ?? 0))
+    .map((alert, index) => ({ ...alert, priorityRank: index + 1 }));
 }
 
 function AdminPatternAlertsPage() {
@@ -192,6 +239,11 @@ function AdminPatternAlertsPage() {
           render: (row) => row.patternType,
         },
         {
+          id: "family",
+          header: "Signal Family",
+          render: (row) => row.signalFamily,
+        },
+        {
           id: "frequency",
           header: "Frequency",
           render: (row) => `${row.frequency} detections`,
@@ -213,7 +265,17 @@ function AdminPatternAlertsPage() {
       }
 
       return [
+        {
+          id: "priorityRank",
+          header: "Priority",
+          render: (row) => row.priorityRank ? `#${row.priorityRank}` : "-",
+        },
         ...baseColumns,
+        {
+          id: "averageImpact",
+          header: "Avg Impact",
+          render: (row) => row.averageImpact !== undefined ? formatPercent(row.averageImpact) : "-",
+        },
         {
           id: "severity",
           header: "Severity Score",
@@ -225,6 +287,8 @@ function AdminPatternAlertsPage() {
   );
 
   const topAlerts = patternAlerts.slice(0, 3);
+  const advancedAlertCount = patternAlerts.filter((alert) => alert.signalFamily === "L2 Advanced").length;
+  const highestSeverityScore = Math.max(0, ...patternAlerts.map((alert) => alert.severityScore ?? 0));
 
   return (
     <section className="admin-content-card" aria-labelledby="admin-pattern-alerts-title">
@@ -256,6 +320,20 @@ function AdminPatternAlertsPage() {
           <h3>{highRiskStudents.length}</h3>
           <small>Priority watchlist candidates</small>
         </article>
+        {isL2OrAbove ? (
+          <article className="admin-analytics-kpi-card">
+            <p>Advanced Alerts</p>
+            <h3>{advancedAlertCount}</h3>
+            <small>Cluster, discipline, phase, and controlled-mode signals</small>
+          </article>
+        ) : null}
+        {isL2OrAbove ? (
+          <article className="admin-analytics-kpi-card">
+            <p>Highest Severity</p>
+            <h3>{highestSeverityScore}</h3>
+            <small>frequency x averageImpact</small>
+          </article>
+        ) : null}
         <article className="admin-analytics-kpi-card">
           <p>Last Detection Window</p>
           <h3>{formatIsoDate(dataset.yearBehaviorSummary.computedAt)}</h3>
@@ -278,6 +356,16 @@ function AdminPatternAlertsPage() {
 
       <div className="admin-risk-table-section">
         <h3>Pattern Alert Feed</h3>
+        {isL2OrAbove ? (
+          <p className="admin-risk-heatmap-copy">
+            L2 priority ranking uses <code>severityScore = frequency x averageImpact</code> across High-Risk Cluster Spike,
+            Guess-Heavy Cluster, Phase Deviation Escalation, Discipline Regression, and Controlled Mode Effectiveness Drop.
+          </p>
+        ) : (
+          <p className="admin-risk-heatmap-copy">
+            L1 shows alert title, frequency, and last occurrence only. Structural severity ranking unlocks at L2.
+          </p>
+        )}
         <UiTable
           caption="Pattern alert feed from rolling summary diagnostics"
           columns={patternAlertColumns}

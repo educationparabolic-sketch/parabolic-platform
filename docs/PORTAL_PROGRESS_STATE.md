@@ -6,10 +6,10 @@ This file is the persistent handoff state for portal checklist implementation ac
 
 - `Current Target Portal`: `admin`
 - `Current Priority Band`: `P1`
-- `Last Completed Checklist ID`: `INS-005`
-- `Next Suggested Checklist ID`: `INS-006`
-- `Last Updated`: `2026-05-23`
-- `Saved Scope Note`: `INS-005` is complete after tightening `/admin/insights/student/:studentId` into the L1 diagnostic student view from `studentYearMetrics` plus rolling-window summaries: Rushed Pattern, Easy Neglect, Hard Bias, Topic Weakness, and Time Misallocation behavior cards now include source fields and no risk-state label, the page states the last-5-runs-or-last-30-days rolling model, and execution-only trendlines/risk state are kept behind L2 access. Continue admin Insights P1 with `INS-006`.
+- `Last Completed Checklist ID`: `GOV-009`
+- `Next Suggested Checklist ID`: `GOV-010`
+- `Last Updated`: `2026-05-24`
+- `Saved Scope Note`: `GOV-009` is complete after replacing `/admin/governance/batch-risk` month-only risk display with a governance-level `batchRiskSummaries` contract: the route now shows a per-batch Risk State Matrix for Stable, Drift-Prone, Impulsive, Overextended, and Volatile plus Avg Discipline Index, Avg Phase Adherence, Raw Stability Score, and Accuracy Stability Score for strategic cohort comparison. Continue admin Governance P1 with `GOV-010`.
 
 ## Active Checklist Set
 

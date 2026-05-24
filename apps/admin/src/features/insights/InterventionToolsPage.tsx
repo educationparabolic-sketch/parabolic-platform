@@ -1,9 +1,12 @@
 import {useCallback, useEffect, useMemo, useState} from "react";
 import {useAuthProvider} from "../../../../../shared/services/authProvider";
+import {LICENSE_LAYER_ORDER} from "../../../../../shared/types/portalRouting";
 import {UiTable, type UiTableColumn} from "../../../../../shared/ui/components";
+import {resolveAdminAccessContext} from "../../portals/adminAccess";
 import {
   ApiClientError,
   buildHighRiskCandidates,
+  buildStructuralInterventionRecommendations,
   createInterventionAction,
   fetchInterventionDataset,
   formatPercent,
@@ -12,6 +15,7 @@ import {
   type HighRiskInterventionCandidate,
   type InterventionActionRecord,
   type InterventionOutcomeStatus,
+  type StructuralInterventionRecommendation,
 } from "./interventionDataset";
 import InsightsWorkspaceNav from "./InsightsWorkspaceNav";
 
@@ -88,12 +92,16 @@ function formatTimestamp(value: string): string {
 
 function InterventionToolsPage() {
   const {session} = useAuthProvider();
+  const accessContext = resolveAdminAccessContext(session);
+  const isL2OrAbove =
+    accessContext.licenseLayer !== null && LICENSE_LAYER_ORDER[accessContext.licenseLayer] >= LICENSE_LAYER_ORDER.L2;
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmittingByStudent, setIsSubmittingByStudent] = useState<Record<string, boolean>>({});
   const [highRiskStudents, setHighRiskStudents] = useState<HighRiskInterventionCandidate[]>([]);
   const [history, setHistory] = useState<InterventionActionRecord[]>([]);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
   const [outcomeDrafts, setOutcomeDrafts] = useState<OutcomeDraftState>({});
+  const [structuralRecommendations, setStructuralRecommendations] = useState<StructuralInterventionRecommendation[]>([]);
   const [requestContext, setRequestContext] = useState<InterventionRequestContext>({
     instituteId: FALLBACK_INTERVENTION_INSTITUTE_ID,
     yearId: FALLBACK_INTERVENTION_YEAR_ID,
@@ -185,6 +193,7 @@ function InterventionToolsPage() {
         const candidates = buildHighRiskCandidates(dataset);
         setRequestContext(nextContext);
         setHighRiskStudents(candidates);
+        setStructuralRecommendations(buildStructuralInterventionRecommendations(dataset));
         setHistory(interventionHistory);
         setOutcomeDrafts(
           Object.fromEntries(
@@ -438,6 +447,42 @@ function InterventionToolsPage() {
     [],
   );
 
+  const structuralRecommendationColumns = useMemo<UiTableColumn<StructuralInterventionRecommendation>[]>(
+    () => [
+      {
+        id: "recommendation",
+        header: "Recommendation",
+        render: (entry) => (
+          <div className="admin-intervention-history-cell">
+            <strong>{entry.title}</strong>
+            <small>{entry.targetScope}</small>
+          </div>
+        ),
+      },
+      {
+        id: "trigger",
+        header: "Trigger Rule",
+        render: (entry) => entry.triggerRule,
+      },
+      {
+        id: "observed",
+        header: "Observed",
+        render: (entry) => formatPercent(entry.observedValuePercent),
+      },
+      {
+        id: "action",
+        header: "Structural Recommendation",
+        render: (entry) => entry.recommendation,
+      },
+      {
+        id: "source",
+        header: "Stored As",
+        render: (entry) => entry.sourcePath,
+      },
+    ],
+    [],
+  );
+
   return (
     <section className="admin-content-card" aria-labelledby="admin-intervention-tools-title">
       <p className="admin-content-eyebrow">Intervention Tools</p>
@@ -463,7 +508,7 @@ function InterventionToolsPage() {
           Soft guidance remains available from L1 signals, while the recommendation cards below surface L2-style
           structural follow-up for controlled mode, phase discipline, and outcome review.
         </p>
-        <small>Route: /admin/insights/interventions</small>
+        <small>Route: /admin/insights/interventions · Recommendations are never auto-applied.</small>
       </div>
 
       {recommendationCards.map((card) => (
@@ -506,6 +551,31 @@ function InterventionToolsPage() {
           rowKey={(row) => row.studentId}
           emptyStateText="No high-risk students currently require intervention."
         />
+      </section>
+
+      <section className="admin-intervention-table-section" aria-labelledby="admin-structural-recommendations-title">
+        <h3 id="admin-structural-recommendations-title">L2 Structural Intervention Recommendations</h3>
+        {isL2OrAbove ? (
+          <>
+            <p className="admin-risk-heatmap-copy">
+              Rule-driven recommendations are derived only from summary-safe analytics and are represented as
+              <code>interventionRecommendations/{requestContext.yearId}</code> records. Teachers must review and
+              apply any action manually.
+            </p>
+            <UiTable
+              caption="Rule-driven L2 structural recommendations"
+              columns={structuralRecommendationColumns}
+              rows={structuralRecommendations}
+              rowKey={(row) => row.recommendationId}
+              emptyStateText="No structural intervention recommendations available."
+            />
+          </>
+        ) : (
+          <p className="admin-risk-heatmap-copy">
+            Structural recommendations for Controlled Mode, limited Hard Mode, Phase Training, and Easy-First
+            Template design unlock at L2. L1 keeps intervention guidance soft and non-enforcing.
+          </p>
+        )}
       </section>
 
       <section className="admin-intervention-table-section" aria-labelledby="admin-intervention-history-title">

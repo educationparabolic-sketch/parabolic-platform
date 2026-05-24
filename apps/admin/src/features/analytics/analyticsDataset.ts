@@ -132,6 +132,7 @@ export interface StudentAnalyticsRunRecord {
   riskState: RiskCluster;
   disciplineIndex: number;
   guessRatePercent: number;
+  minTimeViolationPercent: number;
   overstayPercent: number;
   controlledModeDelta: number;
   overrideCount: number;
@@ -783,6 +784,7 @@ function buildStudentRunSummaries(
     const easyNeglectPercent = clampPercent(Math.max(4, 100 - accuracyPercent - 5 + index * 2));
     const hardBiasPercent = clampPercent(Math.max(5, guessRatePercent + (100 - disciplineIndex) * 0.22));
     const topicWeaknessScore = clampPercent(Math.max(8, 100 - accuracyPercent + index * 4));
+    const minTimeViolationPercent = clampPercent((run.minTimeViolationPercent * 0.55) + Math.max(0, guessRatePercent - 8) * 0.45);
     const overstayPercent = clampPercent(Math.max(3, (100 - disciplineIndex) * 0.25 + index * 2));
     const controlledModeDelta = clampPercent(Math.max(0, disciplineIndex - rawScorePercent) * 0.35);
     const overrideCount = Math.max(0, Math.round((100 - disciplineIndex) / 22) - index % 2);
@@ -805,6 +807,7 @@ function buildStudentRunSummaries(
       riskState,
       disciplineIndex,
       guessRatePercent,
+      minTimeViolationPercent,
       overstayPercent,
       controlledModeDelta: run.mode.toLowerCase() === "controlled" ? controlledModeDelta : 0,
       overrideCount,

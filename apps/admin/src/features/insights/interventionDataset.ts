@@ -57,6 +57,16 @@ export interface HighRiskInterventionCandidate extends StudentYearMetricRecord {
   suggestedAlertMessage: string;
 }
 
+export interface StructuralInterventionRecommendation {
+  recommendationId: string;
+  title: string;
+  targetScope: string;
+  triggerRule: string;
+  observedValuePercent: number;
+  recommendation: string;
+  sourcePath: string;
+}
+
 export const DEFAULT_INTERVENTION_HISTORY: InterventionActionRecord[] = [
   {
     actionType: "ASSIGN_REMEDIAL_TEST",
@@ -181,6 +191,70 @@ export function buildHighRiskCandidates(dataset: DashboardDataset): HighRiskInte
       };
     })
     .sort((left, right) => right.interventionPriority - left.interventionPriority);
+}
+
+export function buildStructuralInterventionRecommendations(
+  dataset: DashboardDataset,
+): StructuralInterventionRecommendation[] {
+  const summary = dataset.yearBehaviorSummary;
+  const runCount = Math.max(1, dataset.runAnalytics.length);
+  const impulsivePercent = summary.riskStateDistribution.impulsive;
+  const averageOverstayPercent =
+    dataset.runAnalytics.reduce((sum, run) => sum + run.maxTimeViolationPercent, 0) / runCount;
+  const averagePhaseDeviationPercent =
+    dataset.runAnalytics.reduce((sum, run) => sum + (100 - run.avgPhaseAdherencePercent), 0) / runCount;
+  const easyNeglectPercent = summary.riskSignals.percentEasyNeglect;
+
+  return [
+    {
+      recommendationId: "structural-controlled-mode",
+      title: "Controlled Mode Recommendation",
+      targetScope: "Current academic year cohort",
+      triggerRule: "If Impulsive cluster > 35%",
+      observedValuePercent: impulsivePercent,
+      recommendation:
+        impulsivePercent > 35 ?
+          "Suggest Controlled Mode for the next mock cycle." :
+          "Keep Controlled Mode as advisory; impulsive cluster is below threshold.",
+      sourcePath: `interventionRecommendations/${summary.academicYear}/structural-controlled-mode`,
+    },
+    {
+      recommendationId: "structural-hard-mode-limited",
+      title: "Hard Mode Limited Recommendation",
+      targetScope: "Runs with repeated overstay",
+      triggerRule: "If Overstay > 25%",
+      observedValuePercent: averageOverstayPercent,
+      recommendation:
+        averageOverstayPercent > 25 ?
+          "Suggest limited Hard Mode practice for overstay-heavy runs." :
+          "Do not escalate to Hard Mode; overstay remains below the structural threshold.",
+      sourcePath: `interventionRecommendations/${summary.academicYear}/structural-hard-mode-limited`,
+    },
+    {
+      recommendationId: "structural-phase-training",
+      title: "Phase Training Recommendation",
+      targetScope: "Students with phase deviation",
+      triggerRule: "If Phase Deviation > 30%",
+      observedValuePercent: averagePhaseDeviationPercent,
+      recommendation:
+        averagePhaseDeviationPercent > 30 ?
+          "Suggest Phase Training before the next scheduled assessment." :
+          "Keep phase guidance soft; deviation is below the L2 structural trigger.",
+      sourcePath: `interventionRecommendations/${summary.academicYear}/structural-phase-training`,
+    },
+    {
+      recommendationId: "structural-easy-first-template",
+      title: "Easy-First Template Design",
+      targetScope: "Cohort easy-neglect pattern",
+      triggerRule: "If Easy Neglect > 40%",
+      observedValuePercent: easyNeglectPercent,
+      recommendation:
+        easyNeglectPercent > 40 ?
+          "Suggest Easy-First Template design for the next remedial mock." :
+          "No Easy-First Template escalation; easy neglect is below threshold.",
+      sourcePath: `interventionRecommendations/${summary.academicYear}/structural-easy-first-template`,
+    },
+  ];
 }
 
 export async function listInterventionActions(
