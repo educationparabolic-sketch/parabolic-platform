@@ -5,11 +5,11 @@ This file is the persistent handoff state for portal checklist implementation ac
 ## Current State
 
 - `Current Target Portal`: `admin`
-- `Current Priority Band`: `P1`
-- `Last Completed Checklist ID`: `GOV-009`
-- `Next Suggested Checklist ID`: `GOV-010`
-- `Last Updated`: `2026-05-24`
-- `Saved Scope Note`: `GOV-009` is complete after replacing `/admin/governance/batch-risk` month-only risk display with a governance-level `batchRiskSummaries` contract: the route now shows a per-batch Risk State Matrix for Stable, Drift-Prone, Impulsive, Overextended, and Volatile plus Avg Discipline Index, Avg Phase Adherence, Raw Stability Score, and Accuracy Stability Score for strategic cohort comparison. Continue admin Governance P1 with `GOV-010`.
+- `Current Priority Band`: `P2`
+- `Last Completed Checklist ID`: `QB-016`
+- `Next Suggested Checklist ID`: `QB-017`
+- `Last Updated`: `2026-05-25`
+- `Saved Scope Note`: `QB-016` is complete after expanding `/admin/question-bank/validation-logs` into the full immutable upload-history workspace backed by `questionUploadLogs/{uploadId}` style records: uploadedBy, timestamp, totalRows, errors, warnings, versionCreated, error/warning detail previews, immutable storage-path framing, and rollback eligibility only when created questions remain unused in assigned templates. Continue admin P2 with `QB-017`.
 
 ## Active Checklist Set
 

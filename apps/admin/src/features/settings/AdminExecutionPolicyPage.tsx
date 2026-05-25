@@ -25,12 +25,19 @@ function AdminExecutionPolicyPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
+  const defaultTimingExamType = Object.keys(FALLBACK_SNAPSHOT.executionPolicy.timingPresets)[0] ?? "JEE_MAIN";
+  const [selectedTimingExamType, setSelectedTimingExamType] = useState(defaultTimingExamType);
 
   const applySnapshot = useCallback((nextSnapshot: AdminSettingsSnapshot, message: string) => {
     setSnapshot(nextSnapshot);
     setExecutionForm(nextSnapshot.executionPolicy);
+    setSelectedTimingExamType((currentValue) =>
+      Object.keys(nextSnapshot.executionPolicy.timingPresets).includes(currentValue) ?
+        currentValue :
+        Object.keys(nextSnapshot.executionPolicy.timingPresets)[0] ?? defaultTimingExamType,
+    );
     setInlineMessage(message);
-  }, []);
+  }, [defaultTimingExamType]);
 
   useEffect(() => {
     let isMounted = true;
@@ -92,6 +99,53 @@ function AdminExecutionPolicyPage() {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  const timingExamTypes = Object.keys(executionForm.timingPresets);
+  const selectedTimingPreset =
+    executionForm.timingPresets[selectedTimingExamType] ??
+    executionForm.timingPresets[timingExamTypes[0] ?? defaultTimingExamType] ??
+    FALLBACK_SNAPSHOT.executionPolicy.timingPresets[defaultTimingExamType];
+
+  function updateTimingPreset(
+    difficulty: "easy" | "medium" | "hard",
+    boundary: "min" | "max",
+    value: number,
+  ): void {
+    setExecutionForm((current) => {
+      const currentPreset =
+        current.timingPresets[selectedTimingExamType] ??
+        FALLBACK_SNAPSHOT.executionPolicy.timingPresets[defaultTimingExamType];
+
+      return {
+        ...current,
+        timingPresets: {
+          ...current.timingPresets,
+          [selectedTimingExamType]: {
+            ...currentPreset,
+            [difficulty]: {
+              ...currentPreset[difficulty],
+              [boundary]: Number.isFinite(value) ? value : 0,
+            },
+          },
+        },
+      };
+    });
+  }
+
+  function resetSelectedTimingPreset(): void {
+    const systemDefault =
+      FALLBACK_SNAPSHOT.executionPolicy.timingPresets[selectedTimingExamType] ??
+      FALLBACK_SNAPSHOT.executionPolicy.timingPresets[defaultTimingExamType];
+
+    setExecutionForm((current) => ({
+      ...current,
+      timingPresets: {
+        ...current.timingPresets,
+        [selectedTimingExamType]: systemDefault,
+      },
+    }));
+    setInlineMessage(`Timing preset for ${selectedTimingExamType} reset to system defaults. Save to persist.`);
   }
 
   return (
@@ -165,6 +219,79 @@ function AdminExecutionPolicyPage() {
             <h4>{executionForm.advancedControls.hardModeAvailable ? "Available" : "Unavailable"}</h4>
             <p>Layer-aware default visibility for stricter execution modes.</p>
           </article>
+        </div>
+      </div>
+
+      <div className="admin-risk-table-section">
+        <h3>Timing Policy Editor</h3>
+        <p className="admin-content-copy">
+          Timing presets are L2+ structural defaults by exam type and difficulty. They define bounded windows only;
+          per-question arbitrary timing edits are not allowed here.
+        </p>
+        <div className="admin-settings-timing-toolbar">
+          <label>
+            Exam Type
+            <select
+              value={selectedTimingExamType}
+              disabled={isSubmitting}
+              onChange={(event) => {
+                setSelectedTimingExamType(event.target.value);
+              }}
+            >
+              {timingExamTypes.map((examType) => (
+                <option key={examType} value={examType}>
+                  {examType}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="admin-compact-button"
+            disabled={isDirector || isSubmitting}
+            onClick={resetSelectedTimingPreset}
+          >
+            Reset to System Defaults
+          </button>
+        </div>
+        <div className="admin-settings-timing-grid" aria-label="Timing windows by difficulty">
+          {(["easy", "medium", "hard"] as const).map((difficulty) => (
+            <article key={difficulty} className="admin-settings-layer-card">
+              <p><strong>{difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}</strong></p>
+              <div className="admin-settings-grid-three">
+                <label>
+                  Min Seconds
+                  <input
+                    type="number"
+                    min={0}
+                    value={selectedTimingPreset[difficulty].min}
+                    disabled={isDirector || isSubmitting}
+                    onChange={(event) => {
+                      updateTimingPreset(difficulty, "min", Number(event.target.value));
+                    }}
+                  />
+                </label>
+                <label>
+                  Max Seconds
+                  <input
+                    type="number"
+                    min={selectedTimingPreset[difficulty].min}
+                    value={selectedTimingPreset[difficulty].max}
+                    disabled={isDirector || isSubmitting}
+                    onChange={(event) => {
+                      updateTimingPreset(difficulty, "max", Number(event.target.value));
+                    }}
+                  />
+                </label>
+                <div className="admin-settings-timing-window">
+                  <span>Window</span>
+                  <strong>
+                    {selectedTimingPreset[difficulty].min}-{selectedTimingPreset[difficulty].max}s
+                  </strong>
+                </div>
+              </div>
+            </article>
+          ))}
         </div>
       </div>
 

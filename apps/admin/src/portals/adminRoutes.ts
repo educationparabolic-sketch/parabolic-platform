@@ -516,6 +516,14 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     readOnlyRoles: ["director"],
   },
   {
+    path: "/admin/settings/audit-history",
+    title: "Settings Audit History",
+    section: "Settings",
+    description: "Read-only settings mutation timeline from institute settingsAudit records.",
+    allowedRoles: ["admin", "director"],
+    readOnlyRoles: ["director"],
+  },
+  {
     path: "/admin/licensing",
     title: "Licensing",
     section: "Licensing",

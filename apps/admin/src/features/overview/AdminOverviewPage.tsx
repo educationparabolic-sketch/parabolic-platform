@@ -32,11 +32,12 @@ function formatSubmissionTimestamp(value: string): string {
   }).format(new Date(parsed));
 }
 
-function metricCard(label: string, value: string) {
+function metricCard(label: string, value: string, helper?: string) {
   return (
     <article key={label} className="admin-analytics-kpi-card">
       <p>{label}</p>
       <h3>{value}</h3>
+      {helper ? <small>{helper}</small> : null}
     </article>
   );
 }
@@ -49,6 +50,10 @@ function formatRegressionCount(value: number): string {
   return value === 1 ? "1 regression alert" : `${value} regression alerts`;
 }
 
+function formatLoadTime(value: number | null): string {
+  return value === null ? "Pending" : `${Math.round(value)} ms`;
+}
+
 function AdminOverviewPage() {
   const { session } = useAuthProvider();
   const accessContext = resolveAdminAccessContext(session);
@@ -57,18 +62,28 @@ function AdminOverviewPage() {
   const [snapshot, setSnapshot] = useState<AdminOverviewSnapshot>(() => getFallbackOverviewSnapshot(currentLayer));
   const [isLoading, setIsLoading] = useState(true);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
+  const [lastLoadTimeMs, setLastLoadTimeMs] = useState<number | null>(null);
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadOverview() {
+      const loadStartedAt = performance.now();
       setIsLoading(true);
       setInlineMessage(null);
+      setLastLoadTimeMs(null);
+
+      const finishLoad = () => {
+        if (isMounted) {
+          setLastLoadTimeMs(performance.now() - loadStartedAt);
+          setIsLoading(false);
+        }
+      };
 
       if (!shouldUseLiveApi()) {
         setSnapshot(getFallbackOverviewSnapshot(currentLayer));
         setInlineMessage("Local mode detected. Loaded deterministic summary-document fixtures for Build 116 overview.");
-        setIsLoading(false);
+        finishLoad();
         return;
       }
 
@@ -89,9 +104,7 @@ function AdminOverviewPage() {
         setSnapshot(getFallbackOverviewSnapshot(currentLayer));
         setInlineMessage(`${reason} Falling back to deterministic Build 116 fixtures.`);
       } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+        finishLoad();
       }
     }
 
@@ -107,6 +120,11 @@ function AdminOverviewPage() {
       metricCard("Active Students", String(snapshot.operationalSnapshot.activeStudents)),
       metricCard("Tests Conducted (Month)", String(snapshot.operationalSnapshot.testsConducted)),
       metricCard("Tests Scheduled (7d)", String(snapshot.operationalSnapshot.testsScheduled)),
+      metricCard(
+        "Current Academic Year",
+        snapshot.academicYear,
+        `Lock status: ${snapshot.systemHealthAndLicensing.academicYearLockStatus}`,
+      ),
       metricCard("Last Test Completion", formatPercent(snapshot.operationalSnapshot.lastTestCompletionRatePercent)),
       metricCard("Billing Count", String(snapshot.operationalSnapshot.billingCount)),
       metricCard("Concurrent Sessions", String(snapshot.operationalSnapshot.activeConcurrentSessions)),
@@ -129,6 +147,28 @@ function AdminOverviewPage() {
       <p className="admin-analytics-inline-note">
         {isLoading ? "Loading overview..." : inlineMessage ?? "Overview summary ready."}
       </p>
+      <div className="admin-overview-performance-contract" aria-label="Overview performance guarantees">
+        <div>
+          <span>Target load</span>
+          <strong>&lt; {snapshot.performanceGuarantees.targetLoadTimeMs} ms</strong>
+        </div>
+        <div>
+          <span>Measured client load</span>
+          <strong>{formatLoadTime(lastLoadTimeMs)}</strong>
+        </div>
+        <div>
+          <span>Document read ceiling</span>
+          <strong>&lt;= {snapshot.performanceGuarantees.maxSummaryDocumentsPerLoad} summary docs</strong>
+        </div>
+        <div>
+          <span>Risk cache</span>
+          <strong>{snapshot.performanceGuarantees.riskDistributionCacheCadence}</strong>
+        </div>
+        <p>
+          {snapshot.performanceGuarantees.payloadShape}. {snapshot.performanceGuarantees.aggregationPolicy}. Sources:{" "}
+          {snapshot.performanceGuarantees.sourceCollections.join(", ")}.
+        </p>
+      </div>
 
       <div className="admin-analytics-kpi-grid">{firstFoldCards}</div>
 
@@ -152,6 +192,13 @@ function AdminOverviewPage() {
                 <span>Skip burst</span>
                 <strong>{formatPercent(snapshot.currentActivity.skipBurstPercentage)}</strong>
               </div>
+            </div>
+          ) : null}
+          {hasLayer(currentLayer, "L2") ? (
+            <div className="admin-overview-current-activity-badges" aria-label="Current activity L2 execution indicators">
+              <span>Live risk {snapshot.currentActivity.liveRiskCount}</span>
+              <span>Controlled {formatPercent(snapshot.currentActivity.controlledModeCompliancePercentage)}</span>
+              <span>MinTime {snapshot.currentActivity.minTimeViolationsLive}</span>
             </div>
           ) : null}
           <div className="admin-overview-submission-list" aria-label="Last five submissions">
@@ -288,6 +335,11 @@ function AdminOverviewPage() {
             <h3>Stability Index {snapshot.governanceSnapshot.institutionalStabilityIndex}</h3>
             <small>MoM change: {snapshot.governanceSnapshot.monthOverMonthStabilityChange}</small>
             <small>Discipline trajectory: {snapshot.governanceSnapshot.disciplineTrajectoryIndicator}</small>
+            <div className="admin-overview-governance-trend" aria-label="Override frequency trend">
+              <span>Override frequency</span>
+              <strong>{snapshot.governanceSnapshot.overrideFrequencyTrend}</strong>
+              <b aria-hidden="true">{snapshot.governanceSnapshot.miniTrendSparkline}</b>
+            </div>
           </article>
           <article className="admin-analytics-kpi-card">
             <p>System Health & Licensing</p>

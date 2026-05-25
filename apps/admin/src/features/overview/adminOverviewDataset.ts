@@ -23,6 +23,14 @@ export interface OverviewAttentionStudent {
 export interface AdminOverviewSnapshot {
   academicYear: string;
   computedAt: string;
+  performanceGuarantees: {
+    targetLoadTimeMs: number;
+    maxSummaryDocumentsPerLoad: number;
+    riskDistributionCacheCadence: string;
+    payloadShape: string;
+    aggregationPolicy: string;
+    sourceCollections: string[];
+  };
   operationalSnapshot: {
     activeStudents: number;
     testsConducted: number;
@@ -99,6 +107,20 @@ export interface AdminOverviewSnapshot {
 const FALLBACK_OVERVIEW_SNAPSHOT: AdminOverviewSnapshot = {
   academicYear: "2026",
   computedAt: "2026-04-10T23:30:00.000Z",
+  performanceGuarantees: {
+    targetLoadTimeMs: 300,
+    maxSummaryDocumentsPerLoad: 8,
+    riskDistributionCacheCadence: "Daily cached risk distribution snapshot",
+    payloadShape: "Small summary documents only",
+    aggregationPolicy: "No session, rawAttempts, or per-question aggregation on Overview load",
+    sourceCollections: [
+      "students aggregate fields",
+      "runAnalytics",
+      "studentYearMetrics",
+      "governanceSnapshots",
+      "license",
+    ],
+  },
   operationalSnapshot: {
     activeStudents: 412,
     testsConducted: 39,
@@ -323,6 +345,18 @@ function normalizeAttentionStudent(
   };
 }
 
+function normalizeStringList(value: unknown, fallback: string[]): string[] {
+  if (!Array.isArray(value)) {
+    return fallback;
+  }
+
+  const normalized = value
+    .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+    .filter((entry) => entry.length > 0);
+
+  return normalized.length > 0 ? normalized : fallback;
+}
+
 function normalizeOverviewSnapshot(payload: unknown): AdminOverviewSnapshot {
   if (!payload || typeof payload !== "object") {
     throw new Error("GET /admin/overview returned an invalid payload.");
@@ -333,6 +367,7 @@ function normalizeOverviewSnapshot(payload: unknown): AdminOverviewSnapshot {
   const operationalSource = source.operationalSnapshot as Record<string, unknown> | undefined;
   const currentActivitySource = source.currentActivity as Record<string, unknown> | undefined;
   const performanceSource = source.performanceSummary as Record<string, unknown> | undefined;
+  const guaranteesSource = source.performanceGuarantees as Record<string, unknown> | undefined;
   const executionSource = source.executionSummary as Record<string, unknown> | undefined;
   const riskSource = source.riskSnapshot as Record<string, unknown> | undefined;
   const governanceSource = source.governanceSnapshot as Record<string, unknown> | undefined;
@@ -360,6 +395,25 @@ function normalizeOverviewSnapshot(payload: unknown): AdminOverviewSnapshot {
   return {
     academicYear: toNonEmptyString(source.academicYear, fallback.academicYear),
     computedAt: toNonEmptyString(source.computedAt, fallback.computedAt),
+    performanceGuarantees: {
+      targetLoadTimeMs: toNumberOrZero(guaranteesSource?.targetLoadTimeMs) || fallback.performanceGuarantees.targetLoadTimeMs,
+      maxSummaryDocumentsPerLoad:
+        toNumberOrZero(guaranteesSource?.maxSummaryDocumentsPerLoad) ||
+        fallback.performanceGuarantees.maxSummaryDocumentsPerLoad,
+      riskDistributionCacheCadence: toNonEmptyString(
+        guaranteesSource?.riskDistributionCacheCadence,
+        fallback.performanceGuarantees.riskDistributionCacheCadence,
+      ),
+      payloadShape: toNonEmptyString(guaranteesSource?.payloadShape, fallback.performanceGuarantees.payloadShape),
+      aggregationPolicy: toNonEmptyString(
+        guaranteesSource?.aggregationPolicy,
+        fallback.performanceGuarantees.aggregationPolicy,
+      ),
+      sourceCollections: normalizeStringList(
+        guaranteesSource?.sourceCollections,
+        fallback.performanceGuarantees.sourceCollections,
+      ),
+    },
     operationalSnapshot: {
       activeStudents: toNumberOrZero(operationalSource?.activeStudents),
       testsConducted: toNumberOrZero(operationalSource?.testsConducted),

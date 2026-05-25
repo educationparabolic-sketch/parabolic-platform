@@ -83,6 +83,19 @@ interface OverrideImpactRow {
   riskEscalationDelta: number;
 }
 
+interface GovernanceTrendFilters {
+  academicYear: string;
+  batchId: string;
+  examType: string;
+}
+
+interface PatternRecurrenceRow {
+  pattern: string;
+  repeatedHighRiskMonths: number;
+  totalMonths: number;
+  recurrencePercent: number;
+}
+
 const FALLBACK_GOVERNANCE_INSTITUTE_ID = "demo-institute";
 const FALLBACK_GOVERNANCE_YEAR_ID = "2026";
 
@@ -216,6 +229,19 @@ function buildRiskHistory(
   }));
 }
 
+function getDominantRiskPattern(snapshot: GovernanceSnapshotRecord): GovernanceRiskCluster {
+  const highRiskClusters: GovernanceRiskCluster[] = ["driftProne", "impulsive", "overextended", "volatile"];
+  return highRiskClusters.reduce((dominant, cluster) =>
+    snapshot.riskDistribution[cluster] > snapshot.riskDistribution[dominant] ? cluster : dominant,
+  "driftProne");
+}
+
+function uniqueSortedValues(values: string[]): string[] {
+  return Array.from(new Set(values.filter((value) => value.trim().length > 0))).sort((left, right) =>
+    left.localeCompare(right),
+  );
+}
+
 function GovernanceWorkspaceNav() {
   return (
     <div className="admin-analytics-inline-link-row">
@@ -276,6 +302,11 @@ function GovernanceMonitoringDashboardPage() {
   const [dataset, setDataset] = useState<GovernanceDashboardDataset>(FALLBACK_GOVERNANCE_DATASET);
   const [isLoading, setIsLoading] = useState(true);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
+  const [trendFilters, setTrendFilters] = useState<GovernanceTrendFilters>({
+    academicYear: "all",
+    batchId: "all",
+    examType: "all",
+  });
 
   useEffect(() => {
     let isMounted = true;
@@ -330,6 +361,27 @@ function GovernanceMonitoringDashboardPage() {
   const orderedSnapshots = useMemo(
     () => [...dataset.snapshots].sort((left, right) => left.month.localeCompare(right.month)),
     [dataset.snapshots],
+  );
+
+  const trendFilterOptions = useMemo(
+    () => ({
+      academicYears: uniqueSortedValues(orderedSnapshots.map((snapshot) => snapshot.academicYear)),
+      batches: uniqueSortedValues(orderedSnapshots.map((snapshot) => snapshot.batchName)),
+      examTypes: uniqueSortedValues(orderedSnapshots.map((snapshot) => snapshot.examType)),
+    }),
+    [orderedSnapshots],
+  );
+
+  const filteredTrendSnapshots = useMemo(
+    () =>
+      orderedSnapshots.filter((snapshot) => {
+        const academicYearMatches =
+          trendFilters.academicYear === "all" || snapshot.academicYear === trendFilters.academicYear;
+        const batchMatches = trendFilters.batchId === "all" || snapshot.batchName === trendFilters.batchId;
+        const examTypeMatches = trendFilters.examType === "all" || snapshot.examType === trendFilters.examType;
+        return academicYearMatches && batchMatches && examTypeMatches;
+      }),
+    [orderedSnapshots, trendFilters],
   );
 
   const latestSnapshot = orderedSnapshots[orderedSnapshots.length - 1] ?? null;
@@ -397,6 +449,58 @@ function GovernanceMonitoringDashboardPage() {
     () => toTrend(orderedSnapshots, (snapshot) => snapshot.executionIntegrityScore),
     [orderedSnapshots],
   );
+  const longitudinalStabilityTrend = useMemo(
+    () => toTrend(filteredTrendSnapshots, (snapshot) => snapshot.stabilityIndex),
+    [filteredTrendSnapshots],
+  );
+  const longitudinalPhaseTrend = useMemo(
+    () => toTrend(filteredTrendSnapshots, (snapshot) => snapshot.phaseCompliancePercent),
+    [filteredTrendSnapshots],
+  );
+  const longitudinalRiskReductionTrend = useMemo(
+    () => toTrend(filteredTrendSnapshots, (snapshot) => snapshot.riskReductionPercent),
+    [filteredTrendSnapshots],
+  );
+  const longitudinalControlledAdoptionTrend = useMemo(
+    () => toTrend(filteredTrendSnapshots, (snapshot) => snapshot.controlledModeAdoptionPercent),
+    [filteredTrendSnapshots],
+  );
+  const yearOverYearStability = useMemo<UiChartPoint[]>(
+    () =>
+      trendFilterOptions.academicYears.map((year) => {
+        const yearSnapshots = orderedSnapshots.filter((snapshot) => {
+          const batchMatches = trendFilters.batchId === "all" || snapshot.batchName === trendFilters.batchId;
+          const examTypeMatches = trendFilters.examType === "all" || snapshot.examType === trendFilters.examType;
+          return snapshot.academicYear === year && batchMatches && examTypeMatches;
+        });
+        const average =
+          yearSnapshots.length > 0 ?
+            yearSnapshots.reduce((sum, snapshot) => sum + snapshot.stabilityIndex, 0) / yearSnapshots.length :
+            0;
+        return {
+          label: year,
+          value: Math.round(average),
+        };
+      }),
+    [orderedSnapshots, trendFilterOptions.academicYears, trendFilters.batchId, trendFilters.examType],
+  );
+  const patternRecurrenceRows = useMemo<PatternRecurrenceRow[]>(() => {
+    const totalMonths = filteredTrendSnapshots.length;
+    const counts = new Map<string, number>();
+    filteredTrendSnapshots.forEach((snapshot) => {
+      const pattern = clusterLabel(getDominantRiskPattern(snapshot));
+      counts.set(pattern, (counts.get(pattern) ?? 0) + 1);
+    });
+
+    return Array.from(counts.entries())
+      .map(([pattern, repeatedHighRiskMonths]) => ({
+        pattern,
+        repeatedHighRiskMonths,
+        totalMonths,
+        recurrencePercent: totalMonths > 0 ? (repeatedHighRiskMonths / totalMonths) * 100 : 0,
+      }))
+      .sort((left, right) => right.recurrencePercent - left.recurrencePercent);
+  }, [filteredTrendSnapshots]);
   const disciplineRollingTrend = useMemo(
     () => toTrend(orderedSnapshots, (snapshot) => snapshot.disciplineIndexRolling30Day),
     [orderedSnapshots],
@@ -745,6 +849,32 @@ function GovernanceMonitoringDashboardPage() {
         id: "accuracyStability",
         header: "Accuracy Stability",
         render: (row) => formatPercent(row.accuracyStabilityScorePercent),
+      },
+    ],
+    [],
+  );
+
+  const patternRecurrenceColumns = useMemo<UiTableColumn<PatternRecurrenceRow>[]>(
+    () => [
+      {
+        id: "pattern",
+        header: "Recurring Risk Pattern",
+        render: (row) => row.pattern,
+      },
+      {
+        id: "repeatedMonths",
+        header: "Repeated High-Risk Months",
+        render: (row) => row.repeatedHighRiskMonths,
+      },
+      {
+        id: "totalMonths",
+        header: "Total Months",
+        render: (row) => row.totalMonths,
+      },
+      {
+        id: "recurrence",
+        header: "Pattern Recurrence Index",
+        render: (row) => formatPercent(row.recurrencePercent),
       },
     ],
     [],
@@ -1237,36 +1367,126 @@ function GovernanceMonitoringDashboardPage() {
     if (currentSubpage === "trends") {
       return (
         <>
+          <section className="admin-governance-table-section" aria-labelledby="admin-governance-trends-filter-title">
+            <h3 id="admin-governance-trends-filter-title">Longitudinal Trend Filters</h3>
+            <p className="admin-governance-section-copy">
+              Cross-year governance reads stay bounded to immutable governanceSnapshots. Filters narrow the displayed
+              Academic Year, Batch, and Exam Type views without session-level recomputation.
+            </p>
+            <div className="admin-analytics-filter-grid">
+              <label htmlFor="governance-trends-academic-year">
+                Academic Year
+                <select
+                  id="governance-trends-academic-year"
+                  value={trendFilters.academicYear}
+                  onChange={(event) =>
+                    setTrendFilters((current) => ({
+                      ...current,
+                      academicYear: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="all">All academic years</option>
+                  {trendFilterOptions.academicYears.map((year) => (
+                    <option key={year} value={year}>
+                      {year}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label htmlFor="governance-trends-batch">
+                Batch
+                <select
+                  id="governance-trends-batch"
+                  value={trendFilters.batchId}
+                  onChange={(event) =>
+                    setTrendFilters((current) => ({
+                      ...current,
+                      batchId: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="all">All batches</option>
+                  {trendFilterOptions.batches.map((batchName) => (
+                    <option key={batchName} value={batchName}>
+                      {batchName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label htmlFor="governance-trends-exam-type">
+                Exam Type
+                <select
+                  id="governance-trends-exam-type"
+                  value={trendFilters.examType}
+                  onChange={(event) =>
+                    setTrendFilters((current) => ({
+                      ...current,
+                      examType: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="all">All exam types</option>
+                  {trendFilterOptions.examTypes.map((examType) => (
+                    <option key={examType} value={examType}>
+                      {examType}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </section>
           <div className="admin-governance-chart-grid">
             <UiChartContainer
-              title="Stability Index Trend"
-              subtitle="Cross-month stability trajectory"
-              data={stabilityTrend}
+              title="Year-over-Year Stability"
+              subtitle="Average Stability Index by academic year from governanceSnapshots"
+              data={yearOverYearStability}
+              variant="line"
+              maxValue={100}
+            />
+            <UiChartContainer
+              title="Filtered Stability Index"
+              subtitle="Longitudinal stability trajectory for the selected filter set"
+              data={longitudinalStabilityTrend}
               variant="line"
               maxValue={100}
             />
             <UiChartContainer
               title="Phase Adherence Trend"
-              subtitle="Cross-month phase compliance movement"
-              data={phaseTrend}
+              subtitle="Discipline growth input: phase adherence percent"
+              data={longitudinalPhaseTrend}
               variant="line"
               maxValue={100}
             />
             <UiChartContainer
-              title="Override Frequency Trend"
-              subtitle="Cross-month override movement"
-              data={overrideTrend}
+              title="Risk Reduction Trend"
+              subtitle="Discipline growth input: risk reduction percent"
+              data={longitudinalRiskReductionTrend}
               variant="line"
               maxValue={100}
             />
             <UiChartContainer
-              title="Execution Integrity Trend"
-              subtitle="Cross-month execution quality movement"
-              data={integrityTrend}
+              title="Controlled Mode Adoption"
+              subtitle="Discipline growth input: controlled-mode adoption percent"
+              data={longitudinalControlledAdoptionTrend}
               variant="line"
               maxValue={100}
             />
           </div>
+          <section className="admin-governance-table-section" aria-labelledby="admin-governance-pattern-recurrence-title">
+            <h3 id="admin-governance-pattern-recurrence-title">Pattern Recurrence Index</h3>
+            <p className="admin-governance-section-copy">
+              Pattern recurrence is calculated as repeatedHighRiskMonths divided by totalMonths for the selected
+              longitudinal filter set. Higher values indicate systemic pattern persistence.
+            </p>
+            <UiTable
+              caption="Pattern recurrence by dominant high-risk state"
+              columns={patternRecurrenceColumns}
+              rows={patternRecurrenceRows}
+              rowKey={(row) => row.pattern}
+              emptyStateText="No longitudinal recurrence records are currently available."
+            />
+          </section>
         </>
       );
     }

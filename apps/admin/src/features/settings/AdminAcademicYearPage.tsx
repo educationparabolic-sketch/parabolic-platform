@@ -25,6 +25,9 @@ function AdminAcademicYearPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
+  const [archiveNoActiveConfirmed, setArchiveNoActiveConfirmed] = useState(false);
+  const [archiveIrreversibleConfirmed, setArchiveIrreversibleConfirmed] = useState(false);
+  const [archiveTypedLabel, setArchiveTypedLabel] = useState("");
 
   const defaultYearId = FALLBACK_SNAPSHOT.academicYears[0]?.yearId ?? "";
   const [selectedYearId, setSelectedYearId] = useState(defaultYearId);
@@ -33,6 +36,11 @@ function AdminAcademicYearPage() {
     () => snapshot.academicYears.find((entry) => entry.yearId === selectedYearId) ?? snapshot.academicYears[0] ?? null,
     [selectedYearId, snapshot.academicYears],
   );
+  const archiveReady =
+    Boolean(currentAcademicYear) &&
+    archiveNoActiveConfirmed &&
+    archiveIrreversibleConfirmed &&
+    archiveTypedLabel.trim() === currentAcademicYear?.academicYearLabel;
 
   const applySnapshot = useCallback((nextSnapshot: AdminSettingsSnapshot, message: string) => {
     setSnapshot(nextSnapshot);
@@ -151,11 +159,8 @@ function AdminAcademicYearPage() {
       return;
     }
 
-    const confirmed = window.confirm(
-      `Archive ${currentAcademicYear.academicYearLabel}? This action is irreversible.`,
-    );
-
-    if (!confirmed) {
+    if (!archiveReady) {
+      setInlineMessage("Complete both archive confirmations and type the academic year label before archiving.");
       return;
     }
 
@@ -165,6 +170,9 @@ function AdminAcademicYearPage() {
     try {
       await archiveAcademicYear(settingsInstituteId, currentAcademicYear.yearId);
       const nextSnapshot = await fetchSettingsSnapshot(settingsInstituteId);
+      setArchiveNoActiveConfirmed(false);
+      setArchiveIrreversibleConfirmed(false);
+      setArchiveTypedLabel("");
       applySnapshot(nextSnapshot, `Archive requested for ${currentAcademicYear.academicYearLabel} through secured archive API.`);
     } catch (error) {
       const reason = error instanceof ApiClientError ? error.message : "Academic year archive failed.";
@@ -247,6 +255,9 @@ function AdminAcademicYearPage() {
             value={currentAcademicYear?.yearId ?? ""}
             onChange={(event) => {
               setSelectedYearId(event.target.value);
+              setArchiveNoActiveConfirmed(false);
+              setArchiveIrreversibleConfirmed(false);
+              setArchiveTypedLabel("");
             }}
           >
             {snapshot.academicYears.map((year) => (
@@ -265,15 +276,98 @@ function AdminAcademicYearPage() {
           >
             Lock Year
           </button>
+        </div>
+      </div>
+
+      <div className="admin-risk-table-section">
+        <h3>Archive Preview and Confirmation</h3>
+        <p className="admin-content-copy">
+          Academic-year archive is irreversible. Complete the backup review and both confirmations before sending the
+          request to the secured archive pipeline.
+        </p>
+        <div className="admin-settings-archive-preview">
+          <article className="admin-risk-summary-card">
+            <p className="admin-content-eyebrow">Selected Year</p>
+            <h4>{currentAcademicYear?.academicYearLabel ?? "-"}</h4>
+            <p>
+              {currentAcademicYear?.studentCount ?? 0} students · {currentAcademicYear?.runCount ?? 0} runs · snapshot{" "}
+              {currentAcademicYear?.snapshotStatus ?? "-"}
+            </p>
+          </article>
+          <article className="admin-risk-summary-card">
+            <p className="admin-content-eyebrow">Backup / Export</p>
+            <h4>Export before archive</h4>
+            <p>
+              Generate final governance snapshot, seal studentYearMetrics, export sessions to BigQuery, and verify
+              snapshot-first backup availability before HOT cleanup.
+            </p>
+          </article>
+          <article className="admin-risk-summary-card">
+            <p className="admin-content-eyebrow">Post-Archive State</p>
+            <h4>Read-only historical year</h4>
+            <p>
+              The year appears in Governance longitudinal comparison. No recalculation or new test generation should
+              run against the archived year.
+            </p>
+          </article>
+        </div>
+        <ol className="admin-settings-archive-flow">
+          <li>Generate final governance snapshot.</li>
+          <li>Seal studentYearMetrics.</li>
+          <li>Export session data to BigQuery.</li>
+          <li>Move HOT collections to the WARM partition.</li>
+          <li>Clear HOT session collections.</li>
+          <li>Initialize the next academic year.</li>
+        </ol>
+        <div className="admin-settings-archive-confirmation">
+          <label>
+            <input
+              type="checkbox"
+              checked={archiveNoActiveConfirmed}
+              disabled={!canEditAcademicYear || isSubmitting || currentAcademicYear?.status === "Archived"}
+              onChange={(event) => {
+                setArchiveNoActiveConfirmed(event.target.checked);
+              }}
+            />
+            I confirm there are no active tests or attempts for this academic year.
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={archiveIrreversibleConfirmed}
+              disabled={!canEditAcademicYear || isSubmitting || currentAcademicYear?.status === "Archived"}
+              onChange={(event) => {
+                setArchiveIrreversibleConfirmed(event.target.checked);
+              }}
+            />
+            I confirm archive is irreversible and should make the year read-only.
+          </label>
+          <label>
+            Type {currentAcademicYear?.academicYearLabel ?? "the academic year label"} to confirm
+            <input
+              type="text"
+              value={archiveTypedLabel}
+              disabled={!canEditAcademicYear || isSubmitting || currentAcademicYear?.status === "Archived"}
+              onChange={(event) => {
+                setArchiveTypedLabel(event.target.value);
+              }}
+            />
+          </label>
           <button
             type="button"
             className="admin-compact-button"
-            disabled={!canEditAcademicYear || !currentAcademicYear || isSubmitting || currentAcademicYear.status === "Archived"}
+            disabled={
+              !canEditAcademicYear ||
+              !currentAcademicYear ||
+              isSubmitting ||
+              currentAcademicYear.status === "Archived" ||
+              !archiveReady
+            }
             onClick={() => {
               void handleArchiveYear();
             }}
           >
-            Archive Year
+            {isSubmitting ? "Archiving..." : "Archive Year"}
           </button>
         </div>
       </div>

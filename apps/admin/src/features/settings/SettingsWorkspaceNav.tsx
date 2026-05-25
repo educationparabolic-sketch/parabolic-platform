@@ -29,6 +29,10 @@ const SETTINGS_WORKSPACE_LINKS = [
     label: "System Configuration",
     to: "/admin/settings/system",
   },
+  {
+    label: "Audit History",
+    to: "/admin/settings/audit-history",
+  },
 ] as const;
 
 function SettingsWorkspaceNav() {

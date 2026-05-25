@@ -59,9 +59,17 @@ function AdminUserRoleManagementPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
+  const [selectedActionUserId, setSelectedActionUserId] = useState(FALLBACK_SNAPSHOT.users[0]?.userId ?? "");
+  const [selectedActionRole, setSelectedActionRole] = useState<StaffRole>(FALLBACK_SNAPSHOT.users[0]?.role ?? "teacher");
 
   const applySnapshot = useCallback((nextSnapshot: AdminSettingsSnapshot, message: string) => {
     setSnapshot(nextSnapshot);
+    setSelectedActionUserId((currentValue) => {
+      if (nextSnapshot.users.some((user) => user.userId === currentValue)) {
+        return currentValue;
+      }
+      return nextSnapshot.users[0]?.userId ?? "";
+    });
     setInlineMessage(message);
   }, []);
 
@@ -140,6 +148,16 @@ function AdminUserRoleManagementPage() {
     ],
     [],
   );
+  const selectedActionUser = useMemo(
+    () => snapshot.users.find((user) => user.userId === selectedActionUserId) ?? snapshot.users[0] ?? null,
+    [selectedActionUserId, snapshot.users],
+  );
+
+  useEffect(() => {
+    if (selectedActionUser) {
+      setSelectedActionRole(selectedActionUser.role);
+    }
+  }, [selectedActionUser]);
 
   async function handleUpsert(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -213,6 +231,60 @@ function AdminUserRoleManagementPage() {
     }
   }
 
+  async function handleExplicitRoleChange(): Promise<void> {
+    if (!selectedActionUser) {
+      return;
+    }
+
+    if (!canEditUsers) {
+      setInlineMessage("Director access is read-only for role change requests.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setInlineMessage(null);
+
+    try {
+      const nextSnapshot = await upsertUserAccess(settingsInstituteId, {
+        ...selectedActionUser,
+        role: selectedActionRole,
+      });
+      applySnapshot(nextSnapshot, `Role change logged for ${selectedActionUser.userId}: ${selectedActionUser.role} to ${selectedActionRole}.`);
+    } catch (error) {
+      const reason = error instanceof ApiClientError ? error.message : "Role change request failed.";
+      setInlineMessage(reason);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleExplicitSuspendUser(): Promise<void> {
+    if (!selectedActionUser) {
+      return;
+    }
+
+    if (!canEditUsers) {
+      setInlineMessage("Director access is read-only for suspend-user requests.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setInlineMessage(null);
+
+    try {
+      const nextSnapshot = await upsertUserAccess(settingsInstituteId, {
+        ...selectedActionUser,
+        status: "suspended",
+      });
+      applySnapshot(nextSnapshot, `Suspend-user request logged for ${selectedActionUser.userId}.`);
+    } catch (error) {
+      const reason = error instanceof ApiClientError ? error.message : "Suspend-user request failed.";
+      setInlineMessage(reason);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return (
     <section className="admin-content-card" aria-labelledby="admin-user-role-management-title">
       <p className="admin-content-eyebrow">Settings</p>
@@ -279,6 +351,75 @@ function AdminUserRoleManagementPage() {
             <h4>Read-only strategic view</h4>
             <p>Can review analytics and governance but not mutate institute settings here.</p>
           </article>
+        </div>
+      </div>
+
+      <div className="admin-risk-table-section">
+        <h3>Explicit User Action Set</h3>
+        <p className="admin-content-copy">
+          Add user, remove user, password reset, change role, and suspend-user requests are separated here so each
+          mutation has a clear audit intent before it is sent to the secured settings API.
+        </p>
+        <div className="admin-settings-user-action-panel">
+          <label>
+            Selected User
+            <select
+              value={selectedActionUser?.userId ?? ""}
+              disabled={!canEditUsers || isSubmitting || snapshot.users.length === 0}
+              onChange={(event) => {
+                setSelectedActionUserId(event.target.value);
+              }}
+            >
+              {snapshot.users.map((user) => (
+                <option key={user.userId} value={user.userId}>
+                  {user.displayName} ({user.userId})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Change Role To
+            <select
+              value={selectedActionRole}
+              disabled={!canEditUsers || isSubmitting || !selectedActionUser}
+              onChange={(event) => {
+                setSelectedActionRole(event.target.value as StaffRole);
+              }}
+            >
+              <option value="admin">admin</option>
+              <option value="teacher">teacher</option>
+              <option value="director">director</option>
+              <option value="support">support</option>
+            </select>
+          </label>
+          <div className="admin-settings-action-summary">
+            <span>Current access</span>
+            <strong>
+              {selectedActionUser ?
+                `${selectedActionUser.role} / ${selectedActionUser.status}` :
+                "No user selected"}
+            </strong>
+          </div>
+          <button
+            type="button"
+            className="admin-compact-button"
+            disabled={!canEditUsers || isSubmitting || !selectedActionUser || selectedActionUser.role === selectedActionRole}
+            onClick={() => {
+              void handleExplicitRoleChange();
+            }}
+          >
+            Change Role
+          </button>
+          <button
+            type="button"
+            className="admin-compact-button"
+            disabled={!canEditUsers || isSubmitting || !selectedActionUser || selectedActionUser.status === "suspended"}
+            onClick={() => {
+              void handleExplicitSuspendUser();
+            }}
+          >
+            Suspend User
+          </button>
         </div>
       </div>
 

@@ -20,6 +20,14 @@ function percent(value: number, total: number): number {
   return Math.min(100, Math.max(0, Math.round((value / total) * 100)));
 }
 
+function statusLabel(status: AdminLicensingSnapshot["eligibilityProgress"][number]["status"]): string {
+  if (status === "in_progress") {
+    return "In progress";
+  }
+
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
 function AdminLicensingEligibilityPage() {
   const { session } = useAuthProvider();
   const accessContext = resolveAdminAccessContext(session);
@@ -117,28 +125,49 @@ function AdminLicensingEligibilityPage() {
           <h3>{snapshot.eligibilityProgress.filter((stage) => stage.status === "eligible").length}</h3>
           <small>Vendor review still required</small>
         </article>
+        <article className="admin-analytics-kpi-card">
+          <p>Upgrade Authority</p>
+          <h3>Vendor</h3>
+          <small>No automatic layer switch</small>
+        </article>
       </div>
 
       <div className="admin-risk-table-section">
-        <h3>Eligibility Progress</h3>
+        <h3>Truth-Ladder Eligibility Rules</h3>
         <div className="admin-licensing-eligibility-grid">
           {snapshot.eligibilityProgress.map((stage) => {
             const progressValue = percent(stage.progressCurrent, stage.progressTarget);
 
             return (
               <article key={stage.stage} className="admin-settings-layer-card">
-                <p><strong>{stage.label}</strong></p>
-                <p>Status: {stage.status.replace("_", " ")}</p>
+                <div className="admin-licensing-stage-header">
+                  <div>
+                    <p><strong>{stage.label}</strong></p>
+                    <small>{stage.stage} maturity checkpoint</small>
+                  </div>
+                  <span>{statusLabel(stage.status)}</span>
+                </div>
                 <p>{stage.summary}</p>
+                <p className="admin-licensing-rule-copy">{stage.rulePresentation}</p>
                 <p>{stage.progressCurrent} / {stage.progressTarget} complete ({progressValue}%)</p>
                 <div className="admin-licensing-progress-track" aria-hidden="true">
                   <span className="admin-licensing-progress-fill" style={{ width: `${progressValue}%` }} />
                 </div>
-                <ul className="admin-licensing-checklist">
+                <div className="admin-licensing-checklist">
                   {stage.checklist.map((item) => (
-                    <li key={item.id}>{item.met ? "PASS" : "PENDING"}: {item.label}</li>
+                    <div key={item.id} className="admin-licensing-check-row">
+                      <span>{item.met ? "PASS" : "PENDING"}</span>
+                      <div>
+                        <strong>{item.label}</strong>
+                        <small>
+                          Current {item.currentValue} · Required {item.requiredValue}
+                        </small>
+                        <small>Source: {item.source}</small>
+                      </div>
+                    </div>
                   ))}
-                </ul>
+                </div>
+                <p className="admin-licensing-rule-copy">{stage.upgradeControl}</p>
               </article>
             );
           })}

@@ -31,10 +31,15 @@ export interface LicensingEligibilityStage {
   label: string;
   status: "eligible" | "in_progress" | "locked";
   summary: string;
+  rulePresentation: string;
+  upgradeControl: string;
   checklist: Array<{
     id: string;
     label: string;
     met: boolean;
+    currentValue: string;
+    requiredValue: string;
+    source: string;
   }>;
   progressCurrent: number;
   progressTarget: number;
@@ -142,42 +147,111 @@ const FALLBACK_SNAPSHOT: AdminLicensingSnapshot = {
   eligibilityProgress: [
     {
       checklist: [
-        {id: "tests", label: "10+ completed tests", met: true},
-        {id: "students", label: "30+ active students", met: true},
-        {id: "tagging", label: "Difficulty tagging coverage >= 90%", met: true},
+        {
+          id: "tests",
+          label: "Completed tests",
+          met: true,
+          currentValue: "14",
+          requiredValue: "10 or more",
+          source: "runAnalytics completed-run count",
+        },
+        {
+          id: "students",
+          label: "Active students",
+          met: true,
+          currentValue: "412",
+          requiredValue: "30 or more",
+          source: "license activeStudentCount",
+        },
+        {
+          id: "tagging",
+          label: "Difficulty tagging coverage",
+          met: true,
+          currentValue: "96%",
+          requiredValue: "90% or more",
+          source: "question bank metadata coverage",
+        },
       ],
       label: "L0 to L1",
       progressCurrent: 10,
       progressTarget: 10,
+      rulePresentation: ">= 10 completed tests, >= 30 active students, and difficulty tagging coverage >= 90%.",
       stage: "L1",
       status: "eligible",
       summary: "Diagnostic unlock requirements are complete.",
+      upgradeControl: "Vendor approval still records the license change; eligibility does not mutate the layer.",
     },
     {
       checklist: [
-        {id: "runs", label: "25+ diagnostic runs", met: true},
-        {id: "adherence", label: "Phase adherence metric available", met: true},
-        {id: "variance", label: "Behavioral variance computed", met: true},
+        {
+          id: "runs",
+          label: "Diagnostic runs",
+          met: true,
+          currentValue: "32",
+          requiredValue: "25 or more",
+          source: "runAnalytics diagnostic-run count",
+        },
+        {
+          id: "adherence",
+          label: "Phase adherence metric",
+          met: true,
+          currentValue: "Available",
+          requiredValue: "Computed",
+          source: "monthlySummary phase adherence",
+        },
+        {
+          id: "variance",
+          label: "Behavioral variance",
+          met: true,
+          currentValue: "Computed",
+          requiredValue: "Computed",
+          source: "yearBehaviorSummary variance signals",
+        },
       ],
       label: "L1 to L2",
       progressCurrent: 25,
       progressTarget: 25,
+      rulePresentation: ">= 25 diagnostic runs, phase adherence metric computed, and behavioral variance computed.",
       stage: "L2",
       status: "eligible",
       summary: "Controlled mode eligibility achieved.",
+      upgradeControl: "Controlled capabilities remain backend-gated until the vendor-signed license enables L2 flags.",
     },
     {
       checklist: [
-        {id: "stability", label: "StabilityIndex >= 70", met: false},
-        {id: "year", label: "At least 1 academic year completed", met: true},
-        {id: "vendor", label: "Vendor invitation required", met: false},
+        {
+          id: "stability",
+          label: "Stability Index",
+          met: true,
+          currentValue: "71",
+          requiredValue: "70 or more",
+          source: "governanceSnapshots stabilityIndex",
+        },
+        {
+          id: "year",
+          label: "Academic year completed",
+          met: true,
+          currentValue: "1",
+          requiredValue: "1 or more",
+          source: "academicYears lifecycle status",
+        },
+        {
+          id: "vendor",
+          label: "Vendor evaluation",
+          met: false,
+          currentValue: "Pending",
+          requiredValue: "Invitation approved",
+          source: "vendor license review",
+        },
       ],
       label: "L2 to L3",
       progressCurrent: 71,
       progressTarget: 100,
+      rulePresentation: "Invitation-only. Optional readiness signals include Stability Index >= 70 and at least one completed academic year.",
       stage: "L3",
       status: "in_progress",
       summary: "Invitation-only governance tier pending vendor approval.",
+      upgradeControl: "No self-upgrade button is exposed for Governance; the institute can only request evaluation.",
     },
   ],
   featureMatrix: [
@@ -318,6 +392,9 @@ function normalizeSnapshot(value: unknown): AdminLicensingSnapshot | null {
                   id: toNonEmptyString(item.id, "check"),
                   label: toNonEmptyString(item.label, "Criteria"),
                   met: Boolean(item.met),
+                  currentValue: toNonEmptyString(item.currentValue, Boolean(item.met) ? "Met" : "Pending"),
+                  requiredValue: toNonEmptyString(item.requiredValue, "Required"),
+                  source: toNonEmptyString(item.source, "Vendor eligibility snapshot"),
                 };
               })
               .filter((item): item is LicensingEligibilityStage["checklist"][number] => Boolean(item)) :
@@ -332,9 +409,11 @@ function normalizeSnapshot(value: unknown): AdminLicensingSnapshot | null {
             label: toNonEmptyString(stage.label, "Stage"),
             progressCurrent: Math.max(0, Math.round(toNumberOrZero(stage.progressCurrent))),
             progressTarget: Math.max(1, Math.round(toNumberOrZero(stage.progressTarget) || 1)),
+            rulePresentation: toNonEmptyString(stage.rulePresentation, "Eligibility rule details are provided by vendor-controlled licensing snapshots."),
             stage: toNonEmptyString(stage.stage, "Lx"),
             status,
             summary: toNonEmptyString(stage.summary, "Eligibility status"),
+            upgradeControl: toNonEmptyString(stage.upgradeControl, "Eligibility is readiness only and does not grant automatic upgrades."),
           } as LicensingEligibilityStage;
         })
         .filter((stage): stage is LicensingEligibilityStage => Boolean(stage)) :

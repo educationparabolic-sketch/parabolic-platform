@@ -53,6 +53,11 @@ const SETTINGS_WORKSPACES: SettingsWorkspaceLink[] = [
     description: "Read-only licensing snapshot visibility and admin-controlled rollout flags.",
     to: "/admin/settings/system",
   },
+  {
+    title: "Settings Audit History",
+    description: "Read-only settings mutation timeline from institute settingsAudit records.",
+    to: "/admin/settings/audit-history",
+  },
 ];
 
 function AdminSettingsLandingPage() {
@@ -138,7 +143,7 @@ function AdminSettingsLandingPage() {
         <article className="admin-analytics-kpi-card">
           <p>Audit Scope</p>
           <h3>Logged</h3>
-          <small>Settings mutations append institute audit history</small>
+          <small>{snapshot.settingsAudit.length} settingsAudit events surfaced</small>
         </article>
         <article className="admin-analytics-kpi-card">
           <p>Current Year</p>

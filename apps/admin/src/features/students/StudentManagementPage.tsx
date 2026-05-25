@@ -435,6 +435,28 @@ function formatSignedPercentLabel(value: number): string {
   return `${value >= 0 ? "+" : ""}${Math.round(value)}%`;
 }
 
+function resolveAcademicYearEndDate(academicYear: string): Date {
+  const yearMatch = academicYear.match(/^(\d{4})-(\d{2})$/);
+  if (yearMatch) {
+    const century = yearMatch[1].slice(0, 2);
+    return new Date(`${century}${yearMatch[2]}-05-31T00:00:00+05:30`);
+  }
+
+  const singleYear = academicYear.match(/^(\d{4})$/);
+  if (singleYear) {
+    return new Date(`${singleYear[1]}-05-31T00:00:00+05:30`);
+  }
+
+  return new Date("2026-05-31T00:00:00+05:30");
+}
+
+function resolveDaysUntilAcademicYearEnd(academicYear: string): number {
+  const millisecondsPerDay = 24 * 60 * 60 * 1000;
+  const endDate = resolveAcademicYearEndDate(academicYear);
+  const today = new Date();
+  return Math.max(0, Math.ceil((endDate.getTime() - today.getTime()) / millisecondsPerDay));
+}
+
 function formatBehaviorTag(value: string): string {
   return value.trim().length > 0 ? value : "No summary";
 }
@@ -1038,6 +1060,16 @@ function StudentManagementPage() {
   const archivedStudents = useMemo(
     () => students.filter((student) => student.status === "archived" || student.status === "suspended"),
     [students],
+  );
+  const archiveYear = filters.academicYear || uniqueAcademicYears[0] || "2025-26";
+  const archiveDaysRemaining = resolveDaysUntilAcademicYearEnd(archiveYear);
+  const archiveYearStudents = useMemo(
+    () => students.filter((student) => student.academicYear === archiveYear),
+    [archiveYear, students],
+  );
+  const archiveGraduatingBatches = useMemo(
+    () => new Set(archiveYearStudents.map((student) => student.batch)).size,
+    [archiveYearStudents],
   );
   const activeLifecycleStudents = useMemo(
     () => students.filter((student) => student.status === "active" || student.status === "inactive" || student.status === "invited"),
@@ -2461,10 +2493,82 @@ function StudentManagementPage() {
   }
 
   function renderArchiveView() {
+    const archiveSteps = [
+      "Lock year read-only",
+      "Export raw sessions to BigQuery",
+      "Snapshot governance metrics",
+      "Archive graduating batches",
+      "Reset rolling metrics for new year",
+    ];
+    const accessibleAfterArchive = [
+      "Student summaries",
+      "Governance snapshots",
+      "Read-only profiles",
+    ];
+    const disabledAfterArchive = [
+      "Assignments",
+      "Test edits",
+      "Student mutations",
+      "Template mutations",
+    ];
+
     return (
       <div className="admin-student-stack">
         <p className="admin-content-copy">
-          Archive review now has its own mounted route for summary-only historical visibility separate from active roster operations.
+          Academic-year archive review keeps historical student summaries visible while locking operational mutations after the year is sealed.
+        </p>
+        <section className="admin-student-archive-warning" aria-label="Academic year archive warning">
+          <div>
+            <span>30-day warning</span>
+            <h3>Academic Year Ends in {archiveDaysRemaining} Days</h3>
+            <p>
+              Archive preparation for {archiveYear} is read-heavy and summary-only. Student mutations continue only until the year is locked.
+            </p>
+          </div>
+          <strong>{archiveYear}</strong>
+        </section>
+        <div className="admin-student-summary-grid">
+          <article className="admin-student-summary-card">
+            <h3>{archiveYearStudents.length}</h3>
+            <p>Students in archive scope from studentYearMetrics.</p>
+          </article>
+          <article className="admin-student-summary-card">
+            <h3>{archiveGraduatingBatches}</h3>
+            <p>Graduating batch groups prepared for archive transition.</p>
+          </article>
+          <article className="admin-student-summary-card">
+            <h3>{archivedStudents.length}</h3>
+            <p>Already archived or suspended records visible in review.</p>
+          </article>
+        </div>
+        <div className="admin-student-archive-grid">
+          <section className="admin-student-archive-panel" aria-labelledby="admin-students-archive-steps-title">
+            <h3 id="admin-students-archive-steps-title">Archive System Actions</h3>
+            <ol>
+              {archiveSteps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+          </section>
+          <section className="admin-student-archive-panel" aria-labelledby="admin-students-archive-access-title">
+            <h3 id="admin-students-archive-access-title">After Archive: Accessible</h3>
+            <ul>
+              {accessibleAfterArchive.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </section>
+          <section className="admin-student-archive-panel" aria-labelledby="admin-students-archive-disabled-title">
+            <h3 id="admin-students-archive-disabled-title">After Archive: Disabled</h3>
+            <ul>
+              {disabledAfterArchive.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </section>
+        </div>
+        <p className="admin-student-inline-note">
+          HOT student identity records remain billing-aware; WARM studentYearMetrics stay available for read-only summaries; COLD raw sessions are exported to BigQuery only.
         </p>
         <UiTable
           caption="Archived and suspended students"

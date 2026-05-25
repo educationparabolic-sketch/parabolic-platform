@@ -76,6 +76,7 @@ const AdminDataArchiveControlsPage = lazy(() => import("./features/settings/Admi
 const AdminExecutionPolicyPage = lazy(() => import("./features/settings/AdminExecutionPolicyPage"));
 const AdminAcademicYearPage = lazy(() => import("./features/settings/AdminAcademicYearPage"));
 const AdminInstituteProfilePage = lazy(() => import("./features/settings/AdminInstituteProfilePage"));
+const AdminSettingsAuditHistoryPage = lazy(() => import("./features/settings/AdminSettingsAuditHistoryPage"));
 const AdminSettingsLandingPage = lazy(() => import("./features/settings/AdminSettingsLandingPage"));
 const AdminSecurityAccessPage = lazy(() => import("./features/settings/AdminSecurityAccessPage"));
 const AdminSystemConfigurationPage = lazy(() => import("./features/settings/AdminSystemConfigurationPage"));
@@ -888,6 +889,10 @@ function App() {
         <Route
           path="settings/system"
           element={<AdminRouteBoundary label="Loading system settings"><AdminSystemConfigurationPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="settings/audit-history"
+          element={<AdminRouteBoundary label="Loading settings audit history"><AdminSettingsAuditHistoryPage /></AdminRouteBoundary>}
         />
         <Route path="settings/*" element={<AdminRouteResolutionPage />} />
         <Route path="*" element={<NotFoundPage />} />

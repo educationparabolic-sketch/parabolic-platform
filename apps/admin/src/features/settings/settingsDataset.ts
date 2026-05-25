@@ -112,6 +112,18 @@ export interface DataRetentionPolicySettings {
   autoArchiveSchedule: string;
 }
 
+export interface SettingsAuditEntry {
+  eventId: string;
+  timestamp: string;
+  actor: string;
+  actorRole: StaffRole;
+  actionType: SettingsActionType;
+  area: string;
+  summary: string;
+  target: string;
+  sourcePath: string;
+}
+
 export interface AdminSettingsSnapshot {
   profile: InstituteProfileSettings;
   academicYears: AcademicYearSummary[];
@@ -129,6 +141,7 @@ export interface AdminSettingsSnapshot {
     };
     dataRetentionPolicy: DataRetentionPolicySettings;
   };
+  settingsAudit: SettingsAuditEntry[];
 }
 
 interface AdminSettingsApiResponse {
@@ -201,6 +214,52 @@ const FALLBACK_SNAPSHOT: AdminSettingsSnapshot = {
       firestoreHotUsage: "6.8 GB",
     },
   },
+  settingsAudit: [
+    {
+      actionType: "UPDATE_SECURITY_SETTINGS",
+      actor: "admin_001",
+      actorRole: "admin",
+      area: "Security & Access",
+      eventId: "settings_audit_20260410_0815",
+      sourcePath: "institutes/inst-build-125/settingsAudit/settings_audit_20260410_0815",
+      summary: "Force logout on password change remained enabled and session timeout set to 30 minutes.",
+      target: "security.sessionControls",
+      timestamp: "2026-04-10T08:15:00.000Z",
+    },
+    {
+      actionType: "UPSERT_USER_ACCESS",
+      actor: "admin_001",
+      actorRole: "admin",
+      area: "User & Role Management",
+      eventId: "settings_audit_20260409_1125",
+      sourcePath: "institutes/inst-build-125/settingsAudit/settings_audit_20260409_1125",
+      summary: "Teacher access record updated for Aman Verma.",
+      target: "users/teacher_014",
+      timestamp: "2026-04-09T11:25:00.000Z",
+    },
+    {
+      actionType: "UPDATE_EXECUTION_POLICY",
+      actor: "admin_001",
+      actorRole: "admin",
+      area: "Default Execution Policies",
+      eventId: "settings_audit_20260408_1420",
+      sourcePath: "institutes/inst-build-125/settingsAudit/settings_audit_20260408_1420",
+      summary: "Phase split confirmed at 30/40/30 with manual override disabled.",
+      target: "executionDefaults.phaseSplit",
+      timestamp: "2026-04-08T14:20:00.000Z",
+    },
+    {
+      actionType: "LOCK_ACADEMIC_YEAR",
+      actor: "admin_001",
+      actorRole: "admin",
+      area: "Academic Year Management",
+      eventId: "settings_audit_20260331_1830",
+      sourcePath: "institutes/inst-build-125/settingsAudit/settings_audit_20260331_1830",
+      summary: "Academic year 2025-26 locked before archive workflow.",
+      target: "academicYears/2025",
+      timestamp: "2026-03-31T18:30:00.000Z",
+    },
+  ],
   featureFlags: {
     enableBetaUi: false,
     enableExperimentalAnalytics: true,
@@ -334,6 +393,7 @@ function normalizeSnapshot(value: unknown): AdminSettingsSnapshot | null {
 
   const years = Array.isArray(value.academicYears) ? value.academicYears : [];
   const users = Array.isArray(value.users) ? value.users : [];
+  const settingsAudit = Array.isArray(value.settingsAudit) ? value.settingsAudit : [];
 
   return {
     academicYears: years.reduce<AcademicYearSummary[]>((result, entry) => {
@@ -477,6 +537,32 @@ function normalizeSnapshot(value: unknown): AdminSettingsSnapshot | null {
       forceLogoutOnPasswordChange: toBoolean(securitySource.forceLogoutOnPasswordChange, true),
       sessionTimeoutDuration: Math.max(5, Math.round(toNumberOrZero(securitySource.sessionTimeoutDuration) || 30)),
     },
+    settingsAudit: settingsAudit
+      .map((entry) => {
+        if (!isPlainObject(entry)) {
+          return null;
+        }
+
+        const actorRole = toNonEmptyString(entry.actorRole, "admin").toLowerCase() as StaffRole;
+        const actionType = toNonEmptyString(entry.actionType, "GET_SETTINGS_SNAPSHOT") as SettingsActionType;
+
+        return {
+          actionType,
+          actor: toNonEmptyString(entry.actor, "system"),
+          actorRole:
+            actorRole === "admin" || actorRole === "teacher" || actorRole === "director" || actorRole === "support" ?
+              actorRole :
+              "admin",
+          area: toNonEmptyString(entry.area, "Settings"),
+          eventId: toNonEmptyString(entry.eventId, "settings_audit_event"),
+          sourcePath: toNonEmptyString(entry.sourcePath, "institutes/{id}/settingsAudit/{eventId}"),
+          summary: toNonEmptyString(entry.summary, "Settings change recorded."),
+          target: toNonEmptyString(entry.target, "settings"),
+          timestamp: toNonEmptyString(entry.timestamp, new Date(0).toISOString()),
+        } as SettingsAuditEntry;
+      })
+      .filter((entry): entry is SettingsAuditEntry => Boolean(entry))
+      .sort((left, right) => right.timestamp.localeCompare(left.timestamp)),
     users: users
       .map((entry) => {
         if (!isPlainObject(entry)) {

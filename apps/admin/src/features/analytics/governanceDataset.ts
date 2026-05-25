@@ -16,6 +16,10 @@ export type GovernanceRiskCluster = (typeof GOVERNANCE_RISK_CLUSTERS)[number];
 export interface GovernanceSnapshotRecord {
   documentId: string;
   month: string;
+  academicYear: string;
+  batchId: string;
+  batchName: string;
+  examType: string;
   stabilityIndex: number;
   rawMarksStdDeviation: number;
   accuracyStdDeviation: number;
@@ -27,6 +31,7 @@ export interface GovernanceSnapshotRecord {
   };
   controlledModeRawImprovementPercent: number;
   controlledModeAccuracyImprovementPercent: number;
+  controlledModeAdoptionPercent: number;
   riskReductionPercent: number;
   disciplineIndexRolling30Day: number;
   disciplineIndexYearToDate: number;
@@ -156,6 +161,10 @@ export const FALLBACK_GOVERNANCE_DATASET: GovernanceDashboardDataset = {
     {
       documentId: "2025_11",
       month: "2025-11",
+      academicYear: "2026",
+      batchId: "all",
+      batchName: "All Batches",
+      examType: "All Exam Types",
       stabilityIndex: 72,
       rawMarksStdDeviation: 14,
       accuracyStdDeviation: 11,
@@ -167,6 +176,7 @@ export const FALLBACK_GOVERNANCE_DATASET: GovernanceDashboardDataset = {
       },
       controlledModeRawImprovementPercent: 8,
       controlledModeAccuracyImprovementPercent: 6,
+      controlledModeAdoptionPercent: 46,
       riskReductionPercent: 9,
       disciplineIndexRolling30Day: 72,
       disciplineIndexYearToDate: 70,
@@ -195,6 +205,10 @@ export const FALLBACK_GOVERNANCE_DATASET: GovernanceDashboardDataset = {
     {
       documentId: "2025_12",
       month: "2025-12",
+      academicYear: "2026",
+      batchId: "all",
+      batchName: "All Batches",
+      examType: "All Exam Types",
       stabilityIndex: 74,
       rawMarksStdDeviation: 13,
       accuracyStdDeviation: 10,
@@ -206,6 +220,7 @@ export const FALLBACK_GOVERNANCE_DATASET: GovernanceDashboardDataset = {
       },
       controlledModeRawImprovementPercent: 9,
       controlledModeAccuracyImprovementPercent: 7,
+      controlledModeAdoptionPercent: 49,
       riskReductionPercent: 10,
       disciplineIndexRolling30Day: 74,
       disciplineIndexYearToDate: 72,
@@ -234,6 +249,10 @@ export const FALLBACK_GOVERNANCE_DATASET: GovernanceDashboardDataset = {
     {
       documentId: "2026_01",
       month: "2026-01",
+      academicYear: "2026",
+      batchId: "all",
+      batchName: "All Batches",
+      examType: "All Exam Types",
       stabilityIndex: 76,
       rawMarksStdDeviation: 12,
       accuracyStdDeviation: 9,
@@ -245,6 +264,7 @@ export const FALLBACK_GOVERNANCE_DATASET: GovernanceDashboardDataset = {
       },
       controlledModeRawImprovementPercent: 10,
       controlledModeAccuracyImprovementPercent: 8,
+      controlledModeAdoptionPercent: 52,
       riskReductionPercent: 11,
       disciplineIndexRolling30Day: 76,
       disciplineIndexYearToDate: 74,
@@ -273,6 +293,10 @@ export const FALLBACK_GOVERNANCE_DATASET: GovernanceDashboardDataset = {
     {
       documentId: "2026_02",
       month: "2026-02",
+      academicYear: "2026",
+      batchId: "all",
+      batchName: "All Batches",
+      examType: "All Exam Types",
       stabilityIndex: 78,
       rawMarksStdDeviation: 11,
       accuracyStdDeviation: 8,
@@ -284,6 +308,7 @@ export const FALLBACK_GOVERNANCE_DATASET: GovernanceDashboardDataset = {
       },
       controlledModeRawImprovementPercent: 11,
       controlledModeAccuracyImprovementPercent: 9,
+      controlledModeAdoptionPercent: 56,
       riskReductionPercent: 12,
       disciplineIndexRolling30Day: 78,
       disciplineIndexYearToDate: 75,
@@ -312,6 +337,10 @@ export const FALLBACK_GOVERNANCE_DATASET: GovernanceDashboardDataset = {
     {
       documentId: "2026_03",
       month: "2026-03",
+      academicYear: "2026",
+      batchId: "all",
+      batchName: "All Batches",
+      examType: "All Exam Types",
       stabilityIndex: 81,
       rawMarksStdDeviation: 9,
       accuracyStdDeviation: 7,
@@ -323,6 +352,7 @@ export const FALLBACK_GOVERNANCE_DATASET: GovernanceDashboardDataset = {
       },
       controlledModeRawImprovementPercent: 13,
       controlledModeAccuracyImprovementPercent: 10,
+      controlledModeAdoptionPercent: 61,
       riskReductionPercent: 14,
       disciplineIndexRolling30Day: 81,
       disciplineIndexYearToDate: 78,
@@ -351,6 +381,10 @@ export const FALLBACK_GOVERNANCE_DATASET: GovernanceDashboardDataset = {
     {
       documentId: "2026_04",
       month: "2026-04",
+      academicYear: "2026",
+      batchId: "all",
+      batchName: "All Batches",
+      examType: "All Exam Types",
       stabilityIndex: 82,
       rawMarksStdDeviation: 8,
       accuracyStdDeviation: 7,
@@ -362,6 +396,7 @@ export const FALLBACK_GOVERNANCE_DATASET: GovernanceDashboardDataset = {
       },
       controlledModeRawImprovementPercent: 14,
       controlledModeAccuracyImprovementPercent: 11,
+      controlledModeAdoptionPercent: 64,
       riskReductionPercent: 15,
       disciplineIndexRolling30Day: 82,
       disciplineIndexYearToDate: 79,
@@ -393,6 +428,11 @@ export const FALLBACK_GOVERNANCE_DATASET: GovernanceDashboardDataset = {
 interface GovernanceSnapshotApiRecord {
   documentId?: unknown;
   month?: unknown;
+  academicYear?: unknown;
+  yearId?: unknown;
+  batchId?: unknown;
+  batchName?: unknown;
+  examType?: unknown;
   stabilityIndex?: unknown;
   rawMarksStdDeviation?: unknown;
   rawScoreStdDeviation?: unknown;
@@ -402,6 +442,8 @@ interface GovernanceSnapshotApiRecord {
   stabilityByDifficulty?: unknown;
   controlledModeRawImprovementPercent?: unknown;
   controlledModeAccuracyImprovementPercent?: unknown;
+  controlledModeAdoptionPercent?: unknown;
+  controlledModeUsagePercent?: unknown;
   riskReductionPercent?: unknown;
   disciplineIndexRolling30Day?: unknown;
   disciplineIndexYearToDate?: unknown;
@@ -524,6 +566,10 @@ function normalizeGovernanceSnapshot(value: unknown, index: number): GovernanceS
   return {
     documentId: toNonEmptyString(record.documentId, month.replace("-", "_")),
     month,
+    academicYear: toNonEmptyString(record.academicYear ?? record.yearId, month.slice(0, 4) || `year-${index + 1}`),
+    batchId: toNonEmptyString(record.batchId, "all"),
+    batchName: toNonEmptyString(record.batchName, "All Batches"),
+    examType: toNonEmptyString(record.examType, "All Exam Types"),
     stabilityIndex,
     rawMarksStdDeviation: toNumberOrZero(record.rawMarksStdDeviation ?? record.rawScoreStdDeviation) || Math.max(0, Math.round((100 - stabilityIndex) * 0.5)),
     accuracyStdDeviation: toNumberOrZero(record.accuracyStdDeviation) || Math.max(0, Math.round((100 - stabilityIndex) * 0.4)),
@@ -537,6 +583,9 @@ function normalizeGovernanceSnapshot(value: unknown, index: number): GovernanceS
     controlledModeAccuracyImprovementPercent:
       toNumberOrZero(record.controlledModeAccuracyImprovementPercent) ||
       Math.max(0, Math.round((stabilityIndex - 60) * 0.28)),
+    controlledModeAdoptionPercent:
+      toNumberOrZero(record.controlledModeAdoptionPercent ?? record.controlledModeUsagePercent) ||
+      Math.max(0, Math.min(100, Math.round(stabilityIndex - 24))),
     riskReductionPercent:
       toNumberOrZero(record.riskReductionPercent) ||
       Math.max(0, Math.round((stabilityIndex - 58) * 0.32)),
@@ -687,7 +736,7 @@ export async function fetchGovernanceDataset(context: GovernanceRequestContext):
     body: {
       instituteId: context.instituteId,
       yearId: context.yearId,
-      limit: 10,
+      limit: 36,
     },
   });
 
