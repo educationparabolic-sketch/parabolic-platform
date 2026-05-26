@@ -18,6 +18,19 @@ interface ArchiveLifecycleRecord {
   usedCount: number;
   lastUsedDate: string;
   archiveBucket: string;
+  lifecycleRule: string;
+  metadataTreatment: string;
+  mediaTreatment: string;
+  transitionReadiness: string;
+  nextOperatorAction: string;
+}
+
+interface LifecyclePolicyRow {
+  tier: string;
+  trigger: string;
+  metadataTreatment: string;
+  mediaTreatment: string;
+  operatorAction: string;
 }
 
 function shouldUseLiveApi(): boolean {
@@ -62,20 +75,25 @@ function normalizeStatus(
 
 function toArchiveBucket(thermalState: ArchiveLifecycleRecord["thermalState"]): string {
   if (thermalState === "hot") {
-    return "hot-store";
+    return "CloudStorage/{instituteId}/questionBank/{questionId}/";
   }
 
   if (thermalState === "warm") {
-    return "warm-store";
+    return "questionBank active metadata + warm media cache";
   }
 
-  return "archive-bucket";
+  return "archive storage bucket";
 }
 
 function toLastUsedDate(
   thermalState: ArchiveLifecycleRecord["thermalState"],
   usedCount: number,
+  sourceLastUsedDate?: string | null,
 ): string {
+  if (sourceLastUsedDate) {
+    return sourceLastUsedDate;
+  }
+
   if (thermalState === "hot") {
     return "Current-year active";
   }
@@ -87,6 +105,72 @@ function toLastUsedDate(
   return thermalState === "cold" ? "Archive candidate" : "Pending use";
 }
 
+function toLifecycleRule(thermalState: ArchiveLifecycleRecord["thermalState"]): string {
+  if (thermalState === "hot") {
+    return "Used in the current academic year.";
+  }
+
+  if (thermalState === "warm") {
+    return "Unused recently but still active for future templates.";
+  }
+
+  return "Unused for more than 2 years.";
+}
+
+function toMetadataTreatment(thermalState: ArchiveLifecycleRecord["thermalState"]): string {
+  if (thermalState === "cold") {
+    return "Metadata retained for historical run lookup.";
+  }
+
+  return "Metadata remains indexed and filterable in questionBank.";
+}
+
+function toMediaTreatment(thermalState: ArchiveLifecycleRecord["thermalState"]): string {
+  if (thermalState === "cold") {
+    return "Images moved to archive storage bucket.";
+  }
+
+  if (thermalState === "warm") {
+    return "Images retained without eager table loading.";
+  }
+
+  return "Images remain in active question-bank storage.";
+}
+
+function toTransitionReadiness(question: QuestionBankRecord): string {
+  if (question.status === "deprecated") {
+    return "Deprecated: blocked from new templates, retained for audit.";
+  }
+
+  if (question.thermalState === "cold") {
+    return "COLD complete: metadata retained, historical deletion blocked.";
+  }
+
+  if (question.thermalState === "warm") {
+    return question.usedCount === 0 ?
+      "Eligible to remain active or transition to COLD after 2 inactive years." :
+      "Historically used: version before structural edits.";
+  }
+
+  return "HOT protected: keep active while current-year templates depend on it.";
+}
+
+function toNextOperatorAction(question: QuestionBankRecord): string {
+  if (question.status === "deprecated") {
+    return "Review audit lineage only.";
+  }
+
+  if (question.thermalState === "cold") {
+    return "Verify archived media path; do not delete metadata.";
+  }
+
+  if (question.usedCount > 0) {
+    return "Create successor version for structural change.";
+  }
+
+  return "Keep active or edit flexible metadata.";
+}
+
 function toArchiveLifecycleRecord(
   question: QuestionBankRecord,
 ): ArchiveLifecycleRecord {
@@ -94,10 +178,15 @@ function toArchiveLifecycleRecord(
     archiveBucket: toArchiveBucket(question.thermalState),
     chapter: question.chapter,
     id: question.id,
-    lastUsedDate: toLastUsedDate(question.thermalState, question.usedCount),
+    lastUsedDate: toLastUsedDate(question.thermalState, question.usedCount, question.lastUsedDate),
+    lifecycleRule: toLifecycleRule(question.thermalState),
+    mediaTreatment: toMediaTreatment(question.thermalState),
+    metadataTreatment: toMetadataTreatment(question.thermalState),
+    nextOperatorAction: toNextOperatorAction(question),
     status: question.status,
     subject: question.subject,
     thermalState: question.thermalState,
+    transitionReadiness: toTransitionReadiness(question),
     uniqueKey: question.uniqueKey,
     usedCount: question.usedCount,
     version: question.version,
@@ -106,6 +195,30 @@ function toArchiveLifecycleRecord(
 
 const ARCHIVE_LIFECYCLE_FIXTURES: ArchiveLifecycleRecord[] =
   QUESTION_BANK.map(toArchiveLifecycleRecord);
+
+const LIFECYCLE_POLICY_ROWS: LifecyclePolicyRow[] = [
+  {
+    tier: "HOT",
+    trigger: "Question used in the current academic year.",
+    metadataTreatment: "Indexed and operational in institutes/{id}/questions/{questionId}.",
+    mediaTreatment: "Question and solution images stay in active question-bank storage.",
+    operatorAction: "Use indexed filters, paginate, and version before structural change.",
+  },
+  {
+    tier: "WARM",
+    trigger: "Question is unused recently but remains active.",
+    metadataTreatment: "Metadata stays retained and selectable for future templates.",
+    mediaTreatment: "Media remains available without eager table-image loading.",
+    operatorAction: "Review reuse, tags, and flexible metadata; wait for COLD threshold.",
+  },
+  {
+    tier: "COLD",
+    trigger: "Question unused for more than 2 years.",
+    metadataTreatment: "Metadata remains permanently visible for historical audit lookup.",
+    mediaTreatment: "Images move to archive storage bucket.",
+    operatorAction: "Verify archive path; never delete questions tied to historical runs.",
+  },
+];
 
 function normalizeQuestionRecord(value: unknown, index: number): QuestionBankRecord | null {
   if (!value || typeof value !== "object") {
@@ -251,7 +364,12 @@ function AdminQuestionBankArchiveVersionsPage() {
       status: "active",
       thermalState: "warm",
       lastUsedDate: "Pending use",
-      archiveBucket: "warm-store",
+      archiveBucket: toArchiveBucket("warm"),
+      lifecycleRule: toLifecycleRule("warm"),
+      metadataTreatment: toMetadataTreatment("warm"),
+      mediaTreatment: toMediaTreatment("warm"),
+      transitionReadiness: "New successor: available for future templates only.",
+      nextOperatorAction: "Use in future templates after review.",
     };
 
     setRecords((current) => [
@@ -277,7 +395,12 @@ function AdminQuestionBankArchiveVersionsPage() {
     {
       id: "lifecycle",
       header: "Lifecycle",
-      render: (record) => `${record.thermalState.toUpperCase()} / ${record.archiveBucket}`,
+      render: (record) => (
+        <div className="admin-analytics-run-cell">
+          <strong>{record.thermalState.toUpperCase()}</strong>
+          <small>{record.lifecycleRule}</small>
+        </div>
+      ),
     },
     {
       id: "version",
@@ -290,9 +413,24 @@ function AdminQuestionBankArchiveVersionsPage() {
       render: (record) => record.usedCount,
     },
     {
-      id: "lastUsed",
-      header: "Last Used",
-      render: (record) => record.lastUsedDate,
+      id: "storage",
+      header: "Storage Treatment",
+      render: (record) => (
+        <div className="admin-analytics-run-cell">
+          <strong>{record.archiveBucket}</strong>
+          <small>{record.mediaTreatment}</small>
+        </div>
+      ),
+    },
+    {
+      id: "retention",
+      header: "Retention / Readiness",
+      render: (record) => (
+        <div className="admin-analytics-run-cell">
+          <strong>{record.lastUsedDate}</strong>
+          <small>{record.transitionReadiness}</small>
+        </div>
+      ),
     },
     {
       id: "actions",
@@ -308,8 +446,8 @@ function AdminQuestionBankArchiveVersionsPage() {
             onClick={() => {
               setInlineMessage(
                 record.thermalState === "cold" ?
-                  `${record.id} is already cold and stored in archive media. Metadata remains queryable for historical runs.` :
-                  `${record.id} remains in ${record.thermalState.toUpperCase()} state until inactivity thresholds move it deeper into the archive lifecycle.`,
+                  `${record.id} is COLD: ${record.mediaTreatment} ${record.metadataTreatment} ${record.nextOperatorAction}` :
+                  `${record.id} is ${record.thermalState.toUpperCase()}: ${record.lifecycleRule} ${record.nextOperatorAction}`,
               );
             }}
           >
@@ -361,15 +499,54 @@ function AdminQuestionBankArchiveVersionsPage() {
       <div className="admin-analytics-compliance-panel">
         <article className="admin-risk-summary-card">
           <h4>Lifecycle Rules</h4>
-          <p>HOT questions remain current-year active, WARM questions stay available but quieter, and COLD questions move media into archive storage while metadata remains visible.</p>
-          <small>No historical-run deletion is allowed.</small>
+          <p>HOT means used in the current academic year, WARM means unused recently but active, and COLD means unused for more than 2 years.</p>
+          <small>COLD moves images to archive storage while metadata remains retained.</small>
         </article>
         <article className="admin-risk-summary-card">
           <h4>Version Integrity</h4>
           <p>Used questions branch through successor versions instead of structural mutation, and deprecated versions remain intact for long-term audit coverage.</p>
-          <small>Matches the version-safe editing contract.</small>
+          <small>Never delete questions tied to historical runs.</small>
+        </article>
+        <article className="admin-risk-summary-card">
+          <h4>Operator Boundary</h4>
+          <p>Archive review is visibility-first: lifecycle transitions and media movement are surfaced here, while destructive deletion is not offered.</p>
+          <small>Library tables still avoid full image loading and rely on indexed filters.</small>
         </article>
       </div>
+
+      <UiTable
+        caption="HOT/WARM/COLD lifecycle policy"
+        columns={[
+          {
+            id: "tier",
+            header: "Tier",
+            render: (row) => row.tier,
+          },
+          {
+            id: "trigger",
+            header: "Trigger",
+            render: (row) => row.trigger,
+          },
+          {
+            id: "metadata",
+            header: "Metadata",
+            render: (row) => row.metadataTreatment,
+          },
+          {
+            id: "media",
+            header: "Media",
+            render: (row) => row.mediaTreatment,
+          },
+          {
+            id: "operator",
+            header: "Operator Action",
+            render: (row) => row.operatorAction,
+          },
+        ]}
+        rows={LIFECYCLE_POLICY_ROWS}
+        rowKey={(row) => row.tier}
+        emptyStateText="No lifecycle policy rows are configured."
+      />
 
       <UiTable
         caption="Question archive and version lifecycle"

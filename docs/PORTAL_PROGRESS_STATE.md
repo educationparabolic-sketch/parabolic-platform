@@ -6,10 +6,10 @@ This file is the persistent handoff state for portal checklist implementation ac
 
 - `Current Target Portal`: `admin`
 - `Current Priority Band`: `P2`
-- `Last Completed Checklist ID`: `QB-016`
-- `Next Suggested Checklist ID`: `QB-017`
-- `Last Updated`: `2026-05-25`
-- `Saved Scope Note`: `QB-016` is complete after expanding `/admin/question-bank/validation-logs` into the full immutable upload-history workspace backed by `questionUploadLogs/{uploadId}` style records: uploadedBy, timestamp, totalRows, errors, warnings, versionCreated, error/warning detail previews, immutable storage-path framing, and rollback eligibility only when created questions remain unused in assigned templates. Continue admin P2 with `QB-017`.
+- `Last Completed Checklist ID`: `LIC-008`
+- `Next Suggested Checklist ID`: `LIC-010`
+- `Last Updated`: `2026-05-26`
+- `Saved Scope Note`: `LIC-008` is complete after applying the full locked-feature treatment across `/admin/licensing/features`: enabled/locked pill states for every L0-L3 Feature Matrix cell, slight blur on locked labels, lock glyph, hover title and aria tooltip copy with vendor-approved upgrade messaging, and a layer-by-layer lock treatment legend that keeps locked capabilities visible for planning without granting backend access. Continue admin P2 with `LIC-010`.
 
 ## Active Checklist Set
 

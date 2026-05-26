@@ -25,6 +25,7 @@ import TestsWorkspaceNav from "./TestsWorkspaceNav";
 const apiClient = getPortalApiClient("admin");
 
 type TemplateStatus = "draft" | "ready" | "assigned" | "archived" | "deprecated";
+type TemplateThermalState = "hot" | "warm" | "cold";
 type TestSubpage = "create" | "library" | "analytics" | "distribution" | "settings";
 
 interface TimingWindow {
@@ -86,6 +87,37 @@ interface DistributionDifficultyRow {
   percent: number;
 }
 
+interface TimingProfileTableRow {
+  difficulty: DifficultyLevel;
+  defaultWindow: string;
+  maxSeconds: number;
+  minSeconds: number;
+  questionCount: number;
+  snapshotRule: string;
+  window: string;
+}
+
+interface TemplateLifecyclePolicyRow {
+  tier: "HOT" | "WARM" | "COLD";
+  trigger: string;
+  metadataTreatment: string;
+  mediaTreatment: string;
+  operatorRule: string;
+}
+
+interface TemplateLifecycleRow {
+  id: string;
+  templateName: string;
+  status: TemplateStatus;
+  thermalState: TemplateThermalState;
+  totalRuns: number;
+  lastUsed: string;
+  trigger: string;
+  metadataTreatment: string;
+  mediaTreatment: string;
+  operatorAction: string;
+}
+
 interface ChapterCoverageRow {
   chapter: string;
   count: number;
@@ -109,8 +141,11 @@ interface TestTemplateRecord extends TemplateDraft {
   id: string;
   canonicalId: string;
   examSnapshot?: ExamTypeSnapshot;
+  lastUsedAt: string | null;
   phaseConfigSnapshot?: PhaseConfigSnapshot;
   status: TemplateStatus;
+  thermalState: TemplateThermalState;
+  totalRuns: number;
   updatedAt: string;
 }
 
@@ -194,7 +229,10 @@ const FALLBACK_TEMPLATES: TestTemplateRecord[] = [
       medium: { minSeconds: 60, maxSeconds: 150 },
       hard: { minSeconds: 150, maxSeconds: 210 },
     },
+    lastUsedAt: null,
     status: "draft",
+    thermalState: "warm",
+    totalRuns: 0,
     updatedAt: "2026-04-10T08:30:00.000Z",
   },
   {
@@ -211,8 +249,75 @@ const FALLBACK_TEMPLATES: TestTemplateRecord[] = [
       medium: { minSeconds: 60, maxSeconds: 150 },
       hard: { minSeconds: 150, maxSeconds: 210 },
     },
+    lastUsedAt: "2026-05-11T07:30:00.000Z",
     status: "assigned",
+    thermalState: "hot",
+    totalRuns: 8,
     updatedAt: "2026-04-08T11:45:00.000Z",
+  },
+  {
+    id: "tmpl-003",
+    canonicalId: "9e4ca01810f01dd3d0a4eb27bfcfb4c47d88d2165479d83694789f403853a721",
+    templateName: "Archived JEE Sprint - 2024",
+    examType: "JEEMains",
+    selectionMethod: "offset_limit",
+    totalDurationMinutes: 180,
+    selectedQuestionIds: ["q-101", "q-102", "q-103", "q-107"],
+    difficultyDistribution: { easy: 2, medium: 1, hard: 1 },
+    timingProfile: {
+      easy: { minSeconds: 30, maxSeconds: 60 },
+      medium: { minSeconds: 60, maxSeconds: 150 },
+      hard: { minSeconds: 150, maxSeconds: 210 },
+    },
+    lastUsedAt: "2024-03-15T08:00:00.000Z",
+    status: "archived",
+    thermalState: "cold",
+    totalRuns: 14,
+    updatedAt: "2024-12-20T10:15:00.000Z",
+  },
+  {
+    id: "tmpl-004",
+    canonicalId: "50cd2769995141f7111099e41df32750f52fa28f68efbef429ddef99114ba016",
+    templateName: "Deprecated NEET Mixed Drill",
+    examType: "NEET",
+    selectionMethod: "shuffle_slice",
+    totalDurationMinutes: 200,
+    selectedQuestionIds: ["q-104", "q-105", "q-106", "q-108"],
+    difficultyDistribution: { easy: 1, medium: 2, hard: 1 },
+    timingProfile: {
+      easy: { minSeconds: 25, maxSeconds: 55 },
+      medium: { minSeconds: 55, maxSeconds: 135 },
+      hard: { minSeconds: 135, maxSeconds: 210 },
+    },
+    lastUsedAt: "2025-10-22T08:20:00.000Z",
+    status: "deprecated",
+    thermalState: "warm",
+    totalRuns: 3,
+    updatedAt: "2025-11-05T09:00:00.000Z",
+  },
+];
+
+const TEMPLATE_LIFECYCLE_POLICY_ROWS: TemplateLifecyclePolicyRow[] = [
+  {
+    tier: "HOT",
+    trigger: "Template used in the current academic year.",
+    metadataTreatment: "Frozen question IDs, canonical ID, timing, phase, and marking snapshots stay operational.",
+    mediaTreatment: "Referenced question media remains in active question-bank storage.",
+    operatorRule: "Keep assignable unless explicitly deprecated; structural edits remain locked after assignment.",
+  },
+  {
+    tier: "WARM",
+    trigger: "Template unused but recent.",
+    metadataTreatment: "Metadata remains retained and visible for reuse, audit, and lifecycle actions.",
+    mediaTreatment: "Referenced media remains available without session-derived recomputation.",
+    operatorRule: "Review for reuse, archive, or deprecate without rebuilding canonical identity on read.",
+  },
+  {
+    tier: "COLD",
+    trigger: "Template unused for more than 2 years.",
+    metadataTreatment: "Metadata is retained permanently for historical runs and governance audit.",
+    mediaTreatment: "Referenced images may move to archive storage through the question/template lifecycle policy.",
+    operatorRule: "Never delete templates with historical runs; keep lookup and audit lineage intact.",
   },
 ];
 
@@ -354,6 +459,10 @@ function toTemplateStatus(value: unknown): TemplateStatus {
   return "draft";
 }
 
+function toTemplateThermalState(value: unknown, fallback: TemplateThermalState): TemplateThermalState {
+  return value === "hot" || value === "warm" || value === "cold" ? value : fallback;
+}
+
 function normalizeSelectionMethod(value: unknown, fallback: SelectionMethod): SelectionMethod {
   if (typeof value !== "string") {
     return fallback;
@@ -474,6 +583,7 @@ function normalizeTemplateRecord(value: unknown, index: number): TestTemplateRec
   const sectionStructure = Array.isArray(examSnapshotSource.sectionStructure) ?
     examSnapshotSource.sectionStructure.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0) :
     fallbackExamSnapshot.sectionStructure;
+  const status = toTemplateStatus(record.status);
 
   return {
     id: toNonEmptyString(record.id, `tmpl-${index + 1}`),
@@ -506,7 +616,13 @@ function normalizeTemplateRecord(value: unknown, index: number): TestTemplateRec
       medium: normalizeTimingWindow(timingProfileSource.medium, fallback?.timingProfile.medium ?? { minSeconds: 60, maxSeconds: 150 }),
       hard: normalizeTimingWindow(timingProfileSource.hard, fallback?.timingProfile.hard ?? { minSeconds: 150, maxSeconds: 210 }),
     },
-    status: toTemplateStatus(record.status),
+    lastUsedAt: toOptionalDateString(record.lastUsedAt ?? record.lastUsed, fallback?.lastUsedAt ?? null),
+    status,
+    thermalState: toTemplateThermalState(
+      record.thermalState,
+      fallback?.thermalState ?? (status === "assigned" ? "hot" : status === "archived" ? "cold" : "warm"),
+    ),
+    totalRuns: Math.max(0, toNumberOrZero(record.totalRuns ?? record.runCount ?? fallback?.totalRuns ?? 0)),
     updatedAt: toNonEmptyString(record.updatedAt, fallback?.updatedAt ?? new Date(0).toISOString()),
   };
 }
@@ -554,7 +670,11 @@ async function fetchQuestionPoolFromApi(): Promise<QuestionPoolLoadState> {
   };
 }
 
-function isDraftEditable(status: TemplateStatus): boolean {
+function isTemplateEditable(status: TemplateStatus): boolean {
+  return status === "draft" || status === "ready";
+}
+
+function isTemplatePublishable(status: TemplateStatus): boolean {
   return status === "draft";
 }
 
@@ -570,6 +690,42 @@ function formatIsoDate(value: string): string {
 
 function formatPercent(value: number): string {
   return `${Math.round(value)}%`;
+}
+
+function formatDifficultyLabel(value: DifficultyLevel): string {
+  return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
+}
+
+function formatTimingWindow(value: TimingWindow): string {
+  return `${value.minSeconds}s - ${value.maxSeconds}s`;
+}
+
+function formatOptionalIsoDate(value: string | null): string {
+  return value ? formatIsoDate(value) : "Never used";
+}
+
+function getTemplateLifecyclePolicy(thermalState: TemplateThermalState): TemplateLifecyclePolicyRow {
+  const tier = thermalState.toUpperCase() as TemplateLifecyclePolicyRow["tier"];
+  return TEMPLATE_LIFECYCLE_POLICY_ROWS.find((row) => row.tier === tier) ?? TEMPLATE_LIFECYCLE_POLICY_ROWS[1];
+}
+
+function toTemplateLifecycleRow(template: TestTemplateRecord): TemplateLifecycleRow {
+  const policy = getTemplateLifecyclePolicy(template.thermalState);
+  return {
+    id: template.id,
+    lastUsed: formatOptionalIsoDate(template.lastUsedAt),
+    mediaTreatment: policy.mediaTreatment,
+    metadataTreatment: policy.metadataTreatment,
+    operatorAction:
+      template.totalRuns > 0 ?
+        `${policy.operatorRule} Historical runs: ${template.totalRuns}.` :
+        `${policy.operatorRule} No historical runs recorded.`,
+    status: template.status,
+    templateName: template.templateName,
+    thermalState: template.thermalState,
+    totalRuns: template.totalRuns,
+    trigger: policy.trigger,
+  };
 }
 
 function resolveTestSubpage(pathname: string): TestSubpage {
@@ -896,29 +1052,61 @@ function TestTemplateManagementPage() {
     );
   }, [draft.selectedQuestionIds, questionPoolById]);
 
+  const activeLibraryTemplates = useMemo(
+    () => templates.filter((template) => template.status !== "archived"),
+    [templates],
+  );
+  const comparableTemplates = useMemo(
+    () => activeLibraryTemplates.filter((template) => template.status !== "deprecated"),
+    [activeLibraryTemplates],
+  );
+  const lifecycleRegisterTemplates = useMemo(
+    () => templates.filter((template) => template.status === "archived" || template.status === "deprecated"),
+    [templates],
+  );
+  const templateLifecycleRows = useMemo(
+    () => templates.map(toTemplateLifecycleRow),
+    [templates],
+  );
+
   useEffect(() => {
-    if (templates.length === 0) {
+    if (activeLibraryTemplates.length === 0) {
       setInspectedTemplateId("");
       return;
     }
 
-    if (params.testId && templates.some((template) => template.id === params.testId)) {
+    if (params.testId && activeLibraryTemplates.some((template) => template.id === params.testId)) {
       setInspectedTemplateId(params.testId);
       return;
     }
 
     setInspectedTemplateId((current) =>
-      current && templates.some((template) => template.id === current) ? current : templates[0]?.id ?? "",
+      current && activeLibraryTemplates.some((template) => template.id === current) ?
+        current :
+        activeLibraryTemplates[0]?.id ?? "",
     );
-  }, [params.testId, templates]);
+  }, [activeLibraryTemplates, params.testId]);
 
   const inspectedTemplate = useMemo(() => {
-    return templates.find((template) => template.id === inspectedTemplateId) ?? templates[0] ?? null;
-  }, [inspectedTemplateId, templates]);
+    return activeLibraryTemplates.find((template) => template.id === inspectedTemplateId) ?? activeLibraryTemplates[0] ?? null;
+  }, [activeLibraryTemplates, inspectedTemplateId]);
   const activeExamSnapshot = useMemo(() => getExamTypeSnapshot(draft.examType), [draft.examType]);
   const phaseConfigPreview = useMemo(
     () => buildPhaseConfigSnapshot(draft.difficultyDistribution, draft.totalDurationMinutes),
     [draft.difficultyDistribution, draft.totalDurationMinutes],
+  );
+  const draftTimingProfileRows = useMemo<TimingProfileTableRow[]>(
+    () =>
+      DIFFICULTY_LEVELS.map((difficulty) => ({
+        defaultWindow: formatTimingWindow(activeExamSnapshot.difficultyTimingMapping[difficulty]),
+        difficulty,
+        maxSeconds: draft.timingProfile[difficulty].maxSeconds,
+        minSeconds: draft.timingProfile[difficulty].minSeconds,
+        questionCount: draft.difficultyDistribution[difficulty],
+        snapshotRule: "Stored in timingProfile and locked after first assignment.",
+        window: formatTimingWindow(draft.timingProfile[difficulty]),
+      })),
+    [activeExamSnapshot, draft.difficultyDistribution, draft.timingProfile],
   );
 
   function updateTiming(
@@ -1048,8 +1236,8 @@ function TestTemplateManagementPage() {
       return;
     }
 
-    if (!isDraftEditable(target.status)) {
-      setErrorMessage("Only draft templates are editable. Assigned/ready templates are structurally locked.");
+    if (!isTemplateEditable(target.status)) {
+      setErrorMessage("Only draft and ready templates are editable. Assigned, archived, and deprecated templates are structurally locked.");
       return;
     }
 
@@ -1104,7 +1292,16 @@ function TestTemplateManagementPage() {
       id: editingTemplateId ?? `tmpl-${Date.now()}`,
       ...draft,
       canonicalId,
+      lastUsedAt: editingTemplateId ?
+        templates.find((template) => template.id === editingTemplateId)?.lastUsedAt ?? null :
+        null,
       status: "draft",
+      thermalState: editingTemplateId ?
+        templates.find((template) => template.id === editingTemplateId)?.thermalState ?? "warm" :
+        "warm",
+      totalRuns: editingTemplateId ?
+        templates.find((template) => template.id === editingTemplateId)?.totalRuns ?? 0 :
+        0,
       updatedAt: now,
     };
 
@@ -1176,7 +1373,7 @@ function TestTemplateManagementPage() {
       return;
     }
 
-    if (!isDraftEditable(target.status)) {
+    if (!isTemplatePublishable(target.status)) {
       setErrorMessage("Only draft templates can be published.");
       setPublishTargetId(null);
       return;
@@ -1254,6 +1451,47 @@ function TestTemplateManagementPage() {
     setErrorMessage(null);
   }
 
+  function updateTemplateLifecycle(templateId: string, nextStatus: Extract<TemplateStatus, "archived" | "deprecated">) {
+    const target = templates.find((template) => template.id === templateId);
+    if (!target) {
+      return;
+    }
+
+    if (target.status === "draft") {
+      setErrorMessage("Draft templates should be edited or discarded before archive/deprecation review.");
+      return;
+    }
+
+    if (target.status === "archived") {
+      setInlineMessage(`${target.templateName} is already archived and hidden from the active library.`);
+      return;
+    }
+
+    if (target.status === "deprecated" && nextStatus === "deprecated") {
+      setInlineMessage(`${target.templateName} is already deprecated and excluded from future comparisons.`);
+      return;
+    }
+
+    setTemplates((current) =>
+      current.map((template) =>
+        template.id === templateId ?
+          {
+            ...template,
+            status: nextStatus,
+            thermalState: nextStatus === "archived" ? "cold" : template.thermalState,
+            updatedAt: new Date().toISOString(),
+          } :
+          template,
+      ),
+    );
+    setInlineMessage(
+      nextStatus === "archived" ?
+        `${target.templateName} moved to archived/COLD state and is hidden from the active library table.` :
+        `${target.templateName} moved to deprecated state and is excluded from future analytics comparisons while lifecycle metadata remains retained.`,
+    );
+    setErrorMessage(null);
+  }
+
   const templateColumns: UiTableColumn<TestTemplateRecord>[] = [
     {
       id: "name",
@@ -1289,6 +1527,11 @@ function TestTemplateManagementPage() {
       ),
     },
     {
+      id: "thermalState",
+      header: "Lifecycle Tier",
+      render: (template) => `${template.thermalState.toUpperCase()} / ${formatOptionalIsoDate(template.lastUsedAt)}`,
+    },
+    {
       id: "updatedAt",
       header: "Updated",
       render: (template) => formatIsoDate(template.updatedAt),
@@ -1305,7 +1548,9 @@ function TestTemplateManagementPage() {
       header: "Actions",
       className: "admin-tests-actions-col",
       render: (template) => {
-        const editable = isDraftEditable(template.status);
+        const editable = isTemplateEditable(template.status);
+        const publishable = isTemplatePublishable(template.status);
+        const lifecycleLocked = template.status === "archived" || template.status === "deprecated";
         return (
           <div className="admin-tests-row-actions">
             <button type="button" onClick={() => navigate(`/admin/tests/${template.id}`)}>
@@ -1315,10 +1560,24 @@ function TestTemplateManagementPage() {
               Analytics
             </button>
             <button type="button" onClick={() => startEditingTemplate(template.id)} disabled={!editable}>
-              Edit Draft
+              Edit Template
             </button>
-            <button type="button" onClick={() => setPublishTargetId(template.id)} disabled={!editable}>
+            <button type="button" onClick={() => setPublishTargetId(template.id)} disabled={!publishable}>
               Publish
+            </button>
+            <button
+              type="button"
+              onClick={() => updateTemplateLifecycle(template.id, "archived")}
+              disabled={template.status === "draft" || lifecycleLocked}
+            >
+              Archive
+            </button>
+            <button
+              type="button"
+              onClick={() => updateTemplateLifecycle(template.id, "deprecated")}
+              disabled={template.status === "draft" || lifecycleLocked}
+            >
+              Deprecate
             </button>
           </div>
         );
@@ -1367,6 +1626,24 @@ function TestTemplateManagementPage() {
         minSeconds: inspectedTemplate.timingProfile[difficulty].minSeconds,
         maxSeconds: inspectedTemplate.timingProfile[difficulty].maxSeconds,
       } satisfies DistributionDifficultyRow)) :
+      [];
+  const selectedTemplateTimingRows =
+    inspectedTemplate ?
+      DIFFICULTY_LEVELS.map((difficulty) => {
+        const templateExamSnapshot = inspectedTemplate.examSnapshot ?? getExamTypeSnapshot(inspectedTemplate.examType);
+        return {
+          defaultWindow: formatTimingWindow(templateExamSnapshot.difficultyTimingMapping[difficulty]),
+          difficulty,
+          maxSeconds: inspectedTemplate.timingProfile[difficulty].maxSeconds,
+          minSeconds: inspectedTemplate.timingProfile[difficulty].minSeconds,
+          questionCount: inspectedTemplate.difficultyDistribution[difficulty],
+          snapshotRule:
+            inspectedTemplate.status === "assigned" ?
+              "Assigned template: timing profile is immutable." :
+              "Draft/ready template: timing profile persists with the structural snapshot.",
+          window: formatTimingWindow(inspectedTemplate.timingProfile[difficulty]),
+        } satisfies TimingProfileTableRow;
+      }) :
       [];
   const inspectedTemplateQuestions = inspectedTemplate ?
     inspectedTemplate.selectedQuestionIds
@@ -1441,8 +1718,11 @@ function TestTemplateManagementPage() {
         "Moderate structural load: pacing discipline should be watched." :
         "Balanced structural load: standard operational execution is expected.";
 
-  const totalQuestionCount = templates.reduce((total, template) => total + template.selectedQuestionIds.length, 0);
-  const readyOrAssignedCount = templates.filter((template) => template.status === "ready" || template.status === "assigned").length;
+  const totalQuestionCount = comparableTemplates.reduce((total, template) => total + template.selectedQuestionIds.length, 0);
+  const readyOrAssignedCount = activeLibraryTemplates.filter((template) => template.status === "ready" || template.status === "assigned").length;
+  const hotTemplateCount = templates.filter((template) => template.thermalState === "hot").length;
+  const warmTemplateCount = templates.filter((template) => template.thermalState === "warm").length;
+  const coldTemplateCount = templates.filter((template) => template.thermalState === "cold").length;
 
   function renderCreateView() {
     return (
@@ -1804,7 +2084,7 @@ function TestTemplateManagementPage() {
             {DIFFICULTY_LEVELS.map((difficulty) => (
               <UiFormField
                 key={difficulty}
-                label={`${difficulty.charAt(0).toUpperCase()}${difficulty.slice(1)} count`}
+                label={`${formatDifficultyLabel(difficulty)} count`}
                 htmlFor={`admin-tests-distribution-${difficulty}`}
               >
                 <input
@@ -1827,7 +2107,7 @@ function TestTemplateManagementPage() {
             {DIFFICULTY_LEVELS.map((difficulty) => (
               <div key={difficulty} className="admin-tests-timing-row">
                 <UiFormField
-                  label={`${difficulty.charAt(0).toUpperCase()} min`}
+                  label={`${formatDifficultyLabel(difficulty)} min`}
                   htmlFor={`admin-tests-timing-min-${difficulty}`}
                 >
                   <input
@@ -1839,7 +2119,7 @@ function TestTemplateManagementPage() {
                   />
                 </UiFormField>
                 <UiFormField
-                  label={`${difficulty.charAt(0).toUpperCase()} max`}
+                  label={`${formatDifficultyLabel(difficulty)} max`}
                   htmlFor={`admin-tests-timing-max-${difficulty}`}
                 >
                   <input
@@ -1853,6 +2133,29 @@ function TestTemplateManagementPage() {
               </div>
             ))}
           </UiForm>
+
+          <article className="admin-tests-phase-preview">
+            <h3>L2 Timing Profile Snapshot</h3>
+            <p>
+              Timing windows are derived from the selected exam type, stored by difficulty in <code>timingProfile</code>,
+              and never modified after first assignment.
+            </p>
+            <UiTable
+              caption="Draft timing profile table by difficulty"
+              columns={[
+                { id: "difficulty", header: "Difficulty", render: (row) => formatDifficultyLabel(row.difficulty) },
+                { id: "count", header: "Questions", render: (row) => row.questionCount },
+                { id: "default", header: "Exam Default", render: (row) => row.defaultWindow },
+                { id: "min", header: "MinTime", render: (row) => `${row.minSeconds}s` },
+                { id: "max", header: "MaxTime", render: (row) => `${row.maxSeconds}s` },
+                { id: "window", header: "Stored Window", render: (row) => row.window },
+                { id: "snapshot", header: "Snapshot Rule", render: (row) => row.snapshotRule },
+              ]}
+              rows={draftTimingProfileRows}
+              rowKey={(row) => row.difficulty}
+              emptyStateText="No draft timing profile is available."
+            />
+          </article>
 
           <article className="admin-tests-phase-preview">
             <h3>L2 Phase Preview</h3>
@@ -1882,15 +2185,26 @@ function TestTemplateManagementPage() {
         <div className="admin-tests-summary-grid">
           <article className="admin-tests-summary-card">
             <h3>Library Status</h3>
-            <p>{templates.length} saved templates across draft, ready, and assigned states.</p>
+            <p>{activeLibraryTemplates.length} active-library templates across draft, ready, assigned, and deprecated states.</p>
           </article>
           <article className="admin-tests-summary-card">
-            <h3>Publishable Templates</h3>
-            <p>{templates.filter((template) => template.status === "draft").length} drafts remain editable.</p>
+            <h3>Editable Templates</h3>
+            <p>{activeLibraryTemplates.filter((template) => isTemplateEditable(template.status)).length} draft/ready templates remain editable.</p>
           </article>
           <article className="admin-tests-summary-card">
             <h3>Structure Locked</h3>
             <p>{readyOrAssignedCount} templates are ready/assigned and treated as lifecycle-locked snapshots.</p>
+          </article>
+          <article className="admin-tests-summary-card">
+            <h3>Hidden / Deprecated</h3>
+            <p>
+              {templates.filter((template) => template.status === "archived").length} archived hidden ·{" "}
+              {templates.filter((template) => template.status === "deprecated").length} deprecated excluded from comparisons.
+            </p>
+          </article>
+          <article className="admin-tests-summary-card">
+            <h3>HOT / WARM / COLD</h3>
+            <p>{hotTemplateCount} HOT · {warmTemplateCount} WARM · {coldTemplateCount} COLD templates.</p>
           </article>
         </div>
 
@@ -1918,9 +2232,55 @@ function TestTemplateManagementPage() {
         <UiTable
           caption="Saved Test Templates"
           columns={templateColumns}
-          rows={templates}
+          rows={activeLibraryTemplates}
           rowKey={(row) => row.id}
-          emptyStateText="No templates created yet."
+          emptyStateText="No active-library templates are visible."
+        />
+
+        <UiTable
+          caption="HOT/WARM/COLD template lifecycle policy"
+          columns={[
+            { id: "tier", header: "Tier", render: (row) => row.tier },
+            { id: "trigger", header: "Trigger", render: (row) => row.trigger },
+            { id: "metadata", header: "Metadata", render: (row) => row.metadataTreatment },
+            { id: "media", header: "Media", render: (row) => row.mediaTreatment },
+            { id: "operator", header: "Operator Rule", render: (row) => row.operatorRule },
+          ]}
+          rows={TEMPLATE_LIFECYCLE_POLICY_ROWS}
+          rowKey={(row) => row.tier}
+          emptyStateText="No lifecycle policy is configured."
+        />
+
+        <UiTable
+          caption="Template HOT/WARM/COLD lifecycle register"
+          columns={[
+            { id: "template", header: "Template", render: (row) => row.templateName },
+            { id: "state", header: "Lifecycle State", render: (row) => `${row.thermalState.toUpperCase()} / ${row.status}` },
+            { id: "usage", header: "Usage", render: (row) => `${row.totalRuns} runs / ${row.lastUsed}` },
+            { id: "trigger", header: "Trigger", render: (row) => row.trigger },
+            { id: "retention", header: "Retention", render: (row) => row.metadataTreatment },
+            { id: "media", header: "Media", render: (row) => row.mediaTreatment },
+            { id: "operator", header: "Operator Action", render: (row) => row.operatorAction },
+          ]}
+          rows={templateLifecycleRows}
+          rowKey={(row) => row.id}
+          emptyStateText="No template lifecycle rows are currently available."
+        />
+
+        <UiTable
+          caption="Archived and deprecated template register"
+          columns={[
+            { id: "template", header: "Template", render: (template) => template.templateName },
+            { id: "status", header: "Status", render: (template) => template.status },
+            { id: "visibility", header: "Library Behavior", render: (template) =>
+              template.status === "archived" ?
+                "Hidden from the active Test Library table." :
+                "Visible in library, excluded from future comparisons." },
+            { id: "updated", header: "Updated", render: (template) => formatIsoDate(template.updatedAt) },
+          ]}
+          rows={lifecycleRegisterTemplates}
+          rowKey={(row) => row.id}
+          emptyStateText="No archived or deprecated templates are currently recorded."
         />
       </>
     );
@@ -1932,7 +2292,7 @@ function TestTemplateManagementPage() {
         <div className="admin-tests-summary-grid">
           <article className="admin-tests-summary-card">
             <h3>Templates Tracked</h3>
-            <p>{templates.length} templates are available for structural analytics drill-in.</p>
+            <p>{comparableTemplates.length} non-deprecated templates are available for structural analytics drill-in.</p>
           </article>
           <article className="admin-tests-summary-card">
             <h3>Question Coverage</h3>
@@ -1961,9 +2321,9 @@ function TestTemplateManagementPage() {
         <UiTable
           caption="Template analytics workspace"
           columns={analyticsColumns}
-          rows={templates}
+          rows={comparableTemplates}
           rowKey={(row) => row.id}
-          emptyStateText="No templates available for analytics."
+          emptyStateText="No non-deprecated templates are available for analytics."
         />
       </>
     );
@@ -2005,7 +2365,7 @@ function TestTemplateManagementPage() {
                 value={inspectedTemplate.id}
                 onChange={(event) => setInspectedTemplateId(event.target.value)}
               >
-                {templates.map((template) => (
+                {activeLibraryTemplates.map((template) => (
                   <option key={template.id} value={template.id}>
                     {template.templateName}
                   </option>
@@ -2018,7 +2378,7 @@ function TestTemplateManagementPage() {
         <UiTable
           caption="Difficulty percentage and timing review"
           columns={[
-            { id: "difficulty", header: "Difficulty", render: (row) => row.difficulty },
+            { id: "difficulty", header: "Difficulty", render: (row) => formatDifficultyLabel(row.difficulty) },
             { id: "count", header: "Question Count", render: (row) => row.count },
             { id: "percent", header: "Difficulty %", render: (row) => formatPercent(row.percent) },
             { id: "min", header: "Min Seconds", render: (row) => row.minSeconds },
@@ -2027,6 +2387,22 @@ function TestTemplateManagementPage() {
           rows={selectedTemplateDifficultyRows}
           rowKey={(row) => row.difficulty}
           emptyStateText="No template is currently available for distribution review."
+        />
+
+        <UiTable
+          caption="Stored timing profile by difficulty"
+          columns={[
+            { id: "difficulty", header: "Difficulty", render: (row) => formatDifficultyLabel(row.difficulty) },
+            { id: "count", header: "Questions", render: (row) => row.questionCount },
+            { id: "default", header: "Exam Default", render: (row) => row.defaultWindow },
+            { id: "min", header: "MinTime", render: (row) => `${row.minSeconds}s` },
+            { id: "max", header: "MaxTime", render: (row) => `${row.maxSeconds}s` },
+            { id: "window", header: "Stored Window", render: (row) => row.window },
+            { id: "snapshot", header: "Snapshot Rule", render: (row) => row.snapshotRule },
+          ]}
+          rows={selectedTemplateTimingRows}
+          rowKey={(row) => row.difficulty}
+          emptyStateText="No stored timing profile is available for this template."
         />
 
         <div className="admin-tests-config-grid">

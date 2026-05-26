@@ -36,6 +36,40 @@ interface StudentOption {
   studentName: string;
 }
 
+interface RollingWindowContractRow {
+  field: string;
+  source: string;
+  windowRule: string;
+  visibility: string;
+}
+
+const rollingWindowContractRows: RollingWindowContractRow[] = [
+  {
+    field: "Rushed Pattern, Time Misallocation",
+    source: "studentRollingWindow/{studentId}",
+    windowRule: "Last 5 completed runs OR last 30 days",
+    visibility: "L1 diagnostic",
+  },
+  {
+    field: "Guess Rate Trend, Pacing Deviation",
+    source: "studentRollingWindow/{studentId}.runSummaries",
+    windowRule: "Same active rolling snapshot; no raw sessions",
+    visibility: "L2 execution",
+  },
+  {
+    field: "MinTime Violation, Overstay Frequency",
+    source: "studentRollingWindow/{studentId}.runSummaries",
+    windowRule: "Same active rolling snapshot; summary rows only",
+    visibility: "L2 execution",
+  },
+  {
+    field: "Rolling Risk State",
+    source: "studentYearMetrics/{studentId}",
+    windowRule: "Computed from the active rolling window",
+    visibility: "L2 execution",
+  },
+];
+
 function riskClusterText(value: StudentAnalyticsRecord["rollingRiskCluster"]): string {
   if (value === "critical") {
     return "Critical";
@@ -376,6 +410,9 @@ function StudentIntelligencePage() {
   const averageOverstayPercent = average(student.runSummaries.map((run) => run.overstayPercent));
   const averageMinTimeViolationPercent = average(student.runSummaries.map((run) => run.minTimeViolationPercent));
   const averageControlledDelta = average(student.runSummaries.map((run) => run.controlledModeDelta));
+  const rollingWindowRunCount = student.runSummaries.length;
+  const rollingWindowOldestRun = student.runSummaries[student.runSummaries.length - 1]?.completedOn ?? null;
+  const rollingWindowNewestRun = student.runSummaries[0]?.completedOn ?? null;
 
   return (
     <section className="admin-content-card" aria-labelledby="admin-student-intelligence-title">
@@ -431,8 +468,22 @@ function StudentIntelligencePage() {
       <div className="admin-analytics-kpi-grid">
         <article className="admin-analytics-kpi-card">
           <p>Runs In Window</p>
-          <h3>{student.testsAttempted}</h3>
-          <small>Last 5 runs or last 30 days snapshot</small>
+          <h3>{rollingWindowRunCount}</h3>
+          <small>Active snapshot uses last 5 completed runs OR last 30 days</small>
+        </article>
+        <article className="admin-analytics-kpi-card">
+          <p>Window Rule</p>
+          <h3>5 runs / 30 days</h3>
+          <small>Whichever defines the current studentRollingWindow summary</small>
+        </article>
+        <article className="admin-analytics-kpi-card">
+          <p>Window Span</p>
+          <h3>{rollingWindowNewestRun ? formatIsoDate(rollingWindowNewestRun) : "No runs"}</h3>
+          <small>
+            {rollingWindowOldestRun ?
+              `Oldest included run: ${formatIsoDate(rollingWindowOldestRun)}` :
+              "No summary run history included"}
+          </small>
         </article>
         <article className="admin-analytics-kpi-card">
           <p>Avg Raw Score</p>
@@ -467,13 +518,49 @@ function StudentIntelligencePage() {
       <div className="admin-risk-table-section">
         <h3>L1 Diagnostic View</h3>
         <p className="admin-risk-heatmap-copy">
-          Rolling window: last 5 runs or last 30 days. The L1 view keeps to behavior diagnostics only and does not
-          assign a risk state.
+          Rolling window means the active <code>studentRollingWindow/{student.studentId}</code> snapshot built from
+          the last 5 completed runs OR the last 30 days, with no raw session query on page load. The L1 view keeps to
+          behavior diagnostics only and does not assign a risk state.
         </p>
         <article className="admin-risk-summary-card">
           <p>{l1DiagnosticInsight}</p>
           <small>Diagnostic interpretation from studentYearMetrics and studentRollingWindow summaries.</small>
         </article>
+      </div>
+
+      <div className="admin-risk-table-section">
+        <h3>Rolling Window Source Contract</h3>
+        <p className="admin-risk-heatmap-copy">
+          All student intelligence panels use the same rolling-window boundary so diagnostic cards, trendlines, and
+          intervention context do not mix different lookback periods.
+        </p>
+        <UiTable
+          caption="Student intelligence rolling-window model"
+          columns={[
+            {
+              id: "field",
+              header: "Field",
+              render: (row) => row.field,
+            },
+            {
+              id: "source",
+              header: "Source",
+              render: (row) => <code>{row.source}</code>,
+            },
+            {
+              id: "windowRule",
+              header: "Window Rule",
+              render: (row) => row.windowRule,
+            },
+            {
+              id: "visibility",
+              header: "Visibility",
+              render: (row) => row.visibility,
+            },
+          ]}
+          rows={rollingWindowContractRows}
+          rowKey={(row) => row.field}
+        />
       </div>
 
       {isL2OrAbove ? (

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
+import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
 import { resolveAdminInstituteId } from "../settings/settingsDataset";
 import {
@@ -13,6 +14,36 @@ import {
   type LicensingFeatureRow,
 } from "./licensingDataset";
 import LicensingWorkspaceNav from "./LicensingWorkspaceNav";
+
+const FEATURE_MATRIX_LAYERS: LicenseLayer[] = ["L0", "L1", "L2", "L3"];
+
+function renderFeatureLayerState(row: LicensingFeatureRow, layer: LicenseLayer, currentLayer: LicenseLayer) {
+  const state = row.layers[layer];
+
+  if (state === "enabled") {
+    return (
+      <span className="admin-licensing-feature-state admin-licensing-feature-state-enabled">
+        Enabled
+      </span>
+    );
+  }
+
+  const tooltip =
+    layer === currentLayer ?
+      `${row.feature} is locked for the current ${currentLayer} plan. Upgrade requires vendor approval.` :
+      `${row.feature} is not included at ${layer}. Locked capabilities stay visible for planning only.`;
+
+  return (
+    <span
+      className="admin-licensing-feature-state admin-licensing-feature-state-locked"
+      title={tooltip}
+      aria-label={tooltip}
+    >
+      <span aria-hidden="true" className="admin-licensing-lock-glyph">🔒</span>
+      <span className="admin-licensing-locked-text">Locked</span>
+    </span>
+  );
+}
 
 function AdminLicenseFeaturesPage() {
   const { session } = useAuthProvider();
@@ -63,6 +94,7 @@ function AdminLicenseFeaturesPage() {
     };
   }, [licensingInstituteId]);
 
+  const currentPlan = snapshot.currentPlan;
   const featureColumns = useMemo<UiTableColumn<LicensingFeatureRow>[]>(
     () => [
       {
@@ -78,28 +110,27 @@ function AdminLicenseFeaturesPage() {
       {
         id: "l0",
         header: "L0",
-        render: (row) => row.layers.L0 === "enabled" ? "Enabled" : "Locked",
+        render: (row) => renderFeatureLayerState(row, "L0", currentPlan.currentLayer),
       },
       {
         id: "l1",
         header: "L1",
-        render: (row) => row.layers.L1 === "enabled" ? "Enabled" : "Locked",
+        render: (row) => renderFeatureLayerState(row, "L1", currentPlan.currentLayer),
       },
       {
         id: "l2",
         header: "L2",
-        render: (row) => row.layers.L2 === "enabled" ? "Enabled" : "Locked",
+        render: (row) => renderFeatureLayerState(row, "L2", currentPlan.currentLayer),
       },
       {
         id: "l3",
         header: "L3",
-        render: (row) => row.layers.L3 === "enabled" ? "Enabled" : "Locked",
+        render: (row) => renderFeatureLayerState(row, "L3", currentPlan.currentLayer),
       },
     ],
-    [],
+    [currentPlan.currentLayer],
   );
 
-  const currentPlan = snapshot.currentPlan;
   const lockedForCurrentLayer = snapshot.featureMatrix.filter(
     (row) => row.layers[currentPlan.currentLayer] === "locked",
   );
@@ -169,6 +200,26 @@ function AdminLicenseFeaturesPage() {
           <h4>No hard upsell language</h4>
           <p>Locked capabilities stay visible for planning, but all actual entitlement changes remain vendor-approved.</p>
         </article>
+      </div>
+
+      <div className="admin-risk-table-section">
+        <h3>Locked Feature Treatment</h3>
+        <div className="admin-licensing-lock-treatment-grid">
+          {FEATURE_MATRIX_LAYERS.map((layer) => {
+            const lockedCount = snapshot.featureMatrix.filter((row) => row.layers[layer] === "locked").length;
+
+            return (
+              <article key={layer} className="admin-risk-summary-card">
+                <p className="admin-content-eyebrow">{layer}</p>
+                <h4>{lockedCount} locked capabilities</h4>
+                <p>
+                  Locked cells use a slight blur, lock glyph, and hover tooltip. Visibility is informational only and
+                  does not grant backend access.
+                </p>
+              </article>
+            );
+          })}
+        </div>
       </div>
 
       <div className="admin-risk-table-section">

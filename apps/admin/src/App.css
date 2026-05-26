@@ -3645,6 +3645,44 @@
   gap: 8px;
 }
 
+.admin-licensing-lock-treatment-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.admin-licensing-feature-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.admin-licensing-feature-state-enabled {
+  border: 1px solid rgba(21, 128, 61, 0.22);
+  background: rgba(21, 128, 61, 0.12);
+  color: #17633a;
+}
+
+.admin-licensing-feature-state-locked {
+  border: 1px solid rgba(16, 42, 81, 0.18);
+  background: rgba(244, 248, 253, 0.88);
+  color: #49617f;
+  cursor: help;
+}
+
+.admin-licensing-lock-glyph {
+  filter: grayscale(1);
+}
+
+.admin-licensing-locked-text {
+  opacity: 0.58;
+  filter: blur(0.35px);
+}
+
 .admin-licensing-preview-card {
   min-height: 112px;
 }
@@ -3797,7 +3835,8 @@
 
   .admin-governance-kpi-grid,
   .admin-governance-comparison-grid,
-  .admin-governance-threshold-grid {
+  .admin-governance-threshold-grid,
+  .admin-licensing-lock-treatment-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -3869,7 +3908,8 @@
 
   .admin-analytics-filter-grid,
   .admin-analytics-compliance-panel,
-  .admin-analytics-insight-list {
+  .admin-analytics-insight-list,
+  .admin-licensing-lock-treatment-grid {
     grid-template-columns: 1fr;
   }
 

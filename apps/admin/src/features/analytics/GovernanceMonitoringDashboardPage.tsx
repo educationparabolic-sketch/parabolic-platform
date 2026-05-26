@@ -55,6 +55,9 @@ interface GovernanceReportRow {
   stabilityIndex: number;
   executionIntegrity: number;
   overrideFrequency: number;
+  academicYear: string;
+  generatedBy: string;
+  immutability: string;
 }
 
 interface StabilityThreshold {
@@ -96,8 +99,100 @@ interface PatternRecurrenceRow {
   recurrencePercent: number;
 }
 
+interface GovernanceSnapshotSealRow {
+  id: string;
+  period: string;
+  generatedAt: string;
+  sealState: "Active monthly accumulator" | "Sealed historical month";
+  storageTreatment: string;
+  mutationTreatment: string;
+  loadTreatment: string;
+}
+
+interface GovernanceReportSectionRow {
+  section: string;
+  source: string;
+  includedContent: string;
+}
+
+interface GovernanceReportWorkflowStep {
+  title: string;
+  detail: string;
+}
+
 const FALLBACK_GOVERNANCE_INSTITUTE_ID = "demo-institute";
 const FALLBACK_GOVERNANCE_YEAR_ID = "2026";
+
+const governanceSealPolicyCards = [
+  {
+    title: "Nightly Snapshot",
+    detail: "The current month can refresh through the governance accumulator before monthly close.",
+  },
+  {
+    title: "End-of-Month Seal",
+    detail: "Closed months become immutable governanceSnapshots/{YYYY-MM} records.",
+  },
+  {
+    title: "Historical Rule",
+    detail: "Past months are never recomputed, aggregated on read, or rebuilt from raw sessions.",
+  },
+  {
+    title: "Archive Continuity",
+    detail: "Sealed snapshots remain reportable for longitudinal trends, PDF packets, and accreditation evidence.",
+  },
+];
+
+const governanceReportSections: GovernanceReportSectionRow[] = [
+  {
+    section: "1. Stability Index Summary",
+    source: "governanceSnapshots/{YYYY-MM}.stabilityIndex",
+    includedContent: "Index value, threshold interpretation, 12-month stability trend, and latest month context.",
+  },
+  {
+    section: "2. Risk Distribution",
+    source: "governanceSnapshots/{YYYY-MM}.riskDistribution",
+    includedContent: "Stable, Drift-Prone, Impulsive, Overextended, and Volatile institutional mix.",
+  },
+  {
+    section: "3. Discipline Trajectory",
+    source: "governanceSnapshots/{YYYY-MM}.disciplineIndex*",
+    includedContent: "Rolling 30-day, year-to-date, YoY movement, phase compliance, and integrity trajectory.",
+  },
+  {
+    section: "4. Override Audit Summary",
+    source: "overrideAuditSummary + governanceSnapshots",
+    includedContent: "Override frequency, impact analysis, and repeated override pattern summary without teacher names.",
+  },
+  {
+    section: "5. Batch Comparison",
+    source: "batchRiskSummaries",
+    includedContent: "Batch risk matrix, discipline metrics, raw stability score, and accuracy stability score.",
+  },
+  {
+    section: "6. Strategic Recommendations",
+    source: "Insights Engine summaries",
+    includedContent: "Manual, advisory planning recommendations derived from summary-safe insights outputs.",
+  },
+];
+
+const governanceReportWorkflowSteps: GovernanceReportWorkflowStep[] = [
+  {
+    title: "Prepare PDF Packet",
+    detail: "Assemble sections from immutable snapshot documents only; no live aggregation or session scan is allowed.",
+  },
+  {
+    title: "Director Review",
+    detail: "Attach timestamp, academic year, generated-by metadata, and immutable source-period identifier.",
+  },
+  {
+    title: "Export PDF",
+    detail: "Use the packet for trustee review, strategic planning, or accreditation documentation.",
+  },
+  {
+    title: "Archive Packet",
+    detail: "Retain exported reports alongside sealed governance periods without recomputing historical months.",
+  },
+];
 
 const GOVERNANCE_SECTIONS: GovernanceSectionDefinition[] = [
   {
@@ -611,7 +706,28 @@ function GovernanceMonitoringDashboardPage() {
         stabilityIndex: Math.round(snapshot.stabilityIndex),
         executionIntegrity: Math.round(snapshot.executionIntegrityScore),
         overrideFrequency: Math.round(snapshot.overrideFrequency),
+        academicYear: snapshot.academicYear,
+        generatedBy: "Director",
+        immutability: "Immutable snapshot packet",
       })),
+    [orderedSnapshots],
+  );
+
+  const snapshotSealRows = useMemo<GovernanceSnapshotSealRow[]>(
+    () =>
+      [...orderedSnapshots].reverse().map((snapshot, index) => {
+        const isLatest = index === 0;
+
+        return {
+          id: snapshot.documentId,
+          period: monthLabel(snapshot.month),
+          generatedAt: formatTimestamp(snapshot.generatedAt),
+          sealState: isLatest ? "Active monthly accumulator" : "Sealed historical month",
+          storageTreatment: isLatest ? "Nightly refreshed summary document" : "Archived immutable snapshot",
+          mutationTreatment: isLatest ? "May refresh before monthly close" : "Read-only; no recompute or overwrite",
+          loadTreatment: "Read governanceSnapshots document; never scan sessions/rawAttempts",
+        };
+      }),
     [orderedSnapshots],
   );
 
@@ -629,8 +745,18 @@ function GovernanceMonitoringDashboardPage() {
       },
       {
         id: "generatedAt",
-        header: "Generated At",
+        header: "Timestamp",
         render: (row) => row.generatedAt,
+      },
+      {
+        id: "academicYear",
+        header: "Academic Year",
+        render: (row) => row.academicYear,
+      },
+      {
+        id: "generatedBy",
+        header: "Generated By",
+        render: (row) => row.generatedBy,
       },
       {
         id: "stabilityIndex",
@@ -646,6 +772,73 @@ function GovernanceMonitoringDashboardPage() {
         id: "overrideFrequency",
         header: "Override Share",
         render: (row) => `${row.overrideFrequency}%`,
+      },
+      {
+        id: "immutability",
+        header: "Status",
+        render: (row) => row.immutability,
+      },
+    ],
+    [],
+  );
+
+  const snapshotSealColumns = useMemo<UiTableColumn<GovernanceSnapshotSealRow>[]>(
+    () => [
+      {
+        id: "period",
+        header: "Snapshot Period",
+        render: (row) => (
+          <div className="admin-governance-month-cell">
+            <strong>{row.period}</strong>
+            <small>{row.id}</small>
+          </div>
+        ),
+      },
+      {
+        id: "generatedAt",
+        header: "Generated At",
+        render: (row) => row.generatedAt,
+      },
+      {
+        id: "sealState",
+        header: "Seal State",
+        render: (row) => row.sealState,
+      },
+      {
+        id: "storageTreatment",
+        header: "Storage Treatment",
+        render: (row) => row.storageTreatment,
+      },
+      {
+        id: "mutationTreatment",
+        header: "Mutation Treatment",
+        render: (row) => row.mutationTreatment,
+      },
+      {
+        id: "loadTreatment",
+        header: "Load Treatment",
+        render: (row) => row.loadTreatment,
+      },
+    ],
+    [],
+  );
+
+  const reportSectionColumns = useMemo<UiTableColumn<GovernanceReportSectionRow>[]>(
+    () => [
+      {
+        id: "section",
+        header: "PDF Section",
+        render: (row) => row.section,
+      },
+      {
+        id: "source",
+        header: "Snapshot Source",
+        render: (row) => <code>{row.source}</code>,
+      },
+      {
+        id: "includedContent",
+        header: "Included Content",
+        render: (row) => row.includedContent,
       },
     ],
     [],
@@ -1495,10 +1688,19 @@ function GovernanceMonitoringDashboardPage() {
       <>
         <section className="admin-governance-report-copy">
           <p>
-            Governance reports remain read-only and snapshot-driven here. This mounted route now isolates report
-            preparation from the monitoring routes while deeper PDF-first generation details stay tracked separately.
+            Governance reports are PDF-first institutional packets generated from immutable governance snapshots only.
+            The packet is prepared for trustee review, strategic planning, and accreditation documentation without
+            recomputing historical months or reading raw sessions.
           </p>
         </section>
+        <div className="admin-governance-comparison-grid">
+          {governanceReportWorkflowSteps.map((step) => (
+            <article key={step.title} className="admin-governance-comparison-card">
+              <p>{step.title}</p>
+              <strong>{step.detail}</strong>
+            </article>
+          ))}
+        </div>
         <div className="admin-governance-chart-grid">
           <UiChartContainer
             title="Report Stability Baseline"
@@ -1515,8 +1717,22 @@ function GovernanceMonitoringDashboardPage() {
             maxValue={100}
           />
         </div>
+        <section className="admin-governance-table-section" aria-labelledby="admin-governance-pdf-sections-title">
+          <h3 id="admin-governance-pdf-sections-title">PDF Packet Sections</h3>
+          <UiTable
+            caption="Governance report sections generated from snapshot documents"
+            columns={reportSectionColumns}
+            rows={governanceReportSections}
+            rowKey={(row) => row.section}
+            emptyStateText="No governance report sections are configured."
+          />
+        </section>
         <section className="admin-governance-table-section" aria-labelledby="admin-governance-reports-title">
           <h3 id="admin-governance-reports-title">Governance Report Packets</h3>
+          <p className="admin-governance-section-copy">
+            Each packet carries timestamp, academic year, Director generation metadata, and immutable source-period
+            status. Export actions should render the PDF from these rows rather than rebuilding metrics on demand.
+          </p>
           <UiTable
             caption="Snapshot-backed governance report periods ready for export workflows"
             columns={reportColumns}
@@ -1524,6 +1740,13 @@ function GovernanceMonitoringDashboardPage() {
             rowKey={(row) => row.id}
             emptyStateText="No governance report packets are currently available."
           />
+        </section>
+        <section className="admin-governance-report-copy" aria-label="Governance report source policy">
+          <p>
+            Source policy: read <code>governanceSnapshots/{`{YYYY-MM}`}</code>, <code>overrideAuditSummary</code>,
+            <code>batchRiskSummaries</code>, and Insights Engine recommendation summaries. Never scan sessions,
+            rawAttempts, or per-question logs while preparing a governance report.
+          </p>
         </section>
       </>
     );
@@ -1565,6 +1788,29 @@ function GovernanceMonitoringDashboardPage() {
           </article>
         ))}
       </div>
+
+      <section className="admin-governance-table-section" aria-labelledby="admin-governance-sealed-month-title">
+        <h3 id="admin-governance-sealed-month-title">Sealed Historical Month Treatment</h3>
+        <p className="admin-governance-section-copy">
+          Governance reads the current month as a nightly refreshed accumulator until monthly close. Earlier periods are
+          sealed historical months: immutable, archive-retained, reportable, and never recomputed from raw sessions.
+        </p>
+        <div className="admin-governance-comparison-grid">
+          {governanceSealPolicyCards.map((card) => (
+            <article key={card.title} className="admin-governance-comparison-card">
+              <p>{card.title}</p>
+              <strong>{card.detail}</strong>
+            </article>
+          ))}
+        </div>
+        <UiTable
+          caption="Governance snapshot seal register"
+          columns={snapshotSealColumns}
+          rows={snapshotSealRows}
+          rowKey={(row) => row.id}
+          emptyStateText="No governance snapshot seal records are currently available."
+        />
+      </section>
 
       {renderSectionContent()}
     </section>

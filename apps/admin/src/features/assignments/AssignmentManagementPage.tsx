@@ -35,6 +35,8 @@ type AssignmentSection = "create" | "list" | "live" | "history" | "bulk";
 type ExecutionMode = (typeof EXECUTION_MODES)[number];
 type LicenseLayer = (typeof LICENSE_ORDER)[number];
 type RunStatus = (typeof RUN_STATUSES)[number];
+type RunLifecycleTier = "HOT" | "WARM" | "COLD";
+type TemplateAssignmentStatus = "draft" | "ready" | "assigned" | "archived" | "deprecated";
 
 type RecipientSelectionMode =
   "EntireBatch" |
@@ -49,7 +51,7 @@ interface TemplateOption {
   canonicalId: string;
   name: string;
   examType: "JEEMains" | "NEET";
-  status: "ready" | "assigned" | "draft";
+  status: TemplateAssignmentStatus;
   difficultyDistribution: string;
   allowedModes: ExecutionMode[];
   lastUsedIso: string;
@@ -111,6 +113,7 @@ interface RunAnalyticsSnapshot {
   avgDisciplineIndex: number;
   controlledCompliancePercent: number;
   guessRatePercent: number;
+  executionStabilityIndex: number;
   executionStabilityBadge: string;
   overrideCount: number;
 }
@@ -228,6 +231,61 @@ interface AdminTestTemplateRecord {
   status: "draft" | "ready" | "assigned" | "archived" | "deprecated";
   updatedAt: string;
 }
+
+interface TemplateMetadataRow {
+  id: string;
+  name: string;
+  examType: string;
+  status: TemplateAssignmentStatus;
+  difficultyDistribution: string;
+  allowedModes: string;
+  canonicalVisibility: string;
+  lastUsed: string;
+}
+
+interface AssignmentLifecyclePolicyRow {
+  tier: RunLifecycleTier;
+  trigger: string;
+  firestoreTreatment: string;
+  analyticsTreatment: string;
+  operatorWorkflow: string;
+}
+
+interface AssignmentLifecycleRow {
+  id: string;
+  runName: string;
+  status: RunStatus;
+  tier: RunLifecycleTier;
+  academicYear: string;
+  trigger: string;
+  firestoreTreatment: string;
+  analyticsTreatment: string;
+  operatorAction: string;
+}
+
+const ASSIGNMENT_LIFECYCLE_POLICY_ROWS: AssignmentLifecyclePolicyRow[] = [
+  {
+    tier: "HOT",
+    trigger: "Scheduled, active, or collecting runs in the operational window.",
+    firestoreTreatment: "Run document and active session documents remain in Firestore for execution.",
+    analyticsTreatment: "Live views use session snapshots only; no history/list recomputation from sessions.",
+    operatorWorkflow: "Extend active windows, terminate active runs, or wait for completion before archive.",
+  },
+  {
+    tier: "WARM",
+    trigger: "Completed, cancelled, or terminated runs in the current academic year.",
+    firestoreTreatment: "Run document stays in current-year Firestore history.",
+    analyticsTreatment: "Read immutable runAnalytics summaries for list/history/reporting.",
+    operatorWorkflow: "Export summaries, resend notifications, duplicate/reassign with a new runId, or archive.",
+  },
+  {
+    tier: "COLD",
+    trigger: "Archived runs or runs from past academic years.",
+    firestoreTreatment: "Past-year sessions are export-eligible for BigQuery and optional Firestore cleanup.",
+    analyticsTreatment: "runAnalytics is retained as the institutional summary surface.",
+    operatorWorkflow: "Visibility and export only; never mutate sessions or repurpose a historical run.",
+  },
+];
 
 const TEMPLATE_OPTIONS: TemplateOption[] = [
   {
@@ -420,6 +478,7 @@ const FALLBACK_RUNS: RunStatusRecord[] = [
       avgDisciplineIndex: 66,
       controlledCompliancePercent: 87,
       guessRatePercent: 12,
+      executionStabilityIndex: 68,
       executionStabilityBadge: "Drift",
       overrideCount: 1,
     },
@@ -456,6 +515,7 @@ const FALLBACK_RUNS: RunStatusRecord[] = [
       avgDisciplineIndex: 62,
       controlledCompliancePercent: 82,
       guessRatePercent: 16,
+      executionStabilityIndex: 74,
       executionStabilityBadge: "Stable",
       overrideCount: 3,
     },
@@ -492,6 +552,7 @@ const FALLBACK_RUNS: RunStatusRecord[] = [
       avgDisciplineIndex: 71,
       controlledCompliancePercent: 0,
       guessRatePercent: 9,
+      executionStabilityIndex: 79,
       executionStabilityBadge: "Stable",
       overrideCount: 0,
     },
@@ -738,7 +799,7 @@ function toTemplateOption(record: AdminTestTemplateRecord): TemplateOption {
     canonicalId: record.canonicalId,
     name: record.templateName,
     examType: record.examType === "NEET" ? "NEET" : "JEEMains",
-    status: record.status === "draft" ? "draft" : record.status === "assigned" ? "assigned" : "ready",
+    status: record.status,
     difficultyDistribution: deriveDifficultyDistributionLabel(record.difficultyDistribution),
     allowedModes: deriveAllowedModes(record.examType),
     lastUsedIso: record.updatedAt,
@@ -764,6 +825,33 @@ async function fetchTemplateOptionsFromApi(): Promise<TemplateOption[]> {
   }
 
   return templates;
+}
+
+function isTemplateAssignable(template: TemplateOption): boolean {
+  return template.status === "ready" || template.status === "assigned";
+}
+
+function formatTemplateDropdownLabel(template: TemplateOption): string {
+  return [
+    template.name,
+    template.examType,
+    template.difficultyDistribution,
+    `Modes: ${template.allowedModes.join("/")}`,
+    `Last used: ${formatDateTime(template.lastUsedIso)}`,
+  ].join(" | ");
+}
+
+function toTemplateMetadataRow(template: TemplateOption): TemplateMetadataRow {
+  return {
+    allowedModes: template.allowedModes.join(", "),
+    canonicalVisibility: "Hidden in dropdown; captured in run snapshot.",
+    difficultyDistribution: template.difficultyDistribution,
+    examType: template.examType,
+    id: template.id,
+    lastUsed: formatDateTime(template.lastUsedIso),
+    name: template.name,
+    status: template.status,
+  };
 }
 
 function extractStudentArray(payload: unknown): unknown[] {
@@ -920,6 +1008,43 @@ function statusClassName(status: RunStatus): string {
   }
 }
 
+function lifecyclePolicyForTier(tier: RunLifecycleTier): AssignmentLifecyclePolicyRow {
+  return ASSIGNMENT_LIFECYCLE_POLICY_ROWS.find((row) => row.tier === tier) ?? ASSIGNMENT_LIFECYCLE_POLICY_ROWS[1];
+}
+
+function resolveRunLifecycleTier(run: RunStatusRecord): RunLifecycleTier {
+  if (run.status === "archived" || run.academicYear !== CURRENT_ACADEMIC_YEAR) {
+    return "COLD";
+  }
+
+  if (run.status === "scheduled" || run.status === "active" || run.status === "collecting") {
+    return "HOT";
+  }
+
+  return "WARM";
+}
+
+function toAssignmentLifecycleRow(run: RunStatusRecord): AssignmentLifecycleRow {
+  const tier = resolveRunLifecycleTier(run);
+  const policy = lifecyclePolicyForTier(tier);
+  return {
+    academicYear: run.academicYear,
+    analyticsTreatment: policy.analyticsTreatment,
+    firestoreTreatment: policy.firestoreTreatment,
+    id: run.runId,
+    operatorAction:
+      tier === "HOT" ?
+        "Operational controls only until execution closes." :
+        tier === "WARM" ?
+          "Export, notify, duplicate, reassign with new runId, or archive." :
+          "Read/export retained summaries; do not mutate historical session data.",
+    runName: run.runName,
+    status: run.status,
+    tier,
+    trigger: policy.trigger,
+  };
+}
+
 function formatBatchLabel(batchId: string, batches: BatchOption[]): string {
   const matchedBatch = batches.find((batch) => batch.id === batchId);
   return matchedBatch?.name ?? batchId;
@@ -971,6 +1096,7 @@ function analyticsForRecipientCount(recipientCount: number, mode: ExecutionMode)
     avgDisciplineIndex: Math.max(40, 76 - Math.min(24, normalizedCount)),
     controlledCompliancePercent: mode === "Controlled" || mode === "Hard" ? Math.max(50, 91 - normalizedCount) : 0,
     guessRatePercent: Math.min(26, 8 + Math.round(normalizedCount * 0.5)),
+    executionStabilityIndex: Math.max(35, 82 - Math.min(30, normalizedCount * 2)),
     executionStabilityBadge: normalizedCount > 8 ? "Drift" : "Stable",
     overrideCount: mode === "Hard" ? 1 : 0,
   };
@@ -1056,6 +1182,9 @@ function buildRunRecordFromAnalytics(record: RunAnalyticsRecord, students: Stude
       avgDisciplineIndex: Math.round(record.disciplineIndexAverage),
       controlledCompliancePercent: Math.round(record.controlledCompliancePercent),
       guessRatePercent: Math.round(record.guessRatePercent),
+      executionStabilityIndex: Math.round(
+        Math.max(0, Math.min(100, record.disciplineIndexAverage - record.guessRatePercent * 0.35)),
+      ),
       executionStabilityBadge: toExecutionStabilityBadge(record),
       overrideCount: Math.round(record.structuralOverridePercent),
     },
@@ -1146,7 +1275,7 @@ function validateDraft(draft: AssignmentDraft, templates: TemplateOption[], stud
     return "The selected template is not recognized.";
   }
 
-  if (template.status === "draft") {
+  if (!isTemplateAssignable(template)) {
     return "Only templates with status ready or assigned can be used for assignment.";
   }
 
@@ -1310,7 +1439,7 @@ function AssignmentManagementPage() {
   const [templateOptions, setTemplateOptions] = useState<TemplateOption[]>(TEMPLATE_OPTIONS);
   const [studentOptions, setStudentOptions] = useState<StudentOption[]>(STUDENT_OPTIONS);
   const [draft, setDraft] = useState<AssignmentDraft>(() => {
-    const firstReadyTemplate = TEMPLATE_OPTIONS.find((template) => template.status !== "draft");
+    const firstReadyTemplate = TEMPLATE_OPTIONS.find(isTemplateAssignable);
     return {
       ...INITIAL_DRAFT,
       templateId: firstReadyTemplate?.id ?? "",
@@ -1345,8 +1474,8 @@ function AssignmentManagementPage() {
         setTemplateOptions(liveTemplates);
         setDraft((current) => {
           const availableTemplate =
-            liveTemplates.find((template) => template.id === current.templateId && template.status !== "draft") ??
-            liveTemplates.find((template) => template.status !== "draft") ??
+            liveTemplates.find((template) => template.id === current.templateId && isTemplateAssignable(template)) ??
+            liveTemplates.find(isTemplateAssignable) ??
             null;
 
           if (!availableTemplate) {
@@ -1507,8 +1636,16 @@ function AssignmentManagementPage() {
   );
 
   const templateOptionsForAssignment = useMemo(
-    () => templateOptions.filter((template) => template.status === "ready" || template.status === "assigned"),
+    () => templateOptions.filter(isTemplateAssignable),
     [templateOptions],
+  );
+  const blockedTemplateOptions = useMemo(
+    () => templateOptions.filter((template) => !isTemplateAssignable(template)),
+    [templateOptions],
+  );
+  const templateMetadataRows = useMemo(
+    () => templateOptionsForAssignment.map(toTemplateMetadataRow),
+    [templateOptionsForAssignment],
   );
 
   const recipientIds = useMemo(
@@ -1565,6 +1702,22 @@ function AssignmentManagementPage() {
   const historyRows = useMemo(
     () => runs.filter((run) => run.status === "completed" || run.status === "archived" || run.status === "cancelled" || run.status === "terminated"),
     [runs],
+  );
+  const assignmentLifecycleRows = useMemo(
+    () => runs.map(toAssignmentLifecycleRow),
+    [runs],
+  );
+  const hotRunCount = useMemo(
+    () => assignmentLifecycleRows.filter((row) => row.tier === "HOT").length,
+    [assignmentLifecycleRows],
+  );
+  const warmRunCount = useMemo(
+    () => assignmentLifecycleRows.filter((row) => row.tier === "WARM").length,
+    [assignmentLifecycleRows],
+  );
+  const coldRunCount = useMemo(
+    () => assignmentLifecycleRows.filter((row) => row.tier === "COLD").length,
+    [assignmentLifecycleRows],
   );
 
   const filteredRuns = useMemo(() => {
@@ -1795,61 +1948,56 @@ function AssignmentManagementPage() {
     return [
       {
         id: "runName",
-        header: "Run",
+        header: "Run Name",
         render: (row) => (
           <div className="admin-assignments-run-cell admin-assignments-run-cell-strong">
             <strong>{row.runName}</strong>
             <small>{row.templateName}</small>
-            <small>{formatDateTime(row.createdAtIso)}</small>
           </div>
         ),
       },
       {
-        id: "delivery",
-        header: "Delivery",
+        id: "mode",
+        header: "Mode",
+        render: (row) => row.mode,
+      },
+      {
+        id: "avgRaw",
+        header: "Avg Raw %",
+        render: (row) => `${row.runAnalyticsSnapshot.avgRawScorePercent}%`,
+      },
+      {
+        id: "avgAccuracy",
+        header: "Avg Accuracy %",
+        render: (row) => `${row.runAnalyticsSnapshot.avgAccuracyPercent}%`,
+      },
+      {
+        id: "riskDistribution",
+        header: "Risk Distribution",
+        render: (row) => row.runAnalyticsSnapshot.riskDistributionSummary,
+      },
+      {
+        id: "stabilityIndex",
+        header: "Stability Index",
+        render: (row) => row.runAnalyticsSnapshot.executionStabilityIndex,
+      },
+      {
+        id: "disciplineIndex",
+        header: "Discipline Index",
+        render: (row) => row.runAnalyticsSnapshot.avgDisciplineIndex,
+      },
+      {
+        id: "completion",
+        header: "Completion %",
+        render: (row) => `${row.completionPercent}%`,
+      },
+      {
+        id: "summaryState",
+        header: "Read-only Summary",
         render: (row) => (
           <div className="admin-assignments-table-stack">
-            <div className="admin-assignments-pill-row">
-              <span className="admin-assignments-metric-pill">{row.mode}</span>
-              <span className={statusClassName(row.status)}>{row.status}</span>
-            </div>
-            <small>{row.batchIds.map((batchId) => formatBatchLabel(batchId, batchOptions)).join(", ")}</small>
-          </div>
-        ),
-      },
-      {
-        id: "performance",
-        header: "Performance",
-        render: (row) => (
-          <div className="admin-assignments-table-stack">
-            <div className="admin-assignments-metric-grid">
-              <span>Raw <strong>{row.runAnalyticsSnapshot.avgRawScorePercent}%</strong></span>
-              <span>Accuracy <strong>{row.runAnalyticsSnapshot.avgAccuracyPercent}%</strong></span>
-              <span>Completion <strong>{row.completionPercent}%</strong></span>
-            </div>
-          </div>
-        ),
-      },
-      {
-        id: "behaviour",
-        header: "Behaviour",
-        render: (row) => (
-          <div className="admin-assignments-table-stack">
-            <div className="admin-assignments-pill-row">
-              <span className="admin-assignments-metric-pill">Stability {row.runAnalyticsSnapshot.executionStabilityBadge}</span>
-              <span className="admin-assignments-metric-pill">Discipline {row.runAnalyticsSnapshot.avgDisciplineIndex}</span>
-            </div>
-            <small>{row.runAnalyticsSnapshot.riskDistributionSummary}</small>
-          </div>
-        ),
-      },
-      {
-        id: "window",
-        header: "Window",
-        render: (row) => (
-          <div className="admin-assignments-window-cell">
-            <strong>{formatDateTime(row.startWindowIso)}</strong>
-            <small>Ended {formatDateTime(row.endWindowIso)}</small>
+            <span className={statusClassName(row.status)}>{row.status}</span>
+            <small>runAnalytics/{row.runId}</small>
           </div>
         ),
       },
@@ -2102,7 +2250,7 @@ function AssignmentManagementPage() {
               >
                 {templateOptionsForAssignment.map((template) => (
                   <option key={template.id} value={template.id}>
-                    {template.name} ({template.examType})
+                    {formatTemplateDropdownLabel(template)}
                   </option>
                 ))}
               </select>
@@ -2137,6 +2285,41 @@ function AssignmentManagementPage() {
               </select>
             </UiFormField>
           </div>
+
+          <section className="admin-assignments-recipient-review" aria-label="Template dropdown metadata">
+            <div>
+              <strong>{templateOptionsForAssignment.length}</strong>
+              <span>ready/assigned templates</span>
+            </div>
+            <div>
+              <strong>{blockedTemplateOptions.length}</strong>
+              <span>draft/archive/deprecated blocked</span>
+            </div>
+            <div>
+              <strong>{selectedTemplate?.allowedModes.length ?? 0}</strong>
+              <span>allowed modes on selection</span>
+            </div>
+            <p>
+              Dropdown labels show Template Name, Exam Type, Difficulty Distribution, Allowed Modes, and Last Used.
+              Canonical ID stays hidden in the selector and is captured only in the immutable run snapshot.
+            </p>
+          </section>
+
+          <UiTable
+            caption="Assignment-ready template metadata"
+            columns={[
+              { id: "name", header: "Template Name", render: (row) => row.name },
+              { id: "exam", header: "Exam Type", render: (row) => row.examType },
+              { id: "status", header: "Status", render: (row) => row.status },
+              { id: "distribution", header: "Difficulty Distribution", render: (row) => row.difficultyDistribution },
+              { id: "modes", header: "Allowed Modes", render: (row) => row.allowedModes },
+              { id: "lastUsed", header: "Last Used", render: (row) => row.lastUsed },
+              { id: "canonical", header: "Canonical ID", render: (row) => row.canonicalVisibility },
+            ]}
+            rows={templateMetadataRows}
+            rowKey={(row) => row.id}
+            emptyStateText="No ready or assigned templates are available for assignment."
+          />
 
           <UiFormField
             label="Step 3 — Recipients"
@@ -2706,6 +2889,55 @@ function AssignmentManagementPage() {
             Existing runs are never repurposed for a new batch. ReassignToBatch creates a new runId.
           </p>
 
+          <section className="admin-assignments-recipient-review" aria-label="Assignment lifecycle tier counts">
+            <div>
+              <strong>{hotRunCount}</strong>
+              <span>HOT operational runs</span>
+            </div>
+            <div>
+              <strong>{warmRunCount}</strong>
+              <span>WARM current-year summaries</span>
+            </div>
+            <div>
+              <strong>{coldRunCount}</strong>
+              <span>COLD archive-retained runs</span>
+            </div>
+            <p>
+              HOT runs keep active execution/session access, WARM runs keep immutable current-year summaries, and
+              COLD runs retain runAnalytics while past-year sessions are export-eligible for BigQuery cleanup.
+            </p>
+          </section>
+
+          <UiTable
+            caption="Assignment HOT/WARM/COLD lifecycle policy"
+            columns={[
+              { id: "tier", header: "Tier", render: (row) => row.tier },
+              { id: "trigger", header: "Trigger", render: (row) => row.trigger },
+              { id: "firestore", header: "Firestore Treatment", render: (row) => row.firestoreTreatment },
+              { id: "analytics", header: "Analytics Treatment", render: (row) => row.analyticsTreatment },
+              { id: "operator", header: "Operator Workflow", render: (row) => row.operatorWorkflow },
+            ]}
+            rows={ASSIGNMENT_LIFECYCLE_POLICY_ROWS}
+            rowKey={(row) => row.tier}
+            emptyStateText="No assignment lifecycle policy configured."
+          />
+
+          <UiTable
+            caption="Assignment lifecycle operator register"
+            columns={[
+              { id: "run", header: "Run", render: (row) => row.runName },
+              { id: "tier", header: "Lifecycle Tier", render: (row) => `${row.tier} / ${row.status}` },
+              { id: "year", header: "Academic Year", render: (row) => row.academicYear },
+              { id: "trigger", header: "Trigger", render: (row) => row.trigger },
+              { id: "firestore", header: "Firestore Treatment", render: (row) => row.firestoreTreatment },
+              { id: "analytics", header: "Analytics Treatment", render: (row) => row.analyticsTreatment },
+              { id: "operator", header: "Operator Action", render: (row) => row.operatorAction },
+            ]}
+            rows={assignmentLifecycleRows}
+            rowKey={(row) => row.id}
+            emptyStateText="No assignment lifecycle rows available."
+          />
+
           <div className="admin-assignments-bulk-grid">
             {runs.slice(0, 4).map((run) => (
               <article key={run.runId} className="admin-assignments-bulk-card">
@@ -2747,10 +2979,16 @@ function AssignmentManagementPage() {
           ExamType: <strong>{selectedTemplate?.examType ?? "N/A"}</strong>
         </p>
         <p>
+          Status: <strong>{selectedTemplate?.status ?? "N/A"}</strong>
+        </p>
+        <p>
           DifficultyDistribution: <strong>{selectedTemplate?.difficultyDistribution ?? "N/A"}</strong>
         </p>
         <p>
           AllowedModes: <strong>{selectedTemplate?.allowedModes.join(", ") ?? "N/A"}</strong>
+        </p>
+        <p>
+          CanonicalId: <strong>{selectedTemplate ? "Hidden in dropdown; locked into run snapshot" : "N/A"}</strong>
         </p>
         <p>
           LastUsed: <strong>{selectedTemplate ? formatDateTime(selectedTemplate.lastUsedIso) : "N/A"}</strong>
