@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
+import { UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
 import {
   ApiClientError,
@@ -12,6 +13,55 @@ import {
   type DataRetentionPolicySettings,
 } from "./settingsDataset";
 import SettingsWorkspaceNav from "./SettingsWorkspaceNav";
+
+interface ExportControlRow {
+  id: string;
+  label: string;
+  format: string;
+  source: string;
+  scope: string;
+  eligibility: string;
+  treatment: string;
+}
+
+const EXPORT_CONTROL_ROWS: ExportControlRow[] = [
+  {
+    eligibility: "Current roster snapshot available",
+    format: "CSV",
+    id: "students-csv",
+    label: "Export Students",
+    scope: "Active academic year roster and status fields",
+    source: "studentYearMetrics + students summary records",
+    treatment: "No session scan; preserves current-year roster snapshot for operational backup.",
+  },
+  {
+    eligibility: "runAnalytics summaries sealed",
+    format: "CSV / JSON",
+    id: "run-analytics",
+    label: "Export Run Analytics",
+    scope: "Completed run summaries, risk distribution, stability, and discipline metrics",
+    source: "runAnalytics/{runId}",
+    treatment: "Reads immutable run-level summaries only; raw attempts remain outside settings export.",
+  },
+  {
+    eligibility: "Governance snapshot ready",
+    format: "PDF / JSON",
+    id: "governance-snapshot",
+    label: "Export Governance Snapshot",
+    scope: "Latest governance period or archived academic-year snapshot",
+    source: "governanceSnapshots/{period}",
+    treatment: "Uses sealed governance documents for trustee, planning, and archive evidence.",
+  },
+  {
+    eligibility: "Active export job window open",
+    format: "ZIP",
+    id: "academic-year",
+    label: "Full Academic Year Export",
+    scope: "Students, run analytics, governance snapshot, settings audit, and archive manifest",
+    source: "snapshot collections + archive manifest",
+    treatment: "Creates a backup bundle before archive; does not clear HOT data or mutate retention state.",
+  },
+];
 
 function AdminDataArchiveControlsPage() {
   const { session } = useAuthProvider();
@@ -97,6 +147,51 @@ function AdminDataArchiveControlsPage() {
   }
 
   const storage = snapshot.dataArchiveControls.storageSummary;
+  const activeYear =
+    snapshot.academicYears.find((year) => year.status === "Active") ?? snapshot.academicYears[0] ?? null;
+  const latestSnapshotYear =
+    snapshot.academicYears.find((year) => year.snapshotStatus.toLowerCase() === "ready") ?? activeYear;
+  const exportColumns = useMemo<UiTableColumn<ExportControlRow>[]>(
+    () => [
+      {
+        header: "Export",
+        id: "label",
+        render: (row) => (
+          <div className="admin-risk-student-cell">
+            <strong>{row.label}</strong>
+            <small>{row.format}</small>
+          </div>
+        ),
+      },
+      {
+        header: "Snapshot Source",
+        id: "source",
+        render: (row) => row.source,
+      },
+      {
+        header: "Scope",
+        id: "scope",
+        render: (row) => row.scope,
+      },
+      {
+        header: "Eligibility",
+        id: "eligibility",
+        render: (row) => row.eligibility,
+      },
+      {
+        header: "Treatment",
+        id: "treatment",
+        render: (row) => row.treatment,
+      },
+    ],
+    [],
+  );
+
+  function requestExport(row: ExportControlRow): void {
+    setInlineMessage(
+      `${row.label} queued as a snapshot-backed export from ${row.source}; settings will not query sessions or mutate archive state.`,
+    );
+  }
 
   return (
     <section className="admin-content-card" aria-labelledby="admin-data-archive-controls-title">
@@ -152,17 +247,73 @@ function AdminDataArchiveControlsPage() {
       </div>
 
       <div className="admin-risk-table-section">
-        <h3>Export and Retention Guidance</h3>
+        <h3>Dedicated Export Controls Center</h3>
         <div className="admin-analytics-insight-list">
           <article className="admin-risk-summary-card">
-            <p className="admin-content-eyebrow">Export Controls</p>
-            <h4>Snapshot-first exports</h4>
-            <p>Students, run analytics, governance snapshots, and full academic-year exports should read from summary collections, not raw sessions.</p>
+            <p className="admin-content-eyebrow">Active Year Export Scope</p>
+            <h4>{activeYear?.academicYearLabel ?? "No active year loaded"}</h4>
+            <p>
+              Student and run exports use current-year snapshot collections. Full academic-year export is treated as a
+              backup bundle and does not trigger archive cleanup.
+            </p>
+            <small>
+              Students: {activeYear?.studentCount ?? 0} · Runs: {activeYear?.runCount ?? 0} · Snapshot:{" "}
+              {activeYear?.snapshotStatus ?? "Unknown"}
+            </small>
           </article>
           <article className="admin-risk-summary-card">
-            <p className="admin-content-eyebrow">Retention Guardrail</p>
-            <h4>Active year protected</h4>
+            <p className="admin-content-eyebrow">Governance Export Scope</p>
+            <h4>{latestSnapshotYear?.snapshotId ?? "pending governance snapshot"}</h4>
+            <p>
+              Governance exports read sealed `governanceSnapshots` records for the selected period and never rebuild
+              history from sessions, rawAttempts, or per-question logs.
+            </p>
+            <small>Status: {latestSnapshotYear?.snapshotStatus ?? "Pending"}</small>
+          </article>
+          <article className="admin-risk-summary-card">
+            <p className="admin-content-eyebrow">Audit Boundary</p>
+            <h4>Export requests stay non-destructive</h4>
+            <p>
+              Export actions create backup artifacts from snapshot sources. Retention edits, archive jobs, and HOT
+              partition clearing remain separate controls.
+            </p>
+          </article>
+        </div>
+      </div>
+
+      <div className="admin-risk-table-section">
+        <UiTable
+          caption="Snapshot-backed settings export controls"
+          columns={exportColumns}
+          rows={EXPORT_CONTROL_ROWS}
+          rowKey={(row) => row.id}
+        />
+        <div className="admin-analytics-inline-link-row" aria-label="Export actions">
+          {EXPORT_CONTROL_ROWS.map((row) => (
+            <button
+              key={row.id}
+              type="button"
+              className="admin-primary-link"
+              onClick={() => requestExport(row)}
+            >
+              {row.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="admin-risk-table-section">
+        <h3>Retention Guardrails</h3>
+        <div className="admin-analytics-insight-list">
+          <article className="admin-risk-summary-card">
+            <p className="admin-content-eyebrow">Active Year Protected</p>
+            <h4>No retention delete against active year</h4>
             <p>Retention changes must not delete current active-year data or bypass archive sequencing.</p>
+          </article>
+          <article className="admin-risk-summary-card">
+            <p className="admin-content-eyebrow">Source Contract</p>
+            <h4>Exports pull from snapshot collections</h4>
+            <p>Students, run analytics, governance snapshots, and full-year bundles are sourced from summaries and archive manifests only.</p>
           </article>
         </div>
       </div>

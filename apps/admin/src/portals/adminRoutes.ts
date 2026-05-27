@@ -524,6 +524,13 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     readOnlyRoles: ["director"],
   },
   {
+    path: "/admin/help",
+    title: "Help / Support",
+    section: "Help / Support",
+    description: "Top-level support workspace for operational help, escalation channels, and vendor handoff context.",
+    allowedRoles: ["admin", "teacher", "director"],
+  },
+  {
     path: "/admin/licensing",
     title: "Licensing",
     section: "Licensing",

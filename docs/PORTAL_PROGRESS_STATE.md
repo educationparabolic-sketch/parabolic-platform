@@ -4,12 +4,12 @@ This file is the persistent handoff state for portal checklist implementation ac
 
 ## Current State
 
-- `Current Target Portal`: `admin`
+- `Current Target Portal`: `student`
 - `Current Priority Band`: `P2`
-- `Last Completed Checklist ID`: `LIC-008`
-- `Next Suggested Checklist ID`: `LIC-010`
-- `Last Updated`: `2026-05-26`
-- `Saved Scope Note`: `LIC-008` is complete after applying the full locked-feature treatment across `/admin/licensing/features`: enabled/locked pill states for every L0-L3 Feature Matrix cell, slight blur on locked labels, lock glyph, hover title and aria tooltip copy with vendor-approved upgrade messaging, and a layer-by-layer lock treatment legend that keeps locked capabilities visible for planning without granting backend access. Continue admin P2 with `LIC-010`.
+- `Last Completed Checklist ID`: `STUDENT-WORKSPACE-ALIGNMENT`
+- `Next Suggested Checklist ID`: `STP-DB-003`
+- `Last Updated`: `2026-05-27`
+- `Saved Scope Note`: Student workspace/design alignment completed before starting student P2. The student shell now uses an admin-aligned route workspace header across dedicated student routes, with route title/description, route path, summary-only data boundary, and role/layer-aware access context. The top Student Routes card was removed, and the student sidebar now mirrors the admin route shell treatment with brand header, route path chip, session/role/layer context, sign-out button, badge-style route links, and summary-only guidance while preserving student-facing tone. No student P2 checklist item was marked complete; continue with `STP-DB-003`.
 
 ## Active Checklist Set
 

@@ -21,7 +21,7 @@ import {
   STUDENT_PRIMARY_NAVIGATION,
   findActivePortalNavigationItem,
 } from "../../../shared/ui/portalConsistency";
-import { UiNavBar, UiRouteLoading } from "../../../shared/ui/components";
+import { UiRouteLoading } from "../../../shared/ui/components";
 import "./App.css";
 
 const LICENSE_LAYER_ORDER: Record<LicenseLayer, number> = {
@@ -138,7 +138,6 @@ function StudentProtectedRoute(props: {
 
 function StudentLayout() {
   const location = useLocation();
-  const navigate = useNavigate();
   const { session, signOut } = useAuthProvider();
   const globalState = useGlobalPortalState();
   const activeLicenseLayer = globalState.licenseLayer ?? "L0";
@@ -152,86 +151,130 @@ function StudentLayout() {
       return LICENSE_LAYER_ORDER[activeLicenseLayer] >= LICENSE_LAYER_ORDER[item.minimumLicenseLayer];
     });
   }, [activeLicenseLayer]);
-  const navBarItems = useMemo(() => {
-    return visibleNavItems.map((item) => ({
-      id: item.path,
-      label: item.label,
-      hint: item.summary,
-      onClick: () => navigate(item.path),
-    }));
-  }, [navigate, visibleNavItems]);
-
   const activeRoute = findActivePortalNavigationItem(STUDENT_PRIMARY_NAVIGATION, location.pathname);
+  const activeRouteLabel = activeRoute?.label ?? "Student";
+  const activeRouteSummary = activeRoute?.summary ?? "Student route selection and contextual section guidance.";
 
   return (
     <main className="student-page-shell">
-      <header className="student-topbar" aria-label="Student top navigation bar">
-        <div className="student-topbar-branding">
-          <p>Portal</p>
-          <h1>Student Portal</h1>
-        </div>
-        <UiNavBar
-          title="Student Routes"
-          subtitle="Shared top navigation"
-          activeItemId={activeRoute?.path}
-          items={navBarItems}
-        />
-        <button
-          type="button"
-          className="student-signout-button"
-          onClick={() => {
-            void signOut();
-          }}
-          disabled={session.status !== "authenticated"}
-        >
-          Sign out
-        </button>
-      </header>
-
       <div className="student-layout-grid">
         <aside className="student-sidebar" aria-label="Student sidebar menu">
-          <p className="student-content-eyebrow">Route Menu</p>
-          <h2>{activeRoute?.label ?? "Student"}</h2>
-          <p className="student-sidebar-copy">
-            {activeRoute?.summary ?? "Student route selection and contextual section guidance."}
-          </p>
-          <ul className="student-sidebar-list">
-            {visibleNavItems.map((item) => (
-              <li key={item.path}>
-                <NavLink
-                  to={item.path}
-                  className={({ isActive }) =>
-                    isActive ?
-                      "student-sidebar-link student-sidebar-link-active" :
-                      "student-sidebar-link"
-                  }
+          <div className="student-sidebar-header">
+            <div className="student-sidebar-brand">
+              <p className="student-sidebar-eyebrow">Parabolic Platform</p>
+              <h1>Student Portal</h1>
+              <p className="student-sidebar-copy">
+                Dedicated learner workspaces with summary-only progress and route-aware access.
+              </p>
+              <div className="student-sidebar-meta">
+                <p className="student-sidebar-path" title={location.pathname}>{location.pathname}</p>
+                <div className="student-sidebar-session">
+                  <span>Status: {session.status}</span>
+                  {globalState.role ? <span>Role: {globalState.role}</span> : null}
+                  <span>Layer: {activeLicenseLayer}</span>
+                </div>
+                <button
+                  type="button"
+                  className="student-signout-button student-sidebar-signout-button"
+                  onClick={() => {
+                    void signOut();
+                  }}
+                  disabled={session.status !== "authenticated"}
                 >
-                  <strong>{item.label}</strong>
-                  <small>{item.summary}</small>
-                </NavLink>
-              </li>
-            ))}
-          </ul>
-          <p className="student-content-note">
-            Data flow: Session Submitted to runAnalytics updated to studentYearMetrics updated to Student
-            Portal summary refresh.
-          </p>
-          <p className="student-content-note">
-            Summary-only contract: student routes accept summary resources only and reject raw session logs,
-            per-question timestamps, and raw answer arrays at payload validation.
-          </p>
-          <p className="student-content-note">
-            Terminology standard: display only Raw Score % and Accuracy %. Score, Total Marks, and
-            cumulative raw marks are not shown.
-          </p>
-          {LICENSE_LAYER_ORDER[activeLicenseLayer] < LICENSE_LAYER_ORDER.L1 ? (
+                  Sign out
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="student-sidebar-body">
+            <div className="student-sidebar-nav-scroll">
+              <nav className="student-sidebar-nav" aria-label="Student navigation">
+                <section className="student-sidebar-section" aria-labelledby="student-nav-section-main">
+                  <div className="student-sidebar-section-header">
+                    <h2 id="student-nav-section-main">Routes</h2>
+                  </div>
+                  <div className="student-sidebar-section-items">
+                    {visibleNavItems.map((item) => (
+                      <NavLink
+                        key={item.path}
+                        to={item.path}
+                        className={({ isActive }) =>
+                          isActive ?
+                            "student-sidebar-link student-sidebar-link-active" :
+                            "student-sidebar-link"
+                        }
+                      >
+                        <span className="student-sidebar-link-badge" aria-hidden="true">
+                          {item.label
+                            .split(" ")
+                            .map((part) => part[0] ?? "")
+                            .join("")
+                            .slice(0, 2)
+                            .toUpperCase()}
+                        </span>
+                        <span className="student-sidebar-link-copy">
+                          <span className="student-sidebar-link-label">{item.label}</span>
+                          <small>{item.summary}</small>
+                        </span>
+                        <span
+                          className="student-sidebar-link-indicator"
+                          aria-hidden="true"
+                          data-active={item.path === activeRoute?.path ? "true" : "false"}
+                        />
+                      </NavLink>
+                    ))}
+                  </div>
+                </section>
+              </nav>
+            </div>
+            <div className="student-sidebar-guidance">
+              <p className="student-content-note">
+                Data flow: Session Submitted to runAnalytics updated to studentYearMetrics updated to Student
+                Portal summary refresh.
+              </p>
+              <p className="student-content-note">
+                Summary-only contract: student routes accept summary resources only and reject raw session logs,
+                per-question timestamps, and raw answer arrays at payload validation.
+              </p>
+              <p className="student-content-note">
+                Terminology standard: display only Raw Score % and Accuracy %. Score, Total Marks, and
+                cumulative raw marks are not shown.
+              </p>
+              {LICENSE_LAYER_ORDER[activeLicenseLayer] < LICENSE_LAYER_ORDER.L1 ? (
             <p className="student-content-note">
               Insights unlock at L1+ license layer. Upgrade path remains backend-authoritative.
             </p>
-          ) : null}
+              ) : null}
+            </div>
+          </div>
         </aside>
 
         <section className="student-main-content" aria-label="Student main dashboard container">
+          <section className="student-workspace-header" aria-label="Student workspace context">
+            <div className="student-workspace-title-block">
+              <p className="student-content-eyebrow">Student Workspace</p>
+              <h2>{activeRouteLabel}</h2>
+              <p>{activeRouteSummary}</p>
+            </div>
+            <div className="student-workspace-context-grid">
+              <article>
+                <p>Route</p>
+                <h3>{location.pathname}</h3>
+                <small>Dedicated student section</small>
+              </article>
+              <article>
+                <p>Data Boundary</p>
+                <h3>Summary Only</h3>
+                <small>studentYearMetrics, runAnalytics, assigned-run summaries</small>
+              </article>
+              <article>
+                <p>Access</p>
+                <h3>{activeLicenseLayer}</h3>
+                <small>{globalState.role ?? "student"} navigation is layer-aware</small>
+              </article>
+            </div>
+          </section>
           <Outlet />
         </section>
       </div>

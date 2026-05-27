@@ -18,6 +18,7 @@ import {
   AlertFrequencyPolicy,
   DataRetentionPolicySettings,
   ExecutionPolicySettings,
+  GovernanceSnapshotRequestSettings,
   InstituteProfileSettings,
   LayerConfiguration,
   SecuritySettings,
@@ -43,6 +44,7 @@ const SETTINGS_ACTIONS: AdminSettingsActionType[] = [
   "RESET_USER_PASSWORD",
   "UPDATE_SECURITY_SETTINGS",
   "UPDATE_FEATURE_FLAGS",
+  "REQUEST_GOVERNANCE_SNAPSHOT",
 ];
 
 const STAFF_ROLES: AdminStaffRole[] = ["admin", "teacher", "director", "support"];
@@ -402,6 +404,7 @@ export class AdminSettingsService {
   public normalizeRequest(
     input: Partial<AdminSettingsRequest> & {
       actorId?: unknown;
+      actorLicenseLayer?: unknown;
       actorRole?: unknown;
       ipAddress?: unknown;
       userAgent?: unknown;
@@ -413,6 +416,7 @@ export class AdminSettingsService {
     const validated: AdminSettingsValidatedRequest = {
       actionType,
       actorId: normalizeRequiredString(input.actorId, "actorId"),
+      actorLicenseLayer: normalizeOptionalString(input.actorLicenseLayer),
       actorRole: normalizeRequiredString(input.actorRole, "actorRole"),
       instituteId,
       ipAddress: normalizeOptionalString(input.ipAddress),
@@ -721,19 +725,45 @@ export class AdminSettingsService {
       return validated;
     }
 
+    if (actionType === "REQUEST_GOVERNANCE_SNAPSHOT") {
+      if (!isPlainObject(input.governanceSnapshotRequest)) {
+        throw new AdminSettingsValidationError(
+          "VALIDATION_ERROR",
+          "Field \"governanceSnapshotRequest\" is required for governance snapshot requests.",
+        );
+      }
+
+      validated.governanceSnapshotRequest = {
+        academicYear: normalizeRequiredString(
+          input.governanceSnapshotRequest.academicYear,
+          "governanceSnapshotRequest.academicYear",
+        ),
+        reason: normalizeRequiredString(
+          input.governanceSnapshotRequest.reason,
+          "governanceSnapshotRequest.reason",
+        ),
+        snapshotMonth: normalizeRequiredString(
+          input.governanceSnapshotRequest.snapshotMonth,
+          "governanceSnapshotRequest.snapshotMonth",
+        ),
+      };
+      return validated;
+    }
+
     return validated;
   }
 
   public async executeRequest(
     input: Partial<AdminSettingsRequest> & {
       actorId?: unknown;
+      actorLicenseLayer?: unknown;
       actorRole?: unknown;
       ipAddress?: unknown;
       userAgent?: unknown;
     },
   ): Promise<AdminSettingsResult> {
     const validatedRequest = this.normalizeRequest(input);
-    this.assertRoleAuthorization(validatedRequest.actorRole, validatedRequest.actionType);
+    this.assertRoleAuthorization(validatedRequest);
     let mutationAuditId: string | undefined;
 
     switch (validatedRequest.actionType) {
@@ -765,6 +795,9 @@ export class AdminSettingsService {
       break;
     case "UPDATE_FEATURE_FLAGS":
       mutationAuditId = await this.updateFeatureFlags(validatedRequest);
+      break;
+    case "REQUEST_GOVERNANCE_SNAPSHOT":
+      mutationAuditId = await this.requestGovernanceSnapshot(validatedRequest);
       break;
     default: {
       const exhaustiveType: never = validatedRequest.actionType;
@@ -1101,6 +1134,43 @@ export class AdminSettingsService {
     });
   }
 
+  private async requestGovernanceSnapshot(
+    request: AdminSettingsValidatedRequest,
+  ): Promise<string> {
+    const governanceSnapshotRequest =
+      request.governanceSnapshotRequest as GovernanceSnapshotRequestSettings;
+    const requestReference = this.dependencies.firestore
+      .collection(INSTITUTES_COLLECTION)
+      .doc(request.instituteId)
+      .collection("governanceSnapshotRequests")
+      .doc();
+
+    await requestReference.set({
+      academicYear: governanceSnapshotRequest.academicYear,
+      actorId: request.actorId,
+      actorRole: request.actorRole,
+      createdAt: FieldValue.serverTimestamp(),
+      reason: governanceSnapshotRequest.reason,
+      requestedFrom: "settings",
+      snapshotMonth: governanceSnapshotRequest.snapshotMonth,
+      status: "queued",
+      triggerType: "manual_l3_settings",
+    });
+
+    return this.writeSettingsAudit({
+      actionType: request.actionType,
+      actorId: request.actorId,
+      actorRole: request.actorRole,
+      instituteId: request.instituteId,
+      ipAddress: request.ipAddress,
+      metadata: {
+        governanceSnapshotRequest,
+        requestPath: requestReference.path,
+      },
+      userAgent: request.userAgent,
+    });
+  }
+
   private async writeSettingsAudit(input: SettingsAuditInput): Promise<string> {
     const eventReference = this.dependencies.firestore
       .collection(
@@ -1397,6 +1467,7 @@ export class AdminSettingsService {
             normalizeOptionalString(yearData.snapshotId) ?
               "Ready" :
               "Pending",
+          snapshotId: normalizeOptionalString(yearData.snapshotId) ?? undefined,
           startDate: toIsoString(yearData.startDate),
           status: normalizeYearStatus(yearData.status),
           studentCount: studentsSnapshot.size,
@@ -1469,8 +1540,23 @@ export class AdminSettingsService {
     return snapshot;
   }
 
-  private assertRoleAuthorization(actorRole: string, actionType: AdminSettingsActionType): void {
-    const normalizedRole = actorRole.trim().toLowerCase();
+  private assertRoleAuthorization(request: AdminSettingsValidatedRequest): void {
+    const normalizedRole = request.actorRole.trim().toLowerCase();
+    const actionType = request.actionType;
+
+    if (actionType === "REQUEST_GOVERNANCE_SNAPSHOT") {
+      if (
+        (normalizedRole === "admin" || normalizedRole === "director") &&
+        request.actorLicenseLayer === "L3"
+      ) {
+        return;
+      }
+
+      throw new AdminSettingsValidationError(
+        "FORBIDDEN",
+        "Governance snapshot requests require L3 settings access.",
+      );
+    }
 
     if (normalizedRole === "admin") {
       return;

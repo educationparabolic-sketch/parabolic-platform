@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
+import { UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
 import { resolveAdminInstituteId } from "../settings/settingsDataset";
 import {
@@ -11,6 +12,97 @@ import {
   type AdminLicensingSnapshot,
 } from "./licensingDataset";
 import LicensingWorkspaceNav from "./LicensingWorkspaceNav";
+
+interface BillingActionRow {
+  action: string;
+  destination: string;
+  url: string;
+  instituteBoundary: string;
+}
+
+interface BillingEstimatorRow {
+  layer: string;
+  model: string;
+  currentStatus: string;
+}
+
+interface UsageSourceRow {
+  metric: string;
+  currentValue: string;
+  source: string;
+}
+
+function summarizeVendorUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    return `${url.hostname}${url.pathname}`;
+  } catch {
+    return value;
+  }
+}
+
+const billingActionColumns: UiTableColumn<BillingActionRow>[] = [
+  {
+    header: "Action",
+    id: "action",
+    render: (row) => row.action,
+  },
+  {
+    header: "Vendor Redirect",
+    id: "destination",
+    render: (row) => row.destination,
+  },
+  {
+    header: "Institute Boundary",
+    id: "instituteBoundary",
+    render: (row) => row.instituteBoundary,
+  },
+  {
+    header: "Open",
+    id: "open",
+    render: (row) => (
+      <a className="admin-primary-link" href={row.url} target="_blank" rel="noreferrer">
+        Open Vendor Flow
+      </a>
+    ),
+  },
+];
+
+const billingEstimatorColumns: UiTableColumn<BillingEstimatorRow>[] = [
+  {
+    header: "Layer",
+    id: "layer",
+    render: (row) => row.layer,
+  },
+  {
+    header: "Estimator Model",
+    id: "model",
+    render: (row) => row.model,
+  },
+  {
+    header: "Current Status",
+    id: "currentStatus",
+    render: (row) => row.currentStatus,
+  },
+];
+
+const usageSourceColumns: UiTableColumn<UsageSourceRow>[] = [
+  {
+    header: "Usage Field",
+    id: "metric",
+    render: (row) => row.metric,
+  },
+  {
+    header: "Current Value",
+    id: "currentValue",
+    render: (row) => row.currentValue,
+  },
+  {
+    header: "Authoritative Source",
+    id: "source",
+    render: (row) => row.source,
+  },
+];
 
 function AdminLicensingUsagePage() {
   const { session } = useAuthProvider();
@@ -63,6 +155,81 @@ function AdminLicensingUsagePage() {
 
   const currentPlan = snapshot.currentPlan;
   const usage = snapshot.usageAndBilling;
+  const billingActionRows: BillingActionRow[] = [
+    {
+      action: "Download Invoice",
+      destination: summarizeVendorUrl(usage.actions.downloadInvoiceUrl),
+      instituteBoundary: "Read-only document retrieval; no license mutation inside admin.",
+      url: usage.actions.downloadInvoiceUrl,
+    },
+    {
+      action: "View Billing History",
+      destination: summarizeVendorUrl(usage.actions.viewBillingHistoryUrl),
+      instituteBoundary: "Vendor ledger review; institute licenseHistory remains immutable audit data.",
+      url: usage.actions.viewBillingHistoryUrl,
+    },
+    {
+      action: "Update Payment Method",
+      destination: summarizeVendorUrl(usage.actions.updatePaymentMethodUrl),
+      instituteBoundary: "Payment credential changes are handled only by vendor billing services.",
+      url: usage.actions.updatePaymentMethodUrl,
+    },
+    {
+      action: "Contact Support",
+      destination: summarizeVendorUrl(usage.actions.contactSupportUrl),
+      instituteBoundary: "Support request handoff; no entitlement or feature-flag change is granted.",
+      url: usage.actions.contactSupportUrl,
+    },
+  ];
+  const billingEstimatorRows: BillingEstimatorRow[] = [
+    {
+      currentStatus: currentPlan.currentLayer === "L0" ? "Current layer model" : "Reference only",
+      layer: "L0",
+      model: "Base fee plus per active student.",
+    },
+    {
+      currentStatus: currentPlan.currentLayer === "L1" ? "Current layer model" : "Reference only",
+      layer: "L1",
+      model: "Higher base fee plus per active student.",
+    },
+    {
+      currentStatus: currentPlan.currentLayer === "L2" ? "Current layer model" : "Reference only",
+      layer: "L2",
+      model: "Premium base fee plus per student plus controlled-mode surcharge.",
+    },
+    {
+      currentStatus: currentPlan.currentLayer === "L3" ? "Current layer model" : "Invitation-only reference",
+      layer: "L3",
+      model: "Annual institutional governance fee.",
+    },
+  ];
+  const usageSourceRows: UsageSourceRow[] = [
+    {
+      currentValue: `${usage.activeStudents} / ${usage.maxStudentsAllowed}`,
+      metric: "Active Students and Max Students Allowed",
+      source: "Vendor API GET /licenseUsage with license limit fallback.",
+    },
+    {
+      currentValue: String(usage.remainingStudentSlots),
+      metric: "Remaining Student Slots",
+      source: "Derived from vendor-accounted active students minus the vendor license limit.",
+    },
+    {
+      currentValue: `${usage.attemptsUsed} used, ${usage.attemptsRemaining} remaining`,
+      metric: "Attempts Used and Attempts Remaining",
+      source: "Vendor API GET /licenseUsage for current billing cycle attempt volume.",
+    },
+    {
+      currentValue: `${usage.peakConcurrency} / ${usage.maxConcurrentAllowed}`,
+      metric: "Peak Concurrency and Max Concurrent Allowed",
+      source: "Vendor usage meter plus license concurrency limit.",
+    },
+    {
+      currentValue: `${usage.estimatedCurrentBill}; next billing date ${usage.nextBillingDate}`,
+      metric: "Estimated Current Bill and Next Billing Date",
+      source: "Vendor billing estimator; displayed as informational, not institute-computed billing authority.",
+    },
+  ];
 
   return (
     <section className="admin-content-card" aria-labelledby="admin-licensing-usage-title">
@@ -121,21 +288,49 @@ function AdminLicensingUsagePage() {
         <article className="admin-risk-summary-card">
           <p className="admin-content-eyebrow">Estimated Current Bill</p>
           <h4>{usage.estimatedCurrentBill}</h4>
-          <p>Commercial calculation remains vendor-side and does not mutate institute license state.</p>
+          <p>
+            Commercial calculation remains vendor-side. The admin portal displays the estimate but cannot
+            recompute, approve, or mutate billing state.
+          </p>
         </article>
         <article className="admin-risk-summary-card">
           <p className="admin-content-eyebrow">Billing Redirects</p>
           <h4>Vendor authoritative</h4>
-          <p>Invoice download, billing history, payment method updates, and support stay outside the admin app.</p>
+          <p>
+            Invoice download, billing history, payment method updates, and support all leave this portal through
+            vendor-owned redirect URLs.
+          </p>
         </article>
       </div>
 
-      <div className="admin-settings-inline-controls">
-        <a className="admin-primary-link" href={usage.actions.downloadInvoiceUrl} target="_blank" rel="noreferrer">Download Invoice</a>
-        <a className="admin-primary-link" href={usage.actions.viewBillingHistoryUrl} target="_blank" rel="noreferrer">View Billing History</a>
-        <a className="admin-primary-link" href={usage.actions.updatePaymentMethodUrl} target="_blank" rel="noreferrer">Update Payment Method</a>
-        <a className="admin-primary-link" href={usage.actions.contactSupportUrl} target="_blank" rel="noreferrer">Contact Support</a>
-      </div>
+      <UiTable
+        caption="Vendor usage source contract"
+        columns={usageSourceColumns}
+        rows={usageSourceRows}
+        rowKey={(row) => row.metric}
+        emptyStateText="No usage source rows available."
+      />
+
+      <UiTable
+        caption="Billing estimator model by license layer"
+        columns={billingEstimatorColumns}
+        rows={billingEstimatorRows}
+        rowKey={(row) => row.layer}
+        emptyStateText="No billing estimator rows available."
+      />
+
+      <UiTable
+        caption="Vendor-side billing redirect workflow"
+        columns={billingActionColumns}
+        rows={billingActionRows}
+        rowKey={(row) => row.action}
+        emptyStateText="No billing action redirects available."
+      />
+
+      <p className="admin-settings-inline-note">
+        Redirect workflow boundary: actions may open vendor services, but this admin route never changes
+        <code>institutes/{"{id}"}/license</code>, feature flags, payment credentials, or billing ledger records.
+      </p>
     </section>
   );
 }

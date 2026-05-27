@@ -15,7 +15,8 @@ export type SettingsActionType =
   | "REMOVE_USER_ACCESS"
   | "RESET_USER_PASSWORD"
   | "UPDATE_SECURITY_SETTINGS"
-  | "UPDATE_FEATURE_FLAGS";
+  | "UPDATE_FEATURE_FLAGS"
+  | "REQUEST_GOVERNANCE_SNAPSHOT";
 
 export type AcademicYearStatus = "Active" | "Locked" | "Archived";
 export type StaffRole = "admin" | "teacher" | "director" | "support";
@@ -38,6 +39,7 @@ export interface AcademicYearSummary {
   studentCount: number;
   runCount: number;
   snapshotStatus: string;
+  snapshotId?: string;
   startDate?: string;
   endDate?: string;
   archivedAt?: string;
@@ -112,6 +114,12 @@ export interface DataRetentionPolicySettings {
   autoArchiveSchedule: string;
 }
 
+export interface GovernanceSnapshotRequestSettings {
+  academicYear: string;
+  snapshotMonth: string;
+  reason: string;
+}
+
 export interface SettingsAuditEntry {
   eventId: string;
   timestamp: string;
@@ -159,6 +167,7 @@ const FALLBACK_SNAPSHOT: AdminSettingsSnapshot = {
       academicYearLabel: "2026-27",
       endDate: "2027-03-31T00:00:00.000Z",
       runCount: 19,
+      snapshotId: "pending-final-governance-snapshot",
       snapshotStatus: "Pending",
       startDate: "2026-04-01T00:00:00.000Z",
       status: "Active",
@@ -170,6 +179,7 @@ const FALLBACK_SNAPSHOT: AdminSettingsSnapshot = {
       archivedAt: "2026-03-31T18:30:00.000Z",
       endDate: "2026-03-31T00:00:00.000Z",
       runCount: 124,
+      snapshotId: "2025",
       snapshotStatus: "Ready",
       startDate: "2025-04-01T00:00:00.000Z",
       status: "Archived",
@@ -408,6 +418,7 @@ function normalizeSnapshot(value: unknown): AdminSettingsSnapshot | null {
         archivedAt: typeof entry.archivedAt === "string" ? entry.archivedAt : undefined,
         endDate: typeof entry.endDate === "string" ? entry.endDate : undefined,
         runCount: Math.max(0, Math.round(toNumberOrZero(entry.runCount))),
+        snapshotId: typeof entry.snapshotId === "string" ? entry.snapshotId : undefined,
         snapshotStatus: toNonEmptyString(entry.snapshotStatus, "Pending"),
         startDate: typeof entry.startDate === "string" ? entry.startDate : undefined,
         status:
@@ -605,6 +616,7 @@ async function settingsAction(
     security?: Partial<SecuritySettings>;
     featureFlags?: Partial<FeatureFlagsSettings>;
     dataRetentionPolicy?: Partial<DataRetentionPolicySettings>;
+    governanceSnapshotRequest?: Partial<GovernanceSnapshotRequestSettings>;
   },
 ): Promise<AdminSettingsSnapshot> {
   const result = await apiClient.post<AdminSettingsApiResponse, Record<string, unknown>>(
@@ -748,6 +760,17 @@ export async function updateDataRetentionPolicy(
   return settingsAction({
     actionType: "UPDATE_DATA_RETENTION_POLICY",
     dataRetentionPolicy,
+    instituteId,
+  });
+}
+
+export async function requestGovernanceSnapshot(
+  instituteId: string,
+  governanceSnapshotRequest: GovernanceSnapshotRequestSettings,
+): Promise<AdminSettingsSnapshot> {
+  return settingsAction({
+    actionType: "REQUEST_GOVERNANCE_SNAPSHOT",
+    governanceSnapshotRequest,
     instituteId,
   });
 }

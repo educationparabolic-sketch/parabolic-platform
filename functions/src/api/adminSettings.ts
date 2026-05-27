@@ -81,10 +81,12 @@ export const createAdminSettingsHandler = (
         const validatedRequest = adminSettingsService.normalizeRequest({
           actionType: body.actionType,
           actorId: identity?.uid,
+          actorLicenseLayer: identity?.licenseLayer,
           actorRole: identity?.role,
           academicYear: body.academicYear,
           executionPolicy: body.executionPolicy,
           featureFlags: body.featureFlags,
+          governanceSnapshotRequest: body.governanceSnapshotRequest,
           dataRetentionPolicy: body.dataRetentionPolicy,
           instituteId: identity?.instituteId ?? body.instituteId,
           ipAddress: request.ip,

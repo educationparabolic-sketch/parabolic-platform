@@ -11,7 +11,8 @@ export type AdminSettingsActionType =
   | "REMOVE_USER_ACCESS"
   | "RESET_USER_PASSWORD"
   | "UPDATE_SECURITY_SETTINGS"
-  | "UPDATE_FEATURE_FLAGS";
+  | "UPDATE_FEATURE_FLAGS"
+  | "REQUEST_GOVERNANCE_SNAPSHOT";
 
 export type AcademicYearStatus = "Active" | "Locked" | "Archived";
 
@@ -35,6 +36,7 @@ export interface AcademicYearSummary {
   studentCount: number;
   runCount: number;
   snapshotStatus: string;
+  snapshotId?: string;
   startDate?: string;
   endDate?: string;
   archivedAt?: string;
@@ -124,6 +126,12 @@ export interface DataRetentionPolicySettings {
   autoArchiveSchedule: string;
 }
 
+export interface GovernanceSnapshotRequestSettings {
+  academicYear: string;
+  snapshotMonth: string;
+  reason: string;
+}
+
 export interface DataArchiveControlsSnapshot {
   storageSummary: {
     firestoreHotUsage: string;
@@ -163,10 +171,12 @@ export interface AdminSettingsRequest {
   security?: Partial<SecuritySettings>;
   featureFlags?: Partial<AdminFeatureFlags>;
   dataRetentionPolicy?: Partial<DataRetentionPolicySettings>;
+  governanceSnapshotRequest?: Partial<GovernanceSnapshotRequestSettings>;
 }
 
 export interface AdminSettingsValidatedRequest extends AdminSettingsRequest {
   actorId: string;
+  actorLicenseLayer?: string;
   actorRole: string;
   ipAddress?: string;
   userAgent?: string;

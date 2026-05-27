@@ -63,6 +63,7 @@ const AdminRiskOverviewPage = lazy(() => import("./features/insights/AdminRiskOv
 const AdminPatternAlertsPage = lazy(() => import("./features/insights/AdminPatternAlertsPage"));
 const InterventionToolsPage = lazy(() => import("./features/insights/InterventionToolsPage"));
 const StudentIntelligencePage = lazy(() => import("./features/insights/StudentIntelligencePage"));
+const AdminHelpSupportPage = lazy(() => import("./features/support/AdminHelpSupportPage"));
 const AdminCurrentLicensePage = lazy(() => import("./features/licensing/AdminCurrentLicensePage"));
 const AdminLicenseFeaturesPage = lazy(() => import("./features/licensing/AdminLicenseFeaturesPage"));
 const AdminLicensingLandingPage = lazy(() => import("./features/licensing/AdminLicensingLandingPage"));
@@ -141,6 +142,11 @@ const ADMIN_NAV_GROUPS = [
     id: "configuration",
     label: "Configuration",
     paths: ["/admin/licensing", "/admin/settings"],
+  },
+  {
+    id: "support",
+    label: "Support",
+    paths: ["/admin/help"],
   },
 ] as const;
 
@@ -895,6 +901,10 @@ function App() {
           element={<AdminRouteBoundary label="Loading settings audit history"><AdminSettingsAuditHistoryPage /></AdminRouteBoundary>}
         />
         <Route path="settings/*" element={<AdminRouteResolutionPage />} />
+        <Route
+          path="help"
+          element={<AdminRouteBoundary label="Loading help and support"><AdminHelpSupportPage /></AdminRouteBoundary>}
+        />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
 

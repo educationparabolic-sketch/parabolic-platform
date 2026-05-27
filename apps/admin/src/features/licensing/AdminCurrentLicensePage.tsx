@@ -1,16 +1,114 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
+import { UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
 import { resolveAdminInstituteId } from "../settings/settingsDataset";
 import {
   ApiClientError,
   FALLBACK_SNAPSHOT,
   fetchLicensingSnapshot,
+  hasLayerAccess,
   isLocalLicensingReadMode,
   resolveLayerBadge,
   type AdminLicensingSnapshot,
+  type CapabilityState,
 } from "./licensingDataset";
 import LicensingWorkspaceNav from "./LicensingWorkspaceNav";
+
+interface LicenseObjectRow {
+  field: string;
+  value: string;
+  contract: string;
+}
+
+interface EnforcementRow {
+  capability: string;
+  flag: string;
+  requiredLayer: string;
+  currentState: CapabilityState;
+  rejection: string;
+}
+
+interface RestrictionRow {
+  restrictedAction: string;
+  instituteMessage: string;
+  authority: string;
+}
+
+const licenseObjectColumns: UiTableColumn<LicenseObjectRow>[] = [
+  {
+    header: "License Field",
+    id: "field",
+    render: (row) => row.field,
+  },
+  {
+    header: "Current Value",
+    id: "value",
+    render: (row) => row.value,
+  },
+  {
+    header: "Contract",
+    id: "contract",
+    render: (row) => row.contract,
+  },
+];
+
+const enforcementColumns: UiTableColumn<EnforcementRow>[] = [
+  {
+    header: "Capability",
+    id: "capability",
+    render: (row) => row.capability,
+  },
+  {
+    header: "Backend Enforcement",
+    id: "flag",
+    render: (row) => row.flag,
+  },
+  {
+    header: "Required Layer",
+    id: "requiredLayer",
+    render: (row) => row.requiredLayer,
+  },
+  {
+    header: "Current State",
+    id: "currentState",
+    render: (row) => (
+      <span className={`admin-licensing-feature-state admin-licensing-feature-state-${row.currentState}`}>
+        {row.currentState === "enabled" ? "Enabled" : "Locked"}
+      </span>
+    ),
+  },
+  {
+    header: "Graceful Rejection",
+    id: "rejection",
+    render: (row) => row.rejection,
+  },
+];
+
+const restrictionColumns: UiTableColumn<RestrictionRow>[] = [
+  {
+    header: "Institute Cannot",
+    id: "restrictedAction",
+    render: (row) => row.restrictedAction,
+  },
+  {
+    header: "Restriction Message",
+    id: "instituteMessage",
+    render: (row) => row.instituteMessage,
+  },
+  {
+    header: "Authority",
+    id: "authority",
+    render: (row) => row.authority,
+  },
+];
+
+function resolveFeatureState(
+  snapshot: AdminLicensingSnapshot,
+  feature: string,
+): CapabilityState {
+  return snapshot.featureMatrix.find((row) => row.feature === feature)?.layers[snapshot.currentPlan.currentLayer] ?? "locked";
+}
 
 function AdminCurrentLicensePage() {
   const { session } = useAuthProvider();
@@ -66,6 +164,110 @@ function AdminCurrentLicensePage() {
     0,
     currentPlan.attemptsQuotaThisMonth - currentPlan.attemptsUsedThisMonth,
   );
+  const licenseObjectRows: LicenseObjectRow[] = [
+    {
+      contract: "Vendor-signed commercial layer; institute-side edits are not accepted.",
+      field: "currentLayer",
+      value: `${currentPlan.currentLayer} (${resolveLayerBadge(currentPlan.currentLayer)})`,
+    },
+    {
+      contract: "Displayed from the authoritative license document.",
+      field: "planName",
+      value: currentPlan.planName,
+    },
+    {
+      contract: "Controls renewal and billing visibility; commercial changes remain vendor-side.",
+      field: "billingCycle",
+      value: currentPlan.billingCycle,
+    },
+    {
+      contract: "License validity window used by protected backend routes.",
+      field: "startDate / expiryDate",
+      value: `${currentPlan.licenseStartDate} to ${currentPlan.expiryDate}`,
+    },
+    {
+      contract: "MaxStudents ceiling enforced by vendor validation and backend limits.",
+      field: "maxStudents",
+      value: String(currentPlan.maxStudentLimit),
+    },
+    {
+      contract: "Concurrent execution ceiling enforced outside UI state.",
+      field: "maxConcurrent",
+      value: String(currentPlan.concurrencyLimit),
+    },
+    {
+      contract: "Eligibility is readiness only; it does not mutate currentLayer.",
+      field: "eligibilityFlags",
+      value: snapshot.eligibilityProgress.map((stage) => `${stage.stage}:${stage.status}`).join(", "),
+    },
+    {
+      contract: "Backend feature flags gate protected routes even when preview UI is visible.",
+      field: "featureFlags",
+      value: `${snapshot.featureMatrix.filter((row) => row.layers[currentPlan.currentLayer] === "enabled").length} enabled / ${snapshot.featureMatrix.length} total`,
+    },
+    {
+      contract: "Tiny HOT payload, cached short-term and refreshed periodically.",
+      field: "status",
+      value: "Active",
+    },
+  ];
+  const enforcementRows: EnforcementRow[] = [
+    {
+      capability: "Controlled Mode",
+      currentState: resolveFeatureState(snapshot, "ControlledMode"),
+      flag: "Reject if !featureFlags.controlledMode",
+      rejection: 'FeatureNotLicensed with requiredLayer "L2"; UI keeps control disabled.',
+      requiredLayer: "L2",
+    },
+    {
+      capability: "Governance Dashboard",
+      currentState: resolveFeatureState(snapshot, "GovernanceDashboard"),
+      flag: "Reject if !featureFlags.governanceAccess",
+      rejection: 'FeatureNotLicensed with requiredLayer "L3"; UI shows governance preview only.',
+      requiredLayer: "L3",
+    },
+    {
+      capability: "Hard Mode",
+      currentState: resolveFeatureState(snapshot, "HardMode"),
+      flag: "Reject if !featureFlags.hardMode",
+      rejection: 'FeatureNotLicensed with requiredLayer "L2"; assignment controls stay unavailable.',
+      requiredLayer: "L2",
+    },
+    {
+      capability: "Adaptive Phase",
+      currentState: resolveFeatureState(snapshot, "AdaptivePhase"),
+      flag: "Reject if !featureFlags.adaptivePhase",
+      rejection: 'FeatureNotLicensed with requiredLayer "L2"; phase orchestration remains locked.',
+      requiredLayer: "L2",
+    },
+  ];
+  const restrictionRows: RestrictionRow[] = [
+    {
+      authority: "Vendor control sheet plus server-side validation.",
+      instituteMessage: "License document is immutable from institute-side admin flows.",
+      restrictedAction: "Modify license doc",
+    },
+    {
+      authority: "Vendor-accounted license limits.",
+      instituteMessage: "Student ceilings cannot be increased inside this portal.",
+      restrictedAction: "Increase maxStudents",
+    },
+    {
+      authority: "Backend middleware and vendor limits.",
+      instituteMessage: "Concurrency and attempt ceilings cannot be disabled by UI changes.",
+      restrictedAction: "Disable limits",
+    },
+    {
+      authority: "Protected endpoints enforce capability flags server-side.",
+      instituteMessage: "Feature preview visibility never bypasses backend flags.",
+      restrictedAction: "Bypass feature flags",
+    },
+    {
+      authority: "Vendor review and immutable eligibility snapshots.",
+      instituteMessage: "Eligibility can be viewed, not edited into an upgrade.",
+      restrictedAction: "Modify eligibility",
+    },
+  ];
 
   return (
     <section className="admin-content-card" aria-labelledby="admin-current-license-title">
@@ -144,14 +346,54 @@ function AdminCurrentLicensePage() {
         <article className="admin-risk-summary-card">
           <p className="admin-content-eyebrow">Single source of truth</p>
           <h4>Server-signed license object</h4>
-          <p>The institute license document remains vendor-controlled and cached in memory after login.</p>
+          <p>
+            The institute license document remains vendor-controlled, optionally signed, cached short-term after
+            login, and refreshed periodically.
+          </p>
         </article>
         <article className="admin-risk-summary-card">
           <p className="admin-content-eyebrow">Backend enforcement</p>
           <h4>No UI-only unlocks</h4>
           <p>Protected endpoints must reject missing license capabilities server-side instead of trusting UI state.</p>
         </article>
+        <article className="admin-risk-summary-card">
+          <p className="admin-content-eyebrow">Current restriction posture</p>
+          <h4>{hasLayerAccess(currentPlan.currentLayer, "L3") ? "Full governance layer active" : "Institute-side restrictions active"}</h4>
+          <p>
+            Locked capabilities return a FeatureNotLicensed-style response with the required layer so the UI can
+            explain the restriction without exposing mutation controls.
+          </p>
+        </article>
       </div>
+
+      <UiTable
+        caption="Final license object model"
+        columns={licenseObjectColumns}
+        rows={licenseObjectRows}
+        rowKey={(row) => row.field}
+        emptyStateText="No license object fields available."
+      />
+
+      <UiTable
+        caption="Backend enforcement matrix"
+        columns={enforcementColumns}
+        rows={enforcementRows}
+        rowKey={(row) => row.capability}
+        emptyStateText="No enforcement rows available."
+      />
+
+      <UiTable
+        caption="Institute-side license restriction messages"
+        columns={restrictionColumns}
+        rows={restrictionRows}
+        rowKey={(row) => row.restrictedAction}
+        emptyStateText="No license restriction rows available."
+      />
+
+      <p className="admin-settings-inline-note">
+        Storage alignment: license is a frequently read HOT document, licenseHistory is WARM audit data, and
+        billing logs remain vendor-side only.
+      </p>
     </section>
   );
 }
