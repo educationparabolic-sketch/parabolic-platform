@@ -34,11 +34,11 @@ Priority guide:
 |---|---|---|---|---|---|
 | STP-DB-001 | Dashboard | Motivation-first dashboard tone and banner | completed | P1 | Implemented |
 | STP-DB-002 | Dashboard | L0 cards: Avg Raw %, Avg Accuracy %, Tests Attempted, Upcoming Tests Count | completed | P0 | Implemented |
-| STP-DB-003 | Dashboard | Batch Rank card on dashboard | missing | P2 | Batch rank appears more clearly in Performance, not Dashboard |
+| STP-DB-003 | Dashboard | Batch Rank card on dashboard | completed | P2 | Added as an optional L0 dashboard core card from summary payload rank fields, with deterministic local fixture coverage |
 | STP-DB-004 | Dashboard | Dynamic motivational messages based on recent progress | completed | P1 | Implemented |
 | STP-DB-005 | Dashboard | L1 cards: Phase Adherence, Easy Neglect, Hard Bias, Time Misallocation, Behavior Summary Tag | completed | P1 | Implemented |
 | STP-DB-006 | Dashboard | L2 cards: Risk State Badge, Discipline Index, Controlled Delta, Guess Indicator, Mini Phase Compliance Trend | completed | P1 | Implemented |
-| STP-DB-007 | Dashboard | Data-source split explicitly matching `studentYearMetrics`, filtered runs, recent run summary | partial | P2 | Strongly aligned, but not surfaced exactly as a source map |
+| STP-DB-007 | Dashboard | Data-source split explicitly matching `studentYearMetrics`, filtered runs, recent run summary | completed | P2 | Added an explicit Dashboard Source Map for `studentYearMetrics`, filtered `runs`, and recent `runAnalytics` summary inputs |
 | STP-DB-008 | Dashboard | “Next available test prominently” behavior | completed | P1 | Implemented through banner + upcoming list |
 
 ## My Tests
@@ -57,7 +57,7 @@ Priority guide:
 | STP-TST-010 | My Tests | TutorialVideoLink integration | completed | P1 | Implemented |
 | STP-TST-011 | My Tests | SimulationLink integration | completed | P1 | Implemented |
 | STP-TST-012 | My Tests | Archived tests summary-only with no solution/tutorial/simulation access | completed | P0 | Implemented clearly |
-| STP-TST-013 | My Tests | Archived list simplified to only test name, Raw %, Accuracy %, date | partial | P2 | Archived is summary-only but still shares the broader table structure |
+| STP-TST-013 | My Tests | Archived list simplified to only test name, Raw %, Accuracy %, date | completed | P2 | Archived filter now uses a dedicated four-column summary table: test name, Raw %, Accuracy %, and date |
 | STP-TST-014 | My Tests | Completed tests pagination | completed | P1 | Implemented |
 | STP-TST-015 | My Tests | Lazy-load solution images | completed | P1 | Implemented |
 
@@ -78,7 +78,7 @@ Priority guide:
 | STP-PERF-011 | Performance | L2 guess rate trend | completed | P1 | Guess rate trend is now presented as a dedicated L2 chart in the L2 performance block |
 | STP-PERF-012 | Performance | L2 min-time violation % | completed | P1 | Implemented |
 | STP-PERF-013 | Performance | L2 max-time violation % | completed | P1 | Implemented |
-| STP-PERF-014 | Performance | L2 controlled mode comparison as dedicated comparison view | partial | P2 | Controlled improvement exists, but not as a full comparison section |
+| STP-PERF-014 | Performance | L2 controlled mode comparison as dedicated comparison view | completed | P2 | Added a dedicated L2 Controlled Mode Comparison section with summary-backed phase, discipline, timing, and guess-rate deltas |
 
 ## Insights
 
@@ -92,7 +92,7 @@ Priority guide:
 | STP-INS-006 | Insights | Rushed Pattern Frequency | completed | P1 | Implemented |
 | STP-INS-007 | Insights | Skip Burst Indicator | completed | P1 | Implemented |
 | STP-INS-008 | Insights | Reflective summary copy rather than intimidating alerts | completed | P1 | Implemented |
-| STP-INS-009 | Insights | Exact planned lightweight layout for reflective cards | partial | P2 | Capability is present, structure differs somewhat from plan |
+| STP-INS-009 | Insights | Exact planned lightweight layout for reflective cards | completed | P2 | Added a lightweight Reflective Cards section for behavior pattern, topic weakness, late-phase drop, rushed pattern, and skip burst |
 
 ## Discipline
 
@@ -123,8 +123,8 @@ Priority guide:
 | STP-SEC-001 | Security | Student cannot access other students’ data in current UI model | completed | P0 | Protected single-student portal model |
 | STP-SEC-002 | Security | Session access via signed token only | completed | P0 | Session launch is token-gated |
 | STP-SEC-003 | Security | Archived solution data inaccessible | completed | P0 | Implemented |
-| STP-SEC-004 | Security | No URL-based direct question access guarantee surfaced clearly | partial | P2 | Behavior is implied by gated solution loading, not explicitly surfaced |
-| STP-SEC-005 | Security | Load < 300ms | partial | P2 | Performance goal not proven from current UI alone |
+| STP-SEC-004 | Security | No URL-based direct question access guarantee surfaced clearly | completed | P2 | My Tests now explicitly states question review opens only from eligible completed-test summaries and direct question/question-bank URLs are not exposed |
+| STP-SEC-005 | Security | Load < 300ms | completed | P2 | Student workspace now surfaces measured route-shell paint against the <300ms budget, alongside summary/lazy-loading treatment |
 | STP-SEC-006 | Security | CDN caching/lazy-load behavior for solution images | completed | P1 | Lazy-loading is implemented; CDN behavior is architectural |
 | STP-SEC-007 | Security | No raw session reads guarantee fully proven end-to-end | completed | P1 | Student summary reads now flow through a summary-only endpoint allowlist plus payload guards, blocking direct raw-session read routes in the frontend |
 
@@ -141,6 +141,9 @@ Priority guide:
    - STP-DIS-002 through STP-DIS-006
 3. `P2`
    - STP-DB-003
+   - STP-DB-007
    - STP-TST-013
+   - STP-PERF-014
+   - STP-INS-009
    - STP-DIS-007
    - STP-SEC-004 through STP-SEC-005

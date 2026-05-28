@@ -18,6 +18,7 @@ import {
   type StudentRiskState,
   type UpcomingTestRecord,
 } from "./studentDashboardDataset";
+import { isStudentDebugMode } from "../../services/studentDebugMode";
 
 interface DashboardCard {
   label: string;
@@ -34,6 +35,10 @@ const LICENSE_LAYER_ORDER: Record<LicenseLayer, number> = {
 
 function formatPercent(value: number): string {
   return `${Math.round(value)}%`;
+}
+
+function formatRank(value: number): string {
+  return `#${Math.round(value)}`;
 }
 
 function formatDateTime(value: string): string {
@@ -87,6 +92,7 @@ function getNextUpcomingTest(dataset: StudentDashboardDataset): UpcomingTestReco
 
 function StudentDashboardPage() {
   const globalState = useGlobalPortalState();
+  const debugMode = isStudentDebugMode();
   const [dataset, setDataset] = useState<StudentDashboardDataset>(STUDENT_DASHBOARD_FALLBACK_DATASET);
   const [isLoading, setIsLoading] = useState(true);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
@@ -101,7 +107,7 @@ function StudentDashboardPage() {
       if (!shouldUseLiveApi()) {
         setDataset(STUDENT_DASHBOARD_FALLBACK_DATASET);
         setInlineMessage(
-          "Local mode detected. Loaded deterministic Build 127 student dashboard fixtures (studentYearMetrics + assigned runs summary).",
+          "Showing a practice dashboard so you can explore the student experience.",
         );
         setIsLoading(false);
         return;
@@ -114,7 +120,7 @@ function StudentDashboardPage() {
         }
 
         setDataset(apiDataset);
-        setInlineMessage("Live mode enabled: dashboard hydrated from GET /student/dashboard.");
+        setInlineMessage("Your dashboard is up to date.");
       } catch (error) {
         if (!isMounted) {
           return;
@@ -122,7 +128,7 @@ function StudentDashboardPage() {
 
         const reason = error instanceof ApiClientError ? error.message : "Failed to load student dashboard data.";
         setDataset(STUDENT_DASHBOARD_FALLBACK_DATASET);
-        setInlineMessage(`${reason} Falling back to deterministic Build 127 fixtures.`);
+        setInlineMessage(`${reason} Showing a practice dashboard for now.`);
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -142,12 +148,12 @@ function StudentDashboardPage() {
       {
         label: "Avg Raw Score % (Last 5 Tests)",
         value: formatPercent(dataset.avgRawScorePercent),
-        helper: "studentYearMetrics",
+        helper: "Recent tests",
       },
       {
         label: "Avg Accuracy %",
         value: formatPercent(dataset.avgAccuracyPercent),
-        helper: "studentYearMetrics",
+        helper: "Recent tests",
       },
       {
         label: "Tests Attempted (Current Year)",
@@ -159,6 +165,15 @@ function StudentDashboardPage() {
         value: String(dataset.upcomingTests.length),
         helper: "Assigned runs",
       },
+      ...(dataset.batchRank ?
+        [
+          {
+            label: "Batch Rank",
+            value: formatRank(dataset.batchRank),
+            helper: "Current batch",
+          },
+        ] :
+        []),
     ];
   }, [dataset]);
 
@@ -269,18 +284,15 @@ function StudentDashboardPage() {
 
   return (
     <section className="student-content-card student-dashboard-page" aria-labelledby="student-dashboard-title">
-      <p className="student-content-eyebrow">Build 127</p>
       <h2 id="student-dashboard-title">Student Dashboard</h2>
       <p className="student-content-copy">
-        Track upcoming tests, recent outcomes, current risk signal, and discipline trends from summary-only
-        analytics sources.
+        See your next test, recent progress, and one clear area to keep building.
       </p>
       <p className="student-dashboard-motivational-banner" role="status">
         {motivationalBannerMessage}
       </p>
-      <p className="student-dashboard-layer-badge">License Layer: {activeLicenseLayer}</p>
 
-      {inlineMessage ? <p className="student-dashboard-inline-note">{inlineMessage}</p> : null}
+      {debugMode && inlineMessage ? <p className="student-dashboard-inline-note">{inlineMessage}</p> : null}
 
       <div className="student-dashboard-card-grid">
         {summaryCards.map((card) => (
@@ -297,7 +309,7 @@ function StudentDashboardPage() {
         <UiStatCard
           title="Current Risk Indicator"
           value={<span className={`student-dashboard-risk-pill ${riskToneClass(dataset.riskState)}`}>{dataset.riskState}</span>}
-          helper="studentYearMetrics.riskState"
+          helper="Current progress pattern"
         >
           Risk signal is rendered with constructive, neutral language.
         </UiStatCard>
@@ -305,7 +317,7 @@ function StudentDashboardPage() {
         <UiStatCard
           title="Discipline Index Summary"
           value={formatPercent(dataset.disciplineIndex)}
-          helper="studentYearMetrics.disciplineIndex"
+          helper="Execution consistency"
         >
           <div className="student-dashboard-discipline-track" aria-hidden="true">
             <span style={{ width: `${Math.max(0, Math.min(100, Math.round(dataset.disciplineIndex)))}%` }} />

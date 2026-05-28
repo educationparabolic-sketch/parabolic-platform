@@ -4,12 +4,12 @@ This file is the persistent handoff state for portal checklist implementation ac
 
 ## Current State
 
-- `Current Target Portal`: `student`
-- `Current Priority Band`: `P2`
-- `Last Completed Checklist ID`: `STUDENT-WORKSPACE-ALIGNMENT`
-- `Next Suggested Checklist ID`: `STP-DB-003`
-- `Last Updated`: `2026-05-27`
-- `Saved Scope Note`: Student workspace/design alignment completed before starting student P2. The student shell now uses an admin-aligned route workspace header across dedicated student routes, with route title/description, route path, summary-only data boundary, and role/layer-aware access context. The top Student Routes card was removed, and the student sidebar now mirrors the admin route shell treatment with brand header, route path chip, session/role/layer context, sign-out button, badge-style route links, and summary-only guidance while preserving student-facing tone. No student P2 checklist item was marked complete; continue with `STP-DB-003`.
+- `Current Target Portal`: `exam`
+- `Current Priority Band`: `P1`
+- `Last Completed Checklist ID`: `STP-SEC-005`
+- `Next Suggested Checklist ID`: `EXP-ENT-004`
+- `Last Updated`: `2026-05-28`
+- `Saved Scope Note`: Completed student P2 `STP-SEC-005` by surfacing measured route-shell paint against the <300ms load budget in the student workspace header. Student active checklist items are complete; advance to exam P1 with `EXP-ENT-004`.
 
 ## Active Checklist Set
 

@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { getFirebaseAuth } from "../../../../../shared/services/firebaseClient";
+import { isStudentDebugMode } from "../../services/studentDebugMode";
 
 interface StudentProfileSettings {
   name: string;
@@ -40,6 +41,7 @@ function decodePayload(idToken: string | null): JwtLikePayload {
 
 function StudentProfileSettingsPage() {
   const { session, signOut } = useAuthProvider();
+  const debugMode = isStudentDebugMode();
   const [notice, setNotice] = useState<string | null>(null);
   const [isSendingReset, setIsSendingReset] = useState(false);
 
@@ -79,7 +81,7 @@ function StudentProfileSettingsPage() {
 
   return (
     <section className="student-content-card student-profile-page" aria-labelledby="student-profile-title">
-      <p className="student-content-eyebrow">Build 128</p>
+      {debugMode ? <p className="student-content-eyebrow">Build 128</p> : null}
       <h2 id="student-profile-title">Profile & Settings</h2>
       <p className="student-content-copy">
         Manage account-level details and security actions without exposing performance-edit controls.

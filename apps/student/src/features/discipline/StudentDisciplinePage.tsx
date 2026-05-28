@@ -10,6 +10,7 @@ import {
   type StudentPerformanceDataset,
   type StudentPerformancePoint,
 } from "../performance/studentPerformanceDataset";
+import { isStudentDebugMode } from "../../services/studentDebugMode";
 
 const LICENSE_LAYER_ORDER: Record<LicenseLayer, number> = {
   L0: 0,
@@ -50,6 +51,7 @@ function getLatestTimelinePoint(
 
 function StudentDisciplinePage() {
   const globalState = useGlobalPortalState();
+  const debugMode = isStudentDebugMode();
   const [dataset, setDataset] = useState<StudentPerformanceDataset>(STUDENT_PERFORMANCE_FALLBACK_DATASET);
   const [isLoading, setIsLoading] = useState(true);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
@@ -64,7 +66,7 @@ function StudentDisciplinePage() {
       if (!shouldUseLiveApi()) {
         setDataset(STUDENT_PERFORMANCE_FALLBACK_DATASET);
         setInlineMessage(
-          "Local mode detected. Loaded deterministic Build 151 discipline fixtures from summary-only studentYearMetrics trends.",
+          "Showing practice discipline trends so you can explore this page.",
         );
         setIsLoading(false);
         return;
@@ -77,7 +79,7 @@ function StudentDisciplinePage() {
         }
 
         setDataset(apiDataset);
-        setInlineMessage("Live mode enabled: discipline summary hydrated from GET /student/performance.");
+        setInlineMessage("Your discipline trends are up to date.");
       } catch (error) {
         if (!isMounted) {
           return;
@@ -88,7 +90,7 @@ function StudentDisciplinePage() {
             error.message :
             "Failed to load student discipline summary.";
         setDataset(STUDENT_PERFORMANCE_FALLBACK_DATASET);
-        setInlineMessage(`${reason} Falling back to deterministic Build 151 fixtures.`);
+        setInlineMessage(`${reason} Showing practice discipline trends for now.`);
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -128,7 +130,7 @@ function StudentDisciplinePage() {
           isLoading ?
             "Loading..." :
             `${dataset.guessProbabilityCluster} (${formatUnsignedPercent(dataset.guessProbabilityPercent)})`,
-        helper: "Summary-only behavior cluster",
+        helper: "Confidence pattern",
       },
     ];
   }, [
@@ -183,15 +185,14 @@ function StudentDisciplinePage() {
 
   return (
     <section className="student-content-card student-discipline-page" aria-labelledby="student-discipline-title">
-      <p className="student-content-eyebrow">Build 151</p>
+      {debugMode ? <p className="student-content-eyebrow">Build 151</p> : null}
       <h2 id="student-discipline-title">Student Discipline</h2>
       <p className="student-content-copy">
-        Track execution maturity with lightweight progress bars that stay motivational, summary-only,
-        and free from raw session exposure.
+        Track execution habits with lightweight progress bars that stay motivational and easy to act on.
       </p>
-      <p className="student-dashboard-layer-badge">License Layer: {activeLicenseLayer}</p>
+      {debugMode ? <p className="student-dashboard-layer-badge">License Layer: {activeLicenseLayer}</p> : null}
 
-      {inlineMessage ? <p className="student-discipline-inline-note">{inlineMessage}</p> : null}
+      {debugMode && inlineMessage ? <p className="student-discipline-inline-note">{inlineMessage}</p> : null}
 
       <div className="student-discipline-kpi-grid">
         {overviewCards.map((card) => (
@@ -201,8 +202,7 @@ function StudentDisciplinePage() {
 
       <section className="student-discipline-summary-strip" aria-label="Discipline summary">
         <p>
-          Discipline stays separate from raw scores here so students can focus on repeatable execution
-          habits instead of intimidating system internals.
+          Discipline stays separate from scores here so you can focus on repeatable exam habits.
         </p>
         <p>
           Latest run snapshot:

@@ -26,7 +26,7 @@ import type { PortalKey } from "./portalManifest";
 import type { AuthContextValue, AuthSession, SignInInput } from "../types/authProvider";
 
 const TOKEN_REFRESH_INTERVAL_MS = 14 * 60 * 1000;
-const LOCAL_TEST_PASSWORD = "Parabolic#Test115";
+const LOCAL_TEST_PASSWORDS = new Set(["Parabolic#Test115", "demo-password"]);
 const LOCAL_FALLBACK_STORAGE_KEY = "parabolic.localAuthToken";
 
 const AUTH_SESSION_INITIAL_STATE: AuthSession = {
@@ -53,7 +53,8 @@ interface LocalAuthIdentity {
 }
 
 const LOCAL_AUTH_IDENTITIES: Record<string, LocalAuthIdentity> = {
-  "student.test@parabolic.local": {role: "student", licenseLayer: "L0"},
+  "student@parabolic.local": {role: "student", licenseLayer: "L2"},
+  "student.test@parabolic.local": {role: "student", licenseLayer: "L2"},
   "teacher.test@parabolic.local": {role: "teacher", licenseLayer: "L1"},
   "admin.test@parabolic.local": {role: "admin", licenseLayer: "L3"},
   "director.test@parabolic.local": {role: "director", licenseLayer: "L3"},
@@ -93,7 +94,7 @@ function tryLocalFallbackSignIn(email: string, password: string): {token: string
 
   const normalizedEmail = email.trim().toLowerCase();
   const identity = LOCAL_AUTH_IDENTITIES[normalizedEmail];
-  if (!identity || password !== LOCAL_TEST_PASSWORD) {
+  if (!identity || !LOCAL_TEST_PASSWORDS.has(password)) {
     return null;
   }
 

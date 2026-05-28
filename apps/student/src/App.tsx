@@ -1,4 +1,4 @@
-import { Suspense, lazy, useMemo, useState, type FormEvent, type ReactElement } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState, type FormEvent, type ReactElement } from "react";
 import {
   Navigate,
   NavLink,
@@ -22,6 +22,7 @@ import {
   findActivePortalNavigationItem,
 } from "../../../shared/ui/portalConsistency";
 import { UiRouteLoading } from "../../../shared/ui/components";
+import { isStudentDebugMode } from "./services/studentDebugMode";
 import "./App.css";
 
 const LICENSE_LAYER_ORDER: Record<LicenseLayer, number> = {
@@ -30,6 +31,8 @@ const LICENSE_LAYER_ORDER: Record<LicenseLayer, number> = {
   L2: 2,
   L3: 3,
 };
+
+const STUDENT_SIDEBAR_STORAGE_KEY = "student-sidebar-collapsed";
 
 const StudentDashboardPage = lazy(() => import("./features/dashboard/StudentDashboardPage"));
 const StudentDisciplinePage = lazy(() => import("./features/discipline/StudentDisciplinePage"));
@@ -45,6 +48,7 @@ function StudentRouteBoundary(props: { label: string; children: ReactElement }) 
 
 function StudentLoginPage(props: { loginPath: string; protectedPath: string }) {
   const { loginPath, protectedPath } = props;
+  const debugMode = isStudentDebugMode();
   const navigate = useNavigate();
   const location = useLocation();
   const { session, signIn, clearError } = useAuthProvider();
@@ -73,10 +77,10 @@ function StudentLoginPage(props: { loginPath: string; protectedPath: string }) {
   return (
     <main className="student-page-shell student-page-shell-login">
       <section className="student-login-card" aria-labelledby="student-login-title">
-        <p className="student-content-eyebrow">Build 126</p>
+        {debugMode ? <p className="student-content-eyebrow">Build 126</p> : null}
         <h1 id="student-login-title">Student Login</h1>
         <p className="student-content-copy">
-          Sign in through Firebase Authentication to access protected student routes.
+          Sign in to continue to your student workspace.
         </p>
         <form className="student-login-form" onSubmit={handleSubmit}>
           <label htmlFor="student-login-email">Email</label>
@@ -98,12 +102,16 @@ function StudentLoginPage(props: { loginPath: string; protectedPath: string }) {
           <button type="submit">Login</button>
         </form>
         {session.error ? <p className="student-login-error" role="alert">{session.error}</p> : null}
-        <p className="student-login-meta">
-          Protected route: <code>{protectedPath}</code>
-        </p>
-        <p className="student-login-meta">
-          Login route: <code>{loginPath}</code>
-        </p>
+        {debugMode ? (
+          <>
+            <p className="student-login-meta">
+              Protected route: <code>{protectedPath}</code>
+            </p>
+            <p className="student-login-meta">
+              Login route: <code>{loginPath}</code>
+            </p>
+          </>
+        ) : null}
       </section>
     </main>
   );
@@ -114,6 +122,7 @@ function StudentProtectedRoute(props: {
   children: ReactElement;
 }) {
   const { loginPath, children } = props;
+  const debugMode = isStudentDebugMode();
   const location = useLocation();
   const { session } = useAuthProvider();
 
@@ -121,9 +130,9 @@ function StudentProtectedRoute(props: {
     return (
       <main className="student-page-shell student-page-shell-login">
         <section className="student-login-card" aria-labelledby="student-loading-title">
-          <p className="student-content-eyebrow">Build 126</p>
+          {debugMode ? <p className="student-content-eyebrow">Build 126</p> : null}
           <h1 id="student-loading-title">Checking session</h1>
-          <p className="student-content-copy">Restoring Firebase authentication state.</p>
+          <p className="student-content-copy">Getting your workspace ready.</p>
         </section>
       </main>
     );
@@ -140,7 +149,34 @@ function StudentLayout() {
   const location = useLocation();
   const { session, signOut } = useAuthProvider();
   const globalState = useGlobalPortalState();
+  const debugMode = isStudentDebugMode();
   const activeLicenseLayer = globalState.licenseLayer ?? "L0";
+  const [pageScrolled, setPageScrolled] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return window.localStorage.getItem(STUDENT_SIDEBAR_STORAGE_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    function handleScroll() {
+      setPageScrolled(window.scrollY > 72);
+    }
+
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(STUDENT_SIDEBAR_STORAGE_KEY, String(sidebarCollapsed));
+    } catch {
+      // Best-effort preference persistence only.
+    }
+  }, [sidebarCollapsed]);
 
   const visibleNavItems = useMemo(() => {
     return STUDENT_PRIMARY_NAVIGATION.filter((item) => {
@@ -153,37 +189,69 @@ function StudentLayout() {
   }, [activeLicenseLayer]);
   const activeRoute = findActivePortalNavigationItem(STUDENT_PRIMARY_NAVIGATION, location.pathname);
   const activeRouteLabel = activeRoute?.label ?? "Student";
-  const activeRouteSummary = activeRoute?.summary ?? "Student route selection and contextual section guidance.";
+  const activeRouteSummary = activeRoute?.summary ?? "Your student workspace.";
 
   return (
     <main className="student-page-shell">
-      <div className="student-layout-grid">
-        <aside className="student-sidebar" aria-label="Student sidebar menu">
+      <div className={`student-layout-grid${sidebarCollapsed ? " student-layout-grid-collapsed" : ""}`}>
+        <aside className={`student-sidebar${sidebarCollapsed ? " student-sidebar-collapsed" : ""}`} aria-label="Student sidebar menu">
           <div className="student-sidebar-header">
             <div className="student-sidebar-brand">
               <p className="student-sidebar-eyebrow">Parabolic Platform</p>
               <h1>Student Portal</h1>
-              <p className="student-sidebar-copy">
-                Dedicated learner workspaces with summary-only progress and route-aware access.
-              </p>
-              <div className="student-sidebar-meta">
-                <p className="student-sidebar-path" title={location.pathname}>{location.pathname}</p>
-                <div className="student-sidebar-session">
-                  <span>Status: {session.status}</span>
-                  {globalState.role ? <span>Role: {globalState.role}</span> : null}
-                  <span>Layer: {activeLicenseLayer}</span>
-                </div>
+              {!sidebarCollapsed ? (
+                <>
+                  <p className="student-sidebar-copy">
+                    Your test progress, insights, and practice review in one calm workspace.
+                  </p>
+                  {debugMode ? (
+                    <div className="student-sidebar-meta">
+                      <p className="student-sidebar-path" title={location.pathname}>{location.pathname}</p>
+                      <div className="student-sidebar-session">
+                        <span>Status: {session.status}</span>
+                        {globalState.role ? <span>Role: {globalState.role}</span> : null}
+                        <span>Layer: {activeLicenseLayer}</span>
+                      </div>
+                    </div>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="student-signout-button student-sidebar-signout-button"
+                    onClick={() => {
+                      void signOut();
+                    }}
+                    disabled={session.status !== "authenticated"}
+                  >
+                    Sign out
+                  </button>
+                </>
+              ) : null}
+            </div>
+            <div className="student-sidebar-actions">
+              <button
+                type="button"
+                className="student-sidebar-icon-button"
+                onClick={() => setSidebarCollapsed((currentValue) => !currentValue)}
+                aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                aria-pressed={sidebarCollapsed}
+                title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              >
+                {sidebarCollapsed ? ">>" : "<<"}
+              </button>
+              {sidebarCollapsed ? (
                 <button
                   type="button"
-                  className="student-signout-button student-sidebar-signout-button"
+                  className="student-sidebar-icon-button"
                   onClick={() => {
                     void signOut();
                   }}
                   disabled={session.status !== "authenticated"}
+                  aria-label="Sign out"
+                  title="Sign out"
                 >
-                  Sign out
+                  SO
                 </button>
-              </div>
+              ) : null}
             </div>
           </div>
 
@@ -192,13 +260,15 @@ function StudentLayout() {
               <nav className="student-sidebar-nav" aria-label="Student navigation">
                 <section className="student-sidebar-section" aria-labelledby="student-nav-section-main">
                   <div className="student-sidebar-section-header">
-                    <h2 id="student-nav-section-main">Routes</h2>
+                    <h2 id="student-nav-section-main">{sidebarCollapsed ? "M" : "Menu"}</h2>
                   </div>
                   <div className="student-sidebar-section-items">
                     {visibleNavItems.map((item) => (
                       <NavLink
                         key={item.path}
                         to={item.path}
+                        aria-label={sidebarCollapsed ? item.label : undefined}
+                        title={sidebarCollapsed ? `${item.label}: ${item.summary}` : undefined}
                         className={({ isActive }) =>
                           isActive ?
                             "student-sidebar-link student-sidebar-link-active" :
@@ -215,7 +285,7 @@ function StudentLayout() {
                         </span>
                         <span className="student-sidebar-link-copy">
                           <span className="student-sidebar-link-label">{item.label}</span>
-                          <small>{item.summary}</small>
+                          {!sidebarCollapsed ? <small>{item.summary}</small> : null}
                         </span>
                         <span
                           className="student-sidebar-link-indicator"
@@ -228,51 +298,29 @@ function StudentLayout() {
                 </section>
               </nav>
             </div>
-            <div className="student-sidebar-guidance">
-              <p className="student-content-note">
-                Data flow: Session Submitted to runAnalytics updated to studentYearMetrics updated to Student
-                Portal summary refresh.
-              </p>
-              <p className="student-content-note">
-                Summary-only contract: student routes accept summary resources only and reject raw session logs,
-                per-question timestamps, and raw answer arrays at payload validation.
-              </p>
-              <p className="student-content-note">
-                Terminology standard: display only Raw Score % and Accuracy %. Score, Total Marks, and
-                cumulative raw marks are not shown.
-              </p>
-              {LICENSE_LAYER_ORDER[activeLicenseLayer] < LICENSE_LAYER_ORDER.L1 ? (
-            <p className="student-content-note">
-              Insights unlock at L1+ license layer. Upgrade path remains backend-authoritative.
-            </p>
-              ) : null}
-            </div>
+            {!sidebarCollapsed ? (
+              <div className="student-sidebar-guidance">
+                <p className="student-content-note">
+                  Your progress updates after each completed test, with Raw % and Accuracy % kept easy to follow.
+                </p>
+                {LICENSE_LAYER_ORDER[activeLicenseLayer] < LICENSE_LAYER_ORDER.L1 ? (
+                  <p className="student-content-note">
+                    Insights unlock when your learning plan includes deeper progress guidance.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </aside>
 
         <section className="student-main-content" aria-label="Student main dashboard container">
-          <section className="student-workspace-header" aria-label="Student workspace context">
+          <section
+            className={`student-workspace-header${pageScrolled ? " student-workspace-header-compact" : ""}`}
+            aria-label="Student workspace context"
+          >
             <div className="student-workspace-title-block">
-              <p className="student-content-eyebrow">Student Workspace</p>
               <h2>{activeRouteLabel}</h2>
-              <p>{activeRouteSummary}</p>
-            </div>
-            <div className="student-workspace-context-grid">
-              <article>
-                <p>Route</p>
-                <h3>{location.pathname}</h3>
-                <small>Dedicated student section</small>
-              </article>
-              <article>
-                <p>Data Boundary</p>
-                <h3>Summary Only</h3>
-                <small>studentYearMetrics, runAnalytics, assigned-run summaries</small>
-              </article>
-              <article>
-                <p>Access</p>
-                <h3>{activeLicenseLayer}</h3>
-                <small>{globalState.role ?? "student"} navigation is layer-aware</small>
-              </article>
+              {!pageScrolled ? <p>{activeRouteSummary}</p> : null}
             </div>
           </section>
           <Outlet />

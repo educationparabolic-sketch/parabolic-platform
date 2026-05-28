@@ -11,6 +11,7 @@ import {
   type StudentTestRecord,
   type StudentTestStatus,
 } from "./studentMyTestsDataset";
+import { isStudentDebugMode } from "../../services/studentDebugMode";
 
 type StatusFilter = "all" | StudentTestStatus;
 
@@ -30,21 +31,21 @@ const STATUS_FILTERS: StatusFilterChip[] = [
 const STORAGE_LIFECYCLE_STEPS = [
   {
     id: "hot",
-    label: "HOT",
-    title: "Assigned and live test access",
+    label: "Now",
+    title: "Ready to start or resume",
     description: "Available and in-progress tests stay action-ready so you can start or resume without delay.",
   },
   {
     id: "warm",
-    label: "WARM",
-    title: "Current-year completed summaries",
-    description: "Completed current-year runs keep solution review and PDF summary access on summary-backed records.",
+    label: "Review",
+    title: "Completed tests this year",
+    description: "Recent completed tests keep review and PDF access where your learning plan allows it.",
   },
   {
     id: "cold",
-    label: "COLD",
-    title: "Archived summary-only history",
-    description: "Past-year records retain only summary fields, with solution assets and direct learning links removed.",
+    label: "Archive",
+    title: "Older test history",
+    description: "Older records stay available as simple history so your main workspace remains focused.",
   },
 ] as const;
 
@@ -113,7 +114,7 @@ function formatAttemptStatus(row: StudentTestRecord): string {
 
 function formatFlaggedStatus(row: StudentTestRecord): string {
   if (row.flaggedQuestions === null) {
-    return "Review markers sync from the active session summary.";
+    return "Review markers will appear after the session updates.";
   }
 
   return `${Math.round(row.flaggedQuestions)} flagged for review`;
@@ -167,6 +168,7 @@ function statusClass(status: StudentTestStatus): string {
 }
 
 function StudentMyTestsPage() {
+  const debugMode = isStudentDebugMode();
   const [scheduledTests, setScheduledTests] = useState<StudentTestRecord[]>([]);
   const [activeTests, setActiveTests] = useState<StudentTestRecord[]>([]);
   const [completedTests, setCompletedTests] = useState<StudentTestRecord[]>([]);
@@ -486,14 +488,44 @@ function StudentMyTestsPage() {
 
           return (
             <div className="student-my-tests-action-stack">
-              <span className="student-my-tests-session-muted">Summary only</span>
-              <small>No archived solution access</small>
+              <span className="student-my-tests-session-muted">History record</span>
+              <small>Review unavailable for archived tests</small>
             </div>
           );
         },
       },
     ],
     [isLaunchingSession, isLoadingSolution],
+  );
+
+  const archivedColumns = useMemo<UiTableColumn<StudentTestRecord>[]>(
+    () => [
+      {
+        id: "test",
+        header: "Test Name",
+        render: (row) => (
+          <div className="student-my-tests-test-cell">
+            <strong>{row.testName}</strong>
+          </div>
+        ),
+      },
+      {
+        id: "raw",
+        header: "Raw %",
+        render: (row) => formatPercent(row.rawScorePercent),
+      },
+      {
+        id: "accuracy",
+        header: "Accuracy %",
+        render: (row) => formatPercent(row.accuracyPercent),
+      },
+      {
+        id: "date",
+        header: "Date",
+        render: (row) => formatDateTime(row.completedAt ?? row.endWindow),
+      },
+    ],
+    [],
   );
 
   const openSolutionTest = useMemo(() => {
@@ -506,18 +538,21 @@ function StudentMyTestsPage() {
 
   return (
     <section className="student-content-card student-my-tests-page" aria-labelledby="student-my-tests-title">
-      <p className="student-content-eyebrow">Build 128</p>
+      {debugMode ? <p className="student-content-eyebrow">Build 128</p> : null}
       <h2 id="student-my-tests-title">My Tests</h2>
       <p className="student-content-copy">
-        Review assigned tests, track status transitions, and manage exam-session lifecycle from a single filtered workspace.
+        Review assigned tests, continue active attempts, and revisit completed work from one place.
       </p>
 
       <p className="student-content-note">
-        Session launch is token-gated through <code>POST /exam/start</code>. Completed tests are paginated and
-        archived records remain summary-only without solution access.
+        Starting a test opens a secure exam session. Completed tests are organized into pages so older work stays easy
+        to find.
+      </p>
+      <p className="student-content-note">
+        Review is available from eligible completed tests, while archived tests stay as clean history records.
       </p>
 
-      {inlineMessage ? <p className="student-my-tests-inline-note">{inlineMessage}</p> : null}
+      {debugMode && inlineMessage ? <p className="student-my-tests-inline-note">{inlineMessage}</p> : null}
 
       <section className="student-my-tests-lifecycle-strip" aria-label="Test storage lifecycle">
         {STORAGE_LIFECYCLE_STEPS.map((step) => (
@@ -552,7 +587,7 @@ function StudentMyTestsPage() {
 
       <UiTable
         caption={`My Tests — ${STATUS_FILTERS.find((filterItem) => filterItem.id === activeFilter)?.label ?? "All"}`}
-        columns={columns}
+        columns={activeFilter === "archived" ? archivedColumns : columns}
         rows={allVisibleRows}
         rowKey={(row) => `${row.runId}-${row.testId}`}
         emptyStateText={isLoading ? "Loading assigned tests..." : "No tests found for the selected status."}
@@ -582,9 +617,8 @@ function StudentMyTestsPage() {
 
       {activeFilter === "archived" ? (
         <p className="student-content-note">
-          Archived view is COLD summary-only and intentionally excludes solution assets, direct question URLs, and
-          tutorial links. Current-year completed items remain WARM with summary-backed review access, while active
-          assignments stay HOT for launch and resume.
+          Archived tests are kept as older history. Recent completed tests remain available for review when your
+          learning plan includes review access, and active assignments stay ready to launch or resume.
         </p>
       ) : null}
 
@@ -592,7 +626,7 @@ function StudentMyTestsPage() {
         <section className="student-my-tests-solution-view" aria-label="Solution view">
           <h3>{`Solutions — ${openSolutionTest.testName}`}</h3>
           <p>
-            Lazy-loaded question and solution assets for current academic year only.
+            Question and solution images load only when you open an eligible completed test.
           </p>
 
           {solutionError ? <p className="student-my-tests-inline-note">{solutionError}</p> : null}

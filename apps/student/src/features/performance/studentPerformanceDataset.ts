@@ -26,6 +26,16 @@ export interface TopicPerformanceEntry {
   accuracyPercent: number;
 }
 
+export interface ControlledModeComparison {
+  baselineLabel: string;
+  currentLabel: string;
+  phaseAdherenceDeltaPercent: number;
+  disciplineIndexDeltaPercent: number;
+  minTimeViolationDeltaPercent: number;
+  maxTimeViolationDeltaPercent: number;
+  guessRateDeltaPercent: number;
+}
+
 export interface StudentPerformanceDataset {
   licenseLayer: LicenseLayer;
   disciplineIndex: number;
@@ -37,6 +47,7 @@ export interface StudentPerformanceDataset {
   easyNeglectFrequencyPercent: number;
   hardBiasFrequencyPercent: number;
   timeAllocationBalancePercent: number;
+  controlledModeComparison: ControlledModeComparison;
   timeline: StudentPerformancePoint[];
   topicPerformanceBreakdown: TopicPerformanceEntry[];
 }
@@ -52,6 +63,15 @@ export const STUDENT_PERFORMANCE_FALLBACK_DATASET: StudentPerformanceDataset = {
   easyNeglectFrequencyPercent: 16,
   hardBiasFrequencyPercent: 14,
   timeAllocationBalancePercent: 69,
+  controlledModeComparison: {
+    baselineLabel: "Before Controlled Mode",
+    currentLabel: "Recent Controlled Runs",
+    phaseAdherenceDeltaPercent: 13,
+    disciplineIndexDeltaPercent: 11,
+    minTimeViolationDeltaPercent: -13,
+    maxTimeViolationDeltaPercent: -9,
+    guessRateDeltaPercent: -9,
+  },
   timeline: [
     {
       runId: "run-2026-02-14-a",
@@ -335,6 +355,72 @@ function normalizeTopicPerformance(value: unknown, index: number): TopicPerforma
   };
 }
 
+function averageBy(
+  entries: StudentPerformancePoint[],
+  selector: (entry: StudentPerformancePoint) => number,
+): number {
+  if (entries.length === 0) {
+    return 0;
+  }
+
+  const total = entries.reduce((sum, entry) => sum + selector(entry), 0);
+  return total / entries.length;
+}
+
+function inferControlledModeComparison(timeline: StudentPerformancePoint[]): ControlledModeComparison {
+  const midpoint = Math.max(1, Math.floor(timeline.length / 2));
+  const baseline = timeline.slice(0, midpoint);
+  const current = timeline.slice(midpoint);
+  const currentWindow = current.length > 0 ? current : timeline.slice(-midpoint);
+
+  return {
+    baselineLabel: "Earlier Runs",
+    currentLabel: "Recent Controlled Runs",
+    phaseAdherenceDeltaPercent: averageBy(currentWindow, (entry) => entry.phaseAdherencePercent) -
+      averageBy(baseline, (entry) => entry.phaseAdherencePercent),
+    disciplineIndexDeltaPercent: averageBy(currentWindow, (entry) => entry.disciplineIndex) -
+      averageBy(baseline, (entry) => entry.disciplineIndex),
+    minTimeViolationDeltaPercent: averageBy(currentWindow, (entry) => entry.minTimeViolationPercent) -
+      averageBy(baseline, (entry) => entry.minTimeViolationPercent),
+    maxTimeViolationDeltaPercent: averageBy(currentWindow, (entry) => entry.maxTimeViolationPercent) -
+      averageBy(baseline, (entry) => entry.maxTimeViolationPercent),
+    guessRateDeltaPercent: averageBy(currentWindow, (entry) => entry.guessRatePercent) -
+      averageBy(baseline, (entry) => entry.guessRatePercent),
+  };
+}
+
+function normalizeControlledModeComparison(
+  value: unknown,
+  timeline: StudentPerformancePoint[],
+  improvementPercent: number,
+): ControlledModeComparison {
+  const inferred = inferControlledModeComparison(timeline);
+
+  if (!value || typeof value !== "object") {
+    return {
+      ...inferred,
+      disciplineIndexDeltaPercent: improvementPercent || inferred.disciplineIndexDeltaPercent,
+    };
+  }
+
+  const record = value as Record<string, unknown>;
+  return {
+    baselineLabel: toString(record.baselineLabel ?? record.beforeLabel, inferred.baselineLabel),
+    currentLabel: toString(record.currentLabel ?? record.afterLabel, inferred.currentLabel),
+    phaseAdherenceDeltaPercent: toNumber(
+      record.phaseAdherenceDeltaPercent ?? record.phaseComplianceDeltaPercent,
+      inferred.phaseAdherenceDeltaPercent,
+    ),
+    disciplineIndexDeltaPercent: toNumber(
+      record.disciplineIndexDeltaPercent ?? record.controlledModeImprovementPercent,
+      improvementPercent || inferred.disciplineIndexDeltaPercent,
+    ),
+    minTimeViolationDeltaPercent: toNumber(record.minTimeViolationDeltaPercent, inferred.minTimeViolationDeltaPercent),
+    maxTimeViolationDeltaPercent: toNumber(record.maxTimeViolationDeltaPercent, inferred.maxTimeViolationDeltaPercent),
+    guessRateDeltaPercent: toNumber(record.guessRateDeltaPercent ?? record.guessProbabilityDeltaPercent, inferred.guessRateDeltaPercent),
+  };
+}
+
 function normalizeDataset(payload: unknown): StudentPerformanceDataset {
   if (!payload || typeof payload !== "object") {
     throw new Error("GET /student/performance returned an invalid payload.");
@@ -365,6 +451,9 @@ function normalizeDataset(payload: unknown): StudentPerformanceDataset {
   const guessProbabilityPercent = clampPercent(
     toNumber(record.guessProbabilityPercent ?? record.guessRatePercent, latest?.guessRatePercent ?? 0),
   );
+  const controlledModeImprovementPercent = toNumber(
+    record.controlledModeImprovementPercent ?? record.controlledModeDeltaPercent,
+  );
 
   return {
     licenseLayer: toLicenseLayer(record.licenseLayer),
@@ -372,7 +461,7 @@ function normalizeDataset(payload: unknown): StudentPerformanceDataset {
     phaseCompliancePercent: clampPercent(
       toNumber(record.phaseCompliancePercent ?? record.phaseAdherencePercent, latest?.phaseAdherencePercent ?? 0),
     ),
-    controlledModeImprovementPercent: toNumber(record.controlledModeImprovementPercent ?? record.controlledModeDeltaPercent),
+    controlledModeImprovementPercent,
     overstayFrequencyPercent: clampPercent(
       toNumber(record.overstayFrequencyPercent, latest?.overstayFrequencyPercent ?? 0),
     ),
@@ -381,6 +470,11 @@ function normalizeDataset(payload: unknown): StudentPerformanceDataset {
     easyNeglectFrequencyPercent: clampPercent(toNumber(record.easyNeglectFrequencyPercent ?? record.easyNeglectPercent)),
     hardBiasFrequencyPercent: clampPercent(toNumber(record.hardBiasFrequencyPercent ?? record.hardBiasPercent)),
     timeAllocationBalancePercent: clampPercent(toNumber(record.timeAllocationBalancePercent ?? record.timeAllocationPercent)),
+    controlledModeComparison: normalizeControlledModeComparison(
+      record.controlledModeComparison,
+      timeline.length > 0 ? timeline : STUDENT_PERFORMANCE_FALLBACK_DATASET.timeline,
+      controlledModeImprovementPercent,
+    ),
     timeline: timeline.length > 0 ? timeline : STUDENT_PERFORMANCE_FALLBACK_DATASET.timeline,
     topicPerformanceBreakdown:
       topicPerformanceBreakdown.length > 0 ?

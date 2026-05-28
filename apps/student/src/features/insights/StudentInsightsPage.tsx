@@ -17,6 +17,7 @@ import {
   type StudentInsightSnapshot,
   type TopicWeaknessInsight,
 } from "./studentInsightsDataset";
+import { isStudentDebugMode } from "../../services/studentDebugMode";
 
 const LICENSE_LAYER_ORDER: Record<LicenseLayer, number> = {
   L0: 0,
@@ -24,6 +25,12 @@ const LICENSE_LAYER_ORDER: Record<LicenseLayer, number> = {
   L2: 2,
   L3: 3,
 };
+
+interface ReflectiveInsightCard {
+  title: string;
+  value: string;
+  reflection: string;
+}
 
 function formatPercent(value: number): string {
   return `${Math.round(value)}%`;
@@ -52,6 +59,7 @@ function toTrendPoints(
 
 function StudentInsightsPage() {
   const globalState = useGlobalPortalState();
+  const debugMode = isStudentDebugMode();
   const [dataset, setDataset] = useState<StudentInsightsDataset>(STUDENT_INSIGHTS_FALLBACK_DATASET);
   const [isLoading, setIsLoading] = useState(true);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
@@ -66,7 +74,7 @@ function StudentInsightsPage() {
       if (!shouldUseLiveApi()) {
         setDataset(STUDENT_INSIGHTS_FALLBACK_DATASET);
         setInlineMessage(
-          "Local mode detected. Loaded deterministic Build 130 insightSnapshots fixtures (summary-only, no raw sessions).",
+          "Showing practice insights so you can explore this page.",
         );
         setIsLoading(false);
         return;
@@ -79,7 +87,7 @@ function StudentInsightsPage() {
         }
 
         setDataset(apiDataset);
-        setInlineMessage("Live mode enabled: behavioral insights hydrated from GET /student/insights.");
+        setInlineMessage("Your insights are up to date.");
       } catch (error) {
         if (!isMounted) {
           return;
@@ -87,7 +95,7 @@ function StudentInsightsPage() {
 
         const reason = error instanceof ApiClientError ? error.message : "Failed to load student insights.";
         setDataset(STUDENT_INSIGHTS_FALLBACK_DATASET);
-        setInlineMessage(`${reason} Falling back to deterministic Build 130 fixtures.`);
+        setInlineMessage(`${reason} Showing practice insights for now.`);
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -124,6 +132,46 @@ function StudentInsightsPage() {
   const skipBurstTrend = useMemo(
     () => toTrendPoints(dataset.snapshots, (snapshot) => snapshot.skipBurstFrequencyPercent),
     [dataset.snapshots],
+  );
+  const primaryTopicWeakness = dataset.topicWeaknessSummary[0];
+
+  const reflectiveCards = useMemo<ReflectiveInsightCard[]>(
+    () => [
+      {
+        title: "Most Frequent Behavior Pattern",
+        value: dataset.mostFrequentBehaviorPattern,
+        reflection: "Focus on one repeatable habit before the next run.",
+      },
+      {
+        title: "Topic Weakness Summary",
+        value: primaryTopicWeakness ? primaryTopicWeakness.topic : "No topic friction",
+        reflection: primaryTopicWeakness ?
+          primaryTopicWeakness.feedback :
+          "Your topic summary is steady in the current insight window.",
+      },
+      {
+        title: "Late-Phase Drop Indicator",
+        value: formatPercent(dataset.latePhaseDropIndicatorPercent),
+        reflection: "Keep the final phase reserved for review and confident attempts.",
+      },
+      {
+        title: "Rushed Pattern Frequency",
+        value: formatPercent(dataset.rushedPatternFrequencyPercent),
+        reflection: "Slow the first decision just enough to protect accuracy.",
+      },
+      {
+        title: "Skip Burst Indicator",
+        value: formatPercent(dataset.skipBurstIndicatorPercent),
+        reflection: "Plan skips in small passes so they do not cluster late.",
+      },
+    ],
+    [
+      dataset.latePhaseDropIndicatorPercent,
+      dataset.mostFrequentBehaviorPattern,
+      dataset.rushedPatternFrequencyPercent,
+      dataset.skipBurstIndicatorPercent,
+      primaryTopicWeakness,
+    ],
   );
 
   const patternSnapshotRows = useMemo<UiTableColumn<StudentInsightSnapshot>[]>(
@@ -207,19 +255,32 @@ function StudentInsightsPage() {
 
   return (
     <section className="student-content-card student-insights-page" aria-labelledby="student-insights-title">
-      <p className="student-content-eyebrow">Build 130</p>
       <h2 id="student-insights-title">Student Insights</h2>
       <p className="student-content-copy">
-        Review behavior patterns, topic-level friction, and next-step suggestions powered by insightSnapshots
-        and studentYearMetrics summary outputs.
+        Notice one pattern, one topic, and one next step to make your next test feel more controlled.
       </p>
       <p className="student-dashboard-motivational-banner">
         Keep building consistency. Insights highlight one behavior to improve each week instead of overwhelming
         you with alerts.
       </p>
-      <p className="student-dashboard-layer-badge">License Layer: {activeLicenseLayer}</p>
 
-      {inlineMessage ? <p className="student-insights-inline-note">{inlineMessage}</p> : null}
+      {debugMode && inlineMessage ? <p className="student-insights-inline-note">{inlineMessage}</p> : null}
+
+      <section className="student-insights-reflective-section" aria-labelledby="student-insights-reflective-title">
+        <div>
+          <p className="student-content-eyebrow">Reflective Cards</p>
+          <h3 id="student-insights-reflective-title">What to notice this week</h3>
+        </div>
+        <div className="student-insights-reflective-grid">
+          {reflectiveCards.map((card) => (
+            <article key={card.title} className="student-insights-reflective-card">
+              <p>{card.title}</p>
+              <strong>{card.value}</strong>
+              <small>{card.reflection}</small>
+            </article>
+          ))}
+        </div>
+      </section>
 
       <div className="student-insights-kpi-grid">
         <UiStatCard
@@ -251,8 +312,7 @@ function StudentInsightsPage() {
           <strong>{dataset.currentYearSolutionAccessOnly ? "Enabled (current year only)" : "Restricted"}</strong>
         </p>
         <p>
-          Historical archived runs remain summary-only and never expose raw session payloads or direct question
-          access.
+          Older tests keep only the progress details you need. Direct question access stays unavailable.
         </p>
       </div>
 

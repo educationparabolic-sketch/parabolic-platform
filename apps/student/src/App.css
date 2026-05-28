@@ -34,6 +34,11 @@
   gap: 1rem;
   padding: 1rem;
   align-items: start;
+  transition: grid-template-columns 180ms ease;
+}
+
+.student-layout-grid-collapsed {
+  grid-template-columns: 92px minmax(0, 1fr);
 }
 
 .student-sidebar {
@@ -45,6 +50,7 @@
   padding: 0;
   overflow: hidden;
   min-height: calc(100vh - 32px);
+  transition: width 180ms ease;
 }
 
 .student-content-eyebrow {
@@ -71,6 +77,31 @@
 
 .student-sidebar-brand {
   min-width: 0;
+}
+
+.student-sidebar-actions {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.student-sidebar-icon-button {
+  border: 1px solid rgba(20, 52, 96, 0.16);
+  background: rgba(255, 255, 255, 0.86);
+  color: #1a3f6e;
+  border-radius: 12px;
+  min-width: 40px;
+  min-height: 36px;
+  padding: 0 10px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.student-sidebar-icon-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .student-sidebar-eyebrow {
@@ -153,6 +184,10 @@
 
 .student-sidebar-section-header {
   padding: 0 6px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: linear-gradient(180deg, #ffffff 70%, rgba(255, 255, 255, 0));
 }
 
 .student-sidebar-section-header h2 {
@@ -241,20 +276,98 @@
   gap: 10px;
 }
 
+.student-sidebar-collapsed .student-sidebar-header {
+  display: grid;
+  grid-template-columns: 1fr;
+  padding: 18px 12px;
+  justify-items: center;
+  gap: 10px;
+}
+
+.student-sidebar-collapsed .student-sidebar-brand h1,
+.student-sidebar-collapsed .student-sidebar-link-copy,
+.student-sidebar-collapsed .student-sidebar-link-indicator {
+  display: none;
+}
+
+.student-sidebar-collapsed .student-sidebar-eyebrow {
+  width: 42px;
+  min-height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #1454af, #0d3f86);
+  color: #ffffff;
+  font-size: 0;
+  letter-spacing: 0;
+}
+
+.student-sidebar-collapsed .student-sidebar-eyebrow::before {
+  content: "SP";
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+}
+
+.student-sidebar-collapsed .student-sidebar-actions {
+  justify-items: center;
+}
+
+.student-sidebar-collapsed .student-sidebar-body {
+  padding: 14px 12px;
+}
+
+.student-sidebar-collapsed .student-sidebar-section-header {
+  padding: 0;
+  text-align: center;
+}
+
+.student-sidebar-collapsed .student-sidebar-section-items {
+  justify-items: center;
+}
+
+.student-sidebar-collapsed .student-sidebar-link {
+  grid-template-columns: 1fr;
+  justify-items: center;
+  padding: 10px;
+  border-radius: 16px;
+}
+
+.student-sidebar-collapsed .student-sidebar-link-badge {
+  width: 42px;
+  height: 42px;
+}
+
 .student-main-content {
   min-width: 0;
   display: grid;
   gap: 1rem;
   align-content: start;
+  padding-bottom: 6rem;
 }
 
 .student-workspace-header {
+  position: sticky;
+  top: 1rem;
+  z-index: 8;
   border: 1px solid #d5deea;
   border-radius: 0.85rem;
-  background: #ffffff;
-  padding: 1rem;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 0.85rem 1rem;
   display: grid;
-  gap: 0.9rem;
+  gap: 0;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 12px 28px rgba(20, 52, 96, 0.08);
+  transition: padding 180ms ease, background-color 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.student-workspace-header-compact {
+  width: fit-content;
+  max-width: min(100%, 360px);
+  padding: 0.45rem 0.8rem;
+  gap: 0;
+  border-color: rgba(213, 222, 234, 0.72);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 10px 22px rgba(20, 52, 96, 0.12);
 }
 
 .student-workspace-title-block h2,
@@ -263,53 +376,20 @@
 }
 
 .student-workspace-title-block h2 {
-  margin-top: 0.3rem;
+  margin: 0;
   font-size: 1.28rem;
   color: #132c52;
+}
+
+.student-workspace-header-compact .student-workspace-title-block h2 {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.2;
 }
 
 .student-workspace-title-block p:not(.student-content-eyebrow) {
   margin-top: 0.45rem;
   color: #3c5575;
-}
-
-.student-workspace-context-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.75rem;
-}
-
-.student-workspace-context-grid article {
-  border: 1px solid #d8e3f1;
-  border-radius: 0.7rem;
-  background: #fbfdff;
-  padding: 0.75rem;
-  display: grid;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
-.student-workspace-context-grid p,
-.student-workspace-context-grid h3,
-.student-workspace-context-grid small {
-  margin: 0;
-}
-
-.student-workspace-context-grid p {
-  color: #5b7392;
-  font-size: 0.78rem;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.student-workspace-context-grid h3 {
-  color: #153461;
-  font-size: 1rem;
-  overflow-wrap: anywhere;
-}
-
-.student-workspace-context-grid small {
-  color: #536d8e;
 }
 
 .student-content-card {
@@ -938,6 +1018,86 @@
   color: #99611e;
 }
 
+.student-performance-controlled-section {
+  border: 1px solid #d6e1f1;
+  border-radius: 0.75rem;
+  background: #fbfdff;
+  padding: 0.95rem;
+  display: grid;
+  gap: 0.8rem;
+}
+
+.student-performance-controlled-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.student-performance-controlled-header h3,
+.student-performance-controlled-header p {
+  margin: 0;
+}
+
+.student-performance-controlled-header h3 {
+  margin-top: 0.2rem;
+  color: #1d3554;
+  font-size: 1rem;
+}
+
+.student-performance-controlled-header > span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #eaf6ef;
+  color: #1f6a46;
+  border: 1px solid #a9d9bd;
+  padding: 0.35rem 0.75rem;
+  font-weight: 800;
+}
+
+.student-performance-controlled-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.student-performance-controlled-card {
+  display: grid;
+  gap: 0.35rem;
+  border: 1px solid #d9e4f3;
+  border-radius: 0.65rem;
+  background: #ffffff;
+  padding: 0.7rem;
+}
+
+.student-performance-controlled-card p,
+.student-performance-controlled-card small {
+  margin: 0;
+}
+
+.student-performance-controlled-card p {
+  color: #4b6487;
+  font-weight: 700;
+}
+
+.student-performance-controlled-card small {
+  color: #5d7394;
+  line-height: 1.4;
+}
+
+.student-performance-controlled-value {
+  color: #254567;
+  font-size: 1.1rem;
+}
+
+.student-performance-controlled-value-positive {
+  color: #17633d;
+}
+
+.student-performance-controlled-value-watch {
+  color: #8a5a16;
+}
+
 .student-performance-allocation-section {
   display: grid;
   gap: 0.75rem;
@@ -1165,6 +1325,59 @@
   gap: 0.75rem;
 }
 
+.student-insights-reflective-section {
+  border: 1px solid #d6e1f1;
+  border-radius: 0.75rem;
+  background: #fbfdff;
+  padding: 0.95rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.student-insights-reflective-section h3 {
+  margin: 0.2rem 0 0;
+  color: #1d3554;
+  font-size: 1rem;
+}
+
+.student-insights-reflective-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.student-insights-reflective-card {
+  border: 1px solid #d9e4f3;
+  border-radius: 0.65rem;
+  background: #ffffff;
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.4rem;
+  align-content: start;
+}
+
+.student-insights-reflective-card p,
+.student-insights-reflective-card small {
+  margin: 0;
+}
+
+.student-insights-reflective-card p {
+  color: #4b6487;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.student-insights-reflective-card strong {
+  color: #173a68;
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.student-insights-reflective-card small {
+  color: #5d7394;
+  line-height: 1.4;
+}
+
 .student-insights-guardrail-strip {
   border: 1px solid #d6e1f1;
   border-radius: 0.75rem;
@@ -1381,14 +1594,15 @@
   .student-dashboard-status-grid,
   .student-dashboard-layer-grid,
   .student-dashboard-widget-grid,
-  .student-workspace-context-grid,
   .student-performance-kpi-grid,
   .student-performance-chart-grid,
   .student-performance-l1-grid,
+  .student-performance-controlled-grid,
   .student-performance-progress-grid,
   .student-discipline-kpi-grid,
   .student-discipline-progress-grid,
   .student-insights-kpi-grid,
+  .student-insights-reflective-grid,
   .student-insights-chart-grid,
   .student-insights-l2-grid {
     grid-template-columns: 1fr;

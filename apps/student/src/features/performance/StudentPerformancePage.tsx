@@ -13,10 +13,12 @@ import {
   STUDENT_PERFORMANCE_FALLBACK_DATASET,
   fetchStudentPerformanceDataset,
   shouldUseLiveApi,
+  type ControlledModeComparison,
   type StudentPerformanceDataset,
   type StudentPerformancePoint,
   type TopicPerformanceEntry,
 } from "./studentPerformanceDataset";
+import { isStudentDebugMode } from "../../services/studentDebugMode";
 
 const LICENSE_LAYER_ORDER: Record<LicenseLayer, number> = {
   L0: 0,
@@ -27,6 +29,14 @@ const LICENSE_LAYER_ORDER: Record<LicenseLayer, number> = {
 
 function formatPercent(value: number): string {
   return `${Math.round(value)}%`;
+}
+
+function formatDelta(value: number, invert = false): string {
+  const rounded = Math.round(value);
+  const effective = invert ? -rounded : rounded;
+  const prefix = rounded > 0 ? "+" : "";
+  const suffix = effective >= 0 ? " improved" : " watch";
+  return `${prefix}${rounded}%${suffix}`;
 }
 
 function formatDate(value: string): string {
@@ -74,8 +84,22 @@ function riskStateHelper(riskState: StudentPerformancePoint["riskState"]): strin
   }
 }
 
+function controlledComparisonTone(value: number, invert = false): string {
+  const effective = invert ? -value : value;
+  if (effective > 0) {
+    return "student-performance-controlled-value student-performance-controlled-value-positive";
+  }
+
+  if (effective < 0) {
+    return "student-performance-controlled-value student-performance-controlled-value-watch";
+  }
+
+  return "student-performance-controlled-value";
+}
+
 function StudentPerformancePage() {
   const globalState = useGlobalPortalState();
+  const debugMode = isStudentDebugMode();
   const [dataset, setDataset] = useState<StudentPerformanceDataset>(STUDENT_PERFORMANCE_FALLBACK_DATASET);
   const [isLoading, setIsLoading] = useState(true);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
@@ -90,7 +114,7 @@ function StudentPerformancePage() {
       if (!shouldUseLiveApi()) {
         setDataset(STUDENT_PERFORMANCE_FALLBACK_DATASET);
         setInlineMessage(
-          "Local mode detected. Loaded deterministic Build 129 performance fixtures from studentYearMetrics-style summary trends.",
+          "Showing practice performance trends so you can explore this page.",
         );
         setIsLoading(false);
         return;
@@ -103,7 +127,7 @@ function StudentPerformancePage() {
         }
 
         setDataset(apiDataset);
-        setInlineMessage("Live mode enabled: performance analytics hydrated from GET /student/performance.");
+        setInlineMessage("Your performance trends are up to date.");
       } catch (error) {
         if (!isMounted) {
           return;
@@ -111,7 +135,7 @@ function StudentPerformancePage() {
 
         const reason = error instanceof ApiClientError ? error.message : "Failed to load student performance analytics.";
         setDataset(STUDENT_PERFORMANCE_FALLBACK_DATASET);
-        setInlineMessage(`${reason} Falling back to deterministic Build 129 fixtures.`);
+        setInlineMessage(`${reason} Showing practice performance trends for now.`);
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -155,18 +179,19 @@ function StudentPerformancePage() {
     [timeline],
   );
   const riskTimeline = useMemo(() => [...timeline].reverse(), [timeline]);
+  const controlledComparison = dataset.controlledModeComparison;
 
   const latestSummaryCards = useMemo(() => {
     return [
       {
         label: "Latest Raw Score %",
         value: latestSnapshot ? formatPercent(latestSnapshot.rawScorePercent) : "-",
-        helper: "studentYearMetrics.rawScorePercent",
+        helper: "Latest completed test",
       },
       {
         label: "Latest Accuracy %",
         value: latestSnapshot ? formatPercent(latestSnapshot.accuracyPercent) : "-",
-        helper: "studentYearMetrics.accuracyPercent",
+        helper: "Latest completed test",
       },
       {
         label: "Latest Time Spent",
@@ -243,17 +268,50 @@ function StudentPerformancePage() {
     [],
   );
 
+  const controlledComparisonRows = useMemo(() => {
+    const comparison: ControlledModeComparison = controlledComparison;
+    return [
+      {
+        label: "Phase Adherence",
+        delta: comparison.phaseAdherenceDeltaPercent,
+        helper: "Higher adherence means steadier phase discipline.",
+        invert: false,
+      },
+      {
+        label: "Discipline Index",
+        delta: comparison.disciplineIndexDeltaPercent,
+        helper: "Higher discipline indicates stronger controlled execution.",
+        invert: false,
+      },
+      {
+        label: "MinTime Violations",
+        delta: comparison.minTimeViolationDeltaPercent,
+        helper: "Lower violation frequency is the desired direction.",
+        invert: true,
+      },
+      {
+        label: "MaxTime Violations",
+        delta: comparison.maxTimeViolationDeltaPercent,
+        helper: "Lower overstay frequency is the desired direction.",
+        invert: true,
+      },
+      {
+        label: "Guess Rate",
+        delta: comparison.guessRateDeltaPercent,
+        helper: "Lower guess rate means more deliberate attempts.",
+        invert: true,
+      },
+    ];
+  }, [controlledComparison]);
+
   return (
     <section className="student-content-card student-performance-page" aria-labelledby="student-performance-title">
-      <p className="student-content-eyebrow">Build 129</p>
       <h2 id="student-performance-title">Student Performance Analytics</h2>
       <p className="student-content-copy">
-        Visualize longitudinal Raw % and Accuracy % growth across runs while tracking execution discipline from
-        studentYearMetrics summary data only.
+        Follow your Raw % and Accuracy % over recent tests, plus the habits that help you stay steady.
       </p>
-      <p className="student-dashboard-layer-badge">License Layer: {activeLicenseLayer}</p>
 
-      {inlineMessage ? <p className="student-performance-inline-note">{inlineMessage}</p> : null}
+      {debugMode && inlineMessage ? <p className="student-performance-inline-note">{inlineMessage}</p> : null}
 
       <div className="student-performance-kpi-grid">
         {latestSummaryCards.map((card) => (
@@ -427,6 +485,27 @@ function StudentPerformancePage() {
                       <dd>{formatPercent(entry.maxTimeViolationPercent)}</dd>
                     </div>
                   </dl>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="student-performance-controlled-section" aria-label="Controlled mode comparison">
+            <div className="student-performance-controlled-header">
+              <div>
+                <p className="student-content-eyebrow">Controlled Mode Comparison</p>
+                <h3>{`${controlledComparison.baselineLabel} vs ${controlledComparison.currentLabel}`}</h3>
+              </div>
+              <span>{formatPercent(dataset.controlledModeImprovementPercent)} net discipline lift</span>
+            </div>
+            <div className="student-performance-controlled-grid">
+              {controlledComparisonRows.map((row) => (
+                <article key={row.label} className="student-performance-controlled-card">
+                  <p>{row.label}</p>
+                  <strong className={controlledComparisonTone(row.delta, row.invert)}>
+                    {formatDelta(row.delta, row.invert)}
+                  </strong>
+                  <small>{row.helper}</small>
                 </article>
               ))}
             </div>

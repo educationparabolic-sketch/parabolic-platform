@@ -25,6 +25,7 @@ export interface StudentDashboardDataset {
   licenseLayer: LicenseLayer;
   avgRawScorePercent: number;
   avgAccuracyPercent: number;
+  batchRank: number | null;
   disciplineIndex: number;
   testsAttempted: number;
   riskState: StudentRiskState;
@@ -44,6 +45,7 @@ export const STUDENT_DASHBOARD_FALLBACK_DATASET: StudentDashboardDataset = {
   licenseLayer: "L0",
   avgRawScorePercent: 72,
   avgAccuracyPercent: 78,
+  batchRank: 7,
   disciplineIndex: 74,
   testsAttempted: 9,
   riskState: "Drift-Prone",
@@ -128,6 +130,11 @@ function toNumberOrZero(value: unknown): number {
   }
 
   return 0;
+}
+
+function toNullablePositiveInteger(value: unknown): number | null {
+  const parsed = toNumberOrZero(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 function toStringOrFallback(value: unknown, fallback: string): string {
@@ -248,6 +255,9 @@ function normalizeStudentDashboardDataset(payload: unknown): StudentDashboardDat
     licenseLayer: toLicenseLayer(typedPayload.licenseLayer),
     avgRawScorePercent: toNumberOrZero(typedPayload.avgRawScorePercent),
     avgAccuracyPercent: toNumberOrZero(typedPayload.avgAccuracyPercent),
+    batchRank: toNullablePositiveInteger(
+      typedPayload.batchRank ?? typedPayload.rankInBatch ?? typedPayload.currentBatchRank,
+    ),
     disciplineIndex: toNumberOrZero(typedPayload.disciplineIndex),
     testsAttempted: toNumberOrZero(typedPayload.testsAttempted),
     riskState: toRiskState(typedPayload.riskState),
