@@ -30,9 +30,9 @@ Priority guide:
 | ID | Module | Item | Status | Priority | Notes |
 |---|---|---|---|---|---|
 | EXP-ENT-001 | Entry | Student start flow launches exam runtime with signed token | completed | P0 | Implemented through start flow and redirect |
-| EXP-ENT-002 | Entry | Session token validated server-side before load | partial | P0 | Client validates token shape/expiry; full server-side pre-render proof is indirect |
+| EXP-ENT-002 | Entry | Session token validated server-side before load | completed | P0 | Added `examSessionEntry` backend validation and a runtime pre-instruction server-entry gate that verifies the signed token hash, route session, and HOT session record before loading the exam |
 | EXP-ENT-003 | Entry | No parallel active session guard | completed | P0 | Browser/session guard exists |
-| EXP-ENT-004 | Entry | Session snapshot carries template/phase/timing/mode/license flags | partial | P1 | Runtime snapshot model contains these concepts; current build is still partly mocked/runtime-constructed |
+| EXP-ENT-004 | Entry | Session snapshot carries template/phase/timing/mode/license flags | completed | P1 | Session start now freezes backend session snapshots for template, phase config, timing profile, execution mode, and license flags, and the server-side entry validation response exposes those snapshots before runtime load |
 | EXP-ENT-005 | Entry | Token refresh flow | completed | P1 | Implemented |
 
 ## Instructions Screen
@@ -98,7 +98,7 @@ Priority guide:
 | ID | Module | Item | Status | Priority | Notes |
 |---|---|---|---|---|---|
 | EXP-LAY-001 | Behavior Engine | L0 free navigation and submit-anytime baseline | completed | P0 | Implemented |
-| EXP-LAY-002 | Behavior Engine | L1 diagnostic advisory layer | partial | P1 | Some advisory behavior exists, full planned advisory set is incomplete |
+| EXP-LAY-002 | Behavior Engine | L1 diagnostic advisory layer | completed | P1 | Added a dedicated non-blocking L1 diagnostic advisory layer with yellow treatment, phase pacing, attempt progress, review load, and explicit no-blocking navigation/save/submit guidance |
 | EXP-LAY-003 | Behavior Engine | L2 controlled mode enforcement | completed | P0 | Strongly implemented |
 | EXP-LAY-004 | Behavior Engine | Hard Mode strict enforcement | partial | P1 | Major restrictions exist, but full spec parity is incomplete |
 | EXP-LAY-005 | Behavior Engine | L1 easy remaining reminder | missing | P1 | Not clearly implemented |
@@ -144,7 +144,7 @@ Priority guide:
 | EXP-SEC-005 | Security | No direct questionId exposure | partial | P2 | Internal IDs still exist in runtime state/UI artifacts, though direct asset access is controlled |
 | EXP-SEC-006 | Security | Single session enforcement | completed | P0 | Implemented |
 | EXP-SEC-007 | Security | Anti-tamper timestamp validation | partial | P1 | Timing validation exists conceptually, full anti-tamper coverage not fully provable here |
-| EXP-SEC-008 | Security | Server-validated MinTime/MaxTime | partial | P0 | Frontend enforces strongly; full backend validation contract not fully verified from UI review |
+| EXP-SEC-008 | Security | Server-validated MinTime/MaxTime | completed | P0 | Answer batch persistence already server-validates MinTime/MaxTime by mode; submission now writes a server timing validation snapshot and rejects Hard-mode submissions with invalid MinTime/MaxTime records |
 | EXP-SEC-009 | Security | No trust in frontend principle | completed | P1 | Strong architectural alignment |
 
 ## Performance & Storage

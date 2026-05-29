@@ -4,6 +4,7 @@ import {registerGlobalErrorHandlers} from "./services/errorReporting";
 import {createRequestLogger} from "./services/logging";
 import {handleExamStartRequest} from "./api/examStart";
 import {handleExamSessionAnswersRequest} from "./api/examSessionAnswers";
+import {handleExamSessionEntryRequest} from "./api/examSessionEntry";
 import {handleExamSessionSubmitRequest} from "./api/examSessionSubmit";
 import {handleInternalEmailQueueRequest} from "./api/internalEmailQueue";
 import {
@@ -145,6 +146,9 @@ export {failureRecoveryRetrySweep};
 export const examStart = functions.https.onRequest(handleExamStartRequest);
 export const examSessionAnswers = functions.https.onRequest(
   handleExamSessionAnswersRequest,
+);
+export const examSessionEntry = functions.https.onRequest(
+  handleExamSessionEntryRequest,
 );
 export const examSessionSubmit = functions.https.onRequest(
   handleExamSessionSubmitRequest,

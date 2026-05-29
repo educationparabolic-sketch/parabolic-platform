@@ -116,19 +116,19 @@ function StudentDisciplinePage() {
     return [
       {
         label: "Discipline Index",
-        value: isLoading ? "Loading..." : formatUnsignedPercent(dataset.disciplineIndex),
+        value: isLoading ? "..." : formatUnsignedPercent(dataset.disciplineIndex),
         helper: "Execution maturity score",
       },
       {
         label: "Phase Compliance %",
-        value: isLoading ? "Loading..." : formatUnsignedPercent(dataset.phaseCompliancePercent),
+        value: isLoading ? "..." : formatUnsignedPercent(dataset.phaseCompliancePercent),
         helper: "Planned pace adherence",
       },
       {
         label: "Guess Probability Cluster",
         value:
           isLoading ?
-            "Loading..." :
+            "..." :
             `${dataset.guessProbabilityCluster} (${formatUnsignedPercent(dataset.guessProbabilityPercent)})`,
         helper: "Confidence pattern",
       },
@@ -191,6 +191,7 @@ function StudentDisciplinePage() {
         Track execution habits with lightweight progress bars that stay motivational and easy to act on.
       </p>
       {debugMode ? <p className="student-dashboard-layer-badge">License Layer: {activeLicenseLayer}</p> : null}
+      {isLoading ? <p className="student-learning-state" role="status">Preparing your discipline trends...</p> : null}
 
       {debugMode && inlineMessage ? <p className="student-discipline-inline-note">{inlineMessage}</p> : null}
 
@@ -222,7 +223,7 @@ function StudentDisciplinePage() {
             <article key={card.label} className="student-discipline-progress-card">
               <header>
                 <strong>{card.label}</strong>
-                <span>{isLoading ? "Loading..." : card.value}</span>
+                <span>{isLoading ? "..." : card.value}</span>
               </header>
               <p>{card.helper}</p>
               <div className="student-discipline-progress-track" aria-hidden="true">

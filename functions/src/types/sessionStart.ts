@@ -36,13 +36,17 @@ export interface SessionTokenClaims {
 export interface SessionDocumentInitializationContext {
   calibrationVersion: string;
   instituteId: string;
+  licenseSnapshot: Record<string, unknown>;
   mode: SessionExecutionMode;
+  phaseConfigSnapshot: Record<string, unknown>;
   questionTimeMap: SessionQuestionTimeMap;
   riskModelVersion: string;
   runId: string;
   sessionId: string;
+  sessionTokenHash: string;
   studentId: string;
   studentUid: string;
+  templateSnapshot: Record<string, unknown>;
   templateVersion: string;
   timingProfileSnapshot: SessionTimingProfileSnapshot;
   yearId: string;
@@ -81,17 +85,21 @@ export interface SessionDocumentInitializationRecord {
   calibrationVersion: string;
   createdAt: FirebaseFirestore.FieldValue;
   instituteId: string;
+  licenseSnapshot: Record<string, unknown>;
   mode: SessionExecutionMode;
+  phaseConfigSnapshot: Record<string, unknown>;
   questionTimeMap: SessionQuestionTimeMap;
   riskModelVersion: string;
   runId: string;
   sessionId: string;
+  sessionTokenHash: string;
   startedAt: null;
   status: "created";
   studentId: string;
   studentUid: string;
   submissionLock: false;
   submittedAt: null;
+  templateSnapshot: Record<string, unknown>;
   templateVersion: string;
   timingProfileSnapshot: SessionTimingProfileSnapshot;
   updatedAt: FirebaseFirestore.FieldValue;
@@ -104,6 +112,26 @@ export interface SessionStartResult {
   sessionPath: string;
   sessionToken: string;
   status: SessionStatus;
+}
+
+export interface SessionEntryValidationContext {
+  sessionId: string;
+  sessionToken: string;
+}
+
+export interface SessionEntryValidationResult {
+  instituteId: string;
+  licenseSnapshot: Record<string, unknown>;
+  mode: SessionExecutionMode;
+  phaseConfigSnapshot: Record<string, unknown>;
+  runId: string;
+  sessionId: string;
+  sessionPath: string;
+  status: SessionStatus;
+  studentId: string;
+  templateSnapshot: Record<string, unknown>;
+  timingProfileSnapshot: SessionTimingProfileSnapshot;
+  yearId: string;
 }
 
 export type SessionTransitionActorType =

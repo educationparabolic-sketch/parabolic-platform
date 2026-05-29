@@ -47,6 +47,13 @@ interface ValidatedSessionIdentity {
   status: string;
 }
 
+interface SubmissionTimingValidation {
+  maxTimeViolationQuestionIds: string[];
+  minTimeViolationQuestionIds: string[];
+  mode: string;
+  serverValidated: true;
+}
+
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -157,6 +164,115 @@ const normalizeDifficulty = (
 
   return normalizedValue.charAt(0).toUpperCase() +
     normalizedValue.slice(1) as "Easy" | "Medium" | "Hard";
+};
+
+const normalizeSessionExecutionMode = (
+  value: unknown,
+  fieldName: string,
+): "operational" | "diagnostic" | "controlled" | "hard" => {
+  const normalizedValue = normalizeRequiredString(value, fieldName)
+    .toLowerCase();
+
+  if (
+    normalizedValue !== "operational" &&
+    normalizedValue !== "diagnostic" &&
+    normalizedValue !== "controlled" &&
+    normalizedValue !== "hard"
+  ) {
+    throw new SubmissionValidationError(
+      "VALIDATION_ERROR",
+      `Field "${fieldName}" must be one of Operational, Diagnostic, ` +
+        "Controlled, or Hard.",
+    );
+  }
+
+  return normalizedValue;
+};
+
+const hasSubmittedAnswer = (
+  answerMap: Record<string, unknown>,
+  questionId: string,
+): boolean => {
+  const answer = answerMap[questionId];
+
+  if (!isPlainObject(answer)) {
+    return false;
+  }
+
+  const selectedOption = answer.selectedOption;
+
+  return typeof selectedOption === "string" && selectedOption.trim() !== "";
+};
+
+const validateSubmissionTiming = (
+  sessionData: Record<string, unknown>,
+  questionIds: string[],
+): SubmissionTimingValidation => {
+  const mode = normalizeSessionExecutionMode(sessionData.mode, "session.mode");
+  const answerMap = isPlainObject(sessionData.answerMap) ?
+    sessionData.answerMap :
+    {};
+  const questionTimeMap = isPlainObject(sessionData.questionTimeMap) ?
+    sessionData.questionTimeMap :
+    {};
+  const minTimeViolationQuestionIds: string[] = [];
+  const maxTimeViolationQuestionIds: string[] = [];
+
+  questionIds.forEach((questionId) => {
+    if (!hasSubmittedAnswer(answerMap, questionId)) {
+      return;
+    }
+
+    const questionTimeRecord = questionTimeMap[questionId];
+
+    if (!isPlainObject(questionTimeRecord)) {
+      throw new SubmissionValidationError(
+        "VALIDATION_ERROR",
+        `Missing server timing record for submitted question "${questionId}".`,
+      );
+    }
+
+    const cumulativeTimeSpent = normalizeNonNegativeNumber(
+      questionTimeRecord.cumulativeTimeSpent,
+      `session.questionTimeMap.${questionId}.cumulativeTimeSpent`,
+    );
+    const minTime = normalizeNonNegativeNumber(
+      questionTimeRecord.minTime,
+      `session.questionTimeMap.${questionId}.minTime`,
+    );
+    const maxTime = normalizeNonNegativeNumber(
+      questionTimeRecord.maxTime,
+      `session.questionTimeMap.${questionId}.maxTime`,
+    );
+
+    if (cumulativeTimeSpent < minTime) {
+      minTimeViolationQuestionIds.push(questionId);
+    }
+
+    if (cumulativeTimeSpent > maxTime) {
+      maxTimeViolationQuestionIds.push(questionId);
+    }
+  });
+
+  if (
+    mode === "hard" &&
+    (
+      minTimeViolationQuestionIds.length > 0 ||
+      maxTimeViolationQuestionIds.length > 0
+    )
+  ) {
+    throw new SubmissionValidationError(
+      "VALIDATION_ERROR",
+      "Hard mode submission contains server-invalid MinTime/MaxTime records.",
+    );
+  }
+
+  return {
+    maxTimeViolationQuestionIds,
+    minTimeViolationQuestionIds,
+    mode,
+    serverValidated: true,
+  };
 };
 
 const normalizePhasePercent = (
@@ -864,6 +980,10 @@ export class SubmissionService {
           const normalizedQuestionIds = questionIds.map((questionId, index) =>
             normalizeRequiredString(questionId, `run.questionIds[${index}]`),
           );
+          const submissionTimingValidation = validateSubmissionTiming(
+            sessionData,
+            normalizedQuestionIds,
+          );
 
           const phaseConfigSnapshot = runData.phaseConfigSnapshot;
 
@@ -976,6 +1096,7 @@ export class SubmissionService {
             riskState: metrics.riskState,
             skipBurstCount: metrics.skipBurstCount,
             status: "submitted",
+            submissionTimingValidation,
             submissionLock: false,
             submittedAt: FieldValue.serverTimestamp(),
             templateVersion,

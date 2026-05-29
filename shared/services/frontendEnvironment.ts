@@ -35,6 +35,10 @@ function readOptionalUrlValue(key: string): string | undefined {
   return value.endsWith("/") ? value.slice(0, -1) : value;
 }
 
+function readBooleanValue(key: string): boolean {
+  return readEnvValue(key).toLowerCase() === "true";
+}
+
 export function validateFrontendEnvironment(): FrontendEnvironmentValidationResult {
   const missingKeys = REQUIRED_ENV_KEYS.filter((key) => readRequiredValue(key).length === 0);
 
@@ -59,5 +63,6 @@ export function getFrontendEnvironment(): FrontendEnvironment {
     portalBaseUrl: readOptionalUrlValue("VITE_PORTAL_BASE_URL"),
     examBaseUrl: readOptionalUrlValue("VITE_EXAM_BASE_URL"),
     vendorBaseUrl: readOptionalUrlValue("VITE_VENDOR_BASE_URL"),
+    examDevMockEntry: readBooleanValue("VITE_EXAM_DEV_MOCK_ENTRY"),
   };
 }

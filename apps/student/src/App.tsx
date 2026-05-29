@@ -373,14 +373,14 @@ function App() {
         )}
       >
         <Route index element={<Navigate to="dashboard" replace />} />
-        <Route path="dashboard" element={<StudentRouteBoundary label="Loading dashboard"><StudentDashboardPage /></StudentRouteBoundary>} />
-        <Route path="my-tests" element={<StudentRouteBoundary label="Loading tests"><StudentMyTestsPage /></StudentRouteBoundary>} />
-        <Route path="performance" element={<StudentRouteBoundary label="Loading performance"><StudentPerformancePage /></StudentRouteBoundary>} />
+        <Route path="dashboard" element={<StudentRouteBoundary label="Getting your latest progress"><StudentDashboardPage /></StudentRouteBoundary>} />
+        <Route path="my-tests" element={<StudentRouteBoundary label="Checking your assigned tests"><StudentMyTestsPage /></StudentRouteBoundary>} />
+        <Route path="performance" element={<StudentRouteBoundary label="Preparing your performance trends"><StudentPerformancePage /></StudentRouteBoundary>} />
         <Route
           path="insights"
           element={(
             <StudentLicenseRoute minimumLicenseLayer="L1" fallbackPath="/student/dashboard">
-              <StudentRouteBoundary label="Loading insights">
+              <StudentRouteBoundary label="Preparing your weekly insights">
                 <StudentInsightsPage />
               </StudentRouteBoundary>
             </StudentLicenseRoute>
@@ -390,13 +390,13 @@ function App() {
           path="discipline"
           element={(
             <StudentLicenseRoute minimumLicenseLayer="L2" fallbackPath="/student/dashboard">
-              <StudentRouteBoundary label="Loading discipline">
+              <StudentRouteBoundary label="Preparing your discipline trends">
                 <StudentDisciplinePage />
               </StudentRouteBoundary>
             </StudentLicenseRoute>
           )}
         />
-        <Route path="profile" element={<StudentRouteBoundary label="Loading profile"><StudentProfileSettingsPage /></StudentRouteBoundary>} />
+        <Route path="profile" element={<StudentRouteBoundary label="Opening your account settings"><StudentProfileSettingsPage /></StudentRouteBoundary>} />
       </Route>
       <Route path="*" element={<Navigate to={protectedDefaultPath} replace />} />
     </Routes>

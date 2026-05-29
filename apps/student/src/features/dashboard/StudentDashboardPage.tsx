@@ -184,10 +184,11 @@ function StudentDashboardPage() {
 
   const isL1Plus = LICENSE_LAYER_ORDER[activeLicenseLayer] >= LICENSE_LAYER_ORDER.L1;
   const isL2Plus = LICENSE_LAYER_ORDER[activeLicenseLayer] >= LICENSE_LAYER_ORDER.L2;
+  const nextUpcoming = getNextUpcomingTest(dataset);
+  const latestResult = dataset.recentResults[0] ?? null;
 
   const motivationalBannerMessage = useMemo(() => {
-    const nextUpcoming = getNextUpcomingTest(dataset);
-    const latest = dataset.recentResults[0];
+    const latest = latestResult;
     const previous = dataset.recentResults[1];
 
     let headline = "Consistency is your strength this month.";
@@ -208,7 +209,7 @@ function StudentDashboardPage() {
         "No upcoming run is scheduled yet. Check back for newly assigned tests.";
 
     return `${headline} ${nextRunPrompt}`;
-  }, [dataset]);
+  }, [dataset, latestResult]);
 
   const performanceTrendPoints = useMemo<UiChartPoint[]>(() => {
     return dataset.recentResults
@@ -288,22 +289,61 @@ function StudentDashboardPage() {
       <p className="student-content-copy">
         See your next test, recent progress, and one clear area to keep building.
       </p>
-      <p className="student-dashboard-motivational-banner" role="status">
-        {motivationalBannerMessage}
-      </p>
+      {isLoading ? <p className="student-learning-state" role="status">Getting your latest progress...</p> : null}
 
       {debugMode && inlineMessage ? <p className="student-dashboard-inline-note">{inlineMessage}</p> : null}
 
-      <div className="student-dashboard-card-grid">
+      <section className="student-dashboard-home-grid" aria-label="Dashboard home summary">
+        <article className="student-focus-card student-focus-card-primary">
+          <p className="student-focus-card-label">Next Test</p>
+          <h3>{nextUpcoming ? nextUpcoming.testName : "Nothing scheduled yet"}</h3>
+          <p>
+            {nextUpcoming ?
+              `${formatDateTime(nextUpcoming.startAt)} · ${nextUpcoming.durationMinutes} min` :
+              "Your next assigned test will appear here when it is ready."}
+          </p>
+          {nextUpcoming ? <span className="student-dashboard-mode-chip">{nextUpcoming.mode}</span> : null}
+        </article>
+
+        <article className="student-focus-card">
+          <p className="student-focus-card-label">Progress Snapshot</p>
+          <h3>{formatPercent(dataset.avgRawScorePercent)} Raw Score %</h3>
+          <p>{`${formatPercent(dataset.avgAccuracyPercent)} Accuracy % across recent tests.`}</p>
+        </article>
+
+        <article className="student-focus-card">
+          <p className="student-focus-card-label">Recent Result</p>
+          <h3>{latestResult ? latestResult.testName : "No completed test yet"}</h3>
+          <p>
+            {latestResult ?
+              `${formatPercent(latestResult.rawScorePercent)} Raw Score % · ${formatPercent(latestResult.accuracyPercent)} Accuracy %` :
+              "Your first completed test will start your progress history."}
+          </p>
+        </article>
+
+        <article className="student-focus-card student-focus-card-encouragement">
+          <p className="student-focus-card-label">Keep Going</p>
+          <h3>One steady step</h3>
+          <p>{motivationalBannerMessage}</p>
+        </article>
+      </section>
+
+      <section className="student-section-group" aria-label="Progress details">
+        <div className="student-section-heading">
+          <h3>Progress Snapshot</h3>
+          <p>Quick numbers for your current learning rhythm.</p>
+        </div>
+        <div className="student-dashboard-card-grid">
         {summaryCards.map((card) => (
           <UiStatCard
             key={card.label}
             title={card.label}
-            value={isLoading ? "Loading..." : card.value}
+            value={isLoading ? "..." : card.value}
             helper={card.helper}
           />
         ))}
-      </div>
+        </div>
+      </section>
 
       <div className="student-dashboard-status-grid">
         <UiStatCard
@@ -339,7 +379,7 @@ function StudentDashboardPage() {
         </div>
       ) : null}
 
-      <div className="student-dashboard-widget-grid">
+      <div className="student-dashboard-widget-grid student-detail-zone">
         <UiTable
           caption="Upcoming Test List"
           columns={upcomingColumns}

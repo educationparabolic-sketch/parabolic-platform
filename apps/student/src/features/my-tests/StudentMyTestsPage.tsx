@@ -114,7 +114,7 @@ function formatAttemptStatus(row: StudentTestRecord): string {
 
 function formatFlaggedStatus(row: StudentTestRecord): string {
   if (row.flaggedQuestions === null) {
-    return "Review markers will appear after the session updates.";
+    return "Review markers will appear after the test updates.";
   }
 
   return `${Math.round(row.flaggedQuestions)} flagged for review`;
@@ -285,7 +285,7 @@ function StudentMyTestsPage() {
       window.location.assign(sessionUrl);
     } catch (error) {
       const reason = error instanceof ApiClientError ? error.message : "Unable to start exam session.";
-      setInlineMessage(`${reason} Session launch requires signed token issuance.`);
+      setInlineMessage(`${reason} Please try again from your assigned test list.`);
     } finally {
       setIsLaunchingSession(null);
     }
@@ -346,158 +346,6 @@ function StudentMyTestsPage() {
     };
   }, [activeTests.length, archivedTests.length, completedTotal, scheduledTests.length]);
 
-  const columns = useMemo<UiTableColumn<StudentTestRecord>[]>(
-    () => [
-      {
-        id: "test",
-        header: "Assigned Test",
-        render: (row) => (
-          <div className="student-my-tests-test-cell">
-            <strong>{row.testName}</strong>
-            <small>{row.runId}</small>
-          </div>
-        ),
-      },
-      {
-        id: "status",
-        header: "Status",
-        render: (row) => <span className={statusClass(row.status)}>{statusLabel(row.status)}</span>,
-      },
-      {
-        id: "meta",
-        header: "Duration & Mode",
-        render: (row) => (
-          <div className="student-my-tests-test-cell">
-            <strong>{`${formatDuration(row.durationMinutes)} · ${row.mode}`}</strong>
-            <small>Academic Year {row.academicYear}</small>
-          </div>
-        ),
-      },
-      {
-        id: "window",
-        header: "Test Window",
-        render: (row) => (
-          <div className="student-my-tests-test-cell">
-            <strong>{formatDateTime(row.startWindow)}</strong>
-            <small>Ends {formatDateTime(row.endWindow)}</small>
-          </div>
-        ),
-      },
-      {
-        id: "result",
-        header: "Results Overview",
-        render: (row) => {
-          if (row.status === "completed") {
-            return (
-              <div className="student-my-tests-test-cell">
-                <strong>
-                  {`Raw ${formatPercent(row.rawScorePercent)} | Accuracy ${formatPercent(row.accuracyPercent)}`}
-                </strong>
-                <small>{`Time Used ${formatOptionalDuration(row.timeUsedMinutes)} | Rank ${formatRank(row.rankInBatch)}`}</small>
-                <small>{row.completedAt ? `Completed ${formatDateTime(row.completedAt)}` : "Awaiting completion"}</small>
-              </div>
-            );
-          }
-
-          if (row.status === "archived") {
-            return (
-              <div className="student-my-tests-test-cell">
-                <strong>{`Raw ${formatPercent(row.rawScorePercent)} | Accuracy ${formatPercent(row.accuracyPercent)}`}</strong>
-                <small>{row.completedAt ? `Completed ${formatDateTime(row.completedAt)}` : "Summary retained"}</small>
-              </div>
-            );
-          }
-
-          if (row.status === "active") {
-            return (
-              <div className="student-my-tests-test-cell">
-                <strong>{formatAttemptStatus(row)}</strong>
-                <small>{formatFlaggedStatus(row)}</small>
-                <small>{`Window closes ${formatDateTime(row.endWindow)}`}</small>
-              </div>
-            );
-          }
-
-          return (
-            <div className="student-my-tests-test-cell">
-              <strong>{`Raw ${formatPercent(row.rawScorePercent)} | Accuracy ${formatPercent(row.accuracyPercent)}`}</strong>
-              <small>{row.completedAt ? `Completed ${formatDateTime(row.completedAt)}` : "Awaiting completion"}</small>
-            </div>
-          );
-        },
-      },
-      {
-        id: "actions",
-        header: "Actions",
-        render: (row) => {
-          if (row.status === "scheduled") {
-            return (
-              <button
-                type="button"
-                className="student-my-tests-action"
-                disabled={isLaunchingSession === row.testId}
-                onClick={() => {
-                  void launchSession(row);
-                }}
-              >
-                {isLaunchingSession === row.testId ? "Starting..." : "Start Test"}
-              </button>
-            );
-          }
-
-          if (row.status === "active") {
-            return (
-              <div className="student-my-tests-action-stack">
-                <button
-                  type="button"
-                  className="student-my-tests-action"
-                  disabled={isLaunchingSession === row.testId}
-                  onClick={() => {
-                    void launchSession(row);
-                  }}
-                >
-                  {isLaunchingSession === row.testId ? "Resuming..." : "Resume"}
-                </button>
-                <small>{computeTimeRemaining(row.endWindow)}</small>
-                <small className="student-my-tests-attempt-status">{formatAttemptStatus(row)}</small>
-              </div>
-            );
-          }
-
-          if (row.status === "completed") {
-            return (
-              <div className="student-my-tests-action-stack">
-                <button
-                  type="button"
-                  className="student-my-tests-action"
-                  disabled={!row.currentAcademicYear || isLoadingSolution}
-                  onClick={() => {
-                    void openSolutions(row);
-                  }}
-                >
-                  View Solutions
-                </button>
-                {row.summaryPdfUrl ? (
-                  <a className="student-my-tests-session-link" href={row.summaryPdfUrl}>
-                    Download Summary
-                  </a>
-                ) : null}
-              </div>
-            );
-          }
-
-          return (
-            <div className="student-my-tests-action-stack">
-              <span className="student-my-tests-session-muted">History record</span>
-              <small>Review unavailable for archived tests</small>
-            </div>
-          );
-        },
-      },
-    ],
-    [isLaunchingSession, isLoadingSolution],
-  );
-
   const archivedColumns = useMemo<UiTableColumn<StudentTestRecord>[]>(
     () => [
       {
@@ -536,6 +384,102 @@ function StudentMyTestsPage() {
     return allVisibleRows.find((row) => row.testId === openSolutionTestId) ?? null;
   }, [allVisibleRows, openSolutionTestId]);
 
+  function renderTestAction(row: StudentTestRecord) {
+    if (row.status === "scheduled") {
+      return (
+        <button
+          type="button"
+          className="student-my-tests-action"
+          disabled={isLaunchingSession === row.testId}
+          onClick={() => {
+            void launchSession(row);
+          }}
+        >
+          {isLaunchingSession === row.testId ? "Starting..." : "Start Test"}
+        </button>
+      );
+    }
+
+    if (row.status === "active") {
+      return (
+        <div className="student-my-tests-action-stack">
+          <button
+            type="button"
+            className="student-my-tests-action"
+            disabled={isLaunchingSession === row.testId}
+            onClick={() => {
+              void launchSession(row);
+            }}
+          >
+            {isLaunchingSession === row.testId ? "Resuming..." : "Resume"}
+          </button>
+          <small>{computeTimeRemaining(row.endWindow)}</small>
+        </div>
+      );
+    }
+
+    if (row.status === "completed") {
+      return (
+        <div className="student-my-tests-action-stack">
+          <button
+            type="button"
+            className="student-my-tests-action"
+            disabled={!row.currentAcademicYear || isLoadingSolution}
+            onClick={() => {
+              void openSolutions(row);
+            }}
+          >
+            View Solutions
+          </button>
+          {row.summaryPdfUrl ? (
+            <a className="student-my-tests-session-link" href={row.summaryPdfUrl}>
+              Download Summary
+            </a>
+          ) : null}
+        </div>
+      );
+    }
+
+    return (
+      <div className="student-my-tests-action-stack">
+        <span className="student-my-tests-session-muted">History record</span>
+        <small>Review unavailable for archived tests</small>
+      </div>
+    );
+  }
+
+  function renderTestMeta(row: StudentTestRecord) {
+    if (row.status === "active") {
+      return (
+        <>
+          <span>{formatAttemptStatus(row)}</span>
+          <span>{formatFlaggedStatus(row)}</span>
+          <span>{`Closes ${formatDateTime(row.endWindow)}`}</span>
+        </>
+      );
+    }
+
+    if (row.status === "completed" || row.status === "archived") {
+      return (
+        <>
+          <span>{`Raw Score % ${formatPercent(row.rawScorePercent)}`}</span>
+          <span>{`Accuracy % ${formatPercent(row.accuracyPercent)}`}</span>
+          <span>{`Time Used ${formatOptionalDuration(row.timeUsedMinutes)}`}</span>
+          <span>{`Rank ${formatRank(row.rankInBatch)}`}</span>
+          <span>{row.completedAt ? `Completed ${formatDateTime(row.completedAt)}` : "Awaiting completion"}</span>
+        </>
+      );
+    }
+
+    return (
+      <>
+        <span>{`${formatDuration(row.durationMinutes)} · ${row.mode}`}</span>
+        <span>{`Starts ${formatDateTime(row.startWindow)}`}</span>
+        <span>{`Closes ${formatDateTime(row.endWindow)}`}</span>
+      </>
+    );
+  }
+
   return (
     <section className="student-content-card student-my-tests-page" aria-labelledby="student-my-tests-title">
       {debugMode ? <p className="student-content-eyebrow">Build 128</p> : null}
@@ -545,7 +489,7 @@ function StudentMyTestsPage() {
       </p>
 
       <p className="student-content-note">
-        Starting a test opens a secure exam session. Completed tests are organized into pages so older work stays easy
+        Starting a test opens a secure test window. Completed tests are organized into pages so older work stays easy
         to find.
       </p>
       <p className="student-content-note">
@@ -585,13 +529,38 @@ function StudentMyTestsPage() {
         })}
       </div>
 
-      <UiTable
-        caption={`My Tests — ${STATUS_FILTERS.find((filterItem) => filterItem.id === activeFilter)?.label ?? "All"}`}
-        columns={activeFilter === "archived" ? archivedColumns : columns}
-        rows={allVisibleRows}
-        rowKey={(row) => `${row.runId}-${row.testId}`}
-        emptyStateText={isLoading ? "Loading assigned tests..." : "No tests found for the selected status."}
-      />
+      {activeFilter === "archived" ? (
+        <UiTable
+          caption="Archived Test History"
+          columns={archivedColumns}
+          rows={allVisibleRows}
+          rowKey={(row) => `${row.runId}-${row.testId}`}
+          emptyStateText={isLoading ? "Checking your older test history..." : "No archived tests yet."}
+        />
+      ) : (
+        <section className="student-test-list" aria-label="Assigned tests">
+          {isLoading ? <p className="student-learning-state">Checking your assigned tests...</p> : null}
+          {!isLoading && allVisibleRows.length === 0 ? (
+            <p className="student-empty-state">No tests found for this view. New assignments will appear here when they are ready.</p>
+          ) : null}
+          {allVisibleRows.map((row) => (
+            <article key={`${row.runId}-${row.testId}`} className="student-test-card">
+              <div className="student-test-card-main">
+                <div>
+                  <span className={statusClass(row.status)}>{statusLabel(row.status)}</span>
+                  <h3>{row.testName}</h3>
+                </div>
+                <div className="student-test-card-meta">
+                  {renderTestMeta(row)}
+                </div>
+              </div>
+              <div className="student-test-card-action">
+                {renderTestAction(row)}
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
 
       {activeFilter === "completed" || activeFilter === "all" ? (
         <div className="student-my-tests-pagination" aria-label="Completed test pagination controls">
@@ -631,7 +600,7 @@ function StudentMyTestsPage() {
 
           {solutionError ? <p className="student-my-tests-inline-note">{solutionError}</p> : null}
 
-          {isLoadingSolution ? <p>Loading solution assets...</p> : null}
+          {isLoadingSolution ? <p className="student-learning-state">Preparing your solution review...</p> : null}
 
           {!isLoadingSolution && solutionItems.length > 0 ? (
             <div className="student-my-tests-solution-grid">

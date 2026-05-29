@@ -12,6 +12,7 @@ export interface FrontendEnvironment {
   portalBaseUrl?: string;
   examBaseUrl?: string;
   vendorBaseUrl?: string;
+  examDevMockEntry?: boolean;
 }
 
 export interface FrontendEnvironmentValidationResult {

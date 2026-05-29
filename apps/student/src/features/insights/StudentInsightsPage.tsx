@@ -234,17 +234,17 @@ function StudentInsightsPage() {
           <div className="student-insights-resource-links">
             {row.tutorialVideoLink ? (
               <a href={row.tutorialVideoLink} target="_blank" rel="noreferrer">
-                TutorialVideoLink
+                Tutorial Video
               </a>
             ) : (
-              <span className="student-insights-resource-muted">TutorialVideoLink unavailable</span>
+              <span className="student-insights-resource-muted">Tutorial video unavailable</span>
             )}
             {row.simulationLink ? (
               <a href={row.simulationLink} target="_blank" rel="noreferrer">
-                SimulationLink
+                Simulation
               </a>
             ) : (
-              <span className="student-insights-resource-muted">SimulationLink unavailable</span>
+              <span className="student-insights-resource-muted">Simulation unavailable</span>
             )}
           </div>
         ),
@@ -263,6 +263,7 @@ function StudentInsightsPage() {
         Keep building consistency. Insights highlight one behavior to improve each week instead of overwhelming
         you with alerts.
       </p>
+      {isLoading ? <p className="student-learning-state" role="status">Preparing your weekly insights...</p> : null}
 
       {debugMode && inlineMessage ? <p className="student-insights-inline-note">{inlineMessage}</p> : null}
 
@@ -285,23 +286,23 @@ function StudentInsightsPage() {
       <div className="student-insights-kpi-grid">
         <UiStatCard
           title="Most Frequent Pattern"
-          value={isLoading ? "Loading..." : dataset.mostFrequentBehaviorPattern}
-          helper="Insight snapshot rollup"
+          value={isLoading ? "..." : dataset.mostFrequentBehaviorPattern}
+          helper="Recent learning pattern"
         />
         <UiStatCard
           title="Latest Late-Phase Drop"
-          value={isLoading ? "Loading..." : formatPercent(dataset.latePhaseDropIndicatorPercent)}
-          helper="L1 pacing signal"
+          value={isLoading ? "..." : formatPercent(dataset.latePhaseDropIndicatorPercent)}
+          helper="Pacing signal"
         />
         <UiStatCard
           title="Latest Guess Detection"
-          value={isLoading ? "Loading..." : formatPercent(dataset.guessDetectionAlertPercent)}
-          helper="Constructive alert"
+          value={isLoading ? "..." : formatPercent(dataset.guessDetectionAlertPercent)}
+          helper="Confidence pattern"
         />
         <UiStatCard
-          title="Archived Summary Entries"
-          value={isLoading ? "Loading..." : String(dataset.archivedSummaryOnlyCount)}
-          helper="Summary-only, no solution assets"
+          title="Older Test Records"
+          value={isLoading ? "..." : String(dataset.archivedSummaryOnlyCount)}
+          helper="Simple history view"
         />
       </div>
 

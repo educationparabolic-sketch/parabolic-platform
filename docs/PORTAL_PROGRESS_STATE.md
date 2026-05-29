@@ -6,10 +6,11 @@ This file is the persistent handoff state for portal checklist implementation ac
 
 - `Current Target Portal`: `exam`
 - `Current Priority Band`: `P1`
-- `Last Completed Checklist ID`: `STP-SEC-005`
-- `Next Suggested Checklist ID`: `EXP-ENT-004`
-- `Last Updated`: `2026-05-28`
-- `Saved Scope Note`: Completed student P2 `STP-SEC-005` by surfacing measured route-shell paint against the <300ms load budget in the student workspace header. Student active checklist items are complete; advance to exam P1 with `EXP-ENT-004`.
+- `Last Completed Checklist ID`: `EXP-LAY-002`
+- `Next Suggested Checklist ID`: `EXP-LAY-004`
+- `Last Updated`: `2026-05-29`
+- `Saved Scope Note`: Completed exam P1 `EXP-LAY-002` by adding a dedicated non-blocking L1 diagnostic advisory layer with yellow treatment, phase pacing, attempt progress, review load, and explicit no-blocking navigation/save/submit guidance. Continue exam P1 with `EXP-LAY-004`.
+- `Temporary Dev Testing Note`: Keep the exam portal dev-only mock entry mode (`npm run dev:mock-entry`, `?token=dev`,http://localhost:5173/session/dev-mock-session?token=dev) until exam portal P0/P1/P2 implementation is fully complete; remove it only during final exam-portal cleanup/hardening.
 
 ## Active Checklist Set
 

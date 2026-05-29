@@ -260,8 +260,52 @@ input {
   padding: 0.65rem 0.8rem;
 }
 
+.exam-advisory-banner.diagnostic {
+  border-color: #e6c35c;
+  background: #fff7dc;
+  color: #5f4500;
+}
+
 .exam-advisory-banner p {
   margin: 0;
+}
+
+.exam-advisory-summary {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.exam-diagnostic-advisory-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin-top: 0.65rem;
+}
+
+.exam-diagnostic-advisory-item {
+  border: 1px solid rgba(95, 69, 0, 0.22);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.62);
+  min-height: 96px;
+  padding: 0.55rem;
+}
+
+.exam-diagnostic-advisory-item span {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.exam-diagnostic-advisory-item strong {
+  display: block;
+  margin-top: 0.18rem;
+}
+
+.exam-diagnostic-advisory-item p {
+  margin-top: 0.32rem;
+  font-size: 0.82rem;
+  line-height: 1.35;
 }
 
 .exam-enforcement-warning {
@@ -776,6 +820,10 @@ input {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .exam-diagnostic-advisory-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .exam-main-layout {
     grid-template-columns: 1fr;
   }
@@ -808,6 +856,10 @@ input {
   }
 
   .exam-legend-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .exam-diagnostic-advisory-grid {
     grid-template-columns: 1fr;
   }
 

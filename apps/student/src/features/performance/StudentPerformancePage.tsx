@@ -4,9 +4,7 @@ import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
 import {
   UiChartContainer,
   UiStatCard,
-  UiTable,
   type UiChartPoint,
-  type UiTableColumn,
 } from "../../../../../shared/ui/components";
 import {
   ApiClientError,
@@ -16,7 +14,6 @@ import {
   type ControlledModeComparison,
   type StudentPerformanceDataset,
   type StudentPerformancePoint,
-  type TopicPerformanceEntry,
 } from "./studentPerformanceDataset";
 import { isStudentDebugMode } from "../../services/studentDebugMode";
 
@@ -206,68 +203,6 @@ function StudentPerformancePage() {
     ];
   }, [latestSnapshot]);
 
-  const timelineColumns = useMemo<UiTableColumn<StudentPerformancePoint>[]>(
-    () => [
-      {
-        id: "run",
-        header: "Run",
-        render: (row) => (
-          <div className="student-performance-run-cell">
-            <strong>{row.runLabel}</strong>
-            <small>{row.runId}</small>
-          </div>
-        ),
-      },
-      {
-        id: "completedAt",
-        header: "Completed",
-        render: (row) => formatDate(row.completedAt),
-      },
-      {
-        id: "raw",
-        header: "Raw %",
-        render: (row) => formatPercent(row.rawScorePercent),
-      },
-      {
-        id: "accuracy",
-        header: "Accuracy %",
-        render: (row) => formatPercent(row.accuracyPercent),
-      },
-      {
-        id: "time",
-        header: "Time Spent",
-        render: (row) => `${Math.round(row.timeSpentMinutes)} min`,
-      },
-      {
-        id: "rank",
-        header: "Rank",
-        render: (row) => (row.rankInBatch === null ? "N/A" : `#${Math.round(row.rankInBatch)}`),
-      },
-    ],
-    [],
-  );
-
-  const topicColumns = useMemo<UiTableColumn<TopicPerformanceEntry>[]>(
-    () => [
-      {
-        id: "topic",
-        header: "Topic",
-        render: (row) => row.topic,
-      },
-      {
-        id: "raw",
-        header: "Raw %",
-        render: (row) => formatPercent(row.rawScorePercent),
-      },
-      {
-        id: "accuracy",
-        header: "Accuracy %",
-        render: (row) => formatPercent(row.accuracyPercent),
-      },
-    ],
-    [],
-  );
-
   const controlledComparisonRows = useMemo(() => {
     const comparison: ControlledModeComparison = controlledComparison;
     return [
@@ -306,10 +241,11 @@ function StudentPerformancePage() {
 
   return (
     <section className="student-content-card student-performance-page" aria-labelledby="student-performance-title">
-      <h2 id="student-performance-title">Student Performance Analytics</h2>
+      <h2 id="student-performance-title">Student Performance</h2>
       <p className="student-content-copy">
         Follow your Raw % and Accuracy % over recent tests, plus the habits that help you stay steady.
       </p>
+      {isLoading ? <p className="student-learning-state" role="status">Preparing your performance trends...</p> : null}
 
       {debugMode && inlineMessage ? <p className="student-performance-inline-note">{inlineMessage}</p> : null}
 
@@ -318,7 +254,7 @@ function StudentPerformancePage() {
           <UiStatCard
             key={card.label}
             title={card.label}
-            value={isLoading ? "Loading..." : card.value}
+            value={isLoading ? "..." : card.value}
             helper={card.helper}
           />
         ))}
@@ -327,14 +263,14 @@ function StudentPerformancePage() {
       <div className="student-performance-chart-grid">
         <UiChartContainer
           title="Raw % Trend"
-          subtitle="Longitudinal score trend"
+          subtitle="Recent completed tests"
           variant="line"
           data={rawTrend}
           maxValue={100}
         />
         <UiChartContainer
           title="Accuracy % Trend"
-          subtitle="Longitudinal accuracy trend"
+          subtitle="Recent completed tests"
           variant="line"
           data={accuracyTrend}
           maxValue={100}
@@ -346,7 +282,7 @@ function StudentPerformancePage() {
           <div className="student-performance-chart-grid">
             <UiChartContainer
               title="Phase Adherence Trend"
-              subtitle="Layer L1 pacing consistency"
+              subtitle="Pacing consistency"
               variant="line"
               data={phaseTrend}
               maxValue={100}
@@ -407,13 +343,24 @@ function StudentPerformancePage() {
             />
           </div>
 
-          <UiTable
-            caption="Topic Performance Breakdown"
-            columns={topicColumns}
-            rows={dataset.topicPerformanceBreakdown}
-            rowKey={(row) => row.topic}
-            emptyStateText="No topic-level summary available."
-          />
+          <section className="student-section-group" aria-label="Topic performance">
+            <div className="student-section-heading">
+              <h3>Topic Performance</h3>
+              <p>Use this as a quick scan for where practice may help most.</p>
+            </div>
+            <div className="student-topic-card-grid">
+              {dataset.topicPerformanceBreakdown.length === 0 ? (
+                <p className="student-empty-state">No topic performance details are available yet.</p>
+              ) : null}
+              {dataset.topicPerformanceBreakdown.map((topic) => (
+                <article key={topic.topic} className="student-topic-card">
+                  <strong>{topic.topic}</strong>
+                  <span>{`${formatPercent(topic.rawScorePercent)} Raw Score %`}</span>
+                  <span>{`${formatPercent(topic.accuracyPercent)} Accuracy %`}</span>
+                </article>
+              ))}
+            </div>
+          </section>
         </>
       ) : null}
 
@@ -422,14 +369,14 @@ function StudentPerformancePage() {
           <div className="student-performance-chart-grid">
             <UiChartContainer
               title="Discipline Index Trend"
-              subtitle="Layer L2 execution maturity"
+              subtitle="Execution habits over time"
               variant="line"
               data={disciplineTrend}
               maxValue={100}
             />
             <UiChartContainer
               title="Guess Rate Trend"
-              subtitle="Layer L2 guess behavior"
+              subtitle="Confidence pattern over time"
               variant="line"
               data={guessTrend}
               maxValue={100}
@@ -438,7 +385,7 @@ function StudentPerformancePage() {
           <div className="student-performance-chart-grid">
             <UiChartContainer
               title="MinTime Violation % Trend"
-              subtitle="Layer-aware timing compliance"
+              subtitle="Early timing checks"
               variant="line"
               data={minViolationTrend}
               maxValue={100}
@@ -447,7 +394,7 @@ function StudentPerformancePage() {
           <div className="student-performance-chart-grid">
             <UiChartContainer
               title="MaxTime Violation % Trend"
-              subtitle="Hard-mode overstay behavior"
+              subtitle="Late timing checks"
               variant="line"
               data={maxViolationTrend}
               maxValue={100}
@@ -562,13 +509,41 @@ function StudentPerformancePage() {
         </>
       ) : null}
 
-      <UiTable
-        caption="Performance Timeline Across Runs"
-        columns={timelineColumns}
-        rows={timeline}
-        rowKey={(row) => row.runId}
-        emptyStateText="No performance timeline available yet."
-      />
+      <section className="student-section-group" aria-label="Recent performance history">
+        <div className="student-section-heading">
+          <h3>Recent Test History</h3>
+          <p>A lighter view of your recent Raw Score %, Accuracy %, time, and rank.</p>
+        </div>
+        <div className="student-performance-history-list">
+          {timeline.length === 0 ? <p className="student-empty-state">No performance history available yet.</p> : null}
+          {timeline.map((entry) => (
+            <article key={entry.runId} className="student-performance-history-card">
+              <div>
+                <strong>{entry.runLabel}</strong>
+                <span>{formatDate(entry.completedAt)}</span>
+              </div>
+              <dl>
+                <div>
+                  <dt>Raw Score %</dt>
+                  <dd>{formatPercent(entry.rawScorePercent)}</dd>
+                </div>
+                <div>
+                  <dt>Accuracy %</dt>
+                  <dd>{formatPercent(entry.accuracyPercent)}</dd>
+                </div>
+                <div>
+                  <dt>Time</dt>
+                  <dd>{`${Math.round(entry.timeSpentMinutes)} min`}</dd>
+                </div>
+                <div>
+                  <dt>Rank</dt>
+                  <dd>{entry.rankInBatch === null ? "N/A" : `#${Math.round(entry.rankInBatch)}`}</dd>
+                </div>
+              </dl>
+            </article>
+          ))}
+        </div>
+      </section>
     </section>
   );
 }

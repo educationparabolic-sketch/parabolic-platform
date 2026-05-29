@@ -396,12 +396,13 @@
   background: #ffffff;
   border: 1px solid #d5deea;
   border-radius: 0.85rem;
-  padding: 1.2rem;
+  padding: 1.25rem;
 }
 
 .student-content-card h2 {
   margin: 0.35rem 0 0;
-  font-size: 1.45rem;
+  font-size: 1.38rem;
+  line-height: 1.18;
 }
 
 .student-content-copy {
@@ -417,6 +418,102 @@
   background: #f4f7fc;
   border: 1px solid #dbe5f2;
   color: #1f3557;
+}
+
+.student-content-card .ui-stat-card,
+.student-content-card .ui-chart,
+.student-content-card .ui-table-shell {
+  border-color: #dbe4f1;
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.student-content-card .ui-stat-card {
+  padding: 0.9rem;
+  background: #fbfdff;
+}
+
+.student-content-card .ui-stat-card-title,
+.student-content-card .ui-stat-card-helper,
+.student-content-card .ui-chart-header p {
+  color: #5a7192;
+}
+
+.student-content-card .ui-stat-card-title {
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+}
+
+.student-content-card .ui-stat-card-value {
+  color: #173763;
+  font-size: 1.35rem;
+}
+
+.student-content-card .ui-chart {
+  background: #fbfdff;
+  padding: 1rem;
+}
+
+.student-content-card .ui-chart-header h3 {
+  color: #173763;
+  font-size: 1rem;
+}
+
+.student-content-card .ui-table-shell {
+  background: #fbfdff;
+}
+
+.student-content-card .ui-table caption {
+  color: #173763;
+  font-size: 0.96rem;
+}
+
+.student-content-card .ui-table th,
+.student-content-card .ui-table td {
+  padding: 0.65rem 0.75rem;
+  border-color: #e8eef7;
+}
+
+.student-content-card .ui-table th {
+  background: #f5f8fc;
+  color: #516987;
+  font-size: 0.76rem;
+}
+
+.student-learning-state,
+.student-empty-state {
+  margin: 0;
+  border: 1px dashed #c9d8eb;
+  border-radius: 12px;
+  background: #f7faff;
+  color: #2f4a70;
+  padding: 0.85rem 0.95rem;
+  line-height: 1.45;
+}
+
+.student-section-group {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.student-section-heading {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.student-section-heading h3,
+.student-section-heading p {
+  margin: 0;
+}
+
+.student-section-heading h3 {
+  color: #173763;
+  font-size: 1.02rem;
+}
+
+.student-section-heading p {
+  color: #5a7192;
+  line-height: 1.4;
 }
 
 .student-dashboard-page {
@@ -459,6 +556,57 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.75rem;
+}
+
+.student-dashboard-home-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.student-focus-card {
+  border: 1px solid #dbe4f1;
+  border-radius: 12px;
+  background: #fbfdff;
+  padding: 1rem;
+  display: grid;
+  gap: 0.55rem;
+  align-content: start;
+}
+
+.student-focus-card-primary {
+  background: linear-gradient(180deg, #f3f8ff 0%, #ffffff 100%);
+  border-color: #c9d8eb;
+}
+
+.student-focus-card-encouragement {
+  background: #f6fbf8;
+  border-color: #cde5d7;
+}
+
+.student-focus-card-label,
+.student-focus-card h3,
+.student-focus-card p {
+  margin: 0;
+}
+
+.student-focus-card-label {
+  color: #5a7192;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.student-focus-card h3 {
+  color: #173763;
+  font-size: 1.08rem;
+  line-height: 1.25;
+}
+
+.student-focus-card p {
+  color: #385575;
+  line-height: 1.42;
 }
 
 .student-dashboard-status-grid {
@@ -519,6 +667,10 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
+}
+
+.student-detail-zone {
+  margin-top: 0.5rem;
 }
 
 .student-dashboard-widget-grid .ui-table-shell {
@@ -790,6 +942,53 @@
   min-width: 900px;
 }
 
+.student-test-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.student-test-card {
+  border: 1px solid #dbe4f1;
+  border-radius: 12px;
+  background: #fbfdff;
+  padding: 0.95rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.9rem;
+  align-items: center;
+}
+
+.student-test-card-main {
+  display: grid;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.student-test-card-main h3 {
+  margin: 0.45rem 0 0;
+  color: #173763;
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.student-test-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.student-test-card-meta span {
+  border-radius: 999px;
+  background: #f1f5fb;
+  color: #375678;
+  padding: 0.28rem 0.62rem;
+  font-size: 0.84rem;
+}
+
+.student-test-card-action {
+  justify-self: end;
+}
+
 .student-my-tests-pagination {
   display: flex;
   align-items: center;
@@ -915,6 +1114,78 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.75rem;
+}
+
+.student-topic-card-grid,
+.student-performance-history-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.student-topic-card {
+  border: 1px solid #dbe4f1;
+  border-radius: 12px;
+  background: #fbfdff;
+  padding: 0.85rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.student-topic-card strong {
+  color: #173763;
+}
+
+.student-topic-card span {
+  color: #385575;
+  font-size: 0.9rem;
+}
+
+.student-performance-history-card {
+  border: 1px solid #dbe4f1;
+  border-radius: 12px;
+  background: #fbfdff;
+  padding: 0.9rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 0.85rem;
+  align-items: center;
+}
+
+.student-performance-history-card > div:first-child {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.student-performance-history-card strong {
+  color: #173763;
+}
+
+.student-performance-history-card span,
+.student-performance-history-card dt {
+  color: #5a7192;
+}
+
+.student-performance-history-card dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.student-performance-history-card dt,
+.student-performance-history-card dd {
+  margin: 0;
+}
+
+.student-performance-history-card dt {
+  font-size: 0.78rem;
+}
+
+.student-performance-history-card dd {
+  color: #173763;
+  font-weight: 800;
 }
 
 .student-performance-run-cell {
@@ -1514,12 +1785,30 @@
 .student-profile-page {
   display: grid;
   gap: 1rem;
+  max-width: 760px;
+}
+
+.student-profile-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.student-profile-section {
+  display: grid;
+  gap: 0.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5ecf6;
+}
+
+.student-profile-section:first-child {
+  padding-top: 0;
+  border-top: 0;
 }
 
 .student-profile-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.65rem;
+  gap: 0.7rem;
 }
 
 .student-profile-field {
@@ -1591,6 +1880,7 @@
   }
 
   .student-dashboard-card-grid,
+  .student-dashboard-home-grid,
   .student-dashboard-status-grid,
   .student-dashboard-layer-grid,
   .student-dashboard-widget-grid,
@@ -1599,6 +1889,9 @@
   .student-performance-l1-grid,
   .student-performance-controlled-grid,
   .student-performance-progress-grid,
+  .student-topic-card,
+  .student-performance-history-card,
+  .student-performance-history-card dl,
   .student-discipline-kpi-grid,
   .student-discipline-progress-grid,
   .student-insights-kpi-grid,
@@ -1610,6 +1903,14 @@
 
   .student-my-tests-filter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .student-test-card {
+    grid-template-columns: 1fr;
+  }
+
+  .student-test-card-action {
+    justify-self: start;
   }
 
   .student-my-tests-solution-images,

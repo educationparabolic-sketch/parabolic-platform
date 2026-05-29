@@ -2,6 +2,7 @@ import {
   FieldValue,
   Timestamp,
 } from "firebase-admin/firestore";
+import {createHash} from "node:crypto";
 import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
 import {createLogger} from "./logging";
 import {dataTierPartitionService} from "./dataTierPartition";
@@ -9,6 +10,8 @@ import {
   SessionDocumentInitializationContext,
   SessionDocumentInitializationRecord,
   SessionExecutionMode,
+  SessionEntryValidationContext,
+  SessionEntryValidationResult,
   SessionQuestionTimeMap,
   SessionStartContext,
   SessionStartErrorCode,
@@ -66,6 +69,56 @@ const defaultSessionTokenSigner: SessionTokenSigner = async (
   uid,
   claims,
 ) => getFirebaseAdminApp().auth().createCustomToken(uid, claims);
+
+const hashSessionToken = (token: string): string =>
+  createHash("sha256").update(token).digest("hex");
+
+const decodeBase64UrlJson = (value: string): Record<string, unknown> | null => {
+  try {
+    const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    const decoded = Buffer.from(padded, "base64").toString("utf8");
+    const parsed = JSON.parse(decoded) as unknown;
+
+    return isPlainObject(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
+const decodeSessionTokenClaims = (token: string): Record<string, unknown> => {
+  const tokenParts = token.split(".");
+  if (tokenParts.length !== 3) {
+    throw new SessionStartValidationError(
+      "UNAUTHORIZED",
+      "Session token must be a signed JWT.",
+    );
+  }
+
+  const payload = decodeBase64UrlJson(tokenParts[1] ?? "");
+  if (!payload) {
+    throw new SessionStartValidationError(
+      "UNAUTHORIZED",
+      "Session token payload could not be decoded.",
+    );
+  }
+
+  if (
+    Number.isFinite(payload.exp) &&
+    (payload.exp as number) * 1000 <= Date.now()
+  ) {
+    throw new SessionStartValidationError(
+      "UNAUTHORIZED",
+      "Session token has expired.",
+    );
+  }
+
+  const customClaims = isPlainObject(payload.claims) ?
+    payload.claims :
+    payload;
+
+  return customClaims;
+};
 
 const isPlainObject = (
   value: unknown,
@@ -317,6 +370,76 @@ const normalizeVersionString = (
   value: unknown,
   fieldName: string,
 ): string => normalizeRequiredString(value, fieldName);
+
+const normalizeSnapshotObject = (
+  value: unknown,
+  fieldName: string,
+): Record<string, unknown> => {
+  if (!isPlainObject(value)) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Run field "${fieldName}" must be an object.`,
+    );
+  }
+
+  return {...value};
+};
+
+const normalizeRunPhaseConfigSnapshot = (
+  value: unknown,
+): Record<string, unknown> => isPlainObject(value) ?
+  {...value} :
+  {
+    phase1Percent: 40,
+    phase2Percent: 45,
+    phase3Percent: 15,
+  };
+
+const normalizeBooleanFlagMap = (
+  value: unknown,
+): Record<string, boolean> => {
+  if (!isPlainObject(value)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, flagValue]) => [key, flagValue === true]),
+  );
+};
+
+const buildLicenseSnapshot = (
+  licenseData: FirebaseFirestore.DocumentData,
+  currentLayer: string,
+): Record<string, unknown> => ({
+  currentLayer,
+  eligibilityFlags: normalizeBooleanFlagMap(licenseData.eligibilityFlags),
+  featureFlags: normalizeBooleanFlagMap(licenseData.featureFlags),
+});
+
+const buildTemplateSnapshot = (
+  runData: FirebaseFirestore.DocumentData,
+  questionIds: string[],
+  templateVersion: string,
+): Record<string, unknown> => {
+  const snapshot: Record<string, unknown> = {
+    questionIds,
+    templateVersion,
+  };
+
+  if (typeof runData.testId === "string" && runData.testId.trim()) {
+    snapshot.testId = runData.testId.trim();
+  }
+
+  if (typeof runData.canonicalId === "string" && runData.canonicalId.trim()) {
+    snapshot.canonicalId = runData.canonicalId.trim();
+  }
+
+  if (isPlainObject(runData.difficultyDistribution)) {
+    snapshot.difficultyDistribution = {...runData.difficultyDistribution};
+  }
+
+  return snapshot;
+};
 
 const normalizeRiskModelVersion = (value: unknown): string => {
   if (typeof value !== "string") {
@@ -585,6 +708,15 @@ export class SessionService {
         runData.questionIds,
         "questionIds",
       );
+      const phaseConfigSnapshot = normalizeRunPhaseConfigSnapshot(
+        runData.phaseConfigSnapshot,
+      );
+      const licenseSnapshot = buildLicenseSnapshot(licenseData, currentLayer);
+      const templateSnapshot = buildTemplateSnapshot(
+        runData,
+        questionIds,
+        templateVersion,
+      );
       const questionReferences = questionIds.map((questionId) =>
         this.firestore.doc(
           `${INSTITUTES_COLLECTION}/${instituteId}/` +
@@ -622,13 +754,17 @@ export class SessionService {
       const initializationRecord = this.buildSessionInitializationRecord({
         calibrationVersion,
         instituteId,
+        licenseSnapshot,
         mode,
+        phaseConfigSnapshot,
         questionTimeMap,
         riskModelVersion,
         runId,
         sessionId,
+        sessionTokenHash: hashSessionToken(sessionToken),
         studentId,
         studentUid,
+        templateSnapshot,
         templateVersion,
         timingProfileSnapshot,
         yearId,
@@ -656,6 +792,130 @@ export class SessionService {
       sessionPath,
       sessionToken,
       status: "created",
+    };
+  }
+
+  /**
+   * Validates that an exam runtime entry token matches an existing HOT session.
+   * @param {SessionEntryValidationContext} context Entry token and route id.
+   * @return {Promise<SessionEntryValidationResult>} Validated session metadata.
+   */
+  public async validateSessionEntry(
+    context: SessionEntryValidationContext,
+  ): Promise<SessionEntryValidationResult> {
+    const routeSessionId = normalizeRequiredString(
+      context.sessionId,
+      "sessionId",
+    );
+    const token = normalizeRequiredString(
+      context.sessionToken,
+      "sessionToken",
+    );
+    const claims = decodeSessionTokenClaims(token);
+    const instituteId = normalizeRequiredString(
+      claims.instituteId,
+      "token.instituteId",
+    );
+    const yearId = normalizeRequiredString(claims.yearId, "token.yearId");
+    const runId = normalizeRequiredString(claims.runId, "token.runId");
+    const tokenSessionId = normalizeRequiredString(
+      claims.sessionId,
+      "token.sessionId",
+    );
+    const studentId = normalizeRequiredString(
+      claims.studentId ?? claims.sub,
+      "token.studentId",
+    );
+
+    if (tokenSessionId !== routeSessionId) {
+      throw new SessionStartValidationError(
+        "UNAUTHORIZED",
+        "Session token does not match the requested session route.",
+      );
+    }
+
+    const sessionPath =
+      `${INSTITUTES_COLLECTION}/${instituteId}/` +
+      `${ACADEMIC_YEARS_COLLECTION}/${yearId}/` +
+      `${RUNS_COLLECTION}/${runId}/` +
+      `${SESSIONS_COLLECTION}/${routeSessionId}`;
+    const sessionSnapshot = await this.firestore.doc(sessionPath).get();
+    const sessionData = sessionSnapshot.data();
+
+    if (!sessionSnapshot.exists || !isPlainObject(sessionData)) {
+      throw new SessionStartValidationError(
+        "NOT_FOUND",
+        `Session "${routeSessionId}" does not exist.`,
+      );
+    }
+
+    const status = normalizeSessionStatus(
+      sessionData.status,
+      "session.status",
+    );
+    if (!ACTIVE_SESSION_STATUSES.includes(status)) {
+      throw new SessionStartValidationError(
+        "SESSION_LOCKED",
+        "Session is not active for exam runtime entry.",
+      );
+    }
+
+    const sessionStudentId = normalizeRequiredString(
+      sessionData.studentId,
+      "session.studentId",
+    );
+    if (sessionStudentId !== studentId) {
+      throw new SessionStartValidationError(
+        "UNAUTHORIZED",
+        "Session token student does not match the session record.",
+      );
+    }
+
+    const storedSessionTokenHash = normalizeRequiredString(
+      sessionData.sessionTokenHash,
+      "session.sessionTokenHash",
+    );
+    if (storedSessionTokenHash !== hashSessionToken(token)) {
+      throw new SessionStartValidationError(
+        "UNAUTHORIZED",
+        "Session token does not match the backend-issued session token.",
+      );
+    }
+
+    const mode = normalizeSessionExecutionMode(
+      sessionData.mode,
+      "session.mode",
+    );
+    const timingProfileSnapshot = normalizeTimingProfileSnapshot(
+      sessionData.timingProfileSnapshot,
+      "session.timingProfileSnapshot",
+    );
+    const phaseConfigSnapshot = normalizeSnapshotObject(
+      sessionData.phaseConfigSnapshot,
+      "phaseConfigSnapshot",
+    );
+    const licenseSnapshot = normalizeSnapshotObject(
+      sessionData.licenseSnapshot,
+      "licenseSnapshot",
+    );
+    const templateSnapshot = normalizeSnapshotObject(
+      sessionData.templateSnapshot,
+      "templateSnapshot",
+    );
+
+    return {
+      instituteId,
+      licenseSnapshot,
+      mode,
+      phaseConfigSnapshot,
+      runId,
+      sessionId: routeSessionId,
+      sessionPath,
+      status,
+      studentId,
+      templateSnapshot,
+      timingProfileSnapshot,
+      yearId,
     };
   }
 
@@ -889,17 +1149,21 @@ export class SessionService {
       calibrationVersion: context.calibrationVersion,
       createdAt: FieldValue.serverTimestamp(),
       instituteId: context.instituteId,
+      licenseSnapshot: context.licenseSnapshot,
       mode: context.mode,
+      phaseConfigSnapshot: context.phaseConfigSnapshot,
       questionTimeMap: context.questionTimeMap,
       riskModelVersion: context.riskModelVersion,
       runId: context.runId,
       sessionId: context.sessionId,
+      sessionTokenHash: context.sessionTokenHash,
       startedAt: null,
       status: "created",
       studentId: context.studentId,
       studentUid: context.studentUid,
       submissionLock: false,
       submittedAt: null,
+      templateSnapshot: context.templateSnapshot,
       templateVersion: context.templateVersion,
       timingProfileSnapshot: context.timingProfileSnapshot,
       updatedAt: FieldValue.serverTimestamp(),

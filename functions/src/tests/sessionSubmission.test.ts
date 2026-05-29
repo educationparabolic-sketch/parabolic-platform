@@ -102,6 +102,7 @@ const seedSession = async (
   sessionId: string,
   status: "active" | "created" | "submitted",
   submissionLock: boolean,
+  mode = "Controlled",
 ): Promise<void> => {
   const nowMillis = Date.now();
   const sessionPath = `${SESSION_ROOT_PATH}/${sessionId}`;
@@ -122,7 +123,7 @@ const seedSession = async (
     calibrationVersion: "cal_v2026_04",
     createdAt: Timestamp.fromMillis(nowMillis - 120_000),
     instituteId: INSTITUTE_ID,
-    mode: "Controlled",
+    mode,
     questionTimeMap: {
       q36_1: {
         cumulativeTimeSpent: 40,
@@ -195,6 +196,7 @@ test.after(async () => {
     "session_build_36_idempotent_no_recompute",
     "session_build_36_parallel_lock",
     "session_build_36_locked",
+    "session_build_36_hard_timing_rejected",
     "session_build_36_not_active",
   ];
 
@@ -245,6 +247,12 @@ test("submitSession finalizes active session atomically", async () => {
   assert.equal(data?.templateVersion, "5");
   assert.equal(data?.rawScorePercent, result.rawScorePercent);
   assert.equal(data?.accuracyPercent, result.accuracyPercent);
+  assert.deepEqual(data?.submissionTimingValidation, {
+    maxTimeViolationQuestionIds: [],
+    minTimeViolationQuestionIds: ["q36_1", "q36_2"],
+    mode: "controlled",
+    serverValidated: true,
+  });
   assert.equal(data?.easyRemainingAfterPhase1Percent, 0);
   assert.equal(data?.hardInPhase1Percent, 0);
   assert.equal(data?.consecutiveWrongStreakMax, 1);
@@ -252,6 +260,41 @@ test("submitSession finalizes active session atomically", async () => {
 
   await deleteIfPresent(sessionPath);
 });
+
+test(
+  "submitSession rejects Hard mode submissions with server-invalid timing",
+  async () => {
+    const sessionId = "session_build_36_hard_timing_rejected";
+    const sessionPath = `${SESSION_ROOT_PATH}/${sessionId}`;
+
+    await deleteIfPresent(sessionPath);
+    await seedSession(sessionId, "active", false, "Hard");
+
+    await assert.rejects(
+      submissionService.submitSession({
+        instituteId: INSTITUTE_ID,
+        runId: RUN_ID,
+        sessionId,
+        studentId: STUDENT_ID,
+        yearId: YEAR_ID,
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof SubmissionValidationError);
+        assert.equal(error.code, "VALIDATION_ERROR");
+        assert.match(error.message, /MinTime\/MaxTime/);
+        return true;
+      },
+    );
+
+    const snapshot = await firestore.doc(sessionPath).get();
+    const data = snapshot.data();
+    assert.equal(data?.status, "active");
+    assert.equal(data?.submissionLock, false);
+    assert.equal(data?.submissionTimingValidation, undefined);
+
+    await deleteIfPresent(sessionPath);
+  },
+);
 
 test(
   "submitSession returns existing result for submitted session",

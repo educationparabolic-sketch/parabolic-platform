@@ -3,6 +3,7 @@ import { Route, Routes, useLocation, useParams } from "react-router-dom";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { buildQuestionAssetUrl, toCdnAssetUrl } from "../../../shared/services/cdnAssetDelivery";
 import { ApiClientError } from "../../../shared/services/apiClient";
+import { getFrontendEnvironment } from "../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../shared/services/portalIntegration";
 import "./App.css";
 
@@ -41,9 +42,17 @@ interface TokenClaims {
   refreshNonce: string | null;
 }
 
+type EntryValidationReason =
+  | "missing_token"
+  | "expired_token"
+  | "malformed_token"
+  | "iframe_blocked"
+  | "server_validation_failed"
+  | null;
+
 interface EntryValidationResult {
   allowed: boolean;
-  reason: "missing_token" | "expired_token" | "malformed_token" | "iframe_blocked" | null;
+  reason: EntryValidationReason;
   claims: TokenClaims;
 }
 
@@ -145,6 +154,12 @@ interface AdaptivePhaseSnapshot {
   disciplineIndex: number;
 }
 
+interface DiagnosticAdvisoryItem {
+  label: string;
+  value: string;
+  message: string;
+}
+
 interface QueuedAnswerWrite {
   clientTimestamp: number;
   questionId: string;
@@ -173,6 +188,16 @@ interface SessionTokenRefreshResponse {
   code?: string;
   data?: {
     token?: string;
+  };
+}
+
+interface ExamSessionEntryResponse {
+  code?: string;
+  data?: {
+    allowed?: boolean;
+    mode?: ExecutionMode;
+    sessionId?: string;
+    status?: SessionLifecycleState;
   };
 }
 
@@ -228,6 +253,7 @@ const SESSION_TOKEN_REFRESH_WINDOW_SEC = 120;
 const RECOVERY_DB_NAME = "parabolic-exam-runtime";
 const RECOVERY_STORE_NAME = "sessionRecovery";
 const RECOVERY_SAVE_INTERVAL_MS = 3_000;
+const DEV_MOCK_SESSION_TOKEN = "dev";
 
 const MARKING_SCHEME = [
   "+4 for each correct answer",
@@ -358,7 +384,27 @@ function parseTokenClaims(token: string): TokenClaims | null {
   }
 }
 
-function validateSessionEntry(token: string | null): EntryValidationResult {
+function isExamDevMockEntryEnabled(): boolean {
+  return import.meta.env.DEV && getFrontendEnvironment().examDevMockEntry === true;
+}
+
+function buildDevMockTokenClaims(sessionId: string): TokenClaims {
+  return {
+    sub: "Dev Mock Candidate",
+    exp: Math.floor(Date.now() / 1000) + 60 * 60,
+    mode: "Controlled",
+    instituteId: "inst-dev-mock",
+    yearId: "year-dev-mock",
+    runId: "run-dev-mock",
+    sessionId: sessionId || "dev-mock-session",
+    refreshNonce: "dev-mock-refresh",
+  };
+}
+
+function validateSessionEntry(
+  token: string | null,
+  sessionId: string,
+): EntryValidationResult {
   if (window.self !== window.top) {
     return {
       allowed: false,
@@ -373,6 +419,14 @@ function validateSessionEntry(token: string | null): EntryValidationResult {
         sessionId: null,
         refreshNonce: null,
       },
+    };
+  }
+
+  if (isExamDevMockEntryEnabled() && token?.trim() === DEV_MOCK_SESSION_TOKEN) {
+    return {
+      allowed: true,
+      reason: null,
+      claims: buildDevMockTokenClaims(sessionId),
     };
   }
 
@@ -919,6 +973,20 @@ function ExamAccessRedirect(props: { reason: EntryValidationResult["reason"] }) 
   );
 }
 
+function ExamServerEntryValidationLoading() {
+  return (
+    <main className="exam-access-shell" aria-live="polite">
+      <section className="exam-access-card">
+        <p className="exam-access-eyebrow">Secure Entry Check</p>
+        <h1>Validating Session</h1>
+        <p>
+          The exam portal is confirming this signed session token with the backend before loading instructions.
+        </p>
+      </section>
+    </main>
+  );
+}
+
 function ScientificCalculatorModal(props: { open: boolean; onClose: () => void }) {
   const { open, onClose } = props;
   const [displayValue, setDisplayValue] = useState("");
@@ -1013,7 +1081,11 @@ function ExamSessionPage() {
   const location = useLocation();
   const tokenFromQuery = useMemo(() => new URLSearchParams(location.search).get("token"), [location.search]);
   const [sessionToken, setSessionToken] = useState<string | null>(() => tokenFromQuery);
-  const entryValidation = useMemo(() => validateSessionEntry(sessionToken), [sessionToken]);
+  const devMockEntryEnabled = useMemo(() => isExamDevMockEntryEnabled(), []);
+  const entryValidation = useMemo(
+    () => validateSessionEntry(sessionToken, sessionId),
+    [sessionId, sessionToken],
+  );
   const modeInstruction = MODE_INSTRUCTIONS[entryValidation.claims.mode];
   const candidateName = entryValidation.claims.sub ?? "Student Candidate";
   const examApiClient = useMemo(() => getPortalApiClient("exam"), []);
@@ -1061,6 +1133,9 @@ function ExamSessionPage() {
   const [submitWarningAcknowledged, setSubmitWarningAcknowledged] = useState(false);
   const [earlySubmitOverrideAccepted, setEarlySubmitOverrideAccepted] = useState(false);
   const [sessionConflictMessage, setSessionConflictMessage] = useState<string | null>(null);
+  const [serverEntryValidationStatus, setServerEntryValidationStatus] = useState<"pending" | "valid" | "invalid">(
+    entryValidation.allowed ? "pending" : "invalid",
+  );
 
   const totalDurationMs = EXAM_DURATION_MINUTES * 60 * 1000;
   const isOperationalMode = entryValidation.claims.mode === "Operational";
@@ -1096,6 +1171,58 @@ function ExamSessionPage() {
   useEffect(() => {
     setSessionToken(tokenFromQuery);
   }, [tokenFromQuery]);
+
+  useEffect(() => {
+    if (!entryValidation.allowed || !sessionToken) {
+      setServerEntryValidationStatus("invalid");
+      return;
+    }
+
+    if (devMockEntryEnabled && sessionToken.trim() === DEV_MOCK_SESSION_TOKEN) {
+      // TODO(EXP): remove this dev-only mock entry after exam P0/P1/P2 completion.
+      setServerEntryValidationStatus("valid");
+      return;
+    }
+
+    const controller = new AbortController();
+    const endpointPath = `/exam/session/${encodeURIComponent(sessionId)}/entry`;
+
+    setServerEntryValidationStatus("pending");
+    void examApiClient
+      .post<ExamSessionEntryResponse, { token: string }>(endpointPath, {
+        body: {
+          token: sessionToken,
+        },
+        headers: {
+          Authorization: `Bearer ${sessionToken}`,
+        },
+        signal: controller.signal,
+        skipAuth: true,
+      })
+      .then((responseBody) => {
+        const serverAllowed =
+          responseBody.data?.allowed === true &&
+          responseBody.data.sessionId === effectiveSessionId;
+
+        setServerEntryValidationStatus(serverAllowed ? "valid" : "invalid");
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+
+        setServerEntryValidationStatus("invalid");
+      });
+
+    return () => controller.abort();
+  }, [
+    devMockEntryEnabled,
+    effectiveSessionId,
+    entryValidation.allowed,
+    examApiClient,
+    sessionId,
+    sessionToken,
+  ]);
 
   useEffect(() => {
     if (!instructionConfirmed || isSubmitted) {
@@ -1758,14 +1885,66 @@ function ExamSessionPage() {
     visitedCount < sessionSnapshot.questions.length;
 
   const unansweredCount = unansweredQuestionIdsForSubmission.length;
+  const attemptedPercent = toPercent(answeredCount, sessionSnapshot.questions.length);
   const lowDiscipline = adaptivePhaseSnapshot.disciplineIndex < EARLY_SUBMIT_DISCIPLINE_THRESHOLD;
   const lowAdherence = adaptivePhaseSnapshot.phaseAdherencePercent < EARLY_SUBMIT_PHASE_ADHERENCE_THRESHOLD;
   const requiresEarlySubmitOverride = isControlledMode && (lowDiscipline || lowAdherence);
+  const diagnosticAdvisories = useMemo<DiagnosticAdvisoryItem[]>(() => {
+    if (!isDiagnosticMode) {
+      return [];
+    }
+
+    return [
+      {
+        label: "Phase Pacing",
+        value: adaptivePhaseSnapshot.currentPhase.toUpperCase(),
+        message:
+          adaptivePhaseSnapshot.phaseAdherencePercent >= 75 ?
+            "Attempt progress is broadly aligned with elapsed time." :
+            "Attempt progress is drifting from elapsed time; adjust pace calmly.",
+      },
+      {
+        label: "Attempt Progress",
+        value: `${attemptedPercent.toFixed(1)}%`,
+        message:
+          attemptedPercent >= 50 ?
+            "Attempt coverage is above the diagnostic midpoint." :
+            "Attempt coverage is below the diagnostic midpoint; review easy wins.",
+      },
+      {
+        label: "Review Load",
+        value: String(markedCount),
+        message:
+          markedCount <= 3 ?
+            "Review load is currently manageable." :
+            "Review load is growing; revisit marked questions in small batches.",
+      },
+      {
+        label: "Navigation",
+        value: "Open",
+        message: "L1 advisories never block navigation, save, or submit actions.",
+      },
+    ];
+  }, [
+    adaptivePhaseSnapshot.currentPhase,
+    adaptivePhaseSnapshot.phaseAdherencePercent,
+    attemptedPercent,
+    isDiagnosticMode,
+    markedCount,
+  ]);
 
   const manualSubmitDisabled = isSubmitted || sessionLocked || slowdownActive || shouldRestrictManualSubmit;
 
   if (!entryValidation.allowed) {
     return <ExamAccessRedirect reason={entryValidation.reason} />;
+  }
+
+  if (serverEntryValidationStatus === "pending") {
+    return <ExamServerEntryValidationLoading />;
+  }
+
+  if (serverEntryValidationStatus === "invalid") {
+    return <ExamAccessRedirect reason="server_validation_failed" />;
   }
 
   if (!instructionConfirmed) {
@@ -2203,18 +2382,34 @@ function ExamSessionPage() {
       </div>
 
       {(isDiagnosticMode || isControlledMode) && !slowdownActive ? (
-        <section className="exam-advisory-banner" aria-label="Adaptive advisory banner">
+        <section
+          className={isDiagnosticMode ? "exam-advisory-banner diagnostic" : "exam-advisory-banner"}
+          aria-label="Adaptive advisory banner"
+        >
           {isDiagnosticMode ? (
-            <p>
-              Advisory: Phase adherence is
-              {" "}
-              <strong>{adaptivePhaseSnapshot.phaseAdherencePercent.toFixed(1)}%</strong>
-              {" "}
-              and overspend is
-              {" "}
-              <strong>{adaptivePhaseSnapshot.overspendPercent.toFixed(1)}%</strong>.
-              Keep skip behavior controlled.
-            </p>
+            <>
+              <div className="exam-advisory-summary">
+                <p>
+                  Diagnostic Advisory: Phase adherence is
+                  {" "}
+                  <strong>{adaptivePhaseSnapshot.phaseAdherencePercent.toFixed(1)}%</strong>
+                  {" "}
+                  and overspend is
+                  {" "}
+                  <strong>{adaptivePhaseSnapshot.overspendPercent.toFixed(1)}%</strong>.
+                </p>
+                <p>L1 guidance is informational only; no navigation or submit action is blocked.</p>
+              </div>
+              <div className="exam-diagnostic-advisory-grid">
+                {diagnosticAdvisories.map((advisory) => (
+                  <article key={advisory.label} className="exam-diagnostic-advisory-item">
+                    <span>{advisory.label}</span>
+                    <strong>{advisory.value}</strong>
+                    <p>{advisory.message}</p>
+                  </article>
+                ))}
+              </div>
+            </>
           ) : (
             <p>
               Controlled Enforcement: MinTime gating active.

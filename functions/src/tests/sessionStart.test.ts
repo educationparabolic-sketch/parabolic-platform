@@ -78,7 +78,16 @@ test(
     await firestore.doc(institutePath).set({instituteId});
     await seedAcademicYear(instituteId, yearId);
     await firestore.doc(studentPath).set({status: "active", studentId});
-    await firestore.doc(licensePath).set({currentLayer: "L1"});
+    await firestore.doc(licensePath).set({
+      currentLayer: "L1",
+      eligibilityFlags: {
+        l1Eligible: true,
+      },
+      featureFlags: {
+        controlledMode: true,
+        hardMode: false,
+      },
+    });
     await firestore.doc(questionEasyPath).set({difficulty: "Easy"});
     await firestore.doc(questionHardPath).set({difficulty: "Hard"});
     await firestore.doc(questionMediumPath).set({difficulty: "Medium"});
@@ -94,8 +103,14 @@ test(
       recipientStudentIds: [studentId],
       riskModelVersion: "risk_v3",
       runId,
+      phaseConfigSnapshot: {
+        phase1Percent: 40,
+        phase2Percent: 45,
+        phase3Percent: 15,
+      },
       startWindow: Timestamp.fromMillis(Date.now() - 5 * 60 * 1000),
       status: "scheduled",
+      testId: "test_build_26_success",
       templateVersion: "7",
       timingProfileSnapshot: timingProfileSnapshotFixture,
     });
@@ -133,6 +148,30 @@ test(
     assert.equal(sessionData?.calibrationVersion, "cal_v2026_04");
     assert.equal(sessionData?.riskModelVersion, "risk_v3");
     assert.equal(sessionData?.templateVersion, "7");
+    assert.deepEqual(sessionData?.licenseSnapshot, {
+      currentLayer: "L1",
+      eligibilityFlags: {
+        l1Eligible: true,
+      },
+      featureFlags: {
+        controlledMode: true,
+        hardMode: false,
+      },
+    });
+    assert.deepEqual(sessionData?.phaseConfigSnapshot, {
+      phase1Percent: 40,
+      phase2Percent: 45,
+      phase3Percent: 15,
+    });
+    assert.deepEqual(sessionData?.templateSnapshot, {
+      questionIds: [
+        "q_build_31_easy",
+        "q_build_31_hard",
+        "q_build_31_medium",
+      ],
+      templateVersion: "7",
+      testId: "test_build_26_success",
+    });
     assert.deepEqual(sessionData?.answerMap, {});
     assert.deepEqual(
       sessionData?.timingProfileSnapshot,
