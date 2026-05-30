@@ -161,6 +161,72 @@ test(
 );
 
 test(
+  "persistIncrementalAnswers stores adaptive phase snapshot incrementally",
+  async () => {
+    const nowMillis = Date.now();
+    const sessionPath =
+      "institutes/inst_build_30/academicYears/2026/" +
+      "runs/run_build_30/sessions/session_build_30_phase_snapshot";
+
+    await deleteIfPresent(sessionPath);
+    await seedSession(sessionPath, "active", "Controlled");
+
+    const result = await answerBatchService.persistIncrementalAnswers({
+      adaptivePhaseSnapshot: {
+        answeredPercent: 44.4,
+        currentPhase: "phase2",
+        difficultyCompliancePercent: 82.5,
+        disciplineIndex: 76.2,
+        elapsedPercent: 50,
+        overspendPercent: 5.6,
+        phaseAdherencePercent: 94.4,
+        skipPatternScore: 88,
+      },
+      answers: [
+        {
+          clientTimestamp: nowMillis,
+          questionId: "q02",
+          selectedOption: "B",
+          timeSpent: 35,
+        },
+      ],
+      context: {
+        instituteId: "inst_build_30",
+        runId: "run_build_30",
+        sessionId: "session_build_30_phase_snapshot",
+        studentId: "student_build_30",
+        yearId: "2026",
+      },
+      millisecondsSinceLastWrite: 5000,
+    });
+
+    assert.equal(result.adaptivePhaseSnapshotPersisted, true);
+
+    const snapshot = await firestore.doc(sessionPath).get();
+    const adaptivePhaseSnapshot = snapshot.data()?.adaptivePhaseSnapshot as {
+      answeredPercent: number;
+      currentPhase: string;
+      difficultyCompliancePercent: number;
+      disciplineIndex: number;
+      elapsedPercent: number;
+      overspendPercent: number;
+      phaseAdherencePercent: number;
+      skipPatternScore: number;
+      updatedAt: Timestamp;
+    };
+
+    assert.equal(adaptivePhaseSnapshot.currentPhase, "phase2");
+    assert.equal(adaptivePhaseSnapshot.phaseAdherencePercent, 94.4);
+    assert.equal(adaptivePhaseSnapshot.overspendPercent, 5.6);
+    assert.equal(adaptivePhaseSnapshot.difficultyCompliancePercent, 82.5);
+    assert.equal(adaptivePhaseSnapshot.skipPatternScore, 88);
+    assert.ok(adaptivePhaseSnapshot.updatedAt);
+
+    await deleteIfPresent(sessionPath);
+  },
+);
+
+test(
   "persistIncrementalAnswers ignores stale writes by clientTimestamp",
   async () => {
     const nowMillis = Date.now();

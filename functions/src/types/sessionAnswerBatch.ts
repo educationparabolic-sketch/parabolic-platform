@@ -14,6 +14,17 @@ export interface PersistAnswerBatchContext {
   yearId: string;
 }
 
+export interface AdaptivePhaseSessionSnapshot {
+  answeredPercent: number;
+  currentPhase: string;
+  difficultyCompliancePercent: number;
+  disciplineIndex: number;
+  elapsedPercent: number;
+  overspendPercent: number;
+  phaseAdherencePercent: number;
+  skipPatternScore: number;
+}
+
 export interface SessionAnswerWriteInput {
   clientTimestamp: number | string | Date;
   questionId: string;
@@ -22,6 +33,7 @@ export interface SessionAnswerWriteInput {
 }
 
 export interface PersistAnswerBatchInput {
+  adaptivePhaseSnapshot?: unknown;
   answers: unknown;
   context: PersistAnswerBatchContext;
   millisecondsSinceLastWrite: number;
@@ -83,6 +95,7 @@ export interface TimingMetricsExport {
 }
 
 export interface PersistAnswerBatchResult {
+  adaptivePhaseSnapshotPersisted: boolean;
   blockedQuestionIds: string[];
   ignoredQuestionIds: string[];
   lockedQuestionIds: string[];

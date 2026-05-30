@@ -6,10 +6,10 @@ This file is the persistent handoff state for portal checklist implementation ac
 
 - `Current Target Portal`: `exam`
 - `Current Priority Band`: `P1`
-- `Last Completed Checklist ID`: `EXP-LAY-002`
-- `Next Suggested Checklist ID`: `EXP-LAY-004`
-- `Last Updated`: `2026-05-29`
-- `Saved Scope Note`: Completed exam P1 `EXP-LAY-002` by adding a dedicated non-blocking L1 diagnostic advisory layer with yellow treatment, phase pacing, attempt progress, review load, and explicit no-blocking navigation/save/submit guidance. Continue exam P1 with `EXP-LAY-004`.
+- `Last Completed Checklist ID`: `EXP-PHS-004`
+- `Next Suggested Checklist ID`: `EXP-SEC-003`
+- `Last Updated`: `2026-05-30`
+- `Saved Scope Note`: Completed exam P1 `EXP-PHS-004` by sending the latest adaptive phase snapshot with answer batches and persisting the validated snapshot into the HOT session document during the backend answer-batch transaction, without runtime analytics queries or recomputation from persisted history. `npm run build` passed for `apps/exam` and `functions`; targeted `npm run test:session-answer-batch` started TAP output but did not complete in the sandbox, likely waiting on the Firestore emulator. Continue exam P1 with `EXP-SEC-003`.
 - `Temporary Dev Testing Note`: Keep the exam portal dev-only mock entry mode (`npm run dev:mock-entry`, `?token=dev`,http://localhost:5173/session/dev-mock-session?token=dev) until exam portal P0/P1/P2 implementation is fully complete; remove it only during final exam-portal cleanup/hardening.
 
 ## Active Checklist Set

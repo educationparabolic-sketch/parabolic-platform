@@ -18,6 +18,7 @@ import {createTenantGuardMiddleware} from "../middleware/tenant";
 import {systemEventTopologyService} from "../services/systemEventTopology";
 
 interface ExamSessionAnswersRequestBody {
+  adaptivePhaseSnapshot?: unknown;
   answers?: unknown;
   instituteId?: unknown;
   millisecondsSinceLastWrite?: unknown;
@@ -33,6 +34,7 @@ interface ExamSessionAnswersRequestDependencies {
 
 interface ExamSessionAnswersValidatedRequestData
 extends Record<string, unknown> {
+  adaptivePhaseSnapshot?: unknown;
   answers: unknown;
   instituteId: string;
   millisecondsSinceLastWrite: number;
@@ -147,6 +149,7 @@ export const createExamSessionAnswersHandler = (
         yearId: validatedData.yearId,
       },
       async () => dependencies.persistIncrementalAnswers({
+        adaptivePhaseSnapshot: validatedData.adaptivePhaseSnapshot,
         answers: validatedData.answers,
         context: {
           instituteId: validatedData.instituteId,
@@ -162,6 +165,8 @@ export const createExamSessionAnswersHandler = (
     response.status(200).json({
       code: "OK",
       data: {
+        adaptivePhaseSnapshotPersisted:
+          result.adaptivePhaseSnapshotPersisted,
         blockedQuestionIds: result.blockedQuestionIds,
         ignoredQuestionIds: result.ignoredQuestionIds,
         lockedQuestionIds: result.lockedQuestionIds,
@@ -210,6 +215,7 @@ export const createExamSessionAnswersHandler = (
         const sessionId = resolveSessionIdFromRequest(request);
 
         setRequestData(request, {
+          adaptivePhaseSnapshot: body.adaptivePhaseSnapshot,
           answers: body.answers,
           instituteId: request.context.identity?.instituteId ?? instituteId,
           millisecondsSinceLastWrite,

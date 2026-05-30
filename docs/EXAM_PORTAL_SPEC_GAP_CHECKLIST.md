@@ -100,13 +100,13 @@ Priority guide:
 | EXP-LAY-001 | Behavior Engine | L0 free navigation and submit-anytime baseline | completed | P0 | Implemented |
 | EXP-LAY-002 | Behavior Engine | L1 diagnostic advisory layer | completed | P1 | Added a dedicated non-blocking L1 diagnostic advisory layer with yellow treatment, phase pacing, attempt progress, review load, and explicit no-blocking navigation/save/submit guidance |
 | EXP-LAY-003 | Behavior Engine | L2 controlled mode enforcement | completed | P0 | Strongly implemented |
-| EXP-LAY-004 | Behavior Engine | Hard Mode strict enforcement | partial | P1 | Major restrictions exist, but full spec parity is incomplete |
-| EXP-LAY-005 | Behavior Engine | L1 easy remaining reminder | missing | P1 | Not clearly implemented |
-| EXP-LAY-006 | Behavior Engine | L1 rapid answering advisory | partial | P1 | Some advisory structure exists, exact behavior unclear |
-| EXP-LAY-007 | Behavior Engine | L1 submit warning if <50% attempted | missing | P1 | Current submit warnings are more discipline/unanswered based |
+| EXP-LAY-004 | Behavior Engine | Hard Mode strict enforcement | completed | P1 | Tightened Hard Mode strict navigation parity: shared runtime gate now blocks backward movement, locked-question jumps, and non-sequential future palette jumps while preserving MinTime/MaxTime enforcement, auto-lock, no-revisit locks, and submit-at-end restriction |
+| EXP-LAY-005 | Behavior Engine | L1 easy remaining reminder | completed | P1 | Added a dedicated live Easy Remaining advisory to the L1 diagnostic banner, computed from easy questions without recorded answers and explicitly framed as non-blocking open-navigation guidance |
+| EXP-LAY-006 | Behavior Engine | L1 rapid answering advisory | completed | P1 | Added a dedicated live Rapid Answers advisory to the L1 diagnostic banner, counting answered questions below their per-difficulty diagnostic engagement window and keeping the guidance explicitly non-blocking |
+| EXP-LAY-007 | Behavior Engine | L1 submit warning if <50% attempted | completed | P1 | Added an explicit L1 Diagnostic submit warning when attempted coverage is below 50%, with confirmation copy that names the low-coverage condition while keeping submission available after final confirmation |
 | EXP-LAY-008 | Behavior Engine | L2 min-time enforcement with countdown and blocked Save & Next | completed | P0 | Implemented |
 | EXP-LAY-009 | Behavior Engine | L2 consecutive-wrong slowdown | completed | P1 | Implemented |
-| EXP-LAY-010 | Behavior Engine | L2 overstay advisory | partial | P1 | Related signals exist, explicit advisory treatment is less clear |
+| EXP-LAY-010 | Behavior Engine | L2 overstay advisory | completed | P1 | Added explicit Controlled-mode overstay treatment: the runtime computes a per-question recommended average from the timing window, displays it in the question header, and switches the L2 banner to an overstay advisory once elapsed time exceeds that average |
 | EXP-LAY-011 | Behavior Engine | L2 early submit confirmation based on provisional discipline | completed | P1 | Implemented |
 | EXP-LAY-012 | Behavior Engine | Hard Mode max-time enforcement and auto-lock | completed | P1 | Implemented |
 | EXP-LAY-013 | Behavior Engine | Hard Mode sequential navigation restriction | completed | P1 | Implemented |
@@ -120,7 +120,7 @@ Priority guide:
 | EXP-PHS-001 | Phase Engine | Phase snapshot loaded at session start | completed | P1 | Implemented in runtime snapshot |
 | EXP-PHS-002 | Phase Engine | Timing profile loaded at session start | completed | P1 | Implemented |
 | EXP-PHS-003 | Phase Engine | Tracks phase adherence, overspend, difficulty compliance, skip patterns | completed | P1 | Implemented in adaptive snapshot logic |
-| EXP-PHS-004 | Phase Engine | Stored incrementally in session context without analytics recomputation in UI | partial | P1 | Runtime tracks and batches data; persistence path is only partly verified from frontend review |
+| EXP-PHS-004 | Phase Engine | Stored incrementally in session context without analytics recomputation in UI | completed | P1 | Answer batches now carry the latest adaptive phase snapshot to the backend, the answer-batch service validates and persists it into the HOT session document in the same incremental write transaction, and the runtime continues to use local measured state instead of querying analytics |
 
 ## Session Lifecycle & Recovery
 

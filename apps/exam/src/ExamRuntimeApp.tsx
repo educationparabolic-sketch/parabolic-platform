@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Route, Routes, useLocation, useParams } from "react-router-dom";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { buildQuestionAssetUrl, toCdnAssetUrl } from "../../../shared/services/cdnAssetDelivery";
@@ -168,6 +168,7 @@ interface QueuedAnswerWrite {
 }
 
 interface ExamAnswerBatchRequestBody {
+  adaptivePhaseSnapshot?: AdaptivePhaseSnapshot;
   answers: QueuedAnswerWrite[];
   instituteId: string;
   millisecondsSinceLastWrite: number;
@@ -1115,6 +1116,7 @@ function ExamSessionPage() {
   const [hardModeLockedQuestionIds, setHardModeLockedQuestionIds] = useState<Set<string>>(new Set());
   const [slowdownUntilMs, setSlowdownUntilMs] = useState<number | null>(null);
   const [rushedAttemptStreak, setRushedAttemptStreak] = useState(0);
+  const adaptivePhaseSnapshotRef = useRef<AdaptivePhaseSnapshot | null>(null);
   const [skippedQuestionsCount, setSkippedQuestionsCount] = useState(0);
   const [sessionLifecycleState, setSessionLifecycleState] = useState<SessionLifecycleState>("created");
   const [submittedAtIso, setSubmittedAtIso] = useState<string | null>(null);
@@ -1368,6 +1370,7 @@ function ExamSessionPage() {
 
     const endpointPath = `/exam/session/${encodeURIComponent(effectiveSessionId)}/answers`;
     const requestBody: ExamAnswerBatchRequestBody = {
+      adaptivePhaseSnapshot: adaptivePhaseSnapshotRef.current ?? undefined,
       answers: answersToPersist,
       instituteId,
       millisecondsSinceLastWrite,
@@ -1854,6 +1857,10 @@ function ExamSessionPage() {
     skippedQuestionsCount,
   ]);
 
+  useEffect(() => {
+    adaptivePhaseSnapshotRef.current = adaptivePhaseSnapshot;
+  }, [adaptivePhaseSnapshot]);
+
   const timerMinutes = Math.floor(remainingMs / 1000 / 60);
   const finalWindowThresholdMinutes = sessionSnapshot.timingProfile.finalWindowMinutes;
   const isFinalWindow = timerMinutes <= finalWindowThresholdMinutes;
@@ -1867,10 +1874,46 @@ function ExamSessionPage() {
   const selectedQuestionMaxTimeRemainingSec = selectedQuestionTiming
     ? Math.max(0, selectedQuestionTiming.maxTimeSec - selectedQuestionTimeSpentSec)
     : 0;
+  const selectedQuestionRecommendedAverageSec = selectedQuestionTiming
+    ? Math.round((selectedQuestionTiming.minTimeSec + selectedQuestionTiming.maxTimeSec) / 2)
+    : 0;
+  const selectedQuestionOverstaySec =
+    isControlledMode && selectedQuestionTiming
+      ? Math.max(0, selectedQuestionTimeSpentSec - selectedQuestionRecommendedAverageSec)
+      : 0;
 
   const selectedQuestionRevisitLocked = selectedQuestion
     ? hardModeLockedQuestionIds.has(selectedQuestion.id) || questionTimingById[selectedQuestion.id]?.maxTimeLocked === true
     : false;
+  const hardModeBackwardNavigationDisabled = isHardMode && sessionSnapshot.hardModeRevisitRestricted;
+
+  const isQuestionJumpDisabled = (questionId: string): boolean => {
+    if (slowdownActive || sessionLocked) {
+      return true;
+    }
+
+    if (!selectedQuestion || !isHardMode || !sessionSnapshot.hardModeRevisitRestricted) {
+      return false;
+    }
+
+    const targetQuestionIndex = getQuestionIndex(sessionSnapshot.questions, questionId);
+    if (targetQuestionIndex === -1) {
+      return true;
+    }
+
+    if (questionId === selectedQuestion.id) {
+      return false;
+    }
+
+    if (hardModeLockedQuestionIds.has(questionId) || targetQuestionIndex < selectedQuestionIndex) {
+      return true;
+    }
+
+    return (
+      sessionSnapshot.timingProfile.hardModeSequentialNavigation &&
+      targetQuestionIndex > selectedQuestionIndex + 1
+    );
+  };
 
   const saveBlockedByTiming =
     enforcementMode &&
@@ -1886,6 +1929,27 @@ function ExamSessionPage() {
 
   const unansweredCount = unansweredQuestionIdsForSubmission.length;
   const attemptedPercent = toPercent(answeredCount, sessionSnapshot.questions.length);
+  const showDiagnosticLowAttemptSubmitWarning = isDiagnosticMode && attemptedPercent < 50;
+  const easyRemainingCount = useMemo(
+    () =>
+      sessionSnapshot.questions.filter((question) => {
+        const responseState = responseStateByQuestionId[question.id];
+        return question.difficulty === "easy" && (!responseState || !hasAnswer(question, responseState));
+      }).length,
+    [responseStateByQuestionId, sessionSnapshot.questions],
+  );
+  const rapidAnswerCount = useMemo(
+    () =>
+      sessionSnapshot.questions.filter((question) => {
+        const responseState = responseStateByQuestionId[question.id];
+        const timingState = questionTimingById[question.id];
+        return (
+          Boolean(responseState && hasAnswer(question, responseState)) &&
+          Boolean(timingState && timingState.timeSpentMs < timingState.minTimeSec * 1000)
+        );
+      }).length,
+    [questionTimingById, responseStateByQuestionId, sessionSnapshot.questions],
+  );
   const lowDiscipline = adaptivePhaseSnapshot.disciplineIndex < EARLY_SUBMIT_DISCIPLINE_THRESHOLD;
   const lowAdherence = adaptivePhaseSnapshot.phaseAdherencePercent < EARLY_SUBMIT_PHASE_ADHERENCE_THRESHOLD;
   const requiresEarlySubmitOverride = isControlledMode && (lowDiscipline || lowAdherence);
@@ -1912,6 +1976,22 @@ function ExamSessionPage() {
             "Attempt coverage is below the diagnostic midpoint; review easy wins.",
       },
       {
+        label: "Easy Remaining",
+        value: String(easyRemainingCount),
+        message:
+          easyRemainingCount === 0 ?
+            "All easy questions have an answer recorded." :
+            "Easy questions remain available; use open navigation to collect them when ready.",
+      },
+      {
+        label: "Rapid Answers",
+        value: String(rapidAnswerCount),
+        message:
+          rapidAnswerCount === 0 ?
+            "No answered question is currently below its diagnostic engagement window." :
+            "Some answers were recorded quickly; revisit them calmly if time permits.",
+      },
+      {
         label: "Review Load",
         value: String(markedCount),
         message:
@@ -1929,8 +2009,10 @@ function ExamSessionPage() {
     adaptivePhaseSnapshot.currentPhase,
     adaptivePhaseSnapshot.phaseAdherencePercent,
     attemptedPercent,
+    easyRemainingCount,
     isDiagnosticMode,
     markedCount,
+    rapidAnswerCount,
   ]);
 
   const manualSubmitDisabled = isSubmitted || sessionLocked || slowdownActive || shouldRestrictManualSubmit;
@@ -2135,7 +2217,13 @@ function ExamSessionPage() {
   };
 
   const goToPreviousQuestion = () => {
-    if (!selectedQuestion || selectedQuestionIndex <= 0 || slowdownActive || sessionLocked) {
+    if (
+      !selectedQuestion ||
+      selectedQuestionIndex <= 0 ||
+      slowdownActive ||
+      sessionLocked ||
+      hardModeBackwardNavigationDisabled
+    ) {
       return;
     }
 
@@ -2152,21 +2240,8 @@ function ExamSessionPage() {
   };
 
   const jumpToQuestion = (questionId: string) => {
-    if (!selectedQuestion || slowdownActive || sessionLocked) {
+    if (!selectedQuestion || isQuestionJumpDisabled(questionId)) {
       return;
-    }
-
-    if (isHardMode && sessionSnapshot.hardModeRevisitRestricted) {
-      const targetQuestionIndex = getQuestionIndex(sessionSnapshot.questions, questionId);
-      if (sessionSnapshot.timingProfile.hardModeSequentialNavigation && targetQuestionIndex > selectedQuestionIndex + 1) {
-        return;
-      }
-      if (targetQuestionIndex < selectedQuestionIndex) {
-        return;
-      }
-      if (hardModeLockedQuestionIds.has(questionId)) {
-        return;
-      }
     }
 
     navigateToQuestion(questionId);
@@ -2418,7 +2493,17 @@ function ExamSessionPage() {
               {" "}
               <strong>{adaptivePhaseSnapshot.disciplineIndex.toFixed(1)}</strong>.
               {" "}
-              Save is blocked until question timer reaches MinTime.
+              {selectedQuestionOverstaySec > 0 ? (
+                <>
+                  Overstay advisory: current question is
+                  {" "}
+                  <strong>{selectedQuestionOverstaySec}s</strong>
+                  {" "}
+                  beyond the recommended average.
+                </>
+              ) : (
+                "Save is blocked until question timer reaches MinTime."
+              )}
             </p>
           )}
         </section>
@@ -2468,11 +2553,7 @@ function ExamSessionPage() {
 
           <div className="exam-palette-grid" aria-label="Question status tiles">
             {filteredPalette.map((tile) => {
-              const jumpDisabled =
-                slowdownActive ||
-                (isHardMode &&
-                  sessionSnapshot.hardModeRevisitRestricted &&
-                  (tile.revisitLocked || tile.number < (selectedQuestion?.number ?? 1)));
+              const jumpDisabled = isQuestionJumpDisabled(tile.id);
 
               return (
                 <button
@@ -2577,6 +2658,13 @@ function ExamSessionPage() {
                 {" "}
                 <strong>{selectedQuestionTimeSpentSec}s</strong>
               </p>
+              {isControlledMode ? (
+                <p>
+                  Recommended Avg:
+                  {" "}
+                  <strong>{selectedQuestionRecommendedAverageSec}s</strong>
+                </p>
+              ) : null}
             </div>
           </header>
 
@@ -2719,7 +2807,13 @@ function ExamSessionPage() {
                 <button
                   type="button"
                   onClick={goToPreviousQuestion}
-                  disabled={selectedQuestionIndex <= 0 || selectedQuestionRevisitLocked || slowdownActive || sessionLocked}
+                  disabled={
+                    selectedQuestionIndex <= 0 ||
+                    selectedQuestionRevisitLocked ||
+                    slowdownActive ||
+                    sessionLocked ||
+                    hardModeBackwardNavigationDisabled
+                  }
                 >
                   Previous
                 </button>
@@ -2825,6 +2919,13 @@ function ExamSessionPage() {
               </p>
             </div>
 
+            {showDiagnosticLowAttemptSubmitWarning ? (
+              <p className="exam-submit-warning">
+                L1 Diagnostic Warning: attempted coverage is below 50%. Submission remains available after final
+                confirmation.
+              </p>
+            ) : null}
+
             {unansweredCount > 0 ? (
               <label className="exam-submit-check">
                 <input
@@ -2832,7 +2933,9 @@ function ExamSessionPage() {
                   checked={submitWarningAcknowledged}
                   onChange={(event) => setSubmitWarningAcknowledged(event.target.checked)}
                 />
-                I understand {unansweredCount} question(s) will remain unanswered after final submission.
+                {showDiagnosticLowAttemptSubmitWarning
+                  ? `I understand this L1 attempt is below 50% coverage and ${unansweredCount} question(s) will remain unanswered after final submission.`
+                  : `I understand ${unansweredCount} question(s) will remain unanswered after final submission.`}
               </label>
             ) : null}
 

@@ -1321,6 +1321,7 @@ test(
 test("exam session answers handler accepts a valid request", async () => {
   const handler = createExamSessionAnswersHandler({
     persistIncrementalAnswers: async (): Promise<PersistAnswerBatchResult> => ({
+      adaptivePhaseSnapshotPersisted: false,
       blockedQuestionIds: [],
       ignoredQuestionIds: [],
       lockedQuestionIds: [],

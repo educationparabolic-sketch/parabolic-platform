@@ -3,6 +3,7 @@ import {createLogger} from "./logging";
 import {SessionStartValidationError, sessionService} from "./session";
 import {getFirestore} from "../utils/firebaseAdmin";
 import {
+  AdaptivePhaseSessionSnapshot,
   MaxTimeEnforcementLevel,
   MaxTimeViolation,
   MinTimeEnforcementLevel,
@@ -42,6 +43,15 @@ interface NormalizedQuestionTimeRecord {
   maxTime: number;
   minTime: number;
 }
+
+type AdaptivePhaseMetricField =
+  | "answeredPercent"
+  | "difficultyCompliancePercent"
+  | "disciplineIndex"
+  | "elapsedPercent"
+  | "overspendPercent"
+  | "phaseAdherencePercent"
+  | "skipPatternScore";
 
 type NormalizedSessionExecutionMode = Lowercase<SessionExecutionMode>;
 
@@ -162,6 +172,64 @@ const normalizeClientTimestamp = (
     "VALIDATION_ERROR",
     `Field "${fieldName}" must be a valid timestamp.`,
   );
+};
+
+const normalizePercentMetric = (
+  value: unknown,
+  fieldName: string,
+): number => {
+  const normalizedValue = normalizeNonNegativeNumber(value, fieldName);
+
+  if (normalizedValue > 100) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Field "${fieldName}" must be between 0 and 100.`,
+    );
+  }
+
+  return normalizedValue;
+};
+
+const normalizeAdaptivePhaseSnapshot = (
+  value: unknown,
+): AdaptivePhaseSessionSnapshot | null => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (!isPlainObject(value)) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      "Field \"adaptivePhaseSnapshot\" must be an object.",
+    );
+  }
+
+  const currentPhase = normalizeRequiredString(
+    value.currentPhase,
+    "adaptivePhaseSnapshot.currentPhase",
+  );
+  const percentFields: AdaptivePhaseMetricField[] = [
+    "answeredPercent",
+    "difficultyCompliancePercent",
+    "disciplineIndex",
+    "elapsedPercent",
+    "overspendPercent",
+    "phaseAdherencePercent",
+    "skipPatternScore",
+  ];
+
+  const normalizedSnapshot = percentFields.reduce(
+    (accumulator, fieldName) => ({
+      ...accumulator,
+      [fieldName]: normalizePercentMetric(
+        value[fieldName],
+        `adaptivePhaseSnapshot.${fieldName}`,
+      ),
+    }),
+    {currentPhase} as AdaptivePhaseSessionSnapshot,
+  );
+
+  return normalizedSnapshot;
 };
 
 const normalizeOptionalTimestampMillis = (
@@ -572,6 +640,9 @@ export class AnswerBatchService {
       "millisecondsSinceLastWrite",
     );
     const normalizedAnswers = normalizeAnswerWrites(input.answers);
+    const adaptivePhaseSnapshot = normalizeAdaptivePhaseSnapshot(
+      input.adaptivePhaseSnapshot,
+    );
 
     sessionService.assertAnswerWriteBatchingConstraints(
       normalizedAnswers.length,
@@ -675,6 +746,14 @@ export class AnswerBatchService {
       const updatePayload: Record<string, unknown> = {
         updatedAt: FieldValue.serverTimestamp(),
       };
+      let adaptivePhaseSnapshotPersisted = false;
+      if (adaptivePhaseSnapshot) {
+        updatePayload.adaptivePhaseSnapshot = {
+          ...adaptivePhaseSnapshot,
+          updatedAt: FieldValue.serverTimestamp(),
+        };
+        adaptivePhaseSnapshotPersisted = true;
+      }
       const blockedQuestionIds: string[] = [];
       const persistedQuestionIds: string[] = [];
       const ignoredQuestionIds: string[] = [];
@@ -784,6 +863,7 @@ export class AnswerBatchService {
       transaction.update(sessionReference, updatePayload);
 
       return {
+        adaptivePhaseSnapshotPersisted,
         blockedQuestionIds,
         ignoredQuestionIds,
         lockedQuestionIds,
@@ -801,6 +881,8 @@ export class AnswerBatchService {
     });
 
     this.logger.info("Incremental answer batch persisted", {
+      adaptivePhaseSnapshotPersisted:
+        writeResult.adaptivePhaseSnapshotPersisted,
       blockedQuestionIds: writeResult.blockedQuestionIds,
       ignoredQuestionIds: writeResult.ignoredQuestionIds,
       instituteId,
@@ -820,6 +902,8 @@ export class AnswerBatchService {
     });
 
     return {
+      adaptivePhaseSnapshotPersisted:
+        writeResult.adaptivePhaseSnapshotPersisted,
       blockedQuestionIds: writeResult.blockedQuestionIds,
       ignoredQuestionIds: writeResult.ignoredQuestionIds,
       lockedQuestionIds: writeResult.lockedQuestionIds,
