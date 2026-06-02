@@ -1,3 +1,5 @@
+import {ExamOperationalDataAccessPolicy} from "./dataTierPartition";
+
 export type SessionStatus =
   "created" |
   "started" |
@@ -87,6 +89,7 @@ export interface SessionDocumentInitializationRecord {
   instituteId: string;
   licenseSnapshot: Record<string, unknown>;
   mode: SessionExecutionMode;
+  operationalDataAccessPolicy: ExamOperationalDataAccessPolicy;
   phaseConfigSnapshot: Record<string, unknown>;
   questionTimeMap: SessionQuestionTimeMap;
   riskModelVersion: string;
@@ -108,6 +111,7 @@ export interface SessionDocumentInitializationRecord {
 }
 
 export interface SessionStartResult {
+  operationalDataAccessPolicy: ExamOperationalDataAccessPolicy;
   sessionId: string;
   sessionPath: string;
   sessionToken: string;
@@ -123,6 +127,7 @@ export interface SessionEntryValidationResult {
   instituteId: string;
   licenseSnapshot: Record<string, unknown>;
   mode: SessionExecutionMode;
+  operationalDataAccessPolicy: ExamOperationalDataAccessPolicy;
   phaseConfigSnapshot: Record<string, unknown>;
   runId: string;
   sessionId: string;

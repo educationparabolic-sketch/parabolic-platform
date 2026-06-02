@@ -218,6 +218,26 @@ const assertStructuredError = (
 test("exam start handler accepts a valid student request", async () => {
   const handler = createExamStartHandler({
     startSession: async () => ({
+      operationalDataAccessPolicy: {
+        allowedOperationalCollections: ["sessions"],
+        archiveExportPolicy: "BigQuery export only during academic-year archive",
+        liveSessionPath:
+          "institutes/inst_build_50/academicYears/2026/runs/run_build_50/" +
+          "sessions/session_build_50",
+        prohibitedRuntimeSources: [
+          "runAnalytics",
+          "studentYearMetrics",
+          "questionAnalytics",
+          "BigQuery",
+        ],
+        summarySinksAfterSubmission: [
+          "runAnalytics",
+          "studentYearMetrics",
+          "questionAnalytics",
+        ],
+        tier: "HOT",
+        writeModel: "incremental session document updates",
+      },
       sessionId: "session_build_50",
       sessionPath:
         "institutes/inst_build_50/academicYears/2026/runs/run_build_50/" +
@@ -1329,6 +1349,26 @@ test("exam session answers handler accepts a valid request", async () => {
       maxTimeViolations: [],
       minTimeEnforcementLevel: "none",
       minTimeViolations: [],
+      operationalDataAccessPolicy: {
+        allowedOperationalCollections: ["sessions"],
+        archiveExportPolicy: "BigQuery export only during academic-year archive",
+        liveSessionPath:
+          "institutes/inst_build_50/academicYears/2026/runs/run_build_50/" +
+          "sessions/session_build_50",
+        prohibitedRuntimeSources: [
+          "runAnalytics",
+          "studentYearMetrics",
+          "questionAnalytics",
+          "BigQuery",
+        ],
+        summarySinksAfterSubmission: [
+          "runAnalytics",
+          "studentYearMetrics",
+          "questionAnalytics",
+        ],
+        tier: "HOT",
+        writeModel: "incremental session document updates",
+      },
       persistedQuestionIds: ["q1"],
       sessionPath:
         "institutes/inst_build_50/academicYears/2026/runs/run_build_50/" +
@@ -1381,6 +1421,16 @@ test("exam session answers handler accepts a valid request", async () => {
     (response.body as {data: {persistedQuestionIds: string[]}})
       .data.persistedQuestionIds[0],
     "q1",
+  );
+  assert.equal(
+    (
+      response.body as {
+        data: {
+          operationalDataAccessPolicy: {tier: string};
+        };
+      }
+    ).data.operationalDataAccessPolicy.tier,
+    "HOT",
   );
 });
 

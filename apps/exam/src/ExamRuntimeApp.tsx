@@ -857,6 +857,10 @@ function getQuestionIndex(questions: SessionQuestion[], questionId: string): num
   return questions.findIndex((question) => question.id === questionId);
 }
 
+function getPublicQuestionFieldKey(question: SessionQuestion): string {
+  return `question-${question.number}`;
+}
+
 function getPhaseId(elapsedPercent: number, phaseConfigSnapshot: PhaseConfigSnapshot): PhaseId {
   const phase1Cutoff = phaseConfigSnapshot.phase1Percent;
   const phase2Cutoff = phaseConfigSnapshot.phase1Percent + phaseConfigSnapshot.phase2Percent;
@@ -1017,7 +1021,10 @@ function ScientificCalculatorModal(props: { open: boolean; onClose: () => void }
         onClick={(event) => event.stopPropagation()}
       >
         <header className="exam-calculator-header">
-          <h2>Scientific Calculator</h2>
+          <div>
+            <p className="exam-calculator-eyebrow">On-screen Utility</p>
+            <h2>Scientific Calculator</h2>
+          </div>
           <button type="button" className="exam-calculator-close" onClick={onClose}>
             Close
           </button>
@@ -1040,6 +1047,7 @@ function ScientificCalculatorModal(props: { open: boolean; onClose: () => void }
 
         {error ? <p className="exam-calculator-error">{error}</p> : null}
 
+        <div className="exam-calculator-section-label">Numeric Keypad</div>
         <div className="exam-calculator-grid" aria-label="Arithmetic keypad">
           {CALCULATOR_KEYS.map((key) => (
             <button
@@ -1056,6 +1064,7 @@ function ScientificCalculatorModal(props: { open: boolean; onClose: () => void }
           ))}
         </div>
 
+        <div className="exam-calculator-section-label">Scientific Operations</div>
         <div className="exam-calculator-operations" aria-label="Scientific operations">
           <button type="button" onClick={() => runScientificOperation("sqrt")}>sqrt</button>
           <button type="button" onClick={() => runScientificOperation("square")}>x²</button>
@@ -1068,9 +1077,9 @@ function ScientificCalculatorModal(props: { open: boolean; onClose: () => void }
           <button type="button" onClick={() => runScientificOperation("tan")}>tan</button>
           <button type="button" onClick={() => runScientificOperation("pi")}>pi</button>
           <button type="button" onClick={() => runScientificOperation("e")}>e</button>
-          <button type="button" onClick={() => runScientificOperation("backspace")}>backspace</button>
-          <button type="button" onClick={() => runScientificOperation("clear")}>clear</button>
-          <button type="button" onClick={() => runScientificOperation("equals")}>equals</button>
+          <button type="button" className="exam-calculator-utility-key" onClick={() => runScientificOperation("backspace")}>Bksp</button>
+          <button type="button" className="exam-calculator-utility-key" onClick={() => runScientificOperation("clear")}>Clear</button>
+          <button type="button" className="exam-calculator-equals-key" onClick={() => runScientificOperation("equals")}>=</button>
         </div>
       </section>
     </div>
@@ -1117,6 +1126,9 @@ function ExamSessionPage() {
   const [slowdownUntilMs, setSlowdownUntilMs] = useState<number | null>(null);
   const [rushedAttemptStreak, setRushedAttemptStreak] = useState(0);
   const adaptivePhaseSnapshotRef = useRef<AdaptivePhaseSnapshot | null>(null);
+  const preloadedQuestionImageUrlsRef = useRef<Set<string>>(new Set());
+  const cachedQuestionSnapshotsRef = useRef<Map<string, SessionQuestion>>(new Map());
+  const questionSnapshotReadCountRef = useRef<Map<string, number>>(new Map());
   const [skippedQuestionsCount, setSkippedQuestionsCount] = useState(0);
   const [sessionLifecycleState, setSessionLifecycleState] = useState<SessionLifecycleState>("created");
   const [submittedAtIso, setSubmittedAtIso] = useState<string | null>(null);
@@ -1144,6 +1156,7 @@ function ExamSessionPage() {
   const isDiagnosticMode = entryValidation.claims.mode === "Diagnostic";
   const isControlledMode = entryValidation.claims.mode === "Controlled";
   const isHardMode = entryValidation.claims.mode === "Hard";
+  const hardModeMinimalUI = isHardMode;
   const enforcementMode = isControlledMode || isHardMode;
   const isSubmitted = sessionLifecycleState === "submitted";
   const tokenExpiryEpochSec = entryValidation.claims.exp;
@@ -1756,9 +1769,36 @@ function ExamSessionPage() {
     [palette, selectedSection],
   );
 
-  const selectedQuestion = sessionSnapshot.questions.find((question) => question.id === selectedQuestionId) ?? sessionSnapshot.questions[0];
+  const questionSnapshotById = useMemo(
+    () => new Map(sessionSnapshot.questions.map((question) => [question.id, question])),
+    [sessionSnapshot.questions],
+  );
+
+  const selectedQuestion = useMemo(() => {
+    const fallbackQuestion = sessionSnapshot.questions[0];
+    const resolvedQuestion =
+      cachedQuestionSnapshotsRef.current.get(selectedQuestionId) ??
+      questionSnapshotById.get(selectedQuestionId) ??
+      fallbackQuestion;
+
+    if (!resolvedQuestion) {
+      return undefined;
+    }
+
+    if (!cachedQuestionSnapshotsRef.current.has(resolvedQuestion.id)) {
+      cachedQuestionSnapshotsRef.current.set(resolvedQuestion.id, resolvedQuestion);
+      questionSnapshotReadCountRef.current.set(resolvedQuestion.id, 1);
+    }
+
+    return cachedQuestionSnapshotsRef.current.get(resolvedQuestion.id) ?? resolvedQuestion;
+  }, [questionSnapshotById, selectedQuestionId, sessionSnapshot.questions]);
   const selectedQuestionIndex = getQuestionIndex(sessionSnapshot.questions, selectedQuestion?.id ?? "");
-  const nextQuestion = selectedQuestionIndex >= 0 ? sessionSnapshot.questions[selectedQuestionIndex + 1] : null;
+  const nextQuestionId = selectedQuestionIndex >= 0 ? sessionSnapshot.questions[selectedQuestionIndex + 1]?.id : null;
+  const nextQuestion = nextQuestionId
+    ? cachedQuestionSnapshotsRef.current.get(nextQuestionId) ?? questionSnapshotById.get(nextQuestionId) ?? null
+    : null;
+  const nextQuestionImageSrc = nextQuestion?.imageUrl ? toCdnAssetUrl(nextQuestion.imageUrl) : null;
+  const selectedQuestionReadCount = selectedQuestion ? questionSnapshotReadCountRef.current.get(selectedQuestion.id) ?? 1 : 0;
   const selectedResponseState = selectedQuestion
     ? responseStateByQuestionId[selectedQuestion.id]
     : undefined;
@@ -1767,13 +1807,37 @@ function ExamSessionPage() {
     : undefined;
 
   useEffect(() => {
-    if (!nextQuestion?.imageUrl) {
+    cachedQuestionSnapshotsRef.current.clear();
+    questionSnapshotReadCountRef.current.clear();
+
+    const firstQuestion = sessionSnapshot.questions[0];
+    if (!firstQuestion) {
       return;
     }
 
+    cachedQuestionSnapshotsRef.current.set(firstQuestion.id, firstQuestion);
+    questionSnapshotReadCountRef.current.set(firstQuestion.id, 1);
+  }, [sessionSnapshot.questions]);
+
+  useEffect(() => {
+    if (!nextQuestionImageSrc || preloadedQuestionImageUrlsRef.current.has(nextQuestionImageSrc)) {
+      return;
+    }
+
+    const preloadLink = document.createElement("link");
+    preloadLink.rel = "preload";
+    preloadLink.as = "image";
+    preloadLink.href = nextQuestionImageSrc;
+    document.head.appendChild(preloadLink);
+
     const preloadedImage = new Image();
-    preloadedImage.src = toCdnAssetUrl(nextQuestion.imageUrl);
-  }, [nextQuestion?.imageUrl]);
+    preloadedImage.src = nextQuestionImageSrc;
+    preloadedQuestionImageUrlsRef.current.add(nextQuestionImageSrc);
+
+    return () => {
+      preloadLink.remove();
+    };
+  }, [nextQuestionImageSrc]);
 
   useEffect(() => {
     if (!isHardMode || !selectedQuestion || isSubmitted) {
@@ -2036,24 +2100,47 @@ function ExamSessionPage() {
           <header className="exam-instruction-header">
             <p className="exam-instruction-eyebrow">Exam Entry</p>
             <h1 id="exam-instruction-title">Instructions</h1>
-            <p>
-              Session ID:
-              {" "}
-              <code>{sessionId}</code>
-            </p>
-            <p>
-              Candidate:
-              {" "}
-              <strong>{candidateName}</strong>
-            </p>
+            <div className="exam-instruction-meta-grid" aria-label="Instruction summary">
+              <div className="exam-instruction-meta-card">
+                <span>Total Questions</span>
+                <strong>{sessionSnapshot.questions.length}</strong>
+              </div>
+              <div className="exam-instruction-meta-card">
+                <span>Total Duration</span>
+                <strong>{EXAM_DURATION_MINUTES} Minutes</strong>
+              </div>
+              <div className="exam-instruction-meta-card">
+                <span>Attempt Model</span>
+                <strong>{entryValidation.claims.mode}</strong>
+              </div>
+              <div className="exam-instruction-meta-card">
+                <span>Negative Marking</span>
+                <strong>-1 for incorrect MCQ</strong>
+              </div>
+            </div>
+            <div className="exam-instruction-candidate-strip">
+              <p>
+                Candidate Name:
+                {" "}
+                <strong>{candidateName}</strong>
+              </p>
+              <p>
+                Session ID:
+                {" "}
+                <code>{sessionId}</code>
+              </p>
+            </div>
           </header>
 
           <section className="exam-instruction-section" aria-label="General Instructions">
             <h2>1. General Instructions</h2>
             <ul>
+              <li>Total questions: {sessionSnapshot.questions.length}.</li>
+              <li>Total duration: {EXAM_DURATION_MINUTES} minutes.</li>
+              <li>Attempt this paper only through the current signed exam session.</li>
               <li>This portal follows a server-authoritative execution model.</li>
               <li>Do not refresh or close the tab during the attempt.</li>
-              <li>Use only this session URL with the signed token provided by the backend.</li>
+              <li>Use the question palette and footer controls exactly as displayed on screen.</li>
             </ul>
           </section>
 
@@ -2068,11 +2155,20 @@ function ExamSessionPage() {
 
           <section className="exam-instruction-section" aria-label="Question Palette Explanation">
             <h2>3. Question Palette Explanation</h2>
-            <div className="exam-legend-grid">
+            <div className="exam-legend-grid exam-legend-grid-instructions">
               {QUESTION_PALETTE_LEGEND.map((legend) => (
                 <div key={legend.status} className="exam-legend-item">
                   <span className={`exam-legend-swatch ${statusClassName(legend.status)}`}>{legend.label.split(" ")[0]}</span>
-                  <span>{legend.label}</span>
+                  <span className="exam-legend-copy">
+                    <strong>{legend.label}</strong>
+                    <span>
+                      {legend.status === "not_visited" ? "You have not visited the question yet." : null}
+                      {legend.status === "not_answered" ? "You have not answered the question." : null}
+                      {legend.status === "answered" ? "You have answered the question." : null}
+                      {legend.status === "marked" ? "You have marked the question for review." : null}
+                      {legend.status === "answered_marked" ? "You have answered the question and marked it for review." : null}
+                    </span>
+                  </span>
                 </div>
               ))}
             </div>
@@ -2089,7 +2185,7 @@ function ExamSessionPage() {
 
           <section className="exam-instruction-section" aria-label="Mode Specific Instructions">
             <h2>5. Mode-Specific Instructions</h2>
-            <p>
+            <p className="exam-mode-instruction-title">
               <strong>{modeInstruction.title}</strong>
             </p>
             <ul>
@@ -2108,8 +2204,9 @@ function ExamSessionPage() {
                 checked={declarationAccepted}
                 onChange={(event) => setDeclarationAccepted(event.target.checked)}
               />
-              I have read all instructions and agree to begin the test under monitored exam conditions.
+              I have read and understood the instructions. I am ready to begin the test under monitored exam conditions.
             </label>
+            <p className="exam-instruction-start-note">7. The Start Test button will be enabled only after the declaration is accepted.</p>
             <button
               type="button"
               className="exam-start-button"
@@ -2356,14 +2453,24 @@ function ExamSessionPage() {
   }
 
   return (
-    <main className="exam-runner-shell">
+    <main className={hardModeMinimalUI ? "exam-runner-shell exam-runner-shell-hard-mode" : "exam-runner-shell"}>
+      <div className="exam-top-bar">
       <header className="exam-header" aria-label="Exam header bar">
-        <div className="exam-header-group">
+        <div className="exam-header-group exam-header-identity exam-header-identity-compact">
           <p className="exam-header-label">Candidate</p>
           <h1>{candidateName}</h1>
+          {!hardModeMinimalUI ? (
+            <>
+              <p className="exam-header-identity-meta">
+                App No:
+                {" "}
+                <strong>EXM-{sessionSnapshot.sessionId.slice(-8).toUpperCase()}</strong>
+              </p>
+            </>
+          ) : null}
         </div>
 
-        <div className="exam-header-group exam-header-metrics">
+        <div className="exam-header-group exam-header-metrics exam-header-metrics-compact">
           <p>
             Question:
             {" "}
@@ -2376,17 +2483,7 @@ function ExamSessionPage() {
             {" "}
             <strong>{entryValidation.claims.mode}</strong>
           </p>
-          <p>
-            Version:
-            {" "}
-            <strong>{sessionSnapshot.questionSetVersion}</strong>
-          </p>
-          <p>
-            Lifecycle:
-            {" "}
-            <strong>{sessionLifecycleState}</strong>
-          </p>
-          {!isOperationalMode ? (
+          {!isOperationalMode && !hardModeMinimalUI ? (
             <p>
               Phase:
               {" "}
@@ -2397,42 +2494,30 @@ function ExamSessionPage() {
 
         <div className="exam-header-group exam-header-timer-group">
           <p className="exam-header-label">Time Left</p>
-          <p className={isFinalWindow ? "exam-header-timer danger" : "exam-header-timer"}>
-            {toCountdownLabel(remainingMs)}
-          </p>
-          <p className="exam-sync-indicator">Server Sync #{syncCounter}</p>
-          <p className={syncState === "error" ? "exam-sync-indicator error" : "exam-sync-indicator"}>
-            Sync State:
-            {" "}
-            <strong>{syncState.toUpperCase()}</strong>
-          </p>
-          <p className="exam-sync-indicator">{syncMessage}</p>
-          <p className="exam-sync-indicator">
-            Pending Batch Size:
-            {" "}
-            <strong>{pendingAnswers.length}</strong>
-          </p>
-          <p className="exam-sync-indicator">
-            Last Heartbeat:
-            {" "}
-            <strong>{lastHeartbeatAtIso ?? "N/A"}</strong>
-          </p>
-          <p className="exam-sync-indicator">
-            Token Refresh:
-            {" "}
-            <strong>{sessionTokenRefreshAtIso ?? "Not required yet"}</strong>
-          </p>
-          <button
-            type="button"
-            className="exam-calculator-launch"
-            onClick={() => setCalculatorOpen(true)}
-          >
-            Open Calculator
-          </button>
+          <div className="exam-header-timer-row">
+            <p className={isFinalWindow ? "exam-header-timer danger" : "exam-header-timer"}>
+              {toCountdownLabel(remainingMs)}
+            </p>
+            <button
+              type="button"
+              className="exam-calculator-launch"
+              onClick={() => setCalculatorOpen(true)}
+            >
+              Calculator
+            </button>
+          </div>
+          {!hardModeMinimalUI ? (
+            <>
+              <p className={syncState === "error" ? "exam-sync-summary error" : "exam-sync-summary"}>
+                Sync #{syncCounter} • {syncState.toUpperCase()} • Pending {pendingAnswers.length} • Heartbeat {lastHeartbeatAtIso ?? "N/A"} • Refresh {sessionTokenRefreshAtIso ?? "Not required"}
+              </p>
+              <p className="exam-sync-indicator">{syncMessage}</p>
+            </>
+          ) : null}
         </div>
       </header>
 
-      <div className="exam-header-subject-tabs" role="tablist" aria-label="Header subject tabs">
+      <div className={hardModeMinimalUI ? "exam-header-subject-tabs exam-header-subject-tabs-hard-mode" : "exam-header-subject-tabs"} role="tablist" aria-label="Header subject tabs">
         {sessionSnapshot.subjects.map((subject) => (
           <button
             key={subject}
@@ -2454,6 +2539,7 @@ function ExamSessionPage() {
         >
           All Subjects
         </button>
+      </div>
       </div>
 
       {(isDiagnosticMode || isControlledMode) && !slowdownActive ? (
@@ -2529,11 +2615,21 @@ function ExamSessionPage() {
         </section>
       ) : null}
 
+      {hardModeMinimalUI ? (
+        <section className="exam-hard-mode-strip" aria-label="Hard mode minimal guidance">
+          <p>Hard Mode active. Sequential progression and timing locks are enforced with minimal on-screen guidance.</p>
+        </section>
+      ) : null}
+
       <div className="exam-main-layout">
         <aside className="exam-palette-panel" aria-label="Question navigation panel">
           <div className="exam-palette-section-header">
             <h2>Question Palette</h2>
-            <p>Left vertical navigation with JEE-style square tiles.</p>
+            <p>
+              {hardModeMinimalUI
+                ? "Restricted navigation view."
+                : "Choose one answer type before saving. Review colors match the live exam palette."}
+            </p>
           </div>
 
           <div className="exam-section-filters" role="tablist" aria-label="Question section filters">
@@ -2573,6 +2669,34 @@ function ExamSessionPage() {
             })}
           </div>
 
+          {!hardModeMinimalUI ? (
+            <div className="exam-palette-legend" aria-label="Question palette legend">
+              <h3>Legend</h3>
+              <div className="exam-palette-legend-grid">
+                <div className="exam-palette-legend-item">
+                  <span className="exam-palette-legend-swatch exam-palette-tile-not-visited">1</span>
+                  <span>You have not visited the question yet.</span>
+                </div>
+                <div className="exam-palette-legend-item">
+                  <span className="exam-palette-legend-swatch exam-palette-tile-not-answered">2</span>
+                  <span>You have not answered the question.</span>
+                </div>
+                <div className="exam-palette-legend-item">
+                  <span className="exam-palette-legend-swatch exam-palette-tile-answered">3</span>
+                  <span>You have answered the question.</span>
+                </div>
+                <div className="exam-palette-legend-item">
+                  <span className="exam-palette-legend-swatch exam-palette-tile-marked">4</span>
+                  <span>You have marked the question for review.</span>
+                </div>
+                <div className="exam-palette-legend-item">
+                  <span className="exam-palette-legend-swatch exam-palette-tile-answered-marked">5</span>
+                  <span>You answered the question and marked it for review.</span>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           <div className="exam-status-indicators" aria-label="Answer status indicators">
             <h3>Status Indicators</h3>
             <p>
@@ -2595,21 +2719,25 @@ function ExamSessionPage() {
               {" "}
               <strong>{hardModeLockedQuestionIds.size}</strong>
             </p>
-            <p>
-              Phase Adherence:
-              {" "}
-              <strong>{adaptivePhaseSnapshot.phaseAdherencePercent.toFixed(1)}%</strong>
-            </p>
-            <p>
-              Difficulty Compliance:
-              {" "}
-              <strong>{adaptivePhaseSnapshot.difficultyCompliancePercent.toFixed(1)}%</strong>
-            </p>
-            <p>
-              Skip Pattern:
-              {" "}
-              <strong>{adaptivePhaseSnapshot.skipPatternScore.toFixed(1)}%</strong>
-            </p>
+            {!hardModeMinimalUI ? (
+              <>
+                <p>
+                  Phase Adherence:
+                  {" "}
+                  <strong>{adaptivePhaseSnapshot.phaseAdherencePercent.toFixed(1)}%</strong>
+                </p>
+                <p>
+                  Difficulty Compliance:
+                  {" "}
+                  <strong>{adaptivePhaseSnapshot.difficultyCompliancePercent.toFixed(1)}%</strong>
+                </p>
+                <p>
+                  Skip Pattern:
+                  {" "}
+                  <strong>{adaptivePhaseSnapshot.skipPatternScore.toFixed(1)}%</strong>
+                </p>
+              </>
+            ) : null}
           </div>
 
           <div className="exam-submit-controls" aria-label="Submit controls">
@@ -2637,11 +2765,17 @@ function ExamSessionPage() {
               {" "}
               {selectedQuestion?.number ?? 1}
             </h2>
-            <p>
-              Snapshot:
-              {" "}
-              <code>{sessionSnapshot.sessionId}</code>
-            </p>
+            {!hardModeMinimalUI ? (
+              <p>
+                Snapshot:
+                {" "}
+                <code>{sessionSnapshot.sessionId}</code>
+                {" "}
+                • Question Load Budget:
+                {" "}
+                <strong>{selectedQuestionReadCount} cached read</strong>
+              </p>
+            ) : null}
             <div className="exam-question-timing-metrics">
               <p>
                 MinTime Remaining:
@@ -2658,7 +2792,7 @@ function ExamSessionPage() {
                 {" "}
                 <strong>{selectedQuestionTimeSpentSec}s</strong>
               </p>
-              {isControlledMode ? (
+              {isControlledMode && !hardModeMinimalUI ? (
                 <p>
                   Recommended Avg:
                   {" "}
@@ -2670,6 +2804,11 @@ function ExamSessionPage() {
 
           {selectedQuestion && selectedResponseState ? (
             <article className="exam-question-surface">
+              {(() => {
+                const publicQuestionFieldKey = getPublicQuestionFieldKey(selectedQuestion);
+
+                return (
+                  <>
               <p className="exam-question-type">
                 Type:
                 {" "}
@@ -2710,7 +2849,7 @@ function ExamSessionPage() {
                     <label key={option.id} className="exam-option-item">
                       <input
                         type="radio"
-                        name={selectedQuestion.id}
+                        name={publicQuestionFieldKey}
                         checked={selectedResponseState.selectedOptionId === option.id}
                         onChange={() => {
                           if (selectedQuestionRevisitLocked || slowdownActive || sessionLocked) {
@@ -2738,9 +2877,9 @@ function ExamSessionPage() {
 
               {selectedQuestion.type === "numeric" ? (
                 <div className="exam-numeric-response">
-                  <label htmlFor={`numeric-${selectedQuestion.id}`}>Numeric response</label>
+                  <label htmlFor={`numeric-${publicQuestionFieldKey}`}>Numeric response</label>
                   <input
-                    id={`numeric-${selectedQuestion.id}`}
+                    id={`numeric-${publicQuestionFieldKey}`}
                     type="text"
                     value={selectedResponseState.numericResponse}
                     onChange={(event) => {
@@ -2806,6 +2945,7 @@ function ExamSessionPage() {
               <footer className="exam-question-actions" aria-label="Question interaction controls">
                 <button
                   type="button"
+                  className="exam-secondary-action"
                   onClick={goToPreviousQuestion}
                   disabled={
                     selectedQuestionIndex <= 0 ||
@@ -2819,6 +2959,7 @@ function ExamSessionPage() {
                 </button>
                 <button
                   type="button"
+                  className="exam-warning-action"
                   onClick={() => {
                     if (selectedQuestionRevisitLocked || slowdownActive || sessionLocked) {
                       return;
@@ -2837,6 +2978,7 @@ function ExamSessionPage() {
                 </button>
                 <button
                   type="button"
+                  className="exam-neutral-action"
                   onClick={() => {
                     if (selectedQuestionRevisitLocked || slowdownActive || sessionLocked) {
                       return;
@@ -2878,6 +3020,9 @@ function ExamSessionPage() {
               {isHardMode && selectedQuestionTiming?.maxTimeLocked ? (
                 <p className="exam-hard-mode-notice">MaxTime reached. Question auto-locked by Hard Mode timing policy.</p>
               ) : null}
+                  </>
+                );
+              })()}
             </article>
           ) : null}
         </section>

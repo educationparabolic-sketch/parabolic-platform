@@ -1,6 +1,7 @@
 import {FieldValue} from "firebase-admin/firestore";
 import {createLogger} from "./logging";
 import {SessionStartValidationError, sessionService} from "./session";
+import {dataTierPartitionService} from "./dataTierPartition";
 import {getFirestore} from "../utils/firebaseAdmin";
 import {
   AdaptivePhaseSessionSnapshot,
@@ -405,6 +406,7 @@ const evaluateMaxTimeViolation = (
 
 const EPOCH_MILLISECONDS_FLOOR = 100_000_000_000;
 const TIMING_CLOCK_SKEW_TOLERANCE_MS = 5000;
+const TIMING_FUTURE_SKEW_TOLERANCE_MS = 30_000;
 
 const isLikelyEpochMillis = (value: number): boolean =>
   Number.isFinite(value) && value >= EPOCH_MILLISECONDS_FLOOR;
@@ -431,11 +433,22 @@ const buildQuestionTimingUpdate = (
   answer: NormalizedAnswerWrite,
   questionTimeRecord: NormalizedQuestionTimeRecord,
   sessionStartMillis: number | null,
+  serverNowMillis: number,
 ): Pick<
   SessionQuestionTimeRecord,
   "cumulativeTimeSpent" | "enteredAt" | "exitedAt" | "lastEntryTimestamp"
 > => {
   const reportedDurationMillis = answer.timeSpent * 1000;
+
+  if (
+    isLikelyEpochMillis(answer.clientTimestamp) &&
+    answer.clientTimestamp > serverNowMillis + TIMING_FUTURE_SKEW_TOLERANCE_MS
+  ) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      "Timing event timestamp cannot be in the future.",
+    );
+  }
 
   if (
     sessionStartMillis !== null &&
@@ -497,6 +510,48 @@ const buildQuestionTimingUpdate = (
     exitedAt: answer.clientTimestamp,
     lastEntryTimestamp: enteredAt,
   };
+};
+
+const calculateCumulativeQuestionTimeSpent = (
+  questionTimeMap: Record<string, unknown>,
+): number => Object.entries(questionTimeMap).reduce(
+  (total, [questionId, value]) => {
+    const questionTimeRecord = normalizeQuestionTimeRecord(
+      value,
+      `questionTimeMap.${questionId}`,
+    );
+
+    return total + questionTimeRecord.cumulativeTimeSpent;
+  },
+  0,
+);
+
+const assertProjectedSessionTimeWithinElapsed = (
+  projectedCumulativeTimeSpent: number,
+  answer: NormalizedAnswerWrite,
+  sessionStartMillis: number | null,
+): void => {
+  if (
+    sessionStartMillis === null ||
+    !isLikelyEpochMillis(sessionStartMillis) ||
+    !isLikelyEpochMillis(answer.clientTimestamp)
+  ) {
+    return;
+  }
+
+  const elapsedSinceSessionStartSeconds =
+    (answer.clientTimestamp - sessionStartMillis) / 1000;
+  const toleranceSeconds = TIMING_CLOCK_SKEW_TOLERANCE_MS / 1000;
+
+  if (
+    projectedCumulativeTimeSpent >
+    elapsedSinceSessionStartSeconds + toleranceSeconds
+  ) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      "Projected question time exceeds elapsed session duration.",
+    );
+  }
 };
 
 const normalizeAnswerWrites = (answers: unknown): NormalizedAnswerWrite[] => {
@@ -742,6 +797,7 @@ export class AnswerBatchService {
       }
 
       const sessionStartMillis = resolveSessionStartMillis(sessionData);
+      const serverNowMillis = Date.now();
 
       const updatePayload: Record<string, unknown> = {
         updatedAt: FieldValue.serverTimestamp(),
@@ -761,6 +817,9 @@ export class AnswerBatchService {
       const maxTimeViolations: MaxTimeViolation[] = [];
       const minTimeViolations: MinTimeViolation[] = [];
       const questionTimingMetrics: QuestionTimingMetric[] = [];
+      let projectedCumulativeTimeSpent =
+        calculateCumulativeQuestionTimeSpent(storedQuestionTimeMap);
+      let maxValidatedClientTimestamp = 0;
 
       for (const answer of normalizedAnswers) {
         const questionTimeRecord = normalizeQuestionTimeRecord(
@@ -799,6 +858,20 @@ export class AnswerBatchService {
           answer,
           questionTimeRecord,
           sessionStartMillis,
+          serverNowMillis,
+        );
+        const cumulativeDelta =
+          timingUpdate.cumulativeTimeSpent -
+          questionTimeRecord.cumulativeTimeSpent;
+        projectedCumulativeTimeSpent += Math.max(cumulativeDelta, 0);
+        assertProjectedSessionTimeWithinElapsed(
+          projectedCumulativeTimeSpent,
+          answer,
+          sessionStartMillis,
+        );
+        maxValidatedClientTimestamp = Math.max(
+          maxValidatedClientTimestamp,
+          answer.clientTimestamp,
         );
         const minTimeViolation = evaluateMinTimeViolation(
           minTimeEnforcementLevel,
@@ -860,6 +933,17 @@ export class AnswerBatchService {
         persistedQuestionIds.push(answer.questionId);
       }
 
+      updatePayload.timingTamperValidation = {
+        clientTimestampMax: maxValidatedClientTimestamp || null,
+        projectedCumulativeTimeSpent,
+        serverElapsedSeconds:
+          sessionStartMillis !== null && isLikelyEpochMillis(sessionStartMillis) ?
+            Number(((serverNowMillis - sessionStartMillis) / 1000).toFixed(2)) :
+            null,
+        status: "validated",
+        validatedAt: FieldValue.serverTimestamp(),
+      };
+
       transaction.update(sessionReference, updatePayload);
 
       return {
@@ -911,6 +995,10 @@ export class AnswerBatchService {
       maxTimeViolations: writeResult.maxTimeViolations,
       minTimeEnforcementLevel: writeResult.minTimeEnforcementLevel,
       minTimeViolations: writeResult.minTimeViolations,
+      operationalDataAccessPolicy:
+        dataTierPartitionService.buildExamOperationalDataAccessPolicy(
+          sessionPath,
+        ),
       persistedQuestionIds: writeResult.persistedQuestionIds,
       sessionPath,
       timingMetricsExport: writeResult.timingMetricsExport,

@@ -14,6 +14,25 @@ export interface RunPartitionState {
   tier: DataTier;
 }
 
+export interface ExamOperationalDataAccessPolicy {
+  allowedOperationalCollections: ["sessions"];
+  archiveExportPolicy: "BigQuery export only during academic-year archive";
+  liveSessionPath: string;
+  prohibitedRuntimeSources: [
+    "runAnalytics",
+    "studentYearMetrics",
+    "questionAnalytics",
+    "BigQuery",
+  ];
+  summarySinksAfterSubmission: [
+    "runAnalytics",
+    "studentYearMetrics",
+    "questionAnalytics",
+  ];
+  tier: "HOT";
+  writeModel: "incremental session document updates";
+}
+
 /**
  * Raised when a request attempts to use an academic-year partition outside its
  * permitted operational tier.

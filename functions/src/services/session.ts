@@ -788,6 +788,10 @@ export class SessionService {
     });
 
     return {
+      operationalDataAccessPolicy:
+        dataTierPartitionService.buildExamOperationalDataAccessPolicy(
+          sessionPath,
+        ),
       sessionId,
       sessionPath,
       sessionToken,
@@ -907,6 +911,10 @@ export class SessionService {
       instituteId,
       licenseSnapshot,
       mode,
+      operationalDataAccessPolicy:
+        dataTierPartitionService.buildExamOperationalDataAccessPolicy(
+          sessionPath,
+        ),
       phaseConfigSnapshot,
       runId,
       sessionId: routeSessionId,
@@ -1151,6 +1159,13 @@ export class SessionService {
       instituteId: context.instituteId,
       licenseSnapshot: context.licenseSnapshot,
       mode: context.mode,
+      operationalDataAccessPolicy:
+        dataTierPartitionService.buildExamOperationalDataAccessPolicy(
+          `${INSTITUTES_COLLECTION}/${context.instituteId}/` +
+            `${ACADEMIC_YEARS_COLLECTION}/${context.yearId}/` +
+            `${RUNS_COLLECTION}/${context.runId}/` +
+            `${SESSIONS_COLLECTION}/${context.sessionId}`,
+        ),
       phaseConfigSnapshot: context.phaseConfigSnapshot,
       questionTimeMap: context.questionTimeMap,
       riskModelVersion: context.riskModelVersion,

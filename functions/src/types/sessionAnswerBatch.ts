@@ -1,3 +1,5 @@
+import {ExamOperationalDataAccessPolicy} from "./dataTierPartition";
+
 export type AnswerBatchErrorCode =
   "FORBIDDEN" |
   "INTERNAL_ERROR" |
@@ -103,6 +105,7 @@ export interface PersistAnswerBatchResult {
   maxTimeViolations: MaxTimeViolation[];
   minTimeEnforcementLevel: MinTimeEnforcementLevel;
   minTimeViolations: MinTimeViolation[];
+  operationalDataAccessPolicy: ExamOperationalDataAccessPolicy;
   persistedQuestionIds: string[];
   sessionPath: string;
   timingMetricsExport: TimingMetricsExport;

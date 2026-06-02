@@ -391,6 +391,104 @@ test(
 );
 
 test(
+  "persistIncrementalAnswers rejects future client timestamps",
+  async () => {
+    const nowMillis = Date.now();
+    const sessionPath =
+      "institutes/inst_build_30/academicYears/2026/" +
+      "runs/run_build_30/sessions/session_build_38_future_timestamp";
+
+    await deleteIfPresent(sessionPath);
+    await seedSession(sessionPath);
+
+    await assert.rejects(
+      answerBatchService.persistIncrementalAnswers({
+        answers: [
+          {
+            clientTimestamp: nowMillis + 60_000,
+            questionId: "q02",
+            selectedOption: "B",
+            timeSpent: 20,
+          },
+        ],
+        context: {
+          instituteId: "inst_build_30",
+          runId: "run_build_30",
+          sessionId: "session_build_38_future_timestamp",
+          studentId: "student_build_30",
+          yearId: "2026",
+        },
+        millisecondsSinceLastWrite: 5000,
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof SessionStartValidationError);
+        assert.equal(error.code, "VALIDATION_ERROR");
+        assert.match(error.message, /timestamp cannot be in the future/i);
+        return true;
+      },
+    );
+
+    const snapshot = await firestore.doc(sessionPath).get();
+    const answerMap = snapshot.data()?.answerMap as Record<string, unknown>;
+    assert.equal(answerMap.q02, undefined);
+    assert.equal(snapshot.data()?.timingTamperValidation, undefined);
+
+    await deleteIfPresent(sessionPath);
+  },
+);
+
+test(
+  "persistIncrementalAnswers rejects projected cumulative time tampering",
+  async () => {
+    const nowMillis = Date.now();
+    const sessionStartMillis = nowMillis - 120_000;
+    const sessionPath =
+      "institutes/inst_build_30/academicYears/2026/" +
+      "runs/run_build_30/sessions/session_build_38_cumulative_tamper";
+
+    await deleteIfPresent(sessionPath);
+    await seedSession(sessionPath);
+
+    await assert.rejects(
+      answerBatchService.persistIncrementalAnswers({
+        answers: [
+          {
+            clientTimestamp: sessionStartMillis + 20_000,
+            questionId: "q02",
+            selectedOption: "C",
+            timeSpent: 20,
+          },
+        ],
+        context: {
+          instituteId: "inst_build_30",
+          runId: "run_build_30",
+          sessionId: "session_build_38_cumulative_tamper",
+          studentId: "student_build_30",
+          yearId: "2026",
+        },
+        millisecondsSinceLastWrite: 5000,
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof SessionStartValidationError);
+        assert.equal(error.code, "VALIDATION_ERROR");
+        assert.match(
+          error.message,
+          /projected question time exceeds elapsed session duration/i,
+        );
+        return true;
+      },
+    );
+
+    const snapshot = await firestore.doc(sessionPath).get();
+    const answerMap = snapshot.data()?.answerMap as Record<string, unknown>;
+    assert.equal(answerMap.q02, undefined);
+    assert.equal(snapshot.data()?.timingTamperValidation, undefined);
+
+    await deleteIfPresent(sessionPath);
+  },
+);
+
+test(
   "persistIncrementalAnswers tracks min-time violations in Diagnostic mode",
   async () => {
     const nowMillis = Date.now();

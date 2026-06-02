@@ -174,6 +174,7 @@ export const createExamSessionAnswersHandler = (
         maxTimeViolations: result.maxTimeViolations,
         minTimeEnforcementLevel: result.minTimeEnforcementLevel,
         minTimeViolations: result.minTimeViolations,
+        operationalDataAccessPolicy: result.operationalDataAccessPolicy,
         persistedQuestionIds: result.persistedQuestionIds,
         sessionPath: result.sessionPath,
         timingMetricsExport: result.timingMetricsExport,

@@ -5,6 +5,7 @@ import {
   DataTier,
   DataTierPartitionValidationError,
   RunPartitionState,
+  ExamOperationalDataAccessPolicy,
 } from "../types/dataTierPartition";
 
 const INSTITUTES_COLLECTION = "institutes";
@@ -74,6 +75,34 @@ export class DataTierPartitionService {
     default:
       return "HOT";
     }
+  }
+
+  /**
+   * Builds the exam-runtime data access contract from the live HOT session path.
+   * @param {string} sessionPath Active session document path.
+   * @return {ExamOperationalDataAccessPolicy} Runtime storage boundary.
+   */
+  public buildExamOperationalDataAccessPolicy(
+    sessionPath: string,
+  ): ExamOperationalDataAccessPolicy {
+    return {
+      allowedOperationalCollections: ["sessions"],
+      archiveExportPolicy: "BigQuery export only during academic-year archive",
+      liveSessionPath: sessionPath,
+      prohibitedRuntimeSources: [
+        "runAnalytics",
+        "studentYearMetrics",
+        "questionAnalytics",
+        "BigQuery",
+      ],
+      summarySinksAfterSubmission: [
+        "runAnalytics",
+        "studentYearMetrics",
+        "questionAnalytics",
+      ],
+      tier: "HOT",
+      writeModel: "incremental session document updates",
+    };
   }
 
   /**

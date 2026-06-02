@@ -1,3 +1,5 @@
+import {ExamOperationalDataAccessPolicy} from "./dataTierPartition";
+
 export type SubmissionErrorCode =
   "FORBIDDEN" |
   "INTERNAL_ERROR" |
@@ -46,6 +48,7 @@ export interface SubmissionResult extends SubmissionMetrics {
 export interface SubmissionResponseData {
   accuracyPercent: number;
   disciplineIndex: number;
+  operationalDataAccessPolicy: ExamOperationalDataAccessPolicy;
   rawScorePercent: number;
   riskState: SubmissionRiskState;
 }

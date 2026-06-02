@@ -133,6 +133,15 @@ test(
       result.sessionToken,
       new RegExp(`signed-session-token:uid_${studentId}:`),
     );
+    assert.equal(result.operationalDataAccessPolicy.tier, "HOT");
+    assert.equal(
+      result.operationalDataAccessPolicy.liveSessionPath,
+      result.sessionPath,
+    );
+    assert.deepEqual(
+      result.operationalDataAccessPolicy.allowedOperationalCollections,
+      ["sessions"],
+    );
 
     const sessionSnapshot = await firestore.doc(result.sessionPath).get();
     const sessionData = sessionSnapshot.data();
@@ -171,6 +180,24 @@ test(
       ],
       templateVersion: "7",
       testId: "test_build_26_success",
+    });
+    assert.deepEqual(sessionData?.operationalDataAccessPolicy, {
+      allowedOperationalCollections: ["sessions"],
+      archiveExportPolicy: "BigQuery export only during academic-year archive",
+      liveSessionPath: result.sessionPath,
+      prohibitedRuntimeSources: [
+        "runAnalytics",
+        "studentYearMetrics",
+        "questionAnalytics",
+        "BigQuery",
+      ],
+      summarySinksAfterSubmission: [
+        "runAnalytics",
+        "studentYearMetrics",
+        "questionAnalytics",
+      ],
+      tier: "HOT",
+      writeModel: "incremental session document updates",
     });
     assert.deepEqual(sessionData?.answerMap, {});
     assert.deepEqual(

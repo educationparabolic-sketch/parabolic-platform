@@ -97,6 +97,7 @@ export const createExamSessionEntryHandler = (
         instituteId: result.instituteId,
         licenseSnapshot: result.licenseSnapshot,
         mode: result.mode,
+        operationalDataAccessPolicy: result.operationalDataAccessPolicy,
         phaseConfigSnapshot: result.phaseConfigSnapshot,
         runId: result.runId,
         sessionId: result.sessionId,

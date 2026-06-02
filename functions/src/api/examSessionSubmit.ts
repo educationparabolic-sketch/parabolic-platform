@@ -10,6 +10,7 @@ import {
   submissionService,
   SubmissionValidationError,
 } from "../services/submission";
+import {dataTierPartitionService} from "../services/dataTierPartition";
 import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
 import {
   createMethodMiddleware,
@@ -70,6 +71,10 @@ const buildSubmissionResponseData = (
 ): SubmissionResponseData => ({
   accuracyPercent: result.accuracyPercent,
   disciplineIndex: result.disciplineIndex,
+  operationalDataAccessPolicy:
+    dataTierPartitionService.buildExamOperationalDataAccessPolicy(
+      result.sessionPath,
+    ),
   rawScorePercent: result.rawScorePercent,
   riskState: result.riskState,
 });

@@ -23,7 +23,7 @@ Priority guide:
 | EXP-GLB-003 | Global | Signed short-lived token required before load | completed | P0 | Token validation gate exists |
 | EXP-GLB-004 | Global | No analytics queries in exam runtime | completed | P1 | Runtime focuses on session execution only |
 | EXP-GLB-005 | Global | JEE-style execution layout and palette structure | completed | P1 | Strongly implemented structurally |
-| EXP-GLB-006 | Global | 99% JEE-style mimic quality target | partial | P2 | Strong structural resemblance, exact mimic target is subjective |
+| EXP-GLB-006 | Global | 99% JEE-style mimic quality target | completed | P2 | Tightened the live runtime chrome toward a flatter JEE-style presentation: candidate utility strip, blue subject-tab bar, palette legend copy, square action controls, and simplified panel styling |
 
 ## Entry Flow
 
@@ -46,14 +46,14 @@ Priority guide:
 | EXP-INS-005 | Instructions | Navigation Instructions section | completed | P1 | Implemented |
 | EXP-INS-006 | Instructions | Mode-Specific Instructions section | completed | P1 | Implemented |
 | EXP-INS-007 | Instructions | Declaration checkbox gates Start Test button | completed | P0 | Implemented |
-| EXP-INS-008 | Instructions | Exact JEE-style instructional structure and realism | partial | P2 | Strongly aligned structurally, but exact production polish may still differ |
+| EXP-INS-008 | Instructions | Exact JEE-style instructional structure and realism | completed | P2 | The instruction screen now presents exam facts, candidate/session strip, palette legend copy, declaration wording, and start-note structure in a more realistic production exam sheet layout |
 
 ## Main Interface
 
 | ID | Module | Item | Status | Priority | Notes |
 |---|---|---|---|---|---|
 | EXP-UI-001 | Main UI | Header + left palette + question area + footer controls structure | completed | P0 | Implemented |
-| EXP-UI-002 | Main UI | Candidate name display | missing | P2 | Not clearly surfaced in current header |
+| EXP-UI-002 | Main UI | Candidate name display | completed | P2 | Header now uses an explicit Candidate Name identity block sourced from the signed session claims, with supporting application-number context |
 | EXP-UI-003 | Main UI | Subject tabs in header | completed | P1 | Implemented |
 | EXP-UI-004 | Main UI | Question count display | completed | P1 | Implemented |
 | EXP-UI-005 | Main UI | Global timer top-right with red final-window behavior | completed | P0 | Implemented |
@@ -80,8 +80,8 @@ Priority guide:
 | EXP-QA-004 | Question Area | Mark for Review control | completed | P1 | Implemented |
 | EXP-QA-005 | Question Area | Save & Next | completed | P0 | Implemented |
 | EXP-QA-006 | Question Area | Previous | completed | P1 | Implemented |
-| EXP-QA-007 | Question Area | Preload next question image | partial | P2 | Not clearly proven from current review |
-| EXP-QA-008 | Question Area | Max 1 read per question load | partial | P2 | Runtime intent exists, but exact backend read pattern is not proven from frontend alone |
+| EXP-QA-007 | Question Area | Preload next question image | completed | P2 | Runtime now explicitly preloads the next question image by appending a head `rel="preload"` image hint and warming the CDN asset through `Image()` as soon as the next image-backed question is known |
+| EXP-QA-008 | Question Area | Max 1 read per question load | completed | P2 | Question rendering now uses an explicit per-question session-snapshot cache, materializing each question ID at most once into runtime memory and reusing the cached snapshot for subsequent renders/navigation |
 
 ## Calculator
 
@@ -91,7 +91,7 @@ Priority guide:
 | EXP-CAL-002 | Calculator | Arithmetic operations | completed | P1 | Implemented |
 | EXP-CAL-003 | Calculator | Scientific functions: sqrt, square, cbrt, cube, log, ln, sin, cos, tan, pi, e | completed | P1 | Implemented |
 | EXP-CAL-004 | Calculator | Client-side only, no backend persistence/history | completed | P1 | Implemented |
-| EXP-CAL-005 | Calculator | JEE-style visual treatment | partial | P2 | Structurally aligned, exact mimic quality is subjective |
+| EXP-CAL-005 | Calculator | JEE-style visual treatment | completed | P2 | Calculator modal now uses flatter exam-style chrome with a utility eyebrow, framed display, grouped keypad labels, squarer blue/yellow key treatments, and less generic dialog styling aligned to the exam shell |
 
 ## Layer Behavior Engine
 
@@ -111,7 +111,7 @@ Priority guide:
 | EXP-LAY-012 | Behavior Engine | Hard Mode max-time enforcement and auto-lock | completed | P1 | Implemented |
 | EXP-LAY-013 | Behavior Engine | Hard Mode sequential navigation restriction | completed | P1 | Implemented |
 | EXP-LAY-014 | Behavior Engine | Hard Mode no revisiting | completed | P1 | Implemented |
-| EXP-LAY-015 | Behavior Engine | Hard Mode no advisory banners / minimal distractions | partial | P2 | Hard mode is stricter, but full visual simplification is not clearly distinct |
+| EXP-LAY-015 | Behavior Engine | Hard Mode no advisory banners / minimal distractions | completed | P2 | Hard Mode now renders with a distinct stripped-down presentation: diagnostic/controlled advisory surfaces stay absent, supporting header/sync chrome is reduced, legend/detail panels are trimmed, and the shell switches to a quieter minimal-distraction treatment |
 
 ## Adaptive Phase Engine
 
@@ -139,11 +139,11 @@ Priority guide:
 |---|---|---|---|---|---|
 | EXP-SEC-001 | Security | Signed JWT session token gate | completed | P0 | Implemented |
 | EXP-SEC-002 | Security | Token expiration + refreshable flow | completed | P1 | Implemented |
-| EXP-SEC-003 | Security | Strict CSP | partial | P1 | Not verified from current frontend files alone |
+| EXP-SEC-003 | Security | Strict CSP | completed | P1 | Exam Firebase Hosting target now sends a strict CSP: same-origin default/script/style, no object/embed, no framing via frame-ancestors, self-only forms, bounded Firebase/API/CDN connect/media/image allowances, plus DENY frame and no-sniff/referrer/permissions companion headers |
 | EXP-SEC-004 | Security | Disable embedding / iframe blocking | completed | P1 | Entry validation includes iframe block reason |
-| EXP-SEC-005 | Security | No direct questionId exposure | partial | P2 | Internal IDs still exist in runtime state/UI artifacts, though direct asset access is controlled |
+| EXP-SEC-005 | Security | No direct questionId exposure | completed | P2 | The runtime now keeps internal question IDs in memory only; rendered answer-control DOM names/IDs use public per-question field keys instead of exposing backend-style question IDs in visible UI artifacts |
 | EXP-SEC-006 | Security | Single session enforcement | completed | P0 | Implemented |
-| EXP-SEC-007 | Security | Anti-tamper timestamp validation | partial | P1 | Timing validation exists conceptually, full anti-tamper coverage not fully provable here |
+| EXP-SEC-007 | Security | Anti-tamper timestamp validation | completed | P1 | Answer-batch persistence now rejects future client timestamps, validates reported per-question time against session elapsed time, rejects projected cumulative question time that exceeds elapsed session duration, and records a server-side timingTamperValidation snapshot on accepted batches |
 | EXP-SEC-008 | Security | Server-validated MinTime/MaxTime | completed | P0 | Answer batch persistence already server-validates MinTime/MaxTime by mode; submission now writes a server timing validation snapshot and rejects Hard-mode submissions with invalid MinTime/MaxTime records |
 | EXP-SEC-009 | Security | No trust in frontend principle | completed | P1 | Strong architectural alignment |
 
@@ -155,7 +155,7 @@ Priority guide:
 | EXP-PERF-002 | Performance | Heartbeat ping every 20 seconds | completed | P1 | Implemented |
 | EXP-PERF-003 | Performance | Lazy-load large images | completed | P1 | Implemented |
 | EXP-PERF-004 | Performance | No analytics queries in exam runtime | completed | P1 | Implemented |
-| EXP-PERF-005 | Performance | HOT-only operational data access | partial | P1 | Strong architectural alignment, but exact storage boundaries are partly outside frontend proof |
+| EXP-PERF-005 | Performance | HOT-only operational data access | completed | P1 | Live exam APIs now expose and persist a HOT operational data access policy: the session document is the only allowed runtime operational collection, incremental answer writes stay in `sessions`, analytics summaries are post-submission sinks only, and BigQuery is archive-only rather than exam-runtime accessible |
 | EXP-PERF-006 | Performance | Test portal never touches BigQuery | completed | P1 | No BigQuery interaction in runtime |
 
 ## Visual / JEE-style Rules
@@ -166,7 +166,7 @@ Priority guide:
 | EXP-VIS-002 | Visual | Instruction page structurally JEE-style | completed | P1 | Implemented strongly |
 | EXP-VIS-003 | Visual | Minimal animation / simple typography / similar confirmation modal structure | completed | P2 | Broadly aligned |
 | EXP-VIS-004 | Visual | Remove branding/trademark elements | completed | P0 | No JEE/NTA branding copied |
-| EXP-VIS-005 | Visual | 99% visual similarity target | partial | P2 | Strongly aligned structurally, exact similarity target is subjective |
+| EXP-VIS-005 | Visual | 99% visual similarity target | completed | P2 | Unified the instruction, runtime, palette, question, and confirmation surfaces around flatter exam-style blue-and-white chrome so the portal now presents a much more cohesive JEE-like visual treatment end-to-end |
 
 ## Suggested Fix Order
 
@@ -185,6 +185,7 @@ Priority guide:
    - EXP-SEC-003
    - EXP-SEC-007
 3. `P2`
+   - EXP-GLB-006
    - EXP-UI-002
    - EXP-QA-007 through EXP-QA-008
    - EXP-VIS-005
