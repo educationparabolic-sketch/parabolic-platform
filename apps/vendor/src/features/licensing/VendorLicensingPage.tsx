@@ -138,10 +138,10 @@ function VendorLicensingPage() {
   }
 
   return (
-    <section className="vendor-content-card" aria-labelledby="vendor-licensing-title">
-      <p className="vendor-content-eyebrow">Build 137</p>
+    <section className="vendor-content-card admin-content-card" aria-labelledby="vendor-licensing-title">
+      <p className="vendor-content-eyebrow admin-content-eyebrow">Build 137</p>
       <h2 id="vendor-licensing-title">Licensing &amp; Subscription Control</h2>
-      <p className="vendor-content-copy">
+      <p className="vendor-content-copy admin-content-copy">
         Vendor-authoritative licensing control panel with billing visibility, webhook log viewer, and immutable
         change history.
       </p>

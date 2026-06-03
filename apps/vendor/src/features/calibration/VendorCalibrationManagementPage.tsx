@@ -326,10 +326,10 @@ function VendorCalibrationManagementPage() {
   }
 
   return (
-    <section className="vendor-content-card" aria-labelledby="vendor-calibration-title">
-      <p className="vendor-content-eyebrow">Build 138</p>
+    <section className="vendor-content-card admin-content-card" aria-labelledby="vendor-calibration-title">
+      <p className="vendor-content-eyebrow admin-content-eyebrow">Build 138</p>
       <h2 id="vendor-calibration-title">Global Calibration Control</h2>
-      <p className="vendor-content-copy">
+      <p className="vendor-content-copy admin-content-copy">
         Manage calibration versions with summary-only simulation, guarded parameter editing, scoped deployment,
         and immutable audit traceability.
       </p>
@@ -794,7 +794,7 @@ function VendorCalibrationManagementPage() {
       />
 
       {selectedVersion ? (
-        <section className="vendor-boundary-note">
+        <section className="vendor-boundary-note admin-content-note">
           <p>
             Selected version <strong>{selectedVersion.versionId}</strong> | created by {selectedVersion.createdBy} | activation {formatDateLabel(selectedVersion.activationDate)}
           </p>

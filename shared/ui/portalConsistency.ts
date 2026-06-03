@@ -127,6 +127,26 @@ export const VENDOR_PRIMARY_NAVIGATION: PortalNavigationItem[] = [
     summary: "Cross-institute intelligence and macro behavioral trends.",
   },
   {
+    path: "/vendor/revenue",
+    label: "Revenue",
+    summary: "MRR, churn, conversion, and layer-distribution business tracking.",
+  },
+  {
+    path: "/vendor/feature-flags",
+    label: "Feature Flags",
+    summary: "Vendor rollout controls for beta features, risk engine tests, and UI staging.",
+  },
+  {
+    path: "/vendor/data-export",
+    label: "Data Export",
+    summary: "Snapshot-safe vendor exports and institute data handoff controls.",
+  },
+  {
+    path: "/vendor/backups",
+    label: "Backups",
+    summary: "Manual backup triggers and simulation restore review for vendor operators.",
+  },
+  {
     path: "/vendor/system-health",
     label: "System Health",
     summary: "Platform runtime status, cost monitoring, and operational checks.",

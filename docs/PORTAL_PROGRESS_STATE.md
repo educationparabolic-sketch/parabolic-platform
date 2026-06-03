@@ -4,12 +4,12 @@ This file is the persistent handoff state for portal checklist implementation ac
 
 ## Current State
 
-- `Current Target Portal`: `vendor`
-- `Current Priority Band`: `P1`
-- `Last Completed Checklist ID`: `EXP-INS-008`
-- `Next Suggested Checklist ID`: `VEN-GLB-006`
-- `Last Updated`: `2026-06-02`
-- `Saved Scope Note`: Completed exam P2 `EXP-INS-008` by making the instruction screen feel more like a production exam sheet: top exam facts, candidate/session strip, richer legend copy, clearer declaration wording, and explicit start-note structure. `npm --prefix apps/exam run build` passed. Exam P2 is complete, so advance to vendor P1 with `VEN-GLB-006`.
+- `Current Target Portal`: `auto`
+- `Current Priority Band`: `auto`
+- `Last Completed Checklist ID`: `VEN-RTE-014`
+- `Next Suggested Checklist ID`: `auto`
+- `Last Updated`: `2026-06-03`
+- `Saved Scope Note`: Completed vendor P2 `VEN-RTE-014` by adding the dedicated `/vendor/backups` route to the vendor route registry, vendor primary navigation, and mounted app shell with backups-and-restore placeholder copy aligned to the vendor spec's backup/recovery lane. `npm --prefix apps/vendor run build` passed. Vendor P2 is complete, and no unresolved items remain in the active portal checklists, so future selection should recompute automatically if new gaps are introduced.
 - `Temporary Dev Testing Note`: Keep the exam portal dev-only mock entry mode (`npm run dev:mock-entry`, `?token=dev`,http://localhost:5173/session/dev-mock-session?token=dev) L0 / Operational
 http://localhost:5173/session/dev-mock-session?token=dev&mode=l0
 L1 / Diagnostic

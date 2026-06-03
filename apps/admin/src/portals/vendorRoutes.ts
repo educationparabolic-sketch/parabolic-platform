@@ -74,6 +74,27 @@ export const VENDOR_ROUTE_DEFINITIONS: VendorRouteDefinition[] = [
     allowedRoles: ["vendor"],
   },
   {
+    path: "/vendor/feature-flags",
+    title: "Global Feature Flags",
+    section: "Feature Flags",
+    description: "Vendor rollout controls for beta capabilities, risk-engine experiments, and staged UI release.",
+    allowedRoles: ["vendor"],
+  },
+  {
+    path: "/vendor/data-export",
+    title: "Data Export",
+    section: "Data Export",
+    description: "Snapshot-safe export controls for vendor metrics and institute-level operational summaries.",
+    allowedRoles: ["vendor"],
+  },
+  {
+    path: "/vendor/backups",
+    title: "Backups",
+    section: "Backups",
+    description: "Vendor recovery route for manual backup triggers and simulation restore review.",
+    allowedRoles: ["vendor"],
+  },
+  {
     path: "/vendor/system-health",
     title: "System Health",
     section: "System Health",

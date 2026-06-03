@@ -191,10 +191,10 @@ function VendorInstituteManagementPage() {
   const isDeleteGuardReady = deleteGuardExpected.length > 0 && deleteGuardInput.trim() === deleteGuardExpected;
 
   return (
-    <section className="vendor-content-card" aria-labelledby="vendor-institutes-title">
-      <p className="vendor-content-eyebrow">Build 137</p>
+    <section className="vendor-content-card admin-content-card" aria-labelledby="vendor-institutes-title">
+      <p className="vendor-content-eyebrow admin-content-eyebrow">Build 137</p>
       <h2 id="vendor-institutes-title">Institutes Management</h2>
-      <p className="vendor-content-copy">
+      <p className="vendor-content-copy admin-content-copy">
         Vendor-authoritative institute lifecycle and licensing workspace sourced from the <code>institutes</code>{" "}
         collection.
       </p>

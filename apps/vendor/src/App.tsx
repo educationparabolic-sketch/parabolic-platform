@@ -1,4 +1,4 @@
-import { Suspense, lazy, useMemo, useState, type FormEvent, type ReactElement } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState, type FormEvent, type ReactElement } from "react";
 import {
   Navigate,
   NavLink,
@@ -10,7 +10,6 @@ import {
 } from "react-router-dom";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { useAuthProvider } from "../../../shared/services/authProvider";
-import { PORTAL_MANIFEST } from "../../../shared/services/portalManifest";
 import {
   getPortalDefaultAuthenticatedPath,
   getPortalLoginPath,
@@ -20,8 +19,10 @@ import {
   VENDOR_PRIMARY_NAVIGATION,
   findActivePortalNavigationItem,
 } from "../../../shared/ui/portalConsistency";
-import { UiNavBar, UiRouteLoading } from "../../../shared/ui/components";
+import { UiRouteLoading } from "../../../shared/ui/components";
+import { getVisibleVendorRoutes, matchVendorRoute } from "../../admin/src/portals/vendorRoutes";
 import { resolveVendorAccessContext } from "./portals/vendorAccess";
+import VendorPlaceholderPage from "./features/shared/VendorPlaceholderPage";
 import "./App.css";
 
 const VendorAuditActivityLogsPage = lazy(() => import("./features/audit/VendorAuditActivityLogsPage"));
@@ -53,6 +54,178 @@ function resolveVendorRedirectTarget(locationState: unknown, fallbackPath: strin
   return fallbackPath;
 }
 
+const VENDOR_SIDEBAR_STORAGE_KEY = "vendor-sidebar-collapsed";
+
+const VENDOR_NAV_GROUPS = [
+  {
+    id: "intelligence",
+    label: "Intelligence",
+    paths: ["/vendor/overview", "/vendor/intelligence", "/vendor/revenue"],
+  },
+  {
+    id: "operations",
+    label: "Operations",
+    paths: ["/vendor/institutes", "/vendor/licensing", "/vendor/audit"],
+  },
+  {
+    id: "controls",
+    label: "Controls",
+    paths: ["/vendor/calibration", "/vendor/feature-flags", "/vendor/data-export", "/vendor/backups", "/vendor/system-health"],
+  },
+] as const;
+
+type VendorVisibleNavItem = {
+  path: string;
+  label: string;
+  summary: string;
+  groupId: string;
+};
+
+function resolveVendorNavGroupId(path: string): string {
+  return VENDOR_NAV_GROUPS.find((group) => group.paths.some((groupPath) => groupPath === path))?.id ?? "other";
+}
+
+function resolveVendorNavShortLabel(label: string): string {
+  return label
+    .split(" ")
+    .map((part) => part[0] ?? "")
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+function VendorSidebarNavigation(props: {
+  activePath?: string;
+  collapsed: boolean;
+  compact: boolean;
+  items: VendorVisibleNavItem[];
+  onCloseMobile: () => void;
+  onSignOut: () => void;
+  onToggleCollapsed: () => void;
+  pathname: string;
+  role: string | null;
+  sessionStatus: string;
+}) {
+  const {
+    activePath,
+    collapsed,
+    compact,
+    items,
+    onCloseMobile,
+    onSignOut,
+    onToggleCollapsed,
+    pathname,
+    role,
+    sessionStatus,
+  } = props;
+  const sections = useMemo(() => {
+    const groupedItems = new Map<string, VendorVisibleNavItem[]>();
+
+    for (const item of items) {
+      const existingItems = groupedItems.get(item.groupId) ?? [];
+      existingItems.push(item);
+      groupedItems.set(item.groupId, existingItems);
+    }
+
+    return VENDOR_NAV_GROUPS.map((group) => ({
+      ...group,
+      items: groupedItems.get(group.id) ?? [],
+    })).filter((group) => group.items.length > 0);
+  }, [items]);
+
+  return (
+    <div className="admin-sidebar-panel">
+      <header className={`admin-sidebar-header${compact ? " admin-sidebar-header-compact" : ""}`}>
+        <div className="admin-sidebar-brand">
+          <p className="admin-sidebar-eyebrow">Parabolic Platform</p>
+          <h1>Vendor Control</h1>
+          {!collapsed ? (
+            <p className="admin-sidebar-copy">Cross-institute operations with routed, vendor-only workspaces.</p>
+          ) : null}
+          {!collapsed ? (
+            <div className="admin-sidebar-meta">
+              <p className="admin-sidebar-path" title={pathname}>{pathname}</p>
+              <div className="admin-sidebar-session">
+                <span>Status: {sessionStatus}</span>
+                {role ? <span>Role: {role}</span> : null}
+                <span>Scope: Global vendor domain</span>
+              </div>
+              <button
+                type="button"
+                className="admin-signout-button admin-sidebar-signout-button"
+                onClick={onSignOut}
+                disabled={sessionStatus !== "authenticated"}
+              >
+                Sign out
+              </button>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="admin-sidebar-actions">
+          <button
+            type="button"
+            className="admin-sidebar-icon-button admin-sidebar-mobile-close"
+            onClick={onCloseMobile}
+            aria-label="Close navigation menu"
+          >
+            Close
+          </button>
+          <button
+            type="button"
+            className="admin-sidebar-icon-button admin-sidebar-collapse-button"
+            onClick={onToggleCollapsed}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-pressed={collapsed}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {collapsed ? ">>" : "<<"}
+          </button>
+        </div>
+      </header>
+
+      <div className="admin-sidebar-body">
+        <div className="admin-sidebar-nav-scroll">
+          <nav className="admin-sidebar-nav" aria-label="Vendor navigation">
+            {sections.map((section) => (
+              <section key={section.id} className="admin-sidebar-section" aria-labelledby={`vendor-nav-section-${section.id}`}>
+                <div className="admin-sidebar-section-header">
+                  <h2 id={`vendor-nav-section-${section.id}`}>{collapsed ? section.label.slice(0, 1) : section.label}</h2>
+                </div>
+                <div className="admin-sidebar-section-items">
+                  {section.items.map((item) => (
+                    <NavLink
+                      key={item.path}
+                      to={item.path}
+                      className={({ isActive }) => `admin-sidebar-link${isActive ? " admin-sidebar-link-active" : ""}`}
+                      aria-label={collapsed ? item.label : undefined}
+                      title={collapsed ? `${item.label}: ${item.summary}` : undefined}
+                      onClick={onCloseMobile}
+                    >
+                      <span className="admin-sidebar-link-badge" aria-hidden="true">
+                        {resolveVendorNavShortLabel(item.label)}
+                      </span>
+                      <span className="admin-sidebar-link-copy">
+                        <span className="admin-sidebar-link-label">{item.label}</span>
+                        {!collapsed ? <small>{item.summary}</small> : null}
+                      </span>
+                      <span
+                        className="admin-sidebar-link-indicator"
+                        aria-hidden="true"
+                        data-active={item.path === activePath ? "true" : "false"}
+                      />
+                    </NavLink>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </nav>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function VendorLoginPage(props: { loginPath: string; protectedPath: string }) {
   const { loginPath, protectedPath } = props;
   const navigate = useNavigate();
@@ -77,14 +250,14 @@ function VendorLoginPage(props: { loginPath: string; protectedPath: string }) {
   }
 
   return (
-    <main className="vendor-page-shell vendor-page-shell-login">
-      <section className="vendor-login-card" aria-labelledby="vendor-login-title">
-        <p className="vendor-content-eyebrow">Build 136</p>
+    <main className="admin-page-shell admin-page-shell-login">
+      <section className="admin-content-card admin-login-card" aria-labelledby="vendor-login-title">
+        <p className="admin-content-eyebrow">Build 136</p>
         <h1 id="vendor-login-title">Vendor Login</h1>
-        <p className="vendor-content-copy">
+        <p className="admin-content-copy">
           Vendor-only sign-in route for the global platform control surface.
         </p>
-        <form className="vendor-login-form" onSubmit={handleSubmit}>
+        <form className="admin-login-form" onSubmit={handleSubmit}>
           <label htmlFor="vendor-login-email">Email</label>
           <input
             id="vendor-login-email"
@@ -105,12 +278,12 @@ function VendorLoginPage(props: { loginPath: string; protectedPath: string }) {
             }}
           />
 
-          <button type="submit">Login</button>
+          <button type="submit" className="admin-primary-link">Login</button>
         </form>
 
         {session.error ? <p className="vendor-login-error" role="alert">{session.error}</p> : null}
 
-        <p className="vendor-login-meta">
+        <p className="admin-login-meta">
           Login route: <code>{loginPath}</code>
         </p>
       </section>
@@ -120,11 +293,11 @@ function VendorLoginPage(props: { loginPath: string; protectedPath: string }) {
 
 function VendorUnauthorizedPage() {
   return (
-    <main className="vendor-page-shell vendor-page-shell-login">
-      <section className="vendor-login-card" aria-labelledby="vendor-unauthorized-title">
-        <p className="vendor-content-eyebrow">Access Guard</p>
+    <main className="admin-page-shell admin-page-shell-login">
+      <section className="admin-content-card admin-login-card" aria-labelledby="vendor-unauthorized-title">
+        <p className="admin-content-eyebrow">Access Guard</p>
         <h1 id="vendor-unauthorized-title">Vendor role required</h1>
-        <p className="vendor-content-copy">
+        <p className="admin-content-copy">
           This portal is restricted to authenticated users with the <code>vendor</code> role claim.
         </p>
       </section>
@@ -142,11 +315,11 @@ function VendorProtectedRoute(props: {
 
   if (session.status === "loading") {
     return (
-      <main className="vendor-page-shell vendor-page-shell-login">
-        <section className="vendor-login-card" aria-labelledby="vendor-loading-title">
-          <p className="vendor-content-eyebrow">Build 136</p>
+      <main className="admin-page-shell admin-page-shell-login">
+        <section className="admin-content-card admin-login-card" aria-labelledby="vendor-loading-title">
+          <p className="admin-content-eyebrow">Build 136</p>
           <h1 id="vendor-loading-title">Checking session</h1>
-          <p className="vendor-content-copy">Restoring authentication context for vendor routes.</p>
+          <p className="admin-content-copy">Restoring authentication context for vendor routes.</p>
         </section>
       </main>
     );
@@ -179,84 +352,176 @@ function VendorRoleGuard(props: { children: ReactElement }) {
 
 function VendorLayout() {
   const location = useLocation();
-  const navigate = useNavigate();
   const { session, signOut } = useAuthProvider();
+  const accessContext = resolveVendorAccessContext(session);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    return window.localStorage.getItem(VENDOR_SIDEBAR_STORAGE_KEY) === "true";
+  });
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [pageScrolled, setPageScrolled] = useState(false);
+  const visibleRoutes = useMemo(() => getVisibleVendorRoutes(accessContext.role), [accessContext.role]);
+  const matchedRoute = useMemo(() => matchVendorRoute(location.pathname), [location.pathname]);
 
   const activeItem = useMemo(() => {
     return findActivePortalNavigationItem(VENDOR_PRIMARY_NAVIGATION, location.pathname);
   }, [location.pathname]);
-  const navBarItems = useMemo(() => {
-    return VENDOR_PRIMARY_NAVIGATION.map((item) => ({
-      id: item.path,
-      label: item.label,
-      hint: item.summary,
-      onClick: () => navigate(item.path),
-    }));
-  }, [navigate]);
+  const navItems = useMemo<VendorVisibleNavItem[]>(() => {
+    return VENDOR_PRIMARY_NAVIGATION
+      .filter((item) => visibleRoutes.some((route) => route.path === item.path))
+      .map((item) => ({
+        path: item.path,
+        label: item.label,
+        summary: item.summary,
+        groupId: resolveVendorNavGroupId(item.path),
+      }));
+  }, [visibleRoutes]);
+  const pageTitle = matchedRoute?.definition.title ?? activeItem?.label ?? "Vendor";
+  const pageDescription =
+    matchedRoute?.definition.description ?? activeItem?.summary ?? "Vendor-only routed workspace.";
 
-  const portal = PORTAL_MANIFEST.vendor;
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(VENDOR_SIDEBAR_STORAGE_KEY, String(sidebarCollapsed));
+  }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handleScroll = () => {
+      setPageScrolled(window.scrollY > 48);
+    };
+
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(min-width: 1025px)");
+    const handleChange = (event: MediaQueryListEvent) => {
+      if (event.matches) {
+        setMobileNavOpen(false);
+      }
+    };
+
+    mediaQuery.addEventListener("change", handleChange);
+    return () => {
+      mediaQuery.removeEventListener("change", handleChange);
+    };
+  }, []);
+
+  const sidebarHeaderCompact = pageScrolled;
 
   return (
-    <main className="vendor-page-shell">
-      <header className="vendor-topbar" aria-label="Vendor top header bar">
-        <div>
-          <p className="vendor-topbar-eyebrow">{portal.domain}</p>
-          <h1>Vendor Portal</h1>
-          <p className="vendor-topbar-path">{location.pathname}</p>
-        </div>
-
-        <UiNavBar
-          title="Vendor Routes"
-          subtitle="Global administration"
-          activeItemId={activeItem?.path}
-          items={navBarItems}
-        />
-
+    <main className="admin-page-shell">
+      <div className={`admin-layout-grid${sidebarCollapsed ? " admin-layout-grid-collapsed" : ""}`}>
         <button
           type="button"
-          className="vendor-signout-button"
+          className={`admin-sidebar-backdrop${mobileNavOpen ? " admin-sidebar-backdrop-visible" : ""}`}
           onClick={() => {
-            void signOut();
+            setMobileNavOpen(false);
           }}
-          disabled={session.status !== "authenticated"}
+          aria-label="Close navigation menu"
+        />
+        <aside
+          id="vendor-sidebar"
+          className={`admin-sidebar${sidebarCollapsed ? " admin-sidebar-collapsed" : ""}${mobileNavOpen ? " admin-sidebar-open" : ""}`}
         >
-          Sign out
-        </button>
-      </header>
-
-      <div className="vendor-layout-grid">
-        <aside className="vendor-sidebar" aria-label="Vendor sidebar navigation">
-          <p className="vendor-content-eyebrow">Primary Navigation</p>
-          <h2>{activeItem?.label ?? "Vendor"}</h2>
-          <p className="vendor-sidebar-copy">
-            {activeItem?.summary ?? "Vendor dashboard sections for platform-wide operations."}
-          </p>
-          <ul className="vendor-sidebar-list">
-            {VENDOR_PRIMARY_NAVIGATION.map((item) => (
-              <li key={item.path}>
-                <NavLink
-                  to={item.path}
-                  className={({ isActive }) =>
-                    isActive ? "vendor-sidebar-link vendor-sidebar-link-active" : "vendor-sidebar-link"
-                  }
-                >
-                  <strong>{item.label}</strong>
-                  <small>{item.summary}</small>
-                </NavLink>
-              </li>
-            ))}
-          </ul>
-          <p className="vendor-content-note">
-            Collection boundary: vendor views consume global summary collections and do not query institute
-            session collections.
-          </p>
+          <VendorSidebarNavigation
+            activePath={activeItem?.path}
+            collapsed={sidebarCollapsed}
+            compact={sidebarHeaderCompact}
+            items={navItems}
+            onCloseMobile={() => {
+              setMobileNavOpen(false);
+            }}
+            onSignOut={() => {
+              void signOut();
+            }}
+            onToggleCollapsed={() => {
+              setSidebarCollapsed((currentValue) => !currentValue);
+            }}
+            pathname={location.pathname}
+            role={accessContext.role}
+            sessionStatus={session.status}
+          />
         </aside>
 
-        <section className="vendor-main-content" aria-label="Vendor main content container">
-          <Outlet />
-        </section>
+        <div className="admin-main-area">
+          <header className="admin-topbar admin-topbar-compact">
+            <div className="admin-topbar-leading">
+              <div className="admin-topbar-actions">
+                <button
+                  type="button"
+                  className="admin-topbar-menu-button"
+                  onClick={() => {
+                    setMobileNavOpen((currentValue) => !currentValue);
+                  }}
+                  aria-label="Toggle navigation menu"
+                  aria-controls="vendor-sidebar"
+                  aria-expanded={mobileNavOpen}
+                >
+                  Menu
+                </button>
+                <button
+                  type="button"
+                  className="admin-topbar-collapse-toggle"
+                  onClick={() => {
+                    setSidebarCollapsed((currentValue) => !currentValue);
+                  }}
+                  aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                >
+                  {sidebarCollapsed ? "Expand nav" : "Collapse nav"}
+                </button>
+              </div>
+
+              <div className="admin-topbar-title-block">
+                <h2>{pageTitle}</h2>
+                <p className="admin-topbar-description">{pageDescription}</p>
+              </div>
+            </div>
+          </header>
+
+          <section className="admin-content-container" aria-label="Vendor main content container">
+            <Outlet />
+          </section>
+        </div>
       </div>
     </main>
+  );
+}
+
+function renderVendorPlaceholder(
+  title: string,
+  description: string,
+  note: string,
+) {
+  return (
+    <VendorPlaceholderPage
+      title={title}
+      description={description}
+      note={note}
+    />
   );
 }
 
@@ -293,6 +558,14 @@ function App() {
           element={<VendorRouteBoundary label="Loading institutes"><VendorInstituteManagementPage /></VendorRouteBoundary>}
         />
         <Route
+          path="institutes/:instituteId"
+          element={renderVendorPlaceholder(
+            "Institute Detail",
+            "Institute-specific drill-in route for tenant health, licensing posture, and operational review.",
+            "Route shell is now mounted for planned route-map parity. Detailed institute-level workflow panels can be layered in without changing the route contract.",
+          )}
+        />
+        <Route
           path="licensing"
           element={<VendorRouteBoundary label="Loading licensing"><VendorLicensingPage /></VendorRouteBoundary>}
         />
@@ -301,8 +574,56 @@ function App() {
           element={<VendorRouteBoundary label="Loading calibration"><VendorCalibrationManagementPage /></VendorRouteBoundary>}
         />
         <Route
+          path="calibration/simulate"
+          element={renderVendorPlaceholder(
+            "Calibration Simulation",
+            "Dedicated simulation route for testing calibration changes against summary-only historical vendor datasets before rollout.",
+            "This mounted shell preserves the simulation route contract while the deeper scenario workspace continues to live in the main calibration surface.",
+          )}
+        />
+        <Route
+          path="calibration/history"
+          element={renderVendorPlaceholder(
+            "Calibration History",
+            "Historical calibration timeline route for reviewing prior versions, activation dates, and rollback posture.",
+            "This route is mounted so the vendor route registry matches the planned map, while detailed history tooling can be expanded in a later vendor build.",
+          )}
+        />
+        <Route
           path="intelligence"
           element={<VendorRouteBoundary label="Loading intelligence"><VendorIntelligenceDashboardPage /></VendorRouteBoundary>}
+        />
+        <Route
+          path="revenue"
+          element={renderVendorPlaceholder(
+            "Revenue & Business Metrics",
+            "Business dashboard route for monthly recurring revenue, layer distribution, upgrade conversion, churn, and active-student growth.",
+            "This mounted shell secures the planned vendor revenue route while keeping dedicated revenue analytics implementation as a separate follow-up slice.",
+          )}
+        />
+        <Route
+          path="feature-flags"
+          element={renderVendorPlaceholder(
+            "Global Feature Flags",
+            "Vendor rollout controls for beta features, experimental risk engine toggles, new UI rollout, and staged percentage releases.",
+            "The route shell is active and aligned to the vendor plan. Operational flag editing remains available from system-health previews until the dedicated control plane is expanded.",
+          )}
+        />
+        <Route
+          path="data-export"
+          element={renderVendorPlaceholder(
+            "Data Export",
+            "Snapshot-safe export route for platform metrics, institute summaries, and controlled vendor data handoff operations.",
+            "This route is mounted for planned-map parity. Export workflows stay constrained to summary collections and can be deepened later without changing navigation.",
+          )}
+        />
+        <Route
+          path="backups"
+          element={renderVendorPlaceholder(
+            "Backups & Restore",
+            "Vendor recovery route for manual backup initiation, backup audit visibility, and restore-simulation review.",
+            "This mounted shell reserves the dedicated backup route from the planned vendor map while keeping restore actions constrained to controlled, summary-safe operational workflows.",
+          )}
         />
         <Route
           path="system-health"

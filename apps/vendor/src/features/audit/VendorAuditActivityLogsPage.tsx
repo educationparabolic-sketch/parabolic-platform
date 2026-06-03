@@ -139,10 +139,10 @@ function VendorAuditActivityLogsPage() {
   }, []);
 
   return (
-    <section className="vendor-content-card" aria-labelledby="vendor-audit-title">
-      <p className="vendor-content-eyebrow">Build 138</p>
+    <section className="vendor-content-card admin-content-card" aria-labelledby="vendor-audit-title">
+      <p className="vendor-content-eyebrow admin-content-eyebrow">Build 138</p>
       <h2 id="vendor-audit-title">Audit &amp; Activity Logs</h2>
-      <p className="vendor-content-copy">
+      <p className="vendor-content-copy admin-content-copy">
         Immutable append-only vendor governance log for calibration pushes, overrides, simulations, and rollback
         actions.
       </p>
@@ -232,7 +232,7 @@ function VendorAuditActivityLogsPage() {
         emptyStateText="No audit events matched the selected filters."
       />
 
-      <section className="vendor-boundary-note">
+      <section className="vendor-boundary-note admin-content-note">
         <p>Audit guarantees enforced for Build 138:</p>
         <ul>
           <li>Append-only immutable records for calibration workflows.</li>

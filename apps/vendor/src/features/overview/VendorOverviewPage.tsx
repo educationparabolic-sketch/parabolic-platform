@@ -5,10 +5,10 @@ function VendorOverviewPage() {
   const dataset = getVendorOverviewDataset();
 
   return (
-    <section className="vendor-content-card" aria-labelledby="vendor-overview-title">
-      <p className="vendor-content-eyebrow">Build 136</p>
+    <section className="vendor-content-card admin-content-card" aria-labelledby="vendor-overview-title">
+      <p className="vendor-content-eyebrow admin-content-eyebrow">Build 136</p>
       <h2 id="vendor-overview-title">Platform Overview</h2>
-      <p className="vendor-content-copy">
+      <p className="vendor-content-copy admin-content-copy">
         Executive snapshot sourced from summary-only vendor metrics. Institute-level raw session reads are not
         allowed in this view.
       </p>
@@ -19,7 +19,7 @@ function VendorOverviewPage() {
         ))}
       </div>
 
-      <div className="vendor-boundary-note" role="note" aria-label="Global collection boundaries">
+      <div className="vendor-boundary-note admin-content-note" role="note" aria-label="Global collection boundaries">
         <p>
           Data boundary: <code>{dataset.dataSource}</code> and global collections only.
         </p>

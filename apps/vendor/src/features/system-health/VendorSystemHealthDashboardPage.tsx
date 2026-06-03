@@ -192,12 +192,12 @@ function VendorSystemHealthDashboardPage() {
 
   return (
     <section
-      className="vendor-content-card vendor-system-health-page"
+      className="vendor-content-card admin-content-card vendor-system-health-page"
       aria-labelledby="vendor-system-health-title"
     >
-      <p className="vendor-content-eyebrow">Build 140</p>
+      <p className="vendor-content-eyebrow admin-content-eyebrow">Build 140</p>
       <h2 id="vendor-system-health-title">System Health Monitoring Dashboard</h2>
-      <p className="vendor-content-copy">
+      <p className="vendor-content-copy admin-content-copy">
         Global runtime monitoring, feature rollout controls, and snapshot-safe export/backup operations for
         vendor operators.
       </p>
@@ -317,9 +317,9 @@ function VendorSystemHealthDashboardPage() {
           </label>
         </UiForm>
 
-        <section className="vendor-content-card vendor-nested-card" aria-label="Data export and backups">
+        <section className="vendor-content-card admin-content-card vendor-nested-card" aria-label="Data export and backups">
           <h3 className="vendor-subsection-title">Data Export & Backup Operations</h3>
-          <p className="vendor-content-copy">
+          <p className="vendor-content-copy admin-content-copy">
             ExportPlatformMetrics, ExportInstituteData, TriggerManualBackup, and RestoreSimulationEnvironment
             operate with snapshot collections only.
           </p>
@@ -355,7 +355,7 @@ function VendorSystemHealthDashboardPage() {
           emptyStateText="No system performance indicators available."
         />
 
-        <section className="vendor-content-card vendor-nested-card" aria-label="Structural guarantees">
+        <section className="vendor-content-card admin-content-card vendor-nested-card" aria-label="Structural guarantees">
           <h3 className="vendor-subsection-title">Structural Guarantee Checklist</h3>
           <ul className="vendor-guarantee-list">
             {dataset.structuralGuarantees.map((item) => (
@@ -396,7 +396,7 @@ function VendorSystemHealthDashboardPage() {
         emptyStateText="No critical frontend telemetry events captured in this session."
       />
 
-      <div className="vendor-boundary-note" role="note" aria-label="System health boundaries and controls">
+      <div className="vendor-boundary-note admin-content-note" role="note" aria-label="System health boundaries and controls">
         <p>Build 140 controls:</p>
         <ul>
           <li>Health metrics derive from platform metrics, monitoring dashboards, and error logs.</li>
@@ -408,7 +408,7 @@ function VendorSystemHealthDashboardPage() {
         </ul>
       </div>
 
-      <p className="vendor-content-note">{lastAction}</p>
+      <p className="vendor-content-note admin-content-note">{lastAction}</p>
     </section>
   );
 }

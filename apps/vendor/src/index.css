@@ -4,10 +4,10 @@
   font-family: "Segoe UI", "Helvetica Neue", sans-serif;
   line-height: 1.5;
   font-weight: 400;
-  color: #15263f;
+  color: #13213a;
   background:
-    radial-gradient(circle at top right, rgba(19, 105, 189, 0.14), transparent 26%),
-    linear-gradient(180deg, #f8fbff 0%, #edf3fa 100%);
+    radial-gradient(circle at top left, rgba(209, 98, 24, 0.12), transparent 24%),
+    linear-gradient(180deg, #fff7ef 0%, #f2f6fb 100%);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -18,16 +18,22 @@
   box-sizing: border-box;
 }
 
-html,
-body {
+html {
   min-width: 320px;
-  min-height: 100vh;
 }
 
 body {
   margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
 }
 
 a {
   color: inherit;
+}
+
+h1,
+h2,
+p {
+  margin-top: 0;
 }

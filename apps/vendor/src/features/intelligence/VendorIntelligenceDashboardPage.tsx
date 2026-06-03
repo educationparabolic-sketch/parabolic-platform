@@ -140,10 +140,10 @@ function VendorIntelligenceDashboardPage() {
   }, []);
 
   return (
-    <section className="vendor-content-card" aria-labelledby="vendor-intelligence-title">
-      <p className="vendor-content-eyebrow">Build 139</p>
+    <section className="vendor-content-card admin-content-card" aria-labelledby="vendor-intelligence-title">
+      <p className="vendor-content-eyebrow admin-content-eyebrow">Build 139</p>
       <h2 id="vendor-intelligence-title">Vendor Intelligence Dashboard</h2>
-      <p className="vendor-content-copy">
+      <p className="vendor-content-copy admin-content-copy">
         Macro-level cross-institute intelligence and commercial performance metrics derived from aggregated
         collections only.
       </p>
@@ -208,7 +208,7 @@ function VendorIntelligenceDashboardPage() {
         emptyStateText="No weakness clusters available."
       />
 
-      <div className="vendor-boundary-note" role="note" aria-label="Vendor intelligence data boundaries">
+      <div className="vendor-boundary-note admin-content-note" role="note" aria-label="Vendor intelligence data boundaries">
         <p>Data boundary controls:</p>
         <ul>
           <li>Sources: vendorAggregates, billingRecords, licenseHistory.</li>

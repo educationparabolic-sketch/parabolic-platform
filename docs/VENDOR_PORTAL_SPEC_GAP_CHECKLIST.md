@@ -23,7 +23,7 @@ Priority guide:
 | VEN-GLB-003 | Global | Protected vendor route shell | completed | P0 | Authenticated route wrapper is implemented |
 | VEN-GLB-004 | Global | Vendor-only role guard | completed | P0 | Non-vendor users redirect to `/unauthorized` |
 | VEN-GLB-005 | Global | Unauthorized route for denied vendor access | completed | P1 | `/unauthorized` is mounted |
-| VEN-GLB-006 | Global | Vendor route registry aligned to planned route map | partial | P1 | Several planned routes exist in definitions but are not mounted in the app |
+| VEN-GLB-006 | Global | Vendor route registry aligned to planned route map | completed | P1 | Canonical vendor route definitions now cover the planned P1 map, and the vendor app mounts the missing planned routes with dedicated placeholder shells where deeper workflows are still future work |
 
 ## Route Map
 
@@ -31,18 +31,18 @@ Priority guide:
 |---|---|---|---|---|---|
 | VEN-RTE-001 | Routes | `/vendor/overview` | completed | P0 | Mounted in `apps/vendor/src/App.tsx` |
 | VEN-RTE-002 | Routes | `/vendor/institutes` | completed | P0 | Mounted |
-| VEN-RTE-003 | Routes | `/vendor/institutes/:instituteId` | partial | P1 | Present in route definitions, not mounted in the vendor app |
+| VEN-RTE-003 | Routes | `/vendor/institutes/:instituteId` | completed | P1 | Mounted with a dedicated institute-detail placeholder shell in the vendor app |
 | VEN-RTE-004 | Routes | `/vendor/licensing` | completed | P0 | Mounted |
 | VEN-RTE-005 | Routes | `/vendor/calibration` | completed | P0 | Mounted |
-| VEN-RTE-006 | Routes | `/vendor/calibration/simulate` | partial | P1 | Present in route definitions, not mounted |
-| VEN-RTE-007 | Routes | `/vendor/calibration/history` | partial | P1 | Present in route definitions, not mounted |
+| VEN-RTE-006 | Routes | `/vendor/calibration/simulate` | completed | P1 | Mounted with a dedicated simulation route shell that preserves the planned contract while deeper tooling remains future work |
+| VEN-RTE-007 | Routes | `/vendor/calibration/history` | completed | P1 | Mounted with a dedicated calibration-history placeholder shell |
 | VEN-RTE-008 | Routes | `/vendor/intelligence` | completed | P0 | Mounted |
-| VEN-RTE-009 | Routes | `/vendor/revenue` | partial | P1 | Present in route definitions, but no mounted route/page in `App.tsx` |
+| VEN-RTE-009 | Routes | `/vendor/revenue` | completed | P1 | Mounted with a dedicated revenue-and-business-metrics placeholder route shell |
 | VEN-RTE-010 | Routes | `/vendor/system-health` | completed | P0 | Mounted |
 | VEN-RTE-011 | Routes | `/vendor/audit` | completed | P0 | Mounted |
-| VEN-RTE-012 | Routes | `/vendor/feature-flags` | missing | P1 | No route definition or mounted page found |
-| VEN-RTE-013 | Routes | `/vendor/data-export` | missing | P1 | No route definition or mounted page found |
-| VEN-RTE-014 | Routes | `/vendor/backups` | missing | P2 | No route definition or mounted page found |
+| VEN-RTE-012 | Routes | `/vendor/feature-flags` | completed | P1 | Added to the vendor route registry and mounted with a dedicated feature-flags placeholder shell |
+| VEN-RTE-013 | Routes | `/vendor/data-export` | completed | P1 | Added to the vendor route registry and mounted with a dedicated data-export placeholder shell |
+| VEN-RTE-014 | Routes | `/vendor/backups` | completed | P2 | Added to the vendor route registry, vendor primary navigation, and mounted with a dedicated backups-and-restore placeholder shell |
 
 ## Suggested Fix Order
 
