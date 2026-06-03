@@ -10,7 +10,13 @@ This file is the persistent handoff state for portal checklist implementation ac
 - `Next Suggested Checklist ID`: `VEN-GLB-006`
 - `Last Updated`: `2026-06-02`
 - `Saved Scope Note`: Completed exam P2 `EXP-INS-008` by making the instruction screen feel more like a production exam sheet: top exam facts, candidate/session strip, richer legend copy, clearer declaration wording, and explicit start-note structure. `npm --prefix apps/exam run build` passed. Exam P2 is complete, so advance to vendor P1 with `VEN-GLB-006`.
-- `Temporary Dev Testing Note`: Keep the exam portal dev-only mock entry mode (`npm run dev:mock-entry`, `?token=dev`,http://localhost:5173/session/dev-mock-session?token=dev) until exam portal P0/P1/P2 implementation is fully complete; remove it only during final exam-portal cleanup/hardening.
+- `Temporary Dev Testing Note`: Keep the exam portal dev-only mock entry mode (`npm run dev:mock-entry`, `?token=dev`,http://localhost:5173/session/dev-mock-session?token=dev) L0 / Operational
+http://localhost:5173/session/dev-mock-session?token=dev&mode=l0
+L1 / Diagnostic
+http://localhost:5173/session/dev-mock-session?token=dev&mode=l1
+L2 / Controlled
+http://localhost:5173/session/dev-mock-session?token=dev&mode=l2 
+until exam portal P0/P1/P2 implementation is fully complete; remove it only during final exam-portal cleanup/hardening.
 
 ## Active Checklist Set
 

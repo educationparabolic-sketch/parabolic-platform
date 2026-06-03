@@ -154,12 +154,6 @@ interface AdaptivePhaseSnapshot {
   disciplineIndex: number;
 }
 
-interface DiagnosticAdvisoryItem {
-  label: string;
-  value: string;
-  message: string;
-}
-
 interface QueuedAnswerWrite {
   clientTimestamp: number;
   questionId: string;
@@ -241,7 +235,19 @@ interface SessionRecoverySnapshot {
 
 type SyncState = "idle" | "syncing" | "error";
 
-const EXAM_DURATION_MINUTES = 180;
+interface PhasePresentation {
+  shortLabel: string;
+  title: string;
+  description: string;
+}
+
+interface PhaseScheduleItem extends PhasePresentation {
+  phaseId: PhaseId;
+  startMs: number;
+  endMs: number;
+  durationMs: number;
+}
+
 const TICK_INTERVAL_MS = 1_000;
 const EARLY_SUBMIT_DISCIPLINE_THRESHOLD = 65;
 const EARLY_SUBMIT_PHASE_ADHERENCE_THRESHOLD = 62;
@@ -389,11 +395,13 @@ function isExamDevMockEntryEnabled(): boolean {
   return import.meta.env.DEV && getFrontendEnvironment().examDevMockEntry === true;
 }
 
-function buildDevMockTokenClaims(sessionId: string): TokenClaims {
+function buildDevMockTokenClaims(sessionId: string, modeOverride: string | null): TokenClaims {
+  const resolvedMode = parseExecutionMode(modeOverride) ?? "Controlled";
+
   return {
     sub: "Dev Mock Candidate",
     exp: Math.floor(Date.now() / 1000) + 60 * 60,
-    mode: "Controlled",
+    mode: resolvedMode,
     instituteId: "inst-dev-mock",
     yearId: "year-dev-mock",
     runId: "run-dev-mock",
@@ -405,6 +413,7 @@ function buildDevMockTokenClaims(sessionId: string): TokenClaims {
 function validateSessionEntry(
   token: string | null,
   sessionId: string,
+  modeOverride: string | null,
 ): EntryValidationResult {
   if (window.self !== window.top) {
     return {
@@ -427,7 +436,7 @@ function validateSessionEntry(
     return {
       allowed: true,
       reason: null,
-      claims: buildDevMockTokenClaims(sessionId),
+      claims: buildDevMockTokenClaims(sessionId, modeOverride),
     };
   }
 
@@ -804,6 +813,43 @@ function buildInitialTimingMap(
   }, {});
 }
 
+function getSessionTotalDurationMs(sessionSnapshot: SessionSnapshot): number {
+  const totalMaxTimeSec = sessionSnapshot.questions.reduce((sum, question) => {
+    return sum + sessionSnapshot.timingProfile.maxTimeByDifficultySec[question.difficulty];
+  }, 0);
+
+  return Math.max(totalMaxTimeSec * 1000, 60_000);
+}
+
+function toDurationMinutesLabel(totalDurationMs: number): number {
+  return Math.max(1, Math.ceil(totalDurationMs / 1000 / 60));
+}
+
+function toCompactDurationLabel(durationMs: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(durationMs / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+  }
+
+  if (minutes > 0) {
+    return seconds > 0 ? `${minutes}m ${String(seconds).padStart(2, "0")}s` : `${minutes}m`;
+  }
+
+  return `${seconds}s`;
+}
+
+function toMinuteSecondCountdownLabel(durationMs: number): string {
+  const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
+}
+
 function hasAnswer(question: SessionQuestion, responseState: QuestionResponseState): boolean {
   if (question.type === "mcq") {
     return Boolean(responseState.selectedOptionId);
@@ -872,6 +918,56 @@ function getPhaseId(elapsedPercent: number, phaseConfigSnapshot: PhaseConfigSnap
     return "phase2";
   }
   return "phase3";
+}
+
+function getPhasePresentation(phaseId: PhaseId): PhasePresentation {
+  switch (phaseId) {
+    case "phase1":
+      return {
+        shortLabel: "Phase 1",
+        title: "Rapid Sweep",
+        description: "Move steadily, secure easier questions, and establish attempt momentum.",
+      };
+    case "phase2":
+      return {
+        shortLabel: "Phase 2",
+        title: "Core Attempt",
+        description: "Spend the main exam window on your central problem-solving effort.",
+      };
+    case "phase3":
+    default:
+      return {
+        shortLabel: "Phase 3",
+        title: "Review and Closure",
+        description: "Use the closing window to review marked work and finish carefully.",
+      };
+  }
+}
+
+function buildPhaseSchedule(totalDurationMs: number, phaseConfigSnapshot: PhaseConfigSnapshot): PhaseScheduleItem[] {
+  const phaseDefinitions: Array<{ phaseId: PhaseId; percent: number }> = [
+    { phaseId: "phase1", percent: phaseConfigSnapshot.phase1Percent },
+    { phaseId: "phase2", percent: phaseConfigSnapshot.phase2Percent },
+    { phaseId: "phase3", percent: phaseConfigSnapshot.phase3Percent },
+  ];
+
+  let elapsedMs = 0;
+
+  return phaseDefinitions.map((definition, index) => {
+    const rawDurationMs = Math.round((totalDurationMs * definition.percent) / 100);
+    const durationMs = index === phaseDefinitions.length - 1 ? Math.max(0, totalDurationMs - elapsedMs) : rawDurationMs;
+    const startMs = elapsedMs;
+    const endMs = Math.min(totalDurationMs, startMs + durationMs);
+    elapsedMs = endMs;
+
+    return {
+      phaseId: definition.phaseId,
+      ...getPhasePresentation(definition.phaseId),
+      startMs,
+      endMs,
+      durationMs: Math.max(0, durationMs),
+    };
+  });
 }
 
 function evaluateExpression(expression: string): number {
@@ -1086,15 +1182,75 @@ function ScientificCalculatorModal(props: { open: boolean; onClose: () => void }
   );
 }
 
+function ExamInsightsModal(props: {
+  open: boolean;
+  onClose: () => void;
+  timingStatus: string;
+  timingProfileItems: Array<{ label: string; value: string; hint: string }>;
+}) {
+  const {
+    open,
+    onClose,
+    timingStatus,
+    timingProfileItems,
+  } = props;
+
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="exam-insights-overlay" role="presentation" onClick={onClose}>
+      <section
+        className="exam-insights-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Exam insights"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="exam-insights-modal-header">
+          <div>
+            <p className="exam-insights-modal-eyebrow">Session Insights</p>
+            <h2>Timing and control metrics</h2>
+          </div>
+          <button type="button" className="exam-insights-close" onClick={onClose}>
+            Close
+          </button>
+        </header>
+
+        <section className="exam-insight-card" aria-label="Question timing profile">
+          <div className="exam-insight-card-header">
+            <div>
+              <p className="exam-insight-card-label">Timing Profile</p>
+              <h3>Question pacing</h3>
+            </div>
+            <span className="exam-insight-status">{timingStatus}</span>
+          </div>
+          <div className="exam-insight-grid">
+            {timingProfileItems.map((item) => (
+              <article key={item.label} className="exam-insight-metric">
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+                <p>{item.hint}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      </section>
+    </div>
+  );
+}
+
 function ExamSessionPage() {
   const { sessionId = "" } = useParams<{ sessionId: string }>();
   const location = useLocation();
   const tokenFromQuery = useMemo(() => new URLSearchParams(location.search).get("token"), [location.search]);
+  const modeFromQuery = useMemo(() => new URLSearchParams(location.search).get("mode"), [location.search]);
   const [sessionToken, setSessionToken] = useState<string | null>(() => tokenFromQuery);
   const devMockEntryEnabled = useMemo(() => isExamDevMockEntryEnabled(), []);
   const entryValidation = useMemo(
-    () => validateSessionEntry(sessionToken, sessionId),
-    [sessionId, sessionToken],
+    () => validateSessionEntry(sessionToken, sessionId, modeFromQuery),
+    [modeFromQuery, sessionId, sessionToken],
   );
   const modeInstruction = MODE_INSTRUCTIONS[entryValidation.claims.mode];
   const candidateName = entryValidation.claims.sub ?? "Student Candidate";
@@ -1104,15 +1260,18 @@ function ExamSessionPage() {
     () => buildSessionSnapshot(sessionId || "runtime-session", entryValidation.claims.mode),
     [entryValidation.claims.mode, sessionId],
   );
+  const totalDurationMs = useMemo(() => getSessionTotalDurationMs(sessionSnapshot), [sessionSnapshot]);
+  const totalDurationMinutesLabel = useMemo(() => toDurationMinutesLabel(totalDurationMs), [totalDurationMs]);
 
   const [selectedSection, setSelectedSection] = useState<QuestionSection | "All">("All");
   const [selectedQuestionId, setSelectedQuestionId] = useState(sessionSnapshot.questions[0]?.id ?? "q-1");
   const [declarationAccepted, setDeclarationAccepted] = useState(false);
   const [instructionConfirmed, setInstructionConfirmed] = useState(false);
-  const [remainingMs, setRemainingMs] = useState(EXAM_DURATION_MINUTES * 60 * 1000);
+  const [remainingMs, setRemainingMs] = useState(totalDurationMs);
   const [deadlineEpochMs, setDeadlineEpochMs] = useState<number | null>(null);
   const [syncCounter, setSyncCounter] = useState(0);
   const [calculatorOpen, setCalculatorOpen] = useState(false);
+  const [insightsOpen, setInsightsOpen] = useState(false);
   const [responseStateByQuestionId, setResponseStateByQuestionId] = useState<Record<string, QuestionResponseState>>(() =>
     buildInitialResponseMap(sessionSnapshot.questions),
   );
@@ -1137,9 +1296,9 @@ function ExamSessionPage() {
   const [lastAnswerWriteAtMs, setLastAnswerWriteAtMs] = useState(() => Date.now() - ANSWER_BATCH_INTERVAL_MS);
   const [pendingAnswerMap, setPendingAnswerMap] = useState<Record<string, QueuedAnswerWrite>>({});
   const [syncState, setSyncState] = useState<SyncState>("idle");
-  const [syncMessage, setSyncMessage] = useState("No pending answer updates.");
-  const [lastHeartbeatAtIso, setLastHeartbeatAtIso] = useState<string | null>(null);
-  const [sessionTokenRefreshAtIso, setSessionTokenRefreshAtIso] = useState<string | null>(null);
+  const [, setSyncMessage] = useState("No pending answer updates.");
+  const [, setLastHeartbeatAtIso] = useState<string | null>(null);
+  const [, setSessionTokenRefreshAtIso] = useState<string | null>(null);
   const [recoveryApplied, setRecoveryApplied] = useState(false);
   const [submitDialogOpen, setSubmitDialogOpen] = useState(false);
   const [submitInFlight, setSubmitInFlight] = useState(false);
@@ -1151,7 +1310,6 @@ function ExamSessionPage() {
     entryValidation.allowed ? "pending" : "invalid",
   );
 
-  const totalDurationMs = EXAM_DURATION_MINUTES * 60 * 1000;
   const isOperationalMode = entryValidation.claims.mode === "Operational";
   const isDiagnosticMode = entryValidation.claims.mode === "Diagnostic";
   const isControlledMode = entryValidation.claims.mode === "Controlled";
@@ -1798,7 +1956,6 @@ function ExamSessionPage() {
     ? cachedQuestionSnapshotsRef.current.get(nextQuestionId) ?? questionSnapshotById.get(nextQuestionId) ?? null
     : null;
   const nextQuestionImageSrc = nextQuestion?.imageUrl ? toCdnAssetUrl(nextQuestion.imageUrl) : null;
-  const selectedQuestionReadCount = selectedQuestion ? questionSnapshotReadCountRef.current.get(selectedQuestion.id) ?? 1 : 0;
   const selectedResponseState = selectedQuestion
     ? responseStateByQuestionId[selectedQuestion.id]
     : undefined;
@@ -1985,6 +2142,86 @@ function ExamSessionPage() {
 
   const sessionLocked = sessionLifecycleState !== "active";
   const saveDisabled = selectedQuestionRevisitLocked || saveBlockedByTiming || slowdownActive || isSubmitted || sessionLocked;
+  const selectedQuestionTimingStatus = slowdownActive
+    ? `Resume in ${slowdownSecondsRemaining}s`
+    : selectedQuestionRevisitLocked
+      ? "Locked"
+      : saveBlockedByTiming
+        ? `Save unlocks in ${selectedQuestionMinTimeRemainingSec}s`
+        : selectedQuestionOverstaySec > 0
+          ? `Overstay by ${selectedQuestionOverstaySec}s`
+          : "On track";
+  const selectedQuestionHeaderStatus = slowdownActive
+    ? `Resume ${slowdownSecondsRemaining}s`
+    : selectedQuestionRevisitLocked
+      ? "Locked"
+      : saveBlockedByTiming
+        ? `Unlocks in ${selectedQuestionMinTimeRemainingSec}s`
+        : selectedQuestionOverstaySec > 0
+          ? `Overstay ${selectedQuestionOverstaySec}s`
+          : "Ready";
+  const timingProfileItems = [
+    {
+      label: "Min Time",
+      value: `${selectedQuestionMinTimeRemainingSec}s`,
+      hint: saveBlockedByTiming ? "Before save is enabled" : "Requirement met",
+    },
+    {
+      label: "Max Time",
+      value: `${selectedQuestionMaxTimeRemainingSec}s`,
+      hint: selectedQuestionRevisitLocked ? "Question locked" : "Remaining on this question",
+    },
+    {
+      label: "Time Spent",
+      value: `${selectedQuestionTimeSpentSec}s`,
+      hint: "Tracked on this question",
+    },
+    {
+      label: "Recommended Avg",
+      value: `${selectedQuestionRecommendedAverageSec}s`,
+      hint: isControlledMode ? "Guided pacing target" : "Reference pacing",
+    },
+  ];
+  const syncSummaryLabel = syncState === "error"
+    ? "Sync issue"
+    : pendingAnswers.length > 0
+      ? `${pendingAnswers.length} pending`
+      : "Synced";
+  const modeTierLabel = isOperationalMode
+    ? "L0 Operational"
+    : isDiagnosticMode
+      ? "L1 Diagnostic"
+      : isControlledMode
+        ? "L2 Controlled"
+        : "Hard Mode";
+  const activeSectionLabel = selectedSection === "All" ? "All Subjects" : selectedSection;
+  const modeStudentExplanation = isOperationalMode
+    ? "Standard exam delivery. You can navigate freely and submit anytime."
+    : isDiagnosticMode
+      ? "Diagnostic guidance is active. You may see pacing cues, but your attempt remains fully open."
+      : isControlledMode
+        ? "Controlled execution is active. Timing and pacing rules can affect save and submit actions."
+        : "Strict execution is active. Timing locks and progression restrictions are enforced.";
+  const phaseSchedule = useMemo(
+    () => buildPhaseSchedule(totalDurationMs, sessionSnapshot.phaseConfigSnapshot),
+    [sessionSnapshot.phaseConfigSnapshot, totalDurationMs],
+  );
+  const currentPhasePresentation = useMemo(
+    () => getPhasePresentation(adaptivePhaseSnapshot.currentPhase),
+    [adaptivePhaseSnapshot.currentPhase],
+  );
+  const currentPhaseSchedule = useMemo(
+    () => phaseSchedule.find((item) => item.phaseId === adaptivePhaseSnapshot.currentPhase) ?? phaseSchedule[0],
+    [adaptivePhaseSnapshot.currentPhase, phaseSchedule],
+  );
+  const elapsedMs = Math.max(0, totalDurationMs - remainingMs);
+  const currentPhaseRemainingMs = Math.max(0, (currentPhaseSchedule?.endMs ?? totalDurationMs) - elapsedMs);
+  const currentPhaseRemainingLabel = toMinuteSecondCountdownLabel(currentPhaseRemainingMs);
+  const paletteSummaryItems = [
+    { label: "Answered", value: answeredCount },
+    { label: "Pending", value: notAnsweredCount },
+    { label: "Review", value: markedCount },
+  ];
 
   const shouldRestrictManualSubmit =
     isHardMode &&
@@ -2014,71 +2251,31 @@ function ExamSessionPage() {
       }).length,
     [questionTimingById, responseStateByQuestionId, sessionSnapshot.questions],
   );
+  const liveSupportItems = isDiagnosticMode
+    ? [
+        `${currentPhasePresentation.shortLabel}: ${currentPhasePresentation.title}`,
+        `${currentPhaseRemainingLabel} left in phase`,
+        `${easyRemainingCount} easy remaining`,
+        `${rapidAnswerCount} rapid answers flagged`,
+      ]
+    : isControlledMode
+      ? [
+        `${currentPhasePresentation.shortLabel}: ${currentPhasePresentation.title}`,
+          `${currentPhaseRemainingLabel} left in phase`,
+          `MinTime ${selectedQuestionMinTimeRemainingSec}s`,
+          selectedQuestionOverstaySec > 0 ? `Overstay ${selectedQuestionOverstaySec}s` : "On paced attempt",
+        ]
+      : isHardMode
+        ? [
+            "Sequential progression active",
+            sessionSnapshot.hardModeRevisitRestricted ? "Revisit disabled" : "Restricted revisit",
+            `MaxTime ${selectedQuestionMaxTimeRemainingSec}s`,
+          ]
+        : [];
+  const compactModePills = !isOperationalMode ? liveSupportItems.slice(2) : [];
   const lowDiscipline = adaptivePhaseSnapshot.disciplineIndex < EARLY_SUBMIT_DISCIPLINE_THRESHOLD;
   const lowAdherence = adaptivePhaseSnapshot.phaseAdherencePercent < EARLY_SUBMIT_PHASE_ADHERENCE_THRESHOLD;
   const requiresEarlySubmitOverride = isControlledMode && (lowDiscipline || lowAdherence);
-  const diagnosticAdvisories = useMemo<DiagnosticAdvisoryItem[]>(() => {
-    if (!isDiagnosticMode) {
-      return [];
-    }
-
-    return [
-      {
-        label: "Phase Pacing",
-        value: adaptivePhaseSnapshot.currentPhase.toUpperCase(),
-        message:
-          adaptivePhaseSnapshot.phaseAdherencePercent >= 75 ?
-            "Attempt progress is broadly aligned with elapsed time." :
-            "Attempt progress is drifting from elapsed time; adjust pace calmly.",
-      },
-      {
-        label: "Attempt Progress",
-        value: `${attemptedPercent.toFixed(1)}%`,
-        message:
-          attemptedPercent >= 50 ?
-            "Attempt coverage is above the diagnostic midpoint." :
-            "Attempt coverage is below the diagnostic midpoint; review easy wins.",
-      },
-      {
-        label: "Easy Remaining",
-        value: String(easyRemainingCount),
-        message:
-          easyRemainingCount === 0 ?
-            "All easy questions have an answer recorded." :
-            "Easy questions remain available; use open navigation to collect them when ready.",
-      },
-      {
-        label: "Rapid Answers",
-        value: String(rapidAnswerCount),
-        message:
-          rapidAnswerCount === 0 ?
-            "No answered question is currently below its diagnostic engagement window." :
-            "Some answers were recorded quickly; revisit them calmly if time permits.",
-      },
-      {
-        label: "Review Load",
-        value: String(markedCount),
-        message:
-          markedCount <= 3 ?
-            "Review load is currently manageable." :
-            "Review load is growing; revisit marked questions in small batches.",
-      },
-      {
-        label: "Navigation",
-        value: "Open",
-        message: "L1 advisories never block navigation, save, or submit actions.",
-      },
-    ];
-  }, [
-    adaptivePhaseSnapshot.currentPhase,
-    adaptivePhaseSnapshot.phaseAdherencePercent,
-    attemptedPercent,
-    easyRemainingCount,
-    isDiagnosticMode,
-    markedCount,
-    rapidAnswerCount,
-  ]);
-
   const manualSubmitDisabled = isSubmitted || sessionLocked || slowdownActive || shouldRestrictManualSubmit;
 
   if (!entryValidation.allowed) {
@@ -2100,6 +2297,19 @@ function ExamSessionPage() {
           <header className="exam-instruction-header">
             <p className="exam-instruction-eyebrow">Exam Entry</p>
             <h1 id="exam-instruction-title">Instructions</h1>
+            <section
+              className={isOperationalMode ? "exam-mode-hero operational" : isDiagnosticMode ? "exam-mode-hero diagnostic" : isControlledMode ? "exam-mode-hero controlled" : "exam-mode-hero hard"}
+              aria-label="Exam mode identity"
+            >
+              <div className="exam-mode-hero-copy">
+                <span className="exam-mode-hero-label">Attempt Mode</span>
+                <strong>{modeTierLabel}</strong>
+                <p>{modeStudentExplanation}</p>
+              </div>
+              <div className="exam-mode-hero-note">
+                <span>This mode changes how the exam behaves while you attempt it.</span>
+              </div>
+            </section>
             <div className="exam-instruction-meta-grid" aria-label="Instruction summary">
               <div className="exam-instruction-meta-card">
                 <span>Total Questions</span>
@@ -2107,7 +2317,7 @@ function ExamSessionPage() {
               </div>
               <div className="exam-instruction-meta-card">
                 <span>Total Duration</span>
-                <strong>{EXAM_DURATION_MINUTES} Minutes</strong>
+                <strong>{totalDurationMinutesLabel} Minutes</strong>
               </div>
               <div className="exam-instruction-meta-card">
                 <span>Attempt Model</span>
@@ -2136,7 +2346,7 @@ function ExamSessionPage() {
             <h2>1. General Instructions</h2>
             <ul>
               <li>Total questions: {sessionSnapshot.questions.length}.</li>
-              <li>Total duration: {EXAM_DURATION_MINUTES} minutes.</li>
+              <li>Total duration: {totalDurationMinutesLabel} minutes.</li>
               <li>Attempt this paper only through the current signed exam session.</li>
               <li>This portal follows a server-authoritative execution model.</li>
               <li>Do not refresh or close the tab during the attempt.</li>
@@ -2193,6 +2403,25 @@ function ExamSessionPage() {
                 <li key={point}>{point}</li>
               ))}
             </ul>
+            {!isOperationalMode ? (
+              <div className="exam-phase-schedule" aria-label="Phase timing schedule">
+                {phaseSchedule.map((phase) => (
+                  <article
+                    key={phase.phaseId}
+                    className={phase.phaseId === adaptivePhaseSnapshot.currentPhase ? "exam-phase-schedule-card active" : "exam-phase-schedule-card"}
+                  >
+                    <span>{phase.shortLabel}</span>
+                    <strong>{phase.title}</strong>
+                    <p>{phase.description}</p>
+                    <small>
+                      {toCompactDurationLabel(phase.durationMs)}
+                      {" "}
+                      window
+                    </small>
+                  </article>
+                ))}
+              </div>
+            ) : null}
           </section>
 
           <section className="exam-instruction-section" aria-label="Declaration and Start">
@@ -2455,145 +2684,141 @@ function ExamSessionPage() {
   return (
     <main className={hardModeMinimalUI ? "exam-runner-shell exam-runner-shell-hard-mode" : "exam-runner-shell"}>
       <div className="exam-top-bar">
-      <header className="exam-header" aria-label="Exam header bar">
-        <div className="exam-header-group exam-header-identity exam-header-identity-compact">
-          <p className="exam-header-label">Candidate</p>
-          <h1>{candidateName}</h1>
-          {!hardModeMinimalUI ? (
-            <>
-              <p className="exam-header-identity-meta">
-                App No:
-                {" "}
-                <strong>EXM-{sessionSnapshot.sessionId.slice(-8).toUpperCase()}</strong>
-              </p>
-            </>
-          ) : null}
-        </div>
+        <header className="exam-header" aria-label="Exam header bar">
+          <div className="exam-header-group exam-header-identity exam-header-identity-compact">
+            <p className="exam-header-label">Candidate</p>
+            <h1>{candidateName}</h1>
+          </div>
 
-        <div className="exam-header-group exam-header-metrics exam-header-metrics-compact">
-          <p>
-            Question:
-            {" "}
-            <strong>{selectedQuestion?.number ?? 1}</strong>
-            {" / "}
-            {sessionSnapshot.questions.length}
-          </p>
-          <p>
-            Mode:
-            {" "}
-            <strong>{entryValidation.claims.mode}</strong>
-          </p>
-          {!isOperationalMode && !hardModeMinimalUI ? (
+          <div className="exam-header-group exam-header-metrics exam-header-metrics-compact">
             <p>
-              Phase:
+              <span className={isOperationalMode ? "exam-mode-badge operational" : isDiagnosticMode ? "exam-mode-badge diagnostic" : isControlledMode ? "exam-mode-badge controlled" : "exam-mode-badge hard"}>
+                {modeTierLabel}
+              </span>
+            </p>
+            <p>
+              Q
               {" "}
-              <strong>{adaptivePhaseSnapshot.currentPhase.toUpperCase()}</strong>
+              <strong>{selectedQuestion?.number ?? 1}</strong>
+              /
+              {sessionSnapshot.questions.length}
             </p>
-          ) : null}
-        </div>
+            {!isOperationalMode ? (
+              <p>
+                {currentPhasePresentation.shortLabel}
+                {" "}
+                <strong>{currentPhasePresentation.title}</strong>
+                {" "}
+                •
+                {" "}
+                <strong>{currentPhaseRemainingLabel} left</strong>
+              </p>
+            ) : null}
+          </div>
 
-        <div className="exam-header-group exam-header-timer-group">
-          <p className="exam-header-label">Time Left</p>
-          <div className="exam-header-timer-row">
-            <p className={isFinalWindow ? "exam-header-timer danger" : "exam-header-timer"}>
-              {toCountdownLabel(remainingMs)}
-            </p>
+          <div className="exam-header-group exam-header-timer-group">
+            <div className="exam-header-timer-row">
+              <div className="exam-header-timer-stack">
+                <p className="exam-header-label">Exam Time Left</p>
+                <p className={isFinalWindow ? "exam-header-timer danger" : "exam-header-timer"}>
+                  {toCountdownLabel(remainingMs)}
+                </p>
+              </div>
+              <div className="exam-header-utility-actions">
+                {!hardModeMinimalUI ? (
+                  <span className={syncState === "error" ? "exam-sync-pill error" : "exam-sync-pill"}>
+                    {syncSummaryLabel}
+                  </span>
+                ) : null}
+                {(isControlledMode || isHardMode) ? (
+                  <button
+                    type="button"
+                    className="exam-header-utility-button"
+                    onClick={() => setInsightsOpen(true)}
+                  >
+                    Timing
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="exam-calculator-launch"
+                  onClick={() => setCalculatorOpen(true)}
+                >
+                  Calculator
+                </button>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div className={hardModeMinimalUI ? "exam-header-subject-tabs exam-header-subject-tabs-hard-mode" : "exam-header-subject-tabs"} role="tablist" aria-label="Header subject tabs">
+          <div className="exam-header-subject-tabs-track">
+            {sessionSnapshot.subjects.map((subject) => (
+              <button
+                key={subject}
+                type="button"
+                role="tab"
+                aria-selected={selectedSection === subject}
+                className={selectedSection === subject ? "exam-filter-button active" : "exam-filter-button"}
+                onClick={() => setSelectedSection(subject)}
+              >
+                {subject}
+              </button>
+            ))}
             <button
               type="button"
-              className="exam-calculator-launch"
-              onClick={() => setCalculatorOpen(true)}
+              role="tab"
+              aria-selected={selectedSection === "All"}
+              className={selectedSection === "All" ? "exam-filter-button active" : "exam-filter-button"}
+              onClick={() => setSelectedSection("All")}
             >
-              Calculator
+              All Subjects
             </button>
           </div>
-          {!hardModeMinimalUI ? (
-            <>
-              <p className={syncState === "error" ? "exam-sync-summary error" : "exam-sync-summary"}>
-                Sync #{syncCounter} • {syncState.toUpperCase()} • Pending {pendingAnswers.length} • Heartbeat {lastHeartbeatAtIso ?? "N/A"} • Refresh {sessionTokenRefreshAtIso ?? "Not required"}
-              </p>
-              <p className="exam-sync-indicator">{syncMessage}</p>
-            </>
-          ) : null}
-        </div>
-      </header>
-
-      <div className={hardModeMinimalUI ? "exam-header-subject-tabs exam-header-subject-tabs-hard-mode" : "exam-header-subject-tabs"} role="tablist" aria-label="Header subject tabs">
-        {sessionSnapshot.subjects.map((subject) => (
-          <button
-            key={subject}
-            type="button"
-            role="tab"
-            aria-selected={selectedSection === subject}
-            className={selectedSection === subject ? "exam-filter-button active" : "exam-filter-button"}
-            onClick={() => setSelectedSection(subject)}
-          >
-            {subject}
-          </button>
-        ))}
-        <button
-          type="button"
-          role="tab"
-          aria-selected={selectedSection === "All"}
-          className={selectedSection === "All" ? "exam-filter-button active" : "exam-filter-button"}
-          onClick={() => setSelectedSection("All")}
-        >
-          All Subjects
-        </button>
-      </div>
-      </div>
-
-      {(isDiagnosticMode || isControlledMode) && !slowdownActive ? (
-        <section
-          className={isDiagnosticMode ? "exam-advisory-banner diagnostic" : "exam-advisory-banner"}
-          aria-label="Adaptive advisory banner"
-        >
-          {isDiagnosticMode ? (
-            <>
-              <div className="exam-advisory-summary">
-                <p>
-                  Diagnostic Advisory: Phase adherence is
-                  {" "}
-                  <strong>{adaptivePhaseSnapshot.phaseAdherencePercent.toFixed(1)}%</strong>
-                  {" "}
-                  and overspend is
-                  {" "}
-                  <strong>{adaptivePhaseSnapshot.overspendPercent.toFixed(1)}%</strong>.
-                </p>
-                <p>L1 guidance is informational only; no navigation or submit action is blocked.</p>
-              </div>
-              <div className="exam-diagnostic-advisory-grid">
-                {diagnosticAdvisories.map((advisory) => (
-                  <article key={advisory.label} className="exam-diagnostic-advisory-item">
-                    <span>{advisory.label}</span>
-                    <strong>{advisory.value}</strong>
-                    <p>{advisory.message}</p>
-                  </article>
+          <div className="exam-inline-question-strip" aria-label="Current question context">
+            <div className="exam-inline-question-strip-copy">
+              <strong>
+                {selectedQuestion?.section ?? "Physics"}
+                {" "}
+                • Question
+                {" "}
+                {selectedQuestion?.number ?? 1}
+              </strong>
+              <span>
+                Type
+                {" "}
+                <strong>{selectedQuestion?.type.toUpperCase() ?? "MCQ"}</strong>
+              </span>
+            </div>
+            <div className="exam-inline-question-strip-actions">
+              {!isOperationalMode ? (
+                <span className="exam-question-status-chip">{selectedQuestionHeaderStatus}</span>
+              ) : null}
+              {(isControlledMode || isHardMode) ? (
+                <button
+                  type="button"
+                  className="exam-header-utility-button"
+                  onClick={() => setInsightsOpen(true)}
+                >
+                  Timing Details
+                </button>
+              ) : null}
+            </div>
+          </div>
+          {!isOperationalMode ? (
+            <div
+              className={isDiagnosticMode ? "exam-inline-mode-strip diagnostic" : isControlledMode ? "exam-inline-mode-strip controlled" : "exam-inline-mode-strip hard"}
+              aria-label="Execution mode strip"
+            >
+              <div className="exam-inline-mode-strip-signals">
+                {compactModePills.map((item) => (
+                  <span key={item} className="exam-inline-mode-strip-pill">{item}</span>
                 ))}
               </div>
-            </>
-          ) : (
-            <p>
-              Controlled Enforcement: MinTime gating active.
-              {" "}
-              Discipline Index
-              {" "}
-              <strong>{adaptivePhaseSnapshot.disciplineIndex.toFixed(1)}</strong>.
-              {" "}
-              {selectedQuestionOverstaySec > 0 ? (
-                <>
-                  Overstay advisory: current question is
-                  {" "}
-                  <strong>{selectedQuestionOverstaySec}s</strong>
-                  {" "}
-                  beyond the recommended average.
-                </>
-              ) : (
-                "Save is blocked until question timer reaches MinTime."
-              )}
-            </p>
-          )}
-        </section>
-      ) : null}
+            </div>
+          ) : null}
+        </div>
+      </div>
 
       {slowdownActive ? (
         <section className="exam-enforcement-warning" aria-label="Controlled slowdown warning">
@@ -2623,28 +2848,19 @@ function ExamSessionPage() {
 
       <div className="exam-main-layout">
         <aside className="exam-palette-panel" aria-label="Question navigation panel">
-          <div className="exam-palette-section-header">
-            <h2>Question Palette</h2>
-            <p>
-              {hardModeMinimalUI
-                ? "Restricted navigation view."
-                : "Choose one answer type before saving. Review colors match the live exam palette."}
-            </p>
-          </div>
-
-          <div className="exam-section-filters" role="tablist" aria-label="Question section filters">
-            {(["All", ...sessionSnapshot.subjects] as const).map((section) => (
-              <button
-                key={section}
-                type="button"
-                role="tab"
-                aria-selected={selectedSection === section}
-                className={selectedSection === section ? "exam-filter-button active" : "exam-filter-button"}
-                onClick={() => setSelectedSection(section)}
-              >
-                {section}
-              </button>
-            ))}
+          <div className="exam-palette-topline">
+            <div className="exam-palette-section-header">
+              <h2>Question Palette</h2>
+              <p>{activeSectionLabel}</p>
+            </div>
+            <div className="exam-palette-summary" aria-label="Palette summary">
+              {paletteSummaryItems.map((item) => (
+                <div key={item.label} className="exam-palette-summary-card">
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="exam-palette-grid" aria-label="Question status tiles">
@@ -2698,45 +2914,37 @@ function ExamSessionPage() {
           ) : null}
 
           <div className="exam-status-indicators" aria-label="Answer status indicators">
-            <h3>Status Indicators</h3>
+            <h3>Session Status</h3>
             <p>
-              Answered:
+              Current Section:
               {" "}
-              <strong>{answeredCount}</strong>
+              <strong>{activeSectionLabel}</strong>
             </p>
             <p>
-              Not Answered:
+              Completion:
               {" "}
-              <strong>{notAnsweredCount}</strong>
+              <strong>{toPercent(visitedCount, sessionSnapshot.questions.length).toFixed(0)}%</strong>
             </p>
-            <p>
-              Marked:
-              {" "}
-              <strong>{markedCount}</strong>
-            </p>
-            <p>
-              Hard Mode Locks:
-              {" "}
-              <strong>{hardModeLockedQuestionIds.size}</strong>
-            </p>
-            {!hardModeMinimalUI ? (
-              <>
-                <p>
-                  Phase Adherence:
-                  {" "}
-                  <strong>{adaptivePhaseSnapshot.phaseAdherencePercent.toFixed(1)}%</strong>
-                </p>
-                <p>
-                  Difficulty Compliance:
-                  {" "}
-                  <strong>{adaptivePhaseSnapshot.difficultyCompliancePercent.toFixed(1)}%</strong>
-                </p>
-                <p>
-                  Skip Pattern:
-                  {" "}
-                  <strong>{adaptivePhaseSnapshot.skipPatternScore.toFixed(1)}%</strong>
-                </p>
-              </>
+            {isHardMode ? (
+              <p>
+                Locked Questions:
+                {" "}
+                <strong>{hardModeLockedQuestionIds.size}</strong>
+              </p>
+            ) : null}
+            {isDiagnosticMode ? (
+              <p>
+                Easy Remaining:
+                {" "}
+                <strong>{easyRemainingCount}</strong>
+              </p>
+            ) : null}
+            {isControlledMode ? (
+              <p>
+                Save Status:
+                {" "}
+                <strong>{selectedQuestionTimingStatus}</strong>
+              </p>
             ) : null}
           </div>
 
@@ -2757,51 +2965,6 @@ function ExamSessionPage() {
         </aside>
 
         <section className="exam-question-container" aria-label="Question rendering container">
-          <header className="exam-question-header">
-            <h2>
-              {selectedQuestion?.section ?? "Physics"}
-              {" "}
-              • Question
-              {" "}
-              {selectedQuestion?.number ?? 1}
-            </h2>
-            {!hardModeMinimalUI ? (
-              <p>
-                Snapshot:
-                {" "}
-                <code>{sessionSnapshot.sessionId}</code>
-                {" "}
-                • Question Load Budget:
-                {" "}
-                <strong>{selectedQuestionReadCount} cached read</strong>
-              </p>
-            ) : null}
-            <div className="exam-question-timing-metrics">
-              <p>
-                MinTime Remaining:
-                {" "}
-                <strong>{selectedQuestionMinTimeRemainingSec}s</strong>
-              </p>
-              <p>
-                MaxTime Remaining:
-                {" "}
-                <strong>{selectedQuestionMaxTimeRemainingSec}s</strong>
-              </p>
-              <p>
-                Time Spent:
-                {" "}
-                <strong>{selectedQuestionTimeSpentSec}s</strong>
-              </p>
-              {isControlledMode && !hardModeMinimalUI ? (
-                <p>
-                  Recommended Avg:
-                  {" "}
-                  <strong>{selectedQuestionRecommendedAverageSec}s</strong>
-                </p>
-              ) : null}
-            </div>
-          </header>
-
           {selectedQuestion && selectedResponseState ? (
             <article className="exam-question-surface">
               {(() => {
@@ -2809,15 +2972,6 @@ function ExamSessionPage() {
 
                 return (
                   <>
-              <p className="exam-question-type">
-                Type:
-                {" "}
-                <strong>{selectedQuestion.type.toUpperCase()}</strong>
-                {" "}
-                • Difficulty:
-                {" "}
-                <strong>{selectedQuestion.difficulty.toUpperCase()}</strong>
-              </p>
               <p className="exam-question-text">{selectedQuestion.text}</p>
 
               {selectedQuestion.imageUrl ? (
@@ -3125,6 +3279,12 @@ function ExamSessionPage() {
       ) : null}
 
       <ScientificCalculatorModal open={calculatorOpen} onClose={() => setCalculatorOpen(false)} />
+      <ExamInsightsModal
+        open={insightsOpen}
+        onClose={() => setInsightsOpen(false)}
+        timingStatus={selectedQuestionTimingStatus}
+        timingProfileItems={timingProfileItems}
+      />
     </main>
   );
 }
