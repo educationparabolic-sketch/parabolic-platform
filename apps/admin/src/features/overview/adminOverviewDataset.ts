@@ -58,6 +58,7 @@ export interface AdminOverviewSnapshot {
     highestPerformingBatch: string;
     lowestPerformingBatch: string;
     distributionHistogram: OverviewDistributionBin[];
+    accuracyDistributionHistogram: OverviewDistributionBin[];
     avgPhaseAdherencePercentage: number;
     easyNeglectPercentage: number;
     hardBiasPercentage: number;
@@ -179,6 +180,13 @@ const FALLBACK_OVERVIEW_SNAPSHOT: AdminOverviewSnapshot = {
       { label: "56-70", value: 76 },
       { label: "71-85", value: 58 },
       { label: "86+", value: 23 },
+    ],
+    accuracyDistributionHistogram: [
+      { label: "<50", value: 11 },
+      { label: "50-64", value: 29 },
+      { label: "65-74", value: 61 },
+      { label: "75-84", value: 73 },
+      { label: "85+", value: 43 },
     ],
     avgPhaseAdherencePercentage: 74,
     easyNeglectPercentage: 19,
@@ -388,6 +396,18 @@ function normalizeOverviewSnapshot(payload: unknown): AdminOverviewSnapshot {
           normalizeDistributionBin(entry, fallback.performanceSummary.distributionHistogram[index] ?? fallback.performanceSummary.distributionHistogram.at(-1)!),
         )
     : fallback.performanceSummary.distributionHistogram;
+  const accuracyDistributionHistogramSource = performanceSource?.accuracyDistributionHistogram;
+  const accuracyDistributionHistogram = Array.isArray(accuracyDistributionHistogramSource)
+    ? accuracyDistributionHistogramSource
+        .slice(0, 6)
+        .map((entry, index) =>
+          normalizeDistributionBin(
+            entry,
+            fallback.performanceSummary.accuracyDistributionHistogram[index] ??
+              fallback.performanceSummary.accuracyDistributionHistogram.at(-1)!,
+          ),
+        )
+    : fallback.performanceSummary.accuracyDistributionHistogram;
   const topStudentsSource = Array.isArray(riskSource?.topFiveStudentsRequiringAttention)
     ? riskSource?.topFiveStudentsRequiringAttention
     : fallback.riskSnapshot.topFiveStudentsRequiringAttention;
@@ -441,6 +461,7 @@ function normalizeOverviewSnapshot(payload: unknown): AdminOverviewSnapshot {
       highestPerformingBatch: toNonEmptyString(performanceSource?.highestPerformingBatch, fallback.performanceSummary.highestPerformingBatch),
       lowestPerformingBatch: toNonEmptyString(performanceSource?.lowestPerformingBatch, fallback.performanceSummary.lowestPerformingBatch),
       distributionHistogram,
+      accuracyDistributionHistogram,
       avgPhaseAdherencePercentage: toNumberOrZero(performanceSource?.avgPhaseAdherencePercentage),
       easyNeglectPercentage: toNumberOrZero(performanceSource?.easyNeglectPercentage),
       hardBiasPercentage: toNumberOrZero(performanceSource?.hardBiasPercentage),
