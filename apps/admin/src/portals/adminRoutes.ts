@@ -44,14 +44,6 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     allowedRoles: ["admin", "teacher"],
   },
   {
-    path: "/admin/students/lifecycle",
-    title: "Student Lifecycle",
-    section: "Students Management",
-    description: "Lifecycle management surface for active and archived student records.",
-    mountedPath: "/admin/students",
-    allowedRoles: ["admin", "teacher"],
-  },
-  {
     path: "/admin/students/batches",
     title: "Batch Management",
     section: "Students Management",

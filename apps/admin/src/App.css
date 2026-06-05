@@ -268,6 +268,200 @@
   margin-top: 6px;
 }
 
+.admin-student-status-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.admin-student-status-guide-card h3 {
+  margin: 0;
+}
+
+.admin-student-helper-list {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: #35506f;
+  display: grid;
+  gap: 8px;
+}
+
+.admin-student-helper-list li {
+  line-height: 1.45;
+}
+
+.admin-student-helper-sublist {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+}
+
+.admin-student-helper-sublist li {
+  line-height: 1.4;
+}
+
+.admin-student-form-hero,
+.admin-student-batch-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid rgba(22, 57, 97, 0.12);
+  border-radius: 16px;
+  padding: 14px 16px;
+  background:
+    radial-gradient(circle at top right, rgba(60, 128, 196, 0.12), transparent 40%),
+    linear-gradient(180deg, rgba(244, 249, 255, 0.96), rgba(235, 244, 253, 0.92));
+}
+
+.admin-student-form-hero strong,
+.admin-student-batch-hero strong {
+  color: #15385f;
+  display: block;
+  font-size: 0.95rem;
+}
+
+.admin-student-form-hero p,
+.admin-student-batch-hero p {
+  margin: 6px 0 0;
+  color: #4c678b;
+  line-height: 1.45;
+}
+
+.admin-student-form-hero-stats {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+  flex-shrink: 0;
+}
+
+.admin-student-form-hero-stats span {
+  border: 1px solid rgba(22, 57, 97, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #173c68;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.admin-student-form-section {
+  border: 1px solid rgba(16, 42, 81, 0.1);
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: rgba(247, 250, 254, 0.72);
+  display: grid;
+  gap: 12px;
+}
+
+.admin-student-form-section-header h4,
+.admin-student-form-section-header p {
+  margin: 0;
+}
+
+.admin-student-form-section-header h4 {
+  color: #15385f;
+  font-size: 0.95rem;
+}
+
+.admin-student-form-section-header p {
+  margin-top: 5px;
+  color: #557091;
+  line-height: 1.42;
+}
+
+.admin-student-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 14px;
+}
+
+.admin-student-form-grid-compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.admin-student-form-span-full {
+  grid-column: 1 / -1;
+}
+
+.admin-student-grid .ui-form-content {
+  gap: 10px;
+}
+
+.admin-student-grid .ui-form-field {
+  gap: 4px;
+}
+
+.admin-student-grid .ui-form-label {
+  font-size: 0.78rem;
+}
+
+.admin-student-grid .ui-form-helper {
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+
+.admin-student-grid .ui-form-field input,
+.admin-student-grid .ui-form-field select {
+  min-height: 32px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+}
+
+.admin-student-form-lockout {
+  border: 1px dashed rgba(27, 95, 194, 0.28);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: rgba(230, 241, 255, 0.68);
+}
+
+.admin-student-form-lockout strong {
+  color: #123a68;
+}
+
+.admin-student-form-lockout p {
+  margin: 6px 0 0;
+  color: #4e6d92;
+  line-height: 1.42;
+}
+
+.admin-student-batch-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.admin-student-batch-summary-card {
+  border: 1px solid rgba(16, 42, 81, 0.1);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: rgba(249, 252, 255, 0.9);
+  display: grid;
+  gap: 4px;
+}
+
+.admin-student-batch-summary-card small {
+  color: #5a7394;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.admin-student-batch-summary-card strong {
+  color: #15385f;
+  font-size: 1.15rem;
+}
+
+.admin-student-batch-summary-card span {
+  color: #59728f;
+  line-height: 1.35;
+  font-size: 0.8rem;
+}
+
 .admin-student-archive-warning {
   border: 1px solid rgba(154, 72, 72, 0.22);
   border-radius: 14px;
@@ -760,23 +954,30 @@
 .admin-student-metrics-cell {
   display: grid;
   gap: 2px;
+  font-size: 0.84rem;
 }
 
 .admin-student-name-cell small,
 .admin-student-metrics-cell span {
   color: #4f688a;
+  font-size: 0.77rem;
 }
 
 .admin-student-signal-cell {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  display: grid;
+  gap: 4px;
 }
 
 .admin-student-l2-cell {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  display: grid;
+  gap: 4px;
+}
+
+.admin-student-signal-cell span,
+.admin-student-l2-cell span {
+  color: #4f688a;
+  line-height: 1.35;
+  font-size: 0.76rem;
 }
 
 .admin-student-signal-pill {
@@ -828,6 +1029,8 @@
   padding: 4px 10px;
   text-transform: capitalize;
   font-weight: 600;
+  font-size: 0.78rem;
+  white-space: nowrap;
 }
 
 .admin-student-status-live {
@@ -846,21 +1049,124 @@
 }
 
 .admin-student-actions-col {
-  min-width: 180px;
+  width: 132px;
+  min-width: 132px;
 }
 
 .admin-student-row-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
+.admin-student-row-actions a,
+.admin-student-row-actions button {
+  font-size: 0.75rem;
+  line-height: 1.2;
 }
 
 .admin-student-select-col {
-  min-width: 70px;
+  width: 52px;
+  min-width: 52px;
 }
 
 .admin-student-pagination-row {
   margin-top: 16px;
+}
+
+.admin-student-inline-editor {
+  margin-top: 14px;
+  border: 1px solid rgba(16, 42, 81, 0.12);
+  border-radius: 16px;
+  padding: 16px;
+  background:
+    radial-gradient(circle at top right, rgba(60, 128, 196, 0.08), transparent 38%),
+    rgba(248, 251, 255, 0.96);
+  display: grid;
+  gap: 14px;
+}
+
+.admin-student-inline-editor-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-student-inline-editor-header h3,
+.admin-student-inline-editor-header p {
+  margin: 0;
+}
+
+.admin-student-inline-editor-header p {
+  margin-top: 5px;
+  color: #557091;
+  line-height: 1.4;
+}
+
+.admin-student-inline-editor-header button {
+  border: 1px solid rgba(16, 42, 81, 0.18);
+  border-radius: 10px;
+  background: #ffffff;
+  color: #163961;
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.admin-content-card[aria-labelledby="admin-students-title"] .ui-table {
+  width: 100%;
+  min-width: 100%;
+  table-layout: fixed;
+}
+
+.admin-content-card[aria-labelledby="admin-students-title"] .ui-table th,
+.admin-content-card[aria-labelledby="admin-students-title"] .ui-table td {
+  padding: 8px 9px;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+  line-height: 1.28;
+}
+
+.admin-content-card[aria-labelledby="admin-students-title"] .ui-table th:nth-child(1),
+.admin-content-card[aria-labelledby="admin-students-title"] .ui-table td:nth-child(1) {
+  width: 52px;
+  white-space: nowrap;
+}
+
+.admin-content-card[aria-labelledby="admin-students-title"] .ui-table th:nth-child(2),
+.admin-content-card[aria-labelledby="admin-students-title"] .ui-table td:nth-child(2) {
+  width: 72px;
+}
+
+.admin-content-card[aria-labelledby="admin-students-title"] .ui-table th:nth-child(4),
+.admin-content-card[aria-labelledby="admin-students-title"] .ui-table td:nth-child(4) {
+  width: 72px;
+}
+
+.admin-content-card[aria-labelledby="admin-students-title"] .ui-table th:nth-child(5),
+.admin-content-card[aria-labelledby="admin-students-title"] .ui-table td:nth-child(5) {
+  width: 96px;
+  white-space: nowrap;
+}
+
+.admin-content-card[aria-labelledby="admin-students-title"] .ui-table th:nth-last-child(2),
+.admin-content-card[aria-labelledby="admin-students-title"] .ui-table td:nth-last-child(2) {
+  width: 88px;
+}
+
+.admin-content-card[aria-labelledby="admin-students-title"] .ui-table th:last-child,
+.admin-content-card[aria-labelledby="admin-students-title"] .ui-table td:last-child {
+  width: 132px;
+}
+
+.admin-content-card[aria-labelledby="admin-students-title"] .ui-table-shell {
+  overflow-x: hidden;
+}
+
+.admin-content-card[aria-labelledby="admin-students-title"] .admin-student-name-cell strong,
+.admin-content-card[aria-labelledby="admin-students-title"] .admin-student-name-cell small {
+  overflow-wrap: anywhere;
 }
 
 .admin-student-edit-form {

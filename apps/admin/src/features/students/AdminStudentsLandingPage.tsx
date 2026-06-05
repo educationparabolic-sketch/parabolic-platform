@@ -21,12 +21,6 @@ const STUDENT_WORKSPACES = [
     meta: "Admin-operated onboarding workflow",
   },
   {
-    title: "Lifecycle",
-    description: "Active, invited, and inactive learner review with next-step visibility for operator follow-through.",
-    to: "/admin/students/lifecycle",
-    meta: "Lifecycle health and reactivation review",
-  },
-  {
     title: "Batch Management",
     description: "Cohort-level roster organization and current-year summary visibility across institute batches.",
     to: "/admin/students/batches",
@@ -203,8 +197,8 @@ function AdminStudentsLandingPage() {
         into the roster table.
       </p>
       <p className="admin-content-copy">
-        Student operations are grouped into focused destinations for roster search, onboarding, lifecycle handling,
-        batch organization, and archive review.
+        Student operations are grouped into focused destinations for roster search, onboarding, batch organization,
+        and archive review, while lifecycle status changes stay inside the main student list.
       </p>
       <p className="admin-settings-inline-note">
         {isLoading ? "Loading student landing..." : inlineMessage ?? "Student landing workspace ready."}

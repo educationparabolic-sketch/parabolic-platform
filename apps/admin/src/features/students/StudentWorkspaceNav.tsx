@@ -10,10 +10,6 @@ const STUDENT_WORKSPACE_LINKS = [
     to: "/admin/students/bulk-upload",
   },
   {
-    label: "Lifecycle",
-    to: "/admin/students/lifecycle",
-  },
-  {
     label: "Batch Management",
     to: "/admin/students/batches",
   },

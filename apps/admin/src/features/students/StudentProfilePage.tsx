@@ -790,9 +790,6 @@ function StudentProfilePage() {
         <NavLink className="admin-student-subnav-link" to="/admin/students/list">
           Back to Student List
         </NavLink>
-        <NavLink className="admin-student-subnav-link" to="/admin/students/lifecycle">
-          Lifecycle Queue
-        </NavLink>
       </div>
 
       {loadMessage ? <p className="admin-student-inline-note">{loadMessage}</p> : null}
@@ -1082,7 +1079,7 @@ function StudentProfilePage() {
               </div>
               <div className="admin-student-summary-card">
                 <h3>Next Actions</h3>
-                <p>Use Lifecycle for activation state changes, Batch Management for cohort updates, and the student list for bulk roster operations.</p>
+                <p>Use the student list for activation or archive changes, and Batch Management for cohort updates.</p>
               </div>
               <div className="admin-content-note">
                 Data shown here stays within summary-document boundaries: current-year rollups, roster fields, and lifecycle status. Raw sessions,

@@ -638,7 +638,7 @@ function App() {
         />
         <Route
           path="students/lifecycle"
-          element={<AdminRouteBoundary label="Loading lifecycle"><StudentManagementPage /></AdminRouteBoundary>}
+          element={<Navigate to="/admin/students/list" replace />}
         />
         <Route
           path="students/batches"

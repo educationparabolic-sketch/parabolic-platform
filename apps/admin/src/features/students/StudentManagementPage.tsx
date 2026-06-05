@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
@@ -7,7 +7,6 @@ import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
 import {
   UiForm,
   UiFormField,
-  UiModal,
   UiPagination,
   UiTable,
   type UiTableColumn,
@@ -139,7 +138,7 @@ const FALLBACK_STUDENTS: StudentRecord[] = [
 
 type StudentStatus = (typeof STUDENT_STATUSES)[number];
 type StudentRiskState = (typeof RISK_STATES)[number];
-type StudentSubpage = "list" | "bulk-upload" | "lifecycle" | "batches" | "archive" | "profile";
+type StudentSubpage = "list" | "bulk-upload" | "batches" | "archive" | "profile";
 
 const LAYER_ORDER: Record<LicenseLayer, number> = {
   L0: 0,
@@ -251,30 +250,176 @@ interface StudentBulkUploadPreviewSummary {
   valid: number;
 }
 
-interface StudentAccountRosterSummary {
-  activeCount: number;
-  archivedOrSuspendedCount: number;
-  currentYear: string;
-  inactiveCount: number;
-  invitedCount: number;
-  rosterSyncCandidates: StudentRecord[];
-  totalMutableCount: number;
-}
-
-interface StudentLifecycleRuleSummary {
-  billingTreatment: string;
-  deleteEligibility: string;
-  historicalAnalytics: string;
-  nextAction: string;
-  transitionAudit: string;
-}
-
 interface BatchRiskDistribution {
   critical: number;
   high: number;
   low: number;
   medium: number;
 }
+
+interface StudentStatusGuideCard {
+  billing: string;
+  helper: string;
+  label: "invited" | "active" | "inactive" | "suspended" | "archived";
+}
+
+interface StudentMetricGuideCard {
+  details?: Array<{
+    helper: string;
+    label: string;
+  }>;
+  helper: string;
+  label: string;
+}
+
+type StudentHelperTab = "status" | "metrics";
+
+const STUDENT_STATUS_GUIDE_CARDS: StudentStatusGuideCard[] = [
+  {
+    label: "invited",
+    billing: "Not billed",
+    helper: "Student record exists, but onboarding or first real participation is still pending.",
+  },
+  {
+    label: "active",
+    billing: "Billed",
+    helper: "Student is part of the live working roster and is expected to participate normally.",
+  },
+  {
+    label: "inactive",
+    billing: "Not billed",
+    helper: "Student is temporarily not participating, but can return later without being treated as blocked.",
+  },
+  {
+    label: "suspended",
+    billing: "Not billed",
+    helper: "Student is intentionally blocked from normal participation until an issue is resolved.",
+  },
+  {
+    label: "archived",
+    billing: "Not billed",
+    helper: "Student record is retained for history and reporting, not for ongoing roster operations.",
+  },
+];
+
+const STUDENT_L0_METRIC_GUIDE: StudentMetricGuideCard[] = [
+  {
+    label: "Tests Attempted",
+    helper: "How many current-year tests or runs the student has completed.",
+  },
+  {
+    label: "Avg Raw Score %",
+    helper: "Average percentage of marks obtained out of total marks across current-year runs.",
+  },
+  {
+    label: "Avg Accuracy %",
+    helper: "Average percentage of correct answers out of attempted questions across current-year runs.",
+  },
+  {
+    label: "Last Active",
+    helper: "Most recent student activity marker available in summary-safe roster data.",
+  },
+];
+
+const STUDENT_L1_METRIC_GUIDE: StudentMetricGuideCard[] = [
+  {
+    label: "Phase Adherence %",
+    helper: "How closely the student followed the recommended time split across phases of a test.",
+  },
+  {
+    label: "Easy Neglect Rate %",
+    helper: "How often the student under-attempted easier questions when they should normally have been covered.",
+  },
+  {
+    label: "Hard Bias Rate %",
+    helper: "How often the student over-focused on harder questions compared with the expected paper mix.",
+  },
+  {
+    label: "Behaviour Tag Summary",
+    helper: "Most frequent execution pattern seen across recent current-year runs.",
+    details: [
+      {
+        label: "Stable pacing",
+        helper: "The student is generally distributing time and question choices in a balanced way.",
+      },
+      {
+        label: "Late-phase drift",
+        helper: "The student starts reasonably but loses structure or pacing later in the test.",
+      },
+      {
+        label: "Easy neglect",
+        helper: "The student is leaving easier, more scorable questions under-attempted.",
+      },
+      {
+        label: "Hard bias",
+        helper: "The student is spending too much focus on harder questions compared with the paper mix.",
+      },
+      {
+        label: "Awaiting history",
+        helper: "There is not enough current-year test history yet to infer a meaningful behavior pattern.",
+      },
+    ],
+  },
+];
+
+const STUDENT_L2_METRIC_GUIDE: StudentMetricGuideCard[] = [
+  {
+    label: "Risk State",
+    helper: "Overall execution-risk band derived from precomputed yearly behavioral signals.",
+    details: [
+      {
+        label: "Low",
+        helper: "Execution signals look steady and currently do not suggest major operational concern.",
+      },
+      {
+        label: "Medium",
+        helper: "Some drift or inconsistency is visible and should be watched before it grows.",
+      },
+      {
+        label: "High",
+        helper: "Clear execution-risk patterns are visible and intervention may be needed soon.",
+      },
+      {
+        label: "Critical",
+        helper: "The student is showing strong risk signals and needs urgent operational attention.",
+      },
+    ],
+  },
+  {
+    label: "Discipline Index",
+    helper: "0 to 100 score where a higher value usually means steadier, more reliable test execution behavior.",
+  },
+  {
+    label: "Controlled Mode Performance Delta",
+    helper: "Difference between controlled-mode and uncontrolled-mode raw performance when enough runs exist in both modes.",
+  },
+  {
+    label: "Guess Rate %",
+    helper: "Estimated rate of rushed low-confidence attempts based on time-spent and outcome patterns.",
+  },
+  {
+    label: "Execution Stability Flag",
+    helper: "High-level consistency label showing whether current-year performance is stable, moderate, or unstable.",
+    details: [
+      {
+        label: "Stable",
+        helper: "Performance is fairly consistent across current-year runs.",
+      },
+      {
+        label: "Moderate",
+        helper: "Some visible fluctuation exists, but it is not yet strongly erratic.",
+      },
+      {
+        label: "Unstable",
+        helper: "Performance swings noticeably from run to run and needs closer review.",
+      },
+      {
+        label: "Pending",
+        helper: "There is not enough reliable current-year history yet to assign a stable judgment.",
+      },
+    ],
+  },
+];
 
 function toNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
@@ -477,59 +622,6 @@ function statusToTone(status: StudentStatus): "live" | "idle" | "alert" {
   return "alert";
 }
 
-function resolveLifecycleRuleSummary(student: StudentRecord): StudentLifecycleRuleSummary {
-  const hasRunHistory = student.testsAttempted > 0;
-  const deleteEligibility = hasRunHistory ? "Deletion blocked; retain summary history" : "Deletion eligible before first run";
-
-  if (student.status === "invited") {
-    return {
-      billingTreatment: "Excluded until active",
-      deleteEligibility,
-      historicalAnalytics: "No historical analytics until first submission",
-      nextAction: "Send activation reminder or reissue invite",
-      transitionAudit: "Log invite resend, activation, or removal",
-    };
-  }
-
-  if (student.status === "active") {
-    return {
-      billingTreatment: "Included in active billing count",
-      deleteEligibility,
-      historicalAnalytics: "Included in current-year analytics",
-      nextAction: "Monitor activity health",
-      transitionAudit: "Log deactivation, suspension, or archive transition",
-    };
-  }
-
-  if (student.status === "inactive") {
-    return {
-      billingTreatment: "Excluded from active billing count",
-      deleteEligibility,
-      historicalAnalytics: "Retained in historical analytics",
-      nextAction: "Review roster sync before reactivation",
-      transitionAudit: "Log reactivation or roster-sync deactivation",
-    };
-  }
-
-  if (student.status === "archived") {
-    return {
-      billingTreatment: "Excluded from billing",
-      deleteEligibility,
-      historicalAnalytics: "Included in read-only historical analytics",
-      nextAction: "Keep read-only; no roster mutation",
-      transitionAudit: "Archive transition remains immutable",
-    };
-  }
-
-  return {
-    billingTreatment: "Excluded while suspended",
-    deleteEligibility,
-    historicalAnalytics: "Retained for audit and historical analytics",
-    nextAction: "Resolve suspension before activation",
-    transitionAudit: "Log suspension resolution or archive transition",
-  };
-}
-
 function isWithinNumberRange(value: number, minRaw: string, maxRaw: string): boolean {
   const minValue = minRaw.trim().length > 0 ? Number(minRaw) : null;
   const maxValue = maxRaw.trim().length > 0 ? Number(maxRaw) : null;
@@ -569,7 +661,7 @@ function toEpochDay(value: string | null): number | null {
 }
 
 function isNamedStudentSubpage(segment: string): segment is Exclude<StudentSubpage, "profile"> {
-  return segment === "list" || segment === "bulk-upload" || segment === "lifecycle" || segment === "batches" || segment === "archive";
+  return segment === "list" || segment === "bulk-upload" || segment === "batches" || segment === "archive";
 }
 
 function resolveStudentSubpage(pathname: string): StudentSubpage {
@@ -902,6 +994,8 @@ function StudentManagementPage() {
   const [bulkUploadMessage, setBulkUploadMessage] = useState<string | null>(null);
   const [bulkUploadSubmitting, setBulkUploadSubmitting] = useState(false);
   const [bulkUploadDeactivateMissing, setBulkUploadDeactivateMissing] = useState(false);
+  const [helperTab, setHelperTab] = useState<StudentHelperTab>("status");
+  const inlineEditorRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -1057,6 +1151,17 @@ function StudentManagementPage() {
     }
   }, [page, totalPages]);
 
+  useEffect(() => {
+    if (!editingStudent || !inlineEditorRef.current) {
+      return;
+    }
+
+    inlineEditorRef.current.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+    });
+  }, [editingStudent]);
+
   const archivedStudents = useMemo(
     () => students.filter((student) => student.status === "archived" || student.status === "suspended"),
     [students],
@@ -1071,40 +1176,10 @@ function StudentManagementPage() {
     () => new Set(archiveYearStudents.map((student) => student.batch)).size,
     [archiveYearStudents],
   );
-  const activeLifecycleStudents = useMemo(
-    () => students.filter((student) => student.status === "active" || student.status === "inactive" || student.status === "invited"),
-    [students],
-  );
-  const lifecycleRuleCards = useMemo(
-    () => [
-      {
-        label: "Invited",
-        value: students.filter((student) => student.status === "invited").length,
-        helper: "Pending first login; excluded from billing until active.",
-      },
-      {
-        label: "Active",
-        value: students.filter((student) => student.status === "active").length,
-        helper: "Included in active billing and current-year operations.",
-      },
-      {
-        label: "Inactive",
-        value: students.filter((student) => student.status === "inactive").length,
-        helper: "Excluded from active billing; retained for historical analytics.",
-      },
-      {
-        label: "Archived",
-        value: students.filter((student) => student.status === "archived").length,
-        helper: "Read-only historical state with no student mutations.",
-      },
-      {
-        label: "Suspended",
-        value: students.filter((student) => student.status === "suspended").length,
-        helper: "Operationally blocked until resolved or archived.",
-      },
-    ],
-    [students],
-  );
+  const statusGuideCards = STUDENT_STATUS_GUIDE_CARDS;
+  const l0MetricGuideCards = STUDENT_L0_METRIC_GUIDE;
+  const l1MetricGuideCards = STUDENT_L1_METRIC_GUIDE;
+  const l2MetricGuideCards = STUDENT_L2_METRIC_GUIDE;
   const batchSummaries = useMemo(() => {
     const summaries = new Map<string, {
       batch: string;
@@ -1199,36 +1274,21 @@ function StudentManagementPage() {
       studentCount,
     };
   }, [batchSummaries]);
-  const accountRosterSummary = useMemo<StudentAccountRosterSummary>(() => {
-    const currentYear = filters.academicYear || uniqueAcademicYears[0] || "Current year";
-    const currentYearStudents = students.filter((student) => student.academicYear === currentYear);
-    const mutableStudents = currentYearStudents.filter(
-      (student) => student.status !== "archived" && student.status !== "suspended",
-    );
-    const rosterSyncCandidates = mutableStudents
-      .filter((student) => student.status === "inactive" || student.status === "invited" || !student.lastActive)
-      .sort((left, right) => {
-        const leftStatusWeight = left.status === "inactive" ? 0 : left.status === "invited" ? 1 : 2;
-        const rightStatusWeight = right.status === "inactive" ? 0 : right.status === "invited" ? 1 : 2;
-        return leftStatusWeight - rightStatusWeight || left.fullName.localeCompare(right.fullName);
-      })
-      .slice(0, 5);
-
-    return {
-      activeCount: currentYearStudents.filter((student) => student.status === "active").length,
-      archivedOrSuspendedCount: currentYearStudents.filter(
-        (student) => student.status === "archived" || student.status === "suspended",
-      ).length,
-      currentYear,
-      inactiveCount: currentYearStudents.filter((student) => student.status === "inactive").length,
-      invitedCount: currentYearStudents.filter((student) => student.status === "invited").length,
-      rosterSyncCandidates,
-      totalMutableCount: mutableStudents.length,
-    };
-  }, [filters.academicYear, students, uniqueAcademicYears]);
-
   const allVisibleSelected =
     pageRows.length > 0 && pageRows.every((student) => selectedStudentIds.includes(student.id));
+  const selectedStudents = useMemo(
+    () => students.filter((student) => selectedStudentIds.includes(student.id)),
+    [selectedStudentIds, students],
+  );
+  const selectedStudentStatusSummary = useMemo(
+    () => ({
+      active: selectedStudents.filter((student) => student.status === "active").length,
+      inactive: selectedStudents.filter((student) => student.status === "inactive").length,
+      invited: selectedStudents.filter((student) => student.status === "invited").length,
+      suspended: selectedStudents.filter((student) => student.status === "suspended").length,
+    }),
+    [selectedStudents],
+  );
 
   const bulkUploadPreviewSummary = useMemo<StudentBulkUploadPreviewSummary>(() => {
     if (!bulkUploadResult) {
@@ -1268,103 +1328,6 @@ function StudentManagementPage() {
       },
     );
   }, [bulkUploadResult]);
-
-  function renderAccountRosterOperationsPanel() {
-    return (
-      <section className="admin-student-bulk-review-card" aria-label="Account creation and roster sync operations">
-        <div className="admin-student-bulk-review-header">
-          <div>
-            <h3>Account Creation & Roster Sync</h3>
-            <p>
-              New accounts are created only after confirmed roster validation. Roster sync reviews invited and inactive
-              records before any deactivate-missing commit is applied.
-            </p>
-          </div>
-          <div className="admin-student-bulk-actions">
-            <NavLink className="admin-primary-link" to="/admin/students/bulk-upload">
-              Open Bulk Upload
-            </NavLink>
-            <NavLink className="admin-primary-link" to="/admin/students/lifecycle">
-              Review Lifecycle
-            </NavLink>
-          </div>
-        </div>
-        <div className="admin-student-summary-grid">
-          <article className="admin-student-summary-card">
-            <h3>{accountRosterSummary.invitedCount}</h3>
-            <p>Invited accounts awaiting first login in {accountRosterSummary.currentYear}.</p>
-          </article>
-          <article className="admin-student-summary-card">
-            <h3>{accountRosterSummary.inactiveCount}</h3>
-            <p>Inactive roster records to review before reactivation or sync deactivation.</p>
-          </article>
-          <article className="admin-student-summary-card">
-            <h3>{accountRosterSummary.totalMutableCount}</h3>
-            <p>Mutable current-year records eligible for roster sync checks.</p>
-          </article>
-        </div>
-        <div className="admin-student-summary-grid">
-          <article className="admin-student-summary-card">
-            <h3>Confirm Gate</h3>
-            <p>Create Firebase Auth users, set claims, write student docs, and send onboarding email after validation only.</p>
-          </article>
-          <article className="admin-student-summary-card">
-            <h3>Roster Sync</h3>
-            <p>Deactivate students not in file is a confirm-time operation; archived and suspended records stay protected.</p>
-          </article>
-          <article className="admin-student-summary-card">
-            <h3>Billing Count</h3>
-            <p>{accountRosterSummary.activeCount} active students count toward usage; {accountRosterSummary.archivedOrSuspendedCount} archived or suspended records do not.</p>
-          </article>
-        </div>
-        <UiTable
-          caption="Roster sync review queue"
-          columns={[
-            {
-              id: "student",
-              header: "Student",
-              render: (student) => (
-                <div className="admin-student-name-cell">
-                  <strong>{student.fullName}</strong>
-                  <small>{student.studentId}</small>
-                </div>
-              ),
-            },
-            {
-              id: "status",
-              header: "Status",
-              render: (student) => (
-                <span className={`admin-student-status admin-student-status-${statusToTone(student.status)}`}>
-                  {student.status}
-                </span>
-              ),
-            },
-            {
-              id: "batch",
-              header: "Batch",
-              render: (student) => student.batch,
-            },
-            {
-              id: "syncReason",
-              header: "Sync Review Reason",
-              render: (student) => {
-                if (student.status === "inactive") {
-                  return "Inactive in current roster";
-                }
-                if (student.status === "invited") {
-                  return "Account invite pending";
-                }
-                return "No last-active signal";
-              },
-            },
-          ]}
-          rows={accountRosterSummary.rosterSyncCandidates}
-          rowKey={(row) => row.id}
-          emptyStateText="No invited, inactive, or never-active students need roster sync review."
-        />
-      </section>
-    );
-  }
 
   function toggleVisibleSelection() {
     if (pageRows.length === 0) {
@@ -1412,7 +1375,7 @@ function StudentManagementPage() {
     setSelectedStudentIds([]);
   }
 
-  function toggleStudentActivation(studentId: string) {
+  function setStudentStatus(studentId: string, nextStatus: StudentStatus) {
     setStudents((current) =>
       current.map((student) => {
         if (student.id !== studentId) {
@@ -1421,7 +1384,7 @@ function StudentManagementPage() {
 
         return {
           ...student,
-          status: student.status === "active" ? "inactive" : "active",
+          status: nextStatus,
         };
       }),
     );
@@ -1698,10 +1661,10 @@ function StudentManagementPage() {
         header: "L1 Signals",
         render: (student: StudentRecord) => (
           <div className="admin-student-signal-cell">
-            <span className="admin-student-signal-pill">Phase {formatPercentLabel(student.phaseAdherencePercent)}</span>
-            <span className="admin-student-signal-pill">Easy neglect {formatPercentLabel(student.easyNeglectRate)}</span>
-            <span className="admin-student-signal-pill">Hard bias {formatPercentLabel(student.hardBiasRate)}</span>
-            <span className="admin-student-signal-pill">{formatBehaviorTag(student.behaviorTagSummary)}</span>
+            <span>Phase: {formatPercentLabel(student.phaseAdherencePercent)}</span>
+            <span>Easy neglect: {formatPercentLabel(student.easyNeglectRate)}</span>
+            <span>Hard bias: {formatPercentLabel(student.hardBiasRate)}</span>
+            <span>Behavior: {formatBehaviorTag(student.behaviorTagSummary)}</span>
           </div>
         ),
       }] :
@@ -1712,13 +1675,16 @@ function StudentManagementPage() {
         header: "L2 Metrics",
         render: (student: StudentRecord) => (
           <div className="admin-student-l2-cell">
-            <span className={`admin-student-risk-pill admin-student-risk-pill-${riskStateToTone(student.riskState)}`}>
-              {student.riskState}
+            <span>
+              Risk:{" "}
+              <strong className={`admin-student-risk-pill admin-student-risk-pill-${riskStateToTone(student.riskState)}`}>
+                {student.riskState}
+              </strong>
             </span>
-            <span className="admin-student-signal-pill">Discipline {Math.round(student.disciplineIndex)}</span>
-            <span className="admin-student-signal-pill">Controlled {formatSignedPercentLabel(student.controlledModePerformanceDelta)}</span>
-            <span className="admin-student-signal-pill">Guess {formatPercentLabel(student.guessRatePercent)}</span>
-            <span className="admin-student-signal-pill">{student.executionStabilityFlag}</span>
+            <span>Discipline: {Math.round(student.disciplineIndex)}</span>
+            <span>Controlled: {formatSignedPercentLabel(student.controlledModePerformanceDelta)}</span>
+            <span>Guess: {formatPercentLabel(student.guessRatePercent)}</span>
+            <span>Stability: {student.executionStabilityFlag}</span>
           </div>
         ),
       }] :
@@ -1738,61 +1704,33 @@ function StudentManagementPage() {
           <button type="button" onClick={() => openEditModal(student.id)}>
             Edit
           </button>
-          <button type="button" onClick={() => toggleStudentActivation(student.id)}>
-            {student.status === "active" ? "Deactivate" : "Activate"}
-          </button>
+          {student.status === "active" ? (
+            <>
+              <button type="button" onClick={() => setStudentStatus(student.id, "inactive")}>
+                Set inactive
+              </button>
+              <button type="button" onClick={() => setStudentStatus(student.id, "suspended")}>
+                Suspend
+              </button>
+            </>
+          ) : null}
+          {student.status === "inactive" || student.status === "invited" ? (
+            <>
+              <button type="button" onClick={() => setStudentStatus(student.id, "active")}>
+                Activate
+              </button>
+              <button type="button" onClick={() => setStudentStatus(student.id, "suspended")}>
+                Suspend
+              </button>
+            </>
+          ) : null}
+          {student.status === "suspended" ? (
+            <button type="button" onClick={() => setStudentStatus(student.id, "active")}>
+              Reinstate
+            </button>
+          ) : null}
         </div>
       ),
-    },
-  ];
-
-  const lifecycleColumns: UiTableColumn<StudentRecord>[] = [
-    {
-      id: "student",
-      header: "Student",
-      render: (student) => (
-        <div className="admin-student-name-cell">
-          <strong>{student.fullName}</strong>
-          <small>{student.studentId}</small>
-        </div>
-      ),
-    },
-    {
-      id: "status",
-      header: "Lifecycle State",
-      render: (student) => (
-        <span className={`admin-student-status admin-student-status-${statusToTone(student.status)}`}>{student.status}</span>
-      ),
-    },
-    {
-      id: "batch",
-      header: "Batch",
-      render: (student) => student.batch,
-    },
-    {
-      id: "lastActive",
-      header: "Last Active",
-      render: (student) => formatDateLabel(student.lastActive),
-    },
-    {
-      id: "billing",
-      header: "Billing Rule",
-      render: (student) => resolveLifecycleRuleSummary(student).billingTreatment,
-    },
-    {
-      id: "deleteRule",
-      header: "Deletion Rule",
-      render: (student) => resolveLifecycleRuleSummary(student).deleteEligibility,
-    },
-    {
-      id: "nextAction",
-      header: "Next Operator Action",
-      render: (student) => resolveLifecycleRuleSummary(student).nextAction,
-    },
-    {
-      id: "audit",
-      header: "Transition Audit",
-      render: (student) => resolveLifecycleRuleSummary(student).transitionAudit,
     },
   ];
 
@@ -1829,6 +1767,24 @@ function StudentManagementPage() {
           <span>Discipline: {student.disciplineIndex.toFixed(0)}</span>
         </div>
       ),
+    },
+  ];
+
+  const statusGuideColumns: UiTableColumn<StudentStatusGuideCard>[] = [
+    {
+      id: "status",
+      header: "Status",
+      render: (card) => card.label.charAt(0).toUpperCase() + card.label.slice(1),
+    },
+    {
+      id: "billing",
+      header: "Billing",
+      render: (card) => card.billing,
+    },
+    {
+      id: "meaning",
+      header: "Meaning",
+      render: (card) => card.helper,
     },
   ];
 
@@ -1887,10 +1843,8 @@ function StudentManagementPage() {
       <>
         <p className="admin-content-copy">
           Manage institute students with architecture-aligned list operations: filtering, batch assignment,
-          activation controls, and profile editing.
+          activation and archive controls, and profile editing.
         </p>
-        {renderAccountRosterOperationsPanel()}
-
         <div className="admin-student-grid">
           <UiForm
             title="Search & Filters"
@@ -1901,188 +1855,227 @@ function StudentManagementPage() {
               setPage(1);
             }}
           >
-            <UiFormField label="Search" htmlFor="admin-student-search" helper="Match by ID, name, or email.">
-              <input
-                id="admin-student-search"
-                type="search"
-                value={filters.query}
-                onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
-                placeholder="Search students"
-              />
-            </UiFormField>
-            <UiFormField label="Status" htmlFor="admin-student-status-filter">
-              <select
-                id="admin-student-status-filter"
-                value={filters.status}
-                onChange={(event) =>
-                  setFilters((current) => ({
-                    ...current,
-                    status: event.target.value as StudentFilterState["status"],
-                  }))
-                }
-              >
-                <option value="all">All</option>
-                {STUDENT_STATUSES.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
-              </select>
-            </UiFormField>
-            <UiFormField
-              label="Academic Year"
-              htmlFor="admin-student-academic-year-filter"
-              helper="Required scope from studentYearMetrics."
-            >
-              <select
-                id="admin-student-academic-year-filter"
-                value={filters.academicYear}
-                onChange={(event) => setFilters((current) => ({ ...current, academicYear: event.target.value }))}
-              >
-                {uniqueAcademicYears.length === 0 ? <option value="">No years available</option> : null}
-                {uniqueAcademicYears.map((academicYear) => (
-                  <option key={academicYear} value={academicYear}>
-                    {academicYear}
-                  </option>
-                ))}
-              </select>
-            </UiFormField>
-            <UiFormField label="Batch" htmlFor="admin-student-batch-filter">
-              <select
-                id="admin-student-batch-filter"
-                value={filters.batch}
-                onChange={(event) => setFilters((current) => ({ ...current, batch: event.target.value }))}
-              >
-                {uniqueBatches.map((batch) => (
-                  <option key={batch} value={batch}>
-                    {batch === "all" ? "All" : batch}
-                  </option>
-                ))}
-              </select>
-            </UiFormField>
-            <UiFormField label="Avg Raw Score Min %" htmlFor="admin-student-raw-min">
-              <input
-                id="admin-student-raw-min"
-                type="number"
-                min="0"
-                max="100"
-                value={filters.rawScoreMin}
-                onChange={(event) => setFilters((current) => ({ ...current, rawScoreMin: event.target.value }))}
-              />
-            </UiFormField>
-            <UiFormField label="Avg Raw Score Max %" htmlFor="admin-student-raw-max">
-              <input
-                id="admin-student-raw-max"
-                type="number"
-                min="0"
-                max="100"
-                value={filters.rawScoreMax}
-                onChange={(event) => setFilters((current) => ({ ...current, rawScoreMax: event.target.value }))}
-              />
-            </UiFormField>
-            <UiFormField label="Avg Accuracy Min %" htmlFor="admin-student-accuracy-min">
-              <input
-                id="admin-student-accuracy-min"
-                type="number"
-                min="0"
-                max="100"
-                value={filters.accuracyMin}
-                onChange={(event) => setFilters((current) => ({ ...current, accuracyMin: event.target.value }))}
-              />
-            </UiFormField>
-            <UiFormField label="Avg Accuracy Max %" htmlFor="admin-student-accuracy-max">
-              <input
-                id="admin-student-accuracy-max"
-                type="number"
-                min="0"
-                max="100"
-                value={filters.accuracyMax}
-                onChange={(event) => setFilters((current) => ({ ...current, accuracyMax: event.target.value }))}
-              />
-            </UiFormField>
-            <UiFormField label="Score Percentile Min" htmlFor="admin-student-percentile-min">
-              <input
-                id="admin-student-percentile-min"
-                type="number"
-                min="0"
-                max="100"
-                value={filters.scorePercentileMin}
-                onChange={(event) => setFilters((current) => ({ ...current, scorePercentileMin: event.target.value }))}
-              />
-            </UiFormField>
-            <UiFormField label="Score Percentile Max" htmlFor="admin-student-percentile-max">
-              <input
-                id="admin-student-percentile-max"
-                type="number"
-                min="0"
-                max="100"
-                value={filters.scorePercentileMax}
-                onChange={(event) => setFilters((current) => ({ ...current, scorePercentileMax: event.target.value }))}
-              />
-            </UiFormField>
-            {canUseL2Filters ? (
-              <>
-                <UiFormField label="Risk State" htmlFor="admin-student-risk-filter">
+            <div className="admin-student-form-hero">
+              <div>
+                <strong>Roster Discovery</strong>
+                <p>Move from broad roster scope to score bands and then to execution filters without scanning a dense utility form.</p>
+              </div>
+              <div className="admin-student-form-hero-stats">
+                <span>{filteredStudents.length} visible</span>
+                <span>{filters.academicYear || "No year"} scope</span>
+              </div>
+            </div>
+
+            <section className="admin-student-form-section" aria-label="Roster scope filters">
+              <div className="admin-student-form-section-header">
+                <h4>Roster Scope</h4>
+                <p>Start with identity, academic year, batch, and current lifecycle state. Academic year is the required scope from <code>studentYearMetrics</code>.</p>
+              </div>
+              <div className="admin-student-form-grid admin-student-form-grid-compact">
+                <div className="admin-student-form-span-full">
+                  <UiFormField label="Search" htmlFor="admin-student-search" helper="Match by ID, name, or email.">
+                    <input
+                      id="admin-student-search"
+                      type="search"
+                      value={filters.query}
+                      onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
+                      placeholder="Search students"
+                    />
+                  </UiFormField>
+                </div>
+                <UiFormField
+                  label="Academic Year"
+                  htmlFor="admin-student-academic-year-filter"
+                >
                   <select
-                    id="admin-student-risk-filter"
-                    value={filters.riskState}
-                    onChange={(event) =>
-                      setFilters((current) => ({
-                        ...current,
-                        riskState: event.target.value as StudentFilterState["riskState"],
-                      }))
-                    }
+                    id="admin-student-academic-year-filter"
+                    value={filters.academicYear}
+                    onChange={(event) => setFilters((current) => ({ ...current, academicYear: event.target.value }))}
                   >
-                    <option value="all">All</option>
-                    {RISK_STATES.map((riskState) => (
-                      <option key={riskState} value={riskState}>
-                        {riskState}
+                    {uniqueAcademicYears.length === 0 ? <option value="">No years available</option> : null}
+                    {uniqueAcademicYears.map((academicYear) => (
+                      <option key={academicYear} value={academicYear}>
+                        {academicYear}
                       </option>
                     ))}
                   </select>
                 </UiFormField>
-                <UiFormField label="Discipline Min" htmlFor="admin-student-discipline-min">
+                <UiFormField label="Status" htmlFor="admin-student-status-filter">
+                  <select
+                    id="admin-student-status-filter"
+                    value={filters.status}
+                    onChange={(event) =>
+                      setFilters((current) => ({
+                        ...current,
+                        status: event.target.value as StudentFilterState["status"],
+                      }))
+                    }
+                  >
+                    <option value="all">All</option>
+                    {STUDENT_STATUSES.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                </UiFormField>
+                <UiFormField label="Batch" htmlFor="admin-student-batch-filter">
+                  <select
+                    id="admin-student-batch-filter"
+                    value={filters.batch}
+                    onChange={(event) => setFilters((current) => ({ ...current, batch: event.target.value }))}
+                  >
+                    {uniqueBatches.map((batch) => (
+                      <option key={batch} value={batch}>
+                        {batch === "all" ? "All" : batch}
+                      </option>
+                    ))}
+                  </select>
+                </UiFormField>
+              </div>
+            </section>
+
+            <section className="admin-student-form-section" aria-label="Performance band filters">
+              <div className="admin-student-form-section-header">
+                <h4>Performance Bands</h4>
+                <p>Use paired min and max values to narrow the roster by score, accuracy, and percentile.</p>
+              </div>
+              <div className="admin-student-form-grid">
+                <UiFormField label="Avg Raw Score Min %" htmlFor="admin-student-raw-min">
                   <input
-                    id="admin-student-discipline-min"
+                    id="admin-student-raw-min"
                     type="number"
                     min="0"
                     max="100"
-                    value={filters.disciplineMin}
-                    onChange={(event) => setFilters((current) => ({ ...current, disciplineMin: event.target.value }))}
+                    value={filters.rawScoreMin}
+                    onChange={(event) => setFilters((current) => ({ ...current, rawScoreMin: event.target.value }))}
                   />
                 </UiFormField>
-                <UiFormField label="Discipline Max" htmlFor="admin-student-discipline-max">
+                <UiFormField label="Avg Raw Score Max %" htmlFor="admin-student-raw-max">
                   <input
-                    id="admin-student-discipline-max"
+                    id="admin-student-raw-max"
                     type="number"
                     min="0"
                     max="100"
-                    value={filters.disciplineMax}
-                    onChange={(event) => setFilters((current) => ({ ...current, disciplineMax: event.target.value }))}
+                    value={filters.rawScoreMax}
+                    onChange={(event) => setFilters((current) => ({ ...current, rawScoreMax: event.target.value }))}
                   />
                 </UiFormField>
-              </>
-            ) : (
-              <p className="admin-student-form-footnote">
-                Risk state and discipline filters unlock at <strong>L2</strong>. Current access layer: <strong>{currentLayer}</strong>.
-              </p>
-            )}
-            <UiFormField label="Last Active From" htmlFor="admin-student-last-active-start">
-              <input
-                id="admin-student-last-active-start"
-                type="date"
-                value={filters.lastActiveStart}
-                onChange={(event) => setFilters((current) => ({ ...current, lastActiveStart: event.target.value }))}
-              />
-            </UiFormField>
-            <UiFormField label="Last Active To" htmlFor="admin-student-last-active-end">
-              <input
-                id="admin-student-last-active-end"
-                type="date"
-                value={filters.lastActiveEnd}
-                onChange={(event) => setFilters((current) => ({ ...current, lastActiveEnd: event.target.value }))}
-              />
-            </UiFormField>
+                <UiFormField label="Avg Accuracy Min %" htmlFor="admin-student-accuracy-min">
+                  <input
+                    id="admin-student-accuracy-min"
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={filters.accuracyMin}
+                    onChange={(event) => setFilters((current) => ({ ...current, accuracyMin: event.target.value }))}
+                  />
+                </UiFormField>
+                <UiFormField label="Avg Accuracy Max %" htmlFor="admin-student-accuracy-max">
+                  <input
+                    id="admin-student-accuracy-max"
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={filters.accuracyMax}
+                    onChange={(event) => setFilters((current) => ({ ...current, accuracyMax: event.target.value }))}
+                  />
+                </UiFormField>
+                <UiFormField label="Score Percentile Min" htmlFor="admin-student-percentile-min">
+                  <input
+                    id="admin-student-percentile-min"
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={filters.scorePercentileMin}
+                    onChange={(event) => setFilters((current) => ({ ...current, scorePercentileMin: event.target.value }))}
+                  />
+                </UiFormField>
+                <UiFormField label="Score Percentile Max" htmlFor="admin-student-percentile-max">
+                  <input
+                    id="admin-student-percentile-max"
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={filters.scorePercentileMax}
+                    onChange={(event) => setFilters((current) => ({ ...current, scorePercentileMax: event.target.value }))}
+                  />
+                </UiFormField>
+              </div>
+            </section>
+
+            <section className="admin-student-form-section" aria-label="Execution and activity filters">
+              <div className="admin-student-form-section-header">
+                <h4>Execution and Activity</h4>
+                <p>Layer-aware filters for risk, discipline, and last activity window.</p>
+              </div>
+              <div className="admin-student-form-grid">
+                {canUseL2Filters ? (
+                  <>
+                    <UiFormField label="Risk State" htmlFor="admin-student-risk-filter">
+                      <select
+                        id="admin-student-risk-filter"
+                        value={filters.riskState}
+                        onChange={(event) =>
+                          setFilters((current) => ({
+                            ...current,
+                            riskState: event.target.value as StudentFilterState["riskState"],
+                          }))
+                        }
+                      >
+                        <option value="all">All</option>
+                        {RISK_STATES.map((riskState) => (
+                          <option key={riskState} value={riskState}>
+                            {riskState}
+                          </option>
+                        ))}
+                      </select>
+                    </UiFormField>
+                    <UiFormField label="Discipline Min" htmlFor="admin-student-discipline-min">
+                      <input
+                        id="admin-student-discipline-min"
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={filters.disciplineMin}
+                        onChange={(event) => setFilters((current) => ({ ...current, disciplineMin: event.target.value }))}
+                      />
+                    </UiFormField>
+                    <UiFormField label="Discipline Max" htmlFor="admin-student-discipline-max">
+                      <input
+                        id="admin-student-discipline-max"
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={filters.disciplineMax}
+                        onChange={(event) => setFilters((current) => ({ ...current, disciplineMax: event.target.value }))}
+                      />
+                    </UiFormField>
+                  </>
+                ) : (
+                  <div className="admin-student-form-lockout admin-student-form-span-full">
+                    <strong>L2 Filters Locked</strong>
+                    <p>Risk state and discipline filters unlock at <strong>L2</strong>. Current access layer: <strong>{currentLayer}</strong>.</p>
+                  </div>
+                )}
+                <UiFormField label="Last Active From" htmlFor="admin-student-last-active-start">
+                  <input
+                    id="admin-student-last-active-start"
+                    type="date"
+                    value={filters.lastActiveStart}
+                    onChange={(event) => setFilters((current) => ({ ...current, lastActiveStart: event.target.value }))}
+                  />
+                </UiFormField>
+                <UiFormField label="Last Active To" htmlFor="admin-student-last-active-end">
+                  <input
+                    id="admin-student-last-active-end"
+                    type="date"
+                    value={filters.lastActiveEnd}
+                    onChange={(event) => setFilters((current) => ({ ...current, lastActiveEnd: event.target.value }))}
+                  />
+                </UiFormField>
+              </div>
+            </section>
           </UiForm>
 
           <UiForm
@@ -2092,18 +2085,62 @@ function StudentManagementPage() {
             onSubmit={applyBatchAssignment}
             footer={<span className="admin-student-form-footnote">Selected students: {selectedStudentIds.length}</span>}
           >
-            <UiFormField
-              label="Target Batch"
-              htmlFor="admin-student-target-batch"
-              helper="Use an existing batch name or enter a new one."
-            >
-              <input
-                id="admin-student-target-batch"
-                type="text"
-                value={batchAssignmentValue}
-                onChange={(event) => setBatchAssignmentValue(event.target.value)}
-              />
-            </UiFormField>
+            <div className="admin-student-batch-hero">
+              <div>
+                <strong>Selection Action Panel</strong>
+                <p>Move selected students into a new cohort with a clearer preview of who will be affected before you submit.</p>
+              </div>
+              <div className="admin-student-form-hero-stats">
+                <span>{selectedStudentIds.length} selected</span>
+                <span>{batchAssignmentValue || "No target"} target</span>
+              </div>
+            </div>
+
+            <div className="admin-student-batch-summary-grid">
+              <article className="admin-student-batch-summary-card">
+                <small>Active</small>
+                <strong>{selectedStudentStatusSummary.active}</strong>
+                <span>currently live roster members</span>
+              </article>
+              <article className="admin-student-batch-summary-card">
+                <small>Inactive</small>
+                <strong>{selectedStudentStatusSummary.inactive}</strong>
+                <span>paused learners in selection</span>
+              </article>
+              <article className="admin-student-batch-summary-card">
+                <small>Invited</small>
+                <strong>{selectedStudentStatusSummary.invited}</strong>
+                <span>pending onboarding records</span>
+              </article>
+              <article className="admin-student-batch-summary-card">
+                <small>Suspended</small>
+                <strong>{selectedStudentStatusSummary.suspended}</strong>
+                <span>blocked records still selected</span>
+              </article>
+            </div>
+
+            <section className="admin-student-form-section" aria-label="Batch assignment target">
+              <div className="admin-student-form-section-header">
+                <h4>Target Batch</h4>
+                <p>Use an existing batch name or type a new destination for the selected roster records.</p>
+              </div>
+              <div className="admin-student-form-grid admin-student-form-grid-compact">
+                <div className="admin-student-form-span-full">
+                  <UiFormField
+                    label="Target Batch"
+                    htmlFor="admin-student-target-batch"
+                    helper="The assignment applies only to selected students from the current filtered view."
+                  >
+                    <input
+                      id="admin-student-target-batch"
+                      type="text"
+                      value={batchAssignmentValue}
+                      onChange={(event) => setBatchAssignmentValue(event.target.value)}
+                    />
+                  </UiFormField>
+                </div>
+              </div>
+            </section>
           </UiForm>
         </div>
 
@@ -2124,6 +2161,83 @@ function StudentManagementPage() {
           emptyStateText="No students match the current filters."
         />
 
+        {editingStudent ? (
+          <section
+            ref={inlineEditorRef}
+            className="admin-student-inline-editor"
+            aria-labelledby="admin-student-inline-editor-title"
+          >
+            <div className="admin-student-inline-editor-header">
+              <div>
+                <h3 id="admin-student-inline-editor-title">Edit Student Details</h3>
+                <p>Update identity and batch details for the selected student without leaving the roster table.</p>
+              </div>
+              <button type="button" onClick={() => setEditingStudent(null)}>
+                Close Editor
+              </button>
+            </div>
+            <form className="admin-student-edit-form" onSubmit={saveEditChanges}>
+              <UiFormField label="Full Name" htmlFor="admin-edit-student-name">
+                <input
+                  id="admin-edit-student-name"
+                  type="text"
+                  value={editingStudent.fullName}
+                  onChange={(event) =>
+                    setEditingStudent((current) =>
+                      current ?
+                        {
+                          ...current,
+                          fullName: event.target.value,
+                        } :
+                        null,
+                    )
+                  }
+                />
+              </UiFormField>
+              <UiFormField label="Email" htmlFor="admin-edit-student-email">
+                <input
+                  id="admin-edit-student-email"
+                  type="email"
+                  value={editingStudent.email}
+                  onChange={(event) =>
+                    setEditingStudent((current) =>
+                      current ?
+                        {
+                          ...current,
+                          email: event.target.value,
+                        } :
+                        null,
+                    )
+                  }
+                />
+              </UiFormField>
+              <UiFormField label="Batch" htmlFor="admin-edit-student-batch">
+                <input
+                  id="admin-edit-student-batch"
+                  type="text"
+                  value={editingStudent.batch}
+                  onChange={(event) =>
+                    setEditingStudent((current) =>
+                      current ?
+                        {
+                          ...current,
+                          batch: event.target.value,
+                        } :
+                        null,
+                    )
+                  }
+                />
+              </UiFormField>
+              <div className="admin-student-edit-actions">
+                <button type="submit">Save Details</button>
+                <button type="button" onClick={() => setEditingStudent(null)}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </section>
+        ) : null}
+
         <div className="admin-student-pagination-row">
           <UiPagination
             page={currentPage}
@@ -2131,6 +2245,95 @@ function StudentManagementPage() {
             totalItems={filteredStudents.length}
             onPageChange={setPage}
           />
+        </div>
+
+        <div className="admin-student-stack">
+          <div className="admin-settings-tab-grid" aria-label="Student helper tabs">
+            <button
+              type="button"
+              className={`admin-settings-tab ${helperTab === "status" ? "admin-settings-tab-active" : ""}`}
+              onClick={() => setHelperTab("status")}
+            >
+              Status
+            </button>
+            <button
+              type="button"
+              className={`admin-settings-tab ${helperTab === "metrics" ? "admin-settings-tab-active" : ""}`}
+              onClick={() => setHelperTab("metrics")}
+            >
+              Metrics
+            </button>
+          </div>
+
+          {helperTab === "status" ? (
+            <div className="admin-student-stack">
+              <UiTable
+                caption="Student status meaning and billing reference"
+                columns={statusGuideColumns}
+                rows={statusGuideCards}
+                rowKey={(row) => row.label}
+                emptyStateText="No student status guidance is available."
+              />
+            </div>
+          ) : null}
+
+          {helperTab === "metrics" ? (
+            <div className="admin-student-stack">
+              <div className="admin-student-summary-grid">
+                <article className="admin-student-summary-card">
+                  <h3>L0 Metrics Guide</h3>
+                  <p>Always visible base metrics for identity, participation, and current-year outcome summaries.</p>
+                  <ul className="admin-student-helper-list">
+                    {l0MetricGuideCards.map((card) => (
+                      <li key={card.label}>
+                        <strong>{card.label}:</strong> {card.helper}
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+                <article className="admin-student-summary-card">
+                  <h3>L1 Metrics Guide</h3>
+                  <p>Behavioral interpretation metrics that help teachers understand how a student is attempting tests, not just how they scored.</p>
+                  <ul className="admin-student-helper-list">
+                    {l1MetricGuideCards.map((card) => (
+                      <li key={card.label}>
+                        <strong>{card.label}:</strong> {card.helper}
+                        {card.details && card.details.length > 0 ? (
+                          <ul className="admin-student-helper-sublist">
+                            {card.details.map((detail) => (
+                              <li key={`${card.label}-${detail.label}`}>
+                                <strong>{detail.label}:</strong> {detail.helper}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+                <article className="admin-student-summary-card">
+                  <h3>L2 Metrics Guide</h3>
+                  <p>Advanced execution and risk indicators intended for deeper operational review when the current layer allows them.</p>
+                  <ul className="admin-student-helper-list">
+                    {l2MetricGuideCards.map((card) => (
+                      <li key={card.label}>
+                        <strong>{card.label}:</strong> {card.helper}
+                        {card.details && card.details.length > 0 ? (
+                          <ul className="admin-student-helper-sublist">
+                            {card.details.map((detail) => (
+                              <li key={`${card.label}-${detail.label}`}>
+                                <strong>{detail.label}:</strong> {detail.helper}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+              </div>
+            </div>
+          ) : null}
         </div>
       </>
     );
@@ -2397,46 +2600,6 @@ function StudentManagementPage() {
     );
   }
 
-  function renderLifecycleView() {
-    return (
-      <div className="admin-student-stack">
-        <p className="admin-content-copy">
-          Lifecycle operations are now mounted separately for active, invited, inactive, and transition-ready student records.
-        </p>
-        <div className="admin-student-summary-grid">
-          {lifecycleRuleCards.map((card) => (
-            <article key={card.label} className="admin-student-summary-card">
-              <h3>{card.value}</h3>
-              <p>{card.label}: {card.helper}</p>
-            </article>
-          ))}
-        </div>
-        {renderAccountRosterOperationsPanel()}
-        <div className="admin-student-summary-grid">
-          <article className="admin-student-summary-card">
-            <h3>Historical Analytics</h3>
-            <p>Inactive, archived, and suspended records remain available to summary analytics; raw session scans are not used here.</p>
-          </article>
-          <article className="admin-student-summary-card">
-            <h3>Deletion Guard</h3>
-            <p>Deletion is allowed only before any run history exists. Students with tests attempted are retained or archived.</p>
-          </article>
-          <article className="admin-student-summary-card">
-            <h3>Transition Log</h3>
-            <p>Every activate, deactivate, suspend, archive, or invite action must leave an auditable lifecycle transition.</p>
-          </article>
-        </div>
-        <UiTable
-          caption="Lifecycle management"
-          columns={lifecycleColumns}
-          rows={activeLifecycleStudents}
-          rowKey={(row) => row.id}
-          emptyStateText="No lifecycle records are available."
-        />
-      </div>
-    );
-  }
-
   function renderBatchesView() {
     return (
       <div className="admin-student-stack">
@@ -2592,77 +2755,8 @@ function StudentManagementPage() {
 
       {currentSubpage === "list" ? renderListView() : null}
       {currentSubpage === "bulk-upload" ? renderBulkUploadView() : null}
-      {currentSubpage === "lifecycle" ? renderLifecycleView() : null}
       {currentSubpage === "batches" ? renderBatchesView() : null}
       {currentSubpage === "archive" ? renderArchiveView() : null}
-      <UiModal
-        isOpen={Boolean(editingStudent)}
-        title="Edit Student Details"
-        description="Update identity and batch details for the selected student."
-        onClose={() => setEditingStudent(null)}
-      >
-        {editingStudent ? (
-          <form className="admin-student-edit-form" onSubmit={saveEditChanges}>
-            <UiFormField label="Full Name" htmlFor="admin-edit-student-name">
-              <input
-                id="admin-edit-student-name"
-                type="text"
-                value={editingStudent.fullName}
-                onChange={(event) =>
-                  setEditingStudent((current) =>
-                    current ?
-                      {
-                        ...current,
-                        fullName: event.target.value,
-                      } :
-                      null,
-                  )
-                }
-              />
-            </UiFormField>
-            <UiFormField label="Email" htmlFor="admin-edit-student-email">
-              <input
-                id="admin-edit-student-email"
-                type="email"
-                value={editingStudent.email}
-                onChange={(event) =>
-                  setEditingStudent((current) =>
-                    current ?
-                      {
-                        ...current,
-                        email: event.target.value,
-                      } :
-                      null,
-                  )
-                }
-              />
-            </UiFormField>
-            <UiFormField label="Batch" htmlFor="admin-edit-student-batch">
-              <input
-                id="admin-edit-student-batch"
-                type="text"
-                value={editingStudent.batch}
-                onChange={(event) =>
-                  setEditingStudent((current) =>
-                    current ?
-                      {
-                        ...current,
-                        batch: event.target.value,
-                      } :
-                      null,
-                  )
-                }
-              />
-            </UiFormField>
-            <div className="admin-student-edit-actions">
-              <button type="submit">Save Details</button>
-              <button type="button" onClick={() => setEditingStudent(null)}>
-                Cancel
-              </button>
-            </div>
-          </form>
-        ) : null}
-      </UiModal>
     </section>
   );
 }
