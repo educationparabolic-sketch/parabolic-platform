@@ -9,13 +9,18 @@ import {
   setRequestData,
   setRequestIdentity,
 } from "./framework";
+import {studentOnboardingActivationService} from "../services/studentOnboardingActivation";
 
 export interface AuthenticationMiddlewareDependencies {
   verifyIdToken: (idToken: string) => Promise<DecodedIdToken>;
+  activateInvitedStudentOnFirstLogin?: (
+    input: {instituteId: string; studentId: string},
+  ) => Promise<void>;
 }
 
 export interface AuthenticationMiddlewareOptions {
   attachStudentId?: boolean;
+  promoteInvitedStudentOnAuthenticate?: boolean;
 }
 
 const normalizeNonEmptyString = (
@@ -115,9 +120,28 @@ export const createAuthenticationMiddleware = (
   const identity = buildIdentityContext(decodedToken);
   setRequestIdentity(request, identity);
 
+  const studentId = resolveStudentId(decodedToken, identity.uid);
+
   if (options.attachStudentId) {
     setRequestData(request, {
-      studentId: resolveStudentId(decodedToken, identity.uid),
+      studentId,
+    });
+  }
+
+  if (
+    options.promoteInvitedStudentOnAuthenticate &&
+    identity.role === "student" &&
+    identity.instituteId
+  ) {
+    const activateInvitedStudentOnFirstLogin =
+      dependencies.activateInvitedStudentOnFirstLogin ??
+      studentOnboardingActivationService.activateInvitedStudentOnFirstLogin.bind(
+        studentOnboardingActivationService,
+      );
+
+    await activateInvitedStudentOnFirstLogin({
+      instituteId: identity.instituteId,
+      studentId,
     });
   }
 

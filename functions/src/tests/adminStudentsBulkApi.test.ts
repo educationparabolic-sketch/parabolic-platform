@@ -58,6 +58,7 @@ test("admin students bulk handler accepts a validate-only request", async () => 
         deactivated: 0,
         deactivationCandidates: 0,
         invalid: 0,
+        onboardingEmailsQueued: 0,
         received: 1,
         updated: 0,
         valid: 1,

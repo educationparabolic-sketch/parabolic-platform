@@ -21,10 +21,10 @@ const STUDENT_WORKSPACES = [
     meta: "Admin-operated onboarding workflow",
   },
   {
-    title: "Batch Management",
-    description: "Cohort-level roster organization and current-year summary visibility across institute batches.",
+    title: "Batch Analysis",
+    description: "Cohort-level performance, behavior, and risk review across institute batches for the selected academic year.",
     to: "/admin/students/batches",
-    meta: "Batch-level roster and metric summaries",
+    meta: "Layer-aware cohort analysis workspace",
   },
   {
     title: "Archived Students",

@@ -78,6 +78,26 @@ interface StudentOverrideRecord {
   count: number;
 }
 
+interface StudentOnboardingResendResult {
+  jobId: string;
+  jobPath: string;
+  queuedAt: string;
+  recipientEmail: string;
+  status: "pending";
+  studentId: string;
+}
+
+interface StudentOnboardingResendApiResponse {
+  data?: StudentOnboardingResendResult;
+}
+
+interface StudentOnboardingUiState {
+  isSubmitting?: boolean;
+  lastQueuedAt: string | null;
+  recipientEmail: string | null;
+  status: "pending";
+}
+
 const FALLBACK_STUDENTS: StudentRecord[] = [
   {
     id: "student-001",
@@ -570,6 +590,19 @@ function formatDateLabel(value: string | null): string {
   return new Date(parsed).toISOString().slice(0, 10);
 }
 
+function formatDateTimeLabel(value: string | null): string {
+  if (!value) {
+    return "Not queued yet";
+  }
+
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) {
+    return value;
+  }
+
+  return new Date(parsed).toLocaleString();
+}
+
 function buildChartPoints(history: StudentHistoryEntry[], getValue: (entry: StudentHistoryEntry) => number) {
   const width = 320;
   const height = 180;
@@ -599,10 +632,13 @@ function StudentProfilePage() {
   const { session } = useAuthProvider();
   const accessContext = resolveAdminAccessContext(session);
   const currentLayer = effectiveLayer(accessContext.licenseLayer);
+  const hasL1Insights = hasLayer(currentLayer, "L1");
   const hasL2Insights = hasLayer(currentLayer, "L2");
+  const isAdmin = accessContext.role === "admin";
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadMessage, setLoadMessage] = useState<string | null>(null);
+  const [onboardingUiState, setOnboardingUiState] = useState<StudentOnboardingUiState | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -664,6 +700,75 @@ function StudentProfilePage() {
     return students.find((entry) => entry.id === params.studentId || entry.studentId === params.studentId) ?? null;
   }, [params.studentId, students]);
 
+  useEffect(() => {
+    setOnboardingUiState(null);
+  }, [student?.id]);
+
+  async function resendStudentOnboardingEmail() {
+    if (!student) {
+      return;
+    }
+
+    if (!isAdmin) {
+      setLoadMessage("Only admin roles can resend onboarding emails.");
+      return;
+    }
+
+    setOnboardingUiState((current) => ({
+      isSubmitting: true,
+      lastQueuedAt: current?.lastQueuedAt ?? null,
+      recipientEmail: current?.recipientEmail ?? student.email,
+      status: "pending",
+    }));
+
+    try {
+      if (shouldUseLiveApi()) {
+        const response = await apiClient.post<StudentOnboardingResendApiResponse, Record<string, unknown>>(
+          "/admin/students/onboarding-resend",
+          {
+            body: {
+              studentId: student.id,
+            },
+          },
+        );
+
+        if (!response.data) {
+          throw new Error("POST /admin/students/onboarding-resend did not return queue data.");
+        }
+
+        setOnboardingUiState({
+          isSubmitting: false,
+          lastQueuedAt: response.data.queuedAt ?? new Date().toISOString(),
+          recipientEmail: response.data.recipientEmail ?? student.email,
+          status: response.data.status ?? "pending",
+        });
+      } else {
+        setOnboardingUiState({
+          isSubmitting: false,
+          lastQueuedAt: new Date().toISOString(),
+          recipientEmail: student.email,
+          status: "pending",
+        });
+      }
+
+      setLoadMessage(`Onboarding email queued again for ${student.fullName} at ${student.email}.`);
+    } catch (error) {
+      setOnboardingUiState((current) => ({
+        isSubmitting: false,
+        lastQueuedAt: current?.lastQueuedAt ?? null,
+        recipientEmail: current?.recipientEmail ?? student.email,
+        status: "pending",
+      }));
+      const message =
+        error instanceof ApiClientError ?
+          `Onboarding resend failed with ${error.code} (${error.status}).` :
+        error instanceof Error ?
+          error.message :
+          "Onboarding resend failed.";
+      setLoadMessage(message);
+    }
+  }
+
   const summaryColumns = useMemo<UiTableColumn<{ metric: string; value: string; helper: string }>[]>(
     () => [
       {
@@ -678,7 +783,7 @@ function StudentProfilePage() {
       },
       {
         id: "helper",
-        header: "Source / Intent",
+        header: "Meaning",
         render: (row) => row.helper,
       },
     ],
@@ -711,34 +816,78 @@ function StudentProfilePage() {
     [],
   );
 
+  const profileInfoRows = useMemo(
+    () =>
+      student ?
+        [
+          {
+            metric: "Student ID",
+            value: student.studentId,
+            helper: "students collection identity field",
+          },
+          {
+            metric: "Full name",
+            value: student.fullName,
+            helper: "students collection identity field",
+          },
+          {
+            metric: "Email",
+            value: student.email,
+            helper: "roster contact field",
+          },
+          {
+            metric: "Batch",
+            value: student.batch,
+            helper: "current academic-year roster placement",
+          },
+          {
+            metric: "Academic year",
+            value: student.academicYear,
+            helper: "studentYearMetrics scope",
+          },
+          {
+            metric: "Status",
+            value: student.status,
+            helper: "roster lifecycle state",
+          },
+          {
+            metric: "Last active",
+            value: formatDateLabel(student.lastActive),
+            helper: "recent student portal activity marker",
+          },
+        ] :
+        [],
+    [student],
+  );
+
   const l1DiagnosticRows = useMemo(
     () =>
       student ?
         [
           {
-            metric: "Phase adherence",
+            metric: "Phase Adherence Trend",
             value: formatPercent(student.phaseAdherencePercent),
-            helper: "current-year average phase adherence",
+            helper: "Higher means pacing stayed closer to the recommended phase plan. Lower means stronger timing drift across phases.",
           },
           {
-            metric: "Easy neglect frequency",
+            metric: "Easy Neglect Frequency",
             value: formatPercent(student.easyNeglectRate),
-            helper: "runs flagged for easy-question under-attempt",
+            helper: "Higher means the student more often missed easier scoring opportunities. Lower means easier questions were handled more reliably.",
           },
           {
-            metric: "Hard bias frequency",
+            metric: "Hard Bias Frequency",
             value: formatPercent(student.hardBiasRate),
-            helper: "runs skewed beyond expected hard-question ratio",
+            helper: "Higher means the student more often over-committed to harder questions too early. Lower means difficulty selection stayed more balanced.",
           },
           {
-            metric: "Topic weakness summary",
+            metric: "Topic Weakness Summary",
             value: student.topicWeaknessSummary,
-            helper: "most persistent weak-topic pattern from summary rollups",
+            helper: "Use this to identify the recurring weak area. Stronger weakness wording means the pattern is more persistent across current-year summaries.",
           },
           {
-            metric: "Time misallocation",
+            metric: "Time Misallocation Summary",
             value: formatPercent(student.timeMisallocationPercent),
-            helper: "deviation from recommended time allocation by difficulty",
+            helper: "Higher means time use was less aligned to the recommended difficulty split. Lower means time allocation was more controlled.",
           },
         ] :
         [],
@@ -797,163 +946,191 @@ function StudentProfilePage() {
 
       {student ? (
         <div className="admin-student-stack">
-          <div className="admin-student-summary-grid">
-            <article className="admin-student-summary-card">
+          <section className="admin-student-profile-hero" aria-label="Student profile summary">
+            <div className="admin-student-profile-hero-copy">
+              <p className="admin-student-profile-kicker">Student Identity</p>
               <h3>{student.fullName}</h3>
               <p>{student.studentId}</p>
               <p>{student.email}</p>
-            </article>
-            <article className="admin-student-summary-card">
-              <h3>Roster Placement</h3>
-              <p>Batch: {student.batch}</p>
-              <p>Academic year: {student.academicYear}</p>
-              <p>Last active: {formatDateLabel(student.lastActive)}</p>
-            </article>
-            <article className="admin-student-summary-card">
-              <h3>Current Standing</h3>
-              <p>Status: {student.status}</p>
-              <p>Risk state: {student.riskState}</p>
-              <p>Discipline index: {student.disciplineIndex.toFixed(0)}</p>
-            </article>
-          </div>
-
-          <div className="admin-overview-stat-grid">
-            <UiStatCard
-              title="Tests Attempted"
-              value={String(student.testsAttempted)}
-              helper="Current academic year"
-            />
-            <UiStatCard
-              title="Avg Raw Score %"
-              value={student.avgRawScorePercent.toFixed(1)}
-              helper="studentYearMetrics"
-            />
-            <UiStatCard
-              title="Avg Accuracy %"
-              value={student.avgAccuracyPercent.toFixed(1)}
-              helper="studentYearMetrics"
-            />
-            <UiStatCard
-              title="Score Percentile"
-              value={formatPercent(student.scorePercentile)}
-              helper="Batch-relative summary"
-            />
-            <UiStatCard
-              title="Rank in Batch"
-              value={student.rankInBatch === null ? "Not available" : `#${student.rankInBatch}`}
-              helper="Current-year batch rank"
-            />
-          </div>
-
-          <section className="admin-student-combo-chart-card" aria-label="Student performance combo chart">
-            <header className="admin-student-combo-chart-header">
-              <h3>Performance Combo Chart</h3>
-              <p>Current-year test history with Avg Raw % and Avg Accuracy %.</p>
-            </header>
-            {student.testHistory.length > 0 ? (
-              <div className="admin-student-combo-chart-layout">
-                <svg className="admin-student-combo-chart" viewBox="0 0 320 180" role="img" aria-label="Raw and accuracy trend chart">
-                  <line x1="24" y1="162" x2="296" y2="162" className="admin-student-combo-axis" />
-                  <line x1="24" y1="18" x2="24" y2="162" className="admin-student-combo-axis" />
-                  {rawChartPoints.length > 1 ? <path d={linePath(rawChartPoints)} className="admin-student-combo-line-raw" /> : null}
-                  {accuracyChartPoints.length > 1 ? <path d={linePath(accuracyChartPoints)} className="admin-student-combo-line-accuracy" /> : null}
-                  {rawChartPoints.map((point) => (
-                    <circle key={`${point.label}-raw`} cx={point.x} cy={point.y} r="4" className="admin-student-combo-dot-raw" />
-                  ))}
-                  {accuracyChartPoints.map((point) => (
-                    <circle
-                      key={`${point.label}-accuracy`}
-                      cx={point.x}
-                      cy={point.y}
-                      r="4"
-                      className="admin-student-combo-dot-accuracy"
-                    />
-                  ))}
-                </svg>
-                <div className="admin-student-combo-legend">
-                  <div className="admin-student-combo-legend-row">
-                    <span className="admin-student-combo-swatch admin-student-combo-swatch-raw" />
-                    <strong>Avg Raw %</strong>
-                  </div>
-                  <div className="admin-student-combo-legend-row">
-                    <span className="admin-student-combo-swatch admin-student-combo-swatch-accuracy" />
-                    <strong>Avg Accuracy %</strong>
-                  </div>
-                  {student.testHistory.map((entry) => (
-                    <div key={entry.id} className="admin-student-combo-legend-entry">
-                      <span>{entry.label}</span>
-                      <strong>
-                        Raw {formatPercent(entry.rawScorePercent)} | Accuracy {formatPercent(entry.accuracyPercent)}
-                      </strong>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <p className="admin-student-inline-note">No current-year history is available for the combo chart yet.</p>
-            )}
-          </section>
-
-          <section className="admin-student-l1-card" aria-label="Student profile L1 intelligence">
-            <header className="admin-student-l1-header">
-              <h3>L1 Intelligence</h3>
-              <p>Constructive current-year diagnostic summaries drawn from precomputed student metrics.</p>
-            </header>
-            <div className="admin-student-l1-grid">
-              <div className="admin-student-l1-kpis">
-                <article className="admin-student-l1-kpi">
-                  <span>Phase Adherence</span>
-                  <strong>{formatPercent(student.phaseAdherencePercent)}</strong>
-                </article>
-                <article className="admin-student-l1-kpi">
-                  <span>Easy Neglect</span>
-                  <strong>{formatPercent(student.easyNeglectRate)}</strong>
-                </article>
-                <article className="admin-student-l1-kpi">
-                  <span>Hard Bias</span>
-                  <strong>{formatPercent(student.hardBiasRate)}</strong>
-                </article>
-                <article className="admin-student-l1-kpi">
-                  <span>Time Misallocation</span>
-                  <strong>{formatPercent(student.timeMisallocationPercent)}</strong>
-                </article>
-              </div>
-              <div className="admin-student-summary-card">
-                <h3>Topic Weakness Summary</h3>
-                <p>{student.topicWeaknessSummary}</p>
-              </div>
             </div>
+            <div className="admin-student-profile-hero-meta">
+              <span>Batch: {student.batch}</span>
+              <span>Academic year: {student.academicYear}</span>
+              <span>Status: {student.status}</span>
+              {hasL2Insights ? <span>Risk: {student.riskState}</span> : <span>Layer: {currentLayer}</span>}
+              <span>Last active: {formatDateLabel(student.lastActive)}</span>
+            </div>
+            {student.status === "invited" ? (
+              <div className="admin-student-inline-actions">
+                {isAdmin ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void resendStudentOnboardingEmail();
+                    }}
+                    disabled={onboardingUiState?.isSubmitting}
+                  >
+                    {onboardingUiState?.isSubmitting ? "Queueing..." : "Resend onboarding email"}
+                  </button>
+                ) : (
+                  <small>Only admins can resend onboarding access for invited students.</small>
+                )}
+                {onboardingUiState?.recipientEmail ? (
+                  <small className="admin-student-row-meta">
+                    Queued to {onboardingUiState.recipientEmail} on {formatDateTimeLabel(onboardingUiState.lastQueuedAt)}.
+                  </small>
+                ) : null}
+              </div>
+            ) : null}
           </section>
+
+          <section className="admin-student-profile-section" aria-label="Student profile L0 overview">
+            <header className="admin-student-profile-section-header">
+              <h3>L0 Overview</h3>
+              <p>Core roster, performance, and current-year evidence that every student profile should surface first.</p>
+            </header>
+
+            <div className="admin-overview-stat-grid">
+              <UiStatCard
+                title="Tests Attempted"
+                value={String(student.testsAttempted)}
+                helper="Higher means more current-year evidence. Lower means the profile is based on a smaller performance sample."
+              />
+              <UiStatCard
+                title="Avg Raw Score %"
+                value={student.avgRawScorePercent.toFixed(1)}
+                helper="Higher means stronger overall score conversion. Lower means weaker mark outcome across current-year tests."
+              />
+              <UiStatCard
+                title="Avg Accuracy %"
+                value={student.avgAccuracyPercent.toFixed(1)}
+                helper="Higher means more correct attempted responses. Lower means the student is making more errors within attempts."
+              />
+              <UiStatCard
+                title="Rank in Batch"
+                value={student.rankInBatch === null ? "Not available" : `#${student.rankInBatch}`}
+                helper="A lower rank number is better. A higher rank number means weaker relative standing inside the batch."
+              />
+            </div>
+
+            <div className="admin-student-grid">
+              <UiTable
+                caption="Profile information"
+                columns={summaryColumns}
+                rows={profileInfoRows}
+                rowKey={(row) => row.metric}
+                emptyStateText="No profile information is available."
+              />
+
+              <UiTable
+                caption="Current-year test history"
+                columns={historyColumns}
+                rows={student.testHistory}
+                rowKey={(row) => row.id}
+                emptyStateText="No current-year test history is available."
+              />
+            </div>
+
+            <section className="admin-student-combo-chart-card" aria-label="Student performance combo chart">
+              <header className="admin-student-combo-chart-header">
+                <h3>Performance Combo Chart</h3>
+                <p>Current-year test history with Avg Raw % and Avg Accuracy %. Higher lines indicate stronger outcomes; lower lines indicate weaker scoring or accuracy.</p>
+              </header>
+              {student.testHistory.length > 0 ? (
+                <div className="admin-student-combo-chart-layout">
+                  <svg className="admin-student-combo-chart" viewBox="0 0 320 180" role="img" aria-label="Raw and accuracy trend chart">
+                    <line x1="24" y1="162" x2="296" y2="162" className="admin-student-combo-axis" />
+                    <line x1="24" y1="18" x2="24" y2="162" className="admin-student-combo-axis" />
+                    {rawChartPoints.length > 1 ? <path d={linePath(rawChartPoints)} className="admin-student-combo-line-raw" /> : null}
+                    {accuracyChartPoints.length > 1 ? <path d={linePath(accuracyChartPoints)} className="admin-student-combo-line-accuracy" /> : null}
+                    {rawChartPoints.map((point) => (
+                      <circle key={`${point.label}-raw`} cx={point.x} cy={point.y} r="4" className="admin-student-combo-dot-raw" />
+                    ))}
+                    {accuracyChartPoints.map((point) => (
+                      <circle
+                        key={`${point.label}-accuracy`}
+                        cx={point.x}
+                        cy={point.y}
+                        r="4"
+                        className="admin-student-combo-dot-accuracy"
+                      />
+                    ))}
+                  </svg>
+                  <div className="admin-student-combo-legend">
+                    <div className="admin-student-combo-legend-row">
+                      <span className="admin-student-combo-swatch admin-student-combo-swatch-raw" />
+                      <strong>Avg Raw %</strong>
+                    </div>
+                    <div className="admin-student-combo-legend-row">
+                      <span className="admin-student-combo-swatch admin-student-combo-swatch-accuracy" />
+                      <strong>Avg Accuracy %</strong>
+                    </div>
+                    {student.testHistory.map((entry) => (
+                      <div key={entry.id} className="admin-student-combo-legend-entry">
+                        <span>{entry.label}</span>
+                        <strong>
+                          Raw {formatPercent(entry.rawScorePercent)} | Accuracy {formatPercent(entry.accuracyPercent)}
+                        </strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="admin-student-inline-note">No current-year history is available for the combo chart yet.</p>
+              )}
+            </section>
+          </section>
+
+          {hasL1Insights ? (
+            <section className="admin-student-l1-card" aria-label="Student profile L1 diagnostics">
+              <header className="admin-student-l1-header">
+                <h3>L1 Diagnostics</h3>
+                <p>Layer-one additions follow the documented student profile contract for current-year diagnostic interpretation.</p>
+              </header>
+              <UiTable
+                caption="L1 student profile diagnostics"
+                columns={summaryColumns}
+                rows={l1DiagnosticRows}
+                rowKey={(row) => row.metric}
+                emptyStateText="No L1 diagnostics are available."
+              />
+            </section>
+          ) : null}
 
           {hasL2Insights ? (
-            <section className="admin-student-l2-card" aria-label="Student profile L2 intelligence">
+            <section className="admin-student-l2-card" aria-label="Student profile L2 execution">
               <header className="admin-student-l2-header">
-                <h3>L2 Intelligence</h3>
-                <p>Advanced execution signals rendered from yearly aggregates and summary-safe trend snapshots.</p>
+                <h3>L2 Execution View</h3>
+                <p>Layer-two additions follow the documented student profile contract for risk, discipline, timing, and override visibility.</p>
               </header>
 
               <div className="admin-student-l2-kpis">
                 <article className="admin-student-l2-kpi">
                   <span>MinTime Violations</span>
                   <strong>{formatPercent(student.minTimeViolationPercent)}</strong>
+                  <small>Higher means more rushed responses below minimum expected time. Lower means answer pacing was more disciplined.</small>
                 </article>
                 <article className="admin-student-l2-kpi">
                   <span>MaxTime Violations</span>
                   <strong>{formatPercent(student.maxTimeViolationPercent)}</strong>
+                  <small>Higher means more overstay or overthinking on questions. Lower means time stayed within guardrails more often.</small>
                 </article>
                 <article className="admin-student-l2-kpi">
                   <span>Controlled Mode Delta</span>
                   <strong>{formatSignedPercent(student.controlledModeDelta)}</strong>
+                  <small>Higher positive values mean the student improves under controlled mode. Lower or negative values mean control is not helping much yet.</small>
                 </article>
                 <article className="admin-student-l2-kpi">
                   <span>Current Guess Rate</span>
                   <strong>{formatPercent(student.guessRatePercent)}</strong>
+                  <small>Higher means more uncertain or rushed answering. Lower means cleaner decision quality and fewer likely guesses.</small>
                 </article>
               </div>
 
               <div className="admin-student-l2-grid">
                 <div className="admin-student-summary-card">
-                  <h3>Risk Timeline</h3>
+                  <h3>Risk State Timeline</h3>
+                  <p className="admin-student-metric-note">Lower states mean more stable execution. Higher states mean stronger concern and a greater need for intervention.</p>
                   <div className="admin-student-risk-timeline">
                     {student.riskTimeline.length > 0 ? (
                       student.riskTimeline.map((entry) => (
@@ -970,6 +1147,7 @@ function StudentProfilePage() {
 
                 <div className="admin-student-summary-card">
                   <h3>Override Records</h3>
+                  <p className="admin-student-metric-note">Higher counts mean more operational exceptions were needed. Lower counts mean cleaner and more compliant execution.</p>
                   <div className="admin-student-override-list">
                     {student.overrideRecords.length > 0 ? (
                       student.overrideRecords.map((entry) => (
@@ -988,105 +1166,21 @@ function StudentProfilePage() {
               <div className="admin-analytics-chart-grid">
                 <UiChartContainer
                   title="Discipline Trend"
-                  subtitle="Current-year discipline trajectory"
+                  subtitle="Current-year discipline trajectory. Higher values mean stronger execution discipline; lower values mean weaker control."
                   data={disciplineTrendData}
                   variant="line"
                   maxValue={100}
                 />
                 <UiChartContainer
                   title="Guess Rate Trend"
-                  subtitle="Current-year guess-rate trajectory"
+                  subtitle="Current-year guess-rate trajectory. Higher values mean more guessing pressure; lower values mean more deliberate answering."
                   data={guessRateTrendData}
                   variant="line"
                   maxValue={100}
                 />
               </div>
             </section>
-          ) : (
-            <section className="admin-student-l2-card" aria-label="Student profile L2 intelligence locked">
-              <header className="admin-student-l2-header">
-                <h3>L2 Intelligence</h3>
-                <p>Risk timelines, discipline trends, guess-rate trends, and override records unlock at <strong>L2</strong>.</p>
-              </header>
-              <p className="admin-student-inline-note">Current access layer: <strong>{currentLayer}</strong>.</p>
-            </section>
-          )}
-
-          <div className="admin-student-grid">
-            <UiTable
-              caption="Student profile summary"
-              columns={summaryColumns}
-              rows={[
-                {
-                  metric: "Profile identity",
-                  value: `${student.fullName} (${student.studentId})`,
-                  helper: "students collection identity fields",
-                },
-                {
-                  metric: "Lifecycle state",
-                  value: student.status,
-                  helper: "invited / active / inactive / archived / suspended",
-                },
-                {
-                  metric: "Academic scope",
-                  value: `${student.academicYear} · ${student.batch}`,
-                  helper: "year-scoped student roster placement",
-                },
-                {
-                  metric: "Current-year results",
-                  value: `Raw ${formatPercent(student.avgRawScorePercent)} | Accuracy ${formatPercent(student.avgAccuracyPercent)}`,
-                  helper: "summary-only studentYearMetrics contract",
-                },
-                {
-                  metric: "Batch rank",
-                  value: student.rankInBatch === null ? "Not available" : `#${student.rankInBatch}`,
-                  helper: "current-year batch-relative placement",
-                },
-                {
-                  metric: "Execution posture",
-                  value: `Risk ${student.riskState} · Discipline ${student.disciplineIndex.toFixed(0)}`,
-                  helper: "layer-aware execution summary",
-                },
-                {
-                  metric: "Last activity",
-                  value: formatDateLabel(student.lastActive),
-                  helper: "recent student portal activity marker",
-                },
-              ]}
-              rowKey={(row) => row.metric}
-              emptyStateText="No summary metrics are available."
-            />
-
-            <div className="admin-student-stack">
-              <UiTable
-                caption="L1 diagnostic summary"
-                columns={summaryColumns}
-                rows={l1DiagnosticRows}
-                rowKey={(row) => row.metric}
-                emptyStateText="No L1 diagnostics are available."
-              />
-              <UiTable
-                caption="Current-year test history"
-                columns={historyColumns}
-                rows={student.testHistory}
-                rowKey={(row) => row.id}
-                emptyStateText="No current-year test history is available."
-              />
-              <div className="admin-student-summary-card">
-                <h3>Operator Guardrails</h3>
-                <p>This dedicated screen is for profile drill-down and summary review only.</p>
-                <p>Deeper L2 trends, risk timelines, and override history remain tracked separately in STU-010.</p>
-              </div>
-              <div className="admin-student-summary-card">
-                <h3>Next Actions</h3>
-                <p>Use the student list for activation or archive changes, and Batch Management for cohort updates.</p>
-              </div>
-              <div className="admin-content-note">
-                Data shown here stays within summary-document boundaries: current-year rollups, roster fields, and lifecycle status. Raw sessions,
-                answer arrays, and per-question logs remain outside this UI surface.
-              </div>
-            </div>
-          </div>
+          ) : null}
         </div>
       ) : null}
     </section>

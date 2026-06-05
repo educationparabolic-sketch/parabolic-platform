@@ -45,9 +45,9 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
   },
   {
     path: "/admin/students/batches",
-    title: "Batch Management",
+    title: "Batch Analysis",
     section: "Students Management",
-    description: "Batch-level student organization and roster views.",
+    description: "Batch-level cohort analysis, behavior visibility, and risk review.",
     mountedPath: "/admin/students",
     allowedRoles: ["admin", "teacher"],
   },

@@ -48,8 +48,12 @@ test("buildIdentityContext requires uid, role, and licenseLayer claims", () => {
 test(
   "authentication middleware attaches normalized identity context",
   async () => {
+    const activationCalls: Array<{instituteId: string; studentId: string}> = [];
     const middleware = createAuthenticationMiddleware(
       {
+        activateInvitedStudentOnFirstLogin: async (input) => {
+          activationCalls.push(input);
+        },
         verifyIdToken: async () => ({
           instituteId: "inst_build_62",
           isSuspended: false,
@@ -59,7 +63,10 @@ test(
           uid: "uid_build_62",
         }) as never,
       },
-      {attachStudentId: true},
+      {
+        attachStudentId: true,
+        promoteInvitedStudentOnAuthenticate: true,
+      },
     );
     const request = createMockRequest({
       headers: {
@@ -94,6 +101,50 @@ test(
         .context.requestData,
       {studentId: "student_build_62"},
     );
+    assert.deepEqual(activationCalls, [
+      {
+        instituteId: "inst_build_62",
+        studentId: "student_build_62",
+      },
+    ]);
+  },
+);
+
+test(
+  "authentication middleware skips invited-student activation for non-student roles",
+  async () => {
+    const activationCalls: Array<{instituteId: string; studentId: string}> = [];
+    const middleware = createAuthenticationMiddleware(
+      {
+        activateInvitedStudentOnFirstLogin: async (input) => {
+          activationCalls.push(input);
+        },
+        verifyIdToken: async () => ({
+          instituteId: "inst_build_62",
+          isSuspended: false,
+          licenseLayer: "l2",
+          role: "admin",
+          uid: "uid_build_62_admin",
+        }) as never,
+      },
+      {
+        promoteInvitedStudentOnAuthenticate: true,
+      },
+    );
+    const request = createMockRequest({
+      headers: {
+        authorization: "Bearer build_62_admin_token",
+      },
+    });
+    const response = createMockResponse();
+
+    await middleware(
+      request as never,
+      response as never,
+      async (): Promise<void> => undefined,
+    );
+
+    assert.deepEqual(activationCalls, []);
   },
 );
 

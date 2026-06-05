@@ -5,10 +5,12 @@ import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
 import {
+  UiChartContainer,
   UiForm,
   UiFormField,
   UiPagination,
   UiTable,
+  type UiChartPoint,
   type UiTableColumn,
 } from "../../../../../shared/ui/components";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
@@ -208,6 +210,14 @@ interface StudentBulkUploadDraftRow {
   enrollmentYear: string;
 }
 
+interface ZipEntryMetadata {
+  compressedSize: number;
+  compressionMethod: number;
+  localHeaderOffset: number;
+  name: string;
+  uncompressedSize: number;
+}
+
 type StudentBulkUploadField = Exclude<keyof StudentBulkUploadDraftRow, "id">;
 type StudentBulkUploadStage = "upload" | "validate" | "resolve" | "confirm" | "complete";
 type StudentBulkUploadRowAction = "create" | "update" | "deactivate" | "none";
@@ -226,6 +236,7 @@ interface StudentBulkUploadSummary {
   deactivationCandidates: number;
   deactivated: number;
   invalid: number;
+  onboardingEmailsQueued: number;
   received: number;
   updated: number;
   valid: number;
@@ -243,6 +254,26 @@ interface StudentBulkUploadApiResponse {
   data?: StudentBulkUploadResult;
 }
 
+interface StudentOnboardingResendResult {
+  jobId: string;
+  jobPath: string;
+  queuedAt: string;
+  recipientEmail: string;
+  status: "pending";
+  studentId: string;
+}
+
+interface StudentOnboardingResendApiResponse {
+  data?: StudentOnboardingResendResult;
+}
+
+interface StudentOnboardingUiState {
+  isSubmitting?: boolean;
+  lastQueuedAt: string | null;
+  recipientEmail: string | null;
+  status: "pending";
+}
+
 interface StudentBulkUploadPreviewSummary {
   creates: number;
   updates: number;
@@ -255,6 +286,11 @@ interface BatchRiskDistribution {
   high: number;
   low: number;
   medium: number;
+}
+
+interface BatchCountSummaryRow {
+  count: number;
+  label: string;
 }
 
 interface StudentStatusGuideCard {
@@ -572,6 +608,19 @@ function formatDateLabel(value: string | null): string {
   return new Date(parsed).toISOString().slice(0, 10);
 }
 
+function formatDateTimeLabel(value: string | null): string {
+  if (!value) {
+    return "Not queued yet";
+  }
+
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) {
+    return value;
+  }
+
+  return new Date(parsed).toLocaleString();
+}
+
 function formatPercentLabel(value: number): string {
   return `${Math.round(value)}%`;
 }
@@ -682,6 +731,465 @@ function normalizeCsvHeader(value: string): string {
   return value.trim().toLowerCase().replace(/[\s_-]+/g, "");
 }
 
+function decodeBytes(bytes: Uint8Array): string {
+  return new TextDecoder("utf-8").decode(bytes);
+}
+
+function toArrayBuffer(bufferLike: ArrayBuffer | SharedArrayBuffer): ArrayBuffer {
+  if (bufferLike instanceof ArrayBuffer) {
+    return bufferLike;
+  }
+
+  return new Uint8Array(bufferLike).slice().buffer;
+}
+
+function toUint16(view: DataView, offset: number): number {
+  return view.getUint16(offset, true);
+}
+
+function toUint32(view: DataView, offset: number): number {
+  return view.getUint32(offset, true);
+}
+
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function getExcelColumnName(columnIndex: number): string {
+  let current = columnIndex + 1;
+  let columnName = "";
+
+  while (current > 0) {
+    const remainder = (current - 1) % 26;
+    columnName = String.fromCharCode(65 + remainder) + columnName;
+    current = Math.floor((current - 1) / 26);
+  }
+
+  return columnName;
+}
+
+function buildWorksheetXml(rows: string[][]): string {
+  const rowXml = rows
+    .map((row, rowIndex) => {
+      const rowNumber = rowIndex + 1;
+      const cellXml = row
+        .map((value, columnIndex) => {
+          const cellReference = `${getExcelColumnName(columnIndex)}${rowNumber}`;
+          return `<c r="${cellReference}" t="inlineStr"><is><t>${escapeXml(value)}</t></is></c>`;
+        })
+        .join("");
+      return `<row r="${rowNumber}">${cellXml}</row>`;
+    })
+    .join("");
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${rowXml}</sheetData></worksheet>`;
+}
+
+function buildCrc32(bytes: Uint8Array): number {
+  let crc = 0xffffffff;
+
+  bytes.forEach((byte) => {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+    }
+  });
+
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function writeUint16(output: number[], value: number): void {
+  output.push(value & 0xff, (value >>> 8) & 0xff);
+}
+
+function writeUint32(output: number[], value: number): void {
+  output.push(value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff);
+}
+
+function createStoredZip(files: Array<{ name: string; content: string }>): Uint8Array {
+  const encoder = new TextEncoder();
+  const output: number[] = [];
+  const centralDirectory: number[] = [];
+
+  files.forEach((file) => {
+    const nameBytes = encoder.encode(file.name);
+    const contentBytes = encoder.encode(file.content);
+    const crc32 = buildCrc32(contentBytes);
+    const localHeaderOffset = output.length;
+
+    writeUint32(output, 0x04034b50);
+    writeUint16(output, 20);
+    writeUint16(output, 0);
+    writeUint16(output, 0);
+    writeUint16(output, 0);
+    writeUint16(output, 0);
+    writeUint32(output, crc32);
+    writeUint32(output, contentBytes.length);
+    writeUint32(output, contentBytes.length);
+    writeUint16(output, nameBytes.length);
+    writeUint16(output, 0);
+    output.push(...nameBytes, ...contentBytes);
+
+    writeUint32(centralDirectory, 0x02014b50);
+    writeUint16(centralDirectory, 20);
+    writeUint16(centralDirectory, 20);
+    writeUint16(centralDirectory, 0);
+    writeUint16(centralDirectory, 0);
+    writeUint16(centralDirectory, 0);
+    writeUint16(centralDirectory, 0);
+    writeUint32(centralDirectory, crc32);
+    writeUint32(centralDirectory, contentBytes.length);
+    writeUint32(centralDirectory, contentBytes.length);
+    writeUint16(centralDirectory, nameBytes.length);
+    writeUint16(centralDirectory, 0);
+    writeUint16(centralDirectory, 0);
+    writeUint16(centralDirectory, 0);
+    writeUint16(centralDirectory, 0);
+    writeUint32(centralDirectory, 0);
+    writeUint32(centralDirectory, localHeaderOffset);
+    centralDirectory.push(...nameBytes);
+  });
+
+  const centralDirectoryOffset = output.length;
+  output.push(...centralDirectory);
+  writeUint32(output, 0x06054b50);
+  writeUint16(output, 0);
+  writeUint16(output, 0);
+  writeUint16(output, files.length);
+  writeUint16(output, files.length);
+  writeUint32(output, centralDirectory.length);
+  writeUint32(output, centralDirectoryOffset);
+  writeUint16(output, 0);
+
+  return new Uint8Array(output);
+}
+
+const STUDENT_BULK_SAMPLE_COLUMNS = [
+  "StudentID",
+  "FullName",
+  "Email",
+  "Batch",
+  "ParentEmail",
+  "Class",
+  "Phone",
+  "EnrollmentYear",
+] as const;
+
+function buildStudentBulkSampleWorkbookXlsx(): Uint8Array {
+  const studentRows = [
+    [...STUDENT_BULK_SAMPLE_COLUMNS],
+    ["STU-001", "Aarav Menon", "aarav.menon@school.local", "Batch-A", "parent.one@family.local", "Class 11", "9999999999", "2025-26"],
+    ["STU-002", "Diya Sharma", "diya.sharma@school.local", "Batch-A", "parent.two@family.local", "Class 11", "8888888888", "2025-26"],
+  ];
+  const summaryRows = [
+    ["Field", "Value"],
+    ["Required fields", "StudentID, FullName, Email, Batch"],
+    ["Optional fields", "ParentEmail, Class, Phone, EnrollmentYear"],
+    ["Validation checks", "Required columns, duplicate student IDs, duplicate emails, database ID conflicts, email mismatch conflicts"],
+    ["Roster sync option", "Admins may deactivate students not present in the uploaded file"],
+    ["Commit authority", "Teachers can prepare the workbook. Only admins can validate and create accounts."],
+  ];
+  const instructionRows = [
+    ["Topic", "Instruction"],
+    ["Sheet to fill", "Fill only the students sheet rows below the header."],
+    ["Email rules", "Use one valid email per student. Reused emails will be rejected."],
+    ["StudentID rule", "Use one stable StudentID per student so reuploads update instead of duplicating."],
+    ["Batch naming", "Keep batch names consistent with the current institute roster convention."],
+    ["Upload support", "This workspace accepts both .xlsx and .csv roster files."],
+  ];
+  const contentTypes =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+    '<Default Extension="xml" ContentType="application/xml"/>' +
+    '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+    '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+    '<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+    '<Override PartName="/xl/worksheets/sheet3.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+    "</Types>";
+  const rootRels =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+    "</Relationships>";
+  const workbook =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+    '<sheets><sheet name="students" sheetId="1" r:id="rId1"/><sheet name="Summary" sheetId="2" r:id="rId2"/><sheet name="INSTRUCTIONS" sheetId="3" r:id="rId3"/></sheets>' +
+    "</workbook>";
+  const workbookRels =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+    '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>' +
+    '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/>' +
+    "</Relationships>";
+
+  return createStoredZip([
+    { name: "[Content_Types].xml", content: contentTypes },
+    { name: "_rels/.rels", content: rootRels },
+    { name: "xl/workbook.xml", content: workbook },
+    { name: "xl/_rels/workbook.xml.rels", content: workbookRels },
+    { name: "xl/worksheets/sheet1.xml", content: buildWorksheetXml(studentRows) },
+    { name: "xl/worksheets/sheet2.xml", content: buildWorksheetXml(summaryRows) },
+    { name: "xl/worksheets/sheet3.xml", content: buildWorksheetXml(instructionRows) },
+  ]);
+}
+
+function getColumnLetters(cellReference: string): string {
+  const match = /^([A-Z]+)/i.exec(cellReference.trim());
+  return match?.[1]?.toUpperCase() ?? "";
+}
+
+function readXmlDocument(xmlContent: string): Document {
+  return new DOMParser().parseFromString(xmlContent, "application/xml");
+}
+
+function readXmlText(node: Element | null): string {
+  if (!node) {
+    return "";
+  }
+
+  return Array.from(node.childNodes)
+    .map((child) => child.textContent ?? "")
+    .join("")
+    .trim();
+}
+
+function normalizeWorkbookPath(target: string): string {
+  const trimmed = target.trim();
+  if (trimmed.startsWith("/")) {
+    return trimmed.slice(1);
+  }
+  if (trimmed.startsWith("xl/")) {
+    return trimmed;
+  }
+  return `xl/${trimmed.replace(/^\.\//, "")}`;
+}
+
+function parseZipEntries(buffer: ArrayBuffer): ZipEntryMetadata[] {
+  const view = new DataView(buffer);
+  const bytes = new Uint8Array(buffer);
+  const eocdSignature = 0x06054b50;
+  const centralDirectorySignature = 0x02014b50;
+  const eocdSearchStart = Math.max(0, bytes.length - 22 - 65535);
+  let eocdOffset = -1;
+
+  for (let offset = bytes.length - 22; offset >= eocdSearchStart; offset -= 1) {
+    if (view.getUint32(offset, true) === eocdSignature) {
+      eocdOffset = offset;
+      break;
+    }
+  }
+
+  if (eocdOffset === -1) {
+    throw new Error("Workbook end-of-central-directory record was not found.");
+  }
+
+  const totalEntries = toUint16(view, eocdOffset + 10);
+  let directoryOffset = toUint32(view, eocdOffset + 16);
+  const entries: ZipEntryMetadata[] = [];
+
+  for (let index = 0; index < totalEntries; index += 1) {
+    if (view.getUint32(directoryOffset, true) !== centralDirectorySignature) {
+      throw new Error("Workbook central directory is malformed.");
+    }
+
+    const compressionMethod = toUint16(view, directoryOffset + 10);
+    const compressedSize = toUint32(view, directoryOffset + 20);
+    const uncompressedSize = toUint32(view, directoryOffset + 24);
+    const fileNameLength = toUint16(view, directoryOffset + 28);
+    const extraLength = toUint16(view, directoryOffset + 30);
+    const commentLength = toUint16(view, directoryOffset + 32);
+    const localHeaderOffset = toUint32(view, directoryOffset + 42);
+    const nameStart = directoryOffset + 46;
+    const nameBytes = bytes.slice(nameStart, nameStart + fileNameLength);
+
+    entries.push({
+      compressedSize,
+      compressionMethod,
+      localHeaderOffset,
+      name: decodeBytes(nameBytes),
+      uncompressedSize,
+    });
+
+    directoryOffset += 46 + fileNameLength + extraLength + commentLength;
+  }
+
+  return entries;
+}
+
+async function inflateZipEntry(buffer: ArrayBuffer, entry: ZipEntryMetadata): Promise<Uint8Array> {
+  const view = new DataView(buffer);
+  if (view.getUint32(entry.localHeaderOffset, true) !== 0x04034b50) {
+    throw new Error(`Workbook local header for ${entry.name} is malformed.`);
+  }
+
+  const fileNameLength = toUint16(view, entry.localHeaderOffset + 26);
+  const extraLength = toUint16(view, entry.localHeaderOffset + 28);
+  const compressedStart = entry.localHeaderOffset + 30 + fileNameLength + extraLength;
+  const compressedBytes = new Uint8Array(buffer.slice(compressedStart, compressedStart + entry.compressedSize));
+
+  if (entry.compressionMethod === 0) {
+    return compressedBytes;
+  }
+
+  if (entry.compressionMethod !== 8) {
+    throw new Error(`Workbook compression method ${entry.compressionMethod} is not supported for ${entry.name}.`);
+  }
+
+  const decompressed = await new Response(
+    new Blob([compressedBytes]).stream().pipeThrough(new DecompressionStream("deflate-raw")),
+  ).arrayBuffer();
+
+  return new Uint8Array(decompressed);
+}
+
+async function readZipEntryText(buffer: ArrayBuffer, entry: ZipEntryMetadata): Promise<string> {
+  const bytes = await inflateZipEntry(buffer, entry);
+  return decodeBytes(bytes);
+}
+
+function readSpreadsheetCell(cell: Element, sharedStrings: string[]): string {
+  const cellType = cell.getAttribute("t");
+  const valueNode = cell.querySelector("v");
+
+  if (cellType === "inlineStr") {
+    return readXmlText(cell.querySelector("is"));
+  }
+
+  if (!valueNode) {
+    return "";
+  }
+
+  const value = readXmlText(valueNode);
+  if (cellType === "s") {
+    const sharedIndex = Number(value);
+    return Number.isFinite(sharedIndex) ? (sharedStrings[sharedIndex] ?? "") : "";
+  }
+
+  return value;
+}
+
+function normalizeBulkUploadDraftRow(
+  row: Record<string, string>,
+  rowIndex: number,
+  fallbackAcademicYear: string,
+): StudentBulkUploadDraftRow {
+  return {
+    id: `bulk-row-${rowIndex + 1}`,
+    studentId: (row.StudentID ?? row.studentId ?? "").trim(),
+    fullName: (row.FullName ?? row.fullName ?? row.Name ?? "").trim(),
+    email: (row.Email ?? row.email ?? "").trim().toLowerCase(),
+    batch: (row.Batch ?? row.batch ?? row.BatchID ?? "").trim(),
+    parentEmail: (row.ParentEmail ?? row.parentEmail ?? "").trim().toLowerCase(),
+    className: (row.Class ?? row.class ?? "").trim(),
+    phone: (row.Phone ?? row.phone ?? "").trim(),
+    enrollmentYear: (row.EnrollmentYear ?? row.enrollmentYear ?? "").trim() || fallbackAcademicYear,
+  };
+}
+
+async function parseBulkUploadWorkbook(
+  file: File,
+  fallbackAcademicYear: string,
+): Promise<StudentBulkUploadDraftRow[]> {
+  const workbookBytes = new Uint8Array(await file.arrayBuffer());
+  const workbookBuffer = toArrayBuffer(workbookBytes.buffer).slice(
+    workbookBytes.byteOffset,
+    workbookBytes.byteOffset + workbookBytes.byteLength,
+  );
+  const workbookEntries = parseZipEntries(workbookBuffer);
+  const entryMap = new Map(workbookEntries.map((entry) => [entry.name, entry]));
+  const workbookEntry = entryMap.get("xl/workbook.xml");
+  const relsEntry = entryMap.get("xl/_rels/workbook.xml.rels");
+
+  if (!workbookEntry || !relsEntry) {
+    throw new Error("Workbook must contain valid Excel workbook metadata.");
+  }
+
+  const workbookXml = readXmlDocument(await readZipEntryText(workbookBuffer, workbookEntry));
+  const relsXml = readXmlDocument(await readZipEntryText(workbookBuffer, relsEntry));
+  const relationshipMap = new Map<string, string>();
+
+  Array.from(relsXml.getElementsByTagName("Relationship")).forEach((relationship) => {
+    const relationshipId = relationship.getAttribute("Id");
+    const target = relationship.getAttribute("Target");
+    if (relationshipId && target) {
+      relationshipMap.set(relationshipId, normalizeWorkbookPath(target));
+    }
+  });
+
+  let studentSheetPath: string | null = null;
+  Array.from(workbookXml.getElementsByTagName("sheet")).forEach((sheet) => {
+    const name = (sheet.getAttribute("name") ?? "").trim().toLowerCase();
+    const relationshipId =
+      sheet.getAttribute("r:id") ??
+      sheet.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "id");
+
+    if ((name === "students" || name === "sheet1") && relationshipId) {
+      studentSheetPath = relationshipMap.get(relationshipId) ?? null;
+    }
+  });
+
+  if (!studentSheetPath) {
+    throw new Error("Workbook must contain a sheet named \"students\".");
+  }
+
+  const studentsSheetEntry = entryMap.get(studentSheetPath);
+  if (!studentsSheetEntry) {
+    throw new Error("The students sheet could not be loaded from the workbook.");
+  }
+
+  const sharedStringsEntry = entryMap.get("xl/sharedStrings.xml");
+  const sharedStrings =
+    sharedStringsEntry ?
+      Array.from(readXmlDocument(await readZipEntryText(workbookBuffer, sharedStringsEntry)).getElementsByTagName("si")).map((item) =>
+        readXmlText(item),
+      ) :
+      [];
+
+  const sheetXml = readXmlDocument(await readZipEntryText(workbookBuffer, studentsSheetEntry));
+  const rowNodes = Array.from(sheetXml.getElementsByTagName("row"));
+
+  if (rowNodes.length < 2) {
+    throw new Error("The students workbook must include a header row and at least one student row.");
+  }
+
+  const headerMap = new Map<string, string>();
+  const headerRow = rowNodes[0];
+  Array.from(headerRow?.getElementsByTagName("c") ?? []).forEach((cell) => {
+    const columnLetters = getColumnLetters(cell.getAttribute("r") ?? "");
+    const headerValue = readSpreadsheetCell(cell, sharedStrings);
+    if (columnLetters && headerValue) {
+      headerMap.set(columnLetters, headerValue.trim());
+    }
+  });
+
+  return rowNodes
+    .slice(1)
+    .map((rowNode) => {
+      const rowRecord: Record<string, string> = {};
+
+      Array.from(rowNode.getElementsByTagName("c")).forEach((cell) => {
+        const columnLetters = getColumnLetters(cell.getAttribute("r") ?? "");
+        const header = headerMap.get(columnLetters);
+        if (!header) {
+          return;
+        }
+
+        rowRecord[header] = readSpreadsheetCell(cell, sharedStrings);
+      });
+
+      return rowRecord;
+    })
+    .filter((row) => Object.values(row).some((value) => value.trim().length > 0))
+    .map((row, rowIndex) => normalizeBulkUploadDraftRow(row, rowIndex, fallbackAcademicYear));
+}
+
 function parseCsvLine(line: string): string[] {
   const values: string[] = [];
   let currentValue = "";
@@ -747,17 +1255,20 @@ function parseBulkUploadCsv(csvContent: string, fallbackAcademicYear: string): S
       return index === undefined ? "" : (values[index] ?? "").trim();
     };
 
-    return {
-      id: `bulk-row-${rowIndex + 1}`,
-      studentId: readColumn("studentid"),
-      fullName: readColumn("fullname") || readColumn("name"),
-      email: readColumn("email").toLowerCase(),
-      batch: readColumn("batch") || readColumn("batchid"),
-      parentEmail: readColumn("parentemail").toLowerCase(),
-      className: readColumn("class"),
-      phone: readColumn("phone"),
-      enrollmentYear: readColumn("enrollmentyear") || fallbackAcademicYear,
-    };
+    return normalizeBulkUploadDraftRow(
+      {
+        StudentID: readColumn("studentid"),
+        FullName: readColumn("fullname") || readColumn("name"),
+        Email: readColumn("email"),
+        Batch: readColumn("batch") || readColumn("batchid"),
+        ParentEmail: readColumn("parentemail"),
+        Class: readColumn("class"),
+        Phone: readColumn("phone"),
+        EnrollmentYear: readColumn("enrollmentyear"),
+      },
+      rowIndex,
+      fallbackAcademicYear,
+    );
   });
 }
 
@@ -874,6 +1385,7 @@ function validateBulkUploadRows(
       deactivationCandidates: deactivationCandidates.length,
       deactivated: committed ? deactivationCandidates.length : 0,
       invalid,
+      onboardingEmailsQueued: committed ? createdCount : 0,
       received: rows.length,
       updated: committed ? updatedCount : 0,
       valid: rows.length - invalid,
@@ -995,6 +1507,8 @@ function StudentManagementPage() {
   const [bulkUploadSubmitting, setBulkUploadSubmitting] = useState(false);
   const [bulkUploadDeactivateMissing, setBulkUploadDeactivateMissing] = useState(false);
   const [helperTab, setHelperTab] = useState<StudentHelperTab>("status");
+  const [onboardingUiByStudentId, setOnboardingUiByStudentId] = useState<Record<string, StudentOnboardingUiState>>({});
+  const [selectedBatchForAnalysis, setSelectedBatchForAnalysis] = useState("");
   const inlineEditorRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -1180,6 +1694,11 @@ function StudentManagementPage() {
   const l0MetricGuideCards = STUDENT_L0_METRIC_GUIDE;
   const l1MetricGuideCards = STUDENT_L1_METRIC_GUIDE;
   const l2MetricGuideCards = STUDENT_L2_METRIC_GUIDE;
+  const batchAnalysisYear = filters.academicYear || uniqueAcademicYears[0] || "2025-26";
+  const batchYearStudents = useMemo(
+    () => students.filter((student) => student.academicYear === batchAnalysisYear),
+    [batchAnalysisYear, students],
+  );
   const batchSummaries = useMemo(() => {
     const summaries = new Map<string, {
       batch: string;
@@ -1193,7 +1712,7 @@ function StudentManagementPage() {
       riskDistribution: BatchRiskDistribution;
     }>();
 
-    students.forEach((student) => {
+    batchYearStudents.forEach((student) => {
       const current = summaries.get(student.batch) ?? {
         batch: student.batch,
         totalStudents: 0,
@@ -1230,7 +1749,7 @@ function StudentManagementPage() {
         averageDisciplineIndex: summary.averageDisciplineIndex / summary.totalStudents,
       }))
       .sort((left, right) => left.batch.localeCompare(right.batch));
-  }, [students]);
+  }, [batchYearStudents]);
   const batchManagementTotals = useMemo(() => {
     const batchCount = batchSummaries.length;
     const studentCount = batchSummaries.reduce((sum, batch) => sum + batch.totalStudents, 0);
@@ -1274,6 +1793,133 @@ function StudentManagementPage() {
       studentCount,
     };
   }, [batchSummaries]);
+  const batchDetailsByBatch = useMemo(() => {
+    const summaries = new Map<string, {
+      averageControlledModeDelta: number;
+      averageDisciplineIndex: number;
+      averageEasyNeglect: number;
+      averageGuessRate: number;
+      averageHardBias: number;
+      averagePhaseAdherence: number;
+      averageTestsAttempted: number;
+      behaviorTags: Map<string, number>;
+      batch: string;
+      executionStabilityFlags: Map<string, number>;
+      riskDistribution: BatchRiskDistribution;
+      totalStudents: number;
+    }>();
+
+    batchYearStudents.forEach((student) => {
+      const current = summaries.get(student.batch) ?? {
+        averageControlledModeDelta: 0,
+        averageDisciplineIndex: 0,
+        averageEasyNeglect: 0,
+        averageGuessRate: 0,
+        averageHardBias: 0,
+        averagePhaseAdherence: 0,
+        averageTestsAttempted: 0,
+        behaviorTags: new Map<string, number>(),
+        batch: student.batch,
+        executionStabilityFlags: new Map<string, number>(),
+        riskDistribution: {
+          critical: 0,
+          high: 0,
+          low: 0,
+          medium: 0,
+        },
+        totalStudents: 0,
+      };
+
+      current.totalStudents += 1;
+      current.averageControlledModeDelta += student.controlledModePerformanceDelta;
+      current.averageDisciplineIndex += student.disciplineIndex;
+      current.averageEasyNeglect += student.easyNeglectRate;
+      current.averageGuessRate += student.guessRatePercent;
+      current.averageHardBias += student.hardBiasRate;
+      current.averagePhaseAdherence += student.phaseAdherencePercent;
+      current.averageTestsAttempted += student.testsAttempted;
+      current.riskDistribution[student.riskState] += 1;
+      current.behaviorTags.set(student.behaviorTagSummary, (current.behaviorTags.get(student.behaviorTagSummary) ?? 0) + 1);
+      current.executionStabilityFlags.set(
+        student.executionStabilityFlag,
+        (current.executionStabilityFlags.get(student.executionStabilityFlag) ?? 0) + 1,
+      );
+      summaries.set(student.batch, current);
+    });
+
+    return new Map(
+      Array.from(summaries.entries()).map(([batch, summary]) => [
+        batch,
+        {
+          ...summary,
+          averageControlledModeDelta: summary.averageControlledModeDelta / summary.totalStudents,
+          averageDisciplineIndex: summary.averageDisciplineIndex / summary.totalStudents,
+          averageEasyNeglect: summary.averageEasyNeglect / summary.totalStudents,
+          averageGuessRate: summary.averageGuessRate / summary.totalStudents,
+          averageHardBias: summary.averageHardBias / summary.totalStudents,
+          averagePhaseAdherence: summary.averagePhaseAdherence / summary.totalStudents,
+          averageTestsAttempted: summary.averageTestsAttempted / summary.totalStudents,
+          behaviorTags: Array.from(summary.behaviorTags.entries())
+            .map(([label, count]) => ({ count, label }))
+            .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label)),
+          executionStabilityFlags: Array.from(summary.executionStabilityFlags.entries())
+            .map(([label, count]) => ({ count, label }))
+            .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label)),
+        },
+      ]),
+    );
+  }, [batchYearStudents]);
+  useEffect(() => {
+    if (batchSummaries.length === 0) {
+      if (selectedBatchForAnalysis !== "") {
+        setSelectedBatchForAnalysis("");
+      }
+      return;
+    }
+
+    const hasSelectedBatch = batchSummaries.some((summary) => summary.batch === selectedBatchForAnalysis);
+    if (!hasSelectedBatch) {
+      setSelectedBatchForAnalysis(batchSummaries[0]?.batch ?? "");
+    }
+  }, [batchSummaries, selectedBatchForAnalysis]);
+  const selectedBatchSummary = useMemo(
+    () => batchSummaries.find((summary) => summary.batch === selectedBatchForAnalysis) ?? null,
+    [batchSummaries, selectedBatchForAnalysis],
+  );
+  const selectedBatchDetail = useMemo(
+    () => (selectedBatchForAnalysis ? batchDetailsByBatch.get(selectedBatchForAnalysis) ?? null : null),
+    [batchDetailsByBatch, selectedBatchForAnalysis],
+  );
+  const batchRawScoreChartData = useMemo<UiChartPoint[]>(
+    () => batchSummaries.map((summary) => ({ label: summary.batch, value: Math.round(summary.averageRawScore) })),
+    [batchSummaries],
+  );
+  const batchAccuracyChartData = useMemo<UiChartPoint[]>(
+    () => batchSummaries.map((summary) => ({ label: summary.batch, value: Math.round(summary.averageAccuracy) })),
+    [batchSummaries],
+  );
+  const selectedBatchRiskDistributionData = useMemo<UiChartPoint[]>(
+    () =>
+      selectedBatchSummary ?
+        (Object.entries(selectedBatchSummary.riskDistribution) as Array<[keyof BatchRiskDistribution, number]>).map(([label, value]) => ({
+          label: label.charAt(0).toUpperCase() + label.slice(1),
+          value,
+        })) :
+        [],
+    [selectedBatchSummary],
+  );
+  const batchCountSummaryColumns: UiTableColumn<BatchCountSummaryRow>[] = [
+    {
+      id: "label",
+      header: "Metric",
+      render: (row) => row.label,
+    },
+    {
+      id: "count",
+      header: "Count",
+      render: (row) => row.count,
+    },
+  ];
   const allVisibleSelected =
     pageRows.length > 0 && pageRows.every((student) => selectedStudentIds.includes(student.id));
   const selectedStudents = useMemo(
@@ -1328,6 +1974,12 @@ function StudentManagementPage() {
       },
     );
   }, [bulkUploadResult]);
+  const bulkUploadConflictCount = bulkUploadPreviewSummary.invalid;
+  const bulkUploadReadyCount = bulkUploadPreviewSummary.valid;
+  const bulkUploadPendingCount =
+    bulkUploadRows.length > 0 && !bulkUploadResult ?
+      bulkUploadRows.length :
+      Math.max(0, bulkUploadRows.length - bulkUploadReadyCount - bulkUploadConflictCount);
 
   function toggleVisibleSelection() {
     if (pageRows.length === 0) {
@@ -1438,6 +2090,98 @@ function StudentManagementPage() {
     setBulkUploadDeactivateMissing(false);
   }
 
+  async function resendStudentOnboardingEmail(student: StudentRecord) {
+    if (!isBulkUploadAdmin) {
+      setLoadMessage("Only admin roles can resend onboarding emails.");
+      return;
+    }
+
+    setOnboardingUiByStudentId((current) => ({
+      ...current,
+      [student.id]: {
+        isSubmitting: true,
+        lastQueuedAt: current[student.id]?.lastQueuedAt ?? null,
+        recipientEmail: current[student.id]?.recipientEmail ?? student.email,
+        status: "pending",
+      },
+    }));
+
+    try {
+      if (shouldUseLiveApi()) {
+        const response = await apiClient.post<StudentOnboardingResendApiResponse, Record<string, unknown>>(
+          "/admin/students/onboarding-resend",
+          {
+            body: {
+              studentId: student.id,
+            },
+          },
+        );
+
+        if (!response.data) {
+          throw new Error("POST /admin/students/onboarding-resend did not return queue data.");
+        }
+
+        setOnboardingUiByStudentId((current) => ({
+          ...current,
+          [student.id]: {
+            isSubmitting: false,
+            lastQueuedAt: response.data?.queuedAt ?? new Date().toISOString(),
+            recipientEmail: response.data?.recipientEmail ?? student.email,
+            status: response.data?.status ?? "pending",
+          },
+        }));
+      } else {
+        setOnboardingUiByStudentId((current) => ({
+          ...current,
+          [student.id]: {
+            isSubmitting: false,
+            lastQueuedAt: new Date().toISOString(),
+            recipientEmail: student.email,
+            status: "pending",
+          },
+        }));
+      }
+
+      setLoadMessage(`Onboarding email queued again for ${student.fullName} at ${student.email}.`);
+    } catch (error) {
+      setOnboardingUiByStudentId((current) => ({
+        ...current,
+        [student.id]: {
+          isSubmitting: false,
+          lastQueuedAt: current[student.id]?.lastQueuedAt ?? null,
+          recipientEmail: current[student.id]?.recipientEmail ?? student.email,
+          status: "pending",
+        },
+      }));
+      const message =
+        error instanceof ApiClientError ?
+          `Onboarding resend failed with ${error.code} (${error.status}).` :
+        error instanceof Error ?
+          error.message :
+          "Onboarding resend failed.";
+      setLoadMessage(message);
+    }
+  }
+
+  function downloadStudentBulkSampleWorkbook() {
+    const xlsxBytes = buildStudentBulkSampleWorkbookXlsx();
+    const xlsxBuffer = toArrayBuffer(xlsxBytes.buffer).slice(
+      xlsxBytes.byteOffset,
+      xlsxBytes.byteOffset + xlsxBytes.byteLength,
+    );
+    const xlsxBlob = new Blob([xlsxBuffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const downloadUrl = URL.createObjectURL(xlsxBlob);
+    const anchor = document.createElement("a");
+    anchor.href = downloadUrl;
+    anchor.download = "student-bulk-upload-sample.xlsx";
+    anchor.click();
+    URL.revokeObjectURL(downloadUrl);
+    setBulkUploadMessage("Downloaded the sample Excel workbook for teacher/admin roster preparation.");
+    setBulkUploadError(null);
+  }
+
   async function handleBulkUploadFileSelection(file: File | null) {
     setBulkUploadResult(null);
     setBulkUploadError(null);
@@ -1451,16 +2195,20 @@ function StudentManagementPage() {
     }
 
     setBulkUploadFileName(file.name);
+    const fallbackAcademicYear = filters.academicYear || uniqueAcademicYears[0] || "2025-26";
+    const normalizedFileName = file.name.toLowerCase();
 
-    if (!file.name.toLowerCase().endsWith(".csv")) {
+    if (!normalizedFileName.endsWith(".csv") && !normalizedFileName.endsWith(".xlsx")) {
       setBulkUploadRows([]);
-      setBulkUploadError("Upload a CSV roster export with StudentID, FullName, Email, and Batch columns.");
+      setBulkUploadError("Upload the sample Excel workbook or a CSV roster export with StudentID, FullName, Email, and Batch columns.");
       return;
     }
 
     try {
-      const csvContent = await file.text();
-      const parsedRows = parseBulkUploadCsv(csvContent, filters.academicYear || uniqueAcademicYears[0] || "2025-26");
+      const parsedRows =
+        normalizedFileName.endsWith(".xlsx") ?
+          await parseBulkUploadWorkbook(file, fallbackAcademicYear) :
+          parseBulkUploadCsv(await file.text(), fallbackAcademicYear);
       setBulkUploadRows(parsedRows);
       setBulkUploadMessage(`Loaded ${parsedRows.length} roster rows from ${file.name}. Validate next to check duplicates and conflicts.`);
     } catch (error) {
@@ -1551,11 +2299,11 @@ function StudentManagementPage() {
 
       setBulkUploadResult(result);
 
-      if (commit) {
-        if (!result.committed) {
-          setBulkUploadStage("resolve");
-          setBulkUploadError("Commit was blocked because one or more roster rows still have validation conflicts.");
-          return;
+        if (commit) {
+          if (!result.committed) {
+            setBulkUploadStage("resolve");
+            setBulkUploadError("Commit was blocked because one or more roster rows still have validation conflicts.");
+            return;
         }
 
         if (shouldUseLiveApi()) {
@@ -1578,9 +2326,9 @@ function StudentManagementPage() {
 
         setBulkUploadStage("complete");
         setLoadMessage(
-          `Bulk upload committed: ${result.summary.created} created, ${result.summary.updated} updated, ${result.summary.deactivated} deactivated.`,
+          `Bulk upload committed: ${result.summary.created} created, ${result.summary.updated} updated, ${result.summary.deactivated} deactivated, ${result.summary.onboardingEmailsQueued} onboarding emails queued.`,
         );
-        setBulkUploadMessage("Accounts are ready for onboarding after the confirmed roster commit.");
+        setBulkUploadMessage("Accounts were created and onboarding emails were queued automatically as part of the confirmed roster commit.");
         return;
       }
 
@@ -1698,39 +2446,59 @@ function StudentManagementPage() {
       id: "actions",
       header: "Actions",
       className: "admin-student-actions-col",
-      render: (student) => (
-        <div className="admin-student-row-actions">
-          <NavLink to={`/admin/students/${student.id}`}>View profile</NavLink>
-          <button type="button" onClick={() => openEditModal(student.id)}>
-            Edit
-          </button>
-          {student.status === "active" ? (
-            <>
-              <button type="button" onClick={() => setStudentStatus(student.id, "inactive")}>
-                Set inactive
-              </button>
-              <button type="button" onClick={() => setStudentStatus(student.id, "suspended")}>
-                Suspend
-              </button>
-            </>
-          ) : null}
-          {student.status === "inactive" || student.status === "invited" ? (
-            <>
-              <button type="button" onClick={() => setStudentStatus(student.id, "active")}>
-                Activate
-              </button>
-              <button type="button" onClick={() => setStudentStatus(student.id, "suspended")}>
-                Suspend
-              </button>
-            </>
-          ) : null}
-          {student.status === "suspended" ? (
-            <button type="button" onClick={() => setStudentStatus(student.id, "active")}>
-              Reinstate
+      render: (student) => {
+        const onboardingUi = onboardingUiByStudentId[student.id];
+
+        return (
+          <div className="admin-student-row-actions">
+            <NavLink to={`/admin/students/${student.id}`}>View profile</NavLink>
+            <button type="button" onClick={() => openEditModal(student.id)}>
+              Edit
             </button>
-          ) : null}
-        </div>
-      ),
+            {student.status === "active" ? (
+              <>
+                <button type="button" onClick={() => setStudentStatus(student.id, "inactive")}>
+                  Set inactive
+                </button>
+                <button type="button" onClick={() => setStudentStatus(student.id, "suspended")}>
+                  Suspend
+                </button>
+              </>
+            ) : null}
+            {student.status === "inactive" || student.status === "invited" ? (
+              <>
+                <button type="button" onClick={() => setStudentStatus(student.id, "active")}>
+                  Activate
+                </button>
+                <button type="button" onClick={() => setStudentStatus(student.id, "suspended")}>
+                  Suspend
+                </button>
+              </>
+            ) : null}
+            {student.status === "suspended" ? (
+              <button type="button" onClick={() => setStudentStatus(student.id, "active")}>
+                Reinstate
+              </button>
+            ) : null}
+            {student.status === "invited" && isBulkUploadAdmin ? (
+              <button
+                type="button"
+                onClick={() => {
+                  void resendStudentOnboardingEmail(student);
+                }}
+                disabled={onboardingUi?.isSubmitting}
+              >
+                {onboardingUi?.isSubmitting ? "Queueing..." : "Resend onboarding"}
+              </button>
+            ) : null}
+            {student.status === "invited" && onboardingUi?.recipientEmail ? (
+              <small className="admin-student-row-meta">
+                Queued to {onboardingUi.recipientEmail} on {formatDateTimeLabel(onboardingUi.lastQueuedAt)}.
+              </small>
+            ) : null}
+          </div>
+        );
+      },
     },
   ];
 
@@ -1793,45 +2561,52 @@ function StudentManagementPage() {
     {
       id: "batch",
       header: "Batch",
-      render: (summary) => summary.batch,
-    },
-    {
-      id: "population",
-      header: "Roster",
-      render: (summary) => `${summary.totalStudents} students`,
-    },
-    {
-      id: "activity",
-      header: "Lifecycle Mix",
       render: (summary) => (
-        <div className="admin-student-metrics-cell">
-          <span>Active: {summary.activeStudents}</span>
-          <span>Invited: {summary.invitedStudents}</span>
-          <span>Archive watch: {summary.archivedStudents}</span>
+        <div className="admin-batch-cell">
+          <strong>{summary.batch}</strong>
+          <small>{summary.totalStudents} students in {batchAnalysisYear}</small>
         </div>
       ),
     },
     {
-      id: "performance",
-      header: "Cohort Metrics",
+      id: "l0Summary",
+      header: "L0 Summary",
       render: (summary) => (
-        <div className="admin-student-metrics-cell">
-          <span>Raw: {summary.averageRawScore.toFixed(1)}%</span>
-          <span>Accuracy: {summary.averageAccuracy.toFixed(1)}%</span>
-          {canUseL2Filters ? <span>Discipline: {summary.averageDisciplineIndex.toFixed(0)}</span> : null}
+        <div className="admin-batch-l0-cell">
+          <span>StudentCount: {summary.totalStudents}</span>
+          <span>AvgRawScorePercent: {summary.averageRawScore.toFixed(1)}%</span>
+          <span>AvgAccuracyPercent: {summary.averageAccuracy.toFixed(1)}%</span>
         </div>
       ),
     },
+    ...(hasL1Signals ?
+      [{
+        id: "l1Signals",
+        header: "L1 Signals",
+        render: (summary: BatchSummary) => {
+          const batchDetail = batchDetailsByBatch.get(summary.batch);
+          const topBehaviorTag = batchDetail?.behaviorTags[0]?.label ?? "No summary";
+          return (
+            <div className="admin-batch-l1-cell">
+              <span>Avg Phase Adherence: {batchDetail?.averagePhaseAdherence.toFixed(1) ?? "0.0"}%</span>
+              <span>Avg Easy Neglect: {batchDetail?.averageEasyNeglect.toFixed(1) ?? "0.0"}%</span>
+              <span>Avg Hard Bias: {batchDetail?.averageHardBias.toFixed(1) ?? "0.0"}%</span>
+              <span>Behavior Tag: {topBehaviorTag}</span>
+            </div>
+          );
+        },
+      }] :
+      []),
     ...(canUseL2Filters ?
       [{
-        id: "riskDistribution",
-        header: "Risk Distribution",
+        id: "l2Signals",
+        header: "L2 Signals",
         render: (summary: BatchSummary) => (
-          <div className="admin-student-l2-cell">
-            <span className="admin-student-risk-pill admin-student-risk-pill-low">Low {summary.riskDistribution.low}</span>
-            <span className="admin-student-risk-pill admin-student-risk-pill-medium">Medium {summary.riskDistribution.medium}</span>
-            <span className="admin-student-risk-pill admin-student-risk-pill-high">High {summary.riskDistribution.high}</span>
-            <span className="admin-student-risk-pill admin-student-risk-pill-critical">Critical {summary.riskDistribution.critical}</span>
+          <div className="admin-batch-l2-cell">
+            <span>AvgDisciplineIndex: {summary.averageDisciplineIndex.toFixed(0)}</span>
+            <span>Risk Low/Medium: {summary.riskDistribution.low} / {summary.riskDistribution.medium}</span>
+            <span>Risk High/Critical: {summary.riskDistribution.high} / {summary.riskDistribution.critical}</span>
+            <span>Top Stability: {batchDetailsByBatch.get(summary.batch)?.executionStabilityFlags[0]?.label ?? "No summary"}</span>
           </div>
         ),
       }] :
@@ -2353,26 +3128,26 @@ function StudentManagementPage() {
         .filter((row) => row.studentId)
         .map((row) => [row.studentId ?? "", row]),
     );
+    const isBulkUploadReadyToCommit =
+      Boolean(bulkUploadResult) &&
+      bulkUploadReadyCount > 0 &&
+      bulkUploadConflictCount === 0;
 
     return (
       <div className="admin-student-stack">
         <p className="admin-content-copy">
           Bulk onboarding now runs as a dedicated upload, validation, duplicate resolution, confirmation, and account-creation workflow.
         </p>
-        <div className="admin-student-summary-grid">
-          <article className="admin-student-summary-card">
-            <h3>Upload Package</h3>
-            <p>Accepted source: CSV roster export with StudentID, FullName, Email, Batch, and optional parent/contact fields.</p>
-          </article>
-          <article className="admin-student-summary-card">
-            <h3>Validation Gate</h3>
-            <p>Checks include required columns, duplicate IDs in file, duplicate emails in file, studentId matches, and email conflicts.</p>
-          </article>
-          <article className="admin-student-summary-card">
-            <h3>Current Queue</h3>
-            <p>{students.filter((student) => student.status === "invited").length} invited students are waiting for activation follow-up.</p>
-          </article>
-        </div>
+        <section className="admin-student-bulk-banner" aria-label="Bulk upload guidance">
+          <div className="admin-student-bulk-banner-copy">
+            <strong>Teacher prepares the roster. Admin validates and commits it.</strong>
+            <p>Use the sample Excel workbook or a matching CSV export, resolve any duplicate or identity conflicts inline, then create accounts and queue onboarding automatically.</p>
+          </div>
+          <div className="admin-student-bulk-banner-notes">
+            <span>Accepted fields: StudentID, FullName, Email, Batch, plus optional parent/contact columns.</span>
+            <span>Validation checks: required fields, duplicate IDs, duplicate emails, ID-email mismatches, and roster conflicts.</span>
+          </div>
+        </section>
         <div className="admin-student-bulk-stage-row" aria-label="Bulk upload workflow stages">
           {stageItems.map((item, index) => {
             const state =
@@ -2393,11 +3168,17 @@ function StudentManagementPage() {
         </div>
         {!isBulkUploadAdmin ? (
           <p className="admin-student-inline-note">
-            This workflow is visible to teachers for reference, but validation and commit are restricted to admin sessions because the backend ingestion endpoint is admin-only.
+            Teachers can prepare the workbook and upload it for review, but validation and account creation are restricted to admin sessions because the backend ingestion endpoint is admin-only.
           </p>
         ) : null}
         {bulkUploadError ? <p className="admin-student-inline-note">{bulkUploadError}</p> : null}
         {bulkUploadMessage ? <p className="admin-student-inline-note">{bulkUploadMessage}</p> : null}
+        <div className="admin-student-bulk-downloads">
+          <button type="button" onClick={downloadStudentBulkSampleWorkbook}>
+            Download Sample Excel
+          </button>
+          <p>Use this workbook for teacher-friendly roster filling. The upload form accepts both `.xlsx` and `.csv` files.</p>
+        </div>
         <UiForm
           title="Bulk Upload Intake"
           description="Upload the roster once, then validate, resolve conflicts inline, and confirm the account-creation commit."
@@ -2408,6 +3189,32 @@ function StudentManagementPage() {
           }}
           footer={<span className="admin-student-form-footnote">Workflow: Upload → Validate → Resolve → Confirm → Create Accounts</span>}
         >
+          <div className="admin-student-bulk-intake-grid">
+            <article className="admin-student-bulk-intake-card">
+              <h3>Workbook Scope</h3>
+              <p>Choose the academic year first, then upload the filled sample workbook or a matching CSV roster export.</p>
+              <ul>
+                <li>Teachers can fill the sample workbook.</li>
+                <li>Admins validate, create accounts, and queue onboarding emails automatically.</li>
+              </ul>
+            </article>
+            <article className="admin-student-bulk-intake-card">
+              <h3>Required Columns</h3>
+              <p>`StudentID`, `FullName`, `Email`, and `Batch` must be present in every row.</p>
+              <ul>
+                <li>`StudentID` drives reupload matching.</li>
+                <li>`Email` must remain unique per student.</li>
+              </ul>
+            </article>
+            <article className="admin-student-bulk-intake-card">
+              <h3>Optional Columns</h3>
+              <p>`ParentEmail`, `Class`, `Phone`, and `EnrollmentYear` can be included when available.</p>
+              <ul>
+                <li>Missing optional values do not block upload.</li>
+                <li>Batch names should stay consistent with the current roster.</li>
+              </ul>
+            </article>
+          </div>
           <UiFormField label="Academic Year Scope" htmlFor="admin-students-bulk-year">
             <select
               id="admin-students-bulk-year"
@@ -2424,24 +3231,24 @@ function StudentManagementPage() {
           <UiFormField
             label="Upload Workbook"
             htmlFor="admin-students-bulk-file"
-            helper="Upload a CSV export with StudentID, FullName, Email, Batch, and optional ParentEmail, Class, Phone, EnrollmentYear columns."
+            helper="Upload the sample Excel workbook or a CSV export with StudentID, FullName, Email, Batch, and optional ParentEmail, Class, Phone, EnrollmentYear columns."
           >
             <input
               key={bulkUploadFileName || "bulk-upload-input"}
               id="admin-students-bulk-file"
               type="file"
-              accept=".csv"
+              accept=".csv,.xlsx"
               onChange={(event) => {
                 const file = event.target.files?.[0] ?? null;
                 void handleBulkUploadFileSelection(file);
               }}
             />
           </UiFormField>
-          <UiFormField
-            label="Roster Sync"
-            htmlFor="admin-students-bulk-deactivate-missing"
-            helper="Deactivate current active roster records that are not present in this upload."
-          >
+          <section className="admin-student-bulk-sync-card" aria-labelledby="admin-students-bulk-sync-title">
+            <div className="admin-student-bulk-sync-copy">
+              <h3 id="admin-students-bulk-sync-title">Roster Sync</h3>
+              <p>Use this only when the uploaded file is intended to become the current source-of-truth roster for the selected academic year.</p>
+            </div>
             <label className="admin-student-bulk-toggle" htmlFor="admin-students-bulk-deactivate-missing">
               <input
                 id="admin-students-bulk-deactivate-missing"
@@ -2451,22 +3258,75 @@ function StudentManagementPage() {
               />
               <span>Deactivate students not in file</span>
             </label>
-          </UiFormField>
+            <div className="admin-student-bulk-sync-note">
+              <strong>What this means</strong>
+              <p>When checked, current active roster records that do not appear in this upload will be marked inactive during commit.</p>
+            </div>
+          </section>
         </UiForm>
-        <div className="admin-student-summary-grid">
-          <article className="admin-student-summary-card">
-            <h3>Rows Loaded</h3>
-            <p>{bulkUploadRows.length === 0 ? "No roster selected yet." : `${bulkUploadRows.length} parsed row(s) from ${bulkUploadFileName}.`}</p>
+        <div className="admin-student-bulk-health-grid">
+          <article className="admin-student-bulk-health-card">
+            <small>Rows Loaded</small>
+            <strong>{bulkUploadRows.length}</strong>
+            <p>{bulkUploadRows.length === 0 ? "No roster selected yet." : `${bulkUploadFileName} is ready for validation.`}</p>
           </article>
-          <article className="admin-student-summary-card">
-            <h3>Preview Actions</h3>
-            <p>{bulkUploadPreviewSummary.creates} create, {bulkUploadPreviewSummary.updates} update, {bulkUploadPreviewSummary.invalid} invalid.</p>
+          <article className="admin-student-bulk-health-card">
+            <small>Ready Rows</small>
+            <strong>{bulkUploadReadyCount}</strong>
+            <p>{bulkUploadPreviewSummary.creates} create, {bulkUploadPreviewSummary.updates} update.</p>
           </article>
-          <article className="admin-student-summary-card">
-            <h3>Roster Sync Impact</h3>
-            <p>{bulkUploadResult?.summary.deactivationCandidates ?? 0} students would be deactivated when roster sync is enabled.</p>
+          <article className="admin-student-bulk-health-card">
+            <small>Conflicts</small>
+            <strong>{bulkUploadConflictCount}</strong>
+            <p>{bulkUploadConflictCount > 0 ? "Resolve highlighted rows before commit." : "No blocking validation conflicts."}</p>
+          </article>
+          <article className="admin-student-bulk-health-card">
+            <small>Roster Sync</small>
+            <strong>{bulkUploadResult?.summary.deactivationCandidates ?? 0}</strong>
+            <p>{bulkUploadDeactivateMissing ? "Students missing from the file will be inactivated on commit." : "Missing students stay unchanged unless roster sync is enabled."}</p>
           </article>
         </div>
+        <section className="admin-student-bulk-status-strip" aria-label="Bulk upload readiness">
+          <div>
+            <strong>
+              {bulkUploadRows.length === 0 ?
+                "Upload a workbook to begin." :
+              !bulkUploadResult ?
+                `${bulkUploadPendingCount} row(s) are waiting for the first validation pass.` :
+              isBulkUploadReadyToCommit ?
+                "Validation is clean. This roster is ready to create accounts." :
+                `${bulkUploadConflictCount} row(s) still need resolution before commit.`}
+            </strong>
+            <p>
+              {bulkUploadRows.length === 0 ?
+                "Download the sample workbook, fill it, and upload it here." :
+              !bulkUploadResult ?
+                "Run validation once to classify rows into creates, updates, and conflicts." :
+              isBulkUploadReadyToCommit ?
+                "Confirming will create or update student accounts and queue onboarding emails automatically." :
+                "Edit the highlighted rows, remove accidental duplicates, and re-run validation."}
+            </p>
+          </div>
+          <span
+            className={`admin-student-bulk-status-pill ${
+              bulkUploadRows.length === 0 ?
+                "admin-student-bulk-status-pill-pending" :
+              isBulkUploadReadyToCommit ?
+                "admin-student-bulk-status-pill-ready" :
+              bulkUploadResult ?
+                "admin-student-bulk-status-pill-review" :
+                "admin-student-bulk-status-pill-pending"
+            }`}
+          >
+            {bulkUploadRows.length === 0 ?
+              "Waiting for file" :
+            isBulkUploadReadyToCommit ?
+              "Ready to commit" :
+            bulkUploadResult ?
+              "Needs review" :
+              "Awaiting validation"}
+          </span>
+        </section>
         {bulkUploadRows.length > 0 ? (
           <div className="admin-student-bulk-review-card">
             <div className="admin-student-bulk-review-header">
@@ -2487,9 +3347,7 @@ function StudentManagementPage() {
                   disabled={
                     bulkUploadSubmitting ||
                     !isBulkUploadAdmin ||
-                    !bulkUploadResult ||
-                    bulkUploadPreviewSummary.invalid > 0 ||
-                    bulkUploadPreviewSummary.valid === 0
+                    !isBulkUploadReadyToCommit
                   }
                 >
                   Confirm and Create Accounts
@@ -2507,12 +3365,20 @@ function StudentManagementPage() {
                   rowStatus?.action === "create" ?
                     "Create account" :
                     "Awaiting validation";
+                const statusTone =
+                  rowStatus?.errors.length ?
+                    "review" :
+                  rowStatus?.action === "update" ?
+                    "update" :
+                  rowStatus?.action === "create" ?
+                    "create" :
+                    "pending";
 
                 return (
                   <article key={row.id} className="admin-student-bulk-row-card">
                     <div className="admin-student-bulk-row-header">
                       <strong>{row.studentId || "New row"}</strong>
-                      <span>{statusLabel}</span>
+                      <span className={`admin-student-bulk-row-status admin-student-bulk-row-status-${statusTone}`}>{statusLabel}</span>
                     </div>
                     <div className="admin-student-bulk-row-grid">
                       <label>
@@ -2604,53 +3470,260 @@ function StudentManagementPage() {
     return (
       <div className="admin-student-stack">
         <p className="admin-content-copy">
-          Batch management is mounted as a dedicated cohort workspace with roster and current-year metric summaries.
+          Batch analysis now acts as the cohort analysis workspace inside Students. Everything shown here stays summary-only, year-scoped, and layer-aware.
         </p>
-        <div className="admin-student-summary-grid">
-          <article className="admin-student-summary-card">
-            <h3>{batchManagementTotals.batchCount}</h3>
-            <p>Batches with current-year student summary coverage.</p>
+        <div className="admin-student-batch-hero">
+          <div>
+            <strong>Academic Year Scope: {filters.academicYear || uniqueAcademicYears[0] || "No year selected"}</strong>
+            <p>
+              Compare cohort performance, scan behavior patterns, and review risk posture for the selected academic year without leaving the student section.
+            </p>
+          </div>
+          <div className="admin-student-form-hero-stats">
+            <span>{batchManagementTotals.batchCount} batches</span>
+            <span>{batchManagementTotals.activeCount} active billed</span>
+          </div>
+        </div>
+        <div className="admin-student-batch-summary-grid">
+          <article className="admin-student-batch-summary-card">
+            <small>Batch Count</small>
+            <strong>{batchManagementTotals.batchCount}</strong>
+            <span>Batches with current-year student summary coverage.</span>
           </article>
-          <article className="admin-student-summary-card">
-            <h3>{batchManagementTotals.studentCount}</h3>
-            <p>Total students represented across batch summaries.</p>
+          <article className="admin-student-batch-summary-card">
+            <small>Student Count</small>
+            <strong>{batchManagementTotals.studentCount}</strong>
+            <span>Total students represented across visible batch summaries.</span>
           </article>
-          <article className="admin-student-summary-card">
-            <h3>{batchManagementTotals.averageRawScore.toFixed(1)}%</h3>
-            <p>Weighted average raw score across visible cohorts.</p>
+          <article className="admin-student-batch-summary-card">
+            <small>Avg Raw Score</small>
+            <strong>{batchManagementTotals.averageRawScore.toFixed(1)}%</strong>
+            <span>Weighted raw-score summary across visible cohorts.</span>
           </article>
-          <article className="admin-student-summary-card">
-            <h3>{batchManagementTotals.averageAccuracy.toFixed(1)}%</h3>
-            <p>Weighted average accuracy across visible cohorts.</p>
+          <article className="admin-student-batch-summary-card">
+            <small>Avg Accuracy</small>
+            <strong>{batchManagementTotals.averageAccuracy.toFixed(1)}%</strong>
+            <span>Weighted accuracy summary across visible cohorts.</span>
           </article>
         </div>
         {canUseL2Filters ? (
-          <div className="admin-student-summary-grid">
-            <article className="admin-student-summary-card">
-              <h3>{batchManagementTotals.averageDiscipline.toFixed(0)}</h3>
-              <p>Average discipline index across batch summaries.</p>
+          <div className="admin-student-batch-summary-grid">
+            <article className="admin-student-batch-summary-card">
+              <small>Avg Discipline</small>
+              <strong>{batchManagementTotals.averageDiscipline.toFixed(0)}</strong>
+              <span>L2+ cohort discipline summary.</span>
             </article>
-            <article className="admin-student-summary-card">
-              <h3>{batchManagementTotals.riskDistribution.high + batchManagementTotals.riskDistribution.critical}</h3>
-              <p>High or critical risk students across all batches.</p>
+            <article className="admin-student-batch-summary-card">
+              <small>Low Risk</small>
+              <strong>{batchManagementTotals.riskDistribution.low}</strong>
+              <span>L2+ students currently in the low-risk band.</span>
             </article>
-            <article className="admin-student-summary-card">
-              <h3>{batchManagementTotals.riskDistribution.low}</h3>
-              <p>Low-risk students across all batches.</p>
+            <article className="admin-student-batch-summary-card">
+              <small>High + Critical</small>
+              <strong>{batchManagementTotals.riskDistribution.high + batchManagementTotals.riskDistribution.critical}</strong>
+              <span>L2+ students who may need stronger batch-level intervention.</span>
+            </article>
+            <article className="admin-student-batch-summary-card">
+              <small>Risk View</small>
+              <strong>Enabled</strong>
+              <span>Risk distribution is visible at the current access layer.</span>
             </article>
           </div>
-        ) : (
+        ) : null}
+        {!canUseL2Filters ? (
           <p className="admin-student-inline-note">
             Discipline index and risk distribution are L2 cohort metrics. Current access layer: {currentLayer}.
           </p>
-        )}
-        <UiTable
-          caption="Batch summaries"
-          columns={batchColumns}
-          rows={batchSummaries}
-          rowKey={(row) => row.batch}
-          emptyStateText="No batch summaries are available."
-        />
+        ) : null}
+        <p className="admin-student-inline-note">
+          Batch summary must stay percentage- and index-based. Absolute marks are intentionally not shown in this workspace.
+        </p>
+        <section className="admin-batch-filter-panel" aria-label="Batch focus selector">
+          <h3>Batch Focus</h3>
+          <p className="admin-content-copy">
+            Choose one batch to expand its layer-aware analysis cards while keeping the cohort comparison table visible below.
+          </p>
+          <div className="admin-batch-filter-grid">
+            <label htmlFor="admin-batch-focus-select">
+              Focus Batch
+              <select
+                id="admin-batch-focus-select"
+                value={selectedBatchForAnalysis}
+                onChange={(event) => setSelectedBatchForAnalysis(event.target.value)}
+              >
+                {batchSummaries.map((summary) => (
+                  <option key={summary.batch} value={summary.batch}>
+                    {summary.batch}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="admin-batch-filter-actions">
+            <p className="admin-batch-filter-summary">
+              Current layer: {currentLayer} | Analysis scope: {batchAnalysisYear} | Focused batch: {selectedBatchForAnalysis || "None"}
+            </p>
+          </div>
+        </section>
+        {selectedBatchSummary && selectedBatchDetail ? (
+          <>
+            <div className="admin-batch-kpi-grid">
+              <article className="admin-batch-kpi-card">
+                <p>L0 StudentCount</p>
+                <h3>{selectedBatchSummary.totalStudents}</h3>
+                <small>Students currently represented in this batch summary.</small>
+              </article>
+              <article className="admin-batch-kpi-card">
+                <p>L0 AvgRawScorePercent</p>
+                <h3>{selectedBatchSummary.averageRawScore.toFixed(1)}%</h3>
+                <small>Higher means stronger average scoring across the selected cohort.</small>
+              </article>
+              <article className="admin-batch-kpi-card">
+                <p>L0 AvgAccuracyPercent</p>
+                <h3>{selectedBatchSummary.averageAccuracy.toFixed(1)}%</h3>
+                <small>Higher means cleaner answer quality across current-year attempts.</small>
+              </article>
+              <article className="admin-batch-kpi-card">
+                <p>Billing-Relevant Active</p>
+                <h3>{selectedBatchSummary.activeStudents}</h3>
+                <small>Only active students count toward billing in this batch.</small>
+              </article>
+            </div>
+
+            <div className="admin-batch-chart-grid">
+              <UiChartContainer
+                title="Batch Raw Score Comparison"
+                subtitle="L0 cohort comparison using AvgRawScorePercent only."
+                data={batchRawScoreChartData}
+                maxValue={100}
+              />
+              <UiChartContainer
+                title="Batch Accuracy Comparison"
+                subtitle="L0 cohort comparison using AvgAccuracyPercent only."
+                data={batchAccuracyChartData}
+                maxValue={100}
+              />
+            </div>
+
+            {hasL1Signals ? (
+              <section className="admin-batch-trend-section" aria-label="Batch L1 analysis">
+                <h3>L1 Batch Analysis</h3>
+                <p className="admin-content-copy">
+                  These behavior-oriented signals summarize how the selected cohort is pacing itself and where execution habits are drifting.
+                </p>
+                <div className="admin-batch-kpi-grid">
+                  <article className="admin-batch-kpi-card">
+                    <p>Avg Phase Adherence</p>
+                    <h3>{selectedBatchDetail.averagePhaseAdherence.toFixed(1)}%</h3>
+                    <small>Higher means the batch stays closer to recommended phase discipline.</small>
+                  </article>
+                  <article className="admin-batch-kpi-card">
+                    <p>Avg Easy Neglect</p>
+                    <h3>{selectedBatchDetail.averageEasyNeglect.toFixed(1)}%</h3>
+                    <small>Higher means easier scoring opportunities are being missed more often.</small>
+                  </article>
+                  <article className="admin-batch-kpi-card">
+                    <p>Avg Hard Bias</p>
+                    <h3>{selectedBatchDetail.averageHardBias.toFixed(1)}%</h3>
+                    <small>Higher means the cohort is over-committing to harder questions too early.</small>
+                  </article>
+                  <article className="admin-batch-kpi-card">
+                    <p>Avg Tests Attempted</p>
+                    <h3>{selectedBatchDetail.averageTestsAttempted.toFixed(1)}</h3>
+                    <small>More attempted tests usually means a stronger evidence base for cohort interpretation.</small>
+                  </article>
+                </div>
+                <div className="admin-batch-chart-grid">
+                  <UiTable
+                    caption="Behavior Tag Summary"
+                    columns={batchCountSummaryColumns}
+                    rows={selectedBatchDetail.behaviorTags}
+                    rowKey={(row) => row.label}
+                    emptyStateText="No behavior tag summary is available for this batch."
+                  />
+                  <article className="admin-batch-trend-card">
+                    <h4>L1 Interpretation</h4>
+                    <p className="admin-student-metric-note">
+                      Use the averages above to decide whether this batch needs pacing correction, easier-question discipline, or difficulty-balancing intervention before risk rises further.
+                    </p>
+                  </article>
+                </div>
+              </section>
+            ) : (
+              <p className="admin-student-inline-note">
+                L1 batch analysis unlocks at layer L1. Current access layer: {currentLayer}.
+              </p>
+            )}
+
+            {canUseL2Filters ? (
+              <section className="admin-batch-trend-section" aria-label="Batch L2 analysis">
+                <h3>L2 Batch Analysis</h3>
+                <p className="admin-content-copy">
+                  L2 adds discipline, risk, controlled-mode delta, guess-rate pressure, and stability distribution for the selected cohort.
+                </p>
+                <div className="admin-batch-kpi-grid">
+                  <article className="admin-batch-kpi-card">
+                    <p>AvgDisciplineIndex</p>
+                    <h3>{selectedBatchDetail.averageDisciplineIndex.toFixed(0)}</h3>
+                    <small>Higher means stronger execution discipline across the cohort.</small>
+                  </article>
+                  <article className="admin-batch-kpi-card">
+                    <p>Avg Guess Rate</p>
+                    <h3>{selectedBatchDetail.averageGuessRate.toFixed(1)}%</h3>
+                    <small>Higher means more uncertain or rushed answering pressure in this batch.</small>
+                  </article>
+                  <article className="admin-batch-kpi-card">
+                    <p>Avg Controlled Delta</p>
+                    <h3>{formatSignedPercentLabel(selectedBatchDetail.averageControlledModeDelta)}</h3>
+                    <small>Positive values mean the cohort improves under more controlled execution conditions.</small>
+                  </article>
+                  <article className="admin-batch-kpi-card">
+                    <p>High + Critical Risk</p>
+                    <h3>{selectedBatchSummary.riskDistribution.high + selectedBatchSummary.riskDistribution.critical}</h3>
+                    <small>Students in this batch who may need stronger intervention attention.</small>
+                  </article>
+                </div>
+                <div className="admin-batch-chart-grid">
+                  <UiChartContainer
+                    title={`Risk Distribution: ${selectedBatchSummary.batch}`}
+                    subtitle="L2 cohort risk mix from student summary records."
+                    data={selectedBatchRiskDistributionData}
+                    variant="pie"
+                  />
+                  <UiTable
+                    caption="Execution Stability Flag"
+                    columns={batchCountSummaryColumns}
+                    rows={selectedBatchDetail.executionStabilityFlags}
+                    rowKey={(row) => row.label}
+                    emptyStateText="No execution stability data is available for this batch."
+                  />
+                </div>
+              </section>
+            ) : null}
+          </>
+        ) : null}
+        <section className="admin-batch-table-section" aria-label="Batch comparison table">
+          <div className="admin-batch-table-header">
+            <div>
+              <h3>Batch Summary Table</h3>
+              <p>
+                Use this comparison board to scan the institute’s visible batches side by side before drilling into the focused
+                layer-wise analysis above.
+              </p>
+            </div>
+            <div className="admin-batch-table-meta">
+              <span>{batchSummaries.length} visible batches</span>
+              <span>{batchAnalysisYear} scope</span>
+            </div>
+          </div>
+          <UiTable
+            caption="Batch summaries"
+            columns={batchColumns}
+            rows={batchSummaries}
+            rowKey={(row) => row.batch}
+            emptyStateText="No batch summaries are available."
+          />
+        </section>
       </div>
     );
   }

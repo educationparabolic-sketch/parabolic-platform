@@ -17,9 +17,11 @@ import {LicenseLayer} from "../types/middleware";
 
 const INSTITUTES_COLLECTION = "institutes";
 const STUDENTS_COLLECTION = "students";
+const EMAIL_QUEUE_COLLECTION = "emailQueue";
 const AUTH_NOT_FOUND_CODE = "auth/user-not-found";
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CSV_REQUIRED_HEADERS = ["studentid", "fullname", "email", "batch"];
+const STUDENT_ONBOARDING_TEMPLATE = "student_onboarding";
 
 interface StudentBulkIngestionAuthUserRecord {
   disabled?: boolean;
@@ -87,6 +89,12 @@ interface PreparedRow {
   existingStudent?: ExistingStudentRecord;
   row: StudentBulkIngestionValidatedRow;
   rowResult: StudentBulkIngestionRowResult;
+}
+
+interface QueuedOnboardingEmail {
+  fullName: string;
+  recipientEmail: string;
+  studentId: string;
 }
 
 const normalizeRequiredString = (value: unknown, fieldName: string): string => {
@@ -481,6 +489,9 @@ export class StudentBulkIngestionService {
     const invalid = rowResults.filter((row) => row.errors.length > 0).length;
     const created = preparedRows.filter((row) => row.action === "create").length;
     const updated = preparedRows.filter((row) => row.action === "update").length;
+    const queuedOnboardingEmails = preparedRows.filter((row) =>
+      (row.existingStudent?.status ?? "invited") === "invited",
+    ).length;
     const canCommit = request.commit && invalid === 0;
 
     if (canCommit) {
@@ -540,6 +551,7 @@ export class StudentBulkIngestionService {
         deactivated: canCommit ? deactivationCandidates.length : 0,
         deactivationCandidates: deactivationCandidates.length,
         invalid,
+        onboardingEmailsQueued: canCommit ? queuedOnboardingEmails : 0,
         received: request.rows.length,
         updated: canCommit ? updated : 0,
         valid: request.rows.length - invalid,
@@ -683,6 +695,20 @@ export class StudentBulkIngestionService {
       .collection(INSTITUTES_COLLECTION)
       .doc(request.instituteId)
       .collection(STUDENTS_COLLECTION);
+    const onboardingEmails = preparedRows
+      .filter((entry) => (entry.existingStudent?.status ?? "invited") === "invited")
+      .map<QueuedOnboardingEmail>((entry) => ({
+        fullName: entry.row.fullName,
+        recipientEmail: entry.row.email,
+        studentId: entry.row.studentId,
+      }));
+    const emailQueueCollection = this.dependencies.firestore.collection(
+      EMAIL_QUEUE_COLLECTION,
+    );
+    const emailJobs = onboardingEmails.map((emailJob) => ({
+      ...emailJob,
+      reference: emailQueueCollection.doc(),
+    }));
 
     await this.dependencies.firestore.runTransaction(async (transaction) => {
       preparedRows.forEach((entry) => {
@@ -715,6 +741,24 @@ export class StudentBulkIngestionService {
           updatedAt: FieldValue.serverTimestamp(),
         }, {merge: true});
       });
+
+      emailJobs.forEach((emailJob) => {
+        transaction.create(emailJob.reference, {
+          createdAt: FieldValue.serverTimestamp(),
+          instituteId: request.instituteId,
+          payload: {
+            fullName: emailJob.fullName,
+            instituteId: request.instituteId,
+            studentId: emailJob.studentId,
+          },
+          recipientEmail: emailJob.recipientEmail,
+          retryCount: 0,
+          sentAt: null,
+          status: "pending",
+          subject: STUDENT_ONBOARDING_TEMPLATE,
+          templateType: STUDENT_ONBOARDING_TEMPLATE,
+        });
+      });
     });
 
     await this.dependencies.logStudentImport({
@@ -725,6 +769,7 @@ export class StudentBulkIngestionService {
         created: preparedRows.filter((row) => row.action === "create").length,
         deactivated: deactivationCandidates.length,
         importedStudentIds: preparedRows.map((row) => row.row.studentId),
+        onboardingEmailsQueued: onboardingEmails.length,
         updated: preparedRows.filter((row) => row.action === "update").length,
       },
       beforeState: {

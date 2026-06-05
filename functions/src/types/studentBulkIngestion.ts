@@ -66,6 +66,7 @@ export interface StudentBulkIngestionSummary {
   deactivationCandidates: number;
   deactivated: number;
   invalid: number;
+  onboardingEmailsQueued: number;
   received: number;
   updated: number;
   valid: number;

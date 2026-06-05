@@ -95,7 +95,10 @@ export const createExamStartHandler = (
   },
   middlewares: [
     createMethodMiddleware("POST"),
-    createAuthenticationMiddleware(dependencies, {attachStudentId: true}),
+    createAuthenticationMiddleware(dependencies, {
+      attachStudentId: true,
+      promoteInvitedStudentOnAuthenticate: true,
+    }),
     createTenantGuardMiddleware({
       resolveRequestInstituteId: (request): string | null => {
         const body = (request.body ?? {}) as ExamStartRequestBody;

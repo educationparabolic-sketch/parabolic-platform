@@ -114,6 +114,7 @@ test(
     const instituteId = "inst_build_m2";
     const auditLogsPath = `institutes/${instituteId}/auditLogs`;
     const studentsPath = `institutes/${instituteId}/students`;
+    const emailQueuePath = "emailQueue";
     const existingStudentPath = `${studentsPath}/STU-002`;
     const staleStudentPath = `${studentsPath}/STU-999`;
     const authStub = createAuthStub();
@@ -128,6 +129,7 @@ test(
     });
 
     await deleteCollectionDocuments(auditLogsPath);
+    await deleteCollectionDocuments(emailQueuePath);
     await deleteCollectionDocuments(studentsPath);
     await deleteDocumentIfPresent(`institutes/${instituteId}`);
 
@@ -176,17 +178,26 @@ test(
     const auditSnapshot = await firestore.collection(auditLogsPath)
       .where("actionType", "==", "IMPORT_STUDENTS")
       .get();
+    const emailQueueSnapshot = await firestore.collection(emailQueuePath)
+      .where("instituteId", "==", instituteId)
+      .where("templateType", "==", "student_onboarding")
+      .get();
 
     assert.equal(result.committed, true);
     assert.equal(result.summary.created, 1);
     assert.equal(result.summary.updated, 1);
     assert.equal(result.summary.deactivated, 1);
+    assert.equal(result.summary.onboardingEmailsQueued, 1);
     assert.equal(createdSnapshot.get("status"), "invited");
     assert.equal(createdSnapshot.get("batchId"), "Batch-A");
     assert.equal(updatedSnapshot.get("batchId"), "Batch-C");
     assert.equal(updatedSnapshot.get("status"), "active");
     assert.equal(deactivatedSnapshot.get("status"), "inactive");
     assert.equal(auditSnapshot.size, 1);
+    assert.equal(emailQueueSnapshot.size, 1);
+    assert.equal(emailQueueSnapshot.docs[0]?.get("recipientEmail"), "new.student@example.com");
+    assert.equal(emailQueueSnapshot.docs[0]?.get("status"), "pending");
+    assert.equal(emailQueueSnapshot.docs[0]?.get("payload")?.studentId, "STU-001");
     assert.equal(authStub.users.get("STU-001")?.email, "new.student@example.com");
     assert.deepEqual(authStub.users.get("STU-001")?.claims, {
       instituteId,
@@ -196,6 +207,7 @@ test(
     });
 
     await deleteCollectionDocuments(auditLogsPath);
+    await deleteCollectionDocuments(emailQueuePath);
     await deleteCollectionDocuments(studentsPath);
     await deleteDocumentIfPresent(`institutes/${instituteId}`);
   },
