@@ -14,7 +14,7 @@ const STUDENT_WORKSPACE_LINKS = [
     to: "/admin/students/batches",
   },
   {
-    label: "Archived Students",
+    label: "Academic Year Archive",
     to: "/admin/students/archive",
   },
 ] as const;

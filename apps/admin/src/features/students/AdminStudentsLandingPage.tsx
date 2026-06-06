@@ -1,8 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { ApiClientError } from "../../../../../shared/services/apiClient";
-import { useAuthProvider } from "../../../../../shared/services/authProvider";
-import { resolveAdminAccessContext } from "../../portals/adminAccess";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 
 const apiClient = getPortalApiClient("admin");
@@ -10,27 +7,27 @@ const apiClient = getPortalApiClient("admin");
 const STUDENT_WORKSPACES = [
   {
     title: "Student List",
-    description: "Primary roster workspace for search, filtering, activation controls, and drill-in profile navigation.",
+    description: "Open the main roster to search students, update status, and open student profiles.",
     to: "/admin/students/list",
-    meta: "Roster operations and profile entry point",
+    meta: "Main roster workspace",
   },
   {
     title: "Bulk Upload",
-    description: "Dedicated CSV intake, validation, duplicate resolution, and account-creation workflow.",
+    description: "Upload a roster file, check the rows, and create student accounts in one guided flow.",
     to: "/admin/students/bulk-upload",
-    meta: "Admin-operated onboarding workflow",
+    meta: "Roster upload and onboarding",
   },
   {
     title: "Batch Analysis",
-    description: "Cohort-level performance, behavior, and risk review across institute batches for the selected academic year.",
+    description: "Review batch-level performance, behavior, and risk for the selected academic year.",
     to: "/admin/students/batches",
-    meta: "Layer-aware cohort analysis workspace",
+    meta: "Batch-level review",
   },
   {
-    title: "Archived Students",
-    description: "Historical and suspended student visibility separated from active roster operations.",
+    title: "Academic Year Archive",
+    description: "Prepare year-end archive timing, review archived batches, and check what remains visible after archive.",
     to: "/admin/students/archive",
-    meta: "Read-heavy archive review",
+    meta: "Year-end archive review",
   },
 ] as const;
 
@@ -123,22 +120,17 @@ function shouldUseLiveApi(): boolean {
 }
 
 function AdminStudentsLandingPage() {
-  const { session } = useAuthProvider();
-  const accessContext = resolveAdminAccessContext(session);
   const [students, setStudents] = useState<StudentLandingRecord[]>(FALLBACK_STUDENTS);
   const [isLoading, setIsLoading] = useState(true);
-  const [inlineMessage, setInlineMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadStudents() {
       setIsLoading(true);
-      setInlineMessage(null);
 
       if (!shouldUseLiveApi()) {
         setStudents(FALLBACK_STUDENTS);
-        setInlineMessage("Local mode detected. Loaded deterministic student landing fixtures.");
         setIsLoading(false);
         return;
       }
@@ -150,15 +142,12 @@ function AdminStudentsLandingPage() {
         }
 
         setStudents(nextStudents);
-        setInlineMessage("Live mode enabled: students landing hydrated from GET /admin/students.");
-      } catch (error) {
+      } catch {
         if (!isMounted) {
           return;
         }
 
-        const reason = error instanceof ApiClientError ? error.message : "Failed to load student landing.";
         setStudents(FALLBACK_STUDENTS);
-        setInlineMessage(`${reason} Falling back to deterministic student fixtures.`);
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -191,21 +180,12 @@ function AdminStudentsLandingPage() {
   return (
     <section className="admin-content-card" aria-labelledby="admin-workspace-landing-title">
       <p className="admin-content-eyebrow">Students Workspace</p>
-      <h2 id="admin-workspace-landing-title">Dedicated Student Landing Workspace</h2>
+      <h2 id="admin-workspace-landing-title">Students</h2>
       <p className="admin-content-copy">
-        This route turns <code>/admin/students</code> into a dedicated workspace index instead of dropping directly
-        into the roster table.
-      </p>
-      <p className="admin-content-copy">
-        Student operations are grouped into focused destinations for roster search, onboarding, batch organization,
-        and archive review, while lifecycle status changes stay inside the main student list.
+        Choose the student workspace you want to open.
       </p>
       <p className="admin-settings-inline-note">
-        {isLoading ? "Loading student landing..." : inlineMessage ?? "Student landing workspace ready."}
-      </p>
-      <p className="admin-settings-inline-note">
-        Role: {accessContext.role ?? "unknown"}. Current layer: {accessContext.licenseLayer ?? "unlicensed"}. Student
-        profiles remain available through the roster workspace.
+        {isLoading ? "Loading student workspaces..." : "Student workspaces are ready."}
       </p>
 
       <div className="admin-analytics-kpi-grid">

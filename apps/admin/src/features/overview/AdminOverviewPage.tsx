@@ -5,7 +5,6 @@ import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
 import UiChartContainer from "../../../../../shared/ui/components/UiChartContainer";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
 import {
-  ApiClientError,
   fetchOverviewSnapshot,
   formatIsoDate,
   formatPercent,
@@ -83,13 +82,11 @@ function AdminOverviewPage() {
 
   const [snapshot, setSnapshot] = useState<AdminOverviewSnapshot>(() => getFallbackOverviewSnapshot(currentLayer));
   const [isLoading, setIsLoading] = useState(true);
-  const [inlineMessage, setInlineMessage] = useState<string | null>(null);
   useEffect(() => {
     let isMounted = true;
 
     async function loadOverview() {
       setIsLoading(true);
-      setInlineMessage(null);
 
       const finishLoad = () => {
         if (isMounted) {
@@ -99,7 +96,6 @@ function AdminOverviewPage() {
 
       if (!shouldUseLiveApi()) {
         setSnapshot(getFallbackOverviewSnapshot(currentLayer));
-        setInlineMessage("Local mode detected. Loaded deterministic summary-document fixtures for Build 116 overview.");
         finishLoad();
         return;
       }
@@ -111,15 +107,12 @@ function AdminOverviewPage() {
         }
 
         setSnapshot(apiSnapshot);
-        setInlineMessage("Live mode enabled: overview hydrated from GET /admin/overview summary payload.");
-      } catch (error) {
+      } catch {
         if (!isMounted) {
           return;
         }
 
-        const reason = error instanceof ApiClientError ? error.message : "Failed to load overview summary payload.";
         setSnapshot(getFallbackOverviewSnapshot(currentLayer));
-        setInlineMessage(`${reason} Falling back to deterministic Build 116 fixtures.`);
       } finally {
         finishLoad();
       }
@@ -275,14 +268,20 @@ function AdminOverviewPage() {
     <section className="admin-content-card admin-overview-page" aria-labelledby="admin-overview-title">
       <p className="admin-content-eyebrow">Admin / Overview</p>
       <h2 id="admin-overview-title">Overview</h2>
-      <p className="admin-content-copy">
-        This screen gives teachers and institute admins a quick view of what is happening now, how recent tests are
-        going, and whether any attention is needed. It reads precomputed summary documents for academic year{" "}
-        <code>{snapshot.academicYear}</code> only, updated <code>{formatIsoDate(snapshot.computedAt)}</code>.
-      </p>
-      <p className="admin-analytics-inline-note">
-        {isLoading ? "Loading overview..." : inlineMessage ?? "Overview summary ready."}
-      </p>
+      <div className="admin-overview-hero">
+        <div className="admin-overview-hero-copy">
+          <p className="admin-content-copy">
+            See what is happening now, how recent tests are going, and whether anything needs attention.
+          </p>
+          <p className="admin-analytics-inline-note">
+            {isLoading ? "Loading overview..." : "Overview is ready."}
+          </p>
+        </div>
+        <div className="admin-overview-hero-meta" aria-label="Overview scope">
+          <span>{snapshot.academicYear} scope</span>
+          <span>Updated {formatIsoDate(snapshot.computedAt)}</span>
+        </div>
+      </div>
 
       {sectionTitle(
         "Overview Snapshot",

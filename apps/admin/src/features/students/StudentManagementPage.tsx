@@ -141,6 +141,7 @@ const FALLBACK_STUDENTS: StudentRecord[] = [
 type StudentStatus = (typeof STUDENT_STATUSES)[number];
 type StudentRiskState = (typeof RISK_STATES)[number];
 type StudentSubpage = "list" | "bulk-upload" | "batches" | "archive" | "profile";
+type ArchiveLifecycleStatus = "open" | "scheduled" | "archived";
 
 const LAYER_ORDER: Record<LicenseLayer, number> = {
   L0: 0,
@@ -216,6 +217,20 @@ interface ZipEntryMetadata {
   localHeaderOffset: number;
   name: string;
   uncompressedSize: number;
+}
+
+interface ArchiveScopeConfig {
+  archiveDate: string;
+  archiveStatus: ArchiveLifecycleStatus;
+  coldDataTransitionDate: string;
+}
+
+interface ArchiveCohortRow {
+  batch: string;
+  activeCount: number;
+  archivedOrSuspendedCount: number;
+  pendingArchiveCount: number;
+  studentCount: number;
 }
 
 type StudentBulkUploadField = Exclude<keyof StudentBulkUploadDraftRow, "id">;
@@ -649,6 +664,28 @@ function resolveDaysUntilAcademicYearEnd(academicYear: string): number {
   const endDate = resolveAcademicYearEndDate(academicYear);
   const today = new Date();
   return Math.max(0, Math.ceil((endDate.getTime() - today.getTime()) / millisecondsPerDay));
+}
+
+function toDateInputValue(date: Date): string {
+  const normalized = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return normalized.toISOString().slice(0, 10);
+}
+
+function addDays(date: Date, days: number): Date {
+  return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
+function createArchiveScopeDefaults(academicYear: string): ArchiveScopeConfig {
+  const archiveDate = resolveAcademicYearEndDate(academicYear);
+  return {
+    archiveDate: toDateInputValue(archiveDate),
+    archiveStatus: "scheduled",
+    coldDataTransitionDate: toDateInputValue(addDays(archiveDate, 30)),
+  };
+}
+
+function formatArchiveStatusLabel(status: ArchiveLifecycleStatus): string {
+  return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
 function formatBehaviorTag(value: string): string {
@@ -1509,6 +1546,7 @@ function StudentManagementPage() {
   const [helperTab, setHelperTab] = useState<StudentHelperTab>("status");
   const [onboardingUiByStudentId, setOnboardingUiByStudentId] = useState<Record<string, StudentOnboardingUiState>>({});
   const [selectedBatchForAnalysis, setSelectedBatchForAnalysis] = useState("");
+  const [archiveScopeByYear, setArchiveScopeByYear] = useState<Record<string, ArchiveScopeConfig>>({});
   const inlineEditorRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -1676,20 +1714,73 @@ function StudentManagementPage() {
     });
   }, [editingStudent]);
 
-  const archivedStudents = useMemo(
-    () => students.filter((student) => student.status === "archived" || student.status === "suspended"),
-    [students],
-  );
   const archiveYear = filters.academicYear || uniqueAcademicYears[0] || "2025-26";
   const archiveDaysRemaining = resolveDaysUntilAcademicYearEnd(archiveYear);
   const archiveYearStudents = useMemo(
     () => students.filter((student) => student.academicYear === archiveYear),
     [archiveYear, students],
   );
+  const archivedStudents = useMemo(
+    () => archiveYearStudents.filter((student) => student.status === "archived" || student.status === "suspended"),
+    [archiveYearStudents],
+  );
+  useEffect(() => {
+    setArchiveScopeByYear((current) => (
+      current[archiveYear] ?
+        current :
+        {
+          ...current,
+          [archiveYear]: createArchiveScopeDefaults(archiveYear),
+        }
+    ));
+  }, [archiveYear]);
   const archiveGraduatingBatches = useMemo(
     () => new Set(archiveYearStudents.map((student) => student.batch)).size,
     [archiveYearStudents],
   );
+  const archiveScope = archiveScopeByYear[archiveYear] ?? createArchiveScopeDefaults(archiveYear);
+  const archiveBatches = useMemo(
+    () => Array.from(new Set(archiveYearStudents.map((student) => student.batch))).sort((left, right) => left.localeCompare(right)),
+    [archiveYearStudents],
+  );
+  const archiveReadyCount = useMemo(
+    () => archiveYearStudents.filter((student) => student.status === "inactive" || student.status === "suspended" || student.status === "archived").length,
+    [archiveYearStudents],
+  );
+  const archivePendingCount = Math.max(0, archiveYearStudents.length - archiveReadyCount);
+  const archivedInScopeCount = useMemo(
+    () => archiveYearStudents.filter((student) => student.status === "archived").length,
+    [archiveYearStudents],
+  );
+  const suspendedInScopeCount = useMemo(
+    () => archiveYearStudents.filter((student) => student.status === "suspended").length,
+    [archiveYearStudents],
+  );
+  const inactiveInScopeCount = useMemo(
+    () => archiveYearStudents.filter((student) => student.status === "inactive").length,
+    [archiveYearStudents],
+  );
+  const archiveCohortRows = useMemo<ArchiveCohortRow[]>(() => {
+    const grouped = new Map<string, ArchiveCohortRow>();
+
+    archiveYearStudents.forEach((student) => {
+      const current = grouped.get(student.batch) ?? {
+        batch: student.batch,
+        activeCount: 0,
+        archivedOrSuspendedCount: 0,
+        pendingArchiveCount: 0,
+        studentCount: 0,
+      };
+
+      current.studentCount += 1;
+      current.activeCount += student.status === "active" || student.status === "invited" ? 1 : 0;
+      current.archivedOrSuspendedCount += student.status === "archived" || student.status === "suspended" ? 1 : 0;
+      current.pendingArchiveCount += student.status === "active" || student.status === "invited" ? 1 : 0;
+      grouped.set(student.batch, current);
+    });
+
+    return Array.from(grouped.values()).sort((left, right) => left.batch.localeCompare(right.batch));
+  }, [archiveYearStudents]);
   const statusGuideCards = STUDENT_STATUS_GUIDE_CARDS;
   const l0MetricGuideCards = STUDENT_L0_METRIC_GUIDE;
   const l1MetricGuideCards = STUDENT_L1_METRIC_GUIDE;
@@ -2533,6 +2624,57 @@ function StudentManagementPage() {
           <span>Raw: {student.avgRawScorePercent.toFixed(1)}%</span>
           <span>Accuracy: {student.avgAccuracyPercent.toFixed(1)}%</span>
           <span>Discipline: {student.disciplineIndex.toFixed(0)}</span>
+        </div>
+      ),
+    },
+  ];
+
+  const archiveCohortColumns: UiTableColumn<ArchiveCohortRow>[] = [
+    {
+      id: "batch",
+      header: "Batch",
+      render: (row) => (
+        <div className="admin-student-name-cell">
+          <strong>{row.batch}</strong>
+        </div>
+      ),
+    },
+    {
+      id: "students",
+      header: "Students Included",
+      render: (row) => (
+        <div className="admin-student-metrics-cell">
+          <strong>{row.studentCount}</strong>
+        </div>
+      ),
+    },
+    {
+      id: "archive-ready",
+      header: "Ready for Archive",
+      render: (row) => (
+        <div className="admin-student-metrics-cell">
+          <strong>{row.archivedOrSuspendedCount}</strong>
+          <span>Already archived or currently suspended</span>
+        </div>
+      ),
+    },
+    {
+      id: "pending",
+      header: "Still in Active Review",
+      render: (row) => (
+        <div className="admin-student-metrics-cell">
+          <strong>{row.pendingArchiveCount}</strong>
+          <span>Active or invited records still needing review</span>
+        </div>
+      ),
+    },
+    {
+      id: "transition",
+      header: "Move Raw Data On",
+      render: () => (
+        <div className="admin-student-metrics-cell">
+          <strong>{archiveScope.coldDataTransitionDate}</strong>
+          <span>Scheduled raw-data move date</span>
         </div>
       ),
     },
@@ -3729,90 +3871,188 @@ function StudentManagementPage() {
   }
 
   function renderArchiveView() {
-    const archiveSteps = [
-      "Lock year read-only",
-      "Export raw sessions to BigQuery",
-      "Snapshot governance metrics",
-      "Archive graduating batches",
-      "Reset rolling metrics for new year",
-    ];
-    const accessibleAfterArchive = [
-      "Student summaries",
-      "Governance snapshots",
-      "Read-only profiles",
-    ];
-    const disabledAfterArchive = [
-      "Assignments",
-      "Test edits",
-      "Student mutations",
-      "Template mutations",
-    ];
+    const archiveScopeNote =
+      archiveBatches.length > 0 ?
+        `${archiveBatches.join(", ")} included in the current archive scope.` :
+        "No batches are currently available in the selected archive scope.";
+
+    const setArchiveScopeField = <K extends keyof ArchiveScopeConfig>(field: K, value: ArchiveScopeConfig[K]) => {
+      setArchiveScopeByYear((current) => ({
+        ...current,
+        [archiveYear]: {
+          ...(current[archiveYear] ?? createArchiveScopeDefaults(archiveYear)),
+          [field]: value,
+        },
+      }));
+    };
 
     return (
       <div className="admin-student-stack">
         <p className="admin-content-copy">
-          Academic-year archive review keeps historical student summaries visible while locking operational mutations after the year is sealed.
+          Academic-year archive keeps historical student summaries visible while giving admins one controlled place to schedule the year lock and cold-data transition for archived cohorts.
         </p>
         <section className="admin-student-archive-warning" aria-label="Academic year archive warning">
           <div>
             <span>30-day warning</span>
             <h3>Academic Year Ends in {archiveDaysRemaining} Days</h3>
             <p>
-              Archive preparation for {archiveYear} is read-heavy and summary-only. Student mutations continue only until the year is locked.
+              Archive preparation for {archiveYear} should stay read-heavy and admin-controlled. Student mutations continue only until the year is locked.
             </p>
           </div>
-          <strong>{archiveYear}</strong>
+          <strong>{formatArchiveStatusLabel(archiveScope.archiveStatus)}</strong>
         </section>
-        <div className="admin-student-summary-grid">
-          <article className="admin-student-summary-card">
-            <h3>{archiveYearStudents.length}</h3>
-            <p>Students in archive scope from studentYearMetrics.</p>
-          </article>
-          <article className="admin-student-summary-card">
-            <h3>{archiveGraduatingBatches}</h3>
-            <p>Graduating batch groups prepared for archive transition.</p>
-          </article>
-          <article className="admin-student-summary-card">
-            <h3>{archivedStudents.length}</h3>
-            <p>Already archived or suspended records visible in review.</p>
-          </article>
-        </div>
-        <div className="admin-student-archive-grid">
-          <section className="admin-student-archive-panel" aria-labelledby="admin-students-archive-steps-title">
-            <h3 id="admin-students-archive-steps-title">Archive System Actions</h3>
-            <ol>
-              {archiveSteps.map((step) => (
-                <li key={step}>{step}</li>
-              ))}
-            </ol>
-          </section>
-          <section className="admin-student-archive-panel" aria-labelledby="admin-students-archive-access-title">
-            <h3 id="admin-students-archive-access-title">After Archive: Accessible</h3>
-            <ul>
-              {accessibleAfterArchive.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </section>
-          <section className="admin-student-archive-panel" aria-labelledby="admin-students-archive-disabled-title">
-            <h3 id="admin-students-archive-disabled-title">After Archive: Disabled</h3>
-            <ul>
-              {disabledAfterArchive.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </section>
-        </div>
-        <p className="admin-student-inline-note">
-          HOT student identity records remain billing-aware; WARM studentYearMetrics stay available for read-only summaries; COLD raw sessions are exported to BigQuery only.
-        </p>
-        <UiTable
-          caption="Archived and suspended students"
-          columns={archivedColumns}
-          rows={archivedStudents}
-          rowKey={(row) => row.id}
-          emptyStateText="No archived student records are currently visible."
-        />
+        <section className="admin-student-archive-section" aria-labelledby="admin-students-archive-scope-title">
+          <div className="admin-student-archive-section-header">
+            <div>
+              <h3 id="admin-students-archive-scope-title">Archive Scope</h3>
+              <p>Set the year scope, archive scheduling, and cold-data transition timing for the selected cohort group.</p>
+            </div>
+            <div className="admin-student-archive-meta">
+              <span>{archiveYear}</span>
+              <span>{archiveBatches.length} batches in scope</span>
+            </div>
+          </div>
+          <div className="admin-student-archive-scope-grid">
+            <label className="admin-student-archive-field">
+              <span>Academic Year</span>
+              <select value={archiveYear} onChange={(event) => setFilters((current) => ({ ...current, academicYear: event.target.value }))}>
+                {uniqueAcademicYears.map((academicYear) => (
+                  <option key={academicYear} value={academicYear}>
+                    {academicYear}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="admin-student-archive-field">
+              <span>Archive Status</span>
+              <select
+                value={archiveScope.archiveStatus}
+                onChange={(event) => setArchiveScopeField("archiveStatus", event.target.value as ArchiveLifecycleStatus)}
+              >
+                <option value="open">Open</option>
+                <option value="scheduled">Scheduled</option>
+                <option value="archived">Archived</option>
+              </select>
+            </label>
+            <label className="admin-student-archive-field">
+              <span>Archive Date</span>
+              <input
+                type="date"
+                value={archiveScope.archiveDate}
+                onChange={(event) => setArchiveScopeField("archiveDate", event.target.value)}
+              />
+            </label>
+            <label className="admin-student-archive-field">
+              <span>Cold Data Transition Date</span>
+              <input
+                type="date"
+                value={archiveScope.coldDataTransitionDate}
+                onChange={(event) => setArchiveScopeField("coldDataTransitionDate", event.target.value)}
+              />
+            </label>
+          </div>
+          <p className="admin-student-inline-note">{archiveScopeNote}</p>
+        </section>
+        <section className="admin-student-archive-section" aria-labelledby="admin-students-archive-summary-title">
+          <div className="admin-student-archive-section-header">
+            <div>
+              <h3 id="admin-students-archive-summary-title">Archive Summary</h3>
+              <p>Use this summary to see what is already archived, what is suspended or inactive, and what still needs review before cold transition.</p>
+            </div>
+          </div>
+          <div className="admin-student-summary-grid">
+            <article className="admin-student-summary-card">
+              <h3>{archiveYearStudents.length}</h3>
+              <p>Students in archive scope from studentYearMetrics.</p>
+            </article>
+            <article className="admin-student-summary-card">
+              <h3>{archiveGraduatingBatches}</h3>
+              <p>Batch groups included in the current archive transition.</p>
+            </article>
+            <article className="admin-student-summary-card">
+              <h3>{archiveReadyCount}</h3>
+              <p>Inactive, suspended, or archived records that are archive-ready.</p>
+            </article>
+            <article className="admin-student-summary-card">
+              <h3>{archivePendingCount}</h3>
+              <p>Active or invited records still pending archive review.</p>
+            </article>
+            <article className="admin-student-summary-card">
+              <h3>{archivedInScopeCount}</h3>
+              <p>Already archived student records in the selected year scope.</p>
+            </article>
+            <article className="admin-student-summary-card">
+              <h3>{suspendedInScopeCount + inactiveInScopeCount}</h3>
+              <p>Suspended and inactive records still visible before cold transition.</p>
+            </article>
+          </div>
+        </section>
+        <section className="admin-student-archive-section" aria-labelledby="admin-students-archived-cohorts-title">
+          <div className="admin-student-archive-section-header">
+            <div>
+              <h3 id="admin-students-archived-cohorts-title">Archived Cohorts</h3>
+              <p>Use this table to quickly see which batches are ready, which still need review, and when raw data is scheduled to move out of day-to-day storage.</p>
+            </div>
+          </div>
+          <div className="admin-student-archive-table-section">
+            <UiTable
+              caption="Archived cohorts"
+              columns={archiveCohortColumns}
+              rows={archiveCohortRows}
+              rowKey={(row) => row.batch}
+              emptyStateText="No cohort archive data is currently available."
+            />
+          </div>
+        </section>
+        <section className="admin-student-archive-section" aria-labelledby="admin-students-archive-policy-title">
+          <div className="admin-student-archive-section-header">
+            <div>
+              <h3 id="admin-students-archive-policy-title">What Stays Available After Archive</h3>
+              <p>Use this guide to understand what staff can still view after the year is archived and what moves out of everyday operational use.</p>
+            </div>
+          </div>
+          <div className="admin-student-archive-grid">
+            <section className="admin-student-archive-panel">
+              <h3>Still visible in the admin app</h3>
+              <ul>
+                <li>Student names, IDs, batch placement, and final lifecycle status remain visible for reference.</li>
+                <li>Admins can still see the year-level archive summary without reopening active roster workflows.</li>
+              </ul>
+            </section>
+            <section className="admin-student-archive-panel">
+              <h3>Still available as read-only summaries</h3>
+              <ul>
+                <li>Student profile summaries and retained year-level metrics stay available in read-only form.</li>
+                <li>Batch archive summaries remain visible for comparison, audits, and historical review.</li>
+              </ul>
+            </section>
+            <section className="admin-student-archive-panel">
+              <h3>Moved out of everyday use</h3>
+              <ul>
+                <li>Raw session-level data moves to long-term storage after the configured transition date.</li>
+                <li>The date above lets admins decide when that raw data should leave the active working environment.</li>
+              </ul>
+            </section>
+          </div>
+          <p className="admin-student-inline-note">
+            This archive page is for year-end review only. Use the main student list for day-to-day student status changes and operational edits.
+          </p>
+        </section>
+        <section className="admin-student-archive-section" aria-labelledby="admin-students-archive-records-title">
+          <div className="admin-student-archive-section-header">
+            <div>
+              <h3 id="admin-students-archive-records-title">Archived Student Visibility</h3>
+              <p>Use this retained table for read-only student-level archive review after cohort scheduling is set.</p>
+            </div>
+          </div>
+          <UiTable
+            caption="Archived and suspended students"
+            columns={archivedColumns}
+            rows={archivedStudents}
+            rowKey={(row) => row.id}
+            emptyStateText="No archived student records are currently visible."
+          />
+        </section>
       </div>
     );
   }

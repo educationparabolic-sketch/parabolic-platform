@@ -587,10 +587,155 @@
   white-space: nowrap;
 }
 
+.admin-student-archive-section {
+  border: 1px solid rgba(16, 42, 81, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.88);
+  padding: 18px;
+}
+
+.admin-student-archive-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.admin-student-archive-section-header h3,
+.admin-student-archive-section-header p {
+  margin: 0;
+}
+
+.admin-student-archive-section-header h3 {
+  color: #173c68;
+}
+
+.admin-student-archive-section-header p {
+  margin-top: 6px;
+  color: #4f688a;
+  line-height: 1.45;
+}
+
+.admin-student-archive-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.admin-student-archive-meta span {
+  border: 1px solid rgba(24, 61, 107, 0.12);
+  border-radius: 999px;
+  background: rgba(243, 247, 253, 0.92);
+  color: #375a80;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 6px 10px;
+}
+
+.admin-student-archive-scope-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.admin-student-archive-field {
+  display: grid;
+  gap: 6px;
+}
+
+.admin-student-archive-field span {
+  color: #375a80;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.admin-student-archive-field input,
+.admin-student-archive-field select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid rgba(20, 51, 92, 0.16);
+  border-radius: 12px;
+  background: rgba(247, 250, 255, 0.96);
+  color: #183d6b;
+  font: inherit;
+  padding: 10px 12px;
+}
+
 .admin-student-archive-grid {
   display: grid;
   gap: 14px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.admin-student-archive-table-section .ui-table-shell {
+  overflow-x: hidden;
+}
+
+.admin-student-archive-table-section .ui-table {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.admin-student-archive-table-section .ui-table th,
+.admin-student-archive-table-section .ui-table td {
+  min-width: 0;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  padding: 10px 12px;
+}
+
+.admin-student-archive-table-section .ui-table th:nth-child(1),
+.admin-student-archive-table-section .ui-table td:nth-child(1) {
+  width: 24%;
+}
+
+.admin-student-archive-table-section .ui-table th:nth-child(2),
+.admin-student-archive-table-section .ui-table td:nth-child(2) {
+  width: 22%;
+}
+
+.admin-student-archive-table-section .ui-table th:nth-child(3),
+.admin-student-archive-table-section .ui-table td:nth-child(3) {
+  width: 18%;
+}
+
+.admin-student-archive-table-section .ui-table th:nth-child(4),
+.admin-student-archive-table-section .ui-table td:nth-child(4) {
+  width: 18%;
+}
+
+.admin-student-archive-table-section .ui-table th:nth-child(5),
+.admin-student-archive-table-section .ui-table td:nth-child(5) {
+  width: 18%;
+}
+
+.admin-student-archive-table-section .admin-student-name-cell strong,
+.admin-student-archive-table-section .admin-student-name-cell small,
+.admin-student-archive-table-section .admin-student-metrics-cell strong,
+.admin-student-archive-table-section .admin-student-metrics-cell span {
+  overflow-wrap: break-word;
+}
+
+.admin-student-archive-table-section .admin-student-name-cell,
+.admin-student-archive-table-section .admin-student-metrics-cell {
+  display: grid;
+  gap: 6px;
+}
+
+.admin-student-archive-table-section .admin-student-name-cell strong,
+.admin-student-archive-table-section .admin-student-metrics-cell strong {
+  line-height: 1.35;
+}
+
+.admin-student-archive-table-section .admin-student-name-cell small,
+.admin-student-archive-table-section .admin-student-metrics-cell span {
+  font-size: 0.74rem;
+  line-height: 1.45;
 }
 
 .admin-student-archive-panel {
@@ -2732,6 +2877,45 @@
   border-color: rgba(16, 42, 81, 0.12);
 }
 
+.admin-overview-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 0 6px;
+}
+
+.admin-overview-hero-copy {
+  max-width: 760px;
+}
+
+.admin-overview-hero-copy .admin-content-copy,
+.admin-overview-hero-copy .admin-analytics-inline-note {
+  margin: 0;
+}
+
+.admin-overview-hero-copy .admin-analytics-inline-note {
+  margin-top: 8px;
+}
+
+.admin-overview-hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.admin-overview-hero-meta span {
+  border: 1px solid rgba(24, 61, 107, 0.12);
+  border-radius: 999px;
+  background: rgba(243, 247, 253, 0.92);
+  color: #375a80;
+  font-size: 0.79rem;
+  font-weight: 700;
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
 .admin-analytics-kpi-card p,
 .admin-analytics-kpi-card h3,
 .admin-analytics-kpi-card small {
@@ -4753,6 +4937,18 @@
     flex-direction: column;
   }
 
+  .admin-student-archive-section-header {
+    flex-direction: column;
+  }
+
+  .admin-student-archive-meta {
+    justify-content: flex-start;
+  }
+
+  .admin-student-archive-scope-grid {
+    grid-template-columns: 1fr;
+  }
+
   .admin-student-bulk-stage-row,
   .admin-student-bulk-row-grid,
   .admin-student-bulk-intake-grid {
@@ -4829,6 +5025,14 @@
   .admin-overview-inline-header {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .admin-overview-hero {
+    flex-direction: column;
+  }
+
+  .admin-overview-hero-meta {
+    justify-content: flex-start;
   }
 
   .admin-overview-layer-block-header {
