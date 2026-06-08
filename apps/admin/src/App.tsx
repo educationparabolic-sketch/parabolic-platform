@@ -86,6 +86,7 @@ const AdminQuestionBankLandingPage = lazy(() => import("./features/tests/AdminQu
 const AdminQuestionBankDistributionPage = lazy(() => import("./features/tests/AdminQuestionBankDistributionPage"));
 const AdminQuestionBankArchiveVersionsPage = lazy(() => import("./features/tests/AdminQuestionBankArchiveVersionsPage"));
 const AdminQuestionBankLibraryPage = lazy(() => import("./features/tests/AdminQuestionBankLibraryPage"));
+const AdminQuestionBankQuestionDetailPage = lazy(() => import("./features/tests/AdminQuestionBankQuestionDetailPage"));
 const AdminQuestionBankTagManagementPage = lazy(() => import("./features/tests/AdminQuestionBankTagManagementPage"));
 const AdminQuestionBankValidationLogsPage = lazy(() => import("./features/tests/AdminQuestionBankValidationLogsPage"));
 const AdminTestsLandingPage = lazy(() => import("./features/tests/AdminTestsLandingPage"));
@@ -664,6 +665,10 @@ function App() {
         <Route
           path="question-bank/library"
           element={<AdminRouteBoundary label="Loading question library"><AdminQuestionBankLibraryPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="question-bank/library/:questionId"
+          element={<AdminRouteBoundary label="Loading question detail"><AdminQuestionBankQuestionDetailPage /></AdminRouteBoundary>}
         />
         <Route
           path="question-bank/distribution"

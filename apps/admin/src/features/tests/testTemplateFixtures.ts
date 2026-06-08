@@ -9,6 +9,7 @@ export type DifficultyLevel = (typeof DIFFICULTY_LEVELS)[number];
 export interface QuestionBankRecord {
   academicYear: string;
   additionalTag: string;
+  correctAnswer?: string;
   examType: string;
   id: string;
   lastUsedDate: string | null;
@@ -20,6 +21,7 @@ export interface QuestionBankRecord {
   negativeMarks: number;
   prompt: string;
   primaryTag: string;
+  questionImageFile?: string;
   questionType: string;
   secondaryTag: string;
   solutionImageFile: string;

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 export interface UiModalProps {
   isOpen: boolean;
@@ -10,6 +10,17 @@ export interface UiModalProps {
 }
 
 function UiModal({ isOpen, title, description, onClose, children, footer }: UiModalProps) {
+  const modalRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!isOpen || !modalRef.current) {
+      return;
+    }
+
+    modalRef.current.focus();
+    modalRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [isOpen]);
+
   if (!isOpen) {
     return null;
   }
@@ -17,10 +28,12 @@ function UiModal({ isOpen, title, description, onClose, children, footer }: UiMo
   return (
     <div className="ui-modal-backdrop" role="presentation" onClick={onClose}>
       <section
+        ref={modalRef}
         className="ui-modal"
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
       >
         <header className="ui-modal-header">

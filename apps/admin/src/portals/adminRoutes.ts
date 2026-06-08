@@ -91,6 +91,14 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     allowedRoles: ["admin", "teacher"],
   },
   {
+    path: "/admin/question-bank/library/:questionId",
+    title: "Question Detail",
+    section: "Question Bank",
+    description: "Dedicated per-question detail workspace for question summary, metadata, and version history review.",
+    mountedPath: "/admin/question-bank",
+    allowedRoles: ["admin", "teacher"],
+  },
+  {
     path: "/admin/question-bank/distribution",
     title: "Distribution Overview",
     section: "Question Bank",

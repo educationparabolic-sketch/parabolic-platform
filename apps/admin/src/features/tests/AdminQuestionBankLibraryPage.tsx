@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { NavLink } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import {
@@ -32,32 +33,7 @@ interface QuestionFilterDraft {
   thermalState: "all" | "hot" | "warm" | "cold";
 }
 
-const PAGE_SIZE = 6;
-const STRUCTURAL_LOCK_TOOLTIP = "Locked: Used in assigned test.";
-const STRUCTURAL_LOCK_FIELDS = [
-  "UniqueKey",
-  "Difficulty",
-  "Marks",
-  "NegativeMarks",
-  "QuestionType",
-  "QuestionImageFile",
-  "CorrectAnswer",
-  "Exam",
-  "Subject",
-];
-const FLEXIBLE_FIELD_WARNING = "Changes affect future solution view only. Past scoring unaffected.";
-const FLEXIBLE_FIELD_LABELS = [
-  "SolutionImageFile",
-  "TutorialVideoLink",
-  "SimulationLink",
-  "PrimaryTag",
-  "SecondaryTag",
-  "AdditionalTag",
-  "Topic",
-  "InternalNotes",
-];
-
-interface FlexibleFieldDraft {
+interface MetadataFieldDraft {
   additionalTag: string;
   internalNotes: string;
   primaryTag: string;
@@ -67,6 +43,28 @@ interface FlexibleFieldDraft {
   topic: string;
   tutorialVideoLink: string;
 }
+
+interface StructuralFieldDraft {
+  academicYear: string;
+  additionalTag: string;
+  chapter: string;
+  correctAnswer: string;
+  difficulty: DifficultyLevel;
+  examType: string;
+  marks: string;
+  negativeMarks: string;
+  primaryTag: string;
+  questionImageFile: string;
+  questionType: string;
+  secondaryTag: string;
+  solutionImageFile: string;
+  subject: string;
+  topic: string;
+  uniqueKey: string;
+}
+
+const PAGE_SIZE = 6;
+const STRUCTURAL_LOCK_TOOLTIP = "Locked: Used in assigned test.";
 
 const INITIAL_FILTERS: QuestionFilterDraft = {
   academicYear: "all",
@@ -138,6 +136,7 @@ function normalizeQuestionRecord(value: unknown, index: number): QuestionBankRec
     academicYear: toNonEmptyString(record.academicYear, fallback?.academicYear ?? "unassigned"),
     additionalTag: toNonEmptyString(record.additionalTag, fallback?.additionalTag ?? "none"),
     chapter: toNonEmptyString(record.chapter, fallback?.chapter ?? `Chapter ${index + 1}`),
+    correctAnswer: toNonEmptyString(record.correctAnswer, fallback?.correctAnswer ?? ""),
     difficulty: normalizeDifficulty(record.difficulty, fallback?.difficulty ?? "medium"),
     examType: toNonEmptyString(record.examType, fallback?.examType ?? "General"),
     id: toNonEmptyString(record.id, fallback?.id ?? `q-${index + 1}`),
@@ -146,6 +145,7 @@ function normalizeQuestionRecord(value: unknown, index: number): QuestionBankRec
     negativeMarks: Math.max(0, toNumberOrZero(record.negativeMarks ?? fallback?.negativeMarks ?? 0)),
     primaryTag: toNonEmptyString(record.primaryTag, fallback?.primaryTag ?? "untagged"),
     prompt: toNonEmptyString(record.prompt, fallback?.prompt ?? ""),
+    questionImageFile: toNonEmptyString(record.questionImageFile, fallback?.questionImageFile ?? ""),
     questionType: toNonEmptyString(record.questionType, fallback?.questionType ?? "Question"),
     secondaryTag: toNonEmptyString(record.secondaryTag, fallback?.secondaryTag ?? "none"),
     simulationLink: toNonEmptyString(record.simulationLink, fallback?.simulationLink ?? ""),
@@ -162,7 +162,7 @@ function normalizeQuestionRecord(value: unknown, index: number): QuestionBankRec
   };
 }
 
-function toFlexibleFieldDraft(question: QuestionBankRecord): FlexibleFieldDraft {
+function toMetadataFieldDraft(question: QuestionBankRecord): MetadataFieldDraft {
   return {
     additionalTag: question.additionalTag,
     internalNotes: question.internalNotes,
@@ -172,6 +172,27 @@ function toFlexibleFieldDraft(question: QuestionBankRecord): FlexibleFieldDraft 
     solutionImageFile: question.solutionImageFile,
     topic: question.topic,
     tutorialVideoLink: question.tutorialVideoLink,
+  };
+}
+
+function toStructuralFieldDraft(question: QuestionBankRecord): StructuralFieldDraft {
+  return {
+    academicYear: question.academicYear,
+    additionalTag: question.additionalTag,
+    chapter: question.chapter,
+    correctAnswer: question.correctAnswer ?? "",
+    difficulty: question.difficulty,
+    examType: question.examType,
+    marks: String(question.marks),
+    negativeMarks: String(question.negativeMarks),
+    primaryTag: question.primaryTag,
+    questionImageFile: question.questionImageFile ?? "",
+    questionType: question.questionType,
+    secondaryTag: question.secondaryTag,
+    solutionImageFile: question.solutionImageFile,
+    subject: question.subject,
+    topic: question.topic,
+    uniqueKey: question.uniqueKey,
   };
 }
 
@@ -191,11 +212,9 @@ async function fetchLibraryFromApi(): Promise<QuestionBankRecord[]> {
     };
   };
   const questions = Array.isArray(response.data?.questions) ? response.data?.questions : [];
-  const normalizedQuestions = questions
+  return questions
     .map((entry, index) => normalizeQuestionRecord(entry, index))
     .filter((entry): entry is QuestionBankRecord => Boolean(entry));
-
-  return normalizedQuestions;
 }
 
 function AdminQuestionBankLibraryPage() {
@@ -203,11 +222,15 @@ function AdminQuestionBankLibraryPage() {
   const [filters, setFilters] = useState<QuestionFilterDraft>(INITIAL_FILTERS);
   const [page, setPage] = useState(1);
   const [inlineMessage, setInlineMessage] = useState(
-    "Question library now has its own mounted workspace with indexed filters, pagination, and structural lock review.",
+    "Search the library, open a question, and decide whether it needs a metadata update or a new version.",
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [flexibleEditQuestionId, setFlexibleEditQuestionId] = useState<string | null>(null);
-  const [flexibleDraft, setFlexibleDraft] = useState<FlexibleFieldDraft | null>(null);
+  const [metadataEditQuestionId, setMetadataEditQuestionId] = useState<string | null>(null);
+  const [metadataDraft, setMetadataDraft] = useState<MetadataFieldDraft | null>(null);
+  const [structureEditQuestionId, setStructureEditQuestionId] = useState<string | null>(null);
+  const [structureDraft, setStructureDraft] = useState<StructuralFieldDraft | null>(null);
+  const metadataEditorRef = useRef<HTMLElement | null>(null);
+  const structureEditorRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     let isActive = true;
@@ -215,7 +238,7 @@ function AdminQuestionBankLibraryPage() {
     async function loadLibrary(): Promise<void> {
       if (!shouldUseLiveApi()) {
         setQuestions(QUESTION_BANK);
-        setInlineMessage("Local mode detected. Loaded deterministic question library fixtures.");
+        setInlineMessage("Question library is ready.");
         return;
       }
 
@@ -228,8 +251,8 @@ function AdminQuestionBankLibraryPage() {
         setQuestions(nextQuestions.length > 0 ? nextQuestions : QUESTION_BANK);
         setInlineMessage(
           nextQuestions.length > 0 ?
-            "Live mode enabled: question library hydrated from GET /admin/questions/library." :
-            "Live mode enabled, but no persisted question library records were returned yet.",
+            "Question library is ready." :
+            "No saved questions were returned yet, so the sample library is being shown.",
         );
       } catch (error) {
         if (!isActive) {
@@ -239,7 +262,7 @@ function AdminQuestionBankLibraryPage() {
         const reason =
           error instanceof ApiClientError ? error.message : "Failed to load question library.";
         setQuestions(QUESTION_BANK);
-        setInlineMessage(`${reason} Falling back to deterministic question library fixtures.`);
+        setInlineMessage(`${reason} Showing the sample library for now.`);
       }
     }
 
@@ -250,33 +273,25 @@ function AdminQuestionBankLibraryPage() {
     };
   }, []);
 
-  const subjects = useMemo(() => {
-    return ["all", ...new Set(questions.map((question) => question.subject))];
-  }, [questions]);
-
-  const examTypes = useMemo(() => {
-    return ["all", ...new Set(questions.map((question) => question.examType))];
-  }, [questions]);
-
-  const chapters = useMemo(() => {
-    return ["all", ...new Set(questions.map((question) => question.chapter))];
-  }, [questions]);
-
-  const questionTypes = useMemo(() => {
-    return ["all", ...new Set(questions.map((question) => question.questionType))];
-  }, [questions]);
-
-  const tags = useMemo(() => {
-    return ["all", ...new Set(questions.flatMap((question) => [question.primaryTag, question.secondaryTag]))];
-  }, [questions]);
-
-  const additionalTags = useMemo(() => {
-    return ["all", ...new Set(questions.map((question) => question.additionalTag))];
-  }, [questions]);
-
-  const academicYears = useMemo(() => {
-    return ["all", ...new Set(questions.map((question) => question.academicYear))];
-  }, [questions]);
+  const subjects = useMemo(() => ["all", ...new Set(questions.map((question) => question.subject))], [questions]);
+  const examTypes = useMemo(() => ["all", ...new Set(questions.map((question) => question.examType))], [questions]);
+  const chapters = useMemo(() => ["all", ...new Set(questions.map((question) => question.chapter))], [questions]);
+  const questionTypes = useMemo(
+    () => ["all", ...new Set(questions.map((question) => question.questionType))],
+    [questions],
+  );
+  const tags = useMemo(
+    () => ["all", ...new Set(questions.flatMap((question) => [question.primaryTag, question.secondaryTag]))],
+    [questions],
+  );
+  const additionalTags = useMemo(
+    () => ["all", ...new Set(questions.map((question) => question.additionalTag))],
+    [questions],
+  );
+  const academicYears = useMemo(
+    () => ["all", ...new Set(questions.map((question) => question.academicYear))],
+    [questions],
+  );
 
   const filteredQuestions = useMemo(() => {
     const query = filters.query.trim().toLowerCase();
@@ -289,7 +304,6 @@ function AdminQuestionBankLibraryPage() {
         question.examType.toLowerCase().includes(query) ||
         question.subject.toLowerCase().includes(query) ||
         question.chapter.toLowerCase().includes(query) ||
-        question.prompt.toLowerCase().includes(query) ||
         question.primaryTag.toLowerCase().includes(query) ||
         question.secondaryTag.toLowerCase().includes(query) ||
         question.additionalTag.toLowerCase().includes(query) ||
@@ -336,72 +350,173 @@ function AdminQuestionBankLibraryPage() {
     const start = (page - 1) * PAGE_SIZE;
     return filteredQuestions.slice(start, start + PAGE_SIZE);
   }, [filteredQuestions, page]);
+  const activeMetadataQuestion = useMemo(
+    () => questions.find((question) => question.id === metadataEditQuestionId) ?? null,
+    [metadataEditQuestionId, questions],
+  );
+  const activeStructureQuestion = useMemo(
+    () => questions.find((question) => question.id === structureEditQuestionId) ?? null,
+    [questions, structureEditQuestionId],
+  );
 
-  const usedQuestionCount = useMemo(() => {
-    return questions.filter((question) => question.usedCount > 0).length;
-  }, [questions]);
+  const usedQuestionCount = useMemo(
+    () => questions.filter((question) => question.usedCount > 0).length,
+    [questions],
+  );
+  const editableQuestionCount = useMemo(
+    () => questions.filter((question) => question.usedCount === 0 && question.status !== "deprecated").length,
+    [questions],
+  );
+
+  useEffect(() => {
+    if (metadataEditQuestionId && metadataEditorRef.current) {
+      metadataEditorRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [metadataEditQuestionId]);
+
+  useEffect(() => {
+    if (structureEditQuestionId && structureEditorRef.current) {
+      structureEditorRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [structureEditQuestionId]);
 
   function handleIndexedFiltersSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPage(1);
-    setInlineMessage("Indexed filters applied on the dedicated question library workspace.");
+    setInlineMessage("Filters applied. Open any question below to review its details.");
     setErrorMessage(null);
   }
 
-  function requestStructuralEdit(question: QuestionBankRecord) {
+  function openMetadataEditor(question: QuestionBankRecord) {
+    setStructureEditQuestionId(null);
+    setStructureDraft(null);
+    setMetadataEditQuestionId(question.id);
+    setMetadataDraft(toMetadataFieldDraft(question));
+    setInlineMessage("Update tags, notes, links, topic, and the solution image for future use here.");
+    setErrorMessage(null);
+  }
+
+  function openStructureEditor(question: QuestionBankRecord) {
     if (question.usedCount > 0) {
       setErrorMessage(
-        `${STRUCTURAL_LOCK_TOOLTIP} Locked fields: ${STRUCTURAL_LOCK_FIELDS.join(", ")}. Use Create Version instead.`,
+        `${STRUCTURAL_LOCK_TOOLTIP} This question has already been used in assigned runs. Create a new version instead of changing the original structure.`,
       );
       return;
     }
 
-    setInlineMessage(`Structural edit allowed for ${question.id}; no assigned-run linkage detected.`);
+    setMetadataEditQuestionId(null);
+    setMetadataDraft(null);
+    setStructureEditQuestionId(question.id);
+    setStructureDraft(toStructuralFieldDraft(question));
+    setInlineMessage("This question is still open, so you can edit the full structure here.");
     setErrorMessage(null);
   }
 
-  function openFlexibleFieldEditor(question: QuestionBankRecord) {
-    setFlexibleEditQuestionId(question.id);
-    setFlexibleDraft(toFlexibleFieldDraft(question));
-    setInlineMessage(FLEXIBLE_FIELD_WARNING);
+  function updateMetadataDraft(field: keyof MetadataFieldDraft, value: string) {
+    setMetadataDraft((current) => current ? { ...current, [field]: value } : current);
+  }
+
+  function updateStructureDraft(field: keyof StructuralFieldDraft, value: string) {
+    setStructureDraft((current) => current ? { ...current, [field]: value } : current);
+  }
+
+  function handleMetadataSolutionImageSelection(fileList: FileList | null) {
+    const file = fileList?.[0];
+    if (!file) {
+      return;
+    }
+
+    updateMetadataDraft("solutionImageFile", file.name);
+    setInlineMessage(`Selected updated solution image: ${file.name}. Save the metadata changes to keep it.`);
     setErrorMessage(null);
   }
 
-  function updateFlexibleDraft(field: keyof FlexibleFieldDraft, value: string) {
-    setFlexibleDraft((current) => current ? { ...current, [field]: value } : current);
+  function handleStructureAssetSelection(
+    field: "questionImageFile" | "solutionImageFile",
+    fileList: FileList | null,
+  ) {
+    const file = fileList?.[0];
+    if (!file) {
+      return;
+    }
+
+    updateStructureDraft(field, file.name);
+    setInlineMessage(`Selected ${field === "questionImageFile" ? "question" : "solution"} image: ${file.name}. Save the structure changes to keep it.`);
+    setErrorMessage(null);
   }
 
-  function saveFlexibleFieldEdits(event: FormEvent<HTMLFormElement>) {
+  function saveMetadataEdits(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!flexibleEditQuestionId || !flexibleDraft) {
+    if (!metadataEditQuestionId || !metadataDraft) {
       return;
     }
 
     setQuestions((current) =>
       current.map((question) =>
-        question.id === flexibleEditQuestionId ?
+        question.id === metadataEditQuestionId ?
           {
             ...question,
-            additionalTag: flexibleDraft.additionalTag.trim() || "none",
-            internalNotes: flexibleDraft.internalNotes.trim(),
-            primaryTag: flexibleDraft.primaryTag.trim() || "untagged",
-            secondaryTag: flexibleDraft.secondaryTag.trim() || "none",
-            simulationLink: flexibleDraft.simulationLink.trim(),
-            solutionImageFile: flexibleDraft.solutionImageFile.trim(),
-            topic: flexibleDraft.topic.trim(),
-            tutorialVideoLink: flexibleDraft.tutorialVideoLink.trim(),
+            additionalTag: metadataDraft.additionalTag.trim() || "none",
+            internalNotes: metadataDraft.internalNotes.trim(),
+            primaryTag: metadataDraft.primaryTag.trim() || "untagged",
+            secondaryTag: metadataDraft.secondaryTag.trim() || "none",
+            simulationLink: metadataDraft.simulationLink.trim(),
+            solutionImageFile: metadataDraft.solutionImageFile.trim(),
+            topic: metadataDraft.topic.trim(),
+            tutorialVideoLink: metadataDraft.tutorialVideoLink.trim(),
           } :
           question,
       ),
     );
-    setInlineMessage(`${FLEXIBLE_FIELD_WARNING} Flexible metadata saved for ${flexibleEditQuestionId}.`);
+    setInlineMessage(`Metadata saved for ${metadataEditQuestionId}. Future views will use the updated information.`);
     setErrorMessage(null);
   }
 
-  function closeFlexibleFieldEditor() {
-    setFlexibleEditQuestionId(null);
-    setFlexibleDraft(null);
-    setInlineMessage("Flexible metadata editor closed.");
+  function closeMetadataEditor() {
+    setMetadataEditQuestionId(null);
+    setMetadataDraft(null);
+    setInlineMessage("Question library is ready.");
+  }
+
+  function saveStructureEdits(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!structureEditQuestionId || !structureDraft) {
+      return;
+    }
+
+    setQuestions((current) =>
+      current.map((question) =>
+        question.id === structureEditQuestionId ?
+          {
+            ...question,
+            academicYear: structureDraft.academicYear.trim() || question.academicYear,
+            additionalTag: structureDraft.additionalTag.trim() || "none",
+            chapter: structureDraft.chapter.trim() || question.chapter,
+            correctAnswer: structureDraft.correctAnswer.trim().toUpperCase(),
+            difficulty: structureDraft.difficulty,
+            examType: structureDraft.examType.trim() || question.examType,
+            marks: Math.max(0, Number(structureDraft.marks) || 0),
+            negativeMarks: Math.max(0, Number(structureDraft.negativeMarks) || 0),
+            primaryTag: structureDraft.primaryTag.trim() || "untagged",
+            questionImageFile: structureDraft.questionImageFile.trim(),
+            questionType: structureDraft.questionType.trim() || question.questionType,
+            secondaryTag: structureDraft.secondaryTag.trim() || "none",
+            solutionImageFile: structureDraft.solutionImageFile.trim(),
+            subject: structureDraft.subject.trim() || question.subject,
+            topic: structureDraft.topic.trim(),
+            uniqueKey: structureDraft.uniqueKey.trim() || question.uniqueKey,
+          } :
+          question,
+      ),
+    );
+    setInlineMessage(`Structure saved for ${structureEditQuestionId}. This question is still open because it has not been used in assigned runs yet.`);
+    setErrorMessage(null);
+  }
+
+  function closeStructureEditor() {
+    setStructureEditQuestionId(null);
+    setStructureDraft(null);
+    setInlineMessage("Question library is ready.");
   }
 
   function createQuestionVersion(questionId: string) {
@@ -411,7 +526,7 @@ function AdminQuestionBankLibraryPage() {
     }
 
     if (target.usedCount === 0) {
-      setInlineMessage("Versioning is required only for structural changes on questions used in assigned runs.");
+      setInlineMessage("Create a new version only when a structurally locked question needs to change.");
       setErrorMessage(null);
       return;
     }
@@ -433,7 +548,34 @@ function AdminQuestionBankLibraryPage() {
         question.id === target.id ? { ...question, status: "deprecated" as const } : question
       )),
     ]);
-    setInlineMessage(`Created version ${nextQuestion.version} for ${target.id}. Previous version marked deprecated.`);
+    setPage(1);
+    setMetadataEditQuestionId(null);
+    setMetadataDraft(null);
+    setStructureEditQuestionId(nextQuestion.id);
+    setStructureDraft(toStructuralFieldDraft(nextQuestion));
+    setInlineMessage(
+      `Created version ${nextQuestion.id} from ${target.id}. You are now editing the new version for future use.`,
+    );
+    setErrorMessage(null);
+  }
+
+  function markQuestionDeprecated(questionId: string) {
+    const target = questions.find((question) => question.id === questionId);
+    if (!target) {
+      return;
+    }
+
+    if (target.usedCount > 0) {
+      setErrorMessage("Questions already used in assigned runs should move through versioning instead of direct deprecation.");
+      return;
+    }
+
+    setQuestions((current) =>
+      current.map((question) =>
+        question.id === questionId ? { ...question, status: "deprecated" as const, thermalState: "cold" } : question,
+      ),
+    );
+    setInlineMessage(`${questionId} is now marked deprecated and will stay available only for history and audit review.`);
     setErrorMessage(null);
   }
 
@@ -449,102 +591,90 @@ function AdminQuestionBankLibraryPage() {
       ),
     },
     {
-      id: "subject",
-      header: "Subject",
-      render: (question) => question.subject,
-    },
-    {
-      id: "chapter",
-      header: "Chapter",
-      render: (question) => question.chapter,
-    },
-    {
-      id: "difficulty",
-      header: "Difficulty",
-      render: (question) => question.difficulty,
-    },
-    {
-      id: "marks",
-      header: "Marks",
-      render: (question) => `${question.marks}`,
-    },
-    {
-      id: "usedCount",
-      header: "Used Count",
-      render: (question) => `${question.usedCount}`,
-    },
-    {
-      id: "lastUsedDate",
-      header: "Last Used Date",
-      render: (question) => question.lastUsedDate ?? "Never",
-    },
-    {
-      id: "version",
-      header: "Version",
-      render: (question) => `v${question.version}`,
-    },
-    {
-      id: "status",
-      header: "Status",
+      id: "question",
+      header: "Question",
       render: (question) => (
-        <span className={`admin-tests-status admin-tests-status-${question.status}`}>{question.status}</span>
+        <div className="admin-question-library-main-cell">
+          <strong>Primary tag: {question.primaryTag}</strong>
+          <small>Subject: {question.subject}</small>
+          <small>Chapter: {question.chapter}</small>
+        </div>
       ),
     },
     {
-      id: "structuralLock",
-      header: "Structure Lock",
-      render: (question) => {
-        const structuralLocked = question.usedCount > 0;
-
-        return (
-          <div className="admin-question-structural-lock">
-            {structuralLocked ? (
-              <span className="admin-question-lock-pill" title={STRUCTURAL_LOCK_TOOLTIP} aria-label={STRUCTURAL_LOCK_TOOLTIP}>
-                <span aria-hidden="true">🔒</span>
+      id: "setup",
+      header: "Setup",
+      render: (question) => (
+        <div className="admin-question-library-compact-cell">
+          <strong>{question.examType}</strong>
+          <small>{question.questionType}</small>
+          <small>{question.difficulty} • {question.marks} / -{question.negativeMarks}</small>
+        </div>
+      ),
+    },
+    {
+      id: "activity",
+      header: "Activity",
+      render: (question) => (
+        <div className="admin-question-library-compact-cell">
+          <strong>{question.usedCount} runs</strong>
+          <small>{question.lastUsedDate ? `Last used ${question.lastUsedDate}` : "Not used yet"}</small>
+          <span className={`admin-tests-status admin-tests-status-${question.status}`}>{question.status}</span>
+          <div className="admin-question-library-state-row">
+            <span className={`admin-question-thermal-pill admin-question-thermal-${question.thermalState}`}>
+              {question.thermalState.toUpperCase()}
+            </span>
+            {question.usedCount > 0 ? (
+              <span className="admin-question-lock-pill" title={STRUCTURAL_LOCK_TOOLTIP}>
                 Locked
               </span>
             ) : (
-              <span className="admin-question-unlocked-pill">Editable</span>
+              <span className="admin-question-unlocked-pill">Open</span>
             )}
-            <small>{structuralLocked ? STRUCTURAL_LOCK_FIELDS.join(", ") : "Locks after first assigned test use"}</small>
           </div>
-        );
-      },
+        </div>
+      ),
     },
     {
       id: "actions",
       header: "Actions",
-      className: "admin-tests-actions-col",
-      render: (question) => {
-        const structuralLocked = question.usedCount > 0;
-
-        return (
-          <div className="admin-tests-row-actions">
-            <button type="button" onClick={() => requestStructuralEdit(question)} title={structuralLocked ? STRUCTURAL_LOCK_TOOLTIP : undefined}>
-              {structuralLocked ? "Structure Locked" : "Edit Structure"}
-            </button>
-            <button
-              type="button"
-              onClick={() => openFlexibleFieldEditor(question)}
-            >
-              Edit Metadata
-            </button>
-            <button type="button" onClick={() => createQuestionVersion(question.id)} disabled={!structuralLocked}>
-              Create Version
-            </button>
-          </div>
-        );
-      },
+      className: "admin-question-library-actions-col",
+      render: (question) => (
+        <div className="admin-question-library-actions">
+          <NavLink to={`/admin/question-bank/library/${question.id}`}>View</NavLink>
+          <button type="button" onClick={() => openMetadataEditor(question)}>
+            Metadata
+          </button>
+          <button
+            type="button"
+            onClick={() => openStructureEditor(question)}
+            disabled={question.usedCount > 0}
+            title={question.usedCount > 0 ? STRUCTURAL_LOCK_TOOLTIP : "Edit full question structure"}
+          >
+            Structure
+          </button>
+          <button type="button" onClick={() => createQuestionVersion(question.id)} disabled={question.usedCount === 0}>
+            Version
+          </button>
+          <button
+            type="button"
+            onClick={() => markQuestionDeprecated(question.id)}
+            disabled={question.usedCount > 0 || question.status === "deprecated"}
+          >
+            Deprecate
+          </button>
+        </div>
+      ),
     },
   ];
 
   return (
     <section className="admin-content-card" aria-labelledby="admin-question-bank-library-title">
       <p className="admin-content-eyebrow">Question Bank Library</p>
-      <h2 id="admin-question-bank-library-title">Dedicated Question Library Workspace</h2>
+      <h2 id="admin-question-bank-library-title">Question Library</h2>
       <p className="admin-content-copy">
-        This route keeps <code>/admin/question-bank/library</code> focused on indexed discovery, immutable structural
-        lock review, and version-safe library actions instead of leaving those controls merged with upload workflows.
+        Search the question bank, open a question, update future-only metadata, or edit the full structure while a
+        question is still open.
       </p>
 
       <QuestionBankWorkspaceNav />
@@ -554,142 +684,54 @@ function AdminQuestionBankLibraryPage() {
 
       <div className="admin-analytics-kpi-grid">
         <article className="admin-analytics-kpi-card">
-          <p>Questions</p>
+          <p>Total Questions</p>
           <h3>{questions.length}</h3>
-          <small>indexed for filter-first retrieval</small>
+          <small>currently available in the library</small>
         </article>
         <article className="admin-analytics-kpi-card">
-          <p>Structural Locks</p>
+          <p>Locked Questions</p>
           <h3>{usedQuestionCount}</h3>
-          <small>used in assigned runs</small>
+          <small>already used in assigned runs</small>
         </article>
         <article className="admin-analytics-kpi-card">
-          <p>HOT Inventory</p>
-          <h3>{questions.filter((question) => question.thermalState === "hot").length}</h3>
-          <small>current-year frequently used</small>
+          <p>Open Questions</p>
+          <h3>{editableQuestionCount}</h3>
+          <small>still open for direct structure edits</small>
         </article>
         <article className="admin-analytics-kpi-card">
           <p>Deprecated Versions</p>
           <h3>{questions.filter((question) => question.status === "deprecated").length}</h3>
-          <small>kept for audit-safe history</small>
+          <small>kept for history and review only</small>
         </article>
       </div>
-
-      <div className="admin-analytics-compliance-panel">
-        <article className="admin-risk-summary-card">
-          <h4>Indexed Filters Only</h4>
-          <p>
-            Exam-facing operators work through search, exam, subject, chapter, difficulty, type, tag, usage, year, and
-            HOT/WARM/COLD filters.
-          </p>
-          <small>Aligned with the source spec performance rules.</small>
-        </article>
-        <article className="admin-risk-summary-card">
-          <h4>Immutable Structure Rules</h4>
-          <p>Questions already used in assigned runs surface a structure lock and must branch through version creation.</p>
-          <small>{STRUCTURAL_LOCK_FIELDS.join(", ")}</small>
-        </article>
-        <article className="admin-risk-summary-card">
-          <h4>Flexible Field Edits</h4>
-          <p>{FLEXIBLE_FIELD_WARNING}</p>
-          <small>{FLEXIBLE_FIELD_LABELS.join(", ")}</small>
-        </article>
-      </div>
-
-      {flexibleDraft && flexibleEditQuestionId ? (
-        <UiForm
-          title={`Flexible Metadata: ${flexibleEditQuestionId}`}
-          description={FLEXIBLE_FIELD_WARNING}
-          submitLabel="Save Future-Only Metadata"
-          onSubmit={saveFlexibleFieldEdits}
-          footer={
-            <button type="button" onClick={closeFlexibleFieldEditor}>
-              Close
-            </button>
-          }
-        >
-          <div className="admin-tests-grid">
-            <UiFormField label="SolutionImageFile" htmlFor="admin-question-flex-solution-image">
-              <input
-                id="admin-question-flex-solution-image"
-                type="text"
-                value={flexibleDraft.solutionImageFile}
-                onChange={(event) => updateFlexibleDraft("solutionImageFile", event.target.value)}
-              />
-            </UiFormField>
-            <UiFormField label="TutorialVideoLink" htmlFor="admin-question-flex-tutorial">
-              <input
-                id="admin-question-flex-tutorial"
-                type="url"
-                value={flexibleDraft.tutorialVideoLink}
-                onChange={(event) => updateFlexibleDraft("tutorialVideoLink", event.target.value)}
-              />
-            </UiFormField>
-            <UiFormField label="SimulationLink" htmlFor="admin-question-flex-simulation">
-              <input
-                id="admin-question-flex-simulation"
-                type="url"
-                value={flexibleDraft.simulationLink}
-                onChange={(event) => updateFlexibleDraft("simulationLink", event.target.value)}
-              />
-            </UiFormField>
-            <UiFormField label="PrimaryTag" htmlFor="admin-question-flex-primary-tag">
-              <input
-                id="admin-question-flex-primary-tag"
-                type="text"
-                value={flexibleDraft.primaryTag}
-                onChange={(event) => updateFlexibleDraft("primaryTag", event.target.value)}
-              />
-            </UiFormField>
-            <UiFormField label="SecondaryTag" htmlFor="admin-question-flex-secondary-tag">
-              <input
-                id="admin-question-flex-secondary-tag"
-                type="text"
-                value={flexibleDraft.secondaryTag}
-                onChange={(event) => updateFlexibleDraft("secondaryTag", event.target.value)}
-              />
-            </UiFormField>
-            <UiFormField label="AdditionalTag" htmlFor="admin-question-flex-additional-tag">
-              <input
-                id="admin-question-flex-additional-tag"
-                type="text"
-                value={flexibleDraft.additionalTag}
-                onChange={(event) => updateFlexibleDraft("additionalTag", event.target.value)}
-              />
-            </UiFormField>
-            <UiFormField label="Topic" htmlFor="admin-question-flex-topic">
-              <input
-                id="admin-question-flex-topic"
-                type="text"
-                value={flexibleDraft.topic}
-                onChange={(event) => updateFlexibleDraft("topic", event.target.value)}
-              />
-            </UiFormField>
-            <UiFormField label="InternalNotes" htmlFor="admin-question-flex-internal-notes">
-              <textarea
-                id="admin-question-flex-internal-notes"
-                value={flexibleDraft.internalNotes}
-                onChange={(event) => updateFlexibleDraft("internalNotes", event.target.value)}
-              />
-            </UiFormField>
-          </div>
-        </UiForm>
-      ) : null}
 
       <UiForm
         title="Question Library Filters"
-        description="Filter by indexed fields only: exam, subject, chapter, difficulty, question type, tags, usage, academic year, thermal state, and text query."
+        description="Start with the main filters, then open more only if you need a narrower search."
         submitLabel="Apply Filters"
         onSubmit={handleIndexedFiltersSubmit}
+        footer={
+          <button
+            type="button"
+            onClick={() => {
+              setFilters(INITIAL_FILTERS);
+              setPage(1);
+              setInlineMessage("Filters cleared. The full question library is now visible.");
+              setErrorMessage(null);
+            }}
+          >
+            Clear Filters
+          </button>
+        }
       >
-        <div className="admin-tests-grid">
+        <div className="admin-question-library-filter-grid">
           <UiFormField label="Search" htmlFor="admin-question-library-filter-search">
             <input
               id="admin-question-library-filter-search"
               type="search"
               value={filters.query}
               onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
-              placeholder="id, key, subject, chapter, prompt"
+              placeholder="id, key, subject, chapter, tag"
             />
           </UiFormField>
           <UiFormField label="Exam" htmlFor="admin-question-library-filter-exam">
@@ -731,120 +773,454 @@ function AdminQuestionBankLibraryPage() {
               ))}
             </select>
           </UiFormField>
-          <UiFormField label="Difficulty" htmlFor="admin-question-library-filter-difficulty">
-            <select
-              id="admin-question-library-filter-difficulty"
-              value={filters.difficulty}
-              onChange={(event) => setFilters((current) => ({
-                ...current,
-                difficulty: event.target.value as "all" | DifficultyLevel,
-              }))}
-            >
-              <option value="all">all</option>
-              {DIFFICULTY_LEVELS.map((difficulty) => (
-                <option key={difficulty} value={difficulty}>
-                  {difficulty}
-                </option>
-              ))}
-            </select>
-          </UiFormField>
-          <UiFormField label="Question Type" htmlFor="admin-question-library-filter-question-type">
-            <select
-              id="admin-question-library-filter-question-type"
-              value={filters.questionType}
-              onChange={(event) => setFilters((current) => ({ ...current, questionType: event.target.value }))}
-            >
-              {questionTypes.map((questionType) => (
-                <option key={questionType} value={questionType}>
-                  {questionType}
-                </option>
-              ))}
-            </select>
-          </UiFormField>
-          <UiFormField label="Tag" htmlFor="admin-question-library-filter-tag">
-            <select
-              id="admin-question-library-filter-tag"
-              value={filters.tag}
-              onChange={(event) => setFilters((current) => ({ ...current, tag: event.target.value }))}
-            >
-              {tags.map((tag) => (
-                <option key={tag} value={tag}>
-                  {tag}
-                </option>
-              ))}
-            </select>
-          </UiFormField>
-          <UiFormField label="Additional Tag" htmlFor="admin-question-library-filter-additional-tag">
-            <select
-              id="admin-question-library-filter-additional-tag"
-              value={filters.additionalTag}
-              onChange={(event) => setFilters((current) => ({ ...current, additionalTag: event.target.value }))}
-            >
-              {additionalTags.map((tag) => (
-                <option key={tag} value={tag}>
-                  {tag}
-                </option>
-              ))}
-            </select>
-          </UiFormField>
-          <UiFormField label="Used in Template" htmlFor="admin-question-library-filter-used">
-            <select
-              id="admin-question-library-filter-used"
-              value={filters.usedInTemplate}
-              onChange={(event) => setFilters((current) => ({
-                ...current,
-                usedInTemplate: event.target.value as "all" | "yes" | "no",
-              }))}
-            >
-              <option value="all">all</option>
-              <option value="yes">yes</option>
-              <option value="no">no</option>
-            </select>
-          </UiFormField>
-          <UiFormField label="Academic Year" htmlFor="admin-question-library-filter-academic-year">
-            <select
-              id="admin-question-library-filter-academic-year"
-              value={filters.academicYear}
-              onChange={(event) => setFilters((current) => ({ ...current, academicYear: event.target.value }))}
-            >
-              {academicYears.map((academicYear) => (
-                <option key={academicYear} value={academicYear}>
-                  {academicYear}
-                </option>
-              ))}
-            </select>
-          </UiFormField>
-          <UiFormField label="HOT/WARM/COLD" htmlFor="admin-question-library-filter-thermal">
-            <select
-              id="admin-question-library-filter-thermal"
-              value={filters.thermalState}
-              onChange={(event) => setFilters((current) => ({
-                ...current,
-                thermalState: event.target.value as "all" | "hot" | "warm" | "cold",
-              }))}
-            >
-              <option value="all">all</option>
-              <option value="hot">hot</option>
-              <option value="warm">warm</option>
-              <option value="cold">cold</option>
-            </select>
-          </UiFormField>
+        </div>
+
+        <details className="admin-question-library-advanced-filters">
+          <summary>More filters</summary>
+          <div className="admin-question-library-filter-grid admin-question-library-filter-grid-advanced">
+            <UiFormField label="Difficulty" htmlFor="admin-question-library-filter-difficulty">
+              <select
+                id="admin-question-library-filter-difficulty"
+                value={filters.difficulty}
+                onChange={(event) => setFilters((current) => ({
+                  ...current,
+                  difficulty: event.target.value as "all" | DifficultyLevel,
+                }))}
+              >
+                <option value="all">all</option>
+                {DIFFICULTY_LEVELS.map((difficulty) => (
+                  <option key={difficulty} value={difficulty}>
+                    {difficulty}
+                  </option>
+                ))}
+              </select>
+            </UiFormField>
+            <UiFormField label="Question Type" htmlFor="admin-question-library-filter-question-type">
+              <select
+                id="admin-question-library-filter-question-type"
+                value={filters.questionType}
+                onChange={(event) => setFilters((current) => ({ ...current, questionType: event.target.value }))}
+              >
+                {questionTypes.map((questionType) => (
+                  <option key={questionType} value={questionType}>
+                    {questionType}
+                  </option>
+                ))}
+              </select>
+            </UiFormField>
+            <UiFormField label="Main Tag" htmlFor="admin-question-library-filter-tag">
+              <select
+                id="admin-question-library-filter-tag"
+                value={filters.tag}
+                onChange={(event) => setFilters((current) => ({ ...current, tag: event.target.value }))}
+              >
+                {tags.map((tag) => (
+                  <option key={tag} value={tag}>
+                    {tag}
+                  </option>
+                ))}
+              </select>
+            </UiFormField>
+            <UiFormField label="Additional Tag" htmlFor="admin-question-library-filter-additional-tag">
+              <select
+                id="admin-question-library-filter-additional-tag"
+                value={filters.additionalTag}
+                onChange={(event) => setFilters((current) => ({ ...current, additionalTag: event.target.value }))}
+              >
+                {additionalTags.map((tag) => (
+                  <option key={tag} value={tag}>
+                    {tag}
+                  </option>
+                ))}
+              </select>
+            </UiFormField>
+            <UiFormField label="Used in Template" htmlFor="admin-question-library-filter-used">
+              <select
+                id="admin-question-library-filter-used"
+                value={filters.usedInTemplate}
+                onChange={(event) => setFilters((current) => ({
+                  ...current,
+                  usedInTemplate: event.target.value as "all" | "yes" | "no",
+                }))}
+              >
+                <option value="all">all</option>
+                <option value="yes">yes</option>
+                <option value="no">no</option>
+              </select>
+            </UiFormField>
+            <UiFormField label="Academic Year" htmlFor="admin-question-library-filter-academic-year">
+              <select
+                id="admin-question-library-filter-academic-year"
+                value={filters.academicYear}
+                onChange={(event) => setFilters((current) => ({ ...current, academicYear: event.target.value }))}
+              >
+                {academicYears.map((academicYear) => (
+                  <option key={academicYear} value={academicYear}>
+                    {academicYear}
+                  </option>
+                ))}
+              </select>
+            </UiFormField>
+            <UiFormField label="HOT/WARM/COLD" htmlFor="admin-question-library-filter-thermal">
+              <select
+                id="admin-question-library-filter-thermal"
+                value={filters.thermalState}
+                onChange={(event) => setFilters((current) => ({
+                  ...current,
+                  thermalState: event.target.value as "all" | "hot" | "warm" | "cold",
+                }))}
+              >
+                <option value="all">all</option>
+                <option value="hot">hot</option>
+                <option value="warm">warm</option>
+                <option value="cold">cold</option>
+              </select>
+            </UiFormField>
+          </div>
+        </details>
+        <div className="admin-question-library-filter-footnote">
+          Use the top row for everyday search. Open more filters only when you need a narrower library cut.
         </div>
       </UiForm>
 
-      <UiTable
-        caption="Question library"
-        columns={questionColumns}
-        rows={paginatedQuestions}
-        rowKey={(row) => row.id}
-        emptyStateText="No questions match the indexed filters."
-      />
-      <UiPagination
-        page={page}
-        pageSize={PAGE_SIZE}
-        totalItems={filteredQuestions.length}
-        onPageChange={setPage}
-      />
+      <div className="admin-question-library-table-shell">
+        <div className="admin-question-library-table-header">
+          <div>
+            <p>Question List</p>
+            <h3>{filteredQuestions.length} questions in this view</h3>
+          </div>
+          <small>
+            Use the row actions to open a question, edit metadata, edit open-question structure, or create a version
+            when the structure is locked.
+          </small>
+        </div>
+        <UiTable
+          caption="Question library"
+          columns={questionColumns}
+          rows={paginatedQuestions}
+          rowKey={(row) => row.id}
+          emptyStateText="No questions match the indexed filters."
+        />
+        <UiPagination
+          page={page}
+          pageSize={PAGE_SIZE}
+          totalItems={filteredQuestions.length}
+          onPageChange={setPage}
+        />
+      </div>
+
+      <section className="admin-question-library-help">
+        <article className="admin-risk-summary-card">
+          <h4>About HOT / WARM / COLD</h4>
+          <p>HOT questions are in active current use, WARM questions are still available but less active, and COLD questions are mainly kept for history, review, or deprecated reference.</p>
+          <small>Use these labels to understand how active a question is in the working library and whether it belongs to everyday use or historical review.</small>
+        </article>
+        <article className="admin-risk-summary-card">
+          <h4>About Structure Lock / Open</h4>
+          <p>Open questions have not yet been used in assigned runs, so their structure can still be edited directly. Locked questions have already been used and should move through versioning instead of in-place structural change.</p>
+          <small>Use Edit Structure for open questions and Create Version for locked ones.</small>
+        </article>
+        <article className="admin-risk-summary-card">
+          <h4>About Metadata Edit vs Structure Edit</h4>
+          <p>Edit Metadata changes future-facing support details like tags, notes, links, topic, and solution image. Edit Structure changes core question setup like key, exam, subject, chapter, marks, answer, and image files.</p>
+          <small>Use metadata editing for support updates and structure editing for real question-definition changes.</small>
+        </article>
+      </section>
+
+      {metadataDraft && metadataEditQuestionId ? (
+        <section ref={metadataEditorRef} className="admin-question-library-editor-shell">
+          <div className="admin-question-library-editor-header">
+            <div>
+              <p>Metadata Editor</p>
+              <h3>{metadataEditQuestionId}</h3>
+            </div>
+            {activeMetadataQuestion ? (
+              <div className="admin-question-library-editor-tags">
+                <span>{activeMetadataQuestion.subject}</span>
+                <span>{activeMetadataQuestion.chapter}</span>
+                <span>{activeMetadataQuestion.primaryTag}</span>
+              </div>
+            ) : null}
+          </div>
+          <UiForm
+            title={`Edit Metadata: ${metadataEditQuestionId}`}
+            description="Update future-facing tags, notes, links, topic, and the solution image here."
+            submitLabel="Save Metadata Changes"
+            onSubmit={saveMetadataEdits}
+            footer={
+              <button type="button" onClick={closeMetadataEditor}>
+                Close
+              </button>
+            }
+          >
+            <div className="admin-tests-grid">
+              <UiFormField
+                label="Solution Image File"
+                htmlFor="admin-question-metadata-solution-image"
+                helper="You can type the filename directly or choose a replacement file below."
+              >
+                <input
+                  id="admin-question-metadata-solution-image"
+                  type="text"
+                  value={metadataDraft.solutionImageFile}
+                  onChange={(event) => updateMetadataDraft("solutionImageFile", event.target.value)}
+                />
+              </UiFormField>
+              <UiFormField
+                label="Upload Updated Solution Image"
+                htmlFor="admin-question-metadata-solution-image-upload"
+                helper="The selected filename will be saved for this question."
+              >
+                <input
+                  id="admin-question-metadata-solution-image-upload"
+                  type="file"
+                  accept=".png,.jpg,.jpeg,.webp"
+                  onChange={(event) => handleMetadataSolutionImageSelection(event.target.files)}
+                />
+              </UiFormField>
+              <UiFormField label="Primary Tag" htmlFor="admin-question-metadata-primary-tag">
+                <input
+                  id="admin-question-metadata-primary-tag"
+                  type="text"
+                  value={metadataDraft.primaryTag}
+                  onChange={(event) => updateMetadataDraft("primaryTag", event.target.value)}
+                />
+              </UiFormField>
+              <UiFormField label="Secondary Tag" htmlFor="admin-question-metadata-secondary-tag">
+                <input
+                  id="admin-question-metadata-secondary-tag"
+                  type="text"
+                  value={metadataDraft.secondaryTag}
+                  onChange={(event) => updateMetadataDraft("secondaryTag", event.target.value)}
+                />
+              </UiFormField>
+              <UiFormField label="Additional Tag" htmlFor="admin-question-metadata-additional-tag">
+                <input
+                  id="admin-question-metadata-additional-tag"
+                  type="text"
+                  value={metadataDraft.additionalTag}
+                  onChange={(event) => updateMetadataDraft("additionalTag", event.target.value)}
+                />
+              </UiFormField>
+              <UiFormField label="Topic" htmlFor="admin-question-metadata-topic">
+                <input
+                  id="admin-question-metadata-topic"
+                  type="text"
+                  value={metadataDraft.topic}
+                  onChange={(event) => updateMetadataDraft("topic", event.target.value)}
+                />
+              </UiFormField>
+              <UiFormField label="Tutorial Video Link" htmlFor="admin-question-metadata-tutorial">
+                <input
+                  id="admin-question-metadata-tutorial"
+                  type="url"
+                  value={metadataDraft.tutorialVideoLink}
+                  onChange={(event) => updateMetadataDraft("tutorialVideoLink", event.target.value)}
+                />
+              </UiFormField>
+              <UiFormField label="Simulation Link" htmlFor="admin-question-metadata-simulation">
+                <input
+                  id="admin-question-metadata-simulation"
+                  type="url"
+                  value={metadataDraft.simulationLink}
+                  onChange={(event) => updateMetadataDraft("simulationLink", event.target.value)}
+                />
+              </UiFormField>
+              <UiFormField label="Internal Notes" htmlFor="admin-question-metadata-notes">
+                <textarea
+                  id="admin-question-metadata-notes"
+                  value={metadataDraft.internalNotes}
+                  onChange={(event) => updateMetadataDraft("internalNotes", event.target.value)}
+                />
+              </UiFormField>
+            </div>
+          </UiForm>
+        </section>
+      ) : null}
+
+      {structureDraft && structureEditQuestionId ? (
+        <section ref={structureEditorRef} className="admin-question-library-editor-shell admin-question-library-editor-shell-structure">
+          <div className="admin-question-library-editor-header">
+            <div>
+              <p>Structure Editor</p>
+              <h3>{structureEditQuestionId}</h3>
+            </div>
+            {activeStructureQuestion ? (
+              <div className="admin-question-library-editor-tags">
+                <span>{activeStructureQuestion.examType}</span>
+                <span>{activeStructureQuestion.subject}</span>
+                <span>{activeStructureQuestion.usedCount > 0 ? "Locked" : "Open"}</span>
+              </div>
+            ) : null}
+          </div>
+          <UiForm
+            title={`Edit Structure: ${structureEditQuestionId}`}
+            description="Update the full question structure here. This is allowed only while the question is still open and unused in assigned runs."
+            submitLabel="Save Structure Changes"
+            onSubmit={saveStructureEdits}
+            footer={
+              <button type="button" onClick={closeStructureEditor}>
+                Close
+              </button>
+            }
+          >
+            <div className="admin-tests-grid">
+            <UiFormField label="Unique Key" htmlFor="admin-question-structure-key">
+              <input
+                id="admin-question-structure-key"
+                type="text"
+                value={structureDraft.uniqueKey}
+                onChange={(event) => updateStructureDraft("uniqueKey", event.target.value)}
+              />
+            </UiFormField>
+            <UiFormField label="Exam" htmlFor="admin-question-structure-exam">
+              <input
+                id="admin-question-structure-exam"
+                type="text"
+                value={structureDraft.examType}
+                onChange={(event) => updateStructureDraft("examType", event.target.value)}
+              />
+            </UiFormField>
+            <UiFormField label="Academic Year" htmlFor="admin-question-structure-academic-year">
+              <input
+                id="admin-question-structure-academic-year"
+                type="text"
+                value={structureDraft.academicYear}
+                onChange={(event) => updateStructureDraft("academicYear", event.target.value)}
+              />
+            </UiFormField>
+            <UiFormField label="Subject" htmlFor="admin-question-structure-subject">
+              <input
+                id="admin-question-structure-subject"
+                type="text"
+                value={structureDraft.subject}
+                onChange={(event) => updateStructureDraft("subject", event.target.value)}
+              />
+            </UiFormField>
+            <UiFormField label="Chapter" htmlFor="admin-question-structure-chapter">
+              <input
+                id="admin-question-structure-chapter"
+                type="text"
+                value={structureDraft.chapter}
+                onChange={(event) => updateStructureDraft("chapter", event.target.value)}
+              />
+            </UiFormField>
+            <UiFormField label="Difficulty" htmlFor="admin-question-structure-difficulty">
+              <select
+                id="admin-question-structure-difficulty"
+                value={structureDraft.difficulty}
+                onChange={(event) => updateStructureDraft("difficulty", event.target.value as DifficultyLevel)}
+              >
+                {DIFFICULTY_LEVELS.map((difficulty) => (
+                  <option key={difficulty} value={difficulty}>
+                    {difficulty}
+                  </option>
+                ))}
+              </select>
+            </UiFormField>
+            <UiFormField label="Marks" htmlFor="admin-question-structure-marks">
+              <input
+                id="admin-question-structure-marks"
+                type="number"
+                min="0"
+                value={structureDraft.marks}
+                onChange={(event) => updateStructureDraft("marks", event.target.value)}
+              />
+            </UiFormField>
+            <UiFormField label="Negative Marks" htmlFor="admin-question-structure-negative-marks">
+              <input
+                id="admin-question-structure-negative-marks"
+                type="number"
+                min="0"
+                value={structureDraft.negativeMarks}
+                onChange={(event) => updateStructureDraft("negativeMarks", event.target.value)}
+              />
+            </UiFormField>
+            <UiFormField label="Question Type" htmlFor="admin-question-structure-question-type">
+              <input
+                id="admin-question-structure-question-type"
+                type="text"
+                value={structureDraft.questionType}
+                onChange={(event) => updateStructureDraft("questionType", event.target.value)}
+              />
+            </UiFormField>
+            <UiFormField label="Correct Answer" htmlFor="admin-question-structure-correct-answer">
+              <input
+                id="admin-question-structure-correct-answer"
+                type="text"
+                value={structureDraft.correctAnswer}
+                onChange={(event) => updateStructureDraft("correctAnswer", event.target.value)}
+              />
+            </UiFormField>
+            <UiFormField label="Question Image File" htmlFor="admin-question-structure-question-image">
+              <input
+                id="admin-question-structure-question-image"
+                type="text"
+                value={structureDraft.questionImageFile}
+                onChange={(event) => updateStructureDraft("questionImageFile", event.target.value)}
+              />
+            </UiFormField>
+            <UiFormField label="Upload Question Image" htmlFor="admin-question-structure-question-image-upload">
+              <input
+                id="admin-question-structure-question-image-upload"
+                type="file"
+                accept=".png,.jpg,.jpeg,.webp"
+                onChange={(event) => handleStructureAssetSelection("questionImageFile", event.target.files)}
+              />
+            </UiFormField>
+            <UiFormField label="Solution Image File" htmlFor="admin-question-structure-solution-image">
+              <input
+                id="admin-question-structure-solution-image"
+                type="text"
+                value={structureDraft.solutionImageFile}
+                onChange={(event) => updateStructureDraft("solutionImageFile", event.target.value)}
+              />
+            </UiFormField>
+            <UiFormField label="Upload Solution Image" htmlFor="admin-question-structure-solution-image-upload">
+              <input
+                id="admin-question-structure-solution-image-upload"
+                type="file"
+                accept=".png,.jpg,.jpeg,.webp"
+                onChange={(event) => handleStructureAssetSelection("solutionImageFile", event.target.files)}
+              />
+            </UiFormField>
+            <UiFormField label="Primary Tag" htmlFor="admin-question-structure-primary-tag">
+              <input
+                id="admin-question-structure-primary-tag"
+                type="text"
+                value={structureDraft.primaryTag}
+                onChange={(event) => updateStructureDraft("primaryTag", event.target.value)}
+              />
+            </UiFormField>
+            <UiFormField label="Secondary Tag" htmlFor="admin-question-structure-secondary-tag">
+              <input
+                id="admin-question-structure-secondary-tag"
+                type="text"
+                value={structureDraft.secondaryTag}
+                onChange={(event) => updateStructureDraft("secondaryTag", event.target.value)}
+              />
+            </UiFormField>
+            <UiFormField label="Additional Tag" htmlFor="admin-question-structure-additional-tag">
+              <input
+                id="admin-question-structure-additional-tag"
+                type="text"
+                value={structureDraft.additionalTag}
+                onChange={(event) => updateStructureDraft("additionalTag", event.target.value)}
+              />
+            </UiFormField>
+            <UiFormField label="Topic" htmlFor="admin-question-structure-topic">
+              <input
+                id="admin-question-structure-topic"
+                type="text"
+                value={structureDraft.topic}
+                onChange={(event) => updateStructureDraft("topic", event.target.value)}
+              />
+            </UiFormField>
+            </div>
+          </UiForm>
+        </section>
+      ) : null}
+
     </section>
   );
 }
