@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import {
+  UiChartContainer,
   UiForm,
   UiFormField,
   UiTable,
@@ -17,18 +18,73 @@ const EXAM_SUBJECTS: Record<ExamType, string[]> = {
   JEEMains: ["Physics", "Chemistry", "Mathematics"],
   NEET: ["Physics", "Chemistry", "Biology"],
 };
-const SAMPLE_EXAM_TYPES = [...EXAM_TYPES, "Other"] as const;
-const SAMPLE_OTHER_SUBJECT = "No subject lock";
+const UPLOAD_EXAM_OPTIONS = [...EXAM_TYPES, "Other"] as const;
+const OTHER_EXAM_SUBJECT_LABEL = "No subject lock";
+type UploadExamOption = (typeof UPLOAD_EXAM_OPTIONS)[number];
 
 type UploadLogRecord = {
+  created: number;
+  errorDetails: string[];
   id: string;
+  rollbackEligibility: "eligible" | "blocked";
+  rollbackReason: string;
   uploadedBy: string;
   timestamp: string;
   totalRows: number;
   errors: number;
   warnings: number;
+  warningDetails: string[];
   versionCreated: number;
 };
+
+const FALLBACK_UPLOAD_LOGS: UploadLogRecord[] = [
+  {
+    created: 19,
+    errorDetails: [],
+    id: "upl-2026-0412-001",
+    rollbackEligibility: "eligible",
+    rollbackReason: "Created questions are unused in assigned templates.",
+    uploadedBy: "admin@parabolic.local",
+    timestamp: "2026-04-12T08:30:00.000Z",
+    totalRows: 124,
+    errors: 0,
+    warnings: 2,
+    warningDetails: ["Chapter balance skewed toward Mechanics.", "Two rows used optional InternalNotes only."],
+    versionCreated: 19,
+  },
+  {
+    created: 12,
+    errorDetails: [
+      "Row 18 missing QuestionImageFile asset.",
+      "Row 29 has invalid Difficulty value.",
+      "Row 44 duplicate UniqueKey in upload.",
+    ],
+    id: "upl-2026-0411-002",
+    rollbackEligibility: "blocked",
+    rollbackReason: "At least one created question is already used in an assigned template.",
+    uploadedBy: "content.ops@parabolic.local",
+    timestamp: "2026-04-11T11:15:00.000Z",
+    totalRows: 86,
+    errors: 4,
+    warnings: 1,
+    warningDetails: ["Hard questions exceed 50% of package rows."],
+    versionCreated: 12,
+  },
+  {
+    created: 8,
+    errorDetails: [],
+    id: "upl-2026-0409-004",
+    rollbackEligibility: "eligible",
+    rollbackReason: "No assigned-template usage detected for this upload batch.",
+    uploadedBy: "admin@parabolic.local",
+    timestamp: "2026-04-09T05:40:00.000Z",
+    totalRows: 52,
+    errors: 0,
+    warnings: 0,
+    warningDetails: [],
+    versionCreated: 8,
+  },
+];
 
 interface ZipEntryMetadata {
   compressedSize: number;
@@ -68,7 +124,7 @@ interface AdminQuestionsBulkRequestRow {
   chapter: string;
   correctAnswer: string;
   difficulty: "Easy" | "Medium" | "Hard";
-  examType: ExamType;
+  examType: string;
   marks: number;
   negativeMarks: number;
   questionTextKeywords?: string[];
@@ -104,8 +160,6 @@ interface AdminQuestionsBulkValidationResult {
   uploadLogId: string | null;
   uploadLogPath: string | null;
 }
-
-type SampleExamType = (typeof SAMPLE_EXAM_TYPES)[number];
 
 interface SampleWorkbookProfile {
   columns: string[];
@@ -149,7 +203,18 @@ function formatIsoDate(value: string): string {
   return Number.isNaN(parsed) ? value : new Date(parsed).toISOString().slice(0, 10);
 }
 
-function formatExamTypeLabel(value: SampleExamType): string {
+function toNumberOrZero(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+function formatExamTypeLabel(value: string): string {
   if (value === "JEEMains") {
     return "JEE Mains";
   }
@@ -180,6 +245,77 @@ function toArrayBuffer(bufferLike: ArrayBuffer | SharedArrayBuffer): ArrayBuffer
 function toFiniteNumber(value: string, fallback: number): number {
   const parsed = Number(value.trim());
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function toNonEmptyString(value: unknown, fallback = ""): string {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
+}
+
+function normalizeStringArray(value: unknown, fallback: string[]): string[] {
+  if (!Array.isArray(value)) {
+    return fallback;
+  }
+
+  const normalized = value
+    .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+    .filter((entry) => entry.length > 0);
+
+  return normalized.length > 0 ? normalized : fallback;
+}
+
+function normalizeRollbackEligibility(value: unknown, fallback: "eligible" | "blocked"): "eligible" | "blocked" {
+  return value === "eligible" || value === "blocked" ? value : fallback;
+}
+
+function normalizeUploadLogRecord(value: unknown, index: number): UploadLogRecord | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const fallback = FALLBACK_UPLOAD_LOGS[index] ?? FALLBACK_UPLOAD_LOGS[0];
+
+  return {
+    created: Math.max(0, toNumberOrZero(record.created ?? fallback?.created ?? 0)),
+    errorDetails: normalizeStringArray(record.errorDetails ?? record.errorMessages, fallback?.errorDetails ?? []),
+    errors: Math.max(0, toNumberOrZero(record.errors ?? fallback?.errors ?? 0)),
+    id: toNonEmptyString(record.id, fallback?.id ?? `upl-${index + 1}`),
+    rollbackEligibility: normalizeRollbackEligibility(
+      record.rollbackEligibility,
+      fallback?.rollbackEligibility ?? "blocked",
+    ),
+    rollbackReason: toNonEmptyString(
+      record.rollbackReason,
+      fallback?.rollbackReason ?? "Rollback requires every created question to be unused in assigned templates.",
+    ),
+    timestamp: toNonEmptyString(record.timestamp, fallback?.timestamp ?? new Date(0).toISOString()),
+    totalRows: Math.max(0, toNumberOrZero(record.totalRows ?? fallback?.totalRows ?? 0)),
+    uploadedBy: toNonEmptyString(record.uploadedBy, fallback?.uploadedBy ?? "unknown"),
+    versionCreated: Math.max(0, toNumberOrZero(record.versionCreated ?? fallback?.versionCreated ?? 0)),
+    warningDetails: normalizeStringArray(
+      record.warningDetails ?? record.warningMessages,
+      fallback?.warningDetails ?? [],
+    ),
+    warnings: Math.max(0, toNumberOrZero(record.warnings ?? fallback?.warnings ?? 0)),
+  };
+}
+
+async function fetchUploadLogsFromApi(): Promise<UploadLogRecord[]> {
+  const payload = await apiClient.get<unknown>("/admin/questions/upload-logs");
+  if (!payload || typeof payload !== "object") {
+    throw new Error("GET /admin/questions/upload-logs returned an invalid payload.");
+  }
+
+  const response = payload as {
+    data?: {
+      logs?: unknown;
+    };
+  };
+  const logs = Array.isArray(response.data?.logs) ? response.data?.logs : [];
+
+  return logs
+    .map((entry, index) => normalizeUploadLogRecord(entry, index))
+    .filter((entry): entry is UploadLogRecord => Boolean(entry));
 }
 
 function encodeCsvCell(value: string): string {
@@ -249,14 +385,14 @@ function writeUint32(output: number[], value: number): void {
   output.push(value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff);
 }
 
-function createStoredZip(files: Array<{ name: string; content: string }>): Uint8Array {
+function createStoredZip(files: Array<{ name: string; content: string | Uint8Array }>): Uint8Array {
   const encoder = new TextEncoder();
   const output: number[] = [];
   const centralDirectory: number[] = [];
 
   files.forEach((file) => {
     const nameBytes = encoder.encode(file.name);
-    const contentBytes = encoder.encode(file.content);
+    const contentBytes = typeof file.content === "string" ? encoder.encode(file.content) : file.content;
     const crc32 = buildCrc32(contentBytes);
     const localHeaderOffset = output.length;
 
@@ -310,6 +446,8 @@ function createStoredZip(files: Array<{ name: string; content: string }>): Uint8
 function getWorkbookRequiredColumns(): string[] {
   return [
     "UniqueKey",
+    "Marks",
+    "NegativeMarks",
     "ChapterName",
     "Difficulty",
     "QuestionType",
@@ -333,26 +471,16 @@ function getSimplifiedSampleColumns(): string[] {
   ];
 }
 
-function getFullSampleColumns(): string[] {
-  return [
-    "Exam",
-    "Subject",
-    "Marks",
-    "NegativeMarks",
-    ...getSimplifiedSampleColumns(),
-  ];
-}
-
-function buildSampleWorkbookProfile(examType: SampleExamType, subject: string): SampleWorkbookProfile {
-  const simplified = examType !== "Other";
-  const subjectLabel = simplified ? subject : SAMPLE_OTHER_SUBJECT;
-  const columns = simplified ? getSimplifiedSampleColumns() : getFullSampleColumns();
+function buildSampleWorkbookProfile(examLabel: string, subjectLabel: string): SampleWorkbookProfile {
+  const columns = getSimplifiedSampleColumns();
   const baseRow: Record<string, string> = {
     AdditionalTag: "formula-application",
-    ChapterName: examType === "NEET" && subject === "Biology" ? "Cell Structure" : "Kinematics",
+    ChapterName: examLabel === "NEET" && subjectLabel === "Biology" ? "Cell Structure" : "Kinematics",
     CorrectAnswer: "A",
     Difficulty: "Medium",
     InternalNotes: "Optional reviewer note",
+    Marks: "4",
+    NegativeMarks: "-1",
     PrimaryTag: "conceptual",
     QuestionImageFile: "question-001.png",
     QuestionNo: "1",
@@ -360,35 +488,28 @@ function buildSampleWorkbookProfile(examType: SampleExamType, subject: string): 
     SecondaryTag: "moderate-time",
     SimulationLink: "",
     SolutionImageFile: "solution-001.png",
-    Topic: examType === "NEET" && subject === "Biology" ? "Cell organelles" : "Projectile motion",
+    Topic: examLabel === "NEET" && subjectLabel === "Biology" ? "Cell organelles" : "Projectile motion",
     TutorialVideoLink: "",
-    UniqueKey: `${examType.toLowerCase()}-${subjectLabel.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-001`,
+    UniqueKey: `${examLabel.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${subjectLabel.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-001`,
   };
-
-  if (!simplified) {
-    baseRow.Exam = "Custom Exam";
-    baseRow.Subject = "Custom Subject";
-    baseRow.Marks = "4";
-    baseRow.NegativeMarks = "-1";
-  }
 
   return {
     columns,
-    fileName: `question-bank-sample-${examType.toLowerCase()}-${subjectLabel.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.csv`,
-    markingScheme: simplified ? "Auto-applied during upload: correct +4, incorrect -1" : "Provided per row using Marks and NegativeMarks",
+    fileName: `question-bank-sample-${examLabel.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${subjectLabel.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.csv`,
+    markingScheme: "Sample workbook includes Marks and NegativeMarks for every question. Standard exams still default to +4 and -1 unless you choose to change them later.",
     sampleRow: baseRow,
     subjectLabel,
   };
 }
 
-function buildSampleWorkbookXlsx(profile: SampleWorkbookProfile, examType: SampleExamType): Uint8Array {
+function buildSampleWorkbookXlsx(profile: SampleWorkbookProfile, examLabel: string): Uint8Array {
   const questionRows = [
     profile.columns,
     profile.columns.map((columnName) => profile.sampleRow[columnName] ?? ""),
   ];
   const summaryRows = [
     ["Field", "Value"],
-    ["Selected Exam", formatExamTypeLabel(examType)],
+    ["Selected Exam", formatExamTypeLabel(examLabel)],
     ["Selected Subject", profile.subjectLabel],
     ["Marking Scheme", profile.markingScheme],
     ["Difficulty Definitions", "Easy = direct recall; Medium = standard application; Hard = multi-step or high discrimination"],
@@ -440,6 +561,43 @@ function buildSampleWorkbookXlsx(profile: SampleWorkbookProfile, examType: Sampl
     { name: "xl/worksheets/sheet1.xml", content: buildWorksheetXml(questionRows) },
     { name: "xl/worksheets/sheet2.xml", content: buildWorksheetXml(summaryRows) },
     { name: "xl/worksheets/sheet3.xml", content: buildWorksheetXml(instructionRows) },
+  ]);
+}
+
+function buildSamplePackageZip(profile: SampleWorkbookProfile, examLabel: string): Uint8Array {
+  const workbookBytes = buildSampleWorkbookXlsx(profile, examLabel);
+  const placeholderImageBytes = new Uint8Array([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+    0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+    0x89, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x44, 0x41,
+    0x54, 0x78, 0x9c, 0x63, 0xf8, 0xcf, 0xc0, 0xf0,
+    0x1f, 0x00, 0x05, 0x00, 0x01, 0xff, 0x89, 0x99,
+    0x3d, 0x1d, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
+    0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+  ]);
+  const readme = [
+    "Sample question upload package",
+    "",
+    "Contents:",
+    "- questions.xlsx",
+    "- question-001.png",
+    "- solution-001.png",
+    "",
+    "Next steps:",
+    "- Keep questions.xlsx at the ZIP root.",
+    "- Replace questions.xlsx with your final workbook if you generated a fresh copy separately.",
+    "- Replace question-001.png and solution-001.png with your real files while keeping the same file names or updating the workbook references to match your own names.",
+    "- Do not create nested folders inside the ZIP.",
+    "- Remove this README.txt file before uploading the final ZIP package.",
+  ].join("\n");
+
+  return createStoredZip([
+    { name: "questions.xlsx", content: workbookBytes },
+    { name: "question-001.png", content: placeholderImageBytes },
+    { name: "solution-001.png", content: placeholderImageBytes },
+    { name: "README.txt", content: readme },
   ]);
 }
 
@@ -660,10 +818,11 @@ function normalizeQuestionsBulkResponse(payload: unknown): AdminQuestionsBulkVal
 }
 
 async function validateQuestionsWithApi(input: {
-  examType: ExamType;
+  examType: string;
   instituteId: string;
   subject: string;
   workbookRows: QuestionUploadWorkbookRow[];
+  commit?: boolean;
 }): Promise<AdminQuestionsBulkValidationResult> {
   const questions: AdminQuestionsBulkRequestRow[] = input.workbookRows.map((row) => ({
     chapter: row.chapter,
@@ -686,7 +845,7 @@ async function validateQuestionsWithApi(input: {
     "/admin/questions/bulk",
     {
       body: {
-        commit: false,
+        commit: input.commit === true,
         instituteId: input.instituteId,
         questions,
       },
@@ -1070,37 +1229,84 @@ async function validateQuestionPackage(
 function QuestionBankManagementPage() {
   const { session } = useAuthProvider();
   const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null);
-  const [uploadExamType, setUploadExamType] = useState<ExamType>("JEEMains");
+  const [uploadExamType, setUploadExamType] = useState<UploadExamOption>("JEEMains");
+  const [customExamName, setCustomExamName] = useState("");
+  const [customSubjectName, setCustomSubjectName] = useState("");
   const [uploadSubject, setUploadSubject] = useState<string>(EXAM_SUBJECTS.JEEMains[0]);
-  const [sampleExamType, setSampleExamType] = useState<SampleExamType>("JEEMains");
-  const [sampleSubject, setSampleSubject] = useState<string>(EXAM_SUBJECTS.JEEMains[0]);
   const [uploadLogs, setUploadLogs] = useState<UploadLogRecord[]>([]);
   const [uploadValidation, setUploadValidation] = useState<QuestionPackageValidationResult | null>(null);
   const [isValidatingUpload, setIsValidatingUpload] = useState(false);
+  const [isFinalUploading, setIsFinalUploading] = useState(false);
   const [inlineMessage, setInlineMessage] = useState(
-    "Upload Package now runs as its own workspace with navigation back to the other Question Bank routes.",
+    "Choose the exam details, download the sample if needed, and validate the ZIP package when you are ready.",
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const nextSubject = EXAM_SUBJECTS[uploadExamType][0];
-    setUploadSubject((current) => (EXAM_SUBJECTS[uploadExamType].includes(current) ? current : nextSubject));
-  }, [uploadExamType]);
-
-  useEffect(() => {
-    if (sampleExamType === "Other") {
-      setSampleSubject(SAMPLE_OTHER_SUBJECT);
+    if (uploadExamType === "Other") {
+      setUploadSubject(customSubjectName.trim() || OTHER_EXAM_SUBJECT_LABEL);
       return;
     }
 
-    const nextSubject = EXAM_SUBJECTS[sampleExamType][0];
-    setSampleSubject((current) => (EXAM_SUBJECTS[sampleExamType].includes(current) ? current : nextSubject));
-  }, [sampleExamType]);
+    const nextSubject = EXAM_SUBJECTS[uploadExamType][0];
+    setUploadSubject((current) => (EXAM_SUBJECTS[uploadExamType].includes(current) ? current : nextSubject));
+  }, [customSubjectName, uploadExamType]);
 
-  const sampleWorkbookProfile = buildSampleWorkbookProfile(sampleExamType, sampleSubject);
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadUploadLogs(): Promise<void> {
+      if (!shouldUseLiveApi()) {
+        setUploadLogs(FALLBACK_UPLOAD_LOGS);
+        return;
+      }
+
+      try {
+        const nextLogs = await fetchUploadLogsFromApi();
+        if (!isActive) {
+          return;
+        }
+
+        setUploadLogs(nextLogs.length > 0 ? nextLogs : FALLBACK_UPLOAD_LOGS);
+      } catch {
+        if (!isActive) {
+          return;
+        }
+
+        setUploadLogs(FALLBACK_UPLOAD_LOGS);
+      }
+    }
+
+    void loadUploadLogs();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  const selectedExamLabel = uploadExamType === "Other" ? customExamName.trim() || "Custom Exam" : uploadExamType;
+  const selectedSubjectLabel =
+    uploadExamType === "Other" ? customSubjectName.trim() || OTHER_EXAM_SUBJECT_LABEL : uploadSubject;
+  const sampleWorkbookProfile = buildSampleWorkbookProfile(selectedExamLabel, selectedSubjectLabel);
+  const hasBlockingValidationIssues =
+    uploadValidation ?
+      uploadValidation.errors.length > 0 ||
+      uploadValidation.rowErrors.length > 0 ||
+      (uploadValidation.serverValidation?.summary.invalid ?? 0) > 0 :
+      false;
 
   async function handleUploadSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (uploadExamType === "Other" && customExamName.trim().length === 0) {
+      setErrorMessage("Enter the exam name before validating a custom exam package.");
+      return;
+    }
+
+    if (uploadExamType === "Other" && customSubjectName.trim().length === 0) {
+      setErrorMessage("Enter the subject name before validating a custom exam package.");
+      return;
+    }
 
     if (!selectedUploadFile) {
       setErrorMessage("Select a ZIP package before validation/upload.");
@@ -1123,9 +1329,9 @@ function QuestionBankManagementPage() {
             claims.instituteId :
             "inst-build-125";
         serverValidation = await validateQuestionsWithApi({
-          examType: uploadExamType,
+          examType: selectedExamLabel,
           instituteId,
-          subject: uploadSubject,
+          subject: selectedSubjectLabel,
           workbookRows: validation.workbookRows,
         });
       }
@@ -1140,25 +1346,32 @@ function QuestionBankManagementPage() {
         (typeof claims?.sub === "string" ? claims.sub : "admin@parabolic.local");
 
       const nextLog: UploadLogRecord = {
+        created: serverValidation?.summary.created ?? 0,
+        errorDetails: validation.errors.concat(validation.rowErrors.flatMap((row) => row.errors)),
         errors:
           validation.errors.length +
           validation.rowErrors.length +
           (serverValidation?.summary.invalid ?? 0),
         id: `upl-${Date.now()}`,
+        rollbackEligibility: "blocked",
+        rollbackReason: "Review assigned-template usage before any rollback decision.",
         timestamp: new Date().toISOString(),
         totalRows: finalValidation.totalRows,
         uploadedBy: actorEmail,
         versionCreated: serverValidation?.summary.updated ?? 0,
         warnings: validation.warnings.length + (serverValidation?.summary.warnings ?? 0),
+        warningDetails: validation.warnings,
       };
 
       setUploadLogs((current) => [nextLog, ...current]);
       setInlineMessage(
         validation.errors.length > 0 || validation.rowErrors.length > 0 ?
-          `Validated ${selectedUploadFile.name}. Package-level issues: ${validation.errors.length}; row-level issues: ${validation.rowErrors.length}. Download the CSV to resolve before any import.` :
+          `Validation found issues in ${selectedUploadFile.name}. Download the error report, correct the workbook or ZIP contents, and upload the package again.` :
         serverValidation ?
-          `Validated ${selectedUploadFile.name}. Local ZIP checks passed, then live validate-only ingestion checked ${serverValidation.summary.received} rows with ${serverValidation.summary.invalid} invalid rows.` :
-          `Validated ${selectedUploadFile.name}. Workbook image references matched ${validation.imageAssetCount} ZIP root assets with no external URLs.`,
+          serverValidation.summary.invalid > 0 ?
+            `Validation completed with issues for ${selectedUploadFile.name}. Review the blocked rows below, correct them, and upload the package again.` :
+            `Validation successful for ${selectedUploadFile.name}. The package passed workbook, image, and row checks and is ready for final upload.` :
+          `Validation successful for ${selectedUploadFile.name}. The workbook and image references are ready for final upload when live upload is available.`,
       );
       setSelectedUploadFile(null);
     } catch (error) {
@@ -1194,6 +1407,91 @@ function QuestionBankManagementPage() {
     URL.revokeObjectURL(downloadUrl);
   }
 
+  async function handleFinalUpload(): Promise<void> {
+    if (!uploadValidation || hasBlockingValidationIssues) {
+      return;
+    }
+
+    setIsFinalUploading(true);
+    setErrorMessage(null);
+
+    try {
+      if (!shouldUseLiveApi()) {
+        setUploadValidation((current) =>
+          current ?
+            {
+              ...current,
+              serverValidation: {
+                commitRequested: true,
+                committed: true,
+                rows: current.serverValidation?.rows ?? [],
+                summary: current.serverValidation?.summary ?? {
+                  created: current.workbookRows.length,
+                  invalid: 0,
+                  received: current.workbookRows.length,
+                  updated: 0,
+                  valid: current.workbookRows.length,
+                  warnings: current.warnings.length,
+                },
+                uploadLogId: current.serverValidation?.uploadLogId ?? `upl-local-${Date.now()}`,
+                uploadLogPath: current.serverValidation?.uploadLogPath ?? null,
+              },
+            } :
+            current,
+        );
+        setInlineMessage(
+          `Upload successful. Local mode simulated the final upload for ${uploadValidation.workbookRows.length} questions.`,
+        );
+        return;
+      }
+
+      const claims = decodeIdTokenClaims(session.idToken);
+      const instituteId =
+        typeof claims?.instituteId === "string" && claims.instituteId.trim().length > 0 ?
+          claims.instituteId :
+          "inst-build-125";
+
+      const commitResponse = await validateQuestionsWithApi({
+        commit: true,
+        examType: selectedExamLabel,
+        instituteId,
+        subject: selectedSubjectLabel,
+        workbookRows: uploadValidation.workbookRows,
+      });
+
+      setUploadValidation((current) =>
+        current ?
+          {
+            ...current,
+            serverValidation: commitResponse,
+          } :
+          current,
+      );
+      setUploadLogs((current) =>
+        current.map((log, index) =>
+          index === 0 ?
+            {
+              ...log,
+              created: commitResponse.summary.created,
+              errors: commitResponse.summary.invalid,
+              versionCreated: commitResponse.summary.updated,
+              warnings: commitResponse.summary.warnings,
+            } :
+            log,
+        ),
+      );
+      setInlineMessage(
+        commitResponse.committed ?
+          `Upload successful. ${commitResponse.summary.created} questions were added and ${commitResponse.summary.updated} existing versions were updated.` :
+          "Final upload was requested, but the system did not confirm a completed upload.",
+      );
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Final upload failed.");
+    } finally {
+      setIsFinalUploading(false);
+    }
+  }
+
   function downloadSampleWorkbookCsv() {
     const lines = [
       sampleWorkbookProfile.columns.join(","),
@@ -1207,12 +1505,12 @@ function QuestionBankManagementPage() {
     anchor.click();
     URL.revokeObjectURL(downloadUrl);
     setInlineMessage(
-      `Downloaded ${formatExamTypeLabel(sampleExamType)} sample schema for ${sampleWorkbookProfile.subjectLabel}. ${sampleWorkbookProfile.markingScheme}.`,
+      `Downloaded ${formatExamTypeLabel(selectedExamLabel)} sample schema for ${sampleWorkbookProfile.subjectLabel}. ${sampleWorkbookProfile.markingScheme}.`,
     );
   }
 
   function downloadSampleWorkbookXlsx() {
-    const xlsxBytes = buildSampleWorkbookXlsx(sampleWorkbookProfile, sampleExamType);
+    const xlsxBytes = buildSampleWorkbookXlsx(sampleWorkbookProfile, selectedExamLabel);
     const xlsxBuffer = toArrayBuffer(xlsxBytes.buffer).slice(
       xlsxBytes.byteOffset,
       xlsxBytes.byteOffset + xlsxBytes.byteLength,
@@ -1227,7 +1525,22 @@ function QuestionBankManagementPage() {
     anchor.click();
     URL.revokeObjectURL(downloadUrl);
     setInlineMessage(
-      `Downloaded workbook sample with questions, Exam Summary, and INSTRUCTIONS sheets for ${formatExamTypeLabel(sampleExamType)}.`,
+      `Downloaded workbook sample with questions, Exam Summary, and INSTRUCTIONS sheets for ${formatExamTypeLabel(selectedExamLabel)}.`,
+    );
+  }
+
+  function downloadSamplePackageZip() {
+    const zipBytes = buildSamplePackageZip(sampleWorkbookProfile, selectedExamLabel);
+    const zipBuffer = toArrayBuffer(zipBytes.buffer).slice(zipBytes.byteOffset, zipBytes.byteOffset + zipBytes.byteLength);
+    const zipBlob = new Blob([zipBuffer], { type: "application/zip" });
+    const downloadUrl = URL.createObjectURL(zipBlob);
+    const anchor = document.createElement("a");
+    anchor.href = downloadUrl;
+    anchor.download = `question-upload-sample-${selectedExamLabel.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${sampleWorkbookProfile.subjectLabel.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.zip`;
+    anchor.click();
+    URL.revokeObjectURL(downloadUrl);
+    setInlineMessage(
+      `Downloaded sample ZIP package with questions.xlsx for ${formatExamTypeLabel(selectedExamLabel)} and ${sampleWorkbookProfile.subjectLabel}. Add the image files before uploading.`,
     );
   }
 
@@ -1235,22 +1548,12 @@ function QuestionBankManagementPage() {
     const preview = buildDistributionPreview(validation.workbookRows);
 
     return (
-      <div className="admin-question-validation-block">
+      <div className="admin-question-validation-card admin-question-distribution-panel">
         <h3>Pre-Import Distribution Preview</h3>
-        <div className="admin-question-validation-grid">
-          <article className="admin-question-validation-card">
-            <h3>{preview.totalRows}</h3>
-            <p>Rows included in the distribution preview.</p>
-          </article>
-          <article className="admin-question-validation-card">
-            <h3>{preview.totalMarks}</h3>
-            <p>Total marks represented by this upload package.</p>
-          </article>
-          <article className="admin-question-validation-card">
-            <h3>{preview.warnings.length}</h3>
-            <p>Balance warnings to review before import confirmation.</p>
-          </article>
-        </div>
+        <p className="admin-question-distribution-summary">
+          {preview.totalRows} question row{preview.totalRows === 1 ? "" : "s"} · {preview.totalMarks} total marks ·{" "}
+          {preview.warnings.length} balance warning{preview.warnings.length === 1 ? "" : "s"}
+        </p>
         {preview.warnings.length > 0 ? (
           <ul className="admin-question-validation-list">
             {preview.warnings.map((warning) => (
@@ -1258,44 +1561,28 @@ function QuestionBankManagementPage() {
             ))}
           </ul>
         ) : (
-          <p className="admin-tests-inline-note">No difficulty, chapter, or marks imbalance warnings were detected.</p>
+          <p className="admin-tests-inline-note">No difficulty, chapter, or marks balance warnings were found.</p>
         )}
-        <UiTable
-          caption="Difficulty distribution preview"
-          columns={[
-            { id: "difficulty", header: "Difficulty", render: (bucket) => bucket.label },
-            { id: "count", header: "Rows", render: (bucket) => bucket.count },
-            { id: "percent", header: "Share", render: (bucket) => `${bucket.percent.toFixed(1)}%` },
-            { id: "marks", header: "Marks", render: (bucket) => bucket.marks },
-          ]}
-          rows={preview.difficultyBuckets}
-          rowKey={(bucket) => bucket.label}
-          emptyStateText="No difficulty rows are available for preview."
-        />
-        <UiTable
-          caption="Chapter balance preview"
-          columns={[
-            { id: "chapter", header: "Chapter", render: (bucket) => bucket.label },
-            { id: "count", header: "Rows", render: (bucket) => bucket.count },
-            { id: "percent", header: "Share", render: (bucket) => `${bucket.percent.toFixed(1)}%` },
-            { id: "marks", header: "Marks", render: (bucket) => bucket.marks },
-          ]}
-          rows={preview.chapterBuckets}
-          rowKey={(bucket) => bucket.label}
-          emptyStateText="No chapter rows are available for preview."
-        />
-        <UiTable
-          caption="Marks balance preview"
-          columns={[
-            { id: "marks", header: "Marks Bucket", render: (bucket) => bucket.label },
-            { id: "count", header: "Rows", render: (bucket) => bucket.count },
-            { id: "percent", header: "Share", render: (bucket) => `${bucket.percent.toFixed(1)}%` },
-            { id: "totalMarks", header: "Total Marks", render: (bucket) => bucket.marks },
-          ]}
-          rows={preview.marksBuckets}
-          rowKey={(bucket) => bucket.label}
-          emptyStateText="No marks rows are available for preview."
-        />
+        <div className="admin-question-distribution-charts">
+          <UiChartContainer
+            title="Difficulty Distribution"
+            subtitle="How the uploaded questions are split by difficulty"
+            data={preview.difficultyBuckets.map((bucket) => ({ label: bucket.label, value: bucket.count }))}
+            variant="pie"
+          />
+          <UiChartContainer
+            title="Chapter Distribution"
+            subtitle="How the uploaded questions are spread across chapters"
+            data={preview.chapterBuckets.map((bucket) => ({ label: bucket.label, value: bucket.count }))}
+            variant="pie"
+          />
+          <UiChartContainer
+            title="Marks Distribution"
+            subtitle="How the uploaded questions are split by marks bucket"
+            data={preview.marksBuckets.map((bucket) => ({ label: bucket.label, value: bucket.count }))}
+            variant="pie"
+          />
+        </div>
       </div>
     );
   }
@@ -1304,16 +1591,15 @@ function QuestionBankManagementPage() {
     setSelectedUploadFile(null);
     setUploadValidation(null);
     setErrorMessage(null);
-    setInlineMessage("Upload Package now runs as its own workspace with navigation back to the other Question Bank routes.");
+    setInlineMessage("Question upload wizard is ready for the next package.");
   }
 
   return (
     <section className="admin-content-card" aria-labelledby="admin-question-bank-title">
       <p className="admin-content-eyebrow">Question Bank Upload</p>
-      <h2 id="admin-question-bank-title">Dedicated Upload Package Workspace</h2>
+      <h2 id="admin-question-bank-title">Bulk Question Upload</h2>
       <p className="admin-content-copy">
-        This route keeps <code>/admin/question-bank/upload-package</code> focused on ZIP intake, workbook validation,
-        and import preparation instead of mixing upload controls with library, tags, or archive workflows.
+        Upload a question package, validate the workbook and image files, and review issues before import.
       </p>
 
       <QuestionBankWorkspaceNav />
@@ -1321,110 +1607,97 @@ function QuestionBankManagementPage() {
       <p className="admin-tests-inline-note">{inlineMessage}</p>
       {errorMessage ? <p className="admin-tests-inline-error">{errorMessage}</p> : null}
 
-      <div className="admin-analytics-kpi-grid">
-        <article className="admin-analytics-kpi-card">
-          <p>Required Sheets</p>
-          <h3>3</h3>
-          <small>questions, Exam Summary, INSTRUCTIONS</small>
-        </article>
-        <article className="admin-analytics-kpi-card">
-          <p>Required Root File</p>
-          <h3>questions.xlsx</h3>
-          <small>must live at ZIP root</small>
-        </article>
-        <article className="admin-analytics-kpi-card">
-          <p>Nested Folders</p>
-          <h3>Blocked</h3>
-          <small>flat ZIP packages only</small>
-        </article>
-        <article className="admin-analytics-kpi-card">
-          <p>Commit Mode</p>
-          <h3>Atomic</h3>
-          <small>no partial import after validation</small>
-        </article>
-      </div>
-
-      <div className="admin-analytics-compliance-panel">
-        <article className="admin-risk-summary-card">
-          <h4>Upload Scope</h4>
-          <p>This workspace is now intentionally limited to upload and validation. Tag governance, archive controls, and library operations live in their own dedicated routes.</p>
-          <small>Prevents cross-workflow confusion.</small>
-        </article>
-        <article className="admin-risk-summary-card">
-          <h4>Validation Guarantees</h4>
-          <p>ZIP inspection rejects nested folders, checks workbook sheets and required columns, validates image references, and produces row-level CSV errors before any import step.</p>
-          <small>No partial commit path is exposed here.</small>
-        </article>
-      </div>
-
-      <section className="admin-question-validation-shell" aria-label="Exam-aware sample download wizard">
+      <section className="admin-question-validation-shell" aria-labelledby="admin-question-upload-workflow-title">
         <div className="admin-student-bulk-review-header">
           <div>
-            <h3>Download Sample Wizard</h3>
+            <h3 id="admin-question-upload-workflow-title">Question Package Workflow</h3>
             <p>
-              Choose the exam context first. JEE Mains and NEET samples omit Exam, Subject, Marks, and NegativeMarks
-              because the upload flow applies the fixed marking scheme from this selection.
+              Choose the exam context once, download a sample workbook if needed, and then upload the ZIP package for
+              validation.
             </p>
           </div>
-          <div className="admin-student-bulk-actions">
-            <button type="button" onClick={downloadSampleWorkbookCsv}>
-              Download CSV
-            </button>
-            <button type="button" onClick={downloadSampleWorkbookXlsx}>
-              Download Workbook
-            </button>
-          </div>
         </div>
-        <div className="admin-student-bulk-stage-row" aria-label="Sample download wizard steps">
+        <div className="admin-student-bulk-stage-row" aria-label="Question package workflow steps">
           <article className="admin-student-bulk-stage admin-student-bulk-stage-active">
             <span>1</span>
             <strong>Choose Exam Type</strong>
           </article>
-          <article className={`admin-student-bulk-stage ${sampleExamType === "Other" ? "" : "admin-student-bulk-stage-active"}`}>
+          <article className="admin-student-bulk-stage admin-student-bulk-stage-active">
             <span>2</span>
-            <strong>{sampleExamType === "Other" ? "No Subject Lock" : "Choose Subject"}</strong>
+            <strong>Choose Subject</strong>
           </article>
-          <article className="admin-student-bulk-stage admin-student-bulk-stage-complete">
+          <article className="admin-student-bulk-stage admin-student-bulk-stage-active">
             <span>3</span>
             <strong>Download Sample</strong>
           </article>
+          <article className="admin-student-bulk-stage admin-student-bulk-stage-complete">
+            <span>4</span>
+            <strong>Upload And Validate</strong>
+          </article>
         </div>
-        <div className="admin-student-grid">
+        <div className="admin-question-upload-wizard-layout">
           <UiForm
-            title="Sample Context"
-            description="Generate the sample schema from the same exam context admins will use during upload validation."
-            submitLabel="Download Workbook"
-            onSubmit={(event) => {
-              event.preventDefault();
-              downloadSampleWorkbookXlsx();
-            }}
-            footer={<span className="admin-tests-form-footnote">{sampleWorkbookProfile.markingScheme}</span>}
+            title="Question Upload Wizard"
+            description="Choose the exam context, download the matching sample workbook if needed, then upload one ZIP package for validation."
+            submitLabel={isValidatingUpload ? "Validating..." : "Validate ZIP Package"}
+            onSubmit={handleUploadSubmit}
+            footer={
+              <span className="admin-tests-form-footnote">
+                Validation checks ZIP structure, workbook references, and duplicate readiness. If issues are found, you
+                can download the row-level error report and fix them before import.
+              </span>
+            }
           >
-            <UiFormField label="Exam Type" htmlFor="admin-question-sample-exam-type">
+            <UiFormField label="Exam Type" htmlFor="admin-question-upload-exam-type">
               <select
-                id="admin-question-sample-exam-type"
-                value={sampleExamType}
-                onChange={(event) => setSampleExamType(event.target.value as SampleExamType)}
+                id="admin-question-upload-exam-type"
+                value={uploadExamType}
+                onChange={(event) => setUploadExamType(event.target.value as UploadExamOption)}
               >
-                {SAMPLE_EXAM_TYPES.map((type) => (
+                {UPLOAD_EXAM_OPTIONS.map((type) => (
                   <option key={type} value={type}>
                     {formatExamTypeLabel(type)}
                   </option>
                 ))}
               </select>
             </UiFormField>
-            {sampleExamType === "Other" ? (
-              <UiFormField label="Subject" htmlFor="admin-question-sample-subject-unlocked" helper="Other exam samples include Subject as a workbook column.">
-                <input id="admin-question-sample-subject-unlocked" type="text" value={SAMPLE_OTHER_SUBJECT} readOnly />
-              </UiFormField>
-            ) : (
-              <UiFormField label="Subject" htmlFor="admin-question-sample-subject">
-                <select
-                  id="admin-question-sample-subject"
-                  value={sampleSubject}
-                  onChange={(event) => setSampleSubject(event.target.value)}
+            {uploadExamType === "Other" ? (
+              <>
+                <UiFormField
+                  label="Exam Name"
+                  htmlFor="admin-question-upload-custom-exam"
+                  helper="Use this when the package is for an exam outside JEE Mains or NEET."
                 >
-                  {EXAM_SUBJECTS[sampleExamType].map((subject) => (
+                  <input
+                    id="admin-question-upload-custom-exam"
+                    type="text"
+                    value={customExamName}
+                    onChange={(event) => setCustomExamName(event.target.value)}
+                    placeholder="Enter exam name"
+                  />
+                </UiFormField>
+                <UiFormField
+                  label="Subject Name"
+                  htmlFor="admin-question-upload-custom-subject"
+                  helper="Enter the subject for this custom exam package."
+                >
+                  <input
+                    id="admin-question-upload-custom-subject"
+                    type="text"
+                    value={customSubjectName}
+                    onChange={(event) => setCustomSubjectName(event.target.value)}
+                    placeholder="Enter subject name"
+                  />
+                </UiFormField>
+              </>
+            ) : (
+              <UiFormField label="Subject" htmlFor="admin-question-upload-subject">
+                <select
+                  id="admin-question-upload-subject"
+                  value={uploadSubject}
+                  onChange={(event) => setUploadSubject(event.target.value)}
+                >
+                  {EXAM_SUBJECTS[uploadExamType].map((subject) => (
                     <option key={subject} value={subject}>
                       {subject}
                     </option>
@@ -1432,206 +1705,230 @@ function QuestionBankManagementPage() {
                 </select>
               </UiFormField>
             )}
+            <div className="admin-question-upload-sample-panel">
+              <div>
+                <h3>Sample Workbook</h3>
+                <p>{formatExamTypeLabel(selectedExamLabel)} · {sampleWorkbookProfile.subjectLabel}</p>
+                <small>
+                  {sampleWorkbookProfile.fileName.replace(/\.csv$/, ".xlsx")} includes questions, Exam Summary, and
+                  INSTRUCTIONS sheets.
+                </small>
+              </div>
+              <div className="admin-student-bulk-actions">
+                <button type="button" onClick={downloadSampleWorkbookCsv}>
+                  Download CSV
+                </button>
+                <button type="button" onClick={downloadSampleWorkbookXlsx}>
+                  Download Workbook
+                </button>
+              </div>
+            </div>
+            <UiFormField label="Question Package (.zip)" htmlFor="admin-question-upload-file">
+              <input
+                key={selectedUploadFile?.name ?? "question-upload"}
+                id="admin-question-upload-file"
+                type="file"
+                accept=".zip"
+                onChange={(event) => setSelectedUploadFile(event.target.files?.[0] ?? null)}
+              />
+            </UiFormField>
+            <UiFormField label="Required Workbook Columns" htmlFor="admin-question-upload-schema">
+              <textarea
+                id="admin-question-upload-schema"
+                rows={4}
+                value="UniqueKey, Marks, NegativeMarks, ChapterName, Difficulty, QuestionType, QuestionNo, QuestionImageFile, SolutionImageFile, CorrectAnswer, PrimaryTag, SecondaryTag"
+                readOnly
+              />
+            </UiFormField>
           </UiForm>
-          <article className="admin-question-validation-card">
-            <h3>Sample Preview</h3>
-            <p>{formatExamTypeLabel(sampleExamType)} · {sampleWorkbookProfile.subjectLabel}</p>
-            <p>{sampleWorkbookProfile.columns.length} columns generated for this sample.</p>
-            <small>{sampleWorkbookProfile.fileName.replace(/\.csv$/, ".xlsx")} includes questions, Exam Summary, and INSTRUCTIONS sheets.</small>
+          <article className="admin-question-validation-card admin-question-upload-instructions">
+            <h3>Instructions for Bulk Question Upload</h3>
+            <p>Use this checklist before uploading the package.</p>
+            <div className="admin-student-bulk-actions">
+              <button type="button" onClick={downloadSamplePackageZip}>
+                Download Sample ZIP
+              </button>
+            </div>
+            <ul className="admin-question-validation-list">
+              <li>Download the sample workbook for the selected exam and subject first.</li>
+              <li>Keep the workbook file name as <code>questions.xlsx</code>.</li>
+              <li>Make sure the workbook includes the required columns shown in the wizard.</li>
+              <li>Place <code>questions.xlsx</code> and every referenced question and solution image at the ZIP root.</li>
+              <li>
+                Use clear file names such as <code>question-001.png</code> and <code>solution-001.png</code>. Keep
+                the same names in the workbook, and use supported image files such as <code>.png</code>, <code>.jpg</code>,
+                <code>.jpeg</code>, or <code>.webp</code>.
+              </li>
+              <li>Do not create folders inside the ZIP.</li>
+              <li>Use one flat ZIP package only.</li>
+              <li>For custom exams, enter both the exam name and subject name before validating.</li>
+            </ul>
+            <p>The validator checks workbook structure, image references, duplicate readiness, and row-level issues before the package can move forward.</p>
           </article>
         </div>
-        <UiTable
-          caption="Sample workbook columns"
-          columns={[
-            { id: "column", header: "Column", render: (columnName) => columnName },
-            {
-              id: "treatment",
-              header: "Treatment",
-              render: (columnName) =>
-                getWorkbookRequiredColumns().includes(columnName) ||
-                (sampleExamType === "Other" && ["Exam", "Subject", "Marks", "NegativeMarks"].includes(columnName)) ?
-                  "Required" :
-                  "Optional",
-            },
-          ]}
-          rows={sampleWorkbookProfile.columns}
-          rowKey={(columnName) => columnName}
-          emptyStateText="Choose an exam type to preview sample columns."
-        />
       </section>
-
-      <UiForm
-        title="Upload Question Package"
-        description="ZIP upload now validates root packaging, workbook sheets, workbook image references, and row-level schema errors before any import can proceed. Live mode also runs validate-only backend ingestion checks."
-        submitLabel={isValidatingUpload ? "Validating..." : "Validate ZIP Package"}
-        onSubmit={handleUploadSubmit}
-        footer={
-          <span className="admin-tests-form-footnote">
-            Validation rejects nested folders, blocks external image URLs, generates a downloadable row-level CSV error report, and in live mode also verifies duplicate/ingestion readiness against the admin bulk API. No partial commit.
-          </span>
-        }
-      >
-        <UiFormField label="Exam Type" htmlFor="admin-question-upload-exam-type">
-          <select
-            id="admin-question-upload-exam-type"
-            value={uploadExamType}
-            onChange={(event) => setUploadExamType(event.target.value as ExamType)}
-          >
-            {EXAM_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </select>
-        </UiFormField>
-        <UiFormField label="Subject" htmlFor="admin-question-upload-subject">
-          <select
-            id="admin-question-upload-subject"
-            value={uploadSubject}
-            onChange={(event) => setUploadSubject(event.target.value)}
-          >
-            {EXAM_SUBJECTS[uploadExamType].map((subject) => (
-              <option key={subject} value={subject}>
-                {subject}
-              </option>
-            ))}
-          </select>
-        </UiFormField>
-        <UiFormField label="Question Package (.zip)" htmlFor="admin-question-upload-file">
-          <input
-            key={selectedUploadFile?.name ?? "question-upload"}
-            id="admin-question-upload-file"
-            type="file"
-            accept=".zip"
-            onChange={(event) => setSelectedUploadFile(event.target.files?.[0] ?? null)}
-          />
-        </UiFormField>
-        <UiFormField label="Sample Workbook Schema" htmlFor="admin-question-upload-schema">
-          <textarea
-            id="admin-question-upload-schema"
-            rows={4}
-            value="UniqueKey, ChapterName, Difficulty, QuestionType, QuestionNo, QuestionImageFile, SolutionImageFile, CorrectAnswer, PrimaryTag, SecondaryTag"
-            readOnly
-          />
-        </UiFormField>
-      </UiForm>
 
       {uploadValidation ? (
         <section className="admin-question-validation-shell" aria-label="Question upload validation">
-          <div className="admin-question-validation-grid">
-            <article className="admin-question-validation-card">
-              <h3>Package Status</h3>
-              <p>
-                {uploadValidation.errors.length > 0 || uploadValidation.rowErrors.length > 0 || (uploadValidation.serverValidation?.summary.invalid ?? 0) > 0 ?
-                  "Blocked" :
-                  "Ready for next validation stage"}
-              </p>
-              <p>{uploadValidation.totalRows} workbook rows checked.</p>
-            </article>
-            <article className="admin-question-validation-card">
-              <h3>Workbook Sheets</h3>
-              <p>{uploadValidation.sheetNames.length > 0 ? uploadValidation.sheetNames.join(", ") : "Workbook sheets unavailable."}</p>
-            </article>
-            <article className="admin-question-validation-card">
-              <h3>Archive Structure</h3>
-              <p>{uploadValidation.nestedFolderEntries.length === 0 ? "ZIP root is flat." : `${uploadValidation.nestedFolderEntries.length} nested entries rejected.`}</p>
-            </article>
-            <article className="admin-question-validation-card">
-              <h3>Image Assets</h3>
-              <p>{uploadValidation.imageAssetCount} ZIP root asset files available for workbook references.</p>
-            </article>
+          <div className="admin-question-results-layout">
+            <div className="admin-question-results-stack">
+              <article className="admin-question-validation-card">
+                <h3>
+                  {uploadValidation.errors.length > 0 || uploadValidation.rowErrors.length > 0 || (uploadValidation.serverValidation?.summary.invalid ?? 0) > 0 ?
+                    "Validation found issues" :
+                  uploadValidation.serverValidation?.committed ?
+                    "Upload successful" :
+                    "Validation successful"}
+                </h3>
+                <p>
+                  {uploadValidation.totalRows} question row{uploadValidation.totalRows === 1 ? "" : "s"} checked for{" "}
+                  {formatExamTypeLabel(selectedExamLabel)} {sampleWorkbookProfile.subjectLabel}.
+                </p>
+                <small>
+                  {uploadValidation.errors.length > 0 || uploadValidation.rowErrors.length > 0 || (uploadValidation.serverValidation?.summary.invalid ?? 0) > 0 ?
+                    "Review the issues below, correct the workbook or ZIP package, and upload it again." :
+                  uploadValidation.serverValidation?.committed ?
+                    "Your package has been uploaded successfully." :
+                    "Everything needed for upload is in place. You can continue with Final Upload."}
+                </small>
+                <ul className="admin-question-validation-list">
+                  <li>
+                    Workbook sheets found:{" "}
+                    {uploadValidation.sheetNames.length > 0 ? uploadValidation.sheetNames.join(", ") : "not available"}
+                  </li>
+                  <li>
+                    ZIP structure:{" "}
+                    {uploadValidation.nestedFolderEntries.length === 0 ?
+                      "flat and ready" :
+                      `${uploadValidation.nestedFolderEntries.length} nested item${uploadValidation.nestedFolderEntries.length === 1 ? "" : "s"} need attention`}
+                  </li>
+                  <li>Image files found at ZIP root: {uploadValidation.imageAssetCount}</li>
+                </ul>
+              </article>
+
+              {uploadValidation.serverValidation ? (
+                <div className="admin-question-validation-block">
+                  <h3>System Check</h3>
+                  <ul className="admin-question-validation-list">
+                    <li>{uploadValidation.serverValidation.summary.received} rows checked against the system.</li>
+                    <li>{uploadValidation.serverValidation.summary.valid} rows are ready.</li>
+                    <li>{uploadValidation.serverValidation.summary.invalid} rows need correction.</li>
+                    <li>{uploadValidation.serverValidation.summary.warnings} warnings were returned.</li>
+                  </ul>
+                </div>
+              ) : null}
+
+              {uploadValidation.errors.length > 0 ? (
+                <div className="admin-question-validation-block">
+                  <h3>Package-Level Errors</h3>
+                  <ul className="admin-question-validation-list">
+                    {uploadValidation.errors.map((error) => (
+                      <li key={error}>{error}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {uploadValidation.nestedFolderEntries.length > 0 ? (
+                <div className="admin-question-validation-block">
+                  <h3>Rejected Nested Entries</h3>
+                  <ul className="admin-question-validation-list">
+                    {uploadValidation.nestedFolderEntries.map((entryName) => (
+                      <li key={entryName}>{entryName}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              <div className="admin-question-validation-block">
+                <div className="admin-question-validation-actions">
+                  <button type="button" onClick={clearUploadValidation}>
+                    Clear Validation
+                  </button>
+                  {!hasBlockingValidationIssues && !uploadValidation.serverValidation?.committed ? (
+                    <button type="button" onClick={() => void handleFinalUpload()} disabled={isFinalUploading}>
+                      {isFinalUploading ? "Uploading..." : "Final Upload"}
+                    </button>
+                  ) : null}
+                  <button type="button" onClick={downloadRowErrorsCsv} disabled={uploadValidation.rowErrors.length === 0}>
+                    Download Row Errors CSV
+                  </button>
+                </div>
+
+                <p className="admin-tests-inline-note">
+                  {hasBlockingValidationIssues ?
+                    "If validation finds errors, download the error report, correct the workbook or ZIP contents, and upload the package again." :
+                  uploadValidation.serverValidation?.committed ?
+                    "The package is already uploaded. You can clear this validation and start the next package when ready." :
+                    "Validation passed. Use Final Upload to add the questions to the system."}
+                </p>
+              </div>
+
+              <UiTable
+                caption="Question upload row-level validation"
+                columns={[
+                  { id: "row", header: "Row", render: (row) => row.rowNumber },
+                  { id: "uniqueKey", header: "UniqueKey", render: (row) => row.uniqueKey || "Missing" },
+                  { id: "errors", header: "Errors", render: (row) => row.errors.join(" ") },
+                ]}
+                rows={uploadValidation.rowErrors}
+                rowKey={(row) => `${row.rowNumber}-${row.uniqueKey || "missing"}`}
+                emptyStateText="No row-level schema or image-reference errors were found."
+              />
+
+              {uploadValidation.serverValidation ? (
+                <UiTable
+                  caption="Question upload backend validate-only results"
+                  columns={[
+                    { id: "row", header: "Row", render: (row) => row.rowNumber },
+                    { id: "uniqueKey", header: "UniqueKey", render: (row) => row.uniqueKey ?? "Missing" },
+                    { id: "action", header: "Action", render: (row) => row.action },
+                    { id: "errors", header: "Errors", render: (row) => row.errors.join(" ") || "None" },
+                    { id: "warnings", header: "Warnings", render: (row) => row.warnings.join(" ") || "None" },
+                  ]}
+                  rows={uploadValidation.serverValidation.rows}
+                  rowKey={(row) => `${row.rowNumber}-${row.questionId ?? row.uniqueKey ?? "pending"}`}
+                  emptyStateText="No backend validate-only results were returned."
+                />
+              ) : null}
+            </div>
+
+            {renderDistributionPreview(uploadValidation)}
           </div>
-
-          {renderDistributionPreview(uploadValidation)}
-
-          {uploadValidation.serverValidation ? (
-            <div className="admin-question-validation-block">
-              <h3>Live Validate-Only Ingestion</h3>
-              <ul className="admin-question-validation-list">
-                <li>{uploadValidation.serverValidation.summary.received} rows submitted to `POST /admin/questions/bulk`.</li>
-                <li>{uploadValidation.serverValidation.summary.valid} rows passed backend ingestion validation.</li>
-                <li>{uploadValidation.serverValidation.summary.invalid} rows were rejected by backend duplicate/schema checks.</li>
-                <li>{uploadValidation.serverValidation.summary.warnings} backend warnings returned.</li>
-              </ul>
-            </div>
-          ) : null}
-
-          {uploadValidation.errors.length > 0 ? (
-            <div className="admin-question-validation-block">
-              <h3>Package-Level Errors</h3>
-              <ul className="admin-question-validation-list">
-                {uploadValidation.errors.map((error) => (
-                  <li key={error}>{error}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-
-          {uploadValidation.nestedFolderEntries.length > 0 ? (
-            <div className="admin-question-validation-block">
-              <h3>Rejected Nested Entries</h3>
-              <ul className="admin-question-validation-list">
-                {uploadValidation.nestedFolderEntries.map((entryName) => (
-                  <li key={entryName}>{entryName}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-
-          <div className="admin-question-validation-actions">
-            <button type="button" onClick={clearUploadValidation}>
-              Clear Validation
-            </button>
-            <button type="button" onClick={downloadRowErrorsCsv} disabled={uploadValidation.rowErrors.length === 0}>
-              Download Row Errors CSV
-            </button>
-          </div>
-
-          <UiTable
-            caption="Question upload row-level validation"
-            columns={[
-              { id: "row", header: "Row", render: (row) => row.rowNumber },
-              { id: "uniqueKey", header: "UniqueKey", render: (row) => row.uniqueKey || "Missing" },
-              { id: "errors", header: "Errors", render: (row) => row.errors.join(" ") },
-            ]}
-            rows={uploadValidation.rowErrors}
-            rowKey={(row) => `${row.rowNumber}-${row.uniqueKey || "missing"}`}
-            emptyStateText="No row-level schema or image-reference errors were found."
-          />
-
-          {uploadValidation.serverValidation ? (
-            <UiTable
-              caption="Question upload backend validate-only results"
-              columns={[
-                { id: "row", header: "Row", render: (row) => row.rowNumber },
-                { id: "uniqueKey", header: "UniqueKey", render: (row) => row.uniqueKey ?? "Missing" },
-                { id: "action", header: "Action", render: (row) => row.action },
-                { id: "errors", header: "Errors", render: (row) => row.errors.join(" ") || "None" },
-                { id: "warnings", header: "Warnings", render: (row) => row.warnings.join(" ") || "None" },
-              ]}
-              rows={uploadValidation.serverValidation.rows}
-              rowKey={(row) => `${row.rowNumber}-${row.questionId ?? row.uniqueKey ?? "pending"}`}
-              emptyStateText="No backend validate-only results were returned."
-            />
-          ) : null}
         </section>
       ) : null}
-      {uploadLogs.length > 0 ? (
+      <section className="admin-content-card" aria-labelledby="admin-question-upload-history-title">
+        <div className="admin-section-header">
+          <div>
+            <p className="admin-eyebrow">Previous Uploads</p>
+            <h2 id="admin-question-upload-history-title">Validation And Upload History</h2>
+          </div>
+          <p className="admin-section-copy">
+            Review earlier question package uploads, see how many rows were checked, and spot any warnings or blocked
+            validations before the next import.
+          </p>
+        </div>
         <UiTable
-          caption="Question upload logs from this workspace session"
+          caption="Previous question package uploads and validation history"
           columns={[
             { id: "id", header: "Upload ID", render: (log) => log.id },
             { id: "uploadedBy", header: "Uploaded By", render: (log) => log.uploadedBy },
             { id: "timestamp", header: "Date", render: (log) => formatIsoDate(log.timestamp) },
-            { id: "totalRows", header: "Rows", render: (log) => log.totalRows },
+            { id: "totalRows", header: "Rows Checked", render: (log) => log.totalRows },
+            { id: "created", header: "Created", render: (log) => log.created },
             { id: "issues", header: "Errors / Warnings", render: (log) => `${log.errors} / ${log.warnings}` },
-            { id: "versionCreated", header: "Version", render: (log) => log.versionCreated },
+            { id: "versionCreated", header: "Versions", render: (log) => log.versionCreated },
+            {
+              id: "status",
+              header: "Status",
+              render: (log) => (log.errors > 0 ? "Needs review" : log.warnings > 0 ? "Warnings" : "Clear"),
+            },
           ]}
           rows={uploadLogs}
           rowKey={(row) => row.id}
           emptyStateText="No package uploads yet."
         />
-      ) : null}
+      </section>
     </section>
   );
 }

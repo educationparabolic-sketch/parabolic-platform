@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
-import { useAuthProvider } from "../../../../../shared/services/authProvider";
-import { resolveAdminAccessContext } from "../../portals/adminAccess";
 import AdminWorkspaceLandingPage from "../shared/AdminWorkspaceLandingPage";
 import { QUESTION_BANK } from "./testTemplateFixtures";
 
@@ -19,40 +17,28 @@ interface QuestionBankLandingSummary {
 
 const QUESTION_BANK_WORKSPACES = [
   {
-    title: "Upload Package",
+    title: "Bulk Upload",
     to: "/admin/question-bank/upload-package",
-    description: "Structured ZIP intake, workbook validation, and pre-import package checks.",
-    meta: "Workbook and asset intake workflow",
-  },
-  {
-    title: "Validation Logs",
-    to: "/admin/question-bank/validation-logs",
-    description: "Immutable upload-log review for row errors, warnings, and version history.",
-    meta: "Audit-safe validation history",
+    description: "Upload a workbook package, validate the rows, and review import issues in one guided flow.",
+    meta: "Workbook and asset intake",
   },
   {
     title: "Question Library",
     to: "/admin/question-bank/library",
-    description: "Indexed question metadata, usage visibility, and structural lock review.",
-    meta: "Search and lifecycle visibility",
+    description: "Search questions, review usage, manage versions, and update allowed metadata safely.",
+    meta: "Search, review, and upkeep",
   },
   {
-    title: "Distribution Overview",
+    title: "Overall Distribution Overview",
     to: "/admin/question-bank/distribution",
-    description: "Difficulty, chapter, marks, and imbalance analytics from question summaries.",
+    description: "Review coverage, difficulty balance, and chapter distribution across the full question bank.",
     meta: "Coverage and balance review",
   },
   {
     title: "Tag Management",
     to: "/admin/question-bank/tags",
-    description: "Create, rename, merge, and deprecate governed tags with template safety rules.",
-    meta: "Governed taxonomy controls",
-  },
-  {
-    title: "Archive / Versions",
-    to: "/admin/question-bank/archive",
-    description: "Thermal-state lifecycle and version-safe historical question management.",
-    meta: "Historical and version-safe review",
+    description: "Create, rename, merge, and retire tags used across the question bank.",
+    meta: "Question taxonomy controls",
   },
 ] as const;
 
@@ -187,8 +173,6 @@ async function fetchQuestionBankLandingSummary(): Promise<QuestionBankLandingSum
 }
 
 function AdminQuestionBankLandingPage() {
-  const { session } = useAuthProvider();
-  const accessContext = resolveAdminAccessContext(session);
   const [summary, setSummary] = useState<QuestionBankLandingSummary>(FALLBACK_SUMMARY);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
 
@@ -198,7 +182,7 @@ function AdminQuestionBankLandingPage() {
     async function hydrate(): Promise<void> {
       if (!shouldUseLiveApi()) {
         setSummary(FALLBACK_SUMMARY);
-        setInlineMessage("Local mode detected. Loaded deterministic question bank landing fixtures.");
+        setInlineMessage("Question bank workspaces are ready.");
         return;
       }
 
@@ -209,9 +193,7 @@ function AdminQuestionBankLandingPage() {
         }
 
         setSummary(nextSummary);
-        setInlineMessage(
-          "Live mode enabled: question bank landing hydrated from GET /admin/questions/library, GET /admin/questions/distribution, and GET /admin/questions/upload-logs.",
-        );
+        setInlineMessage("Question bank workspaces are ready.");
       } catch (error) {
         if (!isActive) {
           return;
@@ -220,7 +202,7 @@ function AdminQuestionBankLandingPage() {
         const reason =
           error instanceof ApiClientError ? error.message : "Failed to load question bank landing summary.";
         setSummary(FALLBACK_SUMMARY);
-        setInlineMessage(`${reason} Falling back to deterministic question bank landing fixtures.`);
+        setInlineMessage(reason);
       }
     }
 
@@ -236,22 +218,22 @@ function AdminQuestionBankLandingPage() {
       {
         label: "Tracked Questions",
         value: String(summary.totalQuestions),
-        detail: `${summary.usedQuestions} already linked to assigned-template history`,
+        detail: `${summary.usedQuestions} already used in delivered work`,
       },
       {
-        label: "Governed Tags",
+        label: "Active Tags",
         value: String(summary.activeTags),
-        detail: "derived from persisted primary and secondary tag usage",
+        detail: "currently in use across the question bank",
       },
       {
         label: "Imbalance Warnings",
         value: String(summary.imbalanceWarnings),
-        detail: "questionAnalytics summary signals needing coverage follow-up",
+        detail: "areas that may need coverage review",
       },
       {
         label: "Latest Upload",
         value: formatIsoDate(summary.latestUploadDate),
-        detail: `${summary.latestUploadRows} rows in the most recent retained package`,
+        detail: `${summary.latestUploadRows} rows in the latest package`,
       },
     ],
     [summary],
@@ -259,13 +241,13 @@ function AdminQuestionBankLandingPage() {
 
   return (
     <AdminWorkspaceLandingPage
-      eyebrow="Question Bank Workspace"
-      title="Dedicated Question Bank Landing Workspace"
+      eyebrow="Question Bank"
+      title="Question Bank"
       description={[
-        "This route turns /admin/question-bank into a dedicated workspace index instead of a single merged page.",
-        "Each workflow maps directly to the source-of-truth navigation structure for package intake, validation history, library review, distribution analysis, tag governance, and archive/version handling.",
+        "Choose the question bank workspace you want to open.",
+        "Use bulk upload for intake, question library for question-level work, tags for taxonomy, and distribution overview for overall balance review.",
       ]}
-      note={`Role: ${accessContext.role ?? "unknown"}. Current layer: ${accessContext.licenseLayer ?? "unlicensed"}. ${inlineMessage ?? "Question bank landing summary ready."}`}
+      note={inlineMessage ?? "Question bank workspaces are ready."}
       stats={stats}
       links={QUESTION_BANK_WORKSPACES.map((workspace) => ({ ...workspace }))}
     />
