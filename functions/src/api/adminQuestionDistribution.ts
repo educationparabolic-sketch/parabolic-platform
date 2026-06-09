@@ -80,6 +80,7 @@ export const createAdminQuestionDistributionHandler = (
         const identity = request.context.identity;
         const validatedRequest =
           adminQuestionDistributionService.normalizeRequest({
+            examType: request.query.examType,
             instituteId: identity?.instituteId,
             limit: request.query.limit,
           });

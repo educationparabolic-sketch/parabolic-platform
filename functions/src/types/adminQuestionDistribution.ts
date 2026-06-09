@@ -33,6 +33,7 @@ export interface AdminQuestionDistributionResult {
 }
 
 export interface AdminQuestionDistributionValidatedRequest {
+  examType: string | null;
   instituteId: string;
   limit: number;
 }

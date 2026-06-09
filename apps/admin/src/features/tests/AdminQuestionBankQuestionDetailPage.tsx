@@ -203,6 +203,18 @@ function deriveQuestionTemplateUsage(question: QuestionBankRecord): QuestionTemp
   });
 }
 
+function renderOptionalExternalLink(url: string, label: string) {
+  if (!url.trim()) {
+    return "Not added";
+  }
+
+  return (
+    <a className="admin-question-library-resource-link" href={url} target="_blank" rel="noreferrer">
+      {label}
+    </a>
+  );
+}
+
 function toPreviewImageSrc(fileName: string, assetType: "question" | "solution"): string {
   if (/^(https?:\/\/|\/|data:)/i.test(fileName)) {
     return fileName;
@@ -408,7 +420,10 @@ function AdminQuestionBankQuestionDetailPage() {
             <div>
               <p className="admin-content-eyebrow">View Question</p>
               <h3 id="admin-question-library-detail-title">{selectedQuestion.id}</h3>
-              <p>{selectedQuestion.prompt}</p>
+              <p>
+                Review the question setup, linked assets, current usage, and question-level analytics from one compact
+                workspace.
+              </p>
               <div className="admin-question-library-detail-badges">
                 <span>{selectedQuestion.examType}</span>
                 <span>{selectedQuestion.subject}</span>
@@ -418,6 +433,31 @@ function AdminQuestionBankQuestionDetailPage() {
                 <span>{selectedQuestion.usedCount > 0 ? "Locked" : "Open"}</span>
               </div>
             </div>
+          </div>
+
+          <div className="admin-question-library-overview-strip">
+            <article className="admin-question-library-overview-card">
+              <p>Unique Key</p>
+              <strong>{selectedQuestion.uniqueKey}</strong>
+              <small>Canonical library identifier</small>
+            </article>
+            <article className="admin-question-library-overview-card">
+              <p>Marking</p>
+              <strong>
+                {selectedQuestion.marks} / -{selectedQuestion.negativeMarks}
+              </strong>
+              <small>{selectedQuestion.questionType}</small>
+            </article>
+            <article className="admin-question-library-overview-card">
+              <p>Usage</p>
+              <strong>{selectedQuestion.usedCount > 0 ? `${selectedQuestion.usedCount} runs` : "Not used yet"}</strong>
+              <small>{selectedQuestion.lastUsedDate ? `Last used ${selectedQuestion.lastUsedDate}` : "No assigned-run usage yet"}</small>
+            </article>
+            <article className="admin-question-library-overview-card">
+              <p>Support</p>
+              <strong>{selectedQuestion.topic || "Topic not added"}</strong>
+              <small>{selectedQuestion.primaryTag} • {selectedQuestion.secondaryTag}</small>
+            </article>
           </div>
 
           <div className="admin-question-library-detail-grid">
@@ -435,13 +475,14 @@ function AdminQuestionBankQuestionDetailPage() {
                 <div><dt>Marks</dt><dd>{selectedQuestion.marks} / -{selectedQuestion.negativeMarks}</dd></div>
                 <div><dt>Academic Year</dt><dd>{selectedQuestion.academicYear}</dd></div>
                 <div><dt>Use</dt><dd>{selectedQuestion.usedCount > 0 ? `${selectedQuestion.usedCount} assigned runs` : "Not used yet"}</dd></div>
+                <div><dt>Correct Answer</dt><dd>{selectedQuestion.correctAnswer || "Not added"}</dd></div>
               </dl>
             </article>
 
             <article className="admin-question-library-panel">
-              <h4>Images And Metadata</h4>
+              <h4>Assets And Support Links</h4>
               <p className="admin-question-library-panel-copy">
-                Review linked assets, answer details, topic labels, and support material.
+                Open the linked images, tutorial support, and simulation resources directly from here.
               </p>
               <dl className="admin-question-library-definition-list">
                 <div>
@@ -476,13 +517,22 @@ function AdminQuestionBankQuestionDetailPage() {
                     )}
                   </dd>
                 </div>
-                <div><dt>Correct Answer</dt><dd>{selectedQuestion.correctAnswer || "Not added"}</dd></div>
+                <div><dt>Tutorial Link</dt><dd>{renderOptionalExternalLink(selectedQuestion.tutorialVideoLink, "Open tutorial")}</dd></div>
+                <div><dt>Simulation Link</dt><dd>{renderOptionalExternalLink(selectedQuestion.simulationLink, "Open simulation")}</dd></div>
+              </dl>
+            </article>
+
+            <article className="admin-question-library-panel">
+              <h4>Tags And Teaching Notes</h4>
+              <p className="admin-question-library-panel-copy">
+                Topic tags and faculty notes that help decide where and how this question should be used.
+              </p>
+              <dl className="admin-question-library-definition-list">
                 <div><dt>Primary Tag</dt><dd>{selectedQuestion.primaryTag}</dd></div>
                 <div><dt>Secondary Tag</dt><dd>{selectedQuestion.secondaryTag}</dd></div>
                 <div><dt>Additional Tag</dt><dd>{selectedQuestion.additionalTag}</dd></div>
                 <div><dt>Topic</dt><dd>{selectedQuestion.topic || "Not added"}</dd></div>
-                <div><dt>Tutorial Link</dt><dd>{selectedQuestion.tutorialVideoLink || "Not added"}</dd></div>
-                <div><dt>Simulation Link</dt><dd>{selectedQuestion.simulationLink || "Not added"}</dd></div>
+                <div><dt>Internal Notes</dt><dd>{selectedQuestion.internalNotes || "Not added"}</dd></div>
               </dl>
             </article>
 

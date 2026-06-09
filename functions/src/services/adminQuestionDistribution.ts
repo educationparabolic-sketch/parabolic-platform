@@ -13,6 +13,7 @@ const QUESTION_ANALYTICS_COLLECTION = "questionAnalytics";
 const QUESTION_BANK_COLLECTION = "questionBank";
 const DEFAULT_LIMIT = 8;
 const MAX_LIMIT = 20;
+const ALL_EXAM_SCOPE = "all";
 
 type DifficultyBand = "Easy" | "Medium" | "Hard";
 
@@ -72,6 +73,26 @@ function normalizeLimit(value: unknown): number {
   }
 
   return Math.min(parsedValue, MAX_LIMIT);
+}
+
+function normalizeExamTypeFilter(value: unknown): string | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    throw new AdminQuestionDistributionValidationError(
+      "VALIDATION_ERROR",
+      "Field \"examType\" must be a non-empty string when provided.",
+    );
+  }
+
+  const normalized = value.trim();
+  if (normalized.length === 0 || normalized.toLowerCase() === ALL_EXAM_SCOPE) {
+    return null;
+  }
+
+  return normalized;
 }
 
 function toNonEmptyString(value: unknown, fallback: string): string {
@@ -230,10 +251,12 @@ export class AdminQuestionDistributionService {
   ) {}
 
   public normalizeRequest(input: {
+    examType?: unknown;
     instituteId?: unknown;
     limit?: unknown;
   }): AdminQuestionDistributionValidatedRequest {
     return {
+      examType: normalizeExamTypeFilter(input.examType),
       instituteId: normalizeRequiredString(input.instituteId, "instituteId"),
       limit: normalizeLimit(input.limit),
     };
@@ -273,12 +296,16 @@ export class AdminQuestionDistributionService {
         return;
       }
 
+      const examType = toNonEmptyString(data.examType, "General");
+      if (request.examType !== null && examType !== request.examType) {
+        return;
+      }
+
       retainedQuestionDocs.push({
         data,
         id: document.id,
       });
 
-      const examType = toNonEmptyString(data.examType, "General");
       examTypes.add(examType);
 
       const subject = toNonEmptyString(data.subject, "General");

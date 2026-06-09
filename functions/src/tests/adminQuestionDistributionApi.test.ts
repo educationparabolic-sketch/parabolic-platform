@@ -40,6 +40,7 @@ const assertStructuredError = (
 test("admin question distribution handler accepts read requests", async () => {
   const handler = createAdminQuestionDistributionHandler({
     getDistributionSummary: async (request) => {
+      assert.equal(request.examType, "NEET");
       assert.equal(request.instituteId, "inst_build_m5_api");
       assert.equal(request.limit, 6);
 
@@ -67,6 +68,7 @@ test("admin question distribution handler accepts read requests", async () => {
       method: "GET",
       path: "/admin/questions/distribution",
       query: {
+        examType: "NEET",
         limit: "6",
       },
     }) as never,

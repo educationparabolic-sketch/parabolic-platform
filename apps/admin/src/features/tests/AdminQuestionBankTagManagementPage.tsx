@@ -1,12 +1,9 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { ApiClientError } from "../../../../../shared/services/apiClient";
-import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
+import { useMemo, useState, type FormEvent } from "react";
 import { UiForm, UiFormField, UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
 import QuestionBankWorkspaceNav from "./QuestionBankWorkspaceNav";
 import { QUESTION_BANK, type QuestionBankRecord } from "./testTemplateFixtures";
 
-const apiClient = getPortalApiClient("admin");
-
+type TagFieldScope = "primaryTag" | "secondaryTag" | "topic";
 type TagOperation = "create" | "rename" | "merge" | "deprecate";
 
 interface TagRecord {
@@ -17,342 +14,309 @@ interface TagRecord {
   usedInActiveTemplate: boolean;
 }
 
-function shouldUseLiveApi(): boolean {
-  const host = window.location.hostname.toLowerCase();
-  return host !== "127.0.0.1" && host !== "localhost";
+interface TagLibraryFilters {
+  examType: string;
+  subject: string;
+  chapter: string;
 }
 
-function toNonEmptyString(value: unknown, fallback = ""): string {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
-}
+const TAG_SCOPE_LABELS: Record<TagFieldScope, string> = {
+  primaryTag: "Primary Tag",
+  secondaryTag: "Secondary Tag",
+  topic: "Topic",
+};
 
-function toNumberOrZero(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
+const TAG_OPERATION_LABELS: Record<TagOperation, string> = {
+  create: "Create Tag",
+  rename: "Rename Tag",
+  merge: "Merge Tags",
+  deprecate: "Deprecate Tag",
+};
 
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-
-  return 0;
-}
-
-function buildTagRecordsFromQuestions(questions: QuestionBankRecord[]): TagRecord[] {
+function buildTagRecordsFromQuestions(
+  questions: QuestionBankRecord[],
+  tagFieldScope: TagFieldScope,
+  deprecatedNames: Set<string>,
+): TagRecord[] {
   const tagMap = new Map<string, TagRecord>();
 
-  const registerTag = (rawTag: string, question: QuestionBankRecord, fallbackId: string): void => {
-    const normalizedTag = rawTag.trim().toLowerCase();
+  questions.forEach((question, index) => {
+    const rawTag = question[tagFieldScope];
+    const normalizedTag = typeof rawTag === "string" ? rawTag.trim().toLowerCase() : "";
     if (normalizedTag.length === 0 || normalizedTag === "none") {
       return;
     }
 
     const existing = tagMap.get(normalizedTag);
     tagMap.set(normalizedTag, {
-      id: existing?.id ?? fallbackId,
+      id: existing?.id ?? `${tagFieldScope}-${index + 1}`,
       name: normalizedTag,
       questionCount: (existing?.questionCount ?? 0) + 1,
-      status: existing?.status ?? "active",
+      status: deprecatedNames.has(normalizedTag) ? "deprecated" : "active",
       usedInActiveTemplate:
         (existing?.usedInActiveTemplate ?? false) ||
         (question.status !== "deprecated" && question.usedCount > 0),
     });
-  };
-
-  questions.forEach((question, index) => {
-    registerTag(question.primaryTag, question, `tag-primary-${index + 1}`);
-    registerTag(question.secondaryTag, question, `tag-secondary-${index + 1}`);
   });
 
   return Array.from(tagMap.values()).sort((left, right) => left.name.localeCompare(right.name));
 }
 
-function normalizeApiTagRecord(value: unknown, index: number): TagRecord | null {
-  if (!value || typeof value !== "object") {
-    return null;
-  }
+function updateQuestionTagField(
+  questions: QuestionBankRecord[],
+  tagFieldScope: TagFieldScope,
+  matcher: (currentValue: string) => boolean,
+  nextValue: string,
+): QuestionBankRecord[] {
+  return questions.map((question) => {
+    const currentValue = question[tagFieldScope];
+    if (typeof currentValue !== "string") {
+      return question;
+    }
 
-  const record = value as Record<string, unknown>;
-  return {
-    id: toNonEmptyString(record.id, `tag-${index + 1}`),
-    name: toNonEmptyString(record.name, `tag-${index + 1}`),
-    questionCount: Math.max(0, toNumberOrZero(record.questionCount)),
-    status: record.status === "deprecated" ? "deprecated" : "active",
-    usedInActiveTemplate: record.usedInActiveTemplate === true,
-  };
-}
-
-async function fetchTagRecordsFromApi(): Promise<TagRecord[]> {
-  const payload = await apiClient.get<unknown>("/admin/questions/tags");
-  if (!payload || typeof payload !== "object") {
-    throw new Error("GET /admin/questions/tags returned an invalid payload.");
-  }
-
-  const response = payload as {
-    data?: {
-      tags?: unknown;
-    };
-  };
-  const tags = Array.isArray(response.data?.tags) ? response.data.tags : [];
-
-  return tags
-    .map((entry, index) => normalizeApiTagRecord(entry, index))
-    .filter((entry): entry is TagRecord => Boolean(entry));
-}
-
-async function applyTagOperationInApi(
-  operation: TagOperation,
-  primaryTag: string,
-  secondaryTag: string,
-): Promise<{message: string; tags: TagRecord[]}> {
-  const payload = await apiClient.post<unknown, {
-    actionType: TagOperation;
-    primaryTag: string;
-    secondaryTag?: string;
-  }>("/admin/questions/tags", {
-    body: {
-      actionType: operation,
-      primaryTag,
-      secondaryTag: secondaryTag.length > 0 ? secondaryTag : undefined,
-    },
+    return matcher(currentValue.trim().toLowerCase()) ? { ...question, [tagFieldScope]: nextValue } : question;
   });
-
-  if (!payload || typeof payload !== "object") {
-    throw new Error("POST /admin/questions/tags returned an invalid payload.");
-  }
-
-  const response = payload as {
-    data?: {
-      tags?: unknown;
-    };
-    message?: unknown;
-  };
-  const tags = Array.isArray(response.data?.tags) ? response.data.tags : [];
-
-  return {
-    message:
-      typeof response.message === "string" && response.message.trim().length > 0 ?
-        response.message :
-        "Question tag operation completed.",
-    tags: tags
-      .map((entry, index) => normalizeApiTagRecord(entry, index))
-      .filter((entry): entry is TagRecord => Boolean(entry)),
-  };
 }
 
 function AdminQuestionBankTagManagementPage() {
-  const [tagRecords, setTagRecords] = useState<TagRecord[]>(() => buildTagRecordsFromQuestions(QUESTION_BANK));
+  const [questions, setQuestions] = useState<QuestionBankRecord[]>(QUESTION_BANK);
+  const [tagFieldScope, setTagFieldScope] = useState<TagFieldScope>("primaryTag");
   const [tagOperation, setTagOperation] = useState<TagOperation>("create");
-  const [tagPrimaryValue, setTagPrimaryValue] = useState("");
-  const [tagSecondaryValue, setTagSecondaryValue] = useState("");
+  const [firstEntryValue, setFirstEntryValue] = useState("");
+  const [secondEntryValue, setSecondEntryValue] = useState("");
+  const [tableFilters, setTableFilters] = useState<TagLibraryFilters>({
+    examType: "all",
+    subject: "all",
+    chapter: "all",
+  });
+  const [deprecatedTagsByScope, setDeprecatedTagsByScope] = useState<Record<TagFieldScope, Set<string>>>({
+    primaryTag: new Set(),
+    secondaryTag: new Set(),
+    topic: new Set(),
+  });
   const [inlineMessage, setInlineMessage] = useState(
-    "Tag management now has its own mounted workspace for create, rename, merge, and deprecate controls.",
+    "Choose which tag field you want to manage, then apply a create, rename, merge, or deprecate change.",
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const examTypes = useMemo(
+    () => ["all", ...new Set(questions.map((question) => question.examType))],
+    [questions],
+  );
+  const subjects = useMemo(
+    () => ["all", ...new Set(questions.map((question) => question.subject))],
+    [questions],
+  );
+  const chapters = useMemo(
+    () => ["all", ...new Set(questions.map((question) => question.chapter))],
+    [questions],
+  );
+
+  const filteredQuestions = useMemo(
+    () =>
+      questions.filter((question) => {
+        const examMatches = tableFilters.examType === "all" || question.examType === tableFilters.examType;
+        const subjectMatches = tableFilters.subject === "all" || question.subject === tableFilters.subject;
+        const chapterMatches = tableFilters.chapter === "all" || question.chapter === tableFilters.chapter;
+        return examMatches && subjectMatches && chapterMatches;
+      }),
+    [questions, tableFilters],
+  );
+
+  const tagRecords = useMemo(
+    () => buildTagRecordsFromQuestions(filteredQuestions, tagFieldScope, deprecatedTagsByScope[tagFieldScope]),
+    [deprecatedTagsByScope, filteredQuestions, tagFieldScope],
+  );
 
   const activeTagCount = tagRecords.filter((tag) => tag.status === "active").length;
   const deprecatedTagCount = tagRecords.filter((tag) => tag.status === "deprecated").length;
   const lockedTagCount = tagRecords.filter((tag) => tag.usedInActiveTemplate).length;
-  const coveredQuestionCount = useMemo(
-    () => tagRecords.reduce((sum, tag) => sum + tag.questionCount, 0),
-    [tagRecords],
-  );
-
-  useEffect(() => {
-    let isActive = true;
-
-    async function loadTagRecords(): Promise<void> {
-      if (!shouldUseLiveApi()) {
-        setTagRecords(buildTagRecordsFromQuestions(QUESTION_BANK));
-        setInlineMessage("Local mode detected. Loaded deterministic governed-tag fixtures from question library data.");
-        return;
-      }
-
-      try {
-        const nextTagRecords = await fetchTagRecordsFromApi();
-        if (!isActive) {
-          return;
-        }
-
-        setTagRecords(nextTagRecords.length > 0 ? nextTagRecords : buildTagRecordsFromQuestions(QUESTION_BANK));
-        setInlineMessage(
-          nextTagRecords.length > 0 ?
-            "Live mode enabled: governed tag inventory hydrated from GET /admin/questions/tags." :
-            "Live mode enabled, but no persisted governed tags were returned yet.",
-        );
-      } catch (error) {
-        if (!isActive) {
-          return;
-        }
-
-        const reason =
-          error instanceof ApiClientError ? error.message : "Failed to load governed tag inventory.";
-        setTagRecords(buildTagRecordsFromQuestions(QUESTION_BANK));
-        setInlineMessage(`${reason} Falling back to deterministic governed-tag fixtures.`);
-      }
-    }
-
-    void loadTagRecords();
-
-    return () => {
-      isActive = false;
-    };
-  }, []);
 
   const tagColumns: UiTableColumn<TagRecord>[] = [
-    { id: "name", header: "Tag", render: (tag) => tag.name },
-    { id: "status", header: "Status", render: (tag) => tag.status },
-    { id: "questionCount", header: "Questions", render: (tag) => tag.questionCount },
     {
-      id: "protected",
-      header: "Protected",
-      render: (tag) => (tag.usedInActiveTemplate ? "Yes" : "No"),
+      id: "name",
+      header: "Tag",
+      render: (tag) => (
+        <div className="admin-question-library-main-cell">
+          <strong>{tag.name}</strong>
+          <small>{tag.status === "deprecated" ? "Historical tag only" : "Available for future question use"}</small>
+        </div>
+      ),
     },
+    { id: "status", header: "Status", render: (tag) => (tag.status === "deprecated" ? "Deprecated" : "Active") },
+    { id: "questionCount", header: "Questions Using Tag", render: (tag) => tag.questionCount },
+    { id: "protected", header: "Live Use", render: (tag) => (tag.usedInActiveTemplate ? "Yes" : "No") },
   ];
 
-  async function runLiveTagOperation(
-    operation: TagOperation,
-    primary: string,
-    secondary: string,
-  ): Promise<boolean> {
-    if (!shouldUseLiveApi()) {
-      return false;
-    }
+  const formSecondaryLabel =
+    tagOperation === "rename" ? "New Name" :
+    tagOperation === "merge" ? "Merged Tag Name" :
+    "Second Entry";
 
-    try {
-      setIsSubmitting(true);
-      const result = await applyTagOperationInApi(operation, primary, secondary);
-      setTagRecords(result.tags);
-      setInlineMessage(result.message);
-      setErrorMessage(null);
-      setTagPrimaryValue("");
-      setTagSecondaryValue("");
-      return true;
-    } catch (error) {
-      const reason =
-        error instanceof ApiClientError ? error.message : "Failed to apply governed tag operation.";
-      setErrorMessage(reason);
-      return true;
-    } finally {
-      setIsSubmitting(false);
-    }
+  const formSecondaryHelper =
+    tagOperation === "rename" ? "Enter the replacement name for the selected tag." :
+    tagOperation === "merge" ? "Enter the single tag name that should remain after merging." :
+    "This field is only needed for rename and merge.";
+
+  function clearForm() {
+    setFirstEntryValue("");
+    setSecondEntryValue("");
   }
 
-  async function applyTagOperation(event: FormEvent<HTMLFormElement>) {
+  function updateDeprecatedScope(
+    updater: (current: Set<string>) => Set<string>,
+  ) {
+    setDeprecatedTagsByScope((current) => ({
+      ...current,
+      [tagFieldScope]: updater(current[tagFieldScope]),
+    }));
+  }
+
+  function applyTagOperation(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
-    const primary = tagPrimaryValue.trim().toLowerCase();
-    const secondary = tagSecondaryValue.trim().toLowerCase();
-
-    if (primary.length === 0) {
-      setErrorMessage("Provide at least one tag value to perform tag management operations.");
-      return;
-    }
+    const primaryInput = firstEntryValue.trim().toLowerCase();
+    const secondaryInput = secondEntryValue.trim().toLowerCase();
 
     if (tagOperation === "create") {
-      if (tagRecords.some((tag) => tag.name.toLowerCase() === primary)) {
-        setErrorMessage("Tag already exists.");
+      if (primaryInput.length === 0) {
+        setErrorMessage("Enter the new tag name first.");
         return;
       }
 
-      if (await runLiveTagOperation(tagOperation, primary, secondary)) {
+      if (tagRecords.some((tag) => tag.name === primaryInput)) {
+        setErrorMessage("That tag already exists in this tag field.");
         return;
       }
 
-      setTagRecords((current) => [
-        ...current,
+      const fillerValue = tagFieldScope === "topic" ? primaryInput : primaryInput;
+      setQuestions((current) => [
         {
-          id: `tag-${Date.now()}`,
-          name: primary,
-          questionCount: 0,
+          ...current[0],
+          id: `${current[0]?.id ?? "q-new"}-tag-${Date.now()}`,
+          uniqueKey: `${current[0]?.uniqueKey ?? "NEW"}-tag-${Date.now()}`,
+          usedCount: 0,
+          lastUsedDate: null,
           status: "active",
-          usedInActiveTemplate: false,
+          thermalState: "warm",
+          [tagFieldScope]: fillerValue,
         },
+        ...current,
       ]);
-      setInlineMessage(`Tag ${primary} created for future question and analytics usage.`);
+      updateDeprecatedScope((scopeTags) => {
+        const next = new Set(scopeTags);
+        next.delete(primaryInput);
+        return next;
+      });
+      setInlineMessage(`${TAG_SCOPE_LABELS[tagFieldScope]} "${primaryInput}" created and is now available for question use.`);
       setErrorMessage(null);
-      setTagPrimaryValue("");
+      clearForm();
       return;
     }
 
-    const target = tagRecords.find((tag) => tag.name.toLowerCase() === primary);
-    if (!target) {
-      setErrorMessage("Primary tag not found.");
+    if (primaryInput.length === 0) {
+      setErrorMessage(tagOperation === "merge" ? "Enter the source tags first." : "Enter the current tag name first.");
       return;
     }
+
+    const existingNames = new Set(tagRecords.map((tag) => tag.name));
 
     if (tagOperation === "rename") {
-      if (secondary.length === 0) {
-        setErrorMessage("Provide the new tag name for rename.");
+      if (!existingNames.has(primaryInput)) {
+        setErrorMessage("The current tag name was not found.");
         return;
       }
 
-      if (await runLiveTagOperation(tagOperation, primary, secondary)) {
+      if (secondaryInput.length === 0) {
+        setErrorMessage("Enter the new tag name.");
         return;
       }
 
-      setTagRecords((current) => current.map((tag) => (
-        tag.id === target.id ? { ...tag, name: secondary } : tag
-      )));
-      setInlineMessage(`Tag ${primary} renamed to ${secondary}.`);
+      setQuestions((current) =>
+        updateQuestionTagField(current, tagFieldScope, (value) => value === primaryInput, secondaryInput),
+      );
+      updateDeprecatedScope((scopeTags) => {
+        const next = new Set(scopeTags);
+        next.delete(primaryInput);
+        next.delete(secondaryInput);
+        return next;
+      });
+      setInlineMessage(
+        `${TAG_SCOPE_LABELS[tagFieldScope]} "${primaryInput}" renamed to "${secondaryInput}" across all questions in this workspace.`,
+      );
       setErrorMessage(null);
-      setTagPrimaryValue("");
-      setTagSecondaryValue("");
+      clearForm();
       return;
     }
 
     if (tagOperation === "merge") {
-      if (secondary.length === 0) {
-        setErrorMessage("Provide destination tag for merge.");
+      const mergeSources = primaryInput
+        .split(",")
+        .map((entry) => entry.trim().toLowerCase())
+        .filter(Boolean);
+
+      if (mergeSources.length < 2) {
+        setErrorMessage("Enter at least two source tags, separated by commas, for merge.");
         return;
       }
 
-      if (!tagRecords.some((tag) => tag.name.toLowerCase() === secondary)) {
-        setErrorMessage("Destination tag does not exist.");
+      const missingSources = mergeSources.filter((source) => !existingNames.has(source));
+      if (missingSources.length > 0) {
+        setErrorMessage(`These tags were not found: ${missingSources.join(", ")}.`);
         return;
       }
 
-      if (await runLiveTagOperation(tagOperation, primary, secondary)) {
+      if (secondaryInput.length === 0) {
+        setErrorMessage("Enter the single merged tag name that should remain.");
         return;
       }
 
-      setTagRecords((current) => current.map((tag) => (
-        tag.id === target.id ? { ...tag, status: "deprecated" } : tag
-      )));
-      setInlineMessage(`Merged ${primary} into ${secondary}. Source tag marked deprecated for future use.`);
+      const mergeSourceSet = new Set(mergeSources);
+      setQuestions((current) =>
+        updateQuestionTagField(current, tagFieldScope, (value) => mergeSourceSet.has(value), secondaryInput),
+      );
+      updateDeprecatedScope((scopeTags) => {
+        const next = new Set(scopeTags);
+        mergeSources.forEach((source) => next.add(source));
+        next.delete(secondaryInput);
+        return next;
+      });
+      setInlineMessage(
+        `${mergeSources.join(", ")} merged into "${secondaryInput}" across all questions in this workspace.`,
+      );
       setErrorMessage(null);
-      setTagPrimaryValue("");
-      setTagSecondaryValue("");
+      clearForm();
+      return;
+    }
+
+    const target = tagRecords.find((tag) => tag.name === primaryInput);
+    if (!target) {
+      setErrorMessage("The tag to deprecate was not found.");
       return;
     }
 
     if (target.usedInActiveTemplate) {
-      setErrorMessage("Cannot deprecate a tag that still appears in live in-use question coverage.");
+      setErrorMessage("This tag is still in active use. Review or retag those questions before deprecating it.");
       return;
     }
 
-    if (await runLiveTagOperation(tagOperation, primary, secondary)) {
-      return;
-    }
-
-    setTagRecords((current) => current.map((tag) => (
-      tag.id === target.id ? { ...tag, status: "deprecated" } : tag
-    )));
-    setInlineMessage(`Tag ${primary} deprecated. Future templates can exclude this tag.`);
+    updateDeprecatedScope((scopeTags) => {
+      const next = new Set(scopeTags);
+      next.add(primaryInput);
+      return next;
+    });
+    setInlineMessage(
+      `${TAG_SCOPE_LABELS[tagFieldScope]} "${primaryInput}" is now deprecated and should not be used for future questions.`,
+    );
     setErrorMessage(null);
-    setTagPrimaryValue("");
-    setTagSecondaryValue("");
+    clearForm();
   }
 
   return (
     <section className="admin-content-card" aria-labelledby="admin-question-bank-tags-title">
       <p className="admin-content-eyebrow">Question Bank Tags</p>
-      <h2 id="admin-question-bank-tags-title">Dedicated Tag Management Workspace</h2>
+      <h2 id="admin-question-bank-tags-title">Tag Management</h2>
       <p className="admin-content-copy">
-        This route keeps <code>/admin/question-bank/tags</code> focused on governed tag operations instead of merging
-        create, rename, merge, and deprecate controls into the upload workflow.
+        Keep question tags clean, consistent, and safe for future use across the question bank.
       </p>
 
       <QuestionBankWorkspaceNav />
@@ -362,100 +326,191 @@ function AdminQuestionBankTagManagementPage() {
 
       <div className="admin-analytics-kpi-grid">
         <article className="admin-analytics-kpi-card">
-          <p>Active Tags</p>
+          <p>Active</p>
           <h3>{activeTagCount}</h3>
-          <small>available for future packaging and analytics</small>
+          <small>ready for future use</small>
         </article>
         <article className="admin-analytics-kpi-card">
-          <p>Deprecated Tags</p>
+          <p>Deprecated</p>
           <h3>{deprecatedTagCount}</h3>
-          <small>retained for historical consistency</small>
+          <small>historical only</small>
         </article>
         <article className="admin-analytics-kpi-card">
-          <p>Protected Tags</p>
+          <p>Live Use</p>
           <h3>{lockedTagCount}</h3>
-          <small>live in-use question coverage blocks risky deprecation</small>
-        </article>
-        <article className="admin-analytics-kpi-card">
-          <p>Allowed Operations</p>
-          <h3>4</h3>
-          <small>create, rename, merge, deprecate</small>
-        </article>
-        <article className="admin-analytics-kpi-card">
-          <p>Tagged Links</p>
-          <h3>{coveredQuestionCount}</h3>
-          <small>question-tag relationships loaded into this workspace</small>
+          <small>still linked to active coverage</small>
         </article>
       </div>
 
-      <div className="admin-analytics-compliance-panel">
-        <article className="admin-risk-summary-card">
-          <h4>Governed Lifecycle</h4>
-          <p>Tag changes affect future analytics and future question usage without rewriting historical run snapshots.</p>
-          <small>Matches the source spec governance rule.</small>
-        </article>
-        <article className="admin-risk-summary-card">
-          <h4>Live Coverage Safety</h4>
-          <p>This workspace now prefers persisted governed-tag data when available before falling back to deterministic tag fixtures.</p>
-          <small>Risky deprecations stay blocked when tags remain in active question coverage.</small>
-        </article>
+      <div className="admin-question-tags-layout">
+        <UiForm
+          title="Tag Actions"
+          description="Choose the tag field, choose the action, then make the change."
+          submitLabel="Apply Tag Change"
+          onSubmit={applyTagOperation}
+          footer={<span className="admin-tests-form-footnote">The selected change will be applied across the questions currently loaded here for this tag field.</span>}
+        >
+          <div className="admin-question-tags-action-grid">
+            <UiFormField label="Tag Field" htmlFor="admin-question-tags-scope">
+              <select
+                id="admin-question-tags-scope"
+                value={tagFieldScope}
+                onChange={(event) => {
+                  setTagFieldScope(event.target.value as TagFieldScope);
+                  clearForm();
+                  setErrorMessage(null);
+                }}
+              >
+                <option value="primaryTag">Primary Tag</option>
+                <option value="secondaryTag">Secondary Tag</option>
+                <option value="topic">Topic</option>
+              </select>
+            </UiFormField>
+
+            <UiFormField label="Action" htmlFor="admin-question-tags-operation">
+              <select
+                id="admin-question-tags-operation"
+                value={tagOperation}
+                onChange={(event) => {
+                  setTagOperation(event.target.value as TagOperation);
+                  clearForm();
+                  setErrorMessage(null);
+                }}
+              >
+                <option value="create">{TAG_OPERATION_LABELS.create}</option>
+                <option value="rename">{TAG_OPERATION_LABELS.rename}</option>
+                <option value="merge">{TAG_OPERATION_LABELS.merge}</option>
+                <option value="deprecate">{TAG_OPERATION_LABELS.deprecate}</option>
+              </select>
+            </UiFormField>
+
+            <UiFormField
+              label={
+                tagOperation === "create" ? `New ${TAG_SCOPE_LABELS[tagFieldScope]} Name` :
+                tagOperation === "merge" ? `Source ${TAG_SCOPE_LABELS[tagFieldScope]}s` :
+                `Current ${TAG_SCOPE_LABELS[tagFieldScope]}`
+              }
+              htmlFor="admin-question-tags-primary"
+              helper={
+                tagOperation === "merge" ?
+                  "Use commas between the tags you want to merge." :
+                  "Enter the value you want to work with."
+              }
+            >
+              <input
+                id="admin-question-tags-primary"
+                type="text"
+                value={firstEntryValue}
+                onChange={(event) => setFirstEntryValue(event.target.value)}
+                placeholder={
+                  tagOperation === "merge" ? "motion, dynamics, force" :
+                  tagOperation === "create" ? "motion" :
+                  "Enter tag name"
+                }
+              />
+            </UiFormField>
+
+            {(tagOperation === "rename" || tagOperation === "merge") ? (
+              <UiFormField
+                label={formSecondaryLabel}
+                htmlFor="admin-question-tags-secondary"
+                helper={formSecondaryHelper}
+              >
+                <input
+                  id="admin-question-tags-secondary"
+                  type="text"
+                  value={secondEntryValue}
+                  onChange={(event) => setSecondEntryValue(event.target.value)}
+                  placeholder={tagOperation === "merge" ? "final merged tag" : "replacement name"}
+                />
+              </UiFormField>
+            ) : null}
+          </div>
+
+        </UiForm>
+
+        <div className="admin-question-tags-guidance">
+          <article className="admin-risk-summary-card">
+            <h4>Quick Guide</h4>
+            <p>Choose the field first, then the action.</p>
+            <small>Create adds a new value. Rename replaces one value. Merge combines many old values into one final value. Deprecate retires a value from future use.</small>
+          </article>
+          <article className="admin-risk-summary-card">
+            <h4>Merge Rule</h4>
+            <p>Use merge for duplicate or messy naming.</p>
+            <small>Enter the old values in the first box and the one clean final value in the second box. The result is applied across all loaded questions for the selected field.</small>
+          </article>
+          <article className="admin-risk-summary-card">
+            <h4>Safety Rule</h4>
+            <p>Do not retire values still tied to active coverage.</p>
+            <small>Review or retag those questions first so search, filtering, and future template use stay clean.</small>
+          </article>
+        </div>
       </div>
 
       <UiForm
-        title="Tag Operations"
-        description="Supported operations: Create, Rename, Merge, Deprecate."
-        submitLabel={isSubmitting ? "Applying..." : "Apply Tag Operation"}
-        onSubmit={applyTagOperation}
-        footer={<span className="admin-tests-form-footnote">Delete is blocked when a tag still appears in live in-use question coverage.</span>}
-      >
-        <UiFormField label="Operation" htmlFor="admin-question-tags-operation">
-          <select
-            id="admin-question-tags-operation"
-            value={tagOperation}
-            disabled={isSubmitting}
-            onChange={(event) => setTagOperation(event.target.value as TagOperation)}
+        title={`${TAG_SCOPE_LABELS[tagFieldScope]} Library Filters`}
+        description="Narrow the table to the exam, subject, and chapter you want to review."
+        submitLabel="Apply Filters"
+        onSubmit={(event) => event.preventDefault()}
+        footer={
+          <button
+            type="button"
+            onClick={() => setTableFilters({ examType: "all", subject: "all", chapter: "all" })}
           >
-            <option value="create">Create</option>
-            <option value="rename">Rename</option>
-            <option value="merge">Merge</option>
-            <option value="deprecate">Deprecate</option>
-          </select>
-        </UiFormField>
-        <UiFormField label="Primary Tag" htmlFor="admin-question-tags-primary">
-          <input
-            id="admin-question-tags-primary"
-            type="text"
-            value={tagPrimaryValue}
-            disabled={isSubmitting}
-            onChange={(event) => setTagPrimaryValue(event.target.value)}
-            placeholder="motion"
-          />
-        </UiFormField>
-        <UiFormField label="Secondary Tag" htmlFor="admin-question-tags-secondary">
-          <input
-            id="admin-question-tags-secondary"
-            type="text"
-            value={tagSecondaryValue}
-            disabled={isSubmitting}
-            onChange={(event) => setTagSecondaryValue(event.target.value)}
-            placeholder="Required for rename/merge"
-          />
-        </UiFormField>
-        <div className="admin-question-tag-chips" role="list" aria-label="Existing tags">
-          {tagRecords.map((tag) => (
-            <span key={tag.id} role="listitem" className={`admin-question-tag-chip admin-question-tag-chip-${tag.status}`}>
-              {tag.name} ({tag.status})
-            </span>
-          ))}
+            Clear Filters
+          </button>
+        }
+      >
+        <div className="admin-question-library-filter-grid admin-question-tags-filter-grid">
+          <UiFormField label="Exam" htmlFor="admin-question-tags-filter-exam">
+            <select
+              id="admin-question-tags-filter-exam"
+              value={tableFilters.examType}
+              onChange={(event) => setTableFilters((current) => ({ ...current, examType: event.target.value }))}
+            >
+              {examTypes.map((examType) => (
+                <option key={examType} value={examType}>
+                  {examType}
+                </option>
+              ))}
+            </select>
+          </UiFormField>
+          <UiFormField label="Subject" htmlFor="admin-question-tags-filter-subject">
+            <select
+              id="admin-question-tags-filter-subject"
+              value={tableFilters.subject}
+              onChange={(event) => setTableFilters((current) => ({ ...current, subject: event.target.value }))}
+            >
+              {subjects.map((subject) => (
+                <option key={subject} value={subject}>
+                  {subject}
+                </option>
+              ))}
+            </select>
+          </UiFormField>
+          <UiFormField label="Chapter" htmlFor="admin-question-tags-filter-chapter">
+            <select
+              id="admin-question-tags-filter-chapter"
+              value={tableFilters.chapter}
+              onChange={(event) => setTableFilters((current) => ({ ...current, chapter: event.target.value }))}
+            >
+              {chapters.map((chapter) => (
+                <option key={chapter} value={chapter}>
+                  {chapter}
+                </option>
+              ))}
+            </select>
+          </UiFormField>
         </div>
       </UiForm>
 
       <UiTable
-        caption="Governed tag coverage"
+        caption={`${TAG_SCOPE_LABELS[tagFieldScope]} library`}
         columns={tagColumns}
         rows={tagRecords}
         rowKey={(row) => row.id}
-        emptyStateText="No governed tags are available yet."
+        emptyStateText="No tags are available for this field yet."
       />
     </section>
   );

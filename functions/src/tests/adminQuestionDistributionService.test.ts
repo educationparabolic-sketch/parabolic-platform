@@ -102,6 +102,7 @@ test("admin question distribution service aggregates question bank analytics", a
   const service = new AdminQuestionDistributionService(createFirestoreMock());
 
   const summary = await service.getDistributionSummary({
+    examType: null,
     instituteId: "inst_build_m5",
     limit: 5,
   });
@@ -120,4 +121,22 @@ test("admin question distribution service aggregates question bank analytics", a
   assert.equal(summary.chapters[0]?.riskImpactScore, 20);
   assert.equal(summary.chapters[1]?.chapter, "Thermodynamics");
   assert.equal(summary.chapters[1]?.disciplineStressIndex, 60);
+});
+
+test("admin question distribution service normalizes all-scope and exam-scoped requests", () => {
+  const service = new AdminQuestionDistributionService(createFirestoreMock());
+
+  const allScopeRequest = service.normalizeRequest({
+    examType: "all",
+    instituteId: "inst_build_m5",
+    limit: "5",
+  });
+  const examScopeRequest = service.normalizeRequest({
+    examType: "NEET",
+    instituteId: "inst_build_m5",
+    limit: "5",
+  });
+
+  assert.equal(allScopeRequest.examType, null);
+  assert.equal(examScopeRequest.examType, "NEET");
 });
