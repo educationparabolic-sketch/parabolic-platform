@@ -7,6 +7,10 @@ import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
 import {createLogger} from "./logging";
 import {dataTierPartitionService} from "./dataTierPartition";
 import {
+  buildQuestionPhaseTimingRuleSet,
+  normalizeDifficultyTimingProfile,
+} from "./questionPhaseTiming";
+import {
   SessionDocumentInitializationContext,
   SessionDocumentInitializationRecord,
   SessionExecutionMode,
@@ -257,18 +261,27 @@ const normalizeTimingWindow = (
 
   const min = value.min;
   const max = value.max;
+  const recommended = value.recommended ?? ((Number(min) + Number(max)) / 2);
 
-  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+  if (
+    !Number.isFinite(min) ||
+    !Number.isFinite(max) ||
+    !Number.isFinite(recommended)
+  ) {
     throw new SessionStartValidationError(
       "VALIDATION_ERROR",
-      `Run field "${fieldName}" must contain numeric min and max values.`,
+      `Run field "${fieldName}" must contain numeric min, recommended, and max values.`,
     );
   }
 
-  if ((min as number) < 0 || (max as number) < 0) {
+  if (
+    (min as number) < 0 ||
+    (max as number) < 0 ||
+    (recommended as number) < 0
+  ) {
     throw new SessionStartValidationError(
       "VALIDATION_ERROR",
-      `Run field "${fieldName}" min/max values must be non-negative.`,
+      `Run field "${fieldName}" timing values must be non-negative.`,
     );
   }
 
@@ -279,9 +292,19 @@ const normalizeTimingWindow = (
     );
   }
 
+  if ((recommended as number) < (min as number) ||
+    (recommended as number) > (max as number)
+  ) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Run field "${fieldName}" recommended must be between min and max.`,
+    );
+  }
+
   return {
     max: Number(max),
     min: Number(min),
+    recommended: Number(recommended),
   };
 };
 
@@ -740,14 +763,29 @@ export class SessionService {
           `questionBank.${questionIds[index]}.difficulty`,
         );
         const timingWindow = timingProfileSnapshot[difficulty];
+        const phaseTimingRules = buildQuestionPhaseTimingRuleSet(
+          difficulty,
+          normalizeDifficultyTimingProfile(timingProfileSnapshot),
+          {
+            phase1Percent: Number(phaseConfigSnapshot.phase1Percent ?? 0),
+            phase2Percent: Number(phaseConfigSnapshot.phase2Percent ?? 0),
+            phase3Percent: Number(phaseConfigSnapshot.phase3Percent ?? 0),
+          },
+        );
 
         questionTimeMap[questionIds[index]] = {
+          bufferTimeSpent: 0,
           cumulativeTimeSpent: 0,
           enteredAt: null,
           exitedAt: null,
           lastEntryTimestamp: null,
           maxTime: timingWindow.max,
           minTime: timingWindow.min,
+          phase1TimeSpent: 0,
+          phase2TimeSpent: 0,
+          phase3TimeSpent: 0,
+          phaseTimingRules,
+          recommendedTime: timingWindow.recommended,
         };
       });
 

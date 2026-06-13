@@ -21,8 +21,11 @@ const ALLOWED_RISK_STATES = new Set<SubmissionRiskState>([
 
 interface SessionAnalyticsSnapshot {
   accuracyPercent?: unknown;
+  normalizedRiskScore?: unknown;
   disciplineIndex?: unknown;
   guessRate?: unknown;
+  guessRatePercent?: unknown;
+  overstayQuestionsPercent?: unknown;
   overrideUsed?: unknown;
   phaseAdherencePercent?: unknown;
   rawScorePercent?: unknown;
@@ -38,6 +41,8 @@ interface RunAnalyticsComputationState {
   sumAccuracyPercent: number;
   sumDisciplineIndex: number;
   sumGuessRate: number;
+  sumNormalizedRiskScore: number;
+  sumOverstayQuestionsPercent: number;
   sumPhaseAdherencePercent: number;
   sumRawScorePercent: number;
   sumRawScoreSquared: number;
@@ -238,6 +243,10 @@ const readComputationState = (
     sumAccuracyPercent: toPercentOrZero(engineState.sumAccuracyPercent),
     sumDisciplineIndex: toPercentOrZero(engineState.sumDisciplineIndex),
     sumGuessRate: toPercentOrZero(engineState.sumGuessRate),
+    sumNormalizedRiskScore: toPercentOrZero(engineState.sumNormalizedRiskScore),
+    sumOverstayQuestionsPercent: toPercentOrZero(
+      engineState.sumOverstayQuestionsPercent,
+    ),
     sumPhaseAdherencePercent: toPercentOrZero(
       engineState.sumPhaseAdherencePercent,
     ),
@@ -326,7 +335,18 @@ export class RunAnalyticsEngineService {
       afterData?.disciplineIndex,
       "disciplineIndex",
     );
-    const guessRate = toPercent(afterData?.guessRate, "guessRate");
+    const guessRate = toPercent(
+      afterData?.guessRatePercent ?? afterData?.guessRate,
+      "guessRatePercent",
+    );
+    const normalizedRiskScore = toPercent(
+      afterData?.normalizedRiskScore ?? (100 - disciplineIndex),
+      "normalizedRiskScore",
+    );
+    const overstayQuestionsPercent = toPercent(
+      afterData?.overstayQuestionsPercent ?? 0,
+      "overstayQuestionsPercent",
+    );
     const phaseAdherencePercent = toPercent(
       afterData?.phaseAdherencePercent,
       "phaseAdherencePercent",
@@ -388,6 +408,10 @@ export class RunAnalyticsEngineService {
       const sumPhaseAdherencePercent =
         computationState.sumPhaseAdherencePercent + phaseAdherencePercent;
       const sumGuessRate = computationState.sumGuessRate + guessRate;
+      const sumNormalizedRiskScore =
+        computationState.sumNormalizedRiskScore + normalizedRiskScore;
+      const sumOverstayQuestionsPercent =
+        computationState.sumOverstayQuestionsPercent + overstayQuestionsPercent;
       const sumRawScoreSquared =
         computationState.sumRawScoreSquared +
         (rawScorePercent * rawScorePercent);
@@ -403,6 +427,12 @@ export class RunAnalyticsEngineService {
         roundToTwoDecimals(sumPhaseAdherencePercent / submittedSessionCount);
       const guessRateAverage =
         roundToTwoDecimals(sumGuessRate / submittedSessionCount);
+      const riskScoreAverage =
+        roundToTwoDecimals(sumNormalizedRiskScore / submittedSessionCount);
+      const overstayQuestionsAverage =
+        roundToTwoDecimals(
+          sumOverstayQuestionsPercent / submittedSessionCount,
+        );
       const variance = Math.max(
         0,
         (sumRawScoreSquared / submittedSessionCount) -
@@ -433,11 +463,16 @@ export class RunAnalyticsEngineService {
         runAnalyticsReference,
         {
           avgAccuracyPercent,
+          avgDisciplineIndex: disciplineAverage,
+          avgPhaseAdherencePercent: phaseAdherenceAverage,
           avgRawScorePercent,
           completionRate,
           disciplineAverage,
+          disciplineIndexAverage: disciplineAverage,
+          guessRatePercent: guessRateAverage,
           guessRateAverage,
           overrideCount,
+          overstayQuestionsPercent: overstayQuestionsAverage,
           phaseAdherenceAverage,
           processingMarkers: {
             runAnalyticsEngine: {
@@ -450,6 +485,8 @@ export class RunAnalyticsEngineService {
               sumAccuracyPercent,
               sumDisciplineIndex,
               sumGuessRate,
+              sumNormalizedRiskScore,
+              sumOverstayQuestionsPercent,
               sumPhaseAdherencePercent,
               sumRawScorePercent,
               sumRawScoreSquared,
@@ -457,6 +494,7 @@ export class RunAnalyticsEngineService {
               overrideCount,
             },
           },
+          riskScoreAverage,
           riskDistribution,
           runId,
           stdDeviation,

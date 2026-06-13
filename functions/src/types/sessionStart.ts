@@ -57,6 +57,7 @@ export interface SessionDocumentInitializationContext {
 export interface SessionTimingWindow {
   max: number;
   min: number;
+  recommended?: number;
 }
 
 export interface SessionTimingProfileSnapshot {
@@ -72,12 +73,23 @@ export type SessionExecutionMode =
   "Hard";
 
 export interface SessionQuestionTimeRecord {
+  bufferTimeSpent?: number;
   cumulativeTimeSpent: number;
   enteredAt: number | null;
   exitedAt: number | null;
   lastEntryTimestamp: number | null;
   maxTime: number;
   minTime: number;
+  phase1TimeSpent?: number;
+  phase2TimeSpent?: number;
+  phase3TimeSpent?: number;
+  phaseTimingRules?: {
+    buffer: SessionTimingWindow;
+    phase1: SessionTimingWindow;
+    phase2: SessionTimingWindow;
+    phase3: SessionTimingWindow;
+  };
+  recommendedTime?: number;
 }
 
 export type SessionQuestionTimeMap = Record<string, SessionQuestionTimeRecord>;

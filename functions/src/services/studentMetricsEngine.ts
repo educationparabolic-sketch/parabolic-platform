@@ -13,14 +13,24 @@ const GOVERNANCE_TREND_WINDOW_SIZE = 5;
 
 interface SubmittedSessionSnapshot {
   accuracyPercent?: unknown;
+  behaviourTagSummary?: unknown;
   consecutiveWrongStreakMax?: unknown;
   disciplineIndex?: unknown;
+  easyAttemptRatePercent?: unknown;
+  easyNeglectRatePercent?: unknown;
   easyRemainingAfterPhase1Percent?: unknown;
   guessRate?: unknown;
+  guessRatePercent?: unknown;
+  hardBiasRatePercent?: unknown;
+  hardAttemptRatioPercent?: unknown;
   hardInPhase1Percent?: unknown;
   maxTimeViolationPercent?: unknown;
   minTimeViolationPercent?: unknown;
+  normalizedRiskScore?: unknown;
+  overstayQuestionsPercent?: unknown;
+  phaseObjectiveAdherencePercent?: unknown;
   phaseAdherencePercent?: unknown;
+  phaseTimingAdherencePercent?: unknown;
   rawScorePercent?: unknown;
   skipBurstCount?: unknown;
   status?: unknown;
@@ -29,12 +39,14 @@ interface SubmittedSessionSnapshot {
 }
 
 interface StudentMetricsComputationState {
+  sumAvgNormalizedRiskScore: number;
   recentGovernanceMetrics: GovernanceMetricPoint[];
   sumAccuracyPercent: number;
   sumDisciplineIndex: number;
   sumEasyNeglectRate: number;
   sumGuessRate: number;
   sumHardBiasRate: number;
+  sumOverstayQuestionsPercent: number;
   sumPhaseAdherencePercent: number;
   sumRawScorePercent: number;
   totalTests: number;
@@ -227,6 +239,10 @@ const readComputationState = (
     {};
 
   return {
+    sumAvgNormalizedRiskScore: toPercentOrDefault(
+      engineState.sumAvgNormalizedRiskScore,
+      0,
+    ),
     recentGovernanceMetrics: toGovernanceMetricPoints(
       engineState?.recentGovernanceMetrics,
     ),
@@ -235,6 +251,10 @@ const readComputationState = (
     sumEasyNeglectRate: toPercentOrDefault(engineState.sumEasyNeglectRate, 0),
     sumGuessRate: toPercentOrDefault(engineState.sumGuessRate, 0),
     sumHardBiasRate: toPercentOrDefault(engineState.sumHardBiasRate, 0),
+    sumOverstayQuestionsPercent: toPercentOrDefault(
+      engineState.sumOverstayQuestionsPercent,
+      0,
+    ),
     sumPhaseAdherencePercent: toPercentOrDefault(
       engineState.sumPhaseAdherencePercent,
       0,
@@ -304,18 +324,30 @@ export class StudentMetricsEngineService {
       afterData?.disciplineIndex,
       "disciplineIndex",
     );
-    const guessRate = toPercent(afterData?.guessRate, "guessRate");
+    const guessRate = toPercent(
+      afterData?.guessRatePercent ?? afterData?.guessRate,
+      "guessRatePercent",
+    );
     const phaseAdherencePercent = toPercentOrDefault(
       afterData?.phaseAdherencePercent,
       100,
     );
     const easyNeglectRate = toPercentOrDefault(
+      afterData?.easyNeglectRatePercent ??
       afterData?.easyRemainingAfterPhase1Percent,
       0,
     );
     const hardBiasRate = toPercentOrDefault(
-      afterData?.hardInPhase1Percent,
+      afterData?.hardBiasRatePercent ?? afterData?.hardInPhase1Percent,
       0,
+    );
+    const overstayQuestionsPercent = toPercentOrDefault(
+      afterData?.overstayQuestionsPercent ?? afterData?.maxTimeViolationPercent,
+      0,
+    );
+    const normalizedRiskScore = toPercentOrDefault(
+      afterData?.normalizedRiskScore,
+      Math.max(0, Math.min(100, 100 - disciplineIndex)),
     );
     const minTimeViolationPercent = toPercentOrDefault(
       afterData?.minTimeViolationPercent,
@@ -375,6 +407,8 @@ export class StudentMetricsEngineService {
         computationState.sumAccuracyPercent + accuracyPercent;
       const sumDisciplineIndex =
         computationState.sumDisciplineIndex + disciplineIndex;
+      const sumAvgNormalizedRiskScore =
+        computationState.sumAvgNormalizedRiskScore + normalizedRiskScore;
       const sumGuessRate = computationState.sumGuessRate + guessRate;
       const sumPhaseAdherencePercent =
         computationState.sumPhaseAdherencePercent + phaseAdherencePercent;
@@ -382,6 +416,8 @@ export class StudentMetricsEngineService {
         computationState.sumEasyNeglectRate + easyNeglectRate;
       const sumHardBiasRate =
         computationState.sumHardBiasRate + hardBiasRate;
+      const sumOverstayQuestionsPercent =
+        computationState.sumOverstayQuestionsPercent + overstayQuestionsPercent;
       const recentGovernanceMetrics = [
         ...computationState.recentGovernanceMetrics,
         {
@@ -407,7 +443,20 @@ export class StudentMetricsEngineService {
           avgAccuracyPercent: roundToTwoDecimals(
             sumAccuracyPercent / totalTests,
           ),
+          avgDisciplineIndex: roundToTwoDecimals(
+            sumDisciplineIndex / totalTests,
+          ),
+          avgGuessRatePercent: roundToTwoDecimals(sumGuessRate / totalTests),
+          avgNormalizedRiskScore: roundToTwoDecimals(
+            sumAvgNormalizedRiskScore / totalTests,
+          ),
+          avgOverstayQuestionsPercent: roundToTwoDecimals(
+            sumOverstayQuestionsPercent / totalTests,
+          ),
           avgPhaseAdherence: roundToTwoDecimals(
+            sumPhaseAdherencePercent / totalTests,
+          ),
+          avgPhaseAdherencePercent: roundToTwoDecimals(
             sumPhaseAdherencePercent / totalTests,
           ),
           avgRawScorePercent: roundToTwoDecimals(
@@ -416,32 +465,76 @@ export class StudentMetricsEngineService {
           disciplineIndex: roundToTwoDecimals(sumDisciplineIndex / totalTests),
           disciplineIndexTrend,
           easyNeglectRate: roundToTwoDecimals(sumEasyNeglectRate / totalTests),
+          easyNeglectRatePercent: roundToTwoDecimals(
+            sumEasyNeglectRate / totalTests,
+          ),
           guessRate: roundToTwoDecimals(sumGuessRate / totalTests),
+          normalizedRiskScore: roundToTwoDecimals(
+            sumAvgNormalizedRiskScore / totalTests,
+          ),
           guessRateTrend,
           hardBiasRate: roundToTwoDecimals(sumHardBiasRate / totalTests),
+          hardBiasRatePercent: roundToTwoDecimals(
+            sumHardBiasRate / totalTests,
+          ),
           lastUpdated: FieldValue.serverTimestamp(),
+          overstayQuestionsPercent: roundToTwoDecimals(
+            sumOverstayQuestionsPercent / totalTests,
+          ),
           processingMarkers: {
             studentMetricsEngine: {
               eventId: context.eventId ?? null,
               lastProcessedSessionId: sessionId,
               lastProcessedSubmittedAt: submittedAt,
               sumAccuracyPercent,
+              sumAvgNormalizedRiskScore,
               sumDisciplineIndex,
               sumEasyNeglectRate,
               sumGuessRate,
               sumHardBiasRate,
+              sumOverstayQuestionsPercent,
               sumPhaseAdherencePercent,
               sumRawScorePercent,
               totalTests,
               latestSessionSummary: {
                 accuracyPercent,
+                behaviourTagSummary: typeof afterData?.behaviourTagSummary === "string" ?
+                  afterData.behaviourTagSummary :
+                  null,
                 consecutiveWrongStreakMax,
-                easyRemainingAfterPhase1Percent: easyNeglectRate,
+                easyAttemptRatePercent: toPercentOrDefault(
+                  afterData?.easyAttemptRatePercent,
+                  0,
+                ),
+                easyNeglectRatePercent: easyNeglectRate,
+                easyRemainingAfterPhase1Percent: toPercentOrDefault(
+                  afterData?.easyRemainingAfterPhase1Percent,
+                  0,
+                ),
                 guessRate,
-                hardInPhase1Percent: hardBiasRate,
+                guessRatePercent: guessRate,
+                hardAttemptRatioPercent: toPercentOrDefault(
+                  afterData?.hardAttemptRatioPercent,
+                  0,
+                ),
+                hardBiasRatePercent: hardBiasRate,
+                hardInPhase1Percent: toPercentOrDefault(
+                  afterData?.hardInPhase1Percent,
+                  0,
+                ),
                 maxTimeViolationPercent,
                 minTimeViolationPercent,
+                normalizedRiskScore,
+                overstayQuestionsPercent,
+                phaseObjectiveAdherencePercent: toPercentOrDefault(
+                  afterData?.phaseObjectiveAdherencePercent,
+                  phaseAdherencePercent,
+                ),
                 phaseAdherencePercent,
+                phaseTimingAdherencePercent: toPercentOrDefault(
+                  afterData?.phaseTimingAdherencePercent,
+                  phaseAdherencePercent,
+                ),
                 rawScorePercent,
                 sessionId,
                 skipBurstCount,

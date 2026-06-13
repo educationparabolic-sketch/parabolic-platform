@@ -37,13 +37,20 @@ interface NormalizedAnswerWrite {
 }
 
 interface NormalizedQuestionTimeRecord {
+  bufferTimeSpent: number;
   cumulativeTimeSpent: number;
   enteredAt: number | null;
   exitedAt: number | null;
   lastEntryTimestamp: number | null;
   maxTime: number;
   minTime: number;
+  phase1TimeSpent: number;
+  phase2TimeSpent: number;
+  phase3TimeSpent: number;
+  recommendedTime: number;
 }
+
+type TimingPhaseKey = "buffer" | "phase1" | "phase2" | "phase3";
 
 type AdaptivePhaseMetricField =
   | "answeredPercent"
@@ -256,6 +263,10 @@ const normalizeQuestionTimeRecord = (
   }
 
   return {
+    bufferTimeSpent: normalizeNonNegativeNumber(
+      value.bufferTimeSpent ?? 0,
+      `${fieldName}.bufferTimeSpent`,
+    ),
     cumulativeTimeSpent: normalizeNonNegativeNumber(
       value.cumulativeTimeSpent,
       `${fieldName}.cumulativeTimeSpent`,
@@ -274,7 +285,45 @@ const normalizeQuestionTimeRecord = (
     ),
     maxTime: normalizeNonNegativeNumber(value.maxTime, `${fieldName}.maxTime`),
     minTime: normalizeNonNegativeNumber(value.minTime, `${fieldName}.minTime`),
+    phase1TimeSpent: normalizeNonNegativeNumber(
+      value.phase1TimeSpent ?? 0,
+      `${fieldName}.phase1TimeSpent`,
+    ),
+    phase2TimeSpent: normalizeNonNegativeNumber(
+      value.phase2TimeSpent ?? 0,
+      `${fieldName}.phase2TimeSpent`,
+    ),
+    phase3TimeSpent: normalizeNonNegativeNumber(
+      value.phase3TimeSpent ?? 0,
+      `${fieldName}.phase3TimeSpent`,
+    ),
+    recommendedTime: normalizeNonNegativeNumber(
+      value.recommendedTime ?? ((Number(value.min ?? 0) + Number(value.max ?? 0)) / 2),
+      `${fieldName}.recommendedTime`,
+    ),
   };
+};
+
+const normalizeTimingPhaseKey = (value: string | undefined | null): TimingPhaseKey => {
+  const normalizedValue = typeof value === "string" ? value.trim().toLowerCase() : "";
+
+  if (normalizedValue === "phase1" || normalizedValue === "p1") {
+    return "phase1";
+  }
+
+  if (normalizedValue === "phase2" || normalizedValue === "p2") {
+    return "phase2";
+  }
+
+  if (normalizedValue === "phase3" || normalizedValue === "p3") {
+    return "phase3";
+  }
+
+  if (normalizedValue === "buffer") {
+    return "buffer";
+  }
+
+  return "buffer";
 };
 
 const normalizeSessionExecutionMode = (
@@ -432,11 +481,19 @@ const resolveSessionStartMillis = (
 const buildQuestionTimingUpdate = (
   answer: NormalizedAnswerWrite,
   questionTimeRecord: NormalizedQuestionTimeRecord,
+  activePhase: TimingPhaseKey,
   sessionStartMillis: number | null,
   serverNowMillis: number,
 ): Pick<
   SessionQuestionTimeRecord,
-  "cumulativeTimeSpent" | "enteredAt" | "exitedAt" | "lastEntryTimestamp"
+  | "bufferTimeSpent"
+  | "cumulativeTimeSpent"
+  | "enteredAt"
+  | "exitedAt"
+  | "lastEntryTimestamp"
+  | "phase1TimeSpent"
+  | "phase2TimeSpent"
+  | "phase3TimeSpent"
 > => {
   const reportedDurationMillis = answer.timeSpent * 1000;
 
@@ -482,10 +539,14 @@ const buildQuestionTimingUpdate = (
 
   if (isIdempotentReplay) {
     return {
+      bufferTimeSpent: questionTimeRecord.bufferTimeSpent,
       cumulativeTimeSpent: questionTimeRecord.cumulativeTimeSpent,
       enteredAt: questionTimeRecord.enteredAt,
       exitedAt: questionTimeRecord.exitedAt,
       lastEntryTimestamp: questionTimeRecord.lastEntryTimestamp,
+      phase1TimeSpent: questionTimeRecord.phase1TimeSpent,
+      phase2TimeSpent: questionTimeRecord.phase2TimeSpent,
+      phase3TimeSpent: questionTimeRecord.phase3TimeSpent,
     };
   }
 
@@ -503,12 +564,25 @@ const buildQuestionTimingUpdate = (
     );
   }
 
+  const phase1TimeSpent = questionTimeRecord.phase1TimeSpent +
+    (activePhase === "phase1" ? answer.timeSpent : 0);
+  const phase2TimeSpent = questionTimeRecord.phase2TimeSpent +
+    (activePhase === "phase2" ? answer.timeSpent : 0);
+  const phase3TimeSpent = questionTimeRecord.phase3TimeSpent +
+    (activePhase === "phase3" ? answer.timeSpent : 0);
+  const bufferTimeSpent = questionTimeRecord.bufferTimeSpent +
+    (activePhase === "buffer" ? answer.timeSpent : 0);
+
   return {
+    bufferTimeSpent,
     cumulativeTimeSpent:
       questionTimeRecord.cumulativeTimeSpent + answer.timeSpent,
     enteredAt,
     exitedAt: answer.clientTimestamp,
     lastEntryTimestamp: enteredAt,
+    phase1TimeSpent,
+    phase2TimeSpent,
+    phase3TimeSpent,
   };
 };
 
@@ -695,8 +769,11 @@ export class AnswerBatchService {
       "millisecondsSinceLastWrite",
     );
     const normalizedAnswers = normalizeAnswerWrites(input.answers);
-    const adaptivePhaseSnapshot = normalizeAdaptivePhaseSnapshot(
+      const adaptivePhaseSnapshot = normalizeAdaptivePhaseSnapshot(
       input.adaptivePhaseSnapshot,
+    );
+    const activePhase = normalizeTimingPhaseKey(
+      adaptivePhaseSnapshot?.currentPhase ?? null,
     );
 
     sessionService.assertAnswerWriteBatchingConstraints(
@@ -857,6 +934,7 @@ export class AnswerBatchService {
         const timingUpdate = buildQuestionTimingUpdate(
           answer,
           questionTimeRecord,
+          activePhase,
           sessionStartMillis,
           serverNowMillis,
         );
@@ -903,6 +981,14 @@ export class AnswerBatchService {
           timingUpdate.enteredAt;
         updatePayload[`questionTimeMap.${answer.questionId}.exitedAt`] =
           timingUpdate.exitedAt;
+        updatePayload[`questionTimeMap.${answer.questionId}.phase1TimeSpent`] =
+          timingUpdate.phase1TimeSpent;
+        updatePayload[`questionTimeMap.${answer.questionId}.phase2TimeSpent`] =
+          timingUpdate.phase2TimeSpent;
+        updatePayload[`questionTimeMap.${answer.questionId}.phase3TimeSpent`] =
+          timingUpdate.phase3TimeSpent;
+        updatePayload[`questionTimeMap.${answer.questionId}.bufferTimeSpent`] =
+          timingUpdate.bufferTimeSpent;
         updatePayload[lastEntryTimestampPath] =
           timingUpdate.lastEntryTimestamp;
 
@@ -922,12 +1008,17 @@ export class AnswerBatchService {
         }
 
         questionTimingMetrics.push({
+          bufferTimeSpent: timingUpdate.bufferTimeSpent,
           cumulativeTimeSpent: timingUpdate.cumulativeTimeSpent,
           maxTime: questionTimeRecord.maxTime,
           maxTimeViolated: maxTimeViolation !== null,
           minTime: questionTimeRecord.minTime,
           minTimeViolated: minTimeViolation !== null,
+          phase1TimeSpent: timingUpdate.phase1TimeSpent,
+          phase2TimeSpent: timingUpdate.phase2TimeSpent,
+          phase3TimeSpent: timingUpdate.phase3TimeSpent,
           questionId: answer.questionId,
+          recommendedTime: questionTimeRecord.recommendedTime,
         });
 
         persistedQuestionIds.push(answer.questionId);

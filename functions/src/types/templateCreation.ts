@@ -14,6 +14,7 @@ export interface TemplateDifficultyDistribution {
 export interface TemplateTimingWindow {
   min: number;
   max: number;
+  recommended?: number;
 }
 
 export interface TemplateTimingProfile {

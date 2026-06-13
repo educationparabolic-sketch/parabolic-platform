@@ -188,23 +188,23 @@ const resolveTimingProfileSnapshot = (
   case "aggressive":
   case "high":
     return {
-      easy: {max: 75, min: 30},
-      hard: {max: 150, min: 55},
-      medium: {max: 105, min: 40},
+      easy: {max: 75, min: 30, recommended: 52.5},
+      hard: {max: 150, min: 55, recommended: 102.5},
+      medium: {max: 105, min: 40, recommended: 72.5},
     };
   case "relaxed":
   case "low":
     return {
-      easy: {max: 105, min: 25},
-      hard: {max: 210, min: 70},
-      medium: {max: 150, min: 50},
+      easy: {max: 105, min: 25, recommended: 65},
+      hard: {max: 210, min: 70, recommended: 140},
+      medium: {max: 150, min: 50, recommended: 100},
     };
   case "moderate":
   default:
     return {
-      easy: {max: 90, min: 30},
-      hard: {max: 180, min: 60},
-      medium: {max: 120, min: 45},
+      easy: {max: 90, min: 30, recommended: 60},
+      hard: {max: 180, min: 60, recommended: 120},
+      medium: {max: 120, min: 45, recommended: 82.5},
     };
   }
 };
@@ -544,6 +544,7 @@ const buildSyntheticSessionDocument = (
 
   const metrics = computeSubmissionMetrics({
     answerMap,
+    examMode: runDefinition.mode,
     phaseConfigSnapshot: runDefinition.phaseConfigSnapshot,
     questionIds: runDefinition.questionIds,
     questionMetaById: runDefinition.questionMetaById,

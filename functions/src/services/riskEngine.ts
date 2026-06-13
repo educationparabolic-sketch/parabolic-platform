@@ -16,10 +16,17 @@ const ROLLING_WINDOW_SIZE = 5;
 interface StudentYearMetricsSnapshot {
   avgAccuracyPercent?: unknown;
   avgPhaseAdherence?: unknown;
+  avgPhaseAdherencePercent?: unknown;
+  avgDisciplineIndex?: unknown;
+  avgGuessRatePercent?: unknown;
+  avgNormalizedRiskScore?: unknown;
+  avgOverstayQuestionsPercent?: unknown;
   avgRawScorePercent?: unknown;
   easyNeglectRate?: unknown;
+  easyNeglectRatePercent?: unknown;
   guessRate?: unknown;
   hardBiasRate?: unknown;
+  hardBiasRatePercent?: unknown;
   processingMarkers?: unknown;
   riskModelVersion?: unknown;
   totalTests?: unknown;
@@ -179,47 +186,66 @@ const computeRiskMetrics = (
   studentMetricsData: Record<string, unknown>,
   previousState: RiskEngineComputationState,
 ): RiskComputationOutput => {
-  const avgRawScorePercent = toPercent(
-    studentMetricsData.avgRawScorePercent,
-    "avgRawScorePercent",
-  );
   const avgAccuracyPercent = toPercent(
     studentMetricsData.avgAccuracyPercent,
     "avgAccuracyPercent",
   );
   const avgPhaseAdherence = toPercent(
+    studentMetricsData.avgPhaseAdherencePercent ??
     studentMetricsData.avgPhaseAdherence,
-    "avgPhaseAdherence",
+    "avgPhaseAdherencePercent",
   );
   const easyNeglectRate = toPercent(
+    studentMetricsData.easyNeglectRatePercent ??
     studentMetricsData.easyNeglectRate,
-    "easyNeglectRate",
+    "easyNeglectRatePercent",
     0,
   );
-  const guessRate = toPercent(studentMetricsData.guessRate, "guessRate", 0);
+  const guessRate = toPercent(
+    studentMetricsData.avgGuessRatePercent ?? studentMetricsData.guessRate,
+    "avgGuessRatePercent",
+    0,
+  );
   const hardBiasRate = toPercent(
-    studentMetricsData.hardBiasRate,
-    "hardBiasRate",
+    studentMetricsData.hardBiasRatePercent ?? studentMetricsData.hardBiasRate,
+    "hardBiasRatePercent",
+    0,
+  );
+  const overstayQuestionsPercent = toPercent(
+    studentMetricsData.avgOverstayQuestionsPercent ??
+    studentMetricsData.overstayQuestionsPercent,
+    "avgOverstayQuestionsPercent",
+    0,
+  );
+  const avgDisciplineIndex = toPercent(
+    studentMetricsData.avgDisciplineIndex ?? studentMetricsData.disciplineIndex,
+    "avgDisciplineIndex",
+    0,
+  );
+  const avgNormalizedRiskScore = toPercent(
+    studentMetricsData.avgNormalizedRiskScore ??
+    studentMetricsData.normalizedRiskScore ??
+    (100 - avgDisciplineIndex),
+    "avgNormalizedRiskScore",
     0,
   );
   const totalTests = toNonNegativeInteger(studentMetricsData.totalTests);
-  const performanceGap = Math.abs(avgAccuracyPercent - avgRawScorePercent);
   const phaseDeviationPercent = 100 - avgPhaseAdherence;
-
-  // Build 44 runs on student-level aggregates, so proxy normalized behavioral
-  // signals are derived from the existing Build 43 yearly metrics document.
   const normalizedEasyNeglect = clampZeroToOne(easyNeglectRate / 100);
   const normalizedHardBias = clampZeroToOne(hardBiasRate / 100);
   const normalizedPhaseDeviation = clampZeroToOne(phaseDeviationPercent / 100);
   const normalizedGuessRate = clampZeroToOne(guessRate / 100);
-  const normalizedPerformanceGap = clampZeroToOne(performanceGap / 100);
+  const normalizedOverstay = clampZeroToOne(overstayQuestionsPercent / 100);
 
   let riskScore = roundToTwoDecimals(
-    (normalizedEasyNeglect * 0.2 * 100) +
-    (normalizedHardBias * 0.2 * 100) +
-    (normalizedPhaseDeviation * 0.25 * 100) +
-    (normalizedGuessRate * 0.25 * 100) +
-    (normalizedPerformanceGap * 0.1 * 100),
+    avgNormalizedRiskScore > 0 ? avgNormalizedRiskScore :
+      (
+        (normalizedGuessRate * 0.30 * 100) +
+        (normalizedPhaseDeviation * 0.25 * 100) +
+        (normalizedOverstay * 0.15 * 100) +
+        (normalizedEasyNeglect * 0.15 * 100) +
+        (normalizedHardBias * 0.15 * 100)
+      ),
   );
 
   let riskState = toRiskState(riskScore);
@@ -249,7 +275,7 @@ const computeRiskMetrics = (
   riskScore = roundToTwoDecimals(Math.min(riskScore, 100));
 
   const smoothedDisciplineIndex = roundToTwoDecimals(
-    ((100 - riskScore) * 0.7) + (avgAccuracyPercent * 0.3),
+    avgDisciplineIndex > 0 ? avgDisciplineIndex : 100 - riskScore,
   );
   const recentRiskScores = [
     ...previousState.recentRiskScores,
@@ -370,8 +396,11 @@ export class RiskEngineService {
       transaction.set(
         studentMetricsReference,
         {
+          avgDisciplineIndex: computation.disciplineIndex,
+          avgNormalizedRiskScore: computation.riskScore,
           disciplineIndex: computation.disciplineIndex,
           lastUpdated: FieldValue.serverTimestamp(),
+          normalizedRiskScore: computation.riskScore,
           riskModelVersion: computation.riskModelVersion,
           riskScore: computation.riskScore,
           riskState: computation.riskState,

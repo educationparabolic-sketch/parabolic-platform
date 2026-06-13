@@ -17,11 +17,18 @@ const RUNS_COLLECTION = "runs";
 const SESSIONS_COLLECTION = "sessions";
 const QUESTION_BANK_COLLECTION = "questionBank";
 
-const MIN_TIME_WEIGHT = 0.25;
-const MAX_TIME_WEIGHT = 0.20;
-const PHASE_WEIGHT = 0.20;
-const GUESS_WEIGHT = 0.20;
-const WRONG_STREAK_WEIGHT = 0.15;
+const OBJECTIVE_WEIGHT = 0.60;
+const TIMING_WEIGHT = 0.40;
+const EASY_GUESS_FACTOR = 0.50;
+const MEDIUM_GUESS_FACTOR = 0.60;
+const HARD_GUESS_FACTOR = 0.70;
+const EASY_NEGLECT_THRESHOLD = 0.70;
+const HARD_BIAS_TOLERANCE_FACTOR = 0.10;
+const RISK_GUESS_WEIGHT = 0.30;
+const RISK_PHASE_WEIGHT = 0.25;
+const RISK_OVERSTAY_WEIGHT = 0.15;
+const RISK_EASY_NEGLECT_WEIGHT = 0.15;
+const RISK_HARD_BIAS_WEIGHT = 0.15;
 
 export interface SubmissionQuestionMeta {
   correctAnswer: string;
@@ -32,10 +39,21 @@ export interface SubmissionQuestionMeta {
 
 export interface SubmissionScoringInput {
   answerMap: Record<string, unknown>;
+  examMode: string;
   phaseConfigSnapshot: Record<string, unknown>;
   questionIds: string[];
   questionMetaById: Record<string, SubmissionQuestionMeta>;
   questionTimeMap: Record<string, unknown>;
+}
+
+interface SubmissionQuestionTimeSnapshot {
+  bufferTimeSpent?: unknown;
+  cumulativeTimeSpent?: unknown;
+  maxTime?: unknown;
+  minTime?: unknown;
+  phase1TimeSpent?: unknown;
+  phase2TimeSpent?: unknown;
+  phase3TimeSpent?: unknown;
 }
 
 interface SubmissionServiceOptions {
@@ -52,6 +70,12 @@ interface SubmissionTimingValidation {
   minTimeViolationQuestionIds: string[];
   mode: string;
   serverValidated: true;
+}
+
+interface NormalizedPhasePercentages {
+  phase1: number;
+  phase2: number;
+  phase3: number;
 }
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
@@ -122,6 +146,50 @@ const clampPercent = (value: number): number => {
   }
 
   return Number(Math.max(0, Math.min(100, value)).toFixed(2));
+};
+
+const normalizeExamMode = (value: string): string => value.trim().toLowerCase();
+
+const normalizePhasePercentages = (
+  value: Record<string, unknown>,
+): NormalizedPhasePercentages => {
+  const phase1 = clampPercent(
+    normalizeNonNegativeNumber(
+      value.phase1Percent ?? 0,
+      "run.phaseConfigSnapshot.phase1Percent",
+    ),
+  );
+  const phase2 = clampPercent(
+    normalizeNonNegativeNumber(
+      value.phase2Percent ?? 0,
+      "run.phaseConfigSnapshot.phase2Percent",
+    ),
+  );
+  const phase3 = clampPercent(
+    normalizeNonNegativeNumber(
+      value.phase3Percent ?? 0,
+      "run.phaseConfigSnapshot.phase3Percent",
+    ),
+  );
+  const total = phase1 + phase2 + phase3;
+
+  if (total <= 0) {
+    return {phase1: 0, phase2: 0, phase3: 0};
+  }
+
+  return {
+    phase1: clampPercent((phase1 / total) * 100),
+    phase2: clampPercent((phase2 / total) * 100),
+    phase3: clampPercent((phase3 / total) * 100),
+  };
+};
+
+const average = (values: number[]): number => {
+  if (values.length === 0) {
+    return 0;
+  }
+
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
 };
 
 const resolveRiskState = (riskScorePercent: number): SubmissionRiskState => {
@@ -361,8 +429,13 @@ export const computeSubmissionMetrics = (
   let phaseDeviationCount = 0;
   let totalEasyQuestions = 0;
   let totalHardQuestions = 0;
+  let easyAttemptedCount = 0;
+  let hardAttemptedCount = 0;
   let easyRemainingAfterPhase1Count = 0;
   let hardAttemptedInPhase1Count = 0;
+  let phase1TimeSpent = 0;
+  let phase2TimeSpent = 0;
+  let phase3TimeSpent = 0;
 
   input.questionIds.forEach((questionId, index) => {
     const questionMeta = input.questionMetaById[questionId];
@@ -406,6 +479,14 @@ export const computeSubmissionMetrics = (
     if (isAttempted) {
       attemptedCount += 1;
 
+      if (questionMeta.difficulty === "Easy") {
+        easyAttemptedCount += 1;
+      }
+
+      if (questionMeta.difficulty === "Hard") {
+        hardAttemptedCount += 1;
+      }
+
       if (isPhase1Question && questionMeta.difficulty === "Hard") {
         hardAttemptedInPhase1Count += 1;
       }
@@ -429,26 +510,79 @@ export const computeSubmissionMetrics = (
       const questionTimeRecord = input.questionTimeMap[questionId];
 
       if (isPlainObject(questionTimeRecord)) {
+        const questionTimingSnapshot =
+          questionTimeRecord as SubmissionQuestionTimeSnapshot;
         const cumulativeTimeSpent = normalizeNonNegativeNumber(
-          questionTimeRecord.cumulativeTimeSpent,
+          questionTimingSnapshot.cumulativeTimeSpent,
           `session.questionTimeMap.${questionId}.cumulativeTimeSpent`,
         );
         const minTime = normalizeNonNegativeNumber(
-          questionTimeRecord.minTime,
+          questionTimingSnapshot.minTime,
           `session.questionTimeMap.${questionId}.minTime`,
         );
         const maxTime = normalizeNonNegativeNumber(
-          questionTimeRecord.maxTime,
+          questionTimingSnapshot.maxTime,
           `session.questionTimeMap.${questionId}.maxTime`,
         );
+        const phase1QuestionTime =
+          typeof questionTimingSnapshot.phase1TimeSpent === "number" ?
+            Math.max(0, questionTimingSnapshot.phase1TimeSpent) :
+            0;
+        const phase2QuestionTime =
+          typeof questionTimingSnapshot.phase2TimeSpent === "number" ?
+            Math.max(0, questionTimingSnapshot.phase2TimeSpent) :
+            0;
+        const phase3QuestionTime =
+          typeof questionTimingSnapshot.phase3TimeSpent === "number" ?
+            Math.max(0, questionTimingSnapshot.phase3TimeSpent) :
+            0;
+        const bufferQuestionTime =
+          typeof questionTimingSnapshot.bufferTimeSpent === "number" ?
+            Math.max(0, questionTimingSnapshot.bufferTimeSpent) :
+            0;
+        const totalQuestionTime =
+          phase1QuestionTime + phase2QuestionTime + phase3QuestionTime + bufferQuestionTime > 0 ?
+            phase1QuestionTime + phase2QuestionTime + phase3QuestionTime + bufferQuestionTime :
+            cumulativeTimeSpent;
 
-        if (cumulativeTimeSpent < minTime) {
-          minTimeViolationCount += 1;
-          guessIndicatorCount += 1;
+        if (
+          phase1QuestionTime === 0 &&
+          phase2QuestionTime === 0 &&
+          phase3QuestionTime === 0 &&
+          bufferQuestionTime === 0
+        ) {
+          if (index < questionBounds.phase1EndIndex) {
+            phase1TimeSpent += cumulativeTimeSpent;
+          } else if (index < questionBounds.phase2EndIndex) {
+            phase2TimeSpent += cumulativeTimeSpent;
+          } else {
+            phase3TimeSpent += cumulativeTimeSpent;
+          }
+        } else {
+          phase1TimeSpent += phase1QuestionTime;
+          phase2TimeSpent += phase2QuestionTime;
+          phase3TimeSpent += phase3QuestionTime;
         }
 
-        if (cumulativeTimeSpent > maxTime) {
+        if (totalQuestionTime < minTime) {
+          minTimeViolationCount += 1;
+        }
+
+        if (totalQuestionTime > maxTime) {
           maxTimeViolationCount += 1;
+        }
+
+        const guessFactor = questionMeta.difficulty === "Easy" ?
+          EASY_GUESS_FACTOR :
+          questionMeta.difficulty === "Medium" ?
+            MEDIUM_GUESS_FACTOR :
+            HARD_GUESS_FACTOR;
+        const guessThreshold = minTime * guessFactor;
+        const isCorrect = selectedOption.toUpperCase() ===
+          questionMeta.correctAnswer.toUpperCase();
+
+        if (!isCorrect && totalQuestionTime < guessThreshold) {
+          guessIndicatorCount += 1;
         }
       }
 
@@ -467,49 +601,104 @@ export const computeSubmissionMetrics = (
   const accuracyPercent = clampPercent(
     toPercentage(correctCount, attemptedCount),
   );
-  const guessRate = clampPercent(
+  const guessRatePercent = clampPercent(
     toPercentage(guessIndicatorCount, attemptedCount),
   );
+  const guessRate = guessRatePercent;
   const minTimeViolationPercent = clampPercent(
     toPercentage(minTimeViolationCount, questionCount),
   );
   const maxTimeViolationPercent = clampPercent(
     toPercentage(maxTimeViolationCount, questionCount),
   );
+  const overstayQuestionsPercent = maxTimeViolationPercent;
   const phaseDeviationPercent = clampPercent(
     toPercentage(phaseDeviationCount, questionCount),
   );
-  const phaseAdherencePercent = clampPercent(100 - phaseDeviationPercent);
+  const phaseObjectiveAdherencePercent = clampPercent(100 - phaseDeviationPercent);
+  const phasePercentages = normalizePhasePercentages(input.phaseConfigSnapshot);
+  const totalTrackedTime = phase1TimeSpent + phase2TimeSpent + phase3TimeSpent;
+  const actualPhasePercentages: NormalizedPhasePercentages = totalTrackedTime > 0 ? {
+    phase1: clampPercent((phase1TimeSpent / totalTrackedTime) * 100),
+    phase2: clampPercent((phase2TimeSpent / totalTrackedTime) * 100),
+    phase3: clampPercent((phase3TimeSpent / totalTrackedTime) * 100),
+  } : {
+    phase1: 0,
+    phase2: 0,
+    phase3: 0,
+  };
+  const averageTimingDeviation = average([
+    Math.abs(actualPhasePercentages.phase1 - phasePercentages.phase1),
+    Math.abs(actualPhasePercentages.phase2 - phasePercentages.phase2),
+    Math.abs(actualPhasePercentages.phase3 - phasePercentages.phase3),
+  ]);
+  const phaseTimingAdherencePercent = clampPercent(100 - averageTimingDeviation);
+  const normalizedExamMode = normalizeExamMode(input.examMode);
+  const phaseAdherencePercent = normalizedExamMode === "controlled" ?
+    clampPercent(
+      (phaseObjectiveAdherencePercent * OBJECTIVE_WEIGHT) +
+      (phaseTimingAdherencePercent * TIMING_WEIGHT),
+    ) :
+    phaseObjectiveAdherencePercent;
+  const easyAttemptRatePercent = clampPercent(
+    toPercentage(easyAttemptedCount, totalEasyQuestions),
+  );
+  const easyNeglectRatePercent = easyAttemptRatePercent <
+    (EASY_NEGLECT_THRESHOLD * 100) ? 100 : 0;
   const easyRemainingAfterPhase1Percent = clampPercent(
     toPercentage(easyRemainingAfterPhase1Count, totalEasyQuestions),
+  );
+  const hardAttemptRatioPercent = clampPercent(
+    toPercentage(hardAttemptedCount, attemptedCount),
   );
   const hardInPhase1Percent = clampPercent(
     toPercentage(hardAttemptedInPhase1Count, totalHardQuestions),
   );
   const skipBurstCount = 0;
-
-  const riskScore =
-    ((minTimeViolationPercent / 100) * MIN_TIME_WEIGHT) +
-    ((maxTimeViolationPercent / 100) * MAX_TIME_WEIGHT) +
-    ((phaseDeviationPercent / 100) * PHASE_WEIGHT) +
-    ((guessRate / 100) * GUESS_WEIGHT) +
-    (Math.min(consecutiveWrongStreakMax / 5, 1) * WRONG_STREAK_WEIGHT);
-  const riskScorePercent = clampPercent(riskScore * 100);
-  const riskState = resolveRiskState(riskScorePercent);
-  const disciplineIndex = clampPercent(
-    ((100 - riskScorePercent) * 0.7) + (accuracyPercent * 0.3),
+  const expectedHardRatio = questionCount > 0 ? totalHardQuestions / questionCount : 0;
+  const studentHardRatio = attemptedCount > 0 ? hardAttemptedCount / attemptedCount : 0;
+  const hardBiasThreshold = expectedHardRatio +
+    (expectedHardRatio * HARD_BIAS_TOLERANCE_FACTOR);
+  const hardBiasRatePercent = studentHardRatio > hardBiasThreshold ? 100 : 0;
+  const normalizedRiskScore = clampPercent(
+    (guessRatePercent * RISK_GUESS_WEIGHT) +
+    ((100 - phaseAdherencePercent) * RISK_PHASE_WEIGHT) +
+    (overstayQuestionsPercent * RISK_OVERSTAY_WEIGHT) +
+    (easyNeglectRatePercent * RISK_EASY_NEGLECT_WEIGHT) +
+    (hardBiasRatePercent * RISK_HARD_BIAS_WEIGHT),
   );
+  const riskState = resolveRiskState(normalizedRiskScore);
+  const disciplineIndex = clampPercent(100 - normalizedRiskScore);
+  const behaviourSignals = {
+    easyNeglect: easyNeglectRatePercent,
+    hardBias: hardBiasRatePercent,
+    overextension: overstayQuestionsPercent,
+    phaseDrift: clampPercent(100 - phaseAdherencePercent),
+    rush: guessRatePercent,
+  };
+  const behaviourTagSummary = Object.entries(behaviourSignals)
+    .sort((left, right) => right[1] - left[1])[0]?.[0] ?? "rush";
 
   return {
     accuracyPercent,
+    behaviourTagSummary,
     consecutiveWrongStreakMax,
     disciplineIndex,
+    easyAttemptRatePercent,
+    easyNeglectRatePercent,
     easyRemainingAfterPhase1Percent,
     guessRate,
+    guessRatePercent,
+    hardAttemptRatioPercent,
+    hardBiasRatePercent,
     hardInPhase1Percent,
     maxTimeViolationPercent,
     minTimeViolationPercent,
+    normalizedRiskScore,
+    overstayQuestionsPercent,
+    phaseObjectiveAdherencePercent,
     phaseAdherencePercent,
+    phaseTimingAdherencePercent,
     rawScorePercent,
     riskState,
     skipBurstCount,
@@ -525,6 +714,10 @@ const normalizeStoredResult = (
       "session.accuracyPercent",
     ),
   ),
+  behaviourTagSummary: typeof value.behaviourTagSummary === "string" &&
+    value.behaviourTagSummary.trim() ?
+    value.behaviourTagSummary.trim() :
+    "rush",
   consecutiveWrongStreakMax: Math.max(
     0,
     Math.round(
@@ -540,6 +733,20 @@ const normalizeStoredResult = (
       "session.disciplineIndex",
     ),
   ),
+  easyAttemptRatePercent: clampPercent(
+    normalizeNonNegativeNumber(
+      value.easyAttemptRatePercent ?? 0,
+      "session.easyAttemptRatePercent",
+    ),
+  ),
+  easyNeglectRatePercent: clampPercent(
+    normalizeNonNegativeNumber(
+      value.easyNeglectRatePercent ??
+      value.easyRemainingAfterPhase1Percent ??
+      0,
+      "session.easyNeglectRatePercent",
+    ),
+  ),
   easyRemainingAfterPhase1Percent: clampPercent(
     normalizeNonNegativeNumber(
       value.easyRemainingAfterPhase1Percent ?? 0,
@@ -548,6 +755,24 @@ const normalizeStoredResult = (
   ),
   guessRate: clampPercent(
     normalizeNonNegativeNumber(value.guessRate ?? 0, "session.guessRate"),
+  ),
+  guessRatePercent: clampPercent(
+    normalizeNonNegativeNumber(
+      value.guessRatePercent ?? value.guessRate ?? 0,
+      "session.guessRatePercent",
+    ),
+  ),
+  hardAttemptRatioPercent: clampPercent(
+    normalizeNonNegativeNumber(
+      value.hardAttemptRatioPercent ?? 0,
+      "session.hardAttemptRatioPercent",
+    ),
+  ),
+  hardBiasRatePercent: clampPercent(
+    normalizeNonNegativeNumber(
+      value.hardBiasRatePercent ?? value.hardInPhase1Percent ?? 0,
+      "session.hardBiasRatePercent",
+    ),
   ),
   hardInPhase1Percent: clampPercent(
     normalizeNonNegativeNumber(
@@ -571,6 +796,30 @@ const normalizeStoredResult = (
     normalizeNonNegativeNumber(
       value.phaseAdherencePercent ?? 100,
       "session.phaseAdherencePercent",
+    ),
+  ),
+  normalizedRiskScore: clampPercent(
+    normalizeNonNegativeNumber(
+      value.normalizedRiskScore ?? (100 - Number(value.disciplineIndex ?? 100)),
+      "session.normalizedRiskScore",
+    ),
+  ),
+  overstayQuestionsPercent: clampPercent(
+    normalizeNonNegativeNumber(
+      value.overstayQuestionsPercent ?? value.maxTimeViolationPercent ?? 0,
+      "session.overstayQuestionsPercent",
+    ),
+  ),
+  phaseObjectiveAdherencePercent: clampPercent(
+    normalizeNonNegativeNumber(
+      value.phaseObjectiveAdherencePercent ?? value.phaseAdherencePercent ?? 100,
+      "session.phaseObjectiveAdherencePercent",
+    ),
+  ),
+  phaseTimingAdherencePercent: clampPercent(
+    normalizeNonNegativeNumber(
+      value.phaseTimingAdherencePercent ?? value.phaseAdherencePercent ?? 100,
+      "session.phaseTimingAdherencePercent",
     ),
   ),
   rawScorePercent: clampPercent(
@@ -1073,6 +1322,7 @@ export class SubmissionService {
               normalizeRiskModelVersion(runData.riskModelVersion);
           const metrics = computeSubmissionMetrics({
             answerMap,
+            examMode: normalizeRequiredString(runData.mode, "run.mode"),
             phaseConfigSnapshot,
             questionIds: normalizedQuestionIds,
             questionMetaById,
@@ -1084,17 +1334,28 @@ export class SubmissionService {
             calibrationVersion,
             consecutiveWrongStreakMax: metrics.consecutiveWrongStreakMax,
             disciplineIndex: metrics.disciplineIndex,
+            easyAttemptRatePercent: metrics.easyAttemptRatePercent,
+            easyNeglectRatePercent: metrics.easyNeglectRatePercent,
             easyRemainingAfterPhase1Percent:
               metrics.easyRemainingAfterPhase1Percent,
             guessRate: metrics.guessRate,
+            guessRatePercent: metrics.guessRatePercent,
+            hardAttemptRatioPercent: metrics.hardAttemptRatioPercent,
+            hardBiasRatePercent: metrics.hardBiasRatePercent,
             hardInPhase1Percent: metrics.hardInPhase1Percent,
             maxTimeViolationPercent: metrics.maxTimeViolationPercent,
             minTimeViolationPercent: metrics.minTimeViolationPercent,
+            normalizedRiskScore: metrics.normalizedRiskScore,
+            overstayQuestionsPercent: metrics.overstayQuestionsPercent,
+            phaseObjectiveAdherencePercent:
+              metrics.phaseObjectiveAdherencePercent,
             phaseAdherencePercent: metrics.phaseAdherencePercent,
+            phaseTimingAdherencePercent: metrics.phaseTimingAdherencePercent,
             rawScorePercent: metrics.rawScorePercent,
             riskModelVersion,
             riskState: metrics.riskState,
             skipBurstCount: metrics.skipBurstCount,
+            behaviourTagSummary: metrics.behaviourTagSummary,
             status: "submitted",
             submissionTimingValidation,
             submissionLock: false,

@@ -165,6 +165,9 @@ const normalizeTimingWindow = (
 
   const min = normalizePositiveInteger(value.min, `${fieldName}.min`);
   const max = normalizePositiveInteger(value.max, `${fieldName}.max`);
+  const recommended = value.recommended === undefined ?
+    Math.round((min + max) / 2) :
+    normalizePositiveInteger(value.recommended, `${fieldName}.recommended`);
 
   if (min > max) {
     throw new TemplateCreationValidationError(
@@ -172,7 +175,13 @@ const normalizeTimingWindow = (
     );
   }
 
-  return {max, min};
+  if (recommended < min || recommended > max) {
+    throw new TemplateCreationValidationError(
+      `Template field "${fieldName}" must satisfy min <= recommended <= max.`,
+    );
+  }
+
+  return {max, min, recommended};
 };
 
 const normalizeTimingProfile = (value: unknown): TemplateTimingProfile => {

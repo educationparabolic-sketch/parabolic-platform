@@ -35,6 +35,25 @@ test(
       data: {
         accuracyPercent: 81,
         disciplineIndex: 76,
+        operationalDataAccessPolicy: {
+          allowedOperationalCollections: ["sessions"],
+          archiveExportPolicy: "BigQuery export only during academic-year archive",
+          liveSessionPath:
+            "institutes/inst_40/academicYears/2026/runs/run_40/sessions/session_40",
+          prohibitedRuntimeSources: [
+            "runAnalytics",
+            "studentYearMetrics",
+            "questionAnalytics",
+            "BigQuery",
+          ],
+          summarySinksAfterSubmission: [
+            "runAnalytics",
+            "studentYearMetrics",
+            "questionAnalytics",
+          ],
+          tier: "HOT",
+          writeModel: "incremental session document updates",
+        },
         rawScorePercent: 72,
         riskState: "Drift-Prone",
       },
@@ -48,6 +67,7 @@ test(
     assert.equal("idempotent" in response.data, false);
     assert.equal("maxTimeViolationPercent" in response.data, false);
     assert.equal("minTimeViolationPercent" in response.data, false);
+    assert.equal("operationalDataAccessPolicy" in response.data, true);
     assert.equal("phaseAdherencePercent" in response.data, false);
     assert.equal("sessionPath" in response.data, false);
   },

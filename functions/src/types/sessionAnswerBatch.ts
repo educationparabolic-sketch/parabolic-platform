@@ -66,12 +66,17 @@ export interface MaxTimeViolation {
 }
 
 export interface QuestionTimingMetric {
+  bufferTimeSpent?: number;
   cumulativeTimeSpent: number;
   maxTime: number;
   maxTimeViolated: boolean;
   minTime: number;
   minTimeViolated: boolean;
+  phase1TimeSpent?: number;
+  phase2TimeSpent?: number;
+  phase3TimeSpent?: number;
   questionId: string;
+  recommendedTime?: number;
 }
 
 export interface TimingMetricsExport {
