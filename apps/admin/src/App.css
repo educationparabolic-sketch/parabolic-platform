@@ -1756,6 +1756,367 @@
   gap: 14px;
 }
 
+.admin-tests-create-hero {
+  margin-top: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.admin-tests-create-banner {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.9fr);
+  gap: 18px;
+  padding: 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(20, 61, 116, 0.14);
+  background:
+    radial-gradient(circle at top right, rgba(27, 95, 194, 0.16), transparent 34%),
+    linear-gradient(135deg, rgba(247, 250, 255, 0.96), rgba(231, 240, 252, 0.95));
+}
+
+.admin-tests-create-banner h3 {
+  margin: 4px 0 10px;
+  color: #163961;
+  font-size: 1.3rem;
+}
+
+.admin-tests-create-banner p {
+  margin: 0;
+  color: #35557d;
+  line-height: 1.55;
+}
+
+.admin-tests-section-kicker {
+  margin: 0;
+  color: #1b5fc2;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-tests-create-banner-metrics,
+.admin-tests-create-strip,
+.admin-tests-mode-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-tests-create-banner-metrics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-self: stretch;
+}
+
+.admin-tests-create-banner-metrics div,
+.admin-tests-create-strip-card,
+.admin-tests-mode-card {
+  border-radius: 14px;
+  border: 1px solid rgba(16, 42, 81, 0.12);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.admin-tests-create-banner-metrics div {
+  padding: 14px;
+  display: grid;
+  gap: 4px;
+}
+
+.admin-tests-create-banner-metrics strong {
+  color: #13355f;
+  font-size: 1.35rem;
+}
+
+.admin-tests-create-banner-metrics span {
+  color: #58739a;
+  font-size: 0.86rem;
+}
+
+.admin-tests-create-strip {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.admin-tests-create-strip-card {
+  padding: 14px;
+}
+
+.admin-tests-create-strip-card h4,
+.admin-tests-mode-card strong {
+  margin: 0 0 8px;
+  color: #163961;
+}
+
+.admin-tests-create-strip-card p,
+.admin-tests-mode-card p,
+.admin-tests-mode-card small {
+  margin: 0;
+  color: #4a678f;
+  line-height: 1.5;
+}
+
+.admin-tests-create-layout {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.95fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.admin-tests-stepper {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-tests-stepper-item {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid rgba(16, 42, 81, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.84);
+  color: #4f688a;
+  text-align: left;
+}
+
+.admin-tests-stepper-item span {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(27, 95, 194, 0.1);
+  color: #1b5fc2;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.admin-tests-stepper-item strong {
+  color: #173e6d;
+}
+
+.admin-tests-stepper-item-active {
+  border-color: rgba(27, 95, 194, 0.36);
+  background: rgba(27, 95, 194, 0.08);
+}
+
+.admin-tests-stepper-item-complete {
+  border-color: rgba(28, 145, 95, 0.28);
+}
+
+.admin-tests-stepper-item:disabled {
+  opacity: 0.58;
+}
+
+.admin-tests-create-main,
+.admin-tests-create-side {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-tests-create-section-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.admin-tests-create-section-header h3 {
+  margin: 4px 0 0;
+  color: #163961;
+  font-size: 1.06rem;
+}
+
+.admin-tests-create-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(27, 95, 194, 0.1);
+  color: #1a4f95;
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.admin-tests-create-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-tests-mode-ceiling {
+  border: 1px solid rgba(16, 42, 81, 0.16);
+  border-radius: 14px;
+  padding: 16px;
+  background: rgba(244, 248, 255, 0.92);
+}
+
+.admin-tests-mode-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-tests-mode-card {
+  padding: 14px;
+  display: grid;
+  gap: 6px;
+}
+
+.admin-tests-mode-card span {
+  color: #1b5fc2;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.admin-tests-step-card,
+.admin-tests-strategy-option,
+.admin-tests-validation-engine {
+  border: 1px solid rgba(16, 42, 81, 0.16);
+  border-radius: 14px;
+  background: rgba(247, 250, 255, 0.94);
+}
+
+.admin-tests-step-card {
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+}
+
+.admin-tests-step-card-main {
+  min-height: 100%;
+}
+
+.admin-tests-step-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+
+.admin-tests-create-summary {
+  position: sticky;
+  top: 18px;
+}
+
+.admin-tests-summary-list,
+.admin-tests-strategy-options,
+.admin-tests-phase-percent-list {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-tests-summary-list div,
+.admin-tests-phase-validation,
+.admin-tests-validation-state {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.admin-tests-summary-list div {
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(16, 42, 81, 0.1);
+  color: #24476f;
+}
+
+.admin-tests-summary-list strong,
+.admin-tests-phase-validation strong,
+.admin-tests-validation-state strong {
+  color: #123b6d;
+}
+
+.admin-tests-strategy-options h4,
+.admin-tests-strategy-request h4,
+.admin-tests-strategy-config h4,
+.admin-tests-validation-engine h4 {
+  margin: 0 0 8px;
+  color: #163961;
+}
+
+.admin-tests-strategy-option {
+  padding: 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.admin-tests-strategy-option span {
+  color: #1b5fc2;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.admin-tests-strategy-option small {
+  color: #4f688a;
+}
+
+.admin-tests-strategy-option-active {
+  border-color: rgba(27, 95, 194, 0.36);
+  background: rgba(27, 95, 194, 0.08);
+}
+
+.admin-tests-inline-form,
+.admin-tests-strategy-config {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-tests-radio-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #24476f;
+}
+
+.admin-tests-timing-header,
+.admin-tests-timing-grid-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) repeat(3, minmax(0, 0.7fr));
+  gap: 8px;
+  align-items: center;
+}
+
+.admin-tests-timing-header {
+  color: #4f688a;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.admin-tests-timing-grid-row strong {
+  color: #163961;
+}
+
+.admin-tests-validation-engine {
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.admin-tests-validation-state {
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+
+.admin-tests-validation-state-valid {
+  background: rgba(28, 145, 95, 0.12);
+  color: #196845;
+}
+
+.admin-tests-validation-state-invalid {
+  background: rgba(179, 49, 49, 0.12);
+  color: #8a2431;
+}
+
+.admin-tests-validation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .admin-tests-form-footnote {
   color: #4f688a;
   font-size: 0.88rem;
@@ -1900,32 +2261,79 @@
   color: #4f688a;
 }
 
-.admin-tests-question-list {
-  max-height: 220px;
+.admin-tests-question-table-shell {
+  max-height: 320px;
   overflow: auto;
   border: 1px solid rgba(16, 42, 81, 0.16);
   border-radius: 10px;
-  padding: 8px;
-  display: grid;
-  gap: 8px;
-  background: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.9);
 }
 
-.admin-tests-question-option {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
+.admin-tests-question-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 760px;
+}
+
+.admin-tests-question-table th,
+.admin-tests-question-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(16, 42, 81, 0.08);
+  text-align: left;
   color: #1f426f;
+  white-space: nowrap;
 }
 
-.admin-tests-question-option span {
-  overflow-wrap: anywhere;
+.admin-tests-question-table th {
+  position: sticky;
+  top: 0;
+  background: rgba(241, 247, 255, 0.98);
+  color: #3f5f85;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  z-index: 1;
+}
+
+.admin-tests-question-table tbody tr:hover {
+  background: rgba(27, 95, 194, 0.05);
+}
+
+.admin-tests-question-preview-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #1b5fc2;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.admin-tests-question-preview-link:hover {
+  color: #163961;
+}
+
+.admin-tests-question-difficulty {
+  font-weight: 700;
+}
+
+.admin-tests-question-difficulty-easy {
+  color: #197a52;
+}
+
+.admin-tests-question-difficulty-medium {
+  color: #9c6a10;
+}
+
+.admin-tests-question-difficulty-hard {
+  color: #9a3131;
 }
 
 .admin-tests-timing-row {
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .admin-tests-template-cell {
@@ -5626,12 +6034,32 @@
 
   .admin-tests-grid,
   .admin-tests-config-grid,
+  .admin-tests-create-layout,
+  .admin-tests-stepper,
   .admin-tests-filter-grid,
   .admin-tests-selection-target,
   .admin-tests-statistical-selection,
+  .admin-tests-create-strip,
+  .admin-tests-create-form-grid,
+  .admin-tests-mode-grid,
+  .admin-tests-timing-header,
+  .admin-tests-timing-grid-row,
   .admin-tests-duplicate-review,
   .admin-tests-summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .admin-tests-create-banner {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-tests-create-banner-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-tests-create-section-header {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .admin-question-validation-grid {
@@ -5864,6 +6292,10 @@
   }
 
   .admin-tests-timing-row {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-tests-create-banner-metrics {
     grid-template-columns: 1fr;
   }
 

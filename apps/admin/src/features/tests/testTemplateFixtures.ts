@@ -1,5 +1,5 @@
 export const EXAM_TYPES = ["JEEMains", "NEET"] as const;
-export const SELECTION_METHODS = ["manual", "shuffle_slice", "offset_limit", "round_robin"] as const;
+export const SELECTION_METHODS = ["manual", "shuffle_slice", "offset_limit", "round_robin", "upload_set"] as const;
 export const DIFFICULTY_LEVELS = ["easy", "medium", "hard"] as const;
 
 export type ExamType = (typeof EXAM_TYPES)[number];
@@ -29,6 +29,8 @@ export interface QuestionBankRecord {
   simulationLink: string;
   topic: string;
   internalNotes: string;
+  uploadId?: string;
+  uploadLabel?: string;
   usedCount: number;
   version: number;
   thermalState: "hot" | "warm" | "cold";
@@ -57,6 +59,8 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     simulationLink: "https://sim.example.com/uniform-acceleration",
     topic: "Uniform acceleration",
     internalNotes: "Good diagnostic for formula selection.",
+    uploadId: "upl-2026-0412-001",
+    uploadLabel: "JEE Main Physics Set A",
     usedCount: 3,
     version: 2,
     thermalState: "hot",
@@ -83,6 +87,8 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     simulationLink: "https://sim.example.com/pulleys",
     topic: "Force balance",
     internalNotes: "Keep as warm template candidate.",
+    uploadId: "upl-2026-0412-001",
+    uploadLabel: "JEE Main Physics Set A",
     usedCount: 0,
     version: 1,
     thermalState: "warm",
@@ -109,6 +115,8 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     simulationLink: "https://sim.example.com/charged-ring",
     topic: "Electric potential",
     internalNotes: "Advanced extension item.",
+    uploadId: "upl-2026-0409-004",
+    uploadLabel: "JEE Advanced Mixed Set",
     usedCount: 1,
     version: 1,
     thermalState: "hot",
@@ -135,6 +143,8 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     simulationLink: "",
     topic: "Molarity",
     internalNotes: "Useful for foundation packages.",
+    uploadId: "upl-2026-0411-002",
+    uploadLabel: "NEET Foundation Chemistry Set",
     usedCount: 0,
     version: 1,
     thermalState: "warm",
@@ -161,6 +171,8 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     simulationLink: "",
     topic: "Heat and work",
     internalNotes: "Common sign convention trap.",
+    uploadId: "upl-2026-0411-002",
+    uploadLabel: "NEET Foundation Chemistry Set",
     usedCount: 2,
     version: 1,
     thermalState: "hot",
@@ -187,6 +199,8 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     simulationLink: "",
     topic: "Reaction mechanisms",
     internalNotes: "Review option wording before reuse.",
+    uploadId: "upl-2026-0409-004",
+    uploadLabel: "NEET Repeaters Organic Set",
     usedCount: 0,
     version: 1,
     thermalState: "warm",
@@ -213,6 +227,8 @@ export const QUESTION_BANK: QuestionBankRecord[] = [
     simulationLink: "",
     topic: "Root relations",
     internalNotes: "Stable algebra benchmark.",
+    uploadId: "upl-2026-0412-001",
+    uploadLabel: "JEE Main Maths Set B",
     usedCount: 4,
     version: 2,
     thermalState: "hot",
