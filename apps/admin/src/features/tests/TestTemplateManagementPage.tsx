@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
@@ -36,7 +36,7 @@ function hasLayer(current: LicenseLayer, required: LicenseLayer): boolean {
 
 type TemplateStatus = "draft" | "ready" | "assigned" | "archived" | "deprecated";
 type TemplateThermalState = "hot" | "warm" | "cold";
-type TestSubpage = "create" | "library" | "analytics" | "distribution" | "settings";
+type TestSubpage = "create" | "library" | "analytics";
 
 interface TimingWindow {
   minSeconds: number;
@@ -90,26 +90,6 @@ interface PhaseConfigSnapshot {
   totalLoad: number;
 }
 
-interface DistributionDifficultyRow {
-  count: number;
-  difficulty: DifficultyLevel;
-  maxSeconds: number;
-  minSeconds: number;
-  percent: number;
-}
-
-interface TimingProfileTableRow {
-  defaultRecommended: string;
-  difficulty: DifficultyLevel;
-  defaultWindow: string;
-  maxSeconds: number;
-  minSeconds: number;
-  questionCount: number;
-  recommendedSeconds: number;
-  snapshotRule: string;
-  window: string;
-}
-
 interface PhaseStrategyPercentages {
   acquisition: number;
   recovery: number;
@@ -144,46 +124,6 @@ interface QuestionUploadLogRecord {
   uploadedBy: string;
   timestamp: string;
   totalRows: number;
-}
-
-interface TemplateLifecyclePolicyRow {
-  tier: "HOT" | "WARM" | "COLD";
-  trigger: string;
-  metadataTreatment: string;
-  mediaTreatment: string;
-  operatorRule: string;
-}
-
-interface TemplateLifecycleRow {
-  id: string;
-  templateName: string;
-  status: TemplateStatus;
-  thermalState: TemplateThermalState;
-  totalRuns: number;
-  lastUsed: string;
-  trigger: string;
-  metadataTreatment: string;
-  mediaTreatment: string;
-  operatorAction: string;
-}
-
-interface ChapterCoverageRow {
-  chapter: string;
-  count: number;
-  percent: number;
-  subjects: string;
-}
-
-interface MarksDistributionRow {
-  marks: string;
-  count: number;
-  percent: number;
-}
-
-interface SectionBalanceRow {
-  count: number;
-  percent: number;
-  section: string;
 }
 
 interface TestTemplateRecord extends TemplateDraft {
@@ -227,6 +167,15 @@ interface QuestionPoolFilters {
   usageState: "all" | "used" | "unused";
 }
 
+interface TemplateLibraryFilters {
+  examType: string;
+  query: string;
+  selectionMethod: "all" | SelectionMethod;
+  status: "all" | TemplateStatus;
+  thermalState: "all" | TemplateThermalState;
+  visibility: "active" | "all" | "archived" | "deprecated";
+}
+
 const EMPTY_QUESTION_POOL_FILTERS: QuestionPoolFilters = {
   academicYear: "all",
   chapter: "all",
@@ -235,6 +184,15 @@ const EMPTY_QUESTION_POOL_FILTERS: QuestionPoolFilters = {
   subject: "all",
   tag: "all",
   usageState: "all",
+};
+
+const INITIAL_TEMPLATE_LIBRARY_FILTERS: TemplateLibraryFilters = {
+  examType: "all",
+  query: "",
+  selectionMethod: "all",
+  status: "all",
+  thermalState: "all",
+  visibility: "active",
 };
 
 function hashString(value: string): number {
@@ -373,30 +331,6 @@ const FALLBACK_TEMPLATES: TestTemplateRecord[] = [
     thermalState: "warm",
     totalRuns: 3,
     updatedAt: "2025-11-05T09:00:00.000Z",
-  },
-];
-
-const TEMPLATE_LIFECYCLE_POLICY_ROWS: TemplateLifecyclePolicyRow[] = [
-  {
-    tier: "HOT",
-    trigger: "Template used in the current academic year.",
-    metadataTreatment: "Frozen question IDs, canonical ID, timing, phase, and marking snapshots stay operational.",
-    mediaTreatment: "Referenced question media remains in active question-bank storage.",
-    operatorRule: "Keep assignable unless explicitly deprecated; structural edits remain locked after assignment.",
-  },
-  {
-    tier: "WARM",
-    trigger: "Template unused but recent.",
-    metadataTreatment: "Metadata remains retained and visible for reuse, audit, and lifecycle actions.",
-    mediaTreatment: "Referenced media remains available without session-derived recomputation.",
-    operatorRule: "Review for reuse, archive, or deprecate without rebuilding canonical identity on read.",
-  },
-  {
-    tier: "COLD",
-    trigger: "Template unused for more than 2 years.",
-    metadataTreatment: "Metadata is retained permanently for historical runs and governance audit.",
-    mediaTreatment: "Referenced images may move to archive storage through the question/template lifecycle policy.",
-    operatorRule: "Never delete templates with historical runs; keep lookup and audit lineage intact.",
   },
 ];
 
@@ -622,6 +556,46 @@ function toTemplateStatus(value: unknown): TemplateStatus {
 
 function toTemplateThermalState(value: unknown, fallback: TemplateThermalState): TemplateThermalState {
   return value === "hot" || value === "warm" || value === "cold" ? value : fallback;
+}
+
+function getAcademicYearStart(referenceDate: Date): Date {
+  const year = referenceDate.getMonth() >= 3 ? referenceDate.getFullYear() : referenceDate.getFullYear() - 1;
+  return new Date(year, 3, 1);
+}
+
+function toValidDate(value: string | null): Date | null {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function deriveTemplateThermalState(template: Pick<TestTemplateRecord, "lastUsedAt" | "status" | "totalRuns">): TemplateThermalState {
+  if (template.status === "archived") {
+    return "cold";
+  }
+
+  const now = new Date();
+  const academicYearStart = getAcademicYearStart(now);
+  const twoYearsAgo = new Date(now);
+  twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+  const lastUsedDate = toValidDate(template.lastUsedAt);
+
+  if (lastUsedDate && lastUsedDate >= academicYearStart) {
+    return "hot";
+  }
+
+  if (template.status === "assigned" && template.totalRuns > 0) {
+    return "hot";
+  }
+
+  if (lastUsedDate && lastUsedDate < twoYearsAgo) {
+    return "cold";
+  }
+
+  return "warm";
 }
 
 function normalizeSelectionMethod(value: unknown, fallback: SelectionMethod): SelectionMethod {
@@ -879,12 +853,34 @@ function formatIsoDate(value: string): string {
   return Number.isNaN(parsed) ? value : new Date(parsed).toISOString().slice(0, 10);
 }
 
-function formatPercent(value: number): string {
-  return `${Math.round(value)}%`;
-}
-
 function formatDifficultyLabel(value: DifficultyLevel): string {
   return `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
+}
+
+function formatTemplateStatusLabel(value: TemplateStatus): string {
+  switch (value) {
+    case "draft":
+      return "Draft";
+    case "ready":
+      return "Ready";
+    case "assigned":
+      return "Used in Assignments";
+    case "archived":
+      return "Archived";
+    case "deprecated":
+      return "Retired";
+  }
+}
+
+function formatThermalStateLabel(value: TemplateThermalState): string {
+  switch (value) {
+    case "hot":
+      return "Recently Used";
+    case "warm":
+      return "Available";
+    case "cold":
+      return "Old / Archived";
+  }
 }
 
 function formatSelectionMethodLabel(value: SelectionMethod): string {
@@ -910,42 +906,12 @@ function formatOptionalIsoDate(value: string | null): string {
   return value ? formatIsoDate(value) : "Never used";
 }
 
-function getTemplateLifecyclePolicy(thermalState: TemplateThermalState): TemplateLifecyclePolicyRow {
-  const tier = thermalState.toUpperCase() as TemplateLifecyclePolicyRow["tier"];
-  return TEMPLATE_LIFECYCLE_POLICY_ROWS.find((row) => row.tier === tier) ?? TEMPLATE_LIFECYCLE_POLICY_ROWS[1];
-}
-
-function toTemplateLifecycleRow(template: TestTemplateRecord): TemplateLifecycleRow {
-  const policy = getTemplateLifecyclePolicy(template.thermalState);
-  return {
-    id: template.id,
-    lastUsed: formatOptionalIsoDate(template.lastUsedAt),
-    mediaTreatment: policy.mediaTreatment,
-    metadataTreatment: policy.metadataTreatment,
-    operatorAction:
-      template.totalRuns > 0 ?
-        `${policy.operatorRule} Historical runs: ${template.totalRuns}.` :
-        `${policy.operatorRule} No historical runs recorded.`,
-    status: template.status,
-    templateName: template.templateName,
-    thermalState: template.thermalState,
-    totalRuns: template.totalRuns,
-    trigger: policy.trigger,
-  };
-}
-
 function resolveTestSubpage(pathname: string): TestSubpage {
   if (pathname.includes("/tests/create")) {
     return "create";
   }
   if (pathname.includes("/tests/analytics")) {
     return "analytics";
-  }
-  if (pathname.includes("/tests/distribution")) {
-    return "distribution";
-  }
-  if (pathname.includes("/tests/settings")) {
-    return "settings";
   }
 
   return "library";
@@ -1058,7 +1024,6 @@ function TestTemplateManagementPage() {
   const hasL2Controls = hasLayer(currentLayer, "L2");
   const location = useLocation();
   const navigate = useNavigate();
-  const params = useParams<{ testId?: string }>();
   const [templates, setTemplates] = useState<TestTemplateRecord[]>(FALLBACK_TEMPLATES);
   const [questionPool, setQuestionPool] = useState<QuestionBankRecord[]>(QUESTION_BANK);
   const [questionUploadLogs, setQuestionUploadLogs] = useState<QuestionUploadLogRecord[]>(FALLBACK_QUESTION_UPLOAD_LOGS);
@@ -1096,7 +1061,9 @@ function TestTemplateManagementPage() {
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [publishTargetId, setPublishTargetId] = useState<string | null>(null);
-  const [inspectedTemplateId, setInspectedTemplateId] = useState<string>(FALLBACK_TEMPLATES[0]?.id ?? "");
+  const [templateLibraryFilters, setTemplateLibraryFilters] = useState<TemplateLibraryFilters>(
+    INITIAL_TEMPLATE_LIBRARY_FILTERS,
+  );
 
   useEffect(() => {
     if (!hasL2Controls && createFlowStep === 4) {
@@ -1431,44 +1398,43 @@ function TestTemplateManagementPage() {
     });
   }, [activeStrategy, difficultyTimingMode]);
 
-  const activeLibraryTemplates = useMemo(
-    () => templates.filter((template) => template.status !== "archived"),
+  const templatesWithDerivedThermalState = useMemo(
+    () => templates.map((template) => ({ ...template, thermalState: deriveTemplateThermalState(template) })),
     [templates],
   );
-  const comparableTemplates = useMemo(
-    () => activeLibraryTemplates.filter((template) => template.status !== "deprecated"),
-    [activeLibraryTemplates],
+  const templateLibraryExamTypes = useMemo(
+    () => ["all", ...new Set(templatesWithDerivedThermalState.map((template) => template.examType).filter((examType) => examType.trim().length > 0))],
+    [templatesWithDerivedThermalState],
   );
-  const lifecycleRegisterTemplates = useMemo(
-    () => templates.filter((template) => template.status === "archived" || template.status === "deprecated"),
-    [templates],
-  );
-  const templateLifecycleRows = useMemo(
-    () => templates.map(toTemplateLifecycleRow),
-    [templates],
-  );
+  const filteredLibraryTemplates = useMemo(() => {
+    const query = templateLibraryFilters.query.trim().toLowerCase();
 
-  useEffect(() => {
-    if (activeLibraryTemplates.length === 0) {
-      setInspectedTemplateId("");
-      return;
-    }
+    return templatesWithDerivedThermalState.filter((template) => {
+      const visibilityMatches =
+        (
+          templateLibraryFilters.visibility === "all" ||
+          (templateLibraryFilters.visibility === "active" && template.status !== "archived" && template.status !== "deprecated") ||
+          (templateLibraryFilters.visibility === "archived" && template.status === "archived") ||
+          (templateLibraryFilters.visibility === "deprecated" && template.status === "deprecated")
+        );
+      const examMatches =
+        templateLibraryFilters.examType === "all" || template.examType === templateLibraryFilters.examType;
+      const selectionMatches =
+        templateLibraryFilters.selectionMethod === "all" || template.selectionMethod === templateLibraryFilters.selectionMethod;
+      const statusMatches =
+        templateLibraryFilters.status === "all" || template.status === templateLibraryFilters.status;
+      const thermalMatches =
+        templateLibraryFilters.thermalState === "all" || template.thermalState === templateLibraryFilters.thermalState;
+      const queryMatches =
+        query.length === 0 ||
+        template.id.toLowerCase().includes(query) ||
+        template.templateName.toLowerCase().includes(query) ||
+        template.examType.toLowerCase().includes(query) ||
+        template.canonicalId.toLowerCase().includes(query);
 
-    if (params.testId && activeLibraryTemplates.some((template) => template.id === params.testId)) {
-      setInspectedTemplateId(params.testId);
-      return;
-    }
-
-    setInspectedTemplateId((current) =>
-      current && activeLibraryTemplates.some((template) => template.id === current) ?
-        current :
-        activeLibraryTemplates[0]?.id ?? "",
-    );
-  }, [activeLibraryTemplates, params.testId]);
-
-  const inspectedTemplate = useMemo(() => {
-    return activeLibraryTemplates.find((template) => template.id === inspectedTemplateId) ?? activeLibraryTemplates[0] ?? null;
-  }, [activeLibraryTemplates, inspectedTemplateId]);
+      return visibilityMatches && examMatches && selectionMatches && statusMatches && thermalMatches && queryMatches;
+    });
+  }, [templateLibraryFilters, templatesWithDerivedThermalState]);
   const previewQuestion = questionPreviewId ? questionPoolById.get(questionPreviewId) ?? null : null;
   const activePhaseStrategy =
     phaseStrategyMode === "default" ? activeStrategy.phaseStrategy : customPhaseStrategy;
@@ -1716,7 +1682,6 @@ function TestTemplateManagementPage() {
     setDifficultyTimingMode("custom");
     setPhaseStrategyMode("default");
     setErrorMessage(null);
-    setInspectedTemplateId(target.id);
     navigate("/admin/tests/create");
   }
 
@@ -1878,7 +1843,7 @@ function TestTemplateManagementPage() {
             template,
         ),
       );
-      setInlineMessage("Template published. Status moved from draft to ready.");
+      setInlineMessage("Test marked ready. It can now be used in assignment workflows.");
     } catch (error) {
       const reason =
         error instanceof ApiClientError ?
@@ -1912,8 +1877,7 @@ function TestTemplateManagementPage() {
 
     setDuplicateTemplate(null);
     setPendingDuplicateRecord(null);
-    setInspectedTemplateId(duplicateTemplate.id);
-    navigate(`/admin/tests/${duplicateTemplate.id}`);
+    navigate(`/admin/tests/analytics/${duplicateTemplate.id}`);
     setInlineMessage(
       `Duplicate template detected. Reusing existing template ${duplicateTemplate.templateName} (${duplicateTemplate.id}).`,
     );
@@ -1966,50 +1930,37 @@ function TestTemplateManagementPage() {
       id: "name",
       header: "Template",
       render: (template) => (
-        <div className="admin-tests-template-cell">
+        <div className="admin-question-library-main-cell">
           <strong>{template.templateName}</strong>
-          <small>{template.examType}</small>
+          <small>{template.id} · {template.examType}</small>
+          <small>Canonical: {template.canonicalId.slice(0, 16)}...</small>
         </div>
       ),
     },
     {
-      id: "selectionMethod",
-      header: "Selection Method",
-      render: (template) => template.selectionMethod,
-    },
-    {
-      id: "questions",
-      header: "Question Count",
-      render: (template) => template.selectedQuestionIds.length,
-    },
-    {
-      id: "distribution",
-      header: "Difficulty Distribution",
-      render: (template) =>
-        `E:${template.difficultyDistribution.easy} M:${template.difficultyDistribution.medium} H:${template.difficultyDistribution.hard}`,
-    },
-    {
-      id: "status",
-      header: "Status",
+      id: "setup",
+      header: "Setup",
       render: (template) => (
-        <span className={`admin-tests-status admin-tests-status-${template.status}`}>{template.status}</span>
+        <div className="admin-question-library-compact-cell">
+          <strong>{formatSelectionMethodLabel(template.selectionMethod)}</strong>
+          <small>{template.selectedQuestionIds.length} questions</small>
+          <small>
+            Easy {template.difficultyDistribution.easy} · Medium {template.difficultyDistribution.medium} · Hard{" "}
+            {template.difficultyDistribution.hard}
+          </small>
+        </div>
       ),
     },
     {
-      id: "thermalState",
-      header: "Lifecycle Tier",
-      render: (template) => `${template.thermalState.toUpperCase()} / ${formatOptionalIsoDate(template.lastUsedAt)}`,
-    },
-    {
-      id: "updatedAt",
-      header: "Updated",
-      render: (template) => formatIsoDate(template.updatedAt),
-    },
-    {
-      id: "canonicalId",
-      header: "Canonical ID",
+      id: "lifecycle",
+      header: "Lifecycle",
       render: (template) => (
-        <code className="admin-tests-canonical-id">{template.canonicalId.slice(0, 16)}...</code>
+        <div className="admin-question-library-compact-cell">
+          <span className={`admin-tests-status admin-tests-status-${template.status}`}>{formatTemplateStatusLabel(template.status)}</span>
+          <small>{template.totalRuns} runs · {formatThermalStateLabel(template.thermalState)}</small>
+          <small>Last used: {formatOptionalIsoDate(template.lastUsedAt)}</small>
+          <small>Updated {formatIsoDate(template.updatedAt)}</small>
+        </div>
       ),
     },
     {
@@ -2021,18 +1972,15 @@ function TestTemplateManagementPage() {
         const publishable = isTemplatePublishable(template.status);
         const lifecycleLocked = template.status === "archived" || template.status === "deprecated";
         return (
-          <div className="admin-tests-row-actions">
-            <button type="button" onClick={() => navigate(`/admin/tests/${template.id}`)}>
-              Open Detail
-            </button>
+          <div className="admin-question-library-actions">
             <button type="button" onClick={() => navigate(`/admin/tests/analytics/${template.id}`)}>
-              Analytics
+              Open Details
             </button>
             <button type="button" onClick={() => startEditingTemplate(template.id)} disabled={!editable}>
-              Edit Template
+              Edit
             </button>
             <button type="button" onClick={() => setPublishTargetId(template.id)} disabled={!publishable}>
-              Publish
+              Ready
             </button>
             <button
               type="button"
@@ -2053,147 +2001,6 @@ function TestTemplateManagementPage() {
       },
     },
   ];
-
-  const analyticsColumns: UiTableColumn<TestTemplateRecord>[] = [
-    {
-      id: "template",
-      header: "Template",
-      render: (template) => template.templateName,
-    },
-    {
-      id: "status",
-      header: "Status",
-      render: (template) => template.status,
-    },
-    {
-      id: "questions",
-      header: "Questions",
-      render: (template) => template.selectedQuestionIds.length,
-    },
-    {
-      id: "distribution",
-      header: "Difficulty Mix",
-      render: (template) =>
-        `E:${template.difficultyDistribution.easy} M:${template.difficultyDistribution.medium} H:${template.difficultyDistribution.hard}`,
-    },
-    {
-      id: "selectionMethod",
-      header: "Selection",
-      render: (template) => template.selectionMethod,
-    },
-  ];
-
-  const selectedTemplateDifficultyRows =
-    inspectedTemplate ?
-      DIFFICULTY_LEVELS.map((difficulty) => ({
-        difficulty,
-        count: inspectedTemplate.difficultyDistribution[difficulty],
-        percent:
-          inspectedTemplate.selectedQuestionIds.length > 0 ?
-            (inspectedTemplate.difficultyDistribution[difficulty] / inspectedTemplate.selectedQuestionIds.length) * 100 :
-            0,
-        minSeconds: inspectedTemplate.timingProfile[difficulty].minSeconds,
-        maxSeconds: inspectedTemplate.timingProfile[difficulty].maxSeconds,
-      } satisfies DistributionDifficultyRow)) :
-      [];
-  const selectedTemplateTimingRows =
-    inspectedTemplate ?
-      DIFFICULTY_LEVELS.map((difficulty) => {
-        const templateExamSnapshot = inspectedTemplate.examSnapshot ?? getExamTypeSnapshot(inspectedTemplate.examType);
-        return {
-          defaultRecommended: `${templateExamSnapshot.difficultyTimingMapping[difficulty].recommendedSeconds}s`,
-          defaultWindow: formatTimingWindow(templateExamSnapshot.difficultyTimingMapping[difficulty]),
-          difficulty,
-          maxSeconds: inspectedTemplate.timingProfile[difficulty].maxSeconds,
-          minSeconds: inspectedTemplate.timingProfile[difficulty].minSeconds,
-          questionCount: inspectedTemplate.difficultyDistribution[difficulty],
-          recommendedSeconds: inspectedTemplate.timingProfile[difficulty].recommendedSeconds,
-          snapshotRule:
-            inspectedTemplate.status === "assigned" ?
-              "Assigned template: timing profile is immutable." :
-              "Draft/ready template: timing profile persists with the structural snapshot.",
-          window: formatTimingWindow(inspectedTemplate.timingProfile[difficulty]),
-        } satisfies TimingProfileTableRow;
-      }) :
-      [];
-  const inspectedTemplateQuestions = inspectedTemplate ?
-    inspectedTemplate.selectedQuestionIds
-      .map((questionId) => questionPoolById.get(questionId))
-      .filter((question): question is QuestionBankRecord => Boolean(question)) :
-    [];
-  const inspectedQuestionTotal = inspectedTemplate?.selectedQuestionIds.length ?? 0;
-  const resolvedQuestionTotal = inspectedTemplateQuestions.length;
-  const inspectedPhaseSnapshot = inspectedTemplate ?
-    inspectedTemplate.phaseConfigSnapshot ?? buildPhaseConfigSnapshot(inspectedTemplate.difficultyDistribution, inspectedTemplate.totalDurationMinutes) :
-    null;
-  const chapterCoverageRows = inspectedTemplateQuestions.reduce<ChapterCoverageRow[]>((rows, question) => {
-    const existing = rows.find((row) => row.chapter === question.chapter);
-    if (existing) {
-      existing.count += 1;
-      existing.percent = inspectedQuestionTotal > 0 ? (existing.count / inspectedQuestionTotal) * 100 : 0;
-      existing.subjects = Array.from(new Set([...existing.subjects.split(", "), question.subject])).join(", ");
-      return rows;
-    }
-
-    rows.push({
-      chapter: question.chapter,
-      count: 1,
-      percent: inspectedQuestionTotal > 0 ? (1 / inspectedQuestionTotal) * 100 : 0,
-      subjects: question.subject,
-    });
-    return rows;
-  }, []);
-  const marksDistributionRows = inspectedTemplateQuestions.reduce<MarksDistributionRow[]>((rows, question) => {
-    const marks = `${question.marks} mark${question.marks === 1 ? "" : "s"}`;
-    const existing = rows.find((row) => row.marks === marks);
-    if (existing) {
-      existing.count += 1;
-      existing.percent = inspectedQuestionTotal > 0 ? (existing.count / inspectedQuestionTotal) * 100 : 0;
-      return rows;
-    }
-
-    rows.push({
-      marks,
-      count: 1,
-      percent: inspectedQuestionTotal > 0 ? (1 / inspectedQuestionTotal) * 100 : 0,
-    });
-    return rows;
-  }, []);
-  const sectionBalanceRows =
-    inspectedTemplate ?
-      (inspectedTemplate.examSnapshot?.sectionStructure ?? getExamTypeSnapshot(inspectedTemplate.examType).sectionStructure).map((section) => {
-        const count = inspectedTemplateQuestions.filter((question) => question.subject === section).length;
-        return {
-          section,
-          count,
-          percent: inspectedQuestionTotal > 0 ? (count / inspectedQuestionTotal) * 100 : 0,
-        } satisfies SectionBalanceRow;
-      }) :
-      [];
-  const estimatedStressIndex =
-    inspectedTemplate && inspectedQuestionTotal > 0 && inspectedPhaseSnapshot ?
-      Math.round((inspectedPhaseSnapshot.totalLoad / (inspectedQuestionTotal * DIFFICULTY_PHASE_WEIGHTS.hard)) * 100) :
-      0;
-  const hardQuestionPercent =
-    inspectedTemplate && inspectedQuestionTotal > 0 ?
-      (inspectedTemplate.difficultyDistribution.hard / inspectedQuestionTotal) * 100 :
-      0;
-  const mediumHardPercent =
-    inspectedTemplate && inspectedQuestionTotal > 0 ?
-      ((inspectedTemplate.difficultyDistribution.medium + inspectedTemplate.difficultyDistribution.hard) / inspectedQuestionTotal) * 100 :
-      0;
-  const riskPredictionLabel =
-    estimatedStressIndex >= 65 || hardQuestionPercent >= 35 ?
-      "High structural load: review timing and controlled-mode readiness." :
-      estimatedStressIndex >= 45 || mediumHardPercent >= 60 ?
-        "Moderate structural load: pacing discipline should be watched." :
-        "Balanced structural load: standard operational execution is expected.";
-
-  const totalQuestionCount = comparableTemplates.reduce((total, template) => total + template.selectedQuestionIds.length, 0);
-  const readyOrAssignedCount = activeLibraryTemplates.filter((template) => template.status === "ready" || template.status === "assigned").length;
-  const hotTemplateCount = templates.filter((template) => template.thermalState === "hot").length;
-  const warmTemplateCount = templates.filter((template) => template.thermalState === "warm").length;
-  const coldTemplateCount = templates.filter((template) => template.thermalState === "cold").length;
 
   function renderCreateView() {
     const stepItems = [
@@ -2784,320 +2591,134 @@ function TestTemplateManagementPage() {
   function renderLibraryView() {
     return (
       <>
-        <div className="admin-tests-summary-grid">
-          <article className="admin-tests-summary-card">
-            <h3>Library Status</h3>
-            <p>{activeLibraryTemplates.length} active-library templates across draft, ready, assigned, and deprecated states.</p>
-          </article>
-          <article className="admin-tests-summary-card">
-            <h3>Editable Templates</h3>
-            <p>{activeLibraryTemplates.filter((template) => isTemplateEditable(template.status)).length} draft/ready templates remain editable.</p>
-          </article>
-          <article className="admin-tests-summary-card">
-            <h3>Structure Locked</h3>
-            <p>{readyOrAssignedCount} templates are ready/assigned and treated as lifecycle-locked snapshots.</p>
-          </article>
-          <article className="admin-tests-summary-card">
-            <h3>Hidden / Deprecated</h3>
-            <p>
-              {templates.filter((template) => template.status === "archived").length} archived hidden ·{" "}
-              {templates.filter((template) => template.status === "deprecated").length} deprecated excluded from comparisons.
-            </p>
-          </article>
-          <article className="admin-tests-summary-card">
-            <h3>HOT / WARM / COLD</h3>
-            <p>{hotTemplateCount} HOT · {warmTemplateCount} WARM · {coldTemplateCount} COLD templates.</p>
-          </article>
-        </div>
-
-        {inspectedTemplate ? (
-          <article className="admin-tests-summary-card admin-tests-detail-card">
-            <h3>Focused Template</h3>
-            <p>
-              <strong>{inspectedTemplate.templateName}</strong> · {inspectedTemplate.examType} ·{" "}
-              {inspectedTemplate.selectedQuestionIds.length} questions
-            </p>
-            <div className="admin-tests-row-actions">
-              <button type="button" onClick={() => navigate(`/admin/tests/analytics/${inspectedTemplate.id}`)}>
-                Open Analytics
-              </button>
-              <button type="button" onClick={() => navigate("/admin/tests/distribution")}>
-                Open Distribution Review
-              </button>
-              <button type="button" onClick={() => navigate("/admin/tests/settings")}>
-                Open Template Settings
-              </button>
-            </div>
-          </article>
-        ) : null}
-
-        <UiTable
-          caption="Saved Test Templates"
-          columns={templateColumns}
-          rows={activeLibraryTemplates}
-          rowKey={(row) => row.id}
-          emptyStateText="No active-library templates are visible."
-        />
-
-        <UiTable
-          caption="HOT/WARM/COLD template lifecycle policy"
-          columns={[
-            { id: "tier", header: "Tier", render: (row) => row.tier },
-            { id: "trigger", header: "Trigger", render: (row) => row.trigger },
-            { id: "metadata", header: "Metadata", render: (row) => row.metadataTreatment },
-            { id: "media", header: "Media", render: (row) => row.mediaTreatment },
-            { id: "operator", header: "Operator Rule", render: (row) => row.operatorRule },
-          ]}
-          rows={TEMPLATE_LIFECYCLE_POLICY_ROWS}
-          rowKey={(row) => row.tier}
-          emptyStateText="No lifecycle policy is configured."
-        />
-
-        <UiTable
-          caption="Template HOT/WARM/COLD lifecycle register"
-          columns={[
-            { id: "template", header: "Template", render: (row) => row.templateName },
-            { id: "state", header: "Lifecycle State", render: (row) => `${row.thermalState.toUpperCase()} / ${row.status}` },
-            { id: "usage", header: "Usage", render: (row) => `${row.totalRuns} runs / ${row.lastUsed}` },
-            { id: "trigger", header: "Trigger", render: (row) => row.trigger },
-            { id: "retention", header: "Retention", render: (row) => row.metadataTreatment },
-            { id: "media", header: "Media", render: (row) => row.mediaTreatment },
-            { id: "operator", header: "Operator Action", render: (row) => row.operatorAction },
-          ]}
-          rows={templateLifecycleRows}
-          rowKey={(row) => row.id}
-          emptyStateText="No template lifecycle rows are currently available."
-        />
-
-        <UiTable
-          caption="Archived and deprecated template register"
-          columns={[
-            { id: "template", header: "Template", render: (template) => template.templateName },
-            { id: "status", header: "Status", render: (template) => template.status },
-            { id: "visibility", header: "Library Behavior", render: (template) =>
-              template.status === "archived" ?
-                "Hidden from the active Test Library table." :
-                "Visible in library, excluded from future comparisons." },
-            { id: "updated", header: "Updated", render: (template) => formatIsoDate(template.updatedAt) },
-          ]}
-          rows={lifecycleRegisterTemplates}
-          rowKey={(row) => row.id}
-          emptyStateText="No archived or deprecated templates are currently recorded."
-        />
-      </>
-    );
-  }
-
-  function renderAnalyticsView() {
-    return (
-      <>
-        <div className="admin-tests-summary-grid">
-          <article className="admin-tests-summary-card">
-            <h3>Templates Tracked</h3>
-            <p>{comparableTemplates.length} non-deprecated templates are available for structural analytics drill-in.</p>
-          </article>
-          <article className="admin-tests-summary-card">
-            <h3>Question Coverage</h3>
-            <p>{totalQuestionCount} frozen question slots are currently represented across library templates.</p>
-          </article>
-          <article className="admin-tests-summary-card">
-            <h3>Focused Template</h3>
-            <p>{inspectedTemplate ? inspectedTemplate.templateName : "No template selected for analytics."}</p>
-          </article>
-        </div>
-
-        {inspectedTemplate ? (
-          <article className="admin-tests-summary-card admin-tests-detail-card">
-            <h3>Focused Analytics Snapshot</h3>
-            <p>
-              Selection: {inspectedTemplate.selectionMethod} · Status: {inspectedTemplate.status} · Last updated:{" "}
-              {formatIsoDate(inspectedTemplate.updatedAt)}
-            </p>
-            <p className="admin-tests-form-footnote">
-              This dedicated analytics route now separates template analysis from create/library flows. Deeper L1/L2
-              metric depth remains tracked separately under `TST-015`.
-            </p>
-          </article>
-        ) : null}
-
-        <UiTable
-          caption="Template analytics workspace"
-          columns={analyticsColumns}
-          rows={comparableTemplates}
-          rowKey={(row) => row.id}
-          emptyStateText="No non-deprecated templates are available for analytics."
-        />
-      </>
-    );
-  }
-
-  function renderDistributionView() {
-    return (
-      <>
-        <div className="admin-tests-summary-grid">
-          <article className="admin-tests-summary-card">
-            <h3>Difficulty %</h3>
-            <p>
-              {inspectedTemplate ?
-                selectedTemplateDifficultyRows.map((row) => `${row.difficulty} ${formatPercent(row.percent)}`).join(" / ") :
-                "No template selected."}
-            </p>
-          </article>
-          <article className="admin-tests-summary-card">
-            <h3>Chapter Coverage</h3>
-            <p>{chapterCoverageRows.length} chapters represented in the frozen question set.</p>
-          </article>
-          <article className="admin-tests-summary-card">
-            <h3>L2 Stress Preview</h3>
-            <p>{estimatedStressIndex}% estimated stress index from structural difficulty load.</p>
-          </article>
-        </div>
-
         <article className="admin-tests-summary-card admin-tests-detail-card">
-          <h3>Distribution Review</h3>
-          <p>
-            {inspectedTemplate ?
-              `${inspectedTemplate.templateName} keeps a frozen ${inspectedTemplate.selectedQuestionIds.length}-question structural snapshot. ${resolvedQuestionTotal} questions resolved against the current library metadata for chapter, marks, and section coverage.` :
-              "No template selected for structural review."}
-          </p>
-          {inspectedTemplate ? (
-            <UiFormField label="Template" htmlFor="admin-tests-distribution-template">
+          <h3>Find A Test Quickly</h3>
+          <p>Use the main filters for day-to-day work. Open archived or retired tests only when you need older records.</p>
+          <div className="admin-tests-filter-grid admin-tests-library-filter-grid">
+            <UiFormField label="Search" htmlFor="admin-tests-library-filter-search">
+              <input
+                id="admin-tests-library-filter-search"
+                type="search"
+                value={templateLibraryFilters.query}
+                onChange={(event) => setTemplateLibraryFilters((current) => ({ ...current, query: event.target.value }))}
+                placeholder="template name, id, canonical id"
+              />
+            </UiFormField>
+            <UiFormField label="Exam Type" htmlFor="admin-tests-library-filter-exam-type">
               <select
-                id="admin-tests-distribution-template"
-                value={inspectedTemplate.id}
-                onChange={(event) => setInspectedTemplateId(event.target.value)}
+                id="admin-tests-library-filter-exam-type"
+                value={templateLibraryFilters.examType}
+                onChange={(event) => setTemplateLibraryFilters((current) => ({ ...current, examType: event.target.value }))}
               >
-                {activeLibraryTemplates.map((template) => (
-                  <option key={template.id} value={template.id}>
-                    {template.templateName}
+                {templateLibraryExamTypes.map((examType) => (
+                  <option key={examType} value={examType}>
+                    {examType}
                   </option>
                 ))}
               </select>
             </UiFormField>
-          ) : null}
+            <UiFormField label="Selection" htmlFor="admin-tests-library-filter-selection">
+              <select
+                id="admin-tests-library-filter-selection"
+                value={templateLibraryFilters.selectionMethod}
+                onChange={(event) => setTemplateLibraryFilters((current) => ({
+                  ...current,
+                  selectionMethod: event.target.value as TemplateLibraryFilters["selectionMethod"],
+                }))}
+              >
+                <option value="all">all</option>
+                {SELECTION_METHODS.map((method) => (
+                  <option key={method} value={method}>
+                    {formatSelectionMethodLabel(method)}
+                  </option>
+                ))}
+              </select>
+            </UiFormField>
+            <UiFormField label="Visibility" htmlFor="admin-tests-library-filter-visibility">
+              <select
+                id="admin-tests-library-filter-visibility"
+                value={templateLibraryFilters.visibility}
+                onChange={(event) => setTemplateLibraryFilters((current) => ({
+                  ...current,
+                  visibility: event.target.value as TemplateLibraryFilters["visibility"],
+                }))}
+              >
+                <option value="active">active only</option>
+                <option value="all">all tests</option>
+                <option value="archived">archived only</option>
+                <option value="deprecated">retired only</option>
+              </select>
+            </UiFormField>
+          </div>
+          <details className="admin-tests-library-advanced-filters">
+            <summary>More filters</summary>
+            <div className="admin-tests-filter-grid admin-tests-library-filter-grid">
+              <UiFormField label="Status" htmlFor="admin-tests-library-filter-status">
+                <select
+                  id="admin-tests-library-filter-status"
+                  value={templateLibraryFilters.status}
+                  onChange={(event) => setTemplateLibraryFilters((current) => ({
+                    ...current,
+                    status: event.target.value as TemplateLibraryFilters["status"],
+                  }))}
+                >
+                  <option value="all">all</option>
+                  <option value="draft">draft</option>
+                  <option value="ready">ready</option>
+                  <option value="assigned">used in assignments</option>
+                  <option value="archived">archived</option>
+                  <option value="deprecated">retired</option>
+                </select>
+              </UiFormField>
+              <UiFormField label="HOT / WARM / COLD" htmlFor="admin-tests-library-filter-thermal">
+                <select
+                  id="admin-tests-library-filter-thermal"
+                  value={templateLibraryFilters.thermalState}
+                  onChange={(event) => setTemplateLibraryFilters((current) => ({
+                    ...current,
+                    thermalState: event.target.value as TemplateLibraryFilters["thermalState"],
+                  }))}
+                >
+                  <option value="all">all</option>
+                  <option value="hot">recently used</option>
+                  <option value="warm">available</option>
+                  <option value="cold">old / archived</option>
+                </select>
+              </UiFormField>
+            </div>
+          </details>
+          <div className="admin-tests-library-filter-actions">
+            <button
+              type="button"
+              onClick={() => {
+                setTemplateLibraryFilters(INITIAL_TEMPLATE_LIBRARY_FILTERS);
+                setInlineMessage("Filters cleared. Showing active tests again.");
+                setErrorMessage(null);
+              }}
+            >
+              Clear Filters
+            </button>
+          </div>
         </article>
 
-        <UiTable
-          caption="Difficulty percentage and timing review"
-          columns={[
-            { id: "difficulty", header: "Difficulty", render: (row) => formatDifficultyLabel(row.difficulty) },
-            { id: "count", header: "Question Count", render: (row) => row.count },
-            { id: "percent", header: "Difficulty %", render: (row) => formatPercent(row.percent) },
-            { id: "min", header: "Min Seconds", render: (row) => row.minSeconds },
-            { id: "max", header: "Max Seconds", render: (row) => row.maxSeconds },
-          ]}
-          rows={selectedTemplateDifficultyRows}
-          rowKey={(row) => row.difficulty}
-          emptyStateText="No template is currently available for distribution review."
-        />
-
-        <UiTable
-          caption="Stored timing profile by difficulty"
-          columns={[
-            { id: "difficulty", header: "Difficulty", render: (row) => formatDifficultyLabel(row.difficulty) },
-            { id: "count", header: "Questions", render: (row) => row.questionCount },
-            { id: "default", header: "Exam Default", render: (row) => row.defaultWindow },
-            { id: "recommended", header: "Recommended", render: (row) => `${row.recommendedSeconds}s` },
-            { id: "window", header: "Stored Window", render: (row) => row.window },
-            { id: "snapshot", header: "Snapshot Rule", render: (row) => row.snapshotRule },
-          ]}
-          rows={selectedTemplateTimingRows}
-          rowKey={(row) => row.difficulty}
-          emptyStateText="No stored timing profile is available for this template."
-        />
-
-        <div className="admin-tests-config-grid">
-          <UiTable
-            caption="Chapter coverage"
-            columns={[
-              { id: "chapter", header: "Chapter", render: (row) => row.chapter },
-              { id: "subjects", header: "Subject(s)", render: (row) => row.subjects },
-              { id: "count", header: "Question Count", render: (row) => row.count },
-              { id: "percent", header: "Coverage %", render: (row) => formatPercent(row.percent) },
-            ]}
-            rows={chapterCoverageRows}
-            rowKey={(row) => row.chapter}
-            emptyStateText="No chapter metadata resolved for this template."
-          />
-
-          <UiTable
-            caption="Marks distribution"
-            columns={[
-              { id: "marks", header: "Marks Bucket", render: (row) => row.marks },
-              { id: "count", header: "Question Count", render: (row) => row.count },
-              { id: "percent", header: "Distribution %", render: (row) => formatPercent(row.percent) },
-            ]}
-            rows={marksDistributionRows}
-            rowKey={(row) => row.marks}
-            emptyStateText="No marks metadata resolved for this template."
-          />
-        </div>
-
-        <div className="admin-tests-config-grid">
-          <UiTable
-            caption="Section balance"
-            columns={[
-              { id: "section", header: "Section", render: (row) => row.section },
-              { id: "count", header: "Question Count", render: (row) => row.count },
-              { id: "percent", header: "Section %", render: (row) => formatPercent(row.percent) },
-            ]}
-            rows={sectionBalanceRows}
-            rowKey={(row) => row.section}
-            emptyStateText="No exam section snapshot is available for this template."
-          />
-
-          <article className="admin-tests-phase-preview">
-            <h3>L2 Structural Preview</h3>
-            <p>{riskPredictionLabel}</p>
-            <div className="admin-tests-phase-grid">
-              {inspectedPhaseSnapshot?.phaseSplit.map((phase) => (
-                <div key={phase.difficulty} className="admin-tests-phase-row">
-                  <strong>{phase.phase}</strong>
-                  <span>{phase.questionCount} questions · load {phase.load}</span>
-                  <span>{phase.percent}% · {phase.minutes} min</span>
-                  <small>{phase.focus}</small>
-                </div>
-              ))}
+        <div className="admin-question-library-table-shell">
+          <div className="admin-question-library-table-header">
+            <div>
+              <p>Test Library</p>
+              <h3>{filteredLibraryTemplates.length} tests found</h3>
             </div>
-          </article>
+            <small>
+              Open details, edit draft work, mark a test ready for assignment, or manage older tests from the row actions.
+            </small>
+          </div>
+          <UiTable
+            caption="Saved tests"
+            columns={templateColumns}
+            rows={filteredLibraryTemplates}
+            rowKey={(row) => row.id}
+            emptyStateText="No tests match these filters."
+          />
         </div>
-      </>
-    );
-  }
-
-  function renderSettingsView() {
-    return (
-      <>
-        <div className="admin-tests-summary-grid">
-          <article className="admin-tests-summary-card">
-            <h3>Lifecycle Rules</h3>
-            <p>`draft` and `ready` remain editable. First assignment locks structure permanently.</p>
-          </article>
-          <article className="admin-tests-summary-card">
-            <h3>Mode Ceiling</h3>
-            <p>L0 allows Operational. L1 adds Diagnostic. L2+ adds Controlled and Hard capability.</p>
-          </article>
-          <article className="admin-tests-summary-card">
-            <h3>Focused Status</h3>
-            <p>{inspectedTemplate ? `${inspectedTemplate.templateName}: ${inspectedTemplate.status}` : "No template selected."}</p>
-          </article>
-        </div>
-
-        <UiTable
-          caption="Template settings and lock guidance"
-          columns={[
-            { id: "rule", header: "Rule", render: (row) => row.rule },
-            { id: "value", header: "Value", render: (row) => row.value },
-          ]}
-          rows={[
-            { rule: "Capability ceiling", value: "Configured at template creation and reused during assignment" },
-            { rule: "Structural lock", value: "Applied after first assignment to preserve canonical identity" },
-            { rule: "Timing profile", value: "Stored per difficulty and treated as immutable snapshot post-assignment" },
-            { rule: "Duplicate handling", value: "Canonical ID comparison allows reuse or intentional duplication" },
-          ]}
-          rowKey={(row) => row.rule}
-          emptyStateText="No template settings are currently available."
-        />
       </>
     );
   }
@@ -3105,10 +2726,9 @@ function TestTemplateManagementPage() {
   return (
     <section className="admin-content-card" aria-labelledby="admin-tests-title">
       <p className="admin-content-eyebrow">Build 118</p>
-      <h2 id="admin-tests-title">Test Template Management UI</h2>
+      <h2 id="admin-tests-title">Teacher Test Workspace</h2>
       <p className="admin-content-copy">
-        Create and manage template drafts through dedicated mounted subpages for authoring, library review, analytics,
-        distribution review, and template settings.
+        Create tests, find saved tests quickly, and open each test’s details and analytics from one workspace.
       </p>
 
       <TestsWorkspaceNav />
@@ -3119,9 +2739,7 @@ function TestTemplateManagementPage() {
 
       {currentSubpage === "create" ? renderCreateView() : null}
       {currentSubpage === "library" ? renderLibraryView() : null}
-      {currentSubpage === "analytics" ? renderAnalyticsView() : null}
-      {currentSubpage === "distribution" ? renderDistributionView() : null}
-      {currentSubpage === "settings" ? renderSettingsView() : null}
+      {currentSubpage === "analytics" ? renderLibraryView() : null}
 
       <UiModal
         isOpen={Boolean(previewQuestion)}
@@ -3154,8 +2772,8 @@ function TestTemplateManagementPage() {
 
       <UiModal
         isOpen={Boolean(publishTargetId)}
-        title="Publish Template"
-        description="Publishing moves draft to ready and locks editing as per template lifecycle."
+        title="Mark Test Ready"
+        description="This moves the test from draft to ready so it can be used in assignment workflows."
         onClose={() => setPublishTargetId(null)}
       >
         <div className="admin-tests-publish-actions">
@@ -3168,7 +2786,7 @@ function TestTemplateManagementPage() {
             }}
             disabled={isSubmitting}
           >
-            Confirm Publish
+            Confirm Mark Ready
           </button>
           <button type="button" onClick={() => setPublishTargetId(null)} disabled={isSubmitting}>
             Cancel

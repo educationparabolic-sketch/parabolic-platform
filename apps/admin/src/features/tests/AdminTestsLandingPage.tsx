@@ -174,27 +174,9 @@ const TEST_WORKSPACES = [
   },
   {
     title: "Test Library",
-    description: "Central library for saved templates, lifecycle review, detail drill-in, and edit-or-publish actions.",
+    description: "Central library for saved templates with filters, per-test analytics access, lifecycle review, and edit-or-publish actions.",
     to: "/admin/tests/library",
     meta: "Primary template operations workspace",
-  },
-  {
-    title: "Template Analytics",
-    description: "Cross-template outcome review for effectiveness, average scores, and reusable template quality signals.",
-    to: "/admin/tests/analytics",
-    meta: "Analytics and performance visibility",
-  },
-  {
-    title: "Distribution Review",
-    description: "Structural review for difficulty balance, question composition, and timing-shape visibility.",
-    to: "/admin/tests/distribution",
-    meta: "Composition and balance checks",
-  },
-  {
-    title: "Template Settings",
-    description: "Lifecycle rules, capability ceilings, and immutable-structure guidance for templates after assignment.",
-    to: "/admin/tests/settings",
-    meta: "Governance and template guardrails",
   },
 ] as const;
 
@@ -257,10 +239,6 @@ function AdminTestsLandingPage() {
     () => templates.filter((template) => template.status === "draft").length,
     [templates],
   );
-  const totalQuestions = useMemo(
-    () => templates.reduce((sum, template) => sum + template.selectedQuestionIds.length, 0),
-    [templates],
-  );
   const testsWorkspaces = useMemo(
     () => TEST_WORKSPACES.map((workspace) => {
       switch (workspace.to) {
@@ -272,28 +250,13 @@ function AdminTestsLandingPage() {
         case "/admin/tests/library":
           return {
             ...workspace,
-            meta: `${templates.length} templates indexed from the current test registry`,
-          };
-        case "/admin/tests/analytics":
-          return {
-            ...workspace,
-            meta: `${readyOrAssignedCount} reusable templates are analytics-eligible`,
-          };
-        case "/admin/tests/distribution":
-          return {
-            ...workspace,
-            meta: `${totalQuestions} frozen question slots represented across indexed templates`,
-          };
-        case "/admin/tests/settings":
-          return {
-            ...workspace,
-            meta: `${templates.filter((template) => template.status === "assigned").length} assigned templates are structurally locked`,
+            meta: `${templates.length} templates indexed, ${readyOrAssignedCount} analytics-eligible`,
           };
         default:
           return workspace;
       }
     }),
-    [draftCount, readyOrAssignedCount, templates, totalQuestions],
+    [draftCount, readyOrAssignedCount, templates],
   );
   const note = isLoading ?
     "Loading tests landing summary from GET /admin/tests..." :
@@ -305,7 +268,7 @@ function AdminTestsLandingPage() {
       title="Dedicated Tests Landing Workspace"
       description={[
         "This route turns /admin/tests into a dedicated workspace index instead of redirecting directly into the template library.",
-        "Template operations are grouped into focused destinations for authoring, library review, analytics, distribution checks, and settings guidance.",
+        "Template operations are grouped into focused destinations for authoring and merged library review with analytics access.",
       ]}
       note={note}
       stats={[

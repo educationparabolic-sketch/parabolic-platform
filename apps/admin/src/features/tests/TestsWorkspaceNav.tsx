@@ -9,18 +9,6 @@ const TESTS_WORKSPACE_LINKS = [
     label: "Test Library",
     to: "/admin/tests/library",
   },
-  {
-    label: "Template Analytics",
-    to: "/admin/tests/analytics",
-  },
-  {
-    label: "Distribution Review",
-    to: "/admin/tests/distribution",
-  },
-  {
-    label: "Template Settings",
-    to: "/admin/tests/settings",
-  },
 ] as const;
 
 function TestsWorkspaceNav() {

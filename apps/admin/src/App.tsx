@@ -7,6 +7,7 @@ import {
   Routes,
   useLocation,
   useNavigate,
+  useParams,
 } from "react-router-dom";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { useAuthProvider } from "../../../shared/services/authProvider";
@@ -91,7 +92,6 @@ const AdminQuestionBankTagManagementPage = lazy(() => import("./features/tests/A
 const AdminQuestionBankValidationLogsPage = lazy(() => import("./features/tests/AdminQuestionBankValidationLogsPage"));
 const AdminTestsLandingPage = lazy(() => import("./features/tests/AdminTestsLandingPage"));
 const AdminTestTemplateAnalyticsDetailPage = lazy(() => import("./features/tests/AdminTestTemplateAnalyticsDetailPage"));
-const AdminTestTemplateDetailPage = lazy(() => import("./features/tests/AdminTestTemplateDetailPage"));
 const StudentManagementPage = lazy(() => import("./features/students/StudentManagementPage"));
 const StudentProfilePage = lazy(() => import("./features/students/StudentProfilePage"));
 const QuestionBankManagementPage = lazy(() => import("./features/tests/QuestionBankManagementPage"));
@@ -119,6 +119,11 @@ function NotFoundPage() {
       </section>
     </main>
   );
+}
+
+function AdminTestDetailRedirect() {
+  const params = useParams<{ testId?: string }>();
+  return <Navigate to={params.testId ? `/admin/tests/analytics/${params.testId}` : "/admin/tests/library"} replace />;
 }
 
 const ADMIN_SIDEBAR_STORAGE_KEY = "admin-sidebar-collapsed";
@@ -708,16 +713,8 @@ function App() {
           element={<AdminRouteBoundary label="Loading template analytics"><AdminTestTemplateAnalyticsDetailPage /></AdminRouteBoundary>}
         />
         <Route
-          path="tests/distribution"
-          element={<AdminRouteBoundary label="Loading distribution review"><TestTemplateManagementPage /></AdminRouteBoundary>}
-        />
-        <Route
-          path="tests/settings"
-          element={<AdminRouteBoundary label="Loading template settings"><TestTemplateManagementPage /></AdminRouteBoundary>}
-        />
-        <Route
           path="tests/:testId"
-          element={<AdminRouteBoundary label="Loading test detail"><AdminTestTemplateDetailPage /></AdminRouteBoundary>}
+          element={<AdminTestDetailRedirect />}
         />
         <Route path="tests/*" element={<AdminRouteResolutionPage />} />
         <Route
