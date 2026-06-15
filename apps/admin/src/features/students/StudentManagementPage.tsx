@@ -183,8 +183,6 @@ interface StudentFilterState {
   rawScoreMax: string;
   accuracyMin: string;
   accuracyMax: string;
-  scorePercentileMin: string;
-  scorePercentileMax: string;
   riskState: StudentRiskState | "all";
   disciplineMin: string;
   disciplineMax: string;
@@ -721,20 +719,6 @@ function isWithinNumberRange(value: number, minRaw: string, maxRaw: string): boo
   }
 
   return true;
-}
-
-function isWithinOptionalNumberRange(value: number | null, minRaw: string, maxRaw: string): boolean {
-  const hasMin = minRaw.trim().length > 0;
-  const hasMax = maxRaw.trim().length > 0;
-  if (!hasMin && !hasMax) {
-    return true;
-  }
-
-  if (value === null) {
-    return false;
-  }
-
-  return isWithinNumberRange(value, minRaw, maxRaw);
 }
 
 function toEpochDay(value: string | null): number | null {
@@ -1523,8 +1507,6 @@ function StudentManagementPage() {
     rawScoreMax: "",
     accuracyMin: "",
     accuracyMax: "",
-    scorePercentileMin: "",
-    scorePercentileMax: "",
     riskState: "all",
     disciplineMin: "",
     disciplineMax: "",
@@ -1661,8 +1643,6 @@ function StudentManagementPage() {
       const academicYearMatches = filters.academicYear.length > 0 && student.academicYear === filters.academicYear;
       const rawScoreMatches = isWithinNumberRange(student.avgRawScorePercent, filters.rawScoreMin, filters.rawScoreMax);
       const accuracyMatches = isWithinNumberRange(student.avgAccuracyPercent, filters.accuracyMin, filters.accuracyMax);
-      const scorePercentileMatches =
-        isWithinOptionalNumberRange(student.scorePercentile, filters.scorePercentileMin, filters.scorePercentileMax);
       const riskStateMatches = !canUseL2Filters || filters.riskState === "all" || student.riskState === filters.riskState;
       const disciplineMatches =
         !canUseL2Filters || isWithinNumberRange(student.disciplineIndex, filters.disciplineMin, filters.disciplineMax);
@@ -1683,7 +1663,6 @@ function StudentManagementPage() {
         academicYearMatches &&
         rawScoreMatches &&
         accuracyMatches &&
-        scorePercentileMatches &&
         riskStateMatches &&
         disciplineMatches &&
         lastActiveMatches
@@ -2855,7 +2834,7 @@ function StudentManagementPage() {
             <section className="admin-student-form-section" aria-label="Performance band filters">
               <div className="admin-student-form-section-header">
                 <h4>Performance Bands</h4>
-                <p>Use paired min and max values to narrow the roster by score, accuracy, and percentile.</p>
+                <p>Use paired min and max values to narrow the roster by score and accuracy.</p>
               </div>
               <div className="admin-student-form-grid">
                 <UiFormField label="Avg Raw Score Min %" htmlFor="admin-student-raw-min">
@@ -2898,83 +2877,55 @@ function StudentManagementPage() {
                     onChange={(event) => setFilters((current) => ({ ...current, accuracyMax: event.target.value }))}
                   />
                 </UiFormField>
-                <UiFormField label="Score Percentile Min" htmlFor="admin-student-percentile-min">
-                  <input
-                    id="admin-student-percentile-min"
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={filters.scorePercentileMin}
-                    onChange={(event) => setFilters((current) => ({ ...current, scorePercentileMin: event.target.value }))}
-                  />
-                </UiFormField>
-                <UiFormField label="Score Percentile Max" htmlFor="admin-student-percentile-max">
-                  <input
-                    id="admin-student-percentile-max"
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={filters.scorePercentileMax}
-                    onChange={(event) => setFilters((current) => ({ ...current, scorePercentileMax: event.target.value }))}
-                  />
-                </UiFormField>
               </div>
             </section>
 
-            <section className="admin-student-form-section" aria-label="Execution and activity filters">
+            {canUseL2Filters ? (
+              <section className="admin-student-form-section" aria-label="Execution and activity filters">
               <div className="admin-student-form-section-header">
                 <h4>Execution and Activity</h4>
                 <p>Layer-aware filters for risk, discipline, and last activity window.</p>
               </div>
               <div className="admin-student-form-grid">
-                {canUseL2Filters ? (
-                  <>
-                    <UiFormField label="Risk State" htmlFor="admin-student-risk-filter">
-                      <select
-                        id="admin-student-risk-filter"
-                        value={filters.riskState}
-                        onChange={(event) =>
-                          setFilters((current) => ({
-                            ...current,
-                            riskState: event.target.value as StudentFilterState["riskState"],
-                          }))
-                        }
-                      >
-                        <option value="all">All</option>
-                        {RISK_STATES.map((riskState) => (
-                          <option key={riskState} value={riskState}>
-                            {riskState}
-                          </option>
-                        ))}
-                      </select>
-                    </UiFormField>
-                    <UiFormField label="Discipline Min" htmlFor="admin-student-discipline-min">
-                      <input
-                        id="admin-student-discipline-min"
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={filters.disciplineMin}
-                        onChange={(event) => setFilters((current) => ({ ...current, disciplineMin: event.target.value }))}
-                      />
-                    </UiFormField>
-                    <UiFormField label="Discipline Max" htmlFor="admin-student-discipline-max">
-                      <input
-                        id="admin-student-discipline-max"
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={filters.disciplineMax}
-                        onChange={(event) => setFilters((current) => ({ ...current, disciplineMax: event.target.value }))}
-                      />
-                    </UiFormField>
-                  </>
-                ) : (
-                  <div className="admin-student-form-lockout admin-student-form-span-full">
-                    <strong>L2 Filters Locked</strong>
-                    <p>Risk state and discipline filters unlock at <strong>L2</strong>. Current access layer: <strong>{currentLayer}</strong>.</p>
-                  </div>
-                )}
+                <UiFormField label="Risk State" htmlFor="admin-student-risk-filter">
+                  <select
+                    id="admin-student-risk-filter"
+                    value={filters.riskState}
+                    onChange={(event) =>
+                      setFilters((current) => ({
+                        ...current,
+                        riskState: event.target.value as StudentFilterState["riskState"],
+                      }))
+                    }
+                  >
+                    <option value="all">All</option>
+                    {RISK_STATES.map((riskState) => (
+                      <option key={riskState} value={riskState}>
+                        {riskState}
+                      </option>
+                    ))}
+                  </select>
+                </UiFormField>
+                <UiFormField label="Discipline Min" htmlFor="admin-student-discipline-min">
+                  <input
+                    id="admin-student-discipline-min"
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={filters.disciplineMin}
+                    onChange={(event) => setFilters((current) => ({ ...current, disciplineMin: event.target.value }))}
+                  />
+                </UiFormField>
+                <UiFormField label="Discipline Max" htmlFor="admin-student-discipline-max">
+                  <input
+                    id="admin-student-discipline-max"
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={filters.disciplineMax}
+                    onChange={(event) => setFilters((current) => ({ ...current, disciplineMax: event.target.value }))}
+                  />
+                </UiFormField>
                 <UiFormField label="Last Active From" htmlFor="admin-student-last-active-start">
                   <input
                     id="admin-student-last-active-start"
@@ -2992,7 +2943,8 @@ function StudentManagementPage() {
                   />
                 </UiFormField>
               </div>
-            </section>
+              </section>
+            ) : null}
           </UiForm>
 
           <UiForm
