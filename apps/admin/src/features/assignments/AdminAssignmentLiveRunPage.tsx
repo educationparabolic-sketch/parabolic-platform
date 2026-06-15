@@ -11,7 +11,7 @@ import {
 } from "../analytics/analyticsDataset";
 import AssignmentsWorkspaceNav from "./AssignmentsWorkspaceNav";
 
-type ExecutionMode = "Operational" | "Diagnostic" | "Controlled" | "Hard";
+type ExecutionMode = "Operational" | "Controlled" | "Focused" | "Hard";
 type RunStatus = "scheduled" | "active" | "collecting" | "completed" | "archived" | "cancelled" | "terminated";
 
 interface RunAnalyticsSnapshot {
@@ -164,7 +164,7 @@ function clampNonNegative(value: number): number {
 }
 
 function toExecutionMode(mode: string): ExecutionMode {
-  if (mode === "Operational" || mode === "Diagnostic" || mode === "Controlled" || mode === "Hard") {
+  if (mode === "Operational" || mode === "Controlled" || mode === "Focused" || mode === "Hard") {
     return mode;
   }
 

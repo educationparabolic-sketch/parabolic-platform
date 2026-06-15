@@ -9,7 +9,7 @@ import {
 } from "../analytics/analyticsDataset";
 import AssignmentsWorkspaceNav from "./AssignmentsWorkspaceNav";
 
-type ExecutionMode = "Operational" | "Diagnostic" | "Controlled" | "Hard";
+type ExecutionMode = "Operational" | "Controlled" | "Focused" | "Hard";
 
 interface RunAnalyticsSnapshot {
   avgRawScorePercent: number;
@@ -53,7 +53,7 @@ const LIVE_RUNS: RunStatusRecord[] = [
     runId: "run-2026-0418-001",
     runName: "Run 2026-0418-001",
     batchName: "Batch-A",
-    mode: "Diagnostic",
+    mode: "Focused",
     startedAtIso: "2026-04-18T05:00:00.000Z",
     completionPercent: 42,
     participants: 3,
@@ -78,7 +78,7 @@ function formatDateTime(value: string): string {
 }
 
 function toExecutionMode(mode: string): ExecutionMode {
-  if (mode === "Operational" || mode === "Diagnostic" || mode === "Controlled" || mode === "Hard") {
+  if (mode === "Operational" || mode === "Controlled" || mode === "Focused" || mode === "Hard") {
     return mode;
   }
 

@@ -3,7 +3,6 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import {
-  UiForm,
   UiFormField,
   UiTable,
   type UiTableColumn,
@@ -16,7 +15,7 @@ import AssignmentsWorkspaceNav from "./AssignmentsWorkspaceNav";
 
 const apiClient = getPortalApiClient("admin");
 
-const EXECUTION_MODES = ["Operational", "Diagnostic", "Controlled", "Hard"] as const;
+const EXECUTION_MODES = ["Operational", "Controlled", "Focused", "Hard"] as const;
 const LICENSE_ORDER = ["L0", "L1", "L2", "L3"] as const;
 const RUN_STATUSES = ["scheduled", "active", "collecting", "completed", "archived", "cancelled", "terminated"] as const;
 
@@ -26,8 +25,8 @@ const CURRENT_INSTITUTE_TIMEZONE = "Asia/Kolkata";
 
 const MODE_REQUIRED_LAYER: Record<ExecutionMode, LicenseLayer> = {
   Operational: "L0",
-  Diagnostic: "L1",
-  Controlled: "L2",
+  Controlled: "L1",
+  Focused: "L2",
   Hard: "L2",
 };
 
@@ -45,6 +44,8 @@ type RecipientSelectionMode =
   "FilterByMetrics";
 
 type RiskState = "low" | "moderate" | "high" | "critical";
+type MetricControl = "risk" | "discipline" | "raw" | "accuracy";
+type RecipientFamily = "batch" | "student";
 
 interface TemplateOption {
   id: string;
@@ -54,6 +55,8 @@ interface TemplateOption {
   status: TemplateAssignmentStatus;
   difficultyDistribution: string;
   allowedModes: ExecutionMode[];
+  totalDurationMinutes: number;
+  createdAtIso: string;
   lastUsedIso: string;
   phaseConfigSnapshot: string;
   timingProfileSnapshot: string;
@@ -68,7 +71,7 @@ interface StudentOption {
   disciplineIndex: number;
   avgRawScorePercent: number;
   avgAccuracyPercent: number;
-  performancePercentile: number;
+  topicWeaknesses: string[];
 }
 
 interface BatchOption {
@@ -84,8 +87,7 @@ interface MetricsFilter {
   rawScoreMax: string;
   accuracyMin: string;
   accuracyMax: string;
-  performancePercentileMin: string;
-  performancePercentileMax: string;
+  topicWeaknesses: string[];
 }
 
 interface AssignmentDraft {
@@ -101,6 +103,13 @@ interface AssignmentDraft {
   attemptLimit: string;
   gracePeriodMinutes: string;
   shuffleQuestionOrder: boolean;
+}
+
+interface TemplateSelectionFilters {
+  query: string;
+  examType: string;
+  dateStart: string;
+  dateEnd: string;
 }
 
 interface RunAnalyticsSnapshot {
@@ -165,10 +174,56 @@ interface RecipientPreviewRow {
   accuracy: number;
   batch: string;
   discipline: number;
-  percentile: number;
   raw: number;
   risk: RiskState;
   student: string;
+}
+
+interface BatchSelectionRow {
+  activeStudents: number;
+  accuracy: number;
+  batchId: string;
+  batchName: string;
+  discipline: number;
+  raw: number;
+  risk: RiskState;
+  selected: boolean;
+  topicWeaknesses: string[];
+}
+
+interface StudentSelectionRow {
+  accuracy: number;
+  batch: string;
+  discipline: number;
+  isActive: boolean;
+  raw: number;
+  risk: RiskState;
+  selected: boolean;
+  studentId: string;
+  studentName: string;
+  topicWeaknesses: string[];
+}
+
+interface RecipientPreviewRow {
+  accuracy: number;
+  batch: string;
+  discipline: number;
+  raw: number;
+  risk: RiskState;
+  student: string;
+}
+
+interface StudentSelectionRow {
+  accuracy: number;
+  batch: string;
+  discipline: number;
+  isActive: boolean;
+  raw: number;
+  risk: RiskState;
+  selected: boolean;
+  studentId: string;
+  studentName: string;
+  topicWeaknesses: string[];
 }
 
 interface RunCreatePayload {
@@ -208,6 +263,7 @@ interface AdminStudentRecord {
   scorePercentile: number | null;
   riskState: "low" | "moderate" | "high" | "critical";
   disciplineIndex: number;
+  topicWeaknesses: string[];
 }
 
 interface AdminTestTemplateRecord {
@@ -229,18 +285,8 @@ interface AdminTestTemplateRecord {
     hard: { minSeconds: number; maxSeconds: number };
   };
   status: "draft" | "ready" | "assigned" | "archived" | "deprecated";
+  createdAt: string;
   updatedAt: string;
-}
-
-interface TemplateMetadataRow {
-  id: string;
-  name: string;
-  examType: string;
-  status: TemplateAssignmentStatus;
-  difficultyDistribution: string;
-  allowedModes: string;
-  canonicalVisibility: string;
-  lastUsed: string;
 }
 
 interface AssignmentLifecyclePolicyRow {
@@ -295,7 +341,9 @@ const TEMPLATE_OPTIONS: TemplateOption[] = [
     examType: "JEEMains",
     status: "ready",
     difficultyDistribution: "Easy 34% / Medium 44% / Hard 22%",
-    allowedModes: ["Operational", "Diagnostic", "Controlled"],
+    allowedModes: ["Operational", "Controlled", "Focused"],
+    totalDurationMinutes: 180,
+    createdAtIso: "2026-03-12T06:40:00.000Z",
     lastUsedIso: "2026-04-10T06:40:00.000Z",
     phaseConfigSnapshot: "P1 34% | P2 33% | P3 33%",
     timingProfileSnapshot: "Easy 45-90s | Medium 75-120s | Hard 105-180s",
@@ -307,7 +355,9 @@ const TEMPLATE_OPTIONS: TemplateOption[] = [
     examType: "NEET",
     status: "assigned",
     difficultyDistribution: "Easy 40% / Medium 38% / Hard 22%",
-    allowedModes: ["Operational", "Diagnostic", "Controlled", "Hard"],
+    allowedModes: ["Operational", "Controlled", "Focused", "Hard"],
+    totalDurationMinutes: 200,
+    createdAtIso: "2026-03-20T04:00:00.000Z",
     lastUsedIso: "2026-04-08T04:00:00.000Z",
     phaseConfigSnapshot: "P1 30% | P2 35% | P3 35%",
     timingProfileSnapshot: "Easy 35-75s | Medium 65-105s | Hard 95-150s",
@@ -319,7 +369,9 @@ const TEMPLATE_OPTIONS: TemplateOption[] = [
     examType: "JEEMains",
     status: "draft",
     difficultyDistribution: "Easy 25% / Medium 50% / Hard 25%",
-    allowedModes: ["Operational", "Diagnostic"],
+    allowedModes: ["Operational", "Controlled"],
+    totalDurationMinutes: 120,
+    createdAtIso: "2026-03-01T09:30:00.000Z",
     lastUsedIso: "2026-03-28T09:30:00.000Z",
     phaseConfigSnapshot: "P1 20% | P2 40% | P3 40%",
     timingProfileSnapshot: "Easy 60-90s | Medium 90-135s | Hard 135-190s",
@@ -342,7 +394,7 @@ const STUDENT_OPTIONS: StudentOption[] = [
     disciplineIndex: 69,
     avgRawScorePercent: 62,
     avgAccuracyPercent: 71,
-    performancePercentile: 66,
+    topicWeaknesses: ["Electrostatics", "Thermodynamics"],
   },
   {
     id: "STU-002",
@@ -353,7 +405,7 @@ const STUDENT_OPTIONS: StudentOption[] = [
     disciplineIndex: 78,
     avgRawScorePercent: 74,
     avgAccuracyPercent: 80,
-    performancePercentile: 81,
+    topicWeaknesses: ["Organic Chemistry"],
   },
   {
     id: "STU-003",
@@ -364,7 +416,7 @@ const STUDENT_OPTIONS: StudentOption[] = [
     disciplineIndex: 42,
     avgRawScorePercent: 49,
     avgAccuracyPercent: 54,
-    performancePercentile: 37,
+    topicWeaknesses: ["Kinematics", "Vectors"],
   },
   {
     id: "STU-005",
@@ -375,7 +427,7 @@ const STUDENT_OPTIONS: StudentOption[] = [
     disciplineIndex: 33,
     avgRawScorePercent: 38,
     avgAccuracyPercent: 44,
-    performancePercentile: 18,
+    topicWeaknesses: ["Plant Physiology", "Genetics"],
   },
   {
     id: "STU-010",
@@ -386,7 +438,7 @@ const STUDENT_OPTIONS: StudentOption[] = [
     disciplineIndex: 61,
     avgRawScorePercent: 58,
     avgAccuracyPercent: 66,
-    performancePercentile: 57,
+    topicWeaknesses: ["Current Electricity", "Magnetism"],
   },
   {
     id: "STU-011",
@@ -397,7 +449,7 @@ const STUDENT_OPTIONS: StudentOption[] = [
     disciplineIndex: 83,
     avgRawScorePercent: 81,
     avgAccuracyPercent: 84,
-    performancePercentile: 88,
+    topicWeaknesses: ["Wave Optics"],
   },
   {
     id: "STU-014",
@@ -408,7 +460,7 @@ const STUDENT_OPTIONS: StudentOption[] = [
     disciplineIndex: 73,
     avgRawScorePercent: 66,
     avgAccuracyPercent: 69,
-    performancePercentile: 71,
+    topicWeaknesses: ["Coordinate Geometry"],
   },
   {
     id: "STU-021",
@@ -419,7 +471,7 @@ const STUDENT_OPTIONS: StudentOption[] = [
     disciplineIndex: 68,
     avgRawScorePercent: 63,
     avgAccuracyPercent: 67,
-    performancePercentile: 62,
+    topicWeaknesses: ["Human Physiology", "Ecology"],
   },
   {
     id: "STU-022",
@@ -430,7 +482,7 @@ const STUDENT_OPTIONS: StudentOption[] = [
     disciplineIndex: 76,
     avgRawScorePercent: 72,
     avgAccuracyPercent: 79,
-    performancePercentile: 79,
+    topicWeaknesses: ["Chemical Bonding"],
   },
   {
     id: "STU-023",
@@ -441,7 +493,7 @@ const STUDENT_OPTIONS: StudentOption[] = [
     disciplineIndex: 47,
     avgRawScorePercent: 51,
     avgAccuracyPercent: 56,
-    performancePercentile: 43,
+    topicWeaknesses: ["Trigonometry", "Thermochemistry"],
   },
 ];
 
@@ -527,8 +579,8 @@ const FALLBACK_RUNS: RunStatusRecord[] = [
     canonicalId: "canon-neet-2026-bio",
     templateName: "NEET Revision - Biology Focus",
     academicYear: "2026",
-    mode: "Diagnostic",
-    modeSnapshot: "Diagnostic",
+    mode: "Focused",
+    modeSnapshot: "Focused",
     phaseConfigSnapshot: "P1 30% | P2 35% | P3 35%",
     timingProfileSnapshot: "Easy 35-75s | Medium 65-105s | Hard 95-150s",
     batchIds: ["batch-c"],
@@ -627,8 +679,7 @@ const INITIAL_DRAFT: AssignmentDraft = {
     rawScoreMax: "",
     accuracyMin: "",
     accuracyMax: "",
-    performancePercentileMin: "",
-    performancePercentileMax: "",
+    topicWeaknesses: [],
   },
   assignmentStartLocal: "",
   assignmentEndLocal: "",
@@ -643,6 +694,13 @@ const INITIAL_FILTERS: AssignmentListFilters = {
   status: "all",
   mode: "all",
   batchId: "all",
+  dateStart: "",
+  dateEnd: "",
+};
+
+const EMPTY_TEMPLATE_FILTERS: TemplateSelectionFilters = {
+  query: "",
+  examType: "all",
   dateStart: "",
   dateEnd: "",
 };
@@ -699,6 +757,46 @@ function toStudentRiskState(value: unknown): StudentOption["riskState"] {
   return "moderate";
 }
 
+function toTopicWeaknesses(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return Array.from(
+      new Set(
+        value
+          .filter((entry): entry is string => typeof entry === "string")
+          .map((entry) => entry.trim())
+          .filter((entry) => entry.length > 0),
+      ),
+    );
+  }
+
+  if (typeof value === "string") {
+    return Array.from(
+      new Set(
+        value
+          .split(/[|,;/]/)
+          .map((entry) => entry.trim())
+          .filter((entry) => entry.length > 0),
+      ),
+    );
+  }
+
+  return [];
+}
+
+function parseTopicWeaknessInput(input: string, options: string[]): string[] {
+  const normalizedOptions = new Map(options.map((option) => [option.toLowerCase(), option]));
+  return Array.from(
+    new Set(
+      input
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0)
+        .map((entry) => normalizedOptions.get(entry.toLowerCase()) ?? null)
+        .filter((entry): entry is string => Boolean(entry)),
+    ),
+  );
+}
+
 function normalizeTestTemplateRecord(value: unknown, index: number): AdminTestTemplateRecord | null {
   if (!value || typeof value !== "object") {
     return null;
@@ -747,6 +845,7 @@ function normalizeTestTemplateRecord(value: unknown, index: number): AdminTestTe
       },
     },
     status: toTemplateStatus(record.status),
+    createdAt: toNonEmptyString(record.createdAt, fallback?.createdAtIso ?? fallback?.lastUsedIso ?? new Date(0).toISOString()),
     updatedAt: toNonEmptyString(record.updatedAt, fallback?.lastUsedIso ?? new Date(0).toISOString()),
   };
 }
@@ -764,13 +863,39 @@ function deriveDifficultyDistributionLabel(distribution: AdminTestTemplateRecord
   ].join(" / ");
 }
 
-function deriveAllowedModes(examType: string): ExecutionMode[] {
-  const normalized = examType.trim().toLowerCase();
-  if (normalized.includes("neet")) {
-    return ["Operational", "Diagnostic", "Controlled", "Hard"];
+function allowedModesForLayer(layer: LicenseLayer): ExecutionMode[] {
+  if (layer === "L0") {
+    return ["Operational"];
   }
 
-  return ["Operational", "Diagnostic", "Controlled"];
+  if (layer === "L1") {
+    return ["Operational", "Controlled"];
+  }
+
+  return ["Operational", "Controlled", "Focused", "Hard"];
+}
+
+function formatLayerAwareModes(layer: LicenseLayer): string {
+  return allowedModesForLayer(layer).join(", ");
+}
+
+function formatExecutionModeHelper(mode: ExecutionMode): string {
+  switch (mode) {
+    case "Operational":
+      return "Standard exam delivery with no extra control overlays.";
+    case "Controlled":
+      return "Adds structured pacing and controlled delivery guardrails.";
+    case "Focused":
+      return "Used for targeted, high-attention runs with tighter guidance.";
+    case "Hard":
+      return "High-rigor execution mode for advanced practice and stricter control.";
+    default:
+      return "";
+  }
+}
+
+function deriveAllowedModes(): ExecutionMode[] {
+  return allowedModesForLayer(CURRENT_LICENSE_LAYER);
 }
 
 function derivePhaseSnapshot(distribution: AdminTestTemplateRecord["difficultyDistribution"]): string {
@@ -801,7 +926,9 @@ function toTemplateOption(record: AdminTestTemplateRecord): TemplateOption {
     examType: record.examType === "NEET" ? "NEET" : "JEEMains",
     status: record.status,
     difficultyDistribution: deriveDifficultyDistributionLabel(record.difficultyDistribution),
-    allowedModes: deriveAllowedModes(record.examType),
+    allowedModes: deriveAllowedModes(),
+    totalDurationMinutes: record.totalDurationMinutes,
+    createdAtIso: record.createdAt,
     lastUsedIso: record.updatedAt,
     phaseConfigSnapshot: derivePhaseSnapshot(record.difficultyDistribution),
     timingProfileSnapshot: deriveTimingProfileSnapshot(record.timingProfile),
@@ -829,29 +956,6 @@ async function fetchTemplateOptionsFromApi(): Promise<TemplateOption[]> {
 
 function isTemplateAssignable(template: TemplateOption): boolean {
   return template.status === "ready" || template.status === "assigned";
-}
-
-function formatTemplateDropdownLabel(template: TemplateOption): string {
-  return [
-    template.name,
-    template.examType,
-    template.difficultyDistribution,
-    `Modes: ${template.allowedModes.join("/")}`,
-    `Last used: ${formatDateTime(template.lastUsedIso)}`,
-  ].join(" | ");
-}
-
-function toTemplateMetadataRow(template: TemplateOption): TemplateMetadataRow {
-  return {
-    allowedModes: template.allowedModes.join(", "),
-    canonicalVisibility: "Hidden in dropdown; captured in run snapshot.",
-    difficultyDistribution: template.difficultyDistribution,
-    examType: template.examType,
-    id: template.id,
-    lastUsed: formatDateTime(template.lastUsedIso),
-    name: template.name,
-    status: template.status,
-  };
 }
 
 function extractStudentArray(payload: unknown): unknown[] {
@@ -895,6 +999,12 @@ function normalizeAdminStudentRecord(value: unknown, index: number): AdminStuden
         toNumberOrZero(record.scorePercentile),
     riskState: toStudentRiskState(record.riskState ?? record.rollingRiskCluster),
     disciplineIndex: toNumberOrZero(record.disciplineIndex),
+    topicWeaknesses: toTopicWeaknesses(
+      record.topicWeaknesses ??
+      record.weakTopics ??
+      record.topicWeakness ??
+      record.topicWeaknessSummary,
+    ),
   };
 }
 
@@ -912,7 +1022,7 @@ function toStudentOption(record: AdminStudentRecord): StudentOption {
     disciplineIndex: record.disciplineIndex,
     avgRawScorePercent: record.avgRawScorePercent,
     avgAccuracyPercent: record.avgAccuracyPercent,
-    performancePercentile: record.scorePercentile ?? 0,
+    topicWeaknesses: record.topicWeaknesses,
   };
 }
 
@@ -950,6 +1060,15 @@ function normalizeIsoDatetime(localDatetime: string): string | null {
   }
 
   return new Date(parsed).toISOString();
+}
+
+function addMinutesToIsoDatetime(isoDatetime: string, minutes: number): string {
+  const parsed = Date.parse(isoDatetime);
+  if (Number.isNaN(parsed)) {
+    return isoDatetime;
+  }
+
+  return new Date(parsed + minutes * 60_000).toISOString();
 }
 
 function parseRangeNumber(value: string): number | null {
@@ -1094,7 +1213,8 @@ function analyticsForRecipientCount(recipientCount: number, mode: ExecutionMode)
     hardBiasPercent: Math.min(32, 14 + Math.round(normalizedCount * 0.5)),
     riskDistributionSummary: "L 32% / M 40% / H 20% / C 8%",
     avgDisciplineIndex: Math.max(40, 76 - Math.min(24, normalizedCount)),
-    controlledCompliancePercent: mode === "Controlled" || mode === "Hard" ? Math.max(50, 91 - normalizedCount) : 0,
+    controlledCompliancePercent:
+      mode === "Controlled" || mode === "Focused" || mode === "Hard" ? Math.max(50, 91 - normalizedCount) : 0,
     guessRatePercent: Math.min(26, 8 + Math.round(normalizedCount * 0.5)),
     executionStabilityIndex: Math.max(35, 82 - Math.min(30, normalizedCount * 2)),
     executionStabilityBadge: normalizedCount > 8 ? "Drift" : "Stable",
@@ -1103,7 +1223,7 @@ function analyticsForRecipientCount(recipientCount: number, mode: ExecutionMode)
 }
 
 function toExecutionMode(mode: string): ExecutionMode {
-  if (mode === "Operational" || mode === "Diagnostic" || mode === "Controlled" || mode === "Hard") {
+  if (mode === "Operational" || mode === "Controlled" || mode === "Focused" || mode === "Hard") {
     return mode;
   }
 
@@ -1194,66 +1314,9 @@ function buildRunRecordFromAnalytics(record: RunAnalyticsRecord, students: Stude
 function recipientIdsFromMode(draft: AssignmentDraft, students: StudentOption[]): string[] {
   const activeStudents = students.filter((student) => student.status === "active");
 
-  if (draft.recipientSelectionMode === "IndividualStudents") {
+  if (draft.recipientSelectionMode === "IndividualStudents" || draft.recipientSelectionMode === "FilterByMetrics") {
     const allowedActiveIds = new Set(activeStudents.map((student) => student.id));
     return Array.from(new Set(draft.selectedStudentIds.filter((studentId) => allowedActiveIds.has(studentId))));
-  }
-
-  if (draft.recipientSelectionMode === "FilterByMetrics") {
-    const disciplineMin = parseRangeNumber(draft.metricsFilter.disciplineMin);
-    const disciplineMax = parseRangeNumber(draft.metricsFilter.disciplineMax);
-    const rawMin = parseRangeNumber(draft.metricsFilter.rawScoreMin);
-    const rawMax = parseRangeNumber(draft.metricsFilter.rawScoreMax);
-    const accuracyMin = parseRangeNumber(draft.metricsFilter.accuracyMin);
-    const accuracyMax = parseRangeNumber(draft.metricsFilter.accuracyMax);
-    const percentileMin = parseRangeNumber(draft.metricsFilter.performancePercentileMin);
-    const percentileMax = parseRangeNumber(draft.metricsFilter.performancePercentileMax);
-    const scopedActiveStudents =
-      draft.selectedBatchIds.length > 0 ?
-        activeStudents.filter((student) => draft.selectedBatchIds.includes(student.batchId)) :
-        activeStudents;
-
-    return scopedActiveStudents
-      .filter((student) => {
-        if (draft.metricsFilter.riskState !== "all" && student.riskState !== draft.metricsFilter.riskState) {
-          return false;
-        }
-
-        if (disciplineMin !== null && student.disciplineIndex < disciplineMin) {
-          return false;
-        }
-
-        if (disciplineMax !== null && student.disciplineIndex > disciplineMax) {
-          return false;
-        }
-
-        if (rawMin !== null && student.avgRawScorePercent < rawMin) {
-          return false;
-        }
-
-        if (rawMax !== null && student.avgRawScorePercent > rawMax) {
-          return false;
-        }
-
-        if (accuracyMin !== null && student.avgAccuracyPercent < accuracyMin) {
-          return false;
-        }
-
-        if (accuracyMax !== null && student.avgAccuracyPercent > accuracyMax) {
-          return false;
-        }
-
-        if (percentileMin !== null && student.performancePercentile < percentileMin) {
-          return false;
-        }
-
-        if (percentileMax !== null && student.performancePercentile > percentileMax) {
-          return false;
-        }
-
-        return true;
-      })
-      .map((student) => student.id);
   }
 
   const targetBatchIds =
@@ -1284,19 +1347,11 @@ function validateDraft(draft: AssignmentDraft, templates: TemplateOption[], stud
     return `Execution mode ${draft.executionMode} requires license layer ${requiredLayer}.`;
   }
 
-  if (!template.allowedModes.includes(draft.executionMode)) {
-    return `Template "${template.name}" does not allow ${draft.executionMode} mode.`;
-  }
-
   if (
     (draft.recipientSelectionMode === "EntireBatch" || draft.recipientSelectionMode === "MultipleBatches") &&
     draft.selectedBatchIds.length === 0
   ) {
     return "Select at least one target batch for batch-level assignment.";
-  }
-
-  if (draft.recipientSelectionMode === "FilterByMetrics" && !hasLicenseAccess(CURRENT_LICENSE_LAYER, "L2")) {
-    return "FilterByMetrics recipient selection is available for L2+ only.";
   }
 
   const recipients = recipientIdsFromMode(draft, students);
@@ -1305,18 +1360,16 @@ function validateDraft(draft: AssignmentDraft, templates: TemplateOption[], stud
   }
 
   const startWindow = normalizeIsoDatetime(draft.assignmentStartLocal);
-  const endWindow = normalizeIsoDatetime(draft.assignmentEndLocal);
+  const selectedTemplate = templates.find((entry) => entry.id === draft.templateId);
+  const endWindow =
+    startWindow && selectedTemplate ? addMinutesToIsoDatetime(startWindow, selectedTemplate.totalDurationMinutes) : null;
 
   if (!startWindow || !endWindow) {
-    return "Provide both assignment start and end windows.";
+    return "Provide a valid assignment start time for the selected template.";
   }
 
   if (Date.parse(startWindow) <= Date.now()) {
     return "Assignment start window must be in the future to remain in scheduled state.";
-  }
-
-  if (Date.parse(endWindow) <= Date.parse(startWindow)) {
-    return "Assignment end window must be later than start window.";
   }
 
   if (draft.timezone.trim().length === 0) {
@@ -1338,8 +1391,9 @@ function validateDraft(draft: AssignmentDraft, templates: TemplateOption[], stud
 
 function buildRunPayload(draft: AssignmentDraft, templates: TemplateOption[], students: StudentOption[]): RunCreatePayload {
   const startWindow = normalizeIsoDatetime(draft.assignmentStartLocal);
-  const endWindow = normalizeIsoDatetime(draft.assignmentEndLocal);
   const template = templates.find((entry) => entry.id === draft.templateId);
+  const endWindow =
+    startWindow && template ? addMinutesToIsoDatetime(startWindow, template.totalDurationMinutes) : null;
 
   if (!startWindow || !endWindow || !template) {
     throw new Error("Assignment payload values are invalid.");
@@ -1443,11 +1497,14 @@ function AssignmentManagementPage() {
     return {
       ...INITIAL_DRAFT,
       templateId: firstReadyTemplate?.id ?? "",
-      executionMode: firstReadyTemplate?.allowedModes[0] ?? "Operational",
+      executionMode: allowedModesForLayer(CURRENT_LICENSE_LAYER)[0] ?? "Operational",
     };
   });
+  const [topicWeaknessInput, setTopicWeaknessInput] = useState("");
   const [runs, setRuns] = useState<RunStatusRecord[]>(FALLBACK_RUNS);
   const [filters, setFilters] = useState<AssignmentListFilters>(INITIAL_FILTERS);
+  const [templateFilters, setTemplateFilters] = useState<TemplateSelectionFilters>(EMPTY_TEMPLATE_FILTERS);
+  const [createFlowStep, setCreateFlowStep] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [inlineMessage, setInlineMessage] = useState<string | null>(
     shouldUseLiveApi() ?
@@ -1485,9 +1542,7 @@ function AssignmentManagementPage() {
           return {
             ...current,
             templateId: availableTemplate.id,
-            executionMode: availableTemplate.allowedModes.includes(current.executionMode) ?
-              current.executionMode :
-              availableTemplate.allowedModes[0] ?? "Operational",
+            executionMode: layerVisibleModes.includes(current.executionMode) ? current.executionMode : layerVisibleModes[0] ?? "Operational",
           };
         });
         setInlineMessage(
@@ -1634,24 +1689,75 @@ function AssignmentManagementPage() {
     () => templateOptions.find((template) => template.id === draft.templateId) ?? null,
     [draft.templateId, templateOptions],
   );
-
-  const templateOptionsForAssignment = useMemo(
-    () => templateOptions.filter(isTemplateAssignable),
-    [templateOptions],
-  );
-  const blockedTemplateOptions = useMemo(
-    () => templateOptions.filter((template) => !isTemplateAssignable(template)),
-    [templateOptions],
-  );
-  const templateMetadataRows = useMemo(
-    () => templateOptionsForAssignment.map(toTemplateMetadataRow),
+  const templateOptionsForAssignment = useMemo(() => templateOptions.filter(isTemplateAssignable), [templateOptions]);
+  const templateExamTypeOptions = useMemo(
+    () => Array.from(new Set(templateOptionsForAssignment.map((template) => template.examType))),
     [templateOptionsForAssignment],
+  );
+  const filteredTemplateOptions = useMemo(
+    () =>
+      templateOptionsForAssignment.filter((template) => {
+        const query = templateFilters.query.trim().toLowerCase();
+        const templateCreatedAt = Date.parse(template.createdAtIso);
+        const dateStart = templateFilters.dateStart ? Date.parse(`${templateFilters.dateStart}T00:00:00`) : null;
+        const dateEnd = templateFilters.dateEnd ? Date.parse(`${templateFilters.dateEnd}T23:59:59`) : null;
+
+        if (query.length > 0) {
+          const haystack = `${template.name} ${template.examType}`.toLowerCase();
+          if (!haystack.includes(query)) {
+            return false;
+          }
+        }
+
+        if (templateFilters.examType !== "all" && template.examType !== templateFilters.examType) {
+          return false;
+        }
+
+        if (dateStart !== null && !Number.isNaN(templateCreatedAt) && templateCreatedAt < dateStart) {
+          return false;
+        }
+
+        if (dateEnd !== null && !Number.isNaN(templateCreatedAt) && templateCreatedAt > dateEnd) {
+          return false;
+        }
+
+        return true;
+      }),
+    [templateFilters, templateOptionsForAssignment],
+  );
+  const layerVisibleModes = useMemo(
+    () => allowedModesForLayer(CURRENT_LICENSE_LAYER),
+    [],
+  );
+  const stepTwoModes = useMemo(
+    () =>
+      layerVisibleModes.map((mode) => ({
+        mode,
+        disabled: false,
+      })),
+    [layerVisibleModes],
   );
 
   const recipientIds = useMemo(
     () => recipientIdsFromMode(draft, studentOptions),
     [draft, studentOptions],
   );
+  const derivedAssignmentStartIso = useMemo(
+    () => normalizeIsoDatetime(draft.assignmentStartLocal),
+    [draft.assignmentStartLocal],
+  );
+  const derivedAssignmentEndIso = useMemo(
+    () =>
+      derivedAssignmentStartIso && selectedTemplate ?
+        addMinutesToIsoDatetime(derivedAssignmentStartIso, selectedTemplate.totalDurationMinutes) :
+        null,
+    [derivedAssignmentStartIso, selectedTemplate],
+  );
+  const stepOneReady = selectedTemplate !== null;
+  const stepTwoReady = selectedTemplate !== null && layerVisibleModes.includes(draft.executionMode);
+  const stepThreeReady = recipientIds.length > 0;
+  const attemptLimitIsValid = Number.isInteger(Number(draft.attemptLimit)) && Number(draft.attemptLimit) > 0;
+  const stepFourReady = derivedAssignmentStartIso !== null && attemptLimitIsValid;
 
   const recipientStudents = useMemo(
     () => studentOptions.filter((student) => recipientIds.includes(student.id)),
@@ -1663,7 +1769,6 @@ function AssignmentManagementPage() {
         accuracy: student.avgAccuracyPercent,
         batch: batchOptions.find((batch) => batch.id === student.batchId)?.name ?? student.batchId,
         discipline: student.disciplineIndex,
-        percentile: student.performancePercentile,
         raw: student.avgRawScorePercent,
         risk: student.riskState,
         student: `${student.name} (${student.id})`,
@@ -1675,10 +1780,127 @@ function AssignmentManagementPage() {
     [studentOptions],
   );
   const inactiveExcludedCount = Math.max(0, studentOptions.length - activeEligibleCount);
-  const recipientScopeLabel =
-    draft.selectedBatchIds.length > 0 ?
-      draft.selectedBatchIds.map((batchId) => formatBatchLabel(batchId, batchOptions)).join(", ") :
-      "All active batches";
+  const recipientFamily: RecipientFamily =
+    draft.recipientSelectionMode === "EntireBatch" || draft.recipientSelectionMode === "MultipleBatches" ? "batch" : "student";
+  const parsedMetricRanges = useMemo(
+    () => ({
+      disciplineMin: parseRangeNumber(draft.metricsFilter.disciplineMin),
+      disciplineMax: parseRangeNumber(draft.metricsFilter.disciplineMax),
+      rawMin: parseRangeNumber(draft.metricsFilter.rawScoreMin),
+      rawMax: parseRangeNumber(draft.metricsFilter.rawScoreMax),
+      accuracyMin: parseRangeNumber(draft.metricsFilter.accuracyMin),
+      accuracyMax: parseRangeNumber(draft.metricsFilter.accuracyMax),
+    }),
+    [draft.metricsFilter],
+  );
+  const visibleMetricControls = useMemo<MetricControl[]>(() => {
+    if (CURRENT_LICENSE_LAYER === "L0") {
+      return ["raw", "accuracy"];
+    }
+
+    if (CURRENT_LICENSE_LAYER === "L1") {
+      return ["raw", "accuracy"];
+    }
+
+    return ["risk", "discipline", "raw", "accuracy"];
+  }, []);
+  function matchesMetricFilters(values: Pick<StudentSelectionRow, "raw" | "accuracy" | "risk" | "discipline" | "topicWeaknesses">): boolean {
+    if (visibleMetricControls.includes("risk") && draft.metricsFilter.riskState !== "all" && values.risk !== draft.metricsFilter.riskState) {
+      return false;
+    }
+    if (visibleMetricControls.includes("discipline") && parsedMetricRanges.disciplineMin !== null && values.discipline < parsedMetricRanges.disciplineMin) {
+      return false;
+    }
+    if (visibleMetricControls.includes("discipline") && parsedMetricRanges.disciplineMax !== null && values.discipline > parsedMetricRanges.disciplineMax) {
+      return false;
+    }
+    if (visibleMetricControls.includes("raw") && parsedMetricRanges.rawMin !== null && values.raw < parsedMetricRanges.rawMin) {
+      return false;
+    }
+    if (visibleMetricControls.includes("raw") && parsedMetricRanges.rawMax !== null && values.raw > parsedMetricRanges.rawMax) {
+      return false;
+    }
+    if (visibleMetricControls.includes("accuracy") && parsedMetricRanges.accuracyMin !== null && values.accuracy < parsedMetricRanges.accuracyMin) {
+      return false;
+    }
+    if (visibleMetricControls.includes("accuracy") && parsedMetricRanges.accuracyMax !== null && values.accuracy > parsedMetricRanges.accuracyMax) {
+      return false;
+    }
+    if (
+      recipientFamily === "student" &&
+      draft.metricsFilter.topicWeaknesses.length > 0 &&
+      !draft.metricsFilter.topicWeaknesses.some((topic) => values.topicWeaknesses.includes(topic))
+    ) {
+      return false;
+    }
+    return true;
+  }
+  const topicWeaknessOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(studentOptions.flatMap((student) => student.topicWeaknesses)),
+      ).sort((left, right) => left.localeCompare(right)),
+    [studentOptions],
+  );
+  useEffect(() => {
+    setTopicWeaknessInput(draft.metricsFilter.topicWeaknesses.join(", "));
+  }, [draft.metricsFilter.topicWeaknesses]);
+  const batchSelectionRows = useMemo<BatchSelectionRow[]>(
+    () =>
+      batchOptions
+        .map((batch) => {
+          const batchStudents = studentOptions.filter((student) => student.batchId === batch.id && student.status === "active");
+          const total = batchStudents.length;
+          const average = (selector: (student: StudentOption) => number) =>
+            total > 0 ? Math.round(batchStudents.reduce((sum, student) => sum + selector(student), 0) / total) : 0;
+          const risk: RiskState =
+            batchStudents.some((student) => student.riskState === "critical") ? "critical" :
+            batchStudents.some((student) => student.riskState === "high") ? "high" :
+            batchStudents.some((student) => student.riskState === "moderate") ? "moderate" :
+            "low";
+
+          return {
+            activeStudents: total,
+            accuracy: average((student) => student.avgAccuracyPercent),
+            batchId: batch.id,
+            batchName: batch.name,
+            discipline: average((student) => student.disciplineIndex),
+            raw: average((student) => student.avgRawScorePercent),
+            risk,
+            selected: draft.selectedBatchIds.includes(batch.id),
+            topicWeaknesses: [],
+          } satisfies BatchSelectionRow;
+        })
+        .filter((row) => recipientFamily !== "batch" || matchesMetricFilters(row)),
+    [batchOptions, draft.selectedBatchIds, recipientFamily, studentOptions],
+  );
+  const studentSelectionRows = useMemo<StudentSelectionRow[]>(() => {
+    return studentOptions.map((student) => ({
+      accuracy: student.avgAccuracyPercent,
+      batch: batchOptions.find((batch) => batch.id === student.batchId)?.name ?? student.batchId,
+      discipline: student.disciplineIndex,
+      isActive: student.status === "active",
+      raw: student.avgRawScorePercent,
+      risk: student.riskState,
+      selected: draft.selectedStudentIds.includes(student.id),
+      studentId: student.id,
+      studentName: student.name,
+      topicWeaknesses: student.topicWeaknesses,
+    }));
+  }, [batchOptions, draft.selectedStudentIds, studentOptions]);
+  const filteredStudentSelectionRows = useMemo<StudentSelectionRow[]>(
+    () => studentSelectionRows.filter((student) => matchesMetricFilters(student)),
+    [matchesMetricFilters, studentSelectionRows],
+  );
+  const recipientScopeLabel = useMemo(() => {
+    if (recipientFamily === "batch") {
+      return draft.selectedBatchIds.length > 0 ?
+          draft.selectedBatchIds.map((batchId) => formatBatchLabel(batchId, batchOptions)).join(", ") :
+          "No batch selected";
+    }
+
+    return draft.selectedStudentIds.length > 0 ? `${draft.selectedStudentIds.length} named students` : "No student selected";
+  }, [batchOptions, draft.selectedBatchIds, draft.selectedStudentIds.length, recipientFamily]);
 
   const activeRuns = useMemo(
     () => runs.filter((run) => run.status === "active"),
@@ -2081,6 +2303,7 @@ function AssignmentManagementPage() {
         assignmentStartLocal: "",
         assignmentEndLocal: "",
       }));
+      setCreateFlowStep(1);
       navigate("/admin/assignments/list");
     } catch (error) {
       if (error instanceof ApiClientError) {
@@ -2220,512 +2443,622 @@ function AssignmentManagementPage() {
       <AssignmentsWorkspaceNav />
 
       {activeSection === "create" ? (
-        <UiForm
-          title="Create Assignment"
-          description="Step flow: Template, mode, recipients, window, and confirmation snapshot before scheduling."
-          submitLabel={isSubmitting ? "Scheduling..." : "Schedule Run"}
-          onSubmit={(event) => {
-            void scheduleRun(event);
-          }}
-          footer={<span className="admin-assignments-form-footnote">Endpoint: POST /admin/runs</span>}
-        >
-          <div className="admin-assignments-grid">
-            <UiFormField
-              label="Step 1 — Test Template"
-              htmlFor="assignment-template"
-              helper="Template status must be ready or assigned; canonical id is captured in run snapshot."
-            >
-              <select
-                id="assignment-template"
-                value={draft.templateId}
-                onChange={(event) => {
-                  const nextTemplate = templateOptionsForAssignment.find((template) => template.id === event.target.value);
-                  setDraft((current) => ({
-                    ...current,
-                    templateId: event.target.value,
-                    executionMode: nextTemplate?.allowedModes.includes(current.executionMode) ? current.executionMode :
-                      nextTemplate?.allowedModes[0] ?? "Operational",
-                  }));
-                }}
-              >
-                {templateOptionsForAssignment.map((template) => (
-                  <option key={template.id} value={template.id}>
-                    {formatTemplateDropdownLabel(template)}
-                  </option>
-                ))}
-              </select>
-            </UiFormField>
-
-            <UiFormField
-              label="Step 2 — Mode"
-              htmlFor="assignment-mode"
-              helper={`Current license layer: ${CURRENT_LICENSE_LAYER}. L2 and L3 both allow Hard mode.`}
-            >
-              <select
-                id="assignment-mode"
-                value={draft.executionMode}
-                onChange={(event) => {
-                  setDraft((current) => ({
-                    ...current,
-                    executionMode: event.target.value as ExecutionMode,
-                  }));
-                }}
-              >
-                {EXECUTION_MODES.map((mode) => {
-                  const requiredLayer = MODE_REQUIRED_LAYER[mode];
-                  const disabled =
-                    !hasLicenseAccess(CURRENT_LICENSE_LAYER, requiredLayer) ||
-                    (selectedTemplate ? !selectedTemplate.allowedModes.includes(mode) : true);
-                  return (
-                    <option key={mode} value={mode} disabled={disabled}>
-                      {mode} (requires {requiredLayer})
-                    </option>
-                  );
-                })}
-              </select>
-            </UiFormField>
-          </div>
-
-          <section className="admin-assignments-recipient-review" aria-label="Template dropdown metadata">
-            <div>
-              <strong>{templateOptionsForAssignment.length}</strong>
-              <span>ready/assigned templates</span>
-            </div>
-            <div>
-              <strong>{blockedTemplateOptions.length}</strong>
-              <span>draft/archive/deprecated blocked</span>
-            </div>
-            <div>
-              <strong>{selectedTemplate?.allowedModes.length ?? 0}</strong>
-              <span>allowed modes on selection</span>
-            </div>
-            <p>
-              Dropdown labels show Template Name, Exam Type, Difficulty Distribution, Allowed Modes, and Last Used.
-              Canonical ID stays hidden in the selector and is captured only in the immutable run snapshot.
-            </p>
-          </section>
-
-          <UiTable
-            caption="Assignment-ready template metadata"
-            columns={[
-              { id: "name", header: "Template Name", render: (row) => row.name },
-              { id: "exam", header: "Exam Type", render: (row) => row.examType },
-              { id: "status", header: "Status", render: (row) => row.status },
-              { id: "distribution", header: "Difficulty Distribution", render: (row) => row.difficultyDistribution },
-              { id: "modes", header: "Allowed Modes", render: (row) => row.allowedModes },
-              { id: "lastUsed", header: "Last Used", render: (row) => row.lastUsed },
-              { id: "canonical", header: "Canonical ID", render: (row) => row.canonicalVisibility },
-            ]}
-            rows={templateMetadataRows}
-            rowKey={(row) => row.id}
-            emptyStateText="No ready or assigned templates are available for assignment."
-          />
-
-          <UiFormField
-            label="Step 3 — Recipients"
-            htmlFor="assignment-recipients"
-            helper="Recipients are stored as explicit recipientStudentIds[] and only active students are eligible."
-          >
-            <div id="assignment-recipients" className="admin-assignments-recipient-shell">
-              <div className="admin-assignments-recipient-mode-row">
-                {(["EntireBatch", "MultipleBatches", "IndividualStudents", "FilterByMetrics"] as const).map((mode) => (
-                  <label key={mode} className="admin-assignments-mode-option">
-                    <input
-                      type="radio"
-                      name="recipientSelectionMode"
-                      value={mode}
-                      checked={draft.recipientSelectionMode === mode}
-                      disabled={mode === "FilterByMetrics" && !hasLicenseAccess(CURRENT_LICENSE_LAYER, "L2")}
-                      onChange={() => updateRecipientMode(mode)}
-                    />
-                    <span>{mode}</span>
-                  </label>
-                ))}
+        <section className="ui-form-card admin-assignments-create-wizard" aria-label="Create Assignment">
+          <header className="ui-form-header">
+            <h3>Create Assignment</h3>
+            <p>Select a template, choose the allowed mode for the current layer, pick recipients, and schedule the run.</p>
+          </header>
+          <form className="ui-form" onSubmit={(event) => { void scheduleRun(event); }}>
+            <div className="ui-form-content">
+              <div className="admin-tests-create-hero">
+                <nav className="admin-tests-stepper" aria-label="Create assignment steps">
+                  {[
+                    { step: 1 as const, label: "Template", enabled: true },
+                    { step: 2 as const, label: "Mode", enabled: stepOneReady },
+                    { step: 3 as const, label: "Recipients", enabled: stepOneReady && stepTwoReady },
+                    { step: 4 as const, label: "Schedule Setup", enabled: stepOneReady && stepTwoReady && stepThreeReady },
+                    { step: 5 as const, label: "Final Snapshot", enabled: stepOneReady && stepTwoReady && stepThreeReady && stepFourReady },
+                  ].map((item, index, items) => (
+                    <button
+                      key={item.step}
+                      type="button"
+                      className={`admin-tests-stepper-item${createFlowStep === item.step ? " admin-tests-stepper-item-active" : ""}${items.findIndex((entry) => entry.step === createFlowStep) > index ? " admin-tests-stepper-item-complete" : ""}`}
+                      disabled={!item.enabled}
+                      onClick={() => setCreateFlowStep(item.step)}
+                    >
+                      <span>{index + 1}</span>
+                      <strong>{item.label}</strong>
+                    </button>
+                  ))}
+                </nav>
               </div>
 
-              {draft.recipientSelectionMode === "IndividualStudents" ? (
-                <div className="admin-assignments-student-list">
-                  {studentOptions.map((student) => {
-                    const checked = draft.selectedStudentIds.includes(student.id);
-                    const disabled = student.status !== "active";
-                    const batchName = batchOptions.find((batch) => batch.id === student.batchId)?.name ?? student.batchId;
+              <div className="admin-tests-create-layout">
+                <div className="admin-tests-create-main">
+                  <article className="admin-tests-step-card admin-assignments-top-summary">
+                    <div className="admin-tests-create-section-header">
+                      <div>
+                        <p className="admin-tests-section-kicker">Quick Summary</p>
+                      </div>
+                      <span className="admin-tests-create-chip">Step {createFlowStep}</span>
+                    </div>
+                    <div className="admin-assignments-top-summary-grid">
+                      <div><span>Template</span><strong>{selectedTemplate?.name ?? "Not selected"}</strong></div>
+                      <div><span>Mode</span><strong>{createFlowStep >= 2 ? draft.executionMode : "Pending"}</strong></div>
+                      <div><span>Recipients</span><strong>{createFlowStep >= 3 ? recipientIds.length : 0}</strong></div>
+                      <div><span>Start</span><strong>{createFlowStep >= 4 && derivedAssignmentStartIso ? formatDateTime(derivedAssignmentStartIso) : "Pending"}</strong></div>
+                      <div><span>End</span><strong>{createFlowStep >= 4 && derivedAssignmentEndIso ? formatDateTime(derivedAssignmentEndIso) : "Pending"}</strong></div>
+                      <div><span>Shuffle</span><strong>{draft.shuffleQuestionOrder ? "Enabled" : "Disabled"}</strong></div>
+                    </div>
+                  </article>
+                  {createFlowStep === 1 ? (
+                    <article className="admin-tests-step-card admin-tests-step-card-main">
+                      <div className="admin-tests-create-section-header">
+                        <div>
+                          <p className="admin-tests-section-kicker">Step 1</p>
+                          <h3>Choose Test Template</h3>
+                        </div>
+                        <span className="admin-tests-create-chip">Start here</span>
+                      </div>
+                      <p className="admin-tests-form-footnote">
+                        Filter templates by exam type, created date, or name search, then choose the test you want to assign.
+                      </p>
 
-                    return (
-                      <label key={student.id} className="admin-assignments-batch-option">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          disabled={disabled}
-                          onChange={() => {
-                            toggleStudent(student.id);
-                          }}
+                      <div className="admin-assignments-filter-grid admin-assignments-template-filter-grid">
+                        <UiFormField label="Search Template Name" htmlFor="assignment-template-search">
+                          <input
+                            id="assignment-template-search"
+                            type="search"
+                            value={templateFilters.query}
+                            onChange={(event) => setTemplateFilters((current) => ({ ...current, query: event.target.value }))}
+                            placeholder="Type template name or exam type"
+                          />
+                        </UiFormField>
+                        <UiFormField label="Exam Type" htmlFor="assignment-template-exam-filter">
+                          <select
+                            id="assignment-template-exam-filter"
+                            value={templateFilters.examType}
+                            onChange={(event) => setTemplateFilters((current) => ({ ...current, examType: event.target.value }))}
+                          >
+                            <option value="all">All exam types</option>
+                            {templateExamTypeOptions.map((examType) => (
+                              <option key={examType} value={examType}>
+                                {examType}
+                              </option>
+                            ))}
+                          </select>
+                        </UiFormField>
+                        <UiFormField label="Created From" htmlFor="assignment-template-date-start">
+                          <input
+                            id="assignment-template-date-start"
+                            type="date"
+                            value={templateFilters.dateStart}
+                            onChange={(event) => setTemplateFilters((current) => ({ ...current, dateStart: event.target.value }))}
+                          />
+                        </UiFormField>
+                        <UiFormField label="Created To" htmlFor="assignment-template-date-end">
+                          <input
+                            id="assignment-template-date-end"
+                            type="date"
+                            value={templateFilters.dateEnd}
+                            onChange={(event) => setTemplateFilters((current) => ({ ...current, dateEnd: event.target.value }))}
+                          />
+                        </UiFormField>
+                      </div>
+
+                      <div className="admin-assignments-template-list" role="radiogroup" aria-label="Assignment template selection">
+                        {filteredTemplateOptions.length > 0 ? (
+                          <div className="admin-assignments-template-table-head" aria-hidden="true">
+                            <span>Select</span>
+                            <span>Template</span>
+                            <span>Exam</span>
+                            <span>Created</span>
+                            <span>Difficulty</span>
+                            <span>Duration</span>
+                          </div>
+                        ) : null}
+                        {filteredTemplateOptions.map((template) => (
+                          <label
+                            key={template.id}
+                            className={`admin-assignments-template-card${draft.templateId === template.id ? " active" : ""}`}
+                          >
+                            <input
+                              type="radio"
+                              name="assignment-template-choice"
+                              value={template.id}
+                              checked={draft.templateId === template.id}
+                              onChange={() => {
+                                setDraft((current) => ({
+                                  ...current,
+                                  templateId: template.id,
+                                  executionMode: layerVisibleModes.includes(current.executionMode) ? current.executionMode : layerVisibleModes[0] ?? "Operational",
+                                }));
+                              }}
+                            />
+                            <strong>{template.name}</strong>
+                            <span>{template.examType}</span>
+                            <span>{formatDateTime(template.createdAtIso)}</span>
+                            <span>{template.difficultyDistribution}</span>
+                            <span>{template.totalDurationMinutes} min</span>
+                          </label>
+                        ))}
+                        {filteredTemplateOptions.length === 0 ? (
+                          <p className="admin-assignments-inline-note">No assignment-ready templates matched the current filters.</p>
+                        ) : null}
+                      </div>
+                      <div className="admin-tests-step-actions">
+                        <button type="button" onClick={() => setTemplateFilters(EMPTY_TEMPLATE_FILTERS)}>
+                          Reset Filters
+                        </button>
+                        <button type="button" onClick={() => setCreateFlowStep(2)} disabled={selectedTemplate === null}>
+                          Continue to Mode
+                        </button>
+                      </div>
+                    </article>
+                  ) : null}
+
+                  {createFlowStep === 2 ? (
+                    <article className="admin-tests-step-card admin-tests-step-card-main">
+                      <div className="admin-tests-create-section-header">
+                        <div>
+                          <p className="admin-tests-section-kicker">Step 2</p>
+                          <h3>Choose Assignment Mode</h3>
+                        </div>
+                        <span className="admin-tests-create-chip">Layer aware</span>
+                      </div>
+                      <p className="admin-tests-form-footnote">
+                        Choose the assignment mode allowed in the current license layer and supported by the selected template.
+                      </p>
+
+                      <div className="admin-assignments-layer-note">
+                        <strong>Current Layer: {CURRENT_LICENSE_LAYER}</strong>
+                        <span>Available modes in this layer: {formatLayerAwareModes(CURRENT_LICENSE_LAYER)}</span>
+                      </div>
+
+                      <div className="admin-assignments-mode-grid" role="radiogroup" aria-label="Assignment mode selection">
+                        {stepTwoModes.map(({ mode, disabled }) => (
+                          <label
+                            key={mode}
+                            className={`admin-assignments-mode-card${draft.executionMode === mode ? " active" : ""}${disabled ? " disabled" : ""}`}
+                          >
+                            <input
+                              type="radio"
+                              name="assignment-execution-mode"
+                              value={mode}
+                              checked={draft.executionMode === mode}
+                              disabled={disabled}
+                              onChange={() => setDraft((current) => ({ ...current, executionMode: mode }))}
+                            />
+                            <div>
+                              <strong>{mode}</strong>
+                              <small>{formatExecutionModeHelper(mode)}</small>
+                            </div>
+                            <span>Layer {MODE_REQUIRED_LAYER[mode]}</span>
+                          </label>
+                        ))}
+                      </div>
+
+                      <div className="admin-tests-step-actions">
+                        <button type="button" onClick={() => setCreateFlowStep(1)}>Back</button>
+                        <button type="button" onClick={() => setCreateFlowStep(3)} disabled={!stepTwoReady}>
+                          Continue to Recipients
+                        </button>
+                      </div>
+                    </article>
+                  ) : null}
+
+                  {createFlowStep === 3 ? (
+                    <article className="admin-tests-step-card admin-tests-step-card-main">
+                      <div className="admin-tests-create-section-header">
+                        <div>
+                          <p className="admin-tests-section-kicker">Step 3</p>
+                          <h3>Select Recipients</h3>
+                        </div>
+                        <span className="admin-tests-create-chip">Choose who gets it</span>
+                      </div>
+                      <p className="admin-tests-form-footnote">
+                        Choose either batches or individual students. Metric filters only narrow the tables so teachers can make the final selection explicitly.
+                      </p>
+
+                      <div id="assignment-recipients" className="admin-assignments-recipient-shell">
+                        <div className="admin-assignments-recipient-mode-row">
+                          <label className="admin-assignments-mode-option">
+                            <input type="radio" name="recipientFamily" value="batch" checked={recipientFamily === "batch"} onChange={() => updateRecipientMode("EntireBatch")} />
+                            <span>Selecting by Batch</span>
+                          </label>
+                          <label className="admin-assignments-mode-option">
+                            <input type="radio" name="recipientFamily" value="student" checked={recipientFamily === "student"} onChange={() => updateRecipientMode("IndividualStudents")} />
+                            <span>Selecting by Individual Student</span>
+                          </label>
+                        </div>
+
+                        {recipientFamily === "batch" ? (
+                          <>
+                            <div className="admin-assignments-recipient-mode-row">
+                              {(["EntireBatch", "MultipleBatches"] as const).map((mode) => (
+                                <label key={mode} className="admin-assignments-mode-option">
+                                  <input type="radio" name="batchSelectionMode" value={mode} checked={draft.recipientSelectionMode === mode} onChange={() => updateRecipientMode(mode)} />
+                                  <span>{mode === "EntireBatch" ? "Single Batch" : "Multiple Batches"}</span>
+                                </label>
+                              ))}
+                            </div>
+
+                            <div className="admin-assignments-filter-grid">
+                              {visibleMetricControls.includes("risk") ? (
+                                <label>
+                                  Batch Risk State
+                                  <select value={draft.metricsFilter.riskState} onChange={(event) => {
+                                    const riskState = event.target.value as RiskState | "all";
+                                    setDraft((current) => ({ ...current, metricsFilter: { ...current.metricsFilter, riskState } }));
+                                  }}>
+                                    <option value="all">All</option>
+                                    <option value="low">Low</option>
+                                    <option value="moderate">Moderate</option>
+                                    <option value="high">High</option>
+                                    <option value="critical">Critical</option>
+                                  </select>
+                                </label>
+                              ) : null}
+                              {visibleMetricControls.includes("discipline") ? (
+                                <>
+                                  <label>
+                                    Batch Discipline Min
+                                    <input type="number" min={0} max={100} value={draft.metricsFilter.disciplineMin} onChange={(event) => setDraft((current) => ({ ...current, metricsFilter: { ...current.metricsFilter, disciplineMin: event.target.value } }))} />
+                                  </label>
+                                  <label>
+                                    Batch Discipline Max
+                                    <input type="number" min={0} max={100} value={draft.metricsFilter.disciplineMax} onChange={(event) => setDraft((current) => ({ ...current, metricsFilter: { ...current.metricsFilter, disciplineMax: event.target.value } }))} />
+                                  </label>
+                                </>
+                              ) : null}
+                              {visibleMetricControls.includes("raw") ? (
+                                <>
+                                  <label>
+                                    Batch Avg Raw % Min
+                                    <input type="number" min={0} max={100} value={draft.metricsFilter.rawScoreMin} onChange={(event) => setDraft((current) => ({ ...current, metricsFilter: { ...current.metricsFilter, rawScoreMin: event.target.value } }))} />
+                                  </label>
+                                  <label>
+                                    Batch Avg Raw % Max
+                                    <input type="number" min={0} max={100} value={draft.metricsFilter.rawScoreMax} onChange={(event) => setDraft((current) => ({ ...current, metricsFilter: { ...current.metricsFilter, rawScoreMax: event.target.value } }))} />
+                                  </label>
+                                </>
+                              ) : null}
+                              {visibleMetricControls.includes("accuracy") ? (
+                                <>
+                                  <label>
+                                    Batch Avg Accuracy % Min
+                                    <input type="number" min={0} max={100} value={draft.metricsFilter.accuracyMin} onChange={(event) => setDraft((current) => ({ ...current, metricsFilter: { ...current.metricsFilter, accuracyMin: event.target.value } }))} />
+                                  </label>
+                                  <label>
+                                    Batch Avg Accuracy % Max
+                                    <input type="number" min={0} max={100} value={draft.metricsFilter.accuracyMax} onChange={(event) => setDraft((current) => ({ ...current, metricsFilter: { ...current.metricsFilter, accuracyMax: event.target.value } }))} />
+                                  </label>
+                                </>
+                              ) : null}
+                            </div>
+
+                            <UiTable
+                              caption={draft.recipientSelectionMode === "EntireBatch" ? "Select one batch" : "Select one or more batches"}
+                              columns={[
+                                {
+                                  id: "select",
+                                  header: "Select",
+                                  render: (row) => (
+                                    <input type={draft.recipientSelectionMode === "EntireBatch" ? "radio" : "checkbox"} name={draft.recipientSelectionMode === "EntireBatch" ? "assignment-batch-single" : undefined} checked={row.selected} onChange={() => toggleBatch(row.batchId)} />
+                                  ),
+                                },
+                                { id: "batch", header: "Batch", render: (row) => row.batchName },
+                                { id: "active", header: "Active", render: (row) => row.activeStudents },
+                                { id: "raw", header: "Avg Raw %", render: (row) => row.raw },
+                                { id: "accuracy", header: "Avg Accuracy %", render: (row) => row.accuracy },
+                                ...(CURRENT_LICENSE_LAYER === "L2" || CURRENT_LICENSE_LAYER === "L3" ? [
+                                  { id: "risk", header: "Risk", render: (row: BatchSelectionRow) => row.risk },
+                                  { id: "discipline", header: "Discipline", render: (row: BatchSelectionRow) => row.discipline },
+                                ] : []),
+                              ]}
+                              rows={batchSelectionRows}
+                              rowKey={(row) => row.batchId}
+                              emptyStateText="No batches matched the current filters."
+                            />
+                          </>
+                        ) : null}
+
+                        {recipientFamily === "student" ? (
+                          <>
+                            <div className="admin-assignments-filter-grid">
+                              {visibleMetricControls.includes("risk") ? (
+                                <label>
+                                  Student Risk State
+                                  <select value={draft.metricsFilter.riskState} onChange={(event) => {
+                                    const riskState = event.target.value as RiskState | "all";
+                                    setDraft((current) => ({ ...current, metricsFilter: { ...current.metricsFilter, riskState } }));
+                                  }}>
+                                    <option value="all">All</option>
+                                    <option value="low">Low</option>
+                                    <option value="moderate">Moderate</option>
+                                    <option value="high">High</option>
+                                    <option value="critical">Critical</option>
+                                  </select>
+                                </label>
+                              ) : null}
+                              {visibleMetricControls.includes("discipline") ? (
+                                <>
+                                  <label>
+                                    Student Discipline Min
+                                    <input type="number" min={0} max={100} value={draft.metricsFilter.disciplineMin} onChange={(event) => setDraft((current) => ({ ...current, metricsFilter: { ...current.metricsFilter, disciplineMin: event.target.value } }))} />
+                                  </label>
+                                  <label>
+                                    Student Discipline Max
+                                    <input type="number" min={0} max={100} value={draft.metricsFilter.disciplineMax} onChange={(event) => setDraft((current) => ({ ...current, metricsFilter: { ...current.metricsFilter, disciplineMax: event.target.value } }))} />
+                                  </label>
+                                </>
+                              ) : null}
+                              {visibleMetricControls.includes("raw") ? (
+                                <>
+                                  <label>
+                                    Student Avg Raw % Min
+                                    <input type="number" min={0} max={100} value={draft.metricsFilter.rawScoreMin} onChange={(event) => setDraft((current) => ({ ...current, metricsFilter: { ...current.metricsFilter, rawScoreMin: event.target.value } }))} />
+                                  </label>
+                                  <label>
+                                    Student Avg Raw % Max
+                                    <input type="number" min={0} max={100} value={draft.metricsFilter.rawScoreMax} onChange={(event) => setDraft((current) => ({ ...current, metricsFilter: { ...current.metricsFilter, rawScoreMax: event.target.value } }))} />
+                                  </label>
+                                </>
+                              ) : null}
+                              {visibleMetricControls.includes("accuracy") ? (
+                                <>
+                                  <label>
+                                    Student Avg Accuracy % Min
+                                    <input type="number" min={0} max={100} value={draft.metricsFilter.accuracyMin} onChange={(event) => setDraft((current) => ({ ...current, metricsFilter: { ...current.metricsFilter, accuracyMin: event.target.value } }))} />
+                                  </label>
+                                  <label>
+                                    Student Avg Accuracy % Max
+                                    <input type="number" min={0} max={100} value={draft.metricsFilter.accuracyMax} onChange={(event) => setDraft((current) => ({ ...current, metricsFilter: { ...current.metricsFilter, accuracyMax: event.target.value } }))} />
+                                  </label>
+                                </>
+                              ) : null}
+                              <label className="admin-assignments-topic-filter">
+                                <span>Topic Weakness</span>
+                                <small>Type topic names with comma separation. Matching topics will autocomplete while typing.</small>
+                                <input
+                                  type="text"
+                                  list="assignment-topic-weakness-options"
+                                  value={topicWeaknessInput}
+                                  placeholder="Example: Electrostatics, Thermodynamics"
+                                  onChange={(event) => {
+                                    const nextValue = event.target.value;
+                                    setTopicWeaknessInput(nextValue);
+                                    setDraft((current) => ({
+                                      ...current,
+                                      metricsFilter: {
+                                        ...current.metricsFilter,
+                                        topicWeaknesses: parseTopicWeaknessInput(nextValue, topicWeaknessOptions),
+                                      },
+                                    }));
+                                  }}
+                                  onBlur={() => {
+                                    const normalizedTopics = parseTopicWeaknessInput(topicWeaknessInput, topicWeaknessOptions);
+                                    setDraft((current) => ({
+                                      ...current,
+                                      metricsFilter: {
+                                        ...current.metricsFilter,
+                                        topicWeaknesses: normalizedTopics,
+                                      },
+                                    }));
+                                    setTopicWeaknessInput(normalizedTopics.join(", "));
+                                  }}
+                                />
+                                <datalist id="assignment-topic-weakness-options">
+                                  {topicWeaknessOptions.map((topic) => (
+                                    <option key={topic} value={topic} />
+                                  ))}
+                                </datalist>
+                              </label>
+                            </div>
+
+                            <UiTable
+                              caption="Select individual students"
+                              columns={[
+                                {
+                                  id: "select",
+                                  header: "Select",
+                                  render: (row) => (
+                                    <input type="checkbox" checked={row.selected} disabled={!row.isActive} onChange={() => toggleStudent(row.studentId)} />
+                                  ),
+                                },
+                                { id: "student", header: "Student", render: (row) => `${row.studentName} (${row.studentId})` },
+                                { id: "batch", header: "Batch", render: (row) => row.batch },
+                                { id: "raw", header: "Avg Raw %", render: (row) => row.raw },
+                                { id: "accuracy", header: "Avg Accuracy %", render: (row) => row.accuracy },
+                                ...(CURRENT_LICENSE_LAYER === "L2" || CURRENT_LICENSE_LAYER === "L3" ? [
+                                  { id: "risk", header: "Risk", render: (row: StudentSelectionRow) => row.risk },
+                                  { id: "discipline", header: "Discipline", render: (row: StudentSelectionRow) => row.discipline },
+                                ] : []),
+                                {
+                                  id: "topics",
+                                  header: "Topic Weakness",
+                                  render: (row: StudentSelectionRow) => row.topicWeaknesses.join(", "),
+                                },
+                              ]}
+                              rows={filteredStudentSelectionRows}
+                              rowKey={(row) => row.studentId}
+                              emptyStateText="No students matched the current selection."
+                            />
+                          </>
+                        ) : null}
+
+                        <section className="admin-assignments-recipient-review" aria-label="Recipient resolution preview">
+                          <div>
+                            <strong>{recipientIds.length}</strong>
+                            <span>selected students resolved</span>
+                          </div>
+                          <div>
+                            <strong>{activeEligibleCount}</strong>
+                            <span>active eligible students</span>
+                          </div>
+                          <div>
+                            <strong>{inactiveExcludedCount}</strong>
+                            <span>inactive or archived excluded</span>
+                          </div>
+                          <p>
+                            Scope: {recipientScopeLabel}. This explicit recipient list is saved with the run and is not recomputed after scheduling.
+                          </p>
+                        </section>
+
+                        <UiTable
+                          caption="Selected students preview"
+                          columns={[
+                            { id: "student", header: "Student", render: (row) => row.student },
+                            { id: "batch", header: "Batch", render: (row) => row.batch },
+                            { id: "raw", header: "Avg Raw %", render: (row) => row.raw },
+                            { id: "accuracy", header: "Avg Accuracy %", render: (row) => row.accuracy },
+                            ...(CURRENT_LICENSE_LAYER === "L2" || CURRENT_LICENSE_LAYER === "L3" ? [
+                              { id: "risk", header: "Risk", render: (row: RecipientPreviewRow) => row.risk },
+                              { id: "discipline", header: "Discipline", render: (row: RecipientPreviewRow) => row.discipline },
+                            ] : []),
+                          ]}
+                          rows={recipientPreviewRows}
+                          rowKey={(row) => row.student}
+                          emptyStateText="No students are selected yet."
                         />
-                        <span>
-                          <strong>{student.name}</strong>
-                          <small>
-                            {student.id} · {batchName} · {student.status}
-                          </small>
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              ) : null}
+                      </div>
 
-              {draft.recipientSelectionMode === "FilterByMetrics" ? (
-                <div className="admin-assignments-filter-grid">
-                  <label>
-                    RiskState
-                    <select
-                      value={draft.metricsFilter.riskState}
-                      onChange={(event) => {
-                        const riskState = event.target.value as RiskState | "all";
-                        setDraft((current) => ({
-                          ...current,
-                          metricsFilter: { ...current.metricsFilter, riskState },
-                        }));
-                      }}
-                    >
-                      <option value="all">All</option>
-                      <option value="low">Low</option>
-                      <option value="moderate">Moderate</option>
-                      <option value="high">High</option>
-                      <option value="critical">Critical</option>
-                    </select>
-                  </label>
-                  <label>
-                    DisciplineIndexRange Min
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={draft.metricsFilter.disciplineMin}
-                      onChange={(event) => {
-                        setDraft((current) => ({
-                          ...current,
-                          metricsFilter: { ...current.metricsFilter, disciplineMin: event.target.value },
-                        }));
-                      }}
-                    />
-                  </label>
-                  <label>
-                    DisciplineIndexRange Max
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={draft.metricsFilter.disciplineMax}
-                      onChange={(event) => {
-                        setDraft((current) => ({
-                          ...current,
-                          metricsFilter: { ...current.metricsFilter, disciplineMax: event.target.value },
-                        }));
-                      }}
-                    />
-                  </label>
-                  <label>
-                    AvgRawScorePercent Min
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={draft.metricsFilter.rawScoreMin}
-                      onChange={(event) => {
-                        setDraft((current) => ({
-                          ...current,
-                          metricsFilter: { ...current.metricsFilter, rawScoreMin: event.target.value },
-                        }));
-                      }}
-                    />
-                  </label>
-                  <label>
-                    AvgRawScorePercent Max
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={draft.metricsFilter.rawScoreMax}
-                      onChange={(event) => {
-                        setDraft((current) => ({
-                          ...current,
-                          metricsFilter: { ...current.metricsFilter, rawScoreMax: event.target.value },
-                        }));
-                      }}
-                    />
-                  </label>
-                  <label>
-                    AvgAccuracyPercent Min
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={draft.metricsFilter.accuracyMin}
-                      onChange={(event) => {
-                        setDraft((current) => ({
-                          ...current,
-                          metricsFilter: { ...current.metricsFilter, accuracyMin: event.target.value },
-                        }));
-                      }}
-                    />
-                  </label>
-                  <label>
-                    AvgAccuracyPercent Max
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={draft.metricsFilter.accuracyMax}
-                      onChange={(event) => {
-                        setDraft((current) => ({
-                          ...current,
-                          metricsFilter: { ...current.metricsFilter, accuracyMax: event.target.value },
-                        }));
-                      }}
-                    />
-                  </label>
-                  <label>
-                    PerformancePercentile Min
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={draft.metricsFilter.performancePercentileMin}
-                      onChange={(event) => {
-                        setDraft((current) => ({
-                          ...current,
-                          metricsFilter: { ...current.metricsFilter, performancePercentileMin: event.target.value },
-                        }));
-                      }}
-                    />
-                  </label>
-                  <label>
-                    PerformancePercentile Max
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={draft.metricsFilter.performancePercentileMax}
-                      onChange={(event) => {
-                        setDraft((current) => ({
-                          ...current,
-                          metricsFilter: { ...current.metricsFilter, performancePercentileMax: event.target.value },
-                        }));
-                      }}
-                    />
-                  </label>
-                </div>
-              ) : null}
+                      <div className="admin-tests-step-actions">
+                        <button type="button" onClick={() => setCreateFlowStep(2)}>Back</button>
+                        <button type="button" onClick={() => setCreateFlowStep(4)} disabled={!stepThreeReady}>
+                          Continue to Schedule Setup
+                        </button>
+                      </div>
+                    </article>
+                  ) : null}
 
-              {draft.recipientSelectionMode !== "IndividualStudents" ? (
-                <div className="admin-assignments-batch-list">
-                  {batchOptions.map((batch) => {
-                    const isChecked = draft.selectedBatchIds.includes(batch.id);
-                    return (
-                      <label key={batch.id} className="admin-assignments-batch-option">
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => {
-                            toggleBatch(batch.id);
-                          }}
-                        />
-                        <span>
-                          <strong>{batch.name}</strong>
-                          <small>{studentOptions.filter((student) => student.batchId === batch.id && student.status === "active").length} active students</small>
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              ) : null}
+                  {createFlowStep === 4 ? (
+                    <article className="admin-tests-step-card admin-tests-step-card-main">
+                      <div className="admin-tests-create-section-header">
+                        <div>
+                          <p className="admin-tests-section-kicker">Step 4</p>
+                          <h3>Schedule Setup</h3>
+                        </div>
+                        <span className="admin-tests-create-chip">Time and delivery</span>
+                      </div>
+                      <p className="admin-tests-form-footnote">
+                        Choose the start time only. The end time is derived automatically from the selected test template duration.
+                      </p>
 
-              <section className="admin-assignments-recipient-review" aria-label="Recipient resolution preview">
-                <div>
-                  <strong>{recipientIds.length}</strong>
-                  <span>recipientStudentIds resolved</span>
-                </div>
-                <div>
-                  <strong>{activeEligibleCount}</strong>
-                  <span>active eligible students</span>
-                </div>
-                <div>
-                  <strong>{inactiveExcludedCount}</strong>
-                  <span>inactive or archived excluded</span>
-                </div>
-                <p>
-                  Scope: {recipientScopeLabel}. This explicit recipient list is saved with the run and is not
-                  recomputed after scheduling.
-                </p>
-              </section>
+                      <div className="admin-assignments-grid">
+                        <UiFormField
+                          label="Assignment Start Time"
+                          htmlFor="assignment-start"
+                          helper="The run must start in the future."
+                        >
+                          <input
+                            id="assignment-start"
+                            type="datetime-local"
+                            value={draft.assignmentStartLocal}
+                            onChange={(event) => setDraft((current) => ({ ...current, assignmentStartLocal: event.target.value }))}
+                          />
+                        </UiFormField>
 
-              <UiTable
-                caption="Resolved recipientStudentIds preview"
-                columns={[
-                  { id: "student", header: "Student", render: (row) => row.student },
-                  { id: "batch", header: "Batch", render: (row) => row.batch },
-                  { id: "risk", header: "Risk State", render: (row) => row.risk },
-                  { id: "discipline", header: "Discipline Index", render: (row) => row.discipline },
-                  { id: "raw", header: "Avg Raw %", render: (row) => row.raw },
-                  { id: "accuracy", header: "Avg Accuracy %", render: (row) => row.accuracy },
-                  { id: "percentile", header: "Percentile", render: (row) => row.percentile },
-                ]}
-                rows={recipientPreviewRows}
-                rowKey={(row) => row.student}
-                emptyStateText="No active recipients match the current selection."
-              />
+                        <UiFormField
+                          label="Derived End Time"
+                          htmlFor="assignment-derived-end"
+                          helper="This is fixed automatically from the selected test template duration."
+                        >
+                          <input
+                            id="assignment-derived-end"
+                            type="text"
+                            value={derivedAssignmentEndIso ? formatDateTime(derivedAssignmentEndIso) : "Select start time"}
+                            readOnly
+                          />
+                        </UiFormField>
+
+                        <UiFormField label="Attempt Limit" htmlFor="assignment-attempt-limit" helper="Default is 1 and tracked in the run snapshot.">
+                          <input
+                            id="assignment-attempt-limit"
+                            type="number"
+                            min={1}
+                            step={1}
+                            value={draft.attemptLimit}
+                            onChange={(event) => setDraft((current) => ({ ...current, attemptLimit: event.target.value }))}
+                          />
+                        </UiFormField>
+
+                        <UiFormField label="Shuffle Question Order" htmlFor="assignment-shuffle" helper="This changes display order only, not the template structure.">
+                          <label className="admin-assignments-toggle">
+                            <input
+                              id="assignment-shuffle"
+                              type="checkbox"
+                              checked={draft.shuffleQuestionOrder}
+                              onChange={(event) => setDraft((current) => ({ ...current, shuffleQuestionOrder: event.target.checked }))}
+                            />
+                            <span>{draft.shuffleQuestionOrder ? "Enabled" : "Disabled"}</span>
+                          </label>
+                        </UiFormField>
+                      </div>
+
+                      <div className="admin-tests-step-actions">
+                        <button type="button" onClick={() => setCreateFlowStep(3)}>Back</button>
+                        <button type="button" onClick={() => setCreateFlowStep(5)} disabled={!stepFourReady}>
+                          Continue to Final Snapshot
+                        </button>
+                      </div>
+                    </article>
+                  ) : null}
+
+                  {createFlowStep === 5 ? (
+                    <article className="admin-tests-step-card admin-tests-step-card-main">
+                      <div className="admin-tests-create-section-header">
+                        <div>
+                          <p className="admin-tests-section-kicker">Step 5</p>
+                          <h3>Final Assignment Snapshot</h3>
+                        </div>
+                        <span className="admin-tests-create-chip">Review and publish</span>
+                      </div>
+                      <p className="admin-tests-form-footnote">
+                        Review the final assignment snapshot below. Scheduling the run creates and publishes this assignment to students.
+                      </p>
+
+                      <section className="admin-assignments-summary" aria-label="Assignment confirmation snapshot">
+                        <p>Template Name: <strong>{selectedTemplate?.name ?? "None"}</strong></p>
+                        <p>Exam Type: <strong>{selectedTemplate?.examType ?? "N/A"}</strong></p>
+                        <p>Mode: <strong>{draft.executionMode}</strong> (requires {MODE_REQUIRED_LAYER[draft.executionMode]})</p>
+                        <p>Recipients: <strong>{recipientIds.length}</strong></p>
+                        <p>Start Time: <strong>{derivedAssignmentStartIso ? formatDateTime(derivedAssignmentStartIso) : "-"}</strong></p>
+                        <p>End Time: <strong>{derivedAssignmentEndIso ? formatDateTime(derivedAssignmentEndIso) : "-"}</strong></p>
+                        <p>Attempt Limit: <strong>{draft.attemptLimit}</strong></p>
+                        <p>Shuffle Question Order: <strong>{draft.shuffleQuestionOrder ? "Enabled" : "Disabled"}</strong></p>
+                        <p>Academic Year: <strong>{CURRENT_ACADEMIC_YEAR}</strong></p>
+                        <div className="admin-assignments-immutable-grid" aria-label="Immutable fields after confirmation">
+                          {[
+                            { field: "testId", value: selectedTemplate?.id ?? "N/A" },
+                            { field: "canonicalId", value: selectedTemplate?.canonicalId ?? "N/A" },
+                            { field: "modeSnapshot", value: draft.executionMode },
+                            { field: "phaseConfigSnapshot", value: selectedTemplate?.phaseConfigSnapshot ?? "N/A" },
+                            { field: "timingProfileSnapshot", value: selectedTemplate?.timingProfileSnapshot ?? "N/A" },
+                            { field: "duration", value: selectedTemplate ? `${selectedTemplate.totalDurationMinutes} min` : "N/A" },
+                          ].map((item) => (
+                            <div key={item.field} className="admin-assignments-immutable-item">
+                              <strong>{item.field}</strong>
+                              <span>{item.value}</span>
+                              <small>Locks when Schedule Run confirms status = scheduled.</small>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+
+                      <div className="admin-tests-step-actions">
+                        <button type="button" onClick={() => setCreateFlowStep(4)}>Back</button>
+                        <button type="submit" disabled={isSubmitting}>
+                          {isSubmitting ? "Scheduling..." : "Schedule Run"}
+                        </button>
+                      </div>
+                    </article>
+                  ) : null}
+                </div>
+              </div>
             </div>
-          </UiFormField>
-
-          <div className="admin-assignments-grid">
-            <UiFormField
-              label="Step 4 — StartWindow"
-              htmlFor="assignment-start"
-              helper="Server validates assignment window and keeps run in scheduled state until activation."
-            >
-              <input
-                id="assignment-start"
-                type="datetime-local"
-                value={draft.assignmentStartLocal}
-                onChange={(event) => {
-                  setDraft((current) => ({ ...current, assignmentStartLocal: event.target.value }));
-                }}
-              />
-            </UiFormField>
-
-            <UiFormField
-              label="Step 4 — EndWindow"
-              htmlFor="assignment-end"
-              helper="Window close must be later than start and grace period controls collecting state."
-            >
-              <input
-                id="assignment-end"
-                type="datetime-local"
-                value={draft.assignmentEndLocal}
-                onChange={(event) => {
-                  setDraft((current) => ({ ...current, assignmentEndLocal: event.target.value }));
-                }}
-              />
-            </UiFormField>
-
-            <UiFormField
-              label="Timezone"
-              htmlFor="assignment-timezone"
-              helper="Stored alongside run window for server-authoritative validation."
-            >
-              <input
-                id="assignment-timezone"
-                type="text"
-                value={draft.timezone}
-                onChange={(event) => {
-                  setDraft((current) => ({ ...current, timezone: event.target.value }));
-                }}
-              />
-            </UiFormField>
-
-            <UiFormField
-              label="AttemptLimit"
-              htmlFor="assignment-attempt-limit"
-              helper="Default is 1 and tracked in run snapshot."
-            >
-              <input
-                id="assignment-attempt-limit"
-                type="number"
-                min={1}
-                step={1}
-                value={draft.attemptLimit}
-                onChange={(event) => {
-                  setDraft((current) => ({ ...current, attemptLimit: event.target.value }));
-                }}
-              />
-            </UiFormField>
-
-            <UiFormField
-              label="GracePeriodMinutes"
-              htmlFor="assignment-grace"
-              helper="Allows collecting state after the end window."
-            >
-              <input
-                id="assignment-grace"
-                type="number"
-                min={0}
-                step={1}
-                value={draft.gracePeriodMinutes}
-                onChange={(event) => {
-                  setDraft((current) => ({ ...current, gracePeriodMinutes: event.target.value }));
-                }}
-              />
-            </UiFormField>
-
-            <UiFormField
-              label="ShuffleQuestionOrder"
-              htmlFor="assignment-shuffle"
-              helper="Shuffle changes display order only and does not mutate canonical structure."
-            >
-              <label className="admin-assignments-toggle">
-                <input
-                  id="assignment-shuffle"
-                  type="checkbox"
-                  checked={draft.shuffleQuestionOrder}
-                  onChange={(event) => {
-                    setDraft((current) => ({ ...current, shuffleQuestionOrder: event.target.checked }));
-                  }}
-                />
-                <span>{draft.shuffleQuestionOrder ? "Enabled" : "Disabled"}</span>
-              </label>
-            </UiFormField>
-          </div>
-
-          <section className="admin-assignments-summary" aria-label="Assignment confirmation snapshot">
-            <h3>Step 5 — Confirmation Snapshot</h3>
-            <p>
-              TemplateName: <strong>{selectedTemplate?.name ?? "None"}</strong>
-            </p>
-            <p>
-              CanonicalId (hidden in run doc): <strong>{selectedTemplate?.canonicalId ?? "N/A"}</strong>
-            </p>
-            <p>
-              Mode: <strong>{draft.executionMode}</strong> (requires {MODE_REQUIRED_LAYER[draft.executionMode]})
-            </p>
-            <p>
-              PhaseConfigSnapshot: <strong>{selectedTemplate?.phaseConfigSnapshot ?? "N/A"}</strong>
-            </p>
-            <p>
-              TimingProfileSnapshot: <strong>{selectedTemplate?.timingProfileSnapshot ?? "N/A"}</strong>
-            </p>
-            <p>
-              RecipientCount: <strong>{recipientIds.length}</strong>
-            </p>
-            <p>
-              Window: <strong>{normalizeIsoDatetime(draft.assignmentStartLocal) ?? "-"}</strong> to <strong>{normalizeIsoDatetime(draft.assignmentEndLocal) ?? "-"}</strong>
-            </p>
-            <p>
-              AcademicYear: <strong>{CURRENT_ACADEMIC_YEAR}</strong>
-            </p>
-            <p>
-              ShuffleStatus: <strong>{draft.shuffleQuestionOrder ? "Enabled" : "Disabled"}</strong>
-            </p>
-            <div className="admin-assignments-immutable-grid" aria-label="Immutable fields after confirmation">
-              {[
-                { field: "testId", value: selectedTemplate?.id ?? "N/A" },
-                { field: "modeSnapshot", value: draft.executionMode },
-                { field: "phaseConfigSnapshot", value: selectedTemplate?.phaseConfigSnapshot ?? "N/A" },
-                { field: "timingProfileSnapshot", value: selectedTemplate?.timingProfileSnapshot ?? "N/A" },
-                { field: "canonicalId", value: selectedTemplate?.canonicalId ?? "N/A" },
-                { field: "academicYear", value: CURRENT_ACADEMIC_YEAR },
-              ].map((item) => (
-                <div key={item.field} className="admin-assignments-immutable-item">
-                  <strong>{item.field}</strong>
-                  <span>{item.value}</span>
-                  <small>Locks when Schedule Run confirms status = scheduled.</small>
-                </div>
-              ))}
-            </div>
-            <p className="admin-assignments-form-footnote">
-              After confirmation, only scheduled-run operational fields such as start window, end window, and
-              recipients remain editable before activation. Structural snapshot fields above are displayed as locked.
-            </p>
-          </section>
-        </UiForm>
+          </form>
+        </section>
       ) : null}
 
       {activeSection === "list" ? (
@@ -2960,43 +3293,6 @@ function AssignmentManagementPage() {
           </div>
         </section>
       ) : null}
-
-      <section className="admin-assignments-summary" aria-label="Assignment guarantees">
-        <h3>Architecture Guarantees</h3>
-        <p>State machine: scheduled → active → collecting → completed → archived, with cancelled/terminated branches.</p>
-        <p>Security: server-authoritative timer, portal-only entry, mode and shuffle immutable after scheduling.</p>
-        <p>Normalization: UI exposes only percentage metrics (AvgRawScorePercent and AvgAccuracyPercent).</p>
-        <p>Storage: runAnalytics summaries are consumed directly; no session scanning queries in list views.</p>
-        <p>Data lifecycle: HOT active runs/sessions, WARM current-year completed runs, COLD archived-year retention.</p>
-      </section>
-
-      <section className="admin-assignments-summary" aria-label="Template detail snapshot">
-        <h3>Selected Template Snapshot</h3>
-        <p>
-          TemplateName: <strong>{selectedTemplate?.name ?? "None"}</strong>
-        </p>
-        <p>
-          ExamType: <strong>{selectedTemplate?.examType ?? "N/A"}</strong>
-        </p>
-        <p>
-          Status: <strong>{selectedTemplate?.status ?? "N/A"}</strong>
-        </p>
-        <p>
-          DifficultyDistribution: <strong>{selectedTemplate?.difficultyDistribution ?? "N/A"}</strong>
-        </p>
-        <p>
-          AllowedModes: <strong>{selectedTemplate?.allowedModes.join(", ") ?? "N/A"}</strong>
-        </p>
-        <p>
-          CanonicalId: <strong>{selectedTemplate ? "Hidden in dropdown; locked into run snapshot" : "N/A"}</strong>
-        </p>
-        <p>
-          LastUsed: <strong>{selectedTemplate ? formatDateTime(selectedTemplate.lastUsedIso) : "N/A"}</strong>
-        </p>
-        <p>
-          Active recipients resolved: <strong>{recipientStudents.length}</strong>
-        </p>
-      </section>
     </article>
   );
 }
