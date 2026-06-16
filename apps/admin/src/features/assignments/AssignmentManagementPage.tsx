@@ -17,7 +17,7 @@ const apiClient = getPortalApiClient("admin");
 
 const EXECUTION_MODES = ["Operational", "Controlled", "Focused", "Hard"] as const;
 const LICENSE_ORDER = ["L0", "L1", "L2", "L3"] as const;
-const RUN_STATUSES = ["scheduled", "active", "collecting", "completed", "archived", "cancelled", "terminated"] as const;
+const RUN_STATUSES = ["Upcoming", "Live", "Completed", "Stopped", "Cancelled"] as const;
 
 const CURRENT_LICENSE_LAYER: LicenseLayer = "L2";
 const CURRENT_ACADEMIC_YEAR = "2026";
@@ -30,11 +30,10 @@ const MODE_REQUIRED_LAYER: Record<ExecutionMode, LicenseLayer> = {
   Hard: "L2",
 };
 
-type AssignmentSection = "create" | "list" | "live" | "history" | "bulk";
+type AssignmentSection = "create" | "list" | "live";
 type ExecutionMode = (typeof EXECUTION_MODES)[number];
 type LicenseLayer = (typeof LICENSE_ORDER)[number];
 type RunStatus = (typeof RUN_STATUSES)[number];
-type RunLifecycleTier = "HOT" | "WARM" | "COLD";
 type TemplateAssignmentStatus = "draft" | "ready" | "assigned" | "archived" | "deprecated";
 
 type RecipientSelectionMode =
@@ -291,50 +290,6 @@ interface AdminTestTemplateRecord {
   updatedAt: string;
 }
 
-interface AssignmentLifecyclePolicyRow {
-  tier: RunLifecycleTier;
-  trigger: string;
-  firestoreTreatment: string;
-  analyticsTreatment: string;
-  operatorWorkflow: string;
-}
-
-interface AssignmentLifecycleRow {
-  id: string;
-  runName: string;
-  status: RunStatus;
-  tier: RunLifecycleTier;
-  academicYear: string;
-  trigger: string;
-  firestoreTreatment: string;
-  analyticsTreatment: string;
-  operatorAction: string;
-}
-
-const ASSIGNMENT_LIFECYCLE_POLICY_ROWS: AssignmentLifecyclePolicyRow[] = [
-  {
-    tier: "HOT",
-    trigger: "Scheduled, active, or collecting runs in the operational window.",
-    firestoreTreatment: "Run document and active session documents remain in Firestore for execution.",
-    analyticsTreatment: "Live views use session snapshots only; no history/list recomputation from sessions.",
-    operatorWorkflow: "Extend active windows, terminate active runs, or wait for completion before archive.",
-  },
-  {
-    tier: "WARM",
-    trigger: "Completed, cancelled, or terminated runs in the current academic year.",
-    firestoreTreatment: "Run document stays in current-year Firestore history.",
-    analyticsTreatment: "Read immutable runAnalytics summaries for list/history/reporting.",
-    operatorWorkflow: "Export summaries, resend notifications, duplicate/reassign with a new runId, or archive.",
-  },
-  {
-    tier: "COLD",
-    trigger: "Archived runs or runs from past academic years.",
-    firestoreTreatment: "Past-year sessions are export-eligible for BigQuery and optional Firestore cleanup.",
-    analyticsTreatment: "runAnalytics is retained as the institutional summary surface.",
-    operatorWorkflow: "Visibility and export only; never mutate sessions or repurpose a historical run.",
-  },
-];
-
 const TEMPLATE_OPTIONS: TemplateOption[] = [
   {
     id: "tmpl-001",
@@ -519,7 +474,7 @@ const FALLBACK_RUNS: RunStatusRecord[] = [
     attemptLimit: 1,
     gracePeriodMinutes: 15,
     shuffleEnabled: true,
-    status: "active",
+    status: "Live",
     completionPercent: 64,
     createdAtIso: "2026-04-15T08:00:00.000Z",
     runAnalyticsSnapshot: {
@@ -556,7 +511,7 @@ const FALLBACK_RUNS: RunStatusRecord[] = [
     attemptLimit: 1,
     gracePeriodMinutes: 10,
     shuffleEnabled: false,
-    status: "completed",
+    status: "Completed",
     completionPercent: 100,
     createdAtIso: "2026-04-10T06:40:00.000Z",
     runAnalyticsSnapshot: {
@@ -593,7 +548,7 @@ const FALLBACK_RUNS: RunStatusRecord[] = [
     attemptLimit: 1,
     gracePeriodMinutes: 15,
     shuffleEnabled: true,
-    status: "archived",
+    status: "Completed",
     completionPercent: 100,
     createdAtIso: "2026-04-08T03:40:00.000Z",
     runAnalyticsSnapshot: {
@@ -1162,58 +1117,17 @@ function parseRunIdFromApiResponse(payload: unknown): string | null {
 
 function statusClassName(status: RunStatus): string {
   switch (status) {
-    case "scheduled":
-      return "admin-assignments-status admin-assignments-status-scheduled";
-    case "active":
-      return "admin-assignments-status admin-assignments-status-active";
-    case "collecting":
-      return "admin-assignments-status admin-assignments-status-collecting";
-    case "completed":
+    case "Upcoming":
+      return "admin-assignments-status admin-assignments-status-upcoming";
+    case "Live":
+      return "admin-assignments-status admin-assignments-status-live";
+    case "Completed":
       return "admin-assignments-status admin-assignments-status-completed";
-    case "archived":
-      return "admin-assignments-status admin-assignments-status-archived";
-    case "terminated":
-      return "admin-assignments-status admin-assignments-status-terminated";
+    case "Stopped":
+      return "admin-assignments-status admin-assignments-status-stopped";
     default:
       return "admin-assignments-status admin-assignments-status-cancelled";
   }
-}
-
-function lifecyclePolicyForTier(tier: RunLifecycleTier): AssignmentLifecyclePolicyRow {
-  return ASSIGNMENT_LIFECYCLE_POLICY_ROWS.find((row) => row.tier === tier) ?? ASSIGNMENT_LIFECYCLE_POLICY_ROWS[1];
-}
-
-function resolveRunLifecycleTier(run: RunStatusRecord): RunLifecycleTier {
-  if (run.status === "archived" || run.academicYear !== CURRENT_ACADEMIC_YEAR) {
-    return "COLD";
-  }
-
-  if (run.status === "scheduled" || run.status === "active" || run.status === "collecting") {
-    return "HOT";
-  }
-
-  return "WARM";
-}
-
-function toAssignmentLifecycleRow(run: RunStatusRecord): AssignmentLifecycleRow {
-  const tier = resolveRunLifecycleTier(run);
-  const policy = lifecyclePolicyForTier(tier);
-  return {
-    academicYear: run.academicYear,
-    analyticsTreatment: policy.analyticsTreatment,
-    firestoreTreatment: policy.firestoreTreatment,
-    id: run.runId,
-    operatorAction:
-      tier === "HOT" ?
-        "Operational controls only until execution closes." :
-        tier === "WARM" ?
-          "Export, notify, duplicate, reassign with new runId, or archive." :
-          "Read/export retained summaries; do not mutate historical session data.",
-    runName: run.runName,
-    status: run.status,
-    tier,
-    trigger: policy.trigger,
-  };
 }
 
 function formatBatchLabel(batchId: string, batches: BatchOption[]): string {
@@ -1300,10 +1214,10 @@ function toExecutionStabilityBadge(record: RunAnalyticsRecord): string {
 
 function inferRunStatus(record: RunAnalyticsRecord): RunStatus {
   if (record.completionRatePercent >= 100) {
-    return "completed";
+    return "Completed";
   }
 
-  return "active";
+  return "Live";
 }
 
 function deriveRecipientIds(batchId: string, participantCount: number, students: StudentOption[]): string[] {
@@ -1516,7 +1430,7 @@ function buildFallbackRunRecord(
     attemptLimit: payload.attemptLimit,
     gracePeriodMinutes: payload.gracePeriodMinutes,
     shuffleEnabled: payload.shuffleQuestionOrder,
-    status: "scheduled",
+    status: "Upcoming",
     completionPercent: 0,
     createdAtIso,
     runAnalyticsSnapshot: analyticsForRecipientCount(payload.recipientStudentIds.length, payload.mode),
@@ -1530,14 +1444,6 @@ function resolveAssignmentSection(pathname: string): AssignmentSection {
 
   if (pathname.includes("/assignments/live")) {
     return "live";
-  }
-
-  if (pathname.includes("/assignments/history")) {
-    return "history";
-  }
-
-  if (pathname.includes("/assignments/bulk")) {
-    return "bulk";
   }
 
   return "create";
@@ -1999,7 +1905,7 @@ function AssignmentManagementPage() {
   }, [batchOptions, draft.selectedBatchIds, draft.selectedStudentIds.length, recipientFamily]);
 
   const activeRuns = useMemo(
-    () => runs.filter((run) => run.status === "active"),
+    () => runs.filter((run) => run.status === "Live"),
     [runs],
   );
   const selectedLiveRun = useMemo(() => {
@@ -2016,27 +1922,6 @@ function AssignmentManagementPage() {
 
     return activeRuns;
   }, [activeRuns, selectedLiveRun]);
-
-  const historyRows = useMemo(
-    () => runs.filter((run) => run.status === "completed" || run.status === "archived" || run.status === "cancelled" || run.status === "terminated"),
-    [runs],
-  );
-  const assignmentLifecycleRows = useMemo(
-    () => runs.map(toAssignmentLifecycleRow),
-    [runs],
-  );
-  const hotRunCount = useMemo(
-    () => assignmentLifecycleRows.filter((row) => row.tier === "HOT").length,
-    [assignmentLifecycleRows],
-  );
-  const warmRunCount = useMemo(
-    () => assignmentLifecycleRows.filter((row) => row.tier === "WARM").length,
-    [assignmentLifecycleRows],
-  );
-  const coldRunCount = useMemo(
-    () => assignmentLifecycleRows.filter((row) => row.tier === "COLD").length,
-    [assignmentLifecycleRows],
-  );
 
   const filteredRuns = useMemo(() => {
     const parsedStart = filters.dateStart ? Date.parse(filters.dateStart) : null;
@@ -2175,8 +2060,37 @@ function AssignmentManagementPage() {
           </div>
         ),
       },
+      {
+        id: "actions",
+        header: "Actions",
+        className: "admin-assignments-actions-col",
+        render: (row) => (
+          <div className="admin-question-library-actions">
+            {row.status === "Upcoming" ? (
+              <button type="button" onClick={() => runBulkOperation("Cancel", row)}>
+                Cancel
+              </button>
+            ) : null}
+            {row.status === "Live" ? (
+              <>
+                <button type="button" onClick={() => navigate(`/admin/assignments/live/${row.runId}`)}>
+                  Open Live Monitor
+                </button>
+                <button type="button" onClick={() => runBulkOperation("Terminate", row)}>
+                  Stop
+                </button>
+              </>
+            ) : null}
+            {row.status === "Completed" ? (
+              <button type="button" onClick={() => navigate(`/admin/assignments/details/${row.runId}`)}>
+                View Details
+              </button>
+            ) : null}
+          </div>
+        ),
+      },
     ];
-  }, [batchOptions]);
+  }, [batchOptions, navigate]);
 
   const liveColumns = useMemo<UiTableColumn<LiveMonitorStudentSnapshot>[]>(() => {
     const columns: UiTableColumn<LiveMonitorStudentSnapshot>[] = [
@@ -2261,66 +2175,6 @@ function AssignmentManagementPage() {
   function formatLiveFlag(isActive: boolean): string {
     return isActive ? "Flagged" : "Clear";
   }
-
-  const historyColumns = useMemo<UiTableColumn<RunStatusRecord>[]>(() => {
-    return [
-      {
-        id: "runName",
-        header: "Run Name",
-        render: (row) => (
-          <div className="admin-assignments-run-cell admin-assignments-run-cell-strong">
-            <strong>{row.runName}</strong>
-            <small>{row.templateName}</small>
-          </div>
-        ),
-      },
-      {
-        id: "mode",
-        header: "Mode",
-        render: (row) => row.mode,
-      },
-      {
-        id: "avgRaw",
-        header: "Avg Raw %",
-        render: (row) => `${row.runAnalyticsSnapshot.avgRawScorePercent}%`,
-      },
-      {
-        id: "avgAccuracy",
-        header: "Avg Accuracy %",
-        render: (row) => `${row.runAnalyticsSnapshot.avgAccuracyPercent}%`,
-      },
-      {
-        id: "riskDistribution",
-        header: "Risk Distribution",
-        render: (row) => row.runAnalyticsSnapshot.riskDistributionSummary,
-      },
-      {
-        id: "stabilityIndex",
-        header: "Stability Index",
-        render: (row) => row.runAnalyticsSnapshot.executionStabilityIndex,
-      },
-      {
-        id: "disciplineIndex",
-        header: "Discipline Index",
-        render: (row) => row.runAnalyticsSnapshot.avgDisciplineIndex,
-      },
-      {
-        id: "completion",
-        header: "Completion %",
-        render: (row) => `${row.completionPercent}%`,
-      },
-      {
-        id: "summaryState",
-        header: "Read-only Summary",
-        render: (row) => (
-          <div className="admin-assignments-table-stack">
-            <span className={statusClassName(row.status)}>{row.status}</span>
-            <small>runAnalytics/{row.runId}</small>
-          </div>
-        ),
-      },
-    ];
-  }, []);
 
   function toggleBatch(batchId: string) {
     setDraft((current) => {
@@ -2424,7 +2278,7 @@ function AssignmentManagementPage() {
           ...sourceRun,
           runId: copyId,
           runName: `Run ${copyId.replace(/^run-/, "")}`,
-          status: "scheduled" as const,
+          status: "Upcoming" as const,
           completionPercent: 0,
           createdAtIso: nowIso,
         };
@@ -2444,7 +2298,7 @@ function AssignmentManagementPage() {
           runName: `Run ${reassignId.replace(/^run-/, "")}`,
           batchIds: [fallbackBatchId],
           recipientStudentIds: recipients,
-          status: "scheduled" as const,
+          status: "Upcoming" as const,
           completionPercent: 0,
           createdAtIso: nowIso,
           runAnalyticsSnapshot: analyticsForRecipientCount(recipients.length, sourceRun.mode),
@@ -2458,32 +2312,32 @@ function AssignmentManagementPage() {
           return run;
         }
 
-        if (operation === "ExtendWindow" && run.status === "active") {
+        if (operation === "ExtendWindow" && run.status === "Live") {
           return {
             ...run,
             endWindowIso: new Date(Date.parse(run.endWindowIso) + (15 * 60 * 1000)).toISOString(),
           };
         }
 
-        if (operation === "Cancel" && run.status === "scheduled") {
+        if (operation === "Cancel" && run.status === "Upcoming") {
           return {
             ...run,
-            status: "cancelled",
+            status: "Cancelled",
           };
         }
 
-        if (operation === "Terminate" && run.status === "active") {
+        if (operation === "Terminate" && run.status === "Live") {
           return {
             ...run,
-            status: "terminated",
+            status: "Stopped",
             completionPercent: 100,
           };
         }
 
-        if (operation === "Archive" && run.status !== "active") {
+        if (operation === "Archive" && run.status !== "Live") {
           return {
             ...run,
-            status: "archived",
+            status: "Completed",
           };
         }
 
@@ -3442,98 +3296,6 @@ function AssignmentManagementPage() {
         </section>
       ) : null}
 
-      {activeSection === "history" ? (
-        <section className="admin-assignments-history-shell" aria-label="Assignment history">
-          <h3>AssignmentHistory</h3>
-          <p className="admin-content-copy">Historical rows are immutable, read-only summaries.</p>
-          <UiTable
-            caption="Assignment History"
-            columns={historyColumns}
-            rows={historyRows}
-            rowKey={(row) => row.runId}
-            emptyStateText="No historical runs available."
-          />
-        </section>
-      ) : null}
-
-      {activeSection === "bulk" ? (
-        <section className="admin-assignments-bulk-shell" aria-label="Bulk operations">
-          <h3>BulkOperations</h3>
-          <p className="admin-content-copy">
-            Existing runs are never repurposed for a new batch. ReassignToBatch creates a new runId.
-          </p>
-
-          <section className="admin-assignments-recipient-review" aria-label="Assignment lifecycle tier counts">
-            <div>
-              <strong>{hotRunCount}</strong>
-              <span>HOT operational runs</span>
-            </div>
-            <div>
-              <strong>{warmRunCount}</strong>
-              <span>WARM current-year summaries</span>
-            </div>
-            <div>
-              <strong>{coldRunCount}</strong>
-              <span>COLD archive-retained runs</span>
-            </div>
-            <p>
-              HOT runs keep active execution/session access, WARM runs keep immutable current-year summaries, and
-              COLD runs retain runAnalytics while past-year sessions are export-eligible for BigQuery cleanup.
-            </p>
-          </section>
-
-          <UiTable
-            caption="Assignment HOT/WARM/COLD lifecycle policy"
-            columns={[
-              { id: "tier", header: "Tier", render: (row) => row.tier },
-              { id: "trigger", header: "Trigger", render: (row) => row.trigger },
-              { id: "firestore", header: "Firestore Treatment", render: (row) => row.firestoreTreatment },
-              { id: "analytics", header: "Analytics Treatment", render: (row) => row.analyticsTreatment },
-              { id: "operator", header: "Operator Workflow", render: (row) => row.operatorWorkflow },
-            ]}
-            rows={ASSIGNMENT_LIFECYCLE_POLICY_ROWS}
-            rowKey={(row) => row.tier}
-            emptyStateText="No assignment lifecycle policy configured."
-          />
-
-          <UiTable
-            caption="Assignment lifecycle operator register"
-            columns={[
-              { id: "run", header: "Run", render: (row) => row.runName },
-              { id: "tier", header: "Lifecycle Tier", render: (row) => `${row.tier} / ${row.status}` },
-              { id: "year", header: "Academic Year", render: (row) => row.academicYear },
-              { id: "trigger", header: "Trigger", render: (row) => row.trigger },
-              { id: "firestore", header: "Firestore Treatment", render: (row) => row.firestoreTreatment },
-              { id: "analytics", header: "Analytics Treatment", render: (row) => row.analyticsTreatment },
-              { id: "operator", header: "Operator Action", render: (row) => row.operatorAction },
-            ]}
-            rows={assignmentLifecycleRows}
-            rowKey={(row) => row.id}
-            emptyStateText="No assignment lifecycle rows available."
-          />
-
-          <div className="admin-assignments-bulk-grid">
-            {runs.slice(0, 4).map((run) => (
-              <article key={run.runId} className="admin-assignments-bulk-card">
-                <h4>{run.runName}</h4>
-                <p>
-                  {run.templateName} · <span className={statusClassName(run.status)}>{run.status}</span>
-                </p>
-                <div className="admin-assignments-bulk-actions">
-                  <button type="button" onClick={() => runBulkOperation("DuplicateRun", run)}>DuplicateRun</button>
-                  <button type="button" onClick={() => runBulkOperation("ExtendWindow", run)} disabled={run.status !== "active"}>ExtendWindow</button>
-                  <button type="button" onClick={() => runBulkOperation("Cancel", run)} disabled={run.status !== "scheduled"}>Cancel</button>
-                  <button type="button" onClick={() => runBulkOperation("Terminate", run)} disabled={run.status !== "active"}>Terminate</button>
-                  <button type="button" onClick={() => runBulkOperation("Archive", run)} disabled={run.status === "active"}>Archive</button>
-                  <button type="button" onClick={() => runBulkOperation("ExportRunSummary", run)}>ExportRunSummary</button>
-                  <button type="button" onClick={() => runBulkOperation("ResendNotification", run)}>ResendNotification</button>
-                  <button type="button" onClick={() => runBulkOperation("ReassignToBatch", run)}>ReassignToBatch</button>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-      ) : null}
     </article>
   );
 }

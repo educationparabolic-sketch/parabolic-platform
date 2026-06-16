@@ -23,24 +23,6 @@ const ASSIGNMENT_WORKSPACES = [
     to: "/admin/assignments/list",
     meta: "Operational run review and filters",
   },
-  {
-    title: "Live Monitor",
-    description: "Dedicated live workspace for active run visibility and drill-in access to focused run monitoring.",
-    to: "/admin/assignments/live",
-    meta: "Active execution monitoring",
-  },
-  {
-    title: "Assignment History",
-    description: "Historical run review with summary-safe lifecycle visibility separate from current operations.",
-    to: "/admin/assignments/history",
-    meta: "Historical reporting and audit review",
-  },
-  {
-    title: "Bulk Operations",
-    description: "Centralized workspace for multi-run reminders, archiving, and repeated operator follow-up actions.",
-    to: "/admin/assignments/bulk",
-    meta: "Batch actions across assignment runs",
-  },
 ] as const;
 
 function AdminAssignmentsLandingPage() {
@@ -126,21 +108,6 @@ function AdminAssignmentsLandingPage() {
             ...workspace,
             meta: `${uniqueBatchCount} batches represented across current run analytics`,
           };
-        case "/admin/assignments/live":
-          return {
-            ...workspace,
-            meta: `${activeRuns.length} active or still-collecting runs currently in scope`,
-          };
-        case "/admin/assignments/history":
-          return {
-            ...workspace,
-            meta: `${averageCompletion}% average completion across indexed run summaries`,
-          };
-        case "/admin/assignments/bulk":
-          return {
-            ...workspace,
-            meta: `${dataset.yearBehaviorSummary.academicYear} summary-safe run operations anchor`,
-          };
         default:
           return workspace;
       }
@@ -174,7 +141,7 @@ function AdminAssignmentsLandingPage() {
         {
           label: "Live Scope",
           value: String(activeRuns.length),
-          detail: "active or still-collecting runs in summary-safe scope",
+          detail: "live assignments available through row-level monitor buttons",
         },
         {
           label: "Avg Completion",

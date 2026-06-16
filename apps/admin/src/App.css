@@ -4266,6 +4266,10 @@
   min-width: 220px;
 }
 
+.admin-assignments-actions-col {
+  min-width: 180px;
+}
+
 .admin-content-card[aria-labelledby="admin-assignments-title"] .ui-table {
   width: 100%;
   min-width: 100%;
@@ -4332,12 +4336,12 @@
   font-weight: 600;
 }
 
-.admin-assignments-status-scheduled {
+.admin-assignments-status-upcoming {
   color: #8b5a13;
   background: rgba(219, 153, 41, 0.16);
 }
 
-.admin-assignments-status-active {
+.admin-assignments-status-live {
   color: #0f6a41;
   background: rgba(15, 146, 85, 0.14);
 }
@@ -4347,22 +4351,12 @@
   background: rgba(77, 120, 194, 0.14);
 }
 
-.admin-assignments-status-collecting {
-  color: #2d5f87;
-  background: rgba(70, 126, 188, 0.15);
-}
-
-.admin-assignments-status-archived {
-  color: #3f5369;
-  background: rgba(99, 118, 139, 0.15);
-}
-
 .admin-assignments-status-cancelled {
   color: #8a2431;
   background: rgba(196, 56, 56, 0.14);
 }
 
-.admin-assignments-status-terminated {
+.admin-assignments-status-stopped {
   color: #7d2f2f;
   background: rgba(176, 71, 71, 0.16);
 }
@@ -4656,6 +4650,260 @@
 .admin-assignments-bulk-actions button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.admin-assignments-detail-shell {
+  display: grid;
+  gap: 18px;
+}
+
+.admin-assignments-detail-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 18px 20px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(243, 248, 255, 0.96), rgba(255, 255, 255, 0.98));
+  border: 1px solid rgba(20, 55, 100, 0.08);
+}
+
+.admin-assignments-detail-hero h3 {
+  margin: 0 0 6px;
+}
+
+.admin-assignments-detail-hero p,
+.admin-assignments-detail-hero small {
+  margin: 0;
+}
+
+.admin-assignments-detail-hero-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-assignments-detail-hero-note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.admin-assignments-detail-hero-note strong {
+  color: #244874;
+  font-size: 0.92rem;
+}
+
+.admin-assignments-detail-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.admin-assignments-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.admin-assignments-detail-card,
+.admin-assignments-detail-panel {
+  border: 1px solid rgba(20, 55, 100, 0.1);
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 18px 35px rgba(20, 55, 100, 0.06);
+}
+
+.admin-assignments-detail-card {
+  padding: 16px 18px;
+  display: grid;
+  gap: 6px;
+}
+
+.admin-assignments-detail-card span,
+.admin-assignments-detail-summary span {
+  font-size: 0.82rem;
+  color: #52667d;
+}
+
+.admin-assignments-detail-card strong {
+  font-size: 1.15rem;
+  color: #12304f;
+}
+
+.admin-assignments-detail-card small {
+  color: #60748a;
+}
+
+.admin-assignments-detail-panel {
+  padding: 18px;
+}
+
+.admin-assignments-detail-panel-accent {
+  background: linear-gradient(135deg, rgba(247, 250, 255, 0.98), rgba(255, 255, 255, 1));
+}
+
+.admin-assignments-detail-panel h3,
+.admin-assignments-detail-panel p {
+  margin-top: 0;
+}
+
+.admin-assignments-detail-panel summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #143764;
+}
+
+.admin-assignments-detail-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.admin-assignments-detail-summary div {
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: rgba(244, 248, 252, 0.95);
+  display: grid;
+  gap: 5px;
+}
+
+.admin-assignments-detail-summary strong {
+  color: #143764;
+}
+
+.admin-assignments-detail-record-list {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.admin-assignments-detail-record-item {
+  border-radius: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(20, 55, 100, 0.08);
+  background: rgba(255, 255, 255, 0.82);
+  display: grid;
+  gap: 5px;
+}
+
+.admin-assignments-detail-record-item span {
+  color: #60748a;
+  font-size: 0.8rem;
+}
+
+.admin-assignments-detail-record-item strong {
+  color: #143764;
+}
+
+.admin-assignments-live-extension-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-assignments-live-extension-custom {
+  margin-top: 12px;
+}
+
+.admin-assignments-live-extension-custom label {
+  display: grid;
+  gap: 6px;
+  color: #244874;
+  font-size: 0.9rem;
+}
+
+.admin-assignments-live-extension-custom input {
+  min-height: 38px;
+  border: 1px solid rgba(16, 42, 81, 0.16);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.94);
+  padding: 8px 10px;
+  color: #183b66;
+}
+
+.admin-assignments-live-drilldown-shell {
+  display: grid;
+  gap: 18px;
+}
+
+.admin-assignments-live-hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: stretch;
+  border-radius: 22px;
+  padding: 20px 22px;
+  background:
+    radial-gradient(circle at top right, rgba(82, 143, 223, 0.18), transparent 34%),
+    linear-gradient(135deg, rgba(239, 247, 255, 0.98), rgba(255, 255, 255, 1));
+  border: 1px solid rgba(20, 55, 100, 0.1);
+}
+
+.admin-assignments-live-hero-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-assignments-live-hero-copy h3,
+.admin-assignments-live-hero-copy p,
+.admin-assignments-live-hero-copy small {
+  margin: 0;
+}
+
+.admin-assignments-live-hero-copy p {
+  color: #244874;
+  font-weight: 600;
+}
+
+.admin-assignments-live-hero-copy small {
+  color: #60748a;
+}
+
+.admin-assignments-live-hero-timer {
+  min-width: 220px;
+  border-radius: 18px;
+  padding: 16px 18px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(20, 55, 100, 0.08);
+  display: grid;
+  gap: 6px;
+}
+
+.admin-assignments-live-hero-timer span {
+  color: #60748a;
+  font-size: 0.82rem;
+}
+
+.admin-assignments-live-hero-timer strong {
+  color: #143764;
+  font-size: 1.55rem;
+  letter-spacing: 0.04em;
+}
+
+.admin-assignments-live-hero-timer small {
+  color: #60748a;
+}
+
+.admin-assignments-live-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.admin-assignments-live-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.admin-assignments-live-window-panel {
+  background: linear-gradient(180deg, rgba(249, 252, 255, 1), rgba(255, 255, 255, 1));
 }
 
 .admin-analytics-inline-note {

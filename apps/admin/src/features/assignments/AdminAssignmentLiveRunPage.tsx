@@ -12,7 +12,7 @@ import {
 import AssignmentsWorkspaceNav from "./AssignmentsWorkspaceNav";
 
 type ExecutionMode = "Operational" | "Controlled" | "Focused" | "Hard";
-type RunStatus = "scheduled" | "active" | "collecting" | "completed" | "archived" | "cancelled" | "terminated";
+type RunStatus = "Live";
 
 interface RunAnalyticsSnapshot {
   avgRawScorePercent: number;
@@ -36,6 +36,8 @@ interface RunStatusRecord {
   batchIds: string[];
   recipientCount: number;
   startedAtIso: string;
+  originalEndWindowIso: string;
+  endWindowIso: string;
   timezone: string;
   gracePeriodMinutes: number;
   shuffleEnabled: boolean;
@@ -62,6 +64,10 @@ interface LiveMonitorStudentSnapshot {
   controlledCompliancePercent: number;
 }
 
+function createRelativeIso(minutesFromNow: number): string {
+  return new Date(Date.now() + minutesFromNow * 60_000).toISOString();
+}
+
 const LIVE_RUNS: RunStatusRecord[] = [
   {
     runId: "run-2026-0416-003",
@@ -70,11 +76,13 @@ const LIVE_RUNS: RunStatusRecord[] = [
     mode: "Controlled",
     batchIds: ["batch-c"],
     recipientCount: 3,
-    startedAtIso: "2026-04-16T04:00:00.000Z",
+    startedAtIso: createRelativeIso(-42),
+    originalEndWindowIso: createRelativeIso(128),
+    endWindowIso: createRelativeIso(128),
     timezone: "Asia/Kolkata",
     gracePeriodMinutes: 15,
     shuffleEnabled: true,
-    status: "active",
+    status: "Live",
     completionPercent: 64,
     runAnalyticsSnapshot: {
       avgRawScorePercent: 63,
@@ -155,6 +163,14 @@ function formatDateTime(value: string): string {
   return new Date(parsed).toISOString().slice(0, 16).replace("T", " ");
 }
 
+function formatCountdownFromMs(milliseconds: number): string {
+  const totalSeconds = Math.floor(Math.max(0, milliseconds) / 1000);
+  const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
+  const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  return `${hours}:${minutes}:${seconds}`;
+}
+
 function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
@@ -192,6 +208,14 @@ function toStabilityBadge(record: RunAnalyticsRecord): string {
 }
 
 function buildRunRecord(record: RunAnalyticsRecord, fallback?: RunStatusRecord): RunStatusRecord {
+  const fallbackOriginalEndWindow =
+    fallback?.originalEndWindowIso ??
+    new Date(Date.parse(record.startedAt) + 3 * 60 * 60 * 1000).toISOString();
+  const fallbackEndWindow = fallback?.endWindowIso ?? fallbackOriginalEndWindow;
+  const endWindowIso =
+    Date.parse(fallbackEndWindow) <= Date.now() ?
+      new Date(Date.now() + 45 * 60 * 1000).toISOString() :
+      fallbackEndWindow;
   return {
     runId: record.runId,
     runName: record.runName,
@@ -200,10 +224,12 @@ function buildRunRecord(record: RunAnalyticsRecord, fallback?: RunStatusRecord):
     batchIds: fallback?.batchIds ?? [record.batchId],
     recipientCount: record.participants,
     startedAtIso: record.startedAt,
+    originalEndWindowIso: fallbackOriginalEndWindow,
+    endWindowIso,
     timezone: fallback?.timezone ?? "Asia/Kolkata",
     gracePeriodMinutes: fallback?.gracePeriodMinutes ?? 0,
     shuffleEnabled: fallback?.shuffleEnabled ?? false,
-    status: fallback?.status ?? "active",
+    status: "Live",
     completionPercent: Math.round(record.completionRatePercent),
     runAnalyticsSnapshot: {
       avgRawScorePercent: Math.round(record.avgRawScorePercent),
@@ -367,6 +393,17 @@ function AdminAssignmentLiveRunPage() {
   const [liveRows, setLiveRows] = useState<LiveMonitorStudentSnapshot[]>(LIVE_MONITOR_ROWS);
   const [isLoading, setIsLoading] = useState(true);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState(() => Date.now());
+  const [extensionPreset, setExtensionPreset] = useState<"5" | "10" | "15" | "30" | "custom">("15");
+  const [customExtensionMinutes, setCustomExtensionMinutes] = useState("");
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -429,6 +466,72 @@ function AdminAssignmentLiveRunPage() {
     () => liveRows.filter((row) => row.runId === selectedRun?.runId),
     [liveRows, selectedRun],
   );
+
+  const countdownLabel = useMemo(() => {
+    if (!selectedRun) {
+      return "--:--:--";
+    }
+
+    const remainingMs = Math.max(0, Date.parse(selectedRun.endWindowIso) - currentTime);
+    return formatCountdownFromMs(remainingMs);
+  }, [currentTime, selectedRun]);
+
+  const extensionMinutes = useMemo(() => {
+    if (extensionPreset === "custom") {
+      const parsed = Number(customExtensionMinutes);
+      return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : null;
+    }
+
+    return Number(extensionPreset);
+  }, [customExtensionMinutes, extensionPreset]);
+
+  const previewEndWindowIso = useMemo(() => {
+    if (!selectedRun || extensionMinutes === null) {
+      return selectedRun?.endWindowIso ?? null;
+    }
+
+    return new Date(Date.parse(selectedRun.endWindowIso) + extensionMinutes * 60 * 1000).toISOString();
+  }, [extensionMinutes, selectedRun]);
+
+  const previewCountdownLabel = useMemo(() => {
+    if (!previewEndWindowIso) {
+      return "--:--:--";
+    }
+
+    return formatCountdownFromMs(Math.max(0, Date.parse(previewEndWindowIso) - currentTime));
+  }, [currentTime, previewEndWindowIso]);
+
+  function extendWindow() {
+    if (!selectedRun || extensionMinutes === null) {
+      setInlineMessage("Enter a valid extension time before applying the new window.");
+      return;
+    }
+
+    setRuns((currentRuns) =>
+      currentRuns.map((run) =>
+        run.runId === selectedRun.runId ?
+          {
+            ...run,
+            endWindowIso: new Date(Date.parse(run.endWindowIso) + extensionMinutes * 60 * 1000).toISOString(),
+          } :
+          run,
+      ),
+    );
+    setInlineMessage(`Time window extended by ${extensionMinutes} minutes for ${selectedRun.runId}.`);
+    if (extensionPreset === "custom") {
+      setCustomExtensionMinutes("");
+    }
+  }
+
+  const liveSummaryLabel = useMemo(() => {
+    if (selectedRun.runAnalyticsSnapshot.avgPhaseAdherencePercent >= 75 && selectedRun.runAnalyticsSnapshot.guessRatePercent <= 12) {
+      return "Steady live run with healthy pacing";
+    }
+    if (selectedRun.runAnalyticsSnapshot.avgPhaseAdherencePercent >= 65) {
+      return "Live run is progressing with some pacing drift";
+    }
+    return "Teacher attention recommended for this live run";
+  }, [selectedRun]);
 
   const liveColumns = useMemo<UiTableColumn<LiveMonitorStudentSnapshot>[]>(
     () => [
@@ -504,13 +607,11 @@ function AdminAssignmentLiveRunPage() {
   }
 
   return (
-    <section className="admin-content-card" aria-labelledby="admin-assignment-live-run-title">
+    <section className="admin-content-card admin-assignments-live-drilldown-shell" aria-labelledby="admin-assignment-live-run-title">
       <p className="admin-content-eyebrow">Assignment Live Run Workspace</p>
-      <h2 id="admin-assignment-live-run-title">Focused Live Monitor for a Single Run</h2>
+      <h2 id="admin-assignment-live-run-title">Live Assignment Monitor</h2>
       <p className="admin-content-copy">
-        This dedicated route keeps <code>/admin/assignments/live/{`{runId}`}</code> separate from the broader live
-        monitor listing. It focuses on one active execution instance with summary-safe live flags, progress state, and
-        run-level compliance context.
+        This page helps a teacher supervise one live assignment, check overall progress quickly, and extend the time window when needed.
       </p>
 
       <AssignmentsWorkspaceNav />
@@ -520,68 +621,143 @@ function AdminAssignmentLiveRunPage() {
         <p className="admin-assignments-inline-note">Loading focused run summary from GET /admin/analytics...</p>
       ) : null}
 
-      <div className="admin-risk-summary-card">
-        <h4>Focused Run</h4>
-        <p>
-          <strong>{selectedRun.runName}</strong> · {selectedRun.batchName} · {selectedRun.mode} · {selectedRun.status}
-        </p>
-        <small>Route: /admin/assignments/live/{selectedRun.runId}</small>
+      <section className="admin-assignments-live-hero">
+        <div className="admin-assignments-live-hero-copy">
+          <h3>{selectedRun.runName}</h3>
+          <p>{selectedRun.batchName} · {selectedRun.mode} · {selectedRun.status}</p>
+          <small>{liveSummaryLabel}</small>
+        </div>
+        <div className="admin-assignments-live-hero-timer">
+          <span>Time Left</span>
+          <strong>{countdownLabel}</strong>
+          <small>Countdown to the current assignment close time</small>
+        </div>
+      </section>
+
+      <div className="admin-assignments-live-summary-grid">
+        <article className="admin-assignments-detail-card">
+          <span>Students In Run</span>
+          <strong>{selectedRun.recipientCount}</strong>
+          <small>Assigned students currently counted in this live run</small>
+        </article>
+        <article className="admin-assignments-detail-card">
+          <span>Completion So Far</span>
+          <strong>{selectedRun.completionPercent}%</strong>
+          <small>Live completion across the assigned students</small>
+        </article>
+        <article className="admin-assignments-detail-card">
+          <span>Avg Raw %</span>
+          <strong>{selectedRun.runAnalyticsSnapshot.avgRawScorePercent}%</strong>
+          <small>Latest run summary available to the teacher</small>
+        </article>
+        <article className="admin-assignments-detail-card">
+          <span>Avg Accuracy %</span>
+          <strong>{selectedRun.runAnalyticsSnapshot.avgAccuracyPercent}%</strong>
+          <small>Latest run summary available to the teacher</small>
+        </article>
       </div>
 
-      <div className="admin-analytics-kpi-grid">
-        <article className="admin-analytics-kpi-card">
-          <p>Participants</p>
-          <h3>{selectedRun.recipientCount}</h3>
-          <small>runAnalytics participant total</small>
-        </article>
-        <article className="admin-analytics-kpi-card">
-          <p>Completion</p>
-          <h3>{selectedRun.completionPercent}%</h3>
-          <small>live run completion</small>
-        </article>
-        <article className="admin-analytics-kpi-card">
-          <p>Avg Raw Score</p>
-          <h3>{selectedRun.runAnalyticsSnapshot.avgRawScorePercent}%</h3>
-          <small>runAnalytics summary</small>
-        </article>
-        <article className="admin-analytics-kpi-card">
-          <p>Avg Accuracy</p>
-          <h3>{selectedRun.runAnalyticsSnapshot.avgAccuracyPercent}%</h3>
-          <small>runAnalytics summary</small>
-        </article>
-      </div>
+      <div className="admin-assignments-live-layout">
+        <section className="admin-assignments-detail-panel">
+          <h3>Live Snapshot</h3>
+          <p>The key live timing and teaching signals are grouped here for quick supervision.</p>
+          <div className="admin-assignments-detail-summary">
+            <div>
+              <span>Started</span>
+              <strong>{formatDateTime(selectedRun.startedAtIso)}</strong>
+            </div>
+            <div>
+              <span>Current End Time</span>
+              <strong>{formatDateTime(selectedRun.endWindowIso)}</strong>
+            </div>
+            <div>
+              <span>Batch</span>
+              <strong>{selectedRun.batchName}</strong>
+            </div>
+            <div>
+              <span>Timezone</span>
+              <strong>{selectedRun.timezone}</strong>
+            </div>
+            <div>
+              <span>Phase Adherence</span>
+              <strong>{selectedRun.runAnalyticsSnapshot.avgPhaseAdherencePercent}%</strong>
+            </div>
+            <div>
+              <span>Discipline</span>
+              <strong>{selectedRun.runAnalyticsSnapshot.avgDisciplineIndex}</strong>
+            </div>
+            <div>
+              <span>Guess Rate</span>
+              <strong>{selectedRun.runAnalyticsSnapshot.guessRatePercent}%</strong>
+            </div>
+            <div>
+              <span>Risk Mix</span>
+              <strong>{selectedRun.runAnalyticsSnapshot.riskDistributionSummary}</strong>
+            </div>
+          </div>
+        </section>
 
-      <div className="admin-analytics-compliance-panel">
-        <article className="admin-risk-summary-card">
-          <h4>Run Snapshot</h4>
-          <p>
-            Started {formatDateTime(selectedRun.startedAtIso)}
-          </p>
-          <small>
-            {selectedRun.batchName} · {selectedRun.timezone} · grace {selectedRun.gracePeriodMinutes} min
-          </small>
-        </article>
-        <article className="admin-risk-summary-card">
-          <h4>Execution Summary</h4>
-          <p>
-            Phase adherence {selectedRun.runAnalyticsSnapshot.avgPhaseAdherencePercent}% · discipline{" "}
-            {selectedRun.runAnalyticsSnapshot.avgDisciplineIndex} · guess rate{" "}
-            {selectedRun.runAnalyticsSnapshot.guessRatePercent}%
-          </p>
-          <small>{selectedRun.runAnalyticsSnapshot.riskDistributionSummary}</small>
-        </article>
-        <article className="admin-risk-summary-card">
-          <h4>L2 Compliance Panel</h4>
-          <p>
-            Per-student min/max time counters, consecutive-wrong indicators, provisional risk scores, and controlled
-            compliance stay visible in the live table beside the color-coded risk state.
-          </p>
-          <small>No question content is visible; live counters are derived from refreshed session snapshots.</small>
-        </article>
+        <section className="admin-assignments-detail-panel admin-assignments-live-window-panel">
+          <h3>Extend Time Window</h3>
+          <p>Give extra time to the students already inside this live assignment by previewing the revised close time before applying it.</p>
+          <div className="admin-assignments-detail-summary">
+            <div>
+              <span>Original End Time</span>
+              <strong>{formatDateTime(selectedRun.originalEndWindowIso)}</strong>
+            </div>
+            <div>
+              <span>Current End Time</span>
+              <strong>{formatDateTime(selectedRun.endWindowIso)}</strong>
+            </div>
+            <div>
+              <span>Preview New End Time</span>
+              <strong>{previewEndWindowIso ? formatDateTime(previewEndWindowIso) : "--"}</strong>
+            </div>
+            <div>
+              <span>Time Left After Change</span>
+              <strong>{previewCountdownLabel}</strong>
+            </div>
+          </div>
+          <div className="admin-assignments-live-extension-row">
+            {(["5", "10", "15", "30", "custom"] as const).map((option) => (
+              <label key={option} className="admin-assignments-mode-option">
+                <input
+                  type="radio"
+                  name="live-extension-minutes"
+                  value={option}
+                  checked={extensionPreset === option}
+                  onChange={() => setExtensionPreset(option)}
+                />
+                <span>{option === "custom" ? "Custom" : `${option} min`}</span>
+              </label>
+            ))}
+          </div>
+          {extensionPreset === "custom" ? (
+            <div className="admin-assignments-live-extension-custom">
+              <label>
+                Custom Minutes
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={customExtensionMinutes}
+                  onChange={(event) => setCustomExtensionMinutes(event.target.value)}
+                  placeholder="Enter custom minutes"
+                />
+              </label>
+            </div>
+          ) : null}
+          <div className="admin-tests-row-actions" style={{ marginTop: 12 }}>
+            <button type="button" onClick={extendWindow} disabled={extensionMinutes === null}>
+              Apply Time Extension
+            </button>
+          </div>
+          <small>Grace period stays at {selectedRun.gracePeriodMinutes} minutes, and the teacher countdown refreshes as soon as the new time is applied.</small>
+        </section>
       </div>
 
       <section className="admin-analytics-run-summary" aria-labelledby="admin-assignment-live-run-table-title">
-        <h3 id="admin-assignment-live-run-table-title">Per-Student Live Monitor</h3>
+        <h3 id="admin-assignment-live-run-table-title">Student Live Monitor</h3>
         <UiTable
           caption={`Live monitor for ${selectedRun.runId}`}
           columns={liveColumns}

@@ -54,8 +54,8 @@ const AdminGovernanceLandingPage = lazy(() => import("./features/analytics/Admin
 const GovernanceMonitoringDashboardPage = lazy(() => import("./features/analytics/GovernanceMonitoringDashboardPage"));
 const RiskInsightsDashboardPage = lazy(() => import("./features/analytics/RiskInsightsDashboardPage"));
 const AdminAssignmentLiveRunPage = lazy(() => import("./features/assignments/AdminAssignmentLiveRunPage"));
+const AdminAssignmentDetailPage = lazy(() => import("./features/assignments/AdminAssignmentDetailPage"));
 const AdminAssignmentsLandingPage = lazy(() => import("./features/assignments/AdminAssignmentsLandingPage"));
-const AdminAssignmentsLivePage = lazy(() => import("./features/assignments/AdminAssignmentsLivePage"));
 const AssignmentManagementPage = lazy(() => import("./features/assignments/AssignmentManagementPage"));
 const AdminExecutionSignalsPage = lazy(() => import("./features/insights/AdminExecutionSignalsPage"));
 const AdminInsightsLandingPage = lazy(() => import("./features/insights/AdminInsightsLandingPage"));
@@ -731,19 +731,23 @@ function App() {
         />
         <Route
           path="assignments/live"
-          element={<AdminRouteBoundary label="Loading assignment live monitor"><AdminAssignmentsLivePage /></AdminRouteBoundary>}
+          element={<Navigate to="/admin/assignments/list" replace />}
         />
         <Route
           path="assignments/live/:runId"
           element={<AdminRouteBoundary label="Loading assignment live monitor"><AdminAssignmentLiveRunPage /></AdminRouteBoundary>}
         />
         <Route
+          path="assignments/details/:runId"
+          element={<AdminRouteBoundary label="Loading assignment details"><AdminAssignmentDetailPage /></AdminRouteBoundary>}
+        />
+        <Route
           path="assignments/history"
-          element={<AdminRouteBoundary label="Loading assignment history"><AssignmentManagementPage /></AdminRouteBoundary>}
+          element={<Navigate to="/admin/assignments/list" replace />}
         />
         <Route
           path="assignments/bulk"
-          element={<AdminRouteBoundary label="Loading assignment bulk operations"><AssignmentManagementPage /></AdminRouteBoundary>}
+          element={<Navigate to="/admin/assignments/list" replace />}
         />
         <Route path="assignments/*" element={<AdminRouteResolutionPage />} />
         <Route

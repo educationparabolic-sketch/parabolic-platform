@@ -9,18 +9,6 @@ const ASSIGNMENTS_WORKSPACE_LINKS = [
     label: "Assignment List",
     to: "/admin/assignments/list",
   },
-  {
-    label: "Live Monitor",
-    to: "/admin/assignments/live",
-  },
-  {
-    label: "Assignment History",
-    to: "/admin/assignments/history",
-  },
-  {
-    label: "Bulk Operations",
-    to: "/admin/assignments/bulk",
-  },
 ] as const;
 
 function AssignmentsWorkspaceNav() {
