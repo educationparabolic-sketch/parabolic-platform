@@ -245,7 +245,9 @@ interface RunCreatePayload {
 }
 
 interface AssignmentListFilters {
+  query: string;
   academicYear: string;
+  templateId: string;
   status: RunStatus | "all";
   mode: ExecutionMode | "all";
   batchId: string;
@@ -649,7 +651,9 @@ const INITIAL_DRAFT: AssignmentDraft = {
 };
 
 const INITIAL_FILTERS: AssignmentListFilters = {
+  query: "",
   academicYear: CURRENT_ACADEMIC_YEAR,
+  templateId: "all",
   status: "all",
   mode: "all",
   batchId: "all",
@@ -1168,6 +1172,18 @@ function behaviorSummaryBadge(snapshot: RunAnalyticsSnapshot): "Stable" | "Phase
   return "Stable";
 }
 
+function resultSummaryBadge(snapshot: RunAnalyticsSnapshot): "Strong" | "Watch" | "Needs Support" {
+  if (snapshot.avgRawScorePercent >= 65 && snapshot.avgAccuracyPercent >= 70) {
+    return "Strong";
+  }
+
+  if (snapshot.avgRawScorePercent >= 50 && snapshot.avgAccuracyPercent >= 60) {
+    return "Watch";
+  }
+
+  return "Needs Support";
+}
+
 function analyticsForRecipientCount(recipientCount: number, mode: ExecutionMode): RunAnalyticsSnapshot {
   const normalizedCount = Math.max(1, recipientCount);
 
@@ -1474,10 +1490,23 @@ function AssignmentManagementPage() {
   const [inlineMessage, setInlineMessage] = useState<string | null>(
     shouldUseLiveApi() ?
       "Live mode enabled: scheduling sends POST /admin/runs." :
-      "Local mode detected: using deterministic assignment fixtures for Build 119.",
+      null,
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const activeSection = useMemo(() => resolveAssignmentSection(location.pathname), [location.pathname]);
+  const workspaceHeader = useMemo(() => {
+    if (activeSection === "create") {
+      return {
+        title: "Create Assignment",
+        copy: "Choose a test, set the mode, pick recipients, and schedule the assignment.",
+      };
+    }
+
+    return {
+      title: "Assignment List",
+      copy: "Track upcoming, live, completed, stopped, and cancelled assignments in one clean view.",
+    };
+  }, [activeSection]);
 
   useEffect(() => {
     let isMounted = true;
@@ -1726,8 +1755,7 @@ function AssignmentManagementPage() {
   const stepOneReady = selectedTemplate !== null;
   const stepTwoReady = selectedTemplate !== null && layerVisibleModes.includes(draft.executionMode);
   const stepThreeReady = recipientIds.length > 0;
-  const attemptLimitIsValid = Number.isInteger(Number(draft.attemptLimit)) && Number(draft.attemptLimit) > 0;
-  const stepFourReady = derivedAssignmentStartIso !== null && earlyEntryBufferMinutes !== null && attemptLimitIsValid;
+  const stepFourReady = derivedAssignmentStartIso !== null && earlyEntryBufferMinutes !== null;
 
   const recipientStudents = useMemo(
     () => studentOptions.filter((student) => recipientIds.includes(student.id)),
@@ -1922,13 +1950,49 @@ function AssignmentManagementPage() {
 
     return activeRuns;
   }, [activeRuns, selectedLiveRun]);
+  const assignmentTemplateFilterOptions = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          runs.map((run) => [
+            run.templateId,
+            {
+              id: run.templateId,
+              name: run.templateName,
+            },
+          ]),
+        ).values(),
+      ).sort((left, right) => left.name.localeCompare(right.name)),
+    [runs],
+  );
 
   const filteredRuns = useMemo(() => {
     const parsedStart = filters.dateStart ? Date.parse(filters.dateStart) : null;
     const parsedEnd = filters.dateEnd ? Date.parse(filters.dateEnd) : null;
+    const normalizedQuery = filters.query.trim().toLowerCase();
 
     return runs.filter((run) => {
+      if (normalizedQuery) {
+        const haystack = [
+          run.runName,
+          run.templateName,
+          run.runId,
+          run.templateId,
+          run.batchIds.map((batchId) => formatBatchLabel(batchId, batchOptions)).join(" "),
+        ]
+          .join(" ")
+          .toLowerCase();
+
+        if (!haystack.includes(normalizedQuery)) {
+          return false;
+        }
+      }
+
       if (filters.academicYear !== "all" && run.academicYear !== filters.academicYear) {
+        return false;
+      }
+
+      if (filters.templateId !== "all" && run.templateId !== filters.templateId) {
         return false;
       }
 
@@ -1955,18 +2019,21 @@ function AssignmentManagementPage() {
 
       return true;
     });
-  }, [filters, runs]);
+  }, [batchOptions, filters, runs]);
 
   const assignmentColumns = useMemo<UiTableColumn<RunStatusRecord>[]>(() => {
+    const showL1 = hasLicenseAccess(CURRENT_LICENSE_LAYER, "L1");
+    const showL2 = hasLicenseAccess(CURRENT_LICENSE_LAYER, "L2");
+
     return [
       {
         id: "runName",
-        header: "Run",
+        header: "Assignment",
         render: (row) => (
           <div className="admin-assignments-run-cell admin-assignments-run-cell-strong">
             <strong>{row.runName}</strong>
             <small>{row.templateName}</small>
-            <small>{row.runId}</small>
+            <small>{row.runId} · {row.templateId}</small>
           </div>
         ),
       },
@@ -1982,90 +2049,85 @@ function AssignmentManagementPage() {
             <small>
               {row.recipientStudentIds.length} recipients across {row.batchIds.map((batchId) => formatBatchLabel(batchId, batchOptions)).join(", ")}
             </small>
-          </div>
-        ),
-      },
-      {
-        id: "lockedSnapshot",
-        header: "Locked Snapshot",
-        render: (row) => (
-          <div className="admin-assignments-lock-stack">
-            <span>testId <strong>{row.templateId}</strong></span>
-            <span>modeSnapshot <strong>{row.modeSnapshot}</strong></span>
-            <span>academicYear <strong>{row.academicYear}</strong></span>
-            <small>canonicalId {row.canonicalId}</small>
+            <small>{row.academicYear} · {row.shuffleEnabled ? "Shuffled order" : "Fixed order"}</small>
           </div>
         ),
       },
       {
         id: "window",
-        header: "Window",
+        header: "Schedule",
         render: (row) => (
           <div className="admin-assignments-window-cell">
             <strong>{formatDateTime(row.startWindowIso)}</strong>
             <small>Ends {formatDateTime(row.endWindowIso)}</small>
+            <small>{row.timezone}</small>
           </div>
         ),
       },
       {
         id: "outcomes",
-        header: "Outcomes",
-        render: (row) => (
-          <div className="admin-assignments-table-stack">
-            <div className="admin-assignments-metric-grid">
-              <span>Completion <strong>{row.completionPercent}%</strong></span>
-              <span>Raw <strong>{row.runAnalyticsSnapshot.avgRawScorePercent}%</strong></span>
-              <span>Accuracy <strong>{row.runAnalyticsSnapshot.avgAccuracyPercent}%</strong></span>
-            </div>
-          </div>
-        ),
-      },
-      {
-        id: "l1Diagnostics",
-        header: "L1 Diagnostics",
+        header: "Results",
         render: (row) => {
-          const behaviorBadge = behaviorSummaryBadge(row.runAnalyticsSnapshot);
+          const resultBadge = resultSummaryBadge(row.runAnalyticsSnapshot);
           return (
             <div className="admin-assignments-table-stack">
               <div className="admin-assignments-metric-grid">
-                <span>Phase adherence <strong>{row.runAnalyticsSnapshot.avgPhaseAdherencePercent}%</strong></span>
-                <span>Easy neglect <strong>{row.runAnalyticsSnapshot.easyNeglectPercent}%</strong></span>
-                <span>Hard bias <strong>{row.runAnalyticsSnapshot.hardBiasPercent}%</strong></span>
+                <span>Raw <strong>{row.runAnalyticsSnapshot.avgRawScorePercent}%</strong></span>
+                <span>Accuracy <strong>{row.runAnalyticsSnapshot.avgAccuracyPercent}%</strong></span>
               </div>
-              <span className={`admin-assignments-behavior-badge admin-assignments-behavior-${behaviorBadge.toLowerCase().replace(/\s+/g, "-")}`}>
-                {behaviorBadge}
-              </span>
-              <small>Source: runAnalytics/{row.runId}</small>
+              <div className="admin-assignments-pill-row">
+                <span className={`admin-assignments-result-badge admin-assignments-result-${resultBadge.toLowerCase().replace(/\s+/g, "-")}`}>
+                  {resultBadge}
+                </span>
+                <span className="admin-assignments-metric-pill">
+                  {row.status === "Completed" ? "Closed Run" : row.status === "Live" ? "Active Window" : "Scheduled Window"}
+                </span>
+              </div>
+              <small>Latest normalized class outcome snapshot</small>
             </div>
           );
         },
       },
       {
-        id: "l2Execution",
-        header: "L2 Execution",
-        className: "admin-assignments-status-col",
-        render: (row) => (
-          <div className="admin-assignments-table-stack">
-            <div className="admin-assignments-metric-grid">
-              <span>Risk <strong>{row.runAnalyticsSnapshot.riskDistributionSummary}</strong></span>
-              <span>Discipline <strong>{row.runAnalyticsSnapshot.avgDisciplineIndex}</strong></span>
-              <span>Compliance <strong>{row.runAnalyticsSnapshot.controlledCompliancePercent}%</strong></span>
-              <span>Guess rate <strong>{row.runAnalyticsSnapshot.guessRatePercent}%</strong></span>
-              <span>Overrides <strong>{row.runAnalyticsSnapshot.overrideCount}</strong></span>
+        id: "signals",
+        header: showL2 ? "Teaching + Execution" : showL1 ? "Teaching Signals" : "Teacher Read",
+        render: (row) => {
+          const behaviorBadge = behaviorSummaryBadge(row.runAnalyticsSnapshot);
+          return (
+            <div className="admin-assignments-table-stack">
+              <div className="admin-assignments-metric-grid">
+                <span>Phase <strong>{row.runAnalyticsSnapshot.avgPhaseAdherencePercent}%</strong></span>
+                {showL1 ? <span>Easy <strong>{row.runAnalyticsSnapshot.easyNeglectPercent}%</strong></span> : null}
+                {showL1 ? <span>Hard <strong>{row.runAnalyticsSnapshot.hardBiasPercent}%</strong></span> : null}
+                {showL2 ? <span>Discipline <strong>{row.runAnalyticsSnapshot.avgDisciplineIndex}</strong></span> : null}
+                {showL2 ? <span>Guess <strong>{row.runAnalyticsSnapshot.guessRatePercent}%</strong></span> : null}
+                {showL2 ? <span>Overrides <strong>{row.runAnalyticsSnapshot.overrideCount}</strong></span> : null}
+                {showL2 ? <span>Compliance <strong>{row.runAnalyticsSnapshot.controlledCompliancePercent}%</strong></span> : null}
+                {showL2 ? <span>Risk <strong>{row.runAnalyticsSnapshot.riskDistributionSummary}</strong></span> : null}
+              </div>
+              <div className="admin-assignments-pill-row">
+                <span className={`admin-assignments-behavior-badge admin-assignments-behavior-${behaviorBadge.toLowerCase().replace(/\s+/g, "-")}`}>
+                  {behaviorBadge}
+                </span>
+                {showL2 ? (
+                  <span className="admin-assignments-metric-pill">
+                    {row.runAnalyticsSnapshot.executionStabilityBadge}
+                  </span>
+                ) : null}
+              </div>
+              <small>
+                {showL2 ? "L1 + L2 run summary" : showL1 ? "L1 run summary" : "L0 teacher summary"}
+              </small>
             </div>
-            <span className="admin-assignments-metric-pill">
-              Execution stability {row.runAnalyticsSnapshot.executionStabilityBadge}
-            </span>
-            <small>Source: runAnalytics/{row.runId}</small>
-          </div>
-        ),
+          );
+        },
       },
       {
         id: "actions",
         header: "Actions",
         className: "admin-assignments-actions-col",
         render: (row) => (
-          <div className="admin-question-library-actions">
+          <div className="admin-assignments-row-actions">
             {row.status === "Upcoming" ? (
               <button type="button" onClick={() => runBulkOperation("Cancel", row)}>
                 Cancel
@@ -2378,11 +2440,8 @@ function AssignmentManagementPage() {
   return (
     <article className="admin-content-card" aria-labelledby="admin-assignments-title">
       <p className="admin-content-eyebrow">Admin / Assignments</p>
-      <h2 id="admin-assignments-title">Assignment Management Interface</h2>
-      <p className="admin-content-copy">
-        Timestamped run instances preserve template structure while supporting create, list, live monitor,
-        history, and bulk operations across the assignment lifecycle.
-      </p>
+      <h2 id="admin-assignments-title">{workspaceHeader.title}</h2>
+      <p className="admin-content-copy">{workspaceHeader.copy}</p>
 
       {inlineMessage ? <p className="admin-assignments-inline-note">{inlineMessage}</p> : null}
       {errorMessage ? <p className="admin-assignments-inline-error">{errorMessage}</p> : null}
@@ -3023,17 +3082,6 @@ function AssignmentManagementPage() {
                           />
                         </UiFormField>
 
-                        <UiFormField label="Attempt Limit" htmlFor="assignment-attempt-limit" helper="Default is 1 and tracked in the run snapshot.">
-                          <input
-                            id="assignment-attempt-limit"
-                            type="number"
-                            min={1}
-                            step={1}
-                            value={draft.attemptLimit}
-                            onChange={(event) => setDraft((current) => ({ ...current, attemptLimit: event.target.value }))}
-                          />
-                        </UiFormField>
-
                         <UiFormField label="Shuffle Question Order" htmlFor="assignment-shuffle" helper="This changes display order only, not the template structure.">
                           <label className="admin-assignments-toggle">
                             <input
@@ -3158,88 +3206,144 @@ function AssignmentManagementPage() {
 
       {activeSection === "list" ? (
         <section className="admin-assignments-list-shell" aria-label="Assignment list">
-          <h3>AssignmentList</h3>
+          <h3>Assignment List</h3>
           <p className="admin-content-copy">
-            Assignment list reads normalized metrics from runAnalytics documents only. Raw marks are never displayed.
+            Review scheduled, live, and completed assignments in one place. Use the filters below to quickly narrow the table to the test, batch, or delivery state you need.
           </p>
 
-          <div className="admin-assignments-filter-grid">
-            <label>
-              AcademicYear
-              <select
-                value={filters.academicYear}
-                onChange={(event) => {
-                  setFilters((current) => ({ ...current, academicYear: event.target.value }));
-                }}
-              >
-                <option value="all">All</option>
-                <option value="2026">2026</option>
-                <option value="2025">2025</option>
-              </select>
-            </label>
-            <label>
-              Status
-              <select
-                value={filters.status}
-                onChange={(event) => {
-                  setFilters((current) => ({ ...current, status: event.target.value as AssignmentListFilters["status"] }));
-                }}
-              >
-                <option value="all">All</option>
-                {RUN_STATUSES.map((status) => (
-                  <option key={status} value={status}>{status}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Mode
-              <select
-                value={filters.mode}
-                onChange={(event) => {
-                  setFilters((current) => ({ ...current, mode: event.target.value as AssignmentListFilters["mode"] }));
-                }}
-              >
-                <option value="all">All</option>
-                {EXECUTION_MODES.map((mode) => (
-                  <option key={mode} value={mode}>{mode}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Batch
-              <select
-                value={filters.batchId}
-                onChange={(event) => {
-                  setFilters((current) => ({ ...current, batchId: event.target.value }));
-                }}
-              >
-                <option value="all">All</option>
-                {batchOptions.map((batch) => (
-                  <option key={batch.id} value={batch.id}>{batch.name}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              DateRange Start
-              <input
-                type="date"
-                value={filters.dateStart}
-                onChange={(event) => {
-                  setFilters((current) => ({ ...current, dateStart: event.target.value }));
-                }}
-              />
-            </label>
-            <label>
-              DateRange End
-              <input
-                type="date"
-                value={filters.dateEnd}
-                onChange={(event) => {
-                  setFilters((current) => ({ ...current, dateEnd: event.target.value }));
-                }}
-              />
-            </label>
-          </div>
+          <section className="admin-assignments-list-filter-card" aria-label="Assignment list filters">
+            <div className="admin-assignments-list-filter-header">
+              <div>
+                <p className="admin-tests-section-kicker">Filter View</p>
+                <h4>Find the right assignment faster</h4>
+                <p>Search by run name or batch, or narrow the list by template, status, mode, and date window.</p>
+              </div>
+              <div className="admin-assignments-filter-actions">
+                <button
+                  type="button"
+                  className="admin-assignments-filter-clear"
+                  onClick={() => setFilters(INITIAL_FILTERS)}
+                >
+                  Reset Filters
+                </button>
+              </div>
+            </div>
+
+            <div className="admin-assignments-list-filter-grid">
+              <UiFormField label="Search" htmlFor="assignment-list-search" helper="Search run name, template, run ID, or batch">
+                <input
+                  id="assignment-list-search"
+                  type="search"
+                  value={filters.query}
+                  onChange={(event) => {
+                    setFilters((current) => ({ ...current, query: event.target.value }));
+                  }}
+                  placeholder="Type run name, template, or batch"
+                />
+              </UiFormField>
+
+              <UiFormField label="Test Template" htmlFor="assignment-list-template-filter" helper="Show only assignments created from one template">
+                <select
+                  id="assignment-list-template-filter"
+                  value={filters.templateId}
+                  onChange={(event) => {
+                    setFilters((current) => ({ ...current, templateId: event.target.value }));
+                  }}
+                >
+                  <option value="all">All templates</option>
+                  {assignmentTemplateFilterOptions.map((template) => (
+                    <option key={template.id} value={template.id}>{template.name}</option>
+                  ))}
+                </select>
+              </UiFormField>
+
+              <UiFormField label="Academic Year" htmlFor="assignment-list-academic-year" helper="Keep the table focused on one year when needed">
+                <select
+                  id="assignment-list-academic-year"
+                  value={filters.academicYear}
+                  onChange={(event) => {
+                    setFilters((current) => ({ ...current, academicYear: event.target.value }));
+                  }}
+                >
+                  <option value="all">All academic years</option>
+                  <option value="2026">2026</option>
+                  <option value="2025">2025</option>
+                </select>
+              </UiFormField>
+
+              <UiFormField label="Status" htmlFor="assignment-list-status" helper="Upcoming, live, completed, stopped, or cancelled">
+                <select
+                  id="assignment-list-status"
+                  value={filters.status}
+                  onChange={(event) => {
+                    setFilters((current) => ({ ...current, status: event.target.value as AssignmentListFilters["status"] }));
+                  }}
+                >
+                  <option value="all">All statuses</option>
+                  {RUN_STATUSES.map((status) => (
+                    <option key={status} value={status}>{status}</option>
+                  ))}
+                </select>
+              </UiFormField>
+
+              <UiFormField label="Mode" htmlFor="assignment-list-mode" helper="Filter by how the assignment was delivered">
+                <select
+                  id="assignment-list-mode"
+                  value={filters.mode}
+                  onChange={(event) => {
+                    setFilters((current) => ({ ...current, mode: event.target.value as AssignmentListFilters["mode"] }));
+                  }}
+                >
+                  <option value="all">All modes</option>
+                  {EXECUTION_MODES.map((mode) => (
+                    <option key={mode} value={mode}>{mode}</option>
+                  ))}
+                </select>
+              </UiFormField>
+
+              <UiFormField label="Batch" htmlFor="assignment-list-batch" helper="Show runs involving a specific batch">
+                <select
+                  id="assignment-list-batch"
+                  value={filters.batchId}
+                  onChange={(event) => {
+                    setFilters((current) => ({ ...current, batchId: event.target.value }));
+                  }}
+                >
+                  <option value="all">All batches</option>
+                  {batchOptions.map((batch) => (
+                    <option key={batch.id} value={batch.id}>{batch.name}</option>
+                  ))}
+                </select>
+              </UiFormField>
+
+              <UiFormField label="Start Date From" htmlFor="assignment-list-date-start" helper="Filter by run start date">
+                <input
+                  id="assignment-list-date-start"
+                  type="date"
+                  value={filters.dateStart}
+                  onChange={(event) => {
+                    setFilters((current) => ({ ...current, dateStart: event.target.value }));
+                  }}
+                />
+              </UiFormField>
+
+              <UiFormField label="Start Date To" htmlFor="assignment-list-date-end" helper="Filter by run start date upper bound">
+                <input
+                  id="assignment-list-date-end"
+                  type="date"
+                  value={filters.dateEnd}
+                  onChange={(event) => {
+                    setFilters((current) => ({ ...current, dateEnd: event.target.value }));
+                  }}
+                />
+              </UiFormField>
+            </div>
+
+            <div className="admin-assignments-list-filter-footnote">
+              <strong>{filteredRuns.length}</strong>
+              <span>assignments currently match the selected filters</span>
+            </div>
+          </section>
 
           <UiTable
             caption="Run Status Table"

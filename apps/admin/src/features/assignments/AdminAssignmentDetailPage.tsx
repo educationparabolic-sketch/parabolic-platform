@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, useParams } from "react-router-dom";
+import { UiChartContainer, UiTable, type UiChartPoint, type UiTableColumn } from "../../../../../shared/ui/components";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
 import {
@@ -8,7 +9,9 @@ import {
   fetchDashboardDataset,
   shouldUseLiveApi,
   type DashboardDataset,
+  type RiskCluster,
   type RunAnalyticsRecord,
+  type StudentAnalyticsRecord,
 } from "../analytics/analyticsDataset";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
 import AssignmentsWorkspaceNav from "./AssignmentsWorkspaceNav";
@@ -470,6 +473,28 @@ interface AssignmentDetailRecord {
   };
 }
 
+interface AssignmentAttentionStudentRecord {
+  runId: string;
+  studentId: string;
+  studentName: string;
+  batchName: string;
+  rawScorePercent: number;
+  accuracyPercent: number;
+  phaseAdherencePercent: number;
+  riskState: RiskCluster;
+  disciplineIndex: number;
+}
+
+interface AssignmentPerformanceStudentRecord extends AssignmentAttentionStudentRecord {}
+
+interface AssignmentAbsentStudentRecord {
+  runId: string;
+  studentId: string;
+  studentName: string;
+  batchName: string;
+  attendanceState: "Absent";
+}
+
 const FALLBACK_ASSIGNMENT_DETAILS: AssignmentDetailRecord[] = [
   {
     runId: "run-2026-0416-003",
@@ -578,6 +603,223 @@ const FALLBACK_ASSIGNMENT_DETAILS: AssignmentDetailRecord[] = [
   },
 ];
 
+const FALLBACK_ASSIGNMENT_ATTENTION_STUDENTS: AssignmentAttentionStudentRecord[] = [
+  {
+    runId: "run-2026-0411-001",
+    studentId: "STU-011",
+    studentName: "Riya Nair",
+    batchName: "Batch-A",
+    rawScorePercent: 48,
+    accuracyPercent: 58,
+    phaseAdherencePercent: 61,
+    riskState: "high",
+    disciplineIndex: 49,
+  },
+  {
+    runId: "run-2026-0411-001",
+    studentId: "STU-012",
+    studentName: "Aditya Rao",
+    batchName: "Batch-A",
+    rawScorePercent: 56,
+    accuracyPercent: 62,
+    phaseAdherencePercent: 53,
+    riskState: "critical",
+    disciplineIndex: 42,
+  },
+  {
+    runId: "run-2026-0411-001",
+    studentId: "STU-013",
+    studentName: "Mehul Jain",
+    batchName: "Batch-B",
+    rawScorePercent: 59,
+    accuracyPercent: 67,
+    phaseAdherencePercent: 57,
+    riskState: "medium",
+    disciplineIndex: 54,
+  },
+  {
+    runId: "run-2026-0416-003",
+    studentId: "STU-021",
+    studentName: "Priya Menon",
+    batchName: "Batch-C",
+    rawScorePercent: 64,
+    accuracyPercent: 71,
+    phaseAdherencePercent: 73,
+    riskState: "medium",
+    disciplineIndex: 68,
+  },
+  {
+    runId: "run-2026-0416-003",
+    studentId: "STU-022",
+    studentName: "Arjun Das",
+    batchName: "Batch-C",
+    rawScorePercent: 54,
+    accuracyPercent: 63,
+    phaseAdherencePercent: 58,
+    riskState: "high",
+    disciplineIndex: 57,
+  },
+  {
+    runId: "run-2026-0416-003",
+    studentId: "STU-023",
+    studentName: "Sara Khan",
+    batchName: "Batch-C",
+    rawScorePercent: 46,
+    accuracyPercent: 51,
+    phaseAdherencePercent: 49,
+    riskState: "critical",
+    disciplineIndex: 41,
+  },
+];
+
+const FALLBACK_ASSIGNMENT_PERFORMANCE_STUDENTS: AssignmentPerformanceStudentRecord[] = [
+  {
+    runId: "run-2026-0411-001",
+    studentId: "STU-101",
+    studentName: "Aarav Menon",
+    batchName: "Batch-A",
+    rawScorePercent: 86,
+    accuracyPercent: 91,
+    phaseAdherencePercent: 84,
+    riskState: "low",
+    disciplineIndex: 82,
+  },
+  {
+    runId: "run-2026-0411-001",
+    studentId: "STU-102",
+    studentName: "Kabir Gupta",
+    batchName: "Batch-A",
+    rawScorePercent: 81,
+    accuracyPercent: 86,
+    phaseAdherencePercent: 79,
+    riskState: "low",
+    disciplineIndex: 78,
+  },
+  {
+    runId: "run-2026-0411-001",
+    studentId: "STU-103",
+    studentName: "Mira Shah",
+    batchName: "Batch-B",
+    rawScorePercent: 74,
+    accuracyPercent: 79,
+    phaseAdherencePercent: 76,
+    riskState: "medium",
+    disciplineIndex: 72,
+  },
+  {
+    runId: "run-2026-0411-001",
+    studentId: "STU-104",
+    studentName: "Diya Sharma",
+    batchName: "Batch-B",
+    rawScorePercent: 68,
+    accuracyPercent: 73,
+    phaseAdherencePercent: 71,
+    riskState: "medium",
+    disciplineIndex: 68,
+  },
+  {
+    runId: "run-2026-0411-001",
+    studentId: "STU-105",
+    studentName: "Rahul Sethi",
+    batchName: "Batch-B",
+    rawScorePercent: 63,
+    accuracyPercent: 70,
+    phaseAdherencePercent: 66,
+    riskState: "medium",
+    disciplineIndex: 63,
+  },
+  {
+    runId: "run-2026-0411-001",
+    studentId: "STU-011",
+    studentName: "Riya Nair",
+    batchName: "Batch-A",
+    rawScorePercent: 48,
+    accuracyPercent: 58,
+    phaseAdherencePercent: 61,
+    riskState: "high",
+    disciplineIndex: 49,
+  },
+  {
+    runId: "run-2026-0411-001",
+    studentId: "STU-012",
+    studentName: "Aditya Rao",
+    batchName: "Batch-A",
+    rawScorePercent: 56,
+    accuracyPercent: 62,
+    phaseAdherencePercent: 53,
+    riskState: "critical",
+    disciplineIndex: 42,
+  },
+  {
+    runId: "run-2026-0411-001",
+    studentId: "STU-013",
+    studentName: "Mehul Jain",
+    batchName: "Batch-B",
+    rawScorePercent: 59,
+    accuracyPercent: 67,
+    phaseAdherencePercent: 57,
+    riskState: "medium",
+    disciplineIndex: 54,
+  },
+  {
+    runId: "run-2026-0416-003",
+    studentId: "STU-201",
+    studentName: "Priya Menon",
+    batchName: "Batch-C",
+    rawScorePercent: 72,
+    accuracyPercent: 78,
+    phaseAdherencePercent: 73,
+    riskState: "medium",
+    disciplineIndex: 68,
+  },
+  {
+    runId: "run-2026-0416-003",
+    studentId: "STU-202",
+    studentName: "Arjun Das",
+    batchName: "Batch-C",
+    rawScorePercent: 54,
+    accuracyPercent: 63,
+    phaseAdherencePercent: 58,
+    riskState: "high",
+    disciplineIndex: 57,
+  },
+  {
+    runId: "run-2026-0416-003",
+    studentId: "STU-203",
+    studentName: "Sara Khan",
+    batchName: "Batch-C",
+    rawScorePercent: 46,
+    accuracyPercent: 51,
+    phaseAdherencePercent: 49,
+    riskState: "critical",
+    disciplineIndex: 41,
+  },
+];
+
+const FALLBACK_ASSIGNMENT_ABSENT_STUDENTS: AssignmentAbsentStudentRecord[] = [
+  {
+    runId: "run-2026-0411-001",
+    studentId: "STU-106",
+    studentName: "Neha Kulkarni",
+    batchName: "Batch-A",
+    attendanceState: "Absent",
+  },
+  {
+    runId: "run-2026-0411-001",
+    studentId: "STU-107",
+    studentName: "Yash Verma",
+    batchName: "Batch-B",
+    attendanceState: "Absent",
+  },
+  {
+    runId: "run-2026-0416-003",
+    studentId: "STU-204",
+    studentName: "Tanvi Joshi",
+    batchName: "Batch-C",
+    attendanceState: "Absent",
+  },
+];
+
 function formatDateTime(value: string): string {
   const parsed = Date.parse(value);
   if (Number.isNaN(parsed)) {
@@ -591,6 +833,140 @@ function formatDateTime(value: string): string {
   const hours = String(date.getHours()).padStart(2, "0");
   const minutes = String(date.getMinutes()).padStart(2, "0");
   return `${year}-${month}-${day} ${hours}:${minutes}`;
+}
+
+function describeCompletionTone(value: number, status: RunStatus): string {
+  if (status === "Upcoming") {
+    return "Scheduled and waiting for students to begin.";
+  }
+
+  if (status === "Live") {
+    if (value >= 75) {
+      return "Most students are well into the paper.";
+    }
+
+    if (value >= 40) {
+      return "The class is steadily moving through the paper.";
+    }
+
+    return "The run has started and early progress is still building.";
+  }
+
+  if (value >= 95) {
+    return "Almost every assigned student completed the paper.";
+  }
+
+  if (value >= 70) {
+    return "Completion is healthy, with a few students still missing.";
+  }
+
+  return "Completion is lower than expected and may need follow-up.";
+}
+
+function describeScoreTone(value: number): string {
+  if (value >= 75) {
+    return "Strong overall paper-level scoring.";
+  }
+
+  if (value >= 55) {
+    return "A workable score range with room to improve.";
+  }
+
+  if (value > 0) {
+    return "This paper likely felt demanding for the class.";
+  }
+
+  return "Scores will appear after attempts are submitted.";
+}
+
+function describeAccuracyTone(value: number): string {
+  if (value >= 80) {
+    return "Answer quality looks sharp and disciplined.";
+  }
+
+  if (value >= 65) {
+    return "Accuracy is reasonably stable across the class.";
+  }
+
+  if (value > 0) {
+    return "Accuracy suggests the class needs more checking discipline.";
+  }
+
+  return "Accuracy will appear after attempts are submitted.";
+}
+
+function describeDisciplineTone(value: number): string {
+  if (value >= 75) {
+    return "Students followed the expected execution rhythm well.";
+  }
+
+  if (value >= 55) {
+    return "Execution discipline is acceptable but not yet tight.";
+  }
+
+  if (value > 0) {
+    return "Execution drift is noticeable and may need intervention.";
+  }
+
+  return "Execution signals will appear once the assignment is attempted.";
+}
+
+function riskChipClass(riskState: RiskCluster): string {
+  return `admin-risk-chip admin-risk-chip-${riskState}`;
+}
+
+function parsePhasePlanSnapshot(snapshot: string): UiChartPoint[] {
+  return snapshot
+    .split("|")
+    .map((segment) => segment.trim())
+    .map((segment) => {
+      const match = segment.match(/^(P\d+)\s+(\d+)%$/i);
+      if (!match) {
+        return null;
+      }
+
+      return {
+        label: match[1].toUpperCase(),
+        value: Number(match[2]),
+      } satisfies UiChartPoint;
+    })
+    .filter((point): point is UiChartPoint => point !== null);
+}
+
+function parseRiskDistributionSnapshot(snapshot: string): UiChartPoint[] {
+  return snapshot
+    .split("/")
+    .map((segment) => segment.trim())
+    .map((segment) => {
+      const match = segment.match(/^([A-Z])\s+(\d+)%$/i);
+      if (!match) {
+        return null;
+      }
+
+      const labelMap: Record<string, string> = {
+        L: "Low",
+        M: "Medium",
+        H: "High",
+        C: "Critical",
+      };
+
+      return {
+        label: labelMap[match[1].toUpperCase()] ?? match[1].toUpperCase(),
+        value: Number(match[2]),
+      } satisfies UiChartPoint;
+    })
+    .filter((point): point is UiChartPoint => point !== null);
+}
+
+function isAttentionStudent(runSummary: StudentAnalyticsRecord["runSummaries"][number], isL2: boolean): boolean {
+  return (
+    runSummary.rawScorePercent < 60 ||
+    runSummary.accuracyPercent < 65 ||
+    runSummary.phaseAdherencePercent < 60 ||
+    runSummary.riskState === "high" ||
+    runSummary.riskState === "critical" ||
+    (isL2 && runSummary.disciplineIndex < 55)
+  );
 }
 
 function toExecutionMode(mode: string): ExecutionMode {
@@ -690,6 +1066,13 @@ function describeExcelScopeForLayer(layer: LicenseLayer | null): string {
   return "Includes L0, L1, and L2 columns allowed by the current institute plan for the completed assignment export.";
 }
 
+function parseBatchNames(batchName: string): string[] {
+  return batchName
+    .split(",")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+}
+
 function AdminAssignmentDetailPage() {
   const { session } = useAuthProvider();
   const accessContext = resolveAdminAccessContext(session);
@@ -752,17 +1135,298 @@ function AdminAssignmentDetailPage() {
     return fallbackById.get(runId) ?? null;
   }, [dataset.runAnalytics, runId]);
 
-  const setupRows = useMemo(
-    () => selectedRun ? [
-      { label: "Selected Test", value: selectedRun.templateName },
-      { label: "Assignment ID", value: selectedRun.runId },
-      { label: "Template Reference", value: selectedRun.canonicalId },
-      { label: "Assigned Mode", value: selectedRun.mode },
-      { label: "Attempt Limit", value: String(selectedRun.attemptLimit) },
-      { label: "Question Shuffle", value: selectedRun.shuffleEnabled ? "Enabled for this assignment" : "Fixed order" },
-    ] : [],
+  const phasePlanPieData = useMemo(
+    () => (selectedRun ? parsePhasePlanSnapshot(selectedRun.phaseConfigSnapshot) : []),
     [selectedRun],
   );
+
+  const riskDistributionPieData = useMemo(
+    () => (selectedRun ? parseRiskDistributionSnapshot(selectedRun.analytics.riskDistributionSummary) : []),
+    [selectedRun],
+  );
+
+  const attentionStudentRows = useMemo<AssignmentAttentionStudentRecord[]>(() => {
+    if (!selectedRun) {
+      return [];
+    }
+
+    const isL2 = accessContext.licenseLayer === "L2" || accessContext.licenseLayer === "L3";
+    const derivedRows = dataset.studentAnalytics
+      .map((student) => ({
+        student,
+        runSummary: student.runSummaries.find((summary) => summary.runId === selectedRun.runId) ?? null,
+      }))
+      .filter(
+        (
+          entry,
+        ): entry is {
+          student: StudentAnalyticsRecord;
+          runSummary: StudentAnalyticsRecord["runSummaries"][number];
+        } => Boolean(entry.runSummary),
+      )
+      .filter(({ runSummary }) => isAttentionStudent(runSummary, isL2))
+      .map(({ student, runSummary }) => ({
+        runId: selectedRun.runId,
+        studentId: student.studentId,
+        studentName: student.studentName,
+        batchName: student.batchName,
+        rawScorePercent: runSummary.rawScorePercent,
+        accuracyPercent: runSummary.accuracyPercent,
+        phaseAdherencePercent: runSummary.phaseAdherencePercent,
+        riskState: runSummary.riskState,
+        disciplineIndex: runSummary.disciplineIndex,
+      }))
+      .sort((left, right) => {
+        const leftSeverity =
+          (100 - left.rawScorePercent) +
+          (100 - left.accuracyPercent) +
+          (left.riskState === "critical" ? 35 : left.riskState === "high" ? 20 : left.riskState === "medium" ? 8 : 0) +
+          (isL2 ? Math.max(0, 60 - left.disciplineIndex) : 0);
+        const rightSeverity =
+          (100 - right.rawScorePercent) +
+          (100 - right.accuracyPercent) +
+          (right.riskState === "critical" ? 35 : right.riskState === "high" ? 20 : right.riskState === "medium" ? 8 : 0) +
+          (isL2 ? Math.max(0, 60 - right.disciplineIndex) : 0);
+        return rightSeverity - leftSeverity;
+      });
+
+    if (derivedRows.length > 0) {
+      return derivedRows;
+    }
+
+    return FALLBACK_ASSIGNMENT_ATTENTION_STUDENTS.filter((row) => row.runId === selectedRun.runId);
+  }, [accessContext.licenseLayer, dataset.studentAnalytics, selectedRun]);
+
+  const performanceStudentRows = useMemo<AssignmentPerformanceStudentRecord[]>(() => {
+    if (!selectedRun) {
+      return [];
+    }
+
+    const derivedRows = dataset.studentAnalytics
+      .map((student) => ({
+        student,
+        runSummary: student.runSummaries.find((summary) => summary.runId === selectedRun.runId) ?? null,
+      }))
+      .filter(
+        (
+          entry,
+        ): entry is {
+          student: StudentAnalyticsRecord;
+          runSummary: StudentAnalyticsRecord["runSummaries"][number];
+        } => Boolean(entry.runSummary),
+      )
+      .map(({ student, runSummary }) => ({
+        runId: selectedRun.runId,
+        studentId: student.studentId,
+        studentName: student.studentName,
+        batchName: student.batchName,
+        rawScorePercent: runSummary.rawScorePercent,
+        accuracyPercent: runSummary.accuracyPercent,
+        phaseAdherencePercent: runSummary.phaseAdherencePercent,
+        riskState: runSummary.riskState,
+        disciplineIndex: runSummary.disciplineIndex,
+      }));
+
+    if (derivedRows.length > 0) {
+      return derivedRows;
+    }
+
+    return FALLBACK_ASSIGNMENT_PERFORMANCE_STUDENTS.filter((row) => row.runId === selectedRun.runId);
+  }, [dataset.studentAnalytics, selectedRun]);
+
+  const topPerformerRows = useMemo(
+    () =>
+      [...performanceStudentRows]
+        .sort((left, right) => {
+          const leftScore = (left.rawScorePercent * 0.55) + (left.accuracyPercent * 0.3) + (left.phaseAdherencePercent * 0.15);
+          const rightScore = (right.rawScorePercent * 0.55) + (right.accuracyPercent * 0.3) + (right.phaseAdherencePercent * 0.15);
+          return rightScore - leftScore;
+        })
+        .slice(0, 5),
+    [performanceStudentRows],
+  );
+
+  const bottomPerformerRows = useMemo(
+    () =>
+      [...performanceStudentRows]
+        .sort((left, right) => {
+          const leftScore = (left.rawScorePercent * 0.55) + (left.accuracyPercent * 0.3) + (left.phaseAdherencePercent * 0.15);
+          const rightScore = (right.rawScorePercent * 0.55) + (right.accuracyPercent * 0.3) + (right.phaseAdherencePercent * 0.15);
+          return leftScore - rightScore;
+        })
+        .slice(0, 5),
+    [performanceStudentRows],
+  );
+
+  const absentStudentRows = useMemo<AssignmentAbsentStudentRecord[]>(() => {
+    if (!selectedRun) {
+      return [];
+    }
+
+    const batchNames = new Set(parseBatchNames(selectedRun.batchName));
+    const derivedRows = dataset.studentAnalytics
+      .filter((student) => batchNames.has(student.batchName))
+      .filter((student) => !student.runSummaries.some((summary) => summary.runId === selectedRun.runId))
+      .map((student) => ({
+        runId: selectedRun.runId,
+        studentId: student.studentId,
+        studentName: student.studentName,
+        batchName: student.batchName,
+        attendanceState: "Absent" as const,
+      }));
+
+    if (derivedRows.length > 0) {
+      return derivedRows;
+    }
+
+    return FALLBACK_ASSIGNMENT_ABSENT_STUDENTS.filter((row) => row.runId === selectedRun.runId);
+  }, [dataset.studentAnalytics, selectedRun]);
+
+  const attentionStudentColumns = useMemo<UiTableColumn<AssignmentAttentionStudentRecord>[]>(() => {
+    const isL2 = accessContext.licenseLayer === "L2" || accessContext.licenseLayer === "L3";
+    const columns: UiTableColumn<AssignmentAttentionStudentRecord>[] = [
+      {
+        id: "student",
+        header: "Student",
+        render: (row) => (
+          <div className="admin-assignments-attention-student-cell">
+            <strong>{row.studentName}</strong>
+            <small>{row.studentId}</small>
+          </div>
+        ),
+      },
+      {
+        id: "batch",
+        header: "Batch",
+        render: (row) => row.batchName,
+      },
+      {
+        id: "raw",
+        header: "Raw %",
+        render: (row) => `${row.rawScorePercent}%`,
+      },
+      {
+        id: "accuracy",
+        header: "Accuracy %",
+        render: (row) => `${row.accuracyPercent}%`,
+      },
+      {
+        id: "phase",
+        header: "Phase Adherence",
+        render: (row) => `${row.phaseAdherencePercent}%`,
+      },
+    ];
+
+    if (isL2) {
+      columns.push(
+        {
+          id: "risk",
+          header: "Risk",
+          render: (row) => <span className={riskChipClass(row.riskState)}>{row.riskState}</span>,
+        },
+        {
+          id: "discipline",
+          header: "Discipline",
+          render: (row) => row.disciplineIndex,
+        },
+      );
+    }
+
+    columns.push({
+      id: "action",
+      header: "Action",
+      render: (row) => <NavLink to={`/admin/students/${row.studentId}`}>Open Student</NavLink>,
+    });
+
+    return columns;
+  }, [accessContext.licenseLayer]);
+
+  const performanceStudentColumns = useMemo<UiTableColumn<AssignmentPerformanceStudentRecord>[]>(() => {
+    const isL2 = accessContext.licenseLayer === "L2" || accessContext.licenseLayer === "L3";
+    const columns: UiTableColumn<AssignmentPerformanceStudentRecord>[] = [
+      {
+        id: "student",
+        header: "Student",
+        render: (row) => (
+          <div className="admin-assignments-attention-student-cell">
+            <strong>{row.studentName}</strong>
+            <small>{row.studentId}</small>
+          </div>
+        ),
+      },
+      {
+        id: "batch",
+        header: "Batch",
+        render: (row) => row.batchName,
+      },
+      {
+        id: "raw",
+        header: "Raw %",
+        render: (row) => `${row.rawScorePercent}%`,
+      },
+      {
+        id: "accuracy",
+        header: "Accuracy %",
+        render: (row) => `${row.accuracyPercent}%`,
+      },
+      {
+        id: "phase",
+        header: "Phase",
+        render: (row) => `${row.phaseAdherencePercent}%`,
+      },
+    ];
+
+    if (isL2) {
+      columns.push(
+        {
+          id: "risk",
+          header: "Risk",
+          render: (row) => <span className={riskChipClass(row.riskState)}>{row.riskState}</span>,
+        },
+        {
+          id: "discipline",
+          header: "Discipline",
+          render: (row) => row.disciplineIndex,
+        },
+      );
+    }
+
+    columns.push({
+      id: "action",
+      header: "Action",
+      render: (row) => <NavLink to={`/admin/students/${row.studentId}`}>Open Student</NavLink>,
+    });
+
+    return columns;
+  }, [accessContext.licenseLayer]);
+
+  const absentStudentColumns = useMemo<UiTableColumn<AssignmentAbsentStudentRecord>[]>(() => [
+    {
+      id: "student",
+      header: "Student",
+      render: (row) => (
+        <div className="admin-assignments-attention-student-cell">
+          <strong>{row.studentName}</strong>
+          <small>{row.studentId}</small>
+        </div>
+      ),
+    },
+    {
+      id: "batch",
+      header: "Batch",
+      render: (row) => row.batchName,
+    },
+    {
+      id: "status",
+      header: "Attendance",
+      render: (row) => row.attendanceState,
+    },
+    {
+      id: "action",
+      header: "Action",
+      render: (row) => <NavLink to={`/admin/students/${row.studentId}`}>Open Student</NavLink>,
+    },
+  ], []);
 
   function downloadSampleExcel(run: AssignmentDetailRecord) {
     const workbookBytes = buildConsolidatedResultWorkbookXlsx(run, accessContext.licenseLayer);
@@ -896,112 +1560,187 @@ function AdminAssignmentDetailPage() {
 
           <section className="admin-assignments-detail-panel">
             <h3>L0 Essentials</h3>
-            <p>The core assignment facts and teacher-facing results are grouped here first.</p>
-            <div className="admin-assignments-detail-summary">
-              <div>
-                <span>Avg Raw %</span>
+            <p>The most important classroom-facing outcomes are shown first, with plain-language hints for quick review.</p>
+            <div className="admin-assignments-detail-summary admin-assignments-detail-summary-compact">
+              <div className="admin-assignments-detail-summary-highlight admin-assignments-detail-summary-score">
+                <span>Average Raw Score</span>
                 <strong>{selectedRun.analytics.avgRawScorePercent}%</strong>
+                <small>{describeScoreTone(selectedRun.analytics.avgRawScorePercent)}</small>
               </div>
-              <div>
-                <span>Avg Accuracy %</span>
+              <div className="admin-assignments-detail-summary-highlight admin-assignments-detail-summary-accuracy">
+                <span>Average Accuracy</span>
                 <strong>{selectedRun.analytics.avgAccuracyPercent}%</strong>
+                <small>{describeAccuracyTone(selectedRun.analytics.avgAccuracyPercent)}</small>
               </div>
               <div>
                 <span>Selected Test</span>
                 <strong>{selectedRun.templateName}</strong>
+                <small>The template locked into this assignment.</small>
               </div>
               <div>
-                <span>Assignment ID</span>
+                <span>Assignment Reference</span>
                 <strong>{selectedRun.runId}</strong>
+                <small>Useful when matching exports or support queries.</small>
               </div>
               <div>
                 <span>Template Reference</span>
                 <strong>{selectedRun.canonicalId}</strong>
+                <small>The underlying template snapshot used for this run.</small>
               </div>
               <div>
-                <span>Attempt Limit</span>
-                <strong>{selectedRun.attemptLimit}</strong>
-              </div>
-              <div>
-                <span>Phase Plan</span>
-                <strong>{selectedRun.phaseConfigSnapshot}</strong>
+                <span>Assigned Mode</span>
+                <strong>{selectedRun.mode}</strong>
+                <small>The exam mode chosen by the teacher for this assignment.</small>
               </div>
               <div>
                 <span>Difficulty Timing Plan</span>
                 <strong>{selectedRun.timingProfileSnapshot}</strong>
-              </div>
-              <div>
-                <span>Grace Period</span>
-                <strong>{selectedRun.gracePeriodMinutes} minutes</strong>
+                <small>Teacher-facing timing guidance carried into this run.</small>
               </div>
               <div>
                 <span>Question Order</span>
                 <strong>{selectedRun.shuffleEnabled ? "Shuffled for this assignment" : "Fixed order"}</strong>
+                <small>{selectedRun.shuffleEnabled ? "Students saw a shuffled question sequence." : "Students saw the template order as-is."}</small>
               </div>
-            </div>
-            <div className="admin-assignments-detail-record-list">
-              {setupRows.map((row) => (
-                <div key={row.label} className="admin-assignments-detail-record-item">
-                  <span>{row.label}</span>
-                  <strong>{row.value}</strong>
-                </div>
-              ))}
+              <div>
+                <span>Grace Period</span>
+                <strong>{selectedRun.gracePeriodMinutes} minutes</strong>
+                <small>Extra closing window available after the main end time.</small>
+              </div>
+              <div className="admin-assignments-detail-summary-highlight admin-assignments-detail-summary-completion">
+                <span>{selectedRun.status === "Completed" ? "Class Completion" : "Current Progress"}</span>
+                <strong>{selectedRun.completionPercent}%</strong>
+                <small>{describeCompletionTone(selectedRun.completionPercent, selectedRun.status)}</small>
+              </div>
             </div>
           </section>
 
           <details className="admin-assignments-detail-panel">
             <summary>L1 Teaching Signals</summary>
+            <p className="admin-assignments-detail-panel-note">These signals help a teacher understand pacing habits and paper navigation quality.</p>
+            <div className="admin-assignments-detail-chart-grid">
+              <UiChartContainer
+                title="Phase Plan Split"
+                subtitle="The intended phase-wise time share for this assignment"
+                data={phasePlanPieData}
+                variant="pie"
+              />
+            </div>
             <div className="admin-assignments-detail-summary">
-              <div>
+              <div className="admin-assignments-detail-summary-highlight">
                 <span>Phase Adherence</span>
                 <strong>{selectedRun.analytics.avgPhaseAdherencePercent}%</strong>
+                <small>How closely students stayed aligned with the intended phase flow.</small>
               </div>
               <div>
                 <span>Easy Neglect</span>
                 <strong>{selectedRun.analytics.easyNeglectPercent}%</strong>
+                <small>Shows whether easier questions were left behind too often.</small>
               </div>
               <div>
                 <span>Hard Bias</span>
                 <strong>{selectedRun.analytics.hardBiasPercent}%</strong>
-              </div>
-              <div>
-                <span>Teacher Read</span>
-                <strong>
-                  {selectedRun.analytics.avgPhaseAdherencePercent === 0 ? "Not available yet" : selectedRun.analytics.avgPhaseAdherencePercent >= 70 ? "Fairly disciplined paper flow" : "Needs pacing support"}
-                </strong>
+                <small>Shows whether students spent too much attention on hard questions.</small>
               </div>
             </div>
           </details>
 
           <details className="admin-assignments-detail-panel">
             <summary>L2 Execution Signals</summary>
+            <p className="admin-assignments-detail-panel-note">These advanced signals help identify execution drift, risk patterns, and control quality.</p>
+            <div className="admin-assignments-detail-chart-grid">
+              <UiChartContainer
+                title="Risk Distribution"
+                subtitle="Class-wide split across low, medium, high, and critical execution risk"
+                data={riskDistributionPieData}
+                variant="pie"
+              />
+            </div>
             <div className="admin-assignments-detail-summary">
-              <div>
-                <span>Risk Distribution</span>
-                <strong>{selectedRun.analytics.riskDistributionSummary}</strong>
-              </div>
-              <div>
+              <div className="admin-assignments-detail-summary-highlight">
                 <span>Discipline Index</span>
                 <strong>{selectedRun.analytics.avgDisciplineIndex}</strong>
+                <small>{describeDisciplineTone(selectedRun.analytics.avgDisciplineIndex)}</small>
               </div>
               <div>
                 <span>Controlled Compliance</span>
                 <strong>{selectedRun.analytics.controlledCompliancePercent}%</strong>
+                <small>How consistently students stayed within controlled-mode expectations.</small>
               </div>
               <div>
                 <span>Guess Rate</span>
                 <strong>{selectedRun.analytics.guessRatePercent}%</strong>
+                <small>Higher values suggest more speculative answering behavior.</small>
               </div>
               <div>
                 <span>Stability Index</span>
                 <strong>{selectedRun.analytics.executionStabilityIndex}</strong>
+                <small>Summarizes whether the class stayed steady throughout the run.</small>
               </div>
               <div>
                 <span>Override Count</span>
                 <strong>{selectedRun.analytics.overrideCount}</strong>
+                <small>The number of structural or control exceptions seen in this run summary.</small>
               </div>
             </div>
           </details>
+
+          <section className="admin-assignments-detail-panel">
+            <h3>Students Needing Attention</h3>
+            <p>
+              This table highlights only the students who may need follow-up after the assignment. Risk and discipline appear only for L2+ plans.
+            </p>
+            <UiTable
+              caption="Students needing attention in this assignment"
+              columns={attentionStudentColumns}
+              rows={attentionStudentRows}
+              rowKey={(row) => `${row.runId}-${row.studentId}`}
+              emptyStateText="No flagged students were found for this assignment."
+            />
+          </section>
+
+          <section className="admin-assignments-detail-panel">
+            <h3>Absent Students</h3>
+            <p>
+              This table lists the students from the assignment batches who did not appear in this assignment.
+            </p>
+            <UiTable
+              caption="Absent students in this assignment"
+              columns={absentStudentColumns}
+              rows={absentStudentRows}
+              rowKey={(row) => `${row.runId}-${row.studentId}`}
+              emptyStateText="No absent students were found for this assignment."
+            />
+          </section>
+
+          <section className="admin-assignments-detail-panel">
+            <h3>Performance Snapshot</h3>
+            <p>
+              These two tables help teachers quickly spot the strongest and weakest student outcomes in this assignment.
+            </p>
+            <div className="admin-assignments-detail-table-grid">
+              <div className="admin-assignments-detail-table-card">
+                <h4>Top 5 Highest Performers</h4>
+                <UiTable
+                  caption="Top 5 highest performers in this assignment"
+                  columns={performanceStudentColumns}
+                  rows={topPerformerRows}
+                  rowKey={(row) => `top-${row.runId}-${row.studentId}`}
+                  emptyStateText="No performance data is available for this assignment."
+                />
+              </div>
+              <div className="admin-assignments-detail-table-card">
+                <h4>Bottom 5 Lowest Performers</h4>
+                <UiTable
+                  caption="Bottom 5 lowest performers in this assignment"
+                  columns={performanceStudentColumns}
+                  rows={bottomPerformerRows}
+                  rowKey={(row) => `bottom-${row.runId}-${row.studentId}`}
+                  emptyStateText="No performance data is available for this assignment."
+                />
+              </div>
+            </div>
+          </section>
         </>
       ) : null}
     </section>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { NavLink, useParams } from "react-router-dom";
 import { UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
 import {
   ApiClientError,
@@ -627,10 +627,15 @@ function AdminAssignmentLiveRunPage() {
           <p>{selectedRun.batchName} · {selectedRun.mode} · {selectedRun.status}</p>
           <small>{liveSummaryLabel}</small>
         </div>
-        <div className="admin-assignments-live-hero-timer">
-          <span>Time Left</span>
-          <strong>{countdownLabel}</strong>
-          <small>Countdown to the current assignment close time</small>
+        <div className="admin-assignments-live-hero-side">
+          <div className="admin-assignments-detail-actions">
+            <NavLink className="admin-primary-link" to="/admin/assignments/list">Back to List</NavLink>
+          </div>
+          <div className="admin-assignments-live-hero-timer">
+            <span>Time Left</span>
+            <strong>{countdownLabel}</strong>
+            <small>Countdown to the current assignment close time</small>
+          </div>
         </div>
       </section>
 
@@ -700,7 +705,7 @@ function AdminAssignmentLiveRunPage() {
         <section className="admin-assignments-detail-panel admin-assignments-live-window-panel">
           <h3>Extend Time Window</h3>
           <p>Give extra time to the students already inside this live assignment by previewing the revised close time before applying it.</p>
-          <div className="admin-assignments-detail-summary">
+          <div className="admin-assignments-detail-summary admin-assignments-live-window-summary">
             <div>
               <span>Original End Time</span>
               <strong>{formatDateTime(selectedRun.originalEndWindowIso)}</strong>
