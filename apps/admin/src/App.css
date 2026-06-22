@@ -6043,6 +6043,17 @@
   color: #4f688a;
 }
 
+.admin-analytics-drill-links {
+  display: grid;
+  gap: 8px;
+  min-width: 180px;
+}
+
+.admin-analytics-drill-links .admin-primary-link {
+  justify-content: center;
+  text-align: center;
+}
+
 .admin-risk-trend-grid {
   margin-top: 16px;
   display: grid;

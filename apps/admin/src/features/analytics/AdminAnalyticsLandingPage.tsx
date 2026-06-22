@@ -10,13 +10,16 @@ import {
   shouldUseLiveApi,
   type DashboardDataset,
 } from "./analyticsDataset";
+import {
+  deriveBatchRecords,
+  deriveRunRecords,
+  deriveTemplateRecords,
+} from "./analyticsArchitecture";
 
 function AdminAnalyticsLandingPage() {
   const { session } = useAuthProvider();
   const accessContext = resolveAdminAccessContext(session);
-  const showRiskInsights =
-    accessContext.licenseLayer !== null && LICENSE_LAYER_ORDER[accessContext.licenseLayer] >= LICENSE_LAYER_ORDER.L1;
-  const showExecutionMetrics =
+  const showL2 =
     accessContext.licenseLayer !== null && LICENSE_LAYER_ORDER[accessContext.licenseLayer] >= LICENSE_LAYER_ORDER.L2;
   const [dataset, setDataset] = useState<DashboardDataset>(FALLBACK_DATASET);
   const [isLoading, setIsLoading] = useState(true);
@@ -31,9 +34,7 @@ function AdminAnalyticsLandingPage() {
 
       if (!shouldUseLiveApi()) {
         setDataset(FALLBACK_DATASET);
-        setInlineMessage(
-          "Local mode detected. Loaded deterministic analytics landing summaries from summary-safe fixtures.",
-        );
+        setInlineMessage("Local mode detected. Loaded deterministic analytics comparison fixtures.");
         setIsLoading(false);
         return;
       }
@@ -68,76 +69,58 @@ function AdminAnalyticsLandingPage() {
     };
   }, []);
 
+  const runs = useMemo(() => deriveRunRecords(dataset.runAnalytics), [dataset.runAnalytics]);
+  const templates = useMemo(() => deriveTemplateRecords(runs), [runs]);
+  const batches = useMemo(() => deriveBatchRecords(runs, dataset.studentYearMetrics), [runs, dataset.studentYearMetrics]);
+
   const analyticsWorkspaces = useMemo(() => ([
     {
-      title: "Overview",
-      description: "Summary dashboard for performance, participation, risk, and discipline using summary collections only.",
-      to: "/admin/analytics/overview",
-      meta: `${dataset.runAnalytics.length} runs surfaced for the current academic year`,
+      title: "Cross-Template Analytics",
+      description: "Compare reusable templates across their run history without duplicating the one-template detail workspace.",
+      to: "/admin/analytics/templates",
+      meta: `${templates.length} templates aggregated from summary-safe run history`,
     },
     {
-      title: "Trends",
-      description: "Time-based performance and stability analysis using monthly summary-safe aggregates.",
-      to: "/admin/analytics/trends",
-      meta: `Monthly anchor ${dataset.yearBehaviorSummary.computedAt.slice(0, 10)}`,
+      title: "Cross-Batch Analytics",
+      description: "Compare cohorts institute-wide without replacing the canonical batch workspace inside Students.",
+      to: "/admin/analytics/batches",
+      meta: `${batches.length} batches represented across current analytics scope`,
     },
-    {
-      title: "Template Analytics",
-      description: "Structural quality and effectiveness drill-down for a selected template across its runs.",
-      to: "/admin/analytics/template/tmpl-001",
-      meta: "Cross-run template performance review",
-    },
-    {
-      title: "Batch Analytics",
-      description: "Cross-batch comparisons for performance, participation, discipline, and risk distribution.",
-      to: "/admin/analytics/batch",
-      meta: `${new Set(dataset.runAnalytics.map((record) => record.batchId)).size} batches represented`,
-    },
-    ...(showRiskInsights ?
-      [{
-        title: "Risk Insights",
-        description: "Risk-focused review for cluster distribution, high-risk learners, and discipline trend signals.",
-        to: "/admin/analytics/risk-insights",
-        meta: `${dataset.studentYearMetrics.filter((student) => ["high", "critical"].includes(student.rollingRiskCluster)).length} high-risk students currently visible`,
-      }] :
-      []),
-  ]), [dataset, showRiskInsights]);
+  ]), [batches.length, runs.length, templates.length]);
 
   const note = isLoading ?
     "Loading analytics landing summary from GET /admin/analytics..." :
-    `${inlineMessage ?? "Analytics landing workspace ready."} Role: ${accessContext.role ?? "unknown"}. Current layer: ${accessContext.licenseLayer ?? "unlicensed"}. Risk Insights unlocks from L1.`;
+    `${inlineMessage ?? "Analytics comparison workspace ready."} Current role: ${accessContext.role ?? "unknown"}. Current layer: ${accessContext.licenseLayer ?? "unlicensed"}. Analytics stays comparison-only and does not duplicate student, assignment, or template detail pages.`;
 
   return (
     <AdminWorkspaceLandingPage
       eyebrow="Analytics Workspace"
-      title="Dedicated Analytics Landing Workspace"
+      title="Cross-Entity Analytics Workspace"
       description={[
-        "This route turns /admin/analytics into a dedicated workspace index instead of redirecting directly into the overview dashboard.",
-        "Analytics workflows are grouped into focused destinations for overview, trends, template performance, batch comparisons, and risk-focused review.",
+        "This module now follows the updated architecture contract: Analytics is reserved for cross-entity comparison only.",
+        "The analytics surfaces here are cross-template analytics and cross-batch analytics, each with shared layer visibility and canonical drill-through into ownership pages.",
       ]}
       note={note}
       stats={[
         {
-          label: "Workspaces",
-          value: String(analyticsWorkspaces.length),
-          detail: "Dedicated analytics destinations",
+          label: "Analytics Pages",
+          value: "2",
+          detail: "Cross-template and cross-batch",
         },
         {
-          label: "Runs Indexed",
-          value: String(dataset.runAnalytics.length),
-          detail: `${dataset.yearBehaviorSummary.academicYear} runAnalytics records`,
+          label: "Runs Compared",
+          value: String(runs.length),
+          detail: "Delivered run events in current dataset",
         },
         {
-          label: "Risk View",
-          value: showRiskInsights ? "Enabled" : "Locked",
-          detail: showRiskInsights ? "Risk insights available at current layer" : "Unlocks from L1",
+          label: "Templates Compared",
+          value: String(templates.length),
+          detail: "Reusable templates aggregated across runs",
         },
         {
-          label: "Execution Layer",
-          value: showExecutionMetrics ? "Visible" : "Limited",
-          detail: showExecutionMetrics ?
-            `${dataset.yearBehaviorSummary.executionStabilityIndex}% stability index available` :
-            "Execution metrics unlock from L2",
+          label: "L2 Depth",
+          value: showL2 ? "Enabled" : "Limited",
+          detail: showL2 ? "Execution and risk signals are visible" : "Execution and risk metrics unlock from L2",
         },
       ]}
       links={analyticsWorkspaces}

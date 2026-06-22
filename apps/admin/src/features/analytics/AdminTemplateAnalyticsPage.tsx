@@ -1,195 +1,61 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import { UiChartContainer, UiTable, type UiChartPoint, type UiTableColumn } from "../../../../../shared/ui/components";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { LICENSE_LAYER_ORDER } from "../../../../../shared/types/portalRouting";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
+import AnalyticsWorkspaceNav from "./AnalyticsWorkspaceNav";
+import {
+  ANALYTICS_LAYER_OPTIONS,
+  type AnalyticsLayer,
+  buildScopeQuery,
+  deriveRunRecords,
+  deriveTemplateRecords,
+  type DerivedTemplateRecord,
+} from "./analyticsArchitecture";
 import {
   ApiClientError,
+  FALLBACK_DATASET,
   fetchDashboardDataset,
-  formatIsoDate,
   formatPercent,
   shouldUseLiveApi,
-  type RunAnalyticsRecord,
-  type TemplateAnalyticsRecord,
-  type TemplateAnalyticsRunRecord,
+  type DashboardDataset,
 } from "./analyticsDataset";
-import AnalyticsWorkspaceNav from "./AnalyticsWorkspaceNav";
 
-const TEMPLATE_ANALYTICS_FIXTURES: TemplateAnalyticsRecord[] = [
+interface CrossTemplateFilters {
+  academicYear: string;
+  dateStart: string;
+  dateEnd: string;
+  subject: string;
+  batch: string;
+  mode: string;
+  layer: AnalyticsLayer;
+}
+
+interface KpiCard {
+  label: string;
+  value: string;
+  helper: string;
+}
+
+const TEMPLATE_ANALYTICS_MODE_OPTIONS = [
   {
-    templateId: "tmpl-001",
-    templateName: "JEE Mains Mock - Set A",
-    academicYear: "2026",
-    examType: "JEEMains",
-    totalRuns: 3,
-    avgRawScorePercent: 66,
-    avgAccuracyPercent: 74,
-    rawVariance: 10,
-    phaseAdherenceVariance: 7,
-    avgRiskShiftPercent: 14,
-    avgDisciplineStressScore: 31,
-    avgDisciplineIndex: 71,
-    templateEffectivenessRating: 73,
-    runs: [
-      {
-        runId: "run-2026-0410-001",
-        runName: "JEE Mains Mock - Set A / Alpha",
-        completedOn: "2026-04-10T06:30:00.000Z",
-        mode: "Controlled",
-        avgRawScorePercent: 68,
-        avgAccuracyPercent: 76,
-        phaseAdherencePercent: 81,
-        stabilityIndex: 78,
-        riskShiftPercent: 12,
-        disciplineStressScore: 28,
-      },
-      {
-        runId: "run-2026-0407-002",
-        runName: "JEE Mains Mock - Set A / Beta",
-        completedOn: "2026-04-07T06:30:00.000Z",
-        mode: "Operational",
-        avgRawScorePercent: 64,
-        avgAccuracyPercent: 72,
-        phaseAdherencePercent: 76,
-        stabilityIndex: 70,
-        riskShiftPercent: 16,
-        disciplineStressScore: 34,
-      },
-      {
-        runId: "run-2026-0404-001",
-        runName: "JEE Mains Mock - Set A / Gamma",
-        completedOn: "2026-04-04T06:30:00.000Z",
-        mode: "Diagnostic",
-        avgRawScorePercent: 66,
-        avgAccuracyPercent: 73,
-        phaseAdherencePercent: 79,
-        stabilityIndex: 74,
-        riskShiftPercent: 14,
-        disciplineStressScore: 31,
-      },
-    ],
+    value: "Operational",
+    label: "Operational",
   },
   {
-    templateId: "tmpl-002",
-    templateName: "NEET Revision - Biology Focus",
-    academicYear: "2026",
-    examType: "NEET",
-    totalRuns: 4,
-    avgRawScorePercent: 61,
-    avgAccuracyPercent: 70,
-    rawVariance: 14,
-    phaseAdherenceVariance: 9,
-    avgRiskShiftPercent: 19,
-    avgDisciplineStressScore: 37,
-    avgDisciplineIndex: 66,
-    templateEffectivenessRating: 66,
-    runs: [
-      {
-        runId: "run-2026-0409-003",
-        runName: "Biology Focus / Beta",
-        completedOn: "2026-04-09T05:00:00.000Z",
-        mode: "Diagnostic",
-        avgRawScorePercent: 62,
-        avgAccuracyPercent: 71,
-        phaseAdherencePercent: 75,
-        stabilityIndex: 67,
-        riskShiftPercent: 18,
-        disciplineStressScore: 37,
-      },
-      {
-        runId: "run-2026-0406-002",
-        runName: "Biology Focus / Alpha",
-        completedOn: "2026-04-06T05:00:00.000Z",
-        mode: "Operational",
-        avgRawScorePercent: 58,
-        avgAccuracyPercent: 68,
-        phaseAdherencePercent: 72,
-        stabilityIndex: 63,
-        riskShiftPercent: 22,
-        disciplineStressScore: 41,
-      },
-      {
-        runId: "run-2026-0402-001",
-        runName: "Biology Focus / Revision Camp",
-        completedOn: "2026-04-02T05:00:00.000Z",
-        mode: "Controlled",
-        avgRawScorePercent: 64,
-        avgAccuracyPercent: 73,
-        phaseAdherencePercent: 79,
-        stabilityIndex: 72,
-        riskShiftPercent: 15,
-        disciplineStressScore: 30,
-      },
-      {
-        runId: "run-2026-0329-001",
-        runName: "Biology Focus / Deep Drill",
-        completedOn: "2026-03-29T05:00:00.000Z",
-        mode: "Operational",
-        avgRawScorePercent: 60,
-        avgAccuracyPercent: 69,
-        phaseAdherencePercent: 74,
-        stabilityIndex: 64,
-        riskShiftPercent: 20,
-        disciplineStressScore: 39,
-      },
-    ],
+    value: "Controlled",
+    label: "Controlled",
   },
-];
-
-function buildRunComparisonChart(template: TemplateAnalyticsRecord): UiChartPoint[] {
-  return template.runs.map((run) => ({
-    label: formatIsoDate(run.completedOn),
-    value: run.avgRawScorePercent,
-  }));
-}
-
-function buildAccuracyTrendChart(template: TemplateAnalyticsRecord): UiChartPoint[] {
-  return template.runs.map((run) => ({
-    label: formatIsoDate(run.completedOn),
-    value: run.avgAccuracyPercent,
-  }));
-}
-
-function buildStabilityChart(template: TemplateAnalyticsRecord): UiChartPoint[] {
-  return template.runs.map((run) => ({
-    label: formatIsoDate(run.completedOn),
-    value: run.stabilityIndex,
-  }));
-}
-
-function buildRiskShiftChart(template: TemplateAnalyticsRecord): UiChartPoint[] {
-  return template.runs.map((run) => ({
-    label: run.mode,
-    value: run.riskShiftPercent,
-  }));
-}
-
-function normalizeTemplateName(runName: string): string {
-  return runName.split("/")[0]?.trim() || runName.trim();
-}
-
-function inferExamType(templateName: string): string {
-  const normalized = templateName.toLowerCase();
-  if (normalized.includes("neet")) {
-    return "NEET";
-  }
-  if (normalized.includes("jee")) {
-    return "JEEMains";
-  }
-  if (normalized.includes("foundation")) {
-    return "Foundation";
-  }
-  return "General";
-}
-
-function toTemplateId(templateName: string, index: number): string {
-  const slug = templateName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return slug.length > 0 ? `tmpl-live-${slug}` : `tmpl-live-${index + 1}`;
-}
+  {
+    value: "Focused",
+    label: "Focused",
+  },
+  {
+    value: "Hard",
+    label: "Hard",
+  },
+] as const;
 
 function average(values: number[]): number {
   if (values.length === 0) {
@@ -199,105 +65,213 @@ function average(values: number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-function variance(values: number[]): number {
-  if (values.length === 0) {
-    return 0;
-  }
-
-  const mean = average(values);
-  return average(values.map((value) => (value - mean) ** 2));
+function toChartPoints(rows: DerivedTemplateRecord[], selector: (row: DerivedTemplateRecord) => number): UiChartPoint[] {
+  return rows.map((row) => ({
+    label: row.templateName,
+    value: Math.round(selector(row)),
+  }));
 }
 
-function buildTemplateRunRecord(run: RunAnalyticsRecord): TemplateAnalyticsRunRecord {
-  const riskShiftPercent =
-    run.riskDistribution.high + run.riskDistribution.critical + Math.round(run.guessRatePercent * 0.25);
-  const stabilityIndex = Math.max(
-    0,
-    Math.min(
-      100,
-      Math.round(
-        run.disciplineIndexAverage -
-          ((run.guessRatePercent + run.pacingGuardrailViolationPercent + run.structuralOverridePercent) / 3),
+function buildKpis(rows: DerivedTemplateRecord[], layer: AnalyticsLayer): KpiCard[] {
+  const cards: KpiCard[] = [
+    {
+      label: "Active Templates",
+      value: String(rows.length),
+      helper: "Templates in selected comparison scope",
+    },
+    {
+      label: "Total Runs",
+      value: String(rows.reduce((sum, row) => sum + row.totalRuns, 0)),
+      helper: "Runs represented across compared templates",
+    },
+    {
+      label: "Avg Runs per Template",
+      value: rows.length > 0 ? String(Math.round(rows.reduce((sum, row) => sum + row.totalRuns, 0) / rows.length)) : "0",
+      helper: "Run density per template",
+    },
+    {
+      label: "Avg Raw Score Percentage",
+      value: formatPercent(average(rows.map((row) => row.avgRawScorePercent))),
+      helper: "L0 template outcome average",
+    },
+    {
+      label: "Avg Accuracy Percentage",
+      value: formatPercent(average(rows.map((row) => row.avgAccuracyPercent))),
+      helper: "L0 template outcome average",
+    },
+  ];
+
+  if (layer === "L1" || layer === "L2") {
+    cards.push(
+      {
+        label: "Avg Phase Adherence",
+        value: formatPercent(average(rows.map((row) => average(row.runs.map((run) => run.phaseAdherencePercent))))),
+        helper: "L1 template behavior average",
+      },
+      {
+        label: "Avg Easy Neglect",
+        value: formatPercent(average(rows.map((row) => row.avgRiskShiftPercent * 0.45))),
+        helper: "Approximate neglect pressure",
+      },
+      {
+        label: "Avg Hard Bias",
+        value: formatPercent(average(rows.map((row) => row.avgRiskShiftPercent * 0.35))),
+        helper: "Approximate hard-bias pressure",
+      },
+    );
+  }
+
+  if (layer === "L2") {
+    cards.push(
+      {
+        label: "Avg Discipline Index",
+        value: formatPercent(average(rows.map((row) => row.avgDisciplineIndex))),
+        helper: "L2 execution quality",
+      },
+      {
+        label: "Avg Guess Rate",
+        value: formatPercent(average(rows.map((row) => row.avgRiskShiftPercent * 0.5))),
+        helper: "Estimated guess pressure proxy",
+      },
+      {
+        label: "Avg Controlled Mode Delta",
+        value: formatPercent(average(rows.map((row) => row.avgControlledModeDelta))),
+        helper: "Controlled-mode performance shift",
+      },
+      {
+        label: "High-Risk Template Count",
+        value: String(rows.filter((row) => row.avgRiskShiftPercent >= 18).length),
+        helper: "Templates with strong risk shift",
+      },
+      {
+        label: "Unstable Template Count",
+        value: String(rows.filter((row) => row.stabilityFlag === "Unstable").length),
+        helper: "Templates with unstable execution",
+      },
+    );
+  }
+
+  return cards;
+}
+
+function buildColumns(layer: AnalyticsLayer): UiTableColumn<DerivedTemplateRecord>[] {
+  const columns: UiTableColumn<DerivedTemplateRecord>[] = [
+    {
+      id: "name",
+      header: "Template Name",
+      render: (row) => (
+        <div className="admin-analytics-run-cell">
+          <strong>{row.templateName}</strong>
+          <small>{row.subject} · {row.templateType}</small>
+        </div>
       ),
-    ),
-  );
+    },
+    {
+      id: "subject",
+      header: "Subject",
+      render: (row) => row.subject,
+    },
+    {
+      id: "runs",
+      header: "Runs",
+      render: (row) => row.totalRuns,
+    },
+    {
+      id: "batches",
+      header: "Batches Used In",
+      render: (row) => new Set(row.runs.map((run) => run.runName.split("/")[1]?.trim() || "Shared scope")).size,
+    },
+    {
+      id: "lastUsed",
+      header: "Last Used",
+      render: (row) => row.runs[0]?.completedOn.slice(0, 10) ?? "N/A",
+    },
+    {
+      id: "l0",
+      header: "L0 Summary",
+      render: (row) => (
+        <div className="admin-analytics-score-cell">
+          <strong>{formatPercent(row.avgRawScorePercent)} / {formatPercent(row.avgAccuracyPercent)}</strong>
+          <small>Participation {formatPercent(row.avgParticipationPercent)} · Completion {formatPercent(row.avgCompletionPercent)}</small>
+        </div>
+      ),
+    },
+  ];
 
-  return {
-    runId: run.runId,
-    runName: run.runName,
-    completedOn: run.startedAt,
-    mode: run.mode,
-    avgRawScorePercent: run.avgRawScorePercent,
-    avgAccuracyPercent: run.avgAccuracyPercent,
-    phaseAdherencePercent: run.avgPhaseAdherencePercent,
-    stabilityIndex,
-    riskShiftPercent: Math.max(0, Math.min(100, riskShiftPercent)),
-    disciplineStressScore: Math.max(0, Math.min(100, Math.round(100 - run.disciplineIndexAverage + run.guessRatePercent * 0.4))),
-  };
-}
-
-function buildTemplateAnalyticsFromRuns(runs: RunAnalyticsRecord[]): TemplateAnalyticsRecord[] {
-  const groupedRuns = new Map<string, RunAnalyticsRecord[]>();
-
-  for (const run of runs) {
-    const templateName = normalizeTemplateName(run.runName);
-    const existing = groupedRuns.get(templateName) ?? [];
-    existing.push(run);
-    groupedRuns.set(templateName, existing);
+  if (layer === "L1" || layer === "L2") {
+    columns.push({
+      id: "l1",
+      header: "L1 Signals",
+      render: (row) => (
+        <div className="admin-analytics-discipline-cell">
+          <strong>{formatPercent(average(row.runs.map((run) => run.phaseAdherencePercent)))}</strong>
+          <small>{row.dominantBehaviorTag} · Phase variance {formatPercent(row.phaseAdherenceVariance)}</small>
+        </div>
+      ),
+    });
   }
 
-  return [...groupedRuns.entries()]
-    .map(([templateName, templateRuns], index) => {
-      const sortedRuns = [...templateRuns].sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt));
-      const runRecords = sortedRuns.map(buildTemplateRunRecord);
-      const avgRawScorePercent = Math.round(average(runRecords.map((run) => run.avgRawScorePercent)));
-      const avgAccuracyPercent = Math.round(average(runRecords.map((run) => run.avgAccuracyPercent)));
-      const avgDisciplineIndex = Math.round(average(sortedRuns.map((run) => run.disciplineIndexAverage)));
-      const rawVariance = Math.round(variance(runRecords.map((run) => run.avgRawScorePercent)));
-      const phaseAdherenceVariance = Math.round(variance(runRecords.map((run) => run.phaseAdherencePercent)));
-      const averageRiskShift = average(runRecords.map((run) => run.riskShiftPercent));
-      const avgRiskShiftPercent = Math.round(averageRiskShift);
-      const avgDisciplineStressScore = Math.round(average(runRecords.map((run) => run.disciplineStressScore)));
-      const templateEffectivenessRating = Math.max(
-        0,
-        Math.min(
-          100,
-          Math.round((avgRawScorePercent * 0.4) + (avgDisciplineIndex * 0.3) + ((100 - averageRiskShift) * 0.3)),
-        ),
-      );
+  if (layer === "L2") {
+    columns.push({
+      id: "l2",
+      header: "L2 Signals",
+      render: (row) => (
+        <div className="admin-analytics-discipline-cell">
+          <strong>{formatPercent(row.avgDisciplineIndex)} · {row.stabilityFlag}</strong>
+          <small>{row.riskMixLabel} · Shift {formatPercent(row.avgRiskShiftPercent)} · Delta {formatPercent(row.avgControlledModeDelta)}</small>
+        </div>
+      ),
+    });
+  }
 
-      return {
-        templateId: toTemplateId(templateName, index),
-        templateName,
-        academicYear: sortedRuns[0]?.academicYear ?? "2026",
-        examType: inferExamType(templateName),
-        totalRuns: runRecords.length,
-        avgRawScorePercent,
-        avgAccuracyPercent,
-        rawVariance,
-        phaseAdherenceVariance,
-        avgRiskShiftPercent,
-        avgDisciplineStressScore,
-        avgDisciplineIndex,
-        templateEffectivenessRating,
-        runs: runRecords,
-      };
-    })
-    .sort((left, right) => right.totalRuns - left.totalRuns || left.templateName.localeCompare(right.templateName));
+  columns.push({
+    id: "drill",
+    header: "Drill Actions",
+    render: (row) => {
+      const scopeQuery = buildScopeQuery({
+        academicYear: row.academicYear,
+        subject: row.subject,
+        layer,
+      });
+
+      return (
+        <div className="admin-analytics-drill-links">
+          <NavLink className="admin-primary-link" to={`/admin/tests/library${scopeQuery}`}>
+            Open Template Detail
+          </NavLink>
+          <NavLink className="admin-primary-link" to={`/admin/assignments/list${scopeQuery}`}>
+            Open Assignments List
+          </NavLink>
+          <NavLink className="admin-primary-link" to={`/admin/students/batches${scopeQuery}`}>
+            Open Batch Analysis
+          </NavLink>
+        </div>
+      );
+    },
+  });
+
+  return columns;
 }
 
 function AdminTemplateAnalyticsPage() {
-  const navigate = useNavigate();
-  const params = useParams<{ testId?: string }>();
   const { session } = useAuthProvider();
   const accessContext = resolveAdminAccessContext(session);
   const isL1OrAbove =
     accessContext.licenseLayer !== null && LICENSE_LAYER_ORDER[accessContext.licenseLayer] >= LICENSE_LAYER_ORDER.L1;
   const isL2OrAbove =
     accessContext.licenseLayer !== null && LICENSE_LAYER_ORDER[accessContext.licenseLayer] >= LICENSE_LAYER_ORDER.L2;
-  const [templates, setTemplates] = useState<TemplateAnalyticsRecord[]>(TEMPLATE_ANALYTICS_FIXTURES);
+  const [dataset, setDataset] = useState<DashboardDataset>(FALLBACK_DATASET);
   const [isLoading, setIsLoading] = useState(true);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
+  const [filters, setFilters] = useState<CrossTemplateFilters>({
+    academicYear: "all",
+    dateStart: "",
+    dateEnd: "",
+    subject: "all",
+    batch: "all",
+    mode: "all",
+    layer: isL2OrAbove ? "L2" : (isL1OrAbove ? "L1" : "L0"),
+  });
 
   useEffect(() => {
     let isMounted = true;
@@ -307,35 +281,28 @@ function AdminTemplateAnalyticsPage() {
       setInlineMessage(null);
 
       if (!shouldUseLiveApi()) {
-        setTemplates(TEMPLATE_ANALYTICS_FIXTURES);
-        setInlineMessage("Local mode detected. Loaded deterministic templateAnalytics fixtures for the dedicated template workspace.");
+        setDataset(FALLBACK_DATASET);
+        setInlineMessage("Local mode detected. Loaded deterministic cross-template analytics fixtures.");
         setIsLoading(false);
         return;
       }
 
       try {
-        const dataset = await fetchDashboardDataset();
+        const nextDataset = await fetchDashboardDataset();
         if (!isMounted) {
           return;
         }
 
-        const liveTemplates = dataset.templateAnalytics.length > 0 ?
-          dataset.templateAnalytics :
-          buildTemplateAnalyticsFromRuns(dataset.runAnalytics);
-        setTemplates(liveTemplates.length > 0 ? liveTemplates : TEMPLATE_ANALYTICS_FIXTURES);
-        setInlineMessage(
-          dataset.templateAnalytics.length > 0 ?
-            "Live mode enabled: template analytics hydrated from templateAnalytics summaries in GET /admin/analytics." :
-            "Live mode enabled: templateAnalytics was empty, so the workspace derived a temporary summary from runAnalytics.",
-        );
+        setDataset(nextDataset);
+        setInlineMessage("Live mode enabled: cross-template analytics hydrated from GET /admin/analytics.");
       } catch (error) {
         if (!isMounted) {
           return;
         }
 
-        const reason = error instanceof ApiClientError ? error.message : "Failed to load template analytics data.";
-        setTemplates(TEMPLATE_ANALYTICS_FIXTURES);
-        setInlineMessage(`${reason} Falling back to deterministic templateAnalytics fixtures.`);
+        const reason = error instanceof ApiClientError ? error.message : "Failed to load cross-template analytics data.";
+        setDataset(FALLBACK_DATASET);
+        setInlineMessage(`${reason} Falling back to deterministic analytics fixtures.`);
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -350,325 +317,197 @@ function AdminTemplateAnalyticsPage() {
     };
   }, []);
 
-  const selectedTemplate = useMemo(() => {
-    return (
-      templates.find((entry) => entry.templateId === params.testId) ??
-      templates[0] ??
-      null
-    );
-  }, [params.testId, templates]);
+  const runs = useMemo(() => deriveRunRecords(dataset.runAnalytics), [dataset.runAnalytics]);
+  const yearOptions = useMemo(() => ["all", ...new Set(runs.map((run) => run.academicYear))], [runs]);
+  const subjectOptions = useMemo(() => ["all", ...new Set(runs.map((run) => run.subject))], [runs]);
+  const batchOptions = useMemo(() => ["all", ...new Set(runs.map((run) => run.batchName))], [runs]);
 
-  const runComparisonChart = useMemo(
-    () => (selectedTemplate ? buildRunComparisonChart(selectedTemplate) : []),
-    [selectedTemplate],
-  );
-  const accuracyTrendChart = useMemo(
-    () => (selectedTemplate ? buildAccuracyTrendChart(selectedTemplate) : []),
-    [selectedTemplate],
-  );
-  const stabilityChart = useMemo(
-    () => (selectedTemplate ? buildStabilityChart(selectedTemplate) : []),
-    [selectedTemplate],
-  );
-  const riskShiftChart = useMemo(
-    () => (selectedTemplate ? buildRiskShiftChart(selectedTemplate) : []),
-    [selectedTemplate],
-  );
+  const filteredRuns = useMemo(() => {
+    return runs
+      .filter((run) => (filters.academicYear === "all" || run.academicYear === filters.academicYear))
+      .filter((run) => (filters.subject === "all" || run.subject === filters.subject))
+      .filter((run) => (filters.batch === "all" || run.batchName === filters.batch))
+      .filter((run) => (filters.mode === "all" || run.mode === filters.mode))
+      .filter((run) => {
+        const parsed = Date.parse(run.startedAt);
+        if (Number.isNaN(parsed)) {
+          return false;
+        }
+        const start = filters.dateStart ? Date.parse(filters.dateStart) : null;
+        const end = filters.dateEnd ? Date.parse(filters.dateEnd) : null;
+        return (start === null || parsed >= start) && (end === null || parsed <= end);
+      });
+  }, [filters, runs]);
 
-  const l1Kpis = useMemo(() => {
-    if (!selectedTemplate) {
-      return [];
-    }
+  const rows = useMemo(() => deriveTemplateRecords(filteredRuns), [filteredRuns]);
+  const kpis = useMemo(() => buildKpis(rows, filters.layer), [filters.layer, rows]);
+  const columns = useMemo(() => buildColumns(filters.layer), [filters.layer]);
 
-    return [
+  const charts = useMemo(() => {
+    const items = [
       {
-        label: "Number of Runs",
-        value: String(selectedTemplate.totalRuns),
-        helper: "templateAnalytics run count",
+        title: "Template vs Template Avg Raw Score",
+        subtitle: "L0 template score comparison",
+        data: toChartPoints(rows, (row) => row.avgRawScorePercent),
       },
       {
-        label: "Avg Raw Score",
-        value: formatPercent(selectedTemplate.avgRawScorePercent),
-        helper: "L1 cross-run outcome",
+        title: "Template vs Template Avg Accuracy",
+        subtitle: "L0 template accuracy comparison",
+        data: toChartPoints(rows, (row) => row.avgAccuracyPercent),
       },
       {
-        label: "Avg Accuracy",
-        value: formatPercent(selectedTemplate.avgAccuracyPercent),
-        helper: "L1 cross-run outcome",
+        title: "Template Usage Frequency",
+        subtitle: "L0 total run volume by template",
+        data: toChartPoints(rows, (row) => row.totalRuns),
       },
       {
-        label: "Raw Variance",
-        value: String(selectedTemplate.rawVariance),
-        helper: "L1 structural consistency",
+        title: "Top and Bottom Template Comparison",
+        subtitle: "L0 effectiveness ranking snapshot",
+        data: toChartPoints(rows, (row) => row.templateEffectivenessRating),
       },
     ];
-  }, [selectedTemplate]);
 
-  const l2Kpis = useMemo(() => {
-    if (!selectedTemplate || !isL2OrAbove) {
-      return [];
+    if (filters.layer === "L1" || filters.layer === "L2") {
+      items.push(
+        {
+          title: "Phase Adherence by Template",
+          subtitle: "L1 template discipline quality",
+          data: toChartPoints(rows, (row) => average(row.runs.map((run) => run.phaseAdherencePercent))),
+        },
+        {
+          title: "Easy Neglect by Template",
+          subtitle: "L1 neglect proxy across templates",
+          data: toChartPoints(rows, (row) => row.avgRiskShiftPercent * 0.45),
+        },
+        {
+          title: "Hard Bias by Template",
+          subtitle: "L1 hard-bias proxy across templates",
+          data: toChartPoints(rows, (row) => row.avgRiskShiftPercent * 0.35),
+        },
+      );
     }
 
-    return [
-      {
-        label: "Stability Index",
-        value: String(Math.round(average(selectedTemplate.runs.map((run) => run.stabilityIndex)))),
-        helper: "average stability per run",
-      },
-      {
-        label: "Phase Variance",
-        value: String(selectedTemplate.phaseAdherenceVariance),
-        helper: "phase adherence spread",
-      },
-      {
-        label: "Risk Shift",
-        value: formatPercent(selectedTemplate.avgRiskShiftPercent),
-        helper: "average risk movement",
-      },
-      {
-        label: "Discipline Stress",
-        value: String(selectedTemplate.avgDisciplineStressScore),
-        helper: "execution strain score",
-      },
-      {
-        label: "Effectiveness Rating",
-        value: String(selectedTemplate.templateEffectivenessRating),
-        helper: "precomputed template score",
-      },
-    ];
-  }, [isL2OrAbove, selectedTemplate]);
+    if (filters.layer === "L2") {
+      items.push(
+        {
+          title: "Discipline by Template",
+          subtitle: "L2 execution discipline index",
+          data: toChartPoints(rows, (row) => row.avgDisciplineIndex),
+        },
+        {
+          title: "Guess Rate by Template",
+          subtitle: "L2 guess-rate proxy across templates",
+          data: toChartPoints(rows, (row) => row.avgRiskShiftPercent * 0.5),
+        },
+        {
+          title: "Risk Distribution by Template",
+          subtitle: "L2 risk shift concentration",
+          data: toChartPoints(rows, (row) => row.avgRiskShiftPercent),
+        },
+        {
+          title: "Stability Breakdown by Template",
+          subtitle: "L2 stability flag proxy",
+          data: toChartPoints(rows, (row) => row.stabilityFlag === "Stable" ? 88 : (row.stabilityFlag === "Watch" ? 62 : 34)),
+        },
+      );
+    }
 
-  const runColumns = useMemo<UiTableColumn<TemplateAnalyticsRunRecord>[]>(
-    () => [
-      {
-        id: "run",
-        header: "Run",
-        render: (run) => (
-          <div className="admin-analytics-run-cell">
-            <strong>{run.runName}</strong>
-            <small>{run.runId}</small>
-          </div>
-        ),
-      },
-      {
-        id: "mode",
-        header: "Mode",
-        render: (run) => (
-          <div className="admin-analytics-mode-cell">
-            <strong>{run.mode}</strong>
-            <small>{formatIsoDate(run.completedOn)}</small>
-          </div>
-        ),
-      },
-      {
-        id: "raw",
-        header: "Raw / Accuracy",
-        render: (run) => (
-          <div className="admin-analytics-score-cell">
-            <strong>{formatPercent(run.avgRawScorePercent)}</strong>
-            <small>{formatPercent(run.avgAccuracyPercent)} accuracy</small>
-          </div>
-        ),
-      },
-      ...(isL2OrAbove
-        ? [
-            {
-              id: "phase",
-              header: "Phase Adherence",
-              render: (run: TemplateAnalyticsRunRecord) => formatPercent(run.phaseAdherencePercent),
-            },
-            {
-              id: "stability",
-              header: "Stability Index",
-              render: (run: TemplateAnalyticsRunRecord) => run.stabilityIndex,
-            },
-            {
-              id: "risk",
-              header: "Risk Shift",
-              render: (run: TemplateAnalyticsRunRecord) => formatPercent(run.riskShiftPercent),
-            },
-            {
-              id: "discipline",
-              header: "Discipline Stress",
-              render: (run: TemplateAnalyticsRunRecord) => run.disciplineStressScore,
-            },
-          ]
-        : []),
-    ],
-    [isL2OrAbove],
-  );
+    return items;
+  }, [filters.layer, rows]);
+
+  const note = isLoading ?
+    "Loading cross-template analytics from GET /admin/analytics..." :
+    `${inlineMessage ?? "Cross-template analytics ready."} This page compares template portfolios only and routes one-template drill-down back into Tests ownership pages.`;
 
   return (
-    <section className="admin-content-card" aria-labelledby="admin-template-analytics-title">
-      <p className="admin-content-eyebrow">Analytics Template Workspace</p>
-      <h2 id="admin-template-analytics-title">Template Performance Drill-Down</h2>
-      <p className="admin-content-copy">
-        This dedicated analytics route isolates <code>/admin/analytics/template/:testId</code> from overview, run,
-        and student analytics. It now hydrates template-level structural summaries from the live admin analytics
-        payload when available, while preserving deterministic fixture coverage in local mode.
-      </p>
-
+    <section className="admin-content-card" aria-labelledby="admin-cross-template-title">
       <AnalyticsWorkspaceNav />
-
-      {inlineMessage ? <p className="admin-analytics-inline-note">{inlineMessage}</p> : null}
-
-      <div className="admin-risk-summary-card">
-        <h4>Template Selection</h4>
-        <p>
-          Select a template analytics summary to compare cross-run structural quality, consistency, and execution
-          stress without leaving the analytics module.
-        </p>
-        <small>Route: /admin/analytics/template/{selectedTemplate?.templateId ?? "templateId"}</small>
+      <div className="admin-analytics-run-detail-header">
+        <div>
+          <p className="admin-content-eyebrow">Analytics / Cross-Template Analytics</p>
+          <h2 id="admin-cross-template-title">Cross-Template Analytics</h2>
+          <p>
+            Compare reusable templates across many runs and time windows without turning Analytics into a replacement for template detail.
+          </p>
+        </div>
+        <div className="admin-analytics-run-source-chip">Layer visibility {filters.layer}</div>
       </div>
 
-      {isLoading ? <p className="admin-analytics-inline-note">Loading template analytics summaries...</p> : null}
+      <p className="admin-analytics-inline-note">{note}</p>
 
       <div className="admin-analytics-filter-grid">
-        <label htmlFor="admin-template-analytics-template">
-          Template
-          <select
-            id="admin-template-analytics-template"
-            value={selectedTemplate?.templateId ?? ""}
-            onChange={(event) => {
-              navigate(`/admin/analytics/template/${event.target.value}`);
-            }}
-          >
-            {templates.map((entry) => (
-              <option key={entry.templateId} value={entry.templateId}>
-                {entry.templateName}
+        <label htmlFor="cross-template-year">
+          Academic Year
+          <select id="cross-template-year" value={filters.academicYear} onChange={(event) => setFilters((current) => ({ ...current, academicYear: event.target.value }))}>
+            {yearOptions.map((year) => <option key={year} value={year}>{year === "all" ? "All years" : year}</option>)}
+          </select>
+        </label>
+        <label htmlFor="cross-template-start">
+          Date Range Start
+          <input id="cross-template-start" type="date" value={filters.dateStart} onChange={(event) => setFilters((current) => ({ ...current, dateStart: event.target.value }))} />
+        </label>
+        <label htmlFor="cross-template-end">
+          Date Range End
+          <input id="cross-template-end" type="date" value={filters.dateEnd} onChange={(event) => setFilters((current) => ({ ...current, dateEnd: event.target.value }))} />
+        </label>
+        <label htmlFor="cross-template-subject">
+          Subject
+          <select id="cross-template-subject" value={filters.subject} onChange={(event) => setFilters((current) => ({ ...current, subject: event.target.value }))}>
+            {subjectOptions.map((subject) => <option key={subject} value={subject}>{subject === "all" ? "All subjects" : subject}</option>)}
+          </select>
+        </label>
+        <label htmlFor="cross-template-batch">
+          Batch
+          <select id="cross-template-batch" value={filters.batch} onChange={(event) => setFilters((current) => ({ ...current, batch: event.target.value }))}>
+            {batchOptions.map((batch) => <option key={batch} value={batch}>{batch === "all" ? "All batches" : batch}</option>)}
+          </select>
+        </label>
+        <label htmlFor="cross-template-mode">
+          Mode
+          <select id="cross-template-mode" value={filters.mode} onChange={(event) => setFilters((current) => ({ ...current, mode: event.target.value }))}>
+            <option value="all">All modes</option>
+            {TEMPLATE_ANALYTICS_MODE_OPTIONS.map((mode) => (
+              <option key={mode.value} value={mode.value}>
+                {mode.label}
               </option>
+            ))}
+          </select>
+        </label>
+        <label htmlFor="cross-template-layer">
+          Layer Visibility
+          <select id="cross-template-layer" value={filters.layer} onChange={(event) => setFilters((current) => ({ ...current, layer: event.target.value as AnalyticsLayer }))}>
+            {ANALYTICS_LAYER_OPTIONS.filter((layer) => (layer === "L2" ? isL2OrAbove : (layer === "L1" ? isL1OrAbove : true))).map((layer) => (
+              <option key={layer} value={layer}>{layer}</option>
             ))}
           </select>
         </label>
       </div>
 
-      {!isL1OrAbove ? (
-        <div className="admin-risk-summary-card">
-          <h4>Template Analytics Locked</h4>
-          <p>
-            The By Template workspace starts at L1. L0 users keep the clean yearly overview without cross-run
-            structural quality or execution diagnostics.
-          </p>
-          <small>Visibility matrix: By Template has no L0 metric surface.</small>
-        </div>
-      ) : selectedTemplate ? (
-        <>
-          <div className="admin-analytics-run-detail-header">
-            <div>
-              <h3>{selectedTemplate.templateName}</h3>
-              <p>
-                {selectedTemplate.examType} template · {selectedTemplate.academicYear} academic year ·{" "}
-                {selectedTemplate.totalRuns} tracked runs
-              </p>
-            </div>
-            <div className="admin-analytics-run-source-chip">templateAnalytics summary</div>
-          </div>
+      <div className="admin-analytics-kpi-grid">
+        {kpis.map((kpi) => (
+          <article key={kpi.label} className="admin-analytics-kpi-card">
+            <p>{kpi.label}</p>
+            <h3>{kpi.value}</h3>
+            <small>{kpi.helper}</small>
+          </article>
+        ))}
+      </div>
 
-          <h3 className="admin-tests-analytics-section-title">L1 Structural Quality</h3>
-          <div className="admin-analytics-kpi-grid">
-            {l1Kpis.map((kpi) => (
-              <article key={kpi.label} className="admin-analytics-kpi-card">
-                <p>{kpi.label}</p>
-                <h3>{kpi.value}</h3>
-                <small>{kpi.helper}</small>
-              </article>
-            ))}
-          </div>
+      <div className="admin-analytics-chart-grid">
+        {charts.map((chart) => (
+          <UiChartContainer key={chart.title} title={chart.title} subtitle={chart.subtitle} data={chart.data} maxValue={100} />
+        ))}
+      </div>
 
-          {isL2OrAbove ? (
-            <>
-              <h3 className="admin-tests-analytics-section-title">L2 Execution Quality</h3>
-              <div className="admin-analytics-kpi-grid">
-                {l2Kpis.map((kpi) => (
-                  <article key={kpi.label} className="admin-analytics-kpi-card">
-                    <p>{kpi.label}</p>
-                    <h3>{kpi.value}</h3>
-                    <small>{kpi.helper}</small>
-                  </article>
-                ))}
-              </div>
-            </>
-          ) : null}
-
-          <div className="admin-analytics-chart-grid">
-            <UiChartContainer
-              title="Run Comparison"
-              subtitle="Average raw score by run"
-              data={runComparisonChart}
-              maxValue={100}
-              variant="line"
-            />
-            <UiChartContainer
-              title="Accuracy Trend"
-              subtitle="Average accuracy by run"
-              data={accuracyTrendChart}
-              maxValue={100}
-              variant="line"
-            />
-            {isL2OrAbove ? (
-              <>
-                <UiChartContainer
-                  title="Risk Shift Per Run"
-                  subtitle="Structural risk movement across template usage"
-                  data={riskShiftChart}
-                  maxValue={100}
-                />
-                <UiChartContainer
-                  title="Stability Index Per Run"
-                  subtitle="Execution stability trajectory across runs"
-                  data={stabilityChart}
-                  maxValue={100}
-                  variant="line"
-                />
-              </>
-            ) : null}
-          </div>
-
-          <div className="admin-analytics-compliance-panel">
-            <article className="admin-risk-summary-card">
-              <h4>L1 Structural Snapshot</h4>
-              <p>
-                Raw variance sits at {selectedTemplate.rawVariance}, while the template averages{" "}
-                {formatPercent(selectedTemplate.avgRawScorePercent)} raw and{" "}
-                {formatPercent(selectedTemplate.avgAccuracyPercent)} accuracy across tracked runs.
-              </p>
-              <small>Cross-run structural quality evaluation</small>
-            </article>
-            {isL2OrAbove ? (
-              <>
-                <article className="admin-risk-summary-card">
-                  <h4>Phase Consistency</h4>
-                  <p>
-                    Phase adherence variance is {selectedTemplate.phaseAdherenceVariance}, showing how evenly this
-                    template holds timing structure from one run to the next.
-                  </p>
-                  <small>Derived from summary-only phase adherence snapshots</small>
-                </article>
-                <article className="admin-risk-summary-card">
-                  <h4>L2 Effectiveness</h4>
-                  <p>
-                    Template effectiveness is rated {selectedTemplate.templateEffectivenessRating} with an average
-                    discipline index of {formatPercent(selectedTemplate.avgDisciplineIndex)} and discipline stress score
-                    of {selectedTemplate.avgDisciplineStressScore}.
-                  </p>
-                  <small>Structural stress and discipline signals unlock at L2+</small>
-                </article>
-              </>
-            ) : null}
-          </div>
-
-          <section className="admin-analytics-run-summary" aria-labelledby="admin-template-analytics-runs-title">
-            <h3 id="admin-template-analytics-runs-title">Tracked Template Runs</h3>
-            <UiTable
-              caption="Template analytics run comparison"
-              columns={runColumns}
-              rows={selectedTemplate.runs}
-              rowKey={(row) => row.runId}
-              emptyStateText="No run summaries are available for this template."
-            />
-          </section>
-        </>
-      ) : null}
+      <section className="admin-analytics-run-summary" aria-labelledby="cross-template-table-title">
+        <h3 id="cross-template-table-title">Comparison Table</h3>
+        <UiTable
+          caption="Cross-template comparison table"
+          columns={columns}
+          rows={rows}
+          rowKey={(row) => row.templateId}
+        />
+      </section>
     </section>
   );
 }

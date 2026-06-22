@@ -45,14 +45,11 @@ function resolveAdminRedirectTarget(locationState: unknown, fallbackPath: string
   return fallbackPath;
 }
 
-const AdminAnalyticsDashboardPage = lazy(() => import("./features/analytics/AdminAnalyticsDashboardPage"));
 const AdminAnalyticsLandingPage = lazy(() => import("./features/analytics/AdminAnalyticsLandingPage"));
-const AdminAnalyticsTrendsPage = lazy(() => import("./features/analytics/AdminAnalyticsTrendsPage"));
 const AdminTemplateAnalyticsPage = lazy(() => import("./features/analytics/AdminTemplateAnalyticsPage"));
 const BatchAnalyticsDashboardPage = lazy(() => import("./features/analytics/BatchAnalyticsDashboardPage"));
 const AdminGovernanceLandingPage = lazy(() => import("./features/analytics/AdminGovernanceLandingPage"));
 const GovernanceMonitoringDashboardPage = lazy(() => import("./features/analytics/GovernanceMonitoringDashboardPage"));
-const RiskInsightsDashboardPage = lazy(() => import("./features/analytics/RiskInsightsDashboardPage"));
 const AdminAssignmentLiveRunPage = lazy(() => import("./features/assignments/AdminAssignmentLiveRunPage"));
 const AdminAssignmentDetailPage = lazy(() => import("./features/assignments/AdminAssignmentDetailPage"));
 const AdminAssignmentsLandingPage = lazy(() => import("./features/assignments/AdminAssignmentsLandingPage"));
@@ -755,34 +752,42 @@ function App() {
           element={<AdminRouteBoundary label="Loading analytics landing"><AdminAnalyticsLandingPage /></AdminRouteBoundary>}
         />
         <Route
+          path="analytics/templates"
+          element={<AdminRouteBoundary label="Loading cross-template analytics"><AdminTemplateAnalyticsPage /></AdminRouteBoundary>}
+        />
+        <Route
+          path="analytics/batches"
+          element={<AdminRouteBoundary label="Loading cross-batch analytics"><BatchAnalyticsDashboardPage /></AdminRouteBoundary>}
+        />
+        <Route
           path="analytics/overview"
-          element={<AdminRouteBoundary label="Loading analytics overview"><AdminAnalyticsDashboardPage /></AdminRouteBoundary>}
+          element={<Navigate to="/admin/analytics/templates" replace />}
         />
         <Route
           path="analytics/run/:runId"
-          element={<AdminRouteBoundary label="Loading run analytics"><AdminAnalyticsDashboardPage /></AdminRouteBoundary>}
+          element={<Navigate to="/admin/assignments/list" replace />}
         />
         <Route
           path="analytics/student/:studentId"
-          element={<AdminRouteBoundary label="Loading student analytics"><AdminAnalyticsDashboardPage /></AdminRouteBoundary>}
+          element={<Navigate to="/admin/students/list" replace />}
         />
         <Route
           path="analytics/template/:testId"
-          element={<AdminRouteBoundary label="Loading template analytics"><AdminTemplateAnalyticsPage /></AdminRouteBoundary>}
+          element={<Navigate to="/admin/analytics/templates" replace />}
         />
         <Route
           path="analytics/trends"
-          element={<AdminRouteBoundary label="Loading analytics trends"><AdminAnalyticsTrendsPage /></AdminRouteBoundary>}
+          element={<Navigate to="/admin/analytics/templates" replace />}
         />
-        <Route path="analytics/*" element={<AdminRouteResolutionPage />} />
         <Route
           path="analytics/risk-insights"
-          element={<AdminRouteBoundary label="Loading risk insights"><RiskInsightsDashboardPage /></AdminRouteBoundary>}
+          element={<Navigate to="/admin/insights/risk" replace />}
         />
         <Route
           path="analytics/batch"
-          element={<AdminRouteBoundary label="Loading batch analytics"><BatchAnalyticsDashboardPage /></AdminRouteBoundary>}
+          element={<Navigate to="/admin/analytics/batches" replace />}
         />
+        <Route path="analytics/*" element={<AdminRouteResolutionPage />} />
         <Route
           path="governance"
           element={<AdminRouteBoundary label="Loading governance landing"><AdminGovernanceLandingPage /></AdminRouteBoundary>}
