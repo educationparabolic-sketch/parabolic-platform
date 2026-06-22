@@ -76,51 +76,51 @@ function AdminAnalyticsLandingPage() {
   const analyticsWorkspaces = useMemo(() => ([
     {
       title: "Cross-Template Analytics",
-      description: "Compare reusable templates across their run history without duplicating the one-template detail workspace.",
+      description: "See which tests are working well across classes, recent runs, and teaching contexts.",
       to: "/admin/analytics/templates",
-      meta: `${templates.length} templates aggregated from summary-safe run history`,
+      meta: `${templates.length} tests summarized for quick teacher review`,
     },
     {
       title: "Cross-Batch Analytics",
-      description: "Compare cohorts institute-wide without replacing the canonical batch workspace inside Students.",
+      description: "Compare batches side by side to spot support needs, strong groups, and follow-up opportunities.",
       to: "/admin/analytics/batches",
-      meta: `${batches.length} batches represented across current analytics scope`,
+      meta: `${batches.length} batches available for side-by-side review`,
     },
   ]), [batches.length, runs.length, templates.length]);
 
   const note = isLoading ?
     "Loading analytics landing summary from GET /admin/analytics..." :
-    `${inlineMessage ?? "Analytics comparison workspace ready."} Current role: ${accessContext.role ?? "unknown"}. Current layer: ${accessContext.licenseLayer ?? "unlicensed"}. Analytics stays comparison-only and does not duplicate student, assignment, or template detail pages.`;
+    `${inlineMessage ?? "Analytics workspace ready."} Current role: ${accessContext.role ?? "unknown"}. Current layer: ${accessContext.licenseLayer ?? "unlicensed"}. This area stays focused on quick comparison, while detailed follow-up continues inside the main tests, students, and assignments pages.`;
 
   return (
     <AdminWorkspaceLandingPage
       eyebrow="Analytics Workspace"
-      title="Cross-Entity Analytics Workspace"
+      title="Teacher-Friendly Analytics Workspace"
       description={[
-        "This module now follows the updated architecture contract: Analytics is reserved for cross-entity comparison only.",
-        "The analytics surfaces here are cross-template analytics and cross-batch analytics, each with shared layer visibility and canonical drill-through into ownership pages.",
+        "Use this space for quick comparison across tests and batches without leaving the admin teaching workflow.",
+        "Each workspace is built for summary-first review, with drill-through links when you want to inspect a specific test, batch, or assignment more closely.",
       ]}
       note={note}
       stats={[
         {
           label: "Analytics Pages",
           value: "2",
-          detail: "Cross-template and cross-batch",
+          detail: "Cross-template and cross-batch views",
         },
         {
           label: "Runs Compared",
           value: String(runs.length),
-          detail: "Delivered run events in current dataset",
+          detail: "Recent test runs included in the summary",
         },
         {
           label: "Templates Compared",
           value: String(templates.length),
-          detail: "Reusable templates aggregated across runs",
+          detail: "Tests rolled up for comparison",
         },
         {
           label: "L2 Depth",
           value: showL2 ? "Enabled" : "Limited",
-          detail: showL2 ? "Execution and risk signals are visible" : "Execution and risk metrics unlock from L2",
+          detail: showL2 ? "Advanced execution signals are visible" : "Advanced execution signals unlock at L2",
         },
       ]}
       links={analyticsWorkspaces}

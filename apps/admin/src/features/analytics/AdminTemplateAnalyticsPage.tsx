@@ -6,7 +6,6 @@ import { LICENSE_LAYER_ORDER } from "../../../../../shared/types/portalRouting";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
 import AnalyticsWorkspaceNav from "./AnalyticsWorkspaceNav";
 import {
-  ANALYTICS_LAYER_OPTIONS,
   type AnalyticsLayer,
   buildScopeQuery,
   deriveRunRecords,
@@ -29,7 +28,6 @@ interface CrossTemplateFilters {
   subject: string;
   batch: string;
   mode: string;
-  layer: AnalyticsLayer;
 }
 
 interface KpiCard {
@@ -65,6 +63,15 @@ function average(values: number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+function renderMetricLine(label: string, value: string) {
+  return (
+    <div className="admin-analytics-metric-line">
+      <span className="admin-analytics-metric-label">{label}</span>
+      <span className="admin-analytics-metric-value">{value}</span>
+    </div>
+  );
+}
+
 function toChartPoints(rows: DerivedTemplateRecord[], selector: (row: DerivedTemplateRecord) => number): UiChartPoint[] {
   return rows.map((row) => ({
     label: row.templateName,
@@ -75,29 +82,29 @@ function toChartPoints(rows: DerivedTemplateRecord[], selector: (row: DerivedTem
 function buildKpis(rows: DerivedTemplateRecord[], layer: AnalyticsLayer): KpiCard[] {
   const cards: KpiCard[] = [
     {
-      label: "Active Templates",
+      label: "Tests in View",
       value: String(rows.length),
-      helper: "Templates in selected comparison scope",
+      helper: "Tests included in this review",
     },
     {
       label: "Total Runs",
       value: String(rows.reduce((sum, row) => sum + row.totalRuns, 0)),
-      helper: "Runs represented across compared templates",
+      helper: "Recent class runs behind this summary",
     },
     {
-      label: "Avg Runs per Template",
+      label: "Avg Runs per Test",
       value: rows.length > 0 ? String(Math.round(rows.reduce((sum, row) => sum + row.totalRuns, 0) / rows.length)) : "0",
-      helper: "Run density per template",
+      helper: "Typical usage per test",
     },
     {
-      label: "Avg Raw Score Percentage",
+      label: "Avg Raw Score",
       value: formatPercent(average(rows.map((row) => row.avgRawScorePercent))),
-      helper: "L0 template outcome average",
+      helper: "Average result across visible tests",
     },
     {
-      label: "Avg Accuracy Percentage",
+      label: "Avg Accuracy",
       value: formatPercent(average(rows.map((row) => row.avgAccuracyPercent))),
-      helper: "L0 template outcome average",
+      helper: "Average accuracy across visible tests",
     },
   ];
 
@@ -106,17 +113,17 @@ function buildKpis(rows: DerivedTemplateRecord[], layer: AnalyticsLayer): KpiCar
       {
         label: "Avg Phase Adherence",
         value: formatPercent(average(rows.map((row) => average(row.runs.map((run) => run.phaseAdherencePercent))))),
-        helper: "L1 template behavior average",
+        helper: "Average pacing discipline across tests",
       },
       {
         label: "Avg Easy Neglect",
         value: formatPercent(average(rows.map((row) => row.avgRiskShiftPercent * 0.45))),
-        helper: "Approximate neglect pressure",
+        helper: "Approximate easy-question neglect signal",
       },
       {
         label: "Avg Hard Bias",
         value: formatPercent(average(rows.map((row) => row.avgRiskShiftPercent * 0.35))),
-        helper: "Approximate hard-bias pressure",
+        helper: "Approximate hard-question overfocus signal",
       },
     );
   }
@@ -126,27 +133,27 @@ function buildKpis(rows: DerivedTemplateRecord[], layer: AnalyticsLayer): KpiCar
       {
         label: "Avg Discipline Index",
         value: formatPercent(average(rows.map((row) => row.avgDisciplineIndex))),
-        helper: "L2 execution quality",
+        helper: "Execution steadiness across tests",
       },
       {
         label: "Avg Guess Rate",
         value: formatPercent(average(rows.map((row) => row.avgRiskShiftPercent * 0.5))),
-        helper: "Estimated guess pressure proxy",
+        helper: "Estimated guess-pressure signal",
       },
       {
         label: "Avg Controlled Mode Delta",
         value: formatPercent(average(rows.map((row) => row.avgControlledModeDelta))),
-        helper: "Controlled-mode performance shift",
+        helper: "Change seen in controlled delivery",
       },
       {
-        label: "High-Risk Template Count",
+        label: "Tests Needing Review",
         value: String(rows.filter((row) => row.avgRiskShiftPercent >= 18).length),
-        helper: "Templates with strong risk shift",
+        helper: "Tests showing stronger risk drift",
       },
       {
-        label: "Unstable Template Count",
+        label: "Unsteady Tests",
         value: String(rows.filter((row) => row.stabilityFlag === "Unstable").length),
-        helper: "Templates with unstable execution",
+        helper: "Tests with less consistent execution",
       },
     );
   }
@@ -158,41 +165,32 @@ function buildColumns(layer: AnalyticsLayer): UiTableColumn<DerivedTemplateRecor
   const columns: UiTableColumn<DerivedTemplateRecord>[] = [
     {
       id: "name",
-      header: "Template Name",
+      header: "Test",
       render: (row) => (
         <div className="admin-analytics-run-cell">
           <strong>{row.templateName}</strong>
-          <small>{row.subject} · {row.templateType}</small>
+          <small>{row.subject} · Last used {row.runs[0]?.completedOn.slice(0, 10) ?? "N/A"}</small>
         </div>
       ),
     },
     {
-      id: "subject",
-      header: "Subject",
-      render: (row) => row.subject,
-    },
-    {
-      id: "runs",
-      header: "Runs",
-      render: (row) => row.totalRuns,
-    },
-    {
-      id: "batches",
-      header: "Batches Used In",
-      render: (row) => new Set(row.runs.map((run) => run.runName.split("/")[1]?.trim() || "Shared scope")).size,
-    },
-    {
-      id: "lastUsed",
-      header: "Last Used",
-      render: (row) => row.runs[0]?.completedOn.slice(0, 10) ?? "N/A",
+      id: "usage",
+      header: "Usage",
+      render: (row) => (
+        <div className="admin-analytics-score-cell">
+          {renderMetricLine("Runs", String(row.totalRuns))}
+          {renderMetricLine("Batches", String(new Set(row.runs.map((run) => run.runName.split("/")[1]?.trim() || "Shared scope")).size))}
+        </div>
+      ),
     },
     {
       id: "l0",
-      header: "L0 Summary",
+      header: "Score Snapshot",
       render: (row) => (
         <div className="admin-analytics-score-cell">
-          <strong>{formatPercent(row.avgRawScorePercent)} / {formatPercent(row.avgAccuracyPercent)}</strong>
-          <small>Participation {formatPercent(row.avgParticipationPercent)} · Completion {formatPercent(row.avgCompletionPercent)}</small>
+          {renderMetricLine("Raw Score", formatPercent(row.avgRawScorePercent))}
+          {renderMetricLine("Accuracy", formatPercent(row.avgAccuracyPercent))}
+          {renderMetricLine("Participation", formatPercent(row.avgParticipationPercent))}
         </div>
       ),
     },
@@ -201,11 +199,12 @@ function buildColumns(layer: AnalyticsLayer): UiTableColumn<DerivedTemplateRecor
   if (layer === "L1" || layer === "L2") {
     columns.push({
       id: "l1",
-      header: "L1 Signals",
+      header: "Learning Signals",
       render: (row) => (
         <div className="admin-analytics-discipline-cell">
-          <strong>{formatPercent(average(row.runs.map((run) => run.phaseAdherencePercent)))}</strong>
-          <small>{row.dominantBehaviorTag} · Phase variance {formatPercent(row.phaseAdherenceVariance)}</small>
+          {renderMetricLine("Phase Adherence", formatPercent(average(row.runs.map((run) => run.phaseAdherencePercent))))}
+          {renderMetricLine("Main Pattern", row.dominantBehaviorTag)}
+          {renderMetricLine("Phase Variance", formatPercent(row.phaseAdherenceVariance))}
         </div>
       ),
     });
@@ -214,11 +213,14 @@ function buildColumns(layer: AnalyticsLayer): UiTableColumn<DerivedTemplateRecor
   if (layer === "L2") {
     columns.push({
       id: "l2",
-      header: "L2 Signals",
+      header: "Execution Signals",
       render: (row) => (
         <div className="admin-analytics-discipline-cell">
-          <strong>{formatPercent(row.avgDisciplineIndex)} · {row.stabilityFlag}</strong>
-          <small>{row.riskMixLabel} · Shift {formatPercent(row.avgRiskShiftPercent)} · Delta {formatPercent(row.avgControlledModeDelta)}</small>
+          {renderMetricLine("Discipline Index", formatPercent(row.avgDisciplineIndex))}
+          {renderMetricLine("Stability", row.stabilityFlag)}
+          {renderMetricLine("Risk Mix", row.riskMixLabel)}
+          {renderMetricLine("Risk Shift", formatPercent(row.avgRiskShiftPercent))}
+          {renderMetricLine("Controlled Delta", formatPercent(row.avgControlledModeDelta))}
         </div>
       ),
     });
@@ -270,7 +272,6 @@ function AdminTemplateAnalyticsPage() {
     subject: "all",
     batch: "all",
     mode: "all",
-    layer: isL2OrAbove ? "L2" : (isL1OrAbove ? "L1" : "L0"),
   });
 
   useEffect(() => {
@@ -340,8 +341,12 @@ function AdminTemplateAnalyticsPage() {
   }, [filters, runs]);
 
   const rows = useMemo(() => deriveTemplateRecords(filteredRuns), [filteredRuns]);
-  const kpis = useMemo(() => buildKpis(rows, filters.layer), [filters.layer, rows]);
-  const columns = useMemo(() => buildColumns(filters.layer), [filters.layer]);
+  const effectiveLayer = useMemo<AnalyticsLayer>(
+    () => (isL2OrAbove ? "L2" : (isL1OrAbove ? "L1" : "L0")),
+    [isL1OrAbove, isL2OrAbove],
+  );
+  const kpis = useMemo(() => buildKpis(rows, effectiveLayer), [effectiveLayer, rows]);
+  const columns = useMemo(() => buildColumns(effectiveLayer), [effectiveLayer]);
 
   const charts = useMemo(() => {
     const items = [
@@ -367,7 +372,7 @@ function AdminTemplateAnalyticsPage() {
       },
     ];
 
-    if (filters.layer === "L1" || filters.layer === "L2") {
+    if (effectiveLayer === "L1" || effectiveLayer === "L2") {
       items.push(
         {
           title: "Phase Adherence by Template",
@@ -387,7 +392,7 @@ function AdminTemplateAnalyticsPage() {
       );
     }
 
-    if (filters.layer === "L2") {
+    if (effectiveLayer === "L2") {
       items.push(
         {
           title: "Discipline by Template",
@@ -413,11 +418,11 @@ function AdminTemplateAnalyticsPage() {
     }
 
     return items;
-  }, [filters.layer, rows]);
+  }, [effectiveLayer, rows]);
 
   const note = isLoading ?
     "Loading cross-template analytics from GET /admin/analytics..." :
-    `${inlineMessage ?? "Cross-template analytics ready."} This page compares template portfolios only and routes one-template drill-down back into Tests ownership pages.`;
+    `${inlineMessage ?? "Cross-template analytics ready."} This page helps teachers compare tests quickly, then jump into the main Tests, Assignments, or Batch pages for follow-up work. ${effectiveLayer} details appear automatically from the institute license.`;
 
   return (
     <section className="admin-content-card" aria-labelledby="admin-cross-template-title">
@@ -427,10 +432,10 @@ function AdminTemplateAnalyticsPage() {
           <p className="admin-content-eyebrow">Analytics / Cross-Template Analytics</p>
           <h2 id="admin-cross-template-title">Cross-Template Analytics</h2>
           <p>
-            Compare reusable templates across many runs and time windows without turning Analytics into a replacement for template detail.
+            Compare tests across recent use, class coverage, and outcome patterns without overloading the table with extra operational detail.
           </p>
         </div>
-        <div className="admin-analytics-run-source-chip">Layer visibility {filters.layer}</div>
+        <div className="admin-analytics-run-source-chip">License layer {effectiveLayer}</div>
       </div>
 
       <p className="admin-analytics-inline-note">{note}</p>
@@ -473,14 +478,6 @@ function AdminTemplateAnalyticsPage() {
             ))}
           </select>
         </label>
-        <label htmlFor="cross-template-layer">
-          Layer Visibility
-          <select id="cross-template-layer" value={filters.layer} onChange={(event) => setFilters((current) => ({ ...current, layer: event.target.value as AnalyticsLayer }))}>
-            {ANALYTICS_LAYER_OPTIONS.filter((layer) => (layer === "L2" ? isL2OrAbove : (layer === "L1" ? isL1OrAbove : true))).map((layer) => (
-              <option key={layer} value={layer}>{layer}</option>
-            ))}
-          </select>
-        </label>
       </div>
 
       <div className="admin-analytics-kpi-grid">
@@ -502,7 +499,7 @@ function AdminTemplateAnalyticsPage() {
       <section className="admin-analytics-run-summary" aria-labelledby="cross-template-table-title">
         <h3 id="cross-template-table-title">Comparison Table</h3>
         <UiTable
-          caption="Cross-template comparison table"
+          caption="Lean teacher review table for comparing tests"
           columns={columns}
           rows={rows}
           rowKey={(row) => row.templateId}

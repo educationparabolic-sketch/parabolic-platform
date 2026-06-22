@@ -54,13 +54,8 @@ const AdminAssignmentLiveRunPage = lazy(() => import("./features/assignments/Adm
 const AdminAssignmentDetailPage = lazy(() => import("./features/assignments/AdminAssignmentDetailPage"));
 const AdminAssignmentsLandingPage = lazy(() => import("./features/assignments/AdminAssignmentsLandingPage"));
 const AssignmentManagementPage = lazy(() => import("./features/assignments/AssignmentManagementPage"));
-const AdminExecutionSignalsPage = lazy(() => import("./features/insights/AdminExecutionSignalsPage"));
 const AdminInsightsLandingPage = lazy(() => import("./features/insights/AdminInsightsLandingPage"));
-const AdminMonthlySummaryPage = lazy(() => import("./features/insights/AdminMonthlySummaryPage"));
 const AdminRiskOverviewPage = lazy(() => import("./features/insights/AdminRiskOverviewPage"));
-const AdminPatternAlertsPage = lazy(() => import("./features/insights/AdminPatternAlertsPage"));
-const InterventionToolsPage = lazy(() => import("./features/insights/InterventionToolsPage"));
-const StudentIntelligencePage = lazy(() => import("./features/insights/StudentIntelligencePage"));
 const AdminHelpSupportPage = lazy(() => import("./features/support/AdminHelpSupportPage"));
 const AdminCurrentLicensePage = lazy(() => import("./features/licensing/AdminCurrentLicensePage"));
 const AdminLicenseFeaturesPage = lazy(() => import("./features/licensing/AdminLicenseFeaturesPage"));
@@ -121,6 +116,11 @@ function NotFoundPage() {
 function AdminTestDetailRedirect() {
   const params = useParams<{ testId?: string }>();
   return <Navigate to={params.testId ? `/admin/tests/analytics/${params.testId}` : "/admin/tests/library"} replace />;
+}
+
+function AdminInsightsStudentRedirect() {
+  const params = useParams<{ studentId?: string }>();
+  return <Navigate to={params.studentId ? `/admin/students/${params.studentId}` : "/admin/students/list"} replace />;
 }
 
 const ADMIN_SIDEBAR_STORAGE_KEY = "admin-sidebar-collapsed";
@@ -818,24 +818,24 @@ function App() {
         />
         <Route path="governance/*" element={<AdminRouteResolutionPage />} />
         <Route
-          path="insights/interventions"
-          element={<AdminRouteBoundary label="Loading interventions"><InterventionToolsPage /></AdminRouteBoundary>}
-        />
-        <Route
           path="insights/student/:studentId"
-          element={<AdminRouteBoundary label="Loading student intelligence"><StudentIntelligencePage /></AdminRouteBoundary>}
+          element={<AdminInsightsStudentRedirect />}
         />
         <Route
           path="insights/patterns"
-          element={<AdminRouteBoundary label="Loading insight patterns"><AdminPatternAlertsPage /></AdminRouteBoundary>}
+          element={<Navigate to="/admin/insights/risk" replace />}
         />
         <Route
           path="insights/execution"
-          element={<AdminRouteBoundary label="Loading execution insights"><AdminExecutionSignalsPage /></AdminRouteBoundary>}
+          element={<Navigate to="/admin/insights/risk" replace />}
         />
         <Route
           path="insights/monthly-summary"
-          element={<AdminRouteBoundary label="Loading monthly summaries"><AdminMonthlySummaryPage /></AdminRouteBoundary>}
+          element={<Navigate to="/admin/insights/risk" replace />}
+        />
+        <Route
+          path="insights/interventions"
+          element={<Navigate to="/admin/insights/risk" replace />}
         />
         <Route
           path="insights/risk"

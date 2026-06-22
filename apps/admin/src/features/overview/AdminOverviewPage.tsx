@@ -34,7 +34,7 @@ function formatSubmissionTimestamp(value: string): string {
 
 function metricCard(label: string, value: string, helper?: string, interpretation?: string) {
   return (
-    <article key={label} className="admin-analytics-kpi-card">
+    <article key={label} className="admin-analytics-kpi-card admin-overview-metric-card">
       <p>{label}</p>
       <h3>{value}</h3>
       {helper ? <small>{helper}</small> : null}
@@ -264,22 +264,76 @@ function AdminOverviewPage() {
     [snapshot],
   );
 
+  const heroSpotlights = useMemo(
+    () => [
+      {
+        label: "Current Layer",
+        value: snapshot.systemHealthAndLicensing.currentLayerBadge,
+        helper: "Enabled coverage",
+      },
+      {
+        label: "Active Students",
+        value: String(snapshot.operationalSnapshot.activeStudents),
+        helper: "Current year",
+      },
+      {
+        label: "Avg Raw Score",
+        value: formatPercent(snapshot.performanceSummary.avgRawScorePercentage),
+        helper: "Last 30 days",
+      },
+      {
+        label: "Live Sessions",
+        value: String(snapshot.operationalSnapshot.activeConcurrentSessions),
+        helper: "Right now",
+      },
+    ],
+    [snapshot],
+  );
+
   return (
     <section className="admin-content-card admin-overview-page" aria-labelledby="admin-overview-title">
       <p className="admin-content-eyebrow">Admin / Overview</p>
       <h2 id="admin-overview-title">Overview</h2>
       <div className="admin-overview-hero">
         <div className="admin-overview-hero-copy">
+          <div className="admin-overview-hero-kicker">Teacher-ready institute dashboard</div>
           <p className="admin-content-copy">
-            See what is happening now, how recent tests are going, and whether anything needs attention.
+            Track live activity, recent performance, and institute health from one polished overview without losing the meaning of each metric.
           </p>
+          <div className="admin-overview-hero-tags" aria-label="Overview context">
+            <span>{snapshot.academicYear}</span>
+            <span>Layer {snapshot.systemHealthAndLicensing.currentLayerBadge}</span>
+            <span>{isLoading ? "Refreshing data" : "Ready to review"}</span>
+          </div>
           <p className="admin-analytics-inline-note">
-            {isLoading ? "Loading overview..." : "Overview is ready."}
+            {isLoading ? "Loading overview..." : "Overview is ready with current summary windows and drill-through signals."}
           </p>
         </div>
-        <div className="admin-overview-hero-meta" aria-label="Overview scope">
-          <span>{snapshot.academicYear} scope</span>
-          <span>Updated {formatIsoDate(snapshot.computedAt)}</span>
+        <div className="admin-overview-hero-panel">
+          <div className="admin-overview-hero-panel-header">
+            <div>
+              <p>At a glance</p>
+              <small>Fast teacher-facing summary</small>
+            </div>
+            <span>Updated {formatIsoDate(snapshot.computedAt)}</span>
+          </div>
+          <div className="admin-overview-hero-spotlights">
+            {heroSpotlights.map((item) => (
+              <article key={item.label} className="admin-overview-hero-spotlight">
+                <p>{item.label}</p>
+                <strong>{item.value}</strong>
+                <small>{item.helper}</small>
+              </article>
+            ))}
+          </div>
+          <div className="admin-overview-hero-actions">
+            <NavLink className="admin-primary-link" to="/admin/assignments/live">
+              Open Live Monitor
+            </NavLink>
+            <NavLink className="admin-secondary-link" to="/admin/analytics">
+              Open Analytics
+            </NavLink>
+          </div>
         </div>
       </div>
 

@@ -6,7 +6,6 @@ import { LICENSE_LAYER_ORDER } from "../../../../../shared/types/portalRouting";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
 import AnalyticsWorkspaceNav from "./AnalyticsWorkspaceNav";
 import {
-  ANALYTICS_LAYER_OPTIONS,
   type AnalyticsLayer,
   buildScopeQuery,
   deriveBatchRecords,
@@ -30,7 +29,6 @@ interface CrossBatchFilters {
   subject: string;
   program: string;
   mode: string;
-  layer: AnalyticsLayer;
 }
 
 interface KpiCard {
@@ -54,6 +52,15 @@ function average(values: number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+function renderMetricLine(label: string, value: string) {
+  return (
+    <div className="admin-analytics-metric-line">
+      <span className="admin-analytics-metric-label">{label}</span>
+      <span className="admin-analytics-metric-value">{value}</span>
+    </div>
+  );
+}
+
 function toChartPoints(rows: DerivedBatchRecord[], selector: (row: DerivedBatchRecord) => number): UiChartPoint[] {
   return rows.map((row) => ({
     label: row.batchName,
@@ -66,27 +73,27 @@ function buildKpis(rows: DerivedBatchRecord[], layer: AnalyticsLayer): KpiCard[]
     {
       label: "Total Batches",
       value: String(rows.length),
-      helper: "Batches in selected comparison scope",
+      helper: "Batches included in this review",
     },
     {
-      label: "Total Students in Scope",
+      label: "Students in View",
       value: String(rows.reduce((sum, row) => sum + row.studentCount, 0)),
-      helper: "Student cohorts represented",
+      helper: "Learners represented across visible batches",
     },
     {
-      label: "Avg Raw Score Percentage",
+      label: "Avg Raw Score",
       value: formatPercent(average(rows.map((row) => row.avgRawScorePercent))),
-      helper: "Cross-batch score average",
+      helper: "Average score across visible batches",
     },
     {
-      label: "Avg Accuracy Percentage",
+      label: "Avg Accuracy",
       value: formatPercent(average(rows.map((row) => row.avgAccuracyPercent))),
-      helper: "Cross-batch accuracy average",
+      helper: "Average accuracy across visible batches",
     },
     {
       label: "Avg Participation Rate",
       value: formatPercent(average(rows.map((row) => row.avgParticipationPercent))),
-      helper: "Cross-batch participation average",
+      helper: "Average participation across visible batches",
     },
   ];
 
@@ -95,17 +102,17 @@ function buildKpis(rows: DerivedBatchRecord[], layer: AnalyticsLayer): KpiCard[]
       {
         label: "Avg Phase Adherence",
         value: formatPercent(average(rows.map((row) => row.avgPhaseAdherencePercent))),
-        helper: "L1 cohort discipline average",
+        helper: "Average pacing discipline across batches",
       },
       {
         label: "Avg Easy Neglect",
         value: formatPercent(average(rows.map((row) => row.avgEasyNeglectPercent))),
-        helper: "L1 cohort neglect signal",
+        helper: "Easy-question neglect signal",
       },
       {
         label: "Avg Hard Bias",
         value: formatPercent(average(rows.map((row) => row.avgHardBiasPercent))),
-        helper: "L1 cohort hard-bias signal",
+        helper: "Hard-question overfocus signal",
       },
     );
   }
@@ -115,27 +122,27 @@ function buildKpis(rows: DerivedBatchRecord[], layer: AnalyticsLayer): KpiCard[]
       {
         label: "Avg Discipline Index",
         value: formatPercent(average(rows.map((row) => row.avgDisciplineIndex))),
-        helper: "L2 execution quality",
+        helper: "Execution steadiness across batches",
       },
       {
         label: "Avg Guess Rate",
         value: formatPercent(average(rows.map((row) => row.avgGuessRatePercent))),
-        helper: "L2 guess pressure",
+        helper: "Estimated guess-pressure signal",
       },
       {
         label: "Avg Controlled Mode Delta",
         value: formatPercent(average(rows.map((row) => row.avgControlledModeDelta))),
-        helper: "L2 controlled-mode delta",
+        helper: "Change seen in controlled delivery",
       },
       {
-        label: "High-Risk Batch Count",
+        label: "Batches Needing Review",
         value: String(rows.filter((row) => row.highRiskRunCount > 0).length),
-        helper: "Batches with risk-heavy run clusters",
+        helper: "Batches showing stronger risk clusters",
       },
       {
-        label: "Unstable Batch Count",
+        label: "Unsteady Batches",
         value: String(rows.filter((row) => row.stabilityFlag === "Unstable").length),
-        helper: "Batches with unstable execution",
+        helper: "Batches with less consistent execution",
       },
     );
   }
@@ -147,41 +154,41 @@ function buildColumns(layer: AnalyticsLayer): UiTableColumn<DerivedBatchRecord>[
   const columns: UiTableColumn<DerivedBatchRecord>[] = [
     {
       id: "batch",
-      header: "Batch Name",
+      header: "Batch",
       render: (row) => (
         <div className="admin-analytics-run-cell">
           <strong>{row.batchName}</strong>
-          <small>{row.program} · {row.subjects.join(", ") || "General"}</small>
         </div>
       ),
     },
     {
-      id: "year",
-      header: "Academic Year",
-      render: (row) => row.academicYear,
-    },
-    {
       id: "students",
-      header: "Student Count",
+      header: "Class Size",
       render: (row) => (
         <div className="admin-analytics-score-cell">
-          <strong>{row.studentCount}</strong>
-          <small>Active {row.activeStudentCount}</small>
+          {renderMetricLine("Students", String(row.studentCount))}
+          {renderMetricLine("Active", String(row.activeStudentCount))}
         </div>
       ),
     },
     {
       id: "activity",
-      header: "Last Activity Window",
-      render: (row) => formatIsoDate(row.lastActivityAt),
+      header: "Recent Activity",
+      render: (row) => (
+        <div className="admin-analytics-score-cell">
+          {renderMetricLine("Last Run", formatIsoDate(row.lastActivityAt))}
+          {renderMetricLine("Runs in Scope", String(row.runCount))}
+        </div>
+      ),
     },
     {
       id: "l0",
-      header: "L0 Summary",
+      header: "Score Snapshot",
       render: (row) => (
         <div className="admin-analytics-score-cell">
-          <strong>{formatPercent(row.avgRawScorePercent)} / {formatPercent(row.avgAccuracyPercent)}</strong>
-          <small>Participation {formatPercent(row.avgParticipationPercent)} · Completion {formatPercent(row.avgCompletionPercent)}</small>
+          {renderMetricLine("Raw Score", formatPercent(row.avgRawScorePercent))}
+          {renderMetricLine("Accuracy", formatPercent(row.avgAccuracyPercent))}
+          {renderMetricLine("Participation", formatPercent(row.avgParticipationPercent))}
         </div>
       ),
     },
@@ -190,11 +197,13 @@ function buildColumns(layer: AnalyticsLayer): UiTableColumn<DerivedBatchRecord>[
   if (layer === "L1" || layer === "L2") {
     columns.push({
       id: "l1",
-      header: "L1 Signals",
+      header: "Learning Signals",
       render: (row) => (
         <div className="admin-analytics-discipline-cell">
-          <strong>{formatPercent(row.avgPhaseAdherencePercent)}</strong>
-          <small>Neglect {formatPercent(row.avgEasyNeglectPercent)} · Bias {formatPercent(row.avgHardBiasPercent)} · {row.dominantBehaviorTag}</small>
+          {renderMetricLine("Phase Adherence", formatPercent(row.avgPhaseAdherencePercent))}
+          {renderMetricLine("Main Pattern", row.dominantBehaviorTag)}
+          {renderMetricLine("Easy Neglect", formatPercent(row.avgEasyNeglectPercent))}
+          {renderMetricLine("Hard Bias", formatPercent(row.avgHardBiasPercent))}
         </div>
       ),
     });
@@ -203,11 +212,14 @@ function buildColumns(layer: AnalyticsLayer): UiTableColumn<DerivedBatchRecord>[
   if (layer === "L2") {
     columns.push({
       id: "l2",
-      header: "L2 Signals",
+      header: "Execution Signals",
       render: (row) => (
         <div className="admin-analytics-discipline-cell">
-          <strong>{formatPercent(row.avgDisciplineIndex)} · {row.stabilityFlag}</strong>
-          <small>Guess {formatPercent(row.avgGuessRatePercent)} · {row.riskMixLabel} · Delta {formatPercent(row.avgControlledModeDelta)}</small>
+          {renderMetricLine("Discipline Index", formatPercent(row.avgDisciplineIndex))}
+          {renderMetricLine("Stability", row.stabilityFlag)}
+          {renderMetricLine("Guess Rate", formatPercent(row.avgGuessRatePercent))}
+          {renderMetricLine("Risk Mix", row.riskMixLabel)}
+          {renderMetricLine("Controlled Delta", formatPercent(row.avgControlledModeDelta))}
         </div>
       ),
     });
@@ -262,7 +274,6 @@ function BatchAnalyticsDashboardPage() {
     subject: "all",
     program: "all",
     mode: "all",
-    layer: isL2OrAbove ? "L2" : (isL1OrAbove ? "L1" : "L0"),
   });
 
   useEffect(() => {
@@ -332,8 +343,12 @@ function BatchAnalyticsDashboardPage() {
   }, [filters, runs]);
 
   const rows = useMemo(() => deriveBatchRecords(filteredRuns, dataset.studentYearMetrics), [dataset.studentYearMetrics, filteredRuns]);
-  const kpis = useMemo(() => buildKpis(rows, filters.layer), [filters.layer, rows]);
-  const columns = useMemo(() => buildColumns(filters.layer), [filters.layer]);
+  const effectiveLayer = useMemo<AnalyticsLayer>(
+    () => (isL2OrAbove ? "L2" : (isL1OrAbove ? "L1" : "L0")),
+    [isL1OrAbove, isL2OrAbove],
+  );
+  const kpis = useMemo(() => buildKpis(rows, effectiveLayer), [effectiveLayer, rows]);
+  const columns = useMemo(() => buildColumns(effectiveLayer), [effectiveLayer]);
 
   const charts = useMemo(() => {
     const items = [
@@ -359,7 +374,7 @@ function BatchAnalyticsDashboardPage() {
       },
     ];
 
-    if (filters.layer === "L1" || filters.layer === "L2") {
+    if (effectiveLayer === "L1" || effectiveLayer === "L2") {
       items.push(
         {
           title: "Phase Adherence by Batch",
@@ -379,7 +394,7 @@ function BatchAnalyticsDashboardPage() {
       );
     }
 
-    if (filters.layer === "L2") {
+    if (effectiveLayer === "L2") {
       items.push(
         {
           title: "Discipline by Batch",
@@ -410,11 +425,11 @@ function BatchAnalyticsDashboardPage() {
     }
 
     return items;
-  }, [filters.layer, rows]);
+  }, [effectiveLayer, rows]);
 
   const note = isLoading ?
     "Loading cross-batch analytics from GET /admin/analytics..." :
-    `${inlineMessage ?? "Cross-batch analytics ready."} This page compares institute cohorts only and routes one-batch deep work into Students or Insights pages.`;
+    `${inlineMessage ?? "Cross-batch analytics ready."} This page helps teachers compare batches quickly, then move into Students, Assignments, or Insights for deeper follow-up. ${effectiveLayer} details appear automatically from the institute license.`;
 
   return (
     <section className="admin-content-card" aria-labelledby="admin-cross-batch-title">
@@ -424,10 +439,10 @@ function BatchAnalyticsDashboardPage() {
           <p className="admin-content-eyebrow">Analytics / Cross-Batch Analytics</p>
           <h2 id="admin-cross-batch-title">Cross-Batch Analytics</h2>
           <p>
-            Compare cohorts institute-wide across performance, behavior, and execution quality without replacing the canonical batch workspace inside Students.
+            Compare batches side by side across outcomes, participation, and support signals in a simpler teacher-facing view.
           </p>
         </div>
-        <div className="admin-analytics-run-source-chip">Layer visibility {filters.layer}</div>
+        <div className="admin-analytics-run-source-chip">License layer {effectiveLayer}</div>
       </div>
 
       <p className="admin-analytics-inline-note">{note}</p>
@@ -470,14 +485,6 @@ function BatchAnalyticsDashboardPage() {
             ))}
           </select>
         </label>
-        <label htmlFor="cross-batch-layer">
-          Layer Visibility
-          <select id="cross-batch-layer" value={filters.layer} onChange={(event) => setFilters((current) => ({ ...current, layer: event.target.value as AnalyticsLayer }))}>
-            {ANALYTICS_LAYER_OPTIONS.filter((layer) => (layer === "L2" ? isL2OrAbove : (layer === "L1" ? isL1OrAbove : true))).map((layer) => (
-              <option key={layer} value={layer}>{layer}</option>
-            ))}
-          </select>
-        </label>
       </div>
 
       <div className="admin-analytics-kpi-grid">
@@ -499,7 +506,7 @@ function BatchAnalyticsDashboardPage() {
       <section className="admin-analytics-run-summary" aria-labelledby="cross-batch-table-title">
         <h3 id="cross-batch-table-title">Comparison Table</h3>
         <UiTable
-          caption="Cross-batch comparison table"
+          caption="Lean teacher review table for comparing batches"
           columns={columns}
           rows={rows}
           rowKey={(row) => row.batchId}
