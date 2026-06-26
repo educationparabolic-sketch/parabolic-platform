@@ -8,13 +8,32 @@ import { getPortalApiClient } from "../../../shared/services/portalIntegration";
 import "./App.css";
 
 type QuestionPaletteStatus = "not_visited" | "not_answered" | "answered" | "marked" | "answered_marked";
-type ExecutionMode = "Operational" | "Diagnostic" | "Controlled" | "Hard";
+type ExecutionMode = "Operational" | "Controlled" | "Focused" | "Hard";
 type QuestionSection = "Physics" | "Chemistry" | "Mathematics";
 type QuestionType = "mcq" | "numeric" | "matrix";
 type DifficultyBand = "easy" | "medium" | "hard";
-type PhaseId = "phase1" | "phase2" | "phase3";
+type PhaseId = "phase1" | "phase2" | "phase3" | "buffer";
 type SubmissionReason = "manual" | "expiry";
 type SessionLifecycleState = "created" | "started" | "active" | "submitted" | "expired" | "terminated";
+type ExamEntryStage = "entry_not_open" | "pre_exam_lobby" | "instructions_waiting" | "entry_closed" | "exam_active";
+type PreExamCheckState = "pending" | "passed" | "failed" | "skipped";
+type BrowserIntegritySeverity = "info" | "warning" | "blocking";
+type BrowserIntegrityEventType =
+  | "FULLSCREEN_ENTERED"
+  | "FULLSCREEN_REQUEST_FAILED"
+  | "FULLSCREEN_EXIT"
+  | "FULLSCREEN_REENTERED"
+  | "TAB_SWITCH"
+  | "WINDOW_BLUR"
+  | "WINDOW_FOCUS_RETURNED"
+  | "COPY_BLOCKED"
+  | "PASTE_BLOCKED"
+  | "CUT_BLOCKED"
+  | "CONTEXT_MENU_BLOCKED"
+  | "SHORTCUT_BLOCKED"
+  | "DEVTOOLS_SUSPECTED"
+  | "NETWORK_LOSS"
+  | "RECONNECTED";
 type CalculatorOperation =
   | "sqrt"
   | "square"
@@ -91,6 +110,7 @@ interface PhaseConfigSnapshot {
   phase1Percent: number;
   phase2Percent: number;
   phase3Percent: number;
+  bufferPercent: number;
 }
 
 interface DifficultyDistributionSnapshot {
@@ -152,6 +172,23 @@ interface AdaptivePhaseSnapshot {
   difficultyCompliancePercent: number;
   skipPatternScore: number;
   disciplineIndex: number;
+}
+
+interface BrowserIntegrityEvent {
+  eventId: string;
+  eventType: BrowserIntegrityEventType;
+  severity: BrowserIntegritySeverity;
+  timestamp: string;
+  phaseId: PhaseId | "instructions" | "lobby";
+  details: string;
+}
+
+interface ExamSessionSchedule {
+  earlyEntryOpensAtMs: number;
+  sessionStartsAtMs: number;
+  sessionEndsAtMs: number;
+  durationMs: number;
+  earlyEntryBufferMinutes: number;
 }
 
 interface QueuedAnswerWrite {
@@ -261,6 +298,18 @@ const RECOVERY_DB_NAME = "parabolic-exam-runtime";
 const RECOVERY_STORE_NAME = "sessionRecovery";
 const RECOVERY_SAVE_INTERVAL_MS = 3_000;
 const DEV_MOCK_SESSION_TOKEN = "dev";
+const BROWSER_INTEGRITY_EVENT_LIMIT = 60;
+const DEVTOOLS_SIZE_THRESHOLD_PX = 160;
+const DEV_MOCK_SESSION_START_DELAY_MS = 5 * 60_000;
+const DEV_MOCK_EARLY_ENTRY_BUFFER_MINUTES = 30;
+
+const GAZE_CALIBRATION_POINTS = [
+  { id: "center", label: "Center", x: 50, y: 50 },
+  { id: "left", label: "Left", x: 12, y: 50 },
+  { id: "right", label: "Right", x: 88, y: 50 },
+  { id: "top", label: "Top", x: 50, y: 14 },
+  { id: "bottom", label: "Bottom", x: 50, y: 86 },
+] as const;
 
 const MARKING_SCHEME = [
   "+4 for each correct answer",
@@ -280,29 +329,33 @@ const MODE_INSTRUCTIONS: Record<ExecutionMode, ModeInstruction> = {
   Operational: {
     title: "Operational Mode",
     points: [
-      "Free question navigation is available across all sections.",
-      "No pacing interventions are enforced in this mode.",
-    ],
-  },
-  Diagnostic: {
-    title: "L1 Diagnostic Mode",
-    points: [
-      "Diagnostic advisories may appear to guide pacing awareness.",
-      "No blocking actions are enforced; this mode remains advisory.",
+      "Free question navigation is available across all sections for the full exam.",
+      "No phase awareness, question visibility restriction, or pacing intervention is shown to the candidate.",
+      "Behaviour events are captured silently for post-submit analytics.",
     ],
   },
   Controlled: {
-    title: "L2 Controlled Mode",
+    title: "Controlled Mode",
     points: [
-      "Minimum engagement timing is enforced per question.",
-      "Save actions may remain disabled until minimum timing conditions are met.",
+      "Phase objectives, phase timer, and progress indicators are visible.",
+      "You may navigate to any question, and phase expiry starts overstay instead of forcing transition.",
+      "Proceed to Phase 2 unlocks only after every question has been viewed.",
+    ],
+  },
+  Focused: {
+    title: "Focused Mode",
+    points: [
+      "Phase transitions happen automatically at the configured phase boundaries.",
+      "Phase 2 shows answered-and-marked questions only; Phase 3 shows unanswered-and-marked questions only.",
+      "Questions hidden by phase rules return in the buffer phase.",
     ],
   },
   Hard: {
     title: "Hard Mode",
     points: [
-      "Minimum and maximum timing limits may be enforced per question.",
-      "Revisit and free navigation behavior can be restricted by session policy.",
+      "Focused phase visibility rules are enforced.",
+      "Minimum thinking time is enforced before navigation or save actions unlock.",
+      "Sequential progression and question discipline events are captured for training analytics.",
     ],
   },
 };
@@ -345,13 +398,13 @@ function parseExecutionMode(value: unknown): ExecutionMode | null {
   if (normalized === "operational" || normalized === "l0") {
     return "Operational";
   }
-  if (normalized === "diagnostic" || normalized === "l1") {
-    return "Diagnostic";
-  }
-  if (normalized === "controlled" || normalized === "l2") {
+  if (normalized === "controlled" || normalized === "l1") {
     return "Controlled";
   }
-  if (normalized === "hard" || normalized === "l3") {
+  if (normalized === "focused" || normalized === "l2") {
+    return "Focused";
+  }
+  if (normalized === "hard") {
     return "Hard";
   }
 
@@ -396,7 +449,7 @@ function isExamDevMockEntryEnabled(): boolean {
 }
 
 function buildDevMockTokenClaims(sessionId: string, modeOverride: string | null): TokenClaims {
-  const resolvedMode = parseExecutionMode(modeOverride) ?? "Controlled";
+  const resolvedMode = parseExecutionMode(modeOverride) ?? "Operational";
 
   return {
     sub: "Dev Mock Candidate",
@@ -633,6 +686,25 @@ function toPercent(numerator: number, denominator: number): number {
   return clamp((numerator / denominator) * 100, 0, 100);
 }
 
+function buildIntegrityEventId(eventType: BrowserIntegrityEventType): string {
+  return `${eventType.toLowerCase()}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function isBrowserFullscreenActive(): boolean {
+  return Boolean(document.fullscreenElement);
+}
+
+function isRestrictedKeyboardEvent(event: KeyboardEvent): boolean {
+  const key = event.key.toLowerCase();
+  const ctrlOrMeta = event.ctrlKey || event.metaKey;
+
+  return (
+    key === "f12" ||
+    (ctrlOrMeta && ["c", "v", "x", "p", "s", "u"].includes(key)) ||
+    (ctrlOrMeta && event.shiftKey && ["i", "j", "c"].includes(key))
+  );
+}
+
 function buildSessionSnapshot(sessionId: string, mode: ExecutionMode): SessionSnapshot {
   const questions: SessionQuestion[] = [
     {
@@ -757,8 +829,9 @@ function buildSessionSnapshot(sessionId: string, mode: ExecutionMode): SessionSn
     hardModeRevisitRestricted: mode === "Hard",
     phaseConfigSnapshot: {
       phase1Percent: 40,
-      phase2Percent: 45,
-      phase3Percent: 15,
+      phase2Percent: 30,
+      phase3Percent: 20,
+      bufferPercent: 10,
     },
     difficultyDistribution: {
       easyPercent: 35,
@@ -850,6 +923,27 @@ function toMinuteSecondCountdownLabel(durationMs: number): string {
   return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
 }
 
+function buildDevSessionSchedule(anchorMs: number, durationMs: number): ExamSessionSchedule {
+  const sessionStartsAtMs = anchorMs + DEV_MOCK_SESSION_START_DELAY_MS;
+  const sessionEndsAtMs = sessionStartsAtMs + durationMs;
+
+  return {
+    earlyEntryOpensAtMs: sessionStartsAtMs - DEV_MOCK_EARLY_ENTRY_BUFFER_MINUTES * 60_000,
+    sessionStartsAtMs,
+    sessionEndsAtMs,
+    durationMs,
+    earlyEntryBufferMinutes: DEV_MOCK_EARLY_ENTRY_BUFFER_MINUTES,
+  };
+}
+
+function toTimeLabel(epochMs: number): string {
+  return new Date(epochMs).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
 function hasAnswer(question: SessionQuestion, responseState: QuestionResponseState): boolean {
   if (question.type === "mcq") {
     return Boolean(responseState.selectedOptionId);
@@ -910,6 +1004,7 @@ function getPublicQuestionFieldKey(question: SessionQuestion): string {
 function getPhaseId(elapsedPercent: number, phaseConfigSnapshot: PhaseConfigSnapshot): PhaseId {
   const phase1Cutoff = phaseConfigSnapshot.phase1Percent;
   const phase2Cutoff = phaseConfigSnapshot.phase1Percent + phaseConfigSnapshot.phase2Percent;
+  const phase3Cutoff = phase2Cutoff + phaseConfigSnapshot.phase3Percent;
 
   if (elapsedPercent <= phase1Cutoff) {
     return "phase1";
@@ -917,7 +1012,10 @@ function getPhaseId(elapsedPercent: number, phaseConfigSnapshot: PhaseConfigSnap
   if (elapsedPercent <= phase2Cutoff) {
     return "phase2";
   }
-  return "phase3";
+  if (elapsedPercent <= phase3Cutoff) {
+    return "phase3";
+  }
+  return "buffer";
 }
 
 function getPhasePresentation(phaseId: PhaseId): PhasePresentation {
@@ -931,15 +1029,21 @@ function getPhasePresentation(phaseId: PhaseId): PhasePresentation {
     case "phase2":
       return {
         shortLabel: "Phase 2",
-        title: "Core Attempt",
-        description: "Spend the main exam window on your central problem-solving effort.",
+        title: "Verification",
+        description: "Review answered and marked questions with clean routing.",
       };
     case "phase3":
-    default:
       return {
         shortLabel: "Phase 3",
-        title: "Review and Closure",
-        description: "Use the closing window to review marked work and finish carefully.",
+        title: "Recovery",
+        description: "Review unanswered and marked questions before final closure.",
+      };
+    case "buffer":
+    default:
+      return {
+        shortLabel: "Buffer",
+        title: "Open Review",
+        description: "All questions are available again for final edits.",
       };
   }
 }
@@ -949,6 +1053,7 @@ function buildPhaseSchedule(totalDurationMs: number, phaseConfigSnapshot: PhaseC
     { phaseId: "phase1", percent: phaseConfigSnapshot.phase1Percent },
     { phaseId: "phase2", percent: phaseConfigSnapshot.phase2Percent },
     { phaseId: "phase3", percent: phaseConfigSnapshot.phase3Percent },
+    { phaseId: "buffer", percent: phaseConfigSnapshot.bufferPercent },
   ];
 
   let elapsedMs = 0;
@@ -1255,16 +1360,23 @@ function ExamSessionPage() {
   const modeInstruction = MODE_INSTRUCTIONS[entryValidation.claims.mode];
   const candidateName = entryValidation.claims.sub ?? "Student Candidate";
   const examApiClient = useMemo(() => getPortalApiClient("exam"), []);
+  const scheduleAnchorMsRef = useRef(Date.now());
 
   const sessionSnapshot = useMemo(
     () => buildSessionSnapshot(sessionId || "runtime-session", entryValidation.claims.mode),
     [entryValidation.claims.mode, sessionId],
   );
-  const totalDurationMs = useMemo(() => getSessionTotalDurationMs(sessionSnapshot), [sessionSnapshot]);
+  const templateDurationMs = useMemo(() => getSessionTotalDurationMs(sessionSnapshot), [sessionSnapshot]);
+  const sessionSchedule = useMemo(
+    () => buildDevSessionSchedule(scheduleAnchorMsRef.current, templateDurationMs),
+    [templateDurationMs],
+  );
+  const totalDurationMs = sessionSchedule.durationMs;
   const totalDurationMinutesLabel = useMemo(() => toDurationMinutesLabel(totalDurationMs), [totalDurationMs]);
 
   const [selectedSection, setSelectedSection] = useState<QuestionSection | "All">("All");
   const [selectedQuestionId, setSelectedQuestionId] = useState(sessionSnapshot.questions[0]?.id ?? "q-1");
+  const [entryStage, setEntryStage] = useState<ExamEntryStage>("pre_exam_lobby");
   const [declarationAccepted, setDeclarationAccepted] = useState(false);
   const [instructionConfirmed, setInstructionConfirmed] = useState(false);
   const [remainingMs, setRemainingMs] = useState(totalDurationMs);
@@ -1288,6 +1400,8 @@ function ExamSessionPage() {
   const preloadedQuestionImageUrlsRef = useRef<Set<string>>(new Set());
   const cachedQuestionSnapshotsRef = useRef<Map<string, SessionQuestion>>(new Map());
   const questionSnapshotReadCountRef = useRef<Map<string, number>>(new Map());
+  const devtoolsSuspectedRef = useRef(false);
+  const fullscreenExitActiveRef = useRef(false);
   const [skippedQuestionsCount, setSkippedQuestionsCount] = useState(0);
   const [sessionLifecycleState, setSessionLifecycleState] = useState<SessionLifecycleState>("created");
   const [submittedAtIso, setSubmittedAtIso] = useState<string | null>(null);
@@ -1309,13 +1423,31 @@ function ExamSessionPage() {
   const [serverEntryValidationStatus, setServerEntryValidationStatus] = useState<"pending" | "valid" | "invalid">(
     entryValidation.allowed ? "pending" : "invalid",
   );
+  const [controlledPhaseId, setControlledPhaseId] = useState<PhaseId>("phase1");
+  const [fullscreenGateError, setFullscreenGateError] = useState<string | null>(null);
+  const [browserIntegrityEvents, setBrowserIntegrityEvents] = useState<BrowserIntegrityEvent[]>([]);
+  const [integrityBlockingReason, setIntegrityBlockingReason] = useState<string | null>(null);
+  const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
+  const [browserReadinessState, setBrowserReadinessState] = useState<PreExamCheckState>("passed");
+  const [internetCheckState, setInternetCheckState] = useState<PreExamCheckState>("pending");
+  const [cameraCheckState, setCameraCheckState] = useState<PreExamCheckState>("pending");
+  const [faceVerificationState, setFaceVerificationState] = useState<PreExamCheckState>("pending");
+  const [gazeCalibrationState, setGazeCalibrationState] = useState<PreExamCheckState>("pending");
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [gazeCalibrationIndex, setGazeCalibrationIndex] = useState(0);
+  const [gazeCalibrationOverlayOpen, setGazeCalibrationOverlayOpen] = useState(false);
 
   const isOperationalMode = entryValidation.claims.mode === "Operational";
-  const isDiagnosticMode = entryValidation.claims.mode === "Diagnostic";
   const isControlledMode = entryValidation.claims.mode === "Controlled";
+  const isFocusedMode = entryValidation.claims.mode === "Focused";
   const isHardMode = entryValidation.claims.mode === "Hard";
+  const faceIdentityGazeGuardEnabled = useMemo(() => {
+    const value = new URLSearchParams(location.search).get("faceGaze");
+    return value?.toLowerCase() !== "off";
+  }, [location.search]);
   const hardModeMinimalUI = isHardMode;
-  const enforcementMode = isControlledMode || isHardMode;
+  const phaseVisibilityEnforced = isFocusedMode || isHardMode;
+  const questionTimingEnforced = isHardMode;
   const isSubmitted = sessionLifecycleState === "submitted";
   const tokenExpiryEpochSec = entryValidation.claims.exp;
   const instituteId = entryValidation.claims.instituteId ?? "inst-build-135";
@@ -1919,12 +2051,211 @@ function ExamSessionPage() {
     [hardModeLockedQuestionIds, questionTimingById, responseStateByQuestionId, sessionSnapshot.questions, visitedQuestionIds],
   );
 
+  const elapsedPercent = toPercent(totalDurationMs - remainingMs, totalDurationMs);
+  const automaticPhaseId = getPhaseId(elapsedPercent, sessionSnapshot.phaseConfigSnapshot);
+  const currentExamPhase = isControlledMode ? controlledPhaseId : automaticPhaseId;
+  const getIntegritySeverity = useCallback((eventType: BrowserIntegrityEventType): BrowserIntegritySeverity => {
+    if (eventType === "FULLSCREEN_ENTERED" || eventType === "FULLSCREEN_REENTERED" || eventType === "WINDOW_FOCUS_RETURNED" || eventType === "RECONNECTED") {
+      return "info";
+    }
+
+    return "blocking";
+  }, []);
+  const recordBrowserIntegrityEvent = useCallback((
+    eventType: BrowserIntegrityEventType,
+    details: string,
+    severityOverride?: BrowserIntegritySeverity,
+  ) => {
+    const severity = severityOverride ?? getIntegritySeverity(eventType);
+    const eventRecord: BrowserIntegrityEvent = {
+      eventId: buildIntegrityEventId(eventType),
+      eventType,
+      severity,
+      timestamp: new Date().toISOString(),
+      phaseId: instructionConfirmed ? currentExamPhase : entryStage === "pre_exam_lobby" ? "lobby" : "instructions",
+      details,
+    };
+
+    setBrowserIntegrityEvents((current) => [eventRecord, ...current].slice(0, BROWSER_INTEGRITY_EVENT_LIMIT));
+
+    if (severity === "blocking") {
+      setIntegrityBlockingReason(details);
+    }
+  }, [currentExamPhase, entryStage, getIntegritySeverity, instructionConfirmed]);
+  const requestExamFullscreen = useCallback(async (): Promise<boolean> => {
+    if (isBrowserFullscreenActive()) {
+      return true;
+    }
+
+    try {
+      await document.documentElement.requestFullscreen();
+      fullscreenExitActiveRef.current = false;
+      setIntegrityBlockingReason(null);
+      recordBrowserIntegrityEvent("FULLSCREEN_ENTERED", "Fullscreen entered for secure exam entry.", "info");
+      return true;
+    } catch {
+      recordBrowserIntegrityEvent("FULLSCREEN_REQUEST_FAILED", "Browser rejected fullscreen entry from exam start.", "warning");
+      return false;
+    }
+  }, [recordBrowserIntegrityEvent]);
+  const startInternetCheck = useCallback(() => {
+    if (!navigator.onLine) {
+      setInternetCheckState("failed");
+      return;
+    }
+
+    setInternetCheckState("passed");
+  }, []);
+  const startCameraCheck = useCallback(async () => {
+    if (!faceIdentityGazeGuardEnabled) {
+      setCameraCheckState("skipped");
+      setFaceVerificationState("skipped");
+      setGazeCalibrationState("skipped");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: "user",
+          width: { ideal: 960 },
+          height: { ideal: 540 },
+        },
+        audio: false,
+      });
+      setCameraStream(stream);
+      setCameraCheckState("passed");
+    } catch {
+      setCameraCheckState("failed");
+    }
+  }, [faceIdentityGazeGuardEnabled]);
+  const runFaceVerificationCheck = useCallback(() => {
+    if (!faceIdentityGazeGuardEnabled) {
+      setFaceVerificationState("skipped");
+      return;
+    }
+
+    if (cameraCheckState !== "passed") {
+      setFaceVerificationState("failed");
+      return;
+    }
+
+    setFaceVerificationState("passed");
+  }, [cameraCheckState, faceIdentityGazeGuardEnabled]);
+  const captureGazeCalibrationPoint = useCallback(() => {
+    if (!faceIdentityGazeGuardEnabled) {
+      setGazeCalibrationState("skipped");
+      return;
+    }
+
+    if (faceVerificationState !== "passed") {
+      setGazeCalibrationState("failed");
+      return;
+    }
+
+    setGazeCalibrationIndex((current) => {
+      const next = current + 1;
+      if (next >= GAZE_CALIBRATION_POINTS.length) {
+        setGazeCalibrationState("passed");
+        setGazeCalibrationOverlayOpen(false);
+        return current;
+      }
+
+      setGazeCalibrationState("pending");
+      return next;
+    });
+  }, [faceIdentityGazeGuardEnabled, faceVerificationState]);
+  const beginExamSession = useCallback(() => {
+    const activeSessionId = window.sessionStorage.getItem(activeSessionGuardKey);
+    if (activeSessionId && activeSessionId !== effectiveSessionId) {
+      setSessionConflictMessage(
+        "Another active session is already registered for this run in this browser profile. Resume that session or submit it before starting a new one.",
+      );
+      return false;
+    }
+
+    const remainingWindowMs = Math.max(0, sessionSchedule.sessionEndsAtMs - Date.now());
+    if (remainingWindowMs <= 0) {
+      setEntryStage("entry_closed");
+      return false;
+    }
+
+    setDeadlineEpochMs(sessionSchedule.sessionEndsAtMs);
+    setRemainingMs(remainingWindowMs);
+    setLastAnswerWriteAtMs(Date.now() - ANSWER_BATCH_INTERVAL_MS);
+    setPendingAnswerMap({});
+    setSyncState("idle");
+    setSyncMessage("No pending answer updates.");
+    setSessionConflictMessage(null);
+    setFullscreenGateError(null);
+    setSessionLifecycleState("started");
+    setRecoveryApplied(false);
+    setInstructionConfirmed(true);
+    setEntryStage("exam_active");
+    return true;
+  }, [activeSessionGuardKey, effectiveSessionId, sessionSchedule.sessionEndsAtMs]);
+  const preExamChecksPassed =
+    browserReadinessState === "passed" &&
+    internetCheckState === "passed" &&
+    (faceIdentityGazeGuardEnabled ?
+      cameraCheckState === "passed" && faceVerificationState === "passed" && gazeCalibrationState === "passed" :
+      cameraCheckState === "skipped" && faceVerificationState === "skipped" && gazeCalibrationState === "skipped");
+  const continueToInstructions = useCallback(() => {
+    void (async () => {
+      if (!preExamChecksPassed) {
+        return;
+      }
+
+      if (Date.now() >= sessionSchedule.sessionStartsAtMs) {
+        setEntryStage("entry_closed");
+        return;
+      }
+
+      const fullscreenEntered = await requestExamFullscreen();
+      if (!fullscreenEntered) {
+        setFullscreenGateError("Fullscreen permission is required before instructions can open. Use Continue to Instructions again and allow fullscreen.");
+        return;
+      }
+
+      setFullscreenGateError(null);
+      setEntryStage("instructions_waiting");
+    })();
+  }, [preExamChecksPassed, requestExamFullscreen, sessionSchedule.sessionStartsAtMs]);
+  const getQuestionPhaseVisibility = useCallback((question: SessionQuestion): boolean => {
+    if (!phaseVisibilityEnforced || currentExamPhase === "phase1" || currentExamPhase === "buffer") {
+      return true;
+    }
+
+    if (!visitedQuestionIds.has(question.id)) {
+      return false;
+    }
+
+    const responseState = responseStateByQuestionId[question.id] ?? {
+      selectedOptionId: null,
+      numericResponse: "",
+      matrixSelections: [],
+      markedForReview: false,
+    };
+    const answered = hasAnswer(question, responseState);
+
+    if (currentExamPhase === "phase2") {
+      return answered && responseState.markedForReview;
+    }
+
+    return !answered && responseState.markedForReview;
+  }, [currentExamPhase, phaseVisibilityEnforced, responseStateByQuestionId, visitedQuestionIds]);
+
   const filteredPalette = useMemo(
-    () =>
-      selectedSection === "All"
-        ? palette
-        : palette.filter((tile) => tile.section === selectedSection),
-    [palette, selectedSection],
+    () => {
+      const visibleQuestionIds = new Set(
+        sessionSnapshot.questions.filter((question) => getQuestionPhaseVisibility(question)).map((question) => question.id),
+      );
+
+      return (selectedSection === "All" ? palette : palette.filter((tile) => tile.section === selectedSection)).filter((tile) =>
+        visibleQuestionIds.has(tile.id),
+      );
+    },
+    [getQuestionPhaseVisibility, palette, selectedSection, sessionSnapshot.questions],
   );
 
   const questionSnapshotById = useMemo(
@@ -1962,6 +2293,11 @@ function ExamSessionPage() {
   const selectedQuestionTiming = selectedQuestion
     ? questionTimingById[selectedQuestion.id]
     : undefined;
+  const selectedQuestionVisible = selectedQuestion ? getQuestionPhaseVisibility(selectedQuestion) : false;
+  const visibleQuestionsForCurrentPhase = useMemo(
+    () => sessionSnapshot.questions.filter((question) => getQuestionPhaseVisibility(question)),
+    [getQuestionPhaseVisibility, sessionSnapshot.questions],
+  );
 
   useEffect(() => {
     cachedQuestionSnapshotsRef.current.clear();
@@ -1997,6 +2333,23 @@ function ExamSessionPage() {
   }, [nextQuestionImageSrc]);
 
   useEffect(() => {
+    if (!phaseVisibilityEnforced || !selectedQuestion || getQuestionPhaseVisibility(selectedQuestion)) {
+      return;
+    }
+
+    const fallbackQuestion = visibleQuestionsForCurrentPhase[0];
+    if (fallbackQuestion && fallbackQuestion.id !== selectedQuestion.id) {
+      navigateToQuestion(fallbackQuestion.id);
+    }
+  }, [
+    getQuestionPhaseVisibility,
+    phaseVisibilityEnforced,
+    selectedQuestion,
+    sessionSnapshot.questions,
+    visibleQuestionsForCurrentPhase,
+  ]);
+
+  useEffect(() => {
     if (!isHardMode || !selectedQuestion || isSubmitted) {
       return;
     }
@@ -2026,10 +2379,9 @@ function ExamSessionPage() {
   const notAnsweredCount = palette.filter((tile) => tile.status === "not_answered").length;
   const markedCount = palette.filter((tile) => tile.status === "marked" || tile.status === "answered_marked").length;
   const visitedCount = visitedQuestionIds.size;
-  const elapsedPercent = toPercent(totalDurationMs - remainingMs, totalDurationMs);
 
   const adaptivePhaseSnapshot = useMemo<AdaptivePhaseSnapshot>(() => {
-    const currentPhase = getPhaseId(elapsedPercent, sessionSnapshot.phaseConfigSnapshot);
+    const currentPhase = currentExamPhase;
     const answeredPercent = toPercent(answeredCount, sessionSnapshot.questions.length);
     const phaseAdherencePercent = clamp(100 - Math.abs(elapsedPercent - answeredPercent), 0, 100);
     const overspendPercent = clamp(elapsedPercent - answeredPercent, 0, 100);
@@ -2068,6 +2420,7 @@ function ExamSessionPage() {
     };
   }, [
     answeredCount,
+    currentExamPhase,
     elapsedPercent,
     questionTimingById,
     sessionSnapshot.difficultyDistribution.easyPercent,
@@ -2081,6 +2434,192 @@ function ExamSessionPage() {
   useEffect(() => {
     adaptivePhaseSnapshotRef.current = adaptivePhaseSnapshot;
   }, [adaptivePhaseSnapshot]);
+
+  useEffect(() => {
+    if (!faceIdentityGazeGuardEnabled) {
+      setCameraCheckState("skipped");
+      setFaceVerificationState("skipped");
+      setGazeCalibrationState("skipped");
+    }
+  }, [faceIdentityGazeGuardEnabled]);
+
+  useEffect(() => {
+    if (!cameraVideoRef.current || !cameraStream) {
+      return;
+    }
+
+    cameraVideoRef.current.srcObject = cameraStream;
+  }, [cameraStream]);
+
+  useEffect(() => {
+    return () => {
+      cameraStream?.getTracks().forEach((track) => track.stop());
+    };
+  }, [cameraStream]);
+
+  useEffect(() => {
+    if (instructionConfirmed || isSubmitted) {
+      return;
+    }
+
+    const preExamClockInterval = window.setInterval(() => {
+      setNowEpochMs(Date.now());
+    }, TICK_INTERVAL_MS);
+
+    return () => window.clearInterval(preExamClockInterval);
+  }, [instructionConfirmed, isSubmitted]);
+
+  useEffect(() => {
+    if (instructionConfirmed || isSubmitted) {
+      return;
+    }
+
+    if (nowEpochMs < sessionSchedule.earlyEntryOpensAtMs) {
+      setEntryStage("entry_not_open");
+      return;
+    }
+
+    if (entryStage === "entry_not_open" && nowEpochMs >= sessionSchedule.earlyEntryOpensAtMs && nowEpochMs < sessionSchedule.sessionStartsAtMs) {
+      setEntryStage("pre_exam_lobby");
+      return;
+    }
+
+    if (entryStage === "pre_exam_lobby" && nowEpochMs >= sessionSchedule.sessionStartsAtMs) {
+      setEntryStage("entry_closed");
+      return;
+    }
+
+    if (entryStage !== "instructions_waiting" || nowEpochMs < sessionSchedule.sessionStartsAtMs) {
+      return;
+    }
+
+    if (!declarationAccepted) {
+      setEntryStage("entry_closed");
+      return;
+    }
+
+    if (!isBrowserFullscreenActive()) {
+      setIntegrityBlockingReason("Fullscreen is required at official exam start. Re-enter fullscreen to open the question paper.");
+      return;
+    }
+
+    beginExamSession();
+  }, [
+    beginExamSession,
+    declarationAccepted,
+    entryStage,
+    instructionConfirmed,
+    isSubmitted,
+    nowEpochMs,
+    sessionSchedule.earlyEntryOpensAtMs,
+    sessionSchedule.sessionStartsAtMs,
+  ]);
+
+  useEffect(() => {
+    if ((!instructionConfirmed && entryStage !== "instructions_waiting") || isSubmitted) {
+      return;
+    }
+
+    const handleFullscreenChange = () => {
+      if (isBrowserFullscreenActive()) {
+        if (fullscreenExitActiveRef.current) {
+          recordBrowserIntegrityEvent("FULLSCREEN_REENTERED", "Student returned to fullscreen.", "info");
+        }
+        fullscreenExitActiveRef.current = false;
+        setIntegrityBlockingReason(null);
+        return;
+      }
+
+      fullscreenExitActiveRef.current = true;
+      recordBrowserIntegrityEvent("FULLSCREEN_EXIT", "Fullscreen was exited during the exam.");
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        recordBrowserIntegrityEvent("TAB_SWITCH", "Exam tab became hidden.");
+      }
+    };
+
+    const handleWindowBlur = () => {
+      recordBrowserIntegrityEvent("WINDOW_BLUR", "Exam window lost focus.");
+    };
+
+    const handleWindowFocus = () => {
+      recordBrowserIntegrityEvent("WINDOW_FOCUS_RETURNED", "Exam window focus returned.", "info");
+    };
+
+    const blockClipboardEvent = (event: ClipboardEvent) => {
+      event.preventDefault();
+      const eventType = event.type === "copy" ? "COPY_BLOCKED" : event.type === "paste" ? "PASTE_BLOCKED" : "CUT_BLOCKED";
+      recordBrowserIntegrityEvent(eventType, `${event.type} action was blocked during the exam.`);
+    };
+
+    const blockContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+      recordBrowserIntegrityEvent("CONTEXT_MENU_BLOCKED", "Context menu was blocked during the exam.");
+    };
+
+    const blockKeyboardShortcut = (event: KeyboardEvent) => {
+      if (!isRestrictedKeyboardEvent(event)) {
+        return;
+      }
+
+      event.preventDefault();
+      recordBrowserIntegrityEvent("SHORTCUT_BLOCKED", `Restricted keyboard shortcut was blocked: ${event.key}.`);
+    };
+
+    const handleOffline = () => {
+      recordBrowserIntegrityEvent("NETWORK_LOSS", "Browser reported offline state.");
+    };
+
+    const handleOnline = () => {
+      recordBrowserIntegrityEvent("RECONNECTED", "Browser reported online state.", "info");
+    };
+
+    const devtoolsCheckInterval = window.setInterval(() => {
+      const widthDelta = Math.abs(window.outerWidth - window.innerWidth);
+      const heightDelta = Math.abs(window.outerHeight - window.innerHeight);
+      const devtoolsSuspected =
+        widthDelta > DEVTOOLS_SIZE_THRESHOLD_PX ||
+        heightDelta > DEVTOOLS_SIZE_THRESHOLD_PX;
+
+      if (devtoolsSuspected && !devtoolsSuspectedRef.current) {
+        devtoolsSuspectedRef.current = true;
+        recordBrowserIntegrityEvent("DEVTOOLS_SUSPECTED", "DevTools-like viewport difference was detected.");
+      }
+
+      if (!devtoolsSuspected) {
+        devtoolsSuspectedRef.current = false;
+      }
+    }, 1_500);
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    document.addEventListener("copy", blockClipboardEvent);
+    document.addEventListener("paste", blockClipboardEvent);
+    document.addEventListener("cut", blockClipboardEvent);
+    document.addEventListener("contextmenu", blockContextMenu);
+    window.addEventListener("keydown", blockKeyboardShortcut, { capture: true });
+    window.addEventListener("blur", handleWindowBlur);
+    window.addEventListener("focus", handleWindowFocus);
+    window.addEventListener("offline", handleOffline);
+    window.addEventListener("online", handleOnline);
+
+    return () => {
+      window.clearInterval(devtoolsCheckInterval);
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      document.removeEventListener("copy", blockClipboardEvent);
+      document.removeEventListener("paste", blockClipboardEvent);
+      document.removeEventListener("cut", blockClipboardEvent);
+      document.removeEventListener("contextmenu", blockContextMenu);
+      window.removeEventListener("keydown", blockKeyboardShortcut, { capture: true });
+      window.removeEventListener("blur", handleWindowBlur);
+      window.removeEventListener("focus", handleWindowFocus);
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("online", handleOnline);
+    };
+  }, [entryStage, instructionConfirmed, isSubmitted, recordBrowserIntegrityEvent]);
 
   const timerMinutes = Math.floor(remainingMs / 1000 / 60);
   const finalWindowThresholdMinutes = sessionSnapshot.timingProfile.finalWindowMinutes;
@@ -2113,6 +2652,15 @@ function ExamSessionPage() {
       return true;
     }
 
+    const targetQuestion = questionSnapshotById.get(questionId);
+    if (targetQuestion && !getQuestionPhaseVisibility(targetQuestion)) {
+      return true;
+    }
+
+    if (questionTimingEnforced && selectedQuestionMinTimeRemainingSec > 0 && questionId !== selectedQuestion?.id) {
+      return true;
+    }
+
     if (!selectedQuestion || !isHardMode || !sessionSnapshot.hardModeRevisitRestricted) {
       return false;
     }
@@ -2137,7 +2685,7 @@ function ExamSessionPage() {
   };
 
   const saveBlockedByTiming =
-    enforcementMode &&
+    questionTimingEnforced &&
     selectedQuestionMinTimeRemainingSec > 0;
 
   const sessionLocked = sessionLifecycleState !== "active";
@@ -2189,19 +2737,19 @@ function ExamSessionPage() {
       : "Synced";
   const modeTierLabel = isOperationalMode
     ? "L0 Operational"
-    : isDiagnosticMode
-      ? "L1 Diagnostic"
-      : isControlledMode
-        ? "L2 Controlled"
-        : "Hard Mode";
+    : isControlledMode
+      ? "L1 Controlled"
+      : isFocusedMode
+        ? "L2 Focused"
+        : "L2 Hard";
   const activeSectionLabel = selectedSection === "All" ? "All Subjects" : selectedSection;
   const modeStudentExplanation = isOperationalMode
     ? "Standard exam delivery. You can navigate freely and submit anytime."
-    : isDiagnosticMode
-      ? "Diagnostic guidance is active. You may see pacing cues, but your attempt remains fully open."
-      : isControlledMode
-        ? "Controlled execution is active. Timing and pacing rules can affect save and submit actions."
-        : "Strict execution is active. Timing locks and progression restrictions are enforced.";
+    : isControlledMode
+      ? "Phase guidance is active. You control transitions, and expiry starts overstay instead of forcing movement."
+      : isFocusedMode
+        ? "Focused execution is active. Phase timing and phase visibility are enforced automatically."
+        : "Hard execution is active. Focused phase rules plus minimum thinking time and progression locks are enforced.";
   const phaseSchedule = useMemo(
     () => buildPhaseSchedule(totalDurationMs, sessionSnapshot.phaseConfigSnapshot),
     [sessionSnapshot.phaseConfigSnapshot, totalDurationMs],
@@ -2230,7 +2778,7 @@ function ExamSessionPage() {
 
   const unansweredCount = unansweredQuestionIdsForSubmission.length;
   const attemptedPercent = toPercent(answeredCount, sessionSnapshot.questions.length);
-  const showDiagnosticLowAttemptSubmitWarning = isDiagnosticMode && attemptedPercent < 50;
+  const showControlledLowAttemptSubmitWarning = isControlledMode && attemptedPercent < 50;
   const easyRemainingCount = useMemo(
     () =>
       sessionSnapshot.questions.filter((question) => {
@@ -2239,44 +2787,65 @@ function ExamSessionPage() {
       }).length,
     [responseStateByQuestionId, sessionSnapshot.questions],
   );
-  const rapidAnswerCount = useMemo(
-    () =>
-      sessionSnapshot.questions.filter((question) => {
-        const responseState = responseStateByQuestionId[question.id];
-        const timingState = questionTimingById[question.id];
-        return (
-          Boolean(responseState && hasAnswer(question, responseState)) &&
-          Boolean(timingState && timingState.timeSpentMs < timingState.minTimeSec * 1000)
-        );
-      }).length,
-    [questionTimingById, responseStateByQuestionId, sessionSnapshot.questions],
-  );
-  const liveSupportItems = isDiagnosticMode
-    ? [
-        `${currentPhasePresentation.shortLabel}: ${currentPhasePresentation.title}`,
-        `${currentPhaseRemainingLabel} left in phase`,
-        `${easyRemainingCount} easy remaining`,
-        `${rapidAnswerCount} rapid answers flagged`,
-      ]
-    : isControlledMode
+  const liveSupportItems = isControlledMode
       ? [
         `${currentPhasePresentation.shortLabel}: ${currentPhasePresentation.title}`,
           `${currentPhaseRemainingLabel} left in phase`,
-          `MinTime ${selectedQuestionMinTimeRemainingSec}s`,
-          selectedQuestionOverstaySec > 0 ? `Overstay ${selectedQuestionOverstaySec}s` : "On paced attempt",
+          `${easyRemainingCount} easy remaining`,
+          automaticPhaseId !== controlledPhaseId ? "Overstay active" : "Within phase window",
         ]
-      : isHardMode
+      : isFocusedMode
         ? [
-            "Sequential progression active",
-            sessionSnapshot.hardModeRevisitRestricted ? "Revisit disabled" : "Restricted revisit",
-            `MaxTime ${selectedQuestionMaxTimeRemainingSec}s`,
+            `${currentPhasePresentation.shortLabel}: ${currentPhasePresentation.title}`,
+            `${visibleQuestionsForCurrentPhase.length} visible questions`,
+            currentExamPhase === "buffer" ? "Buffer open" : "Auto phase transition active",
           ]
-        : [];
+        : isHardMode
+          ? [
+              "Sequential progression active",
+              sessionSnapshot.hardModeRevisitRestricted ? "Revisit disabled" : "Restricted revisit",
+              `MinTime ${selectedQuestionMinTimeRemainingSec}s`,
+            ]
+          : [];
   const compactModePills = !isOperationalMode ? liveSupportItems.slice(2) : [];
   const lowDiscipline = adaptivePhaseSnapshot.disciplineIndex < EARLY_SUBMIT_DISCIPLINE_THRESHOLD;
   const lowAdherence = adaptivePhaseSnapshot.phaseAdherencePercent < EARLY_SUBMIT_PHASE_ADHERENCE_THRESHOLD;
   const requiresEarlySubmitOverride = isControlledMode && (lowDiscipline || lowAdherence);
   const manualSubmitDisabled = isSubmitted || sessionLocked || slowdownActive || shouldRestrictManualSubmit;
+  const browserIntegrityAlertCount = browserIntegrityEvents.filter((event) => event.severity !== "info").length;
+  const sessionStartCountdownMs = Math.max(0, sessionSchedule.sessionStartsAtMs - nowEpochMs);
+  const entryOpenCountdownMs = Math.max(0, sessionSchedule.earlyEntryOpensAtMs - nowEpochMs);
+  const currentGazeCalibrationPoint = GAZE_CALIBRATION_POINTS[gazeCalibrationIndex] ?? GAZE_CALIBRATION_POINTS[0];
+  const preExamChecklist = [
+    { id: "session", label: "Session Window", state: entryStage === "entry_not_open" ? "pending" : "passed" as PreExamCheckState },
+    { id: "browser", label: "Browser Integrity", state: browserReadinessState },
+    { id: "internet", label: "Internet Connection", state: internetCheckState },
+    { id: "camera", label: "Camera Permission", state: cameraCheckState },
+    { id: "face", label: "Face Verification", state: faceVerificationState },
+    { id: "gaze", label: "Gaze Calibration", state: gazeCalibrationState },
+  ];
+  const canControlledProceedToPhase2 = visitedCount >= sessionSnapshot.questions.length;
+  const controlledPhaseAdvanceDisabled =
+    sessionLocked ||
+    !isControlledMode ||
+    controlledPhaseId === "buffer" ||
+    (controlledPhaseId === "phase1" && !canControlledProceedToPhase2);
+
+  const advanceControlledPhase = () => {
+    if (controlledPhaseAdvanceDisabled) {
+      return;
+    }
+
+    setControlledPhaseId((current) => {
+      if (current === "phase1") {
+        return "phase2";
+      }
+      if (current === "phase2") {
+        return "phase3";
+      }
+      return "buffer";
+    });
+  };
 
   if (!entryValidation.allowed) {
     return <ExamAccessRedirect reason={entryValidation.reason} />;
@@ -2290,6 +2859,202 @@ function ExamSessionPage() {
     return <ExamAccessRedirect reason="server_validation_failed" />;
   }
 
+  if (entryStage === "entry_not_open") {
+    return (
+      <main className="exam-instruction-shell">
+        <section className="exam-instruction-card">
+          <p className="exam-instruction-eyebrow">Exam Entry Lobby</p>
+          <h1>Entry Window Not Open</h1>
+          <p>
+            Student entry opens at
+            {" "}
+            <strong>{toTimeLabel(sessionSchedule.earlyEntryOpensAtMs)}</strong>
+            .
+          </p>
+          <p className="exam-lobby-countdown">
+            Opens in
+            {" "}
+            <strong>{toMinuteSecondCountdownLabel(entryOpenCountdownMs)}</strong>
+          </p>
+        </section>
+      </main>
+    );
+  }
+
+  if (entryStage === "entry_closed") {
+    return (
+      <main className="exam-instruction-shell">
+        <section className="exam-instruction-card">
+          <p className="exam-instruction-eyebrow">Exam Entry Closed</p>
+          <h1>Entry Window Closed</h1>
+          <p>
+            This exam started at
+            {" "}
+            <strong>{toTimeLabel(sessionSchedule.sessionStartsAtMs)}</strong>
+            . New entry is not allowed after the official start time.
+          </p>
+          <button
+            type="button"
+            className="exam-start-button"
+            onClick={() => window.location.assign(STUDENT_PORTAL_FALLBACK_PATH)}
+          >
+            Return to Student Portal
+          </button>
+        </section>
+      </main>
+    );
+  }
+
+  if (entryStage === "pre_exam_lobby") {
+    return (
+      <main className="exam-instruction-shell">
+        <section className="exam-instruction-card exam-lobby-card" aria-labelledby="exam-lobby-title">
+          <header className="exam-instruction-header">
+            <p className="exam-instruction-eyebrow">Pre-Exam Session Lobby</p>
+            <h1 id="exam-lobby-title">Complete Entry Checks</h1>
+            <div className="exam-lobby-meta-grid">
+              <div>
+                <span>Candidate</span>
+                <strong>{candidateName}</strong>
+              </div>
+              <div>
+                <span>Official Start</span>
+                <strong>{toTimeLabel(sessionSchedule.sessionStartsAtMs)}</strong>
+              </div>
+              <div>
+                <span>Starts In</span>
+                <strong>{toMinuteSecondCountdownLabel(sessionStartCountdownMs)}</strong>
+              </div>
+              <div>
+                <span>Face + Gaze</span>
+                <strong>{faceIdentityGazeGuardEnabled ? "Required" : "Off for lab"}</strong>
+              </div>
+            </div>
+          </header>
+
+          <div className="exam-lobby-layout">
+            <aside className="exam-lobby-checklist" aria-label="Pre-exam checklist">
+              {preExamChecklist.map((item) => (
+                <div key={item.id} className={`exam-lobby-check exam-lobby-check-${item.state}`}>
+                  <span>{item.label}</span>
+                  <strong>{item.state}</strong>
+                </div>
+              ))}
+            </aside>
+
+            <section className="exam-lobby-workspace" aria-label="Current lobby checks">
+              <div className="exam-lobby-action-grid">
+                <article className="exam-lobby-action-panel">
+                  <h2>Browser + Internet</h2>
+                  <p>Confirm the browser is online and ready for the secure session.</p>
+                  <div className="exam-lobby-action-row">
+                    <button type="button" className="exam-secondary-action" onClick={() => setBrowserReadinessState(navigator.onLine ? "passed" : "failed")}>
+                      Recheck Browser
+                    </button>
+                    <button type="button" className="exam-save-next-button" onClick={startInternetCheck}>
+                      Check Internet
+                    </button>
+                  </div>
+                </article>
+
+                <article className="exam-lobby-action-panel">
+                  <h2>Camera + Face</h2>
+                  <p>{faceIdentityGazeGuardEnabled ? "Open camera, then run the identity readiness check." : "Skipped for supervised lab assignment policy."}</p>
+                  <div className="exam-lobby-camera-frame">
+                    {faceIdentityGazeGuardEnabled ? (
+                      <video ref={cameraVideoRef} autoPlay playsInline muted aria-label="Camera preview" />
+                    ) : (
+                      <span>Camera skipped</span>
+                    )}
+                  </div>
+                  <div className="exam-lobby-action-row">
+                    <button type="button" className="exam-secondary-action" onClick={() => { void startCameraCheck(); }}>
+                      {faceIdentityGazeGuardEnabled ? "Enable Camera" : "Mark Skipped"}
+                    </button>
+                    <button type="button" className="exam-save-next-button" onClick={runFaceVerificationCheck} disabled={faceIdentityGazeGuardEnabled && cameraCheckState !== "passed"}>
+                      Verify Face
+                    </button>
+                  </div>
+                </article>
+
+                <article className="exam-lobby-action-panel exam-lobby-gaze-panel">
+                  <h2>Gaze Calibration</h2>
+                  <p>{faceIdentityGazeGuardEnabled ? "Open the full-screen marker calibration. Look at each marker before capturing it." : "Skipped for supervised lab assignment policy."}</p>
+                  <button
+                    type="button"
+                    className="exam-save-next-button"
+                    onClick={() => {
+                      if (!faceIdentityGazeGuardEnabled) {
+                        captureGazeCalibrationPoint();
+                        return;
+                      }
+                      setGazeCalibrationOverlayOpen(true);
+                    }}
+                    disabled={faceIdentityGazeGuardEnabled && faceVerificationState !== "passed"}
+                  >
+                    {gazeCalibrationState === "passed" ? "Calibration Complete" : "Open Full-Screen Calibration"}
+                  </button>
+                </article>
+              </div>
+            </section>
+          </div>
+
+          <footer className="exam-lobby-footer">
+            <p>
+              The official exam opens automatically after instructions when the countdown reaches zero.
+            </p>
+            <button
+              type="button"
+              className="exam-start-button"
+              disabled={!preExamChecksPassed}
+              onClick={continueToInstructions}
+            >
+              Continue to Instructions
+            </button>
+            {fullscreenGateError ? <p className="exam-submit-warning">{fullscreenGateError}</p> : null}
+          </footer>
+          {gazeCalibrationOverlayOpen ? (
+            <div className="exam-gaze-calibration-overlay" role="presentation">
+              <section className="exam-gaze-calibration-surface" aria-label="Full-screen gaze calibration">
+                <div className="exam-gaze-calibration-header">
+                  <div>
+                    <p className="exam-integrity-eyebrow">Gaze Calibration</p>
+                    <h2>{currentGazeCalibrationPoint.label} Marker</h2>
+                  </div>
+                  <span>
+                    {Math.min(gazeCalibrationIndex + 1, GAZE_CALIBRATION_POINTS.length)}
+                    /
+                    {GAZE_CALIBRATION_POINTS.length}
+                  </span>
+                </div>
+                <span
+                  className="exam-gaze-calibration-marker"
+                  style={{
+                    left: `${currentGazeCalibrationPoint.x}%`,
+                    top: `${currentGazeCalibrationPoint.y}%`,
+                  }}
+                >
+                  {currentGazeCalibrationPoint.label}
+                </span>
+                <div className="exam-gaze-calibration-footer">
+                  <p>Keep your face steady and look directly at the marker before capturing.</p>
+                  <div className="exam-lobby-action-row">
+                    <button type="button" className="exam-secondary-action" onClick={() => setGazeCalibrationOverlayOpen(false)}>
+                      Pause Calibration
+                    </button>
+                    <button type="button" className="exam-save-next-button" onClick={captureGazeCalibrationPoint}>
+                      Capture Marker
+                    </button>
+                  </div>
+                </div>
+              </section>
+            </div>
+          ) : null}
+        </section>
+      </main>
+    );
+  }
+
   if (!instructionConfirmed) {
     return (
       <main className="exam-instruction-shell">
@@ -2298,7 +3063,7 @@ function ExamSessionPage() {
             <p className="exam-instruction-eyebrow">Exam Entry</p>
             <h1 id="exam-instruction-title">Instructions</h1>
             <section
-              className={isOperationalMode ? "exam-mode-hero operational" : isDiagnosticMode ? "exam-mode-hero diagnostic" : isControlledMode ? "exam-mode-hero controlled" : "exam-mode-hero hard"}
+              className={isOperationalMode ? "exam-mode-hero operational" : isControlledMode ? "exam-mode-hero controlled" : isFocusedMode ? "exam-mode-hero focused" : "exam-mode-hero hard"}
               aria-label="Exam mode identity"
             >
               <div className="exam-mode-hero-copy">
@@ -2424,8 +3189,18 @@ function ExamSessionPage() {
             ) : null}
           </section>
 
-          <section className="exam-instruction-section" aria-label="Declaration and Start">
-            <h2>6. Declaration and Start</h2>
+          <section className="exam-instruction-section" aria-label="Declaration and Countdown">
+            <h2>6. Declaration and Countdown</h2>
+            <div className="exam-instruction-countdown-panel">
+              <span>Official exam starts in</span>
+              <strong>{toMinuteSecondCountdownLabel(sessionStartCountdownMs)}</strong>
+              <p>
+                Question paper opens automatically at
+                {" "}
+                <strong>{toTimeLabel(sessionSchedule.sessionStartsAtMs)}</strong>
+                .
+              </p>
+            </div>
             <label className="exam-declaration-checkbox" htmlFor="exam-declaration-checkbox">
               <input
                 id="exam-declaration-checkbox"
@@ -2435,43 +3210,16 @@ function ExamSessionPage() {
               />
               I have read and understood the instructions. I am ready to begin the test under monitored exam conditions.
             </label>
-            <p className="exam-instruction-start-note">7. The Start Test button will be enabled only after the declaration is accepted.</p>
-            <button
-              type="button"
-              className="exam-start-button"
-              disabled={!declarationAccepted}
-              onClick={() => {
-                const activeSessionId = window.sessionStorage.getItem(activeSessionGuardKey);
-                if (activeSessionId && activeSessionId !== effectiveSessionId) {
-                  setSessionConflictMessage(
-                    "Another active session is already registered for this run in this browser profile. Resume that session or submit it before starting a new one.",
-                  );
-                  return;
-                }
-
-                const deadline = Date.now() + totalDurationMs;
-                setDeadlineEpochMs(deadline);
-                setRemainingMs(totalDurationMs);
-                setLastAnswerWriteAtMs(Date.now() - ANSWER_BATCH_INTERVAL_MS);
-                setPendingAnswerMap({});
-                setSyncState("idle");
-                setSyncMessage("No pending answer updates.");
-                setSessionConflictMessage(null);
-                setSessionLifecycleState("started");
-                setRecoveryApplied(false);
-                setInstructionConfirmed(true);
-              }}
-            >
-              Start Test
-            </button>
+            <p className="exam-instruction-start-note">7. Keep this page open in fullscreen. If the declaration is not accepted before official start, entry will close.</p>
             {sessionConflictMessage ? <p className="exam-submit-warning">{sessionConflictMessage}</p> : null}
+            {fullscreenGateError ? <p className="exam-submit-warning">{fullscreenGateError}</p> : null}
           </section>
         </section>
       </main>
     );
   }
 
-  const saveCurrentAndMaybeAdvance = (advance: boolean) => {
+  const saveCurrentWithReviewStateAndMaybeAdvance = (markedForReview: boolean, advance: boolean) => {
     if (!selectedQuestion || sessionLocked) {
       return;
     }
@@ -2505,19 +3253,27 @@ function ExamSessionPage() {
       return next;
     });
 
-    if (!hasAnswer(selectedQuestion, responseStateByQuestionId[selectedQuestion.id])) {
+    const currentResponseState = responseStateByQuestionId[selectedQuestion.id] ?? {
+      selectedOptionId: null,
+      numericResponse: "",
+      matrixSelections: [],
+      markedForReview: false,
+    };
+    const nextResponseState = {
+      ...currentResponseState,
+      markedForReview,
+    };
+
+    setResponseStateByQuestionId((current) => ({
+      ...current,
+      [selectedQuestion.id]: nextResponseState,
+    }));
+
+    if (!hasAnswer(selectedQuestion, nextResponseState)) {
       setSkippedQuestionsCount((current) => current + 1);
     }
 
-    queueAnswerWrite(
-      selectedQuestion.id,
-      responseStateByQuestionId[selectedQuestion.id] ?? {
-        selectedOptionId: null,
-        numericResponse: "",
-        matrixSelections: [],
-        markedForReview: false,
-      },
-    );
+    queueAnswerWrite(selectedQuestion.id, nextResponseState);
 
     if (isHardMode && sessionSnapshot.hardModeRevisitRestricted) {
       setHardModeLockedQuestionIds((current) => {
@@ -2548,7 +3304,8 @@ function ExamSessionPage() {
       selectedQuestionIndex <= 0 ||
       slowdownActive ||
       sessionLocked ||
-      hardModeBackwardNavigationDisabled
+      hardModeBackwardNavigationDisabled ||
+      (questionTimingEnforced && selectedQuestionMinTimeRemainingSec > 0)
     ) {
       return;
     }
@@ -2692,7 +3449,7 @@ function ExamSessionPage() {
 
           <div className="exam-header-group exam-header-metrics exam-header-metrics-compact">
             <p>
-              <span className={isOperationalMode ? "exam-mode-badge operational" : isDiagnosticMode ? "exam-mode-badge diagnostic" : isControlledMode ? "exam-mode-badge controlled" : "exam-mode-badge hard"}>
+              <span className={isOperationalMode ? "exam-mode-badge operational" : isControlledMode ? "exam-mode-badge controlled" : isFocusedMode ? "exam-mode-badge focused" : "exam-mode-badge hard"}>
                 {modeTierLabel}
               </span>
             </p>
@@ -2807,7 +3564,7 @@ function ExamSessionPage() {
           </div>
           {!isOperationalMode ? (
             <div
-              className={isDiagnosticMode ? "exam-inline-mode-strip diagnostic" : isControlledMode ? "exam-inline-mode-strip controlled" : "exam-inline-mode-strip hard"}
+              className={isControlledMode ? "exam-inline-mode-strip controlled" : isFocusedMode ? "exam-inline-mode-strip focused" : "exam-inline-mode-strip hard"}
               aria-label="Execution mode strip"
             >
               <div className="exam-inline-mode-strip-signals">
@@ -2815,6 +3572,22 @@ function ExamSessionPage() {
                   <span key={item} className="exam-inline-mode-strip-pill">{item}</span>
                 ))}
               </div>
+              {isControlledMode ? (
+                <button
+                  type="button"
+                  className="exam-phase-advance-button"
+                  disabled={controlledPhaseAdvanceDisabled}
+                  onClick={advanceControlledPhase}
+                >
+                  {controlledPhaseId === "phase1"
+                    ? "Proceed to Phase 2"
+                    : controlledPhaseId === "phase2"
+                      ? "Proceed to Phase 3"
+                      : controlledPhaseId === "phase3"
+                        ? "Enter Buffer"
+                        : "Buffer Active"}
+                </button>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -2884,6 +3657,9 @@ function ExamSessionPage() {
               );
             })}
           </div>
+          {filteredPalette.length === 0 ? (
+            <p className="exam-phase-empty-note">No questions are visible in this phase window.</p>
+          ) : null}
 
           {!hardModeMinimalUI ? (
             <div className="exam-palette-legend" aria-label="Question palette legend">
@@ -2925,6 +3701,11 @@ function ExamSessionPage() {
               {" "}
               <strong>{toPercent(visitedCount, sessionSnapshot.questions.length).toFixed(0)}%</strong>
             </p>
+            <p>
+              Browser Alerts:
+              {" "}
+              <strong>{browserIntegrityAlertCount}</strong>
+            </p>
             {isHardMode ? (
               <p>
                 Locked Questions:
@@ -2932,18 +3713,11 @@ function ExamSessionPage() {
                 <strong>{hardModeLockedQuestionIds.size}</strong>
               </p>
             ) : null}
-            {isDiagnosticMode ? (
-              <p>
-                Easy Remaining:
-                {" "}
-                <strong>{easyRemainingCount}</strong>
-              </p>
-            ) : null}
             {isControlledMode ? (
               <p>
-                Save Status:
+                Phase Status:
                 {" "}
-                <strong>{selectedQuestionTimingStatus}</strong>
+                <strong>{automaticPhaseId !== controlledPhaseId ? "Overstay active" : "On phase"}</strong>
               </p>
             ) : null}
           </div>
@@ -2965,7 +3739,7 @@ function ExamSessionPage() {
         </aside>
 
         <section className="exam-question-container" aria-label="Question rendering container">
-          {selectedQuestion && selectedResponseState ? (
+          {selectedQuestion && selectedResponseState && selectedQuestionVisible ? (
             <article className="exam-question-surface">
               {(() => {
                 const publicQuestionFieldKey = getPublicQuestionFieldKey(selectedQuestion);
@@ -3106,7 +3880,8 @@ function ExamSessionPage() {
                     selectedQuestionRevisitLocked ||
                     slowdownActive ||
                     sessionLocked ||
-                    hardModeBackwardNavigationDisabled
+                    hardModeBackwardNavigationDisabled ||
+                    (questionTimingEnforced && selectedQuestionMinTimeRemainingSec > 0)
                   }
                 >
                   Previous
@@ -3133,24 +3908,15 @@ function ExamSessionPage() {
                 <button
                   type="button"
                   className="exam-neutral-action"
-                  onClick={() => {
-                    if (selectedQuestionRevisitLocked || slowdownActive || sessionLocked) {
-                      return;
-                    }
-
-                    updateQuestionResponseState(selectedQuestion.id, (current) => ({
-                      ...current,
-                      markedForReview: !current.markedForReview,
-                    }));
-                  }}
-                  disabled={selectedQuestionRevisitLocked || slowdownActive || sessionLocked}
+                  onClick={() => saveCurrentWithReviewStateAndMaybeAdvance(true, true)}
+                  disabled={saveDisabled}
                 >
-                  Mark for Review
+                  Mark for Review & Next
                 </button>
                 <button
                   type="button"
                   className="exam-save-next-button"
-                  onClick={() => saveCurrentAndMaybeAdvance(true)}
+                  onClick={() => saveCurrentWithReviewStateAndMaybeAdvance(false, true)}
                   disabled={saveDisabled}
                 >
                   Save & Next
@@ -3178,7 +3944,12 @@ function ExamSessionPage() {
                 );
               })()}
             </article>
-          ) : null}
+          ) : (
+            <article className="exam-question-surface exam-phase-empty-state">
+              <h2>{currentPhasePresentation.shortLabel}: {currentPhasePresentation.title}</h2>
+              <p>No questions match the visibility rule for this phase. Continue when the next phase or buffer opens.</p>
+            </article>
+          )}
         </section>
       </div>
 
@@ -3218,9 +3989,9 @@ function ExamSessionPage() {
               </p>
             </div>
 
-            {showDiagnosticLowAttemptSubmitWarning ? (
+            {showControlledLowAttemptSubmitWarning ? (
               <p className="exam-submit-warning">
-                L1 Diagnostic Warning: attempted coverage is below 50%. Submission remains available after final
+                Controlled Mode Warning: attempted coverage is below 50%. Submission remains available after final
                 confirmation.
               </p>
             ) : null}
@@ -3232,8 +4003,8 @@ function ExamSessionPage() {
                   checked={submitWarningAcknowledged}
                   onChange={(event) => setSubmitWarningAcknowledged(event.target.checked)}
                 />
-                {showDiagnosticLowAttemptSubmitWarning
-                  ? `I understand this L1 attempt is below 50% coverage and ${unansweredCount} question(s) will remain unanswered after final submission.`
+                {showControlledLowAttemptSubmitWarning
+                  ? `I understand this controlled attempt is below 50% coverage and ${unansweredCount} question(s) will remain unanswered after final submission.`
                   : `I understand ${unansweredCount} question(s) will remain unanswered after final submission.`}
               </label>
             ) : null}
@@ -3285,6 +4056,24 @@ function ExamSessionPage() {
         timingStatus={selectedQuestionTimingStatus}
         timingProfileItems={timingProfileItems}
       />
+      {integrityBlockingReason ? (
+        <div className="exam-integrity-overlay" role="presentation">
+          <section className="exam-integrity-dialog" role="dialog" aria-modal="true" aria-label="Browser integrity restriction">
+            <p className="exam-integrity-eyebrow">Browser Integrity Guard</p>
+            <h2>Return to Fullscreen</h2>
+            <p>{integrityBlockingReason}</p>
+            <button
+              type="button"
+              className="exam-start-button"
+              onClick={() => {
+                void requestExamFullscreen();
+              }}
+            >
+              Re-enter Fullscreen
+            </button>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }

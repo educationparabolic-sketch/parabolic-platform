@@ -30,6 +30,11 @@ const MODE_REQUIRED_LAYER: Record<ExecutionMode, LicenseLayer> = {
   Hard: "L2",
 };
 
+const DEFAULT_PROCTORING_POLICY: AssignmentProctoringPolicy = {
+  browserIntegrityGuardEnabled: true,
+  faceIdentityGazeGuardEnabled: true,
+};
+
 type AssignmentSection = "create" | "list" | "live";
 type ExecutionMode = (typeof EXECUTION_MODES)[number];
 type LicenseLayer = (typeof LICENSE_ORDER)[number];
@@ -104,6 +109,7 @@ interface AssignmentDraft {
   attemptLimit: string;
   gracePeriodMinutes: string;
   shuffleQuestionOrder: boolean;
+  cameraIdentityGazeGuardEnabled: boolean;
 }
 
 interface TemplateSelectionFilters {
@@ -147,10 +153,16 @@ interface RunStatusRecord {
   attemptLimit: number;
   gracePeriodMinutes: number;
   shuffleEnabled: boolean;
+  proctoringPolicy: AssignmentProctoringPolicy;
   status: RunStatus;
   completionPercent: number;
   createdAtIso: string;
   runAnalyticsSnapshot: RunAnalyticsSnapshot;
+}
+
+interface AssignmentProctoringPolicy {
+  browserIntegrityGuardEnabled: boolean;
+  faceIdentityGazeGuardEnabled: boolean;
 }
 
 interface LiveMonitorStudentSnapshot {
@@ -241,6 +253,7 @@ interface RunCreatePayload {
   attemptLimit: number;
   gracePeriodMinutes: number;
   shuffleQuestionOrder: boolean;
+  proctoringPolicy: AssignmentProctoringPolicy;
   academicYear: string;
 }
 
@@ -476,6 +489,7 @@ const FALLBACK_RUNS: RunStatusRecord[] = [
     attemptLimit: 1,
     gracePeriodMinutes: 15,
     shuffleEnabled: true,
+    proctoringPolicy: DEFAULT_PROCTORING_POLICY,
     status: "Live",
     completionPercent: 64,
     createdAtIso: "2026-04-15T08:00:00.000Z",
@@ -513,6 +527,7 @@ const FALLBACK_RUNS: RunStatusRecord[] = [
     attemptLimit: 1,
     gracePeriodMinutes: 10,
     shuffleEnabled: false,
+    proctoringPolicy: DEFAULT_PROCTORING_POLICY,
     status: "Completed",
     completionPercent: 100,
     createdAtIso: "2026-04-10T06:40:00.000Z",
@@ -550,6 +565,7 @@ const FALLBACK_RUNS: RunStatusRecord[] = [
     attemptLimit: 1,
     gracePeriodMinutes: 15,
     shuffleEnabled: true,
+    proctoringPolicy: DEFAULT_PROCTORING_POLICY,
     status: "Completed",
     completionPercent: 100,
     createdAtIso: "2026-04-08T03:40:00.000Z",
@@ -648,6 +664,7 @@ const INITIAL_DRAFT: AssignmentDraft = {
   attemptLimit: "1",
   gracePeriodMinutes: "10",
   shuffleQuestionOrder: false,
+  cameraIdentityGazeGuardEnabled: true,
 };
 
 const INITIAL_FILTERS: AssignmentListFilters = {
@@ -1271,6 +1288,7 @@ function buildRunRecordFromAnalytics(record: RunAnalyticsRecord, students: Stude
     attemptLimit: 1,
     gracePeriodMinutes: 0,
     shuffleEnabled: false,
+    proctoringPolicy: DEFAULT_PROCTORING_POLICY,
     status: inferRunStatus(record),
     completionPercent: Math.round(record.completionRatePercent),
     createdAtIso: record.startedAt,
@@ -1400,6 +1418,10 @@ function buildRunPayload(draft: AssignmentDraft, templates: TemplateOption[], st
     attemptLimit: Number(draft.attemptLimit),
     gracePeriodMinutes: Number(draft.gracePeriodMinutes),
     shuffleQuestionOrder: draft.shuffleQuestionOrder,
+    proctoringPolicy: {
+      browserIntegrityGuardEnabled: true,
+      faceIdentityGazeGuardEnabled: draft.cameraIdentityGazeGuardEnabled,
+    },
     academicYear: CURRENT_ACADEMIC_YEAR,
   };
 }
@@ -1446,6 +1468,7 @@ function buildFallbackRunRecord(
     attemptLimit: payload.attemptLimit,
     gracePeriodMinutes: payload.gracePeriodMinutes,
     shuffleEnabled: payload.shuffleQuestionOrder,
+    proctoringPolicy: payload.proctoringPolicy,
     status: "Upcoming",
     completionPercent: 0,
     createdAtIso,
@@ -3093,6 +3116,22 @@ function AssignmentManagementPage() {
                             <span>{draft.shuffleQuestionOrder ? "Enabled" : "Disabled"}</span>
                           </label>
                         </UiFormField>
+
+                        <UiFormField
+                          label="Face + Gaze Guard"
+                          htmlFor="assignment-camera-gaze-guard"
+                          helper="Switch off only for supervised school lab exams. Browser Integrity Guard remains enabled."
+                        >
+                          <label className="admin-assignments-toggle">
+                            <input
+                              id="assignment-camera-gaze-guard"
+                              type="checkbox"
+                              checked={draft.cameraIdentityGazeGuardEnabled}
+                              onChange={(event) => setDraft((current) => ({ ...current, cameraIdentityGazeGuardEnabled: event.target.checked }))}
+                            />
+                            <span>{draft.cameraIdentityGazeGuardEnabled ? "Required" : "Off for lab"}</span>
+                          </label>
+                        </UiFormField>
                       </div>
 
                       <div className="admin-tests-step-actions">
@@ -3141,6 +3180,8 @@ function AssignmentManagementPage() {
                               <p><span>Duration</span><strong>{selectedTemplate ? `${selectedTemplate.totalDurationMinutes} minutes` : "-"}</strong></p>
                               <p><span>Attempt Limit</span><strong>{draft.attemptLimit}</strong></p>
                               <p><span>Shuffle</span><strong>{draft.shuffleQuestionOrder ? "Enabled" : "Disabled"}</strong></p>
+                              <p><span>Browser Integrity</span><strong>Enabled</strong></p>
+                              <p><span>Face + Gaze Guard</span><strong>{draft.cameraIdentityGazeGuardEnabled ? "Required" : "Off for lab"}</strong></p>
                             </div>
                           </article>
 

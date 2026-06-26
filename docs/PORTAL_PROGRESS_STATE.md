@@ -10,12 +10,15 @@ This file is the persistent handoff state for portal checklist implementation ac
 - `Next Suggested Checklist ID`: `auto`
 - `Last Updated`: `2026-06-03`
 - `Saved Scope Note`: Completed vendor P2 `VEN-RTE-014` by adding the dedicated `/vendor/backups` route to the vendor route registry, vendor primary navigation, and mounted app shell with backups-and-restore placeholder copy aligned to the vendor spec's backup/recovery lane. `npm --prefix apps/vendor run build` passed. Vendor P2 is complete, and no unresolved items remain in the active portal checklists, so future selection should recompute automatically if new gaps are introduced.
-- `Temporary Dev Testing Note`: Keep the exam portal dev-only mock entry mode (`npm run dev:mock-entry`, `?token=dev`,http://localhost:5173/session/dev-mock-session?token=dev) L0 / Operational
-http://localhost:5173/session/dev-mock-session?token=dev&mode=l0
-L1 / Diagnostic
-http://localhost:5173/session/dev-mock-session?token=dev&mode=l1
-L2 / Controlled
-http://localhost:5173/session/dev-mock-session?token=dev&mode=l2 
+- `Temporary Dev Testing Note`: Keep the exam portal dev-only mock entry mode (`npm run dev:mock-entry`, `?token=dev`, http://localhost:5173/session/dev-mock-session?token=dev) for updated layer-aware exam architecture testing:
+Operational / Observe
+http://localhost:5173/session/dev-mock-session?token=dev&mode=operational
+Controlled / Guide
+http://localhost:5173/session/dev-mock-session?token=dev&mode=controlled
+Focused / Enforce Phase Strategy
+http://localhost:5173/session/dev-mock-session?token=dev&mode=focused
+Hard / Enforce Phase Strategy + Minimum Thinking Time
+http://localhost:5173/session/dev-mock-session?token=dev&mode=hard
 until exam portal P0/P1/P2 implementation is fully complete; remove it only during final exam-portal cleanup/hardening.
 
 ## Active Checklist Set
