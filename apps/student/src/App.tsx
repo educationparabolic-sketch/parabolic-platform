@@ -34,9 +34,11 @@ const LICENSE_LAYER_ORDER: Record<LicenseLayer, number> = {
 
 const STUDENT_SIDEBAR_STORAGE_KEY = "student-sidebar-collapsed";
 
+function studentLivePhotoStorageKey(email: string): string {
+  return `student-live-photo:${email.toLowerCase()}`;
+}
+
 const StudentDashboardPage = lazy(() => import("./features/dashboard/StudentDashboardPage"));
-const StudentDisciplinePage = lazy(() => import("./features/discipline/StudentDisciplinePage"));
-const StudentInsightsPage = lazy(() => import("./features/insights/StudentInsightsPage"));
 const StudentMyTestsPage = lazy(() => import("./features/my-tests/StudentMyTestsPage"));
 const StudentPerformancePage = lazy(() => import("./features/performance/StudentPerformancePage"));
 const StudentProfileSettingsPage = lazy(() => import("./features/profile/StudentProfileSettingsPage"));
@@ -152,6 +154,7 @@ function StudentLayout() {
   const debugMode = isStudentDebugMode();
   const activeLicenseLayer = globalState.licenseLayer ?? "L0";
   const [pageScrolled, setPageScrolled] = useState(false);
+  const [hasLivePhoto, setHasLivePhoto] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
       return window.localStorage.getItem(STUDENT_SIDEBAR_STORAGE_KEY) === "true";
@@ -177,6 +180,20 @@ function StudentLayout() {
       // Best-effort preference persistence only.
     }
   }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    const email = session.user?.email;
+    if (!email) {
+      setHasLivePhoto(true);
+      return;
+    }
+
+    try {
+      setHasLivePhoto(Boolean(window.localStorage.getItem(studentLivePhotoStorageKey(email))));
+    } catch {
+      setHasLivePhoto(true);
+    }
+  }, [location.pathname, session.user?.email]);
 
   const visibleNavItems = useMemo(() => {
     return STUDENT_PRIMARY_NAVIGATION.filter((item) => {
@@ -323,30 +340,20 @@ function StudentLayout() {
               {!pageScrolled ? <p>{activeRouteSummary}</p> : null}
             </div>
           </section>
+          {!hasLivePhoto && location.pathname !== "/student/profile" ? (
+            <section className="student-live-photo-required-banner" aria-label="Live photo required">
+              <div>
+                <strong>Live identity photo needed</strong>
+                <p>Capture your photo once in profile settings so future exam face verification can use it.</p>
+              </div>
+              <NavLink to="/student/profile">Open Profile</NavLink>
+            </section>
+          ) : null}
           <Outlet />
         </section>
       </div>
     </main>
   );
-}
-
-function StudentLicenseRoute(props: {
-  minimumLicenseLayer: LicenseLayer;
-  fallbackPath: string;
-  children: ReactElement;
-}) {
-  const { minimumLicenseLayer, fallbackPath, children } = props;
-  const globalState = useGlobalPortalState();
-  const location = useLocation();
-
-  const activeLicenseLayer = globalState.licenseLayer ?? "L0";
-  const hasAccess = LICENSE_LAYER_ORDER[activeLicenseLayer] >= LICENSE_LAYER_ORDER[minimumLicenseLayer];
-
-  if (!hasAccess) {
-    return <Navigate replace to={fallbackPath} state={{ from: location.pathname }} />;
-  }
-
-  return children;
 }
 
 function App() {
@@ -375,27 +382,10 @@ function App() {
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<StudentRouteBoundary label="Getting your latest progress"><StudentDashboardPage /></StudentRouteBoundary>} />
         <Route path="my-tests" element={<StudentRouteBoundary label="Checking your assigned tests"><StudentMyTestsPage /></StudentRouteBoundary>} />
-        <Route path="performance" element={<StudentRouteBoundary label="Preparing your performance trends"><StudentPerformancePage /></StudentRouteBoundary>} />
-        <Route
-          path="insights"
-          element={(
-            <StudentLicenseRoute minimumLicenseLayer="L1" fallbackPath="/student/dashboard">
-              <StudentRouteBoundary label="Preparing your weekly insights">
-                <StudentInsightsPage />
-              </StudentRouteBoundary>
-            </StudentLicenseRoute>
-          )}
-        />
-        <Route
-          path="discipline"
-          element={(
-            <StudentLicenseRoute minimumLicenseLayer="L2" fallbackPath="/student/dashboard">
-              <StudentRouteBoundary label="Preparing your discipline trends">
-                <StudentDisciplinePage />
-              </StudentRouteBoundary>
-            </StudentLicenseRoute>
-          )}
-        />
+        <Route path="analytics" element={<StudentRouteBoundary label="Preparing your analytics"><StudentPerformancePage /></StudentRouteBoundary>} />
+        <Route path="performance" element={<Navigate to="/student/analytics" replace />} />
+        <Route path="insights" element={<Navigate to="/student/analytics" replace />} />
+        <Route path="discipline" element={<Navigate to="/student/analytics" replace />} />
         <Route path="profile" element={<StudentRouteBoundary label="Opening your account settings"><StudentProfileSettingsPage /></StudentRouteBoundary>} />
       </Route>
       <Route path="*" element={<Navigate to={protectedDefaultPath} replace />} />

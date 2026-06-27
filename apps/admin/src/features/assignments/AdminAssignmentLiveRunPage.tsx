@@ -13,6 +13,8 @@ import AssignmentsWorkspaceNav from "./AssignmentsWorkspaceNav";
 
 type ExecutionMode = "Operational" | "Controlled" | "Focused" | "Hard";
 type RunStatus = "Live";
+type LiveProctorViolationType = "gaze" | "fullscreen" | "face";
+type LiveProctorSeverity = "watch" | "warning" | "blocking";
 
 interface RunAnalyticsSnapshot {
   avgRawScorePercent: number;
@@ -62,6 +64,19 @@ interface LiveMonitorStudentSnapshot {
   consecutiveWrongIndicator: number;
   provisionalRiskScore: number;
   controlledCompliancePercent: number;
+  faceGuardEnabled: boolean;
+  faceVerificationStatus: "verified" | "problem" | "override";
+  faceOverrideNote: string | null;
+  proctorViolations: LiveProctorViolation[];
+}
+
+interface LiveProctorViolation {
+  id: string;
+  type: LiveProctorViolationType;
+  severity: LiveProctorSeverity;
+  label: string;
+  detail: string;
+  observedAtIso: string;
 }
 
 function createRelativeIso(minutesFromNow: number): string {
@@ -117,6 +132,19 @@ const LIVE_MONITOR_ROWS: LiveMonitorStudentSnapshot[] = [
     consecutiveWrongIndicator: 1,
     provisionalRiskScore: 34,
     controlledCompliancePercent: 91,
+    faceGuardEnabled: true,
+    faceVerificationStatus: "verified",
+    faceOverrideNote: null,
+    proctorViolations: [
+      {
+        id: "STU-021-fullscreen-1",
+        type: "fullscreen",
+        severity: "watch",
+        label: "Fullscreen Re-entered",
+        detail: "Student returned to fullscreen after a short exit.",
+        observedAtIso: createRelativeIso(-12),
+      },
+    ],
   },
   {
     runId: "run-2026-0416-003",
@@ -134,6 +162,27 @@ const LIVE_MONITOR_ROWS: LiveMonitorStudentSnapshot[] = [
     consecutiveWrongIndicator: 2,
     provisionalRiskScore: 46,
     controlledCompliancePercent: 84,
+    faceGuardEnabled: true,
+    faceVerificationStatus: "problem",
+    faceOverrideNote: null,
+    proctorViolations: [
+      {
+        id: "STU-022-gaze-1",
+        type: "gaze",
+        severity: "warning",
+        label: "Gaze Away",
+        detail: "Gaze stayed outside calibrated bounds for 9 seconds.",
+        observedAtIso: createRelativeIso(-8),
+      },
+      {
+        id: "STU-022-face-1",
+        type: "face",
+        severity: "blocking",
+        label: "Face Match Problem",
+        detail: "Identity confidence dropped below the live threshold.",
+        observedAtIso: createRelativeIso(-5),
+      },
+    ],
   },
   {
     runId: "run-2026-0416-003",
@@ -151,6 +200,27 @@ const LIVE_MONITOR_ROWS: LiveMonitorStudentSnapshot[] = [
     consecutiveWrongIndicator: 4,
     provisionalRiskScore: 73,
     controlledCompliancePercent: 64,
+    faceGuardEnabled: true,
+    faceVerificationStatus: "problem",
+    faceOverrideNote: null,
+    proctorViolations: [
+      {
+        id: "STU-023-gaze-1",
+        type: "gaze",
+        severity: "blocking",
+        label: "Repeated Gaze Away",
+        detail: "Multiple side-look violations during the current live window.",
+        observedAtIso: createRelativeIso(-14),
+      },
+      {
+        id: "STU-023-fullscreen-1",
+        type: "fullscreen",
+        severity: "blocking",
+        label: "Fullscreen Disabled",
+        detail: "Exam fullscreen was exited and required re-entry.",
+        observedAtIso: createRelativeIso(-11),
+      },
+    ],
   },
 ];
 
@@ -307,6 +377,37 @@ function buildLiveMonitorRow(
       runSummary.phaseAdherencePercent - runSummary.controlledModeDelta + 8 :
       runSummary.phaseAdherencePercent,
   );
+  const proctorViolations: LiveProctorViolation[] = [];
+  if (pacingDriftFlag || runSummary.overstayPercent >= 14) {
+    proctorViolations.push({
+      id: `${run.runId}-${student.studentId}-gaze-${index}`,
+      type: "gaze",
+      severity: runSummary.riskState === "critical" || runSummary.riskState === "high" ? "blocking" : "warning",
+      label: "Gaze Attention Drift",
+      detail: "Live gaze signal moved outside the calibrated tolerance window.",
+      observedAtIso: createRelativeIso(-4 - index * 2),
+    });
+  }
+  if (runSummary.controlledModeDelta < -4 || runSummary.disciplineIndex < 60) {
+    proctorViolations.push({
+      id: `${run.runId}-${student.studentId}-fullscreen-${index}`,
+      type: "fullscreen",
+      severity: runSummary.disciplineIndex < 45 ? "blocking" : "warning",
+      label: "Fullscreen Integrity Alert",
+      detail: "Browser integrity guard reported a live fullscreen interruption.",
+      observedAtIso: createRelativeIso(-7 - index * 2),
+    });
+  }
+  if (runSummary.riskState === "critical") {
+    proctorViolations.push({
+      id: `${run.runId}-${student.studentId}-face-${index}`,
+      type: "face",
+      severity: "blocking",
+      label: "Face Verification Problem",
+      detail: "Face verification needs teacher review for this live session.",
+      observedAtIso: createRelativeIso(-3 - index),
+    });
+  }
 
   return {
     runId: run.runId,
@@ -324,6 +425,10 @@ function buildLiveMonitorRow(
     consecutiveWrongIndicator,
     provisionalRiskScore,
     controlledCompliancePercent,
+    faceGuardEnabled: true,
+    faceVerificationStatus: runSummary.riskState === "critical" ? "problem" : "verified",
+    faceOverrideNote: null,
+    proctorViolations,
   };
 }
 
@@ -385,6 +490,25 @@ function liveIndicatorClass(risk: "Stable" | "Drift" | "HighRisk"): string {
 
 function formatLiveFlag(isActive: boolean): string {
   return isActive ? "Flagged" : "Clear";
+}
+
+function formatProctorTime(value: string): string {
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) {
+    return value;
+  }
+
+  return new Date(parsed).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function violationTone(type: LiveProctorViolationType): string {
+  if (type === "fullscreen") {
+    return "admin-live-violation-fullscreen";
+  }
+  if (type === "face") {
+    return "admin-live-violation-face";
+  }
+  return "admin-live-violation-gaze";
 }
 
 function AdminAssignmentLiveRunPage() {
@@ -523,6 +647,30 @@ function AdminAssignmentLiveRunPage() {
     }
   }
 
+  function overrideFaceDetection(studentId: string) {
+    setLiveRows((currentRows) =>
+      currentRows.map((row) =>
+        row.runId === selectedRun?.runId && row.studentId === studentId ?
+          {
+            ...row,
+            faceVerificationStatus: "override",
+            faceOverrideNote: "Teacher manually accepted the student identity for this live session.",
+            proctorViolations: row.proctorViolations.map((violation) =>
+              violation.type === "face" ?
+                {
+                  ...violation,
+                  severity: "watch",
+                  detail: `${violation.detail} Manual live override applied by admin.`,
+                } :
+                violation,
+            ),
+          } :
+          row,
+      ),
+    );
+    setInlineMessage(`Face verification manually overridden for ${studentId}. This live-only action is not stored after the test.`);
+  }
+
   const liveSummaryLabel = useMemo(() => {
     if (selectedRun.runAnalyticsSnapshot.avgPhaseAdherencePercent >= 75 && selectedRun.runAnalyticsSnapshot.guessRatePercent <= 12) {
       return "Steady live run with healthy pacing";
@@ -586,6 +734,45 @@ function AdminAssignmentLiveRunPage() {
         },
       },
       {
+        id: "proctoring",
+        header: "Proctor Violations",
+        render: (row) => (
+          <div className="admin-live-violation-stack">
+            {row.proctorViolations.length > 0 ? (
+              row.proctorViolations.map((violation) => (
+                <span
+                  key={violation.id}
+                  className={`admin-live-violation-pill ${violationTone(violation.type)} admin-live-violation-${violation.severity}`}
+                  title={violation.detail}
+                >
+                  {violation.label} · {formatProctorTime(violation.observedAtIso)}
+                </span>
+              ))
+            ) : (
+              <span className="admin-live-violation-pill admin-live-violation-clear">No live violations</span>
+            )}
+            <small>Visible only while the assignment is live.</small>
+          </div>
+        ),
+      },
+      {
+        id: "faceGuard",
+        header: "Face Guard",
+        render: (row) => (
+          <div className="admin-live-face-guard-cell">
+            <span className={`admin-live-face-status admin-live-face-status-${row.faceVerificationStatus}`}>
+              {row.faceGuardEnabled ? row.faceVerificationStatus : "off"}
+            </span>
+            {row.faceOverrideNote ? <small>{row.faceOverrideNote}</small> : null}
+            {row.faceGuardEnabled && row.faceVerificationStatus === "problem" ? (
+              <button type="button" onClick={() => overrideFaceDetection(row.studentId)}>
+                Override Face
+              </button>
+            ) : null}
+          </div>
+        ),
+      },
+      {
         id: "l2ExecutionCounters",
         header: "L2 Execution Counters",
         render: (row) => (
@@ -601,6 +788,16 @@ function AdminAssignmentLiveRunPage() {
     ],
     [],
   );
+
+  const liveProctorSummary = useMemo(() => {
+    const violations = studentRows.flatMap((row) => row.proctorViolations);
+    return {
+      gaze: violations.filter((violation) => violation.type === "gaze").length,
+      fullscreen: violations.filter((violation) => violation.type === "fullscreen").length,
+      faceProblems: studentRows.filter((row) => row.faceGuardEnabled && row.faceVerificationStatus === "problem").length,
+      overrides: studentRows.filter((row) => row.faceVerificationStatus === "override").length,
+    };
+  }, [studentRows]);
 
   if (!selectedRun) {
     return null;
@@ -659,6 +856,26 @@ function AdminAssignmentLiveRunPage() {
           <span>Avg Accuracy %</span>
           <strong>{selectedRun.runAnalyticsSnapshot.avgAccuracyPercent}%</strong>
           <small>Latest run summary available to the teacher</small>
+        </article>
+        <article className="admin-assignments-detail-card">
+          <span>Gaze Violations</span>
+          <strong>{liveProctorSummary.gaze}</strong>
+          <small>Live-only proctoring events from active students</small>
+        </article>
+        <article className="admin-assignments-detail-card">
+          <span>Fullscreen Violations</span>
+          <strong>{liveProctorSummary.fullscreen}</strong>
+          <small>Browser integrity alerts during this live run</small>
+        </article>
+        <article className="admin-assignments-detail-card">
+          <span>Face Problems</span>
+          <strong>{liveProctorSummary.faceProblems}</strong>
+          <small>Students waiting for manual live review</small>
+        </article>
+        <article className="admin-assignments-detail-card">
+          <span>Face Overrides</span>
+          <strong>{liveProctorSummary.overrides}</strong>
+          <small>Admin overrides applied only for this live session</small>
         </article>
       </div>
 

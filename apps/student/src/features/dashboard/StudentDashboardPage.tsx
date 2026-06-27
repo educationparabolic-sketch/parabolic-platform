@@ -2,10 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useGlobalPortalState } from "../../../../../shared/services/globalPortalState";
 import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
 import {
-  UiChartContainer,
   UiStatCard,
   UiTable,
-  type UiChartPoint,
   type UiTableColumn,
 } from "../../../../../shared/ui/components";
 import {
@@ -41,6 +39,11 @@ function formatRank(value: number): string {
   return `#${Math.round(value)}`;
 }
 
+function formatSignedPercent(value: number): string {
+  const rounded = Math.round(value);
+  return `${rounded >= 0 ? "+" : ""}${rounded}%`;
+}
+
 function formatDateTime(value: string): string {
   const timestamp = Date.parse(value);
   if (Number.isNaN(timestamp)) {
@@ -53,29 +56,16 @@ function formatDateTime(value: string): string {
   }).format(new Date(timestamp));
 }
 
-function formatDate(value: string): string {
-  const timestamp = Date.parse(value);
-  if (Number.isNaN(timestamp)) {
-    return "N/A";
-  }
-
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-  }).format(new Date(timestamp));
-}
-
 function riskToneClass(riskState: StudentRiskState): string {
   switch (riskState) {
-    case "Stable":
+    case "low":
       return "student-dashboard-risk-stable";
-    case "Drift-Prone":
+    case "medium":
       return "student-dashboard-risk-drift";
-    case "Impulsive":
-      return "student-dashboard-risk-impulsive";
-    case "Volatile":
-      return "student-dashboard-risk-volatile";
-    case "Overextended":
+    case "high":
       return "student-dashboard-risk-overextended";
+    case "critical":
+      return "student-dashboard-risk-volatile";
     default:
       return "student-dashboard-risk-stable";
   }
@@ -143,20 +133,20 @@ function StudentDashboardPage() {
     };
   }, []);
 
-  const summaryCards = useMemo<DashboardCard[]>(() => {
+  const l0MetricCards = useMemo<DashboardCard[]>(() => {
     return [
       {
-        label: "Avg Raw Score % (Last 5 Tests)",
+        label: "Avg Raw Score %",
         value: formatPercent(dataset.avgRawScorePercent),
-        helper: "Recent tests",
+        helper: "Current progress snapshot",
       },
       {
         label: "Avg Accuracy %",
         value: formatPercent(dataset.avgAccuracyPercent),
-        helper: "Recent tests",
+        helper: "Current progress snapshot",
       },
       {
-        label: "Tests Attempted (Current Year)",
+        label: "Tests Attempted",
         value: String(dataset.testsAttempted),
         helper: "Current academic year",
       },
@@ -176,6 +166,63 @@ function StudentDashboardPage() {
         []),
     ];
   }, [dataset]);
+
+  const l1MetricCards = useMemo<DashboardCard[]>(
+    () => [
+      {
+        label: "Phase Adherence",
+        value: formatPercent(dataset.phaseAdherencePercent),
+        helper: "L1 execution behavior",
+      },
+      {
+        label: "Easy Neglect",
+        value: formatPercent(dataset.easyNeglectPercent),
+        helper: "L1 behavior signal",
+      },
+      {
+        label: "Hard Bias",
+        value: formatPercent(dataset.hardBiasPercent),
+        helper: "L1 behavior signal",
+      },
+      {
+        label: "Behavior",
+        value: dataset.behaviorSummaryTag,
+        helper: "L1 summary tag",
+      },
+    ],
+    [dataset],
+  );
+
+  const l2MetricCards = useMemo<DashboardCard[]>(
+    () => [
+      {
+        label: "Risk",
+        value: dataset.riskState,
+        helper: "L2 execution risk",
+      },
+      {
+        label: "Discipline Index",
+        value: String(Math.round(dataset.disciplineIndex)),
+        helper: "L2 consistency score",
+      },
+      {
+        label: "Controlled Delta",
+        value: formatSignedPercent(dataset.controlledModeImprovementDeltaPercent),
+        helper: "Controlled-mode performance delta",
+      },
+      {
+        label: "Guess Rate",
+        value: formatPercent(dataset.guessProbabilityPercent),
+        helper: "L2 rushed-attempt signal",
+      },
+      {
+        label: "Stability",
+        value: dataset.executionStabilityFlag,
+        helper: "L2 execution stability",
+      },
+    ],
+    [dataset],
+  );
 
   const activeLicenseLayer = useMemo<LicenseLayer>(() => {
     const resolvedLayer = globalState.licenseLayer ?? dataset.licenseLayer;
@@ -210,16 +257,6 @@ function StudentDashboardPage() {
 
     return `${headline} ${nextRunPrompt}`;
   }, [dataset, latestResult]);
-
-  const performanceTrendPoints = useMemo<UiChartPoint[]>(() => {
-    return dataset.recentResults
-      .slice(0, 5)
-      .reverse()
-      .map((result) => ({
-        label: formatDate(result.completedAt),
-        value: Math.round(result.rawScorePercent),
-      }));
-  }, [dataset.recentResults]);
 
   const upcomingColumns = useMemo<UiTableColumn<UpcomingTestRecord>[]>(
     () => [
@@ -293,139 +330,109 @@ function StudentDashboardPage() {
 
       {debugMode && inlineMessage ? <p className="student-dashboard-inline-note">{inlineMessage}</p> : null}
 
-      <section className="student-dashboard-home-grid" aria-label="Dashboard home summary">
-        <article className="student-focus-card student-focus-card-primary">
-          <p className="student-focus-card-label">Next Test</p>
-          <h3>{nextUpcoming ? nextUpcoming.testName : "Nothing scheduled yet"}</h3>
-          <p>
-            {nextUpcoming ?
-              `${formatDateTime(nextUpcoming.startAt)} · ${nextUpcoming.durationMinutes} min` :
-              "Your next assigned test will appear here when it is ready."}
-          </p>
-          {nextUpcoming ? <span className="student-dashboard-mode-chip">{nextUpcoming.mode}</span> : null}
-        </article>
-
-        <article className="student-focus-card">
-          <p className="student-focus-card-label">Progress Snapshot</p>
-          <h3>{formatPercent(dataset.avgRawScorePercent)} Raw Score %</h3>
-          <p>{`${formatPercent(dataset.avgAccuracyPercent)} Accuracy % across recent tests.`}</p>
-        </article>
-
-        <article className="student-focus-card">
-          <p className="student-focus-card-label">Recent Result</p>
-          <h3>{latestResult ? latestResult.testName : "No completed test yet"}</h3>
-          <p>
-            {latestResult ?
-              `${formatPercent(latestResult.rawScorePercent)} Raw Score % · ${formatPercent(latestResult.accuracyPercent)} Accuracy %` :
-              "Your first completed test will start your progress history."}
-          </p>
-        </article>
-
-        <article className="student-focus-card student-focus-card-encouragement">
-          <p className="student-focus-card-label">Keep Going</p>
-          <h3>One steady step</h3>
-          <p>{motivationalBannerMessage}</p>
-        </article>
-      </section>
-
-      <section className="student-section-group" aria-label="Progress details">
+      <section className="student-dashboard-layer-section" aria-labelledby="student-dashboard-l0-title">
         <div className="student-section-heading">
-          <h3>Progress Snapshot</h3>
-          <p>Quick numbers for your current learning rhythm.</p>
+          <p className="student-dashboard-layer-badge">L0 Metrics</p>
+          <h3 id="student-dashboard-l0-title">Current Progress Snapshot</h3>
+          <p>Your basic progress view: scores, attempted tests, and upcoming assignment count.</p>
         </div>
         <div className="student-dashboard-card-grid">
-        {summaryCards.map((card) => (
-          <UiStatCard
-            key={card.label}
-            title={card.label}
-            value={isLoading ? "..." : card.value}
-            helper={card.helper}
-          />
-        ))}
+          {l0MetricCards.map((card) => (
+            <UiStatCard
+              key={card.label}
+              title={card.label}
+              value={isLoading ? "..." : card.value}
+              helper={card.helper}
+            />
+          ))}
         </div>
       </section>
 
-      <div className="student-dashboard-status-grid">
-        <UiStatCard
-          title="Current Risk Indicator"
-          value={<span className={`student-dashboard-risk-pill ${riskToneClass(dataset.riskState)}`}>{dataset.riskState}</span>}
-          helper="Current progress pattern"
-        >
-          Risk signal is rendered with constructive, neutral language.
-        </UiStatCard>
+      <section className="student-dashboard-layer-section" aria-labelledby="student-dashboard-trends-title">
+        <div className="student-section-heading">
+          <h3 id="student-dashboard-trends-title">Upcoming Trends & Recent Results</h3>
+          <p>{motivationalBannerMessage}</p>
+        </div>
+        <div className="student-dashboard-home-grid" aria-label="Upcoming and recent result highlights">
+          <article className="student-focus-card student-focus-card-primary">
+            <p className="student-focus-card-label">Next Test</p>
+            <h3>{nextUpcoming ? nextUpcoming.testName : "Nothing scheduled yet"}</h3>
+            <p>
+              {nextUpcoming ?
+                `${formatDateTime(nextUpcoming.startAt)} · ${nextUpcoming.durationMinutes} min` :
+                "Your next assigned test will appear here when it is ready."}
+            </p>
+            {nextUpcoming ? <span className="student-dashboard-mode-chip">{nextUpcoming.mode}</span> : null}
+          </article>
+          <article className="student-focus-card">
+            <p className="student-focus-card-label">Recent Result</p>
+            <h3>{latestResult ? latestResult.testName : "No completed test yet"}</h3>
+            <p>
+              {latestResult ?
+                `${formatPercent(latestResult.rawScorePercent)} Raw Score % · ${formatPercent(latestResult.accuracyPercent)} Accuracy %` :
+                "Your first completed test will start your progress history."}
+            </p>
+          </article>
+        </div>
+        <div className="student-dashboard-widget-grid student-detail-zone">
+          <UiTable
+            caption="Upcoming Test List"
+            columns={upcomingColumns}
+            rows={dataset.upcomingTests}
+            rowKey={(row) => row.runId}
+            emptyStateText="No upcoming assigned runs."
+          />
 
-        <UiStatCard
-          title="Discipline Index Summary"
-          value={formatPercent(dataset.disciplineIndex)}
-          helper="Execution consistency"
-        >
-          <div className="student-dashboard-discipline-track" aria-hidden="true">
-            <span style={{ width: `${Math.max(0, Math.min(100, Math.round(dataset.disciplineIndex)))}%` }} />
-          </div>
-        </UiStatCard>
-      </div>
+          <UiTable
+            caption="Recent Results"
+            columns={resultColumns}
+            rows={dataset.recentResults}
+            rowKey={(row) => row.runId}
+            emptyStateText="No completed runs yet."
+          />
+        </div>
+      </section>
 
       {isL1Plus ? (
-        <div className="student-dashboard-layer-grid" aria-label="L1 behavioral cards and adherence indicators">
-          <UiStatCard title="Phase Adherence %" value={formatPercent(dataset.phaseAdherencePercent)} helper="L1 adherence indicator" />
-          <UiStatCard title="Easy Neglect %" value={formatPercent(dataset.easyNeglectPercent)} helper="L1 behavior indicator" />
-          <UiStatCard title="Hard Bias %" value={formatPercent(dataset.hardBiasPercent)} helper="L1 behavior indicator" />
-          <UiStatCard
-            title="Time Misallocation %"
-            value={formatPercent(dataset.timeMisallocationPercent)}
-            helper="L1 pacing indicator"
-          />
-          <UiStatCard title="Behavior Summary Tag" value={dataset.behaviorSummaryTag} helper="Constructive interpretation" />
-        </div>
+        <section className="student-dashboard-layer-section" aria-labelledby="student-dashboard-l1-title">
+          <div className="student-section-heading">
+            <p className="student-dashboard-layer-badge">L1 Metrics</p>
+            <h3 id="student-dashboard-l1-title">Execution Behavior</h3>
+            <p>Phase adherence and behavior signals shown only for L1 and higher student access.</p>
+          </div>
+          <div className="student-dashboard-layer-grid">
+            {l1MetricCards.map((card) => (
+              <UiStatCard key={card.label} title={card.label} value={card.value} helper={card.helper} />
+            ))}
+          </div>
+        </section>
       ) : null}
 
-      <div className="student-dashboard-widget-grid student-detail-zone">
-        <UiTable
-          caption="Upcoming Test List"
-          columns={upcomingColumns}
-          rows={dataset.upcomingTests}
-          rowKey={(row) => row.runId}
-          emptyStateText="No upcoming assigned runs."
-        />
-
-        <UiTable
-          caption="Recent Results"
-          columns={resultColumns}
-          rows={dataset.recentResults}
-          rowKey={(row) => row.runId}
-          emptyStateText="No completed runs yet."
-        />
-      </div>
-
-      <UiChartContainer
-        title="Recent Raw Score Trend"
-        subtitle="Last completed tests"
-        variant="line"
-        data={performanceTrendPoints.length > 0 ? performanceTrendPoints : [{ label: "No Data", value: 0 }]}
-        maxValue={100}
-      />
-
       {isL2Plus ? (
-        <section className="student-dashboard-l2-section" aria-label="L2 risk-state and discipline depth">
-          <div className="student-dashboard-layer-grid">
-            <UiStatCard
-              title="Controlled Mode Improvement Delta"
-              value={`${Math.round(dataset.controlledModeImprovementDeltaPercent)}%`}
-              helper="L2 execution depth"
-            />
-            <UiStatCard
-              title="Guess Probability Indicator"
-              value={`${Math.round(dataset.guessProbabilityPercent)}%`}
-              helper="L2 execution depth"
-            />
+        <section className="student-dashboard-layer-section student-dashboard-l2-section" aria-labelledby="student-dashboard-l2-title">
+          <div className="student-section-heading">
+            <p className="student-dashboard-layer-badge">L2 Metrics</p>
+            <h3 id="student-dashboard-l2-title">Execution Risk & Discipline</h3>
+            <p>Risk, discipline, controlled-mode delta, guess rate, and stability shown only for L2 and higher access.</p>
           </div>
-          <UiChartContainer
-            title="Phase Compliance Mini Trend"
-            subtitle="L2 phase discipline progression"
-            variant="line"
-            data={dataset.phaseComplianceMiniTrend}
-            maxValue={100}
-          />
+          <div className="student-dashboard-layer-grid">
+            {l2MetricCards.map((card) => (
+              <UiStatCard
+                key={card.label}
+                title={card.label}
+                value={card.label === "Risk" ? (
+                  <span className={`student-dashboard-risk-pill ${riskToneClass(dataset.riskState)}`}>{card.value}</span>
+                ) : card.value}
+                helper={card.helper}
+              >
+                {card.label === "Discipline Index" ? (
+                  <div className="student-dashboard-discipline-track" aria-hidden="true">
+                    <span style={{ width: `${Math.max(0, Math.min(100, Math.round(dataset.disciplineIndex)))}%` }} />
+                  </div>
+                ) : null}
+              </UiStatCard>
+            ))}
+          </div>
         </section>
       ) : null}
     </section>

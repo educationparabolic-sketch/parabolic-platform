@@ -2,7 +2,7 @@ import { ApiClientError } from "../../../../../shared/services/apiClient";
 import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
 import { getStudentSummaryResource } from "../../services/studentSummaryApi";
 
-export type StudentRiskState = "Stable" | "Drift-Prone" | "Impulsive" | "Volatile" | "Overextended";
+export type StudentRiskState = "low" | "medium" | "high" | "critical";
 
 export interface UpcomingTestRecord {
   runId: string;
@@ -36,6 +36,7 @@ export interface StudentDashboardDataset {
   behaviorSummaryTag: string;
   controlledModeImprovementDeltaPercent: number;
   guessProbabilityPercent: number;
+  executionStabilityFlag: string;
   phaseComplianceMiniTrend: Array<{ label: string; value: number }>;
   upcomingTests: UpcomingTestRecord[];
   recentResults: RecentResultRecord[];
@@ -43,19 +44,20 @@ export interface StudentDashboardDataset {
 
 export const STUDENT_DASHBOARD_FALLBACK_DATASET: StudentDashboardDataset = {
   licenseLayer: "L0",
-  avgRawScorePercent: 72,
-  avgAccuracyPercent: 78,
+  avgRawScorePercent: 74,
+  avgAccuracyPercent: 81,
   batchRank: 7,
-  disciplineIndex: 74,
-  testsAttempted: 9,
-  riskState: "Drift-Prone",
-  phaseAdherencePercent: 68,
-  easyNeglectPercent: 21,
-  hardBiasPercent: 17,
+  disciplineIndex: 86,
+  testsAttempted: 6,
+  riskState: "low",
+  phaseAdherencePercent: 88,
+  easyNeglectPercent: 12,
+  hardBiasPercent: 9,
   timeMisallocationPercent: 24,
-  behaviorSummaryTag: "Steady with end-phase drift",
-  controlledModeImprovementDeltaPercent: 6,
-  guessProbabilityPercent: 19,
+  behaviorSummaryTag: "Late-phase drift",
+  controlledModeImprovementDeltaPercent: 9,
+  guessProbabilityPercent: 11,
+  executionStabilityFlag: "Stable",
   phaseComplianceMiniTrend: [
     { label: "W-3", value: 62 },
     { label: "W-2", value: 66 },
@@ -156,21 +158,30 @@ function toLicenseLayer(value: unknown): LicenseLayer {
 
 function toRiskState(value: unknown): StudentRiskState {
   if (typeof value !== "string") {
-    return "Stable";
+    return "low";
   }
 
   const normalized = value.trim().toLowerCase();
   switch (normalized) {
+    case "low":
+      return "low";
+    case "medium":
+      return "medium";
+    case "high":
+      return "high";
+    case "critical":
+      return "critical";
+    case "stable":
+      return "low";
     case "drift-prone":
-      return "Drift-Prone";
+      return "medium";
     case "impulsive":
-      return "Impulsive";
     case "volatile":
-      return "Volatile";
+      return "high";
     case "overextended":
-      return "Overextended";
+      return "critical";
     default:
-      return "Stable";
+      return "low";
   }
 }
 
@@ -260,14 +271,24 @@ function normalizeStudentDashboardDataset(payload: unknown): StudentDashboardDat
     ),
     disciplineIndex: toNumberOrZero(typedPayload.disciplineIndex),
     testsAttempted: toNumberOrZero(typedPayload.testsAttempted),
-    riskState: toRiskState(typedPayload.riskState),
+    riskState: toRiskState(typedPayload.riskState ?? typedPayload.rollingRiskCluster),
     phaseAdherencePercent: toNumberOrZero(typedPayload.phaseAdherencePercent),
     easyNeglectPercent: toNumberOrZero(typedPayload.easyNeglectPercent),
     hardBiasPercent: toNumberOrZero(typedPayload.hardBiasPercent),
     timeMisallocationPercent: toNumberOrZero(typedPayload.timeMisallocationPercent),
     behaviorSummaryTag: toStringOrFallback(typedPayload.behaviorSummaryTag, "Balanced execution momentum"),
-    controlledModeImprovementDeltaPercent: toNumberOrZero(typedPayload.controlledModeImprovementDeltaPercent),
-    guessProbabilityPercent: toNumberOrZero(typedPayload.guessProbabilityPercent),
+    controlledModeImprovementDeltaPercent: toNumberOrZero(
+      typedPayload.controlledModeImprovementDeltaPercent ??
+        typedPayload.controlledModePerformanceDelta ??
+        typedPayload.controlledDelta,
+    ),
+    guessProbabilityPercent: toNumberOrZero(
+      typedPayload.guessProbabilityPercent ?? typedPayload.guessRatePercent ?? typedPayload.guessRate,
+    ),
+    executionStabilityFlag: toStringOrFallback(
+      typedPayload.executionStabilityFlag ?? typedPayload.executionStabilityBadge ?? typedPayload.stabilityFlag,
+      "Stable",
+    ),
     phaseComplianceMiniTrend:
       phaseComplianceMiniTrend.length > 0 ?
         phaseComplianceMiniTrend :

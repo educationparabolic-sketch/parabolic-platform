@@ -24,8 +24,8 @@ function StudentPortalShell(props: StudentPortalShellProps) {
         {" "}
         <code>/student/*</code>
         {" "}
-        into a route registry covering dashboard, tests, performance, insights, discipline, and
-        profile views with layered access for L1 and L2 capabilities.
+        into a route registry covering dashboard, tests, analytics, and
+        profile views with layered performance metrics.
       </p>
       <dl className="meta-grid">
         <div>
@@ -80,7 +80,7 @@ function StudentPortalShell(props: StudentPortalShellProps) {
         <section className="panel">
           <h3>Available Student Routes</h3>
           <p className="panel-copy">
-            The visible navigation below is filtered by the current license layer so L0 hides insights and L1 hides discipline metrics.
+            The visible navigation below is filtered by the current license layer and centers student metrics in Analytics.
           </p>
           <div className="route-chip-grid">
             {visibleRoutes.map((route) => (
@@ -93,8 +93,7 @@ function StudentPortalShell(props: StudentPortalShellProps) {
         </section>
       </div>
       <div className="callout">
-        Student access remains role-locked to `student`, insights unlock at `L1`, discipline metrics
-        unlock at `L2`, and performance detail routes support dynamic `testId` resolution.
+        Student access remains role-locked to `student`, and analytics detail routes support dynamic `testId` resolution.
       </div>
     </section>
   );

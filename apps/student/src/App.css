@@ -521,6 +521,18 @@
   gap: 1rem;
 }
 
+.student-dashboard-layer-section {
+  display: grid;
+  gap: 0.85rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5ecf6;
+}
+
+.student-dashboard-layer-section:first-of-type {
+  padding-top: 0;
+  border-top: 0;
+}
+
 .student-dashboard-inline-note {
   margin: 0;
   padding: 0.75rem;
@@ -554,13 +566,13 @@
 
 .student-dashboard-card-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 0.75rem;
 }
 
 .student-dashboard-home-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 0.75rem;
 }
 
@@ -617,7 +629,7 @@
 
 .student-dashboard-layer-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 0.75rem;
 }
 
@@ -769,57 +781,6 @@
   color: #24426a;
 }
 
-.student-my-tests-lifecycle-strip {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.75rem;
-}
-
-.student-my-tests-lifecycle-card {
-  border: 1px solid #d6e1f1;
-  border-radius: 0.75rem;
-  background: #fbfdff;
-  padding: 0.85rem;
-  display: grid;
-  gap: 0.45rem;
-}
-
-.student-my-tests-lifecycle-card strong,
-.student-my-tests-lifecycle-card p {
-  margin: 0;
-}
-
-.student-my-tests-lifecycle-card p {
-  color: #3b587f;
-}
-
-.student-my-tests-lifecycle-pill {
-  width: fit-content;
-  border-radius: 999px;
-  padding: 0.25rem 0.65rem;
-  font-size: 0.78rem;
-  font-weight: 700;
-  border: 1px solid transparent;
-}
-
-.student-my-tests-lifecycle-pill-hot {
-  background: #fff5e2;
-  border-color: #dfc28d;
-  color: #7a5208;
-}
-
-.student-my-tests-lifecycle-pill-warm {
-  background: #e9f7ef;
-  border-color: #8ecfb0;
-  color: #0f6a46;
-}
-
-.student-my-tests-lifecycle-pill-cold {
-  background: #f0f3f8;
-  border-color: #bec8d6;
-  color: #5b667a;
-}
-
 .student-my-tests-filter-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -845,6 +806,52 @@
 .student-my-tests-filter-active {
   border-color: #8ca9cf;
   background: #ecf4ff;
+}
+
+.student-my-tests-search-panel {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.4fr) repeat(2, minmax(160px, 0.8fr)) auto;
+  gap: 0.75rem;
+  align-items: end;
+  border: 1px solid #d6e1f1;
+  border-radius: 0.75rem;
+  background: #fbfdff;
+  padding: 0.85rem;
+}
+
+.student-my-tests-search-panel label {
+  display: grid;
+  gap: 0.35rem;
+  color: #314f72;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.student-my-tests-search-panel input {
+  min-height: 40px;
+  border: 1px solid #c9d6e8;
+  border-radius: 0.55rem;
+  background: #ffffff;
+  color: #173763;
+  padding: 0.5rem 0.65rem;
+  font: inherit;
+}
+
+.student-my-tests-search-panel button {
+  min-height: 40px;
+  border: 1px solid #a9bfdc;
+  background: #f2f6fd;
+  color: #173c6e;
+  border-radius: 0.55rem;
+  padding: 0.5rem 0.8rem;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.student-my-tests-search-panel button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .student-my-tests-test-cell {
@@ -1016,56 +1023,98 @@
   opacity: 0.6;
 }
 
-.student-my-tests-solution-view {
+.student-my-tests-drilldown-page {
+  max-width: 1180px;
+}
+
+.student-my-tests-drilldown-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.student-my-tests-drilldown-header h2 {
+  margin: 0.25rem 0 0;
+}
+
+.student-my-tests-drilldown-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.student-my-tests-drilldown-meta span,
+.student-my-tests-response-row span {
   border: 1px solid #d8e2f1;
-  border-radius: 0.75rem;
-  padding: 0.95rem;
-  background: #fbfdff;
-  display: grid;
-  gap: 0.6rem;
-}
-
-.student-my-tests-solution-view h3 {
-  margin: 0;
-}
-
-.student-my-tests-solution-view p {
-  margin: 0;
-  color: #355174;
+  border-radius: 999px;
+  background: #f5f8fd;
+  color: #24476e;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.84rem;
+  font-weight: 700;
 }
 
 .student-my-tests-solution-grid {
   display: grid;
-  gap: 0.6rem;
+  gap: 1rem;
 }
 
 .student-my-tests-solution-card {
   border: 1px solid #d8e4f5;
-  border-radius: 0.7rem;
-  padding: 0.7rem;
+  border-radius: 0.75rem;
+  padding: 0.9rem;
   background: #ffffff;
   display: grid;
-  gap: 0.45rem;
+  gap: 0.75rem;
 }
 
-.student-my-tests-solution-card h4 {
+.student-my-tests-solution-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.student-my-tests-solution-card-header h3 {
   margin: 0;
 }
 
-.student-my-tests-solution-card p {
-  margin: 0;
+.student-my-tests-solution-card-header span {
+  color: #385575;
+  font-weight: 700;
 }
 
 .student-my-tests-solution-images {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.5rem;
+  gap: 0.75rem;
+}
+
+.student-my-tests-solution-images figure {
+  margin: 0;
+  display: grid;
+  gap: 0.4rem;
 }
 
 .student-my-tests-solution-images img {
   width: 100%;
   border-radius: 0.5rem;
   border: 1px solid #d5dfef;
+  background: #f6f9fd;
+}
+
+.student-my-tests-solution-images figcaption {
+  color: #557092;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.student-my-tests-response-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
 }
 
 .student-my-tests-solution-links {
@@ -1081,6 +1130,11 @@
   font-weight: 600;
 }
 
+.student-my-tests-solution-links span {
+  color: #6b7c92;
+  font-weight: 600;
+}
+
 .student-my-tests-solution-links a:hover {
   text-decoration: underline;
 }
@@ -1088,6 +1142,18 @@
 .student-performance-page {
   display: grid;
   gap: 1rem;
+}
+
+.student-performance-layer-section {
+  display: grid;
+  gap: 0.9rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5ecf6;
+}
+
+.student-performance-layer-section:first-of-type {
+  padding-top: 0;
+  border-top: 0;
 }
 
 .student-performance-inline-note {
@@ -1170,8 +1236,176 @@
 .student-performance-history-card dl {
   margin: 0;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
   gap: 0.55rem;
+}
+
+.student-performance-history-signal-groups {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.student-performance-history-filters {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(150px, 0.7fr)) auto;
+  gap: 0.75rem;
+  align-items: end;
+  border: 1px solid #d6e1f1;
+  border-radius: 0.75rem;
+  background: #fbfdff;
+  padding: 0.85rem;
+  max-width: 820px;
+}
+
+.student-performance-history-filters label {
+  display: grid;
+  gap: 0.35rem;
+  color: #314f72;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.student-performance-history-filters input,
+.student-performance-history-filters select {
+  min-height: 40px;
+  border: 1px solid #c9d6e8;
+  border-radius: 0.55rem;
+  background: #ffffff;
+  color: #173763;
+  padding: 0.5rem 0.65rem;
+  font: inherit;
+}
+
+.student-performance-history-filters button {
+  min-height: 40px;
+  border: 1px solid #a9bfdc;
+  background: #f2f6fd;
+  color: #173c6e;
+  border-radius: 0.55rem;
+  padding: 0.5rem 0.8rem;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.student-performance-history-filters button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.student-performance-history-table-card {
+  width: min(100%, 1120px);
+  border: 1px solid #d6e1f1;
+  border-radius: 0.9rem;
+  background: linear-gradient(180deg, #fbfdff 0%, #ffffff 100%);
+  padding: 0.9rem;
+  box-shadow: 0 18px 42px rgba(30, 69, 120, 0.08);
+}
+
+.student-performance-history-table-card .ui-table-shell {
+  margin: 0;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  overflow-x: auto;
+}
+
+.student-performance-history-table-card .ui-table {
+  width: 100%;
+  min-width: 1040px;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0 0.45rem;
+}
+
+.student-performance-history-table-card .ui-table th:nth-child(1),
+.student-performance-history-table-card .ui-table td:nth-child(1) {
+  width: 14%;
+}
+
+.student-performance-history-table-card .ui-table th:nth-child(2),
+.student-performance-history-table-card .ui-table td:nth-child(2),
+.student-performance-history-table-card .ui-table th:nth-child(3),
+.student-performance-history-table-card .ui-table td:nth-child(3) {
+  width: 10%;
+}
+
+.student-performance-history-table-card .ui-table th:nth-child(4),
+.student-performance-history-table-card .ui-table td:nth-child(4),
+.student-performance-history-table-card .ui-table th:nth-child(5),
+.student-performance-history-table-card .ui-table td:nth-child(5) {
+  width: 8%;
+}
+
+.student-performance-history-table-card .ui-table th:nth-child(6),
+.student-performance-history-table-card .ui-table td:nth-child(6),
+.student-performance-history-table-card .ui-table th:nth-child(7),
+.student-performance-history-table-card .ui-table td:nth-child(7) {
+  width: 25%;
+}
+
+.student-performance-history-table-card .ui-table caption {
+  color: #173763;
+  font-weight: 800;
+  text-align: left;
+  margin-bottom: 0.5rem;
+}
+
+.student-performance-history-table-card .ui-table th {
+  color: #5a7192;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.35rem 0.65rem;
+}
+
+.student-performance-history-table-card .ui-table td {
+  background: #f8fbff;
+  border-top: 1px solid #e0e8f4;
+  border-bottom: 1px solid #e0e8f4;
+  padding: 0.7rem 0.65rem;
+  vertical-align: top;
+}
+
+.student-performance-history-table-card .ui-table td:first-child {
+  border-left: 1px solid #e0e8f4;
+  border-radius: 0.7rem 0 0 0.7rem;
+}
+
+.student-performance-history-table-card .ui-table td:last-child {
+  border-right: 1px solid #e0e8f4;
+  border-radius: 0 0.7rem 0.7rem 0;
+}
+
+.student-performance-history-pagination {
+  margin-top: 0.75rem;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.student-performance-history-pagination p {
+  margin: 0;
+  color: #4d6688;
+  font-size: 0.85rem;
+}
+
+.student-performance-history-pagination button {
+  border: 1px solid #a9bfdc;
+  background: #f2f6fd;
+  color: #173c6e;
+  border-radius: 0.55rem;
+  padding: 0.48rem 0.75rem;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.student-performance-history-pagination button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .student-performance-history-card dt,
@@ -1186,6 +1420,73 @@
 .student-performance-history-card dd {
   color: #173763;
   font-weight: 800;
+}
+
+.student-performance-history-layer-signals {
+  border: 1px solid #d8e4f5;
+  border-radius: 0.65rem;
+  background: #f7fbff;
+  padding: 0.65rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.student-performance-history-layer-signals-l2 {
+  background: #f8f7ff;
+  border-color: #dcd8f4;
+}
+
+.student-performance-history-layer-signals > strong {
+  color: #173a68;
+  font-size: 0.78rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.student-performance-history-layer-signals div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.student-performance-history-layer-signals span {
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid rgba(23, 58, 104, 0.12);
+  color: #294b75;
+  padding: 0.28rem 0.55rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.student-performance-table-signals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-content: start;
+}
+
+.student-performance-table-signals strong {
+  flex-basis: 100%;
+  color: #173a68;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.student-performance-table-signals span {
+  border: 1px solid rgba(23, 58, 104, 0.1);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #294b75;
+  padding: 0.22rem 0.45rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.student-performance-table-signals-l2 span {
+  color: #3c3972;
 }
 
 .student-performance-run-cell {
@@ -1784,70 +2085,152 @@
 
 .student-profile-page {
   display: grid;
+  gap: 1.1rem;
+  max-width: 1120px;
+}
+
+.student-profile-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
   gap: 1rem;
-  max-width: 760px;
+  padding: 1rem;
+  border: 1px solid rgba(20, 84, 175, 0.14);
+  border-radius: 0.8rem;
+  background: linear-gradient(180deg, #f8fbff, #edf5ff);
+}
+
+.student-profile-avatar {
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #1454af, #0d3f86);
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  box-shadow: 0 12px 22px rgba(20, 84, 175, 0.2);
+}
+
+.student-profile-title-block {
+  min-width: 0;
+}
+
+.student-profile-title-block h2,
+.student-profile-title-block p {
+  margin: 0;
+}
+
+.student-profile-title-block h2 {
+  color: #132c52;
+  font-size: 1.45rem;
+  line-height: 1.15;
+}
+
+.student-profile-title-block p {
+  margin-top: 0.35rem;
+  color: #365476;
+  font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .student-profile-panel {
   display: grid;
-  gap: 1rem;
+  gap: 1.1rem;
 }
 
 .student-profile-section {
   display: grid;
-  gap: 0.75rem;
-  padding-top: 1rem;
-  border-top: 1px solid #e5ecf6;
-}
-
-.student-profile-section:first-child {
-  padding-top: 0;
-  border-top: 0;
+  gap: 0.85rem;
+  padding: 1rem;
+  border: 1px solid #dbe5f2;
+  border-radius: 0.8rem;
+  background: #fbfdff;
 }
 
 .student-profile-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.7rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.student-live-photo-required-banner {
+  margin-bottom: 1rem;
+  border: 1px solid rgba(31, 101, 180, 0.2);
+  border-radius: 0.75rem;
+  background: #f3f8ff;
+  padding: 0.85rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.student-live-photo-required-banner strong,
+.student-live-photo-required-banner p {
+  margin: 0;
+}
+
+.student-live-photo-required-banner p {
+  margin-top: 0.25rem;
+  color: #3d587d;
+  line-height: 1.45;
+}
+
+.student-live-photo-required-banner a {
+  border: 1px solid #afc3e0;
+  border-radius: 0.55rem;
+  background: #ffffff;
+  color: #173b69;
+  padding: 0.5rem 0.75rem;
+  text-decoration: none;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .student-profile-field {
   margin: 0;
   border: 1px solid #d7e2f2;
-  border-radius: 0.65rem;
-  padding: 0.75rem;
-  background: #fbfdff;
+  border-radius: 0.75rem;
+  padding: 0.85rem;
+  background: #ffffff;
+  min-width: 0;
 }
 
 .student-profile-field h3 {
   margin: 0;
-  font-size: 0.82rem;
+  font-size: 0.75rem;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   color: #5d7497;
 }
 
 .student-profile-field p {
-  margin: 0.4rem 0 0;
-  font-weight: 600;
+  margin: 0.45rem 0 0;
+  font-weight: 800;
   color: #143059;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .student-profile-actions {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.55rem;
   flex-wrap: wrap;
 }
 
 .student-profile-actions button {
   border: 1px solid #afc3e0;
-  background: #f1f6ff;
+  background: #ffffff;
   color: #173b69;
-  border-radius: 0.55rem;
-  padding: 0.5rem 0.8rem;
+  border-radius: 0.65rem;
+  padding: 0.58rem 0.82rem;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 800;
+  box-shadow: 0 8px 16px rgba(20, 52, 96, 0.06);
 }
 
 .student-profile-actions button:disabled {
@@ -1861,11 +2244,166 @@
   color: #6c2323;
 }
 
+.student-live-photo-panel {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.student-live-photo-identity-card {
+  display: grid;
+  gap: 0.8rem;
+  border: 1px solid #d7e2f2;
+  border-radius: 0.85rem;
+  padding: 0.75rem;
+  background: #ffffff;
+}
+
+.student-live-photo-preview {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  border: 1px solid #dbe5f2;
+  border-radius: 0.75rem;
+  background: linear-gradient(180deg, #f4f8ff, #edf3fb);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  color: #60789b;
+  font-weight: 700;
+}
+
+.student-live-photo-preview img,
+.student-live-photo-camera video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.student-live-photo-details {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.student-live-photo-summary {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.student-live-photo-status {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 0.32rem 0.62rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.student-live-photo-status-verified {
+  background: rgba(15, 146, 85, 0.14);
+  color: #0f6a41;
+}
+
+.student-live-photo-status-unverified {
+  background: rgba(219, 153, 41, 0.16);
+  color: #8b5a13;
+}
+
+.student-live-photo-details small {
+  color: #587093;
+}
+
+.student-live-photo-camera {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 1px solid #d7e2f2;
+  border-radius: 0.8rem;
+  background: #eef4ff;
+  overflow: hidden;
+}
+
+.student-live-photo-camera-placeholder {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 0.35rem;
+  color: #426282;
+  text-align: center;
+  padding: 1rem;
+}
+
+.student-live-photo-camera-placeholder strong,
+.student-live-photo-camera-placeholder span {
+  display: block;
+}
+
+.student-live-photo-camera-placeholder span {
+  font-size: 0.9rem;
+  color: #60789b;
+}
+
+.student-live-photo-camera canvas {
+  display: none;
+}
+
+.student-profile-access-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.student-profile-access-card {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  min-width: 0;
+  border: 1px solid #d7e2f2;
+  border-radius: 0.75rem;
+  padding: 0.85rem;
+  background: #ffffff;
+}
+
+.student-profile-access-card div {
+  min-width: 0;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.student-profile-access-card strong {
+  color: #16335e;
+}
+
+.student-profile-access-card span {
+  color: #60789b;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.student-profile-access-card button {
+  flex: 0 0 auto;
+  border: 1px solid #afc3e0;
+  background: #f1f6ff;
+  color: #173b69;
+  border-radius: 0.65rem;
+  padding: 0.58rem 0.82rem;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.student-profile-access-card button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .student-profile-notice {
   margin: 0;
-  padding: 0.7rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid rgba(47, 102, 179, 0.22);
   border-left: 4px solid #2f66b3;
-  background: #eef4ff;
+  border-radius: 0.7rem;
+  background: #f2f7ff;
   color: #24426a;
 }
 
@@ -1889,6 +2427,7 @@
   .student-performance-l1-grid,
   .student-performance-controlled-grid,
   .student-performance-progress-grid,
+  .student-performance-history-filters,
   .student-topic-card,
   .student-performance-history-card,
   .student-performance-history-card dl,
@@ -1905,6 +2444,10 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .student-my-tests-search-panel {
+    grid-template-columns: 1fr;
+  }
+
   .student-test-card {
     grid-template-columns: 1fr;
   }
@@ -1914,7 +2457,25 @@
   }
 
   .student-my-tests-solution-images,
-  .student-profile-grid {
+  .student-profile-grid,
+  .student-live-photo-panel,
+  .student-profile-access-grid {
     grid-template-columns: 1fr;
+  }
+
+  .student-profile-hero {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .student-profile-hero .student-live-photo-status {
+    grid-column: 1 / -1;
+  }
+
+  .student-profile-access-card {
+    align-items: flex-start;
+  }
+
+  .student-live-photo-required-banner {
+    display: grid;
   }
 }

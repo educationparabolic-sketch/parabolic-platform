@@ -26,6 +26,9 @@ const FALLBACK_STUDENTS: StudentRecord[] = [
     studentId: "STU-001",
     fullName: "Aarav Menon",
     email: "aarav.menon@school.local",
+    livePhotoUrl: "https://api.dicebear.com/9.x/initials/svg?seed=Aarav%20Menon",
+    livePhotoVerified: true,
+    livePhotoCapturedAt: "2026-04-07T08:30:00.000Z",
     batch: "Batch-A",
     status: "active",
     academicYear: "2025-26",
@@ -49,6 +52,9 @@ const FALLBACK_STUDENTS: StudentRecord[] = [
     studentId: "STU-002",
     fullName: "Diya Sharma",
     email: "diya.sharma@school.local",
+    livePhotoUrl: "https://api.dicebear.com/9.x/initials/svg?seed=Diya%20Sharma",
+    livePhotoVerified: false,
+    livePhotoCapturedAt: "2026-04-08T09:15:00.000Z",
     batch: "Batch-A",
     status: "inactive",
     academicYear: "2025-26",
@@ -72,6 +78,9 @@ const FALLBACK_STUDENTS: StudentRecord[] = [
     studentId: "STU-003",
     fullName: "Kabir Gupta",
     email: "kabir.gupta@school.local",
+    livePhotoUrl: "https://api.dicebear.com/9.x/initials/svg?seed=Kabir%20Gupta",
+    livePhotoVerified: true,
+    livePhotoCapturedAt: "2026-04-06T10:45:00.000Z",
     batch: "Batch-B",
     status: "active",
     academicYear: "2025-26",
@@ -95,6 +104,9 @@ const FALLBACK_STUDENTS: StudentRecord[] = [
     studentId: "STU-004",
     fullName: "Naina Iyer",
     email: "naina.iyer@school.local",
+    livePhotoUrl: null,
+    livePhotoVerified: false,
+    livePhotoCapturedAt: null,
     batch: "Batch-C",
     status: "suspended",
     academicYear: "2025-26",
@@ -118,6 +130,9 @@ const FALLBACK_STUDENTS: StudentRecord[] = [
     studentId: "STU-005",
     fullName: "Rehan Patel",
     email: "rehan.patel@school.local",
+    livePhotoUrl: null,
+    livePhotoVerified: false,
+    livePhotoCapturedAt: null,
     batch: "Batch-B",
     status: "invited",
     academicYear: "2025-26",
@@ -155,6 +170,9 @@ interface StudentRecord {
   studentId: string;
   fullName: string;
   email: string;
+  livePhotoUrl: string | null;
+  livePhotoVerified: boolean;
+  livePhotoCapturedAt: string | null;
   batch: string;
   status: StudentStatus;
   academicYear: string;
@@ -564,6 +582,9 @@ function normalizeStudentRecord(value: unknown, index: number): StudentRecord | 
     studentId,
     fullName,
     email,
+    livePhotoUrl: toNonEmptyString(record.livePhotoUrl ?? record.livePhotoDataUrl ?? record.identityPhotoUrl),
+    livePhotoVerified: Boolean(record.livePhotoVerified ?? record.identityPhotoVerified),
+    livePhotoCapturedAt: toNonEmptyString(record.livePhotoCapturedAt ?? record.identityPhotoCapturedAt),
     batch,
     status: toStudentStatus(record.status),
     academicYear: toNonEmptyString(record.academicYear) ?? toNonEmptyString(record.year) ?? "2025-26",
@@ -1456,6 +1477,9 @@ function applyBulkUploadCommit(
       ...(existing ?? {
         id: studentId,
         studentId,
+        livePhotoUrl: null,
+        livePhotoVerified: false,
+        livePhotoCapturedAt: null,
         academicYear: nextAcademicYear,
         avgAccuracyPercent: 0,
         avgRawScorePercent: 0,
@@ -2112,6 +2136,23 @@ function StudentManagementPage() {
     );
   }
 
+  function setLivePhotoVerification(studentId: string, verified: boolean) {
+    setStudents((current) =>
+      current.map((student) =>
+        student.id === studentId ?
+          {
+            ...student,
+            livePhotoVerified: verified,
+          } :
+          student,
+      ),
+    );
+    const targetStudent = students.find((student) => student.id === studentId);
+    setLoadMessage(
+      `${targetStudent?.fullName ?? studentId} live photo marked ${verified ? "verified" : "unverified"} for admin review.`,
+    );
+  }
+
   function openEditModal(studentId: string) {
     const student = students.find((entry) => entry.id === studentId);
     if (!student) {
@@ -2460,6 +2501,35 @@ function StudentManagementPage() {
       header: "Status",
       render: (student) => (
         <span className={`admin-student-status admin-student-status-${statusToTone(student.status)}`}>{student.status}</span>
+      ),
+    },
+    {
+      id: "livePhoto",
+      header: "Live Photo",
+      render: (student) => (
+        <div className="admin-student-live-photo-cell">
+          <div className="admin-student-live-photo-preview">
+            {student.livePhotoUrl ? (
+              <img src={student.livePhotoUrl} alt={`${student.fullName} live identity capture`} />
+            ) : (
+              <span>No photo</span>
+            )}
+          </div>
+          <span className={`admin-student-photo-status admin-student-photo-status-${student.livePhotoVerified ? "verified" : "unverified"}`}>
+            {student.livePhotoVerified ? "Verified" : "Unverified"}
+          </span>
+          <small>{student.livePhotoCapturedAt ? formatDateTimeLabel(student.livePhotoCapturedAt) : "Not captured"}</small>
+          {student.livePhotoUrl ? (
+            <div className="admin-student-inline-actions">
+              <button
+                type="button"
+                onClick={() => setLivePhotoVerification(student.id, !student.livePhotoVerified)}
+              >
+                {student.livePhotoVerified ? "Mark unverified" : "Verify photo"}
+              </button>
+            </div>
+          ) : null}
+        </div>
       ),
     },
     {

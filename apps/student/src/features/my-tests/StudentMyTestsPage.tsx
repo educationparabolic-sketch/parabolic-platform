@@ -22,32 +22,11 @@ interface StatusFilterChip {
 
 const STATUS_FILTERS: StatusFilterChip[] = [
   { id: "all", label: "All" },
-  { id: "scheduled", label: "Available" },
+  { id: "scheduled", label: "Upcoming" },
   { id: "active", label: "In Progress" },
   { id: "completed", label: "Completed" },
-  { id: "archived", label: "Archived" },
+  { id: "archived", label: "Older History" },
 ];
-
-const STORAGE_LIFECYCLE_STEPS = [
-  {
-    id: "hot",
-    label: "Now",
-    title: "Ready to start or resume",
-    description: "Available and in-progress tests stay action-ready so you can start or resume without delay.",
-  },
-  {
-    id: "warm",
-    label: "Review",
-    title: "Completed tests this year",
-    description: "Recent completed tests keep review and PDF access where your learning plan allows it.",
-  },
-  {
-    id: "cold",
-    label: "Archive",
-    title: "Older test history",
-    description: "Older records stay available as simple history so your main workspace remains focused.",
-  },
-] as const;
 
 function formatDateTime(value: string | null): string {
   if (!value) {
@@ -140,15 +119,15 @@ function computeTimeRemaining(endWindowIso: string): string {
 function statusLabel(status: StudentTestStatus): string {
   switch (status) {
     case "scheduled":
-      return "Available";
+      return "Upcoming";
     case "active":
       return "In Progress";
     case "completed":
       return "Completed";
     case "archived":
-      return "Archived";
+      return "Older History";
     default:
-      return "Available";
+      return "Upcoming";
   }
 }
 
@@ -176,6 +155,9 @@ function StudentMyTestsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<StatusFilter>("all");
+  const [testNameQuery, setTestNameQuery] = useState("");
+  const [dateRangeStart, setDateRangeStart] = useState("");
+  const [dateRangeEnd, setDateRangeEnd] = useState("");
   const [completedPage, setCompletedPage] = useState(1);
   const [completedTotal, setCompletedTotal] = useState(0);
   const [completedHasMore, setCompletedHasMore] = useState(false);
@@ -209,7 +191,7 @@ function StudentMyTestsPage() {
 
         if (!shouldUseLiveApi()) {
           setInlineMessage(
-            "Local mode detected. Build 128 fallback data loaded with separated available, in-progress, completed, and archived states.",
+            "Local mode detected. Build 128 fallback data loaded with separated upcoming, in-progress, completed, and older-history states.",
           );
         } else {
           setInlineMessage("Live mode enabled: My Tests hydrated from GET /student/tests.");
@@ -316,7 +298,7 @@ function StudentMyTestsPage() {
     }
   }
 
-  const allVisibleRows = useMemo(() => {
+  const statusRows = useMemo(() => {
     if (activeFilter === "scheduled") {
       return scheduledTests;
     }
@@ -335,6 +317,34 @@ function StudentMyTestsPage() {
 
     return [...scheduledTests, ...activeTests, ...completedTests, ...archivedTests];
   }, [activeFilter, activeTests, archivedTests, completedTests, scheduledTests]);
+
+  const allVisibleRows = useMemo(() => {
+    const normalizedQuery = testNameQuery.trim().toLowerCase();
+    const startEpoch = dateRangeStart ? Date.parse(`${dateRangeStart}T00:00:00`) : null;
+    const endEpoch = dateRangeEnd ? Date.parse(`${dateRangeEnd}T23:59:59`) : null;
+
+    return statusRows.filter((row) => {
+      if (normalizedQuery && !row.testName.toLowerCase().includes(normalizedQuery)) {
+        return false;
+      }
+
+      const rowDateSource = row.completedAt ?? row.startWindow;
+      const rowEpoch = Date.parse(rowDateSource);
+      if (!Number.isFinite(rowEpoch)) {
+        return false;
+      }
+
+      if (startEpoch !== null && Number.isFinite(startEpoch) && rowEpoch < startEpoch) {
+        return false;
+      }
+
+      if (endEpoch !== null && Number.isFinite(endEpoch) && rowEpoch > endEpoch) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [dateRangeEnd, dateRangeStart, statusRows, testNameQuery]);
 
   const summaryCounts = useMemo(() => {
     return {
@@ -443,7 +453,7 @@ function StudentMyTestsPage() {
     return (
       <div className="student-my-tests-action-stack">
         <span className="student-my-tests-session-muted">History record</span>
-        <small>Review unavailable for archived tests</small>
+        <small>Review locked for older history</small>
       </div>
     );
   }
@@ -480,35 +490,89 @@ function StudentMyTestsPage() {
     );
   }
 
+  if (openSolutionTest) {
+    return (
+      <section className="student-content-card student-my-tests-page student-my-tests-drilldown-page" aria-labelledby="student-my-tests-solution-title">
+        <div className="student-my-tests-drilldown-header">
+          <div>
+            <p className="student-content-eyebrow">Solution Review</p>
+            <h2 id="student-my-tests-solution-title">{openSolutionTest.testName}</h2>
+          </div>
+          <button
+            type="button"
+            className="student-my-tests-action"
+            onClick={() => {
+              setOpenSolutionTestId(null);
+              setSolutionItems([]);
+              setSolutionError(null);
+            }}
+          >
+            Back to My Tests
+          </button>
+        </div>
+
+        <div className="student-my-tests-drilldown-meta" aria-label="Selected test summary">
+          <span>{`Raw Score % ${formatPercent(openSolutionTest.rawScorePercent)}`}</span>
+          <span>{`Accuracy % ${formatPercent(openSolutionTest.accuracyPercent)}`}</span>
+          <span>{`Completed ${formatDateTime(openSolutionTest.completedAt)}`}</span>
+        </div>
+
+        {solutionError ? <p className="student-my-tests-inline-note">{solutionError}</p> : null}
+
+        {isLoadingSolution ? <p className="student-learning-state">Preparing your solution review...</p> : null}
+
+        {!isLoadingSolution && solutionItems.length > 0 ? (
+          <div className="student-my-tests-solution-grid">
+            {solutionItems.map((item) => (
+              <article key={item.questionId} className="student-my-tests-solution-card">
+                <div className="student-my-tests-solution-card-header">
+                  <h3>{`Question ${item.questionId}`}</h3>
+                  <span>{`Student Response: ${item.studentAnswer}`}</span>
+                </div>
+                <div className="student-my-tests-solution-images" aria-label={`Question and solution for ${item.questionId}`}>
+                  <figure>
+                    <img src={item.questionImageUrl} alt={`Question ${item.questionId}`} loading="lazy" />
+                    <figcaption>Question Image</figcaption>
+                  </figure>
+                  <figure>
+                    <img src={item.solutionImageUrl} alt={`Solution ${item.questionId}`} loading="lazy" />
+                    <figcaption>Solution Image</figcaption>
+                  </figure>
+                </div>
+                <div className="student-my-tests-response-row">
+                  <span>{`Correct Answer: ${item.correctAnswer}`}</span>
+                  <span>{`Student Response: ${item.studentAnswer}`}</span>
+                </div>
+                <div className="student-my-tests-solution-links">
+                  {item.tutorialVideoLink ? (
+                    <a href={item.tutorialVideoLink} target="_blank" rel="noreferrer">
+                      Video Link
+                    </a>
+                  ) : (
+                    <span>Video unavailable</span>
+                  )}
+                  {item.simulationLink ? (
+                    <a href={item.simulationLink} target="_blank" rel="noreferrer">
+                      Simulation Link
+                    </a>
+                  ) : (
+                    <span>Simulation unavailable</span>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : null}
+      </section>
+    );
+  }
+
   return (
     <section className="student-content-card student-my-tests-page" aria-labelledby="student-my-tests-title">
       {debugMode ? <p className="student-content-eyebrow">Build 128</p> : null}
       <h2 id="student-my-tests-title">My Tests</h2>
-      <p className="student-content-copy">
-        Review assigned tests, continue active attempts, and revisit completed work from one place.
-      </p>
-
-      <p className="student-content-note">
-        Starting a test opens a secure test window. Completed tests are organized into pages so older work stays easy
-        to find.
-      </p>
-      <p className="student-content-note">
-        Review is available from eligible completed tests, while archived tests stay as clean history records.
-      </p>
 
       {debugMode && inlineMessage ? <p className="student-my-tests-inline-note">{inlineMessage}</p> : null}
-
-      <section className="student-my-tests-lifecycle-strip" aria-label="Test storage lifecycle">
-        {STORAGE_LIFECYCLE_STEPS.map((step) => (
-          <article key={step.id} className="student-my-tests-lifecycle-card">
-            <span className={`student-my-tests-lifecycle-pill student-my-tests-lifecycle-pill-${step.id}`}>
-              {step.label}
-            </span>
-            <strong>{step.title}</strong>
-            <p>{step.description}</p>
-          </article>
-        ))}
-      </section>
 
       <div className="student-my-tests-filter-grid" role="tablist" aria-label="Filter by test status">
         {STATUS_FILTERS.map((filterItem) => {
@@ -529,13 +593,52 @@ function StudentMyTestsPage() {
         })}
       </div>
 
+      <section className="student-my-tests-search-panel" aria-label="Search and date filters">
+        <label>
+          Test Name
+          <input
+            type="search"
+            value={testNameQuery}
+            onChange={(event) => setTestNameQuery(event.target.value)}
+            placeholder="Search by test name"
+          />
+        </label>
+        <label>
+          From Date
+          <input
+            type="date"
+            value={dateRangeStart}
+            onChange={(event) => setDateRangeStart(event.target.value)}
+          />
+        </label>
+        <label>
+          To Date
+          <input
+            type="date"
+            value={dateRangeEnd}
+            onChange={(event) => setDateRangeEnd(event.target.value)}
+          />
+        </label>
+        <button
+          type="button"
+          onClick={() => {
+            setTestNameQuery("");
+            setDateRangeStart("");
+            setDateRangeEnd("");
+          }}
+          disabled={!testNameQuery && !dateRangeStart && !dateRangeEnd}
+        >
+          Clear
+        </button>
+      </section>
+
       {activeFilter === "archived" ? (
         <UiTable
-          caption="Archived Test History"
+          caption="Older Test History"
           columns={archivedColumns}
           rows={allVisibleRows}
           rowKey={(row) => `${row.runId}-${row.testId}`}
-          emptyStateText={isLoading ? "Checking your older test history..." : "No archived tests yet."}
+          emptyStateText={isLoading ? "Checking your older test history..." : "No older history yet."}
         />
       ) : (
         <section className="student-test-list" aria-label="Assigned tests">
@@ -586,50 +689,12 @@ function StudentMyTestsPage() {
 
       {activeFilter === "archived" ? (
         <p className="student-content-note">
-          Archived tests are kept as older history. Recent completed tests remain available for review when your
-          learning plan includes review access, and active assignments stay ready to launch or resume.
+          Older-history tests are kept as summary records. Recent completed tests remain available for review when your
+          learning plan includes review access, and active assignments stay ready to launch or resume. Students do not
+          manually archive tests from this page.
         </p>
       ) : null}
 
-      {openSolutionTest ? (
-        <section className="student-my-tests-solution-view" aria-label="Solution view">
-          <h3>{`Solutions — ${openSolutionTest.testName}`}</h3>
-          <p>
-            Question and solution images load only when you open an eligible completed test.
-          </p>
-
-          {solutionError ? <p className="student-my-tests-inline-note">{solutionError}</p> : null}
-
-          {isLoadingSolution ? <p className="student-learning-state">Preparing your solution review...</p> : null}
-
-          {!isLoadingSolution && solutionItems.length > 0 ? (
-            <div className="student-my-tests-solution-grid">
-              {solutionItems.map((item) => (
-                <article key={item.questionId} className="student-my-tests-solution-card">
-                  <h4>{`Question ${item.questionId}`}</h4>
-                  <div className="student-my-tests-solution-images">
-                    <img src={item.questionImageUrl} alt={`Question ${item.questionId}`} loading="lazy" />
-                    <img src={item.solutionImageUrl} alt={`Solution ${item.questionId}`} loading="lazy" />
-                  </div>
-                  <p>{`Correct: ${item.correctAnswer} · Your Answer: ${item.studentAnswer}`}</p>
-                  <div className="student-my-tests-solution-links">
-                    {item.tutorialVideoLink ? (
-                      <a href={item.tutorialVideoLink} target="_blank" rel="noreferrer">
-                        Tutorial Video
-                      </a>
-                    ) : null}
-                    {item.simulationLink ? (
-                      <a href={item.simulationLink} target="_blank" rel="noreferrer">
-                        Simulation
-                      </a>
-                    ) : null}
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : null}
-        </section>
-      ) : null}
     </section>
   );
 }

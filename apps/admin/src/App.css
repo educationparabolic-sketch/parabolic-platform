@@ -1499,6 +1499,55 @@
   line-height: 1.2;
 }
 
+.admin-student-live-photo-cell {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
+.admin-student-live-photo-preview {
+  width: 58px;
+  aspect-ratio: 4 / 5;
+  border: 1px solid rgba(16, 42, 81, 0.14);
+  border-radius: 10px;
+  background: #f5f8fc;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  color: #60748a;
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.admin-student-live-photo-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.admin-student-photo-status {
+  border-radius: 999px;
+  padding: 3px 7px;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.admin-student-photo-status-verified {
+  background: rgba(15, 146, 85, 0.14);
+  color: #0f6a41;
+}
+
+.admin-student-photo-status-unverified {
+  background: rgba(219, 153, 41, 0.16);
+  color: #8b5a13;
+}
+
+.admin-student-live-photo-cell small {
+  color: #4f688a;
+  font-size: 0.68rem;
+}
+
 .admin-student-risk-pill {
   display: inline-flex;
   align-items: center;
@@ -1676,6 +1725,11 @@
 .admin-content-card[aria-labelledby="admin-students-title"] .ui-table td:nth-child(5) {
   width: 96px;
   white-space: nowrap;
+}
+
+.admin-content-card[aria-labelledby="admin-students-title"] .ui-table th:nth-child(6),
+.admin-content-card[aria-labelledby="admin-students-title"] .ui-table td:nth-child(6) {
+  width: 112px;
 }
 
 .admin-content-card[aria-labelledby="admin-students-title"] .ui-table th:nth-last-child(2),
@@ -4755,6 +4809,86 @@
 .admin-live-indicator-highrisk {
   color: #8a2431;
   background: rgba(196, 56, 56, 0.14);
+}
+
+.admin-live-violation-stack,
+.admin-live-face-guard-cell {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+
+.admin-live-violation-stack small,
+.admin-live-face-guard-cell small {
+  color: #60748a;
+  line-height: 1.35;
+}
+
+.admin-live-violation-pill,
+.admin-live-face-status {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.admin-live-violation-gaze {
+  background: rgba(31, 101, 180, 0.13);
+  color: #174a86;
+}
+
+.admin-live-violation-fullscreen {
+  background: rgba(196, 56, 56, 0.14);
+  color: #8a2431;
+}
+
+.admin-live-violation-face {
+  background: rgba(107, 29, 129, 0.16);
+  color: #6b1d81;
+}
+
+.admin-live-violation-watch,
+.admin-live-violation-warning {
+  border: 1px solid rgba(16, 42, 81, 0.12);
+}
+
+.admin-live-violation-blocking {
+  box-shadow: inset 0 0 0 1px rgba(196, 56, 56, 0.3);
+}
+
+.admin-live-violation-clear {
+  background: rgba(15, 146, 85, 0.12);
+  color: #0f6a41;
+}
+
+.admin-live-face-status-verified {
+  background: rgba(15, 146, 85, 0.14);
+  color: #0f6a41;
+}
+
+.admin-live-face-status-problem {
+  background: rgba(196, 56, 56, 0.14);
+  color: #8a2431;
+}
+
+.admin-live-face-status-override {
+  background: rgba(219, 153, 41, 0.16);
+  color: #8b5a13;
+}
+
+.admin-live-face-guard-cell button {
+  width: fit-content;
+  border: 1px solid rgba(16, 42, 81, 0.16);
+  border-radius: 10px;
+  background: #ffffff;
+  color: #173c68;
+  padding: 6px 9px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 800;
 }
 
 .admin-assignments-live-run-block {

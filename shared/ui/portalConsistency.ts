@@ -77,21 +77,9 @@ export const STUDENT_PRIMARY_NAVIGATION: PortalNavigationItem[] = [
     summary: "Assigned, active, and completed test navigation for the student account.",
   },
   {
-    path: "/student/performance",
-    label: "Performance",
-    summary: "Summary-level performance trends based on analytics collections.",
-  },
-  {
-    path: "/student/insights",
-    label: "Insights",
-    summary: "Behavioral insight space for interpreted performance indicators.",
-    minimumLicenseLayer: "L1",
-  },
-  {
-    path: "/student/discipline",
-    label: "Discipline",
-    summary: "Execution maturity view with lightweight progress signals for L2+ learners.",
-    minimumLicenseLayer: "L2",
+    path: "/student/analytics",
+    label: "Analytics",
+    summary: "Layer-aware analytics trends, history, and execution signals.",
   },
   {
     path: "/student/profile",
