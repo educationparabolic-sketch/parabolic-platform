@@ -80,6 +80,19 @@ interface ModeInstruction {
   points: string[];
 }
 
+interface LobbyModeDetail {
+  title: string;
+  summary: string;
+  focus: string;
+}
+
+interface PreExamChecklistItem {
+  id: string;
+  label: string;
+  state: PreExamCheckState;
+  helper: string;
+}
+
 interface QuestionOption {
   id: string;
   label: string;
@@ -300,8 +313,8 @@ const RECOVERY_SAVE_INTERVAL_MS = 3_000;
 const DEV_MOCK_SESSION_TOKEN = "dev";
 const BROWSER_INTEGRITY_EVENT_LIMIT = 60;
 const DEVTOOLS_SIZE_THRESHOLD_PX = 160;
-const DEV_MOCK_SESSION_START_DELAY_MS = 5 * 60_000;
-const DEV_MOCK_EARLY_ENTRY_BUFFER_MINUTES = 30;
+const DEV_MOCK_SESSION_START_DELAY_MS = 60_000;
+const DEV_MOCK_EARLY_ENTRY_BUFFER_MINUTES = 1;
 
 const GAZE_CALIBRATION_POINTS = [
   { id: "center", label: "Center", x: 50, y: 50 },
@@ -357,6 +370,29 @@ const MODE_INSTRUCTIONS: Record<ExecutionMode, ModeInstruction> = {
       "Minimum thinking time is enforced before navigation or save actions unlock.",
       "Sequential progression and question discipline events are captured for training analytics.",
     ],
+  },
+};
+
+const LOBBY_MODE_DETAILS: Record<ExecutionMode, LobbyModeDetail> = {
+  Operational: {
+    title: "Standard Exam Entry",
+    summary: "Open navigation with silent integrity capture.",
+    focus: "Confirm device readiness and continue to the instruction sheet.",
+  },
+  Controlled: {
+    title: "Guided Phase Entry",
+    summary: "Phase objectives, pacing support, and overstay visibility are enabled.",
+    focus: "Complete checks before reviewing the phase plan and controlled start rules.",
+  },
+  Focused: {
+    title: "Focused Execution Entry",
+    summary: "Automatic phase transitions and filtered question visibility are enabled.",
+    focus: "Calibrate identity checks before the focused phase engine takes over.",
+  },
+  Hard: {
+    title: "Hard Mode Entry",
+    summary: "Sequential discipline, minimum time locks, and strict timing capture are enabled.",
+    focus: "Finish every readiness gate before entering the restricted instruction flow.",
   },
 };
 
@@ -1353,6 +1389,7 @@ function ExamSessionPage() {
   const modeFromQuery = useMemo(() => new URLSearchParams(location.search).get("mode"), [location.search]);
   const [sessionToken, setSessionToken] = useState<string | null>(() => tokenFromQuery);
   const devMockEntryEnabled = useMemo(() => isExamDevMockEntryEnabled(), []);
+  const devMockSessionActive = devMockEntryEnabled && sessionToken?.trim() === DEV_MOCK_SESSION_TOKEN;
   const entryValidation = useMemo(
     () => validateSessionEntry(sessionToken, sessionId, modeFromQuery),
     [modeFromQuery, sessionId, sessionToken],
@@ -2206,7 +2243,7 @@ function ExamSessionPage() {
         return;
       }
 
-      if (Date.now() >= sessionSchedule.sessionStartsAtMs) {
+      if (!devMockSessionActive && Date.now() >= sessionSchedule.sessionStartsAtMs) {
         setEntryStage("entry_closed");
         return;
       }
@@ -2220,7 +2257,7 @@ function ExamSessionPage() {
       setFullscreenGateError(null);
       setEntryStage("instructions_waiting");
     })();
-  }, [preExamChecksPassed, requestExamFullscreen, sessionSchedule.sessionStartsAtMs]);
+  }, [devMockSessionActive, preExamChecksPassed, requestExamFullscreen, sessionSchedule.sessionStartsAtMs]);
   const getQuestionPhaseVisibility = useCallback((question: SessionQuestion): boolean => {
     if (!phaseVisibilityEnforced || currentExamPhase === "phase1" || currentExamPhase === "buffer") {
       return true;
@@ -2484,7 +2521,7 @@ function ExamSessionPage() {
       return;
     }
 
-    if (entryStage === "pre_exam_lobby" && nowEpochMs >= sessionSchedule.sessionStartsAtMs) {
+    if (!devMockSessionActive && entryStage === "pre_exam_lobby" && nowEpochMs >= sessionSchedule.sessionStartsAtMs) {
       setEntryStage("entry_closed");
       return;
     }
@@ -2494,6 +2531,9 @@ function ExamSessionPage() {
     }
 
     if (!declarationAccepted) {
+      if (devMockSessionActive) {
+        return;
+      }
       setEntryStage("entry_closed");
       return;
     }
@@ -2507,6 +2547,7 @@ function ExamSessionPage() {
   }, [
     beginExamSession,
     declarationAccepted,
+    devMockSessionActive,
     entryStage,
     instructionConfirmed,
     isSubmitted,
@@ -2779,19 +2820,10 @@ function ExamSessionPage() {
   const unansweredCount = unansweredQuestionIdsForSubmission.length;
   const attemptedPercent = toPercent(answeredCount, sessionSnapshot.questions.length);
   const showControlledLowAttemptSubmitWarning = isControlledMode && attemptedPercent < 50;
-  const easyRemainingCount = useMemo(
-    () =>
-      sessionSnapshot.questions.filter((question) => {
-        const responseState = responseStateByQuestionId[question.id];
-        return question.difficulty === "easy" && (!responseState || !hasAnswer(question, responseState));
-      }).length,
-    [responseStateByQuestionId, sessionSnapshot.questions],
-  );
   const liveSupportItems = isControlledMode
       ? [
         `${currentPhasePresentation.shortLabel}: ${currentPhasePresentation.title}`,
           `${currentPhaseRemainingLabel} left in phase`,
-          `${easyRemainingCount} easy remaining`,
           automaticPhaseId !== controlledPhaseId ? "Overstay active" : "Within phase window",
         ]
       : isFocusedMode
@@ -2816,14 +2848,119 @@ function ExamSessionPage() {
   const sessionStartCountdownMs = Math.max(0, sessionSchedule.sessionStartsAtMs - nowEpochMs);
   const entryOpenCountdownMs = Math.max(0, sessionSchedule.earlyEntryOpensAtMs - nowEpochMs);
   const currentGazeCalibrationPoint = GAZE_CALIBRATION_POINTS[gazeCalibrationIndex] ?? GAZE_CALIBRATION_POINTS[0];
-  const preExamChecklist = [
-    { id: "session", label: "Session Window", state: entryStage === "entry_not_open" ? "pending" : "passed" as PreExamCheckState },
-    { id: "browser", label: "Browser Integrity", state: browserReadinessState },
-    { id: "internet", label: "Internet Connection", state: internetCheckState },
-    { id: "camera", label: "Camera Permission", state: cameraCheckState },
-    { id: "face", label: "Face Verification", state: faceVerificationState },
-    { id: "gaze", label: "Gaze Calibration", state: gazeCalibrationState },
+  const preExamChecklist: PreExamChecklistItem[] = [
+    {
+      id: "session",
+      label: "Session Window",
+      state: entryStage === "entry_not_open" ? "pending" : "passed",
+      helper: "Wait until the entry window opens for this session.",
+    },
+    {
+      id: "browser",
+      label: "Browser Integrity",
+      state: browserReadinessState,
+      helper: "Keep this tab active and avoid switching windows during entry.",
+    },
+    {
+      id: "internet",
+      label: "Internet Connection",
+      state: internetCheckState,
+      helper: "Check your connection before starting the secure session.",
+    },
+    {
+      id: "camera",
+      label: "Camera Permission",
+      state: cameraCheckState,
+      helper: "Allow browser camera permission and keep the camera uncovered.",
+    },
+    {
+      id: "face",
+      label: "Face Verification",
+      state: faceVerificationState,
+      helper: "Keep your face centered in the guide with steady lighting.",
+    },
+    {
+      id: "gaze",
+      label: "Gaze Calibration",
+      state: gazeCalibrationState,
+      helper: "Look at each full-screen marker until it is captured.",
+    },
   ];
+  const completedPreExamCheckCount = preExamChecklist.filter((item) => item.state === "passed" || item.state === "skipped").length;
+  const preExamProgressPercent = Math.round((completedPreExamCheckCount / preExamChecklist.length) * 100);
+  const lobbyModeDetail = LOBBY_MODE_DETAILS[entryValidation.claims.mode];
+  const lobbyModeClassName = isOperationalMode
+    ? "operational"
+    : isControlledMode
+      ? "controlled"
+      : isFocusedMode
+        ? "focused"
+        : "hard";
+  const faceStatusState = !faceIdentityGazeGuardEnabled
+    ? "skipped"
+    : cameraCheckState === "failed"
+      ? "failed"
+      : faceVerificationState === "passed"
+        ? "passed"
+        : cameraCheckState === "passed"
+          ? "ready"
+          : "pending";
+  const faceStatusLabel = faceStatusState === "passed"
+    ? "Face Verified"
+    : faceStatusState === "ready"
+      ? "Ready to Verify"
+      : faceStatusState === "failed"
+        ? "Face Not Verified"
+        : faceStatusState === "skipped"
+          ? "Face Check Skipped"
+          : "Face Not Verified";
+  const faceStatusHint = faceStatusState === "passed"
+    ? "Identity readiness confirmed. Continue with gaze calibration."
+    : faceStatusState === "ready"
+      ? "Camera is active. Select Verify Face to complete identity readiness."
+      : faceStatusState === "failed"
+        ? "Camera access failed or identity readiness could not complete. Re-enable camera and try again."
+        : faceStatusState === "skipped"
+          ? "This assignment policy does not require face verification."
+          : "Enable camera first so the face check can run.";
+  const lobbyNextStepState = preExamChecksPassed
+    ? "complete"
+    : browserReadinessState === "failed" || internetCheckState === "failed" || cameraCheckState === "failed" || faceVerificationState === "failed" || gazeCalibrationState === "failed"
+      ? "attention"
+      : "active";
+  const lobbyNextStepTitle = preExamChecksPassed
+    ? "Entry checks complete"
+    : browserReadinessState === "failed"
+      ? "Browser needs attention"
+      : internetCheckState !== "passed"
+        ? "Check internet connection"
+        : faceIdentityGazeGuardEnabled && cameraCheckState !== "passed"
+          ? "Enable camera to continue"
+          : faceIdentityGazeGuardEnabled && faceVerificationState !== "passed"
+            ? "Now verify your face"
+            : faceIdentityGazeGuardEnabled && gazeCalibrationState !== "passed"
+              ? "Complete gaze calibration"
+              : "Review readiness checks";
+  const lobbyNextStepDetail = preExamChecksPassed
+    ? "You can continue to instructions when you are ready."
+    : browserReadinessState === "failed"
+      ? "Return to the exam tab and recheck browser readiness."
+      : internetCheckState !== "passed"
+        ? "Select Check Internet. If it fails, reconnect before starting."
+        : faceIdentityGazeGuardEnabled && cameraCheckState !== "passed"
+          ? "Allow browser camera access, then center your face in the guide."
+          : faceIdentityGazeGuardEnabled && faceVerificationState !== "passed"
+            ? "Keep your face steady and select Verify Face."
+            : faceIdentityGazeGuardEnabled && gazeCalibrationState !== "passed"
+              ? "Open the calibration screen and capture every marker."
+              : "Confirm the skipped lab checks and proceed to instructions.";
+  const lobbyModeStudentNote = isControlledMode
+    ? "Controlled mode shows phase goals and overstay status during the exam."
+    : isFocusedMode
+      ? "Focused mode may show only the questions available in the current phase."
+      : isHardMode
+        ? "Hard mode applies navigation locks and minimum thinking-time rules."
+        : "Operational mode keeps navigation open while integrity events are captured silently.";
   const canControlledProceedToPhase2 = visitedCount >= sessionSnapshot.questions.length;
   const controlledPhaseAdvanceDisabled =
     sessionLocked ||
@@ -2909,34 +3046,79 @@ function ExamSessionPage() {
     return (
       <main className="exam-instruction-shell">
         <section className="exam-instruction-card exam-lobby-card" aria-labelledby="exam-lobby-title">
-          <header className="exam-instruction-header">
-            <p className="exam-instruction-eyebrow">Pre-Exam Session Lobby</p>
-            <h1 id="exam-lobby-title">Complete Entry Checks</h1>
-            <div className="exam-lobby-meta-grid">
-              <div>
-                <span>Candidate</span>
-                <strong>{candidateName}</strong>
+          <header className={`exam-lobby-hero ${lobbyModeClassName}`}>
+            <div className="exam-lobby-hero-copy">
+              <p className="exam-instruction-eyebrow">Pre-Exam Session Lobby</p>
+              <h1 id="exam-lobby-title">Complete Entry Check</h1>
+              <p>{lobbyModeDetail.focus}</p>
+              <div className="exam-lobby-mode-strip" aria-label="Exam mode identity">
+                <span>{modeTierLabel}</span>
+                <strong>{lobbyModeDetail.title}</strong>
+                <span>{lobbyModeDetail.summary}</span>
               </div>
-              <div>
-                <span>Official Start</span>
-                <strong>{toTimeLabel(sessionSchedule.sessionStartsAtMs)}</strong>
-              </div>
-              <div>
-                <span>Starts In</span>
-                <strong>{toMinuteSecondCountdownLabel(sessionStartCountdownMs)}</strong>
-              </div>
-              <div>
-                <span>Face + Gaze</span>
-                <strong>{faceIdentityGazeGuardEnabled ? "Required" : "Off for lab"}</strong>
-              </div>
+            </div>
+            <div className="exam-lobby-start-panel" aria-label="Exam start countdown">
+              <span>Official Start</span>
+              <strong>{toTimeLabel(sessionSchedule.sessionStartsAtMs)}</strong>
+              <p>
+                Starts in
+                {" "}
+                {toMinuteSecondCountdownLabel(sessionStartCountdownMs)}
+              </p>
             </div>
           </header>
 
+          <div className="exam-lobby-meta-grid" aria-label="Session summary">
+            <div>
+              <span>Candidate</span>
+              <strong>{candidateName}</strong>
+            </div>
+            <div>
+              <span>Attempt Mode</span>
+              <strong>{entryValidation.claims.mode}</strong>
+            </div>
+            <div>
+              <span>Checks Done</span>
+              <strong>
+                {completedPreExamCheckCount}
+                /
+                {preExamChecklist.length}
+              </strong>
+            </div>
+            <div>
+              <span>Face + Gaze</span>
+              <strong>{faceIdentityGazeGuardEnabled ? "Required" : "Off for lab"}</strong>
+            </div>
+          </div>
+
+          <section className={`exam-lobby-next-step exam-lobby-next-step-${lobbyNextStepState}`} aria-live="polite">
+            <span className="exam-lobby-next-step-icon" aria-hidden="true" />
+            <div>
+              <strong>{lobbyNextStepTitle}</strong>
+              <p>{lobbyNextStepDetail}</p>
+            </div>
+          </section>
+
           <div className="exam-lobby-layout">
             <aside className="exam-lobby-checklist" aria-label="Pre-exam checklist">
+              <div className="exam-lobby-checklist-header">
+                <div>
+                  <span>Readiness</span>
+                  <strong>{preExamProgressPercent}%</strong>
+                </div>
+                <div className="exam-lobby-progress-track" aria-hidden="true">
+                  <span style={{ width: `${preExamProgressPercent}%` }} />
+                </div>
+              </div>
               {preExamChecklist.map((item) => (
                 <div key={item.id} className={`exam-lobby-check exam-lobby-check-${item.state}`}>
-                  <span>{item.label}</span>
+                  <span className="exam-lobby-check-dot" aria-hidden="true" />
+                  <span>
+                    {item.label}
+                    {item.state === "pending" || item.state === "failed" ? (
+                      <small>{item.helper}</small>
+                    ) : null}
+                  </span>
                   <strong>{item.state}</strong>
                 </div>
               ))}
@@ -2945,8 +3127,13 @@ function ExamSessionPage() {
             <section className="exam-lobby-workspace" aria-label="Current lobby checks">
               <div className="exam-lobby-action-grid">
                 <article className="exam-lobby-action-panel">
-                  <h2>Browser + Internet</h2>
-                  <p>Confirm the browser is online and ready for the secure session.</p>
+                  <div className="exam-lobby-action-header">
+                    <span>01</span>
+                    <div>
+                      <h2>Browser + Internet</h2>
+                      <p>Confirm the browser is online and ready for the secure session.</p>
+                    </div>
+                  </div>
                   <div className="exam-lobby-action-row">
                     <button type="button" className="exam-secondary-action" onClick={() => setBrowserReadinessState(navigator.onLine ? "passed" : "failed")}>
                       Recheck Browser
@@ -2955,31 +3142,59 @@ function ExamSessionPage() {
                       Check Internet
                     </button>
                   </div>
+                  {internetCheckState === "failed" || browserReadinessState === "failed" ? (
+                    <p className="exam-lobby-support-note">If this keeps failing, reconnect and contact the invigilator.</p>
+                  ) : null}
                 </article>
 
                 <article className="exam-lobby-action-panel">
-                  <h2>Camera + Face</h2>
-                  <p>{faceIdentityGazeGuardEnabled ? "Open camera, then run the identity readiness check." : "Skipped for supervised lab assignment policy."}</p>
+                  <div className="exam-lobby-action-header">
+                    <span>02</span>
+                    <div>
+                      <h2>Camera + Face</h2>
+                      <p>{faceIdentityGazeGuardEnabled ? "Open camera, then run the identity readiness check." : "Skipped for supervised lab assignment policy."}</p>
+                    </div>
+                  </div>
                   <div className="exam-lobby-camera-frame">
                     {faceIdentityGazeGuardEnabled ? (
                       <video ref={cameraVideoRef} autoPlay playsInline muted aria-label="Camera preview" />
                     ) : (
                       <span>Camera skipped</span>
                     )}
+                    {faceIdentityGazeGuardEnabled ? (
+                      <div className="exam-lobby-face-guide" aria-hidden="true">
+                        <span />
+                      </div>
+                    ) : null}
+                    <div className={`exam-lobby-face-status exam-lobby-face-status-${faceStatusState}`} aria-live="polite">
+                      <span className="exam-lobby-face-status-icon" aria-hidden="true" />
+                      <div>
+                        <strong>{faceStatusLabel}</strong>
+                        <p>{faceStatusHint}</p>
+                      </div>
+                    </div>
                   </div>
                   <div className="exam-lobby-action-row">
                     <button type="button" className="exam-secondary-action" onClick={() => { void startCameraCheck(); }}>
-                      {faceIdentityGazeGuardEnabled ? "Enable Camera" : "Mark Skipped"}
+                      {cameraCheckState === "failed" ? "Retry Camera" : faceIdentityGazeGuardEnabled ? "Enable Camera" : "Mark Skipped"}
                     </button>
                     <button type="button" className="exam-save-next-button" onClick={runFaceVerificationCheck} disabled={faceIdentityGazeGuardEnabled && cameraCheckState !== "passed"}>
-                      Verify Face
+                      {faceVerificationState === "failed" ? "Retry Face Check" : "Verify Face"}
                     </button>
                   </div>
+                  {cameraCheckState === "failed" || faceVerificationState === "failed" ? (
+                    <p className="exam-lobby-support-note">If this keeps failing, contact the invigilator before the official start.</p>
+                  ) : null}
                 </article>
 
                 <article className="exam-lobby-action-panel exam-lobby-gaze-panel">
-                  <h2>Gaze Calibration</h2>
-                  <p>{faceIdentityGazeGuardEnabled ? "Open the full-screen marker calibration. Look at each marker before capturing it." : "Skipped for supervised lab assignment policy."}</p>
+                  <div className="exam-lobby-action-header">
+                    <span>03</span>
+                    <div>
+                      <h2>Gaze Calibration</h2>
+                      <p>{faceIdentityGazeGuardEnabled ? "Open the full-screen marker calibration. Look at each marker before capturing it." : "Skipped for supervised lab assignment policy."}</p>
+                    </div>
+                  </div>
                   <button
                     type="button"
                     className="exam-save-next-button"
@@ -2994,10 +3209,22 @@ function ExamSessionPage() {
                   >
                     {gazeCalibrationState === "passed" ? "Calibration Complete" : "Open Full-Screen Calibration"}
                   </button>
+                  {gazeCalibrationState === "failed" ? (
+                    <p className="exam-lobby-support-note">Retry calibration with your face steady and eyes on each marker.</p>
+                  ) : null}
                 </article>
               </div>
             </section>
           </div>
+
+          <section className={`exam-lobby-completion-panel ${preExamChecksPassed ? "complete" : ""}`} aria-label="Entry completion status">
+            <div>
+              <span>{preExamChecksPassed ? "Ready" : "Before You Continue"}</span>
+              <strong>{preExamChecksPassed ? "Entry checks complete" : "Complete every required check"}</strong>
+              <p>{preExamChecksPassed ? "You are cleared to review instructions and start when the exam opens." : "The button below unlocks after browser, internet, camera, face, and gaze checks are ready."}</p>
+            </div>
+            <p>{lobbyModeStudentNote}</p>
+          </section>
 
           <footer className="exam-lobby-footer">
             <p>
@@ -3058,78 +3285,104 @@ function ExamSessionPage() {
   if (!instructionConfirmed) {
     return (
       <main className="exam-instruction-shell">
-        <section className="exam-instruction-card" aria-labelledby="exam-instruction-title">
-          <header className="exam-instruction-header">
-            <p className="exam-instruction-eyebrow">Exam Entry</p>
-            <h1 id="exam-instruction-title">Instructions</h1>
-            <section
-              className={isOperationalMode ? "exam-mode-hero operational" : isControlledMode ? "exam-mode-hero controlled" : isFocusedMode ? "exam-mode-hero focused" : "exam-mode-hero hard"}
-              aria-label="Exam mode identity"
-            >
-              <div className="exam-mode-hero-copy">
-                <span className="exam-mode-hero-label">Attempt Mode</span>
-                <strong>{modeTierLabel}</strong>
-                <p>{modeStudentExplanation}</p>
-              </div>
-              <div className="exam-mode-hero-note">
-                <span>This mode changes how the exam behaves while you attempt it.</span>
-              </div>
-            </section>
-            <div className="exam-instruction-meta-grid" aria-label="Instruction summary">
-              <div className="exam-instruction-meta-card">
-                <span>Total Questions</span>
-                <strong>{sessionSnapshot.questions.length}</strong>
-              </div>
-              <div className="exam-instruction-meta-card">
-                <span>Total Duration</span>
-                <strong>{totalDurationMinutesLabel} Minutes</strong>
-              </div>
-              <div className="exam-instruction-meta-card">
-                <span>Attempt Model</span>
-                <strong>{entryValidation.claims.mode}</strong>
-              </div>
-              <div className="exam-instruction-meta-card">
-                <span>Negative Marking</span>
-                <strong>-1 for incorrect MCQ</strong>
+        <section className="exam-instruction-card exam-instruction-card-redesigned" aria-labelledby="exam-instruction-title">
+          <header className={`exam-instruction-hero ${lobbyModeClassName}`}>
+            <div className="exam-instruction-hero-copy">
+              <p className="exam-instruction-eyebrow">Exam Entry</p>
+              <h1 id="exam-instruction-title">Read Before You Start</h1>
+              <p>{modeStudentExplanation}</p>
+              <div className="exam-instruction-candidate-strip">
+                <p>
+                  Candidate:
+                  {" "}
+                  <strong>{candidateName}</strong>
+                </p>
+                <p>
+                  Session:
+                  {" "}
+                  <code>{sessionId}</code>
+                </p>
               </div>
             </div>
-            <div className="exam-instruction-candidate-strip">
+            <div className="exam-instruction-start-card" aria-label="Official start countdown">
+              <span>Official exam starts in</span>
+              <strong>{toMinuteSecondCountdownLabel(sessionStartCountdownMs)}</strong>
               <p>
-                Candidate Name:
+                Opens at
                 {" "}
-                <strong>{candidateName}</strong>
-              </p>
-              <p>
-                Session ID:
-                {" "}
-                <code>{sessionId}</code>
+                {toTimeLabel(sessionSchedule.sessionStartsAtMs)}
               </p>
             </div>
           </header>
 
-          <section className="exam-instruction-section" aria-label="General Instructions">
-            <h2>1. General Instructions</h2>
-            <ul>
-              <li>Total questions: {sessionSnapshot.questions.length}.</li>
-              <li>Total duration: {totalDurationMinutesLabel} minutes.</li>
-              <li>Attempt this paper only through the current signed exam session.</li>
-              <li>This portal follows a server-authoritative execution model.</li>
-              <li>Do not refresh or close the tab during the attempt.</li>
-              <li>Use the question palette and footer controls exactly as displayed on screen.</li>
-            </ul>
+          <div className="exam-instruction-meta-grid" aria-label="Instruction summary">
+            <div className="exam-instruction-meta-card">
+              <span>Questions</span>
+              <strong>{sessionSnapshot.questions.length}</strong>
+            </div>
+            <div className="exam-instruction-meta-card">
+              <span>Duration</span>
+              <strong>{totalDurationMinutesLabel} Min</strong>
+            </div>
+            <div className="exam-instruction-meta-card">
+              <span>Mode</span>
+              <strong>{entryValidation.claims.mode}</strong>
+            </div>
+            <div className="exam-instruction-meta-card">
+              <span>Negative Marking</span>
+              <strong>-1 MCQ</strong>
+            </div>
+          </div>
+
+          <section className="exam-instruction-priority" aria-label="Most important instructions">
+            <article>
+              <span>01</span>
+              <strong>Stay in this tab</strong>
+              <p>Do not refresh, close, or switch away from the exam window.</p>
+            </article>
+            <article>
+              <span>02</span>
+              <strong>Use on-screen controls</strong>
+              <p>Navigate with the palette, section tabs, and footer buttons only.</p>
+            </article>
+            <article>
+              <span>03</span>
+              <strong>Accept declaration</strong>
+              <p>The question paper opens automatically at the official start time.</p>
+            </article>
           </section>
 
-          <section className="exam-instruction-section" aria-label="Marking Scheme">
-            <h2>2. Marking Scheme</h2>
-            <ul>
-              {MARKING_SCHEME.map((point) => (
-                <li key={point}>{point}</li>
-              ))}
-            </ul>
-          </section>
+          <div className="exam-instruction-layout">
+            <section className="exam-instruction-section" aria-label="Marking Scheme">
+              <div className="exam-instruction-section-header">
+                <span>Scoring</span>
+                <h2>Marking Scheme</h2>
+              </div>
+              <ul className="exam-instruction-clean-list">
+                {MARKING_SCHEME.map((point) => (
+                  <li key={point}>{point}</li>
+                ))}
+              </ul>
+            </section>
+
+            <section className="exam-instruction-section" aria-label="Navigation Instructions">
+              <div className="exam-instruction-section-header">
+                <span>During Exam</span>
+                <h2>Navigation Rules</h2>
+              </div>
+              <ul className="exam-instruction-clean-list">
+                {NAVIGATION_INSTRUCTIONS.map((point) => (
+                  <li key={point}>{point}</li>
+                ))}
+              </ul>
+            </section>
+          </div>
 
           <section className="exam-instruction-section" aria-label="Question Palette Explanation">
-            <h2>3. Question Palette Explanation</h2>
+            <div className="exam-instruction-section-header">
+              <span>Status Guide</span>
+              <h2>Question Palette</h2>
+            </div>
             <div className="exam-legend-grid exam-legend-grid-instructions">
               {QUESTION_PALETTE_LEGEND.map((legend) => (
                 <div key={legend.status} className="exam-legend-item">
@@ -3137,11 +3390,11 @@ function ExamSessionPage() {
                   <span className="exam-legend-copy">
                     <strong>{legend.label}</strong>
                     <span>
-                      {legend.status === "not_visited" ? "You have not visited the question yet." : null}
-                      {legend.status === "not_answered" ? "You have not answered the question." : null}
-                      {legend.status === "answered" ? "You have answered the question." : null}
-                      {legend.status === "marked" ? "You have marked the question for review." : null}
-                      {legend.status === "answered_marked" ? "You have answered the question and marked it for review." : null}
+                      {legend.status === "not_visited" ? "You have not opened this question yet." : null}
+                      {legend.status === "not_answered" ? "You opened it but have not saved an answer." : null}
+                      {legend.status === "answered" ? "Your answer is saved for this question." : null}
+                      {legend.status === "marked" ? "You want to review this question later." : null}
+                      {legend.status === "answered_marked" ? "Your answer is saved and the question is marked for review." : null}
                     </span>
                   </span>
                 </div>
@@ -3149,25 +3402,19 @@ function ExamSessionPage() {
             </div>
           </section>
 
-          <section className="exam-instruction-section" aria-label="Navigation Instructions">
-            <h2>4. Navigation Instructions</h2>
-            <ul>
-              {NAVIGATION_INSTRUCTIONS.map((point) => (
-                <li key={point}>{point}</li>
-              ))}
-            </ul>
-          </section>
-
           <section className="exam-instruction-section" aria-label="Mode Specific Instructions">
-            <h2>5. Mode-Specific Instructions</h2>
-            <p className="exam-mode-instruction-title">
-              <strong>{modeInstruction.title}</strong>
-            </p>
-            <ul>
-              {modeInstruction.points.map((point) => (
-                <li key={point}>{point}</li>
+            <div className="exam-instruction-section-header">
+              <span>{modeTierLabel}</span>
+              <h2>{modeInstruction.title}</h2>
+            </div>
+            <div className="exam-mode-rule-grid">
+              {modeInstruction.points.map((point, index) => (
+                <article key={point}>
+                  <span>{String(index + 1).padStart(2, "0")}</span>
+                  <p>{point}</p>
+                </article>
               ))}
-            </ul>
+            </div>
             {!isOperationalMode ? (
               <div className="exam-phase-schedule" aria-label="Phase timing schedule">
                 {phaseSchedule.map((phase) => (
@@ -3189,28 +3436,35 @@ function ExamSessionPage() {
             ) : null}
           </section>
 
-          <section className="exam-instruction-section" aria-label="Declaration and Countdown">
-            <h2>6. Declaration and Countdown</h2>
-            <div className="exam-instruction-countdown-panel">
-              <span>Official exam starts in</span>
-              <strong>{toMinuteSecondCountdownLabel(sessionStartCountdownMs)}</strong>
+          <section className={`exam-instruction-ready-panel ${declarationAccepted ? "accepted" : ""}`} aria-label="Declaration and readiness">
+            {!declarationAccepted ? (
+              <div className="exam-declaration-alert" role="alert">
+                <strong>Action required before start</strong>
+                <p>Tick the declaration checkbox below. Without this confirmation, the exam paper will not open.</p>
+              </div>
+            ) : null}
+            <div>
+              <span>{declarationAccepted ? "Ready State" : "Final Step"}</span>
+              <strong>{declarationAccepted ? "Declaration accepted" : "Accept declaration to enter the paper"}</strong>
               <p>
-                Question paper opens automatically at
-                {" "}
-                <strong>{toTimeLabel(sessionSchedule.sessionStartsAtMs)}</strong>
-                .
+                {declarationAccepted ?
+                  "Keep this page open in fullscreen. The paper opens automatically at the official start time." :
+                  "Read the rules above, then confirm that you understand the monitored exam conditions."}
               </p>
             </div>
             <label className="exam-declaration-checkbox" htmlFor="exam-declaration-checkbox">
-              <input
-                id="exam-declaration-checkbox"
-                type="checkbox"
-                checked={declarationAccepted}
-                onChange={(event) => setDeclarationAccepted(event.target.checked)}
-              />
-              I have read and understood the instructions. I am ready to begin the test under monitored exam conditions.
+                <input
+                  id="exam-declaration-checkbox"
+                  type="checkbox"
+                  checked={declarationAccepted}
+                  onChange={(event) => setDeclarationAccepted(event.target.checked)}
+                />
+              <span>
+                <strong>Accept Declaration</strong>
+                I have read and understood the instructions. I am ready to begin the test under monitored exam conditions.
+              </span>
             </label>
-            <p className="exam-instruction-start-note">7. Keep this page open in fullscreen. If the declaration is not accepted before official start, entry will close.</p>
+            <p className="exam-instruction-start-note">If the declaration is not accepted before official start, entry will close.</p>
             {sessionConflictMessage ? <p className="exam-submit-warning">{sessionConflictMessage}</p> : null}
             {fullscreenGateError ? <p className="exam-submit-warning">{fullscreenGateError}</p> : null}
           </section>
@@ -3487,15 +3741,6 @@ function ExamSessionPage() {
                     {syncSummaryLabel}
                   </span>
                 ) : null}
-                {(isControlledMode || isHardMode) ? (
-                  <button
-                    type="button"
-                    className="exam-header-utility-button"
-                    onClick={() => setInsightsOpen(true)}
-                  >
-                    Timing
-                  </button>
-                ) : null}
                 <button
                   type="button"
                   className="exam-calculator-launch"
@@ -3551,13 +3796,13 @@ function ExamSessionPage() {
               {!isOperationalMode ? (
                 <span className="exam-question-status-chip">{selectedQuestionHeaderStatus}</span>
               ) : null}
-              {(isControlledMode || isHardMode) ? (
+              {(isControlledMode || isFocusedMode || isHardMode) ? (
                 <button
                   type="button"
                   className="exam-header-utility-button"
                   onClick={() => setInsightsOpen(true)}
                 >
-                  Timing Details
+                  Q Time
                 </button>
               ) : null}
             </div>
