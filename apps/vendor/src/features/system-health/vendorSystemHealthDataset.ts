@@ -30,41 +30,12 @@ export interface InfrastructureAlert {
   raisedAt: string;
 }
 
-export type GlobalFeatureFlagName =
-  | "EnableBetaFeatures"
-  | "EnableExperimentalRiskEngine"
-  | "EnableNewUI"
-  | "SetRolloutPercentage";
-
-export interface GlobalFeatureFlagRecord {
-  flagName: GlobalFeatureFlagName;
-  valueType: "boolean" | "number";
-  booleanValue?: boolean;
-  numberValue?: number;
-  description: string;
-  middlewareEnforced: true;
-  documentPath: string;
-}
-
-export interface DataOperationRecord {
-  operation:
-    | "ExportPlatformMetrics"
-    | "ExportInstituteData"
-    | "TriggerManualBackup"
-    | "RestoreSimulationEnvironment";
-  sourceCollections: readonly string[];
-  mode: "snapshot-only";
-  status: "ready" | "in-progress";
-  lastExecutedAt: string;
-}
-
 export interface StructuralGuaranteeCheck {
   id:
     | "cross_institute_intelligence_aggregation"
     | "calibration_simulation_without_raw_recompute"
     | "immutable_calibration_versioning"
     | "vendor_authoritative_licensing"
-    | "feature_flag_based_rollout"
     | "strong_tenant_separation";
   label: string;
   status: "pass";
@@ -86,8 +57,6 @@ export interface VendorSystemHealthDataset {
   healthMetrics: SystemHealthMetric[];
   trend: SystemHealthTrendPoint[];
   alerts: InfrastructureAlert[];
-  featureFlags: GlobalFeatureFlagRecord[];
-  dataOperations: DataOperationRecord[];
   structuralGuarantees: StructuralGuaranteeCheck[];
   performanceIndicators: SystemHealthPerformanceIndicator[];
   frontendTelemetry: FrontendTelemetrySummary;
@@ -199,70 +168,6 @@ export function getVendorSystemHealthDataset(): VendorSystemHealthDataset {
         raisedAt: "2026-04-22T08:02:00.000Z",
       },
     ],
-    featureFlags: [
-      {
-        flagName: "EnableBetaFeatures",
-        valueType: "boolean",
-        booleanValue: true,
-        description: "Enables beta-only operator features for selected rollout cohorts.",
-        middlewareEnforced: true,
-        documentPath: "globalFeatureFlags/EnableBetaFeatures",
-      },
-      {
-        flagName: "EnableExperimentalRiskEngine",
-        valueType: "boolean",
-        booleanValue: false,
-        description: "Controls risk-engine experiment routing behind vendor middleware checks.",
-        middlewareEnforced: true,
-        documentPath: "globalFeatureFlags/EnableExperimentalRiskEngine",
-      },
-      {
-        flagName: "EnableNewUI",
-        valueType: "boolean",
-        booleanValue: true,
-        description: "Gates new portal UI package visibility by backend-evaluated flags.",
-        middlewareEnforced: true,
-        documentPath: "globalFeatureFlags/EnableNewUI",
-      },
-      {
-        flagName: "SetRolloutPercentage",
-        valueType: "number",
-        numberValue: 35,
-        description: "Controls rollout percentage applied by middleware for flagged capabilities.",
-        middlewareEnforced: true,
-        documentPath: "globalFeatureFlags/SetRolloutPercentage",
-      },
-    ],
-    dataOperations: [
-      {
-        operation: "ExportPlatformMetrics",
-        sourceCollections: ["vendorMetrics", "vendorAggregates"],
-        mode: "snapshot-only",
-        status: "ready",
-        lastExecutedAt: "2026-04-22T07:00:00.000Z",
-      },
-      {
-        operation: "ExportInstituteData",
-        sourceCollections: ["governanceSnapshots", "studentYearMetrics", "runAnalytics"],
-        mode: "snapshot-only",
-        status: "ready",
-        lastExecutedAt: "2026-04-21T18:10:00.000Z",
-      },
-      {
-        operation: "TriggerManualBackup",
-        sourceCollections: ["vendorAggregates", "calibrationVersions", "globalFeatureFlags", "auditLogs"],
-        mode: "snapshot-only",
-        status: "in-progress",
-        lastExecutedAt: "2026-04-22T09:12:00.000Z",
-      },
-      {
-        operation: "RestoreSimulationEnvironment",
-        sourceCollections: ["vendorAggregates", "vendorMetrics", "auditLogs"],
-        mode: "snapshot-only",
-        status: "ready",
-        lastExecutedAt: "2026-04-20T13:45:00.000Z",
-      },
-    ],
     structuralGuarantees: [
       {
         id: "cross_institute_intelligence_aggregation",
@@ -287,12 +192,6 @@ export function getVendorSystemHealthDataset(): VendorSystemHealthDataset {
         label: "Vendor-authoritative licensing",
         status: "pass",
         evidence: "License updates and history are controlled from vendor-authorized flows.",
-      },
-      {
-        id: "feature_flag_based_rollout",
-        label: "Feature-flag-based rollout control",
-        status: "pass",
-        evidence: "Global feature flags are mapped to middleware-enforced evaluation paths.",
       },
       {
         id: "strong_tenant_separation",

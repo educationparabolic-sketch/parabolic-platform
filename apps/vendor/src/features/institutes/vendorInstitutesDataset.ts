@@ -1,5 +1,9 @@
 import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
 
+export type VendorLicenseLevel = "L0" | "L1" | "L2";
+export type VendorLicenseTier = "Tier 1" | "Tier 2" | "Tier 3";
+export type VendorLicensePlanId = `${VendorLicenseLevel}-${"T1" | "T2" | "T3"}`;
+
 export type VendorInstituteSubscriptionStatus =
   | "trialing"
   | "active"
@@ -21,11 +25,15 @@ export type VendorInstituteActionType =
 export interface VendorInstituteRecord {
   id: string;
   instituteName: string;
-  currentLicenseLayer: LicenseLayer;
+  currentLicenseLayer: VendorLicenseLevel;
+  currentLicensePlanId: VendorLicensePlanId;
   activeStudentCount: number;
   subscriptionStatus: VendorInstituteSubscriptionStatus;
   lifecycleStatus: VendorInstituteLifecycleStatus;
   monthlyUsage: number;
+  concurrentStudentsNow: number;
+  peakConcurrentStudents: number;
+  examSessionsThisMonth: number;
   lastActiveDate: string;
   paymentStatus: "Paid" | "Due" | "Failed";
   riskProfile?: "Low" | "Moderate" | "High";
@@ -40,9 +48,20 @@ export interface VendorInstituteRecord {
     billingCycle: "Monthly" | "Quarterly";
     nextInvoiceDate: string;
     paymentFailures: number;
-    amountDueUsd: number;
+    amountDueInr: number;
     manualOverrideEnabled: boolean;
   };
+}
+
+export interface VendorLicensePlan {
+  id: VendorLicensePlanId;
+  level: VendorLicenseLevel;
+  tier: VendorLicenseTier;
+  baseFeeInr: number;
+  perStudentFeeInr: number;
+  maxConcurrentStudents: number;
+  maxExamSessionsPerMonth: number;
+  isActive: boolean;
 }
 
 export interface VendorLicenseChangeRecord {
@@ -51,8 +70,10 @@ export interface VendorLicenseChangeRecord {
   instituteName: string;
   changedAt: string;
   changedBy: string;
-  fromLayer: LicenseLayer;
-  toLayer: LicenseLayer;
+  fromLayer: VendorLicenseLevel;
+  toLayer: VendorLicenseLevel;
+  fromPlanId: VendorLicensePlanId;
+  toPlanId: VendorLicensePlanId;
   reason: string;
   billingCycle: "Monthly" | "Quarterly";
 }
@@ -68,20 +89,118 @@ export interface VendorLicenseWebhookLog {
 
 export interface VendorInstitutesDataset {
   sourceCollection: "institutes";
+  licensePlans: VendorLicensePlan[];
   institutes: VendorInstituteRecord[];
   licenseChangeHistory: VendorLicenseChangeRecord[];
   webhookLogs: VendorLicenseWebhookLog[];
 }
+
+const LICENSE_PLANS: VendorLicensePlan[] = [
+  {
+    id: "L0-T1",
+    level: "L0",
+    tier: "Tier 1",
+    baseFeeInr: 3500,
+    perStudentFeeInr: 50,
+    maxConcurrentStudents: 200,
+    maxExamSessionsPerMonth: 30,
+    isActive: true,
+  },
+  {
+    id: "L0-T2",
+    level: "L0",
+    tier: "Tier 2",
+    baseFeeInr: 6500,
+    perStudentFeeInr: 52,
+    maxConcurrentStudents: 400,
+    maxExamSessionsPerMonth: 50,
+    isActive: true,
+  },
+  {
+    id: "L0-T3",
+    level: "L0",
+    tier: "Tier 3",
+    baseFeeInr: 9500,
+    perStudentFeeInr: 54,
+    maxConcurrentStudents: 600,
+    maxExamSessionsPerMonth: 70,
+    isActive: true,
+  },
+  {
+    id: "L1-T1",
+    level: "L1",
+    tier: "Tier 1",
+    baseFeeInr: 5500,
+    perStudentFeeInr: 98,
+    maxConcurrentStudents: 200,
+    maxExamSessionsPerMonth: 30,
+    isActive: true,
+  },
+  {
+    id: "L1-T2",
+    level: "L1",
+    tier: "Tier 2",
+    baseFeeInr: 8500,
+    perStudentFeeInr: 105,
+    maxConcurrentStudents: 400,
+    maxExamSessionsPerMonth: 50,
+    isActive: true,
+  },
+  {
+    id: "L1-T3",
+    level: "L1",
+    tier: "Tier 3",
+    baseFeeInr: 11500,
+    perStudentFeeInr: 108,
+    maxConcurrentStudents: 600,
+    maxExamSessionsPerMonth: 70,
+    isActive: true,
+  },
+  {
+    id: "L2-T1",
+    level: "L2",
+    tier: "Tier 1",
+    baseFeeInr: 8500,
+    perStudentFeeInr: 140,
+    maxConcurrentStudents: 200,
+    maxExamSessionsPerMonth: 30,
+    isActive: true,
+  },
+  {
+    id: "L2-T2",
+    level: "L2",
+    tier: "Tier 2",
+    baseFeeInr: 11500,
+    perStudentFeeInr: 155,
+    maxConcurrentStudents: 400,
+    maxExamSessionsPerMonth: 50,
+    isActive: true,
+  },
+  {
+    id: "L2-T3",
+    level: "L2",
+    tier: "Tier 3",
+    baseFeeInr: 14500,
+    perStudentFeeInr: 160,
+    maxConcurrentStudents: 600,
+    maxExamSessionsPerMonth: 70,
+    isActive: true,
+  },
+];
 
 const INSTITUTES: VendorInstituteRecord[] = [
   {
     id: "inst_north_star",
     instituteName: "North Star Academy",
     currentLicenseLayer: "L2",
+    currentLicensePlanId: "L2-T3",
     activeStudentCount: 1340,
     subscriptionStatus: "active",
     lifecycleStatus: "active",
     monthlyUsage: 93,
+    concurrentStudentsNow: 518,
+    peakConcurrentStudents: 574,
+    examSessionsThisMonth: 66,
     lastActiveDate: "2026-04-21T12:40:00.000Z",
     paymentStatus: "Paid",
     riskProfile: "Moderate",
@@ -96,7 +215,7 @@ const INSTITUTES: VendorInstituteRecord[] = [
       billingCycle: "Monthly",
       nextInvoiceDate: "2026-05-01T00:00:00.000Z",
       paymentFailures: 0,
-      amountDueUsd: 12400,
+      amountDueInr: 228900,
       manualOverrideEnabled: false,
     },
   },
@@ -104,10 +223,14 @@ const INSTITUTES: VendorInstituteRecord[] = [
     id: "inst_riverdale",
     instituteName: "Riverdale Test Hub",
     currentLicenseLayer: "L1",
+    currentLicensePlanId: "L1-T2",
     activeStudentCount: 820,
     subscriptionStatus: "past_due",
     lifecycleStatus: "watchlist",
     monthlyUsage: 67,
+    concurrentStudentsNow: 312,
+    peakConcurrentStudents: 361,
+    examSessionsThisMonth: 42,
     lastActiveDate: "2026-04-20T09:15:00.000Z",
     paymentStatus: "Due",
     riskProfile: "High",
@@ -122,18 +245,22 @@ const INSTITUTES: VendorInstituteRecord[] = [
       billingCycle: "Monthly",
       nextInvoiceDate: "2026-04-24T00:00:00.000Z",
       paymentFailures: 2,
-      amountDueUsd: 6180,
+      amountDueInr: 94600,
       manualOverrideEnabled: true,
     },
   },
   {
     id: "inst_orbit",
     instituteName: "Orbit Scholars",
-    currentLicenseLayer: "L3",
+    currentLicenseLayer: "L2",
+    currentLicensePlanId: "L2-T3",
     activeStudentCount: 2055,
     subscriptionStatus: "active",
     lifecycleStatus: "active",
     monthlyUsage: 98,
+    concurrentStudentsNow: 589,
+    peakConcurrentStudents: 600,
+    examSessionsThisMonth: 70,
     lastActiveDate: "2026-04-22T05:22:00.000Z",
     paymentStatus: "Paid",
     riskProfile: "Low",
@@ -148,7 +275,7 @@ const INSTITUTES: VendorInstituteRecord[] = [
       billingCycle: "Quarterly",
       nextInvoiceDate: "2026-06-15T00:00:00.000Z",
       paymentFailures: 0,
-      amountDueUsd: 26800,
+      amountDueInr: 343300,
       manualOverrideEnabled: false,
     },
   },
@@ -156,10 +283,14 @@ const INSTITUTES: VendorInstituteRecord[] = [
     id: "inst_delta",
     instituteName: "Delta Coaching Network",
     currentLicenseLayer: "L0",
+    currentLicensePlanId: "L0-T1",
     activeStudentCount: 395,
     subscriptionStatus: "trialing",
     lifecycleStatus: "active",
     monthlyUsage: 41,
+    concurrentStudentsNow: 92,
+    peakConcurrentStudents: 118,
+    examSessionsThisMonth: 12,
     lastActiveDate: "2026-04-19T16:48:00.000Z",
     paymentStatus: "Paid",
     activityMetrics: {
@@ -172,7 +303,7 @@ const INSTITUTES: VendorInstituteRecord[] = [
       billingCycle: "Monthly",
       nextInvoiceDate: "2026-04-29T00:00:00.000Z",
       paymentFailures: 0,
-      amountDueUsd: 1420,
+      amountDueInr: 23250,
       manualOverrideEnabled: false,
     },
   },
@@ -180,10 +311,14 @@ const INSTITUTES: VendorInstituteRecord[] = [
     id: "inst_zenith",
     instituteName: "Zenith Integrated Prep",
     currentLicenseLayer: "L2",
+    currentLicensePlanId: "L2-T2",
     activeStudentCount: 1495,
     subscriptionStatus: "suspended",
     lifecycleStatus: "suspended",
     monthlyUsage: 32,
+    concurrentStudentsNow: 0,
+    peakConcurrentStudents: 448,
+    examSessionsThisMonth: 18,
     lastActiveDate: "2026-04-12T08:30:00.000Z",
     paymentStatus: "Failed",
     riskProfile: "High",
@@ -198,7 +333,7 @@ const INSTITUTES: VendorInstituteRecord[] = [
       billingCycle: "Monthly",
       nextInvoiceDate: "2026-04-16T00:00:00.000Z",
       paymentFailures: 3,
-      amountDueUsd: 11020,
+      amountDueInr: 243225,
       manualOverrideEnabled: true,
     },
   },
@@ -213,6 +348,8 @@ const LICENSE_HISTORY: VendorLicenseChangeRecord[] = [
     changedBy: "vendor.ops@parabolic.local",
     fromLayer: "L1",
     toLayer: "L2",
+    fromPlanId: "L1-T3",
+    toPlanId: "L2-T3",
     reason: "Governance analytics enablement",
     billingCycle: "Monthly",
   },
@@ -224,6 +361,8 @@ const LICENSE_HISTORY: VendorLicenseChangeRecord[] = [
     changedBy: "vendor.billing@parabolic.local",
     fromLayer: "L2",
     toLayer: "L1",
+    fromPlanId: "L2-T2",
+    toPlanId: "L1-T2",
     reason: "Temporary downgrade during delinquency recovery",
     billingCycle: "Monthly",
   },
@@ -234,8 +373,10 @@ const LICENSE_HISTORY: VendorLicenseChangeRecord[] = [
     changedAt: "2026-04-09T05:05:00.000Z",
     changedBy: "vendor.ops@parabolic.local",
     fromLayer: "L2",
-    toLayer: "L3",
-    reason: "Director governance rollout approved",
+    toLayer: "L2",
+    fromPlanId: "L2-T2",
+    toPlanId: "L2-T3",
+    reason: "Tier capacity expansion approved",
     billingCycle: "Quarterly",
   },
   {
@@ -244,8 +385,10 @@ const LICENSE_HISTORY: VendorLicenseChangeRecord[] = [
     instituteName: "Zenith Integrated Prep",
     changedAt: "2026-04-05T13:35:00.000Z",
     changedBy: "vendor.billing@parabolic.local",
-    fromLayer: "L3",
+    fromLayer: "L2",
     toLayer: "L2",
+    fromPlanId: "L2-T3",
+    toPlanId: "L2-T2",
     reason: "Payment failure fallback policy",
     billingCycle: "Monthly",
   },
@@ -257,6 +400,8 @@ const LICENSE_HISTORY: VendorLicenseChangeRecord[] = [
     changedBy: "vendor.ops@parabolic.local",
     fromLayer: "L0",
     toLayer: "L0",
+    fromPlanId: "L0-T1",
+    toPlanId: "L0-T1",
     reason: "Trial extension approved",
     billingCycle: "Monthly",
   },
@@ -293,7 +438,7 @@ const WEBHOOK_LOGS: VendorLicenseWebhookLog[] = [
     receivedAt: "2026-04-09T02:05:00.000Z",
     eventType: "invoice.created",
     status: "processed",
-    summary: "Quarterly invoice generated for L3 governance layer.",
+    summary: "Quarterly invoice generated for L2 Tier 3 capacity plan.",
   },
   {
     id: "webhook_005",
@@ -308,6 +453,7 @@ const WEBHOOK_LOGS: VendorLicenseWebhookLog[] = [
 export function getVendorInstitutesDataset(): VendorInstitutesDataset {
   return {
     sourceCollection: "institutes",
+    licensePlans: LICENSE_PLANS,
     institutes: INSTITUTES,
     licenseChangeHistory: LICENSE_HISTORY,
     webhookLogs: WEBHOOK_LOGS,

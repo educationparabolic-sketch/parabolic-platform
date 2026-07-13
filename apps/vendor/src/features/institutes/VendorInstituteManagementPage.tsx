@@ -6,7 +6,6 @@ import {
   UiTable,
   type UiTableColumn,
 } from "../../../../../shared/ui/components";
-import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
 import {
   filterInstitutes,
   getVendorInstitutesDataset,
@@ -14,11 +13,12 @@ import {
   type VendorInstituteLifecycleStatus,
   type VendorInstituteRecord,
   type VendorInstituteSubscriptionStatus,
+  type VendorLicenseLevel,
 } from "./vendorInstitutesDataset";
 
 interface InstituteFilters {
   query: string;
-  layer: LicenseLayer | "all";
+  layer: VendorLicenseLevel | "all";
   subscriptionStatus: VendorInstituteSubscriptionStatus | "all";
   lifecycleStatus: VendorInstituteLifecycleStatus | "all";
 }
@@ -32,7 +32,7 @@ interface LocalActionRecord {
   note: string;
 }
 
-const LAYER_FILTERS: Array<InstituteFilters["layer"]> = ["all", "L0", "L1", "L2", "L3"];
+const LAYER_FILTERS: Array<InstituteFilters["layer"]> = ["all", "L0", "L1", "L2"];
 const SUBSCRIPTION_FILTERS: Array<InstituteFilters["subscriptionStatus"]> = [
   "all",
   "trialing",
@@ -97,7 +97,7 @@ function VendorInstituteManagementPage() {
   }, [filteredInstitutes, selectedInstituteId]);
 
   const layerOverview = useMemo(() => {
-    const totals: Record<LicenseLayer, number> = { L0: 0, L1: 0, L2: 0, L3: 0 };
+    const totals: Record<VendorLicenseLevel, number> = { L0: 0, L1: 0, L2: 0 };
 
     for (const institute of filteredInstitutes) {
       totals[institute.currentLicenseLayer] += 1;
@@ -138,8 +138,8 @@ function VendorInstituteManagementPage() {
       },
       {
         id: "layer",
-        header: "License Layer",
-        render: (row) => row.currentLicenseLayer,
+        header: "License Plan",
+        render: (row) => row.currentLicensePlanId,
       },
       {
         id: "activeStudents",
@@ -206,7 +206,6 @@ function VendorInstituteManagementPage() {
         <UiStatCard title="Layer L0" value={String(layerOverview.L0)} helper="Operational layer institutes" />
         <UiStatCard title="Layer L1" value={String(layerOverview.L1)} helper="Diagnostic layer institutes" />
         <UiStatCard title="Layer L2" value={String(layerOverview.L2)} helper="Controlled layer institutes" />
-        <UiStatCard title="Layer L3" value={String(layerOverview.L3)} helper="Governance layer institutes" />
         <UiStatCard title="Average Monthly Usage" value={`${Math.round(activitySnapshot.monthlyUsage / Math.max(filteredInstitutes.length, 1))}%`} helper="Usage pressure across filtered set" />
       </div>
 
@@ -307,7 +306,7 @@ function VendorInstituteManagementPage() {
                 <strong>{selectedInstitute.instituteName}</strong> <span>({selectedInstitute.id})</span>
               </p>
               <p className="vendor-profile-detail">
-                License Layer: <strong>{selectedInstitute.currentLicenseLayer}</strong> | Subscription:{" "}
+                License Plan: <strong>{selectedInstitute.currentLicensePlanId}</strong> | Subscription:{" "}
                 <strong>{toTitleCase(selectedInstitute.subscriptionStatus)}</strong> | Payment:{" "}
                 <strong>{selectedInstitute.paymentStatus}</strong>
               </p>

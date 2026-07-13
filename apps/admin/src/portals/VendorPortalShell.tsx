@@ -19,7 +19,7 @@ function VendorPortalShell(props: VendorPortalShellProps) {
       title: "Business Intelligence",
       detail: "Vendor-only routes for global metrics, commercial signals, and portfolio visibility.",
       routes: visibleRoutes.filter((route) =>
-        ["/vendor/overview", "/vendor/intelligence", "/vendor/revenue"].includes(route.path),
+        ["/vendor/overview", "/vendor/intelligence"].includes(route.path),
       ),
     },
     {

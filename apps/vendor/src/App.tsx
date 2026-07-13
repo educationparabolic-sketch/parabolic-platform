@@ -60,7 +60,7 @@ const VENDOR_NAV_GROUPS = [
   {
     id: "intelligence",
     label: "Intelligence",
-    paths: ["/vendor/overview", "/vendor/intelligence", "/vendor/revenue"],
+    paths: ["/vendor/overview", "/vendor/intelligence"],
   },
   {
     id: "operations",
@@ -70,7 +70,7 @@ const VENDOR_NAV_GROUPS = [
   {
     id: "controls",
     label: "Controls",
-    paths: ["/vendor/calibration", "/vendor/feature-flags", "/vendor/data-export", "/vendor/backups", "/vendor/system-health"],
+    paths: ["/vendor/calibration", "/vendor/system-health"],
   },
 ] as const;
 
@@ -592,38 +592,6 @@ function App() {
         <Route
           path="intelligence"
           element={<VendorRouteBoundary label="Loading intelligence"><VendorIntelligenceDashboardPage /></VendorRouteBoundary>}
-        />
-        <Route
-          path="revenue"
-          element={renderVendorPlaceholder(
-            "Revenue & Business Metrics",
-            "Business dashboard route for monthly recurring revenue, layer distribution, upgrade conversion, churn, and active-student growth.",
-            "This mounted shell secures the planned vendor revenue route while keeping dedicated revenue analytics implementation as a separate follow-up slice.",
-          )}
-        />
-        <Route
-          path="feature-flags"
-          element={renderVendorPlaceholder(
-            "Global Feature Flags",
-            "Vendor rollout controls for beta features, experimental risk engine toggles, new UI rollout, and staged percentage releases.",
-            "The route shell is active and aligned to the vendor plan. Operational flag editing remains available from system-health previews until the dedicated control plane is expanded.",
-          )}
-        />
-        <Route
-          path="data-export"
-          element={renderVendorPlaceholder(
-            "Data Export",
-            "Snapshot-safe export route for platform metrics, institute summaries, and controlled vendor data handoff operations.",
-            "This route is mounted for planned-map parity. Export workflows stay constrained to summary collections and can be deepened later without changing navigation.",
-          )}
-        />
-        <Route
-          path="backups"
-          element={renderVendorPlaceholder(
-            "Backups & Restore",
-            "Vendor recovery route for manual backup initiation, backup audit visibility, and restore-simulation review.",
-            "This mounted shell reserves the dedicated backup route from the planned vendor map while keeping restore actions constrained to controlled, summary-safe operational workflows.",
-          )}
         />
         <Route
           path="system-health"
