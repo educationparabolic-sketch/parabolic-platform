@@ -14,35 +14,40 @@ export const VENDOR_ROUTE_DEFINITIONS: VendorRouteDefinition[] = [
     path: "/vendor/overview",
     title: "Vendor Overview",
     section: "Vendor Overview",
-    description: "Global operational metrics, commercial posture, and platform-wide status for vendor administrators.",
+    description:
+      "Global operational metrics, commercial posture, and platform-wide status for vendor administrators.",
     allowedRoles: ["vendor"],
   },
   {
     path: "/vendor/institutes",
     title: "Institutes",
     section: "Institutes",
-    description: "Cross-institute management surface for tenant discovery, status review, and portfolio navigation.",
+    description:
+      "Cross-institute management surface for tenant discovery, status review, and portfolio navigation.",
     allowedRoles: ["vendor"],
   },
   {
     path: "/vendor/institutes/:instituteId",
     title: "Institute Detail",
     section: "Institutes",
-    description: "Institute-specific vendor view for tenant health, licensing posture, and operational drill-in.",
+    description:
+      "Institute-specific vendor view for tenant health, licensing posture, and operational drill-in.",
     allowedRoles: ["vendor"],
   },
   {
     path: "/vendor/licensing",
     title: "Licensing",
     section: "Licensing Management",
-    description: "Vendor-only license management route for institute entitlements, layer upgrades, and feature access control.",
+    description:
+      "Vendor-controlled catalogue for pricing, capacity parameters, validation, and versioned publication.",
     allowedRoles: ["vendor"],
   },
   {
     path: "/vendor/calibration",
     title: "Calibration",
     section: "Calibration",
-    description: "Calibration deployment workspace for version review and controlled rollout planning.",
+    description:
+      "Calibration deployment workspace for version review and controlled rollout planning.",
     allowedRoles: ["vendor"],
   },
   {
@@ -56,28 +61,32 @@ export const VENDOR_ROUTE_DEFINITIONS: VendorRouteDefinition[] = [
     path: "/vendor/calibration/history",
     title: "Calibration History",
     section: "Calibration",
-    description: "Historical calibration timeline for prior deployments, revisions, and vendor review.",
+    description:
+      "Historical calibration timeline for prior deployments, revisions, and vendor review.",
     allowedRoles: ["vendor"],
   },
   {
     path: "/vendor/intelligence",
     title: "Global Intelligence",
     section: "Global Intelligence",
-    description: "Cross-institute behavioral analytics and platform intelligence summaries at the vendor layer.",
+    description:
+      "Cross-institute behavioral analytics and platform intelligence summaries at the vendor layer.",
     allowedRoles: ["vendor"],
   },
   {
     path: "/vendor/system-health",
     title: "System Health",
     section: "System Health",
-    description: "Operational monitoring for Firestore usage, Cloud Functions activity, and platform error visibility.",
+    description:
+      "Operational monitoring for Firestore usage, Cloud Functions activity, and platform error visibility.",
     allowedRoles: ["vendor"],
   },
   {
     path: "/vendor/audit",
     title: "Audit Logs",
     section: "Audit Logs",
-    description: "Full system audit viewer for vendor governance, operational review, and immutable event inspection.",
+    description:
+      "Full system audit viewer for vendor governance, operational review, and immutable event inspection.",
     allowedRoles: ["vendor"],
   },
 ];

@@ -1,77 +1,49 @@
 import { useMemo, useState, type FormEvent } from "react";
+import { UiFormField, UiStatCard, UiTable } from "../../../../../shared/ui/components";
 import {
-  UiForm,
-  UiFormField,
-  UiStatCard,
-  UiTable,
-  type UiTableColumn,
-} from "../../../../../shared/ui/components";
-import {
-  getLicenseHistoryForInstitute,
   getVendorInstitutesDataset,
-  getWebhookLogsForInstitute,
-  type VendorInstituteSubscriptionStatus,
-  type VendorLicenseChangeRecord,
+  type VendorLicenseLevel,
   type VendorLicensePlan,
   type VendorLicensePlanId,
-  type VendorLicenseWebhookLog,
 } from "../institutes/vendorInstitutesDataset";
-
-interface LicenseAssignmentDraft {
-  nextPlanId: VendorLicensePlanId;
-  nextStatus: VendorInstituteSubscriptionStatus;
-  customStudentCount: string;
-  note: string;
-}
+import { useVendorLicenseRequests } from "../institutes/vendorLicenseRequestsStore";
 
 interface LicenseParameterDraft {
   baseFeeInr: string;
   perStudentFeeInr: string;
   maxConcurrentStudents: string;
   maxExamSessionsPerMonth: string;
-  note: string;
-}
-
-interface QueuedLicenseAction {
-  id: string;
-  createdAt: string;
-  instituteName: string;
-  previousPlanId: VendorLicensePlanId;
-  nextPlanId: VendorLicensePlanId;
-  nextStatus: VendorInstituteSubscriptionStatus;
-  projectedMonthlyFeeInr: number;
+  isActive: boolean;
   note: string;
 }
 
 interface PublishedPlanUpdate {
   id: string;
+  version: string;
   createdAt: string;
   planId: VendorLicensePlanId;
   affectedInstitutes: number;
+  changedParameters: string[];
   baseFeeInr: number;
   perStudentFeeInr: number;
   maxConcurrentStudents: number;
   maxExamSessionsPerMonth: number;
+  effectiveMode: "immediate" | "next_billing_cycle";
   note: string;
 }
 
-function toTitleCase(value: string): string {
-  return value
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
+type LevelFilter = "all" | VendorLicenseLevel;
 
 function formatDateLabel(value: string): string {
   const parsed = Date.parse(value);
-  if (Number.isNaN(parsed)) {
-    return value;
-  }
-
-  return new Date(parsed).toISOString().slice(0, 10);
+  return Number.isNaN(parsed) ? value : new Date(parsed).toISOString().slice(0, 10);
 }
 
 function formatInr(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "Invalid value";
+  }
+
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
@@ -79,20 +51,12 @@ function formatInr(value: number): string {
   }).format(value);
 }
 
-function calculateMonthlyFee(plan: VendorLicensePlan, studentCount: number): number {
-  return plan.baseFeeInr + studentCount * plan.perStudentFeeInr;
-}
-
-function getUsagePercent(used: number, limit: number): number {
-  if (limit <= 0) {
-    return 0;
-  }
-
-  return Math.min(100, Math.round((used / limit) * 100));
-}
-
 function getPlanLabel(plan: VendorLicensePlan): string {
   return `${plan.level} ${plan.tier}`;
+}
+
+function calculateMonthlyFee(plan: VendorLicensePlan, studentCount: number): number {
+  return plan.baseFeeInr + studentCount * plan.perStudentFeeInr;
 }
 
 function buildParameterDraft(plan: VendorLicensePlan): LicenseParameterDraft {
@@ -101,645 +65,636 @@ function buildParameterDraft(plan: VendorLicensePlan): LicenseParameterDraft {
     perStudentFeeInr: String(plan.perStudentFeeInr),
     maxConcurrentStudents: String(plan.maxConcurrentStudents),
     maxExamSessionsPerMonth: String(plan.maxExamSessionsPerMonth),
+    isActive: plan.isActive,
     note: "",
   };
 }
 
-function parsePositiveInteger(value: string, fallback: number): number {
-  const parsed = Number.parseInt(value, 10);
+function parseDraftNumber(value: string): number {
+  return Number.parseInt(value, 10);
+}
 
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return fallback;
+function buildPlanFromDraft(
+  plan: VendorLicensePlan,
+  draft: LicenseParameterDraft,
+): VendorLicensePlan {
+  return {
+    ...plan,
+    baseFeeInr: parseDraftNumber(draft.baseFeeInr),
+    perStudentFeeInr: parseDraftNumber(draft.perStudentFeeInr),
+    maxConcurrentStudents: parseDraftNumber(draft.maxConcurrentStudents),
+    maxExamSessionsPerMonth: parseDraftNumber(draft.maxExamSessionsPerMonth),
+    isActive: draft.isActive,
+  };
+}
+
+function getChangedParameters(plan: VendorLicensePlan, draftPlan: VendorLicensePlan): string[] {
+  const changes: string[] = [];
+  if (plan.baseFeeInr !== draftPlan.baseFeeInr) changes.push("Base fee");
+  if (plan.perStudentFeeInr !== draftPlan.perStudentFeeInr) changes.push("Per-student fee");
+  if (plan.maxConcurrentStudents !== draftPlan.maxConcurrentStudents)
+    changes.push("Concurrent limit");
+  if (plan.maxExamSessionsPerMonth !== draftPlan.maxExamSessionsPerMonth)
+    changes.push("Exam-session limit");
+  if (plan.isActive !== draftPlan.isActive) changes.push("Plan status");
+  return changes;
+}
+
+function validateDraft(
+  selectedPlan: VendorLicensePlan,
+  draftPlan: VendorLicensePlan,
+  plans: VendorLicensePlan[],
+): string[] {
+  const errors: string[] = [];
+  const numericValues = [
+    ["Base fee", draftPlan.baseFeeInr],
+    ["Per-student fee", draftPlan.perStudentFeeInr],
+    ["Concurrent-student limit", draftPlan.maxConcurrentStudents],
+    ["Monthly exam-session limit", draftPlan.maxExamSessionsPerMonth],
+  ] as const;
+
+  for (const [label, value] of numericValues) {
+    if (!Number.isInteger(value) || value <= 0) {
+      errors.push(`${label} must be a positive whole number.`);
+    }
   }
 
-  return parsed;
+  const sameLevelPlans = plans
+    .filter((plan) => plan.level === selectedPlan.level && plan.id !== selectedPlan.id)
+    .sort((left, right) => left.id.localeCompare(right.id));
+  const lowerPlan = sameLevelPlans.filter((plan) => plan.id < selectedPlan.id).at(-1);
+  const higherPlan = sameLevelPlans.find((plan) => plan.id > selectedPlan.id);
+
+  if (lowerPlan && draftPlan.baseFeeInr < lowerPlan.baseFeeInr) {
+    errors.push(
+      `Base fee must remain at least ${formatInr(lowerPlan.baseFeeInr)} (${lowerPlan.id}).`,
+    );
+  }
+  if (higherPlan && draftPlan.baseFeeInr > higherPlan.baseFeeInr) {
+    errors.push(`Base fee cannot exceed ${formatInr(higherPlan.baseFeeInr)} (${higherPlan.id}).`);
+  }
+  if (lowerPlan && draftPlan.perStudentFeeInr < lowerPlan.perStudentFeeInr) {
+    errors.push(
+      `Per-student fee must remain at least ${formatInr(lowerPlan.perStudentFeeInr)} (${lowerPlan.id}).`,
+    );
+  }
+  if (higherPlan && draftPlan.perStudentFeeInr > higherPlan.perStudentFeeInr) {
+    errors.push(
+      `Per-student fee cannot exceed ${formatInr(higherPlan.perStudentFeeInr)} (${higherPlan.id}).`,
+    );
+  }
+  if (lowerPlan && draftPlan.maxConcurrentStudents < lowerPlan.maxConcurrentStudents) {
+    errors.push(`Concurrent limit cannot be below the lower tier ${lowerPlan.id}.`);
+  }
+  if (higherPlan && draftPlan.maxConcurrentStudents > higherPlan.maxConcurrentStudents) {
+    errors.push(`Concurrent limit cannot exceed the higher tier ${higherPlan.id}.`);
+  }
+  if (lowerPlan && draftPlan.maxExamSessionsPerMonth < lowerPlan.maxExamSessionsPerMonth) {
+    errors.push(`Exam-session limit cannot be below the lower tier ${lowerPlan.id}.`);
+  }
+  if (higherPlan && draftPlan.maxExamSessionsPerMonth > higherPlan.maxExamSessionsPerMonth) {
+    errors.push(`Exam-session limit cannot exceed the higher tier ${higherPlan.id}.`);
+  }
+
+  return errors;
 }
 
 function VendorLicensingPage() {
   const dataset = useMemo(() => getVendorInstitutesDataset(), []);
-  const [licensePlans, setLicensePlans] = useState<VendorLicensePlan[]>(() =>
-    dataset.licensePlans.map((plan) => ({ ...plan })),
+  const { licensePlans, publishLicensePlan } = useVendorLicenseRequests();
+  const [drafts, setDrafts] = useState<Record<VendorLicensePlanId, LicenseParameterDraft>>(
+    () =>
+      Object.fromEntries(
+        licensePlans.map((plan) => [plan.id, buildParameterDraft(plan)]),
+      ) as Record<VendorLicensePlanId, LicenseParameterDraft>,
   );
-  const [cataloguePlanId, setCataloguePlanId] = useState<VendorLicensePlanId>(
+  const [selectedPlanId, setSelectedPlanId] = useState<VendorLicensePlanId>(
     dataset.licensePlans[0]?.id ?? "L0-T1",
   );
-  const [parameterDraft, setParameterDraft] = useState<LicenseParameterDraft>(() =>
-    buildParameterDraft(dataset.licensePlans[0] ?? {
-      id: "L0-T1",
-      level: "L0",
-      tier: "Tier 1",
-      baseFeeInr: 3500,
-      perStudentFeeInr: 50,
-      maxConcurrentStudents: 200,
-      maxExamSessionsPerMonth: 30,
-      isActive: true,
-    }),
+  const [levelFilter, setLevelFilter] = useState<LevelFilter>("all");
+  const [effectiveMode, setEffectiveMode] = useState<"immediate" | "next_billing_cycle">(
+    "next_billing_cycle",
   );
-  const [instituteId, setInstituteId] = useState(dataset.institutes[0]?.id ?? "");
-  const [assignmentDraft, setAssignmentDraft] = useState<LicenseAssignmentDraft>({
-    nextPlanId: dataset.institutes[0]?.currentLicensePlanId ?? "L0-T1",
-    nextStatus: "active",
-    customStudentCount: "",
-    note: "",
-  });
-  const [queuedActions, setQueuedActions] = useState<QueuedLicenseAction[]>([]);
-  const [publishedPlanUpdates, setPublishedPlanUpdates] = useState<PublishedPlanUpdate[]>([]);
+  const [publishConfirmed, setPublishConfirmed] = useState(false);
+  const [publishedUpdates, setPublishedUpdates] = useState<PublishedPlanUpdate[]>([]);
 
-  const planById = useMemo(() => {
-    return new Map(licensePlans.map((plan) => [plan.id, plan]));
-  }, [licensePlans]);
-
-  const selectedInstitute = useMemo(() => {
-    return dataset.institutes.find((entry) => entry.id === instituteId) ?? dataset.institutes[0] ?? null;
-  }, [dataset.institutes, instituteId]);
-
-  const selectedPlan = selectedInstitute ? planById.get(selectedInstitute.currentLicensePlanId) ?? null : null;
-  const cataloguePlan = planById.get(cataloguePlanId) ?? licensePlans[0];
-  const targetPlan = planById.get(assignmentDraft.nextPlanId) ?? licensePlans[0];
-  const studentCountForPreview =
-    Number.parseInt(assignmentDraft.customStudentCount, 10) || selectedInstitute?.activeStudentCount || 0;
-  const projectedMonthlyFee = calculateMonthlyFee(targetPlan, studentCountForPreview);
-  const affectedInstitutesForCataloguePlan = dataset.institutes.filter(
-    (institute) => institute.currentLicensePlanId === cataloguePlan?.id,
+  const selectedPlan = licensePlans.find((plan) => plan.id === selectedPlanId) ?? licensePlans[0];
+  const selectedDraft = selectedPlan ? drafts[selectedPlan.id] : undefined;
+  const draftPlan =
+    selectedPlan && selectedDraft ? buildPlanFromDraft(selectedPlan, selectedDraft) : null;
+  const validationErrors =
+    selectedPlan && draftPlan ? validateDraft(selectedPlan, draftPlan, licensePlans) : [];
+  const changedParameters =
+    selectedPlan && draftPlan ? getChangedParameters(selectedPlan, draftPlan) : [];
+  const hasChanges = changedParameters.length > 0;
+  const affectedInstitutes = selectedPlan
+    ? dataset.institutes.filter((institute) => institute.currentLicensePlanId === selectedPlan.id)
+    : [];
+  const revenueDelta =
+    selectedPlan && draftPlan
+      ? affectedInstitutes.reduce(
+          (total, institute) =>
+            total +
+            calculateMonthlyFee(draftPlan, institute.activeStudentCount) -
+            calculateMonthlyFee(selectedPlan, institute.activeStudentCount),
+          0,
+        )
+      : 0;
+  const concurrencyConflicts = draftPlan
+    ? affectedInstitutes.filter(
+        (institute) => institute.peakConcurrentStudents > draftPlan.maxConcurrentStudents,
+      ).length
+    : 0;
+  const sessionConflicts = draftPlan
+    ? affectedInstitutes.filter(
+        (institute) => institute.examSessionsThisMonth > draftPlan.maxExamSessionsPerMonth,
+      ).length
+    : 0;
+  const filteredPlans = licensePlans.filter(
+    (plan) => levelFilter === "all" || plan.level === levelFilter,
   );
+  const modifiedPlanCount = licensePlans.filter((plan) => {
+    const draft = drafts[plan.id];
+    return draft ? getChangedParameters(plan, buildPlanFromDraft(plan, draft)).length > 0 : false;
+  }).length;
+  const assignedPlanCount = new Set(
+    dataset.institutes.map((institute) => institute.currentLicensePlanId),
+  ).size;
 
-  const portfolioStats = useMemo(() => {
-    return dataset.institutes.reduce(
-      (accumulator, institute) => {
-        const plan = planById.get(institute.currentLicensePlanId);
-        const monthlyFee = plan ? calculateMonthlyFee(plan, institute.activeStudentCount) : 0;
-
-        return {
-          activeInstitutes: accumulator.activeInstitutes + (institute.subscriptionStatus === "active" ? 1 : 0),
-          monthlyRevenueInr: accumulator.monthlyRevenueInr + monthlyFee,
-          nearConcurrentLimit:
-            accumulator.nearConcurrentLimit +
-            (plan && getUsagePercent(institute.peakConcurrentStudents, plan.maxConcurrentStudents) >= 85 ? 1 : 0),
-          nearSessionLimit:
-            accumulator.nearSessionLimit +
-            (plan && getUsagePercent(institute.examSessionsThisMonth, plan.maxExamSessionsPerMonth) >= 85 ? 1 : 0),
-        };
-      },
-      {
-        activeInstitutes: 0,
-        monthlyRevenueInr: 0,
-        nearConcurrentLimit: 0,
-        nearSessionLimit: 0,
-      },
-    );
-  }, [dataset.institutes, planById]);
-
-  const webhookRows = useMemo(() => {
-    if (!selectedInstitute) {
-      return [] as VendorLicenseWebhookLog[];
-    }
-
-    return getWebhookLogsForInstitute(dataset, selectedInstitute.id);
-  }, [dataset, selectedInstitute]);
-
-  const historyRows = useMemo(() => {
-    if (!selectedInstitute) {
-      return [] as VendorLicenseChangeRecord[];
-    }
-
-    return getLicenseHistoryForInstitute(dataset, selectedInstitute.id);
-  }, [dataset, selectedInstitute]);
-
-  const planColumns = useMemo<Array<UiTableColumn<VendorLicensePlan>>>(() => {
-    return [
-      {
-        id: "plan",
-        header: "Plan",
-        render: (row) => getPlanLabel(row),
-      },
-      {
-        id: "baseFee",
-        header: "Base Fee",
-        render: (row) => formatInr(row.baseFeeInr),
-      },
-      {
-        id: "studentFee",
-        header: "Per Student",
-        render: (row) => formatInr(row.perStudentFeeInr),
-      },
-      {
-        id: "concurrent",
-        header: "Max Concurrent",
-        render: (row) => row.maxConcurrentStudents.toLocaleString("en-IN"),
-      },
-      {
-        id: "sessions",
-        header: "Exam Sessions / Month",
-        render: (row) => row.maxExamSessionsPerMonth.toLocaleString("en-IN"),
-      },
-      {
-        id: "status",
-        header: "Status",
-        render: (row) => (row.isActive ? "Active" : "Inactive"),
-      },
-      {
-        id: "edit",
-        header: "Control",
-        render: (row) => (
-          <button
-            type="button"
-            className="vendor-link-button"
-            onClick={() => {
-              setCataloguePlanId(row.id);
-              setParameterDraft(buildParameterDraft(row));
-            }}
-          >
-            Edit parameters
-          </button>
-        ),
-      },
-    ];
-  }, []);
-
-  const webhookColumns = useMemo<Array<UiTableColumn<VendorLicenseWebhookLog>>>(() => {
-    return [
-      {
-        id: "receivedAt",
-        header: "Received",
-        render: (row) => formatDateLabel(row.receivedAt),
-      },
-      {
-        id: "eventType",
-        header: "Event",
-        render: (row) => row.eventType,
-      },
-      {
-        id: "status",
-        header: "Status",
-        render: (row) => toTitleCase(row.status),
-      },
-      {
-        id: "summary",
-        header: "Summary",
-        render: (row) => row.summary,
-      },
-    ];
-  }, []);
-
-  const historyColumns = useMemo<Array<UiTableColumn<VendorLicenseChangeRecord>>>(() => {
-    return [
-      {
-        id: "changedAt",
-        header: "Changed",
-        render: (row) => formatDateLabel(row.changedAt),
-      },
-      {
-        id: "fromTo",
-        header: "Plan Change",
-        render: (row) => `${row.fromPlanId} -> ${row.toPlanId}`,
-      },
-      {
-        id: "billingCycle",
-        header: "Billing Cycle",
-        render: (row) => row.billingCycle,
-      },
-      {
-        id: "changedBy",
-        header: "Changed By",
-        render: (row) => row.changedBy,
-      },
-      {
-        id: "reason",
-        header: "Reason",
-        render: (row) => row.reason,
-      },
-    ];
-  }, []);
-
-  function handleInstituteSelection(nextInstituteId: string) {
-    const nextInstitute = dataset.institutes.find((entry) => entry.id === nextInstituteId);
-
-    setInstituteId(nextInstituteId);
-    if (nextInstitute) {
-      setAssignmentDraft((previous) => ({
-        ...previous,
-        nextPlanId: nextInstitute.currentLicensePlanId,
-        nextStatus: nextInstitute.subscriptionStatus,
-        customStudentCount: "",
-      }));
-    }
+  function selectPlan(planId: VendorLicensePlanId) {
+    setSelectedPlanId(planId);
+    setPublishConfirmed(false);
+    setEffectiveMode("next_billing_cycle");
   }
 
-  function handleLicenseAssignment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function updateDraft(field: keyof LicenseParameterDraft, value: string | boolean) {
+    if (!selectedPlan) return;
+    setDrafts((current) => ({
+      ...current,
+      [selectedPlan.id]: { ...current[selectedPlan.id], [field]: value },
+    }));
+    setPublishConfirmed(false);
+  }
 
-    if (!selectedInstitute) {
+  function resetSelectedDraft() {
+    if (!selectedPlan) return;
+    setDrafts((current) => ({
+      ...current,
+      [selectedPlan.id]: buildParameterDraft(selectedPlan),
+    }));
+    setPublishConfirmed(false);
+  }
+
+  function publishSelectedPlan(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (
+      !selectedPlan ||
+      !selectedDraft ||
+      !draftPlan ||
+      validationErrors.length > 0 ||
+      !hasChanges ||
+      !selectedDraft.note.trim() ||
+      !publishConfirmed
+    ) {
       return;
     }
 
-    const note = assignmentDraft.note.trim() || "Vendor-approved license assignment.";
-    const action: QueuedLicenseAction = {
-      id: `${Date.now()}-${selectedInstitute.id}-${assignmentDraft.nextPlanId}`,
-      createdAt: new Date().toISOString(),
-      instituteName: selectedInstitute.instituteName,
-      previousPlanId: selectedInstitute.currentLicensePlanId,
-      nextPlanId: assignmentDraft.nextPlanId,
-      nextStatus: assignmentDraft.nextStatus,
-      projectedMonthlyFeeInr: projectedMonthlyFee,
-      note,
+    const createdAt = new Date().toISOString();
+    const planVersion = `v1.${publishedUpdates.filter((update) => update.planId === selectedPlan.id).length + 1}`;
+    const update: PublishedPlanUpdate = {
+      id: `${createdAt}-${selectedPlan.id}`,
+      version: planVersion,
+      createdAt,
+      planId: selectedPlan.id,
+      affectedInstitutes: affectedInstitutes.length,
+      changedParameters,
+      baseFeeInr: draftPlan.baseFeeInr,
+      perStudentFeeInr: draftPlan.perStudentFeeInr,
+      maxConcurrentStudents: draftPlan.maxConcurrentStudents,
+      maxExamSessionsPerMonth: draftPlan.maxExamSessionsPerMonth,
+      effectiveMode,
+      note: selectedDraft.note.trim(),
     };
 
-    setQueuedActions((previous) => [action, ...previous].slice(0, 10));
-    setAssignmentDraft((previous) => ({ ...previous, note: "" }));
-  }
-
-  function handleCataloguePlanSelection(nextPlanId: VendorLicensePlanId) {
-    const nextPlan = planById.get(nextPlanId);
-
-    setCataloguePlanId(nextPlanId);
-    if (nextPlan) {
-      setParameterDraft(buildParameterDraft(nextPlan));
-    }
-  }
-
-  function handlePushPlanParameters(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!cataloguePlan) {
-      return;
-    }
-
-    const updatedPlan: VendorLicensePlan = {
-      ...cataloguePlan,
-      baseFeeInr: parsePositiveInteger(parameterDraft.baseFeeInr, cataloguePlan.baseFeeInr),
-      perStudentFeeInr: parsePositiveInteger(parameterDraft.perStudentFeeInr, cataloguePlan.perStudentFeeInr),
-      maxConcurrentStudents: parsePositiveInteger(
-        parameterDraft.maxConcurrentStudents,
-        cataloguePlan.maxConcurrentStudents,
-      ),
-      maxExamSessionsPerMonth: parsePositiveInteger(
-        parameterDraft.maxExamSessionsPerMonth,
-        cataloguePlan.maxExamSessionsPerMonth,
-      ),
-    };
-    const note = parameterDraft.note.trim() || "Vendor pushed updated license parameters to assigned institutes.";
-
-    setLicensePlans((previous) => previous.map((plan) => (plan.id === updatedPlan.id ? updatedPlan : plan)));
-    setPublishedPlanUpdates((previous) =>
-      [
-        {
-          id: `${Date.now()}-${updatedPlan.id}`,
-          createdAt: new Date().toISOString(),
-          planId: updatedPlan.id,
-          affectedInstitutes: affectedInstitutesForCataloguePlan.length,
-          baseFeeInr: updatedPlan.baseFeeInr,
-          perStudentFeeInr: updatedPlan.perStudentFeeInr,
-          maxConcurrentStudents: updatedPlan.maxConcurrentStudents,
-          maxExamSessionsPerMonth: updatedPlan.maxExamSessionsPerMonth,
-          note,
-        },
-        ...previous,
-      ].slice(0, 10),
-    );
-    setParameterDraft(buildParameterDraft(updatedPlan));
+    publishLicensePlan(draftPlan);
+    setDrafts((current) => ({
+      ...current,
+      [selectedPlan.id]: buildParameterDraft(draftPlan),
+    }));
+    setPublishedUpdates((current) => [update, ...current].slice(0, 20));
+    setPublishConfirmed(false);
   }
 
   return (
-    <section className="vendor-content-card admin-content-card" aria-labelledby="vendor-licensing-title">
-      <p className="vendor-content-eyebrow admin-content-eyebrow">Vendor controlled licensing</p>
-      <h2 id="vendor-licensing-title">Licensing &amp; Subscription Control</h2>
-      <p className="vendor-content-copy admin-content-copy">
-        Control the test portal commercial plan, capacity limits, billing preview, subscription state, and
-        institute-specific override queue from one vendor-owned workspace.
-      </p>
+    <section
+      className="vendor-content-card admin-content-card vendor-licensing-page"
+      aria-labelledby="vendor-licensing-title"
+    >
+      <header className="vendor-licensing-heading">
+        <div>
+          <p className="vendor-content-eyebrow admin-content-eyebrow">Plan configuration</p>
+          <h2 id="vendor-licensing-title">Licensing</h2>
+          <p className="vendor-content-copy admin-content-copy">
+            Define commercial fees and capacity limits, validate their impact, and publish a
+            controlled parameter version to institutes using the plan.
+          </p>
+        </div>
+        <span className="vendor-result-count">Vendor controlled</span>
+      </header>
 
-      <div className="vendor-overview-grid">
-        <UiStatCard title="Active Institutes" value={String(portfolioStats.activeInstitutes)} helper="Subscription status is active" />
-        <UiStatCard title="Monthly Revenue" value={formatInr(portfolioStats.monthlyRevenueInr)} helper="Base fee plus active student fees" />
-        <UiStatCard title="Near Concurrent Cap" value={String(portfolioStats.nearConcurrentLimit)} helper="Peak concurrency at or above 85%" />
-        <UiStatCard title="Near Session Cap" value={String(portfolioStats.nearSessionLimit)} helper="Exam sessions at or above 85%" />
-        <UiStatCard title="Plan Catalogue" value={String(licensePlans.length)} helper="L0/L1/L2 across three tiers" />
-        <UiStatCard title="Control Authority" value="Vendor" helper="Plan assignment and overrides are vendor scoped" />
+      <div className="vendor-institute-summary" aria-label="License catalogue summary">
+        <UiStatCard
+          title="Plans"
+          value={String(licensePlans.length)}
+          helper="L0-L2 across three tiers"
+        />
+        <UiStatCard
+          title="Assigned Plans"
+          value={String(assignedPlanCount)}
+          helper="Used by at least one institute"
+        />
+        <UiStatCard
+          title="Draft Changes"
+          value={String(modifiedPlanCount)}
+          helper="Not yet published"
+        />
+        <UiStatCard
+          title="Published Updates"
+          value={String(publishedUpdates.length)}
+          helper="This vendor session"
+        />
       </div>
 
-      <UiTable
-        caption="License plan catalogue"
-        columns={planColumns}
-        rows={licensePlans}
-        rowKey={(row) => row.id}
-        emptyStateText="No license plans configured."
-      />
+      <div className="vendor-license-config-layout">
+        <aside className="vendor-plan-browser" aria-labelledby="vendor-plan-browser-title">
+          <div className="vendor-section-heading">
+            <div>
+              <h3 id="vendor-plan-browser-title">Plan catalogue</h3>
+              <p>Select a plan to edit its parameters.</p>
+            </div>
+          </div>
+          <div className="vendor-level-filter" role="tablist" aria-label="Filter plans by level">
+            {(["all", "L0", "L1", "L2"] as LevelFilter[]).map((level) => (
+              <button
+                key={level}
+                type="button"
+                role="tab"
+                aria-selected={levelFilter === level}
+                className={levelFilter === level ? "vendor-level-filter-active" : ""}
+                onClick={() => setLevelFilter(level)}
+              >
+                {level === "all" ? "All" : level}
+              </button>
+            ))}
+          </div>
+          <div className="vendor-plan-list">
+            {filteredPlans.map((plan) => {
+              const planDraft = drafts[plan.id];
+              const isModified = planDraft
+                ? getChangedParameters(plan, buildPlanFromDraft(plan, planDraft)).length > 0
+                : false;
+              const assignedCount = dataset.institutes.filter(
+                (institute) => institute.currentLicensePlanId === plan.id,
+              ).length;
+              return (
+                <button
+                  key={plan.id}
+                  type="button"
+                  className={`vendor-plan-list-item${plan.id === selectedPlan?.id ? " vendor-plan-list-item-active" : ""}`}
+                  onClick={() => selectPlan(plan.id)}
+                >
+                  <span>
+                    <strong>{getPlanLabel(plan)}</strong>
+                    <small>
+                      {plan.id} | {assignedCount} institute(s)
+                    </small>
+                  </span>
+                  <span className="vendor-plan-list-meta">
+                    <small>{formatInr(plan.baseFeeInr)} base</small>
+                    <i>{isModified ? "Draft" : plan.isActive ? "Active" : "Inactive"}</i>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </aside>
 
-      <div className="vendor-section-grid">
-        <UiForm
-          title="Edit plan parameters"
-          description="Change the vendor-owned commercial and capacity values for a plan, then push the updated catalogue to every institute using that plan."
-          submitLabel="Push parameters to institutes"
-          onSubmit={handlePushPlanParameters}
-        >
-          <UiFormField
-            label="Plan"
-            htmlFor="vendor-catalogue-plan"
-            helper={`${affectedInstitutesForCataloguePlan.length} institute(s) currently assigned`}
-          >
-            <select
-              id="vendor-catalogue-plan"
-              value={cataloguePlanId}
-              onChange={(event) => {
-                handleCataloguePlanSelection(event.target.value as VendorLicensePlanId);
-              }}
+        {selectedPlan && selectedDraft && draftPlan ? (
+          <form className="vendor-plan-editor" onSubmit={publishSelectedPlan}>
+            <header className="vendor-plan-editor-header">
+              <div>
+                <p className="vendor-content-eyebrow">Selected plan</p>
+                <h3>{getPlanLabel(selectedPlan)}</h3>
+                <p>
+                  {selectedPlan.id} | {affectedInstitutes.length} assigned institute(s)
+                </p>
+              </div>
+              <span
+                className={`vendor-status ${hasChanges ? "vendor-status-due" : "vendor-status-active"}`}
+              >
+                {hasChanges ? `${changedParameters.length} draft changes` : "Published values"}
+              </span>
+            </header>
+
+            <section
+              className="vendor-parameter-editor"
+              aria-labelledby="vendor-parameter-editor-title"
             >
-              {licensePlans.map((plan) => (
-                <option key={plan.id} value={plan.id}>
-                  {getPlanLabel(plan)} ({plan.id})
-                </option>
-              ))}
-            </select>
-          </UiFormField>
+              <div className="vendor-section-heading">
+                <div>
+                  <h4 id="vendor-parameter-editor-title">Parameters</h4>
+                  <p>All monetary values are monthly INR amounts.</p>
+                </div>
+                <button
+                  type="button"
+                  className="vendor-secondary-button"
+                  disabled={!hasChanges}
+                  onClick={resetSelectedDraft}
+                >
+                  Reset draft
+                </button>
+              </div>
+              <div className="vendor-parameter-grid">
+                <UiFormField
+                  label="Base fee (INR)"
+                  htmlFor="vendor-license-base-fee"
+                  helper={`Published: ${formatInr(selectedPlan.baseFeeInr)}`}
+                >
+                  <input
+                    id="vendor-license-base-fee"
+                    inputMode="numeric"
+                    value={selectedDraft.baseFeeInr}
+                    onChange={(event) => updateDraft("baseFeeInr", event.target.value)}
+                  />
+                </UiFormField>
+                <UiFormField
+                  label="Per-student fee (INR)"
+                  htmlFor="vendor-license-student-fee"
+                  helper={`Published: ${formatInr(selectedPlan.perStudentFeeInr)}`}
+                >
+                  <input
+                    id="vendor-license-student-fee"
+                    inputMode="numeric"
+                    value={selectedDraft.perStudentFeeInr}
+                    onChange={(event) => updateDraft("perStudentFeeInr", event.target.value)}
+                  />
+                </UiFormField>
+                <UiFormField
+                  label="Maximum concurrent students"
+                  htmlFor="vendor-license-concurrent"
+                  helper={`Published: ${selectedPlan.maxConcurrentStudents.toLocaleString("en-IN")}`}
+                >
+                  <input
+                    id="vendor-license-concurrent"
+                    inputMode="numeric"
+                    value={selectedDraft.maxConcurrentStudents}
+                    onChange={(event) => updateDraft("maxConcurrentStudents", event.target.value)}
+                  />
+                </UiFormField>
+                <UiFormField
+                  label="Maximum exam sessions / month"
+                  htmlFor="vendor-license-sessions"
+                  helper={`Published: ${selectedPlan.maxExamSessionsPerMonth.toLocaleString("en-IN")}`}
+                >
+                  <input
+                    id="vendor-license-sessions"
+                    inputMode="numeric"
+                    value={selectedDraft.maxExamSessionsPerMonth}
+                    onChange={(event) => updateDraft("maxExamSessionsPerMonth", event.target.value)}
+                  />
+                </UiFormField>
+              </div>
+              <label className="vendor-plan-active-toggle">
+                <input
+                  type="checkbox"
+                  checked={selectedDraft.isActive}
+                  onChange={(event) => updateDraft("isActive", event.target.checked)}
+                />
+                <span>
+                  <strong>Plan available for assignment</strong>
+                  <small>
+                    Disabling prevents new assignments; existing institutes remain assigned.
+                  </small>
+                </span>
+              </label>
+            </section>
 
-          <UiFormField label="Base fee (INR)" htmlFor="vendor-base-fee" helper="Fixed monthly plan fee.">
-            <input
-              id="vendor-base-fee"
-              inputMode="numeric"
-              value={parameterDraft.baseFeeInr}
-              onChange={(event) => {
-                setParameterDraft((previous) => ({ ...previous, baseFeeInr: event.target.value }));
-              }}
-            />
-          </UiFormField>
+            <section
+              className="vendor-parameter-impact"
+              aria-labelledby="vendor-parameter-impact-title"
+            >
+              <div className="vendor-section-heading">
+                <div>
+                  <h4 id="vendor-parameter-impact-title">Change impact</h4>
+                  <p>Preview before publishing to assigned institutes.</p>
+                </div>
+              </div>
+              <div className="vendor-parameter-impact-grid">
+                <div>
+                  <span>Affected institutes</span>
+                  <strong>{affectedInstitutes.length}</strong>
+                </div>
+                <div>
+                  <span>Monthly revenue change</span>
+                  <strong>
+                    {revenueDelta >= 0 ? "+" : ""}
+                    {formatInr(revenueDelta)}
+                  </strong>
+                </div>
+                <div>
+                  <span>Concurrency conflicts</span>
+                  <strong>{concurrencyConflicts}</strong>
+                </div>
+                <div>
+                  <span>Session conflicts</span>
+                  <strong>{sessionConflicts}</strong>
+                </div>
+              </div>
+              <div className="vendor-price-examples">
+                <span>
+                  100 students: <strong>{formatInr(calculateMonthlyFee(draftPlan, 100))}</strong>
+                </span>
+                <span>
+                  500 students: <strong>{formatInr(calculateMonthlyFee(draftPlan, 500))}</strong>
+                </span>
+              </div>
+              {validationErrors.length > 0 ? (
+                <div className="vendor-parameter-validation" role="alert">
+                  <strong>Resolve before publishing</strong>
+                  <ul>
+                    {validationErrors.map((error) => (
+                      <li key={error}>{error}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p className="vendor-parameter-valid">Parameters pass catalogue validation.</p>
+              )}
+            </section>
 
-          <UiFormField label="Per student fee (INR)" htmlFor="vendor-student-fee" helper="Applied to each billable active student.">
-            <input
-              id="vendor-student-fee"
-              inputMode="numeric"
-              value={parameterDraft.perStudentFeeInr}
-              onChange={(event) => {
-                setParameterDraft((previous) => ({ ...previous, perStudentFeeInr: event.target.value }));
-              }}
-            />
-          </UiFormField>
+            <section
+              className="vendor-publish-control"
+              aria-labelledby="vendor-publish-control-title"
+            >
+              <div className="vendor-section-heading">
+                <div>
+                  <h4 id="vendor-publish-control-title">Publish update</h4>
+                  <p>Published changes are versioned and added to the vendor audit trail.</p>
+                </div>
+              </div>
+              <div className="vendor-publish-grid">
+                <UiFormField label="Effective timing" htmlFor="vendor-license-effective-mode">
+                  <select
+                    id="vendor-license-effective-mode"
+                    value={effectiveMode}
+                    onChange={(event) =>
+                      setEffectiveMode(event.target.value as "immediate" | "next_billing_cycle")
+                    }
+                  >
+                    <option value="next_billing_cycle">Next billing cycle</option>
+                    <option value="immediate">Immediately</option>
+                  </select>
+                </UiFormField>
+                <UiFormField
+                  label="Publish note"
+                  htmlFor="vendor-license-publish-note"
+                  helper="Required for the audit trail."
+                >
+                  <input
+                    id="vendor-license-publish-note"
+                    value={selectedDraft.note}
+                    onChange={(event) => updateDraft("note", event.target.value)}
+                    placeholder="Reason for changing these parameters"
+                  />
+                </UiFormField>
+              </div>
+              {effectiveMode === "immediate" &&
+              changedParameters.some((parameter) =>
+                ["Base fee", "Per-student fee"].includes(parameter),
+              ) ? (
+                <p className="vendor-publish-warning">
+                  Immediate commercial changes can alter current-cycle billing previews. Existing
+                  issued invoices remain unchanged.
+                </p>
+              ) : null}
+              <label className="vendor-publish-confirmation">
+                <input
+                  type="checkbox"
+                  checked={publishConfirmed}
+                  onChange={(event) => setPublishConfirmed(event.target.checked)}
+                />
+                <span>
+                  I reviewed pricing, capacity conflicts, timing, and affected institutes.
+                </span>
+              </label>
+              <div className="vendor-publish-actions">
+                <span>
+                  {changedParameters.length > 0
+                    ? `Changes: ${changedParameters.join(", ")}`
+                    : "No unpublished changes."}
+                </span>
+                <button
+                  type="submit"
+                  className="vendor-primary-action"
+                  disabled={
+                    !hasChanges ||
+                    validationErrors.length > 0 ||
+                    !selectedDraft.note.trim() ||
+                    !publishConfirmed
+                  }
+                >
+                  Publish parameter version
+                </button>
+              </div>
+            </section>
+          </form>
+        ) : null}
+      </div>
 
-          <UiFormField label="Max concurrent students" htmlFor="vendor-max-concurrent" helper="Runtime cap for simultaneous test portal users.">
-            <input
-              id="vendor-max-concurrent"
-              inputMode="numeric"
-              value={parameterDraft.maxConcurrentStudents}
-              onChange={(event) => {
-                setParameterDraft((previous) => ({ ...previous, maxConcurrentStudents: event.target.value }));
-              }}
-            />
-          </UiFormField>
-
-          <UiFormField label="Max exam sessions / month" htmlFor="vendor-max-sessions" helper="Monthly exam-session creation allowance.">
-            <input
-              id="vendor-max-sessions"
-              inputMode="numeric"
-              value={parameterDraft.maxExamSessionsPerMonth}
-              onChange={(event) => {
-                setParameterDraft((previous) => ({ ...previous, maxExamSessionsPerMonth: event.target.value }));
-              }}
-            />
-          </UiFormField>
-
-          <UiFormField label="Publish note" htmlFor="vendor-parameter-note" helper="Stored with the catalogue push event.">
-            <input
-              id="vendor-parameter-note"
-              value={parameterDraft.note}
-              onChange={(event) => {
-                setParameterDraft((previous) => ({ ...previous, note: event.target.value }));
-              }}
-              placeholder="Reason for changing plan parameters"
-            />
-          </UiFormField>
-        </UiForm>
-
+      <section className="vendor-license-history" aria-labelledby="vendor-license-history-title">
+        <div className="vendor-section-heading">
+          <div>
+            <h3 id="vendor-license-history-title">Publication history</h3>
+            <p>Parameter versions published during this vendor session.</p>
+          </div>
+        </div>
         <UiTable
-          caption="Plan parameter push log"
+          caption="Published license parameter versions"
           columns={[
             {
-              id: "createdAt",
-              header: "Pushed",
+              id: "date",
+              header: "Published",
               render: (row: PublishedPlanUpdate) => formatDateLabel(row.createdAt),
             },
+            { id: "version", header: "Version", render: (row: PublishedPlanUpdate) => row.version },
+            { id: "plan", header: "Plan", render: (row: PublishedPlanUpdate) => row.planId },
             {
-              id: "plan",
-              header: "Plan",
-              render: (row: PublishedPlanUpdate) => row.planId,
+              id: "changes",
+              header: "Changed",
+              render: (row: PublishedPlanUpdate) => row.changedParameters.join(", "),
             },
             {
               id: "institutes",
               header: "Institutes",
-              render: (row: PublishedPlanUpdate) => row.affectedInstitutes.toLocaleString("en-IN"),
+              render: (row: PublishedPlanUpdate) => row.affectedInstitutes,
             },
             {
-              id: "commercial",
-              header: "Commercial",
-              render: (row: PublishedPlanUpdate) => `${formatInr(row.baseFeeInr)} + ${formatInr(row.perStudentFeeInr)}/student`,
-            },
-            {
-              id: "limits",
-              header: "Limits",
+              id: "timing",
+              header: "Effective",
               render: (row: PublishedPlanUpdate) =>
-                `${row.maxConcurrentStudents.toLocaleString("en-IN")} concurrent, ${row.maxExamSessionsPerMonth.toLocaleString("en-IN")} sessions`,
+                row.effectiveMode === "immediate" ? "Immediately" : "Next billing cycle",
             },
-            {
-              id: "note",
-              header: "Note",
-              render: (row: PublishedPlanUpdate) => row.note,
-            },
+            { id: "note", header: "Note", render: (row: PublishedPlanUpdate) => row.note },
           ]}
-          rows={publishedPlanUpdates}
+          rows={publishedUpdates}
           rowKey={(row) => row.id}
-          emptyStateText="No plan parameter updates pushed in this session."
+          emptyStateText="No parameter versions published in this session."
         />
-      </div>
+      </section>
 
-      <div className="vendor-section-grid">
-        <UiForm
-          title="Select institute"
-          description="Review the current plan, billing preview, and usage limits for an institute."
-          submitLabel="Apply selection"
-          onSubmit={(event) => {
-            event.preventDefault();
-          }}
-        >
-          <UiFormField
-            label="Institute"
-            htmlFor="vendor-licensing-institute"
-            helper="Source collection: institutes/{id}/license"
-          >
-            <select
-              id="vendor-licensing-institute"
-              value={selectedInstitute?.id ?? ""}
-              onChange={(event) => {
-                handleInstituteSelection(event.target.value);
-              }}
-            >
-              {dataset.institutes.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.instituteName} ({entry.currentLicensePlanId})
-                </option>
-              ))}
-            </select>
-          </UiFormField>
-
-          {selectedInstitute && selectedPlan ? (
-            <div className="vendor-license-profile" aria-label="Selected institute license summary">
-              <p>
-                <strong>{selectedInstitute.instituteName}</strong> is on{" "}
-                <strong>{getPlanLabel(selectedPlan)}</strong> with{" "}
-                <strong>{selectedInstitute.activeStudentCount.toLocaleString("en-IN")}</strong> active students.
-              </p>
-              <p>
-                Current bill preview:{" "}
-                <strong>{formatInr(calculateMonthlyFee(selectedPlan, selectedInstitute.activeStudentCount))}</strong>{" "}
-                per month. Next invoice: <strong>{formatDateLabel(selectedInstitute.billing.nextInvoiceDate)}</strong>.
-              </p>
-            </div>
-          ) : null}
-        </UiForm>
-
-        <UiForm
-          title="Assign license plan"
-          description="Queue a vendor-authoritative plan or status change with a clear operator note."
-          submitLabel="Queue license assignment"
-          onSubmit={handleLicenseAssignment}
-        >
-          <UiFormField label="Target plan" htmlFor="vendor-target-plan">
-            <select
-              id="vendor-target-plan"
-              value={assignmentDraft.nextPlanId}
-              onChange={(event) => {
-                setAssignmentDraft((previous) => ({
-                  ...previous,
-                  nextPlanId: event.target.value as VendorLicensePlanId,
-                }));
-              }}
-            >
-              {licensePlans.map((plan) => (
-                <option key={plan.id} value={plan.id}>
-                  {getPlanLabel(plan)} - {formatInr(plan.baseFeeInr)} + {formatInr(plan.perStudentFeeInr)}/student
-                </option>
-              ))}
-            </select>
-          </UiFormField>
-
-          <UiFormField label="Subscription status" htmlFor="vendor-target-status">
-            <select
-              id="vendor-target-status"
-              value={assignmentDraft.nextStatus}
-              onChange={(event) => {
-                setAssignmentDraft((previous) => ({
-                  ...previous,
-                  nextStatus: event.target.value as VendorInstituteSubscriptionStatus,
-                }));
-              }}
-            >
-              <option value="trialing">Trialing</option>
-              <option value="active">Active</option>
-              <option value="past_due">Past Due</option>
-              <option value="suspended">Suspended</option>
-              <option value="canceled">Canceled</option>
-            </select>
-          </UiFormField>
-
-          <UiFormField
-            label="Billable student count"
-            htmlFor="vendor-student-count"
-            helper="Leave blank to use current active students."
-          >
-            <input
-              id="vendor-student-count"
-              inputMode="numeric"
-              value={assignmentDraft.customStudentCount}
-              onChange={(event) => {
-                setAssignmentDraft((previous) => ({ ...previous, customStudentCount: event.target.value }));
-              }}
-              placeholder={selectedInstitute?.activeStudentCount.toString() ?? "0"}
-            />
-          </UiFormField>
-
-          <UiFormField
-            label="Operator note"
-            htmlFor="vendor-assignment-note"
-            helper={`Preview: ${formatInr(projectedMonthlyFee)} / month`}
-          >
-            <input
-              id="vendor-assignment-note"
-              value={assignmentDraft.note}
-              onChange={(event) => {
-                setAssignmentDraft((previous) => ({ ...previous, note: event.target.value }));
-              }}
-              placeholder="Upgrade, downgrade, suspension, or billing reason"
-            />
-          </UiFormField>
-        </UiForm>
-      </div>
-
-      {selectedInstitute && selectedPlan ? (
-        <div className="vendor-overview-grid">
-          <UiStatCard title="Current Plan" value={getPlanLabel(selectedPlan)} helper={selectedInstitute.currentLicensePlanId} />
-          <UiStatCard title="Base Fee" value={formatInr(selectedPlan.baseFeeInr)} helper="Fixed monthly fee" />
-          <UiStatCard title="Per Student Fee" value={formatInr(selectedPlan.perStudentFeeInr)} helper="Applied to billable students" />
-          <UiStatCard title="Concurrent Usage" value={`${selectedInstitute.peakConcurrentStudents}/${selectedPlan.maxConcurrentStudents}`} helper={`${getUsagePercent(selectedInstitute.peakConcurrentStudents, selectedPlan.maxConcurrentStudents)}% peak utilization`} />
-          <UiStatCard title="Exam Sessions" value={`${selectedInstitute.examSessionsThisMonth}/${selectedPlan.maxExamSessionsPerMonth}`} helper={`${getUsagePercent(selectedInstitute.examSessionsThisMonth, selectedPlan.maxExamSessionsPerMonth)}% used this month`} />
-          <UiStatCard title="Amount Due" value={formatInr(selectedInstitute.billing.amountDueInr)} helper={selectedInstitute.paymentStatus} />
+      <section className="vendor-license-matrix" aria-labelledby="vendor-license-matrix-title">
+        <div className="vendor-section-heading">
+          <div>
+            <h3 id="vendor-license-matrix-title">Published catalogue matrix</h3>
+            <p>Current values used for billing and capacity enforcement.</p>
+          </div>
         </div>
-      ) : (
-        <p className="vendor-content-note">No institute data available.</p>
-      )}
-
-      <div className="vendor-section-grid">
         <UiTable
-          caption="Queued vendor license assignments"
+          caption="Published license catalogue"
           columns={[
+            { id: "plan", header: "Plan", render: (row: VendorLicensePlan) => getPlanLabel(row) },
             {
-              id: "createdAt",
-              header: "Queued",
-              render: (row: QueuedLicenseAction) => formatDateLabel(row.createdAt),
+              id: "base",
+              header: "Base Fee",
+              render: (row: VendorLicensePlan) => formatInr(row.baseFeeInr),
             },
             {
-              id: "institute",
-              header: "Institute",
-              render: (row: QueuedLicenseAction) => row.instituteName,
+              id: "student",
+              header: "Per Student",
+              render: (row: VendorLicensePlan) => formatInr(row.perStudentFeeInr),
             },
             {
-              id: "change",
-              header: "Plan Change",
-              render: (row: QueuedLicenseAction) => `${row.previousPlanId} -> ${row.nextPlanId}`,
+              id: "concurrent",
+              header: "Max Concurrent",
+              render: (row: VendorLicensePlan) => row.maxConcurrentStudents.toLocaleString("en-IN"),
+            },
+            {
+              id: "sessions",
+              header: "Exam Sessions / Month",
+              render: (row: VendorLicensePlan) =>
+                row.maxExamSessionsPerMonth.toLocaleString("en-IN"),
             },
             {
               id: "status",
               header: "Status",
-              render: (row: QueuedLicenseAction) => toTitleCase(row.nextStatus),
-            },
-            {
-              id: "fee",
-              header: "Projected Fee",
-              render: (row: QueuedLicenseAction) => formatInr(row.projectedMonthlyFeeInr),
-            },
-            {
-              id: "note",
-              header: "Note",
-              render: (row: QueuedLicenseAction) => row.note,
+              render: (row: VendorLicensePlan) => (row.isActive ? "Active" : "Inactive"),
             },
           ]}
-          rows={queuedActions}
+          rows={licensePlans}
           rowKey={(row) => row.id}
-          emptyStateText="No vendor license assignments queued in this session."
+          emptyStateText="No license plans configured."
         />
-
-        <UiTable
-          caption="License change history"
-          columns={historyColumns}
-          rows={historyRows}
-          rowKey={(row) => row.id}
-          emptyStateText="No license history found for selected institute."
-        />
-      </div>
-
-      <UiTable
-        caption="Billing and subscription webhook log"
-        columns={webhookColumns}
-        rows={webhookRows}
-        rowKey={(row) => row.id}
-        emptyStateText="No webhook logs found for selected institute."
-      />
+      </section>
     </section>
   );
 }

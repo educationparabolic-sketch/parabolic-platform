@@ -102,7 +102,7 @@ export const VENDOR_PRIMARY_NAVIGATION: PortalNavigationItem[] = [
   {
     path: "/vendor/licensing",
     label: "Licensing",
-    summary: "Vendor-authoritative subscription and layer controls.",
+    summary: "Plan pricing, capacity parameters, and controlled publication.",
   },
   {
     path: "/vendor/calibration",

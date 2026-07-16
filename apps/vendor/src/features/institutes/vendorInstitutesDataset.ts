@@ -20,13 +20,43 @@ export type VendorInstituteActionType =
   | "DowngradeLicense"
   | "ExtendLicense"
   | "ForceArchive"
-  | "DeleteInstitute";
+  | "ScheduleDeletion"
+  | "PurgeInstitute"
+  | "ResendAdministratorInvitation"
+  | "ResetAdministratorAccess"
+  | "SuspendAdministratorAccess"
+  | "RestoreAdministratorAccess"
+  | "ChangePrimaryAdministrator";
+
+export interface VendorInstituteAdministrator {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  role: "Primary Administrator" | "Administrator";
+  status: "active" | "invited" | "locked" | "suspended";
+  invitationStatus: "accepted" | "pending" | "expired" | "not_required";
+  invitedAt: string;
+  invitationAcceptedAt: string;
+  lastLoginAt: string;
+  mfaEnabled: boolean;
+}
+
+export interface VendorInstituteAdministration {
+  instituteId: string;
+  primaryAdministrator: VendorInstituteAdministrator;
+  additionalAdministrators: VendorInstituteAdministrator[];
+  billingContactName: string;
+  billingContactEmail: string;
+  billingContactPhone: string;
+}
 
 export interface VendorInstituteRecord {
   id: string;
   instituteName: string;
   currentLicenseLayer: VendorLicenseLevel;
   currentLicensePlanId: VendorLicensePlanId;
+  licenseExpiresAt: string;
   activeStudentCount: number;
   subscriptionStatus: VendorInstituteSubscriptionStatus;
   lifecycleStatus: VendorInstituteLifecycleStatus;
@@ -46,6 +76,8 @@ export interface VendorInstituteRecord {
   };
   billing: {
     billingCycle: "Monthly" | "Quarterly";
+    billingContactEmail: string;
+    paymentMethodLabel: string;
     nextInvoiceDate: string;
     paymentFailures: number;
     amountDueInr: number;
@@ -93,6 +125,7 @@ export interface VendorInstitutesDataset {
   institutes: VendorInstituteRecord[];
   licenseChangeHistory: VendorLicenseChangeRecord[];
   webhookLogs: VendorLicenseWebhookLog[];
+  administration: VendorInstituteAdministration[];
 }
 
 const LICENSE_PLANS: VendorLicensePlan[] = [
@@ -194,6 +227,7 @@ const INSTITUTES: VendorInstituteRecord[] = [
     instituteName: "North Star Academy",
     currentLicenseLayer: "L2",
     currentLicensePlanId: "L2-T3",
+    licenseExpiresAt: "2026-12-31T23:59:59.000Z",
     activeStudentCount: 1340,
     subscriptionStatus: "active",
     lifecycleStatus: "active",
@@ -213,6 +247,8 @@ const INSTITUTES: VendorInstituteRecord[] = [
     },
     billing: {
       billingCycle: "Monthly",
+      billingContactEmail: "billing@northstar.example",
+      paymentMethodLabel: "Card ending 4021",
       nextInvoiceDate: "2026-05-01T00:00:00.000Z",
       paymentFailures: 0,
       amountDueInr: 228900,
@@ -224,6 +260,7 @@ const INSTITUTES: VendorInstituteRecord[] = [
     instituteName: "Riverdale Test Hub",
     currentLicenseLayer: "L1",
     currentLicensePlanId: "L1-T2",
+    licenseExpiresAt: "2026-08-31T23:59:59.000Z",
     activeStudentCount: 820,
     subscriptionStatus: "past_due",
     lifecycleStatus: "watchlist",
@@ -243,6 +280,8 @@ const INSTITUTES: VendorInstituteRecord[] = [
     },
     billing: {
       billingCycle: "Monthly",
+      billingContactEmail: "billing@riverdaletest.example",
+      paymentMethodLabel: "Card ending 1187",
       nextInvoiceDate: "2026-04-24T00:00:00.000Z",
       paymentFailures: 2,
       amountDueInr: 94600,
@@ -254,6 +293,7 @@ const INSTITUTES: VendorInstituteRecord[] = [
     instituteName: "Orbit Scholars",
     currentLicenseLayer: "L2",
     currentLicensePlanId: "L2-T3",
+    licenseExpiresAt: "2027-03-31T23:59:59.000Z",
     activeStudentCount: 2055,
     subscriptionStatus: "active",
     lifecycleStatus: "active",
@@ -273,6 +313,8 @@ const INSTITUTES: VendorInstituteRecord[] = [
     },
     billing: {
       billingCycle: "Quarterly",
+      billingContactEmail: "accounts@orbitscholars.example",
+      paymentMethodLabel: "Bank transfer",
       nextInvoiceDate: "2026-06-15T00:00:00.000Z",
       paymentFailures: 0,
       amountDueInr: 343300,
@@ -284,6 +326,7 @@ const INSTITUTES: VendorInstituteRecord[] = [
     instituteName: "Delta Coaching Network",
     currentLicenseLayer: "L0",
     currentLicensePlanId: "L0-T1",
+    licenseExpiresAt: "2026-09-30T23:59:59.000Z",
     activeStudentCount: 395,
     subscriptionStatus: "trialing",
     lifecycleStatus: "active",
@@ -301,6 +344,8 @@ const INSTITUTES: VendorInstituteRecord[] = [
     },
     billing: {
       billingCycle: "Monthly",
+      billingContactEmail: "accounts@deltacoaching.example",
+      paymentMethodLabel: "UPI mandate",
       nextInvoiceDate: "2026-04-29T00:00:00.000Z",
       paymentFailures: 0,
       amountDueInr: 23250,
@@ -312,6 +357,7 @@ const INSTITUTES: VendorInstituteRecord[] = [
     instituteName: "Zenith Integrated Prep",
     currentLicenseLayer: "L2",
     currentLicensePlanId: "L2-T2",
+    licenseExpiresAt: "2026-07-31T23:59:59.000Z",
     activeStudentCount: 1495,
     subscriptionStatus: "suspended",
     lifecycleStatus: "suspended",
@@ -331,11 +377,144 @@ const INSTITUTES: VendorInstituteRecord[] = [
     },
     billing: {
       billingCycle: "Monthly",
+      billingContactEmail: "accounts@zenithprep.example",
+      paymentMethodLabel: "Card ending 7714",
       nextInvoiceDate: "2026-04-16T00:00:00.000Z",
       paymentFailures: 3,
       amountDueInr: 243225,
       manualOverrideEnabled: true,
     },
+  },
+];
+
+const INSTITUTE_ADMINISTRATION: VendorInstituteAdministration[] = [
+  {
+    instituteId: "inst_north_star",
+    primaryAdministrator: {
+      id: "admin_north_star_primary",
+      name: "Meera Iyer",
+      email: "meera.iyer@northstar.example",
+      phone: "+91 98760 11240",
+      role: "Primary Administrator",
+      status: "active",
+      invitationStatus: "accepted",
+      invitedAt: "2025-01-08T09:00:00.000Z",
+      invitationAcceptedAt: "2025-01-08T10:42:00.000Z",
+      lastLoginAt: "2026-04-21T12:35:00.000Z",
+      mfaEnabled: true,
+    },
+    additionalAdministrators: [
+      {
+        id: "admin_north_star_academic",
+        name: "Arjun Menon",
+        email: "arjun.menon@northstar.example",
+        phone: "+91 98450 34881",
+        role: "Administrator",
+        status: "active",
+        invitationStatus: "accepted",
+        invitedAt: "2025-03-14T08:30:00.000Z",
+        invitationAcceptedAt: "2025-03-14T09:12:00.000Z",
+        lastLoginAt: "2026-04-20T15:18:00.000Z",
+        mfaEnabled: true,
+      },
+    ],
+    billingContactName: "North Star Accounts",
+    billingContactEmail: "billing@northstar.example",
+    billingContactPhone: "+91 80412 88000",
+  },
+  {
+    instituteId: "inst_riverdale",
+    primaryAdministrator: {
+      id: "admin_riverdale_primary",
+      name: "Kabir Sharma",
+      email: "kabir@riverdaletest.example",
+      phone: "+91 98110 26440",
+      role: "Primary Administrator",
+      status: "locked",
+      invitationStatus: "accepted",
+      invitedAt: "2025-06-03T06:15:00.000Z",
+      invitationAcceptedAt: "2025-06-03T07:02:00.000Z",
+      lastLoginAt: "2026-04-18T11:45:00.000Z",
+      mfaEnabled: false,
+    },
+    additionalAdministrators: [],
+    billingContactName: "Riverdale Billing Desk",
+    billingContactEmail: "billing@riverdaletest.example",
+    billingContactPhone: "+91 11418 92210",
+  },
+  {
+    instituteId: "inst_orbit",
+    primaryAdministrator: {
+      id: "admin_orbit_primary",
+      name: "Sana Qureshi",
+      email: "sana@orbitscholars.example",
+      phone: "+91 98202 74118",
+      role: "Primary Administrator",
+      status: "active",
+      invitationStatus: "accepted",
+      invitedAt: "2024-11-12T05:40:00.000Z",
+      invitationAcceptedAt: "2024-11-12T06:21:00.000Z",
+      lastLoginAt: "2026-04-22T05:20:00.000Z",
+      mfaEnabled: true,
+    },
+    additionalAdministrators: [
+      {
+        id: "admin_orbit_operations",
+        name: "Dev Patel",
+        email: "dev.patel@orbitscholars.example",
+        phone: "+91 99870 41162",
+        role: "Administrator",
+        status: "invited",
+        invitationStatus: "pending",
+        invitedAt: "2026-04-19T08:00:00.000Z",
+        invitationAcceptedAt: "",
+        lastLoginAt: "",
+        mfaEnabled: false,
+      },
+    ],
+    billingContactName: "Orbit Finance",
+    billingContactEmail: "accounts@orbitscholars.example",
+    billingContactPhone: "+91 22618 27400",
+  },
+  {
+    instituteId: "inst_delta",
+    primaryAdministrator: {
+      id: "admin_delta_primary",
+      name: "Priya Nair",
+      email: "priya@deltacoaching.example",
+      phone: "+91 98950 62317",
+      role: "Primary Administrator",
+      status: "invited",
+      invitationStatus: "pending",
+      invitedAt: "2026-04-18T10:30:00.000Z",
+      invitationAcceptedAt: "",
+      lastLoginAt: "",
+      mfaEnabled: false,
+    },
+    additionalAdministrators: [],
+    billingContactName: "Delta Accounts",
+    billingContactEmail: "accounts@deltacoaching.example",
+    billingContactPhone: "+91 48427 11590",
+  },
+  {
+    instituteId: "inst_zenith",
+    primaryAdministrator: {
+      id: "admin_zenith_primary",
+      name: "Vikram Desai",
+      email: "vikram@zenithprep.example",
+      phone: "+91 99090 51126",
+      role: "Primary Administrator",
+      status: "suspended",
+      invitationStatus: "accepted",
+      invitedAt: "2025-02-21T07:20:00.000Z",
+      invitationAcceptedAt: "2025-02-21T08:05:00.000Z",
+      lastLoginAt: "2026-04-12T08:25:00.000Z",
+      mfaEnabled: true,
+    },
+    additionalAdministrators: [],
+    billingContactName: "Zenith Accounts",
+    billingContactEmail: "accounts@zenithprep.example",
+    billingContactPhone: "+91 79618 73044",
   },
 ];
 
@@ -457,6 +636,7 @@ export function getVendorInstitutesDataset(): VendorInstitutesDataset {
     institutes: INSTITUTES,
     licenseChangeHistory: LICENSE_HISTORY,
     webhookLogs: WEBHOOK_LOGS,
+    administration: INSTITUTE_ADMINISTRATION,
   };
 }
 
@@ -467,6 +647,7 @@ export function filterInstitutes(
     layer: LicenseLayer | "all";
     subscriptionStatus: VendorInstituteSubscriptionStatus | "all";
     lifecycleStatus: VendorInstituteLifecycleStatus | "all";
+    paymentStatus: VendorInstituteRecord["paymentStatus"] | "all";
   },
 ): VendorInstituteRecord[] {
   const query = filters.query.trim().toLowerCase();
@@ -483,7 +664,14 @@ export function filterInstitutes(
       return false;
     }
 
-    if (filters.lifecycleStatus !== "all" && institute.lifecycleStatus !== filters.lifecycleStatus) {
+    if (
+      filters.lifecycleStatus !== "all" &&
+      institute.lifecycleStatus !== filters.lifecycleStatus
+    ) {
+      return false;
+    }
+
+    if (filters.paymentStatus !== "all" && institute.paymentStatus !== filters.paymentStatus) {
       return false;
     }
 
