@@ -1,497 +1,392 @@
-import {ApiClientError} from "../../../../../shared/services/apiClient";
-import {getPortalApiClient} from "../../../../../shared/services/portalIntegration";
-import {LICENSE_LAYER_ORDER, type LicenseLayer} from "../../../../../shared/types/portalRouting";
+import { ApiClientError } from "../../../../../shared/services/apiClient";
+import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 
 const apiClient = getPortalApiClient("admin");
 
-export type CapabilityState = "enabled" | "locked";
+export type AdminLicenseLevel = "L0" | "L1" | "L2";
+export type AdminLicenseTier = "Tier 1" | "Tier 2" | "Tier 3";
+export type AdminLicensePlanId = "TRIAL" | `${AdminLicenseLevel}-${"T1" | "T2" | "T3"}`;
+export type AdminSubscriptionStatus =
+  | "trialing"
+  | "active"
+  | "past_due"
+  | "suspended"
+  | "trial_expired";
 
-export interface LicensingCurrentPlan {
-  currentLayer: LicenseLayer;
-  planName: string;
+export interface AdminLicensePlan {
+  id: AdminLicensePlanId;
+  level: AdminLicenseLevel;
+  tier: AdminLicenseTier;
+  baseFeeInr: number;
+  perStudentFeeInr: number;
+  maxConcurrentStudents: number;
+  maxExamSessionsPerMonth: number;
+  availability: "onboarding_only" | "available";
+}
+
+export interface AdminCurrentLicense {
+  instituteId: string;
+  instituteName: string;
+  planId: AdminLicensePlanId;
+  level: AdminLicenseLevel;
+  tier: AdminLicenseTier;
+  subscriptionStatus: AdminSubscriptionStatus;
+  billingCycle: "Monthly" | "Quarterly";
   licenseStartDate: string;
   expiryDate: string;
-  renewalDate: string;
-  billingCycle: string;
   activeStudentCount: number;
-  maxStudentLimit: number;
-  concurrencyLimit: number;
-  attemptsUsedThisMonth: number;
-  attemptsQuotaThisMonth: number;
+  baseFeeInr: number;
+  perStudentFeeInr: number;
+  maxConcurrentStudents: number;
+  maxExamSessionsPerMonth: number;
 }
 
-export interface LicensingFeatureRow {
-  feature: string;
-  description: string;
-  layers: Record<LicenseLayer, CapabilityState>;
-}
-
-export interface LicensingEligibilityStage {
-  stage: string;
-  label: string;
-  status: "eligible" | "in_progress" | "locked";
-  summary: string;
-  rulePresentation: string;
-  upgradeControl: string;
-  checklist: Array<{
-    id: string;
-    label: string;
-    met: boolean;
-    currentValue: string;
-    requiredValue: string;
-    source: string;
-  }>;
-  progressCurrent: number;
-  progressTarget: number;
-}
-
-export interface LicensingUsageAndBilling {
+export interface AdminLicenseUsage {
   activeStudents: number;
-  maxStudentsAllowed: number;
-  remainingStudentSlots: number;
-  attemptsUsed: number;
-  attemptsRemaining: number;
-  peakConcurrency: number;
-  maxConcurrentAllowed: number;
-  estimatedCurrentBill: string;
-  nextBillingDate: string;
-  actions: {
-    downloadInvoiceUrl: string;
-    viewBillingHistoryUrl: string;
-    updatePaymentMethodUrl: string;
-    contactSupportUrl: string;
-  };
+  peakConcurrentStudents: number;
+  examSessionsThisMonth: number;
+  monthlyTestRuns: number;
+  estimatedCurrentChargeInr: number;
 }
 
-export interface LicensingUpgradePreview {
-  currentLayer: LicenseLayer;
-  previewCards: string[];
-  requestUpgradeUrl: string;
-  scheduleEvaluationUrl: string;
+export interface AdminLicenseInvoice {
+  id: string;
+  invoiceNumber: string;
+  billingPeriod: string;
+  issuedAt: string;
+  dueAt: string;
+  amountInr: number;
+  status: "draft" | "due" | "past_due" | "paid" | "failed";
 }
 
-export interface LicensingHistoryEntry {
-  eventId: string;
+export interface AdminLicenseCapability {
+  id: string;
+  label: string;
+  description: string;
+  minimumLevel: AdminLicenseLevel;
+}
+
+export interface AdminLicenseUpgradeRequest {
+  id: string;
+  requestedPlanId: AdminLicensePlanId;
+  submittedAt: string;
+  requestedBy: string;
+  reason: string;
+  status: "pending" | "payment_required" | "approved" | "rejected";
+  vendorNote: string;
+}
+
+export interface AdminLicenseHistoryEntry {
+  id: string;
   timestamp: string;
-  previousLayer: LicenseLayer;
-  newLayer: LicenseLayer;
-  billingChange: string;
+  previousPlanId: AdminLicensePlanId;
+  newPlanId: AdminLicensePlanId;
+  billingCycle: "Monthly" | "Quarterly";
   reason: string;
   actor: string;
 }
 
 export interface AdminLicensingSnapshot {
-  currentPlan: LicensingCurrentPlan;
-  featureMatrix: LicensingFeatureRow[];
-  eligibilityProgress: LicensingEligibilityStage[];
-  usageAndBilling: LicensingUsageAndBilling;
-  upgradePreview: LicensingUpgradePreview;
-  licenseHistory: LicensingHistoryEntry[];
+  currentLicense: AdminCurrentLicense;
+  usage: AdminLicenseUsage;
+  plans: AdminLicensePlan[];
+  capabilities: AdminLicenseCapability[];
+  invoices: AdminLicenseInvoice[];
+  upgradeRequests: AdminLicenseUpgradeRequest[];
+  licenseHistory: AdminLicenseHistoryEntry[];
 }
 
 interface AdminLicensingApiResponse {
   code: string;
-  data?: {
-    snapshot?: unknown;
-  };
+  data?: { snapshot?: unknown; request?: AdminLicenseUpgradeRequest };
 }
 
-function toNonEmptyString(value: unknown, fallback = ""): string {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
-}
+export const LICENSE_PLANS: AdminLicensePlan[] = [
+  {
+    id: "TRIAL",
+    level: "L0",
+    tier: "Tier 1",
+    baseFeeInr: 0,
+    perStudentFeeInr: 0,
+    maxConcurrentStudents: 200,
+    maxExamSessionsPerMonth: 30,
+    availability: "onboarding_only",
+  },
+  {
+    id: "L0-T1",
+    level: "L0",
+    tier: "Tier 1",
+    baseFeeInr: 3500,
+    perStudentFeeInr: 50,
+    maxConcurrentStudents: 200,
+    maxExamSessionsPerMonth: 30,
+    availability: "available",
+  },
+  {
+    id: "L0-T2",
+    level: "L0",
+    tier: "Tier 2",
+    baseFeeInr: 6500,
+    perStudentFeeInr: 52,
+    maxConcurrentStudents: 400,
+    maxExamSessionsPerMonth: 50,
+    availability: "available",
+  },
+  {
+    id: "L0-T3",
+    level: "L0",
+    tier: "Tier 3",
+    baseFeeInr: 9500,
+    perStudentFeeInr: 54,
+    maxConcurrentStudents: 600,
+    maxExamSessionsPerMonth: 70,
+    availability: "available",
+  },
+  {
+    id: "L1-T1",
+    level: "L1",
+    tier: "Tier 1",
+    baseFeeInr: 5500,
+    perStudentFeeInr: 98,
+    maxConcurrentStudents: 200,
+    maxExamSessionsPerMonth: 30,
+    availability: "available",
+  },
+  {
+    id: "L1-T2",
+    level: "L1",
+    tier: "Tier 2",
+    baseFeeInr: 8500,
+    perStudentFeeInr: 105,
+    maxConcurrentStudents: 400,
+    maxExamSessionsPerMonth: 50,
+    availability: "available",
+  },
+  {
+    id: "L1-T3",
+    level: "L1",
+    tier: "Tier 3",
+    baseFeeInr: 11500,
+    perStudentFeeInr: 108,
+    maxConcurrentStudents: 600,
+    maxExamSessionsPerMonth: 70,
+    availability: "available",
+  },
+  {
+    id: "L2-T1",
+    level: "L2",
+    tier: "Tier 1",
+    baseFeeInr: 8500,
+    perStudentFeeInr: 140,
+    maxConcurrentStudents: 200,
+    maxExamSessionsPerMonth: 30,
+    availability: "available",
+  },
+  {
+    id: "L2-T2",
+    level: "L2",
+    tier: "Tier 2",
+    baseFeeInr: 11500,
+    perStudentFeeInr: 155,
+    maxConcurrentStudents: 400,
+    maxExamSessionsPerMonth: 50,
+    availability: "available",
+  },
+  {
+    id: "L2-T3",
+    level: "L2",
+    tier: "Tier 3",
+    baseFeeInr: 14500,
+    perStudentFeeInr: 160,
+    maxConcurrentStudents: 600,
+    maxExamSessionsPerMonth: 70,
+    availability: "available",
+  },
+];
 
-function toNumberOrZero(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-
-  return 0;
-}
-
-function toLayer(value: unknown, fallback: LicenseLayer): LicenseLayer {
-  if (typeof value !== "string") {
-    return fallback;
-  }
-
-  const normalized = value.trim().toUpperCase();
-  if (normalized === "L0" || normalized === "L1" || normalized === "L2" || normalized === "L3") {
-    return normalized;
-  }
-
-  return fallback;
-}
+export const FALLBACK_SNAPSHOT: AdminLicensingSnapshot = {
+  currentLicense: {
+    instituteId: "inst_demo_admin",
+    instituteName: "Parabolic Demo Institute",
+    planId: "L2-T2",
+    level: "L2",
+    tier: "Tier 2",
+    subscriptionStatus: "active",
+    billingCycle: "Monthly",
+    licenseStartDate: "2026-07-01",
+    expiryDate: "2027-06-30",
+    activeStudentCount: 412,
+    baseFeeInr: 11500,
+    perStudentFeeInr: 155,
+    maxConcurrentStudents: 400,
+    maxExamSessionsPerMonth: 50,
+  },
+  usage: {
+    activeStudents: 412,
+    peakConcurrentStudents: 312,
+    examSessionsThisMonth: 42,
+    monthlyTestRuns: 1482,
+    estimatedCurrentChargeInr: 75360,
+  },
+  plans: LICENSE_PLANS,
+  capabilities: [
+    {
+      id: "basic_test_engine",
+      label: "Test authoring and execution",
+      description: "Core question, test, assignment, and examination workflows.",
+      minimumLevel: "L0",
+    },
+    {
+      id: "raw_accuracy_analytics",
+      label: "Accuracy analytics",
+      description: "Operational result and accuracy summaries.",
+      minimumLevel: "L0",
+    },
+    {
+      id: "risk_overview",
+      label: "Risk overview",
+      description: "Institute-level student risk summaries.",
+      minimumLevel: "L1",
+    },
+    {
+      id: "pattern_alerts",
+      label: "Pattern alerts",
+      description: "Behavior-pattern monitoring and alerts.",
+      minimumLevel: "L1",
+    },
+    {
+      id: "adaptive_phase",
+      label: "Adaptive phase controls",
+      description: "Phase-aware orchestration and routing controls.",
+      minimumLevel: "L2",
+    },
+    {
+      id: "controlled_mode",
+      label: "Controlled mode",
+      description: "Controlled examination and intervention capabilities.",
+      minimumLevel: "L2",
+    },
+    {
+      id: "governance",
+      label: "Governance intelligence",
+      description: "Governance dashboards and immutable override visibility.",
+      minimumLevel: "L2",
+    },
+  ],
+  invoices: [
+    {
+      id: "invoice_2026_07",
+      invoiceNumber: "INV-2026-07118",
+      billingPeriod: "July 2026",
+      issuedAt: "2026-07-01T04:30:00.000Z",
+      dueAt: "2026-07-20T23:59:59.000Z",
+      amountInr: 75360,
+      status: "due",
+    },
+    {
+      id: "invoice_2026_06",
+      invoiceNumber: "INV-2026-06118",
+      billingPeriod: "June 2026",
+      issuedAt: "2026-06-01T04:30:00.000Z",
+      dueAt: "2026-06-20T23:59:59.000Z",
+      amountInr: 73190,
+      status: "paid",
+    },
+  ],
+  upgradeRequests: [],
+  licenseHistory: [
+    {
+      id: "lic_evt_20260701",
+      timestamp: "2026-07-01T05:30:00.000Z",
+      previousPlanId: "L2-T1",
+      newPlanId: "L2-T2",
+      billingCycle: "Monthly",
+      reason: "Higher concurrency required for the new academic session.",
+      actor: "vendor.licensing@parabolic.local",
+    },
+    {
+      id: "lic_evt_20260101",
+      timestamp: "2026-01-01T05:30:00.000Z",
+      previousPlanId: "L1-T2",
+      newPlanId: "L2-T1",
+      billingCycle: "Monthly",
+      reason: "L2 capabilities approved following institute request.",
+      actor: "vendor.licensing@parabolic.local",
+    },
+  ],
+};
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-const FALLBACK_SNAPSHOT: AdminLicensingSnapshot = {
-  currentPlan: {
-    activeStudentCount: 412,
-    attemptsQuotaThisMonth: 2500,
-    attemptsUsedThisMonth: 1482,
-    billingCycle: "Monthly",
-    concurrencyLimit: 120,
-    currentLayer: "L2",
-    expiryDate: "2026-12-31",
-    licenseStartDate: "2026-01-01",
-    maxStudentLimit: 500,
-    planName: "Controlled Growth",
-    renewalDate: "2027-01-01",
-  },
-  eligibilityProgress: [
-    {
-      checklist: [
-        {
-          id: "tests",
-          label: "Completed tests",
-          met: true,
-          currentValue: "14",
-          requiredValue: "10 or more",
-          source: "runAnalytics completed-run count",
-        },
-        {
-          id: "students",
-          label: "Active students",
-          met: true,
-          currentValue: "412",
-          requiredValue: "30 or more",
-          source: "license activeStudentCount",
-        },
-        {
-          id: "tagging",
-          label: "Difficulty tagging coverage",
-          met: true,
-          currentValue: "96%",
-          requiredValue: "90% or more",
-          source: "question bank metadata coverage",
-        },
-      ],
-      label: "L0 to L1",
-      progressCurrent: 10,
-      progressTarget: 10,
-      rulePresentation: ">= 10 completed tests, >= 30 active students, and difficulty tagging coverage >= 90%.",
-      stage: "L1",
-      status: "eligible",
-      summary: "Diagnostic unlock requirements are complete.",
-      upgradeControl: "Vendor approval still records the license change; eligibility does not mutate the layer.",
-    },
-    {
-      checklist: [
-        {
-          id: "runs",
-          label: "Diagnostic runs",
-          met: true,
-          currentValue: "32",
-          requiredValue: "25 or more",
-          source: "runAnalytics diagnostic-run count",
-        },
-        {
-          id: "adherence",
-          label: "Phase adherence metric",
-          met: true,
-          currentValue: "Available",
-          requiredValue: "Computed",
-          source: "monthlySummary phase adherence",
-        },
-        {
-          id: "variance",
-          label: "Behavioral variance",
-          met: true,
-          currentValue: "Computed",
-          requiredValue: "Computed",
-          source: "yearBehaviorSummary variance signals",
-        },
-      ],
-      label: "L1 to L2",
-      progressCurrent: 25,
-      progressTarget: 25,
-      rulePresentation: ">= 25 diagnostic runs, phase adherence metric computed, and behavioral variance computed.",
-      stage: "L2",
-      status: "eligible",
-      summary: "Controlled mode eligibility achieved.",
-      upgradeControl: "Controlled capabilities remain backend-gated until the vendor-signed license enables L2 flags.",
-    },
-    {
-      checklist: [
-        {
-          id: "stability",
-          label: "Stability Index",
-          met: true,
-          currentValue: "71",
-          requiredValue: "70 or more",
-          source: "governanceSnapshots stabilityIndex",
-        },
-        {
-          id: "year",
-          label: "Academic year completed",
-          met: true,
-          currentValue: "1",
-          requiredValue: "1 or more",
-          source: "academicYears lifecycle status",
-        },
-        {
-          id: "vendor",
-          label: "Vendor evaluation",
-          met: false,
-          currentValue: "Pending",
-          requiredValue: "Invitation approved",
-          source: "vendor license review",
-        },
-      ],
-      label: "L2 to L3",
-      progressCurrent: 71,
-      progressTarget: 100,
-      rulePresentation: "Invitation-only. Optional readiness signals include Stability Index >= 70 and at least one completed academic year.",
-      stage: "L3",
-      status: "in_progress",
-      summary: "Invitation-only governance tier pending vendor approval.",
-      upgradeControl: "No self-upgrade button is exposed for Governance; the institute can only request evaluation.",
-    },
-  ],
-  featureMatrix: [
-    {
-      description: "Core test authoring, assignment, and execution.",
-      feature: "BasicTestEngine",
-      layers: {L0: "enabled", L1: "enabled", L2: "enabled", L3: "enabled"},
-    },
-    {
-      description: "Raw and accuracy analytics visibility.",
-      feature: "RawAndAccuracyAnalytics",
-      layers: {L0: "enabled", L1: "enabled", L2: "enabled", L3: "enabled"},
-    },
-    {
-      description: "Risk insight overviews.",
-      feature: "RiskOverview",
-      layers: {L0: "locked", L1: "enabled", L2: "enabled", L3: "enabled"},
-    },
-    {
-      description: "Behavior pattern alerting.",
-      feature: "PatternAlerts",
-      layers: {L0: "locked", L1: "enabled", L2: "enabled", L3: "enabled"},
-    },
-    {
-      description: "Adaptive phase orchestration.",
-      feature: "AdaptivePhase",
-      layers: {L0: "locked", L1: "locked", L2: "enabled", L3: "enabled"},
-    },
-    {
-      description: "Controlled mode enforcement.",
-      feature: "ControlledMode",
-      layers: {L0: "locked", L1: "locked", L2: "enabled", L3: "enabled"},
-    },
-    {
-      description: "Hard mode assignment controls.",
-      feature: "HardMode",
-      layers: {L0: "locked", L1: "locked", L2: "enabled", L3: "enabled"},
-    },
-    {
-      description: "Governance dashboard access.",
-      feature: "GovernanceDashboard",
-      layers: {L0: "locked", L1: "locked", L2: "locked", L3: "enabled"},
-    },
-    {
-      description: "Override audit visibility.",
-      feature: "OverrideAudit",
-      layers: {L0: "locked", L1: "locked", L2: "locked", L3: "enabled"},
-    },
-  ],
-  licenseHistory: [
-    {
-      actor: "vendor_ops_014",
-      billingChange: "Monthly plan updated to Controlled Growth",
-      eventId: "lic_evt_20260101",
-      newLayer: "L2",
-      previousLayer: "L1",
-      reason: "Eligibility approved after controlled diagnostics review",
-      timestamp: "2026-01-01T05:30:00.000Z",
-    },
-    {
-      actor: "vendor_ops_004",
-      billingChange: "Monthly plan activated",
-      eventId: "lic_evt_20250701",
-      newLayer: "L1",
-      previousLayer: "L0",
-      reason: "L1 readiness checklist met",
-      timestamp: "2025-07-01T05:30:00.000Z",
-    },
-  ],
-  upgradePreview: {
-    currentLayer: "L2",
-    previewCards: [
-      "Stability Index gauge sample",
-      "Batch risk heatmap preview",
-      "Override audit timeline sample",
-    ],
-    requestUpgradeUrl: "https://vendor.yourdomain.com/licensing/request-upgrade",
-    scheduleEvaluationUrl: "https://vendor.yourdomain.com/licensing/schedule-evaluation",
-  },
-  usageAndBilling: {
-    actions: {
-      contactSupportUrl: "https://vendor.yourdomain.com/support",
-      downloadInvoiceUrl: "https://vendor.yourdomain.com/billing/invoice/latest",
-      updatePaymentMethodUrl: "https://vendor.yourdomain.com/billing/payment-method",
-      viewBillingHistoryUrl: "https://vendor.yourdomain.com/billing/history",
-    },
-    activeStudents: 412,
-    attemptsRemaining: 1018,
-    attemptsUsed: 1482,
-    estimatedCurrentBill: "USD 1,842.00",
-    maxConcurrentAllowed: 120,
-    maxStudentsAllowed: 500,
-    nextBillingDate: "2026-05-01",
-    peakConcurrency: 74,
-    remainingStudentSlots: 88,
-  },
-};
+function isPlanId(value: unknown): value is AdminLicensePlanId {
+  return typeof value === "string" && LICENSE_PLANS.some((plan) => plan.id === value);
+}
+
+function toString(value: unknown, fallback: string): string {
+  return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
+function toNumber(value: unknown, fallback: number): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
 
 function normalizeSnapshot(value: unknown): AdminLicensingSnapshot | null {
-  if (!isPlainObject(value)) {
-    return null;
-  }
+  if (!isPlainObject(value)) return null;
+  const current = isPlainObject(value.currentLicense) ? value.currentLicense : null;
+  const usage = isPlainObject(value.usage) ? value.usage : null;
+  if (!current || !usage || !isPlanId(current.planId)) return null;
 
-  const currentPlanSource = isPlainObject(value.currentPlan) ? value.currentPlan : {};
-  const usageSource = isPlainObject(value.usageAndBilling) ? value.usageAndBilling : {};
-  const actionsSource = isPlainObject(usageSource.actions) ? usageSource.actions : {};
-  const upgradeSource = isPlainObject(value.upgradePreview) ? value.upgradePreview : {};
+  const plan = LICENSE_PLANS.find((entry) => entry.id === current.planId);
+  if (!plan) return null;
+  const subscriptionStatus = toString(current.subscriptionStatus, "active");
+  const normalizedStatus: AdminSubscriptionStatus = [
+    "trialing",
+    "active",
+    "past_due",
+    "suspended",
+    "trial_expired",
+  ].includes(subscriptionStatus)
+    ? (subscriptionStatus as AdminSubscriptionStatus)
+    : "active";
 
-  const normalized: AdminLicensingSnapshot = {
-    currentPlan: {
-      activeStudentCount: Math.max(0, Math.round(toNumberOrZero(currentPlanSource.activeStudentCount))),
-      attemptsQuotaThisMonth: Math.max(1, Math.round(toNumberOrZero(currentPlanSource.attemptsQuotaThisMonth) || 1)),
-      attemptsUsedThisMonth: Math.max(0, Math.round(toNumberOrZero(currentPlanSource.attemptsUsedThisMonth))),
-      billingCycle: toNonEmptyString(currentPlanSource.billingCycle, "Monthly"),
-      concurrencyLimit: Math.max(1, Math.round(toNumberOrZero(currentPlanSource.concurrencyLimit) || 1)),
-      currentLayer: toLayer(currentPlanSource.currentLayer, "L0"),
-      expiryDate: toNonEmptyString(currentPlanSource.expiryDate, "Unknown"),
-      licenseStartDate: toNonEmptyString(currentPlanSource.licenseStartDate, "Unknown"),
-      maxStudentLimit: Math.max(1, Math.round(toNumberOrZero(currentPlanSource.maxStudentLimit) || 1)),
-      planName: toNonEmptyString(currentPlanSource.planName, "Plan"),
-      renewalDate: toNonEmptyString(currentPlanSource.renewalDate, "Unknown"),
+  return {
+    ...FALLBACK_SNAPSHOT,
+    currentLicense: {
+      instituteId: toString(current.instituteId, FALLBACK_SNAPSHOT.currentLicense.instituteId),
+      instituteName: toString(
+        current.instituteName,
+        FALLBACK_SNAPSHOT.currentLicense.instituteName,
+      ),
+      planId: plan.id,
+      level: plan.level,
+      tier: plan.tier,
+      subscriptionStatus: normalizedStatus,
+      billingCycle: current.billingCycle === "Quarterly" ? "Quarterly" : "Monthly",
+      licenseStartDate: toString(
+        current.licenseStartDate,
+        FALLBACK_SNAPSHOT.currentLicense.licenseStartDate,
+      ),
+      expiryDate: toString(current.expiryDate, FALLBACK_SNAPSHOT.currentLicense.expiryDate),
+      activeStudentCount: Math.max(0, Math.round(toNumber(current.activeStudentCount, 0))),
+      baseFeeInr: plan.baseFeeInr,
+      perStudentFeeInr: plan.perStudentFeeInr,
+      maxConcurrentStudents: plan.maxConcurrentStudents,
+      maxExamSessionsPerMonth: plan.maxExamSessionsPerMonth,
     },
-    eligibilityProgress: Array.isArray(value.eligibilityProgress) ?
-      value.eligibilityProgress
-        .map((stage) => {
-          if (!isPlainObject(stage)) {
-            return null;
-          }
-
-          const checklist = Array.isArray(stage.checklist) ?
-            stage.checklist
-              .map((item) => {
-                if (!isPlainObject(item)) {
-                  return null;
-                }
-
-                return {
-                  id: toNonEmptyString(item.id, "check"),
-                  label: toNonEmptyString(item.label, "Criteria"),
-                  met: Boolean(item.met),
-                  currentValue: toNonEmptyString(item.currentValue, Boolean(item.met) ? "Met" : "Pending"),
-                  requiredValue: toNonEmptyString(item.requiredValue, "Required"),
-                  source: toNonEmptyString(item.source, "Vendor eligibility snapshot"),
-                };
-              })
-              .filter((item): item is LicensingEligibilityStage["checklist"][number] => Boolean(item)) :
-            [];
-
-          const statusRaw = toNonEmptyString(stage.status, "locked");
-          const status: LicensingEligibilityStage["status"] =
-            statusRaw === "eligible" || statusRaw === "in_progress" ? statusRaw : "locked";
-
-          return {
-            checklist,
-            label: toNonEmptyString(stage.label, "Stage"),
-            progressCurrent: Math.max(0, Math.round(toNumberOrZero(stage.progressCurrent))),
-            progressTarget: Math.max(1, Math.round(toNumberOrZero(stage.progressTarget) || 1)),
-            rulePresentation: toNonEmptyString(stage.rulePresentation, "Eligibility rule details are provided by vendor-controlled licensing snapshots."),
-            stage: toNonEmptyString(stage.stage, "Lx"),
-            status,
-            summary: toNonEmptyString(stage.summary, "Eligibility status"),
-            upgradeControl: toNonEmptyString(stage.upgradeControl, "Eligibility is readiness only and does not grant automatic upgrades."),
-          } as LicensingEligibilityStage;
-        })
-        .filter((stage): stage is LicensingEligibilityStage => Boolean(stage)) :
-      [],
-    featureMatrix: Array.isArray(value.featureMatrix) ?
-      value.featureMatrix
-        .map((row) => {
-          if (!isPlainObject(row)) {
-            return null;
-          }
-
-          const layersSource = isPlainObject(row.layers) ? row.layers : {};
-          const parseState = (layer: LicenseLayer): CapabilityState =>
-            toNonEmptyString(layersSource[layer], "locked") === "enabled" ? "enabled" : "locked";
-
-          return {
-            description: toNonEmptyString(row.description, ""),
-            feature: toNonEmptyString(row.feature, "Feature"),
-            layers: {
-              L0: parseState("L0"),
-              L1: parseState("L1"),
-              L2: parseState("L2"),
-              L3: parseState("L3"),
-            },
-          } as LicensingFeatureRow;
-        })
-        .filter((row): row is LicensingFeatureRow => Boolean(row)) :
-      [],
-    licenseHistory: Array.isArray(value.licenseHistory) ?
-      value.licenseHistory
-        .map((entry) => {
-          if (!isPlainObject(entry)) {
-            return null;
-          }
-
-          return {
-            actor: toNonEmptyString(entry.actor, "vendor"),
-            billingChange: toNonEmptyString(entry.billingChange, ""),
-            eventId: toNonEmptyString(entry.eventId, "event"),
-            newLayer: toLayer(entry.newLayer, "L0"),
-            previousLayer: toLayer(entry.previousLayer, "L0"),
-            reason: toNonEmptyString(entry.reason, ""),
-            timestamp: toNonEmptyString(entry.timestamp, new Date(0).toISOString()),
-          } as LicensingHistoryEntry;
-        })
-        .filter((entry): entry is LicensingHistoryEntry => Boolean(entry)) :
-      [],
-    upgradePreview: {
-      currentLayer: toLayer(upgradeSource.currentLayer, "L0"),
-      previewCards:
-        Array.isArray(upgradeSource.previewCards) ?
-          upgradeSource.previewCards
-            .map((item) => toNonEmptyString(item))
-            .filter((item) => item.length > 0) :
-          [],
-      requestUpgradeUrl: toNonEmptyString(upgradeSource.requestUpgradeUrl, "https://vendor.yourdomain.com/licensing/request-upgrade"),
-      scheduleEvaluationUrl: toNonEmptyString(upgradeSource.scheduleEvaluationUrl, "https://vendor.yourdomain.com/licensing/schedule-evaluation"),
-    },
-    usageAndBilling: {
-      actions: {
-        contactSupportUrl: toNonEmptyString(actionsSource.contactSupportUrl, "https://vendor.yourdomain.com/support"),
-        downloadInvoiceUrl: toNonEmptyString(actionsSource.downloadInvoiceUrl, "https://vendor.yourdomain.com/billing/invoice/latest"),
-        updatePaymentMethodUrl: toNonEmptyString(actionsSource.updatePaymentMethodUrl, "https://vendor.yourdomain.com/billing/payment-method"),
-        viewBillingHistoryUrl: toNonEmptyString(actionsSource.viewBillingHistoryUrl, "https://vendor.yourdomain.com/billing/history"),
-      },
-      activeStudents: Math.max(0, Math.round(toNumberOrZero(usageSource.activeStudents))),
-      attemptsRemaining: Math.max(0, Math.round(toNumberOrZero(usageSource.attemptsRemaining))),
-      attemptsUsed: Math.max(0, Math.round(toNumberOrZero(usageSource.attemptsUsed))),
-      estimatedCurrentBill: toNonEmptyString(usageSource.estimatedCurrentBill, "Unknown"),
-      maxConcurrentAllowed: Math.max(1, Math.round(toNumberOrZero(usageSource.maxConcurrentAllowed) || 1)),
-      maxStudentsAllowed: Math.max(1, Math.round(toNumberOrZero(usageSource.maxStudentsAllowed) || 1)),
-      nextBillingDate: toNonEmptyString(usageSource.nextBillingDate, "Unknown"),
-      peakConcurrency: Math.max(0, Math.round(toNumberOrZero(usageSource.peakConcurrency))),
-      remainingStudentSlots: Math.max(0, Math.round(toNumberOrZero(usageSource.remainingStudentSlots))),
+    usage: {
+      activeStudents: Math.max(0, Math.round(toNumber(usage.activeStudents, 0))),
+      peakConcurrentStudents: Math.max(0, Math.round(toNumber(usage.peakConcurrentStudents, 0))),
+      examSessionsThisMonth: Math.max(0, Math.round(toNumber(usage.examSessionsThisMonth, 0))),
+      monthlyTestRuns: Math.max(0, Math.round(toNumber(usage.monthlyTestRuns, 0))),
+      estimatedCurrentChargeInr: Math.max(
+        0,
+        Math.round(toNumber(usage.estimatedCurrentChargeInr, 0)),
+      ),
     },
   };
-
-  return normalized;
 }
 
 export function isLocalLicensingReadMode(): boolean {
@@ -499,46 +394,58 @@ export function isLocalLicensingReadMode(): boolean {
   return host === "127.0.0.1" || host === "localhost";
 }
 
-export function resolveLayerBadge(layer: LicenseLayer): string {
-  switch (layer) {
-    case "L0":
-      return "Operational";
-    case "L1":
-      return "Diagnostic";
-    case "L2":
-      return "Controlled";
-    case "L3":
-      return "Governance";
-    default:
-      return "Operational";
-  }
-}
-
-export function hasLayerAccess(currentLayer: LicenseLayer, requiredLayer: LicenseLayer): boolean {
-  return LICENSE_LAYER_ORDER[currentLayer] >= LICENSE_LAYER_ORDER[requiredLayer];
-}
-
 export async function fetchLicensingSnapshot(instituteId: string): Promise<AdminLicensingSnapshot> {
-  if (isLocalLicensingReadMode()) {
-    return FALLBACK_SNAPSHOT;
-  }
-
+  if (isLocalLicensingReadMode()) return FALLBACK_SNAPSHOT;
   const result = await apiClient.post<AdminLicensingApiResponse, Record<string, unknown>>(
     "/admin/licensing",
-    {
-      body: {
-        actionType: "GET_LICENSE_SNAPSHOT",
-        instituteId,
-      },
-    },
+    { body: { actionType: "GET_LICENSE_SNAPSHOT", instituteId } },
   );
-
   const snapshot = normalizeSnapshot(result.data?.snapshot);
-  if (!snapshot) {
-    throw new Error("POST /admin/licensing did not return a valid licensing snapshot.");
-  }
-
+  if (!snapshot) throw new Error("Licensing API did not return a valid vendor-aligned snapshot.");
   return snapshot;
 }
 
-export {ApiClientError, FALLBACK_SNAPSHOT};
+export async function submitLicenseUpgradeRequest(input: {
+  instituteId: string;
+  currentPlanId: AdminLicensePlanId;
+  requestedPlanId: AdminLicensePlanId;
+  requestedBy: string;
+  reason: string;
+}): Promise<AdminLicenseUpgradeRequest> {
+  if (isLocalLicensingReadMode()) {
+    return {
+      id: `license_req_${Date.now()}`,
+      requestedPlanId: input.requestedPlanId,
+      submittedAt: new Date().toISOString(),
+      requestedBy: input.requestedBy,
+      reason: input.reason,
+      status: "pending",
+      vendorNote: "Awaiting vendor review.",
+    };
+  }
+
+  const result = await apiClient.post<
+    AdminLicensingApiResponse,
+    typeof input & { actionType: "REQUEST_LICENSE_UPGRADE" }
+  >("/admin/licensing", {
+    body: { actionType: "REQUEST_LICENSE_UPGRADE", ...input },
+  });
+  if (!result.data?.request) throw new Error("Vendor did not return the created license request.");
+  return result.data.request;
+}
+
+export function getPlanRank(plan: AdminLicensePlan): number {
+  if (plan.id === "TRIAL") return -1;
+  const levelRank = { L0: 0, L1: 1, L2: 2 }[plan.level];
+  const tierRank = { "Tier 1": 1, "Tier 2": 2, "Tier 3": 3 }[plan.tier];
+  return levelRank * 3 + tierRank;
+}
+
+export function levelIncludes(
+  currentLevel: AdminLicenseLevel,
+  requiredLevel: AdminLicenseLevel,
+): boolean {
+  return { L0: 0, L1: 1, L2: 2 }[currentLevel] >= { L0: 0, L1: 1, L2: 2 }[requiredLevel];
+}
+
+export { ApiClientError };

@@ -3890,7 +3890,9 @@
 .admin-assignments-template-table-head,
 .admin-assignments-template-card {
   display: grid;
-  grid-template-columns: 28px minmax(220px, 1.5fr) minmax(90px, 0.7fr) minmax(130px, 0.9fr) minmax(220px, 1.4fr) minmax(80px, 0.5fr);
+  grid-template-columns:
+    28px minmax(220px, 1.5fr) minmax(90px, 0.7fr) minmax(130px, 0.9fr) minmax(220px, 1.4fr)
+    minmax(80px, 0.5fr);
   gap: 10px;
   align-items: center;
 }
@@ -5470,7 +5472,10 @@
   font: inherit;
   text-decoration: none;
   box-shadow: 0 8px 18px rgba(200, 109, 29, 0.24);
-  transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    filter 180ms ease;
 }
 
 .admin-question-bank-landing-link:hover {
@@ -5598,8 +5603,7 @@
   padding: 20px;
   border-radius: 24px;
   border: 1px solid rgba(20, 60, 104, 0.1);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 249, 253, 0.96));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 249, 253, 0.96));
   box-shadow: 0 24px 50px -40px rgba(20, 54, 95, 0.38);
 }
 
@@ -5648,8 +5652,7 @@
   gap: 5px;
   padding: 14px;
   border-radius: 18px;
-  background:
-    linear-gradient(180deg, rgba(246, 250, 255, 0.98), rgba(235, 244, 251, 0.94));
+  background: linear-gradient(180deg, rgba(246, 250, 255, 0.98), rgba(235, 244, 251, 0.94));
   border: 1px solid rgba(24, 61, 107, 0.08);
 }
 
@@ -5731,8 +5734,7 @@
   overflow: hidden;
   border-radius: 20px;
   border: 1px solid rgba(24, 61, 107, 0.08);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(245, 250, 255, 0.94));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(245, 250, 255, 0.94));
   box-shadow: 0 18px 36px -28px rgba(18, 46, 84, 0.22);
 }
 
@@ -5791,8 +5793,7 @@
   padding: 20px;
   border-radius: 24px;
   border: 1px solid rgba(24, 61, 107, 0.08);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 250, 254, 0.93));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 250, 254, 0.93));
   box-shadow: 0 24px 48px -38px rgba(20, 54, 95, 0.22);
 }
 
@@ -5886,12 +5887,13 @@
   margin-top: 10px;
   border: 1px solid rgba(16, 42, 81, 0.1);
   border-radius: 20px;
-  background:
-    linear-gradient(180deg, rgba(251, 253, 255, 0.98), rgba(241, 247, 253, 0.93));
+  background: linear-gradient(180deg, rgba(251, 253, 255, 0.98), rgba(241, 247, 253, 0.93));
   padding: 16px;
   display: grid;
   gap: 12px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 18px 36px -34px rgba(18, 46, 84, 0.2);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 18px 36px -34px rgba(18, 46, 84, 0.2);
 }
 
 .admin-overview-layer-block-header {
@@ -7026,7 +7028,13 @@
   position: absolute;
   inset: 0;
   border-radius: 180px 180px 0 0;
-  background: conic-gradient(from 270deg at 50% 100%, #9a4d58 0deg 108deg, #c69c43 108deg 135deg, #3f8668 135deg 180deg, transparent 180deg 360deg);
+  background: conic-gradient(
+    from 270deg at 50% 100%,
+    #9a4d58 0deg 108deg,
+    #c69c43 108deg 135deg,
+    #3f8668 135deg 180deg,
+    transparent 180deg 360deg
+  );
 }
 
 .admin-governance-gauge-arc::after {
@@ -7635,6 +7643,635 @@
 
 .admin-settings-action-summary strong {
   color: #173c68;
+}
+
+.admin-license-page.admin-content-card {
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 10px 30px rgba(16, 41, 77, 0.08);
+  overflow: visible;
+}
+
+.admin-license-page.admin-content-card::after {
+  display: none;
+}
+
+.admin-license-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 22px;
+}
+
+.admin-license-heading h2,
+.admin-license-heading p {
+  margin-top: 0;
+}
+
+.admin-license-heading > div:first-child > p:last-child {
+  max-width: 720px;
+  color: #526a89;
+  margin-bottom: 0;
+}
+
+.admin-license-posture {
+  display: grid;
+  gap: 4px;
+  min-width: 245px;
+  border-left: 4px solid #34714a;
+  background: #f2f8f4;
+  padding: 11px 14px;
+}
+
+.admin-license-posture-trialing {
+  border-left-color: #3476a8;
+  background: #eef6ff;
+}
+
+.admin-license-posture-past_due,
+.admin-license-posture-trial_expired {
+  border-left-color: #b37a1e;
+  background: #fff8e9;
+}
+
+.admin-license-posture-suspended {
+  border-left-color: #a53a31;
+  background: #fff1ef;
+}
+
+.admin-license-posture span,
+.admin-license-posture small {
+  color: #617594;
+  font-size: 0.78rem;
+}
+
+.admin-license-posture strong {
+  color: #255d39;
+}
+
+.admin-license-posture-past_due strong,
+.admin-license-posture-trial_expired strong {
+  color: #805614;
+}
+
+.admin-license-posture-suspended strong {
+  color: #8e3029;
+}
+
+.admin-license-tabs {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  border-bottom: 1px solid rgba(15, 43, 85, 0.14);
+  margin-top: 22px;
+}
+
+.admin-license-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: #5b7090;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 750;
+  padding: 11px 13px;
+}
+
+.admin-license-tabs .admin-license-tab-active {
+  border-bottom-color: #1a65b8;
+  color: #174f92;
+}
+
+.admin-license-tabs button > span {
+  display: inline-grid;
+  place-items: center;
+  min-width: 21px;
+  height: 21px;
+  border-radius: 999px;
+  background: #fff1df;
+  color: #8a5c18;
+  font-size: 0.71rem;
+}
+
+.admin-license-load-state {
+  color: #617594;
+  font-size: 0.78rem;
+  margin: 9px 0 0;
+}
+
+.admin-license-view {
+  display: grid;
+  gap: 18px;
+  padding-top: 18px;
+}
+
+.admin-license-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.admin-license-section-heading h3,
+.admin-license-section-heading p {
+  margin: 0;
+}
+
+.admin-license-section-heading p {
+  color: #617594;
+  font-size: 0.87rem;
+  margin-top: 4px;
+}
+
+.admin-license-plan-badge,
+.admin-license-status {
+  border: 1px solid rgba(15, 43, 85, 0.14);
+  border-radius: 999px;
+  background: #f5f8fc;
+  color: #345071;
+  font-size: 0.8rem;
+  font-weight: 750;
+  line-height: 1;
+  padding: 7px 10px;
+  white-space: nowrap;
+}
+
+.admin-license-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.admin-license-current-grid,
+.admin-license-usage-grid,
+.admin-license-history-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.admin-license-parameters,
+.admin-license-contract,
+.admin-license-utilization,
+.admin-license-billing-summary,
+.admin-license-invoices,
+.admin-license-plan-selector,
+.admin-license-plan-detail,
+.admin-license-capabilities,
+.admin-license-history-panel {
+  min-width: 0;
+  border: 1px solid rgba(15, 43, 85, 0.13);
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.admin-license-parameters > header,
+.admin-license-contract > header,
+.admin-license-utilization > header,
+.admin-license-billing-summary > header,
+.admin-license-invoices > header,
+.admin-license-plan-selector > header,
+.admin-license-capabilities > header,
+.admin-license-history-panel > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  background: #f6f8fb;
+  padding: 13px 15px;
+}
+
+.admin-license-parameters h3,
+.admin-license-parameters p,
+.admin-license-contract h3,
+.admin-license-contract p,
+.admin-license-utilization h3,
+.admin-license-utilization p,
+.admin-license-billing-summary h3,
+.admin-license-billing-summary p,
+.admin-license-invoices h3,
+.admin-license-invoices p,
+.admin-license-plan-selector h3,
+.admin-license-plan-selector p,
+.admin-license-capabilities h3,
+.admin-license-capabilities p,
+.admin-license-history-panel h3,
+.admin-license-history-panel p {
+  margin: 0;
+}
+
+.admin-license-parameters header p,
+.admin-license-contract header p,
+.admin-license-utilization header p,
+.admin-license-billing-summary header p,
+.admin-license-invoices header p,
+.admin-license-plan-selector header p,
+.admin-license-capabilities header p,
+.admin-license-history-panel header p {
+  color: #617594;
+  font-size: 0.8rem;
+  margin-top: 3px;
+}
+
+.admin-license-parameters dl,
+.admin-license-contract dl,
+.admin-license-plan-detail dl {
+  margin: 0;
+  padding: 0 15px;
+}
+
+.admin-license-parameters dl > div,
+.admin-license-contract dl > div,
+.admin-license-plan-detail dl > div {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) auto;
+  gap: 12px;
+  border-top: 1px solid rgba(15, 43, 85, 0.09);
+  padding: 11px 0;
+}
+
+.admin-license-parameters dt,
+.admin-license-contract dt,
+.admin-license-plan-detail dt {
+  color: #617594;
+}
+
+.admin-license-parameters dd,
+.admin-license-contract dd,
+.admin-license-plan-detail dd {
+  color: #244568;
+  font-weight: 750;
+  margin: 0;
+  text-align: right;
+}
+
+.admin-license-contract > button {
+  margin: 14px 15px;
+}
+
+.admin-license-authority-note,
+.admin-license-trial-note {
+  border-left: 4px solid #3476a8;
+  background: #eef6ff;
+  color: #405d7e;
+  padding: 12px 14px;
+}
+
+.admin-license-authority-note p {
+  margin: 4px 0 0;
+}
+
+.admin-license-trial-note {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.admin-license-utilization > div {
+  display: grid;
+  gap: 20px;
+  padding: 20px 15px;
+}
+
+.admin-license-meter {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-license-meter > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #345071;
+}
+
+.admin-license-meter > span small,
+.admin-license-meter > small {
+  color: #617594;
+}
+
+.admin-license-meter > div {
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e5ebf2;
+}
+
+.admin-license-meter > div i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #2f7792;
+}
+
+.admin-license-billing-summary > strong {
+  display: block;
+  color: #244568;
+  font-size: 1.5rem;
+  padding: 20px 15px 8px;
+}
+
+.admin-license-billing-summary dl {
+  margin: 0;
+  padding: 0 15px;
+}
+
+.admin-license-billing-summary dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid rgba(15, 43, 85, 0.09);
+  padding: 10px 0;
+}
+
+.admin-license-billing-summary dt,
+.admin-license-billing-summary > small {
+  color: #617594;
+}
+
+.admin-license-billing-summary dd {
+  color: #244568;
+  font-weight: 750;
+  margin: 0;
+}
+
+.admin-license-billing-summary > small {
+  display: block;
+  padding: 5px 15px 16px;
+}
+
+.admin-license-table-scroll {
+  overflow-x: auto;
+}
+
+.admin-license-table-scroll table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.admin-license-table-scroll th,
+.admin-license-table-scroll td {
+  border-top: 1px solid rgba(15, 43, 85, 0.09);
+  color: #345071;
+  padding: 11px 15px;
+  vertical-align: top;
+}
+
+.admin-license-table-scroll th {
+  color: #617594;
+  font-size: 0.73rem;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.admin-license-table-scroll td > small {
+  display: block;
+  color: #617594;
+  margin-top: 3px;
+}
+
+.admin-license-invoice-actions {
+  display: flex;
+  gap: 6px;
+  min-width: 150px;
+}
+
+.admin-license-invoice-actions button {
+  border: 1px solid rgba(15, 43, 85, 0.17);
+  border-radius: 6px;
+  background: #ffffff;
+  color: #174f92;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 750;
+  padding: 6px 9px;
+}
+
+.admin-license-invoice-actions button:hover {
+  border-color: #1a65b8;
+  background: #eef6ff;
+}
+
+.admin-license-invoice-message {
+  border-top: 1px solid rgba(15, 43, 85, 0.09);
+  color: #526a89;
+  font-size: 0.8rem;
+  margin: 0;
+  padding: 10px 15px;
+}
+
+.admin-license-status-paid,
+.admin-license-status-approved {
+  border-color: rgba(35, 117, 70, 0.25);
+  background: #edf8f1;
+  color: #24623b;
+}
+
+.admin-license-status-due,
+.admin-license-status-pending,
+.admin-license-status-payment_required {
+  border-color: rgba(160, 107, 20, 0.26);
+  background: #fff8e9;
+  color: #805614;
+}
+
+.admin-license-status-past_due,
+.admin-license-status-failed,
+.admin-license-status-rejected {
+  border-color: rgba(151, 48, 40, 0.24);
+  background: #fff1ef;
+  color: #8e3029;
+}
+
+.admin-license-plan-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.75fr) minmax(0, 1.25fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.admin-license-plan-selector > div {
+  display: grid;
+  max-height: 560px;
+  overflow-y: auto;
+}
+
+.admin-license-plan-selector > div > button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 0;
+  border-bottom: 1px solid rgba(15, 43, 85, 0.09);
+  background: #ffffff;
+  color: #345071;
+  cursor: pointer;
+  font: inherit;
+  padding: 12px 15px;
+  text-align: left;
+}
+
+.admin-license-plan-selector > div > button:last-child {
+  border-bottom: 0;
+}
+
+.admin-license-plan-selector > div > .admin-license-plan-selected {
+  background: #f1f7ff;
+  box-shadow: inset 3px 0 #1a65b8;
+}
+
+.admin-license-plan-selector button > span:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.admin-license-plan-selector button small,
+.admin-license-plan-selector button > span:last-child {
+  color: #617594;
+  font-size: 0.76rem;
+}
+
+.admin-license-plan-detail {
+  padding-bottom: 16px;
+}
+
+.admin-license-plan-detail > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  background: #f6f8fb;
+  padding: 13px 15px;
+}
+
+.admin-license-plan-detail h3,
+.admin-license-plan-detail p {
+  margin-top: 0;
+}
+
+.admin-license-plan-message,
+.admin-license-open-request,
+.admin-license-request-form,
+.admin-license-request-message {
+  margin: 14px 15px 0;
+}
+
+.admin-license-plan-message,
+.admin-license-request-message {
+  color: #617594;
+}
+
+.admin-license-open-request {
+  border-left: 4px solid #b37a1e;
+  background: #fff8e9;
+  color: #526a89;
+  padding: 11px 13px;
+}
+
+.admin-license-open-request p {
+  margin: 4px 0;
+}
+
+.admin-license-request-form {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-license-request-form textarea {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid rgba(15, 43, 85, 0.18);
+  border-radius: 7px;
+  color: #244568;
+  font: inherit;
+  padding: 9px 10px;
+  resize: vertical;
+}
+
+.admin-license-request-form button {
+  justify-self: start;
+}
+
+.admin-license-request-form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.admin-license-history-panel > div {
+  display: grid;
+}
+
+.admin-license-history-panel article {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 10px;
+  border-top: 1px solid rgba(15, 43, 85, 0.09);
+  padding: 14px 15px;
+}
+
+.admin-license-history-marker {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #3476a8;
+  margin-top: 5px;
+}
+
+.admin-license-history-panel article > div {
+  display: grid;
+  gap: 4px;
+}
+
+.admin-license-history-panel time,
+.admin-license-history-panel article small {
+  color: #7890aa;
+  font-size: 0.75rem;
+}
+
+.admin-license-history-panel article p {
+  color: #526a89;
+  margin: 0;
+}
+
+.admin-license-empty {
+  color: #617594;
+  margin: 0;
+  padding: 28px 15px;
+  text-align: center;
+}
+
+.admin-license-boundary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid rgba(15, 43, 85, 0.12);
+  margin-top: 22px;
+  padding-top: 16px;
+}
+
+.admin-license-boundary > div {
+  display: grid;
+  gap: 3px;
+}
+
+.admin-license-boundary strong {
+  color: #255d39;
+}
+
+.admin-license-boundary span,
+.admin-license-boundary code {
+  color: #617594;
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
 }
 
 .admin-licensing-eligibility-grid {
@@ -8277,7 +8914,10 @@
   background: linear-gradient(180deg, var(--admin-brand), var(--admin-brand-strong));
   color: #ffffff;
   box-shadow: 0 8px 18px rgba(20, 84, 175, 0.24);
-  transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    filter 180ms ease;
 }
 
 .admin-signout-button:hover,
@@ -8303,7 +8943,12 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.38) 52%, transparent 100%);
+  background: linear-gradient(
+    120deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.38) 52%,
+    transparent 100%
+  );
   opacity: 0.52;
 }
 
@@ -8373,7 +9018,10 @@
 .admin-student-edit-actions button {
   border: 1px solid var(--admin-border-strong);
   border-radius: 11px;
-  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .admin-content-card .ui-form-actions button:hover,
@@ -8391,7 +9039,10 @@
 .admin-nav-link,
 .admin-sidebar-link,
 .ui-nav-item {
-  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .admin-nav-link:hover,
@@ -8452,7 +9103,11 @@
   z-index: 3;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 249, 255, 0.96));
   backdrop-filter: blur(8px);
-  transition: padding 180ms ease, gap 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+  transition:
+    padding 180ms ease,
+    gap 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease;
 }
 
 .admin-sidebar-header-compact {
@@ -8466,11 +9121,18 @@
 }
 
 .admin-sidebar-header .admin-sidebar-eyebrow {
-  transition: margin 180ms ease, font-size 180ms ease, letter-spacing 180ms ease, opacity 180ms ease;
+  transition:
+    margin 180ms ease,
+    font-size 180ms ease,
+    letter-spacing 180ms ease,
+    opacity 180ms ease;
 }
 
 .admin-sidebar-header .admin-sidebar-copy {
-  transition: margin 180ms ease, max-height 180ms ease, opacity 180ms ease;
+  transition:
+    margin 180ms ease,
+    max-height 180ms ease,
+    opacity 180ms ease;
   max-height: 72px;
   overflow: hidden;
 }
@@ -8617,7 +9279,12 @@
   top: 0;
   z-index: 2;
   backdrop-filter: blur(8px);
-  transition: padding 180ms ease, gap 180ms ease, border-radius 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+  transition:
+    padding 180ms ease,
+    gap 180ms ease,
+    border-radius 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease;
 }
 
 .admin-sidebar-summary-card strong,
@@ -8627,14 +9294,19 @@
 }
 
 .admin-sidebar-summary-card strong {
-  transition: font-size 180ms ease, letter-spacing 180ms ease;
+  transition:
+    font-size 180ms ease,
+    letter-spacing 180ms ease;
 }
 
 .admin-sidebar-summary-card p {
   margin-top: 4px;
   color: #4f688a;
   line-height: 1.5;
-  transition: margin 180ms ease, max-height 180ms ease, opacity 180ms ease;
+  transition:
+    margin 180ms ease,
+    max-height 180ms ease,
+    opacity 180ms ease;
   max-height: 72px;
   overflow: hidden;
 }
@@ -8760,7 +9432,9 @@
 .admin-sidebar-link-active {
   border-color: rgba(20, 84, 175, 0.34);
   background: linear-gradient(180deg, rgba(240, 247, 255, 0.98), rgba(229, 239, 255, 0.92));
-  box-shadow: inset 0 0 0 1px rgba(20, 84, 175, 0.2), 0 14px 30px rgba(17, 60, 120, 0.12);
+  box-shadow:
+    inset 0 0 0 1px rgba(20, 84, 175, 0.2),
+    0 14px 30px rgba(17, 60, 120, 0.12);
 }
 
 .admin-sidebar-link-active .admin-sidebar-link-badge {
@@ -8784,7 +9458,11 @@
   padding: 10px 12px;
   font: inherit;
   font-weight: 700;
-  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease;
 }
 
 .admin-sidebar-icon-button:hover,
@@ -9192,6 +9870,58 @@
 
   .admin-sidebar {
     width: min(340px, calc(100vw - 16px));
+  }
+}
+
+@media (max-width: 900px) {
+  .admin-license-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-license-current-grid,
+  .admin-license-usage-grid,
+  .admin-license-history-grid,
+  .admin-license-plan-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-license-heading,
+  .admin-license-section-heading,
+  .admin-license-invoices > header,
+  .admin-license-plan-detail > header,
+  .admin-license-boundary {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-license-posture {
+    min-width: 0;
+  }
+
+  .admin-license-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-license-trial-note {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-license-parameters dl > div,
+  .admin-license-contract dl > div,
+  .admin-license-plan-detail dl > div {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-license-parameters dd,
+  .admin-license-contract dd,
+  .admin-license-plan-detail dd {
+    text-align: left;
+  }
+
+  .admin-license-plan-selector > div > button {
+    grid-template-columns: 1fr;
   }
 }
 

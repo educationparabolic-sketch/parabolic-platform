@@ -68,6 +68,7 @@ export type VendorOnboardingStatus =
   | "awaiting_acceptance"
   | "awaiting_payment"
   | "payment_received"
+  | "trial_terms_accepted"
   | "administrator_invited"
   | "setup_in_progress"
   | "ready_for_activation"

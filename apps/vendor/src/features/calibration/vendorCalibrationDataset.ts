@@ -5,28 +5,25 @@ const apiClient = getPortalApiClient("vendor");
 
 const LOCAL_AUDIT_STORAGE_KEY = "vendor-build-138-calibration-audit";
 
-export type CalibrationSimulationMode =
-  | "SingleInstitute"
-  | "SelectedInstitutes"
-  | "AllInstitutes";
+export type CalibrationSimulationMode = "SingleInstitute" | "SelectedInstitutes" | "AllInstitutes";
 
 export type CalibrationPushScope = "ApplyGlobally" | "ApplyToSelectedInstitutes";
 
-export interface CalibrationWeightsDraft {
-  guessWeight: number;
-  phaseDeviationWeight: number;
-  easyNeglectWeight: number;
-  hardBiasWeight: number;
-  consecutiveWrongWeight: number;
-}
-
-export interface CalibrationThresholdDraft {
-  guessFactorPerDifficulty: number;
-  phaseTolerancePercent: number;
-  hardBiasDeviationAllowance: number;
-  stabilityVarianceThreshold: number;
-  minTimeMultiplier: number;
-  maxTimeMultiplier: number;
+export interface StrategyProfileParameters {
+  objectiveWeight: number;
+  timingWeight: number;
+  P1CoverageWeight: number;
+  P1RoutingWeight: number;
+  easyGuessFactor: number;
+  mediumGuessFactor: number;
+  hardGuessFactor: number;
+  easyNeglectThreshold: number;
+  hardBiasToleranceFactor: number;
+  riskGuessWeight: number;
+  riskPhaseWeight: number;
+  riskOverstayWeight: number;
+  riskEasyNeglectWeight: number;
+  riskHardBiasWeight: number;
 }
 
 export interface VendorCalibrationVersionRecord {
@@ -38,8 +35,7 @@ export interface VendorCalibrationVersionRecord {
   rollbackStatus: "available" | "rollback_queued" | "rolled_back";
   isActive: boolean;
   parameterChanges: string[];
-  weights: CalibrationWeightsDraft;
-  thresholds: CalibrationThresholdDraft;
+  parameters: StrategyProfileParameters;
 }
 
 export interface CalibrationInstituteSummary {
@@ -182,21 +178,21 @@ const INSTITUTES: CalibrationInstituteSummary[] = [
   },
 ];
 
-const BASELINE_WEIGHTS: CalibrationWeightsDraft = {
-  guessWeight: 0.24,
-  phaseDeviationWeight: 0.2,
-  easyNeglectWeight: 0.19,
-  hardBiasWeight: 0.18,
-  consecutiveWrongWeight: 0.19,
-};
-
-const BASELINE_THRESHOLDS: CalibrationThresholdDraft = {
-  guessFactorPerDifficulty: 1.15,
-  phaseTolerancePercent: 12,
-  hardBiasDeviationAllowance: 18,
-  stabilityVarianceThreshold: 10,
-  minTimeMultiplier: 0.7,
-  maxTimeMultiplier: 1.35,
+const BASELINE_PARAMETERS: StrategyProfileParameters = {
+  objectiveWeight: 0.6,
+  timingWeight: 0.4,
+  P1CoverageWeight: 0.7,
+  P1RoutingWeight: 0.3,
+  easyGuessFactor: 0.5,
+  mediumGuessFactor: 0.6,
+  hardGuessFactor: 0.7,
+  easyNeglectThreshold: 0.7,
+  hardBiasToleranceFactor: 0.1,
+  riskGuessWeight: 0.3,
+  riskPhaseWeight: 0.25,
+  riskOverstayWeight: 0.15,
+  riskEasyNeglectWeight: 0.15,
+  riskHardBiasWeight: 0.15,
 };
 
 const VERSIONS: VendorCalibrationVersionRecord[] = [
@@ -209,40 +205,46 @@ const VERSIONS: VendorCalibrationVersionRecord[] = [
     rollbackStatus: "available",
     isActive: true,
     parameterChanges: [
-      "HardBiasWeight increased 0.16 -> 0.18",
-      "PhaseTolerancePercent tightened 14 -> 12",
-      "MaxTimeMultiplier adjusted 1.40 -> 1.35",
+      "P1CoverageWeight increased 0.68 -> 0.70",
+      "easyNeglectThreshold increased 0.68 -> 0.70",
+      "hardBiasToleranceFactor reduced 0.12 -> 0.10",
     ],
-    weights: BASELINE_WEIGHTS,
-    thresholds: BASELINE_THRESHOLDS,
+    parameters: BASELINE_PARAMETERS,
   },
   {
     versionId: "cal_v2026_03_27",
     createdAt: "2026-03-27T06:14:00.000Z",
     createdBy: "vendor.risk@parabolic.local",
     activationDate: "2026-03-29T00:00:00.000Z",
-    affectedInstitutes: ["inst_north_star", "inst_riverdale", "inst_orbit", "inst_delta", "inst_zenith"],
+    affectedInstitutes: [
+      "inst_north_star",
+      "inst_riverdale",
+      "inst_orbit",
+      "inst_delta",
+      "inst_zenith",
+    ],
     rollbackStatus: "available",
     isActive: false,
     parameterChanges: [
-      "GuessWeight reduced 0.27 -> 0.24",
-      "ConsecutiveWrongWeight raised 0.17 -> 0.19",
-      "StabilityVarianceThreshold tightened 12 -> 10",
+      "easyGuessFactor increased 0.45 -> 0.48",
+      "mediumGuessFactor increased 0.55 -> 0.58",
+      "riskGuessWeight increased 0.28 -> 0.32",
     ],
-    weights: {
-      guessWeight: 0.23,
-      phaseDeviationWeight: 0.2,
-      easyNeglectWeight: 0.2,
-      hardBiasWeight: 0.18,
-      consecutiveWrongWeight: 0.19,
-    },
-    thresholds: {
-      guessFactorPerDifficulty: 1.2,
-      phaseTolerancePercent: 14,
-      hardBiasDeviationAllowance: 20,
-      stabilityVarianceThreshold: 12,
-      minTimeMultiplier: 0.75,
-      maxTimeMultiplier: 1.4,
+    parameters: {
+      objectiveWeight: 0.6,
+      timingWeight: 0.4,
+      P1CoverageWeight: 0.68,
+      P1RoutingWeight: 0.32,
+      easyGuessFactor: 0.48,
+      mediumGuessFactor: 0.58,
+      hardGuessFactor: 0.68,
+      easyNeglectThreshold: 0.68,
+      hardBiasToleranceFactor: 0.12,
+      riskGuessWeight: 0.32,
+      riskPhaseWeight: 0.24,
+      riskOverstayWeight: 0.14,
+      riskEasyNeglectWeight: 0.15,
+      riskHardBiasWeight: 0.15,
     },
   },
   {
@@ -254,24 +256,25 @@ const VERSIONS: VendorCalibrationVersionRecord[] = [
     rollbackStatus: "rolled_back",
     isActive: false,
     parameterChanges: [
-      "EasyNeglectWeight increased 0.16 -> 0.21",
-      "PhaseDeviationWeight reduced 0.23 -> 0.2",
-      "MinTimeMultiplier lowered 0.8 -> 0.75",
+      "objectiveWeight reduced 0.60 -> 0.55",
+      "timingWeight increased 0.40 -> 0.45",
+      "hardGuessFactor reduced 0.68 -> 0.65",
     ],
-    weights: {
-      guessWeight: 0.22,
-      phaseDeviationWeight: 0.21,
-      easyNeglectWeight: 0.21,
-      hardBiasWeight: 0.17,
-      consecutiveWrongWeight: 0.19,
-    },
-    thresholds: {
-      guessFactorPerDifficulty: 1.25,
-      phaseTolerancePercent: 15,
-      hardBiasDeviationAllowance: 22,
-      stabilityVarianceThreshold: 14,
-      minTimeMultiplier: 0.8,
-      maxTimeMultiplier: 1.45,
+    parameters: {
+      objectiveWeight: 0.55,
+      timingWeight: 0.45,
+      P1CoverageWeight: 0.65,
+      P1RoutingWeight: 0.35,
+      easyGuessFactor: 0.45,
+      mediumGuessFactor: 0.55,
+      hardGuessFactor: 0.65,
+      easyNeglectThreshold: 0.65,
+      hardBiasToleranceFactor: 0.12,
+      riskGuessWeight: 0.28,
+      riskPhaseWeight: 0.27,
+      riskOverstayWeight: 0.15,
+      riskEasyNeglectWeight: 0.15,
+      riskHardBiasWeight: 0.15,
     },
   },
 ];
@@ -365,13 +368,14 @@ export function getVendorCalibrationDataset(): VendorCalibrationDataset {
   };
 }
 
-export function validateCalibrationWeights(
-  draft: CalibrationWeightsDraft,
-): { isValid: boolean; issues: string[]; total: number } {
-  const entries = Object.entries(draft);
+export function validateStrategyProfileParameters(draft: StrategyProfileParameters): {
+  isValid: boolean;
+  issues: string[];
+  riskWeightTotal: number;
+} {
   const issues: string[] = [];
 
-  for (const [key, value] of entries) {
+  for (const [key, value] of Object.entries(draft)) {
     if (!Number.isFinite(value)) {
       issues.push(`${key} must be a number.`);
       continue;
@@ -382,54 +386,23 @@ export function validateCalibrationWeights(
     }
   }
 
-  const total = entries.reduce((accumulator, [, value]) => accumulator + value, 0);
-  if (Math.abs(total - 1) > 0.0001) {
-    issues.push(`Risk weights must sum to 1. Current sum: ${total.toFixed(3)}.`);
+  const riskWeightTotal =
+    draft.riskGuessWeight +
+    draft.riskPhaseWeight +
+    draft.riskOverstayWeight +
+    draft.riskEasyNeglectWeight +
+    draft.riskHardBiasWeight;
+
+  if (Math.abs(riskWeightTotal - 1) > 0.0001) {
+    issues.push(
+      `Risk score weights must total 1.00. Current total: ${riskWeightTotal.toFixed(3)}.`,
+    );
   }
 
   return {
     isValid: issues.length === 0,
     issues,
-    total,
-  };
-}
-
-export function validateCalibrationThresholds(
-  draft: CalibrationThresholdDraft,
-): { isValid: boolean; issues: string[] } {
-  const issues: string[] = [];
-
-  if (draft.guessFactorPerDifficulty < 0.5 || draft.guessFactorPerDifficulty > 2) {
-    issues.push("GuessFactorPerDifficulty must be between 0.5 and 2.0.");
-  }
-
-  if (draft.phaseTolerancePercent < 0 || draft.phaseTolerancePercent > 50) {
-    issues.push("PhaseTolerancePercent must be between 0 and 50.");
-  }
-
-  if (draft.hardBiasDeviationAllowance < 0 || draft.hardBiasDeviationAllowance > 60) {
-    issues.push("HardBiasDeviationAllowance must be between 0 and 60.");
-  }
-
-  if (draft.stabilityVarianceThreshold < 0 || draft.stabilityVarianceThreshold > 40) {
-    issues.push("StabilityVarianceThreshold must be between 0 and 40.");
-  }
-
-  if (draft.minTimeMultiplier < 0.5 || draft.minTimeMultiplier > 1.5) {
-    issues.push("MinTimeMultiplier must be between 0.5 and 1.5.");
-  }
-
-  if (draft.maxTimeMultiplier < 1 || draft.maxTimeMultiplier > 2) {
-    issues.push("MaxTimeMultiplier must be between 1.0 and 2.0.");
-  }
-
-  if (draft.minTimeMultiplier > draft.maxTimeMultiplier) {
-    issues.push("MinTimeMultiplier must not exceed MaxTimeMultiplier.");
-  }
-
-  return {
-    isValid: issues.length === 0,
-    issues,
+    riskWeightTotal,
   };
 }
 
@@ -454,10 +427,13 @@ function computeLocalSimulation(
   dataset: VendorCalibrationDataset,
   mode: CalibrationSimulationMode,
   instituteIds: string[],
-  weights: CalibrationWeightsDraft,
+  parameters: StrategyProfileParameters,
 ): CalibrationSimulationResult {
   const selected = dataset.institutes.filter((entry) => instituteIds.includes(entry.instituteId));
-  const totalStudents = selected.reduce((accumulator, entry) => accumulator + entry.studentCount, 0);
+  const totalStudents = selected.reduce(
+    (accumulator, entry) => accumulator + entry.studentCount,
+    0,
+  );
   const weightedRiskBaseline = selected.reduce(
     (accumulator, entry) => accumulator + entry.beforeAverageRiskScore * entry.studentCount,
     0,
@@ -468,17 +444,30 @@ function computeLocalSimulation(
   );
 
   const beforeAverageRiskScore = totalStudents === 0 ? 0 : weightedRiskBaseline / totalStudents;
-  const beforeDisciplineIndex = totalStudents === 0 ? 0 : weightedDisciplineBaseline / totalStudents;
+  const beforeDisciplineIndex =
+    totalStudents === 0 ? 0 : weightedDisciplineBaseline / totalStudents;
 
-  const intensity =
-    weights.hardBiasWeight * 0.32 +
-    weights.easyNeglectWeight * 0.24 +
-    weights.consecutiveWrongWeight * 0.18 -
-    weights.phaseDeviationWeight * 0.16 -
-    weights.guessWeight * 0.08;
+  const strategyIntensity =
+    parameters.riskGuessWeight * parameters.mediumGuessFactor +
+    parameters.riskPhaseWeight * (1 - parameters.objectiveWeight) +
+    parameters.riskOverstayWeight * parameters.timingWeight +
+    parameters.riskEasyNeglectWeight * (1 - parameters.easyNeglectThreshold) +
+    parameters.riskHardBiasWeight * parameters.hardBiasToleranceFactor;
+  const baselineIntensity =
+    BASELINE_PARAMETERS.riskGuessWeight * BASELINE_PARAMETERS.mediumGuessFactor +
+    BASELINE_PARAMETERS.riskPhaseWeight * (1 - BASELINE_PARAMETERS.objectiveWeight) +
+    BASELINE_PARAMETERS.riskOverstayWeight * BASELINE_PARAMETERS.timingWeight +
+    BASELINE_PARAMETERS.riskEasyNeglectWeight * (1 - BASELINE_PARAMETERS.easyNeglectThreshold) +
+    BASELINE_PARAMETERS.riskHardBiasWeight * BASELINE_PARAMETERS.hardBiasToleranceFactor;
+  const phaseAdherence =
+    parameters.objectiveWeight * parameters.P1CoverageWeight +
+    parameters.timingWeight * parameters.P1RoutingWeight;
+  const baselinePhaseAdherence =
+    BASELINE_PARAMETERS.objectiveWeight * BASELINE_PARAMETERS.P1CoverageWeight +
+    BASELINE_PARAMETERS.timingWeight * BASELINE_PARAMETERS.P1RoutingWeight;
 
-  const riskDelta = clampPercent(-(intensity * 12));
-  const disciplineDelta = clampPercent((weights.phaseDeviationWeight + weights.easyNeglectWeight) * 6);
+  const riskDelta = clampPercent((strategyIntensity - baselineIntensity) * 20);
+  const disciplineDelta = clampPercent((phaseAdherence - baselinePhaseAdherence) * 10);
   const mediumShift = clampPercent(riskDelta * 0.7);
   const highShift = clampPercent(riskDelta * 0.3);
 
@@ -501,26 +490,15 @@ function computeLocalSimulation(
   return {
     mode,
     instituteIds,
-    summarySources: ["studentYearMetrics", "runAnalytics", "riskComponents", "disciplineComponents"],
+    summarySources: [
+      "studentYearMetrics",
+      "runAnalytics",
+      "riskComponents",
+      "disciplineComponents",
+    ],
     comparison,
     generatedAt: new Date().toISOString(),
     engineSource: "local-fallback",
-  };
-}
-
-function toSimulationApiWeights(weights: CalibrationWeightsDraft): {
-  easyNeglectWeight: number;
-  guessWeight: number;
-  hardBiasWeight: number;
-  phaseWeight: number;
-  wrongStreakWeight: number;
-} {
-  return {
-    easyNeglectWeight: weights.easyNeglectWeight,
-    guessWeight: weights.guessWeight,
-    hardBiasWeight: weights.hardBiasWeight,
-    phaseWeight: weights.phaseDeviationWeight,
-    wrongStreakWeight: weights.consecutiveWrongWeight,
   };
 }
 
@@ -610,9 +588,9 @@ export async function runCalibrationSimulation(options: {
   dataset: VendorCalibrationDataset;
   mode: CalibrationSimulationMode;
   selectedInstituteIds: string[];
-  weights: CalibrationWeightsDraft;
+  parameters: StrategyProfileParameters;
 }): Promise<CalibrationSimulationResult> {
-  const { dataset, mode, selectedInstituteIds, weights } = options;
+  const { dataset, mode, selectedInstituteIds, parameters } = options;
   const instituteIds = resolveSelectedInstituteIds(dataset, mode, selectedInstituteIds);
 
   if (instituteIds.length === 0) {
@@ -624,12 +602,12 @@ export async function runCalibrationSimulation(options: {
       CalibrationSimulationApiResponse,
       {
         institutes: string[];
-        weights: ReturnType<typeof toSimulationApiWeights>;
+        strategyProfileParameters: StrategyProfileParameters;
       }
     >("/vendor/calibration/simulate", {
       body: {
         institutes: instituteIds,
-        weights: toSimulationApiWeights(weights),
+        strategyProfileParameters: parameters,
       },
       retry: {
         retryUnsafeMethods: false,
@@ -665,7 +643,7 @@ export async function runCalibrationSimulation(options: {
       engineSource: "api",
     };
   } catch (error) {
-    const fallback = computeLocalSimulation(dataset, mode, instituteIds, weights);
+    const fallback = computeLocalSimulation(dataset, mode, instituteIds, parameters);
 
     if (error instanceof ApiClientError) {
       return {

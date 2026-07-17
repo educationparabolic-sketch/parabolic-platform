@@ -51,7 +51,7 @@ export const ADMIN_PRIMARY_NAVIGATION: PortalNavigationItem[] = [
   {
     path: "/admin/licensing",
     label: "Licensing",
-    summary: "License plan, feature matrix, usage, and upgrade controls.",
+    summary: "Vendor-assigned plan, usage, billing, upgrade requests, and license history.",
   },
   {
     path: "/admin/settings",

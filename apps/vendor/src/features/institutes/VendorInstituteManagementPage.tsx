@@ -99,7 +99,7 @@ const SUBSCRIPTION_FILTERS: Array<InstituteFilters["subscriptionStatus"]> = [
   "active",
   "past_due",
   "suspended",
-  "canceled",
+  "trial_expired",
 ];
 const LIFECYCLE_FILTERS: Array<InstituteFilters["lifecycleStatus"]> = [
   "all",
@@ -124,6 +124,12 @@ function toTitleCase(value: string): string {
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function formatSubscriptionStatus(value: VendorInstituteSubscriptionStatus): string {
+  if (value === "trialing") return "Trial";
+  if (value === "trial_expired") return "Trial Expired";
+  return toTitleCase(value);
 }
 
 function buildDeleteGuardPhrase(instituteId: string): string {
@@ -331,6 +337,9 @@ function VendorInstituteManagementPage() {
   const selectedPlan = selectedInstitute
     ? (planById.get(selectedInstitute.currentLicensePlanId) ?? null)
     : null;
+  const isTrialSubscription =
+    selectedInstitute?.subscriptionStatus === "trialing" ||
+    selectedInstitute?.subscriptionStatus === "trial_expired";
   const selectedAdministration = selectedInstitute
     ? (administrationOverrides[selectedInstitute.id] ??
       dataset.administration.find(
@@ -435,7 +444,10 @@ function VendorInstituteManagementPage() {
     {
       id: "layer",
       header: "License Plan",
-      render: (row) => row.currentLicensePlanId,
+      render: (row) =>
+        row.subscriptionStatus === "trialing" || row.subscriptionStatus === "trial_expired"
+          ? `Trial (${row.currentLicensePlanId} entitlement)`
+          : row.currentLicensePlanId,
     },
     {
       id: "activeStudents",
@@ -445,16 +457,18 @@ function VendorInstituteManagementPage() {
     {
       id: "subscription",
       header: "Subscription Status",
-      render: (row) => toTitleCase(row.subscriptionStatus),
+      render: (row) => formatSubscriptionStatus(row.subscriptionStatus),
     },
     {
       id: "payment",
       header: "Payment",
       render: (row) =>
-        getEffectivePaymentStatus(
-          invoices.filter((invoice) => invoice.instituteId === row.id),
-          row.paymentStatus,
-        ),
+        row.subscriptionStatus === "trialing" || row.subscriptionStatus === "trial_expired"
+          ? "Not applicable"
+          : getEffectivePaymentStatus(
+              invoices.filter((invoice) => invoice.instituteId === row.id),
+              row.paymentStatus,
+            ),
     },
     {
       id: "monthlyUsage",
@@ -997,7 +1011,7 @@ function VendorInstituteManagementPage() {
                   placeholder="Name, ID, plan or status"
                 />
               </UiFormField>
-              <UiFormField label="License layer" htmlFor="vendor-institute-layer">
+              <UiFormField label="Entitlement layer" htmlFor="vendor-institute-layer">
                 <select
                   id="vendor-institute-layer"
                   value={filters.layer}
@@ -1029,7 +1043,7 @@ function VendorInstituteManagementPage() {
                 >
                   {SUBSCRIPTION_FILTERS.map((option) => (
                     <option key={option} value={option}>
-                      {option === "all" ? "All subscriptions" : toTitleCase(option)}
+                      {option === "all" ? "All subscriptions" : formatSubscriptionStatus(option)}
                     </option>
                   ))}
                 </select>
@@ -1110,9 +1124,14 @@ function VendorInstituteManagementPage() {
                   <span
                     className={`vendor-status vendor-status-${selectedInstitute.subscriptionStatus}`}
                   >
-                    {toTitleCase(selectedInstitute.subscriptionStatus)}
+                    {formatSubscriptionStatus(selectedInstitute.subscriptionStatus)}
                   </span>
-                  <span className="vendor-status">{selectedInstitute.currentLicensePlanId}</span>
+                  <span className="vendor-status">
+                    {selectedInstitute.subscriptionStatus === "trialing" ||
+                    selectedInstitute.subscriptionStatus === "trial_expired"
+                      ? `Trial | ${selectedInstitute.currentLicensePlanId} entitlement`
+                      : selectedInstitute.currentLicensePlanId}
+                  </span>
                 </div>
               </header>
 
@@ -1136,7 +1155,12 @@ function VendorInstituteManagementPage() {
                   <div className="vendor-institute-summary">
                     <UiStatCard
                       title="Current Plan"
-                      value={getPlanLabel(selectedPlan)}
+                      value={
+                        selectedInstitute.subscriptionStatus === "trialing" ||
+                        selectedInstitute.subscriptionStatus === "trial_expired"
+                          ? "Trial"
+                          : getPlanLabel(selectedPlan)
+                      }
                       helper={`Expires ${formatDateLabel(effectiveLicenseExpiry)}`}
                     />
                     <UiStatCard
@@ -1146,10 +1170,23 @@ function VendorInstituteManagementPage() {
                     />
                     <UiStatCard
                       title="Monthly Fee"
-                      value={formatInr(
-                        calculateMonthlyFee(selectedPlan, selectedInstitute.activeStudentCount),
-                      )}
-                      helper={`${selectedInstitute.billing.billingCycle} billing`}
+                      value={
+                        selectedInstitute.subscriptionStatus === "trialing" ||
+                        selectedInstitute.subscriptionStatus === "trial_expired"
+                          ? formatInr(0)
+                          : formatInr(
+                              calculateMonthlyFee(
+                                selectedPlan,
+                                selectedInstitute.activeStudentCount,
+                              ),
+                            )
+                      }
+                      helper={
+                        selectedInstitute.subscriptionStatus === "trialing" ||
+                        selectedInstitute.subscriptionStatus === "trial_expired"
+                          ? "No billing during the one-month Trial"
+                          : `${selectedInstitute.billing.billingCycle} billing`
+                      }
                     />
                     <UiStatCard
                       title="Last Active"
@@ -1163,7 +1200,7 @@ function VendorInstituteManagementPage() {
                       <dl>
                         <div>
                           <dt>Subscription</dt>
-                          <dd>{toTitleCase(selectedInstitute.subscriptionStatus)}</dd>
+                          <dd>{formatSubscriptionStatus(selectedInstitute.subscriptionStatus)}</dd>
                         </div>
                         <div>
                           <dt>Payment</dt>
@@ -1308,11 +1345,11 @@ function VendorInstituteManagementPage() {
                               }));
                             }}
                           >
-                            <option value="trialing">Trialing</option>
+                            <option value="trialing">Trial</option>
                             <option value="active">Active</option>
                             <option value="past_due">Past Due</option>
                             <option value="suspended">Suspended</option>
-                            <option value="canceled">Canceled</option>
+                            <option value="trial_expired">Trial Expired</option>
                           </select>
                         </UiFormField>
 
@@ -1923,9 +1960,11 @@ function VendorInstituteManagementPage() {
                           label="Extend until"
                           htmlFor="vendor-license-extension-date"
                           helper={
-                            extensionDays > 0
-                              ? `${extensionDays} additional days; the current plan remains unchanged.`
-                              : "Choose a date later than the current expiry."
+                            isTrialSubscription
+                              ? "Trial subscriptions are fixed to one calendar month and cannot be extended."
+                              : extensionDays > 0
+                                ? `${extensionDays} additional days; the current plan remains unchanged.`
+                                : "Choose a date later than the current expiry."
                           }
                         >
                           <input
@@ -1933,14 +1972,18 @@ function VendorInstituteManagementPage() {
                             type="date"
                             min={minimumExtensionDate}
                             value={extensionDate}
-                            disabled={Boolean(selectedDeletionSchedule)}
+                            disabled={Boolean(selectedDeletionSchedule) || isTrialSubscription}
                             onChange={(event) => setExtensionDate(event.target.value)}
                           />
                         </UiFormField>
                         <button
                           type="submit"
                           className="vendor-primary-action"
-                          disabled={extensionDays <= 0 || Boolean(selectedDeletionSchedule)}
+                          disabled={
+                            extensionDays <= 0 ||
+                            Boolean(selectedDeletionSchedule) ||
+                            isTrialSubscription
+                          }
                         >
                           Confirm extension
                         </button>

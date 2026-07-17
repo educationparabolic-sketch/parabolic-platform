@@ -43,11 +43,7 @@ export interface StructuralGuaranteeCheck {
 }
 
 export interface SystemHealthPerformanceIndicator {
-  indicator:
-    | "ApiLatencyP95"
-    | "QueueBacklog"
-    | "EmulatorServiceHealth"
-    | "ErrorBudgetConsumption";
+  indicator: "ApiLatencyP95" | "QueueBacklog" | "EmulatorServiceHealth" | "ErrorBudgetConsumption";
   value: string;
   status: "healthy" | "degraded";
 }
@@ -197,13 +193,18 @@ export function getVendorSystemHealthDataset(): VendorSystemHealthDataset {
         id: "strong_tenant_separation",
         label: "Strong tenant separation and scalability",
         status: "pass",
-        evidence: "Vendor dashboard queries aggregated global collections, not institute raw sessions.",
+        evidence:
+          "Vendor dashboard queries aggregated global collections, not institute raw sessions.",
       },
     ],
     performanceIndicators: [
       { indicator: "ApiLatencyP95", value: "418 ms", status: "healthy" },
       { indicator: "QueueBacklog", value: "57 jobs", status: "healthy" },
-      { indicator: "EmulatorServiceHealth", value: "degraded: auth reconnects", status: "degraded" },
+      {
+        indicator: "EmulatorServiceHealth",
+        value: "degraded: auth reconnects",
+        status: "degraded",
+      },
       { indicator: "ErrorBudgetConsumption", value: "42% (30d)", status: "healthy" },
     ],
     frontendTelemetry: {

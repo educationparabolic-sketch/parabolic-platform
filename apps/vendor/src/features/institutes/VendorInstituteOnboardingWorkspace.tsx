@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { UiFormField, UiStatCard } from "../../../../../shared/ui/components";
-import type { VendorLicensePlanId } from "./vendorInstitutesDataset";
+import type { VendorLicensePlan, VendorLicensePlanId } from "./vendorInstitutesDataset";
 import {
   useVendorLicenseRequests,
   type VendorOnboardingRecord,
@@ -9,6 +9,18 @@ import {
 } from "./vendorLicenseRequestsStore";
 
 type OnboardingFilter = "all" | "attention" | "commercial" | "setup" | "complete";
+
+const TRIAL_STUDENT_LIMIT = 200;
+const TRIAL_PLAN: VendorLicensePlan = {
+  id: "TRIAL",
+  level: "L0",
+  tier: "Tier 1",
+  baseFeeInr: 0,
+  perStudentFeeInr: 0,
+  maxConcurrentStudents: 200,
+  maxExamSessionsPerMonth: 30,
+  isActive: true,
+};
 
 interface OnboardingDraft {
   instituteName: string;
@@ -45,6 +57,25 @@ function formatInr(value: number): string {
     currency: "INR",
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+function getTrialExpiryDate(startDate: string): string {
+  const [year, month, day] = startDate.split("-").map(Number);
+  if (!year || !month || !day) return startDate;
+
+  const targetMonthStart = new Date(Date.UTC(year, month, 1));
+  const targetMonthLastDay = new Date(
+    Date.UTC(targetMonthStart.getUTCFullYear(), targetMonthStart.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  const anniversary = new Date(
+    Date.UTC(
+      targetMonthStart.getUTCFullYear(),
+      targetMonthStart.getUTCMonth(),
+      Math.min(day, targetMonthLastDay),
+    ),
+  );
+  anniversary.setUTCDate(anniversary.getUTCDate() - 1);
+  return anniversary.toISOString().slice(0, 10);
 }
 
 function toTitleCase(value: string): string {
@@ -111,6 +142,7 @@ function getNextAction(record: VendorOnboardingRecord): string {
     awaiting_acceptance: "Await proposal acceptance",
     awaiting_payment: "Confirm payment",
     payment_received: "Invite administrator",
+    trial_terms_accepted: "Invite administrator",
     administrator_invited: "Await administrator",
     setup_in_progress: "Complete setup",
     ready_for_activation: "Activate institute",
@@ -131,6 +163,7 @@ function VendorInstituteOnboardingWorkspace() {
     createOnboardingRecord,
     updateOnboardingRecord,
   } = useVendorLicenseRequests();
+  const onboardingPlans = [TRIAL_PLAN, ...licensePlans];
   const requestedRecordId = searchParams.get("onboarding");
   const initialRecord =
     onboardingRecords.find((record) => record.id === requestedRecordId) ??
@@ -162,6 +195,7 @@ function VendorInstituteOnboardingWorkspace() {
         "awaiting_acceptance",
         "awaiting_payment",
         "payment_received",
+        "trial_terms_accepted",
       ].includes(record.status);
     if (filter === "setup")
       return ["administrator_invited", "setup_in_progress", "ready_for_activation"].includes(
@@ -180,6 +214,7 @@ function VendorInstituteOnboardingWorkspace() {
           "awaiting_acceptance",
           "awaiting_payment",
           "payment_received",
+          "trial_terms_accepted",
         ].includes(record.status)
           ? 1
           : 0),
@@ -195,13 +230,18 @@ function VendorInstituteOnboardingWorkspace() {
     { pending: 0, commercial: 0, setup: 0, active: 0 },
   );
   const draftPlan = commercialDraft
-    ? licensePlans.find((plan) => plan.id === commercialDraft.selectedPlanId)
+    ? onboardingPlans.find((plan) => plan.id === commercialDraft.selectedPlanId)
     : null;
+  const selectedIsTrial = selectedRecord?.selectedPlanId === "TRIAL";
+  const commercialIsTrial = commercialDraft?.selectedPlanId === "TRIAL";
   const activationChecks = selectedRecord
     ? [
         { label: "Institute profile verified", complete: selectedRecord.profileVerified },
         { label: "Commercial proposal accepted", complete: selectedRecord.proposalAccepted },
-        { label: "Required payment received", complete: selectedRecord.paymentComplete },
+        {
+          label: selectedIsTrial ? "Payment not required for Trial" : "Required payment received",
+          complete: selectedIsTrial || selectedRecord.paymentComplete,
+        },
         {
           label: "Administrator invitation accepted",
           complete: selectedRecord.invitationStatus === "accepted",
@@ -223,6 +263,7 @@ function VendorInstituteOnboardingWorkspace() {
         "awaiting_acceptance",
         "awaiting_payment",
         "payment_received",
+        "trial_terms_accepted",
         "administrator_invited",
         "setup_in_progress",
         "ready_for_activation",
@@ -234,6 +275,7 @@ function VendorInstituteOnboardingWorkspace() {
         "awaiting_acceptance",
         "awaiting_payment",
         "payment_received",
+        "trial_terms_accepted",
         "administrator_invited",
         "setup_in_progress",
         "ready_for_activation",
@@ -249,9 +291,11 @@ function VendorInstituteOnboardingWorkspace() {
   const workflowSteps = [
     { label: "Review", complete: reviewComplete },
     { label: "Configure", complete: commercialComplete },
-    { label: "Proposal", complete: proposalSent },
+    { label: selectedIsTrial ? "Trial Terms" : "Proposal", complete: proposalSent },
     { label: "Acceptance", complete: selectedRecord?.proposalAccepted ?? false },
-    { label: "Payment", complete: selectedRecord?.paymentComplete ?? false },
+    ...(selectedIsTrial
+      ? []
+      : [{ label: "Payment", complete: selectedRecord?.paymentComplete ?? false }]),
     { label: "Invitation", complete: invitationAccepted },
     { label: "Setup", complete: instituteSetupComplete },
     { label: "Activation", complete: selectedRecord?.status === "active" },
@@ -291,13 +335,19 @@ function VendorInstituteOnboardingWorkspace() {
                   }
                 : !proposalSent
                   ? {
-                      current: "Commercial setup saved",
-                      next: "Review the calculated amount, then send the proposal to the institute.",
+                      current: selectedIsTrial ? "Trial setup saved" : "Commercial setup saved",
+                      next: selectedIsTrial
+                        ? "Review the fixed one-month term, then send the Trial Terms."
+                        : "Review the calculated amount, then send the proposal to the institute.",
                     }
                   : !selectedRecord.proposalAccepted
                     ? {
-                        current: "Waiting for proposal acceptance",
-                        next: "Mark accepted only after the institute confirms the proposal.",
+                        current: selectedIsTrial
+                          ? "Waiting for Trial Terms acceptance"
+                          : "Waiting for proposal acceptance",
+                        next: selectedIsTrial
+                          ? "Mark accepted only after the institute accepts the Trial Terms."
+                          : "Mark accepted only after the institute confirms the proposal.",
                       }
                     : !selectedRecord.paymentComplete
                       ? {
@@ -343,7 +393,7 @@ function VendorInstituteOnboardingWorkspace() {
     selectedRecord?.status === "administrator_invited" &&
     selectedRecord.invitationStatus === "sent";
   const canCompleteInstituteSetup = invitationAccepted && selectedRecord?.status !== "active";
-  const newPlan = licensePlans.find((plan) => plan.id === newDraft.selectedPlanId);
+  const newPlan = onboardingPlans.find((plan) => plan.id === newDraft.selectedPlanId);
   const newMonthlyFee = newPlan
     ? newPlan.baseFeeInr +
       (Number.parseInt(newDraft.expectedStudents, 10) || 0) * newPlan.perStudentFeeInr
@@ -376,16 +426,31 @@ function VendorInstituteOnboardingWorkspace() {
       selectedRecord.id,
       {
         selectedPlanId: commercialDraft.selectedPlanId,
-        billableStudents: Number.parseInt(commercialDraft.billableStudents, 10) || 0,
-        billingCycle: commercialDraft.billingCycle,
+        billableStudents:
+          commercialDraft.selectedPlanId === "TRIAL"
+            ? Math.min(
+                TRIAL_STUDENT_LIMIT,
+                Number.parseInt(commercialDraft.billableStudents, 10) || 0,
+              )
+            : Number.parseInt(commercialDraft.billableStudents, 10) || 0,
+        billingCycle:
+          commercialDraft.selectedPlanId === "TRIAL" ? "Monthly" : commercialDraft.billingCycle,
         licenseStartDate: commercialDraft.licenseStartDate,
-        licenseExpiryDate: commercialDraft.licenseExpiryDate,
-        trialDays: Number.parseInt(commercialDraft.trialDays, 10) || 0,
-        paymentTermsDays: Number.parseInt(commercialDraft.paymentTermsDays, 10) || 0,
+        licenseExpiryDate:
+          commercialDraft.selectedPlanId === "TRIAL"
+            ? getTrialExpiryDate(commercialDraft.licenseStartDate)
+            : commercialDraft.licenseExpiryDate,
+        trialDays: 0,
+        paymentTermsDays:
+          commercialDraft.selectedPlanId === "TRIAL"
+            ? 0
+            : Number.parseInt(commercialDraft.paymentTermsDays, 10) || 0,
         status: "commercial_configured",
       },
       "Commercial setup saved",
-      `Configured ${commercialDraft.selectedPlanId} on a ${commercialDraft.billingCycle.toLowerCase()} cycle.`,
+      commercialDraft.selectedPlanId === "TRIAL"
+        ? "Configured a fixed one-calendar-month Trial with L0 Tier 1 entitlement limits."
+        : `Configured ${commercialDraft.selectedPlanId} on a ${commercialDraft.billingCycle.toLowerCase()} cycle.`,
     );
   }
 
@@ -419,12 +484,21 @@ function VendorInstituteOnboardingWorkspace() {
       requestedCapabilities: ["Vendor-created onboarding"],
       duplicateWarning: "",
       selectedPlanId: newDraft.selectedPlanId,
-      billableStudents: Number.parseInt(newDraft.expectedStudents, 10) || 0,
-      billingCycle: newDraft.billingCycle,
+      billableStudents:
+        newDraft.selectedPlanId === "TRIAL"
+          ? Math.min(TRIAL_STUDENT_LIMIT, Number.parseInt(newDraft.expectedStudents, 10) || 0)
+          : Number.parseInt(newDraft.expectedStudents, 10) || 0,
+      billingCycle: newDraft.selectedPlanId === "TRIAL" ? "Monthly" : newDraft.billingCycle,
       licenseStartDate: newDraft.licenseStartDate,
-      licenseExpiryDate: newDraft.licenseExpiryDate,
-      trialDays: Number.parseInt(newDraft.trialDays, 10) || 0,
-      paymentTermsDays: Number.parseInt(newDraft.paymentTermsDays, 10) || 0,
+      licenseExpiryDate:
+        newDraft.selectedPlanId === "TRIAL"
+          ? getTrialExpiryDate(newDraft.licenseStartDate)
+          : newDraft.licenseExpiryDate,
+      trialDays: 0,
+      paymentTermsDays:
+        newDraft.selectedPlanId === "TRIAL"
+          ? 0
+          : Number.parseInt(newDraft.paymentTermsDays, 10) || 0,
       proposalAccepted: false,
       paymentComplete: false,
       profileVerified: false,
@@ -608,17 +682,25 @@ function VendorInstituteOnboardingWorkspace() {
                 <select
                   id="onboard-plan"
                   value={newDraft.selectedPlanId}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const selectedPlanId = event.target.value as VendorLicensePlanId;
                     setNewDraft((draft) => ({
                       ...draft,
-                      selectedPlanId: event.target.value as VendorLicensePlanId,
-                    }))
-                  }
+                      selectedPlanId,
+                      billingCycle: selectedPlanId === "TRIAL" ? "Monthly" : draft.billingCycle,
+                      licenseExpiryDate:
+                        selectedPlanId === "TRIAL"
+                          ? getTrialExpiryDate(draft.licenseStartDate)
+                          : draft.licenseExpiryDate,
+                      paymentTermsDays: selectedPlanId === "TRIAL" ? "0" : draft.paymentTermsDays,
+                    }));
+                  }}
                 >
-                  {licensePlans.map((plan) => (
+                  {onboardingPlans.map((plan) => (
                     <option key={plan.id} value={plan.id}>
-                      {plan.level} {plan.tier} - {formatInr(plan.baseFeeInr)} +{" "}
-                      {formatInr(plan.perStudentFeeInr)}/student
+                      {plan.id === "TRIAL"
+                        ? "Trial - free for one calendar month (L0 Tier 1 limits)"
+                        : `${plan.level} ${plan.tier} - ${formatInr(plan.baseFeeInr)} + ${formatInr(plan.perStudentFeeInr)}/student`}
                     </option>
                   ))}
                 </select>
@@ -627,6 +709,7 @@ function VendorInstituteOnboardingWorkspace() {
                 <select
                   id="onboard-cycle"
                   value={newDraft.billingCycle}
+                  disabled={newDraft.selectedPlanId === "TRIAL"}
                   onChange={(event) =>
                     setNewDraft((draft) => ({
                       ...draft,
@@ -644,7 +727,14 @@ function VendorInstituteOnboardingWorkspace() {
                   type="date"
                   value={newDraft.licenseStartDate}
                   onChange={(event) =>
-                    setNewDraft((draft) => ({ ...draft, licenseStartDate: event.target.value }))
+                    setNewDraft((draft) => ({
+                      ...draft,
+                      licenseStartDate: event.target.value,
+                      licenseExpiryDate:
+                        draft.selectedPlanId === "TRIAL"
+                          ? getTrialExpiryDate(event.target.value)
+                          : draft.licenseExpiryDate,
+                    }))
                   }
                 />
               </UiFormField>
@@ -653,18 +743,9 @@ function VendorInstituteOnboardingWorkspace() {
                   id="onboard-expiry"
                   type="date"
                   value={newDraft.licenseExpiryDate}
+                  disabled={newDraft.selectedPlanId === "TRIAL"}
                   onChange={(event) =>
                     setNewDraft((draft) => ({ ...draft, licenseExpiryDate: event.target.value }))
-                  }
-                />
-              </UiFormField>
-              <UiFormField label="Trial days" htmlFor="onboard-trial">
-                <input
-                  id="onboard-trial"
-                  inputMode="numeric"
-                  value={newDraft.trialDays}
-                  onChange={(event) =>
-                    setNewDraft((draft) => ({ ...draft, trialDays: event.target.value }))
                   }
                 />
               </UiFormField>
@@ -673,15 +754,24 @@ function VendorInstituteOnboardingWorkspace() {
                   id="onboard-terms"
                   inputMode="numeric"
                   value={newDraft.paymentTermsDays}
+                  disabled={newDraft.selectedPlanId === "TRIAL"}
                   onChange={(event) =>
                     setNewDraft((draft) => ({ ...draft, paymentTermsDays: event.target.value }))
                   }
                 />
               </UiFormField>
               <div className="vendor-onboarding-fee-preview">
-                <span>Estimated monthly charge</span>
+                <span>
+                  {newDraft.selectedPlanId === "TRIAL"
+                    ? "Fixed Trial entitlement"
+                    : "Estimated monthly charge"}
+                </span>
                 <strong>{formatInr(newMonthlyFee)}</strong>
-                <small>Based on expected students and current published parameters.</small>
+                <small>
+                  {newDraft.selectedPlanId === "TRIAL"
+                    ? `One calendar month | Up to ${TRIAL_STUDENT_LIMIT} students | 200 concurrent | 30 sessions`
+                    : "Based on expected students and current published parameters."}
+                </small>
               </div>
             </div>
           ) : null}
@@ -744,7 +834,9 @@ function VendorInstituteOnboardingWorkspace() {
                 </div>
                 <div>
                   <dt>Billing</dt>
-                  <dd>{newDraft.billingCycle}</dd>
+                  <dd>
+                    {newDraft.selectedPlanId === "TRIAL" ? "Not applicable" : newDraft.billingCycle}
+                  </dd>
                 </div>
                 <div>
                   <dt>Estimated monthly fee</dt>
@@ -903,7 +995,10 @@ function VendorInstituteOnboardingWorkspace() {
                 {toTitleCase(selectedRecord.status)}
               </span>
             </header>
-            <div className="vendor-onboarding-progress" aria-label="Onboarding progress">
+            <div
+              className={`vendor-onboarding-progress${selectedIsTrial ? " vendor-onboarding-progress-trial" : ""}`}
+              aria-label="Onboarding progress"
+            >
               {workflowSteps.map((step, index) => {
                 const state = step.complete
                   ? "complete"
@@ -1032,31 +1127,52 @@ function VendorInstituteOnboardingWorkspace() {
               </div>
             </section>
             <form className="vendor-onboarding-detail-section" onSubmit={saveCommercialSetup}>
-              <h4>License and commercial setup</h4>
+              <h4>
+                {commercialIsTrial ? "Trial subscription setup" : "License and commercial setup"}
+              </h4>
               <div className="vendor-onboarding-form-grid">
                 <UiFormField label="Plan" htmlFor="onboarding-commercial-plan">
                   <select
                     id="onboarding-commercial-plan"
                     value={commercialDraft.selectedPlanId}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const selectedPlanId = event.target.value as VendorLicensePlanId;
                       setCommercialDraft((draft) =>
                         draft
-                          ? { ...draft, selectedPlanId: event.target.value as VendorLicensePlanId }
+                          ? {
+                              ...draft,
+                              selectedPlanId,
+                              billingCycle:
+                                selectedPlanId === "TRIAL" ? "Monthly" : draft.billingCycle,
+                              licenseExpiryDate:
+                                selectedPlanId === "TRIAL"
+                                  ? getTrialExpiryDate(draft.licenseStartDate)
+                                  : draft.licenseExpiryDate,
+                              paymentTermsDays:
+                                selectedPlanId === "TRIAL" ? "0" : draft.paymentTermsDays,
+                            }
                           : draft,
-                      )
-                    }
+                      );
+                    }}
                   >
-                    {licensePlans.map((plan) => (
+                    {onboardingPlans.map((plan) => (
                       <option key={plan.id} value={plan.id}>
-                        {plan.level} {plan.tier}
+                        {plan.id === "TRIAL" ? "Trial - one month" : `${plan.level} ${plan.tier}`}
                       </option>
                     ))}
                   </select>
                 </UiFormField>
-                <UiFormField label="Billable students" htmlFor="onboarding-billable">
+                <UiFormField
+                  label={commercialIsTrial ? "Trial student allowance" : "Billable students"}
+                  htmlFor="onboarding-billable"
+                  helper={
+                    commercialIsTrial ? `Maximum ${TRIAL_STUDENT_LIMIT} students.` : undefined
+                  }
+                >
                   <input
                     id="onboarding-billable"
                     inputMode="numeric"
+                    max={commercialIsTrial ? TRIAL_STUDENT_LIMIT : undefined}
                     value={commercialDraft.billableStudents}
                     onChange={(event) =>
                       setCommercialDraft((draft) =>
@@ -1069,6 +1185,7 @@ function VendorInstituteOnboardingWorkspace() {
                   <select
                     id="onboarding-billing-cycle"
                     value={commercialDraft.billingCycle}
+                    disabled={commercialIsTrial}
                     onChange={(event) =>
                       setCommercialDraft((draft) =>
                         draft
@@ -1091,7 +1208,16 @@ function VendorInstituteOnboardingWorkspace() {
                     value={commercialDraft.licenseStartDate}
                     onChange={(event) =>
                       setCommercialDraft((draft) =>
-                        draft ? { ...draft, licenseStartDate: event.target.value } : draft,
+                        draft
+                          ? {
+                              ...draft,
+                              licenseStartDate: event.target.value,
+                              licenseExpiryDate:
+                                draft.selectedPlanId === "TRIAL"
+                                  ? getTrialExpiryDate(event.target.value)
+                                  : draft.licenseExpiryDate,
+                            }
+                          : draft,
                       )
                     }
                   />
@@ -1101,6 +1227,7 @@ function VendorInstituteOnboardingWorkspace() {
                     id="onboarding-license-expiry"
                     type="date"
                     value={commercialDraft.licenseExpiryDate}
+                    disabled={commercialIsTrial}
                     onChange={(event) =>
                       setCommercialDraft((draft) =>
                         draft ? { ...draft, licenseExpiryDate: event.target.value } : draft,
@@ -1113,6 +1240,7 @@ function VendorInstituteOnboardingWorkspace() {
                     id="onboarding-payment-terms"
                     inputMode="numeric"
                     value={commercialDraft.paymentTermsDays}
+                    disabled={commercialIsTrial}
                     onChange={(event) =>
                       setCommercialDraft((draft) =>
                         draft ? { ...draft, paymentTermsDays: event.target.value } : draft,
@@ -1122,7 +1250,7 @@ function VendorInstituteOnboardingWorkspace() {
                 </UiFormField>
               </div>
               <div className="vendor-onboarding-commercial-preview">
-                <span>Monthly estimate</span>
+                <span>{commercialIsTrial ? "Trial charge" : "Monthly estimate"}</span>
                 <strong>
                   {draftPlan
                     ? formatInr(
@@ -1148,12 +1276,14 @@ function VendorInstituteOnboardingWorkspace() {
                   onClick={() =>
                     updateStatus(
                       "awaiting_acceptance",
-                      "Proposal sent",
-                      `Commercial proposal sent for ${commercialDraft.selectedPlanId}.`,
+                      selectedIsTrial ? "Trial Terms sent" : "Proposal sent",
+                      selectedIsTrial
+                        ? "One-month Trial Terms sent to the institute."
+                        : `Commercial proposal sent for ${commercialDraft.selectedPlanId}.`,
                     )
                   }
                 >
-                  Send proposal
+                  {selectedIsTrial ? "Send Trial Terms" : "Send proposal"}
                 </button>
                 <button
                   type="button"
@@ -1162,29 +1292,37 @@ function VendorInstituteOnboardingWorkspace() {
                   onClick={() =>
                     updateOnboardingRecord(
                       selectedRecord.id,
-                      { proposalAccepted: true, status: "awaiting_payment" },
-                      "Proposal accepted",
-                      "Institute accepted the commercial proposal.",
+                      {
+                        proposalAccepted: true,
+                        paymentComplete: selectedIsTrial,
+                        status: selectedIsTrial ? "trial_terms_accepted" : "awaiting_payment",
+                      },
+                      selectedIsTrial ? "Trial Terms accepted" : "Proposal accepted",
+                      selectedIsTrial
+                        ? "Institute accepted the one-month Trial Terms; payment is not applicable."
+                        : "Institute accepted the commercial proposal.",
                     )
                   }
                 >
                   Mark accepted
                 </button>
-                <button
-                  type="button"
-                  className={canMarkPaymentReceived ? "vendor-primary-action" : ""}
-                  disabled={!canMarkPaymentReceived}
-                  onClick={() =>
-                    updateOnboardingRecord(
-                      selectedRecord.id,
-                      { paymentComplete: true, status: "payment_received" },
-                      "Payment received",
-                      "Initial payment confirmed by vendor.",
-                    )
-                  }
-                >
-                  Mark payment received
-                </button>
+                {!selectedIsTrial ? (
+                  <button
+                    type="button"
+                    className={canMarkPaymentReceived ? "vendor-primary-action" : ""}
+                    disabled={!canMarkPaymentReceived}
+                    onClick={() =>
+                      updateOnboardingRecord(
+                        selectedRecord.id,
+                        { paymentComplete: true, status: "payment_received" },
+                        "Payment received",
+                        "Initial payment confirmed by vendor.",
+                      )
+                    }
+                  >
+                    Mark payment received
+                  </button>
+                ) : null}
               </div>
             </form>
             <form className="vendor-onboarding-detail-section" onSubmit={saveAdministrator}>

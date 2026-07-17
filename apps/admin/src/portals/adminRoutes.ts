@@ -11,7 +11,6 @@ export interface AdminRouteDefinition {
   redirectOnDenied?: string;
   readOnlyRoles?: PortalRole[];
 }
-
 export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
   {
     path: "/admin/overview",
@@ -435,7 +434,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     path: "/admin/licensing",
     title: "Licensing",
     section: "Licensing",
-    description: "Licensing overview route for current plan, eligibility, usage, and feature visibility.",
+    description: "Institute license overview with vendor-controlled parameters, usage, billing, upgrade requests, and history.",
     mountedPath: "/admin/licensing/current",
     allowedRoles: ["admin", "director"],
     readOnlyRoles: ["director"],
@@ -444,39 +443,23 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     path: "/admin/licensing/current",
     title: "Current License",
     section: "Licensing",
-    description: "Read-only current licensing state and active feature summary.",
-    allowedRoles: ["admin", "director"],
-    readOnlyRoles: ["director"],
-  },
-  {
-    path: "/admin/licensing/features",
-    title: "License Features",
-    section: "Licensing",
-    description: "Feature-flag and entitlement visibility for the current license layer.",
-    allowedRoles: ["admin", "director"],
-    readOnlyRoles: ["director"],
-  },
-  {
-    path: "/admin/licensing/eligibility",
-    title: "Eligibility",
-    section: "Licensing",
-    description: "License eligibility and capability requirements by institutional workflow.",
+    description: "Read-only vendor-assigned plan, subscription term, fees, and operating limits.",
     allowedRoles: ["admin", "director"],
     readOnlyRoles: ["director"],
   },
   {
     path: "/admin/licensing/usage",
-    title: "Usage",
+    title: "Usage & Billing",
     section: "Licensing",
-    description: "Usage summary for current entitlements and operational limits.",
+    description: "Current-cycle usage, vendor-calculated charges, and read-only invoice status.",
     allowedRoles: ["admin", "director"],
     readOnlyRoles: ["director"],
   },
   {
-    path: "/admin/licensing/upgrade-preview",
-    title: "Upgrade Preview",
+    path: "/admin/licensing/plans",
+    title: "Plans & Upgrade",
     section: "Licensing",
-    description: "Strategic preview of next-layer capabilities with vendor-approved upgrade workflow.",
+    description: "Published Trial and L0-L2 plans with an institute-to-vendor upgrade request workflow.",
     allowedRoles: ["admin", "director"],
     readOnlyRoles: ["director"],
   },

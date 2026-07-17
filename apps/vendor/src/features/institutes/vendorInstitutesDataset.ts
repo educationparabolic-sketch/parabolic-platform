@@ -2,14 +2,14 @@ import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
 
 export type VendorLicenseLevel = "L0" | "L1" | "L2";
 export type VendorLicenseTier = "Tier 1" | "Tier 2" | "Tier 3";
-export type VendorLicensePlanId = `${VendorLicenseLevel}-${"T1" | "T2" | "T3"}`;
+export type VendorLicensePlanId = "TRIAL" | `${VendorLicenseLevel}-${"T1" | "T2" | "T3"}`;
 
 export type VendorInstituteSubscriptionStatus =
   | "trialing"
   | "active"
   | "past_due"
   | "suspended"
-  | "canceled";
+  | "trial_expired";
 
 export type VendorInstituteLifecycleStatus = "active" | "watchlist" | "suspended" | "archived";
 
@@ -326,7 +326,7 @@ const INSTITUTES: VendorInstituteRecord[] = [
     instituteName: "Delta Coaching Network",
     currentLicenseLayer: "L0",
     currentLicensePlanId: "L0-T1",
-    licenseExpiresAt: "2026-09-30T23:59:59.000Z",
+    licenseExpiresAt: "2026-08-16T23:59:59.000Z",
     activeStudentCount: 395,
     subscriptionStatus: "trialing",
     lifecycleStatus: "active",

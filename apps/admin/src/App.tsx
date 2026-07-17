@@ -57,13 +57,7 @@ const AssignmentManagementPage = lazy(() => import("./features/assignments/Assig
 const AdminInsightsLandingPage = lazy(() => import("./features/insights/AdminInsightsLandingPage"));
 const AdminRiskOverviewPage = lazy(() => import("./features/insights/AdminRiskOverviewPage"));
 const AdminHelpSupportPage = lazy(() => import("./features/support/AdminHelpSupportPage"));
-const AdminCurrentLicensePage = lazy(() => import("./features/licensing/AdminCurrentLicensePage"));
-const AdminLicenseFeaturesPage = lazy(() => import("./features/licensing/AdminLicenseFeaturesPage"));
-const AdminLicensingLandingPage = lazy(() => import("./features/licensing/AdminLicensingLandingPage"));
-const AdminLicensingEligibilityPage = lazy(() => import("./features/licensing/AdminLicensingEligibilityPage"));
-const AdminLicenseHistoryPage = lazy(() => import("./features/licensing/AdminLicenseHistoryPage"));
-const AdminLicenseUpgradePreviewPage = lazy(() => import("./features/licensing/AdminLicenseUpgradePreviewPage"));
-const AdminLicensingUsagePage = lazy(() => import("./features/licensing/AdminLicensingUsagePage"));
+const AdminLicensingWorkspace = lazy(() => import("./features/licensing/AdminLicensingWorkspace"));
 const AdminOverviewPage = lazy(() => import("./features/overview/AdminOverviewPage"));
 const AdminStudentsLandingPage = lazy(() => import("./features/students/AdminStudentsLandingPage"));
 const AdminDataArchiveControlsPage = lazy(() => import("./features/settings/AdminDataArchiveControlsPage"));
@@ -846,34 +840,26 @@ function App() {
           element={<AdminRouteBoundary label="Loading insights"><AdminInsightsLandingPage /></AdminRouteBoundary>}
         />
         <Route path="insights/*" element={<AdminRouteResolutionPage />} />
-        <Route
-          path="licensing"
-          element={<AdminRouteBoundary label="Loading licensing"><AdminLicensingLandingPage /></AdminRouteBoundary>}
-        />
+        <Route path="licensing" element={<Navigate to="/admin/licensing/current" replace />} />
         <Route
           path="licensing/current"
-          element={<AdminRouteBoundary label="Loading current license"><AdminCurrentLicensePage /></AdminRouteBoundary>}
-        />
-        <Route
-          path="licensing/features"
-          element={<AdminRouteBoundary label="Loading feature matrix"><AdminLicenseFeaturesPage /></AdminRouteBoundary>}
-        />
-        <Route
-          path="licensing/eligibility"
-          element={<AdminRouteBoundary label="Loading eligibility"><AdminLicensingEligibilityPage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading current license"><AdminLicensingWorkspace /></AdminRouteBoundary>}
         />
         <Route
           path="licensing/usage"
-          element={<AdminRouteBoundary label="Loading usage"><AdminLicensingUsagePage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading license usage"><AdminLicensingWorkspace /></AdminRouteBoundary>}
         />
         <Route
-          path="licensing/upgrade-preview"
-          element={<AdminRouteBoundary label="Loading upgrade preview"><AdminLicenseUpgradePreviewPage /></AdminRouteBoundary>}
+          path="licensing/plans"
+          element={<AdminRouteBoundary label="Loading license plans"><AdminLicensingWorkspace /></AdminRouteBoundary>}
         />
         <Route
           path="licensing/history"
-          element={<AdminRouteBoundary label="Loading license history"><AdminLicenseHistoryPage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading license history"><AdminLicensingWorkspace /></AdminRouteBoundary>}
         />
+        <Route path="licensing/features" element={<Navigate to="/admin/licensing/plans" replace />} />
+        <Route path="licensing/eligibility" element={<Navigate to="/admin/licensing/plans" replace />} />
+        <Route path="licensing/upgrade-preview" element={<Navigate to="/admin/licensing/plans" replace />} />
         <Route path="licensing/*" element={<AdminRouteResolutionPage />} />
         <Route
           path="settings"
