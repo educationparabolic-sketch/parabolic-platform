@@ -1,11 +1,12 @@
-import {ApiClientError} from "../../../../../shared/services/apiClient";
-import {getPortalApiClient} from "../../../../../shared/services/portalIntegration";
+import { ApiClientError } from "../../../../../shared/services/apiClient";
+import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 
 const apiClient = getPortalApiClient("admin");
 const DEFAULT_SETTINGS_INSTITUTE_ID =
   import.meta.env.VITE_ADMIN_SETTINGS_INSTITUTE_ID ?? "inst-build-125";
 
 export type SettingsActionType =
+  | "REQUEST_ACADEMIC_YEAR_ARCHIVE"
   | "GET_SETTINGS_SNAPSHOT"
   | "UPDATE_INSTITUTE_PROFILE"
   | "LOCK_ACADEMIC_YEAR"
@@ -56,11 +57,14 @@ export interface ExecutionPolicySettings {
     manualOverrideAllowed: boolean;
     hardModeAvailable: boolean;
   };
-  timingPresets: Record<string, {
-    easy: {min: number; max: number};
-    medium: {min: number; max: number};
-    hard: {min: number; max: number};
-  }>;
+  timingPresets: Record<
+    string,
+    {
+      easy: { min: number; max: number };
+      medium: { min: number; max: number };
+      hard: { min: number; max: number };
+    }
+  >;
   alertFrequencyPolicy: {
     alertCooldownInterval: number;
     maxAlertsPerSection: number;
@@ -205,9 +209,9 @@ const FALLBACK_SNAPSHOT: AdminSettingsSnapshot = {
     },
     timingPresets: {
       JEE_MAIN: {
-        easy: {max: 120, min: 30},
-        hard: {max: 240, min: 90},
-        medium: {max: 180, min: 60},
+        easy: { max: 120, min: 30 },
+        hard: { max: 240, min: 90 },
+        medium: { max: 180, min: 60 },
       },
     },
   },
@@ -232,7 +236,8 @@ const FALLBACK_SNAPSHOT: AdminSettingsSnapshot = {
       area: "Security & Access",
       eventId: "settings_audit_20260410_0815",
       sourcePath: "institutes/inst-build-125/settingsAudit/settings_audit_20260410_0815",
-      summary: "Force logout on password change remained enabled and session timeout set to 30 minutes.",
+      summary:
+        "Force logout on password change remained enabled and session timeout set to 30 minutes.",
       target: "security.sessionControls",
       timestamp: "2026-04-10T08:15:00.000Z",
     },
@@ -385,21 +390,31 @@ function normalizeSnapshot(value: unknown): AdminSettingsSnapshot | null {
 
   const profileSource = isPlainObject(value.profile) ? value.profile : {};
   const executionSource = isPlainObject(value.executionPolicy) ? value.executionPolicy : {};
-  const phaseSplitSource = isPlainObject(executionSource.phaseSplit) ? executionSource.phaseSplit : {};
-  const advancedSource = isPlainObject(executionSource.advancedControls) ? executionSource.advancedControls : {};
-  const alertSource =
-    isPlainObject(executionSource.alertFrequencyPolicy) ? executionSource.alertFrequencyPolicy : {};
+  const phaseSplitSource = isPlainObject(executionSource.phaseSplit)
+    ? executionSource.phaseSplit
+    : {};
+  const advancedSource = isPlainObject(executionSource.advancedControls)
+    ? executionSource.advancedControls
+    : {};
+  const alertSource = isPlainObject(executionSource.alertFrequencyPolicy)
+    ? executionSource.alertFrequencyPolicy
+    : {};
   const securitySource = isPlainObject(value.security) ? value.security : {};
   const examSource = isPlainObject(securitySource.examControls) ? securitySource.examControls : {};
-  const emailSource = isPlainObject(securitySource.emailConfiguration) ? securitySource.emailConfiguration : {};
+  const emailSource = isPlainObject(securitySource.emailConfiguration)
+    ? securitySource.emailConfiguration
+    : {};
   const layerSource = isPlainObject(value.layerConfiguration) ? value.layerConfiguration : {};
   const flagsSource = isPlainObject(value.featureFlags) ? value.featureFlags : {};
-  const archiveControlsSource =
-    isPlainObject(value.dataArchiveControls) ? value.dataArchiveControls : {};
-  const storageSummarySource =
-    isPlainObject(archiveControlsSource.storageSummary) ? archiveControlsSource.storageSummary : {};
-  const retentionSource =
-    isPlainObject(archiveControlsSource.dataRetentionPolicy) ? archiveControlsSource.dataRetentionPolicy : {};
+  const archiveControlsSource = isPlainObject(value.dataArchiveControls)
+    ? value.dataArchiveControls
+    : {};
+  const storageSummarySource = isPlainObject(archiveControlsSource.storageSummary)
+    ? archiveControlsSource.storageSummary
+    : {};
+  const retentionSource = isPlainObject(archiveControlsSource.dataRetentionPolicy)
+    ? archiveControlsSource.dataRetentionPolicy
+    : {};
 
   const years = Array.isArray(value.academicYears) ? value.academicYears : [];
   const users = Array.isArray(value.users) ? value.users : [];
@@ -421,10 +436,7 @@ function normalizeSnapshot(value: unknown): AdminSettingsSnapshot | null {
         snapshotId: typeof entry.snapshotId === "string" ? entry.snapshotId : undefined,
         snapshotStatus: toNonEmptyString(entry.snapshotStatus, "Pending"),
         startDate: typeof entry.startDate === "string" ? entry.startDate : undefined,
-        status:
-          status === "Locked" || status === "Archived" ?
-            status :
-            "Active",
+        status: status === "Locked" || status === "Archived" ? status : "Active",
         studentCount: Math.max(0, Math.round(toNumberOrZero(entry.studentCount))),
         yearId: toNonEmptyString(entry.yearId, "year"),
       });
@@ -438,9 +450,18 @@ function normalizeSnapshot(value: unknown): AdminSettingsSnapshot | null {
         manualOverrideAllowed: toBoolean(advancedSource.manualOverrideAllowed, false),
       },
       alertFrequencyPolicy: {
-        alertCooldownInterval: Math.max(1, Math.round(toNumberOrZero(alertSource.alertCooldownInterval) || 10)),
-        escalationThreshold: Math.max(1, Math.round(toNumberOrZero(alertSource.escalationThreshold) || 3)),
-        maxAlertsPerSection: Math.max(1, Math.round(toNumberOrZero(alertSource.maxAlertsPerSection) || 2)),
+        alertCooldownInterval: Math.max(
+          1,
+          Math.round(toNumberOrZero(alertSource.alertCooldownInterval) || 10),
+        ),
+        escalationThreshold: Math.max(
+          1,
+          Math.round(toNumberOrZero(alertSource.escalationThreshold) || 3),
+        ),
+        maxAlertsPerSection: Math.max(
+          1,
+          Math.round(toNumberOrZero(alertSource.maxAlertsPerSection) || 2),
+        ),
       },
       phaseSplit: {
         phase1Percent: Math.round(toNumberOrZero(phaseSplitSource.phase1Percent) || 30),
@@ -448,76 +469,71 @@ function normalizeSnapshot(value: unknown): AdminSettingsSnapshot | null {
         phase3Percent: Math.round(toNumberOrZero(phaseSplitSource.phase3Percent) || 30),
       },
       timingPresets:
-        isPlainObject(executionSource.timingPresets) && Object.keys(executionSource.timingPresets).length > 0 ?
-          (executionSource.timingPresets as ExecutionPolicySettings["timingPresets"]) :
-          FALLBACK_SNAPSHOT.executionPolicy.timingPresets,
+        isPlainObject(executionSource.timingPresets) &&
+        Object.keys(executionSource.timingPresets).length > 0
+          ? (executionSource.timingPresets as ExecutionPolicySettings["timingPresets"])
+          : FALLBACK_SNAPSHOT.executionPolicy.timingPresets,
     },
     dataArchiveControls: {
       dataRetentionPolicy: {
-        autoArchiveSchedule:
-          toNonEmptyString(
-            retentionSource.autoArchiveSchedule,
-            FALLBACK_SNAPSHOT.dataArchiveControls.dataRetentionPolicy.autoArchiveSchedule,
-          ),
-        autoExportThreshold:
-          Math.max(
-            1,
-            Math.round(
-              toNumberOrZero(retentionSource.autoExportThreshold) ||
+        autoArchiveSchedule: toNonEmptyString(
+          retentionSource.autoArchiveSchedule,
+          FALLBACK_SNAPSHOT.dataArchiveControls.dataRetentionPolicy.autoArchiveSchedule,
+        ),
+        autoExportThreshold: Math.max(
+          1,
+          Math.round(
+            toNumberOrZero(retentionSource.autoExportThreshold) ||
               FALLBACK_SNAPSHOT.dataArchiveControls.dataRetentionPolicy.autoExportThreshold,
-            ),
           ),
-        rawSessionRetentionYears:
-          Math.max(
-            1,
-            Math.round(
-              toNumberOrZero(retentionSource.rawSessionRetentionYears) ||
+        ),
+        rawSessionRetentionYears: Math.max(
+          1,
+          Math.round(
+            toNumberOrZero(retentionSource.rawSessionRetentionYears) ||
               FALLBACK_SNAPSHOT.dataArchiveControls.dataRetentionPolicy.rawSessionRetentionYears,
-            ),
           ),
+        ),
       },
       storageSummary: {
-        activeSessionCount:
-          Math.max(
-            0,
-            Math.round(
-              toNumberOrZero(storageSummarySource.activeSessionCount),
-            ),
-          ),
-        archivedAcademicYears:
-          Math.max(
-            0,
-            Math.round(
-              toNumberOrZero(storageSummarySource.archivedAcademicYears),
-            ),
-          ),
-        bigQueryArchiveSize:
-          toNonEmptyString(
-            storageSummarySource.bigQueryArchiveSize,
-            FALLBACK_SNAPSHOT.dataArchiveControls.storageSummary.bigQueryArchiveSize,
-          ),
-        firestoreHotUsage:
-          toNonEmptyString(
-            storageSummarySource.firestoreHotUsage,
-            FALLBACK_SNAPSHOT.dataArchiveControls.storageSummary.firestoreHotUsage,
-          ),
+        activeSessionCount: Math.max(
+          0,
+          Math.round(toNumberOrZero(storageSummarySource.activeSessionCount)),
+        ),
+        archivedAcademicYears: Math.max(
+          0,
+          Math.round(toNumberOrZero(storageSummarySource.archivedAcademicYears)),
+        ),
+        bigQueryArchiveSize: toNonEmptyString(
+          storageSummarySource.bigQueryArchiveSize,
+          FALLBACK_SNAPSHOT.dataArchiveControls.storageSummary.bigQueryArchiveSize,
+        ),
+        firestoreHotUsage: toNonEmptyString(
+          storageSummarySource.firestoreHotUsage,
+          FALLBACK_SNAPSHOT.dataArchiveControls.storageSummary.firestoreHotUsage,
+        ),
       },
     },
     featureFlags: {
       enableBetaUi: toBoolean(flagsSource.enableBetaUi, false),
       enableExperimentalAnalytics: toBoolean(flagsSource.enableExperimentalAnalytics, false),
       enableLlmMonthlySummary: toBoolean(flagsSource.enableLlmMonthlySummary, false),
-      toggleAdvancedPhaseVisualization: toBoolean(flagsSource.toggleAdvancedPhaseVisualization, false),
+      toggleAdvancedPhaseVisualization: toBoolean(
+        flagsSource.toggleAdvancedPhaseVisualization,
+        false,
+      ),
     },
     layerConfiguration: {
       currentLayer: toNonEmptyString(layerSource.currentLayer, "L0"),
       eligibilityStatus: toNonEmptyString(layerSource.eligibilityStatus, "Eligible"),
-      featureFlags:
-        isPlainObject(layerSource.featureFlags) ?
-          Object.fromEntries(
-            Object.entries(layerSource.featureFlags).map(([key, flagValue]) => [key, Boolean(flagValue)]),
-          ) :
-          {},
+      featureFlags: isPlainObject(layerSource.featureFlags)
+        ? Object.fromEntries(
+            Object.entries(layerSource.featureFlags).map(([key, flagValue]) => [
+              key,
+              Boolean(flagValue),
+            ]),
+          )
+        : {},
     },
     profile: {
       academicYearFormat: toNonEmptyString(profileSource.academicYearFormat, "YYYY-YY"),
@@ -535,9 +551,7 @@ function normalizeSnapshot(value: unknown): AdminSettingsSnapshot | null {
         senderName: toNonEmptyString(emailSource.senderName, "Institute Admin"),
         smtpHost: toNonEmptyString(emailSource.smtpHost) || undefined,
         smtpPort:
-          typeof emailSource.smtpPort === "number" ?
-            Math.round(emailSource.smtpPort) :
-            undefined,
+          typeof emailSource.smtpPort === "number" ? Math.round(emailSource.smtpPort) : undefined,
       },
       examControls: {
         blockRightClick: toBoolean(examSource.blockRightClick, true),
@@ -546,7 +560,10 @@ function normalizeSnapshot(value: unknown): AdminSettingsSnapshot | null {
         tamperDetectionAlerts: toBoolean(examSource.tamperDetectionAlerts, false),
       },
       forceLogoutOnPasswordChange: toBoolean(securitySource.forceLogoutOnPasswordChange, true),
-      sessionTimeoutDuration: Math.max(5, Math.round(toNumberOrZero(securitySource.sessionTimeoutDuration) || 30)),
+      sessionTimeoutDuration: Math.max(
+        5,
+        Math.round(toNumberOrZero(securitySource.sessionTimeoutDuration) || 30),
+      ),
     },
     settingsAudit: settingsAudit
       .map((entry) => {
@@ -555,15 +572,21 @@ function normalizeSnapshot(value: unknown): AdminSettingsSnapshot | null {
         }
 
         const actorRole = toNonEmptyString(entry.actorRole, "admin").toLowerCase() as StaffRole;
-        const actionType = toNonEmptyString(entry.actionType, "GET_SETTINGS_SNAPSHOT") as SettingsActionType;
+        const actionType = toNonEmptyString(
+          entry.actionType,
+          "GET_SETTINGS_SNAPSHOT",
+        ) as SettingsActionType;
 
         return {
           actionType,
           actor: toNonEmptyString(entry.actor, "system"),
           actorRole:
-            actorRole === "admin" || actorRole === "teacher" || actorRole === "director" || actorRole === "support" ?
-              actorRole :
-              "admin",
+            actorRole === "admin" ||
+            actorRole === "teacher" ||
+            actorRole === "director" ||
+            actorRole === "support"
+              ? actorRole
+              : "admin",
           area: toNonEmptyString(entry.area, "Settings"),
           eventId: toNonEmptyString(entry.eventId, "settings_audit_event"),
           sourcePath: toNonEmptyString(entry.sourcePath, "institutes/{id}/settingsAudit/{eventId}"),
@@ -587,9 +610,9 @@ function normalizeSnapshot(value: unknown): AdminSettingsSnapshot | null {
           displayName: toNonEmptyString(entry.displayName, "Unknown User"),
           email: toNonEmptyString(entry.email),
           role:
-            role === "admin" || role === "teacher" || role === "director" || role === "support" ?
-              role :
-              "teacher",
+            role === "admin" || role === "teacher" || role === "director" || role === "support"
+              ? role
+              : "teacher",
           status: status === "active" || status === "suspended" ? status : "active",
           updatedAt: toNonEmptyString(entry.updatedAt, new Date(0).toISOString()),
           userId: toNonEmptyString(entry.userId, "user"),
@@ -599,26 +622,24 @@ function normalizeSnapshot(value: unknown): AdminSettingsSnapshot | null {
   };
 }
 
-async function settingsAction(
-  payload: {
-    instituteId: string;
-    actionType: SettingsActionType;
-    profile?: Partial<InstituteProfileSettings>;
-    academicYear?: {yearId?: string};
-    executionPolicy?: Partial<ExecutionPolicySettings>;
-    userAccess?: {
-      userId?: string;
-      displayName?: string;
-      email?: string;
-      role?: StaffRole;
-      status?: StaffStatus;
-    };
-    security?: Partial<SecuritySettings>;
-    featureFlags?: Partial<FeatureFlagsSettings>;
-    dataRetentionPolicy?: Partial<DataRetentionPolicySettings>;
-    governanceSnapshotRequest?: Partial<GovernanceSnapshotRequestSettings>;
-  },
-): Promise<AdminSettingsSnapshot> {
+async function settingsAction(payload: {
+  instituteId: string;
+  actionType: SettingsActionType;
+  profile?: Partial<InstituteProfileSettings>;
+  academicYear?: { yearId?: string };
+  executionPolicy?: Partial<ExecutionPolicySettings>;
+  userAccess?: {
+    userId?: string;
+    displayName?: string;
+    email?: string;
+    role?: StaffRole;
+    status?: StaffStatus;
+  };
+  security?: Partial<SecuritySettings>;
+  featureFlags?: Partial<FeatureFlagsSettings>;
+  dataRetentionPolicy?: Partial<DataRetentionPolicySettings>;
+  governanceSnapshotRequest?: Partial<GovernanceSnapshotRequestSettings>;
+}): Promise<AdminSettingsSnapshot> {
   const result = await apiClient.post<AdminSettingsApiResponse, Record<string, unknown>>(
     "/admin/settings",
     {
@@ -643,9 +664,9 @@ export function isLocalSettingsReadMode(): boolean {
 export function resolveAdminInstituteId(idToken: string | null): string {
   const claims = decodeIdTokenClaims(idToken);
   const instituteId = claims?.instituteId;
-  return typeof instituteId === "string" && instituteId.trim().length > 0 ?
-      instituteId.trim() :
-      DEFAULT_SETTINGS_INSTITUTE_ID;
+  return typeof instituteId === "string" && instituteId.trim().length > 0
+    ? instituteId.trim()
+    : DEFAULT_SETTINGS_INSTITUTE_ID;
 }
 
 export async function fetchSettingsSnapshot(instituteId: string): Promise<AdminSettingsSnapshot> {
@@ -686,8 +707,19 @@ export async function lockAcademicYear(
   yearId: string,
 ): Promise<AdminSettingsSnapshot> {
   return settingsAction({
-    academicYear: {yearId},
+    academicYear: { yearId },
     actionType: "LOCK_ACADEMIC_YEAR",
+    instituteId,
+  });
+}
+
+export async function requestAcademicYearArchive(
+  instituteId: string,
+  yearId: string,
+): Promise<AdminSettingsSnapshot> {
+  return settingsAction({
+    academicYear: { yearId },
+    actionType: "REQUEST_ACADEMIC_YEAR_ARCHIVE",
     instituteId,
   });
 }
@@ -716,7 +748,7 @@ export async function removeUserAccess(
   return settingsAction({
     actionType: "REMOVE_USER_ACCESS",
     instituteId,
-    userAccess: {userId},
+    userAccess: { userId },
   });
 }
 
@@ -727,7 +759,7 @@ export async function resetUserPassword(
   return settingsAction({
     actionType: "RESET_USER_PASSWORD",
     instituteId,
-    userAccess: {userId},
+    userAccess: { userId },
   });
 }
 
@@ -775,20 +807,14 @@ export async function requestGovernanceSnapshot(
   });
 }
 
-export async function archiveAcademicYear(
-  instituteId: string,
-  yearId: string,
-): Promise<void> {
-  await apiClient.post<unknown, Record<string, unknown>>(
-    "/admin/academicYear/archive",
-    {
-      body: {
-        doubleConfirm: true,
-        instituteId,
-        yearId,
-      },
+export async function archiveAcademicYear(instituteId: string, yearId: string): Promise<void> {
+  await apiClient.post<unknown, Record<string, unknown>>("/admin/academicYear/archive", {
+    body: {
+      doubleConfirm: true,
+      instituteId,
+      yearId,
     },
-  );
+  });
 }
 
-export {ApiClientError, FALLBACK_SNAPSHOT};
+export { ApiClientError, FALLBACK_SNAPSHOT };

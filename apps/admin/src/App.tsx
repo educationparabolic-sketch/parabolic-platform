@@ -60,15 +60,7 @@ const AdminHelpSupportPage = lazy(() => import("./features/support/AdminHelpSupp
 const AdminLicensingWorkspace = lazy(() => import("./features/licensing/AdminLicensingWorkspace"));
 const AdminOverviewPage = lazy(() => import("./features/overview/AdminOverviewPage"));
 const AdminStudentsLandingPage = lazy(() => import("./features/students/AdminStudentsLandingPage"));
-const AdminDataArchiveControlsPage = lazy(() => import("./features/settings/AdminDataArchiveControlsPage"));
-const AdminExecutionPolicyPage = lazy(() => import("./features/settings/AdminExecutionPolicyPage"));
-const AdminAcademicYearPage = lazy(() => import("./features/settings/AdminAcademicYearPage"));
-const AdminInstituteProfilePage = lazy(() => import("./features/settings/AdminInstituteProfilePage"));
-const AdminSettingsAuditHistoryPage = lazy(() => import("./features/settings/AdminSettingsAuditHistoryPage"));
-const AdminSettingsLandingPage = lazy(() => import("./features/settings/AdminSettingsLandingPage"));
-const AdminSecurityAccessPage = lazy(() => import("./features/settings/AdminSecurityAccessPage"));
-const AdminSystemConfigurationPage = lazy(() => import("./features/settings/AdminSystemConfigurationPage"));
-const AdminUserRoleManagementPage = lazy(() => import("./features/settings/AdminUserRoleManagementPage"));
+const AdminSettingsWorkspace = lazy(() => import("./features/settings/AdminSettingsWorkspace"));
 const AdminQuestionBankLandingPage = lazy(() => import("./features/tests/AdminQuestionBankLandingPage"));
 const AdminQuestionBankDistributionPage = lazy(() => import("./features/tests/AdminQuestionBankDistributionPage"));
 const AdminQuestionBankArchiveVersionsPage = lazy(() => import("./features/tests/AdminQuestionBankArchiveVersionsPage"));
@@ -861,42 +853,28 @@ function App() {
         <Route path="licensing/eligibility" element={<Navigate to="/admin/licensing/plans" replace />} />
         <Route path="licensing/upgrade-preview" element={<Navigate to="/admin/licensing/plans" replace />} />
         <Route path="licensing/*" element={<AdminRouteResolutionPage />} />
-        <Route
-          path="settings"
-          element={<AdminRouteBoundary label="Loading settings"><AdminSettingsLandingPage /></AdminRouteBoundary>}
-        />
+        <Route path="settings" element={<Navigate to="/admin/settings/profile" replace />} />
         <Route
           path="settings/profile"
-          element={<AdminRouteBoundary label="Loading settings"><AdminInstituteProfilePage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading settings"><AdminSettingsWorkspace /></AdminRouteBoundary>}
         />
         <Route
           path="settings/academic-year"
-          element={<AdminRouteBoundary label="Loading academic year settings"><AdminAcademicYearPage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading academic year settings"><AdminSettingsWorkspace /></AdminRouteBoundary>}
         />
         <Route
-          path="settings/execution-policy"
-          element={<AdminRouteBoundary label="Loading execution policy"><AdminExecutionPolicyPage /></AdminRouteBoundary>}
-        />
-        <Route
-          path="settings/users"
-          element={<AdminRouteBoundary label="Loading user settings"><AdminUserRoleManagementPage /></AdminRouteBoundary>}
-        />
-        <Route
-          path="settings/security"
-          element={<AdminRouteBoundary label="Loading security settings"><AdminSecurityAccessPage /></AdminRouteBoundary>}
-        />
-        <Route
-          path="settings/data"
-          element={<AdminRouteBoundary label="Loading data settings"><AdminDataArchiveControlsPage /></AdminRouteBoundary>}
-        />
-        <Route
-          path="settings/system"
-          element={<AdminRouteBoundary label="Loading system settings"><AdminSystemConfigurationPage /></AdminRouteBoundary>}
+          path="settings/access"
+          element={<AdminRouteBoundary label="Loading access settings"><AdminSettingsWorkspace /></AdminRouteBoundary>}
         />
         <Route
           path="settings/audit-history"
-          element={<AdminRouteBoundary label="Loading settings audit history"><AdminSettingsAuditHistoryPage /></AdminRouteBoundary>}
+          element={<AdminRouteBoundary label="Loading settings activity"><AdminSettingsWorkspace /></AdminRouteBoundary>}
         />
+        <Route path="settings/users" element={<Navigate to="/admin/settings/access" replace />} />
+        <Route path="settings/security" element={<Navigate to="/admin/settings/access" replace />} />
+        <Route path="settings/execution-policy" element={<Navigate to="/admin/settings/profile" replace />} />
+        <Route path="settings/data" element={<Navigate to="/admin/settings/profile" replace />} />
+        <Route path="settings/system" element={<Navigate to="/admin/settings/profile" replace />} />
         <Route path="settings/*" element={<AdminRouteResolutionPage />} />
         <Route
           path="help"

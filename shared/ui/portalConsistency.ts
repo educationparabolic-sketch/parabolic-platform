@@ -56,12 +56,12 @@ export const ADMIN_PRIMARY_NAVIGATION: PortalNavigationItem[] = [
   {
     path: "/admin/settings",
     label: "Settings",
-    summary: "Institute profile, policy, security, and system configuration controls.",
+    summary: "Institute profile, academic year, staff access, and settings activity controls.",
   },
   {
     path: "/admin/help",
     label: "Help / Support",
-    summary: "Support channels, escalation guidance, and operational help destinations.",
+    summary: "Create, track, and continue institute support requests.",
   },
 ];
 

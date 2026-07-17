@@ -1701,11 +1701,7 @@ input {
   position: fixed;
   inset: 0;
   z-index: 2400;
-  background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
-    #08172e;
-  background-size: 20vw 20vh;
+  background: #0d1723;
   color: #ffffff;
 }
 
@@ -1770,61 +1766,360 @@ input {
   position: relative;
   width: 100vw;
   height: 100vh;
+  min-height: 560px;
   overflow: hidden;
 }
 
 .exam-gaze-calibration-header,
 .exam-gaze-calibration-footer {
   position: absolute;
-  left: 1rem;
-  right: 1rem;
-  z-index: 2;
+  left: 0;
+  right: 0;
+  z-index: 4;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(7, 20, 44, 0.78);
-  padding: 0.8rem 0.9rem;
+  background: rgba(9, 17, 28, 0.98);
+  padding: 1rem 1.35rem;
 }
 
 .exam-gaze-calibration-header {
-  top: 1rem;
+  top: 0;
+  min-height: 92px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 .exam-gaze-calibration-footer {
-  bottom: 1rem;
-  flex-wrap: wrap;
+  bottom: 0;
+  min-height: 118px;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
 }
 
-.exam-gaze-calibration-header h2,
-.exam-gaze-calibration-footer p {
+.exam-gaze-calibration-title h2,
+.exam-gaze-calibration-title p,
+.exam-gaze-calibration-instruction p {
   margin: 0;
 }
 
-.exam-gaze-calibration-header h2 {
-  font-size: 1.1rem;
+.exam-gaze-calibration-title h2 {
+  font-size: 1.18rem;
+  letter-spacing: 0;
 }
 
-.exam-gaze-calibration-header span {
+.exam-gaze-calibration-title > p:last-child {
+  margin-top: 0.25rem;
+  color: #b9c6d6;
+  font-size: 0.86rem;
+}
+
+.exam-gaze-calibration-step-count {
+  min-width: 126px;
+  display: grid;
+  gap: 0.15rem;
+  border-left: 3px solid #e5b943;
+  padding-left: 0.75rem;
+}
+
+.exam-gaze-calibration-step-count span {
+  color: #aebccd;
+  font-size: 0.8rem;
+}
+
+.exam-gaze-calibration-progress {
+  position: absolute;
+  top: 92px;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  height: 56px;
+  padding: 0.45rem 1.35rem;
+  background: rgba(19, 32, 48, 0.96);
+}
+
+.exam-gaze-calibration-progress > span {
+  position: absolute;
+  left: 50%;
+  top: 18px;
+  width: min(calc(100% - 2.7rem), 620px);
+  height: 3px;
+  overflow: hidden;
+  transform: translateX(-50%);
+  background: #3c4c5f;
+}
+
+.exam-gaze-calibration-progress > span i {
+  display: block;
+  height: 100%;
+  background: #54b879;
+  transition: width 220ms ease;
+}
+
+.exam-gaze-calibration-progress ol {
+  position: relative;
+  z-index: 1;
+  max-width: 620px;
+  height: 100%;
+  margin: 0 auto;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  list-style: none;
+}
+
+.exam-gaze-calibration-progress li {
+  display: grid;
+  justify-items: center;
+  gap: 0.15rem;
+}
+
+.exam-gaze-calibration-progress li b {
+  width: 29px;
+  height: 29px;
+  display: grid;
+  place-items: center;
+  border: 2px solid #5a687a;
+  border-radius: 50%;
+  background: #1d2a3a;
+  color: #c4cfdb;
+  font-size: 0.7rem;
+}
+
+.exam-gaze-calibration-progress li small {
+  color: #9dabbc;
+  font-size: 0.68rem;
+}
+
+.exam-gaze-calibration-progress .exam-gaze-progress-complete b {
+  border-color: #54b879;
+  background: #247148;
+  color: #ffffff;
+}
+
+.exam-gaze-calibration-progress .exam-gaze-progress-current b {
+  border-color: #f2cb57;
+  background: #f2cb57;
+  color: #3e2d00;
+  box-shadow: 0 0 0 5px rgba(242, 203, 87, 0.16);
+}
+
+.exam-gaze-calibration-progress .exam-gaze-progress-current small {
+  color: #f7df96;
   font-weight: 800;
+}
+
+.exam-gaze-calibration-stage {
+  position: absolute;
+  top: 148px;
+  right: 0;
+  bottom: 118px;
+  left: 0;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    #111e2c;
+  background-size: 20% 25%;
+}
+
+.exam-gaze-calibration-stage::after {
+  content: "";
+  position: absolute;
+  inset: 12%;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  pointer-events: none;
+}
+
+.exam-gaze-calibration-stage-hint {
+  position: absolute;
+  top: 1rem;
+  left: 50%;
+  z-index: 1;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  border-radius: 999px;
+  padding: 0.4rem 0.7rem;
+  background: rgba(8, 15, 24, 0.72);
+  color: #d8e2ed;
+  font-size: 0.78rem;
+}
+
+.exam-gaze-calibration-stage-hint strong {
+  color: #f2cb57;
 }
 
 .exam-gaze-calibration-marker {
   position: absolute;
+  z-index: 2;
   transform: translate(-50%, -50%);
-  min-width: min(132px, 24vw);
-  aspect-ratio: 1;
-  border-radius: 999px;
-  background: #f7d356;
-  color: #442f00;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 900;
+  width: 104px;
+  height: 104px;
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  animation: examGazeTargetArrive 260ms ease-out;
+}
+
+.exam-gaze-marker-ring {
+  position: absolute;
+  inset: 5px;
+  border: 3px solid #f2cb57;
+  border-radius: 50%;
   box-shadow:
-    0 0 0 16px rgba(247, 211, 86, 0.18),
-    0 0 42px rgba(247, 211, 86, 0.46);
+    0 0 0 12px rgba(242, 203, 87, 0.11),
+    0 0 34px rgba(242, 203, 87, 0.36);
+  animation: examGazeTargetPulse 1.3s ease-in-out infinite;
+}
+
+.exam-gaze-marker-dot {
+  width: 22px;
+  height: 22px;
+  border: 5px solid #ffffff;
+  border-radius: 50%;
+  background: #e1aa23;
+  box-shadow: 0 0 0 5px rgba(12, 25, 40, 0.7);
+}
+
+.exam-gaze-calibration-marker strong {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  min-width: 78px;
+  border-radius: 999px;
+  padding: 0.25rem 0.5rem;
+  background: rgba(5, 12, 20, 0.85);
+  color: #f8e5a2;
+  font-size: 0.74rem;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.exam-gaze-marker-ready .exam-gaze-marker-ring {
+  border-color: #62ca89;
+  box-shadow:
+    0 0 0 12px rgba(98, 202, 137, 0.12),
+    0 0 34px rgba(98, 202, 137, 0.35);
+}
+
+.exam-gaze-marker-ready .exam-gaze-marker-dot {
+  background: #3fad69;
+}
+
+@keyframes examGazeTargetArrive {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.72);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes examGazeTargetPulse {
+  0%,
+  100% {
+    transform: scale(0.92);
+  }
+
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+.exam-gaze-calibration-camera {
+  position: relative;
+  width: 138px;
+  height: 84px;
+  flex: 0 0 138px;
+  overflow: hidden;
+  border: 1px solid #526276;
+  border-radius: 6px;
+  background: #050b13;
+}
+
+.exam-gaze-calibration-camera video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.exam-gaze-calibration-face-guide {
+  position: absolute;
+  inset: 9px 43px;
+  border: 2px solid rgba(98, 202, 137, 0.9);
+  border-radius: 50%;
+}
+
+.exam-gaze-calibration-camera b {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  border-radius: 999px;
+  padding: 0.15rem 0.35rem;
+  background: rgba(20, 107, 60, 0.9);
+  color: #ffffff;
+  font-size: 0.62rem;
+}
+
+.exam-gaze-calibration-instruction {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.exam-gaze-calibration-instruction > span {
+  color: #91a4ba;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+.exam-gaze-calibration-instruction strong {
+  font-size: 1rem;
+}
+
+.exam-gaze-calibration-instruction p {
+  color: #b9c6d6;
+  font-size: 0.82rem;
+}
+
+.exam-gaze-calibration-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.exam-gaze-calibration-actions button {
+  margin: 0;
+  min-height: 42px;
+  border: 1px solid #63758a;
+  border-radius: 4px;
+  padding: 0.65rem 0.9rem;
+  font: inherit;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.exam-gaze-calibration-actions .exam-secondary-action {
+  background: #1b2939;
+  color: #dbe5ef;
+}
+
+.exam-gaze-calibration-actions .exam-save-next-button {
+  border-color: #e6b936;
+  background: #f2cb57;
+  color: #382900;
+}
+
+.exam-gaze-calibration-actions button:disabled {
+  cursor: wait;
+  opacity: 0.62;
 }
 
 .exam-hard-mode-strip {
@@ -2754,6 +3049,79 @@ input {
 }
 
 @media (max-width: 768px) {
+  .exam-gaze-calibration-header {
+    min-height: 112px;
+    padding: 0.75rem 0.85rem;
+  }
+
+  .exam-gaze-calibration-title h2 {
+    font-size: 1rem;
+  }
+
+  .exam-gaze-calibration-title > p:last-child {
+    display: none;
+  }
+
+  .exam-gaze-calibration-step-count {
+    min-width: 100px;
+    font-size: 0.82rem;
+  }
+
+  .exam-gaze-calibration-progress {
+    top: 112px;
+    padding-inline: 0.65rem;
+  }
+
+  .exam-gaze-calibration-progress li small {
+    display: none;
+  }
+
+  .exam-gaze-calibration-stage {
+    top: 168px;
+    bottom: 164px;
+  }
+
+  .exam-gaze-calibration-stage-hint {
+    top: 0.6rem;
+  }
+
+  .exam-gaze-calibration-marker {
+    width: 78px;
+    height: 78px;
+  }
+
+  .exam-gaze-marker-dot {
+    width: 18px;
+    height: 18px;
+    border-width: 4px;
+  }
+
+  .exam-gaze-calibration-footer {
+    min-height: 164px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: 0.7rem 0.85rem;
+  }
+
+  .exam-gaze-calibration-camera {
+    width: 104px;
+    height: 70px;
+    flex-basis: 104px;
+  }
+
+  .exam-gaze-calibration-face-guide {
+    inset: 8px 31px;
+  }
+
+  .exam-gaze-calibration-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+
+  .exam-gaze-calibration-actions .exam-save-next-button {
+    flex: 1;
+  }
+
   .exam-access-shell,
   .exam-instruction-shell,
   .exam-question-container,
@@ -2913,5 +3281,16 @@ input {
   .exam-calculator-grid,
   .exam-calculator-operations {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .exam-gaze-calibration-marker,
+  .exam-gaze-marker-ring {
+    animation: none;
+  }
+
+  .exam-gaze-calibration-progress > span i {
+    transition: none;
   }
 }

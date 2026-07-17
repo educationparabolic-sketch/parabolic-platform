@@ -1465,6 +1465,7 @@ function ExamSessionPage() {
   const [browserIntegrityEvents, setBrowserIntegrityEvents] = useState<BrowserIntegrityEvent[]>([]);
   const [integrityBlockingReason, setIntegrityBlockingReason] = useState<string | null>(null);
   const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
+  const gazeCalibrationVideoRef = useRef<HTMLVideoElement | null>(null);
   const [browserReadinessState, setBrowserReadinessState] = useState<PreExamCheckState>("passed");
   const [internetCheckState, setInternetCheckState] = useState<PreExamCheckState>("pending");
   const [cameraCheckState, setCameraCheckState] = useState<PreExamCheckState>("pending");
@@ -1473,6 +1474,7 @@ function ExamSessionPage() {
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [gazeCalibrationIndex, setGazeCalibrationIndex] = useState(0);
   const [gazeCalibrationOverlayOpen, setGazeCalibrationOverlayOpen] = useState(false);
+  const [gazeTargetSettled, setGazeTargetSettled] = useState(false);
 
   const isOperationalMode = entryValidation.claims.mode === "Operational";
   const isControlledMode = entryValidation.claims.mode === "Controlled";
@@ -2481,12 +2483,37 @@ function ExamSessionPage() {
   }, [faceIdentityGazeGuardEnabled]);
 
   useEffect(() => {
-    if (!cameraVideoRef.current || !cameraStream) {
+    if (!cameraStream) {
       return;
     }
 
-    cameraVideoRef.current.srcObject = cameraStream;
-  }, [cameraStream]);
+    if (cameraVideoRef.current) {
+      cameraVideoRef.current.srcObject = cameraStream;
+    }
+    if (gazeCalibrationVideoRef.current) {
+      gazeCalibrationVideoRef.current.srcObject = cameraStream;
+    }
+  }, [cameraStream, gazeCalibrationOverlayOpen]);
+
+  useEffect(() => {
+    if (!gazeCalibrationOverlayOpen) {
+      return;
+    }
+
+    setGazeTargetSettled(false);
+    const settleTimer = window.setTimeout(() => setGazeTargetSettled(true), 900);
+    const handleCalibrationKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setGazeTargetSettled(false);
+        setGazeCalibrationOverlayOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleCalibrationKeyDown);
+    return () => {
+      window.clearTimeout(settleTimer);
+      window.removeEventListener("keydown", handleCalibrationKeyDown);
+    };
+  }, [gazeCalibrationIndex, gazeCalibrationOverlayOpen]);
 
   useEffect(() => {
     return () => {
@@ -2848,6 +2875,8 @@ function ExamSessionPage() {
   const sessionStartCountdownMs = Math.max(0, sessionSchedule.sessionStartsAtMs - nowEpochMs);
   const entryOpenCountdownMs = Math.max(0, sessionSchedule.earlyEntryOpensAtMs - nowEpochMs);
   const currentGazeCalibrationPoint = GAZE_CALIBRATION_POINTS[gazeCalibrationIndex] ?? GAZE_CALIBRATION_POINTS[0];
+  const gazeCalibrationCapturedCount = Math.min(gazeCalibrationIndex, GAZE_CALIBRATION_POINTS.length);
+  const gazeCalibrationProgressPercent = (gazeCalibrationCapturedCount / GAZE_CALIBRATION_POINTS.length) * 100;
   const preExamChecklist: PreExamChecklistItem[] = [
     {
       id: "session",
@@ -3203,6 +3232,7 @@ function ExamSessionPage() {
                         captureGazeCalibrationPoint();
                         return;
                       }
+                      setGazeTargetSettled(false);
                       setGazeCalibrationOverlayOpen(true);
                     }}
                     disabled={faceIdentityGazeGuardEnabled && faceVerificationState !== "passed"}
@@ -3241,39 +3271,73 @@ function ExamSessionPage() {
             {fullscreenGateError ? <p className="exam-submit-warning">{fullscreenGateError}</p> : null}
           </footer>
           {gazeCalibrationOverlayOpen ? (
-            <div className="exam-gaze-calibration-overlay" role="presentation">
-              <section className="exam-gaze-calibration-surface" aria-label="Full-screen gaze calibration">
-                <div className="exam-gaze-calibration-header">
-                  <div>
-                    <p className="exam-integrity-eyebrow">Gaze Calibration</p>
-                    <h2>{currentGazeCalibrationPoint.label} Marker</h2>
+            <div className="exam-gaze-calibration-overlay" role="dialog" aria-modal="true" aria-labelledby="exam-gaze-calibration-title">
+              <section className="exam-gaze-calibration-surface">
+                <header className="exam-gaze-calibration-header">
+                  <div className="exam-gaze-calibration-title">
+                    <p className="exam-integrity-eyebrow">Camera verification</p>
+                    <h2 id="exam-gaze-calibration-title">Follow each target with your eyes</h2>
+                    <p>Keep your head still. Move only your eyes toward the highlighted target.</p>
                   </div>
-                  <span>
-                    {Math.min(gazeCalibrationIndex + 1, GAZE_CALIBRATION_POINTS.length)}
-                    /
-                    {GAZE_CALIBRATION_POINTS.length}
-                  </span>
+                  <div className="exam-gaze-calibration-step-count" aria-live="polite">
+                    <strong>Point {Math.min(gazeCalibrationIndex + 1, GAZE_CALIBRATION_POINTS.length)} of {GAZE_CALIBRATION_POINTS.length}</strong>
+                    <span>{gazeCalibrationCapturedCount} captured</span>
+                  </div>
+                </header>
+
+                <div className="exam-gaze-calibration-progress" aria-label="Calibration progress">
+                  <span aria-hidden="true"><i style={{ width: `${gazeCalibrationProgressPercent}%` }} /></span>
+                  <ol>
+                    {GAZE_CALIBRATION_POINTS.map((point, index) => {
+                      const pointState = index < gazeCalibrationIndex ? "complete" : index === gazeCalibrationIndex ? "current" : "upcoming";
+                      return (
+                        <li key={point.id} className={`exam-gaze-progress-${pointState}`}>
+                          <b>{index < gazeCalibrationIndex ? "OK" : index + 1}</b>
+                          <small>{point.label}</small>
+                        </li>
+                      );
+                    })}
+                  </ol>
                 </div>
-                <span
-                  className="exam-gaze-calibration-marker"
-                  style={{
-                    left: `${currentGazeCalibrationPoint.x}%`,
-                    top: `${currentGazeCalibrationPoint.y}%`,
-                  }}
-                >
-                  {currentGazeCalibrationPoint.label}
-                </span>
-                <div className="exam-gaze-calibration-footer">
-                  <p>Keep your face steady and look directly at the marker before capturing.</p>
-                  <div className="exam-lobby-action-row">
-                    <button type="button" className="exam-secondary-action" onClick={() => setGazeCalibrationOverlayOpen(false)}>
-                      Pause Calibration
-                    </button>
-                    <button type="button" className="exam-save-next-button" onClick={captureGazeCalibrationPoint}>
-                      Capture Marker
-                    </button>
+
+                <div className="exam-gaze-calibration-stage">
+                  <div className="exam-gaze-calibration-stage-hint" aria-hidden="true">
+                    <strong>Head still</strong>
+                    <span>Eyes on the target</span>
+                  </div>
+                  <div
+                    key={currentGazeCalibrationPoint.id}
+                    className={`exam-gaze-calibration-marker ${gazeTargetSettled ? "exam-gaze-marker-ready" : ""}`}
+                    style={{ left: `${currentGazeCalibrationPoint.x}%`, top: `${currentGazeCalibrationPoint.y}%` }}
+                    role="img"
+                    aria-label={`${currentGazeCalibrationPoint.label} gaze target`}
+                  >
+                    <span className="exam-gaze-marker-ring" aria-hidden="true" />
+                    <span className="exam-gaze-marker-dot" aria-hidden="true" />
+                    <strong>{gazeTargetSettled ? "Look here" : "Focus"}</strong>
                   </div>
                 </div>
+
+                <footer className="exam-gaze-calibration-footer">
+                  <div className="exam-gaze-calibration-camera">
+                    <video ref={gazeCalibrationVideoRef} autoPlay playsInline muted aria-label="Live camera framing preview" />
+                    <span className="exam-gaze-calibration-face-guide" aria-hidden="true" />
+                    <b>Face visible</b>
+                  </div>
+                  <div className="exam-gaze-calibration-instruction" aria-live="polite">
+                    <span>Current target</span>
+                    <strong>Look toward the {currentGazeCalibrationPoint.label.toLowerCase()}</strong>
+                    <p>{gazeTargetSettled ? "Keep looking at the target, then confirm." : "Hold your gaze while the target settles."}</p>
+                  </div>
+                  <div className="exam-gaze-calibration-actions">
+                    <button type="button" className="exam-secondary-action" onClick={() => { setGazeTargetSettled(false); setGazeCalibrationOverlayOpen(false); }}>
+                      Pause
+                    </button>
+                    <button type="button" className="exam-save-next-button" onClick={captureGazeCalibrationPoint} disabled={!gazeTargetSettled}>
+                      {gazeTargetSettled ? "Confirm I'm Looking Here" : "Keep Looking..."}
+                    </button>
+                  </div>
+                </footer>
               </section>
             </div>
           ) : null}
