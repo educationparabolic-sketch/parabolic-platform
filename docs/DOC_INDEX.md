@@ -21,6 +21,16 @@ The documentation system is divided into the following categories:
 
 ---
 
+# Current Backend Wiring Controller
+
+| File | Purpose |
+|-----|------|
+|BACKEND_WIRING_MASTER_EXECUTION_PLAN.md|Authoritative resumable plan for wiring all four portal frontends to backend APIs, closing security/test/deployment gaps, and progressing from the recorded checkpoint to production readiness|
+
+For backend integration and deployment work, read this controller first. It takes precedence over historical UI-completion state in `PORTAL_IMPLEMENTATION_CONTROLLER.md` and `PORTAL_PROGRESS_STATE.md` while the backend-wiring program is active.
+
+---
+
 # AI Governance Documents
 
 These documents define how AI agents behave during development.
