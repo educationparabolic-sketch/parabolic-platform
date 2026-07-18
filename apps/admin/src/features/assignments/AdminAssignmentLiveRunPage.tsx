@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { NavLink, useParams } from "react-router-dom";
 import { UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
 import {
@@ -647,7 +647,7 @@ function AdminAssignmentLiveRunPage() {
     }
   }
 
-  function overrideFaceDetection(studentId: string) {
+  const overrideFaceDetection = useCallback((studentId: string) => {
     setLiveRows((currentRows) =>
       currentRows.map((row) =>
         row.runId === selectedRun?.runId && row.studentId === studentId ?
@@ -669,7 +669,7 @@ function AdminAssignmentLiveRunPage() {
       ),
     );
     setInlineMessage(`Face verification manually overridden for ${studentId}. This live-only action is not stored after the test.`);
-  }
+  }, [selectedRun?.runId]);
 
   const liveSummaryLabel = useMemo(() => {
     if (selectedRun.runAnalyticsSnapshot.avgPhaseAdherencePercent >= 75 && selectedRun.runAnalyticsSnapshot.guessRatePercent <= 12) {
@@ -786,7 +786,7 @@ function AdminAssignmentLiveRunPage() {
         ),
       },
     ],
-    [],
+    [overrideFaceDetection],
   );
 
   const liveProctorSummary = useMemo(() => {

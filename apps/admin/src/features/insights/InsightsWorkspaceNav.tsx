@@ -5,7 +5,9 @@ interface InsightsWorkspaceNavProps {
   studentRouteTarget?: string;
 }
 
-function InsightsWorkspaceNav(_props: InsightsWorkspaceNavProps) {
+function InsightsWorkspaceNav(props: InsightsWorkspaceNavProps) {
+  void props;
+
   return (
     <div className="admin-analytics-inline-link-row">
       <NavLink className="admin-question-bank-landing-link" to="/admin/insights">

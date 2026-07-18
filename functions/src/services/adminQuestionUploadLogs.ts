@@ -47,8 +47,8 @@ function normalizeLogRecord(
 ): AdminQuestionUploadLogRecord {
   const timestampValue =
     value?.committedAt instanceof Timestamp ? value.committedAt :
-    value?.createdAt instanceof Timestamp ? value.createdAt :
-    null;
+      value?.createdAt instanceof Timestamp ? value.createdAt :
+        null;
 
   return {
     created:

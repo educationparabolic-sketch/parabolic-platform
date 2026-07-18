@@ -112,7 +112,7 @@ function AdminAssignmentsLandingPage() {
           return workspace;
       }
     }),
-    [activeRuns.length, averageCompletion, dataset, uniqueBatchCount],
+    [dataset, uniqueBatchCount],
   );
   const note = isLoading ?
     "Loading assignments landing summary from GET /admin/analytics..." :

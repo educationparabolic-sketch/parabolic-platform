@@ -477,10 +477,6 @@ function VendorLayout() {
     matchedRoute?.definition.description ?? activeItem?.summary ?? "Vendor-only routed workspace.";
 
   useEffect(() => {
-    setMobileNavOpen(false);
-  }, [location.pathname]);
-
-  useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }

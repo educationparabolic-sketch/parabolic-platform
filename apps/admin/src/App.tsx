@@ -327,13 +327,9 @@ function AdminLayout() {
         groupId: resolveAdminNavGroupId(item.path),
       };
     });
-  }, [visibleNavItems, visibleRoutes]);
+  }, [visibleNavItems]);
   const pageTitle = matchedRoute?.definition.title ?? activeItem?.label ?? "Admin";
   const pageDescription = matchedRoute?.definition.description ?? activeItem?.summary ?? "Permission-aware admin workspace.";
-
-  useEffect(() => {
-    setMobileNavOpen(false);
-  }, [location.pathname]);
 
   useEffect(() => {
     if (typeof window === "undefined") {

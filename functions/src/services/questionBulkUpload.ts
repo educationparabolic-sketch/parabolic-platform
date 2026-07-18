@@ -412,8 +412,8 @@ const normalizeExistingQuestion = (
       undefined,
   primaryTag:
     typeof data?.primaryTag === "string" ? data.primaryTag :
-    data?.primaryTag === null ? null :
-    undefined,
+      data?.primaryTag === null ? null :
+        undefined,
   questionId,
   searchTokens:
     Array.isArray(data?.searchTokens) ?
@@ -428,7 +428,7 @@ const normalizeExistingQuestion = (
       undefined,
   uniqueKey:
     typeof data?.uniqueKey === "string" ? data.uniqueKey :
-    undefined,
+      undefined,
   usedCount:
     typeof data?.usedCount === "number" && Number.isFinite(data.usedCount) ?
       data.usedCount :

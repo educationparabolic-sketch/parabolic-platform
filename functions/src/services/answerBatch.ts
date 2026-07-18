@@ -769,7 +769,7 @@ export class AnswerBatchService {
       "millisecondsSinceLastWrite",
     );
     const normalizedAnswers = normalizeAnswerWrites(input.answers);
-      const adaptivePhaseSnapshot = normalizeAdaptivePhaseSnapshot(
+    const adaptivePhaseSnapshot = normalizeAdaptivePhaseSnapshot(
       input.adaptivePhaseSnapshot,
     );
     const activePhase = normalizeTimingPhaseKey(

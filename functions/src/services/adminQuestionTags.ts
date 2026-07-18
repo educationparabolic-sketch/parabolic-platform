@@ -379,14 +379,15 @@ export class AdminQuestionTagsService {
       (request.actionType === "rename" || request.actionType === "merge") &&
       request.secondaryTag
     ) {
+      const secondaryTag = request.secondaryTag;
       const destinationTagRef = instituteRef
         .collection(TAG_DICTIONARY_COLLECTION)
-        .doc(buildTagId(request.secondaryTag));
+        .doc(buildTagId(secondaryTag));
 
       writes.push((batch) => {
         batch.set(destinationTagRef, {
           status: "active",
-          tagName: request.secondaryTag,
+          tagName: secondaryTag,
           updatedAt: Timestamp.now(),
         }, {merge: true});
         batch.set(sourceTagRef, {
@@ -397,10 +398,15 @@ export class AdminQuestionTagsService {
       });
 
       questionSnapshot.docs.forEach((document, index) => {
+        const question = questions[index];
+        if (!question) {
+          throw new Error("Question tag snapshot normalization invariant failed.");
+        }
+
         const nextTags = replaceQuestionTags(
-          questions[index]!,
+          question,
           request.primaryTag,
-          request.secondaryTag!,
+          secondaryTag,
         );
         if (!nextTags) {
           return;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
@@ -1516,6 +1516,10 @@ function AssignmentManagementPage() {
       null,
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const layerVisibleModes = useMemo(
+    () => allowedModesForLayer(CURRENT_LICENSE_LAYER),
+    [],
+  );
   const activeSection = useMemo(() => resolveAssignmentSection(location.pathname), [location.pathname]);
   const workspaceHeader = useMemo(() => {
     if (activeSection === "create") {
@@ -1584,7 +1588,7 @@ function AssignmentManagementPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [layerVisibleModes]);
 
   useEffect(() => {
     let isMounted = true;
@@ -1736,10 +1740,6 @@ function AssignmentManagementPage() {
       }),
     [templateFilters, templateOptionsForAssignment],
   );
-  const layerVisibleModes = useMemo(
-    () => allowedModesForLayer(CURRENT_LICENSE_LAYER),
-    [],
-  );
   const stepTwoModes = useMemo(
     () =>
       layerVisibleModes.map((mode) => ({
@@ -1825,7 +1825,7 @@ function AssignmentManagementPage() {
 
     return ["risk", "discipline", "raw", "accuracy"];
   }, []);
-  function matchesMetricFilters(values: Pick<StudentSelectionRow, "raw" | "accuracy" | "risk" | "discipline" | "topicWeaknesses">): boolean {
+  const matchesMetricFilters = useCallback((values: Pick<StudentSelectionRow, "raw" | "accuracy" | "risk" | "discipline" | "topicWeaknesses">): boolean => {
     if (visibleMetricControls.includes("risk") && appliedMetricsFilter.riskState !== "all" && values.risk !== appliedMetricsFilter.riskState) {
       return false;
     }
@@ -1855,7 +1855,7 @@ function AssignmentManagementPage() {
       return false;
     }
     return true;
-  }
+  }, [appliedMetricsFilter, parsedMetricRanges, recipientFamily, visibleMetricControls]);
   const topicWeaknessOptions = useMemo(
     () =>
       Array.from(
@@ -1925,7 +1925,7 @@ function AssignmentManagementPage() {
           } satisfies BatchSelectionRow;
         })
         .filter((row) => recipientFamily !== "batch" || matchesMetricFilters(row)),
-    [appliedMetricsFilter, batchOptions, draft.selectedBatchIds, recipientFamily, studentOptions, visibleMetricControls],
+    [batchOptions, draft.selectedBatchIds, matchesMetricFilters, recipientFamily, studentOptions],
   );
   const studentSelectionRows = useMemo<StudentSelectionRow[]>(() => {
     return studentOptions.map((student) => ({
@@ -2044,7 +2044,7 @@ function AssignmentManagementPage() {
     });
   }, [batchOptions, filters, runs]);
 
-  const assignmentColumns = useMemo<UiTableColumn<RunStatusRecord>[]>(() => {
+  const assignmentColumns: UiTableColumn<RunStatusRecord>[] = (() => {
     const showL1 = hasLicenseAccess(CURRENT_LICENSE_LAYER, "L1");
     const showL2 = hasLicenseAccess(CURRENT_LICENSE_LAYER, "L2");
 
@@ -2175,7 +2175,7 @@ function AssignmentManagementPage() {
         ),
       },
     ];
-  }, [batchOptions, navigate]);
+  })();
 
   const liveColumns = useMemo<UiTableColumn<LiveMonitorStudentSnapshot>[]>(() => {
     const columns: UiTableColumn<LiveMonitorStudentSnapshot>[] = [

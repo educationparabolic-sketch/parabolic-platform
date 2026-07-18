@@ -485,7 +485,7 @@ interface AssignmentAttentionStudentRecord {
   disciplineIndex: number;
 }
 
-interface AssignmentPerformanceStudentRecord extends AssignmentAttentionStudentRecord {}
+type AssignmentPerformanceStudentRecord = AssignmentAttentionStudentRecord;
 
 interface AssignmentAbsentStudentRecord {
   runId: string;

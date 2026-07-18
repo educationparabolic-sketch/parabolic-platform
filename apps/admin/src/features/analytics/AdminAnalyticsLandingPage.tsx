@@ -86,7 +86,7 @@ function AdminAnalyticsLandingPage() {
       to: "/admin/analytics/batches",
       meta: `${batches.length} batches available for side-by-side review`,
     },
-  ]), [batches.length, runs.length, templates.length]);
+  ]), [batches.length, templates.length]);
 
   const note = isLoading ?
     "Loading analytics landing summary from GET /admin/analytics..." :

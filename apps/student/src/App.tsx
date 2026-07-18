@@ -154,7 +154,6 @@ function StudentLayout() {
   const debugMode = isStudentDebugMode();
   const activeLicenseLayer = globalState.licenseLayer ?? "L0";
   const [pageScrolled, setPageScrolled] = useState(false);
-  const [hasLivePhoto, setHasLivePhoto] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
       return window.localStorage.getItem(STUDENT_SIDEBAR_STORAGE_KEY) === "true";
@@ -181,19 +180,18 @@ function StudentLayout() {
     }
   }, [sidebarCollapsed]);
 
-  useEffect(() => {
+  const hasLivePhoto = (() => {
     const email = session.user?.email;
     if (!email) {
-      setHasLivePhoto(true);
-      return;
+      return true;
     }
 
     try {
-      setHasLivePhoto(Boolean(window.localStorage.getItem(studentLivePhotoStorageKey(email))));
+      return Boolean(window.localStorage.getItem(studentLivePhotoStorageKey(email)));
     } catch {
-      setHasLivePhoto(true);
+      return true;
     }
-  }, [location.pathname, session.user?.email]);
+  })();
 
   const visibleNavItems = useMemo(() => {
     return STUDENT_PRIMARY_NAVIGATION.filter((item) => {

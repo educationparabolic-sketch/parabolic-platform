@@ -2465,7 +2465,6 @@ function ExamSessionPage() {
     sessionSnapshot.difficultyDistribution.easyPercent,
     sessionSnapshot.difficultyDistribution.hardPercent,
     sessionSnapshot.difficultyDistribution.mediumPercent,
-    sessionSnapshot.phaseConfigSnapshot,
     sessionSnapshot.questions,
     skippedQuestionsCount,
   ]);

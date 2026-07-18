@@ -81,9 +81,9 @@ export class AdminStudentOnboardingResendService {
     const fullName =
       typeof studentData.fullName === "string" && studentData.fullName.trim().length > 0 ?
         studentData.fullName.trim() :
-      typeof studentData.name === "string" && studentData.name.trim().length > 0 ?
-        studentData.name.trim() :
-        request.studentId;
+        typeof studentData.name === "string" && studentData.name.trim().length > 0 ?
+          studentData.name.trim() :
+          request.studentId;
 
     if (status !== "invited") {
       throw new AdminStudentOnboardingResendValidationError(

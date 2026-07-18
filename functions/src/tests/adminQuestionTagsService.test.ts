@@ -153,7 +153,9 @@ test("admin question tags service renames persisted tag coverage", async () => {
     secondaryTag: "kinematics",
   });
 
-  const writes = (firestore as never as {_writes: Array<{kind: string; path: string; data: Record<string, unknown>}>})._writes;
+  const writes = (firestore as never as {
+    _writes: Array<{kind: string; path: string; data: Record<string, unknown>}>
+  })._writes;
   assert.equal(writes.some((write) => write.kind === "update" && write.path.endsWith("/questionBank/q-001")), true);
   assert.equal(writes.some((write) => write.kind === "set" && write.path.endsWith("/tagDictionary/kinematics")), true);
   assert.equal(writes.some((write) => write.kind === "set" && write.path.endsWith("/tagDictionary/motion")), true);

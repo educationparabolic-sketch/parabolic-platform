@@ -256,7 +256,7 @@ function StudentDashboardPage() {
         "No upcoming run is scheduled yet. Check back for newly assigned tests.";
 
     return `${headline} ${nextRunPrompt}`;
-  }, [dataset, latestResult]);
+  }, [dataset, latestResult, nextUpcoming]);
 
   const upcomingColumns = useMemo<UiTableColumn<UpcomingTestRecord>[]>(
     () => [

@@ -277,7 +277,6 @@ function AdminQuestionBankQuestionDetailPage() {
     accessContext.licenseLayer !== null && LICENSE_LAYER_ORDER[accessContext.licenseLayer] >= LICENSE_LAYER_ORDER.L2;
   const [questions, setQuestions] = useState<QuestionBankRecord[]>(QUESTION_BANK);
   const [inlineMessage, setInlineMessage] = useState("Question details are ready.");
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [previewAsset, setPreviewAsset] = useState<{
     fileName: string;
     src: string;
@@ -377,13 +376,9 @@ function AdminQuestionBankQuestionDetailPage() {
     },
   ];
 
-  useEffect(() => {
-    if (!selectedQuestion && questionId) {
-      setErrorMessage(`Question ${questionId} was not found in the library.`);
-    } else {
-      setErrorMessage(null);
-    }
-  }, [questionId, selectedQuestion]);
+  const errorMessage = !selectedQuestion && questionId ?
+    `Question ${questionId} was not found in the library.` :
+    null;
 
   function openImagePreview(fileName: string, assetType: "question" | "solution") {
     if (!fileName.trim()) {

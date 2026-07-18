@@ -12,16 +12,16 @@ For backend wiring, integration, security, testing, and deployment readiness, th
 
 ```yaml
 program: backend-wiring-and-deployment-readiness
-program_status: READY_TO_START
+program_status: IN_PROGRESS
 release_decision: NO_GO
 current_phase: 0
 current_task: BWM-001
-current_substep: BWM-001-A
+current_substep: BWM-001-E
 last_completed_task: BWM-000
 next_task: BWM-001
 blocked_tasks: []
 last_updated: 2026-07-18
-last_update_summary: Master controller expanded with mandatory per-task test levels, Firebase CLI emulator/staging rules, product-owner acceptance, and a final production deployment/handoff task. Begin BWM-001 by making the existing quality gates trustworthy and green.
+last_update_summary: BWM-001-D added a dependency-free fail-fast root verifier; its forced failure path exited 1 at the first gate and its real run passed all 10 portal/Functions lint and build checks. Resume BWM-001-E with the isolated Firebase emulator harness.
 ```
 
 Do not infer progress from old build numbers, UI completion labels, or visual verification artifacts. Only this checkpoint, the task registry, checked substeps, session log, and current repository evidence determine progress for this program.
@@ -252,7 +252,7 @@ The registry is the canonical order. Detailed cards below define scope and accep
 | ID | Priority | Status | Depends on | Outcome |
 |---|---|---|---|---|
 | BWM-000 | P0 | VERIFIED | - | Four-portal wiring audit and master controller |
-| BWM-001 | P0 | READY | BWM-000 | Trustworthy green quality gates and local integration-test harness |
+| BWM-001 | P0 | IN_PROGRESS | BWM-000 | Trustworthy green quality gates and local integration-test harness |
 | BWM-002 | P0 | PLANNED | BWM-001 | Canonical `/api/v1` route and contract manifest |
 | BWM-003 | P0 | PLANNED | BWM-002 | Unified API gateway/router wired to handlers |
 | BWM-004 | P0 | PLANNED | BWM-003 | Hosting API rewrites, CORS policy, and security headers |
@@ -327,13 +327,13 @@ The registry is the canonical order. Detailed cards below define scope and accep
 
 ### BWM-001 — Restore Trustworthy Quality Gates
 
-- **Status:** `READY`
+- **Status:** `IN_PROGRESS`
 - **Purpose:** Start integration work from a clean, repeatable baseline and unblock the existing Functions predeploy gate.
 - **Substeps:**
-  - [ ] **BWM-001-A:** Re-run lint in Admin, Student, Exam, Vendor, and Functions; save the current categorized failure list.
-  - [ ] **BWM-001-B:** Fix frontend lint errors and hook dependency warnings without changing intended behavior.
-  - [ ] **BWM-001-C:** Resolve Functions lint failures. Adjust obsolete lint policy only through an explicit, narrowly justified configuration decision; do not blanket-disable correctness rules.
-  - [ ] **BWM-001-D:** Add one repeatable workspace verification command/script for all portal lint/build checks and Functions lint/build.
+  - [x] **BWM-001-A:** Re-run lint in Admin, Student, Exam, Vendor, and Functions; save the current categorized failure list.
+  - [x] **BWM-001-B:** Fix frontend lint errors and hook dependency warnings without changing intended behavior.
+  - [x] **BWM-001-C:** Resolve Functions lint failures. Adjust obsolete lint policy only through an explicit, narrowly justified configuration decision; do not blanket-disable correctness rules.
+  - [x] **BWM-001-D:** Add one repeatable workspace verification command/script for all portal lint/build checks and Functions lint/build.
   - [ ] **BWM-001-E:** Configure a minimal isolated Firebase Local Emulator Suite harness for Auth, Firestore, Functions, and Hosting, adding Storage when current asset behavior needs it.
   - [ ] **BWM-001-F:** Bootstrap the shared browser E2E runner and one no-mock Hosting/emulator smoke scenario so later user-visible tasks can add focused Playwright scenarios immediately rather than waiting for BWM-048. Do not pre-empt the API gateway owned by BWM-003.
   - [ ] **BWM-001-G:** Add one deterministic `firebase emulators:exec` smoke command that starts the required services, runs a real Functions/Firestore/Hosting check, exits non-zero on failure, and shuts everything down.
@@ -341,6 +341,64 @@ The registry is the canonical order. Detailed cards below define scope and accep
 - **Acceptance:** All five packages lint with zero errors; all builds pass; the repeatable command exits non-zero on any package failure; the initial Firebase CLI emulator and no-mock browser harnesses pass twice and are ready for each subsequent task to extend.
 - **Required verification:** portal `npm run lint`, portal `npm run build`, `npm --prefix functions run lint`, `npm --prefix functions run build`, and the initial `firebase emulators:exec --project demo-parabolic-test --only <configured-emulators> "<smoke-command>"`.
 - **Notes:** Keep lint cleanup behavior-neutral. Test-harness/configuration additions are in scope, but production business behavior belongs to its later owning task.
+- **BWM-001-A evidence (2026-07-18):**
+  - **Implemented files:** `docs/BACKEND_WIRING_MASTER_EXECUTION_PLAN.md` only; no application, Functions, lint-policy, or generated files changed.
+  - **Categorized frontend lint baseline:**
+    - Admin: 4 errors and 8 warnings across 8 files. Errors are 2 `react-hooks/set-state-in-effect`, 1 `@typescript-eslint/no-empty-object-type`, and 1 `@typescript-eslint/no-unused-vars`; all 8 warnings are `react-hooks/exhaustive-deps`.
+    - Student: 1 `react-hooks/set-state-in-effect` error in `src/App.tsx` and 1 `react-hooks/exhaustive-deps` warning in `src/features/dashboard/StudentDashboardPage.tsx`.
+    - Exam: 0 errors and 1 `react-hooks/exhaustive-deps` warning in `src/ExamRuntimeApp.tsx`.
+    - Vendor: 1 `react-hooks/set-state-in-effect` error in `src/App.tsx` and 0 warnings.
+    - Cross-portal totals: 6 errors and 10 warnings. The error categories are 4 synchronous state updates in effects and 2 Admin TypeScript correctness findings; the warnings are all hook dependency findings.
+  - **Categorized Functions lint baseline:** 286 errors and 2 warnings across 47 files. By rule: 150 `max-len` errors, 127 `require-jsdoc` errors, 9 `indent` errors, and 2 `@typescript-eslint/no-non-null-assertion` warnings. By layer (errors and warnings combined): API 13, middleware 2, services 220, tests 37, and types 16. Highest-concentration files are `src/services/adminOverview.ts` (67), `src/services/adminQuestionTags.ts` (27), `src/services/adminQuestionLibrary.ts` (23), `src/services/questionBulkUpload.ts` (19), and `src/services/adminQuestionDistribution.ts` (18).
+  - **L1 static:** `npm run lint` from each of `apps/admin`, `apps/student`, `apps/exam`, `apps/vendor`, and `functions` — BASELINE CAPTURED; exit codes were 1, 1, 0, 1, and 1 respectively with the exact totals above. Failures are expected at this audit substep and keep BWM-001 `IN_PROGRESS`; builds and green reruns remain pending in later BWM-001 substeps.
+  - **L2 unit/contract:** N/A — inventory/documentation substep; no logic, DTO, schema, policy, state, or handler changed.
+  - **L3 Firebase emulator:** N/A — no Firebase behavior or emulator configuration changed in BWM-001-A; harness setup begins at BWM-001-E.
+  - **L4 browser E2E:** N/A — no user-visible behavior changed; runner bootstrap begins at BWM-001-F.
+  - **L5 staging/preview:** N/A — no deployment or public-runtime behavior changed and no cloud mutation was authorized or performed.
+  - **Firebase CLI version:** N/A for this lint-only substep; the harness substeps will record the locally executed CLI version.
+  - **Authorization/external mutations:** None.
+  - **Contract/schema changes:** None.
+  - **Residual risks:** All categorized findings remain intentionally unfixed for BWM-001-B and BWM-001-C; full builds, repeatable workspace command, emulator/browser harnesses, and twice-clean verification remain pending in BWM-001-D through BWM-001-H.
+  - **Completed on:** 2026-07-18
+- **BWM-001-B evidence (2026-07-18):**
+  - **Implemented files:** `apps/admin/src/App.tsx`, `apps/admin/src/features/analytics/AdminAnalyticsLandingPage.tsx`, `apps/admin/src/features/assignments/AdminAssignmentDetailPage.tsx`, `apps/admin/src/features/assignments/AdminAssignmentLiveRunPage.tsx`, `apps/admin/src/features/assignments/AdminAssignmentsLandingPage.tsx`, `apps/admin/src/features/assignments/AssignmentManagementPage.tsx`, `apps/admin/src/features/insights/InsightsWorkspaceNav.tsx`, `apps/admin/src/features/tests/AdminQuestionBankQuestionDetailPage.tsx`, `apps/student/src/App.tsx`, `apps/student/src/features/dashboard/StudentDashboardPage.tsx`, `apps/exam/src/ExamRuntimeApp.tsx`, `apps/vendor/src/App.tsx`, and this controller.
+  - **Implementation summary:** Removed unnecessary hook dependencies; added missing dependencies through stable callbacks; moved a stable mode list before its consuming effect; replaced an empty interface with an equivalent type alias; derived question/photo display state without synchronous effect setters; and relied on the existing sidebar navigation, backdrop, breakpoint, and toggle handlers to close mobile navigation without route-change setter effects. No API, route, DTO, data, authorization, or lint-policy behavior changed.
+  - **L1 static:** `npm run lint` in each of `apps/admin`, `apps/student`, `apps/exam`, and `apps/vendor` — PASS, zero errors and zero warnings in all four portals. `npm run build` in each of the same four packages — PASS; TypeScript project builds and Vite 7.3.2 production builds completed successfully (Admin 116 modules, Student 91, Exam 70, Vendor 89).
+  - **L2 unit/contract:** N/A — the repository has no frontend automated test script yet; this bounded substep changed no domain logic or contracts, and BWM-001-F owns the initial shared browser runner. Static typecheck/build and all affected lint correctness rules pass.
+  - **L3 Firebase emulator:** N/A — no Auth, Firestore, Functions, rules, Storage, trigger, or Hosting behavior changed.
+  - **L4 browser E2E:** N/A — no cross-layer user flow changed; the no-mock browser harness is not available until BWM-001-F.
+  - **L5 staging/preview:** N/A — no deployment, environment, security-header, rewrite, secret, or public-runtime behavior changed.
+  - **Firebase CLI version:** N/A — no Firebase CLI behavior was exercised by this frontend-only lint cleanup.
+  - **Authorization/external mutations:** None.
+  - **Contract/schema changes:** None.
+  - **Residual risks:** Functions still has the BWM-001-A baseline of 286 errors and 2 warnings, owned by BWM-001-C. Workspace command, emulator/browser harnesses, deterministic smoke, and twice-clean verification remain pending in BWM-001-D through BWM-001-H.
+  - **Completed on:** 2026-07-18
+- **BWM-001-C evidence (2026-07-18):**
+  - **Implemented files:** `functions/.eslintrc.js`, `functions/src/services/adminQuestionTags.ts`, `functions/src/services/adminQuestionUploadLogs.ts`, `functions/src/services/adminStudentOnboardingResend.ts`, `functions/src/services/answerBatch.ts`, `functions/src/services/questionBulkUpload.ts`, `functions/src/tests/adminQuestionTagsService.test.ts`, and this controller.
+  - **Implementation summary:** Applied Decision `DEC-007` only to TypeScript: the inherited blanket `require-jsdoc` style rule is disabled and `max-len` is 120. All ESLint recommended, TypeScript recommended, import, quote, and indentation rules remain enabled. Fixed all nine indentation findings, wrapped the sole 127-character line, and replaced two non-null assertions with stable secondary-tag narrowing plus an explicit fail-closed snapshot-alignment invariant.
+  - **L1 static:** `npm run lint` in `functions` — PASS, zero errors and zero warnings. `npm run build` in `functions` — PASS, TypeScript compilation completed successfully.
+  - **L2 unit/contract:** `node --test lib/tests/adminQuestionTagsService.test.js` from `functions` after the final build — PASS, 1 test file, 1 pass, 0 failures.
+  - **L3 Firebase emulator:** N/A — valid Firestore query/write behavior and contracts did not change; edits were lint-only formatting and equivalent type narrowing, with an explicit error replacing an implicit crash only if an internal snapshot-normalization invariant is violated. Emulator harness configuration begins at BWM-001-E.
+  - **L4 browser E2E:** N/A — no user-visible or cross-layer flow changed.
+  - **L5 staging/preview:** N/A — no deployment, environment, rewrite, secret, or public-runtime behavior changed.
+  - **Firebase CLI version:** N/A — no Firebase CLI behavior was exercised by this lint-only Functions cleanup.
+  - **Authorization/external mutations:** None.
+  - **Contract/schema changes:** None.
+  - **Residual risks:** The five package lint/build gates are individually green, but the fail-fast workspace command, emulator/browser harnesses, deterministic smoke command, and twice-clean verification remain pending in BWM-001-D through BWM-001-H.
+  - **Completed on:** 2026-07-18
+- **BWM-001-D evidence (2026-07-18):**
+  - **Implemented files:** `scripts/verify-workspace.mjs` and this controller.
+  - **Implementation summary:** Added one dependency-free Node command that resolves the repository root from its own file location, runs Admin, Student, Exam, Vendor, and Functions lint gates followed by their five builds, streams each package's native output, and exits immediately with the failed command's non-zero status or with 1 when a command cannot start.
+  - **L1 static:** `node scripts/verify-workspace.mjs` from the repository root — PASS; all 10 checks completed in order (5 lint, 5 TypeScript/production builds) and the command exited 0. `env PATH= /usr/bin/node scripts/verify-workspace.mjs` — EXPECTED FAIL; `npm` could not start at Admin lint, the verifier stopped immediately, and the command exited 1, proving non-zero failure propagation.
+  - **L2 unit/contract:** N/A — orchestration-only script with no domain logic or contract changes; both success and process-start failure branches were exercised directly.
+  - **L3 Firebase emulator:** N/A — no Firebase configuration or behavior changed; emulator harness setup begins at BWM-001-E.
+  - **L4 browser E2E:** N/A — no user-visible flow changed.
+  - **L5 staging/preview:** N/A — no deployment or public-runtime behavior changed.
+  - **Firebase CLI version:** N/A — the workspace verifier intentionally covers static lint/build gates only.
+  - **Authorization/external mutations:** None.
+  - **Contract/schema changes:** None.
+  - **Residual risks:** Auth/Firestore/Functions/Hosting emulator configuration, the no-mock browser smoke, deterministic emulator smoke command, and twice-clean final verification remain pending in BWM-001-E through BWM-001-H.
+  - **Completed on:** 2026-07-18
 
 ### BWM-002 — Canonical API Route and Contract Manifest
 
@@ -963,6 +1021,7 @@ operations_owner: TBD
 | DEC-004 | 2026-07-18 | Use Firebase ID tokens for normal APIs; custom token is only a one-time Exam launch credential. | Current custom-token-as-bearer design is incompatible with `verifyIdToken`. | Accepted |
 | DEC-005 | 2026-07-18 | Production must fail closed and never silently substitute fixtures or fabricated success. | Fake data can mislead students/operators and hide data loss. | Accepted |
 | DEC-006 | 2026-07-18 | Finish the Admin -> Student -> Exam -> Analytics golden path before secondary portal operations. | It validates the platform's core value chain and shared infrastructure first. | Accepted |
+| DEC-007 | 2026-07-18 | For Functions TypeScript only, disable inherited blanket `require-jsdoc` and use a 120-character `max-len`; retain all correctness, TypeScript, import, quote, and indentation rules. | Google-style mandatory JSDoc and an 80-character limit created 277 non-behavior findings across already typed implementation/test code. Public or non-obvious APIs may still use focused documentation without making boilerplate comments a predeploy gate. | Accepted |
 
 Add decisions here whenever implementation changes a contract, schema, security boundary, task order, or release scope.
 
@@ -1080,6 +1139,42 @@ Never record only “tests passed.” Include exact commands and whether tests w
 ## Session Log
 
 Append newest entries at the top.
+
+### LOG-005 — 2026-07-18 — BWM-001-D Workspace Verification Command
+
+- **Task:** BWM-001-D
+- **Outcome:** Added `node scripts/verify-workspace.mjs`, a dependency-free fail-fast root command for every portal and Functions lint/build gate.
+- **Validation performed:** Forced missing-`npm` execution stopped at Admin lint and exited 1. The normal root execution passed Admin, Student, Exam, Vendor, and Functions lint, then all five builds, reported 10 completed checks, and exited 0. `git diff --check` passed before the controller update.
+- **Files changed:** `scripts/verify-workspace.mjs` and `docs/BACKEND_WIRING_MASTER_EXECUTION_PLAN.md`.
+- **Cloud changes:** None. No Firebase emulator, login, preview, staging deployment, or production deployment was performed.
+- **Next:** BWM-001-E — configure the isolated Auth, Firestore, Functions, and Hosting Firebase Local Emulator Suite harness, adding Storage only if current asset behavior requires it.
+
+### LOG-004 — 2026-07-18 — BWM-001-C Functions Lint Cleanup
+
+- **Task:** BWM-001-C
+- **Outcome:** Cleared all 286 Functions lint errors and 2 warnings. Narrowed two inherited style rules for TypeScript through `DEC-007`, retained correctness rules, fixed remaining formatting, and removed both non-null assertions with explicit narrowing/invariant handling.
+- **Validation performed:** Final `npm run lint` in `functions` passed with zero findings; final `npm run build` passed; `node --test lib/tests/adminQuestionTagsService.test.js` passed 1 test file with 0 failures; `git diff --check` passed before the controller update.
+- **Files changed:** Functions ESLint configuration, 5 Functions service files, 1 focused test file, and `docs/BACKEND_WIRING_MASTER_EXECUTION_PLAN.md`.
+- **Cloud changes:** None. No Firebase emulator, login, preview, staging deployment, or production deployment was performed.
+- **Next:** BWM-001-D — add one fail-fast workspace verification command covering all four portal lint/build gates and Functions lint/build.
+
+### LOG-003 — 2026-07-18 — BWM-001-B Frontend Lint Cleanup
+
+- **Task:** BWM-001-B
+- **Outcome:** Cleared all 6 frontend lint errors and 10 hook warnings without changing contracts or intended portal behavior. Admin, Student, Exam, and Vendor now lint with zero findings.
+- **Validation performed:** Final `npm run lint` passed in all four portal directories. Final `npm run build` passed in all four portal directories, including TypeScript project compilation and Vite 7.3.2 production bundling. `git diff --check` passed before the controller update.
+- **Files changed:** 8 Admin source files, 2 Student source files, 1 Exam source file, 1 Vendor source file, and `docs/BACKEND_WIRING_MASTER_EXECUTION_PLAN.md`.
+- **Cloud changes:** None. No Firebase emulator, login, preview, staging deployment, or production deployment was performed.
+- **Next:** BWM-001-C — resolve the categorized Functions lint baseline without blanket-disabling correctness rules, then run Functions lint and build.
+
+### LOG-002 — 2026-07-18 — BWM-001-A Current Lint Baseline
+
+- **Task:** BWM-001-A
+- **Outcome:** Re-ran all five package lint gates without changing source or lint policy, confirmed the prior aggregate baseline, and recorded exact rule and layer categories in the BWM-001 task evidence.
+- **Validation performed:** `npm run lint` in Admin (4 errors, 8 warnings), Student (1 error, 1 warning), Exam (0 errors, 1 warning), Vendor (1 error, 0 warnings), and Functions (286 errors, 2 warnings). Exam exited 0; the other four exited 1 as expected from the captured findings.
+- **Files changed:** `docs/BACKEND_WIRING_MASTER_EXECUTION_PLAN.md`
+- **Cloud changes:** None. No Firebase emulator, login, preview, staging deployment, or production deployment was performed.
+- **Next:** BWM-001-B — fix the 6 frontend lint errors and 10 hook dependency warnings without changing intended behavior, then rerun all four frontend lint gates.
 
 ### LOG-001 — 2026-07-18 — Mandatory Testing and Firebase Release Handoff
 
