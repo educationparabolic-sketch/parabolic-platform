@@ -1,5 +1,14 @@
 {
   "projects": {
     "default": "parabolic-dev"
+  },
+  "targets": {
+    "demo-parabolic-test": {
+      "hosting": {
+        "portal": [
+          "demo-parabolic-test-portal"
+        ]
+      }
+    }
   }
 }

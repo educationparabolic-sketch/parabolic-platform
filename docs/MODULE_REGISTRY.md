@@ -14,15 +14,28 @@ If a module already exists, it must be reused rather than recreated.
 
 Modules are categorized into the following groups:
 
-API Endpoints  
-Services  
-Processing Engines  
-Firestore Collections  
-Frontend Modules
+- API Endpoints
+- Services
+- Processing Engines
+- Firestore Collections
+- Frontend Modules
+- Contract Manifests
+
+---
+
+# CONTRACT MANIFESTS
+
+Manifest | Build/Task | Purpose
+---|---|---
+CanonicalApiRouteManifest | BWM-002 | `functions/src/apiRouteManifest.ts` is the machine-readable inventory for all 29 executable frontend method/path contracts and all 41 current HTTP Functions exports. It records canonical `/api/v1` paths, current frontend paths, portal ownership, compatibility status, mapped Functions exports, and explicit dispositions for the 19 exports without frontend routes. `docs/api_contract.md` is its prose contract and `docs/FRONTEND_API_CALL_INVENTORY.md` contains per-route request/response evidence. BWM-003 must reuse this manifest for gateway routing rather than create a second route table; BWM-002-E owns frontend-call coverage enforcement.
+
+Current canonical route totals as of 2026-07-19: 13 `implemented`, 10 `incompatible`, 6 `missing`, and 0 `intentionally_retired`. Canonical assignment does not imply runtime reachability before BWM-003 and BWM-004.
 
 ---
 
 # API ENDPOINTS
+
+The table below is an implementation-history registry and retains the legacy paths used by the original builds. Canonical browser route keys and current compatibility status are authoritative in `functions/src/apiRouteManifest.ts` and `docs/api_contract.md`. Do not infer a public `/api/v1` route for an endpoint that the typed manifest marks `unmapped_portal`, `internal_only`, `webhook`, or `healthcheck`.
 
 Endpoint | Build | Description
 ---|---|---

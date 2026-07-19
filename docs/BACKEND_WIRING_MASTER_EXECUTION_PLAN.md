@@ -15,13 +15,13 @@ program: backend-wiring-and-deployment-readiness
 program_status: IN_PROGRESS
 release_decision: NO_GO
 current_phase: 0
-current_task: BWM-001
-current_substep: BWM-001-E
-last_completed_task: BWM-000
-next_task: BWM-001
+current_task: BWM-003
+current_substep: BWM-003-A
+last_completed_task: BWM-002
+next_task: BWM-003
 blocked_tasks: []
-last_updated: 2026-07-18
-last_update_summary: BWM-001-D added a dependency-free fail-fast root verifier; its forced failure path exited 1 at the first gate and its real run passed all 10 portal/Functions lint and build checks. Resume BWM-001-E with the isolated Firebase emulator harness.
+last_updated: 2026-07-19
+last_update_summary: BWM-002-E added a permanent AST-based contract test that reconciles every statically declared portal API method/path and every HTTP Functions export with the typed manifest. BWM-002 is verified; continue BWM-003-A by adding the single versioned HTTP gateway export.
 ```
 
 Do not infer progress from old build numbers, UI completion labels, or visual verification artifacts. Only this checkpoint, the task registry, checked substeps, session log, and current repository evidence determine progress for this program.
@@ -252,9 +252,9 @@ The registry is the canonical order. Detailed cards below define scope and accep
 | ID | Priority | Status | Depends on | Outcome |
 |---|---|---|---|---|
 | BWM-000 | P0 | VERIFIED | - | Four-portal wiring audit and master controller |
-| BWM-001 | P0 | IN_PROGRESS | BWM-000 | Trustworthy green quality gates and local integration-test harness |
-| BWM-002 | P0 | PLANNED | BWM-001 | Canonical `/api/v1` route and contract manifest |
-| BWM-003 | P0 | PLANNED | BWM-002 | Unified API gateway/router wired to handlers |
+| BWM-001 | P0 | VERIFIED | BWM-000 | Trustworthy green quality gates and local integration-test harness |
+| BWM-002 | P0 | VERIFIED | BWM-001 | Canonical `/api/v1` route and contract manifest |
+| BWM-003 | P0 | READY | BWM-002 | Unified API gateway/router wired to handlers |
 | BWM-004 | P0 | PLANNED | BWM-003 | Hosting API rewrites, CORS policy, and security headers |
 | BWM-005 | P0 | PLANNED | BWM-004 | Environment matrix and production artifact validation |
 | BWM-006 | P0 | PLANNED | BWM-002 | Standard response envelope and shared boundary types |
@@ -327,17 +327,17 @@ The registry is the canonical order. Detailed cards below define scope and accep
 
 ### BWM-001 — Restore Trustworthy Quality Gates
 
-- **Status:** `IN_PROGRESS`
+- **Status:** `VERIFIED`
 - **Purpose:** Start integration work from a clean, repeatable baseline and unblock the existing Functions predeploy gate.
 - **Substeps:**
   - [x] **BWM-001-A:** Re-run lint in Admin, Student, Exam, Vendor, and Functions; save the current categorized failure list.
   - [x] **BWM-001-B:** Fix frontend lint errors and hook dependency warnings without changing intended behavior.
   - [x] **BWM-001-C:** Resolve Functions lint failures. Adjust obsolete lint policy only through an explicit, narrowly justified configuration decision; do not blanket-disable correctness rules.
   - [x] **BWM-001-D:** Add one repeatable workspace verification command/script for all portal lint/build checks and Functions lint/build.
-  - [ ] **BWM-001-E:** Configure a minimal isolated Firebase Local Emulator Suite harness for Auth, Firestore, Functions, and Hosting, adding Storage when current asset behavior needs it.
-  - [ ] **BWM-001-F:** Bootstrap the shared browser E2E runner and one no-mock Hosting/emulator smoke scenario so later user-visible tasks can add focused Playwright scenarios immediately rather than waiting for BWM-048. Do not pre-empt the API gateway owned by BWM-003.
-  - [ ] **BWM-001-G:** Add one deterministic `firebase emulators:exec` smoke command that starts the required services, runs a real Functions/Firestore/Hosting check, exits non-zero on failure, and shuts everything down.
-  - [ ] **BWM-001-H:** Run the full baseline and emulator commands twice from a clean working tree and document results.
+  - [x] **BWM-001-E:** Configure a minimal isolated Firebase Local Emulator Suite harness for Auth, Firestore, Functions, and Hosting, adding Storage when current asset behavior needs it.
+  - [x] **BWM-001-F:** Bootstrap the shared browser E2E runner and one no-mock Hosting/emulator smoke scenario so later user-visible tasks can add focused Playwright scenarios immediately rather than waiting for BWM-048. Do not pre-empt the API gateway owned by BWM-003.
+  - [x] **BWM-001-G:** Add one deterministic `firebase emulators:exec` smoke command that starts the required services, runs a real Functions/Firestore/Hosting check, exits non-zero on failure, and shuts everything down.
+  - [x] **BWM-001-H:** Run the full baseline and emulator commands twice from a clean working tree and document results.
 - **Acceptance:** All five packages lint with zero errors; all builds pass; the repeatable command exits non-zero on any package failure; the initial Firebase CLI emulator and no-mock browser harnesses pass twice and are ready for each subsequent task to extend.
 - **Required verification:** portal `npm run lint`, portal `npm run build`, `npm --prefix functions run lint`, `npm --prefix functions run build`, and the initial `firebase emulators:exec --project demo-parabolic-test --only <configured-emulators> "<smoke-command>"`.
 - **Notes:** Keep lint cleanup behavior-neutral. Test-harness/configuration additions are in scope, but production business behavior belongs to its later owning task.
@@ -399,29 +399,150 @@ The registry is the canonical order. Detailed cards below define scope and accep
   - **Contract/schema changes:** None.
   - **Residual risks:** Auth/Firestore/Functions/Hosting emulator configuration, the no-mock browser smoke, deterministic emulator smoke command, and twice-clean final verification remain pending in BWM-001-E through BWM-001-H.
   - **Completed on:** 2026-07-18
+- **BWM-001-E evidence (2026-07-19):**
+  - **Implemented files:** `firebase.json`, `.firebaserc`, and this controller.
+  - **Implementation summary:** Added the Auth emulator and pinned Auth `9099`, Functions `5001`, Firestore `8080`, and Hosting `5000` to `127.0.0.1`; disabled the optional Emulator UI; enabled single-project enforcement; and mapped only the existing `portal` Hosting target for the isolated `demo-parabolic-test` project. Storage was intentionally not added: inspection found Storage architecture/types but no active Firebase Storage-backed asset flow or Storage rules/configuration; the current identity-photo persistence is local-only and remains owned by BWM-042.
+  - **L1 static:** `node scripts/verify-workspace.mjs` — PASS; all 10 Admin, Student, Exam, Vendor, and Functions lint/build checks completed and exited 0. `node -e "for (const p of ['firebase.json','.firebaserc']) JSON.parse(require('fs').readFileSync(p,'utf8'))"` — PASS; both Firebase configuration files parsed as JSON.
+  - **L2 unit/contract:** N/A — emulator topology and local target configuration only; no logic, DTO, schema, policy, state, or handler changed.
+  - **L3 Firebase emulator:** `FUNCTIONS_DISCOVERY_TIMEOUT=30 CI=true firebase emulators:exec --project demo-parabolic-test --only auth,firestore,functions,hosting:portal "node -e \"<assert Auth, Firestore, and emulator-hub environment variables>\""` — PASS; Firebase CLI `15.9.0` started Auth, Firestore with rules, the complete Functions export graph, and portal Hosting on their configured loopback ports; the assertion exited 0 and all emulators shut down cleanly. The 30-second override is required because the current large Functions export graph exceeded the CLI's default 10-second discovery window on the first diagnostic run.
+  - **L4 browser E2E:** N/A — BWM-001-F is the next substep and owns the initial no-mock browser scenario.
+  - **L5 staging/preview:** N/A — the explicit demo project and local Hosting target were used; no preview/staging deployment or public URL changed.
+  - **Firebase CLI version:** `15.9.0`.
+  - **Authorization/external mutations:** The user approved local emulator execution outside the sandbox on 2026-07-19 so the CLI could bind loopback ports. No Firebase resource, deployment, or remote data was mutated; the CLI refreshed its local authenticated credential cache while initializing the Functions emulator.
+  - **Contract/schema changes:** None. The `.firebaserc` addition is a local-only Hosting target mapping for the demo project.
+  - **Residual risks:** BWM-001-F through BWM-001-H still own the browser runner/no-mock scenario, permanent deterministic smoke command (including the 30-second Functions discovery allowance), and twice-clean final verification. Firebase Storage remains deferred until BWM-042 or another asset task introduces a real Storage-backed flow.
+  - **Completed on:** 2026-07-19
+- **BWM-001-F evidence (2026-07-19):**
+  - **Implemented files:** `package.json`, `package-lock.json`, `playwright.config.mjs`, `tests/e2e/portal-hosting.smoke.spec.mjs`, `.gitignore`, and this controller.
+  - **Implementation summary:** Added a root-level Playwright `1.59.1` runner with a pinned Chromium project, one worker, no retries, failure-only screenshots/traces, ignored report output, and reusable `test:e2e`/`test:e2e:hosting` commands. The initial scenario uses no request interception or response mocks: it loads the prepared Admin and Student production bundles through Firebase Hosting, verifies HTML responses and the real unauthenticated login routes, and fails on browser errors or failed same-origin asset requests. It deliberately makes no API-gateway assertion because BWM-003 owns that route.
+  - **L1 static:** `node --check playwright.config.mjs`, `node --check tests/e2e/portal-hosting.smoke.spec.mjs`, and `npm run test:e2e -- --list` — PASS; the configuration and scenario parsed and exactly 1 Chromium test was discovered. `npm --prefix apps/admin run lint` and `npm --prefix apps/student run lint` — PASS with zero findings. `VITE_BASE_PATH=/admin/ npm --prefix apps/admin run build` and `VITE_BASE_PATH=/student/ npm --prefix apps/student run build`, followed by `node scripts/frontend-cicd/prepare-portal-hosting.mjs` — PASS; 116 Admin modules and 91 Student modules built with Hosting-safe asset bases and the combined portal bundle was prepared.
+  - **L2 unit/contract:** N/A — test-runner/configuration addition only; no application logic, DTO, schema, policy, state, or handler changed.
+  - **L3 Firebase emulator:** `CI=true firebase emulators:exec --project demo-parabolic-test --only hosting:portal "npm run test:e2e:hosting"` — PASS; Firebase CLI `15.9.0` served the isolated portal target on `127.0.0.1:5000`, the child command exited 0, and the emulator shut down cleanly.
+  - **L4 browser E2E:** The same Firebase CLI command — PASS; Playwright ran 1 Chromium scenario in 17.6 seconds. Admin and Student HTML, JavaScript, and CSS returned successfully; the real apps reached `/login` and `/student/login`; and the test observed no same-origin request failures, console errors, or page errors. No browser network route was mocked.
+  - **L5 staging/preview:** N/A — the browser targeted only the isolated local `demo-parabolic-test` Hosting emulator; no preview/staging deployment or public URL changed.
+  - **Firebase CLI version:** `15.9.0`.
+  - **Authorization/external mutations:** The user approved downloading the pinned Playwright package from npm and running the local Hosting emulator/headless Chromium outside the sandbox on 2026-07-19. Installs affected only ignored local `node_modules`; no Firebase resource, deployment, or remote data was mutated. The Firebase CLI refreshed its local authenticated credential cache during startup.
+  - **Contract/schema changes:** No API or domain contract changed. New developer test commands are `npm run test:e2e` and `npm run test:e2e:hosting`.
+  - **Residual risks:** BWM-001-G still owns the permanent combined real Functions/Firestore/Hosting smoke command, including build/bundle preparation and the 30-second Functions discovery allowance. BWM-001-H owns twice-clean execution. Later feature tasks will extend the shared browser suite beyond this unauthenticated Hosting baseline.
+  - **Completed on:** 2026-07-19
+- **BWM-001-G evidence (2026-07-19):**
+  - **Implemented files:** `package.json`, `scripts/run-emulator-smoke.mjs`, `scripts/firebase-emulator-smoke.mjs`, `functions/.env.demo-parabolic-test`, `functions/.gitignore`, and this controller.
+  - **Implementation summary:** Added `npm run smoke:emulators`, a fail-fast root command that builds Admin and Student with their Hosting base paths, builds Functions, prepares the combined portal bundle, and invokes `firebase emulators:exec` for only Firestore, Functions, and `hosting:portal` under `demo-parabolic-test`. Its inner check asserts the emulator project/hosts, creates and reads one disposable Firestore document through the real emulator REST API, calls the exported `helloWorld` Function and verifies the isolated test response, checks both Hosting entry artifacts, runs the BWM-001-F no-mock Chromium scenario, deletes the smoke document in `finally`, and propagates every non-zero status. Added a committed non-secret project-specific Functions dotenv file so a developer's ignored base `.env` cannot change the demo project's `NODE_ENV` or `PROJECT_ID`.
+  - **L1 static:** `node --check scripts/run-emulator-smoke.mjs` and `node --check scripts/firebase-emulator-smoke.mjs` — PASS. `npm --prefix functions run lint` — PASS with zero findings. `npm run smoke:emulators` built Admin (116 modules), Student (91 modules), and Functions successfully before starting emulators. JSON manifest parsing and `git diff --check` also passed.
+  - **L2 unit/contract:** N/A — orchestration and integration assertions only; no application handler, DTO, schema, authorization policy, or domain state transition changed. Both success and fail-closed orchestration paths were exercised directly.
+  - **L3 Firebase emulator:** `npm run smoke:emulators` — PASS; its logged Firebase command was `firebase emulators:exec --project demo-parabolic-test --only firestore,functions,hosting:portal "node scripts/firebase-emulator-smoke.mjs"`. Firebase CLI `15.9.0` loaded the full Functions export graph with the configured 30-second discovery allowance, created/read/deleted `emulatorSmoke/bwm-001-g`, returned the exact test/demo response from `helloWorld`, served both portal artifacts, exited 0, and shut down all emulators. A first diagnostic run detected that the ignored base Functions `.env` was overriding test identity, exited 1, cleaned up, and shut down; the non-secret project-specific override fixed that isolation leak.
+  - **L4 browser E2E:** `npm run smoke:emulators` — PASS; the nested no-mock Playwright command ran 1 Chromium Hosting scenario in 6.8 seconds with successful Admin/Student assets and login routes and no browser or same-origin network errors.
+  - **Failure propagation:** `env PATH= /usr/bin/node scripts/run-emulator-smoke.mjs` — EXPECTED FAIL; the command stopped at the first Admin build gate when `npm` could not start and exited 1. The initial real emulator mismatch also exited 1 and triggered Firebase shutdown, proving inner-check failure propagation and cleanup.
+  - **L5 staging/preview:** N/A — only the isolated local demo project emulators were used; no preview/staging deployment or public URL changed.
+  - **Firebase CLI version:** `15.9.0`.
+  - **Authorization/external mutations:** The user approved the local emulator/Chromium executions outside the sandbox on 2026-07-19. Only disposable emulator data, ignored build/test output, and local CLI credential/cache state changed; no Firebase resource, deployment, or remote data was mutated.
+  - **Contract/schema changes:** No product/API/schema contract changed. The new developer verification contract is `npm run smoke:emulators`; its fixed project is `demo-parabolic-test` and its fixed emulator set is Firestore, Functions, and `hosting:portal`.
+  - **Residual risks:** BWM-001-H must run both `node scripts/verify-workspace.mjs` and `npm run smoke:emulators` twice from the final BWM-001 tree and record both clean repetitions before BWM-001 can become `VERIFIED`.
+  - **Completed on:** 2026-07-19
+- **BWM-001-H evidence (2026-07-19):**
+  - **Implemented files:** This controller only. BWM-001-H was a verification-only closeout; no application, Functions, harness, configuration, contract, or schema file changed.
+  - **Final-tree hygiene:** The intentional accumulated BWM-001 source/configuration delta was unchanged before repetition 1, between repetitions, and after repetition 2. Each `git status --short` snapshot contained the same BWM-001 files and no generated build, Playwright, Firebase, or emulator artifact; `git diff --check` passed before and after the repetitions. Because the task changes are intentionally uncommitted, this stable no-drift snapshot is the clean final BWM-001 verification tree.
+  - **L1 static:** Repetition 1, `node scripts/verify-workspace.mjs` — PASS, exit 0; Admin, Student, Exam, Vendor, and Functions lint passed with zero findings, followed by all five production/TypeScript builds (Admin 116 modules, Student 91, Exam 70, Vendor 89, and Functions `tsc`). Repetition 2, the identical command — PASS, exit 0 with the same 10 gates and module counts.
+  - **L2 unit/contract:** N/A — closeout verification only; no logic, DTO, schema, policy, state, or handler changed in BWM-001-H. The bounded BWM-001 harness behavior was exercised through the required real integration and browser levels below.
+  - **L3 Firebase emulator:** Repetition 1 and repetition 2, `npm run smoke:emulators` — PASS, exit 0 both times. Each run logged `firebase emulators:exec --project demo-parabolic-test --only firestore,functions,hosting:portal "node scripts/firebase-emulator-smoke.mjs"`, loaded the complete Functions graph with the 30-second discovery allowance, wrote/read/deleted `emulatorSmoke/bwm-001-g`, verified the exact `helloWorld` test/demo response, served both portal artifacts, and shut down all processes. A final read-only socket check found no listener on emulator ports `4400`, `4500`, `5000`, `5001`, `8080`, `9150`, `9299`, or `9499`.
+  - **L4 browser E2E:** The nested no-mock Chromium scenario passed once in each emulator repetition: 1 test in 26.2 seconds, then 1 test in 32.4 seconds. Both runs loaded the real Admin and Student login entry routes and same-origin JavaScript/CSS assets with no browser, console, or request failure.
+  - **L5 staging/preview:** N/A — only the isolated local `demo-parabolic-test` emulators were used; no preview/staging deployment, release artifact, or public URL changed.
+  - **Firebase CLI version:** `15.9.0`.
+  - **Authorization/external mutations:** The user authorized continuation and the required local emulator/Chromium execution. Both repetitions used disposable local emulator data and local build/browser/cache state only; no Firebase resource, deployment, or remote data changed. The CLI refreshed local authenticated credential state during Functions initialization.
+  - **Contract/schema changes:** None.
+  - **Residual risks:** BWM-001 acceptance is complete. BWM-002 now owns the canonical `/api/v1` call inventory and route manifest; the known product wiring risks remain open under their existing owning tasks.
+  - **Completed on:** 2026-07-19
 
 ### BWM-002 — Canonical API Route and Contract Manifest
 
-- **Status:** `PLANNED`
+- **Status:** `VERIFIED`
 - **Purpose:** Eliminate ambiguity between REST frontend paths and individually exported Functions.
 - **Substeps:**
-  - [ ] Inventory every frontend call by portal, method, path, request type, response type, auth, role, tenant, license, and current handler.
-  - [ ] Assign canonical `/api/v1` routes, including parameterized Exam session paths.
-  - [ ] Mark every route as implemented, incompatible, missing, or intentionally retired.
-  - [ ] Update `docs/api_contract.md`, `docs/MODULE_REGISTRY.md`, and a code-level route manifest used by the router/tests.
-  - [ ] Add a test that fails when a frontend-declared route has no manifest entry.
+  - [x] **BWM-002-A:** Inventory every frontend call by portal, method, path, request type, response type, auth, role, tenant, license, and current handler.
+  - [x] **BWM-002-B:** Assign canonical `/api/v1` routes, including parameterized Exam session paths.
+  - [x] **BWM-002-C:** Mark every route as implemented, incompatible, missing, or intentionally retired.
+  - [x] **BWM-002-D:** Update `docs/api_contract.md`, `docs/MODULE_REGISTRY.md`, and a code-level route manifest used by the router/tests.
+  - [x] **BWM-002-E:** Add a test that fails when a frontend-declared route has no manifest entry.
 - **Acceptance:** One machine-testable manifest accounts for every portal API call and backend HTTP export.
+- **BWM-002-A evidence (2026-07-19):**
+  - **Implemented files:** `docs/FRONTEND_API_CALL_INVENTORY.md` and this controller.
+  - **Implementation summary:** Added a pre-canonical discovery inventory of 29 unique executable frontend HTTP contracts, deduplicated only by portal, method, and normalized path: 17 Admin, 6 Student, 4 Exam runtime, and 2 Vendor. Every row records frontend request and response types, bearer-token behavior, current role/tenant/license enforcement, current Functions handler/export, and frontend source boundary. The inventory explicitly reserves canonical `/api/v1` route assignment for BWM-002-B and formal compatibility classification for BWM-002-C.
+  - **Observed wiring evidence:** Five Student summary/solution contracts and Exam token refresh have no handler; Exam start has request/response drift; Exam answers and submit receive a session token while their handlers require Firebase ID authentication; Vendor calibration simulation names its parameter payload differently on each side; and no existing gateway or Hosting rewrite maps current frontend REST paths to individual Functions exports.
+  - **L1 static:** A Node inventory assertion — PASS; it found exactly 29 unique IDs with the expected portal split and confirmed all 22 named current handler exports in `functions/src/index.ts`. A targeted `rg` scan across all four portal source trees and shared services produced 91 caller/client anchors for manual reconciliation. `git diff --check` — PASS.
+  - **L2 unit/contract:** N/A — discovery documentation only; no executable route manifest, DTO, handler, policy, or state transition changed.
+  - **L3 Firebase emulator:** N/A — no Firebase runtime behavior or configuration changed.
+  - **L4 browser E2E:** N/A — no user-visible or executable transport behavior changed.
+  - **L5 staging/preview:** N/A — no deployment or public runtime changed.
+  - **Firebase CLI version:** N/A — this substep was a read-only source audit plus documentation.
+  - **Authorization/external mutations:** None.
+  - **Contract/schema changes:** None. `docs/FRONTEND_API_CALL_INVENTORY.md` records current contracts but does not declare canonical routes.
+  - **Residual risks:** BWM-002-B through BWM-002-E still own canonical route assignment, compatibility status, authoritative documentation/code manifest updates, and frontend-to-manifest coverage enforcement. BWM-002 remains `IN_PROGRESS`.
+  - **Completed on:** 2026-07-19
+- **BWM-002-B evidence (2026-07-19):**
+  - **Implemented files:** `docs/FRONTEND_API_CALL_INVENTORY.md` and this controller.
+  - **Implementation summary:** Assigned all 29 inventory IDs a canonical method/path key under `/api/v1`: 17 Admin, 6 Student, 4 Exam runtime, and 2 Vendor. The assignment preserves the binding architecture's established paths and adds only the version prefix, including `/api/v1/student/tests/{testId}/solutions` and all four `/api/v1/exam/session/{sessionId}/...` templates. Documented method-aware dispatch, URL-encoded path parameters, query handling, tenant-path policy, no-trailing-slash policy, and ownership boundaries for the later gateway and Hosting rewrite tasks.
+  - **Route decision:** Canonical paths equal `/api/v1` plus the current normalized path. This intentionally preserves architecture-defined names such as singular `exam/session` and `admin/academicYear/archive`; compatibility and implementation status remain unassigned until BWM-002-C.
+  - **L1 static:** A Node route assertion — PASS; it parsed exactly 29 assignments, confirmed 29 unique IDs and 29 unique method/path keys, proved every canonical path is the exact `/api/v1` mapping of its current path, rejected trailing slashes, and confirmed all five parameterized Student/Exam templates. `git diff --check` — PASS.
+  - **L2 unit/contract:** N/A — documentation-level route assignment only; no executable manifest, router, DTO, handler, policy, or state transition changed.
+  - **L3 Firebase emulator:** N/A — no Firebase runtime behavior or configuration changed.
+  - **L4 browser E2E:** N/A — frontend calls still use their current paths; no user-visible or executable transport behavior changed.
+  - **L5 staging/preview:** N/A — no deployment or public runtime changed.
+  - **Firebase CLI version:** N/A — no Firebase behavior was touched.
+  - **Authorization/external mutations:** None.
+  - **Contract/schema changes:** The canonical public route names are now assigned in documentation. They are not yet executable and do not change request/response schemas.
+  - **Residual risks:** BWM-002-C through BWM-002-E still own route compatibility classification, authoritative contract/module documentation plus the code manifest, and frontend-to-manifest coverage enforcement. BWM-003 and BWM-004 remain responsible for gateway dispatch and Hosting rewrites.
+  - **Completed on:** 2026-07-19
+- **BWM-002-C evidence (2026-07-19):**
+  - **Implemented files:** `docs/FRONTEND_API_CALL_INVENTORY.md` and this controller.
+  - **Implementation summary:** Defined the four route-status meanings and classified every canonical frontend contract by comparing current method, credential model, request union, response consumption, and handler/export presence. Final totals are 13 `implemented`, 10 `incompatible`, 6 `missing`, and 0 `intentionally retired`. Common gateway/Hosting reachability is explicitly excluded from per-route status because BWM-003 and BWM-004 own it.
+  - **Classification findings:** Admin Overview and Analytics consume the wrong envelope level; Admin template creation, run creation, Settings, and Licensing expose frontend union members rejected by their handlers; Exam start has request/response drift; Exam answers and submit use the wrong credential model; Vendor simulation sends the wrong parameter property; five Student reads and Exam token refresh have no handler. No route has retirement evidence.
+  - **L1 static:** A Node classification assertion — PASS; it parsed exactly 29 classified rows, confirmed the exact 13/10/6/0 status sets, preserved all 29 unique canonical method/path mappings, confirmed all six detailed missing-handler rows, and verified source markers for the Admin union, Exam auth, and Vendor request mismatches. `git diff --check` — PASS.
+  - **L2 unit/contract:** N/A — source-grounded documentation classification only; no executable manifest, router, DTO, handler, policy, or state transition changed.
+  - **L3 Firebase emulator:** N/A — no Firebase runtime behavior or configuration changed.
+  - **L4 browser E2E:** N/A — no user-visible or executable transport behavior changed.
+  - **L5 staging/preview:** N/A — no deployment or public runtime changed.
+  - **Firebase CLI version:** N/A — no Firebase behavior was touched.
+  - **Authorization/external mutations:** None.
+  - **Contract/schema changes:** None. The document now records current compatibility status; it does not repair or activate any contract.
+  - **Residual risks:** BWM-002-D and BWM-002-E still own the authoritative API/module documentation, code-level manifest, and frontend-to-manifest coverage test. The incompatible and missing routes remain assigned to their later owning implementation tasks.
+  - **Completed on:** 2026-07-19
+- **BWM-002-D evidence (2026-07-19):**
+  - **Implemented files:** `functions/src/apiRouteManifest.ts`, `docs/api_contract.md`, `docs/MODULE_REGISTRY.md`, and this controller.
+  - **Implementation summary:** Added a typed manifest with all 29 frontend route IDs, current and canonical paths, methods, portal ownership, compatibility status, and mapped Functions export. Added a second machine-readable inventory covering every current `functions.https.onRequest` export: 22 canonical-route exports, 16 unmapped portal exports, one internal-only export, one webhook, and one health check. Rewrote the API contract around the canonical `/api/v1` boundary and registered the manifest module while preserving the Module Registry's legacy endpoint table as implementation history.
+  - **L1 static:** `npm --prefix functions run lint` — PASS with zero findings. `npm --prefix functions run build` — PASS; TypeScript compiled the new manifest. `git diff --check` — PASS after removing documentation whitespace findings.
+  - **L2 unit/contract:** A runtime reconciliation assertion against `functions/lib/apiRouteManifest.js`, the source inventory, API contract, Module Registry, and `functions/src/index.ts` — PASS. It confirmed 29 unique route IDs and method/path keys, exact 13/10/6/0 status totals, canonical `/api/v1` mappings, reciprocal route/export references, matching documentation rows, and exact coverage of all 41 source `onRequest` exports with disposition totals 22/16/1/1/1. A final compiled-manifest smoke also returned 29 routes and 41 exports.
+  - **L3 Firebase emulator:** N/A — the manifest is not yet wired into a gateway and no deployed/emulated Firebase handler behavior changed.
+  - **L4 browser E2E:** N/A — frontend paths and runtime transport are unchanged.
+  - **L5 staging/preview:** N/A — no deployment or public runtime changed.
+  - **Firebase CLI version:** N/A — no Firebase runtime behavior or configuration changed.
+  - **Authorization/external mutations:** None.
+  - **Contract/schema changes:** Added the machine-readable canonical API route contract and backend HTTP export disposition inventory. No request/response DTO, Firestore schema, or live route changed.
+  - **Residual risks:** BWM-002-E must add the permanent test that discovers frontend-declared routes and fails on a missing manifest entry. BWM-003 must consume the manifest for gateway dispatch; the 10 incompatible and 6 missing routes remain owned by their later repair tasks.
+  - **Completed on:** 2026-07-19
+- **BWM-002-E evidence (2026-07-19):**
+  - **Implemented files:** `functions/tests/apiRouteManifest.test.js`, `functions/package.json`, `functions/tsconfig.dev.json`, and this controller.
+  - **Implementation summary:** Added a permanent TypeScript-AST source scanner for all four portal source trees. It normalizes literal and parameterized API-client calls, follows the existing Student summary wrapper and Exam endpoint-path declarations, fails closed on unresolved API-client paths, and compares the discovered method/current-path set bidirectionally with `API_ROUTE_MANIFEST`. A second contract case compares every `functions.https.onRequest` export in `functions/src/index.ts` with `BACKEND_HTTP_EXPORT_MANIFEST` and validates route handler/status consistency. The test remains outside `src` so production `tsc` does not compile the TypeScript compiler API; the development TypeScript project includes it for type-aware ESLint only.
+  - **L1 static:** `npm --prefix functions run lint` — PASS with zero findings. `node scripts/verify-workspace.mjs` — PASS; all 10 Admin, Student, Exam, Vendor, and Functions lint/build gates completed, with frontend build module counts of 116, 91, 70, and 89 and a successful Functions `tsc`. `git diff --check` — PASS.
+  - **L2 unit/contract:** `npm --prefix functions run test:api-route-manifest` — PASS after a clean Functions build; the test file exited 0. Direct execution with Node's test API reported 2 passing contract cases and 0 failures: complete bidirectional frontend route coverage and complete backend HTTP export disposition coverage.
+  - **L3 Firebase emulator:** N/A — this substep adds static contract enforcement only; no Firebase handler, Auth, Firestore, Functions runtime, rules, Storage, trigger, or Hosting behavior changed.
+  - **L4 browser E2E:** N/A — no user-visible or cross-layer runtime flow changed.
+  - **L5 staging/preview:** N/A — no deployment, environment, rewrite, secret, or public runtime changed.
+  - **Firebase CLI version:** N/A — no Firebase CLI behavior was exercised by this source-level contract test.
+  - **Authorization/external mutations:** None.
+  - **Contract/schema changes:** Added automated enforcement for the existing canonical route and backend export manifests; no API DTO, Firestore schema, route implementation, or live transport changed.
+  - **Residual risks:** BWM-002 acceptance is complete. BWM-003 must add the versioned gateway and manifest-backed dispatch; the 10 incompatible and 6 missing frontend contracts remain assigned to their later implementation tasks.
+  - **Completed on:** 2026-07-19
 
 ### BWM-003 — Unified API Gateway and Router
 
-- **Status:** `PLANNED`
+- **Status:** `READY`
 - **Purpose:** Make canonical REST paths reach their intended handlers in local, staging, and production environments.
 - **Substeps:**
-  - [ ] Add a single versioned HTTP gateway export.
-  - [ ] Dispatch exact method/path pairs and preserve route parameters for Exam endpoints.
-  - [ ] Reuse existing handlers/services; do not duplicate business logic.
-  - [ ] Return structured 404 and method errors.
-  - [ ] Add router tests for Admin, Student, Exam, Vendor, and unknown paths.
+  - [ ] **BWM-003-A:** Add a single versioned HTTP gateway export.
+  - [ ] **BWM-003-B:** Dispatch exact method/path pairs and preserve route parameters for Exam endpoints.
+  - [ ] **BWM-003-C:** Reuse existing handlers/services; do not duplicate business logic.
+  - [ ] **BWM-003-D:** Return structured 404 and method errors.
+  - [ ] **BWM-003-E:** Add router tests for Admin, Student, Exam, Vendor, and unknown paths.
 - **Acceptance:** Each implemented manifest route reaches exactly one handler under the Functions emulator and unknown paths never fall through to a portal SPA.
 
 ### BWM-004 — Hosting Rewrites, CORS, and Baseline Security Headers
@@ -1139,6 +1260,87 @@ Never record only “tests passed.” Include exact commands and whether tests w
 ## Session Log
 
 Append newest entries at the top.
+
+### LOG-014 — 2026-07-19 — BWM-002-E Manifest Coverage Enforcement
+
+- **Task:** BWM-002-E
+- **Outcome:** Added a permanent AST-based contract test that fails when a statically declared frontend API method/path lacks a typed manifest entry, when the manifest contains a stale frontend route, or when a source HTTP Functions export lacks an export-manifest disposition. BWM-002 now satisfies its machine-testable route/export accounting acceptance criterion.
+- **Validation performed:** `npm --prefix functions run test:api-route-manifest` passed after a clean Functions build. Direct Node test execution reported 2 passing contract cases and 0 failures. `npm --prefix functions run lint` passed with zero findings; `node scripts/verify-workspace.mjs` passed all 10 portal/Functions lint and build gates; `git diff --check` passed. Emulator, browser, and staging levels were not applicable because executable Firebase and user-visible runtime behavior did not change.
+- **Files changed:** Added `functions/tests/apiRouteManifest.test.js`; updated `functions/package.json` with the repeatable test command; updated `functions/tsconfig.dev.json` so type-aware ESLint includes the external JavaScript test without expanding the production TypeScript build; updated this controller for evidence, status, checkpoint, and this log.
+- **Cloud changes:** None.
+- **Next:** BWM-003-A — add the single versioned HTTP gateway export without yet implementing later dispatch, error, or router-test substeps.
+
+### LOG-013 — 2026-07-19 — BWM-002-D Typed API Route and Export Manifest
+
+- **Task:** BWM-002-D
+- **Outcome:** Added the typed canonical route manifest, accounted for all 41 HTTP Functions exports, rewrote the authoritative API contract, and registered the manifest module without wiring the future gateway or adding BWM-002-E's coverage test.
+- **Validation performed:** Functions lint and TypeScript build passed. Runtime reconciliation confirmed all 29 unique frontend route contracts, exact 13/10/6/0 route statuses, matching inventory/API documentation, reciprocal route/export mappings, and exact 41/41 `onRequest` export coverage split across 22 canonical-route, 16 unmapped-portal, one internal-only, one webhook, and one health-check disposition. `git diff --check` passed.
+- **Files changed:** Added `functions/src/apiRouteManifest.ts`; rewrote `docs/api_contract.md`; updated `docs/MODULE_REGISTRY.md`; updated `docs/BACKEND_WIRING_MASTER_EXECUTION_PLAN.md` for the checkpoint, evidence, and this log.
+- **Cloud changes:** None.
+- **Next:** BWM-002-E — add a permanent test that discovers every frontend-declared API method/path and fails when its canonical mapping is absent from `API_ROUTE_MANIFEST`.
+
+### LOG-012 — 2026-07-19 — BWM-002-C Route Compatibility Classification
+
+- **Task:** BWM-002-C
+- **Outcome:** Classified every canonical frontend route against the current handler contract: 13 implemented, 10 incompatible, 6 missing, and none intentionally retired.
+- **Validation performed:** A Node assertion parsed all 29 classified rows, confirmed the exact status membership and totals, preserved unique canonical method/path keys, reconciled all six missing-handler detail rows, and checked source markers for Admin request-union drift, Exam authentication drift, and Vendor simulation request drift. `git diff --check` passed. No executable behavior changed, so unit, emulator, browser, and staging gates were not applicable.
+- **Files changed:** Updated `docs/FRONTEND_API_CALL_INVENTORY.md` with status definitions, per-route classifications, reasons, and totals; updated `docs/BACKEND_WIRING_MASTER_EXECUTION_PLAN.md` for the checkpoint, evidence, and this log.
+- **Cloud changes:** None.
+- **Next:** BWM-002-D — update `docs/api_contract.md`, `docs/MODULE_REGISTRY.md`, and a code-level route manifest consumed by the future router/tests.
+
+### LOG-011 — 2026-07-19 — BWM-002-B Canonical API Route Assignment
+
+- **Task:** BWM-002-B
+- **Outcome:** Assigned all 29 inventoried frontend contracts unique canonical method/path keys on the same-origin `/api/v1` surface while preserving architecture-defined resource names and request semantics.
+- **Validation performed:** A Node assertion parsed 29 assignments, confirmed unique IDs and method/path keys, proved every canonical route is exactly `/api/v1` plus its current normalized path, found no trailing slash, and verified the Student `testId` route plus all four Exam `sessionId` routes. `git diff --check` passed. No executable behavior changed, so unit, emulator, browser, and staging gates were not applicable.
+- **Files changed:** Updated `docs/FRONTEND_API_CALL_INVENTORY.md` with route policy and assignments; updated `docs/BACKEND_WIRING_MASTER_EXECUTION_PLAN.md` for the checkpoint, evidence, and this log.
+- **Cloud changes:** None.
+- **Next:** BWM-002-C — classify every canonical route as implemented, incompatible, missing, or intentionally retired using the already-recorded frontend and handler contracts.
+
+### LOG-010 — 2026-07-19 — BWM-002-A Frontend API Call Inventory
+
+- **Task:** BWM-002-A
+- **Outcome:** Added a source-grounded inventory of all 29 unique frontend API contracts across Admin (17), Student (6), Exam runtime (4), and Vendor (2), including request/response shapes, credential model, role, tenant, license, current handler, and source boundary without preempting canonical route or compatibility decisions.
+- **Validation performed:** A Node assertion confirmed 29 unique inventory IDs with the exact portal split and found all 22 referenced current handler exports in `functions/src/index.ts`; a targeted `rg` scan reconciled caller/client anchors across the four portal trees and shared service; and `git diff --check` passed. No executable behavior changed, so unit, emulator, browser, and staging gates were not applicable.
+- **Files changed:** Added `docs/FRONTEND_API_CALL_INVENTORY.md`; updated `docs/BACKEND_WIRING_MASTER_EXECUTION_PLAN.md` for the checkpoint, task status, evidence, and this log.
+- **Cloud changes:** None.
+- **Next:** BWM-002-B — assign canonical `/api/v1` routes, including parameterized Exam session paths, while preserving the inventory's current-path evidence.
+
+### LOG-009 — 2026-07-19 — BWM-001-H Twice-Clean Verification Closeout
+
+- **Task:** BWM-001-H
+- **Outcome:** Closed BWM-001 after two independent green executions of the complete workspace verifier and two independent green executions of the isolated real emulator/browser smoke from an unchanged final BWM-001 tree.
+- **Validation performed:** Both `node scripts/verify-workspace.mjs` runs passed all 10 portal/Functions lint and build gates. Both `npm run smoke:emulators` runs exited 0 under Firebase CLI `15.9.0`, verified disposable Firestore write/read/delete, the exact test/demo Functions health response, Admin and Student Hosting artifacts, and one no-mock Chromium scenario (26.2 seconds and 32.4 seconds), then shut down cleanly. Pre-run, between-run, and post-run worktree snapshots were identical; `git diff --check` passed; and a final socket check found no emulator listener remaining.
+- **Files changed:** `docs/BACKEND_WIRING_MASTER_EXECUTION_PLAN.md` only for checkpoint, statuses, evidence, and this session log.
+- **Cloud changes:** None. The runs used only local builds, local headless Chromium, and disposable emulator data under `demo-parabolic-test`; no deployment, Firebase resource, or remote data changed.
+- **Next:** BWM-002-A — inventory every frontend call by portal, method, path, request/response type, authorization context, and current backend handler.
+
+### LOG-008 — 2026-07-19 — BWM-001-G Deterministic Emulator Smoke Command
+
+- **Task:** BWM-001-G
+- **Outcome:** Added one root command that prepares all required artifacts, runs real Firestore/Functions/Hosting checks plus the no-mock Chromium scenario under `demo-parabolic-test`, removes its disposable Firestore document, and relies on `emulators:exec` for process cleanup.
+- **Validation performed:** Script syntax, Functions lint, all three affected builds, JSON parsing, and diff checks passed. A forced missing-`npm` run exited 1 at the first gate. The first real run also exited 1 and shut down cleanly when it detected local dotenv identity leakage; after adding the non-secret project-specific emulator dotenv override, the final run verified Firestore write/read/delete, the exact test/demo Functions response, Admin/Student Hosting assets, and 1 Chromium scenario, then exited 0 and shut down every emulator.
+- **Files changed:** Root package scripts, two emulator smoke scripts, the project-specific non-secret Functions emulator dotenv configuration and ignore exception, and `docs/BACKEND_WIRING_MASTER_EXECUTION_PLAN.md`.
+- **Cloud changes:** None. Approved execution used only disposable local emulator data and local browser/build/cache state; no deployment, Firebase resource, or remote data changed.
+- **Next:** BWM-001-H — run the workspace verifier and deterministic emulator smoke twice from the final BWM-001 tree, document both repetitions, and close BWM-001 only if all four runs pass.
+
+### LOG-007 — 2026-07-19 — BWM-001-F Shared Browser E2E Bootstrap
+
+- **Task:** BWM-001-F
+- **Outcome:** Added a pinned root Playwright runner and one no-mock Chromium scenario for the combined portal Hosting target without adding or testing the future API gateway.
+- **Validation performed:** Playwright discovered exactly one test; Admin and Student lint passed; both portals built with their Hosting base paths; and the combined portal bundle was prepared. Firebase CLI `15.9.0` then ran the browser scenario against `hosting:portal` under `demo-parabolic-test`: both login entry paths and their assets loaded, no same-origin/browser errors were observed, 1 test passed in 17.6 seconds, the command exited 0, and Hosting shut down cleanly.
+- **Files changed:** Root package manifest/lock, Playwright configuration, the portal Hosting smoke spec, `.gitignore`, and `docs/BACKEND_WIRING_MASTER_EXECUTION_PLAN.md`.
+- **Cloud changes:** None. The approved npm download and emulator/browser execution changed only local dependencies/cache and local CLI credential state; no deployment, Firebase resource, or remote data changed.
+- **Next:** BWM-001-G — add one permanent deterministic emulator smoke command that prepares artifacts, exercises real Functions/Firestore/Hosting behavior, fails closed, and cleans up.
+
+### LOG-006 — 2026-07-19 — BWM-001-E Isolated Firebase Emulator Harness
+
+- **Task:** BWM-001-E
+- **Outcome:** Configured stable loopback endpoints for Auth, Firestore, Functions, and Hosting, enabled isolated single-project behavior, and added a demo-project mapping for only the portal Hosting target. Storage was excluded because no current production path uses Firebase Storage; BWM-042 owns the first real identity-photo persistence flow.
+- **Validation performed:** The workspace verifier passed all 10 lint/build gates. Firebase CLI `15.9.0` started the four selected services under `demo-parabolic-test`; with a 30-second Functions discovery allowance, it loaded the complete Functions export graph, supplied the expected emulator environment to the child assertion, exited 0, and shut down cleanly. Both Firebase JSON files parsed successfully.
+- **Files changed:** `firebase.json`, `.firebaserc`, and `docs/BACKEND_WIRING_MASTER_EXECUTION_PLAN.md`.
+- **Cloud changes:** None. The approved execution ran local emulators only; no deployment, Firebase resource, or remote data changed. The CLI refreshed its local authenticated credential cache during Functions initialization.
+- **Next:** BWM-001-F — bootstrap the shared browser E2E runner and one no-mock portal Hosting/emulator smoke scenario without pre-empting the BWM-003 API gateway.
 
 ### LOG-005 — 2026-07-18 — BWM-001-D Workspace Verification Command
 

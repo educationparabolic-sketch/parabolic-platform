@@ -75,6 +75,11 @@ dist
 .env.*
 .firebase
 
+# Browser test output
+test-results/
+playwright-report/
+blob-report/
+
 # Codex local workspace state
 .codex
 
