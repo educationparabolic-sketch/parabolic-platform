@@ -22,6 +22,7 @@ export interface ApiRouteManifestEntry {
 
 export type BackendHttpExportDisposition =
   | "canonical_route"
+  | "gateway"
   | "internal_only"
   | "unmapped_portal"
   | "webhook"
@@ -289,6 +290,11 @@ export const API_ROUTE_MANIFEST: readonly ApiRouteManifestEntry[] = [
 
 const UNROUTED_BACKEND_HTTP_EXPORTS: readonly
 BackendHttpExportManifestEntry[] = [
+  {
+    disposition: "gateway",
+    functionExport: "apiV1",
+    routeIds: [],
+  },
   {
     disposition: "internal_only",
     functionExport: "internalEmailQueue",

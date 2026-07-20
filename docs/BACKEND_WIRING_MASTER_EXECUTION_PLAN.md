@@ -15,13 +15,13 @@ program: backend-wiring-and-deployment-readiness
 program_status: IN_PROGRESS
 release_decision: NO_GO
 current_phase: 0
-current_task: BWM-003
-current_substep: BWM-003-A
-last_completed_task: BWM-002
-next_task: BWM-003
+current_task: BWM-004
+current_substep: BWM-004 — Add /api/v1/** rewrites before portal SPA rewrites
+last_completed_task: BWM-003
+next_task: BWM-004
 blocked_tasks: []
-last_updated: 2026-07-19
-last_update_summary: BWM-002-E added a permanent AST-based contract test that reconciles every statically declared portal API method/path and every HTTP Functions export with the typed manifest. BWM-002 is verified; continue BWM-003-A by adding the single versioned HTTP gateway export.
+last_updated: 2026-07-20
+last_update_summary: BWM-003 is VERIFIED. Permanent contract and Functions-emulator router suites prove exact one-handler resolution for all 13 implemented manifest routes, portal-specific behavior, encoded parameters, method errors, and JSON-only unknown-path failures. Continue BWM-004 with API-first Hosting rewrites.
 ```
 
 Do not infer progress from old build numbers, UI completion labels, or visual verification artifacts. Only this checkpoint, the task registry, checked substeps, session log, and current repository evidence determine progress for this program.
@@ -30,7 +30,8 @@ Do not infer progress from old build numbers, UI completion labels, or visual ve
 
 Use this prompt in a new session:
 
-> Read `docs/BACKEND_WIRING_MASTER_EXECUTION_PLAN.md` completely. Resume the `current_task` at the first unchecked substep. Inspect the current code before changing it, implement only that bounded task, run its required verification, update the checkpoint, task status, evidence, and session log in the same document, then report the result and next task.
+> Read `docs/BACKEND_WIRING_MASTER_EXECUTION_PLAN.md` completely. Resume the `current_task` at the first unchecked substep. Inspect the current code before changing it, implement only that bounded task, run its required verification, update the checkpoint, task status, evidence, and session log in the same document, then report the r
+esult and next task.
 
 ---
 
@@ -254,8 +255,8 @@ The registry is the canonical order. Detailed cards below define scope and accep
 | BWM-000 | P0 | VERIFIED | - | Four-portal wiring audit and master controller |
 | BWM-001 | P0 | VERIFIED | BWM-000 | Trustworthy green quality gates and local integration-test harness |
 | BWM-002 | P0 | VERIFIED | BWM-001 | Canonical `/api/v1` route and contract manifest |
-| BWM-003 | P0 | READY | BWM-002 | Unified API gateway/router wired to handlers |
-| BWM-004 | P0 | PLANNED | BWM-003 | Hosting API rewrites, CORS policy, and security headers |
+| BWM-003 | P0 | VERIFIED | BWM-002 | Unified API gateway/router wired to handlers |
+| BWM-004 | P0 | READY | BWM-003 | Hosting API rewrites, CORS policy, and security headers |
 | BWM-005 | P0 | PLANNED | BWM-004 | Environment matrix and production artifact validation |
 | BWM-006 | P0 | PLANNED | BWM-002 | Standard response envelope and shared boundary types |
 | BWM-007 | P0 | PLANNED | BWM-005,BWM-006 | Explicit dev fixture mode and production fail-closed behavior |
@@ -535,19 +536,84 @@ The registry is the canonical order. Detailed cards below define scope and accep
 
 ### BWM-003 — Unified API Gateway and Router
 
-- **Status:** `READY`
+- **Status:** `VERIFIED`
 - **Purpose:** Make canonical REST paths reach their intended handlers in local, staging, and production environments.
 - **Substeps:**
-  - [ ] **BWM-003-A:** Add a single versioned HTTP gateway export.
-  - [ ] **BWM-003-B:** Dispatch exact method/path pairs and preserve route parameters for Exam endpoints.
-  - [ ] **BWM-003-C:** Reuse existing handlers/services; do not duplicate business logic.
-  - [ ] **BWM-003-D:** Return structured 404 and method errors.
-  - [ ] **BWM-003-E:** Add router tests for Admin, Student, Exam, Vendor, and unknown paths.
+  - [x] **BWM-003-A:** Add a single versioned HTTP gateway export.
+  - [x] **BWM-003-B:** Dispatch exact method/path pairs and preserve route parameters for Exam endpoints.
+  - [x] **BWM-003-C:** Reuse existing handlers/services; do not duplicate business logic.
+  - [x] **BWM-003-D:** Return structured 404 and method errors.
+  - [x] **BWM-003-E:** Add router tests for Admin, Student, Exam, Vendor, and unknown paths.
 - **Acceptance:** Each implemented manifest route reaches exactly one handler under the Functions emulator and unknown paths never fall through to a portal SPA.
+- **BWM-003-A evidence (2026-07-20):**
+  - **Implemented files:** `functions/src/index.ts`, `functions/src/apiRouteManifest.ts`, `docs/api_contract.md`, `docs/MODULE_REGISTRY.md`, and this controller.
+  - **Implementation summary:** Added exactly one versioned HTTP Functions export named `apiV1`. Until the later router substeps are complete, the export fails truthfully with HTTP 501 and the exact body `API gateway routing is not implemented.`; it performs no method/path matching and invokes no business handler. Added a distinct `gateway` disposition to the existing backend HTTP export manifest so the permanent export-accounting contract remains exhaustive, and reconciled the authoritative documentation from 41 to 42 HTTP exports.
+  - **L1 static:** `npm --prefix functions run lint` — PASS with zero findings. `npm --prefix functions run build` — PASS. `node scripts/verify-workspace.mjs` — PASS; all 10 Admin, Student, Exam, Vendor, and Functions lint/build checks completed (frontend module counts 116, 91, 70, and 89; Functions `tsc` passed). `git diff --check` — PASS.
+  - **L2 unit/contract:** `npm --prefix functions run test:api-route-manifest` — PASS after a clean Functions build; the permanent AST/manifest contract test confirmed every source `onRequest` export, including `apiV1`, has exactly one typed disposition and all 29 frontend route declarations remain reconciled.
+  - **L3 Firebase emulator:** `FUNCTIONS_DISCOVERY_TIMEOUT=30 CI=true firebase emulators:exec --project demo-parabolic-test --only functions "node -e '<fetch and assert apiV1 status/body>'"` — PASS; Firebase CLI discovered `us-central1-apiV1`, the real emulator request returned exactly HTTP 501 and `API gateway routing is not implemented.`, the assertion exited 0, and the emulator shut down cleanly. The initial sandboxed attempt could not bind loopback ports (`EPERM`) or update local CLI configuration (`EROFS`); the approved outside-sandbox retry passed.
+  - **L4 browser E2E:** N/A — no Hosting rewrite or portal caller reaches the gateway yet, and this substep intentionally added no dispatch or user-visible flow; BWM-003-B through BWM-003-E and BWM-004 own those behaviors.
+  - **L5 staging/preview:** N/A — no deployment, environment, rewrite, security-header, secret, or public-runtime configuration changed; only the isolated local demo Functions emulator ran.
+  - **Firebase CLI version:** `15.9.0`.
+  - **Authorization/external mutations:** The user approved the local Functions emulator execution outside the sandbox on 2026-07-20 so the CLI could bind loopback ports. No Firebase resource, deployment, or remote data changed; the CLI refreshed local credential/configuration cache state during startup.
+  - **Contract/schema changes:** The backend HTTP export inventory now contains 42 entries and gives the new `apiV1` export the distinct `gateway` disposition. No canonical route is executable yet, no request/response DTO or Firestore schema changed, and the temporary 501 behavior is explicitly replaced by BWM-003-B through BWM-003-D.
+  - **Residual risks:** BWM-003-B must add exact manifest-backed method/path matching with Exam parameter preservation; BWM-003-C must connect matches to the existing handlers; BWM-003-D must add structured route/method failures; and BWM-003-E must add router coverage across all portals and unknown paths. Hosting routing remains BWM-004.
+  - **Completed on:** 2026-07-20
+- **BWM-003-B evidence (2026-07-20):**
+  - **Implemented files:** `functions/src/api/apiGateway.ts`, `functions/src/index.ts`, `docs/api_contract.md`, `docs/MODULE_REGISTRY.md`, and this controller.
+  - **Implementation summary:** Added a strict route-selection layer that derives every match directly from `API_ROUTE_MANIFEST`, using the HTTP method and complete case-sensitive canonical path with no trailing or extra segments. Parameterized Student and Exam segments are decoded into `request.params`; the original request path/URL remains untouched so existing Exam handlers retain their current path-based compatibility. The gateway invokes no business handler yet and retains the truthful temporary HTTP 501 response owned by BWM-003-C/D.
+  - **L1 static:** `npm --prefix functions run lint` — PASS with zero findings. `npm --prefix functions run build` — PASS. `node scripts/verify-workspace.mjs` — PASS; all 10 Admin, Student, Exam, Vendor, and Functions lint/build checks completed (frontend module counts 116, 91, 70, and 89; Functions `tsc` passed). `git diff --check` — PASS.
+  - **L2 unit/contract:** A compiled Node assertion against `functions/lib/api/apiGateway.js` and `functions/lib/apiRouteManifest.js` — PASS; all 29 manifest method/path pairs resolved to their exact route IDs, Student `testId` and all Exam `sessionId` segments round-tripped through URL encoding/decoding, and wrong method, trailing slash, case drift, and malformed encoding returned no match. `npm --prefix functions run test:api-route-manifest` — PASS after a clean build; all frontend routes and 42 HTTP exports remain exhaustively accounted for.
+  - **L3 Firebase emulator:** `FUNCTIONS_DISCOVERY_TIMEOUT=30 CI=true firebase emulators:exec --project demo-parabolic-test --only functions "node -e '<assert Admin and encoded Exam apiV1 requests>'"` — PASS; Firebase CLI mapped a real `GET /api/v1/admin/students` and `POST /api/v1/exam/session/session%20id%20%CE%A9/entry` through `us-central1-apiV1`, both requests completed with the intentional pre-handler HTTP 501 response, the assertion exited 0, and all emulator processes shut down cleanly.
+  - **L4 browser E2E:** N/A — no portal caller, Hosting rewrite, or business handler dispatch changed; the gateway still returns an explicit failure. BWM-003-C/E and BWM-004 own handler/browser reachability.
+  - **L5 staging/preview:** N/A — no deployment, environment, rewrite, security-header, secret, or public-runtime configuration changed; only the isolated local demo Functions emulator ran.
+  - **Firebase CLI version:** `15.9.0`.
+  - **Authorization/external mutations:** The user approved the local Functions emulator execution outside the sandbox on 2026-07-20 so the CLI could bind loopback ports. No Firebase resource, deployment, or remote data changed; the CLI refreshed local credential/configuration cache state during startup.
+  - **Contract/schema changes:** Canonical gateway matching is now exact and case-sensitive, rejects trailing/extra segments, decodes named path parameters into `request.params`, and preserves the original URL. No request/response DTO, handler behavior, authorization policy, or Firestore schema changed.
+  - **Residual risks:** BWM-003-C must map resolved manifest entries to their existing handlers; BWM-003-D must replace the temporary 501 with structured unknown-route/method behavior; BWM-003-E must add permanent router coverage. Hosting routing remains BWM-004.
+  - **Completed on:** 2026-07-20
+- **BWM-003-C evidence (2026-07-20):**
+  - **Implemented files:** `functions/src/api/apiGatewayHandlers.ts`, `functions/src/api/apiGateway.ts`, `docs/api_contract.md`, `docs/MODULE_REGISTRY.md`, and this controller.
+  - **Implementation summary:** Added one handler registry keyed by the manifest's existing Functions export names and mapped all 23 non-missing route entries to exactly 22 existing raw request handlers (`adminTests` intentionally serves both GET and POST). The gateway invokes those handlers directly, retaining their current middleware, controllers, dependency bindings, services, logging, and response contracts. A module-startup invariant fails closed if a mapped manifest export lacks a handler or the registry contains an extra handler. Missing routes still return the temporary 501 owned by BWM-003-D.
+  - **L1 static:** `npm --prefix functions run lint` — PASS with zero findings. `npm --prefix functions run build` — PASS. `node scripts/verify-workspace.mjs` — PASS; all 10 Admin, Student, Exam, Vendor, and Functions lint/build checks completed (frontend module counts 116, 91, 70, and 89; Functions `tsc` passed). `git diff --check` — PASS.
+  - **L2 unit/contract:** `npm --prefix functions run test:api-route-manifest` — PASS after a clean Functions build; all 29 frontend routes and 42 HTTP exports remain reconciled. A compiled registry assertion against `API_ROUTE_MANIFEST`, `assertGatewayHandlerRegistry`, and `API_GATEWAY_HANDLERS` — PASS; it confirmed 23 mapped route entries, 22 unique mapped export names, 22 registered existing handler functions, and no missing or extra registry key.
+  - **L3 Firebase emulator:** `FUNCTIONS_DISCOVERY_TIMEOUT=30 CI=true firebase emulators:exec --project demo-parabolic-test --only functions "node -e '<compare direct/gateway Admin and assert Exam/Vendor/Student responses>'"` — PASS. The direct `adminStudents` export and gateway `GET /api/v1/admin/students` both returned the same existing `401 UNAUTHORIZED` contract; gateway Exam entry reached its existing validation middleware and returned `400 VALIDATION_ERROR`; gateway Vendor calibration push reached its existing auth middleware and returned `401 UNAUTHORIZED`; and the missing Student dashboard route retained the intentional temporary 501. The assertion exited 0 and all emulator processes shut down cleanly.
+  - **L4 browser E2E:** N/A — Hosting does not route portal requests to `apiV1` yet and no portal flow changed; BWM-003-E and BWM-004 own permanent gateway/browser reachability proof.
+  - **L5 staging/preview:** N/A — no deployment, environment, rewrite, security-header, secret, or public-runtime configuration changed; only the isolated local demo Functions emulator ran.
+  - **Firebase CLI version:** `15.9.0`.
+  - **Authorization/external mutations:** The user approved the local Functions emulator execution outside the sandbox on 2026-07-20 so the CLI could bind loopback ports. No Firebase resource, deployment, or remote data changed; the CLI refreshed local credential/configuration cache state during startup.
+  - **Contract/schema changes:** Every manifest route with a non-null `functionExport` is now reachable through the direct `apiV1` Function URL and uses the same raw handler as its legacy direct export. No handler DTO, middleware policy, service logic, or Firestore schema changed. Hosting reachability remains pending BWM-004.
+  - **Residual risks:** BWM-003-D must replace temporary missing/unknown failures with structured route-versus-method errors; BWM-003-E must add permanent router coverage for all portals and unknown paths. Existing incompatible route contracts remain assigned to their later owning tasks.
+  - **Completed on:** 2026-07-20
+- **BWM-003-D evidence (2026-07-20):**
+  - **Implemented files:** `functions/src/api/apiGateway.ts`, `functions/src/types/apiResponse.ts`, `functions/src/services/apiResponse.ts`, `functions/src/tests/apiErrorHandling.test.ts`, `docs/api_contract.md`, `docs/MODULE_REGISTRY.md`, and this controller.
+  - **Implementation summary:** Replaced the gateway's temporary plain-text 501 behavior with existing structured API error responses. Exact manifest paths requested with an unsupported method now return HTTP 405, stable code `METHOD_NOT_ALLOWED`, a safe message, request metadata, and a sorted manifest-derived `Allow` header. Unknown paths return HTTP 404 `NOT_FOUND`; exact routes whose manifest status is `missing` also return 404 with an explicit not-implemented message. Existing mapped handlers retain their own response behavior unchanged.
+  - **L1 static:** `npm --prefix functions run lint` — PASS with zero findings. `npm --prefix functions run build` — PASS. `node scripts/verify-workspace.mjs` — PASS; all 10 Admin, Student, Exam, Vendor, and Functions lint/build checks completed (frontend module counts 116, 91, 70, and 89; Functions `tsc` passed). `git diff --check` — PASS.
+  - **L2 unit/contract:** `npm --prefix functions run test:api-error-handling` — PASS after a clean build; both the existing nested error-envelope case and the new `METHOD_NOT_ALLOWED` -> HTTP 405 mapping passed. `npm --prefix functions run test:api-route-manifest` — PASS after a clean build; all 29 frontend route contracts and 42 HTTP exports remain reconciled.
+  - **L3 Firebase emulator:** `FUNCTIONS_DISCOVERY_TIMEOUT=30 CI=true firebase emulators:exec --project demo-parabolic-test --only functions "node -e '<assert 404, 405, Allow, and existing handler responses>'"` — PASS. `PUT /api/v1/admin/tests` returned `405 METHOD_NOT_ALLOWED` with `Allow: GET, POST`; `DELETE /api/v1/admin/students` returned 405 with `Allow: GET`; an unknown path returned JSON `404 NOT_FOUND`; missing `GET /api/v1/student/dashboard` returned structured 404; and implemented `GET /api/v1/admin/students` still reached its handler and returned `401 UNAUTHORIZED`. The assertion exited 0 and all emulator processes shut down cleanly.
+  - **L4 browser E2E:** N/A — Hosting does not route portal requests to `apiV1` yet and no portal flow changed; BWM-003-E and BWM-004 own permanent router/browser reachability proof.
+  - **L5 staging/preview:** N/A — no deployment, environment, rewrite, security-header, secret, or public-runtime configuration changed; only the isolated local demo Functions emulator ran.
+  - **Firebase CLI version:** `15.9.0`.
+  - **Authorization/external mutations:** The user approved the local Functions emulator execution outside the sandbox on 2026-07-20 so the CLI could bind loopback ports. No Firebase resource, deployment, or remote data changed; the CLI refreshed local credential/configuration cache state during startup.
+  - **Contract/schema changes:** Added stable error code `METHOD_NOT_ALLOWED` mapped to HTTP 405. Gateway method errors include a manifest-derived `Allow` header; unknown and manifest-missing routes use structured `NOT_FOUND`. Decision `DEC-008` records this boundary contract. No request DTO, handler/service behavior, or Firestore schema changed.
+  - **Residual risks:** BWM-003-E must add permanent router tests for Admin, Student, Exam, Vendor, method errors, and unknown paths. Hosting/API rewrite behavior remains BWM-004.
+  - **Completed on:** 2026-07-20
+- **BWM-003-E evidence (2026-07-20):**
+  - **Implemented files:** `functions/tests/apiGateway.test.js`, `functions/tests/apiGateway.emulator.test.js`, `scripts/run-api-gateway-emulator-tests.mjs`, `functions/package.json`, root `package.json`, and this controller.
+  - **Implementation summary:** Added a permanent fast router/registry contract suite plus a fail-fast root Functions-emulator command. The contract suite materializes and resolves all 29 manifest method/path pairs, proves every pair resolves exactly once, reconciles all 13 currently implemented routes with one existing handler registry entry, verifies decoded Student and Exam parameters, and rejects wrong methods, trailing slashes, case drift, and malformed encoding. The emulator suite invokes every implemented manifest route through `apiV1`, covers Admin, missing Student, encoded Exam, Vendor, method-error, and unknown-path behavior explicitly, and rejects non-JSON or SPA-like HTML responses.
+  - **L1 static:** `npm --prefix functions run lint` — PASS with zero findings. `npm --prefix functions run build` — PASS through the focused tests and emulator runner. `node scripts/verify-workspace.mjs` — PASS; all 10 Admin, Student, Exam, Vendor, and Functions lint/build gates completed (frontend module counts 116, 91, 70, and 89; Functions `tsc` passed). `git diff --check` — PASS.
+  - **L2 unit/contract:** `npm --prefix functions run test:api-gateway` — PASS after a clean build; exact resolution for all 29 routes, all 13 implemented-route handler mappings, encoded parameter preservation, and strict rejection cases passed. `npm --prefix functions run test:api-route-manifest` and `npm --prefix functions run test:api-error-handling` — PASS; all frontend/export inventory and structured error regressions remain green.
+  - **L3 Firebase emulator:** `npm run test:api-gateway:emulator` — PASS. Its logged command was `firebase emulators:exec --project demo-parabolic-test --only functions "node --test functions/tests/apiGateway.emulator.test.js"`. All 13 implemented manifest routes reached mapped business handlers rather than gateway 404/405 responses. Explicit checks confirmed Admin `401 UNAUTHORIZED`, Student missing-route `404 NOT_FOUND`, encoded Exam entry `400 VALIDATION_ERROR`, Vendor `401 UNAUTHORIZED`, method error `405 METHOD_NOT_ALLOWED` with `Allow: GET, POST`, and an unknown-path JSON `404 NOT_FOUND` whose body was not HTML. All 3 emulator test cases passed and the emulator shut down cleanly.
+  - **L4 browser E2E:** N/A — BWM-003 exposes a direct Functions URL but does not yet connect Hosting or any portal caller, so there is no browser-reachable gateway path in this bounded task. The L3 suite proves unknown direct gateway paths cannot fall through to SPA HTML; BWM-004 owns API-first Hosting rewrites and browser proof.
+  - **L5 staging/preview:** N/A — no deployment, environment, rewrite, security-header, secret, or public-runtime configuration changed; only the isolated local demo Functions emulator ran.
+  - **Firebase CLI version:** `15.9.0`.
+  - **Authorization/external mutations:** The user approved the local Functions emulator execution outside the sandbox on 2026-07-20 so the CLI could bind loopback ports. No Firebase resource, deployment, or remote data changed; the CLI refreshed local credential/configuration cache state during startup.
+  - **Contract/schema changes:** No product API DTO, handler behavior, authorization policy, or Firestore schema changed. Added permanent developer verification commands: `npm --prefix functions run test:api-gateway` and `npm run test:api-gateway:emulator`.
+  - **Residual risks:** BWM-003 acceptance is complete. BWM-004 must place `/api/v1/**` Hosting rewrites before every portal SPA fallback and prove the same JSON boundary through emulator and approved staging browser tests.
+  - **Completed on:** 2026-07-20
 
 ### BWM-004 — Hosting Rewrites, CORS, and Baseline Security Headers
 
-- **Status:** `PLANNED`
+- **Status:** `READY`
 - **Purpose:** Route browser requests safely before SPA fallbacks.
 - **Substeps:**
   - [ ] Add `/api/v1/**` rewrites before Admin/Student/Exam/Vendor SPA rewrites.
@@ -1143,6 +1209,7 @@ operations_owner: TBD
 | DEC-005 | 2026-07-18 | Production must fail closed and never silently substitute fixtures or fabricated success. | Fake data can mislead students/operators and hide data loss. | Accepted |
 | DEC-006 | 2026-07-18 | Finish the Admin -> Student -> Exam -> Analytics golden path before secondary portal operations. | It validates the platform's core value chain and shared infrastructure first. | Accepted |
 | DEC-007 | 2026-07-18 | For Functions TypeScript only, disable inherited blanket `require-jsdoc` and use a 120-character `max-len`; retain all correctness, TypeScript, import, quote, and indentation rules. | Google-style mandatory JSDoc and an 80-character limit created 277 non-behavior findings across already typed implementation/test code. Public or non-obvious APIs may still use focused documentation without making boilerplate comments a predeploy gate. | Accepted |
+| DEC-008 | 2026-07-20 | Gateway path misses and manifest-missing routes return structured `404 NOT_FOUND`; a known canonical path requested with an unsupported method returns structured `405 METHOD_NOT_ALLOWED` and a manifest-derived `Allow` header. | This keeps failures as JSON at the API boundary, distinguishes absent resources from invalid methods, and prevents API requests from falling through to portal HTML. | Accepted |
 
 Add decisions here whenever implementation changes a contract, schema, security boundary, task order, or release scope.
 
@@ -1260,6 +1327,51 @@ Never record only “tests passed.” Include exact commands and whether tests w
 ## Session Log
 
 Append newest entries at the top.
+
+### LOG-019 — 2026-07-20 — BWM-003-E Permanent Router Acceptance Suite
+
+- **Task:** BWM-003-E
+- **Outcome:** Added permanent contract and Functions-emulator router suites, proved all 13 implemented manifest routes reach their mapped existing handlers exactly once, and completed BWM-003 acceptance across Admin, Student, Exam, Vendor, method-error, and unknown-path behavior.
+- **Validation performed:** Functions lint/build, the new API gateway contract suite, API route/export manifest regression, structured error regression, `git diff --check`, and all 10 workspace lint/build gates passed. `npm run test:api-gateway:emulator` used Firebase CLI `15.9.0` with only the Functions emulator under `demo-parabolic-test`; all 3 integration cases passed, every implemented route avoided gateway miss/method failures, portal-specific contracts and encoded Exam parameters held, the unknown response was JSON rather than SPA HTML, and all emulator processes shut down cleanly.
+- **Files changed:** Added `functions/tests/apiGateway.test.js`, `functions/tests/apiGateway.emulator.test.js`, and `scripts/run-api-gateway-emulator-tests.mjs`; updated `functions/package.json`, root `package.json`, and this controller.
+- **Cloud changes:** None. Only the local Functions emulator and local CLI credential/configuration cache were used; no deployment, Firebase resource, or remote data changed.
+- **Next:** BWM-004 — add `/api/v1/**` rewrites before all portal SPA fallbacks, then continue the bounded Hosting, CORS, header, camera-policy, and authorized non-production staging substeps.
+
+### LOG-018 — 2026-07-20 — BWM-003-D Structured Route and Method Errors
+
+- **Task:** BWM-003-D
+- **Outcome:** Replaced temporary gateway 501 text responses with structured 404/405 JSON errors, introduced stable `METHOD_NOT_ALLOWED`, and derived `Allow` headers from the canonical manifest without changing mapped handler responses.
+- **Validation performed:** Functions lint/build, the API error suite, the API route/export manifest contract, `git diff --check`, and all 10 workspace lint/build gates passed. Under Firebase CLI `15.9.0` and `demo-parabolic-test`, multi-method and single-method paths returned correct 405 responses and `Allow` headers, unknown and missing routes returned JSON 404s, an implemented Admin route still reached its existing handler, and the Functions emulator shut down cleanly.
+- **Files changed:** `functions/src/api/apiGateway.ts`, `functions/src/types/apiResponse.ts`, `functions/src/services/apiResponse.ts`, `functions/src/tests/apiErrorHandling.test.ts`, `docs/api_contract.md`, `docs/MODULE_REGISTRY.md`, and this controller.
+- **Cloud changes:** None. Only the local Functions emulator and local CLI credential/configuration cache were used; no deployment, Firebase resource, or remote data changed.
+- **Next:** BWM-003-E — add permanent router tests covering Admin, Student, Exam, Vendor, method errors, and unknown paths, then run BWM-003 acceptance verification.
+
+### LOG-017 — 2026-07-20 — BWM-003-C Existing Handler Dispatch
+
+- **Task:** BWM-003-C
+- **Outcome:** Connected all 23 manifest route entries with backend implementations to 22 existing raw request handlers through a drift-checked registry, preserving all existing middleware/controller/service behavior and adding no duplicate business logic.
+- **Validation performed:** Functions lint/build, the API route/export manifest contract, `git diff --check`, and all 10 workspace lint/build gates passed. A compiled assertion proved exact 23-route/22-handler registry reconciliation. Under Firebase CLI `15.9.0` and `demo-parabolic-test`, gateway Admin behavior matched the direct legacy export's 401 contract, Exam reached existing validation (400), Vendor reached existing auth (401), the missing Student route remained 501, and the Functions emulator shut down cleanly.
+- **Files changed:** Added `functions/src/api/apiGatewayHandlers.ts`; updated `functions/src/api/apiGateway.ts`, `docs/api_contract.md`, `docs/MODULE_REGISTRY.md`, and this controller.
+- **Cloud changes:** None. Only the local Functions emulator and local CLI credential/configuration cache were used; no deployment, Firebase resource, or remote data changed.
+- **Next:** BWM-003-D — replace temporary gateway failures with structured 404 and method-not-allowed responses while preserving existing handler responses.
+
+### LOG-016 — 2026-07-20 — BWM-003-B Exact Route Selection and Parameters
+
+- **Task:** BWM-003-B
+- **Outcome:** Added strict method/path resolution directly from the typed manifest for all 29 canonical routes, preserved decoded Student/Exam parameters in `request.params`, and left the original request URL intact for existing Exam handler compatibility. No business handler was wired early.
+- **Validation performed:** Functions lint/build, the API route/export manifest contract, `git diff --check`, and all 10 workspace lint/build gates passed. A compiled contract assertion matched all 29 routes and rejected wrong-method, trailing-slash, case-drift, and malformed-encoding inputs. Firebase CLI `15.9.0` then sent real Admin and encoded Exam URLs through `us-central1-apiV1` under `demo-parabolic-test`; both completed with the intentional pre-handler 501 response and the Functions emulator shut down cleanly.
+- **Files changed:** Added `functions/src/api/apiGateway.ts`; updated `functions/src/index.ts`, `docs/api_contract.md`, `docs/MODULE_REGISTRY.md`, and this controller.
+- **Cloud changes:** None. Only the local Functions emulator and local CLI credential/configuration cache were used; no deployment, Firebase resource, or remote data changed.
+- **Next:** BWM-003-C — connect resolved manifest routes to the existing handler functions without copying middleware, controller, or service logic.
+
+### LOG-015 — 2026-07-20 — BWM-003-A Versioned Gateway Export
+
+- **Task:** BWM-003-A
+- **Outcome:** Added the single `apiV1` HTTP Functions export with a truthful temporary 501 response, accounted for it through a new `gateway` disposition in the existing typed export manifest, and reconciled the authoritative API/module documentation without implementing routing or handler dispatch early.
+- **Validation performed:** Functions lint/build passed; the API route/export manifest contract passed with complete coverage of all 42 HTTP exports and unchanged reconciliation of all 29 frontend routes; the workspace verifier passed all 10 portal/Functions lint and build gates; and `git diff --check` passed. Firebase CLI `15.9.0` discovered the real `apiV1` export under the isolated `demo-parabolic-test` Functions emulator, returned the exact expected HTTP 501 status/body, exited 0, and shut down cleanly. The initial sandboxed emulator attempt failed on loopback/config permissions; the approved outside-sandbox retry passed.
+- **Files changed:** `functions/src/index.ts`, `functions/src/apiRouteManifest.ts`, `docs/api_contract.md`, `docs/MODULE_REGISTRY.md`, and this controller.
+- **Cloud changes:** None. Only the local Functions emulator and local CLI credential/configuration cache were used; no deployment, Firebase resource, or remote data changed.
+- **Next:** BWM-003-B — dispatch exact manifest method/path pairs and preserve decoded Exam `sessionId` route parameters without yet duplicating business logic, finalizing structured errors, or adding BWM-003-E's router suite.
 
 ### LOG-014 — 2026-07-19 — BWM-002-E Manifest Coverage Enforcement
 

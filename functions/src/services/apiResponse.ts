@@ -14,6 +14,8 @@ const resolveErrorStatus = (code: StandardApiErrorCode): number => {
     return 403;
   case "NOT_FOUND":
     return 404;
+  case "METHOD_NOT_ALLOWED":
+    return 405;
   case "VALIDATION_ERROR":
     return 400;
   case "SESSION_LOCKED":

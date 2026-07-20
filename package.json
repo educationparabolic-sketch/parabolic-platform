@@ -5,6 +5,7 @@
   "scripts": {
     "playwright:install": "playwright install chromium",
     "smoke:emulators": "node scripts/run-emulator-smoke.mjs",
+    "test:api-gateway:emulator": "node scripts/run-api-gateway-emulator-tests.mjs",
     "test:e2e": "playwright test",
     "test:e2e:hosting": "playwright test tests/e2e/portal-hosting.smoke.spec.mjs"
   },

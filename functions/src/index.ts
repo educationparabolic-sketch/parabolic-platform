@@ -1,4 +1,5 @@
 import * as functions from "firebase-functions";
+import {handleApiV1Request} from "./api/apiGateway";
 import {sendErrorResponse} from "./services/apiResponse";
 import {registerGlobalErrorHandlers} from "./services/errorReporting";
 import {createRequestLogger} from "./services/logging";
@@ -146,6 +147,7 @@ export {billingSnapshotMonthly};
 export {dataRetentionPolicyDaily};
 export {failureRecoveryDispatch};
 export {failureRecoveryRetrySweep};
+export const apiV1 = functions.https.onRequest(handleApiV1Request);
 export const examStart = functions.https.onRequest(handleExamStartRequest);
 export const examSessionAnswers = functions.https.onRequest(
   handleExamSessionAnswersRequest,

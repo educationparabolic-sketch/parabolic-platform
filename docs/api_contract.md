@@ -1,8 +1,8 @@
 # Parabolic Platform API Contract
 
-Status: canonical route contract; runtime gateway pending BWM-003
+Status: canonical route contract; `apiV1` dispatch and structured route errors implemented
 
-Last reconciled: 2026-07-19 (`BWM-002-D`)
+Last reconciled: 2026-07-20 (`BWM-003-D`)
 
 ## Sources of truth
 
@@ -18,6 +18,10 @@ If prose and the typed manifest disagree about a route key or status, the typed 
 - HTTP method and path together form the route key.
 - Canonical routes have no trailing slash.
 - Path parameters use braces in documentation and URL-encoded segments at runtime.
+- Gateway matching is case-sensitive, rejects trailing or extra path segments, and decodes matched parameter segments into `request.params` without rewriting the original request URL.
+- Routes with a non-null `functionExport` invoke that export's existing raw request handler, retaining its middleware, controller, and service chain.
+- A known canonical path with the wrong method returns HTTP 405, error code `METHOD_NOT_ALLOWED`, and an `Allow` header derived from every manifest entry for that path.
+- Unknown paths and canonical routes whose manifest status is `missing` return structured HTTP 404 `NOT_FOUND` errors and never fall through to a portal document.
 - Tenant identity comes from verified server identity unless a documented vendor or session-entry boundary applies.
 - BWM-003 owns gateway dispatch; BWM-004 owns the Hosting rewrite before SPA fallbacks. Until those tasks complete, a canonical route assignment is not proof of reachability.
 
@@ -68,8 +72,9 @@ The detailed request/response mismatch for each incompatible entry is recorded u
 
 ## Backend HTTP export accounting
 
-`functions/src/apiRouteManifest.ts` accounts for all 41 current `functions.https.onRequest` exports:
+`functions/src/apiRouteManifest.ts` accounts for all 42 current `functions.https.onRequest` exports:
 
+- `apiV1` is the single versioned `gateway` export; it resolves exact manifest method/path pairs, preserves decoded route parameters, and dispatches non-null `functionExport` mappings through the existing raw request handlers;
 - 22 exports are referenced by one or more canonical frontend routes;
 - 16 portal-oriented exports currently have no executable frontend caller and remain `unmapped_portal` rather than receiving an invented public route;
 - `internalEmailQueue` is `internal_only`;
@@ -119,7 +124,7 @@ Current exceptions, including the raw `GET /admin/tests` array and top-level com
 
 ## Stable error codes
 
-Canonical errors include `UNAUTHORIZED`, `FORBIDDEN`, `TENANT_MISMATCH`, `LICENSE_RESTRICTED`, `VALIDATION_ERROR`, `NOT_FOUND`, `SESSION_LOCKED`, `WINDOW_CLOSED`, and `INTERNAL_ERROR`.
+Canonical errors include `UNAUTHORIZED`, `FORBIDDEN`, `TENANT_MISMATCH`, `LICENSE_RESTRICTED`, `VALIDATION_ERROR`, `NOT_FOUND`, `METHOD_NOT_ALLOWED`, `SESSION_LOCKED`, `WINDOW_CLOSED`, and `INTERNAL_ERROR`.
 
 ## Exam invariants
 

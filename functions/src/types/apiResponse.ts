@@ -2,6 +2,7 @@ export type StandardApiErrorCode =
   "FORBIDDEN" |
   "INTERNAL_ERROR" |
   "LICENSE_RESTRICTED" |
+  "METHOD_NOT_ALLOWED" |
   "NOT_FOUND" |
   "SESSION_LOCKED" |
   "SESSION_NOT_ACTIVE" |
