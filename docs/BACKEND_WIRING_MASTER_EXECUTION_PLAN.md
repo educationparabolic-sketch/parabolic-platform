@@ -16,12 +16,12 @@ program_status: IN_PROGRESS
 release_decision: NO_GO
 current_phase: 0
 current_task: BWM-004
-current_substep: BWM-004 — Add /api/v1/** rewrites before portal SPA rewrites
+current_substep: BWM-004 — Fix the Exam camera Permissions Policy to match the proctoring policy
 last_completed_task: BWM-003
 next_task: BWM-004
 blocked_tasks: []
-last_updated: 2026-07-20
-last_update_summary: BWM-003 is VERIFIED. Permanent contract and Functions-emulator router suites prove exact one-handler resolution for all 13 implemented manifest routes, portal-specific behavior, encoded parameters, method errors, and JSON-only unknown-path failures. Continue BWM-004 with API-first Hosting rewrites.
+last_updated: 2026-08-06
+last_update_summary: BWM-004 is IN_PROGRESS. All three Hosting targets now share a tested baseline CSP, no-sniff, referrer, framing, and permissions-header contract; local Hosting plus no-mock Chromium prove the portal target serves the policy without breaking Admin or Student. Continue with the distinct Exam camera Permissions Policy correction.
 ```
 
 Do not infer progress from old build numbers, UI completion labels, or visual verification artifacts. Only this checkpoint, the task registry, checked substeps, session log, and current repository evidence determine progress for this program.
@@ -30,8 +30,7 @@ Do not infer progress from old build numbers, UI completion labels, or visual ve
 
 Use this prompt in a new session:
 
-> Read `docs/BACKEND_WIRING_MASTER_EXECUTION_PLAN.md` completely. Resume the `current_task` at the first unchecked substep. Inspect the current code before changing it, implement only that bounded task, run its required verification, update the checkpoint, task status, evidence, and session log in the same document, then report the r
-esult and next task.
+> Read `docs/BACKEND_WIRING_MASTER_EXECUTION_PLAN.md` completely. Resume the `current_task` at the first unchecked substep. Inspect the current code before changing it, implement only that bounded task, run its required verification, update the checkpoint, task status, evidence, and session log in the same document, then report the result and next task.
 
 ---
 
@@ -256,7 +255,7 @@ The registry is the canonical order. Detailed cards below define scope and accep
 | BWM-001 | P0 | VERIFIED | BWM-000 | Trustworthy green quality gates and local integration-test harness |
 | BWM-002 | P0 | VERIFIED | BWM-001 | Canonical `/api/v1` route and contract manifest |
 | BWM-003 | P0 | VERIFIED | BWM-002 | Unified API gateway/router wired to handlers |
-| BWM-004 | P0 | READY | BWM-003 | Hosting API rewrites, CORS policy, and security headers |
+| BWM-004 | P0 | IN_PROGRESS | BWM-003 | Hosting API rewrites, CORS policy, and security headers |
 | BWM-005 | P0 | PLANNED | BWM-004 | Environment matrix and production artifact validation |
 | BWM-006 | P0 | PLANNED | BWM-002 | Standard response envelope and shared boundary types |
 | BWM-007 | P0 | PLANNED | BWM-005,BWM-006 | Explicit dev fixture mode and production fail-closed behavior |
@@ -613,17 +612,73 @@ The registry is the canonical order. Detailed cards below define scope and accep
 
 ### BWM-004 — Hosting Rewrites, CORS, and Baseline Security Headers
 
-- **Status:** `READY`
+- **Status:** `IN_PROGRESS`
 - **Purpose:** Route browser requests safely before SPA fallbacks.
 - **Substeps:**
-  - [ ] Add `/api/v1/**` rewrites before Admin/Student/Exam/Vendor SPA rewrites.
-  - [ ] Use same-origin routing as the default.
-  - [ ] If a portal must call cross-origin, implement explicit origin allowlists, `OPTIONS`, allowed headers/methods, and credential policy.
-  - [ ] Apply no-sniff, referrer, framing, CSP, and permissions headers consistently across all Hosting targets.
+  - [x] Add `/api/v1/**` rewrites before Admin/Student/Exam/Vendor SPA rewrites.
+  - [x] Use same-origin routing as the default.
+  - [x] If a portal must call cross-origin, implement explicit origin allowlists, `OPTIONS`, allowed headers/methods, and credential policy.
+  - [x] Apply no-sniff, referrer, framing, CSP, and permissions headers consistently across all Hosting targets.
   - [ ] Fix the Exam camera Permissions Policy so it matches the proctoring policy instead of unconditionally blocking camera access.
   - [ ] With product-owner authorization, establish and record the dedicated non-production Firebase project and `portal`/`exam`/`vendor` target mappings used for all subsequent L5 checks. Use no production data or secrets.
   - [ ] Perform the program's first manual Firebase CLI staging/preview deployment using a minimal non-sensitive verification artifact, never the current local portal bundles; prove rewrites/headers/API routing by public URL. BWM-005 will qualify full portal artifacts and BWM-010 will automate this already-proven path.
 - **Acceptance:** Emulator and approved staging browser tests prove API JSON is returned rather than `index.html`; unauthorized origins fail; portal routes still resolve after refresh; the explicit non-production project and target mapping are recorded without credentials.
+- **BWM-004 API-first rewrite evidence (2026-08-06):**
+  - **Implemented files:** `firebase.json`, `package.json`, `scripts/firebase-emulator-smoke.mjs`, `tests/e2e/portal-hosting.smoke.spec.mjs`, `tests/firebase-hosting-config.test.mjs`, and this controller.
+  - **Implementation summary:** Added the same first-position `/api/v1/**` rewrite to the `portal`, `exam`, and `vendor` Hosting targets, explicitly targeting the existing first-generation `apiV1` Function in `us-central1`. Added a permanent configuration-order contract test and extended the existing emulator and no-mock Chromium smoke checks to reject SPA HTML at the API boundary. No same-origin client policy, CORS behavior, security headers, camera policy, target mapping, or staging resource was changed early.
+  - **L1 static:** `node scripts/verify-workspace.mjs` — PASS; all 10 Admin, Student, Exam, Vendor, and Functions lint/build gates completed (frontend module counts 116, 91, 70, and 89; Functions `tsc` passed). `node --check scripts/firebase-emulator-smoke.mjs`, `node --check tests/e2e/portal-hosting.smoke.spec.mjs`, `npm run test:e2e:hosting -- --list`, and `git diff --check` — PASS; both browser scenarios were discovered and all edited JavaScript/configuration parsed cleanly.
+  - **L2 unit/contract:** `npm run test:hosting-config` — PASS; one Node contract case confirmed the exact `portal`/`exam`/`vendor` target set and required each target's first rewrite to be `/api/v1/**` -> `us-central1/apiV1` before an `index.html` SPA rewrite.
+  - **L3 Firebase emulator:** `npm run smoke:emulators` — PASS after the expected sandbox-only loopback failure and approved retry. Its logged Firebase command was `firebase emulators:exec --project demo-parabolic-test --only firestore,functions,hosting:portal "node scripts/firebase-emulator-smoke.mjs"`; Hosting preserved `/api/v1/hosting-rewrite-probe`, the real `apiV1` Function returned HTTP 404 with JSON code `NOT_FOUND`, the response contained no HTML doctype, the existing Firestore/health checks passed, and every emulator shut down cleanly. The narrower `env CI=true FUNCTIONS_DISCOVERY_TIMEOUT=30 NODE_ENV=test PROJECT_ID=demo-parabolic-test firebase emulators:exec --project demo-parabolic-test --only functions,hosting:portal "npm run test:e2e:hosting"` also passed and shut down cleanly.
+  - **L4 browser E2E:** The narrowed Functions/`hosting:portal` Firebase CLI command — PASS; Playwright ran 2 Chromium scenarios with no network mocking. Admin and Student entry/refresh routes and assets remained valid, and browser navigation to the API probe returned structured JSON 404 rather than `index.html` (2 passed in 6.7 seconds). The full shared emulator smoke independently passed the same 2 scenarios in 22.7 seconds.
+  - **L5 staging/preview:** N/A for this bounded first substep — no dedicated staging project/target mapping or public preview deployment was authorized; those remain explicit later BWM-004 substeps and are required before the task can become `VERIFIED`.
+  - **L6 production:** N/A — BWM-057 only.
+  - **Firebase CLI version:** `15.9.0`.
+  - **Authorization/external mutations:** The user approved local emulator/headless Chromium execution outside the sandbox so the CLI could bind loopback ports. No deployment, Firebase resource, or remote data changed; only local build/test output and local CLI credential/configuration cache state changed, plus read-only Firebase CLI metadata/project lookups. The initial sandboxed run failed on `EPERM`/`EROFS` before emulators could start and was not counted as verification.
+  - **Contract/schema changes:** Hosting now maps `/api/v1/**` to `apiV1` in `us-central1` for all three targets before SPA routing. No API request/response DTO, handler behavior, authorization policy, or Firestore schema changed.
+  - **Residual risks:** BWM-004 remains `IN_PROGRESS`; same-origin-default client routing, any necessary CORS allowlist, baseline headers, Exam camera policy, dedicated non-production target mappings, and public staging proof remain unchecked.
+  - **Completed on:** 2026-08-06
+- **BWM-004 same-origin-default evidence (2026-08-06):**
+  - **Implemented files:** `shared/services/apiClient.ts`, `shared/services/portalIntegration.ts`, `scripts/run-emulator-smoke.mjs`, `tests/frontend-api-routing.test.mjs`, `package.json`, `docs/FRONTEND_API_CALL_INVENTORY.md`, and this controller.
+  - **Implementation summary:** Centralized the absent/blank API-base fallback as `SAME_ORIGIN_API_BASE_URL = "/api/v1"` inside the shared client and removed the portal integration layer's old root-path override. Admin, Student, Exam, Vendor, and the exported generic client now share that default; an explicit non-empty `VITE_API_BASE_URL` remains an override for the next conditional cross-origin assessment. Updated the emulator artifact build to neutralize ignored developer-local API overrides so the Hosting smoke exercises default mode, and reconciled the route inventory with the implemented gateway and Hosting path.
+  - **L1 static:** `node scripts/verify-workspace.mjs` — PASS; all 10 Admin, Student, Exam, Vendor, and Functions lint/build gates completed (frontend module counts 116, 91, 70, and 89; Functions `tsc` passed). The four focused portal lint commands, `git diff --check`, and JavaScript syntax checks also passed. `env VITE_API_BASE_URL= VITE_BASE_PATH=/admin/ npm --prefix apps/admin run build` plus `rg -n -o 'http://127\\.0\\.0\\.1:5001[^" ]*|/api/v1' apps/admin/dist -g '*.js'` — PASS; the default-mode compiled artifact contained `/api/v1` and no loopback Functions origin.
+  - **L2 unit/contract:** `npm run test:frontend-api-routing` — PASS; one permanent source contract case confirmed the exact `/api/v1` fallback, confirmed the portal factory does not supply a competing `baseUrl`, found shared client creation for all four portal keys, and found no direct `fetch`, Axios, XHR, or callable-Function transport in portal production source. `npm run test:hosting-config` — PASS; all three targets retain API-first rewrite order.
+  - **L3 Firebase emulator:** `npm run smoke:emulators` — PASS. The command built Admin and Student with `VITE_API_BASE_URL` explicitly empty, built Functions, prepared Hosting, and logged `firebase emulators:exec --project demo-parabolic-test --only firestore,functions,hosting:portal "node scripts/firebase-emulator-smoke.mjs"`. The real gateway request retained `/api/v1/hosting-rewrite-probe`, returned JSON `404 NOT_FOUND` rather than SPA HTML, all Firestore/health/Hosting assertions passed, and every emulator shut down cleanly.
+  - **L4 browser E2E:** The nested `npm run test:e2e:hosting` under the same Firebase CLI command — PASS; 2 no-mock Chromium scenarios passed in 16.1 seconds. Admin and Student default-mode artifacts and entry routes loaded, and browser navigation through same-origin Hosting reached `apiV1` and returned JSON rather than `index.html`.
+  - **L5 staging/preview:** N/A for this bounded substep — no public deployment, environment mapping, or secret changed; BWM-004's explicit authorized staging substeps remain pending.
+  - **L6 production:** N/A — BWM-057 only.
+  - **Firebase CLI version:** `15.9.0`.
+  - **Authorization/external mutations:** The user approved local emulator/headless Chromium execution outside the sandbox so the CLI could bind loopback ports. No deployment, Firebase resource, or remote data changed; only local build/test output and local CLI credential/configuration cache state changed, plus read-only CLI metadata/project checks.
+  - **Contract/schema changes:** When `VITE_API_BASE_URL` is absent or blank, every shared frontend API client now prefixes requests with same-origin `/api/v1`. Explicit non-empty overrides remain supported. No route name, request/response DTO, handler, authorization policy, or Firestore schema changed.
+  - **Residual risks:** BWM-004 must next determine whether any supported portal topology genuinely requires a cross-origin API override and either implement a strict CORS policy or record why the conditional substep is satisfied by same-origin-only routing. Ignored developer `.env.local` loopback overrides remain local and BWM-005 owns release artifact/environment enforcement. Headers, Exam camera policy, non-production target mapping, and public staging proof remain unchecked.
+  - **Completed on:** 2026-08-06
+- **BWM-004 cross-origin/CORS disposition evidence (2026-08-06):**
+  - **Implemented files:** `functions/tests/apiGateway.emulator.test.js`, `docs/api_contract.md`, `docs/FRONTEND_API_CALL_INVENTORY.md`, and this controller.
+  - **Implementation summary:** Inspected every executable portal transport, frontend environment/base URL path, Hosting target, gateway handler, tracked release workflow, and relevant architecture/API contract. No supported Admin, Student, Exam, or Vendor topology requires a cross-origin API call: each deployed Hosting target owns an API-first `/api/v1/**` rewrite and every portal caller uses the shared same-origin client. Therefore no origin allowlist, preflight success path, allowed-header/method grant, or credentialed CORS policy was added. Documented that a non-empty `VITE_API_BASE_URL` is only a developer/diagnostic override until a future task explicitly approves and verifies a separate-origin topology, and added permanent emulator coverage for the current fail-closed boundary.
+  - **L1 static:** `node scripts/verify-workspace.mjs` — PASS; all 10 Admin, Student, Exam, Vendor, and Functions lint/build gates completed (frontend module counts 116, 91, 70, and 89; Functions `tsc` passed). `npm --prefix functions run lint`, `npm --prefix functions run build`, `node --check functions/tests/apiGateway.emulator.test.js`, and `git diff --check` — PASS.
+  - **L2 unit/contract:** `npm --prefix functions run test:api-gateway` — PASS after a clean Functions build; the three fast router/registry contract cases remained green. `npm run test:frontend-api-routing` and `npm run test:hosting-config` — PASS; one contract case each reconfirmed all four portals use the shared `/api/v1` default and all three Hosting targets retain API-first rewrite order.
+  - **L3 Firebase emulator:** `env FUNCTIONS_DISCOVERY_TIMEOUT=30 CI=true NODE_ENV=test PROJECT_ID=demo-parabolic-test firebase emulators:exec --project demo-parabolic-test --only functions "node --test functions/tests/apiGateway.emulator.test.js"` — PASS with exit 0 under the isolated demo project. All 4 gateway integration cases passed. An unauthorized-origin `OPTIONS /api/v1/admin/students` returned structured `405 METHOD_NOT_ALLOWED` with `Allow: GET` and no `Access-Control-Allow-Origin`, credentials, methods, or headers grant; a direct-origin-marked GET retained its existing `401 UNAUTHORIZED` behavior with no origin or credential grant. The Functions emulator and its support processes shut down cleanly.
+  - **L4 browser E2E:** N/A — no browser-visible flow or supported cross-origin topology was added or changed; the network-level emulator assertion directly verifies the response headers that cause a browser preflight to fail closed. Existing same-origin no-mock browser proof remains recorded in the preceding substep.
+  - **L5 staging/preview:** N/A for this bounded disposition — no deployment, environment mapping, rewrite, header, secret, or public runtime changed. BWM-004's explicitly authorized staging substeps remain pending.
+  - **L6 production:** N/A — BWM-057 only.
+  - **Firebase CLI version:** `15.9.0`.
+  - **Authorization/external mutations:** Approved execution used only the local Functions emulator outside the sandbox so the CLI could bind loopback ports. No deployment, Firebase resource, or remote data changed; the CLI updated local credential/configuration cache state during startup.
+  - **Contract/schema changes:** The API contract now explicitly records same-origin-only browser support and treats arbitrary `VITE_API_BASE_URL` overrides as non-release diagnostic configuration until an explicit allowlisted CORS design is approved. Gateway runtime, request/response DTOs, authentication/authorization, and Firestore schema are unchanged.
+  - **Residual risks:** BWM-005 still owns environment/artifact enforcement, including preventing an unapproved direct Function origin from entering release bundles. BWM-004 must next apply baseline security headers consistently across all Hosting targets; Exam camera policy, non-production target mapping, and public staging proof remain unchecked.
+  - **Completed on:** 2026-08-06
+- **BWM-004 baseline Hosting security-header evidence (2026-08-06):**
+  - **Implemented files:** `firebase.json`, `tests/firebase-hosting-config.test.mjs`, `scripts/firebase-emulator-smoke.mjs`, `tests/e2e/portal-hosting.smoke.spec.mjs`, and this controller.
+  - **Implementation summary:** Applied one exact `**` response-header contract to the `portal`, `exam`, and `vendor` Hosting targets. The baseline sets `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, a deny-by-default Permissions Policy, and a CSP that denies framing and objects, limits scripts/forms/base URLs to self, permits the Firebase connections used by the shared client, permits current HTTPS/data/blob image and media sources, and permits the inline styles used throughout the existing React portals. The Exam camera directive intentionally remains `camera=()` because correcting it is the next separately bounded substep. The existing API rewrite probe timeout increased from 15 to 30 seconds after the first full run reached and passed the new header assertions but exposed a cold-start-only Functions timeout; no product route or response behavior changed.
+  - **L1 static:** `node scripts/verify-workspace.mjs` — PASS; all 10 Admin, Student, Exam, Vendor, and Functions lint/build gates completed (frontend module counts 116, 91, 70, and 89; Functions `tsc` passed). `node --check scripts/firebase-emulator-smoke.mjs`, `node --check tests/e2e/portal-hosting.smoke.spec.mjs`, `npm run test:e2e:hosting -- --list`, JSON parsing, and `git diff --check` — PASS; Playwright discovered exactly 2 browser scenarios.
+  - **L2 unit/contract:** `npm run test:hosting-config` — PASS. The permanent configuration contract now requires every exact target in the `portal`/`exam`/`vendor` set to expose one all-path rule whose five headers and values exactly match the canonical baseline, in addition to retaining the API-first rewrite-order assertion.
+  - **L3 Firebase emulator:** `npm run smoke:emulators` — PASS on the final run. It logged `firebase emulators:exec --project demo-parabolic-test --only firestore,functions,hosting:portal "node scripts/firebase-emulator-smoke.mjs"`; both Admin and Student HTML responses carried the expected no-sniff, framing, referrer, permissions, and CSP directives, the Firestore and Function checks passed, the API-first rewrite still returned JSON `404 NOT_FOUND`, and all emulator processes shut down cleanly. The first run had already passed the new Hosting header checks before the pre-existing API probe's 15-second signal expired during a cold Functions worker start; the 30-second allowance matched the established Functions discovery window and the complete retry passed.
+  - **L4 browser E2E:** The nested no-mock Chromium run inside `npm run smoke:emulators` — PASS; 2 scenarios passed in 29.8 seconds. The Admin and Student HTML responses exposed the five baseline headers, their entry routes and assets loaded successfully, and the existing console, page-error, and failed same-origin-request listeners reported no CSP regressions.
+  - **L5 staging/preview:** N/A for this bounded substep — no public deployment, target mapping, environment, secret, or remote resource changed. Static parity covers all three configured targets and the real local Hosting/browser proof covers the composite `portal` target; BWM-004's later authorized staging substeps must verify the policy on public `portal`, `exam`, and `vendor` URLs.
+  - **L6 production:** N/A — BWM-057 only.
+  - **Firebase CLI version:** `15.9.0`.
+  - **Authorization/external mutations:** Approved execution used only local Firestore, Functions, Hosting, and headless Chromium processes outside the sandbox so the CLI could bind loopback ports. No deployment, Firebase resource, or remote data changed; the CLI performed read-only metadata/project checks and updated local credential/configuration cache state.
+  - **Contract/schema changes:** Hosting responses on all configured targets now share the exact baseline security-header policy. No API route, DTO, handler, authorization rule, Firestore schema, or browser CORS policy changed. Exam camera access remains denied until the immediately following camera-policy substep.
+  - **Residual risks:** The baseline deliberately permits inline styles and broad HTTPS image/media loading because current portal source requires them; BWM-047 owns later hardening after production assets and third-party origins are finalized. BWM-004 must next align Exam camera permission with proctoring, then record non-production target mappings and prove all targets through approved public staging URLs.
+  - **Completed on:** 2026-08-06
 
 ### BWM-005 — Environment Matrix and Artifact Safety
 
@@ -1210,6 +1265,7 @@ operations_owner: TBD
 | DEC-006 | 2026-07-18 | Finish the Admin -> Student -> Exam -> Analytics golden path before secondary portal operations. | It validates the platform's core value chain and shared infrastructure first. | Accepted |
 | DEC-007 | 2026-07-18 | For Functions TypeScript only, disable inherited blanket `require-jsdoc` and use a 120-character `max-len`; retain all correctness, TypeScript, import, quote, and indentation rules. | Google-style mandatory JSDoc and an 80-character limit created 277 non-behavior findings across already typed implementation/test code. Public or non-obvious APIs may still use focused documentation without making boilerplate comments a predeploy gate. | Accepted |
 | DEC-008 | 2026-07-20 | Gateway path misses and manifest-missing routes return structured `404 NOT_FOUND`; a known canonical path requested with an unsupported method returns structured `405 METHOD_NOT_ALLOWED` and a manifest-derived `Allow` header. | This keeps failures as JSON at the API boundary, distinguishes absent resources from invalid methods, and prevents API requests from falling through to portal HTML. | Accepted |
+| DEC-009 | 2026-08-06 | Supported browser deployments remain same-origin-only and receive no CORS grants; a non-empty `VITE_API_BASE_URL` is diagnostic configuration until a separate-origin topology is explicitly approved and allowlisted. | Every Hosting target already rewrites `/api/v1/**` to the gateway, no executable portal bypasses the shared client, and declining unnecessary cross-origin support minimizes token and origin-policy exposure. | Accepted |
 
 Add decisions here whenever implementation changes a contract, schema, security boundary, task order, or release scope.
 
@@ -1327,6 +1383,42 @@ Never record only “tests passed.” Include exact commands and whether tests w
 ## Session Log
 
 Append newest entries at the top.
+
+### LOG-023 — 2026-08-06 — BWM-004 Baseline Hosting Security Headers
+
+- **Task:** BWM-004 fourth substep — apply no-sniff, referrer, framing, CSP, and permissions headers consistently across all Hosting targets.
+- **Outcome:** Standardized one exact five-header baseline across `portal`, `exam`, and `vendor`, added permanent target-parity coverage, and proved the local composite Hosting target serves the policy without breaking Admin or Student. Kept Exam camera access denied for the next separately bounded policy correction.
+- **Validation performed:** The exact Hosting configuration contract, JavaScript syntax, JSON parsing, Playwright discovery, `git diff --check`, and all 10 workspace lint/build gates passed. Firebase CLI `15.9.0` under `demo-parabolic-test` passed the full Firestore/Functions/Hosting smoke; Admin and Student carried the baseline response headers, the API rewrite remained JSON, and 2 no-mock Chromium scenarios passed in 29.8 seconds with no CSP-related console, page, or same-origin request failures. The first full run passed the header assertions but timed out on the later API probe during a cold Functions start; after aligning that probe with the established 30-second discovery allowance, the complete retry passed and shut down cleanly.
+- **Files changed:** `firebase.json`, `tests/firebase-hosting-config.test.mjs`, `scripts/firebase-emulator-smoke.mjs`, `tests/e2e/portal-hosting.smoke.spec.mjs`, and this controller, in addition to preserved earlier BWM-004 changes.
+- **Cloud changes:** None. Approved execution used only local emulators and headless Chromium; no deployment, Firebase resource, or remote data changed. The CLI performed read-only metadata/project checks and updated local credential/configuration cache state.
+- **Next:** BWM-004 — fix the Exam camera Permissions Policy so it matches the proctoring policy instead of unconditionally blocking camera access.
+
+### LOG-022 — 2026-08-06 — BWM-004 Same-Origin-Only CORS Disposition
+
+- **Task:** BWM-004 third substep — determine whether a portal must call cross-origin and, only if required, add explicit CORS policy.
+- **Outcome:** Confirmed all supported portal deployments use their own API-first Hosting rewrite and no executable portal requires a direct Functions origin. Kept the gateway fail-closed with no CORS grants, documented the release boundary for diagnostic API-base overrides, and added permanent emulator coverage for unauthorized-origin preflight and direct requests.
+- **Validation performed:** Functions lint/build, the three-case fast gateway contract, frontend-routing and Hosting-order contracts, JavaScript syntax, `git diff --check`, and all 10 workspace lint/build gates passed. Firebase CLI `15.9.0` under `demo-parabolic-test` passed all 4 Functions-emulator gateway cases: unauthorized-origin `OPTIONS` returned structured 405 with `Allow: GET` and no access-control grants, the marked GET retained 401 without origin/credential grants, and all emulator processes shut down cleanly.
+- **Files changed:** `functions/tests/apiGateway.emulator.test.js`, `docs/api_contract.md`, `docs/FRONTEND_API_CALL_INVENTORY.md`, and this controller, in addition to the preserved earlier BWM-004 changes.
+- **Cloud changes:** None. Approved execution used only the local Functions emulator; no deployment, Firebase resource, or remote data changed. The CLI updated local credential/configuration cache state during startup.
+- **Next:** BWM-004 — apply no-sniff, referrer, framing, CSP, and permissions headers consistently across all Hosting targets without yet changing the distinct Exam camera policy.
+
+### LOG-021 — 2026-08-06 — BWM-004 Same-Origin API Default
+
+- **Task:** BWM-004 second substep — use same-origin routing as the default.
+- **Outcome:** Made `/api/v1` the single absent/blank API-base fallback for all four portal clients and the generic shared client, removed the old portal-root override, kept explicit environment overrides for the bounded CORS assessment, and made the emulator artifacts exercise default mode instead of ignored loopback configuration.
+- **Validation performed:** The permanent frontend routing contract and Hosting-order regression passed; all four portal lint gates and all 10 workspace lint/build gates passed. A default-mode Admin artifact contained `/api/v1` and no direct loopback Functions origin. Firebase CLI `15.9.0` under `demo-parabolic-test` built default-mode Admin/Student artifacts, passed Firestore/Functions/Hosting checks, returned JSON `404 NOT_FOUND` through same-origin `/api/v1`, passed 2 no-mock Chromium scenarios in 16.1 seconds, and shut down cleanly.
+- **Files changed:** `shared/services/apiClient.ts`, `shared/services/portalIntegration.ts`, `scripts/run-emulator-smoke.mjs`, new `tests/frontend-api-routing.test.mjs`, root `package.json`, `docs/FRONTEND_API_CALL_INVENTORY.md`, and this controller, in addition to the preserved first-substep BWM-004 changes.
+- **Cloud changes:** None. Approved execution used only local emulators and headless Chromium; no deployment, Firebase resource, or remote data changed. The CLI performed read-only metadata/project checks and updated local credential/configuration cache state.
+- **Next:** BWM-004 — determine whether any supported portal must call the API cross-origin; if so implement an explicit allowlist, `OPTIONS`, headers/methods, and credential policy, otherwise record the same-origin-only disposition without adding permissive CORS.
+
+### LOG-020 — 2026-08-06 — BWM-004 API-First Hosting Rewrites
+
+- **Task:** BWM-004 first substep — add `/api/v1/**` rewrites before every portal SPA fallback.
+- **Outcome:** Routed the canonical API prefix to `us-central1/apiV1` as the first rewrite on `portal`, `exam`, and `vendor`; added permanent target/order coverage; and extended the real Hosting smoke so API requests cannot silently return a portal shell.
+- **Validation performed:** `npm run test:hosting-config`, all 10 workspace lint/build gates, syntax/discovery checks, and `git diff --check` passed. Firebase CLI `15.9.0` under `demo-parabolic-test` passed both the shared Firestore/Functions/Hosting smoke and a narrowed Functions + `hosting:portal` run. In both Node and Chromium, `/api/v1/hosting-rewrite-probe` preserved its path through Hosting and returned JSON `404 NOT_FOUND`, never `index.html`; the two no-mock browser scenarios also proved Admin and Student refresh routes/assets still resolve.
+- **Files changed:** `firebase.json`, root `package.json`, `scripts/firebase-emulator-smoke.mjs`, `tests/e2e/portal-hosting.smoke.spec.mjs`, new `tests/firebase-hosting-config.test.mjs`, and this controller. The pre-existing user edit repairing the wrapped starter prompt was preserved.
+- **Cloud changes:** None. Approved execution used only local emulators and headless Chromium; no deployment, Firebase resource, or remote data changed. The CLI performed read-only metadata/project checks and updated local credential/configuration cache state.
+- **Next:** BWM-004 — use same-origin routing as the default without starting the later CORS, headers, camera-policy, target-mapping, or staging-preview substeps.
 
 ### LOG-019 — 2026-07-20 — BWM-003-E Permanent Router Acceptance Suite
 

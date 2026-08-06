@@ -13,9 +13,9 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 ## Transport baseline
 
 - All calls use `shared/services/apiClient.ts` through `getPortalApiClient`.
-- Admin, Student, and Vendor calls use the API client's automatic Firebase ID-token bearer header. The configured base is `VITE_API_BASE_URL`; otherwise `portalIntegration.ts` supplies `/`.
+- Admin, Student, and Vendor calls use the API client's automatic Firebase ID-token bearer header. The shared client uses same-origin `/api/v1` for every supported portal topology. A non-empty `VITE_API_BASE_URL` remains a developer/diagnostic override but is not an approved release topology without an explicit CORS policy.
 - Exam-runtime calls deliberately set `skipAuth: true` and put the session token in the bearer header themselves.
-- The existing backend exports individual HTTP Functions. The repository does not yet contain a unified REST gateway or Hosting rewrite from these frontend paths to those exports.
+- The `apiV1` gateway dispatches canonical routes to the existing HTTP handlers, and every Hosting target routes `/api/v1/**` to that gateway before its SPA fallback.
 - `Auth`, `role`, `tenant`, and `license` below describe both the frontend credential and the middleware on the current handler. “None (missing)” means no backend enforcement exists for that frontend contract.
 
 ## Canonical route policy

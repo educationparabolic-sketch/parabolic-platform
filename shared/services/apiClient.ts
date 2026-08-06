@@ -26,6 +26,8 @@ const DEFAULT_RETRY_POLICY: ApiRetryPolicy = {
 const RETRYABLE_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504]);
 const IDEMPOTENT_METHODS = new Set<ApiHttpMethod>(["GET", "DELETE"]);
 
+export const SAME_ORIGIN_API_BASE_URL = "/api/v1";
+
 export class ApiClientError extends Error {
   readonly status: number;
   readonly code: string;
@@ -55,7 +57,7 @@ function resolveBaseUrl(config: ApiClientConfig): string {
 
   const envBaseUrl = getFrontendEnvironment().apiBaseUrl;
   if (!envBaseUrl || envBaseUrl.trim().length === 0) {
-    return "";
+    return SAME_ORIGIN_API_BASE_URL;
   }
 
   return removeTrailingSlash(envBaseUrl.trim());

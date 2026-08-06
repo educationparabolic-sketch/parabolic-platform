@@ -64,13 +64,7 @@ export function getPortalApiClient(portal: PortalKey): ApiClient {
     return cached;
   }
 
-  const environment = getFrontendEnvironment();
-  const apiBaseUrl = environment.apiBaseUrl && environment.apiBaseUrl.trim().length > 0 ?
-    environment.apiBaseUrl :
-    "/";
-
   const client = createApiClient({
-    baseUrl: apiBaseUrl,
     defaultHeaders: {
       "X-Parabolic-Portal": portal,
     },

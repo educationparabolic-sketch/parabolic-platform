@@ -2,7 +2,7 @@
 
 Status: canonical route contract; `apiV1` dispatch and structured route errors implemented
 
-Last reconciled: 2026-07-20 (`BWM-003-D`)
+Last reconciled: 2026-08-06 (`BWM-004`)
 
 ## Sources of truth
 
@@ -23,7 +23,14 @@ If prose and the typed manifest disagree about a route key or status, the typed 
 - A known canonical path with the wrong method returns HTTP 405, error code `METHOD_NOT_ALLOWED`, and an `Allow` header derived from every manifest entry for that path.
 - Unknown paths and canonical routes whose manifest status is `missing` return structured HTTP 404 `NOT_FOUND` errors and never fall through to a portal document.
 - Tenant identity comes from verified server identity unless a documented vendor or session-entry boundary applies.
-- BWM-003 owns gateway dispatch; BWM-004 owns the Hosting rewrite before SPA fallbacks. Until those tasks complete, a canonical route assignment is not proof of reachability.
+- Every supported portal deployment reaches this boundary through its own Hosting target's `/api/v1/**` rewrite before the SPA fallback.
+
+## Browser origin policy
+
+- Supported Admin, Student, Exam, and Vendor browser traffic is same-origin. No supported deployment requires a portal to call a direct Functions origin.
+- The gateway intentionally emits no `Access-Control-Allow-Origin`, credential, method, or header grants. A preflight `OPTIONS` request to a known canonical path therefore receives the normal structured `405 METHOD_NOT_ALLOWED` response without a CORS grant; an unknown path receives the normal structured 404 response.
+- A non-empty `VITE_API_BASE_URL` remains a developer/diagnostic override, not an approved release topology. Enabling it for a separate browser origin requires a task-specific origin allowlist, explicit `OPTIONS` behavior, allowed headers/methods, a credential decision, emulator/browser coverage, and approved staging proof before release use.
+- BWM-005 owns release-artifact and environment enforcement; it must not treat an arbitrary cross-origin override as production-ready configuration.
 
 ## Route status meanings
 

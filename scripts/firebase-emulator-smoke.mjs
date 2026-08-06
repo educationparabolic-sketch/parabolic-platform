@@ -8,6 +8,8 @@ const projectId = process.env.GCLOUD_PROJECT;
 const functionsOrigin = "http://127.0.0.1:5001";
 const hostingOrigin = process.env.PARABOLIC_E2E_BASE_URL ?? "http://127.0.0.1:5000";
 const marker = "bwm-001-g-emulator-smoke";
+const expectedPermissionsPolicy =
+  "camera=(), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(self)";
 
 assert.equal(projectId, expectedProjectId, "Unexpected Firebase emulator project ID");
 assert.ok(firestoreHost, "FIRESTORE_EMULATOR_HOST is required");
@@ -101,10 +103,35 @@ async function verifyHosting() {
     );
 
     assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/);
+    assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+    assert.equal(response.headers.get("x-frame-options"), "DENY");
+    assert.equal(response.headers.get("referrer-policy"), "no-referrer");
+    assert.equal(
+      response.headers.get("permissions-policy"),
+      expectedPermissionsPolicy,
+    );
+    const contentSecurityPolicy = response.headers.get("content-security-policy") ?? "";
+    assert.match(contentSecurityPolicy, /(?:^|; )default-src 'self'(?:;|$)/);
+    assert.match(contentSecurityPolicy, /(?:^|; )object-src 'none'(?:;|$)/);
+    assert.match(contentSecurityPolicy, /(?:^|; )frame-ancestors 'none'(?:;|$)/);
+    assert.match(contentSecurityPolicy, /(?:^|; )script-src 'self'(?:;|$)/);
+    assert.match(contentSecurityPolicy, /(?:^|; )connect-src 'self' /);
     assert.match(responseBody, new RegExp(`/${portal}/assets/`));
   }
 
-  console.log("[emulator-check] Hosting Admin and Student artifacts verified.");
+  const apiResponse = await fetch(`${hostingOrigin}/api/v1/hosting-rewrite-probe`, {
+    signal: AbortSignal.timeout(30_000),
+  });
+  const apiResponseBody = await apiResponse.text();
+
+  assert.equal(apiResponse.status, 404);
+  assert.match(apiResponse.headers.get("content-type") ?? "", /^application\/json\b/);
+  assert.doesNotMatch(apiResponseBody, /<!doctype html>/i);
+  assert.equal(JSON.parse(apiResponseBody).error?.code, "NOT_FOUND");
+
+  console.log(
+    "[emulator-check] Hosting artifacts, baseline security headers, and API-first rewrite verified.",
+  );
 }
 
 try {

@@ -30,13 +30,13 @@ run(
   "Build Admin Hosting artifact",
   npmExecutable,
   ["--prefix", "apps/admin", "run", "build"],
-  {VITE_BASE_PATH: "/admin/"},
+  {VITE_API_BASE_URL: "", VITE_BASE_PATH: "/admin/"},
 );
 run(
   "Build Student Hosting artifact",
   npmExecutable,
   ["--prefix", "apps/student", "run", "build"],
-  {VITE_BASE_PATH: "/student/"},
+  {VITE_API_BASE_URL: "", VITE_BASE_PATH: "/student/"},
 );
 run(
   "Build Functions artifact",

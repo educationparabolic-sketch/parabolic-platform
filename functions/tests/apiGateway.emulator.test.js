@@ -141,3 +141,56 @@ test(
     assert.equal(unknown.body.error?.message, "API route not found.");
   },
 );
+
+test(
+  "cross-origin browser requests receive no CORS grant",
+  async () => {
+    const unauthorizedOrigin = "https://unauthorized.example";
+    const preflight = await fetch(
+      `${gatewayOrigin}/api/v1/admin/students`,
+      {
+        headers: {
+          "Access-Control-Request-Headers":
+            "authorization,x-parabolic-portal",
+          "Access-Control-Request-Method": "GET",
+          "Origin": unauthorizedOrigin,
+        },
+        method: "OPTIONS",
+        signal: AbortSignal.timeout(15_000),
+      },
+    );
+    const preflightBody = await preflight.json();
+
+    assert.equal(preflight.status, 405);
+    assert.equal(preflightBody.error?.code, "METHOD_NOT_ALLOWED");
+    assert.equal(preflight.headers.get("allow"), "GET");
+    assert.equal(preflight.headers.get("access-control-allow-origin"), null);
+    assert.equal(
+      preflight.headers.get("access-control-allow-credentials"),
+      null,
+    );
+    assert.equal(preflight.headers.get("access-control-allow-methods"), null);
+    assert.equal(preflight.headers.get("access-control-allow-headers"), null);
+
+    const directRequest = await fetch(
+      `${gatewayOrigin}/api/v1/admin/students`,
+      {
+        headers: {"Origin": unauthorizedOrigin},
+        method: "GET",
+        signal: AbortSignal.timeout(15_000),
+      },
+    );
+    const directRequestBody = await directRequest.json();
+
+    assert.equal(directRequest.status, 401);
+    assert.equal(directRequestBody.error?.code, "UNAUTHORIZED");
+    assert.equal(
+      directRequest.headers.get("access-control-allow-origin"),
+      null,
+    );
+    assert.equal(
+      directRequest.headers.get("access-control-allow-credentials"),
+      null,
+    );
+  },
+);
