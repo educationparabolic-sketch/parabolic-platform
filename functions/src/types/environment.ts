@@ -44,11 +44,18 @@ export interface ManagedSecrets {
   emailProviderKey?: string;
 }
 
+export interface ReleaseMetadata {
+  id: string;
+  commitSha: string;
+  builtAt: string;
+}
+
 export interface EnvironmentConfig {
   assetDelivery: AssetDeliveryConfig;
   nodeEnv: RuntimeEnvironment;
   projectId: string;
   endpoints: ServiceEndpoints;
+  release: ReleaseMetadata;
   secrets: ManagedSecrets;
   secretMetadata: Record<ManagedSecretKey, SecretResolutionMetadata>;
 }

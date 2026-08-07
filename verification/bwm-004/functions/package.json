@@ -1,0 +1,11 @@
+{
+  "name": "parabolic-bwm-004-verification-function",
+  "private": true,
+  "main": "index.js",
+  "engines": {
+    "node": "20"
+  },
+  "dependencies": {
+    "firebase-functions": "7.3.2"
+  }
+}

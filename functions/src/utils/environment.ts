@@ -83,6 +83,11 @@ export const loadEnvironmentConfig = async (): Promise<EnvironmentConfig> => {
       vendorBaseUrl:
         getOptionalEnv("VENDOR_BASE_URL") ?? DEFAULT_ENDPOINTS.vendorBaseUrl,
     },
+    release: {
+      id: getOptionalEnv("RELEASE_ID") ?? "",
+      commitSha: getOptionalEnv("RELEASE_COMMIT_SHA") ?? "",
+      builtAt: getOptionalEnv("RELEASE_BUILT_AT") ?? "",
+    },
     secrets: secretResolution.secrets,
     secretMetadata: secretResolution.metadata,
   };
@@ -92,6 +97,7 @@ export const loadEnvironmentConfig = async (): Promise<EnvironmentConfig> => {
     projectId: config.projectId,
     assetDelivery: config.assetDelivery,
     endpoints: config.endpoints,
+    release: config.release,
     configuredSecrets: Object.entries(config.secretMetadata)
       .filter(([, metadata]) => metadata.source !== "unconfigured")
       .map(([key, metadata]) => ({

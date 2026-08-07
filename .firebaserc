@@ -7,6 +7,22 @@
       "hosting": {
         "portal": [
           "demo-parabolic-test-portal"
+        ],
+        "exam": [
+          "demo-parabolic-test-exam"
+        ]
+      }
+    },
+    "parabolic-dev": {
+      "hosting": {
+        "portal": [
+          "parabolic-dev"
+        ],
+        "exam": [
+          "parabolic-dev-40ec9"
+        ],
+        "vendor": [
+          "parabolic-dev-vendor"
         ]
       }
     }

@@ -64,5 +64,10 @@ export function getFrontendEnvironment(): FrontendEnvironment {
     examBaseUrl: readOptionalUrlValue("VITE_EXAM_BASE_URL"),
     vendorBaseUrl: readOptionalUrlValue("VITE_VENDOR_BASE_URL"),
     examDevMockEntry: readBooleanValue("VITE_EXAM_DEV_MOCK_ENTRY"),
+    release: {
+      id: readEnvValue("VITE_RELEASE_ID"),
+      commitSha: readEnvValue("VITE_RELEASE_COMMIT_SHA"),
+      builtAt: readEnvValue("VITE_RELEASE_BUILT_AT"),
+    },
   };
 }

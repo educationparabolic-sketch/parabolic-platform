@@ -4,12 +4,21 @@
   "type": "module",
   "scripts": {
     "playwright:install": "playwright install chromium",
+    "prepare:bwm-004-staging": "node scripts/prepare-bwm-004-staging-verification.mjs",
     "smoke:emulators": "node scripts/run-emulator-smoke.mjs",
     "test:api-gateway:emulator": "node scripts/run-api-gateway-emulator-tests.mjs",
+    "test:bwm-004-staging": "npm run prepare:bwm-004-staging && node --test tests/bwm-004-staging-verification.test.mjs",
+    "test:build-environment-validation": "node --test tests/build-environment-validation.test.mjs",
+    "test:ci-environment-injection": "node --test tests/ci-environment-injection.test.mjs",
+    "test:deploy-target-validation": "node --test tests/deploy-target-validation.test.mjs",
+    "test:release-artifact-scan": "node --test tests/release-artifact-scan.test.mjs",
     "test:frontend-api-routing": "node --test tests/frontend-api-routing.test.mjs",
+    "test:environment-matrix": "node --test tests/environment-matrix.test.mjs",
     "test:hosting-config": "node --test tests/firebase-hosting-config.test.mjs",
     "test:e2e": "playwright test",
-    "test:e2e:hosting": "playwright test tests/e2e/portal-hosting.smoke.spec.mjs"
+    "test:e2e:exam-hosting": "playwright test tests/e2e/exam-hosting.camera.spec.mjs",
+    "test:e2e:hosting": "playwright test tests/e2e/portal-hosting.smoke.spec.mjs",
+    "test:e2e:staging-verification": "playwright test tests/e2e/staging-verification.spec.mjs"
   },
   "devDependencies": {
     "playwright": "1.59.1"

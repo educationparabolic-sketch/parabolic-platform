@@ -73,6 +73,7 @@ node_modules
 dist
 .env
 .env.*
+!apps/*/.env.example
 .firebase
 
 # Browser test output

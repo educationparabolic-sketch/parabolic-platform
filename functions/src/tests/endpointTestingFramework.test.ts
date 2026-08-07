@@ -166,6 +166,11 @@ const createEnvironmentConfig = (
   },
   nodeEnv,
   projectId: "parabolic-platform-build-76-tests",
+  release: {
+    id: "endpoint-testing-framework",
+    commitSha: "0000000000000000000000000000000000000000",
+    builtAt: "2026-01-01T00:00:00Z",
+  },
   secretMetadata: {
     aiApiKey: {
       envVar: "AI_API_KEY",

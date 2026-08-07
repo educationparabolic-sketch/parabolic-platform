@@ -13,6 +13,13 @@ export interface FrontendEnvironment {
   examBaseUrl?: string;
   vendorBaseUrl?: string;
   examDevMockEntry?: boolean;
+  release: FrontendReleaseMetadata;
+}
+
+export interface FrontendReleaseMetadata {
+  id: string;
+  commitSha: string;
+  builtAt: string;
 }
 
 export interface FrontendEnvironmentValidationResult {
