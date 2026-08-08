@@ -41,6 +41,7 @@ function createEnvironment(environmentName = "test") {
     VITE_PORTAL_BASE_URL: `https://portal.${projectId}.${domainSuffix}`,
     VITE_EXAM_BASE_URL: `https://exam.${projectId}.${domainSuffix}`,
     VITE_VENDOR_BASE_URL: `https://vendor.${projectId}.${domainSuffix}`,
+    VITE_DATA_MODE: "live",
     VITE_EXAM_DEV_MOCK_ENTRY: "false",
     PROJECT_ID: projectId,
     NODE_ENV: environmentName,
@@ -92,6 +93,7 @@ test("every required CI value fails closed when missing", () => {
     "VITE_PORTAL_BASE_URL",
     "VITE_EXAM_BASE_URL",
     "VITE_VENDOR_BASE_URL",
+    "VITE_DATA_MODE",
     "VITE_EXAM_DEV_MOCK_ENTRY",
     "VITE_RELEASE_ID",
     "VITE_RELEASE_COMMIT_SHA",
@@ -145,6 +147,7 @@ test("malformed release values, origins, buckets, and release overrides fail", (
     ["QUESTION_ASSETS_BUCKET", "gs://bucket/path", "bare bucket name"],
     ["VITE_PORTAL_BASE_URL", "portal.test.invalid", "absolute URL"],
     ["VITE_EXAM_DEV_MOCK_ENTRY", "true", "must be false"],
+    ["VITE_DATA_MODE", "fixture", "must be live"],
   ];
 
   for (const [key, value, expectedMessage] of cases) {

@@ -1,26 +1,16 @@
 import {StandardApiErrorCode} from "./apiResponse";
+import type {
+  DeployCalibrationVersionResult,
+} from "../../../shared/contracts/apiDtos";
+export type {
+  DeployedInstituteCalibrationResult,
+  DeployCalibrationVersionResult,
+} from "../../../shared/contracts/apiDtos";
 
 export interface DeployCalibrationVersionInput {
   changedBy: string;
   deploymentLogId?: string;
   targetInstitutes: string[];
-  versionId: string;
-}
-
-export interface DeployedInstituteCalibrationResult {
-  calibrationPath: string;
-  calibrationHistoryPath: string;
-  instituteId: string;
-  licensePath: string;
-  compatibilityLicensePath: string;
-}
-
-export interface DeployCalibrationVersionResult {
-  calibrationSourcePath: string;
-  deployedInstituteCount: number;
-  deployedInstitutes: DeployedInstituteCalibrationResult[];
-  deploymentLogId: string;
-  vendorCalibrationLogPath: string;
   versionId: string;
 }
 

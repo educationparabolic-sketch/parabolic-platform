@@ -1,13 +1,15 @@
 import { Suspense, lazy } from "react";
-import { UiRouteLoading } from "../../../shared/ui/components";
+import { UiDataStateBoundary, UiRouteLoading } from "../../../shared/ui/components";
 
 const ExamRuntimeApp = lazy(() => import("./ExamRuntimeApp"));
 
 function App() {
   return (
-    <Suspense fallback={<UiRouteLoading label="Loading exam runtime" />}>
-      <ExamRuntimeApp />
-    </Suspense>
+    <UiDataStateBoundary label="Exam runtime">
+      <Suspense fallback={<UiRouteLoading label="Loading exam runtime" />}>
+        <ExamRuntimeApp />
+      </Suspense>
+    </UiDataStateBoundary>
   );
 }
 

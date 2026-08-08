@@ -117,8 +117,7 @@ function StudentDashboardPage() {
         }
 
         const reason = error instanceof ApiClientError ? error.message : "Failed to load student dashboard data.";
-        setDataset(STUDENT_DASHBOARD_FALLBACK_DATASET);
-        setInlineMessage(`${reason} Showing a practice dashboard for now.`);
+        setInlineMessage(reason);
       } finally {
         if (isMounted) {
           setIsLoading(false);

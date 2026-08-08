@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
+import {
+  shouldUseLiveApi as shouldUseConfiguredLiveApi,
+} from "../../../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import { UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
 import QuestionBankWorkspaceNav from "./QuestionBankWorkspaceNav";
@@ -34,8 +37,7 @@ interface LifecyclePolicyRow {
 }
 
 function shouldUseLiveApi(): boolean {
-  const host = window.location.hostname.toLowerCase();
-  return host !== "127.0.0.1" && host !== "localhost";
+  return shouldUseConfiguredLiveApi();
 }
 
 function toNonEmptyString(value: unknown, fallback = ""): string {
@@ -270,11 +272,9 @@ async function fetchArchiveLifecycleFromApi(): Promise<ArchiveLifecycleRecord[]>
   }
 
   const response = payload as {
-    data?: {
-      questions?: unknown;
-    };
+    questions?: unknown;
   };
-  const questions = Array.isArray(response.data?.questions) ? response.data?.questions : [];
+  const questions = Array.isArray(response.questions) ? response.questions : [];
   return questions
     .map((entry, index) => normalizeQuestionRecord(entry, index))
     .filter((entry): entry is QuestionBankRecord => Boolean(entry))
@@ -306,7 +306,7 @@ function AdminQuestionBankArchiveVersionsPage() {
           return;
         }
 
-        setRecords(nextRecords.length > 0 ? nextRecords : ARCHIVE_LIFECYCLE_FIXTURES);
+        setRecords(nextRecords);
         setInlineMessage(
           nextRecords.length > 0 ?
             "Live mode enabled: archive/version lifecycle hydrated from GET /admin/questions/library." :
@@ -319,8 +319,7 @@ function AdminQuestionBankArchiveVersionsPage() {
 
         const reason =
           error instanceof ApiClientError ? error.message : "Failed to load archive/version lifecycle.";
-        setRecords(ARCHIVE_LIFECYCLE_FIXTURES);
-        setInlineMessage(`${reason} Falling back to deterministic archive/version fixtures.`);
+        setInlineMessage(reason);
       } finally {
         if (isActive) {
           setIsLoading(false);

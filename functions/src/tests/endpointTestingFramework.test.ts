@@ -206,18 +206,16 @@ const assertStructuredError = (
       code: string;
       message: string;
     };
-    meta: {
-      requestId: string;
-      timestamp: string;
-    };
+    requestId: string;
     success: boolean;
+    timestamp: string;
   };
 
   assert.equal(errorResponse.error.code, expectedCode);
   assert.equal(errorResponse.error.message, expectedMessage);
   assert.equal(errorResponse.success, false);
-  assert.equal(typeof errorResponse.meta.requestId, "string");
-  assert.equal(typeof errorResponse.meta.timestamp, "string");
+  assert.equal(typeof errorResponse.requestId, "string");
+  assert.equal(typeof errorResponse.timestamp, "string");
 };
 
 test("exam start handler accepts a valid student request", async () => {

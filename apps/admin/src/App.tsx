@@ -19,7 +19,7 @@ import {
   ADMIN_PRIMARY_NAVIGATION,
   findActivePortalNavigationItem,
 } from "../../../shared/ui/portalConsistency";
-import { UiRouteLoading } from "../../../shared/ui/components";
+import { UiDataStateBoundary, UiRouteLoading } from "../../../shared/ui/components";
 import {
   evaluateAdminRoutePermissions,
   getVisibleAdminRoutes,
@@ -77,7 +77,11 @@ const TestTemplateManagementPage = lazy(() => import("./features/tests/TestTempl
 
 function AdminRouteBoundary(props: { label: string; children: ReactElement }) {
   const { label, children } = props;
-  return <Suspense fallback={<UiRouteLoading label={label} />}>{children}</Suspense>;
+  return (
+    <UiDataStateBoundary label={label}>
+      <Suspense fallback={<UiRouteLoading label={label} />}>{children}</Suspense>
+    </UiDataStateBoundary>
+  );
 }
 
 function NotFoundPage() {

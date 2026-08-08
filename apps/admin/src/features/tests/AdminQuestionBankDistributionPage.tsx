@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
+import {
+  shouldUseLiveApi as shouldUseConfiguredLiveApi,
+} from "../../../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import { UiChartContainer, UiTable, type UiChartPoint, type UiTableColumn } from "../../../../../shared/ui/components";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
@@ -393,8 +396,7 @@ const EXAM_FILTER_OPTIONS: Array<{ value: ExamDistributionFilter; label: string 
 ];
 
 function shouldUseLiveApi(): boolean {
-  const host = window.location.hostname.toLowerCase();
-  return host !== "127.0.0.1" && host !== "localhost";
+  return shouldUseConfiguredLiveApi();
 }
 
 function toNumberOrZero(value: unknown): number {
@@ -488,11 +490,9 @@ function normalizeDistributionSnapshot(payload: unknown): QuestionDistributionSn
   }
 
   const response = payload as {
-    data?: {
-      summary?: unknown;
-    };
+    summary?: unknown;
   };
-  const summary = response.data?.summary;
+  const summary = response.summary;
   if (!summary || typeof summary !== "object") {
     throw new Error("GET /admin/questions/distribution did not include a summary payload.");
   }
@@ -582,8 +582,7 @@ function AdminQuestionBankDistributionPage() {
 
         const reason =
           error instanceof ApiClientError ? error.message : "Failed to load question distribution summary.";
-        setSnapshot(FALLBACK_DISTRIBUTION_SNAPSHOTS[examFilter]);
-        setInlineMessage(`${reason} Falling back to deterministic question distribution fixtures.`);
+        setInlineMessage(reason);
       } finally {
         if (isActive) {
           setIsLoading(false);

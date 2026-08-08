@@ -1,4 +1,5 @@
 import { ApiClientError } from "../../../../../shared/services/apiClient";
+import { shouldUseFixtureData } from "../../../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 
 const apiClient = getPortalApiClient("admin");
@@ -157,12 +158,9 @@ export interface AdminSettingsSnapshot {
 }
 
 interface AdminSettingsApiResponse {
-  code: string;
-  data?: {
-    actionType?: SettingsActionType;
-    mutationAuditId?: string;
-    snapshot?: AdminSettingsSnapshot;
-  };
+  actionType?: SettingsActionType;
+  mutationAuditId?: string;
+  snapshot?: AdminSettingsSnapshot;
 }
 
 const FALLBACK_SNAPSHOT: AdminSettingsSnapshot = {
@@ -647,7 +645,7 @@ async function settingsAction(payload: {
     },
   );
 
-  const snapshot = normalizeSnapshot(result.data?.snapshot);
+  const snapshot = normalizeSnapshot(result.snapshot);
 
   if (!snapshot) {
     throw new Error("POST /admin/settings did not return a valid settings snapshot.");
@@ -657,8 +655,7 @@ async function settingsAction(payload: {
 }
 
 export function isLocalSettingsReadMode(): boolean {
-  const host = window.location.hostname.toLowerCase();
-  return host === "127.0.0.1" || host === "localhost";
+  return shouldUseFixtureData();
 }
 
 export function resolveAdminInstituteId(idToken: string | null): string {

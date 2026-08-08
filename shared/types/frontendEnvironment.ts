@@ -1,5 +1,12 @@
+export type FrontendDataMode = "live" | "fixture";
+
+export function resolveFrontendDataMode(value: unknown): FrontendDataMode {
+  return typeof value === "string" && value.trim().toLowerCase() === "fixture" ? "fixture" : "live";
+}
+
 export interface FrontendEnvironment {
   mode: string;
+  dataMode: FrontendDataMode;
   firebaseApiKey: string;
   firebaseAuthDomain: string;
   firebaseProjectId: string;

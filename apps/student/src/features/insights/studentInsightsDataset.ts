@@ -1,4 +1,7 @@
 import { ApiClientError } from "../../../../../shared/services/apiClient";
+import {
+  shouldUseLiveApi as shouldUseConfiguredLiveApi,
+} from "../../../../../shared/services/frontendEnvironment";
 import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
 import { getStudentSummaryResource } from "../../services/studentSummaryApi";
 
@@ -338,8 +341,7 @@ function normalizeDataset(payload: unknown): StudentInsightsDataset {
 }
 
 export function shouldUseLiveApi(): boolean {
-  const host = window.location.hostname.toLowerCase();
-  return host !== "127.0.0.1" && host !== "localhost";
+  return shouldUseConfiguredLiveApi();
 }
 
 export async function fetchStudentInsightsDataset(limit = 6): Promise<StudentInsightsDataset> {

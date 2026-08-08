@@ -45,8 +45,7 @@ function AdminInsightsLandingPage() {
         }
 
         const reason = error instanceof ApiClientError ? error.message : "Failed to load insights landing.";
-        setDataset(FALLBACK_DATASET);
-        setInlineMessage(`${reason} Falling back to deterministic insights fixtures.`);
+        setInlineMessage(reason);
       } finally {
         if (isMounted) {
           setIsLoading(false);

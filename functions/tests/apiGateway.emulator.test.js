@@ -50,6 +50,15 @@ async function requestGateway(requestPath, method, body) {
   };
 }
 
+function assertCanonicalErrorEnvelope(body) {
+  assert.equal(body.success, false);
+  assert.equal(typeof body.error?.code, "string");
+  assert.equal(typeof body.error?.message, "string");
+  assert.equal(typeof body.requestId, "string");
+  assert.match(body.timestamp, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(body.meta, undefined);
+}
+
 test(
   "every implemented manifest route reaches a business handler",
   async () => {
@@ -129,6 +138,7 @@ test(
       "PUT",
     );
     assert.equal(methodError.status, 405);
+    assertCanonicalErrorEnvelope(methodError.body);
     assert.equal(methodError.body.error?.code, "METHOD_NOT_ALLOWED");
     assert.equal(methodError.headers.get("allow"), "GET, POST");
 
@@ -137,6 +147,7 @@ test(
       "GET",
     );
     assert.equal(unknown.status, 404);
+    assertCanonicalErrorEnvelope(unknown.body);
     assert.equal(unknown.body.error?.code, "NOT_FOUND");
     assert.equal(unknown.body.error?.message, "API route not found.");
   },

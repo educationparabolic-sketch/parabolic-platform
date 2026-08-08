@@ -111,8 +111,6 @@ function AdminOverviewPage() {
         if (!isMounted) {
           return;
         }
-
-        setSnapshot(getFallbackOverviewSnapshot(currentLayer));
       } finally {
         finishLoad();
       }

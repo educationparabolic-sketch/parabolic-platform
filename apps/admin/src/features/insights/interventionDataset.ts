@@ -1,5 +1,17 @@
 import {ApiClientError} from "../../../../../shared/services/apiClient";
 import {getPortalApiClient} from "../../../../../shared/services/portalIntegration";
+import type {
+  AdminInterventionRequest,
+  AdminInterventionResult,
+  InterventionActionRecord,
+  InterventionActionType,
+  InterventionOutcomeStatus,
+} from "../../../../../shared/contracts/apiDtos";
+export type {
+  InterventionActionRecord,
+  InterventionActionType,
+  InterventionOutcomeStatus,
+} from "../../../../../shared/contracts/apiDtos";
 import {
   fetchDashboardDataset,
   FALLBACK_DATASET,
@@ -10,45 +22,6 @@ import {
 } from "../analytics/analyticsDataset";
 
 const apiClient = getPortalApiClient("admin");
-
-export type InterventionActionType =
-  | "ASSIGN_REMEDIAL_TEST"
-  | "SEND_ALERT"
-  | "TRACK_OUTCOME"
-  | "LIST_ACTIONS";
-
-export type InterventionOutcomeStatus =
-  | "pending"
-  | "improving"
-  | "no_change"
-  | "escalated"
-  | "resolved";
-
-export interface InterventionActionRecord {
-  interventionId: string;
-  actionType: InterventionActionType;
-  instituteId: string;
-  yearId: string;
-  studentId?: string;
-  studentName?: string;
-  riskCluster?: string;
-  remedialTestId?: string;
-  alertMessage?: string;
-  outcomeStatus?: InterventionOutcomeStatus;
-  outcomeNotes?: string;
-  auditId?: string;
-  auditPath?: string;
-  timestamp: string;
-}
-
-interface InterventionApiResponse {
-  code: string;
-  data?: {
-    action?: InterventionActionRecord;
-    actions?: InterventionActionRecord[];
-    mode?: "action" | "list";
-  };
-}
 
 export interface HighRiskInterventionCandidate extends StudentYearMetricRecord {
   interventionPriority: number;
@@ -271,7 +244,7 @@ export async function listInterventionActions(
     );
   }
 
-  const payload = await apiClient.post<InterventionApiResponse, Record<string, unknown>>(
+  const payload = await apiClient.post<AdminInterventionResult, AdminInterventionRequest>(
     "/admin/interventions",
     {
       body: {
@@ -284,7 +257,7 @@ export async function listInterventionActions(
     },
   );
 
-  const rawActions = Array.isArray(payload.data?.actions) ? payload.data?.actions : [];
+  const rawActions = Array.isArray(payload.actions) ? payload.actions : [];
   return rawActions
     .map((entry) => normalizeInterventionRecord(entry))
     .filter((entry): entry is InterventionActionRecord => Boolean(entry));
@@ -318,7 +291,7 @@ export async function createInterventionAction(
     return localAction;
   }
 
-  const payload = await apiClient.post<InterventionApiResponse, Record<string, unknown>>(
+  const payload = await apiClient.post<AdminInterventionResult, AdminInterventionRequest>(
     "/admin/interventions",
     {
       body: {
@@ -334,7 +307,7 @@ export async function createInterventionAction(
     },
   );
 
-  const action = normalizeInterventionRecord(payload.data?.action);
+  const action = normalizeInterventionRecord(payload.action);
 
   if (!action) {
     throw new Error("POST /admin/interventions did not return a valid intervention action.");

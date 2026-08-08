@@ -1,8 +1,8 @@
 # Parabolic Platform API Contract
 
-Status: canonical route contract; `apiV1` dispatch and structured route errors implemented
+Status: canonical route and response-envelope contract
 
-Last reconciled: 2026-08-06 (`BWM-004`)
+Last reconciled: 2026-08-08 (`BWM-006`)
 
 ## Sources of truth
 
@@ -100,6 +100,12 @@ Vendor global access is explicit per handler; vendor role does not imply an unre
 
 ## Response envelopes
 
+The shared frontend definitions are in `shared/types/apiResponse.ts`; the
+deployable Functions mirror is in `functions/src/types/apiResponse.ts`. A
+permanent contract test requires their success code, stable error-code set, and
+envelope fields to remain identical. Success and error correlation fields are
+top-level fields; legacy `meta` nesting is not part of the canonical contract.
+
 The target success envelope is:
 
 ```json
@@ -129,9 +135,75 @@ The target error envelope is:
 
 Current exceptions, including the raw `GET /admin/tests` array and top-level compatibility fields, are implementation facts rather than new canonical precedent. BWM-006 owns shared envelope validation and unwrapping.
 
+The shared frontend client returns only validated success `data`. Canonical
+server failures throw `ApiClientError<TDetails>` with the stable error `code`,
+HTTP `status`, original `payload`, top-level `requestId`, and optional typed
+`details` preserved for correlation and field-level handling. Locally generated
+network or invalid-response errors use `requestId: null` and have no details
+because no canonical server error envelope was validated.
+
+## Shared endpoint DTOs
+
+Wire-level request and result DTOs that are already compatible on both sides of
+the browser/Functions boundary live in `shared/contracts/apiDtos.d.ts`. The
+declaration-only module is portable across the portal and Functions TypeScript
+builds and is the single source for these currently aligned families:
+
+- Admin student onboarding resend and bulk ingestion;
+- Admin intervention actions;
+- Admin question bulk upload;
+- Vendor calibration push.
+
+Functions type modules may re-export these names so existing backend imports
+remain stable, but they must not redeclare the wire shape. Backend-only validated
+requests, middleware context, and service inputs stay in `functions/src/types`;
+portal view models stay with their UI. The permanent
+`npm run test:api-dto-contract` check rejects duplicate declarations in the
+migrated consumers and requires their request generics to use the shared DTOs.
+
+Routes classified as `missing` or `incompatible` are deliberately excluded
+until their owning BWM task aligns the real request/response behavior. Recording
+either side's current incompatible shape as canonical would encode known drift
+rather than eliminate it.
+
+## Portal response adapters
+
+After the shared client validates the HTTP envelope and unwraps `data`,
+`shared/services/portalResponseAdapters.ts` performs representative domain-data
+validation before Admin question-bulk, Student summary, Exam submission, and
+Vendor calibration-push consumers normalize or use the result. These adapters
+throw `PortalResponseValidationError` with the affected route when required
+fields are missing or incompatible; they never synthesize fixture-like values.
+
+`tests/portal-response-adapters.test.mjs` feeds the current Functions success
+builders for Admin, Exam, and Vendor through the same envelope parser and portal
+adapters used by production callers. The Student summary route is still
+classified `missing`, so its representative expected summary is tested together
+with the existing summary-only raw-session-field rejection policy rather than
+being described as a current backend response. Fixture fallback outside this
+boundary remains BWM-007 work.
+
 ## Stable error codes
 
-Canonical errors include `UNAUTHORIZED`, `FORBIDDEN`, `TENANT_MISMATCH`, `LICENSE_RESTRICTED`, `VALIDATION_ERROR`, `NOT_FOUND`, `METHOD_NOT_ALLOWED`, `SESSION_LOCKED`, `WINDOW_CLOSED`, and `INTERNAL_ERROR`.
+| Code | HTTP status | Meaning |
+| --- | ---: | --- |
+| `UNAUTHORIZED` | 401 | A valid authentication credential is absent or invalid. |
+| `FORBIDDEN` | 403 | The verified actor lacks the required role or capability. |
+| `TENANT_MISMATCH` | 403 | The target tenant conflicts with verified identity scope. |
+| `LICENSE_RESTRICTED` | 403 | The verified license does not permit the operation. |
+| `VALIDATION_ERROR` | 400 | The request method, parameters, or payload are invalid. |
+| `NOT_FOUND` | 404 | The route or authorized target resource does not exist. |
+| `METHOD_NOT_ALLOWED` | 405 | The route exists but does not support the HTTP method. |
+| `SESSION_LOCKED` | 409 | The session cannot accept the requested mutation. |
+| `SESSION_NOT_ACTIVE` | 409 | The session lifecycle state is not active. |
+| `SUBMISSION_LOCKED` | 409 | Submission finalization is already locked or complete. |
+| `WINDOW_CLOSED` | 409 | The permitted assignment or operation window is closed. |
+| `INTERNAL_ERROR` | 500 | An unexpected server failure occurred. |
+
+These identifiers are stable public contract values. New codes require an
+additive contract change, an HTTP mapping, and boundary tests; existing meanings
+must not be silently repurposed. Transport-only client failures such as
+`NETWORK_ERROR` are not server envelope codes.
 
 ## Exam invariants
 

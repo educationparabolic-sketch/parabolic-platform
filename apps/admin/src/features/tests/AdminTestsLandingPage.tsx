@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
+import {
+  shouldUseLiveApi as shouldUseConfiguredLiveApi,
+} from "../../../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
@@ -69,8 +72,7 @@ const FALLBACK_TEMPLATES: TestTemplateRecord[] = [
 ];
 
 function shouldUseLiveApi(): boolean {
-  const host = window.location.hostname.toLowerCase();
-  return host !== "127.0.0.1" && host !== "localhost";
+  return shouldUseConfiguredLiveApi();
 }
 
 function toNonEmptyString(value: unknown, fallback = ""): string {
@@ -215,8 +217,7 @@ function AdminTestsLandingPage() {
         }
 
         const reason = error instanceof ApiClientError ? error.message : "Failed to load tests landing.";
-        setTemplates(FALLBACK_TEMPLATES);
-        setInlineMessage(`${reason} Falling back to deterministic test fixtures.`);
+        setInlineMessage(reason);
       } finally {
         if (isMounted) {
           setIsLoading(false);

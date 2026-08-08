@@ -302,8 +302,7 @@ function AdminTemplateAnalyticsPage() {
         }
 
         const reason = error instanceof ApiClientError ? error.message : "Failed to load cross-template analytics data.";
-        setDataset(FALLBACK_DATASET);
-        setInlineMessage(`${reason} Falling back to deterministic analytics fixtures.`);
+        setInlineMessage(reason);
       } finally {
         if (isMounted) {
           setIsLoading(false);

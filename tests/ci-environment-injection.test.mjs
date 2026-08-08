@@ -35,6 +35,7 @@ test("CI builds receive the canonical public and release environment", async () 
     "VITE_PORTAL_BASE_URL",
     "VITE_EXAM_BASE_URL",
     "VITE_VENDOR_BASE_URL",
+    "VITE_DATA_MODE",
     "VITE_EXAM_DEV_MOCK_ENTRY",
     "VITE_RELEASE_ID",
     "VITE_RELEASE_COMMIT_SHA",
@@ -61,6 +62,7 @@ test("CI builds receive the canonical public and release environment", async () 
   }
 
   assert.equal(countOccurrences(workflow, 'VITE_API_BASE_URL: ""'), 2);
+  assert.equal(countOccurrences(workflow, 'VITE_DATA_MODE: "live"'), 2);
   assert.equal(countOccurrences(workflow, 'VITE_EXAM_DEV_MOCK_ENTRY: "false"'), 2);
   assert.equal(countOccurrences(workflow, "Inject release build timestamp"), 2);
   assert.equal(countOccurrences(workflow, "VITE_RELEASE_BUILT_AT=${built_at}"), 2);

@@ -179,9 +179,8 @@ function AdminSettingsWorkspace() {
         );
       } catch (error) {
         if (!mounted) return;
-        setSnapshot(FALLBACK_SNAPSHOT);
         setMessage(
-          `${error instanceof ApiClientError ? error.message : "Unable to load institute settings."} Showing the last available snapshot.`,
+          error instanceof ApiClientError ? error.message : "Unable to load institute settings.",
         );
       } finally {
         if (mounted) setIsLoading(false);

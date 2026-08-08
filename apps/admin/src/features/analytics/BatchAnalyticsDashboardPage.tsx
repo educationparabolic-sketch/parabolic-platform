@@ -304,8 +304,7 @@ function BatchAnalyticsDashboardPage() {
         }
 
         const reason = error instanceof ApiClientError ? error.message : "Failed to load cross-batch analytics data.";
-        setDataset(FALLBACK_DATASET);
-        setInlineMessage(`${reason} Falling back to deterministic analytics fixtures.`);
+        setInlineMessage(reason);
       } finally {
         if (isMounted) {
           setIsLoading(false);

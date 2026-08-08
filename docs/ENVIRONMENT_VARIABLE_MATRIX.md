@@ -33,15 +33,16 @@ runtime configuration, never from a developer `.env.local` file.
 ## CI injection contract
 
 Pull-request and validation builds receive deterministic `demo-parabolic-test`
-Firebase identifiers, `.invalid` public origins, same-origin API mode, and an
-Exam mock flag of `false`. They do not depend on repository or environment
+Firebase identifiers, `.invalid` public origins, same-origin API mode, explicit
+live data mode, and an Exam mock flag of `false`. They do not depend on repository or environment
 secrets.
 
 Environment-scoped deployment builds read browser-public Firebase values,
 portal origins, the CDN origin, and bucket names from GitHub Environment
 `vars`. Only Firebase deployment authentication remains in `secrets`. The
 workflow deliberately injects an empty `VITE_API_BASE_URL` and literal
-`VITE_EXAM_DEV_MOCK_ENTRY=false` rather than accepting environment overrides.
+`VITE_DATA_MODE=live` and `VITE_EXAM_DEV_MOCK_ENTRY=false` rather than accepting
+environment overrides.
 
 Both CI jobs derive one release ID from the GitHub run ID and attempt, use the
 checked-out commit SHA, and generate one UTC build timestamp. The exact same
@@ -70,7 +71,7 @@ fails with key names and reasons, never configuration values, when:
 - test does not use `demo-*`, staging does not use `parabolic-dev`, or
   production names a test/staging project;
 - staging/production supplies a direct API override or fixture institute, or
-  any CI build enables the Exam development mock entry; or
+  any CI build selects fixture data or enables the Exam development mock entry; or
 - selected Firebase auth/storage identifiers visibly belong to a different
   project or environment.
 
@@ -153,6 +154,7 @@ their mapped target origins.
 | `VITE_PORTAL_BASE_URL` | All portals | `O` | `O` | `R` | `R` | Absolute Admin/Student Hosting origin, without a trailing slash. Do not persist an expiring preview URL as the canonical value. |
 | `VITE_EXAM_BASE_URL` | All portals | `O` | `O` | `R` | `R` | Absolute Exam Hosting origin, without a trailing slash. |
 | `VITE_VENDOR_BASE_URL` | All portals | `O` | `O` | `R` | `R` | Absolute Vendor Hosting origin, without a trailing slash. |
+| `VITE_DATA_MODE` | All portals | `R` (`fixture` or `live`) | `R` (`live`) | `R` (`live`) | `R` (`live`) | Single fixture/live selector. Only the exact normalized value `fixture` enables fixture reads; missing, invalid, and every CI/release value fail closed to `live`. Hostname never selects data mode. |
 | `VITE_BASE_PATH` | Admin, Student | `O` | `R` | `R` | `R` | `/admin/` for Admin and `/student/` for Student; local root builds may omit it. |
 | `VITE_EXAM_DEV_MOCK_ENTRY` | Exam | `O` | `O` | `R` (`false`) | `R` (`false`) | May be `true` only for an explicitly named local/test fixture flow. Release artifacts must inject the literal `false`. |
 | `VITE_ADMIN_SETTINGS_INSTITUTE_ID` | Admin | `O` | `O` | `F` | `F` | Temporary local/test diagnostic override. Release identity must come from authenticated context; BWM-007 owns removal of the current fixture fallback. |

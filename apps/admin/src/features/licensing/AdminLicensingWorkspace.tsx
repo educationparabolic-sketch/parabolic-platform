@@ -187,9 +187,8 @@ function AdminLicensingWorkspace() {
         );
       } catch (error) {
         if (!mounted) return;
-        setSnapshot(FALLBACK_SNAPSHOT);
         setLoadMessage(
-          `${error instanceof ApiClientError ? error.message : "Unable to load license state."} Showing the last available snapshot.`,
+          error instanceof ApiClientError ? error.message : "Unable to load license state.",
         );
       } finally {
         if (mounted) setIsLoading(false);

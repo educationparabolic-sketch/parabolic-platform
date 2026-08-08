@@ -1,3 +1,8 @@
+import type {
+  ApiErrorDetail,
+  ApiErrorEnvelope,
+} from "./apiResponse";
+
 export type ApiHttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export interface ApiClientRequestOptions<TRequestBody = unknown> {
@@ -17,12 +22,38 @@ export interface ApiRetryPolicy {
   retryUnsafeMethods: boolean;
 }
 
-export interface ApiErrorPayload {
-  error?: {
-    code?: string;
-    message?: string;
-  };
+export interface ApiErrorPayload extends Partial<Omit<ApiErrorEnvelope, "error">> {
+  error?: Partial<ApiErrorDetail>;
   message?: string;
+}
+
+export interface ApiClientErrorMetadata<TDetails = unknown> {
+  details?: TDetails;
+  requestId?: string | null;
+}
+
+export class ApiClientError<TDetails = unknown> extends Error {
+  readonly status: number;
+  readonly code: string;
+  readonly payload: unknown;
+  readonly requestId: string | null;
+  readonly details: TDetails | undefined;
+
+  constructor(
+    message: string,
+    status: number,
+    code: string,
+    payload: unknown,
+    metadata: ApiClientErrorMetadata<TDetails> = {},
+  ) {
+    super(message);
+    this.name = "ApiClientError";
+    this.status = status;
+    this.code = code;
+    this.payload = payload;
+    this.requestId = metadata.requestId ?? null;
+    this.details = metadata.details;
+  }
 }
 
 export interface ApiClientConfig {
@@ -38,28 +69,28 @@ export interface ApiRequestContext {
 }
 
 export interface ApiClient {
-  request<TResponse, TRequestBody = unknown>(
+  request<TData, TRequestBody = unknown>(
     path: string,
     options?: ApiClientRequestOptions<TRequestBody>,
-  ): Promise<TResponse>;
-  get<TResponse>(
+  ): Promise<TData>;
+  get<TData>(
     path: string,
     options?: Omit<ApiClientRequestOptions<never>, "method" | "body">,
-  ): Promise<TResponse>;
-  post<TResponse, TRequestBody = unknown>(
+  ): Promise<TData>;
+  post<TData, TRequestBody = unknown>(
     path: string,
     options?: Omit<ApiClientRequestOptions<TRequestBody>, "method">,
-  ): Promise<TResponse>;
-  put<TResponse, TRequestBody = unknown>(
+  ): Promise<TData>;
+  put<TData, TRequestBody = unknown>(
     path: string,
     options?: Omit<ApiClientRequestOptions<TRequestBody>, "method">,
-  ): Promise<TResponse>;
-  patch<TResponse, TRequestBody = unknown>(
+  ): Promise<TData>;
+  patch<TData, TRequestBody = unknown>(
     path: string,
     options?: Omit<ApiClientRequestOptions<TRequestBody>, "method">,
-  ): Promise<TResponse>;
-  delete<TResponse>(
+  ): Promise<TData>;
+  delete<TData>(
     path: string,
     options?: Omit<ApiClientRequestOptions<never>, "method" | "body">,
-  ): Promise<TResponse>;
+  ): Promise<TData>;
 }

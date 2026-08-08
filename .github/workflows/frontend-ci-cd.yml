@@ -49,6 +49,7 @@ jobs:
       VITE_PORTAL_BASE_URL: "https://portal.test.invalid"
       VITE_EXAM_BASE_URL: "https://exam.test.invalid"
       VITE_VENDOR_BASE_URL: "https://vendor.test.invalid"
+      VITE_DATA_MODE: "live"
       VITE_EXAM_DEV_MOCK_ENTRY: "false"
       VITE_RELEASE_ID: "gha-${{ github.run_id }}-${{ github.run_attempt }}"
       VITE_RELEASE_COMMIT_SHA: "${{ github.sha }}"
@@ -158,6 +159,7 @@ jobs:
       VITE_PORTAL_BASE_URL: ${{ vars.VITE_PORTAL_BASE_URL }}
       VITE_EXAM_BASE_URL: ${{ vars.VITE_EXAM_BASE_URL }}
       VITE_VENDOR_BASE_URL: ${{ vars.VITE_VENDOR_BASE_URL }}
+      VITE_DATA_MODE: "live"
       VITE_EXAM_DEV_MOCK_ENTRY: "false"
       VITE_RELEASE_ID: "gha-${{ github.run_id }}-${{ github.run_attempt }}"
       VITE_RELEASE_COMMIT_SHA: "${{ github.sha }}"

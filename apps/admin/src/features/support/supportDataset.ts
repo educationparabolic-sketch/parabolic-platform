@@ -205,13 +205,15 @@ function resolveAssignedTeam(category: SupportCategory): string {
 }
 
 export function loadSupportTickets(): SupportTicket[] {
+  const fallbackTickets = shouldUseFixtureData() ? FALLBACK_TICKETS : [];
+
   try {
     const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (!stored) return FALLBACK_TICKETS;
+    if (!stored) return fallbackTickets;
     const parsed = JSON.parse(stored) as unknown;
-    return Array.isArray(parsed) ? (parsed as SupportTicket[]) : FALLBACK_TICKETS;
+    return Array.isArray(parsed) ? (parsed as SupportTicket[]) : fallbackTickets;
   } catch {
-    return FALLBACK_TICKETS;
+    return fallbackTickets;
   }
 }
 
@@ -264,3 +266,4 @@ export function toSupportAttachments(files: File[]): SupportAttachment[] {
     type: file.type || "application/octet-stream",
   }));
 }
+import { shouldUseFixtureData } from "../../../../../shared/services/frontendEnvironment";

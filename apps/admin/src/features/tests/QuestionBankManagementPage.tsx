@@ -1,6 +1,15 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
+import {
+  shouldUseLiveApi as shouldUseConfiguredLiveApi,
+} from "../../../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
+import { adaptAdminQuestionBulkResult } from "../../../../../shared/services/portalResponseAdapters";
+import type {
+  QuestionBulkUploadQuestionInput,
+  QuestionBulkUploadRequest,
+  QuestionBulkUploadResult as AdminQuestionsBulkValidationResult,
+} from "../../../../../shared/contracts/apiDtos";
 import {
   UiChartContainer,
   UiForm,
@@ -120,7 +129,7 @@ interface QuestionUploadWorkbookRow {
   uniqueKey: string;
 }
 
-interface AdminQuestionsBulkRequestRow {
+interface AdminQuestionsBulkRequestRow extends QuestionBulkUploadQuestionInput {
   chapter: string;
   correctAnswer: string;
   difficulty: "Easy" | "Medium" | "Hard";
@@ -136,29 +145,6 @@ interface AdminQuestionsBulkRequestRow {
   tutorialVideoLink?: string | null;
   uniqueKey: string;
   version: number;
-}
-
-interface AdminQuestionsBulkValidationResult {
-  commitRequested: boolean;
-  committed: boolean;
-  rows: Array<{
-    action: "create" | "update" | "none";
-    errors: string[];
-    questionId: string | null;
-    rowNumber: number;
-    uniqueKey: string | null;
-    warnings: string[];
-  }>;
-  summary: {
-    created: number;
-    invalid: number;
-    received: number;
-    updated: number;
-    valid: number;
-    warnings: number;
-  };
-  uploadLogId: string | null;
-  uploadLogPath: string | null;
 }
 
 interface SampleWorkbookProfile {
@@ -307,11 +293,9 @@ async function fetchUploadLogsFromApi(): Promise<UploadLogRecord[]> {
   }
 
   const response = payload as {
-    data?: {
-      logs?: unknown;
-    };
+    logs?: unknown;
   };
-  const logs = Array.isArray(response.data?.logs) ? response.data?.logs : [];
+  const logs = Array.isArray(response.logs) ? response.logs : [];
 
   return logs
     .map((entry, index) => normalizeUploadLogRecord(entry, index))
@@ -630,8 +614,7 @@ function readXmlText(node: Element | null): string {
 }
 
 function shouldUseLiveApi(): boolean {
-  const host = window.location.hostname.toLowerCase();
-  return host !== "127.0.0.1" && host !== "localhost";
+  return shouldUseConfiguredLiveApi();
 }
 
 function decodeIdTokenClaims(idToken: string | null): Record<string, unknown> | null {
@@ -764,59 +747,6 @@ function buildKeywordHints(row: QuestionUploadWorkbookRow): string[] {
     .filter((value, index, values) => value.length > 0 && values.indexOf(value) === index);
 }
 
-function normalizeQuestionsBulkResponse(payload: unknown): AdminQuestionsBulkValidationResult {
-  if (!payload || typeof payload !== "object") {
-    throw new Error("POST /admin/questions/bulk returned an invalid response.");
-  }
-
-  const response = payload as {
-    data?: {
-      committed?: unknown;
-      commitRequested?: unknown;
-      rows?: unknown;
-      summary?: unknown;
-      uploadLogId?: unknown;
-      uploadLogPath?: unknown;
-    };
-  };
-  const data = response.data;
-  if (!data || typeof data !== "object") {
-    throw new Error("POST /admin/questions/bulk did not include validation data.");
-  }
-
-  const rows = Array.isArray(data.rows) ? data.rows : [];
-  const summary = data.summary && typeof data.summary === "object" ? data.summary as Record<string, unknown> : {};
-
-  return {
-    commitRequested: data.commitRequested === true,
-    committed: data.committed === true,
-    rows: rows.map((row, index) => {
-      const record = row && typeof row === "object" ? row as Record<string, unknown> : {};
-      return {
-        action:
-          record.action === "create" || record.action === "update" || record.action === "none" ?
-            record.action :
-            "none",
-        errors: Array.isArray(record.errors) ? record.errors.filter((value): value is string => typeof value === "string") : [],
-        questionId: typeof record.questionId === "string" ? record.questionId : null,
-        rowNumber: typeof record.rowNumber === "number" ? record.rowNumber : index + 1,
-        uniqueKey: typeof record.uniqueKey === "string" ? record.uniqueKey : null,
-        warnings: Array.isArray(record.warnings) ? record.warnings.filter((value): value is string => typeof value === "string") : [],
-      };
-    }),
-    summary: {
-      created: typeof summary.created === "number" ? summary.created : 0,
-      invalid: typeof summary.invalid === "number" ? summary.invalid : 0,
-      received: typeof summary.received === "number" ? summary.received : 0,
-      updated: typeof summary.updated === "number" ? summary.updated : 0,
-      valid: typeof summary.valid === "number" ? summary.valid : 0,
-      warnings: typeof summary.warnings === "number" ? summary.warnings : 0,
-    },
-    uploadLogId: typeof data.uploadLogId === "string" ? data.uploadLogId : null,
-    uploadLogPath: typeof data.uploadLogPath === "string" ? data.uploadLogPath : null,
-  };
-}
-
 async function validateQuestionsWithApi(input: {
   examType: string;
   instituteId: string;
@@ -841,7 +771,7 @@ async function validateQuestionsWithApi(input: {
     uniqueKey: row.uniqueKey,
     version: 1,
   }));
-  const response = await apiClient.post<unknown, { commit: boolean; instituteId: string; questions: AdminQuestionsBulkRequestRow[] }>(
+  const response = await apiClient.post<unknown, QuestionBulkUploadRequest>(
     "/admin/questions/bulk",
     {
       body: {
@@ -852,7 +782,7 @@ async function validateQuestionsWithApi(input: {
     },
   );
 
-  return normalizeQuestionsBulkResponse(response);
+  return adaptAdminQuestionBulkResult(response);
 }
 
 function normalizeWorkbookPath(target: string): string {
@@ -1267,13 +1197,11 @@ function QuestionBankManagementPage() {
           return;
         }
 
-        setUploadLogs(nextLogs.length > 0 ? nextLogs : FALLBACK_UPLOAD_LOGS);
+        setUploadLogs(nextLogs);
       } catch {
         if (!isActive) {
           return;
         }
-
-        setUploadLogs(FALLBACK_UPLOAD_LOGS);
       }
     }
 

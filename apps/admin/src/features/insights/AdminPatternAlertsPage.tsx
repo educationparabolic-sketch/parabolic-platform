@@ -197,8 +197,7 @@ function AdminPatternAlertsPage() {
         }
 
         const reason = error instanceof ApiClientError ? error.message : "Failed to load pattern alerts data.";
-        setDataset(FALLBACK_DATASET);
-        setInlineMessage(`${reason} Falling back to deterministic Build 121 fixtures.`);
+        setInlineMessage(reason);
       } finally {
         if (isMounted) {
           setIsLoading(false);

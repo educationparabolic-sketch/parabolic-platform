@@ -21,7 +21,7 @@ import {
   STUDENT_PRIMARY_NAVIGATION,
   findActivePortalNavigationItem,
 } from "../../../shared/ui/portalConsistency";
-import { UiRouteLoading } from "../../../shared/ui/components";
+import { UiDataStateBoundary, UiRouteLoading } from "../../../shared/ui/components";
 import { isStudentDebugMode } from "./services/studentDebugMode";
 import "./App.css";
 
@@ -45,7 +45,11 @@ const StudentProfileSettingsPage = lazy(() => import("./features/profile/Student
 
 function StudentRouteBoundary(props: { label: string; children: ReactElement }) {
   const { label, children } = props;
-  return <Suspense fallback={<UiRouteLoading label={label} />}>{children}</Suspense>;
+  return (
+    <UiDataStateBoundary label={label}>
+      <Suspense fallback={<UiRouteLoading label={label} />}>{children}</Suspense>
+    </UiDataStateBoundary>
+  );
 }
 
 function StudentLoginPage(props: { loginPath: string; protectedPath: string }) {

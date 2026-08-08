@@ -434,8 +434,7 @@ function GovernanceMonitoringDashboardPage() {
         }
 
         const reason = error instanceof ApiClientError ? error.message : "Failed to load governance snapshot data.";
-        setDataset(FALLBACK_GOVERNANCE_DATASET);
-        setInlineMessage(`${reason} Falling back to deterministic Build 123 fixtures.`);
+        setInlineMessage(reason);
       } finally {
         if (isMounted) {
           setIsLoading(false);

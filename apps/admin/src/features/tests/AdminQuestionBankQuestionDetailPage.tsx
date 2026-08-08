@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { NavLink, useParams } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
+import {
+  shouldUseLiveApi as shouldUseConfiguredLiveApi,
+} from "../../../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import { UiChartContainer, UiModal, UiTable, type UiChartPoint, type UiTableColumn } from "../../../../../shared/ui/components";
 import { LICENSE_LAYER_ORDER } from "../../../../../shared/types/portalRouting";
@@ -12,8 +15,7 @@ import QuestionBankWorkspaceNav from "./QuestionBankWorkspaceNav";
 const apiClient = getPortalApiClient("admin");
 
 function shouldUseLiveApi(): boolean {
-  const host = window.location.hostname.toLowerCase();
-  return host !== "127.0.0.1" && host !== "localhost";
+  return shouldUseConfiguredLiveApi();
 }
 
 function toNonEmptyString(value: unknown, fallback = ""): string {
@@ -257,11 +259,9 @@ async function fetchLibraryFromApi(): Promise<QuestionBankRecord[]> {
   }
 
   const response = payload as {
-    data?: {
-      questions?: unknown;
-    };
+    questions?: unknown;
   };
-  const questions = Array.isArray(response.data?.questions) ? response.data?.questions : [];
+  const questions = Array.isArray(response.questions) ? response.questions : [];
   return questions
     .map((entry, index) => normalizeQuestionRecord(entry, index))
     .filter((entry): entry is QuestionBankRecord => Boolean(entry));
@@ -299,7 +299,7 @@ function AdminQuestionBankQuestionDetailPage() {
           return;
         }
 
-        setQuestions(nextQuestions.length > 0 ? nextQuestions : QUESTION_BANK);
+        setQuestions(nextQuestions);
         setInlineMessage("Question details are ready.");
       } catch (error) {
         if (!isActive) {
@@ -308,8 +308,7 @@ function AdminQuestionBankQuestionDetailPage() {
 
         const reason =
           error instanceof ApiClientError ? error.message : "Failed to load question details.";
-        setQuestions(QUESTION_BANK);
-        setInlineMessage(`${reason} Showing the sample question for now.`);
+        setInlineMessage(reason);
       }
     }
 

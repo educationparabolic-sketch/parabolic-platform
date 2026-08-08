@@ -1,26 +1,16 @@
 import {StandardApiErrorCode} from "./apiResponse";
 import {LicenseLayer} from "./middleware";
-
-export interface StudentBulkIngestionStudentInput {
-  batch?: string;
-  batchId?: string;
-  class?: string;
-  email?: string;
-  enrollmentYear?: string;
-  fullName?: string;
-  name?: string;
-  parentEmail?: string;
-  phone?: string;
-  studentId?: string;
-}
-
-export interface StudentBulkIngestionRequest {
-  commit?: boolean;
-  csvContent?: string;
-  deactivateMissing?: boolean;
-  instituteId: string;
-  students?: StudentBulkIngestionStudentInput[];
-}
+import type {
+  StudentBulkIngestionResult,
+} from "../../../shared/contracts/apiDtos";
+export type {
+  StudentBulkIngestionRequest,
+  StudentBulkIngestionResult,
+  StudentBulkIngestionRowAction,
+  StudentBulkIngestionRowResult,
+  StudentBulkIngestionStudentInput,
+  StudentBulkIngestionSummary,
+} from "../../../shared/contracts/apiDtos";
 
 export interface StudentBulkIngestionValidatedRow {
   batchId: string;
@@ -44,40 +34,6 @@ export interface StudentBulkIngestionValidatedRequest {
   ipAddress?: string;
   rows: StudentBulkIngestionValidatedRow[];
   userAgent?: string;
-}
-
-export type StudentBulkIngestionRowAction =
-  "create" |
-  "update" |
-  "deactivate" |
-  "none";
-
-export interface StudentBulkIngestionRowResult {
-  action: StudentBulkIngestionRowAction;
-  email: string | null;
-  errors: string[];
-  fullName: string | null;
-  rowNumber: number;
-  studentId: string | null;
-}
-
-export interface StudentBulkIngestionSummary {
-  created: number;
-  deactivationCandidates: number;
-  deactivated: number;
-  invalid: number;
-  onboardingEmailsQueued: number;
-  received: number;
-  updated: number;
-  valid: number;
-}
-
-export interface StudentBulkIngestionResult {
-  commitRequested: boolean;
-  committed: boolean;
-  deactivateMissing: boolean;
-  rows: StudentBulkIngestionRowResult[];
-  summary: StudentBulkIngestionSummary;
 }
 
 export interface StudentBulkIngestionSuccessResponse {

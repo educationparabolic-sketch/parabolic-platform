@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
+import {
+  shouldUseLiveApi as shouldUseConfiguredLiveApi,
+} from "../../../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import { UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
 import QuestionBankWorkspaceNav from "./QuestionBankWorkspaceNav";
@@ -76,8 +79,7 @@ function formatIsoDate(value: string): string {
 }
 
 function shouldUseLiveApi(): boolean {
-  const host = window.location.hostname.toLowerCase();
-  return host !== "127.0.0.1" && host !== "localhost";
+  return shouldUseConfiguredLiveApi();
 }
 
 function toNumberOrZero(value: unknown): number {
@@ -148,11 +150,9 @@ async function fetchUploadLogsFromApi(): Promise<UploadLogRecord[]> {
   }
 
   const response = payload as {
-    data?: {
-      logs?: unknown;
-    };
+    logs?: unknown;
   };
-  const logs = Array.isArray(response.data?.logs) ? response.data?.logs : [];
+  const logs = Array.isArray(response.logs) ? response.logs : [];
   const normalizedLogs = logs
     .map((entry, index) => normalizeUploadLogRecord(entry, index))
     .filter((entry): entry is UploadLogRecord => Boolean(entry));
@@ -186,7 +186,7 @@ function AdminQuestionBankValidationLogsPage() {
           return;
         }
 
-        setUploadLogs(nextLogs.length > 0 ? nextLogs : FALLBACK_UPLOAD_LOGS);
+        setUploadLogs(nextLogs);
         setInlineMessage(
           nextLogs.length > 0 ?
             "Live mode enabled. Immutable upload logs hydrated from GET /admin/questions/upload-logs." :
@@ -199,8 +199,7 @@ function AdminQuestionBankValidationLogsPage() {
 
         const reason =
           error instanceof ApiClientError ? error.message : "Failed to load question upload logs.";
-        setUploadLogs(FALLBACK_UPLOAD_LOGS);
-        setInlineMessage(`${reason} Falling back to deterministic validation log fixtures.`);
+        setInlineMessage(reason);
       }
     }
 

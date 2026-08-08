@@ -89,8 +89,7 @@ function StudentDisciplinePage() {
           error instanceof ApiClientError ?
             error.message :
             "Failed to load student discipline summary.";
-        setDataset(STUDENT_PERFORMANCE_FALLBACK_DATASET);
-        setInlineMessage(`${reason} Showing practice discipline trends for now.`);
+        setInlineMessage(reason);
       } finally {
         if (isMounted) {
           setIsLoading(false);

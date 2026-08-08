@@ -1,29 +1,16 @@
 import {StandardApiErrorCode} from "./apiResponse";
-
-export type InterventionActionType =
-  | "ASSIGN_REMEDIAL_TEST"
-  | "SEND_ALERT"
-  | "TRACK_OUTCOME"
-  | "LIST_ACTIONS";
-
-export type InterventionOutcomeStatus =
-  | "pending"
-  | "improving"
-  | "no_change"
-  | "escalated"
-  | "resolved";
-
-export interface AdminInterventionRequest {
-  instituteId: string;
-  yearId: string;
-  actionType: InterventionActionType;
-  studentId?: string;
-  remedialTestId?: string;
-  alertMessage?: string;
-  outcomeStatus?: InterventionOutcomeStatus;
-  outcomeNotes?: string;
-  limit?: number;
-}
+import type {
+  AdminInterventionResult,
+  InterventionActionType,
+  InterventionOutcomeStatus,
+} from "../../../shared/contracts/apiDtos";
+export type {
+  AdminInterventionRequest,
+  AdminInterventionResult,
+  InterventionActionRecord,
+  InterventionActionType,
+  InterventionOutcomeStatus,
+} from "../../../shared/contracts/apiDtos";
 
 export interface AdminInterventionValidatedRequest {
   actorId: string;
@@ -39,29 +26,6 @@ export interface AdminInterventionValidatedRequest {
   limit: number;
   ipAddress?: string;
   userAgent?: string;
-}
-
-export interface InterventionActionRecord {
-  interventionId: string;
-  actionType: InterventionActionType;
-  instituteId: string;
-  yearId: string;
-  studentId?: string;
-  studentName?: string;
-  riskCluster?: string;
-  remedialTestId?: string;
-  alertMessage?: string;
-  outcomeStatus?: InterventionOutcomeStatus;
-  outcomeNotes?: string;
-  auditId?: string;
-  auditPath?: string;
-  timestamp: string;
-}
-
-export interface AdminInterventionResult {
-  mode: "action" | "list";
-  action?: InterventionActionRecord;
-  actions: InterventionActionRecord[];
 }
 
 export interface AdminInterventionSuccessResponse {

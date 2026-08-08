@@ -2,6 +2,7 @@ import type {
   FrontendEnvironment,
   FrontendEnvironmentValidationResult,
 } from "../types/frontendEnvironment";
+import { resolveFrontendDataMode } from "../types/frontendEnvironment";
 
 const REQUIRED_ENV_KEYS = [
   "VITE_FIREBASE_API_KEY",
@@ -51,6 +52,7 @@ export function validateFrontendEnvironment(): FrontendEnvironmentValidationResu
 export function getFrontendEnvironment(): FrontendEnvironment {
   return {
     mode: import.meta.env.MODE,
+    dataMode: resolveFrontendDataMode(readEnvValue("VITE_DATA_MODE")),
     firebaseApiKey: readRequiredValue("VITE_FIREBASE_API_KEY"),
     firebaseAuthDomain: readRequiredValue("VITE_FIREBASE_AUTH_DOMAIN"),
     firebaseProjectId: readRequiredValue("VITE_FIREBASE_PROJECT_ID"),
@@ -70,4 +72,12 @@ export function getFrontendEnvironment(): FrontendEnvironment {
       builtAt: readEnvValue("VITE_RELEASE_BUILT_AT"),
     },
   };
+}
+
+export function shouldUseLiveApi(): boolean {
+  return getFrontendEnvironment().dataMode === "live";
+}
+
+export function shouldUseFixtureData(): boolean {
+  return getFrontendEnvironment().dataMode === "fixture";
 }

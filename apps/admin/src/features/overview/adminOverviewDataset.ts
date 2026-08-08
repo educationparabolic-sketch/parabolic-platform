@@ -1,4 +1,7 @@
 import { ApiClientError } from "../../../../../shared/services/apiClient";
+import {
+  shouldUseLiveApi as shouldUseConfiguredLiveApi,
+} from "../../../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
 
@@ -518,8 +521,7 @@ function normalizeOverviewSnapshot(payload: unknown): AdminOverviewSnapshot {
 }
 
 export function shouldUseLiveApi(): boolean {
-  const host = window.location.hostname.toLowerCase();
-  return host !== "127.0.0.1" && host !== "localhost";
+  return shouldUseConfiguredLiveApi();
 }
 
 export function formatPercent(value: number): string {

@@ -1,4 +1,5 @@
 import { getPortalApiClient } from "../../../../shared/services/portalIntegration";
+import { adaptStudentSummaryResult } from "../../../../shared/services/portalResponseAdapters";
 import { assertStudentSummaryPayload } from "./studentSummaryDataPolicy";
 
 const apiClient = getPortalApiClient("student");
@@ -26,13 +27,19 @@ export async function getStudentSummaryResource(
   query?: Record<string, string | number>,
 ): Promise<unknown> {
   assertSummaryRoute(path);
-  const payload = await apiClient.get<unknown>(path, query ? { query } : undefined);
+  const payload = adaptStudentSummaryResult(
+    await apiClient.get<unknown>(path, query ? { query } : undefined),
+    resource,
+  );
   assertStudentSummaryPayload(payload, resource);
   return payload;
 }
 
 export async function getStudentSolutionSummary(testId: string): Promise<unknown> {
-  const payload = await apiClient.get<unknown>(`/student/tests/${encodeURIComponent(testId)}/solutions`);
+  const payload = adaptStudentSummaryResult(
+    await apiClient.get<unknown>(`/student/tests/${encodeURIComponent(testId)}/solutions`),
+    "solutions",
+  );
   assertStudentSummaryPayload(payload, "solutions");
   return payload;
 }

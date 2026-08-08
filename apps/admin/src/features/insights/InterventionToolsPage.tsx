@@ -222,7 +222,7 @@ function InterventionToolsPage() {
         }
 
         const reason = error instanceof ApiClientError ? error.message : "Failed to load intervention tools.";
-        setInlineMessage(`${reason} Falling back to local deterministic intervention fixtures.`);
+        setInlineMessage(reason);
       } finally {
         if (isMounted) {
           setIsLoading(false);

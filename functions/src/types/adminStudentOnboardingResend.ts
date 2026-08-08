@@ -1,23 +1,16 @@
 import {StandardApiErrorCode} from "./apiResponse";
-
-export interface AdminStudentOnboardingResendRequest {
-  instituteId?: string;
-  studentId?: string;
-}
+import type {
+  AdminStudentOnboardingResendResult,
+} from "../../../shared/contracts/apiDtos";
+export type {
+  AdminStudentOnboardingResendRequest,
+  AdminStudentOnboardingResendResult,
+} from "../../../shared/contracts/apiDtos";
 
 export interface AdminStudentOnboardingResendValidatedRequest {
   actorId: string;
   actorRole: string;
   instituteId: string;
-  studentId: string;
-}
-
-export interface AdminStudentOnboardingResendResult {
-  jobId: string;
-  jobPath: string;
-  queuedAt: string;
-  recipientEmail: string;
-  status: "pending";
   studentId: string;
 }
 

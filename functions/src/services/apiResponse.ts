@@ -1,53 +1,61 @@
 import * as functions from "firebase-functions";
 import {
+  StandardApiSuccessResponse,
   StandardApiErrorCode,
   StandardApiErrorResponse,
 } from "../types/apiResponse";
 
-const resolveErrorStatus = (code: StandardApiErrorCode): number => {
-  switch (code) {
-  case "UNAUTHORIZED":
-    return 401;
-  case "FORBIDDEN":
-  case "TENANT_MISMATCH":
-  case "LICENSE_RESTRICTED":
-    return 403;
-  case "NOT_FOUND":
-    return 404;
-  case "METHOD_NOT_ALLOWED":
-    return 405;
-  case "VALIDATION_ERROR":
-    return 400;
-  case "SESSION_LOCKED":
-  case "SESSION_NOT_ACTIVE":
-  case "SUBMISSION_LOCKED":
-  case "WINDOW_CLOSED":
-    return 409;
-  case "INTERNAL_ERROR":
-    return 500;
-  default: {
-    const exhaustiveCode: never = code;
-    throw new Error(`Unsupported error code: ${exhaustiveCode}`);
-  }
-  }
+export const STANDARD_API_ERROR_STATUS: Readonly<
+  Record<StandardApiErrorCode, number>
+> = {
+  FORBIDDEN: 403,
+  INTERNAL_ERROR: 500,
+  LICENSE_RESTRICTED: 403,
+  METHOD_NOT_ALLOWED: 405,
+  NOT_FOUND: 404,
+  SESSION_LOCKED: 409,
+  SESSION_NOT_ACTIVE: 409,
+  SUBMISSION_LOCKED: 409,
+  TENANT_MISMATCH: 403,
+  UNAUTHORIZED: 401,
+  VALIDATION_ERROR: 400,
+  WINDOW_CLOSED: 409,
 };
 
-export const buildErrorResponse = (
+export function buildSuccessResponse<TData>(
+  data: TData,
+  message: string,
+  requestId: string,
+  timestamp: string,
+): StandardApiSuccessResponse<TData> {
+  return {
+    code: "OK",
+    data,
+    message,
+    requestId,
+    success: true,
+    timestamp,
+  };
+}
+
+export function buildErrorResponse<TDetails = unknown>(
   code: StandardApiErrorCode,
   message: string,
   requestId: string,
   timestamp: string,
-): StandardApiErrorResponse => ({
-  error: {
-    code,
-    message,
-  },
-  meta: {
+  details?: TDetails,
+): StandardApiErrorResponse<TDetails> {
+  return {
+    error: {
+      code,
+      ...(typeof details === "undefined" ? {} : {details}),
+      message,
+    },
     requestId,
+    success: false,
     timestamp,
-  },
-  success: false,
-});
+  };
+}
 
 export const sendErrorResponse = (
   response: functions.Response,
@@ -55,7 +63,7 @@ export const sendErrorResponse = (
   code: StandardApiErrorCode,
   message: string,
 ): void => {
-  response.status(resolveErrorStatus(code)).json(
+  response.status(STANDARD_API_ERROR_STATUS[code]).json(
     buildErrorResponse(
       code,
       message,

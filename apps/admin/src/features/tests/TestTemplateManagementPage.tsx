@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
+import {
+  shouldUseLiveApi as shouldUseConfiguredLiveApi,
+} from "../../../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import { LICENSE_LAYER_ORDER, type LicenseLayer } from "../../../../../shared/types/portalRouting";
 import {
@@ -820,18 +823,16 @@ async function fetchQuestionPoolFromApi(): Promise<QuestionPoolLoadState> {
   }
 
   const response = payload as {
-    data?: {
-      questions?: unknown;
-    };
+    questions?: unknown;
   };
-  const questions = Array.isArray(response.data?.questions) ? response.data?.questions : [];
+  const questions = Array.isArray(response.questions) ? response.questions : [];
   const normalizedQuestions = questions
     .map((entry, index) => normalizeQuestionRecord(entry, index))
     .filter((entry): entry is QuestionBankRecord => Boolean(entry));
 
   return {
-    questions: normalizedQuestions.length > 0 ? normalizedQuestions : QUESTION_BANK,
-    source: normalizedQuestions.length > 0 ? "live" : "local",
+    questions: normalizedQuestions,
+    source: "live",
   };
 }
 
@@ -844,8 +845,7 @@ function isTemplatePublishable(status: TemplateStatus): boolean {
 }
 
 function shouldUseLiveApi(): boolean {
-  const host = window.location.hostname.toLowerCase();
-  return host !== "127.0.0.1" && host !== "localhost";
+  return shouldUseConfiguredLiveApi();
 }
 
 function formatIsoDate(value: string): string {
@@ -1006,11 +1006,9 @@ async function fetchQuestionUploadLogsFromApi(): Promise<QuestionUploadLogRecord
   }
 
   const response = payload as {
-    data?: {
-      logs?: unknown;
-    };
+    logs?: unknown;
   };
-  const logs = Array.isArray(response.data?.logs) ? response.data.logs : [];
+  const logs = Array.isArray(response.logs) ? response.logs : [];
   return logs
     .map((entry, index) => normalizeQuestionUploadLogRecord(entry, index))
     .filter((entry): entry is QuestionUploadLogRecord => Boolean(entry));
@@ -1101,8 +1099,7 @@ function TestTemplateManagementPage() {
           error instanceof ApiClientError ?
             `GET /admin/tests failed with ${error.code} (${error.status}).` :
             "Failed to load template library.";
-        setTemplates(FALLBACK_TEMPLATES);
-        setInlineMessage(`${reason} Falling back to deterministic Build 118 fixtures.`);
+        setInlineMessage(reason);
       } finally {
         if (isMounted) {
           setIsLoadingTemplates(false);
@@ -1134,12 +1131,11 @@ function TestTemplateManagementPage() {
 
         setQuestionPool(nextQuestionPool.questions);
         setInlineMessage((current) => {
-          const suffix =
-            nextQuestionPool.source === "live" ?
-              " Question-pool selection now hydrates from GET /admin/questions/library." :
-              " GET /admin/questions/library returned no persisted records yet, so question-pool selection stayed on deterministic fallback data.";
+          const suffix = nextQuestionPool.questions.length > 0 ?
+            " Question-pool selection now hydrates from GET /admin/questions/library." :
+            " GET /admin/questions/library returned no persisted records yet.";
           return current.includes("Question-pool selection now hydrates from GET /admin/questions/library.")
-            || current.includes("question-pool selection stayed on deterministic fallback data.")
+            || current.includes("GET /admin/questions/library returned no persisted records yet.")
             ? current
             : `${current}${suffix}`;
         });
@@ -1148,7 +1144,6 @@ function TestTemplateManagementPage() {
           return;
         }
 
-        setQuestionPool(QUESTION_BANK);
         const reason =
           error instanceof ApiClientError ?
             `GET /admin/questions/library failed with ${error.code} (${error.status}).` :
@@ -1156,7 +1151,7 @@ function TestTemplateManagementPage() {
         setInlineMessage((current) =>
           current.includes("question-pool selection")
             ? current
-            : `${current} ${reason} Question-pool selection fell back to deterministic fixtures.`,
+            : `${current} ${reason}`,
         );
       }
     }
@@ -1183,13 +1178,11 @@ function TestTemplateManagementPage() {
           return;
         }
 
-        setQuestionUploadLogs(nextLogs.length > 0 ? nextLogs : FALLBACK_QUESTION_UPLOAD_LOGS);
+        setQuestionUploadLogs(nextLogs);
       } catch {
         if (!isMounted) {
           return;
         }
-
-        setQuestionUploadLogs(FALLBACK_QUESTION_UPLOAD_LOGS);
       }
     }
 

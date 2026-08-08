@@ -206,11 +206,9 @@ test(
           code: string;
           message: string;
         };
-        meta: {
-          requestId: string;
-          timestamp: string;
-        };
+        requestId: string;
         success: boolean;
+        timestamp: string;
       }).error.code,
       "FORBIDDEN",
     );
@@ -269,7 +267,7 @@ test(
       "Token instituteId does not match payload.instituteId.",
     );
     assert.equal(
-      typeof (response.body as {meta: {requestId: string}}).meta.requestId,
+      typeof (response.body as {requestId: string}).requestId,
       "string",
     );
   },
@@ -312,7 +310,7 @@ test(
       "Field \"payload.instituteId\" must be a non-empty string.",
     );
     assert.equal(
-      typeof (response.body as {meta: {timestamp: string}}).meta.timestamp,
+      typeof (response.body as {timestamp: string}).timestamp,
       "string",
     );
   },

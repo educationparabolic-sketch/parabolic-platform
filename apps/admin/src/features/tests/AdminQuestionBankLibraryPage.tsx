@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { NavLink } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
+import {
+  shouldUseLiveApi as shouldUseConfiguredLiveApi,
+} from "../../../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import {
   UiForm,
@@ -81,8 +84,7 @@ const INITIAL_FILTERS: QuestionFilterDraft = {
 };
 
 function shouldUseLiveApi(): boolean {
-  const host = window.location.hostname.toLowerCase();
-  return host !== "127.0.0.1" && host !== "localhost";
+  return shouldUseConfiguredLiveApi();
 }
 
 function toNonEmptyString(value: unknown, fallback = ""): string {
@@ -207,11 +209,9 @@ async function fetchLibraryFromApi(): Promise<QuestionBankRecord[]> {
   }
 
   const response = payload as {
-    data?: {
-      questions?: unknown;
-    };
+    questions?: unknown;
   };
-  const questions = Array.isArray(response.data?.questions) ? response.data?.questions : [];
+  const questions = Array.isArray(response.questions) ? response.questions : [];
   return questions
     .map((entry, index) => normalizeQuestionRecord(entry, index))
     .filter((entry): entry is QuestionBankRecord => Boolean(entry));
@@ -248,11 +248,11 @@ function AdminQuestionBankLibraryPage() {
           return;
         }
 
-        setQuestions(nextQuestions.length > 0 ? nextQuestions : QUESTION_BANK);
+        setQuestions(nextQuestions);
         setInlineMessage(
           nextQuestions.length > 0 ?
             "Question library is ready." :
-            "No saved questions were returned yet, so the sample library is being shown.",
+            "No saved questions were returned yet.",
         );
       } catch (error) {
         if (!isActive) {
@@ -261,8 +261,7 @@ function AdminQuestionBankLibraryPage() {
 
         const reason =
           error instanceof ApiClientError ? error.message : "Failed to load question library.";
-        setQuestions(QUESTION_BANK);
-        setInlineMessage(`${reason} Showing the sample library for now.`);
+        setInlineMessage(reason);
       }
     }
 

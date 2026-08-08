@@ -1,4 +1,7 @@
 import { ApiClientError } from "../../../../../shared/services/apiClient";
+import {
+  shouldUseLiveApi as shouldUseConfiguredLiveApi,
+} from "../../../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 
 const apiClient = getPortalApiClient("admin");
@@ -1155,8 +1158,7 @@ function normalizeYearBehaviorSummaryRecord(
 }
 
 export function shouldUseLiveApi(): boolean {
-  const host = window.location.hostname.toLowerCase();
-  return host !== "127.0.0.1" && host !== "localhost";
+  return shouldUseConfiguredLiveApi();
 }
 
 export function formatPercent(value: number): string {

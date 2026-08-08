@@ -554,8 +554,8 @@ function AdminAssignmentLiveRunPage() {
 
         const nextRuns = buildLiveRunRecords(dataset.runAnalytics);
         const nextLiveRows = buildLiveMonitorRows(dataset);
-        setRuns(nextRuns.length > 0 ? nextRuns : LIVE_RUNS);
-        setLiveRows(nextLiveRows.length > 0 ? nextLiveRows : LIVE_MONITOR_ROWS);
+        setRuns(nextRuns);
+        setLiveRows(nextLiveRows);
         setInlineMessage(
           "Live mode enabled: focused run summary and per-student live flags hydrated from GET /admin/analytics with deterministic fallback coverage.",
         );
@@ -565,9 +565,7 @@ function AdminAssignmentLiveRunPage() {
         }
 
         const reason = error instanceof ApiClientError ? error.message : "Failed to load focused live run data.";
-        setRuns(LIVE_RUNS);
-        setLiveRows(LIVE_MONITOR_ROWS);
-        setInlineMessage(`${reason} Falling back to deterministic focused-run fixtures.`);
+        setInlineMessage(reason);
       } finally {
         if (isMounted) {
           setIsLoading(false);

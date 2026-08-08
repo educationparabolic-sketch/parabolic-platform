@@ -1,4 +1,5 @@
 import { ApiClientError } from "../../../../../shared/services/apiClient";
+import { shouldUseFixtureData } from "../../../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 
 const apiClient = getPortalApiClient("admin");
@@ -97,8 +98,8 @@ export interface AdminLicensingSnapshot {
 }
 
 interface AdminLicensingApiResponse {
-  code: string;
-  data?: { snapshot?: unknown; request?: AdminLicenseUpgradeRequest };
+  snapshot?: unknown;
+  request?: AdminLicenseUpgradeRequest;
 }
 
 export const LICENSE_PLANS: AdminLicensePlan[] = [
@@ -390,8 +391,7 @@ function normalizeSnapshot(value: unknown): AdminLicensingSnapshot | null {
 }
 
 export function isLocalLicensingReadMode(): boolean {
-  const host = window.location.hostname.toLowerCase();
-  return host === "127.0.0.1" || host === "localhost";
+  return shouldUseFixtureData();
 }
 
 export async function fetchLicensingSnapshot(instituteId: string): Promise<AdminLicensingSnapshot> {
@@ -400,7 +400,7 @@ export async function fetchLicensingSnapshot(instituteId: string): Promise<Admin
     "/admin/licensing",
     { body: { actionType: "GET_LICENSE_SNAPSHOT", instituteId } },
   );
-  const snapshot = normalizeSnapshot(result.data?.snapshot);
+  const snapshot = normalizeSnapshot(result.snapshot);
   if (!snapshot) throw new Error("Licensing API did not return a valid vendor-aligned snapshot.");
   return snapshot;
 }
@@ -430,8 +430,8 @@ export async function submitLicenseUpgradeRequest(input: {
   >("/admin/licensing", {
     body: { actionType: "REQUEST_LICENSE_UPGRADE", ...input },
   });
-  if (!result.data?.request) throw new Error("Vendor did not return the created license request.");
-  return result.data.request;
+  if (!result.request) throw new Error("Vendor did not return the created license request.");
+  return result.request;
 }
 
 export function getPlanRank(plan: AdminLicensePlan): number {

@@ -62,8 +62,7 @@ function AdminAssignmentsLandingPage() {
         }
 
         const reason = error instanceof ApiClientError ? error.message : "Failed to load assignments landing.";
-        setDataset(FALLBACK_DATASET);
-        setInlineMessage(`${reason} Falling back to deterministic assignment fixtures.`);
+        setInlineMessage(reason);
       } finally {
         if (isMounted) {
           setIsLoading(false);

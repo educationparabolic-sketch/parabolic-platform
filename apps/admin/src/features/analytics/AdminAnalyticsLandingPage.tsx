@@ -53,8 +53,7 @@ function AdminAnalyticsLandingPage() {
         }
 
         const reason = error instanceof ApiClientError ? error.message : "Failed to load analytics landing.";
-        setDataset(FALLBACK_DATASET);
-        setInlineMessage(`${reason} Falling back to deterministic analytics fixtures.`);
+        setInlineMessage(reason);
       } finally {
         if (isMounted) {
           setIsLoading(false);

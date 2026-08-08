@@ -2,7 +2,17 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
+import {
+  shouldUseLiveApi as shouldUseConfiguredLiveApi,
+} from "../../../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
+import type {
+  AdminStudentOnboardingResendRequest,
+  AdminStudentOnboardingResendResult as StudentOnboardingResendResult,
+  StudentBulkIngestionRequest,
+  StudentBulkIngestionResult as StudentBulkUploadResult,
+  StudentBulkIngestionRowResult as StudentBulkUploadRowResult,
+} from "../../../../../shared/contracts/apiDtos";
 import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
 import {
   UiChartContainer,
@@ -251,52 +261,6 @@ interface ArchiveCohortRow {
 
 type StudentBulkUploadField = Exclude<keyof StudentBulkUploadDraftRow, "id">;
 type StudentBulkUploadStage = "upload" | "validate" | "resolve" | "confirm" | "complete";
-type StudentBulkUploadRowAction = "create" | "update" | "deactivate" | "none";
-
-interface StudentBulkUploadRowResult {
-  action: StudentBulkUploadRowAction;
-  email: string | null;
-  errors: string[];
-  fullName: string | null;
-  rowNumber: number;
-  studentId: string | null;
-}
-
-interface StudentBulkUploadSummary {
-  created: number;
-  deactivationCandidates: number;
-  deactivated: number;
-  invalid: number;
-  onboardingEmailsQueued: number;
-  received: number;
-  updated: number;
-  valid: number;
-}
-
-interface StudentBulkUploadResult {
-  commitRequested: boolean;
-  committed: boolean;
-  deactivateMissing: boolean;
-  rows: StudentBulkUploadRowResult[];
-  summary: StudentBulkUploadSummary;
-}
-
-interface StudentBulkUploadApiResponse {
-  data?: StudentBulkUploadResult;
-}
-
-interface StudentOnboardingResendResult {
-  jobId: string;
-  jobPath: string;
-  queuedAt: string;
-  recipientEmail: string;
-  status: "pending";
-  studentId: string;
-}
-
-interface StudentOnboardingResendApiResponse {
-  data?: StudentOnboardingResendResult;
-}
 
 interface StudentOnboardingUiState {
   isSubmitting?: boolean;
@@ -625,8 +589,7 @@ async function fetchStudentsFromApi(): Promise<StudentRecord[]> {
 }
 
 function shouldUseLiveApi(): boolean {
-  const hostname = window.location.hostname.toLowerCase();
-  return hostname !== "127.0.0.1" && hostname !== "localhost";
+  return shouldUseConfiguredLiveApi();
 }
 
 function formatDateLabel(value: string | null): string {
@@ -1581,13 +1544,12 @@ function StudentManagementPage() {
           return;
         }
 
-        const fallbackReason =
+        const reason =
           error instanceof ApiClientError ?
             `GET /admin/students failed with ${error.code} (${error.status}).` :
-            "GET /admin/students is unavailable in local mode.";
+            "GET /admin/students is unavailable in live mode.";
 
-        setStudents(FALLBACK_STUDENTS);
-        setLoadMessage(`${fallbackReason} Loaded deterministic local student fixtures for Build 117 UI workflows.`);
+        setLoadMessage(reason);
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -2219,7 +2181,7 @@ function StudentManagementPage() {
 
     try {
       if (shouldUseLiveApi()) {
-        const response = await apiClient.post<StudentOnboardingResendApiResponse, Record<string, unknown>>(
+        const response = await apiClient.post<StudentOnboardingResendResult, AdminStudentOnboardingResendRequest>(
           "/admin/students/onboarding-resend",
           {
             body: {
@@ -2228,17 +2190,13 @@ function StudentManagementPage() {
           },
         );
 
-        if (!response.data) {
-          throw new Error("POST /admin/students/onboarding-resend did not return queue data.");
-        }
-
         setOnboardingUiByStudentId((current) => ({
           ...current,
           [student.id]: {
             isSubmitting: false,
-            lastQueuedAt: response.data?.queuedAt ?? new Date().toISOString(),
-            recipientEmail: response.data?.recipientEmail ?? student.email,
-            status: response.data?.status ?? "pending",
+            lastQueuedAt: response.queuedAt ?? new Date().toISOString(),
+            recipientEmail: response.recipientEmail ?? student.email,
+            status: response.status ?? "pending",
           },
         }));
       } else {
@@ -2379,7 +2337,7 @@ function StudentManagementPage() {
               typeof claims?.instituteId === "string" && claims.instituteId.trim().length > 0 ?
                 claims.instituteId :
                 "inst-build-125";
-            const response = await apiClient.post<StudentBulkUploadApiResponse, Record<string, unknown>>(
+            const response = await apiClient.post<StudentBulkUploadResult, StudentBulkIngestionRequest>(
               "/admin/students/bulk",
               {
                 body: {
@@ -2400,11 +2358,7 @@ function StudentManagementPage() {
               },
             );
 
-            if (!response.data) {
-              throw new Error("POST /admin/students/bulk did not return validation data.");
-            }
-
-            return response.data;
+            return response;
           })() :
           validateBulkUploadRows(students, bulkUploadRows, bulkUploadDeactivateMissing, commit);
 

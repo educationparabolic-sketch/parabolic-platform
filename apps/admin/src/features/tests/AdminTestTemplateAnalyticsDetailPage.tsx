@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { UiChartContainer, type UiChartPoint } from "../../../../../shared/ui/components";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
+import {
+  shouldUseLiveApi as shouldUseConfiguredLiveApi,
+} from "../../../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import {
   fetchDashboardDataset,
@@ -269,8 +272,7 @@ const TEMPLATE_DETAILS: TestTemplateDetailRecord[] = [
 ];
 
 function shouldUseLiveApi(): boolean {
-  const host = window.location.hostname.toLowerCase();
-  return host !== "127.0.0.1" && host !== "localhost";
+  return shouldUseConfiguredLiveApi();
 }
 
 function toNonEmptyString(value: unknown, fallback = ""): string {
@@ -664,9 +666,9 @@ function AdminTestTemplateAnalyticsDetailPage() {
         }
 
         const liveTemplates = buildTemplateAnalyticsDetails(dataset.runAnalytics, details);
-        setTemplates(liveTemplates.length > 0 ? liveTemplates : TEMPLATE_ANALYTICS_DETAILS);
-        setTemplateDetails(details.length > 0 ? details : TEMPLATE_DETAILS);
-        setQuestionPool(questions.length > 0 ? questions : QUESTION_BANK);
+        setTemplates(liveTemplates);
+        setTemplateDetails(details);
+        setQuestionPool(questions);
         setInlineMessage("Live mode enabled: test template analytics detail hydrated from GET /admin/analytics.");
       } catch (error) {
         if (!isMounted) {
@@ -674,10 +676,7 @@ function AdminTestTemplateAnalyticsDetailPage() {
         }
 
         const reason = error instanceof ApiClientError ? error.message : "Failed to load test template analytics detail.";
-        setTemplates(TEMPLATE_ANALYTICS_DETAILS);
-        setTemplateDetails(TEMPLATE_DETAILS);
-        setQuestionPool(QUESTION_BANK);
-        setInlineMessage(`${reason} Falling back to deterministic template analytics detail fixtures.`);
+        setInlineMessage(reason);
       } finally {
         if (isMounted) {
           setIsLoading(false);

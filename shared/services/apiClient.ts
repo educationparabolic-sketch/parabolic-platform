@@ -3,18 +3,31 @@ import { readCrossPortalIdToken } from "./crossPortalAuthSession";
 import { getFrontendEnvironment } from "./frontendEnvironment";
 import { getFirebaseAuth } from "./firebaseClient";
 import {
+  beginFrontendDataRequest,
+  completeFrontendDataRequest,
+  failFrontendDataRequest,
+} from "./frontendDataState";
+import {
   captureFrontendApiFailure,
   captureFrontendApiTiming,
 } from "./frontendMonitoring";
-import type {
-  ApiClient,
-  ApiClientConfig,
-  ApiClientRequestOptions,
-  ApiErrorPayload,
-  ApiHttpMethod,
-  ApiRequestContext,
-  ApiRetryPolicy,
+import {
+  ApiEnvelopeValidationError,
+  parseApiErrorEnvelope,
+  unwrapApiSuccessData,
+  type ApiErrorEnvelope,
+} from "../types/apiResponse";
+import {
+  ApiClientError,
+  type ApiClient,
+  type ApiClientConfig,
+  type ApiClientRequestOptions,
+  type ApiHttpMethod,
+  type ApiRequestContext,
+  type ApiRetryPolicy,
 } from "../types/apiClient";
+
+export { ApiClientError } from "../types/apiClient";
 
 const DEFAULT_RETRY_POLICY: ApiRetryPolicy = {
   maxAttempts: 3,
@@ -27,20 +40,6 @@ const RETRYABLE_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504]);
 const IDEMPOTENT_METHODS = new Set<ApiHttpMethod>(["GET", "DELETE"]);
 
 export const SAME_ORIGIN_API_BASE_URL = "/api/v1";
-
-export class ApiClientError extends Error {
-  readonly status: number;
-  readonly code: string;
-  readonly payload: unknown;
-
-  constructor(message: string, status: number, code: string, payload: unknown) {
-    super(message);
-    this.name = "ApiClientError";
-    this.status = status;
-    this.code = code;
-    this.payload = payload;
-  }
-}
 
 function ensureLeadingSlash(path: string): string {
   return path.startsWith("/") ? path : `/${path}`;
@@ -165,27 +164,19 @@ async function refreshToken(user: User | null): Promise<string | null> {
   return getIdToken(user, true);
 }
 
-function normalizeErrorPayload(payload: unknown): ApiErrorPayload {
-  if (payload && typeof payload === "object") {
-    return payload as ApiErrorPayload;
-  }
-
-  return {};
-}
-
-function toApiError(
+function toApiError<TDetails>(
   context: ApiRequestContext,
   status: number,
-  payload: unknown,
-): ApiClientError {
-  const normalized = normalizeErrorPayload(payload);
-  const code = normalized.error?.code ?? `HTTP_${status}`;
-  const message =
-    normalized.error?.message ??
-    normalized.message ??
+  payload: ApiErrorEnvelope<TDetails>,
+): ApiClientError<TDetails> {
+  const code = payload.error.code;
+  const message = payload.error.message ||
     `API request failed for ${context.method} ${context.path} with status ${status}`;
 
-  return new ApiClientError(message, status, code, payload);
+  return new ApiClientError(message, status, code, payload, {
+    details: payload.error.details,
+    requestId: payload.requestId,
+  });
 }
 
 function isJsonResponse(response: Response): boolean {
@@ -199,7 +190,11 @@ async function readResponseBody(response: Response): Promise<unknown> {
   }
 
   if (isJsonResponse(response)) {
-    return response.json();
+    try {
+      return await response.json();
+    } catch {
+      return null;
+    }
   }
 
   const text = await response.text();
@@ -209,10 +204,10 @@ async function readResponseBody(response: Response): Promise<unknown> {
 export function createApiClient(config: ApiClientConfig = {}): ApiClient {
   const baseUrl = resolveBaseUrl(config);
 
-  async function request<TResponse, TRequestBody = unknown>(
+  async function executeRequest<TData, TRequestBody = unknown>(
     path: string,
     options: ApiClientRequestOptions<TRequestBody> = {},
-  ): Promise<TResponse> {
+  ): Promise<TData> {
     const requestStartedAt =
       typeof performance !== "undefined" && typeof performance.now === "function" ?
         performance.now() :
@@ -277,6 +272,31 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
         }
 
         if (response.ok) {
+          let data: TData;
+          try {
+            data = unwrapApiSuccessData<TData>(payload);
+          } catch (error) {
+            if (!(error instanceof ApiEnvelopeValidationError)) {
+              throw error;
+            }
+
+            const finishedAt =
+              typeof performance !== "undefined" && typeof performance.now === "function" ?
+                performance.now() :
+                Date.now();
+            captureFrontendApiFailure({
+              method,
+              path: requestPath,
+              url: requestUrl,
+              status: response.status,
+              attempt,
+              durationMs: Math.max(0, Math.round(finishedAt - requestStartedAt)),
+              code: "INVALID_RESPONSE",
+              message: error.message,
+            });
+            throw new ApiClientError(error.message, response.status, "INVALID_RESPONSE", payload);
+          }
+
           const finishedAt =
             typeof performance !== "undefined" && typeof performance.now === "function" ?
               performance.now() :
@@ -289,7 +309,33 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
             attempt,
             durationMs: Math.max(0, Math.round(finishedAt - requestStartedAt)),
           });
-          return payload as TResponse;
+          return data;
+        }
+
+        let errorEnvelope: ApiErrorEnvelope;
+        try {
+          errorEnvelope = parseApiErrorEnvelope(payload);
+          payload = errorEnvelope;
+        } catch (error) {
+          if (!(error instanceof ApiEnvelopeValidationError)) {
+            throw error;
+          }
+
+          const finishedAt =
+            typeof performance !== "undefined" && typeof performance.now === "function" ?
+              performance.now() :
+              Date.now();
+          captureFrontendApiFailure({
+            method,
+            path: requestPath,
+            url: requestUrl,
+            status: response.status,
+            attempt,
+            durationMs: Math.max(0, Math.round(finishedAt - requestStartedAt)),
+            code: "INVALID_RESPONSE",
+            message: error.message,
+          });
+          throw new ApiClientError(error.message, response.status, "INVALID_RESPONSE", payload);
         }
 
         const retryable = isRetryableRequest(method, policy, response.status, false);
@@ -306,12 +352,10 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
             status: response.status,
             attempt,
             durationMs: Math.max(0, Math.round(finishedAt - requestStartedAt)),
-            code: (payload as ApiErrorPayload | null)?.error?.code ?? `HTTP_${response.status}`,
-            message:
-              (payload as ApiErrorPayload | null)?.error?.message ??
-              `API request failed for ${method} ${requestPath}`,
+            code: errorEnvelope.error.code,
+            message: errorEnvelope.error.message,
           });
-          throw toApiError(context, response.status, payload);
+          throw toApiError(context, response.status, errorEnvelope);
         }
       } catch (error) {
         const alreadyTypedError = error instanceof ApiClientError;
@@ -356,26 +400,44 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
     );
   }
 
+  async function request<TData, TRequestBody = unknown>(
+    path: string,
+    options: ApiClientRequestOptions<TRequestBody> = {},
+  ): Promise<TData> {
+    const method = options.method ?? "GET";
+    const requestPath = ensureLeadingSlash(path);
+    const dataRequestId = beginFrontendDataRequest(method, requestPath);
+
+    try {
+      const data = await executeRequest<TData, TRequestBody>(path, options);
+      completeFrontendDataRequest(dataRequestId, data);
+      return data;
+    } catch (error) {
+      failFrontendDataRequest(dataRequestId, error);
+      throw error;
+    }
+  }
+
   return {
     request,
-    get: <TResponse>(path: string, options?: Omit<ApiClientRequestOptions<never>, "method" | "body">) =>
-      request<TResponse>(path, { ...options, method: "GET" }),
-    post: <TResponse, TRequestBody = unknown>(
+    get: <TData>(path: string, options?: Omit<ApiClientRequestOptions<never>, "method" | "body">) =>
+      request<TData>(path, { ...options, method: "GET" }),
+    post: <TData, TRequestBody = unknown>(
       path: string,
       options?: Omit<ApiClientRequestOptions<TRequestBody>, "method">,
-    ) => request<TResponse, TRequestBody>(path, { ...options, method: "POST" }),
-    put: <TResponse, TRequestBody = unknown>(
+    ) => request<TData, TRequestBody>(path, { ...options, method: "POST" }),
+    put: <TData, TRequestBody = unknown>(
       path: string,
       options?: Omit<ApiClientRequestOptions<TRequestBody>, "method">,
-    ) => request<TResponse, TRequestBody>(path, { ...options, method: "PUT" }),
-    patch: <TResponse, TRequestBody = unknown>(
+    ) => request<TData, TRequestBody>(path, { ...options, method: "PUT" }),
+    patch: <TData, TRequestBody = unknown>(
       path: string,
       options?: Omit<ApiClientRequestOptions<TRequestBody>, "method">,
-    ) => request<TResponse, TRequestBody>(path, { ...options, method: "PATCH" }),
-    delete: <TResponse>(
+    ) => request<TData, TRequestBody>(path, { ...options, method: "PATCH" }),
+    delete: <TData>(
       path: string,
       options?: Omit<ApiClientRequestOptions<never>, "method" | "body">,
-    ) => request<TResponse>(path, { ...options, method: "DELETE" }),
+    ) => request<TData>(path, { ...options, method: "DELETE" }),
   };
 }
 

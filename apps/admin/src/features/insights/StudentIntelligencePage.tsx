@@ -150,9 +150,8 @@ function StudentIntelligencePage() {
         }
 
         const reason = error instanceof ApiClientError ? error.message : "Failed to load student intelligence.";
-        setDataset(FALLBACK_DATASET);
         setInterventionHistory([]);
-        setInlineMessage(`${reason} Falling back to deterministic student intelligence fixtures.`);
+        setInlineMessage(reason);
       } finally {
         if (isMounted) {
           setIsLoading(false);

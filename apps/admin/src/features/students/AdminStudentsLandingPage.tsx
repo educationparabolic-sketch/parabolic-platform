@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
+import {
+  shouldUseLiveApi as shouldUseConfiguredLiveApi,
+} from "../../../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 
 const apiClient = getPortalApiClient("admin");
@@ -115,8 +118,7 @@ async function fetchStudentsFromApi(): Promise<StudentLandingRecord[]> {
 }
 
 function shouldUseLiveApi(): boolean {
-  const hostname = window.location.hostname.toLowerCase();
-  return hostname !== "127.0.0.1" && hostname !== "localhost";
+  return shouldUseConfiguredLiveApi();
 }
 
 function AdminStudentsLandingPage() {
@@ -146,8 +148,6 @@ function AdminStudentsLandingPage() {
         if (!isMounted) {
           return;
         }
-
-        setStudents(FALLBACK_STUDENTS);
       } finally {
         if (isMounted) {
           setIsLoading(false);

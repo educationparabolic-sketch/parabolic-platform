@@ -2,7 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { NavLink, useParams } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
+import {
+  shouldUseLiveApi as shouldUseConfiguredLiveApi,
+} from "../../../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
+import type {
+  AdminStudentOnboardingResendRequest,
+  AdminStudentOnboardingResendResult as StudentOnboardingResendResult,
+} from "../../../../../shared/contracts/apiDtos";
 import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
 import { UiChartContainer, UiStatCard, UiTable, type UiChartPoint, type UiTableColumn } from "../../../../../shared/ui/components";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
@@ -76,19 +83,6 @@ interface StudentOverrideRecord {
   id: string;
   label: string;
   count: number;
-}
-
-interface StudentOnboardingResendResult {
-  jobId: string;
-  jobPath: string;
-  queuedAt: string;
-  recipientEmail: string;
-  status: "pending";
-  studentId: string;
-}
-
-interface StudentOnboardingResendApiResponse {
-  data?: StudentOnboardingResendResult;
 }
 
 interface StudentOnboardingUiState {
@@ -557,8 +551,7 @@ async function fetchStudentsFromApi(): Promise<StudentRecord[]> {
 }
 
 function shouldUseLiveApi(): boolean {
-  const hostname = window.location.hostname.toLowerCase();
-  return hostname !== "127.0.0.1" && hostname !== "localhost";
+  return shouldUseConfiguredLiveApi();
 }
 
 function formatPercent(value: number | null): string {
@@ -723,7 +716,7 @@ function StudentProfilePage() {
 
     try {
       if (shouldUseLiveApi()) {
-        const response = await apiClient.post<StudentOnboardingResendApiResponse, Record<string, unknown>>(
+        const response = await apiClient.post<StudentOnboardingResendResult, AdminStudentOnboardingResendRequest>(
           "/admin/students/onboarding-resend",
           {
             body: {
@@ -732,15 +725,11 @@ function StudentProfilePage() {
           },
         );
 
-        if (!response.data) {
-          throw new Error("POST /admin/students/onboarding-resend did not return queue data.");
-        }
-
         setOnboardingUiState({
           isSubmitting: false,
-          lastQueuedAt: response.data.queuedAt ?? new Date().toISOString(),
-          recipientEmail: response.data.recipientEmail ?? student.email,
-          status: response.data.status ?? "pending",
+          lastQueuedAt: response.queuedAt ?? new Date().toISOString(),
+          recipientEmail: response.recipientEmail ?? student.email,
+          status: response.status ?? "pending",
         });
       } else {
         setOnboardingUiState({

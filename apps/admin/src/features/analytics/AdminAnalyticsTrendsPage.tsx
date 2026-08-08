@@ -134,7 +134,7 @@ function AdminAnalyticsTrendsPage() {
         }
 
         const monthlyRows = buildMonthlyTrendRows(dataset);
-        setRows(monthlyRows.length > 0 ? monthlyRows : MONTHLY_TREND_FIXTURES);
+        setRows(monthlyRows);
         setInlineMessage("Live mode enabled: trends hydrated from monthlySummary records in GET /admin/analytics.");
       } catch (error) {
         if (!isMounted) {
@@ -142,8 +142,7 @@ function AdminAnalyticsTrendsPage() {
         }
 
         const reason = error instanceof ApiClientError ? error.message : "Failed to load analytics trend data.";
-        setRows(MONTHLY_TREND_FIXTURES);
-        setInlineMessage(`${reason} Falling back to deterministic monthlySummary fixtures.`);
+        setInlineMessage(reason);
       } finally {
         if (isMounted) {
           setIsLoading(false);

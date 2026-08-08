@@ -157,9 +157,7 @@ function StudentPerformancePage() {
         }
 
         const reason = error instanceof ApiClientError ? error.message : "Failed to load student performance analytics.";
-        setDataset(STUDENT_PERFORMANCE_FALLBACK_DATASET);
-        setTopicWeaknessRows(STUDENT_INSIGHTS_FALLBACK_DATASET.topicWeaknessSummary);
-        setInlineMessage(`${reason} Showing practice performance trends for now.`);
+        setInlineMessage(reason);
       } finally {
         if (isMounted) {
           setIsLoading(false);

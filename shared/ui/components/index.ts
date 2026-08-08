@@ -1,5 +1,7 @@
 export { default as UiChartContainer } from "./UiChartContainer";
 export type { UiChartContainerProps, UiChartPoint } from "./UiChartContainer";
+export { default as UiDataStateBoundary } from "./UiDataStateBoundary";
+export type { UiDataStateBoundaryProps } from "./UiDataStateBoundary";
 export { default as UiErrorBoundary } from "./UiErrorBoundary";
 export { default as UiForm } from "./UiForm";
 export { UiFormField } from "./UiForm";

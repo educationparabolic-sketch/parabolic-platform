@@ -19,6 +19,7 @@ const frontendSourceKeys = [
   "VITE_API_BASE_URL",
   "VITE_BASE_PATH",
   "VITE_CDN_BASE_URL",
+  "VITE_DATA_MODE",
   "VITE_EXAM_BASE_URL",
   "VITE_EXAM_DEV_MOCK_ENTRY",
   "VITE_FIREBASE_API_KEY",
@@ -80,6 +81,7 @@ const functionsPlatformKeys = [
 const commonPortalExampleKeys = [
   "VITE_API_BASE_URL",
   "VITE_CDN_BASE_URL",
+  "VITE_DATA_MODE",
   "VITE_EXAM_BASE_URL",
   "VITE_FIREBASE_API_KEY",
   "VITE_FIREBASE_APP_ID",

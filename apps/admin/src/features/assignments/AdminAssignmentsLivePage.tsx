@@ -149,7 +149,7 @@ function AdminAssignmentsLivePage() {
         }
 
         const nextRuns = buildLiveRunRows(dataset.runAnalytics);
-        setLiveRuns(nextRuns.length > 0 ? nextRuns : LIVE_RUNS);
+        setLiveRuns(nextRuns);
         setInlineMessage(
           "Live mode enabled: live monitor landing hydrated from GET /admin/analytics runAnalytics summaries.",
         );
@@ -159,8 +159,7 @@ function AdminAssignmentsLivePage() {
         }
 
         const reason = error instanceof ApiClientError ? error.message : "Failed to load live monitor data.";
-        setLiveRuns(LIVE_RUNS);
-        setInlineMessage(`${reason} Falling back to deterministic live-run fixtures.`);
+        setInlineMessage(reason);
       } finally {
         if (isMounted) {
           setIsLoading(false);

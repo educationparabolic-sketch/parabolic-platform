@@ -1109,8 +1109,7 @@ function AdminAssignmentDetailPage() {
         }
 
         const reason = error instanceof ApiClientError ? error.message : "Failed to load assignment detail.";
-        setDataset(FALLBACK_DATASET);
-        setInlineMessage(`${reason} Falling back to deterministic assignment detail fixtures.`);
+        setInlineMessage(reason);
       } finally {
         if (isMounted) {
           setIsLoading(false);

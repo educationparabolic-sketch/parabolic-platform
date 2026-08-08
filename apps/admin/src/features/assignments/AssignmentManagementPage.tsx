@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
+import {
+  shouldUseLiveApi as shouldUseConfiguredLiveApi,
+} from "../../../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import {
   UiFormField,
@@ -686,8 +689,7 @@ const EMPTY_TEMPLATE_FILTERS: TemplateSelectionFilters = {
 };
 
 function shouldUseLiveApi(): boolean {
-  const host = window.location.hostname.toLowerCase();
-  return host !== "127.0.0.1" && host !== "localhost";
+  return shouldUseConfiguredLiveApi();
 }
 
 function toNonEmptyString(value: unknown, fallback = ""): string {
@@ -1124,7 +1126,6 @@ function parseRunIdFromApiResponse(payload: unknown): string | null {
   const candidates = [
     objectPayload.runId,
     objectPayload.id,
-    (objectPayload.data as Record<string, unknown> | undefined)?.runId,
   ];
 
   for (const value of candidates) {
@@ -1578,8 +1579,7 @@ function AssignmentManagementPage() {
           error instanceof ApiClientError ?
             `GET /admin/tests failed with ${error.code} (${error.status}).` :
             "Failed to hydrate assignment template options from GET /admin/tests.";
-        setTemplateOptions(TEMPLATE_OPTIONS);
-        setInlineMessage(`${reason} Falling back to deterministic assignment template fixtures.`);
+        setInlineMessage(reason);
       }
     }
 
@@ -1630,8 +1630,7 @@ function AssignmentManagementPage() {
           error instanceof ApiClientError ?
             `GET /admin/students failed with ${error.code} (${error.status}).` :
             "Failed to hydrate assignment recipient data from GET /admin/students.";
-        setStudentOptions(STUDENT_OPTIONS);
-        setInlineMessage(`${reason} Falling back to deterministic assignment recipient fixtures.`);
+        setInlineMessage(reason);
       }
     }
 
@@ -1672,8 +1671,7 @@ function AssignmentManagementPage() {
           error instanceof ApiClientError ?
             `GET /admin/analytics failed with ${error.code} (${error.status}).` :
             "Failed to hydrate assignment list data from GET /admin/analytics.";
-        setRuns(FALLBACK_RUNS);
-        setInlineMessage(`${reason} Falling back to deterministic assignment fixtures for list, history, and bulk views.`);
+        setInlineMessage(reason);
       }
     }
 

@@ -1,5 +1,11 @@
 import { ApiClientError } from "../../../../../shared/services/apiClient";
+import { shouldUseFixtureData } from "../../../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
+import { adaptVendorCalibrationPushResult } from "../../../../../shared/services/portalResponseAdapters";
+import type {
+  DeployCalibrationVersionResult,
+  VendorCalibrationPushRequest,
+} from "../../../../../shared/contracts/apiDtos";
 
 const apiClient = getPortalApiClient("vendor");
 
@@ -113,30 +119,17 @@ export interface CalibrationPushResult {
 }
 
 interface CalibrationSimulationApiResponse {
-  code: "OK";
-  data: {
-    after: {
-      averageProjectedRiskScore: number;
-      riskDistribution: Record<"low" | "medium" | "high", CalibrationDistributionEntry>;
-    };
-    before: {
-      averageProjectedRiskScore: number;
-      riskDistribution: Record<"low" | "medium" | "high", CalibrationDistributionEntry>;
-    };
-    delta: {
-      averageProjectedRiskScore: number;
-      riskDistribution: Record<"low" | "medium" | "high", CalibrationDistributionEntry>;
-    };
+  after: {
+    averageProjectedRiskScore: number;
+    riskDistribution: Record<"low" | "medium" | "high", CalibrationDistributionEntry>;
   };
-}
-
-interface CalibrationPushApiResponse {
-  code: "OK";
-  data: {
-    deployedInstituteCount: number;
-    deploymentLogId: string;
-    versionId: string;
-    vendorCalibrationLogPath: string;
+  before: {
+    averageProjectedRiskScore: number;
+    riskDistribution: Record<"low" | "medium" | "high", CalibrationDistributionEntry>;
+  };
+  delta: {
+    averageProjectedRiskScore: number;
+    riskDistribution: Record<"low" | "medium" | "high", CalibrationDistributionEntry>;
   };
 }
 
@@ -624,25 +617,29 @@ export async function runCalibrationSimulation(options: {
         "disciplineComponents",
       ],
       comparison: {
-        beforeAverageRiskScore: response.data.before.averageProjectedRiskScore,
-        afterAverageRiskScore: response.data.after.averageProjectedRiskScore,
+        beforeAverageRiskScore: response.before.averageProjectedRiskScore,
+        afterAverageRiskScore: response.after.averageProjectedRiskScore,
         beforeDisciplineIndex: 0,
         afterDisciplineIndex: 0,
-        riskDistributionShift: response.data.delta.riskDistribution,
-        clusterMovementPercent: Math.abs(response.data.delta.averageProjectedRiskScore),
-        batchLevelDeltaPercent: response.data.delta.averageProjectedRiskScore,
+        riskDistributionShift: response.delta.riskDistribution,
+        clusterMovementPercent: Math.abs(response.delta.averageProjectedRiskScore),
+        batchLevelDeltaPercent: response.delta.averageProjectedRiskScore,
         stabilityImpact:
-          response.data.delta.averageProjectedRiskScore <= -0.2
+          response.delta.averageProjectedRiskScore <= -0.2
             ? "improved"
-            : response.data.delta.averageProjectedRiskScore >= 0.2
+            : response.delta.averageProjectedRiskScore >= 0.2
               ? "degraded"
               : "neutral",
-        estimatedAlertDelta: Math.round(response.data.delta.averageProjectedRiskScore * 5),
+        estimatedAlertDelta: Math.round(response.delta.averageProjectedRiskScore * 5),
       },
       generatedAt: new Date().toISOString(),
       engineSource: "api",
     };
   } catch (error) {
+    if (!shouldUseFixtureData()) {
+      throw error;
+    }
+
     const fallback = computeLocalSimulation(dataset, mode, instituteIds, parameters);
 
     if (error instanceof ApiClientError) {
@@ -677,27 +674,30 @@ export async function pushCalibrationVersion(options: {
   }
 
   try {
-    const response = await apiClient.post<
-      CalibrationPushApiResponse,
-      { targetInstitutes: string[]; versionId: string }
-    >("/vendor/calibration/push", {
-      body: {
-        targetInstitutes,
-        versionId,
-      },
-      retry: {
-        retryUnsafeMethods: false,
-      },
-    });
+    const response: DeployCalibrationVersionResult = adaptVendorCalibrationPushResult(
+      await apiClient.post<unknown, VendorCalibrationPushRequest>("/vendor/calibration/push", {
+        body: {
+          targetInstitutes,
+          versionId,
+        },
+        retry: {
+          retryUnsafeMethods: false,
+        },
+      }),
+    );
 
     return {
-      deployedInstituteCount: response.data.deployedInstituteCount,
-      deploymentLogId: response.data.deploymentLogId,
-      versionId: response.data.versionId,
-      vendorCalibrationLogPath: response.data.vendorCalibrationLogPath,
+      deployedInstituteCount: response.deployedInstituteCount,
+      deploymentLogId: response.deploymentLogId,
+      versionId: response.versionId,
+      vendorCalibrationLogPath: response.vendorCalibrationLogPath,
       engineSource: "api",
     };
-  } catch {
+  } catch (error) {
+    if (!shouldUseFixtureData()) {
+      throw error;
+    }
+
     return {
       deployedInstituteCount: targetInstitutes.length,
       deploymentLogId: `local_${Date.now()}`,

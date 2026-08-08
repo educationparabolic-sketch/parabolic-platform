@@ -2367,11 +2367,11 @@ Payloads must:
 
     {
       "success": true,
+      "code": "OK",
       "data": { ... },
-      "meta": {
-        "timestamp": "ISO_DATE",
-        "requestId": "uuid"
-      }
+      "message": "Human readable message",
+      "requestId": "uuid",
+      "timestamp": "ISO_DATE"
     }
 
 ### Standard Error Response
@@ -2382,10 +2382,8 @@ Payloads must:
         "code": "ERROR_CODE",
         "message": "Human readable message"
       },
-      "meta": {
-        "timestamp": "ISO_DATE",
-        "requestId": "uuid"
-      }
+      "requestId": "uuid",
+      "timestamp": "ISO_DATE"
     }
 
 ---
@@ -2400,7 +2398,10 @@ Payloads must:
 | LICENSE_RESTRICTED | License layer insufficient |
 | VALIDATION_ERROR | Request schema invalid |
 | NOT_FOUND | Resource does not exist |
+| METHOD_NOT_ALLOWED | Route does not support the HTTP method |
 | SESSION_LOCKED | Session immutable |
+| SESSION_NOT_ACTIVE | Session is not active |
+| SUBMISSION_LOCKED | Submission is already locked or complete |
 | WINDOW_CLOSED | Assignment window expired |
 | INTERNAL_ERROR | Server failure |
 
@@ -18060,7 +18061,6 @@ The system architecture now includes:
 - Unified system event topology
 
 This topology completes the deterministic operational design of the platform.
-
 
 
 

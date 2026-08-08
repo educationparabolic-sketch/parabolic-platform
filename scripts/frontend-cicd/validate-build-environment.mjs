@@ -12,6 +12,7 @@ const REQUIRED_KEYS = [
   "VITE_PORTAL_BASE_URL",
   "VITE_EXAM_BASE_URL",
   "VITE_VENDOR_BASE_URL",
+  "VITE_DATA_MODE",
   "VITE_EXAM_DEV_MOCK_ENTRY",
   "VITE_RELEASE_ID",
   "VITE_RELEASE_COMMIT_SHA",
@@ -253,6 +254,10 @@ export function validateBuildEnvironment(input = process.env) {
 
   if (environment.VITE_EXAM_DEV_MOCK_ENTRY !== "false") {
     errors.push("VITE_EXAM_DEV_MOCK_ENTRY must be false in CI builds");
+  }
+
+  if (environment.VITE_DATA_MODE !== "live") {
+    errors.push("VITE_DATA_MODE must be live in CI builds");
   }
 
   if (

@@ -3,6 +3,7 @@ import { Route, Routes, useLocation, useParams } from "react-router-dom";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { buildQuestionAssetUrl, toCdnAssetUrl } from "../../../shared/services/cdnAssetDelivery";
 import { ApiClientError } from "../../../shared/services/apiClient";
+import { adaptExamSubmitResult } from "../../../shared/services/portalResponseAdapters";
 import { getFrontendEnvironment } from "../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../shared/services/portalIntegration";
 import "./App.css";
@@ -221,29 +222,20 @@ interface ExamAnswerBatchRequestBody {
 }
 
 interface ExamAnswerBatchResponse {
-  code?: string;
-  data?: {
-    ignoredQuestionIds?: string[];
-    lockedQuestionIds?: string[];
-    persistedQuestionIds?: string[];
-  };
+  ignoredQuestionIds?: string[];
+  lockedQuestionIds?: string[];
+  persistedQuestionIds?: string[];
 }
 
 interface SessionTokenRefreshResponse {
-  code?: string;
-  data?: {
-    token?: string;
-  };
+  token?: string;
 }
 
 interface ExamSessionEntryResponse {
-  code?: string;
-  data?: {
-    allowed?: boolean;
-    mode?: ExecutionMode;
-    sessionId?: string;
-    status?: SessionLifecycleState;
-  };
+  allowed?: boolean;
+  mode?: ExecutionMode;
+  sessionId?: string;
+  status?: SessionLifecycleState;
 }
 
 interface ExamSubmitRequestBody {
@@ -253,19 +245,6 @@ interface ExamSubmitRequestBody {
   reason: SubmissionReason;
   unansweredQuestionIds: string[];
   clientSubmittedAt: string;
-}
-
-interface ExamSubmitResponse {
-  code?: string;
-  data?: {
-    status?: SessionLifecycleState;
-    submittedAt?: string;
-    rawScorePercent?: number;
-    accuracyPercent?: number;
-    disciplineIndex?: number;
-    riskState?: string;
-    alreadySubmitted?: boolean;
-  };
 }
 
 interface SessionRecoverySnapshot {
@@ -588,7 +567,7 @@ function parseSessionRefreshToken(responseBody: SessionTokenRefreshResponse): st
     return null;
   }
 
-  const refreshedToken = responseBody.data?.token;
+  const refreshedToken = responseBody.token;
   if (typeof refreshedToken !== "string" || refreshedToken.trim().length === 0) {
     return null;
   }
@@ -1545,8 +1524,8 @@ function ExamSessionPage() {
       })
       .then((responseBody) => {
         const serverAllowed =
-          responseBody.data?.allowed === true &&
-          responseBody.data.sessionId === effectiveSessionId;
+          responseBody.allowed === true &&
+          responseBody.sessionId === effectiveSessionId;
 
         setServerEntryValidationStatus(serverAllowed ? "valid" : "invalid");
       })
@@ -1734,10 +1713,10 @@ function ExamSessionPage() {
           skipAuth: true,
         },
       );
-      const persistedQuestionIds = responseBody.data?.persistedQuestionIds ?? answersToPersist.map((answer) => answer.questionId);
-      const ignoredQuestionIds = responseBody.data?.ignoredQuestionIds ?? [];
+      const persistedQuestionIds = responseBody.persistedQuestionIds ?? answersToPersist.map((answer) => answer.questionId);
+      const ignoredQuestionIds = responseBody.ignoredQuestionIds ?? [];
       const settledQuestionIds = new Set([...persistedQuestionIds, ...ignoredQuestionIds]);
-      const lockedQuestionIds = responseBody.data?.lockedQuestionIds ?? [];
+      const lockedQuestionIds = responseBody.lockedQuestionIds ?? [];
 
       if (lockedQuestionIds.length > 0) {
         setHardModeLockedQuestionIds((current) => {
@@ -2021,23 +2000,25 @@ function ExamSessionPage() {
         clientSubmittedAt: new Date().toISOString(),
       };
 
-      const responseBody = await examApiClient.post<ExamSubmitResponse, ExamSubmitRequestBody>(
-        endpointPath,
-        {
-          body: requestBody,
-          headers: {
-            Authorization: `Bearer ${sessionToken}`,
+      const responseBody = adaptExamSubmitResult(
+        await examApiClient.post<unknown, ExamSubmitRequestBody>(
+          endpointPath,
+          {
+            body: requestBody,
+            headers: {
+              Authorization: `Bearer ${sessionToken}`,
+            },
+            skipAuth: true,
           },
-          skipAuth: true,
-        },
+        ),
       );
       setSubmissionReason(reason);
-      setSubmittedAtIso(responseBody.data?.submittedAt ?? new Date().toISOString());
+      setSubmittedAtIso(responseBody.submittedAt ?? new Date().toISOString());
       setSessionLifecycleState("submitted");
       setSubmitDialogOpen(false);
       setSubmitWarningAcknowledged(false);
       setEarlySubmitOverrideAccepted(false);
-      setSyncMessage(responseBody.data?.alreadySubmitted ? "Submission already finalized on server." : "Submission completed.");
+      setSyncMessage(responseBody.alreadySubmitted ? "Submission already finalized on server." : "Submission completed.");
     } catch (error) {
       if (error instanceof ApiClientError) {
         throw new Error(`Submission failed with status ${error.status}`);

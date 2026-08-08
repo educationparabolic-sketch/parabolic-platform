@@ -405,8 +405,7 @@ function AdminRiskOverviewPage() {
         }
 
         const reason = error instanceof ApiClientError ? error.message : "Failed to load risk overview data.";
-        setDataset(FALLBACK_DATASET);
-        setInlineMessage(`${reason} Falling back to deterministic insights fixtures.`);
+        setInlineMessage(reason);
       } finally {
         if (isMounted) {
           setIsLoading(false);

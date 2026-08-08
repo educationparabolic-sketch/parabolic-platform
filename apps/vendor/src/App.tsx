@@ -27,7 +27,7 @@ import {
   VENDOR_PRIMARY_NAVIGATION,
   findActivePortalNavigationItem,
 } from "../../../shared/ui/portalConsistency";
-import { UiRouteLoading } from "../../../shared/ui/components";
+import { UiDataStateBoundary, UiRouteLoading } from "../../../shared/ui/components";
 import { getVisibleVendorRoutes, matchVendorRoute } from "../../admin/src/portals/vendorRoutes";
 import { resolveVendorAccessContext } from "./portals/vendorAccess";
 import VendorPlaceholderPage from "./features/shared/VendorPlaceholderPage";
@@ -55,7 +55,11 @@ const VendorSystemHealthDashboardPage = lazy(
 
 function VendorRouteBoundary(props: { label: string; children: ReactElement }) {
   const { label, children } = props;
-  return <Suspense fallback={<UiRouteLoading label={label} />}>{children}</Suspense>;
+  return (
+    <UiDataStateBoundary label={label}>
+      <Suspense fallback={<UiRouteLoading label={label} />}>{children}</Suspense>
+    </UiDataStateBoundary>
+  );
 }
 
 function resolveVendorRedirectTarget(locationState: unknown, fallbackPath: string): string {

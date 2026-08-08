@@ -185,8 +185,7 @@ function AdminMonthlySummaryPage() {
         }
 
         const reason = error instanceof ApiClientError ? error.message : "Failed to load monthly summary access.";
-        setDataset(FALLBACK_DATASET);
-        setInlineMessage(`${reason} Falling back to deterministic Build 121 fixtures.`);
+        setInlineMessage(reason);
       } finally {
         if (isMounted) {
           setIsLoading(false);

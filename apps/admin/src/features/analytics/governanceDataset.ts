@@ -1,4 +1,7 @@
 import { ApiClientError } from "../../../../../shared/services/apiClient";
+import {
+  shouldUseLiveApi as shouldUseConfiguredLiveApi,
+} from "../../../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 
 const apiClient = getPortalApiClient("admin");
@@ -466,11 +469,6 @@ interface GovernanceSnapshotApiRecord {
 }
 
 interface GovernanceSnapshotsApiResult {
-  data?: {
-    snapshots?: unknown;
-    templateStabilityComparisons?: unknown;
-    batchRiskSummaries?: unknown;
-  };
   snapshots?: unknown;
   templateStabilityComparisons?: unknown;
   batchRiskSummaries?: unknown;
@@ -684,8 +682,7 @@ function normalizeBatchRiskSummary(value: unknown, index: number): GovernanceBat
 }
 
 export function shouldUseLiveApi(): boolean {
-  const host = window.location.hostname.toLowerCase();
-  return host !== "127.0.0.1" && host !== "localhost";
+  return shouldUseConfiguredLiveApi();
 }
 
 export function formatPercent(value: number): string {
@@ -693,11 +690,6 @@ export function formatPercent(value: number): string {
 }
 
 function resolvePayloadSnapshots(payload: GovernanceSnapshotsApiResult): unknown[] {
-  const embedded = payload?.data?.snapshots;
-  if (Array.isArray(embedded)) {
-    return embedded;
-  }
-
   if (Array.isArray(payload?.snapshots)) {
     return payload.snapshots;
   }
@@ -706,11 +698,6 @@ function resolvePayloadSnapshots(payload: GovernanceSnapshotsApiResult): unknown
 }
 
 function resolveTemplateStabilityComparisons(payload: GovernanceSnapshotsApiResult): unknown[] {
-  const embedded = payload?.data?.templateStabilityComparisons;
-  if (Array.isArray(embedded)) {
-    return embedded;
-  }
-
   if (Array.isArray(payload?.templateStabilityComparisons)) {
     return payload.templateStabilityComparisons;
   }
@@ -719,11 +706,6 @@ function resolveTemplateStabilityComparisons(payload: GovernanceSnapshotsApiResu
 }
 
 function resolveBatchRiskSummaries(payload: GovernanceSnapshotsApiResult): unknown[] {
-  const embedded = payload?.data?.batchRiskSummaries;
-  if (Array.isArray(embedded)) {
-    return embedded;
-  }
-
   if (Array.isArray(payload?.batchRiskSummaries)) {
     return payload.batchRiskSummaries;
   }

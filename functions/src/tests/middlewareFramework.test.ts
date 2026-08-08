@@ -110,19 +110,17 @@ test("middleware framework returns standardized method errors", async () => {
       code: string;
       message: string;
     };
-    meta: {
-      requestId: string;
-      timestamp: string;
-    };
+    requestId: string;
     success: boolean;
+    timestamp: string;
   };
 
   assert.equal(response.statusCode, 400);
   assert.equal(responseBody.error.code, "VALIDATION_ERROR");
   assert.equal(responseBody.error.message, "Method not allowed. Use POST.");
   assert.equal(responseBody.success, false);
-  assert.equal(typeof responseBody.meta.requestId, "string");
-  assert.equal(typeof responseBody.meta.timestamp, "string");
+  assert.equal(typeof responseBody.requestId, "string");
+  assert.equal(typeof responseBody.timestamp, "string");
 });
 
 test("middleware framework returns standardized license errors", async () => {
@@ -158,11 +156,9 @@ test("middleware framework returns standardized license errors", async () => {
       code: string;
       message: string;
     };
-    meta: {
-      requestId: string;
-      timestamp: string;
-    };
+    requestId: string;
     success: boolean;
+    timestamp: string;
   };
 
   assert.equal(response.statusCode, 403);
@@ -172,6 +168,6 @@ test("middleware framework returns standardized license errors", async () => {
     "Controlled mode requires license layer L2.",
   );
   assert.equal(responseBody.success, false);
-  assert.equal(typeof responseBody.meta.requestId, "string");
-  assert.equal(typeof responseBody.meta.timestamp, "string");
+  assert.equal(typeof responseBody.requestId, "string");
+  assert.equal(typeof responseBody.timestamp, "string");
 });

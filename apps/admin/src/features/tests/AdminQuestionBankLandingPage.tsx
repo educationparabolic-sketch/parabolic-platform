@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
+import {
+  shouldUseLiveApi as shouldUseConfiguredLiveApi,
+} from "../../../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import AdminWorkspaceLandingPage from "../shared/AdminWorkspaceLandingPage";
 import { QUESTION_BANK } from "./testTemplateFixtures";
@@ -54,8 +57,7 @@ const FALLBACK_SUMMARY: QuestionBankLandingSummary = {
 };
 
 function shouldUseLiveApi(): boolean {
-  const host = window.location.hostname.toLowerCase();
-  return host !== "127.0.0.1" && host !== "localhost";
+  return shouldUseConfiguredLiveApi();
 }
 
 function toNonEmptyString(value: unknown, fallback = ""): string {
@@ -100,27 +102,21 @@ async function fetchQuestionBankLandingSummary(): Promise<QuestionBankLandingSum
   }
 
   const libraryResponse = libraryPayload as {
-    data?: {
-      questions?: unknown;
-    };
+    questions?: unknown;
   };
   const distributionResponse = distributionPayload as {
-    data?: {
-      summary?: unknown;
-    };
+    summary?: unknown;
   };
   const uploadLogsResponse = uploadLogsPayload as {
-    data?: {
-      logs?: unknown;
-    };
+    logs?: unknown;
   };
 
-  const questions = Array.isArray(libraryResponse.data?.questions) ? libraryResponse.data?.questions : [];
+  const questions = Array.isArray(libraryResponse.questions) ? libraryResponse.questions : [];
   const distributionSummary =
-    distributionResponse.data?.summary && typeof distributionResponse.data.summary === "object" ?
-      (distributionResponse.data.summary as Record<string, unknown>) :
+    distributionResponse.summary && typeof distributionResponse.summary === "object" ?
+      (distributionResponse.summary as Record<string, unknown>) :
       null;
-  const uploadLogs = Array.isArray(uploadLogsResponse.data?.logs) ? uploadLogsResponse.data?.logs : [];
+  const uploadLogs = Array.isArray(uploadLogsResponse.logs) ? uploadLogsResponse.logs : [];
 
   if (questions.length === 0 || !distributionSummary) {
     throw new Error("Question bank landing summary is missing required admin question data.");
@@ -201,7 +197,6 @@ function AdminQuestionBankLandingPage() {
 
         const reason =
           error instanceof ApiClientError ? error.message : "Failed to load question bank landing summary.";
-        setSummary(FALLBACK_SUMMARY);
         setInlineMessage(reason);
       }
     }

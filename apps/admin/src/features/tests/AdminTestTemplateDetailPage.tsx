@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
+import {
+  shouldUseLiveApi as shouldUseConfiguredLiveApi,
+} from "../../../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import { UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
 import TestsWorkspaceNav from "./TestsWorkspaceNav";
@@ -81,8 +84,7 @@ const TEMPLATE_DETAILS: TestTemplateDetailRecord[] = [
 ];
 
 function shouldUseLiveApi(): boolean {
-  const host = window.location.hostname.toLowerCase();
-  return host !== "127.0.0.1" && host !== "localhost";
+  return shouldUseConfiguredLiveApi();
 }
 
 function toNonEmptyString(value: unknown, fallback = ""): string {
@@ -224,8 +226,7 @@ function AdminTestTemplateDetailPage() {
         }
 
         const reason = error instanceof ApiClientError ? error.message : "Failed to load test template detail.";
-        setTemplates(TEMPLATE_DETAILS);
-        setInlineMessage(`${reason} Falling back to deterministic template detail fixtures.`);
+        setInlineMessage(reason);
       } finally {
         if (isMounted) {
           setIsLoading(false);
