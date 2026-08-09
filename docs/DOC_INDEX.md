@@ -66,6 +66,7 @@ These documents define the constraints used during development.
 | File | Purpose |
 |-----|------|
 |architecture_rules.md|Global engineering rules and design principles|
+|CAPABILITY_POLICY.md|Canonical role, license-layer, and feature-flag capability policy shared by portal visibility and backend authorization|
 |firestore_schema.md|Authoritative Firestore data schema|
 |api_contract.md|API structure, validation rules, and response formats|
 

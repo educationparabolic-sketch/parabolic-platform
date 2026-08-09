@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  SUSPENDED_ACCOUNT_MESSAGE,
   buildIdentityContext,
   createAuthenticationMiddleware,
   getBearerToken,
@@ -44,6 +45,64 @@ test("buildIdentityContext requires uid, role, and licenseLayer claims", () => {
       error.message === "Authentication token is missing required claims.",
   );
 });
+
+test(
+  "authentication middleware rejects every suspended role before downstream work",
+  async () => {
+    const activationCalls: Array<{instituteId: string; studentId: string}> = [];
+    const roles = ["student", "teacher", "admin", "director", "vendor"];
+
+    for (const role of roles) {
+      const middleware = createAuthenticationMiddleware(
+        {
+          activateInvitedStudentOnFirstLogin: async (input) => {
+            activationCalls.push(input);
+          },
+          verifyIdToken: async () => ({
+            instituteId: "inst_build_62",
+            isSuspended: true,
+            licenseLayer: "L3",
+            role,
+            studentId: "student_build_62",
+            uid: `uid_build_62_${role}`,
+          }) as never,
+        },
+        {
+          attachStudentId: true,
+          promoteInvitedStudentOnAuthenticate: true,
+        },
+      );
+      const request = createMockRequest({
+        headers: {
+          authorization: `Bearer build_62_suspended_${role}`,
+        },
+      });
+      const response = createMockResponse();
+      let nextCalled = false;
+
+      await assert.rejects(
+        async () => {
+          await middleware(
+            request as never,
+            response as never,
+            async (): Promise<void> => {
+              nextCalled = true;
+            },
+          );
+        },
+        (error: unknown) =>
+          error instanceof MiddlewareRejectionError &&
+          error.code === "FORBIDDEN" &&
+          error.message === SUSPENDED_ACCOUNT_MESSAGE,
+      );
+
+      assert.equal(nextCalled, false);
+      assert.equal((request as {context?: unknown}).context, undefined);
+    }
+
+    assert.deepEqual(activationCalls, []);
+  },
+);
 
 test(
   "authentication middleware attaches normalized identity context",

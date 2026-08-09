@@ -94,6 +94,8 @@ Unmapped exports remain directly exported legacy Functions until an owning task 
 
 Normal portal calls require a verified Firebase ID token. Server middleware must derive actor, role, tenant, license, and suspension context from the verified identity rather than editable request fields.
 
+Immediately after successful token verification, a truthy `isSuspended` claim terminates the request with canonical `403 FORBIDDEN` and message `Account access is suspended.` Identity context, student activation, role/license/tenant middleware, and business handlers do not run for that request. Claim synchronization, token refresh, and revocation latency remain governed by BWM-009 and BWM-036.
+
 Exam entry is a credential-exchange boundary. BWM-018 must align it with the architecture decision that the Exam app exchanges the short-lived launch credential, removes it from the URL, and uses Firebase ID tokens for normal answer and submission APIs.
 
 Vendor global access is explicit per handler; vendor role does not imply an unrestricted tenant bypass on institute-scoped Admin routes.
@@ -188,7 +190,7 @@ boundary remains BWM-007 work.
 | Code | HTTP status | Meaning |
 | --- | ---: | --- |
 | `UNAUTHORIZED` | 401 | A valid authentication credential is absent or invalid. |
-| `FORBIDDEN` | 403 | The verified actor lacks the required role or capability. |
+| `FORBIDDEN` | 403 | The verified actor is suspended or lacks the required role or capability. |
 | `TENANT_MISMATCH` | 403 | The target tenant conflicts with verified identity scope. |
 | `LICENSE_RESTRICTED` | 403 | The verified license does not permit the operation. |
 | `VALIDATION_ERROR` | 400 | The request method, parameters, or payload are invalid. |

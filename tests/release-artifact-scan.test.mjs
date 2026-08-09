@@ -48,6 +48,7 @@ const prohibitedArtifacts = [
   ["dev-mock-token", 'const mockToken="developer-token-value";'],
   ["fixture-mode", "const settings={fixtureMode:true};"],
   ["fixture-mode", 'const settings={"mode":"fixture"};'],
+  ["fixture-payload", 'const marker="PARABOLIC_FIXTURE_PAYLOAD:question-bank";'],
   ["prefilled-password-object", 'const credentials={password:"do-not-ship"};'],
   ["prefilled-password-object", 'const credentials={"password":"do-not-ship"};'],
   ["prefilled-password-assignment", 'password="do-not-ship";'],

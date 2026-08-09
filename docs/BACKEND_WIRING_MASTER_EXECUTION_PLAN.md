@@ -15,13 +15,13 @@ program: backend-wiring-and-deployment-readiness
 program_status: IN_PROGRESS
 release_decision: NO_GO
 current_phase: 0
-current_task: BWM-007
-current_substep: BWM-007 — Ensure fixture imports can be tree-shaken or excluded from production bundles where practical
-last_completed_task: BWM-006
-next_task: BWM-007
+current_task: BWM-008
+current_substep: BWM-008 — Align Admin teacher-visible routes with actual handler permissions
+last_completed_task: BWM-007
+next_task: BWM-008
 blocked_tasks: []
-last_updated: 2026-08-08
-last_update_summary: BWM-007 is IN_PROGRESS. Its third substep added one shared live-mode request lifecycle and route boundary across Admin, Student, Exam, and Vendor. Live routes now replace fixture-backed children with explicit loading, empty, unavailable, permission, or validation states until authoritative API work settles, and recoverable states provide a safe full-page retry. The permanent two-case lifecycle/wiring contract, API envelope/routing/adapter regressions, and all 10 workspace gates passed. BWM-007 continues at fixture import tree-shaking or production exclusion where practical.
+last_updated: 2026-08-09
+last_update_summary: BWM-008 is IN_PROGRESS. The shared authentication middleware now rejects every truthy isSuspended claim with canonical 403 FORBIDDEN immediately after successful Firebase ID-token verification, before identity/request-data attachment, student activation, downstream middleware, or handlers. Unit coverage proves the guard is role-independent across student, teacher, admin, director, and vendor; an isolated Auth, Firestore, and Functions emulator test proved a real suspended-user ID token receives the canonical gateway response. Focused middleware regressions and all 10 workspace gates passed. Continue BWM-008 by aligning Admin teacher-visible routes with actual handler permissions.
 ```
 
 Do not infer progress from old build numbers, UI completion labels, or visual verification artifacts. Only this checkpoint, the task registry, checked substeps, session log, and current repository evidence determine progress for this program.
@@ -258,8 +258,8 @@ The registry is the canonical order. Detailed cards below define scope and accep
 | BWM-004 | P0 | VERIFIED | BWM-003 | Hosting API rewrites, CORS policy, and security headers |
 | BWM-005 | P0 | VERIFIED | BWM-004 | Environment matrix and production artifact validation |
 | BWM-006 | P0 | VERIFIED | BWM-002 | Standard response envelope and shared boundary types |
-| BWM-007 | P0 | IN_PROGRESS | BWM-005,BWM-006 | Explicit dev fixture mode and production fail-closed behavior |
-| BWM-008 | P0 | PLANNED | BWM-006 | Shared RBAC/capability policy and suspension enforcement |
+| BWM-007 | P0 | VERIFIED | BWM-005,BWM-006 | Explicit dev fixture mode and production fail-closed behavior |
+| BWM-008 | P0 | IN_PROGRESS | BWM-006 | Shared RBAC/capability policy and suspension enforcement |
 | BWM-009 | P0 | PLANNED | BWM-008 | Claims synchronization, revocation, and cross-portal auth hardening |
 | BWM-010 | P0 | PLANNED | BWM-001,BWM-004,BWM-005 | Backend CI and staging deploy pipeline |
 | BWM-011 | P0 | PLANNED | BWM-003,BWM-006,BWM-007 | Admin Overview and Analytics live contract repair |
@@ -888,14 +888,14 @@ The registry is the canonical order. Detailed cards below define scope and accep
 
 ### BWM-007 — Explicit Fixture Mode and Production Fail-Closed Policy
 
-- **Status:** `IN_PROGRESS`
+- **Status:** `VERIFIED`
 - **Purpose:** Prevent outages and contract failures from appearing as valid student/admin/vendor data.
 - **Substeps:**
   - [x] Replace hostname detection with an explicit dev/test data-mode setting.
   - [x] Remove catch-all production fixture fallbacks and fabricated success responses.
   - [x] Add explicit loading, empty, unavailable, permission, validation, and retry states.
-  - [ ] Ensure fixture imports can be tree-shaken or excluded from production bundles where practical.
-  - [ ] Test that a production-mode 500/network failure shows an error and no fixture records.
+  - [x] Ensure fixture imports can be tree-shaken or excluded from production bundles where practical.
+  - [x] Test that a production-mode 500/network failure shows an error and no fixture records.
 - **Acceptance:** No production API failure can show fake scores, sessions, invoices, calibration deployment, audit events, or successful mutations.
 - **BWM-007 explicit data-mode evidence (2026-08-08):**
   - **Implemented files:** `shared/types/frontendEnvironment.ts`, `shared/services/frontendEnvironment.ts`; the hostname-gated Admin datasets/pages under `apps/admin/src/features/analytics`, `assignments`, `licensing`, `overview`, `settings`, `students`, and `tests`; the four Student datasets under `apps/student/src/features/dashboard`, `insights`, `my-tests`, and `performance`; all four portal `.env.example` files; `.github/workflows/frontend-ci-cd.yml`; `scripts/frontend-cicd/validate-build-environment.mjs`; `tests/frontend-data-mode.test.mjs`, `tests/environment-matrix.test.mjs`, `tests/build-environment-validation.test.mjs`, `tests/ci-environment-injection.test.mjs`; `docs/ENVIRONMENT_VARIABLE_MATRIX.md`; `package.json`; and this controller.
@@ -939,19 +939,75 @@ The registry is the canonical order. Detailed cards below define scope and accep
   - **Contract/schema changes:** In live mode, every shared-client request now contributes to one internal route-level display lifecycle; HTTP payloads, canonical envelopes, public client return/error types, API routes, DTOs, authorization policy, persistence behavior, and Firestore schema are unchanged. `DEC-017` records the display-boundary decision.
   - **Residual risks:** Fixture modules can still be emitted in production chunks even though the live boundary prevents their initial values from rendering while API state is unresolved; the next substep owns practical tree-shaking/exclusion. The final BWM-007 substep still must force a production-mode 500/network failure in a browser and prove an explicit error with no fixture records. Field-level domain normalization that fails after a successful shared-client completion remains governed by strict response adapters where present and by the owning endpoint-alignment tasks elsewhere.
   - **Completed on:** 2026-08-08
+- **BWM-007 fixture-payload exclusion evidence (2026-08-09):**
+  - **Implemented files:** Added `apps/admin/src/features/tests/testTemplateContract.ts`, `apps/admin/src/features/tests/testTemplateFixtureData.ts`, and `tests/frontend-fixture-bundling.test.mjs`; updated `apps/admin/src/features/tests/testTemplateFixtures.ts`, `scripts/frontend-cicd/scan-release-artifacts.mjs`, `tests/release-artifact-scan.test.mjs`, `package.json`, and this controller.
+  - **Implementation summary:** Split the reusable Admin question-bank module into a fixture-free contract/hash module, a pure marked fixture-payload module, and the existing compatibility selector used by all eight importing route chunks. The selector uses the direct compile-time expression `import.meta.env.VITE_DATA_MODE === "fixture"`; Vite/Rollup removes the payload import and chunk when release mode is `live`, while the existing explicit local fixture workflow retains the exact records. Added a reserved `PARABOLIC_FIXTURE_PAYLOAD:` signature to the isolated data and made the existing CI release-artifact scanner reject any marked fixture payload. Other portal datasets remain co-located with live adapters or route implementation and were not broadly extracted in this bounded substep; their live rendering remains fail-closed through the preceding BWM-007 mode, fallback, and route-state work, and their eventual domain replacement remains assigned to the owning endpoint tasks.
+  - **L1 static:** `node scripts/verify-workspace.mjs` — PASS; all 10 Admin, Student, Exam, Vendor, and Functions lint/build gates completed with zero lint findings, frontend production-build module counts 124, 97, 76, and 95, and successful Functions `tsc`. The final Admin output contained the 30-byte empty selector and fixture-free contract chunks but no `testTemplateFixtureData` chunk. Focused Admin lint/build, JavaScript syntax, focused Prettier, and `git diff --check` also passed.
+  - **L2 unit/contract:** `npm run test:frontend-fixture-bundling` — PASS; its two executable cases require the fixture payload to have exactly one guarded importer, build Admin twice in disposable directories, prove the `live` artifact contains neither the marked payload nor a fixture-data chunk, and prove the explicit `fixture` artifact retains the marker. `npm run test:release-artifact-scan` — PASS, 16/16 named cases including the new redacted `fixture-payload` rejection. `npm run test:frontend-data-mode`, `npm run test:frontend-production-fallbacks`, and `npm run test:frontend-data-states` — PASS, retaining the explicit-mode, no-live-fallback, and route-state contracts.
+  - **L3 Firebase emulator:** N/A — this substep changes TypeScript module boundaries, compile-time bundling, and static artifact inspection only; no Firebase handler, Auth, Firestore, rule, Storage, trigger, Hosting response, rewrite, or persistence behavior changed.
+  - **L4 browser E2E:** N/A — successful live and fixture UI behavior is unchanged, and the built artifacts are exercised at the payload boundary directly. The final BWM-007 substep owns the no-mock production-mode forced 500/network browser proof and visible no-fixture assertion.
+  - **L5 staging/preview:** N/A — no deployment, environment setting, secret, public URL, or cloud resource was read or changed.
+  - **L6 production:** N/A — BWM-057 only.
+  - **Firebase CLI version:** N/A — no Firebase CLI or emulator action was required for this frontend build/artifact-only substep.
+  - **Authorization/external mutations:** None. All builds and tests were local, used disposable temporary artifact directories where applicable, and changed no remote resource, deployment, data, secret, credential, public URL, or environment configuration.
+  - **Contract/schema changes:** `DEC-018` reserves `PARABOLIC_FIXTURE_PAYLOAD:` as the release-scanner signature for extracted fixture payloads and requires direct compile-time `VITE_DATA_MODE` selection for the isolated Admin question bank. No API route, DTO, canonical envelope, authentication/authorization policy, persistence behavior, or Firestore schema changed.
+  - **Residual risks:** Co-located fixture-like initial values are still present in several route modules, but the preceding live route boundary prevents them from rendering while authoritative state is unresolved; later endpoint/domain tasks replace those datasets as their contracts become live. BWM-007's final substep must now force both HTTP 500 and network failure in a production-mode browser and prove the explicit error boundary displays no fixture records.
+  - **Completed on:** 2026-08-09
+- **BWM-007 production failure browser evidence (2026-08-09):**
+  - **Implemented files:** Added `verification/bwm-007/functions/package.json`, `verification/bwm-007/functions/index.js`, `scripts/prepare-bwm-007-failure-verification.mjs`, `scripts/run-bwm-007-failure-e2e.mjs`, `tests/bwm-007-production-failure-harness.test.mjs`, and `tests/e2e/bwm-007-production-failures.spec.mjs`; updated `package.json` and this controller.
+  - **Implementation summary:** Added a disposable, generated Firebase verification package that copies the real combined Portal Hosting artifact and links the repository's locked Functions dependencies without modifying the production gateway. Its isolated `apiV1` always emits the canonical HTTP 500 envelope. The runner builds Admin and Student with `VITE_DATA_MODE=live`, empty same-origin API configuration, and production base paths, then starts only Functions and the `portal` Hosting target under `demo-parabolic-test`. The no-mock Chromium test enters through the real Student SPA, observes all retried dashboard responses as HTTP 500, verifies the explicit unavailable state and server message with three representative fixture labels absent, preloads the Profile route, switches the browser context truly offline, returns client-side to Dashboard, and verifies the network failure state with the same no-fixture assertions. No Playwright request routing, response fulfillment, or application failure hook is used.
+  - **L1 static:** `node scripts/verify-workspace.mjs` — PASS; all 10 Admin, Student, Exam, Vendor, and Functions lint/build gates completed with zero lint findings, frontend production-build module counts 124, 97, 76, and 95, and successful Functions `tsc`. `node --check` for both runner scripts, the harness contract, browser spec, fixture-bundling test, and isolated Function; JSON parsing; `npm run test:e2e:bwm-007-failures -- --list`; and `git diff --check` — PASS, with exactly one Chromium test discovered and edited lines clean.
+  - **L2 unit/contract:** `npm run test:bwm-007-failure-contract`, `npm run test:frontend-fixture-bundling`, `npm run test:release-artifact-scan`, `npm run test:frontend-data-mode`, `npm run test:frontend-production-fallbacks`, `npm run test:frontend-data-states`, `npm run test:api-envelope-contract`, `npm run test:frontend-api-routing`, and `npm run test:portal-response-adapters` — PASS. The new harness contract requires live build mode, the demo project, isolated Functions plus Hosting, a real 500 Function, true offline mode, explicit no-fixture assertions, and no Playwright routing mocks; the accumulated mode, fallback, state, envelope, routing, adapter, bundling, and artifact-scanner protections remain green.
+  - **L3 Firebase emulator:** `npm run test:bwm-007-failures:emulator` — PASS under Firebase CLI `15.9.0`; its generated package ran `firebase emulators:exec --project demo-parabolic-test --config firebase.json --only functions,hosting:portal` and the real Hosting rewrite delivered three retried `GET /api/v1/student/dashboard` responses from `us-central1-apiV1`, each with HTTP 500, before clean shutdown. `npm run smoke:emulators` — PASS regression under the same demo project with Firestore, Functions, `hosting:portal`, disposable Firestore write/read/delete, the API-first rewrite, and two existing Chromium checks.
+  - **L4 browser E2E:** `npm run test:bwm-007-failures:emulator` — PASS, one Chromium scenario against the live-mode Student production artifact and local Hosting/Functions emulators. It rendered `Authoritative data is unavailable` plus the canonical server failure after real HTTP 500 responses, then rendered the network-failure message after `context.setOffline(true)` caused real request failures; `JEE Mock A - Physics Focus`, `Late-phase drift`, and `Chemistry Rapid Revision` were absent in both failure states.
+  - **L5 staging/preview:** N/A — this bounded task proves deterministic frontend failure behavior against isolated local emulators and changes no deployment, environment setting, secret, public URL, security header, rewrite, or cloud resource.
+  - **L6 production:** N/A — BWM-057 only.
+  - **Firebase CLI version:** `15.9.0`.
+  - **Authorization/external mutations:** The user approved local Firebase emulator listeners and headless Chromium execution outside the sandbox. Firebase CLI used/refreshed local credential/configuration cache while initializing the demo project, but no deployment, Firebase resource, remote data, secret, public URL, or environment configuration was created, modified, or deleted.
+  - **Contract/schema changes:** None. The canonical API envelope, production gateway/handlers, routes, DTOs, authentication/authorization policy, persistence behavior, and Firestore schema are unchanged; the forced 500 Function and generated Firebase config exist only in the ignored local verification package.
+  - **Residual risks:** Co-located fixture-like datasets remain assigned to their owning endpoint/domain tasks, but the verified live-mode route boundary prevents them from rendering during authoritative API failures. BWM-008 now owns shared capability, license, tenant, and suspension enforcement; production release remains `NO_GO`.
+  - **Completed on:** 2026-08-09
 
 ### BWM-008 — Shared RBAC, Tenant, License, and Suspension Policy
 
-- **Status:** `PLANNED`
+- **Status:** `IN_PROGRESS`
 - **Purpose:** Align portal visibility with backend authorization and close suspended-user access.
 - **Substeps:**
-  - [ ] Define a capability matrix for roles and minimum license/feature flags.
-  - [ ] Enforce `isSuspended` immediately after token verification.
+  - [x] Define a capability matrix for roles and minimum license/feature flags.
+  - [x] Enforce `isSuspended` immediately after token verification.
   - [ ] Align Admin teacher-visible routes with actual handler permissions.
   - [ ] Add Student and Vendor role checks to protected frontend routing for UX, while retaining server enforcement.
   - [ ] Ensure target institute/student IDs are token-derived or server-verified.
   - [ ] Add negative tests for role, tenant, suspension, stale license, and vendor bypass boundaries.
 - **Acceptance:** UI visibility and API authorization derive from the same policy; all negative cases return deterministic 401/403/license errors without fixture fallback.
+- **BWM-008 capability-matrix evidence (2026-08-09):**
+  - **Implemented files:** Added `shared/contracts/capabilityPolicy.ts`, `docs/CAPABILITY_POLICY.md`, and `tests/capability-policy.test.mjs`; updated `package.json`, `docs/MODULE_REGISTRY.md`, `docs/DOC_INDEX.md`, and this controller.
+  - **Implementation summary:** Defined one runtime-dependency-free, typed `CAPABILITY_MATRIX` with 49 capability keys spanning portal admission and Admin, Student, Exam, and Vendor actions. Every entry declares allowed roles, a minimum institute license layer or an explicit vendor-global `null`, required authoritative feature flags, and optional stricter role-specific layers. Read/manage capabilities remain separate; every Director grant has an effective L3 minimum; vendor grants are vendor-only and never depend on institute license state. `docs/CAPABILITY_POLICY.md` records the authoritative fail-closed three-axis evaluation and identifies current route/handler drift for later BWM-008 alignment rather than changing enforcement in this substep.
+  - **L1 static:** `functions/node_modules/.bin/tsc --noEmit --strict --target ES2022 --module ESNext --moduleResolution bundler --skipLibCheck shared/contracts/capabilityPolicy.ts`, `node --check tests/capability-policy.test.mjs`, package JSON parsing, `node scripts/verify-workspace.mjs`, and `git diff --check` — PASS. The shared policy compiled strictly, the test harness parsed, package metadata remained valid, and all 10 Admin, Student, Exam, Vendor, and Functions lint/build gates passed with frontend production-build module counts 124, 97, 76, and 95 plus successful Functions `tsc`.
+  - **L2 unit/contract:** `npm run test:capability-policy`, `npm --prefix functions run test:role-middleware`, `npm --prefix functions run test:license-middleware`, and `node --test functions/lib/tests/authMiddleware.test.js` — PASS. The new contract test verifies all 49 entries, valid/unique roles and flags, license floors, Director L3 overrides, vendor-global isolation, representative critical policies, no runtime imports, and exact documentation coverage; existing auth, role, and license middleware behavior remains green.
+  - **L3 Firebase emulator:** N/A — this substep defines a policy contract and documentation only; it changes no Firebase Auth, Functions, Firestore, Storage, or Hosting behavior. Suspension and runtime capability enforcement are owned by later BWM-008 substeps.
+  - **L4 browser E2E:** N/A — no frontend route visibility or browser behavior changed; later BWM-008 substeps consume the matrix and add negative integration coverage.
+  - **L5 staging/preview:** N/A — no deployable runtime behavior, environment configuration, public artifact, or cloud resource changed.
+  - **L6 production:** N/A — BWM-057 only.
+  - **Firebase CLI version:** N/A — no Firebase CLI or emulator action was required for this contract-definition-only substep.
+  - **Authorization/external mutations:** None. All inspection, typechecking, tests, linting, and builds were local and changed no remote resource, deployment, data, secret, credential, public URL, or environment configuration.
+  - **Contract/schema changes:** `DEC-019` establishes `shared/contracts/capabilityPolicy.ts` as the canonical capability vocabulary and role/license/feature policy. No API route or DTO, runtime authorization decision, persistence behavior, or Firestore schema changed.
+  - **Residual risks:** The matrix is not yet consumed by route guards or backend handlers, existing Admin visibility/handler mismatches remain, tenant identifiers are not yet uniformly server-bound, and suspended identities are still accepted after token verification. Those risks remain explicitly assigned to the next five BWM-008 substeps; production release remains `NO_GO`.
+  - **Completed on:** 2026-08-09
+- **BWM-008 suspension-enforcement evidence (2026-08-09):**
+  - **Implemented files:** Updated `functions/src/middleware/auth.ts`, `functions/src/tests/authMiddleware.test.ts`, `functions/package.json`, `package.json`, `tests/capability-policy.test.mjs`, `docs/CAPABILITY_POLICY.md`, `docs/api_contract.md`, `docs/MODULE_REGISTRY.md`, and this controller; added `functions/tests/suspensionGuard.emulator.test.js`.
+  - **Implementation summary:** The shared authentication middleware now checks the verified token's `isSuspended` claim immediately after `verifyIdToken` returns and throws `MiddlewareRejectionError("FORBIDDEN", "Account access is suspended.")` before building or attaching identity context. Therefore student ID hydration, invited-student activation, tenant/role/license middleware, and business handlers cannot run for a suspended request. A source audit confirmed all 38 current ID-token-verifying API modules delegate authentication through this shared middleware.
+  - **L1 static:** `npm --prefix functions run lint`, `npm --prefix functions run build`, `node --check functions/tests/suspensionGuard.emulator.test.js`, package JSON parsing, the 38/38 shared-middleware source audit, `node scripts/verify-workspace.mjs`, and `git diff --check` — PASS. Functions lint/typecheck completed with zero findings, all protected ID-token API modules use the common guard, and all 10 Admin, Student, Exam, Vendor, and Functions lint/build gates passed with frontend production-build module counts 124, 97, 76, and 95 plus successful Functions `tsc`.
+  - **L2 unit/contract:** `npm --prefix functions run test:auth-middleware`, `npm run test:capability-policy`, plus direct `node --test` runs for `apiErrorHandling`, `middlewareFramework`, `roleMiddleware`, `licenseMiddleware`, and `tenantMiddleware` compiled tests — PASS. The focused test proves suspended student, teacher, admin, director, and vendor claims all receive the exact `FORBIDDEN` rejection while `next()`, request-context attachment, and invited-student activation remain untouched; normal identity attachment, verification-failure behavior, and capability-policy documentation coverage remain green.
+  - **L3 Firebase emulator:** `npm run test:suspension-guard:emulator` — PASS under Firebase CLI `15.9.0` with explicit `--project demo-parabolic-test --only auth,firestore,functions`. The test created a disposable Auth-emulator admin, assigned `isSuspended: true` with valid role/institute/L3 claims, signed in for a real emulator-issued ID token, called `GET /api/v1/admin/students` through `us-central1-apiV1`, and received the canonical HTTP 403 `FORBIDDEN` envelope and suspension message. The user was deleted and Auth, Firestore, Functions, and support emulators shut down cleanly.
+  - **L4 browser E2E:** N/A — the change is a server authorization boundary with no frontend visibility or browser interaction change; the real authenticated gateway behavior is covered at L3.
+  - **L5 staging/preview:** N/A — no deployment, environment setting, secret, public artifact, URL, or cloud runtime changed.
+  - **L6 production:** N/A — BWM-057 only.
+  - **Firebase CLI version:** `15.9.0`.
+  - **Authorization/external mutations:** The user approved local Firebase emulator listeners outside the sandbox. The final proof created and deleted one disposable Auth-emulator user and used only the isolated demo Auth, Firestore, and Functions emulators; Firebase CLI updated local credential/configuration cache state, but no deployment, remote data, secret, public URL, environment configuration, or cloud resource changed.
+  - **Contract/schema changes:** `DEC-020` establishes that a truthy verified `isSuspended` claim maps to canonical HTTP 403 `FORBIDDEN` with `Account access is suspended.` and terminates before identity context or downstream work. No route, DTO, persistence behavior, or Firestore schema changed.
+  - **Residual risks:** Suspension changes are only observed once a token containing the updated claim is presented; synchronization, forced refresh, session/token revocation, and deterministic propagation latency remain assigned to BWM-009 and BWM-036. Admin route/handler permission drift and the remaining tenant/negative-test substeps are still open; production release remains `NO_GO`.
+  - **Completed on:** 2026-08-09
 
 ### BWM-009 — Claims, Revocation, and Cross-Portal Auth Hardening
 
@@ -1465,9 +1521,9 @@ operations_owner: TBD
 | Exam lifecycle remains local while submission requires active backend state | Critical | BWM-020,BWM-023 | Open |
 | Exam uses hardcoded questions/schedule/build IDs | Critical | BWM-019 | Open |
 | Answer clear/timing/batch semantics can corrupt or omit data | Critical | BWM-021,BWM-022 | Open |
-| Production failures fall back to fixtures/fake success | Critical | BWM-007 | Open |
+| Production failures fall back to fixtures/fake success | Critical | BWM-007 | Resolved 2026-08-09 |
 | Admin/Vendor actions mutate React/localStorage only | High | BWM-026..BWM-041 | Open |
-| Suspension and changed claims are not enforced/revoked | Critical | BWM-008,BWM-009,BWM-036 | Open |
+| Suspended claims are rejected, but changed claims are not synchronized/refreshed/revoked | Critical | BWM-009,BWM-036 | Partially resolved 2026-08-09; propagation remains open |
 | JavaScript-readable cross-portal bearer-token bridge | High | BWM-009,BWM-044,BWM-047 | Open |
 | Vendor calibration contract mismatch and partial rollout | Critical | BWM-038,BWM-039 | Open |
 | Exam camera policy contradicts camera readiness UI | High | BWM-004,BWM-045 | Resolved 2026-08-07; BWM-045 retains broader proctoring-integrity work |
@@ -1498,6 +1554,9 @@ operations_owner: TBD
 | DEC-015 | 2026-08-08 | Validate representative portal domain data after canonical envelope unwrapping and before permissive UI normalization; route-specific adapters must throw on incompatible shapes and must not manufacture fixture-like defaults. | Envelope validation prevents transport drift but cannot prove that `data` matches a portal's domain contract. A second pure boundary catches missing/nested/legacy fields while keeping fixture-mode removal and visible page-state policy in BWM-007. | Accepted |
 | DEC-016 | 2026-08-08 | Use one browser-public `VITE_DATA_MODE` selector for all portals; only the exact normalized value `fixture` opts into fixture reads, while missing/invalid values and every CI/release artifact use `live`. Hostname never selects data mode. | An explicit, centrally validated opt-in preserves intentional local fixture workflows while preventing loopback assumptions, preview hosts, or configuration drift from silently selecting fake data in a deployable artifact. | Accepted |
 | DEC-017 | 2026-08-08 | In live mode, derive portal route loading, empty, permission, validation, and unavailable display states from the shared API-client request lifecycle; mask route children until authoritative requests settle and use a full-page reload as the safe retry boundary. | A shared fail-closed boundary prevents fixture-backed initial component state from becoming visible during failures, keeps parallel requests consistent across portals, and retries authentication, routing, and page loaders together without inventing per-page recovery behavior. | Accepted |
+| DEC-018 | 2026-08-09 | Extract reusable fixture payloads behind a direct compile-time `VITE_DATA_MODE` selector and mark them with the reserved `PARABOLIC_FIXTURE_PAYLOAD:` signature, which release-artifact scanning rejects. | Direct build-time selection lets Rollup omit isolated fixture data from live artifacts without changing explicit local fixture behavior, while the marker makes accidental release inclusion a deterministic CI failure. | Accepted |
+| DEC-019 | 2026-08-09 | Use `shared/contracts/capabilityPolicy.ts` as the canonical capability vocabulary and fail-closed role, minimum-license, role-specific license override, and institute feature-flag policy. Treat vendor capabilities as global and institute-license-independent, require every Director grant to resolve to L3, and keep read and mutation grants distinct. | One dependency-free matrix gives frontend visibility and backend authorization a shared target without prematurely changing either runtime. Independent axes prevent a sufficient role or layer from bypassing a missing feature grant, while explicit Director/vendor invariants preserve governance and control-plane boundaries. | Accepted |
+| DEC-020 | 2026-08-09 | Immediately after successful Firebase ID-token verification, reject any truthy `isSuspended` claim with canonical HTTP 403 `FORBIDDEN` and message `Account access is suspended.` before identity/request-data attachment or downstream middleware and handler execution. | Suspension is an actor-wide denial across student, teacher, admin, director, and vendor roles. Placing the guard at the shared authentication boundary prevents later role, tenant, license, activation, or handler behavior from bypassing it while preserving `UNAUTHORIZED` for absent, invalid, or expired credentials. | Accepted |
 
 Add decisions here whenever implementation changes a contract, schema, security boundary, task order, or release scope.
 
@@ -1616,6 +1675,42 @@ Never record only “tests passed.” Include exact commands and whether tests w
 ## Session Log
 
 Append newest entries at the top.
+
+### LOG-043 — 2026-08-09 — BWM-008 Immediate Suspension Enforcement
+
+- **Task:** BWM-008 second substep — enforce `isSuspended` immediately after token verification.
+- **Outcome:** The shared Firebase ID-token middleware now returns canonical `403 FORBIDDEN` for a truthy suspension claim before attaching identity/request data, activating an invited student, invoking downstream middleware, or reaching a handler. Unit coverage proves the guard applies to all five roles, and a real Auth-emulator ID token proved the gateway behavior. BWM-008 remains `IN_PROGRESS` at Admin teacher-route/handler alignment.
+- **Validation performed:** Functions lint/build, syntax/JSON/source-audit checks, `npm --prefix functions run test:auth-middleware`, `npm run test:capability-policy`, the API-error/framework/role/license/tenant middleware regressions, and `git diff --check` passed. `npm run test:suspension-guard:emulator` passed under Firebase CLI `15.9.0`, `demo-parabolic-test`, and Auth/Firestore/Functions with one real suspended-user HTTP 403 scenario and clean cleanup. `node scripts/verify-workspace.mjs` passed all 10 lint/build gates with frontend module counts 124, 97, 76, and 95 plus successful Functions `tsc`.
+- **Files changed:** Shared authentication middleware and unit test, isolated real-token emulator regression, repeatable Functions/root commands, capability/API/module documentation, and this controller. Preserved prior BWM-007 and BWM-008 matrix worktree changes remain in place.
+- **Cloud changes:** None. The user approved local emulator execution; one disposable Auth-emulator user was created and deleted, Firebase CLI touched local credential/configuration cache state, and no deployment, remote data, secret, public URL, environment configuration, or cloud resource changed.
+- **Next:** BWM-008 — align Admin teacher-visible routes with actual handler permissions.
+
+### LOG-042 — 2026-08-09 — BWM-008 Shared Capability Matrix
+
+- **Task:** BWM-008 first substep — define a capability matrix for roles and minimum license/feature flags.
+- **Outcome:** Added a typed, runtime-dependency-free 49-entry matrix covering portal admission plus Admin, Student, Exam, and Vendor actions. The policy independently constrains roles, license layers, role-specific layer overrides, and authoritative feature flags; keeps Director grants at effective L3; isolates vendor-global capabilities; and separates read from mutation grants. The policy document and permanent contract regression make this the shared target for later frontend/backend enforcement without changing runtime access in this substep. BWM-008 is `IN_PROGRESS` at immediate suspension rejection.
+- **Validation performed:** The focused strict TypeScript compile, syntax and package-JSON checks, `npm run test:capability-policy`, existing auth/role/license middleware regressions, and `git diff --check` passed. `node scripts/verify-workspace.mjs` passed all 10 lint/build gates with frontend module counts 124, 97, 76, and 95 plus successful Functions `tsc`. Firebase emulator, browser, staging, and production checks were N/A because no deployable behavior changed.
+- **Files changed:** Added the shared capability contract, policy documentation, and matrix contract test; registered the contract/document and root test command; updated this controller. Preserved prior BWM-007 worktree changes remain in place.
+- **Cloud changes:** None. No Firebase CLI, emulator, deployment, remote data, secret, credential, public URL, or environment configuration was used or changed.
+- **Next:** BWM-008 — enforce `isSuspended` immediately after token verification.
+
+### LOG-041 — 2026-08-09 — BWM-007 Production Failure Browser Proof
+
+- **Task:** BWM-007 fifth substep — test that a production-mode HTTP 500/network failure shows an error and no fixture records.
+- **Outcome:** Added a permanent no-mock failure harness around real live-mode Admin/Student builds, a disposable canonical-500 Firebase Function, the actual combined Portal Hosting artifact, and true Chromium offline mode. The Student dashboard showed the explicit unavailable state for all three HTTP retries and again for the offline request; the named fixture score/session labels were absent throughout. The preceding explicit-mode, no-fallback, route-state, and artifact-exclusion substeps plus this cross-layer proof satisfy BWM-007 acceptance, so BWM-007 is `VERIFIED` and BWM-008 is `READY`.
+- **Validation performed:** `npm run test:bwm-007-failures:emulator` passed one Chromium scenario under Firebase CLI `15.9.0`, Functions and `hosting:portal`, and `demo-parabolic-test`, with three observed HTTP 500 responses, true browser-offline request failures, and clean emulator shutdown. `npm run smoke:emulators` passed the existing Firestore/Functions/Hosting and two-browser-check regression. The new harness contract plus fixture-bundling, release scanning, data-mode, production-fallback, explicit-state, envelope, routing, and portal-adapter suites passed. `node scripts/verify-workspace.mjs` passed all 10 lint/build gates with module counts 124, 97, 76, and 95; focused syntax/JSON/test-discovery checks and `git diff --check` passed.
+- **Files changed:** Added the isolated BWM-007 verification Function package, generated-package preparer, end-to-end runner, static harness contract, Chromium failure spec, and root commands; updated this controller. Preserved earlier BWM-007 fixture isolation and release-scanner changes remain in the same worktree.
+- **Cloud changes:** None. The user approved only local loopback emulators and headless Chromium outside the sandbox; Firebase CLI touched local credential/configuration cache but no deployment, Firebase resource, remote data, secret, public URL, or environment configuration.
+- **Next:** BWM-008 — define a capability matrix for roles and minimum license/feature flags.
+
+### LOG-040 — 2026-08-09 — BWM-007 Fixture Payload Exclusion
+
+- **Task:** BWM-007 fourth substep — ensure fixture imports can be tree-shaken or excluded from production bundles where practical.
+- **Outcome:** Isolated the reusable Admin question-bank fixture records from their shared types and hashing helper, selected the payload through a direct compile-time data-mode branch, and reserved a fixture-payload signature that the release scanner rejects. The permanent two-build artifact test proves live Admin output omits the payload and its chunk while explicit fixture output retains it. Co-located page/domain datasets were left with their owning API tasks rather than expanded here. BWM-007 stays `IN_PROGRESS` at its final browser-failure substep.
+- **Validation performed:** The new fixture-bundling suite passed its source/import contract and disposable live-versus-fixture Vite builds. The strengthened release-artifact scanner passed all 16 named cases; frontend data-mode, production-fallback, and explicit-state regressions passed. Focused Admin lint/build, syntax, Prettier, and `git diff --check` passed. The final workspace verifier passed all 10 lint/build gates with frontend module counts 124, 97, 76, and 95 plus green Functions `tsc`.
+- **Files changed:** Admin test-template contract, isolated fixture payload, compatibility selector, permanent fixture-bundling test and root command, release scanner and its regression, and this controller.
+- **Cloud changes:** None. No Firebase CLI, emulator, deployment, remote data, secret, credential, public URL, or environment configuration was used or changed.
+- **Next:** BWM-007 — force production-mode HTTP 500 and network failures in the browser and prove an explicit error state appears with no fixture records.
 
 ### LOG-039 — 2026-08-08 — BWM-007 Explicit Frontend Data States
 

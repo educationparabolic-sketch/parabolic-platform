@@ -23,6 +23,8 @@ export interface AuthenticationMiddlewareOptions {
   promoteInvitedStudentOnAuthenticate?: boolean;
 }
 
+const SUSPENDED_ACCOUNT_MESSAGE = "Account access is suspended.";
+
 const normalizeNonEmptyString = (
   value: unknown,
 ): string | null => {
@@ -117,6 +119,13 @@ export const createAuthenticationMiddleware = (
     );
   }
 
+  if (decodedToken.isSuspended) {
+    throw new MiddlewareRejectionError(
+      "FORBIDDEN",
+      SUSPENDED_ACCOUNT_MESSAGE,
+    );
+  }
+
   const identity = buildIdentityContext(decodedToken);
   setRequestIdentity(request, identity);
 
@@ -149,6 +158,7 @@ export const createAuthenticationMiddleware = (
 };
 
 export {
+  SUSPENDED_ACCOUNT_MESSAGE,
   buildIdentityContext,
   getBearerToken,
   normalizeRole,

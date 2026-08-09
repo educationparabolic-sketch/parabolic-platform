@@ -63,6 +63,10 @@ const POLICIES = [
       /(?:fixture[_-]?mode|use[_-]?fixtures?)\s*["']?\s*[:=]\s*["']?true\b|["']mode["']\s*:\s*["']fixture["']/giu,
   },
   {
+    id: "fixture-payload",
+    pattern: /PARABOLIC_FIXTURE_PAYLOAD:/gu,
+  },
+  {
     id: "prefilled-password-object",
     pattern: /(?:["']password["']|\bpassword)\s*:\s*["'][^"'\r\n]+["']/giu,
   },
