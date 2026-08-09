@@ -10,6 +10,7 @@ import {
   setRequestData,
 } from "../middleware/framework";
 import {createRoleAuthorizationMiddleware} from "../middleware/role";
+import {ADMIN_TEACHER_ROLES} from "../policy/adminRolePolicy";
 import {createTenantGuardMiddleware} from "../middleware/tenant";
 import {adminQuestionDistributionService} from "../services/adminQuestionDistribution";
 import {
@@ -71,9 +72,9 @@ export const createAdminQuestionDistributionHandler = (
         request.context.identity?.instituteId ?? null,
     }),
     createRoleAuthorizationMiddleware({
-      allowedRoles: ["admin"],
+      allowedRoles: ADMIN_TEACHER_ROLES,
       forbiddenMessage:
-        "Only admin roles can access question distribution summaries.",
+        "Only teacher and admin roles can access question distribution summaries.",
     }),
     createRequestValidationMiddleware({
       validator: (request: MiddlewareRequest): void => {

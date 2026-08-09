@@ -82,12 +82,12 @@ test("admin question upload logs handler accepts read requests", async () => {
   assert.equal((response.body as {success: boolean}).success, true);
 });
 
-test("admin question upload logs handler rejects non-admin role", async () => {
+test("admin question upload logs handler rejects disallowed roles", async () => {
   const handler = createAdminQuestionUploadLogsHandler({
     getLogs: async () => {
       throw new Error("getLogs should not be called");
     },
-    verifyIdToken: async () => createAdminToken({role: "teacher"}) as never,
+    verifyIdToken: async () => createAdminToken({role: "student"}) as never,
   });
   const response = createMockResponse();
 
@@ -106,7 +106,7 @@ test("admin question upload logs handler rejects non-admin role", async () => {
   assertStructuredError(
     response.body,
     "FORBIDDEN",
-    "Only admin roles can access question upload logs.",
+    "Only teacher and admin roles can access question upload logs.",
   );
 });
 

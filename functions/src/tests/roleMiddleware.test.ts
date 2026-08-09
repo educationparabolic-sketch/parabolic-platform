@@ -44,6 +44,7 @@ test("role middleware allows normalized configured roles", async () => {
     isVendor: false,
     licenseLayer: "L2",
     role: "teacher",
+    studentId: null,
     uid: "uid_build_64",
   });
 
@@ -71,6 +72,7 @@ test("role middleware rejects unauthorized roles", async () => {
     isVendor: false,
     licenseLayer: "L3",
     role: "teacher",
+    studentId: null,
     uid: "uid_build_64_teacher",
   });
 
@@ -101,6 +103,7 @@ test("role middleware uses the default forbidden message", async () => {
     isVendor: true,
     licenseLayer: "L3",
     role: "student",
+    studentId: "uid_build_64_student",
     uid: "uid_build_64_student",
   });
 

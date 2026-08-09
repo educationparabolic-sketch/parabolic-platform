@@ -152,6 +152,7 @@ test(
         isVendor: false,
         licenseLayer: "L2",
         role: "student",
+        studentId: "student_build_62",
         uid: "uid_build_62",
       },
     );
@@ -204,6 +205,11 @@ test(
     );
 
     assert.deepEqual(activationCalls, []);
+    assert.equal(
+      (request as {context: {identity: {studentId: string | null}}})
+        .context.identity.studentId,
+      null,
+    );
   },
 );
 

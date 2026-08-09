@@ -10,6 +10,7 @@ import {
   setRequestData,
 } from "../middleware/framework";
 import {createRoleAuthorizationMiddleware} from "../middleware/role";
+import {ADMIN_TEACHER_ROLES} from "../policy/adminRolePolicy";
 import {createTenantGuardMiddleware} from "../middleware/tenant";
 import {
   questionAssetUploadService,
@@ -70,9 +71,9 @@ export const createAdminQuestionAssetsHandler = (
       },
     }),
     createRoleAuthorizationMiddleware({
-      allowedRoles: ["admin"],
+      allowedRoles: ADMIN_TEACHER_ROLES,
       forbiddenMessage:
-        "Only admin roles can upload question assets.",
+        "Only teacher and admin roles can upload question assets.",
     }),
     createRequestValidationMiddleware({
       validator: (request: MiddlewareRequest): void => {

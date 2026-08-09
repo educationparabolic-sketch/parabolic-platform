@@ -98,12 +98,12 @@ test("admin question library handler accepts read requests", async () => {
   assert.equal((response.body as {success: boolean}).success, true);
 });
 
-test("admin question library handler rejects non-admin role", async () => {
+test("admin question library handler rejects disallowed roles", async () => {
   const handler = createAdminQuestionLibraryHandler({
     getLibrary: async () => {
       throw new Error("getLibrary should not be called");
     },
-    verifyIdToken: async () => createAdminToken({role: "teacher"}) as never,
+    verifyIdToken: async () => createAdminToken({role: "student"}) as never,
   });
   const response = createMockResponse();
 
@@ -122,7 +122,7 @@ test("admin question library handler rejects non-admin role", async () => {
   assertStructuredError(
     response.body,
     "FORBIDDEN",
-    "Only admin roles can access question library records.",
+    "Only teacher and admin roles can access question library records.",
   );
 });
 

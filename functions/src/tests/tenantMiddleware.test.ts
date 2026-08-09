@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {setRequestIdentity} from "../middleware/framework";
-import {createTenantGuardMiddleware} from "../middleware/tenant";
+import {
+  MISSING_TENANT_CLAIM_MESSAGE,
+  createTenantGuardMiddleware,
+} from "../middleware/tenant";
 import {MiddlewareRejectionError} from "../types/middleware";
 import {
   createMockRequest,
@@ -25,6 +28,7 @@ test("tenant middleware rejects institute mismatches", async () => {
     isVendor: false,
     licenseLayer: "L1",
     role: "student",
+    studentId: "uid_build_63",
     uid: "uid_build_63",
   });
 
@@ -61,6 +65,7 @@ test("tenant middleware allows matching institute access", async () => {
     isVendor: false,
     licenseLayer: "L1",
     role: "student",
+    studentId: "uid_build_63",
     uid: "uid_build_63",
   });
 
@@ -77,6 +82,7 @@ test("tenant middleware allows matching institute access", async () => {
 
 test("tenant middleware bypasses vendor requests", async () => {
   const middleware = createTenantGuardMiddleware({
+    allowVendorBypass: true,
     resolveRequestInstituteId: (request) =>
       ((request.body ?? {}) as {instituteId?: string}).instituteId,
   });
@@ -93,6 +99,7 @@ test("tenant middleware bypasses vendor requests", async () => {
     isVendor: true,
     licenseLayer: "L3",
     role: "vendor",
+    studentId: null,
     uid: "uid_build_63_vendor",
   });
 
@@ -105,4 +112,71 @@ test("tenant middleware bypasses vendor requests", async () => {
   );
 
   assert.equal(nextCalled, true);
+});
+
+test("tenant middleware denies implicit vendor bypass", async () => {
+  const middleware = createTenantGuardMiddleware({
+    resolveRequestInstituteId: (request) =>
+      ((request.body ?? {}) as {instituteId?: string}).instituteId,
+  });
+  const request = createMockRequest({
+    body: {
+      instituteId: "inst_build_63_request",
+    },
+  });
+
+  setRequestIdentity(request as never, {
+    instituteId: null,
+    isSuspended: false,
+    isVendor: true,
+    licenseLayer: "L3",
+    role: "vendor",
+    studentId: null,
+    uid: "uid_build_63_vendor",
+  });
+
+  await assert.rejects(
+    async () => {
+      await middleware(
+        request as never,
+        createMockResponse() as never,
+        async (): Promise<void> => undefined,
+      );
+    },
+    (error: unknown) =>
+      error instanceof MiddlewareRejectionError &&
+      error.code === "TENANT_MISMATCH" &&
+      error.message === MISSING_TENANT_CLAIM_MESSAGE,
+  );
+});
+
+test("tenant middleware fails closed when a tenant identity lacks instituteId", async () => {
+  const middleware = createTenantGuardMiddleware({
+    resolveRequestInstituteId: () => null,
+  });
+  const request = createMockRequest();
+
+  setRequestIdentity(request as never, {
+    instituteId: null,
+    isSuspended: false,
+    isVendor: false,
+    licenseLayer: "L1",
+    role: "student",
+    studentId: "student_build_63",
+    uid: "uid_build_63",
+  });
+
+  await assert.rejects(
+    async () => {
+      await middleware(
+        request as never,
+        createMockResponse() as never,
+        async (): Promise<void> => undefined,
+      );
+    },
+    (error: unknown) =>
+      error instanceof MiddlewareRejectionError &&
+      error.code === "TENANT_MISMATCH" &&
+      error.message === MISSING_TENANT_CLAIM_MESSAGE,
+  );
 });

@@ -5,25 +5,16 @@
   "targets": {
     "demo-parabolic-test": {
       "hosting": {
-        "portal": [
-          "demo-parabolic-test-portal"
-        ],
-        "exam": [
-          "demo-parabolic-test-exam"
-        ]
+        "portal": ["demo-parabolic-test-portal"],
+        "exam": ["demo-parabolic-test-exam"],
+        "vendor": ["demo-parabolic-test-vendor"]
       }
     },
     "parabolic-dev": {
       "hosting": {
-        "portal": [
-          "parabolic-dev"
-        ],
-        "exam": [
-          "parabolic-dev-40ec9"
-        ],
-        "vendor": [
-          "parabolic-dev-vendor"
-        ]
+        "portal": ["parabolic-dev"],
+        "exam": ["parabolic-dev-40ec9"],
+        "vendor": ["parabolic-dev-vendor"]
       }
     }
   }

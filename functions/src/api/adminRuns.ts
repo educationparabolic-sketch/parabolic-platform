@@ -10,6 +10,7 @@ import {
   setRequestData,
 } from "../middleware/framework";
 import {createRoleAuthorizationMiddleware} from "../middleware/role";
+import {ADMIN_TEACHER_ROLES} from "../policy/adminRolePolicy";
 import {createTenantGuardMiddleware} from "../middleware/tenant";
 import {adminRunsService} from "../services/adminRuns";
 import {
@@ -66,8 +67,8 @@ export const createAdminRunsHandler = (
         request.context.identity?.instituteId ?? null,
     }),
     createRoleAuthorizationMiddleware({
-      allowedRoles: ["admin"],
-      forbiddenMessage: "Only admin roles can schedule assignment runs.",
+      allowedRoles: ADMIN_TEACHER_ROLES,
+      forbiddenMessage: "Only teacher and admin roles can schedule assignment runs.",
     }),
     createRequestValidationMiddleware({
       validator: (request: MiddlewareRequest): void => {

@@ -99,13 +99,13 @@ test("admin questions bulk handler accepts a validate-only request", async () =>
   assert.equal((response.body as {success: boolean}).success, true);
 });
 
-test("admin questions bulk handler rejects non-admin role", async () => {
+test("admin questions bulk handler rejects disallowed roles", async () => {
   const handler = createAdminQuestionsBulkHandler({
     ingestQuestions: async () => {
       throw new Error("ingestQuestions should not be called");
     },
     verifyIdToken: async () =>
-      createAdminToken({role: "teacher"}) as never,
+      createAdminToken({role: "student"}) as never,
   });
   const response = createMockResponse();
 
@@ -139,7 +139,7 @@ test("admin questions bulk handler rejects non-admin role", async () => {
   assertStructuredError(
     response.body,
     "FORBIDDEN",
-    "Only admin roles can run question bulk upload.",
+    "Only teacher and admin roles can run question bulk upload.",
   );
 });
 

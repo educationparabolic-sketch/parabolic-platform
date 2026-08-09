@@ -10,6 +10,7 @@ import {
   setRequestData,
 } from "../middleware/framework";
 import {createRoleAuthorizationMiddleware} from "../middleware/role";
+import {ADMIN_TEACHER_ROLES} from "../policy/adminRolePolicy";
 import {createTenantGuardMiddleware} from "../middleware/tenant";
 import {createLicenseEnforcementMiddleware} from "../middleware/license";
 import {interventionToolsService} from "../services/interventionTools";
@@ -71,7 +72,7 @@ export const createAdminInterventionsHandler = (
       },
     }),
     createRoleAuthorizationMiddleware({
-      allowedRoles: ["admin", "teacher"],
+      allowedRoles: ADMIN_TEACHER_ROLES,
       forbiddenMessage:
         "Only admin and teacher roles can perform intervention actions.",
     }),

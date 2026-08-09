@@ -32,6 +32,7 @@ test("middleware framework executes middleware in order", async () => {
           isVendor: false,
           licenseLayer: "L1",
           role: "teacher",
+          studentId: null,
           uid: "uid_build_61",
         });
         await next();
@@ -136,6 +137,7 @@ test("middleware framework returns standardized license errors", async () => {
           isVendor: false,
           licenseLayer: "L1",
           role: "teacher",
+          studentId: null,
           uid: "uid_build_65",
         });
         await next();

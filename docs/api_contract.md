@@ -2,7 +2,7 @@
 
 Status: canonical route and response-envelope contract
 
-Last reconciled: 2026-08-08 (`BWM-006`)
+Last reconciled: 2026-08-09 (`BWM-008` teacher-route alignment)
 
 ## Sources of truth
 
@@ -45,18 +45,18 @@ Current totals: 13 implemented, 10 incompatible, 6 missing, 0 intentionally reti
 
 | ID | Canonical method and path | Status | Current Functions export | Security boundary |
 | --- | --- | --- | --- | --- |
-| ADM-01 | `GET /api/v1/admin/overview` | `incompatible` | `adminOverview` | Firebase ID; admin/director; identity tenant |
-| ADM-02 | `GET /api/v1/admin/analytics` | `incompatible` | `adminAnalytics` | Firebase ID; admin/director; identity tenant |
-| ADM-03 | `GET /api/v1/admin/students` | `implemented` | `adminStudents` | Firebase ID; admin/director; identity tenant |
+| ADM-01 | `GET /api/v1/admin/overview` | `incompatible` | `adminOverview` | Firebase ID; teacher/admin/director; identity tenant |
+| ADM-02 | `GET /api/v1/admin/analytics` | `incompatible` | `adminAnalytics` | Firebase ID; teacher/admin/director; identity tenant |
+| ADM-03 | `GET /api/v1/admin/students` | `implemented` | `adminStudents` | Firebase ID; teacher/admin; identity tenant |
 | ADM-04 | `POST /api/v1/admin/students/onboarding-resend` | `implemented` | `adminStudentOnboardingResend` | Firebase ID; admin; identity tenant |
 | ADM-05 | `POST /api/v1/admin/students/bulk` | `implemented` | `adminStudentsBulk` | Firebase ID; admin; matching body tenant |
-| ADM-06 | `GET /api/v1/admin/questions/library` | `implemented` | `adminQuestionLibrary` | Firebase ID; admin; identity tenant |
-| ADM-07 | `GET /api/v1/admin/questions/distribution` | `implemented` | `adminQuestionDistribution` | Firebase ID; admin; identity tenant |
-| ADM-08 | `GET /api/v1/admin/questions/upload-logs` | `implemented` | `adminQuestionUploadLogs` | Firebase ID; admin; identity tenant |
-| ADM-09 | `POST /api/v1/admin/questions/bulk` | `implemented` | `adminQuestionsBulk` | Firebase ID; admin; matching body tenant |
-| ADM-10 | `GET /api/v1/admin/tests` | `implemented` | `adminTests` | Firebase ID; admin; identity tenant |
-| ADM-11 | `POST /api/v1/admin/tests` | `incompatible` | `adminTests` | Firebase ID; admin; identity tenant |
-| ADM-12 | `POST /api/v1/admin/runs` | `incompatible` | `adminRuns` | Firebase ID; admin; identity tenant |
+| ADM-06 | `GET /api/v1/admin/questions/library` | `implemented` | `adminQuestionLibrary` | Firebase ID; teacher/admin; identity tenant |
+| ADM-07 | `GET /api/v1/admin/questions/distribution` | `implemented` | `adminQuestionDistribution` | Firebase ID; teacher/admin; identity tenant |
+| ADM-08 | `GET /api/v1/admin/questions/upload-logs` | `implemented` | `adminQuestionUploadLogs` | Firebase ID; teacher/admin; identity tenant |
+| ADM-09 | `POST /api/v1/admin/questions/bulk` | `implemented` | `adminQuestionsBulk` | Firebase ID; teacher/admin; matching body tenant |
+| ADM-10 | `GET /api/v1/admin/tests` | `implemented` | `adminTests` | Firebase ID; teacher/admin; identity tenant |
+| ADM-11 | `POST /api/v1/admin/tests` | `incompatible` | `adminTests` | Firebase ID; teacher/admin; identity tenant |
+| ADM-12 | `POST /api/v1/admin/runs` | `incompatible` | `adminRuns` | Firebase ID; teacher/admin; identity tenant |
 | ADM-13 | `POST /api/v1/admin/governance/snapshots` | `implemented` | `adminGovernanceSnapshots` | Firebase ID; director L3 or vendor; guarded tenant |
 | ADM-14 | `POST /api/v1/admin/settings` | `incompatible` | `adminSettings` | Firebase ID; admin/director; guarded tenant |
 | ADM-15 | `POST /api/v1/admin/academicYear/archive` | `implemented` | `adminAcademicYearArchive` | Firebase ID; admin/vendor; guarded tenant |
@@ -92,13 +92,13 @@ Unmapped exports remain directly exported legacy Functions until an owning task 
 
 ## Authentication and authorization
 
-Normal portal calls require a verified Firebase ID token. Server middleware must derive actor, role, tenant, license, and suspension context from the verified identity rather than editable request fields.
+Normal portal calls require a verified Firebase ID token. Server middleware derives actor, role, tenant, license, suspension, and Student identity context from verified claims rather than editable request fields. Tenant-bound identities without a non-empty institute claim receive `403 TENANT_MISMATCH`; a supplied request institute must match the claim. Exam start/answer/submit use the verified Student ID, while staff-selected Student IDs are verified under the authenticated institute subtree before data access or mutation.
 
 Immediately after successful token verification, a truthy `isSuspended` claim terminates the request with canonical `403 FORBIDDEN` and message `Account access is suspended.` Identity context, student activation, role/license/tenant middleware, and business handlers do not run for that request. Claim synchronization, token refresh, and revocation latency remain governed by BWM-009 and BWM-036.
 
 Exam entry is a credential-exchange boundary. BWM-018 must align it with the architecture decision that the Exam app exchanges the short-lived launch credential, removes it from the URL, and uses Firebase ID tokens for normal answer and submission APIs.
 
-Vendor global access is explicit per handler; vendor role does not imply an unrestricted tenant bypass on institute-scoped Admin routes.
+Vendor global access is explicit per handler; the shared tenant guard defaults to no Vendor bypass. The five existing mixed-role Admin handlers that intentionally accept a cross-institute Vendor target opt in explicitly, while Vendor-only global APIs remain outside the institute guard.
 
 ## Response envelopes
 

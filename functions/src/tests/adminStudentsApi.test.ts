@@ -105,12 +105,12 @@ test("admin students handler accepts tenant-scoped summary reads", async () => {
   assert.equal((response.body as {students: unknown[]}).students.length, 1);
 });
 
-test("admin students handler rejects non-admin roles", async () => {
+test("admin students handler rejects disallowed roles", async () => {
   const handler = createAdminStudentsHandler({
     listStudents: async () => {
       throw new Error("listStudents should not be called");
     },
-    verifyIdToken: async () => createAdminToken({role: "teacher"}) as never,
+    verifyIdToken: async () => createAdminToken({role: "director"}) as never,
   });
   const response = createMockResponse();
 
@@ -129,7 +129,7 @@ test("admin students handler rejects non-admin roles", async () => {
   assertStructuredError(
     response.body,
     "FORBIDDEN",
-    "Only admin and director roles can access student summaries.",
+    "Only teacher and admin roles can access student summaries.",
   );
 });
 

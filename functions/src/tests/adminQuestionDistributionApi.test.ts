@@ -80,12 +80,12 @@ test("admin question distribution handler accepts read requests", async () => {
   assert.equal((response.body as {success: boolean}).success, true);
 });
 
-test("admin question distribution handler rejects non-admin role", async () => {
+test("admin question distribution handler rejects disallowed roles", async () => {
   const handler = createAdminQuestionDistributionHandler({
     getDistributionSummary: async () => {
       throw new Error("getDistributionSummary should not be called");
     },
-    verifyIdToken: async () => createAdminToken({role: "teacher"}) as never,
+    verifyIdToken: async () => createAdminToken({role: "student"}) as never,
   });
   const response = createMockResponse();
 
@@ -104,7 +104,7 @@ test("admin question distribution handler rejects non-admin role", async () => {
   assertStructuredError(
     response.body,
     "FORBIDDEN",
-    "Only admin roles can access question distribution summaries.",
+    "Only teacher and admin roles can access question distribution summaries.",
   );
 });
 

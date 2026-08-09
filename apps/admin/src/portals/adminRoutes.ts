@@ -1,4 +1,8 @@
 import { LICENSE_LAYER_ORDER, type LicenseLayer, type PortalRole, type RouteAccessDecision } from "../../../../shared/types/portalRouting";
+import { CAPABILITY_MATRIX } from "../../../../shared/contracts/capabilityPolicy";
+
+const ADMIN_TEACHER_ROLES = CAPABILITY_MATRIX["admin.students.read"].allowedRoles;
+const ADMIN_TEACHER_DIRECTOR_ROLES = CAPABILITY_MATRIX["admin.overview.read"].allowedRoles;
 
 export interface AdminRouteDefinition {
   path: string;
@@ -6,7 +10,7 @@ export interface AdminRouteDefinition {
   section: string;
   description: string;
   mountedPath?: string;
-  allowedRoles: PortalRole[];
+  allowedRoles: readonly PortalRole[];
   minimumLicenseLayer?: LicenseLayer;
   redirectOnDenied?: string;
   readOnlyRoles?: PortalRole[];
@@ -17,14 +21,14 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Overview",
     section: "Admin Overview",
     description: "Real-time operational, performance, execution, risk, and governance snapshots adapt to role and license layer.",
-    allowedRoles: ["admin", "teacher", "director"],
+    allowedRoles: ADMIN_TEACHER_DIRECTOR_ROLES,
   },
   {
     path: "/admin/students",
     title: "Students",
     section: "Students Management",
     description: "Student search, filters, batch views, archive visibility, and drill-in navigation anchored to institute-scoped student metrics.",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/students/list",
@@ -32,7 +36,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Students Management",
     description: "Primary roster view for search, filters, status toggles, and drill-in navigation to individual student profiles.",
     mountedPath: "/admin/students",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/students/bulk-upload",
@@ -40,7 +44,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Students Management",
     description: "Bulk import and export entry point for controlled student onboarding workflows.",
     mountedPath: "/admin/students",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/students/batches",
@@ -48,7 +52,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Students Management",
     description: "Batch-level cohort analysis, behavior visibility, and risk review.",
     mountedPath: "/admin/students",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/students/archive",
@@ -56,7 +60,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Students Management",
     description: "Archive review surface for inactive or historical student records.",
     mountedPath: "/admin/students",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/students/:studentId",
@@ -64,14 +68,14 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Students Management",
     description: "Academic summary, trends, execution profile, risk indicators, and assignment history for an individual student.",
     mountedPath: "/admin/students",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/question-bank",
     title: "Question Bank",
     section: "Question Bank",
     description: "Question library, upload package operations, and metadata management entry route.",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/question-bank/upload-package",
@@ -79,7 +83,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Question Bank",
     description: "Dedicated upload workflow for ZIP package validation and import preparation.",
     mountedPath: "/admin/question-bank",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/question-bank/library",
@@ -87,7 +91,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Question Bank",
     description: "Dedicated indexed library workspace for question discovery, structural lock review, and version-safe actions.",
     mountedPath: "/admin/question-bank",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/question-bank/library/:questionId",
@@ -95,7 +99,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Question Bank",
     description: "Dedicated per-question detail workspace for question summary, metadata, and version history review.",
     mountedPath: "/admin/question-bank",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/question-bank/distribution",
@@ -103,7 +107,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Question Bank",
     description: "Dedicated question-distribution workspace for difficulty balance, chapter coverage, and marks analytics.",
     mountedPath: "/admin/question-bank",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/question-bank/archive",
@@ -111,7 +115,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Question Bank",
     description: "Dedicated lifecycle and versioning workspace for HOT/WARM/COLD review plus deprecated version controls.",
     mountedPath: "/admin/question-bank",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/question-bank/tags",
@@ -119,7 +123,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Question Bank",
     description: "Dedicated governed-tag workspace for create, rename, merge, and deprecate actions.",
     mountedPath: "/admin/question-bank",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/question-bank/validation-logs",
@@ -127,14 +131,14 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Question Bank",
     description: "Dedicated immutable upload-log review for package validation outcomes and rollback context.",
     mountedPath: "/admin/question-bank",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/tests",
     title: "Tests",
     section: "Test Templates",
     description: "Entry point for template generation, saved tests, live monitoring, and template analytics.",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/tests/create",
@@ -142,7 +146,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Test Templates",
     description: "Template generation surface covering filter builders, selection mode, and duplicate detection.",
     mountedPath: "/admin/tests",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/tests/library",
@@ -150,7 +154,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Test Templates",
     description: "Dedicated library view for saved template drafts, ready templates, and lifecycle actions.",
     mountedPath: "/admin/tests",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/tests/analytics",
@@ -158,7 +162,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Test Templates",
     description: "Dedicated analytics workspace for template coverage, structural patterns, and outcome review entry points.",
     mountedPath: "/admin/tests",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/tests/distribution",
@@ -166,7 +170,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Test Templates",
     description: "Dedicated structural review screen for difficulty balance, timing profile, and template composition snapshots.",
     mountedPath: "/admin/tests",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/tests/settings",
@@ -174,7 +178,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Test Templates",
     description: "Dedicated settings screen for lifecycle rules, mode capability ceilings, and structural lock guidance.",
     mountedPath: "/admin/tests",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/tests/:testId",
@@ -182,7 +186,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Test Templates",
     description: "Template preview, management, and lifecycle view for an individual test definition.",
     mountedPath: "/admin/tests",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/tests/analytics/:testId",
@@ -190,7 +194,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Test Templates",
     description: "Template effectiveness, difficulty distribution, and outcome summaries for a selected test.",
     mountedPath: "/admin/tests",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/assignments",
@@ -198,7 +202,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Assignments",
     description: "Assignment scheduling, active run monitoring, completed run summaries, and email controls.",
     mountedPath: "/admin/assignments/create",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/assignments/create",
@@ -206,7 +210,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Assignments",
     description: "Assignment creation flow with template selection, targeting, scheduling, and mode selection.",
     mountedPath: "/admin/assignments",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/assignments/list",
@@ -214,7 +218,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Assignments",
     description: "Dedicated list view for assignment status, run analytics summaries, and schedule filters.",
     mountedPath: "/admin/assignments",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/assignments/live",
@@ -222,7 +226,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Assignments",
     description: "Dedicated live monitoring view for active assignment runs and current execution health.",
     mountedPath: "/admin/assignments",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/assignments/live/:runId",
@@ -230,7 +234,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Assignments",
     description: "Run-level live participation, completion tracking, reminders, and operational controls.",
     mountedPath: "/admin/assignments",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/assignments/details/:runId",
@@ -238,14 +242,14 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Assignments",
     description: "Per-assignment setup review and analytics drill-down for a selected run.",
     mountedPath: "/admin/assignments",
-    allowedRoles: ["admin", "teacher"],
+    allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
     path: "/admin/analytics",
     title: "Analytics",
     section: "Analytics",
     description: "Landing route for cross-entity comparison views backed by summary-safe analytics only.",
-    allowedRoles: ["admin", "teacher", "director"],
+    allowedRoles: ADMIN_TEACHER_DIRECTOR_ROLES,
   },
   {
     path: "/admin/analytics/templates",
@@ -253,7 +257,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Analytics",
     description: "Compare reusable templates across many runs without duplicating one-template detail pages.",
     mountedPath: "/admin/analytics",
-    allowedRoles: ["admin", "teacher", "director"],
+    allowedRoles: ADMIN_TEACHER_DIRECTOR_ROLES,
   },
   {
     path: "/admin/analytics/batches",
@@ -262,7 +266,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     description:
       "Compare institute cohorts across performance, behavior, and execution quality without replacing batch detail ownership pages.",
     mountedPath: "/admin/analytics",
-    allowedRoles: ["admin", "teacher", "director"],
+    allowedRoles: ADMIN_TEACHER_DIRECTOR_ROLES,
   },
   {
     path: "/admin/insights",
@@ -270,7 +274,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Insights",
     description: "Lean insights landing route centered on institute-wide risk prioritization and explanation.",
     mountedPath: "/admin/insights/risk",
-    allowedRoles: ["admin", "teacher", "director"],
+    allowedRoles: ADMIN_TEACHER_DIRECTOR_ROLES,
     minimumLicenseLayer: "L2",
     redirectOnDenied: "/admin/overview",
     readOnlyRoles: ["director"],
@@ -280,7 +284,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Risk Overview",
     section: "Insights",
     description: "Institute-wide L2+ risk command center with prioritization, driver explanation, and next-step routing.",
-    allowedRoles: ["admin", "teacher", "director"],
+    allowedRoles: ADMIN_TEACHER_DIRECTOR_ROLES,
     minimumLicenseLayer: "L2",
     redirectOnDenied: "/admin/overview",
     readOnlyRoles: ["director"],
@@ -399,7 +403,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Help / Support",
     section: "Help / Support",
     description: "Institute support request creation, status tracking, conversation history, and escalation context.",
-    allowedRoles: ["admin", "teacher", "director"],
+    allowedRoles: ADMIN_TEACHER_DIRECTOR_ROLES,
   },
   {
     path: "/admin/licensing",

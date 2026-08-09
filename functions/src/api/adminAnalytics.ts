@@ -10,6 +10,7 @@ import {
   setRequestData,
 } from "../middleware/framework";
 import {createRoleAuthorizationMiddleware} from "../middleware/role";
+import {ADMIN_TEACHER_DIRECTOR_ROLES} from "../policy/adminRolePolicy";
 import {createTenantGuardMiddleware} from "../middleware/tenant";
 import {adminAnalyticsService} from "../services/adminAnalytics";
 import {
@@ -65,9 +66,9 @@ export const createAdminAnalyticsHandler = (
         request.context.identity?.instituteId ?? null,
     }),
     createRoleAuthorizationMiddleware({
-      allowedRoles: ["admin", "director"],
+      allowedRoles: ADMIN_TEACHER_DIRECTOR_ROLES,
       forbiddenMessage:
-        "Only admin and director roles can access analytics summaries.",
+        "Only teacher, admin, and director roles can access analytics summaries.",
     }),
     createRequestValidationMiddleware({
       validator: (request: MiddlewareRequest): void => {

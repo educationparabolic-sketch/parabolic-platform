@@ -50,6 +50,7 @@ test(
       isVendor: false,
       licenseLayer: "L3",
       role: "admin",
+      studentId: null,
       uid: "uid_build_65_admin",
     });
 
@@ -78,6 +79,7 @@ test("license middleware rejects insufficient license layers", async () => {
     isVendor: false,
     licenseLayer: "L2",
     role: "director",
+    studentId: null,
     uid: "uid_build_65_director",
   });
 
@@ -110,6 +112,7 @@ test(
       isVendor: false,
       licenseLayer: "L0",
       role: "teacher",
+      studentId: null,
       uid: "uid_build_65_teacher",
     });
 

@@ -98,6 +98,7 @@ const buildIdentityContext = (
     isVendor: role === "vendor" || Boolean(decodedToken.isVendor),
     licenseLayer,
     role,
+    studentId: role === "student" ? resolveStudentId(decodedToken, uid) : null,
     uid,
   };
 };
@@ -129,11 +130,9 @@ export const createAuthenticationMiddleware = (
   const identity = buildIdentityContext(decodedToken);
   setRequestIdentity(request, identity);
 
-  const studentId = resolveStudentId(decodedToken, identity.uid);
-
-  if (options.attachStudentId) {
+  if (options.attachStudentId && identity.studentId) {
     setRequestData(request, {
-      studentId,
+      studentId: identity.studentId,
     });
   }
 
@@ -150,7 +149,7 @@ export const createAuthenticationMiddleware = (
 
     await activateInvitedStudentOnFirstLogin({
       instituteId: identity.instituteId,
-      studentId,
+      studentId: identity.studentId ?? identity.uid,
     });
   }
 

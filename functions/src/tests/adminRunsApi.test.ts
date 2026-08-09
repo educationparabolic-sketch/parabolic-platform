@@ -118,12 +118,12 @@ test("admin runs handler accepts secured scheduling requests", async () => {
   assert.equal((response.body as {success: boolean}).success, true);
 });
 
-test("admin runs handler rejects non-admin roles", async () => {
+test("admin runs handler rejects disallowed roles", async () => {
   const handler = createAdminRunsHandler({
     createRun: async () => {
       throw new Error("createRun should not be called");
     },
-    verifyIdToken: async () => createAdminToken({role: "teacher"}) as never,
+    verifyIdToken: async () => createAdminToken({role: "student"}) as never,
   });
   const response = createMockResponse();
 
@@ -143,7 +143,7 @@ test("admin runs handler rejects non-admin roles", async () => {
   assertStructuredError(
     response.body,
     "FORBIDDEN",
-    "Only admin roles can schedule assignment runs.",
+    "Only teacher and admin roles can schedule assignment runs.",
   );
 });
 

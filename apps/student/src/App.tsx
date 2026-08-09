@@ -1,4 +1,12 @@
-import { Suspense, lazy, useEffect, useMemo, useState, type FormEvent, type ReactElement } from "react";
+import {
+  Suspense,
+  lazy,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type ReactElement,
+} from "react";
 import {
   Navigate,
   NavLink,
@@ -22,6 +30,7 @@ import {
   findActivePortalNavigationItem,
 } from "../../../shared/ui/portalConsistency";
 import { UiDataStateBoundary, UiRouteLoading } from "../../../shared/ui/components";
+import { resolveStudentAccessContext } from "./portals/studentAccess";
 import { isStudentDebugMode } from "./services/studentDebugMode";
 import "./App.css";
 
@@ -41,7 +50,9 @@ function studentLivePhotoStorageKey(email: string): string {
 const StudentDashboardPage = lazy(() => import("./features/dashboard/StudentDashboardPage"));
 const StudentMyTestsPage = lazy(() => import("./features/my-tests/StudentMyTestsPage"));
 const StudentPerformancePage = lazy(() => import("./features/performance/StudentPerformancePage"));
-const StudentProfileSettingsPage = lazy(() => import("./features/profile/StudentProfileSettingsPage"));
+const StudentProfileSettingsPage = lazy(
+  () => import("./features/profile/StudentProfileSettingsPage"),
+);
 
 function StudentRouteBoundary(props: { label: string; children: ReactElement }) {
   const { label, children } = props;
@@ -68,9 +79,9 @@ function StudentLoginPage(props: { loginPath: string; protectedPath: string }) {
     const signedIn = await signIn({ email, password });
     if (signedIn) {
       const nextTarget =
-        typeof location.state === "object" && location.state !== null && "from" in location.state ?
-          String((location.state as { from?: string }).from ?? protectedPath) :
-          protectedPath;
+        typeof location.state === "object" && location.state !== null && "from" in location.state
+          ? String((location.state as { from?: string }).from ?? protectedPath)
+          : protectedPath;
 
       navigate(nextTarget, { replace: true });
     }
@@ -85,9 +96,7 @@ function StudentLoginPage(props: { loginPath: string; protectedPath: string }) {
       <section className="student-login-card" aria-labelledby="student-login-title">
         {debugMode ? <p className="student-content-eyebrow">Build 126</p> : null}
         <h1 id="student-login-title">Student Login</h1>
-        <p className="student-content-copy">
-          Sign in to continue to your student workspace.
-        </p>
+        <p className="student-content-copy">Sign in to continue to your student workspace.</p>
         <form className="student-login-form" onSubmit={handleSubmit}>
           <label htmlFor="student-login-email">Email</label>
           <input
@@ -107,7 +116,11 @@ function StudentLoginPage(props: { loginPath: string; protectedPath: string }) {
 
           <button type="submit">Login</button>
         </form>
-        {session.error ? <p className="student-login-error" role="alert">{session.error}</p> : null}
+        {session.error ? (
+          <p className="student-login-error" role="alert">
+            {session.error}
+          </p>
+        ) : null}
         {debugMode ? (
           <>
             <p className="student-login-meta">
@@ -123,10 +136,7 @@ function StudentLoginPage(props: { loginPath: string; protectedPath: string }) {
   );
 }
 
-function StudentProtectedRoute(props: {
-  loginPath: string;
-  children: ReactElement;
-}) {
+function StudentProtectedRoute(props: { loginPath: string; children: ReactElement }) {
   const { loginPath, children } = props;
   const debugMode = isStudentDebugMode();
   const location = useLocation();
@@ -148,7 +158,26 @@ function StudentProtectedRoute(props: {
     return <Navigate replace to={loginPath} state={{ from: location.pathname }} />;
   }
 
+  const accessContext = resolveStudentAccessContext(session);
+  if (!accessContext.canAccessStudentPortal) {
+    return <Navigate replace to="/unauthorized" />;
+  }
+
   return children;
+}
+
+function StudentUnauthorizedPage() {
+  return (
+    <main className="student-page-shell student-page-shell-login">
+      <section className="student-login-card" aria-labelledby="student-unauthorized-title">
+        <p className="student-content-eyebrow">Access Guard</p>
+        <h1 id="student-unauthorized-title">Student role required</h1>
+        <p className="student-content-copy">
+          This portal is restricted to authenticated users with the <code>student</code> role claim.
+        </p>
+      </section>
+    </main>
+  );
 }
 
 function StudentLayout() {
@@ -203,7 +232,9 @@ function StudentLayout() {
         return true;
       }
 
-      return LICENSE_LAYER_ORDER[activeLicenseLayer] >= LICENSE_LAYER_ORDER[item.minimumLicenseLayer];
+      return (
+        LICENSE_LAYER_ORDER[activeLicenseLayer] >= LICENSE_LAYER_ORDER[item.minimumLicenseLayer]
+      );
     });
   }, [activeLicenseLayer]);
   const activeRoute = findActivePortalNavigationItem(STUDENT_PRIMARY_NAVIGATION, location.pathname);
@@ -212,8 +243,13 @@ function StudentLayout() {
 
   return (
     <main className="student-page-shell">
-      <div className={`student-layout-grid${sidebarCollapsed ? " student-layout-grid-collapsed" : ""}`}>
-        <aside className={`student-sidebar${sidebarCollapsed ? " student-sidebar-collapsed" : ""}`} aria-label="Student sidebar menu">
+      <div
+        className={`student-layout-grid${sidebarCollapsed ? " student-layout-grid-collapsed" : ""}`}
+      >
+        <aside
+          className={`student-sidebar${sidebarCollapsed ? " student-sidebar-collapsed" : ""}`}
+          aria-label="Student sidebar menu"
+        >
           <div className="student-sidebar-header">
             <div className="student-sidebar-brand">
               <p className="student-sidebar-eyebrow">Parabolic Platform</p>
@@ -225,7 +261,9 @@ function StudentLayout() {
                   </p>
                   {debugMode ? (
                     <div className="student-sidebar-meta">
-                      <p className="student-sidebar-path" title={location.pathname}>{location.pathname}</p>
+                      <p className="student-sidebar-path" title={location.pathname}>
+                        {location.pathname}
+                      </p>
                       <div className="student-sidebar-session">
                         <span>Status: {session.status}</span>
                         {globalState.role ? <span>Role: {globalState.role}</span> : null}
@@ -277,7 +315,10 @@ function StudentLayout() {
           <div className="student-sidebar-body">
             <div className="student-sidebar-nav-scroll">
               <nav className="student-sidebar-nav" aria-label="Student navigation">
-                <section className="student-sidebar-section" aria-labelledby="student-nav-section-main">
+                <section
+                  className="student-sidebar-section"
+                  aria-labelledby="student-nav-section-main"
+                >
                   <div className="student-sidebar-section-header">
                     <h2 id="student-nav-section-main">{sidebarCollapsed ? "M" : "Menu"}</h2>
                   </div>
@@ -289,9 +330,9 @@ function StudentLayout() {
                         aria-label={sidebarCollapsed ? item.label : undefined}
                         title={sidebarCollapsed ? `${item.label}: ${item.summary}` : undefined}
                         className={({ isActive }) =>
-                          isActive ?
-                            "student-sidebar-link student-sidebar-link-active" :
-                            "student-sidebar-link"
+                          isActive
+                            ? "student-sidebar-link student-sidebar-link-active"
+                            : "student-sidebar-link"
                         }
                       >
                         <span className="student-sidebar-link-badge" aria-hidden="true">
@@ -320,7 +361,8 @@ function StudentLayout() {
             {!sidebarCollapsed ? (
               <div className="student-sidebar-guidance">
                 <p className="student-content-note">
-                  Your progress updates after each completed test, with Raw % and Accuracy % kept easy to follow.
+                  Your progress updates after each completed test, with Raw % and Accuracy % kept
+                  easy to follow.
                 </p>
                 {LICENSE_LAYER_ORDER[activeLicenseLayer] < LICENSE_LAYER_ORDER.L1 ? (
                   <p className="student-content-note">
@@ -343,10 +385,16 @@ function StudentLayout() {
             </div>
           </section>
           {!hasLivePhoto && location.pathname !== "/student/profile" ? (
-            <section className="student-live-photo-required-banner" aria-label="Live photo required">
+            <section
+              className="student-live-photo-required-banner"
+              aria-label="Live photo required"
+            >
               <div>
                 <strong>Live identity photo needed</strong>
-                <p>Capture your photo once in profile settings so future exam face verification can use it.</p>
+                <p>
+                  Capture your photo once in profile settings so future exam face verification can
+                  use it.
+                </p>
               </div>
               <NavLink to="/student/profile">Open Profile</NavLink>
             </section>
@@ -373,22 +421,51 @@ function App() {
         path={loginPath}
         element={<StudentLoginPage loginPath={loginPath} protectedPath={protectedDefaultPath} />}
       />
+      <Route path="/unauthorized" element={<StudentUnauthorizedPage />} />
       <Route
         path={basePath}
-        element={(
+        element={
           <StudentProtectedRoute loginPath={loginPath}>
             <StudentLayout />
           </StudentProtectedRoute>
-        )}
+        }
       >
         <Route index element={<Navigate to="dashboard" replace />} />
-        <Route path="dashboard" element={<StudentRouteBoundary label="Getting your latest progress"><StudentDashboardPage /></StudentRouteBoundary>} />
-        <Route path="my-tests" element={<StudentRouteBoundary label="Checking your assigned tests"><StudentMyTestsPage /></StudentRouteBoundary>} />
-        <Route path="analytics" element={<StudentRouteBoundary label="Preparing your analytics"><StudentPerformancePage /></StudentRouteBoundary>} />
+        <Route
+          path="dashboard"
+          element={
+            <StudentRouteBoundary label="Getting your latest progress">
+              <StudentDashboardPage />
+            </StudentRouteBoundary>
+          }
+        />
+        <Route
+          path="my-tests"
+          element={
+            <StudentRouteBoundary label="Checking your assigned tests">
+              <StudentMyTestsPage />
+            </StudentRouteBoundary>
+          }
+        />
+        <Route
+          path="analytics"
+          element={
+            <StudentRouteBoundary label="Preparing your analytics">
+              <StudentPerformancePage />
+            </StudentRouteBoundary>
+          }
+        />
         <Route path="performance" element={<Navigate to="/student/analytics" replace />} />
         <Route path="insights" element={<Navigate to="/student/analytics" replace />} />
         <Route path="discipline" element={<Navigate to="/student/analytics" replace />} />
-        <Route path="profile" element={<StudentRouteBoundary label="Opening your account settings"><StudentProfileSettingsPage /></StudentRouteBoundary>} />
+        <Route
+          path="profile"
+          element={
+            <StudentRouteBoundary label="Opening your account settings">
+              <StudentProfileSettingsPage />
+            </StudentRouteBoundary>
+          }
+        />
       </Route>
       <Route path="*" element={<Navigate to={protectedDefaultPath} replace />} />
     </Routes>

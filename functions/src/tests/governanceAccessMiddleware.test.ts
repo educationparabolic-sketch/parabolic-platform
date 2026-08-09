@@ -45,6 +45,7 @@ test(
       isVendor: false,
       licenseLayer: "L3",
       role: "director",
+      studentId: null,
       uid: "uid_build_89_director",
     });
 
@@ -73,6 +74,7 @@ test(
       isVendor: true,
       licenseLayer: "L0",
       role: "vendor",
+      studentId: null,
       uid: "uid_build_89_vendor",
     });
 
@@ -100,6 +102,7 @@ test(
       isVendor: false,
       licenseLayer: "L2",
       role: "director",
+      studentId: null,
       uid: "uid_build_89_director",
     });
 

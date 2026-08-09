@@ -10,6 +10,7 @@ import {
   setRequestData,
 } from "../middleware/framework";
 import {createRoleAuthorizationMiddleware} from "../middleware/role";
+import {ADMIN_TEACHER_ROLES} from "../policy/adminRolePolicy";
 import {createTenantGuardMiddleware} from "../middleware/tenant";
 import {adminStudentsService} from "../services/adminStudents";
 import {
@@ -66,9 +67,9 @@ export const createAdminStudentsHandler = (
         request.context.identity?.instituteId ?? null,
     }),
     createRoleAuthorizationMiddleware({
-      allowedRoles: ["admin", "director"],
+      allowedRoles: ADMIN_TEACHER_ROLES,
       forbiddenMessage:
-        "Only admin and director roles can access student summaries.",
+        "Only teacher and admin roles can access student summaries.",
     }),
     createRequestValidationMiddleware({
       validator: (request: MiddlewareRequest): void => {

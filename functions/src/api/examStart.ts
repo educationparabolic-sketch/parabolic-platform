@@ -125,7 +125,7 @@ export const createExamStartHandler = (
         setRequestData(request, {
           instituteId: request.context.identity?.instituteId ?? instituteId,
           runId,
-          studentId: request.context.requestData?.studentId,
+          studentId: request.context.identity?.studentId,
           studentUid: request.context.identity?.uid,
           yearId,
         });

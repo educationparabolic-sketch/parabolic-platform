@@ -8,6 +8,7 @@ export interface MiddlewareIdentityContext {
   uid: string;
   role: string;
   instituteId: string | null;
+  studentId: string | null;
   licenseLayer: LicenseLayer | null;
   isVendor: boolean;
   isSuspended: boolean;

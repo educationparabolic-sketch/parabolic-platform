@@ -10,6 +10,7 @@ import {
   setRequestData,
 } from "../middleware/framework";
 import {createRoleAuthorizationMiddleware} from "../middleware/role";
+import {ADMIN_TEACHER_ROLES} from "../policy/adminRolePolicy";
 import {createTenantGuardMiddleware} from "../middleware/tenant";
 import {
   questionBulkUploadService,
@@ -73,9 +74,9 @@ export const createAdminQuestionsBulkHandler = (
       },
     }),
     createRoleAuthorizationMiddleware({
-      allowedRoles: ["admin"],
+      allowedRoles: ADMIN_TEACHER_ROLES,
       forbiddenMessage:
-        "Only admin roles can run question bulk upload.",
+        "Only teacher and admin roles can run question bulk upload.",
     }),
     createRequestValidationMiddleware({
       validator: (request: MiddlewareRequest): void => {

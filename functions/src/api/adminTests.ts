@@ -10,6 +10,7 @@ import {
   setRequestData,
 } from "../middleware/framework";
 import {createRoleAuthorizationMiddleware} from "../middleware/role";
+import {ADMIN_TEACHER_ROLES} from "../policy/adminRolePolicy";
 import {createTenantGuardMiddleware} from "../middleware/tenant";
 import {adminTestsService} from "../services/adminTests";
 import {
@@ -71,8 +72,8 @@ export const createAdminTestsHandler = (
         request.context.identity?.instituteId ?? null,
     }),
     createRoleAuthorizationMiddleware({
-      allowedRoles: ["admin"],
-      forbiddenMessage: "Only admin roles can manage test templates.",
+      allowedRoles: ADMIN_TEACHER_ROLES,
+      forbiddenMessage: "Only teacher and admin roles can manage test templates.",
     }),
     createRequestValidationMiddleware({
       validator: (request: MiddlewareRequest): void => {

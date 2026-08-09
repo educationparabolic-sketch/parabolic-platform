@@ -134,12 +134,12 @@ test("admin overview handler accepts summary reads", async () => {
   assert.equal((response.body as {success: boolean}).success, true);
 });
 
-test("admin overview handler rejects non-admin roles", async () => {
+test("admin overview handler rejects disallowed roles", async () => {
   const handler = createAdminOverviewHandler({
     getOverviewSnapshot: async () => {
       throw new Error("getOverviewSnapshot should not be called");
     },
-    verifyIdToken: async () => createAdminToken({role: "teacher"}) as never,
+    verifyIdToken: async () => createAdminToken({role: "student"}) as never,
   });
   const response = createMockResponse();
 
@@ -158,7 +158,7 @@ test("admin overview handler rejects non-admin roles", async () => {
   assertStructuredError(
     response.body,
     "FORBIDDEN",
-    "Only admin and director roles can access overview summaries.",
+    "Only teacher, admin, and director roles can access overview summaries.",
   );
 });
 

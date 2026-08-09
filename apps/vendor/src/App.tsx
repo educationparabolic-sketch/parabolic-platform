@@ -392,16 +392,9 @@ function VendorProtectedRoute(props: { loginPath: string; children: ReactElement
       />
     );
   }
-
-  return children;
-}
-
-function VendorRoleGuard(props: { children: ReactElement }) {
-  const { children } = props;
-  const { session } = useAuthProvider();
   const accessContext = resolveVendorAccessContext(session);
 
-  if (!accessContext.isVendor) {
+  if (!accessContext.canAccessVendorPortal) {
     return <Navigate replace to="/unauthorized" />;
   }
 
@@ -760,9 +753,7 @@ function App() {
           path={basePath}
           element={
             <VendorProtectedRoute loginPath={loginPath}>
-              <VendorRoleGuard>
-                <VendorLayout />
-              </VendorRoleGuard>
+              <VendorLayout />
             </VendorProtectedRoute>
           }
         >

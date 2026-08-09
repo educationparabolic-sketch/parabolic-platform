@@ -75,12 +75,12 @@ test("admin question assets handler accepts upload requests", async () => {
   assert.equal((response.body as {success: boolean}).success, true);
 });
 
-test("admin question assets handler rejects non-admin role", async () => {
+test("admin question assets handler rejects disallowed roles", async () => {
   const handler = createAdminQuestionAssetsHandler({
     uploadAsset: async () => {
       throw new Error("uploadAsset should not be called");
     },
-    verifyIdToken: async () => createAdminToken({role: "teacher"}) as never,
+    verifyIdToken: async () => createAdminToken({role: "student"}) as never,
   });
   const response = createMockResponse();
 
@@ -105,7 +105,7 @@ test("admin question assets handler rejects non-admin role", async () => {
   assertStructuredError(
     response.body,
     "FORBIDDEN",
-    "Only admin roles can upload question assets.",
+    "Only teacher and admin roles can upload question assets.",
   );
 });
 

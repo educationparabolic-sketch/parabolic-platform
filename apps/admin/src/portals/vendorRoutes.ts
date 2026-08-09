@@ -1,11 +1,14 @@
+import { CAPABILITY_MATRIX } from "../../../../shared/contracts/capabilityPolicy";
 import type { PortalRole, RouteAccessDecision } from "../../../../shared/types/portalRouting";
+
+const VENDOR_PORTAL_ALLOWED_ROLES = CAPABILITY_MATRIX["portal.vendor.access"].allowedRoles;
 
 export interface VendorRouteDefinition {
   path: string;
   title: string;
   section: string;
   description: string;
-  allowedRoles: PortalRole[];
+  allowedRoles: readonly PortalRole[];
   redirectOnDenied?: string;
 }
 
@@ -16,7 +19,7 @@ export const VENDOR_ROUTE_DEFINITIONS: VendorRouteDefinition[] = [
     section: "Vendor Overview",
     description:
       "Global operational metrics, commercial posture, and platform-wide status for vendor administrators.",
-    allowedRoles: ["vendor"],
+    allowedRoles: VENDOR_PORTAL_ALLOWED_ROLES,
   },
   {
     path: "/vendor/institutes",
@@ -24,7 +27,7 @@ export const VENDOR_ROUTE_DEFINITIONS: VendorRouteDefinition[] = [
     section: "Institutes",
     description:
       "Cross-institute management surface for tenant discovery, status review, and portfolio navigation.",
-    allowedRoles: ["vendor"],
+    allowedRoles: VENDOR_PORTAL_ALLOWED_ROLES,
   },
   {
     path: "/vendor/institutes/:instituteId",
@@ -32,7 +35,7 @@ export const VENDOR_ROUTE_DEFINITIONS: VendorRouteDefinition[] = [
     section: "Institutes",
     description:
       "Institute-specific vendor view for tenant health, licensing posture, and operational drill-in.",
-    allowedRoles: ["vendor"],
+    allowedRoles: VENDOR_PORTAL_ALLOWED_ROLES,
   },
   {
     path: "/vendor/licensing",
@@ -40,7 +43,7 @@ export const VENDOR_ROUTE_DEFINITIONS: VendorRouteDefinition[] = [
     section: "Licensing Management",
     description:
       "Vendor-controlled catalogue for pricing, capacity parameters, validation, and versioned publication.",
-    allowedRoles: ["vendor"],
+    allowedRoles: VENDOR_PORTAL_ALLOWED_ROLES,
   },
   {
     path: "/vendor/calibration",
@@ -48,14 +51,14 @@ export const VENDOR_ROUTE_DEFINITIONS: VendorRouteDefinition[] = [
     section: "Calibration",
     description:
       "Calibration deployment workspace for version review and controlled rollout planning.",
-    allowedRoles: ["vendor"],
+    allowedRoles: VENDOR_PORTAL_ALLOWED_ROLES,
   },
   {
     path: "/vendor/calibration/simulate",
     title: "Calibration Simulation",
     section: "Calibration",
     description: "Simulation route for testing future calibration behavior before deployment.",
-    allowedRoles: ["vendor"],
+    allowedRoles: VENDOR_PORTAL_ALLOWED_ROLES,
   },
   {
     path: "/vendor/calibration/history",
@@ -63,7 +66,7 @@ export const VENDOR_ROUTE_DEFINITIONS: VendorRouteDefinition[] = [
     section: "Calibration",
     description:
       "Historical calibration timeline for prior deployments, revisions, and vendor review.",
-    allowedRoles: ["vendor"],
+    allowedRoles: VENDOR_PORTAL_ALLOWED_ROLES,
   },
   {
     path: "/vendor/intelligence",
@@ -71,7 +74,7 @@ export const VENDOR_ROUTE_DEFINITIONS: VendorRouteDefinition[] = [
     section: "Global Intelligence",
     description:
       "Cross-institute behavioral analytics and platform intelligence summaries at the vendor layer.",
-    allowedRoles: ["vendor"],
+    allowedRoles: VENDOR_PORTAL_ALLOWED_ROLES,
   },
   {
     path: "/vendor/system-health",
@@ -79,7 +82,7 @@ export const VENDOR_ROUTE_DEFINITIONS: VendorRouteDefinition[] = [
     section: "System Health",
     description:
       "Operational monitoring for Firestore usage, Cloud Functions activity, and platform error visibility.",
-    allowedRoles: ["vendor"],
+    allowedRoles: VENDOR_PORTAL_ALLOWED_ROLES,
   },
   {
     path: "/vendor/audit",
@@ -87,7 +90,7 @@ export const VENDOR_ROUTE_DEFINITIONS: VendorRouteDefinition[] = [
     section: "Audit Logs",
     description:
       "Full system audit viewer for vendor governance, operational review, and immutable event inspection.",
-    allowedRoles: ["vendor"],
+    allowedRoles: VENDOR_PORTAL_ALLOWED_ROLES,
   },
 ];
 

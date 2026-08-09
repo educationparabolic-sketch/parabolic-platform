@@ -176,7 +176,7 @@ export const createExamSessionSubmitHandler = (
           instituteId: request.context.identity?.instituteId ?? instituteId,
           runId,
           sessionId,
-          studentId: request.context.requestData?.studentId,
+          studentId: request.context.identity?.studentId,
           yearId,
         });
       },

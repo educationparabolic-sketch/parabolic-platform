@@ -9,6 +9,7 @@ import {
   setRequestData,
 } from "../middleware/framework";
 import {createRoleAuthorizationMiddleware} from "../middleware/role";
+import {ADMIN_TEACHER_ROLES} from "../policy/adminRolePolicy";
 import {createTenantGuardMiddleware} from "../middleware/tenant";
 import {adminQuestionTagsService} from "../services/adminQuestionTags";
 import {
@@ -93,9 +94,9 @@ export const createAdminQuestionTagsHandler = (
         request.context.identity?.instituteId ?? null,
     }),
     createRoleAuthorizationMiddleware({
-      allowedRoles: ["admin"],
+      allowedRoles: ADMIN_TEACHER_ROLES,
       forbiddenMessage:
-        "Only admin roles can access question tag governance.",
+        "Only teacher and admin roles can access question tag governance.",
     }),
     createRequestValidationMiddleware({
       validator: (request: MiddlewareRequest): void => {

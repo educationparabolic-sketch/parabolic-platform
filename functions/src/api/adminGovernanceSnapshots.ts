@@ -66,6 +66,7 @@ export const createAdminGovernanceSnapshotsHandler = (
     createMethodMiddleware("POST"),
     createAuthenticationMiddleware(dependencies),
     createTenantGuardMiddleware({
+      allowVendorBypass: true,
       resolveRequestInstituteId: (request): string | null => {
         const body = (request.body ?? {}) as GovernanceSnapshotAccessRequest;
 

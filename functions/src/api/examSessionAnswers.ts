@@ -225,7 +225,7 @@ export const createExamSessionAnswersHandler = (
           millisecondsSinceLastWrite,
           runId,
           sessionId,
-          studentId: request.context.requestData?.studentId,
+          studentId: request.context.identity?.studentId,
           yearId,
         });
       },

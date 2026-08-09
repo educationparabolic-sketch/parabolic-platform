@@ -14,6 +14,8 @@ export interface TenantGuardMiddlewareOptions {
 
 const DEFAULT_TENANT_MISMATCH_MESSAGE =
   "Token instituteId does not match request instituteId.";
+const MISSING_TENANT_CLAIM_MESSAGE =
+  "Authenticated identity is missing required instituteId claim.";
 
 const normalizeInstituteId = (
   value: string | null | undefined,
@@ -38,9 +40,18 @@ export const createTenantGuardMiddleware = (
     );
   }
 
-  if (identity.isVendor && options.allowVendorBypass !== false) {
+  if (identity.isVendor && options.allowVendorBypass === true) {
     await next();
     return;
+  }
+
+  const identityInstituteId = normalizeInstituteId(identity.instituteId);
+
+  if (!identityInstituteId) {
+    throw new MiddlewareRejectionError(
+      "TENANT_MISMATCH",
+      MISSING_TENANT_CLAIM_MESSAGE,
+    );
   }
 
   const requestInstituteId = normalizeInstituteId(
@@ -52,7 +63,7 @@ export const createTenantGuardMiddleware = (
     return;
   }
 
-  if (identity.instituteId !== requestInstituteId) {
+  if (identityInstituteId !== requestInstituteId) {
     throw new MiddlewareRejectionError(
       "TENANT_MISMATCH",
       options.mismatchMessage ?? DEFAULT_TENANT_MISMATCH_MESSAGE,
@@ -62,4 +73,4 @@ export const createTenantGuardMiddleware = (
   await next();
 };
 
-export {DEFAULT_TENANT_MISMATCH_MESSAGE};
+export {DEFAULT_TENANT_MISMATCH_MESSAGE, MISSING_TENANT_CLAIM_MESSAGE};

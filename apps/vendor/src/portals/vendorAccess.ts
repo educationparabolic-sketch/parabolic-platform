@@ -1,10 +1,18 @@
+import { CAPABILITY_MATRIX } from "../../../../shared/contracts/capabilityPolicy";
+import { resolveGlobalPortalState } from "../../../../shared/services/globalPortalState";
 import type { AuthSession } from "../../../../shared/types/authProvider";
 import type { PortalRole } from "../../../../shared/types/portalRouting";
-import { resolveGlobalPortalState } from "../../../../shared/services/globalPortalState";
+
+const VENDOR_PORTAL_ALLOWED_ROLES: readonly PortalRole[] =
+  CAPABILITY_MATRIX["portal.vendor.access"].allowedRoles;
 
 export interface VendorAccessContext {
   role: PortalRole | null;
-  isVendor: boolean;
+  canAccessVendorPortal: boolean;
+}
+
+export function isVendorPortalRoleAllowed(role: PortalRole | null): boolean {
+  return role !== null && VENDOR_PORTAL_ALLOWED_ROLES.includes(role);
 }
 
 export function resolveVendorAccessContext(session: AuthSession): VendorAccessContext {
@@ -13,6 +21,6 @@ export function resolveVendorAccessContext(session: AuthSession): VendorAccessCo
 
   return {
     role,
-    isVendor: role === "vendor",
+    canAccessVendorPortal: isVendorPortalRoleAllowed(role),
   };
 }

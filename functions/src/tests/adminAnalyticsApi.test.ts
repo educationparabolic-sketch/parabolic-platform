@@ -132,12 +132,12 @@ test("admin analytics handler accepts summary reads", async () => {
   assert.equal((response.body as {success: boolean}).success, true);
 });
 
-test("admin analytics handler rejects non-admin roles", async () => {
+test("admin analytics handler rejects disallowed roles", async () => {
   const handler = createAdminAnalyticsHandler({
     getAnalyticsSnapshot: async () => {
       throw new Error("getAnalyticsSnapshot should not be called");
     },
-    verifyIdToken: async () => createAdminToken({role: "teacher"}) as never,
+    verifyIdToken: async () => createAdminToken({role: "student"}) as never,
   });
   const response = createMockResponse();
 
@@ -156,7 +156,7 @@ test("admin analytics handler rejects non-admin roles", async () => {
   assertStructuredError(
     response.body,
     "FORBIDDEN",
-    "Only admin and director roles can access analytics summaries.",
+    "Only teacher, admin, and director roles can access analytics summaries.",
   );
 });
 

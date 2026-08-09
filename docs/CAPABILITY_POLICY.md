@@ -2,7 +2,7 @@
 
 This document explains the canonical role, license-layer, and institute feature-flag matrix defined in `shared/contracts/capabilityPolicy.ts`.
 
-The code-level `CAPABILITY_MATRIX` is authoritative. Frontend visibility and backend authorization must eventually consume the same capability entries; BWM-008's later substeps own that enforcement work.
+The code-level `CAPABILITY_MATRIX` is authoritative. Admin teacher-visible route definitions and Student/Vendor protected-route admission now consume its role sets directly. The corresponding deployable Admin Functions handlers consume a small dependency-free role-policy mirror that a permanent contract test requires to match the matrix exactly. BWM-008's remaining substeps own tenant targeting and broader negative enforcement coverage.
 
 ## Decision Rules
 
@@ -14,7 +14,7 @@ Access to a capability requires every declared axis to pass:
 
 Missing roles, layers, or required flags fail closed. A sufficient layer never bypasses a disabled required flag. Eligibility flags describe upgrade readiness and never grant runtime access. Vendor capabilities are global and therefore have no institute license minimum. Director is a valid institute role only at L3, so every capability granted to Director has an effective L3 minimum.
 
-This matrix assumes an authenticated, active, non-suspended identity. The shared Functions authentication middleware rejects a verified token whose `isSuspended` claim is truthy before attaching identity/request data or invoking downstream middleware. Later BWM-008 substeps bind route visibility, handlers, tenant targeting, and broader negative tests to this policy.
+This matrix assumes an authenticated, active, non-suspended identity. The shared Functions authentication middleware rejects a verified token whose `isSuspended` claim is truthy before attaching identity/request data or invoking downstream middleware. Teacher-visible Admin route and handler role boundaries are aligned to the matrix. Student and Vendor protected routes decode the authenticated claim projection and admit only the roles in `portal.student.access` and `portal.vendor.access`; these browser guards are UX boundaries, while every current Student/Exam and Vendor API continues to authenticate and authorize independently on the server. Tenant-bound identities now fail closed without an institute claim, request institute targets must match that verified claim, Vendor bypass is opt-in per reviewed mixed-role handler, Exam student identity comes from the verified token, and staff-selected student IDs are resolved inside the authenticated institute subtree. The final BWM-008 substep owns comprehensive negative boundary coverage.
 
 ## Portal and Admin Capabilities
 
@@ -48,7 +48,7 @@ This matrix assumes an authenticated, active, non-suspended identity. The shared
 | `admin.mode.adaptive.configure` | teacher, admin | L2 | - | adaptivePhase |
 | `admin.mode.hard.configure` | teacher, admin | L2 | - | hardMode |
 
-Read and manage capabilities are deliberately separate. Director may read only the explicitly granted Admin summaries, settings/license views, and governance surfaces; Director never inherits teacher/admin mutation capabilities. Teacher question/test/assignment management grants record the architecture policy even where current handlers are narrower—the later route/handler-alignment substep must resolve those existing mismatches against this matrix.
+Read and manage capabilities are deliberately separate. Director may read only the explicitly granted Admin summaries, settings/license views, and governance surfaces; Director never inherits teacher/admin mutation capabilities. Teacher question/test/assignment management grants are now reflected by the teacher-visible Admin routes and their current question, test, run, and intervention handlers. Admin-only student mutations and settings/license/governance boundaries remain narrower by design.
 
 ## Student and Exam Capabilities
 
@@ -69,7 +69,7 @@ Read and manage capabilities are deliberately separate. Director may read only t
 | `exam.mode.adaptive.execute` | student | L2 | adaptivePhase |
 | `exam.mode.hard.execute` | student | L2 | hardMode |
 
-Student capabilities never grant access to another student's data. Session ownership and institute matching remain mandatory server-side checks and are handled by BWM-008's tenant-boundary substep.
+Student capabilities never grant access to another student's data. Exam start, answer, and submit handlers use the Student ID projected into verified identity context, ignore editable student targets, and retain stored session institute/student ownership checks. Staff-selected students are resolved beneath the authenticated institute path and must exist before the requested operation proceeds.
 
 ## Vendor Capabilities
 
