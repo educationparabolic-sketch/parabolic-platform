@@ -2,6 +2,7 @@ import {FieldValue} from "firebase-admin/firestore";
 import {createLogger} from "./logging";
 import {getFirestore} from "../utils/firebaseAdmin";
 import {licenseHistoryService} from "./licenseHistory";
+import {licenseClaimFreshnessService} from "./licenseClaimFreshness";
 import {
   LicenseManagementFeatureFlags,
   LicenseManagementValidationError,
@@ -365,6 +366,7 @@ export class LicenseManagementService {
           previousStudentLimit: previousStudentLimit ?? undefined,
           reason: mutationReason,
         });
+      nextLicenseDocument.licenseVersion = licenseHistoryWrite.entryId;
 
       transaction.set(
         currentLicenseReference,
@@ -380,6 +382,11 @@ export class LicenseManagementService {
         this.firestore.doc(licenseHistoryWrite.path),
         licenseHistoryWrite.entry,
       );
+      transaction.set(
+        instituteReference,
+        {licenseVersion: licenseHistoryWrite.entryId},
+        {merge: true},
+      );
 
       return {
         activeStudentLimit: pricingPlan.activeStudentLimit,
@@ -389,12 +396,19 @@ export class LicenseManagementService {
         licenseHistoryEntryId: licenseHistoryWrite.entryId,
         licenseHistoryPath: licenseHistoryWrite.path,
         licensePath: currentLicensePath,
+        licenseVersion: licenseHistoryWrite.entryId,
         newLayer,
         planId: pricingPlan.planId,
         planName: pricingPlan.planName ?? billingPlan,
         previousLayer,
       };
     });
+
+    const freshnessResult = await licenseClaimFreshnessService
+      .propagateInstituteLicenseChange({
+        instituteId: result.instituteId,
+        licenseVersion: result.licenseVersion,
+      });
 
     this.logger.info("Institute license updated by vendor API.", {
       activeStudentLimit: result.activeStudentLimit,
@@ -405,11 +419,14 @@ export class LicenseManagementService {
       licenseHistoryEntryId: result.licenseHistoryEntryId,
       licenseHistoryPath: result.licenseHistoryPath,
       licensePath: result.licensePath,
+      licenseVersion: result.licenseVersion,
       newLayer: result.newLayer,
       planId: result.planId,
       planName: result.planName,
       previousLayer: result.previousLayer,
       pricingPlanPath: pricingPlan.path,
+      synchronizedUserCount: freshnessResult.userCount,
+      versionSuperseded: freshnessResult.superseded,
     });
 
     return result;

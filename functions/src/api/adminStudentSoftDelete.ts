@@ -126,7 +126,7 @@ export const handleAdminStudentSoftDeleteRequest =
       studentSoftDeleteService,
     ),
     verifyIdToken: (idToken: string) =>
-      getFirebaseAdminApp().auth().verifyIdToken(idToken),
+      getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
   });
 
 export {buildSuccessResponse};

@@ -128,5 +128,5 @@ export const handleAdminTestsRequest = createAdminTestsHandler({
   createTemplate: adminTestsService.createTemplate.bind(adminTestsService),
   listTemplates: adminTestsService.listTemplates.bind(adminTestsService),
   verifyIdToken: (idToken: string) =>
-    getFirebaseAdminApp().auth().verifyIdToken(idToken),
+    getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
 });

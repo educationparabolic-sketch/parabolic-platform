@@ -136,7 +136,7 @@ export const handleVendorLicenseUpdateRequest =
         licenseManagementService,
       ),
     verifyIdToken: (idToken: string) =>
-      getFirebaseAdminApp().auth().verifyIdToken(idToken),
+      getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
   });
 
 export {buildSuccessResponse};

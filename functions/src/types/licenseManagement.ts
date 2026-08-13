@@ -23,6 +23,7 @@ export interface UpdateInstituteLicenseResult {
   licenseHistoryEntryId: string;
   licenseHistoryPath: string;
   licensePath: string;
+  licenseVersion: string;
   newLayer: LicenseLayer;
   planId: string;
   planName: string | null;

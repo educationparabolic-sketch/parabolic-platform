@@ -2427,6 +2427,7 @@ test(
         licenseHistoryPath:
           "institutes/inst_build_93/licenseHistory/history_build_94",
         licensePath: "institutes/inst_build_93/license/current",
+        licenseVersion: "history_build_94",
         newLayer: request.newLayer,
         planId: "L2",
         planName: "Controlled",

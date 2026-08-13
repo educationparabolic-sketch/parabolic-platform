@@ -129,7 +129,7 @@ export const handleAdminSettingsRequest =
       adminSettingsService,
     ),
     verifyIdToken: (idToken: string) =>
-      getFirebaseAdminApp().auth().verifyIdToken(idToken),
+      getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
   });
 
 export {buildSuccessResponse};

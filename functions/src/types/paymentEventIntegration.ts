@@ -12,6 +12,7 @@ export type StripeWebhookEventType =
 
 export interface StripeWebhookProcessingResult {
   billingRecordPath: string | null;
+  claimFreshnessSynchronized: boolean;
   duplicate: boolean;
   eventId: string;
   eventLogPath: string;
@@ -19,6 +20,7 @@ export interface StripeWebhookProcessingResult {
   instituteId: string | null;
   licenseHistoryPath: string | null;
   licensePath: string | null;
+  licenseVersion: string | null;
   status: "ignored" | "processed";
   stripeWebhookStatus: BillingSnapshotWebhookStatus | null;
 }

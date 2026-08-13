@@ -5,6 +5,9 @@ import {
   administrativeActionLoggingService,
 } from "./administrativeActionLogging";
 import {
+  identitySessionSecurityService,
+} from "./identitySessionSecurity";
+import {
   StudentBulkIngestionResult,
   StudentBulkIngestionRowAction,
   StudentBulkIngestionRowResult,
@@ -55,6 +58,10 @@ interface StudentBulkIngestionDependencies {
   getCurrentTimestamp: () => Date;
   logStudentImport:
     typeof administrativeActionLoggingService.logStudentImport;
+  sessionSecurity?: Pick<
+    typeof identitySessionSecurityService,
+    "clearClaimsAndRevokeSessions"
+  >;
 }
 
 interface StudentDocumentRecord {
@@ -307,6 +314,7 @@ export class StudentBulkIngestionService {
         administrativeActionLoggingService.logStudentImport.bind(
           administrativeActionLoggingService,
         ),
+      sessionSecurity: identitySessionSecurityService,
     },
   ) {}
 
@@ -526,6 +534,14 @@ export class StudentBulkIngestionService {
         );
         throw error;
       }
+
+      const sessionSecurity =
+        this.dependencies.sessionSecurity ?? identitySessionSecurityService;
+      await Promise.all(
+        deactivationCandidates.map((candidate) =>
+          sessionSecurity.clearClaimsAndRevokeSessions(candidate.studentId),
+        ),
+      );
     }
 
     if (canCommit && deactivationCandidates.length > 0) {

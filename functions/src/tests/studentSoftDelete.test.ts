@@ -52,12 +52,24 @@ test(
     const metricsPath =
       `institutes/${instituteId}/academicYears/${yearId}/` +
       `studentYearMetrics/${studentId}`;
+    const revokedStudentIds: string[] = [];
     const service = new StudentSoftDeleteService({
       firestore,
       logStudentSoftDelete:
         administrativeActionLoggingService.logStudentSoftDelete.bind(
           administrativeActionLoggingService,
         ),
+      sessionSecurity: {
+        clearClaimsAndRevokeSessions: async (uid) => {
+          revokedStudentIds.push(uid);
+          return {
+            claimsChanged: true,
+            refreshTokensRevoked: true,
+            uid,
+            userMissing: false,
+          };
+        },
+      },
     });
 
     await deleteCollectionDocuments(auditLogsPath);
@@ -113,6 +125,7 @@ test(
     assert.equal(metricsSnapshot.exists, true);
     assert.equal(auditSnapshot.size, 1);
     assert.equal(auditSnapshot.docs[0]?.get("targetId"), studentId);
+    assert.deepEqual(revokedStudentIds, [studentId]);
 
     await deleteCollectionDocuments(auditLogsPath);
     await Promise.all([
@@ -133,12 +146,24 @@ test(
     const studentId = "student_build_104_idempotent";
     const auditLogsPath = `institutes/${instituteId}/auditLogs`;
     const studentPath = `institutes/${instituteId}/students/${studentId}`;
+    const revokedStudentIds: string[] = [];
     const service = new StudentSoftDeleteService({
       firestore,
       logStudentSoftDelete:
         administrativeActionLoggingService.logStudentSoftDelete.bind(
           administrativeActionLoggingService,
         ),
+      sessionSecurity: {
+        clearClaimsAndRevokeSessions: async (uid) => {
+          revokedStudentIds.push(uid);
+          return {
+            claimsChanged: false,
+            refreshTokensRevoked: true,
+            uid,
+            userMissing: false,
+          };
+        },
+      },
     });
 
     await deleteCollectionDocuments(auditLogsPath);
@@ -166,6 +191,7 @@ test(
 
     assert.equal(result.alreadyDeleted, true);
     assert.equal(auditSnapshot.size, 0);
+    assert.deepEqual(revokedStudentIds, [studentId]);
 
     await deleteCollectionDocuments(auditLogsPath);
     await Promise.all([

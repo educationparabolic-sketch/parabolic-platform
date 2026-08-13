@@ -4,6 +4,9 @@ import {
   administrativeActionLoggingService,
 } from "./administrativeActionLogging";
 import {
+  identitySessionSecurityService,
+} from "./identitySessionSecurity";
+import {
   StudentSoftDeleteResult,
   StudentSoftDeleteValidatedRequest,
   StudentSoftDeleteValidationError,
@@ -16,6 +19,10 @@ interface StudentSoftDeleteDependencies {
   firestore: FirebaseFirestore.Firestore;
   logStudentSoftDelete:
     typeof administrativeActionLoggingService.logStudentSoftDelete;
+  sessionSecurity?: Pick<
+    typeof identitySessionSecurityService,
+    "clearClaimsAndRevokeSessions"
+  >;
 }
 
 interface StudentRecord {
@@ -74,6 +81,7 @@ export class StudentSoftDeleteService {
         administrativeActionLoggingService.logStudentSoftDelete.bind(
           administrativeActionLoggingService,
         ),
+      sessionSecurity: identitySessionSecurityService,
     },
   ) {}
 
@@ -153,6 +161,10 @@ export class StudentSoftDeleteService {
         userAgent: request.userAgent,
       });
     }
+
+    await (
+      this.dependencies.sessionSecurity ?? identitySessionSecurityService
+    ).clearClaimsAndRevokeSessions(studentId);
 
     this.logger.info("Student soft delete processed.", {
       alreadyDeleted,

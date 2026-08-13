@@ -4,6 +4,9 @@ import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import {createLogger} from "./logging";
 import {getFirestore} from "../utils/firebaseAdmin";
 import {
+  identitySessionSecurityService,
+} from "./identitySessionSecurity";
+import {
   AcademicYearStatus,
   AdminFeatureFlags,
   AdminSettingsActionType,
@@ -52,6 +55,12 @@ const STAFF_STATUSES: AdminStaffStatus[] = ["active", "suspended"];
 
 interface AdminSettingsDependencies {
   firestore: FirebaseFirestore.Firestore;
+  sessionSecurity?: Pick<
+    typeof identitySessionSecurityService,
+    | "clearClaimsAndRevokeSessions"
+    | "revokeSessions"
+    | "synchronizeClaimsAndRevokeSessions"
+  >;
 }
 
 interface SettingsAuditInput {
@@ -398,6 +407,7 @@ export class AdminSettingsService {
   constructor(
     private readonly dependencies: AdminSettingsDependencies = {
       firestore: getFirestore(),
+      sessionSecurity: identitySessionSecurityService,
     },
   ) {}
 
@@ -1002,18 +1012,41 @@ export class AdminSettingsService {
       status: normalizeUserStatus(userAccess.status),
       updatedAt: new Date().toISOString(),
     };
+    const instituteReference = this.dependencies.firestore.doc(
+      `${INSTITUTES_COLLECTION}/${request.instituteId}`,
+    );
+    const instituteSnapshot = await instituteReference.get();
+    const instituteData = instituteSnapshot.data() ?? {};
+    const settingsUsers = isPlainObject(instituteData.settingsUsers) ?
+      instituteData.settingsUsers :
+      {};
+    const previousRecord = isPlainObject(settingsUsers[userId]) ?
+      settingsUsers[userId] :
+      null;
+    const accessChanged =
+      normalizeOptionalString(previousRecord?.role)?.toLowerCase() !==
+        record.role ||
+      normalizeOptionalString(previousRecord?.status)?.toLowerCase() !==
+        record.status;
 
-    await this.dependencies.firestore
-      .doc(`${INSTITUTES_COLLECTION}/${request.instituteId}`)
-      .set(
-        {
-          settingsUsers: {
-            [userId]: record,
-          },
-          updatedAt: FieldValue.serverTimestamp(),
+    await instituteReference.set(
+      {
+        settingsUsers: {
+          [userId]: record,
         },
-        {merge: true},
-      );
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      {merge: true},
+    );
+
+    if (accessChanged) {
+      await (
+        this.dependencies.sessionSecurity ?? identitySessionSecurityService
+      ).synchronizeClaimsAndRevokeSessions({
+        instituteId: request.instituteId,
+        uid: userId,
+      });
+    }
 
     return this.writeSettingsAudit({
       actionType: request.actionType,
@@ -1022,6 +1055,7 @@ export class AdminSettingsService {
       instituteId: request.instituteId,
       ipAddress: request.ipAddress,
       metadata: {
+        accessChanged,
         userId,
         ...record,
       },
@@ -1044,6 +1078,10 @@ export class AdminSettingsService {
         updatedAt: FieldValue.serverTimestamp(),
       });
 
+    await (
+      this.dependencies.sessionSecurity ?? identitySessionSecurityService
+    ).clearClaimsAndRevokeSessions(userId);
+
     return this.writeSettingsAudit({
       actionType: request.actionType,
       actorId: request.actorId,
@@ -1065,6 +1103,10 @@ export class AdminSettingsService {
       "userAccess.userId",
     );
 
+    await (
+      this.dependencies.sessionSecurity ?? identitySessionSecurityService
+    ).revokeSessions(userId);
+
     return this.writeSettingsAudit({
       actionType: request.actionType,
       actorId: request.actorId,
@@ -1082,16 +1124,32 @@ export class AdminSettingsService {
     request: AdminSettingsValidatedRequest,
   ): Promise<string> {
     const security = request.security as SecuritySettings;
+    const instituteReference = this.dependencies.firestore.doc(
+      `${INSTITUTES_COLLECTION}/${request.instituteId}`,
+    );
+    const instituteSnapshot = await instituteReference.get();
+    const instituteData = instituteSnapshot.data() ?? {};
+    const settingsUsers = isPlainObject(instituteData.settingsUsers) ?
+      instituteData.settingsUsers :
+      {};
+    const affectedUserIds = Array.from(new Set([
+      request.actorId,
+      ...Object.keys(settingsUsers),
+    ])).sort();
 
-    await this.dependencies.firestore
-      .doc(`${INSTITUTES_COLLECTION}/${request.instituteId}`)
-      .set(
-        {
-          securitySettings: security,
-          updatedAt: FieldValue.serverTimestamp(),
-        },
-        {merge: true},
-      );
+    await instituteReference.set(
+      {
+        securitySettings: security,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      {merge: true},
+    );
+
+    const sessionSecurity =
+      this.dependencies.sessionSecurity ?? identitySessionSecurityService;
+    await Promise.all(
+      affectedUserIds.map((userId) => sessionSecurity.revokeSessions(userId)),
+    );
 
     return this.writeSettingsAudit({
       actionType: request.actionType,
@@ -1100,6 +1158,7 @@ export class AdminSettingsService {
       instituteId: request.instituteId,
       ipAddress: request.ipAddress,
       metadata: {
+        affectedUserCount: affectedUserIds.length,
         security,
       },
       userAgent: request.userAgent,

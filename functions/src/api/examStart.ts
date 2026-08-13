@@ -155,5 +155,5 @@ export const createExamStartHandler = (
 export const handleExamStartRequest = createExamStartHandler({
   startSession: sessionService.startSession.bind(sessionService),
   verifyIdToken: (idToken: string) =>
-    getFirebaseAdminApp().auth().verifyIdToken(idToken),
+    getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
 });

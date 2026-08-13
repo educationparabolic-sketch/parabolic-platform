@@ -118,6 +118,7 @@ test(
     const existingStudentPath = `${studentsPath}/STU-002`;
     const staleStudentPath = `${studentsPath}/STU-999`;
     const authStub = createAuthStub();
+    const revokedStudentIds: string[] = [];
     const service = new StudentBulkIngestionService({
       auth: authStub,
       firestore,
@@ -126,6 +127,17 @@ test(
         administrativeActionLoggingService.logStudentImport.bind(
           administrativeActionLoggingService,
         ),
+      sessionSecurity: {
+        clearClaimsAndRevokeSessions: async (studentId) => {
+          revokedStudentIds.push(studentId);
+          return {
+            claimsChanged: true,
+            refreshTokensRevoked: true,
+            uid: studentId,
+            userMissing: false,
+          };
+        },
+      },
     });
 
     await deleteCollectionDocuments(auditLogsPath);
@@ -205,6 +217,7 @@ test(
       role: "student",
       studentId: "STU-001",
     });
+    assert.deepEqual(revokedStudentIds, ["STU-999"]);
 
     await deleteCollectionDocuments(auditLogsPath);
     await deleteCollectionDocuments(emailQueuePath);

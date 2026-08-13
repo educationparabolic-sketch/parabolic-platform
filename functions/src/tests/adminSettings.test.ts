@@ -173,3 +173,115 @@ test("admin settings service blocks director from profile mutation actions", asy
     },
   );
 });
+
+test(
+  "admin settings revokes sessions for access and security mutations",
+  async () => {
+    const instituteId = "inst_build_125_session_security";
+    const institutePath = `institutes/${instituteId}`;
+    const auditPath = `${institutePath}/settingsAudit`;
+    const events: string[] = [];
+    const securityResult = (uid: string) => ({
+      claimsChanged: true,
+      refreshTokensRevoked: true,
+      uid,
+      userMissing: false,
+    });
+    const service = new AdminSettingsService({
+      firestore,
+      sessionSecurity: {
+        clearClaimsAndRevokeSessions: async (uid) => {
+          events.push(`clear:${uid}`);
+          return securityResult(uid);
+        },
+        revokeSessions: async (uid) => {
+          events.push(`revoke:${uid}`);
+          return securityResult(uid);
+        },
+        synchronizeClaimsAndRevokeSessions: async ({instituteId, uid}) => {
+          events.push(`sync:${instituteId}:${uid}`);
+          return securityResult(uid);
+        },
+      },
+    });
+
+    await deleteCollectionDocuments(auditPath);
+    await deleteDocumentIfPresent(institutePath);
+    await firestore.doc(institutePath).set({
+      instituteId,
+      settingsUsers: {
+        admin_security: {
+          role: "admin",
+          status: "active",
+        },
+        teacher_security: {
+          role: "teacher",
+          status: "active",
+        },
+      },
+    });
+
+    const accessRequest = {
+      actionType: "UPSERT_USER_ACCESS" as const,
+      actorId: "admin_security",
+      actorRole: "admin",
+      instituteId,
+      userAccess: {
+        displayName: "Teacher Security",
+        email: "teacher.security@example.test",
+        role: "director" as const,
+        status: "suspended" as const,
+        userId: "teacher_security",
+      },
+    };
+    await service.executeRequest(accessRequest);
+    await service.executeRequest(accessRequest);
+    await service.executeRequest({
+      actionType: "REMOVE_USER_ACCESS",
+      actorId: "admin_security",
+      actorRole: "admin",
+      instituteId,
+      userAccess: {userId: "teacher_security"},
+    });
+    await service.executeRequest({
+      actionType: "RESET_USER_PASSWORD",
+      actorId: "admin_security",
+      actorRole: "admin",
+      instituteId,
+      userAccess: {userId: "teacher_security"},
+    });
+    await service.executeRequest({
+      actionType: "UPDATE_SECURITY_SETTINGS",
+      actorId: "admin_security",
+      actorRole: "admin",
+      instituteId,
+      security: {
+        allowMultipleAdminSessions: false,
+        emailConfiguration: {
+          notificationToggles: true,
+          senderName: "Security",
+          smtpHost: "smtp.example.test",
+          smtpPort: 587,
+        },
+        examControls: {
+          blockRightClick: true,
+          enforceFullscreen: true,
+          tabSwitchWarning: true,
+          tamperDetectionAlerts: true,
+        },
+        forceLogoutOnPasswordChange: true,
+        sessionTimeoutDuration: 30,
+      },
+    });
+
+    assert.deepEqual(events, [
+      `sync:${instituteId}:teacher_security`,
+      "clear:teacher_security",
+      "revoke:teacher_security",
+      "revoke:admin_security",
+    ]);
+
+    await deleteCollectionDocuments(auditPath);
+    await deleteDocumentIfPresent(institutePath);
+  },
+);

@@ -4,6 +4,7 @@ import {auditLogStorageService} from "./auditLogStorage";
 import {billingSnapshotService} from "./billingSnapshot";
 import {createLogger} from "./logging";
 import {licenseHistoryService} from "./licenseHistory";
+import {licenseClaimFreshnessService} from "./licenseClaimFreshness";
 import {LicenseLayer} from "../types/middleware";
 import {
   PaymentEventIntegrationValidationError,
@@ -850,6 +851,9 @@ export class PaymentEventIntegrationService {
         return {
           billingRecordPath:
             normalizeOptionalString(eventLogSnapshot.get("billingRecordPath")),
+          claimFreshnessSynchronized:
+            eventLogSnapshot.get("claimFreshnessSynchronizedAt") !== undefined &&
+            eventLogSnapshot.get("claimFreshnessSynchronizedAt") !== null,
           duplicate: true,
           eventId: event.id,
           eventLogPath,
@@ -861,6 +865,8 @@ export class PaymentEventIntegrationService {
             ),
           licensePath:
             normalizeOptionalString(eventLogSnapshot.get("licensePath")),
+          licenseVersion:
+            normalizeOptionalString(eventLogSnapshot.get("licenseVersion")),
           status:
             normalizeOptionalString(
               eventLogSnapshot.get("status"),
@@ -967,6 +973,7 @@ export class PaymentEventIntegrationService {
           reason: mutationContext.reason,
           stripeInvoiceId: mutationContext.stripeInvoiceId ?? undefined,
         });
+      nextLicenseDocument.licenseVersion = licenseHistoryWrite.entryId;
       const billingRecordDocument = buildBillingRecordDocument(eventContext);
       const billingRecordPath =
         eventContext.invoiceId ?
@@ -987,6 +994,11 @@ export class PaymentEventIntegrationService {
         this.firestore.doc(licenseHistoryWrite.path),
         licenseHistoryWrite.entry,
       );
+      transaction.set(
+        instituteReference,
+        {licenseVersion: licenseHistoryWrite.entryId},
+        {merge: true},
+      );
 
       if (billingRecordDocument && billingRecordPath) {
         transaction.set(
@@ -998,6 +1010,7 @@ export class PaymentEventIntegrationService {
 
       transaction.create(eventLogReference, {
         billingRecordPath,
+        claimFreshnessSynchronizedAt: null,
         createdAt: FieldValue.serverTimestamp(),
         eventId: event.id,
         eventType: event.type,
@@ -1005,6 +1018,7 @@ export class PaymentEventIntegrationService {
         invoiceId: eventContext.invoiceId,
         licenseHistoryPath: licenseHistoryWrite.path,
         licensePath: currentLicensePath,
+        licenseVersion: licenseHistoryWrite.entryId,
         status: "processed",
         stripeCustomerId: eventContext.customerId,
         stripeSubscriptionId: eventContext.subscriptionId,
@@ -1013,6 +1027,7 @@ export class PaymentEventIntegrationService {
 
       return {
         billingRecordPath,
+        claimFreshnessSynchronized: false,
         duplicate: false,
         eventId: event.id,
         eventLogPath,
@@ -1020,53 +1035,79 @@ export class PaymentEventIntegrationService {
         instituteId,
         licenseHistoryPath: licenseHistoryWrite.path,
         licensePath: currentLicensePath,
+        licenseVersion: licenseHistoryWrite.entryId,
         status: "processed",
         stripeWebhookStatus: eventContext.webhookStatus,
       } satisfies StripeWebhookProcessingResult;
     });
 
-    if (!result.duplicate && result.instituteId && result.stripeWebhookStatus) {
+    let finalResult: StripeWebhookProcessingResult = result;
+
+    if (
+      finalResult.status === "processed" &&
+      !finalResult.claimFreshnessSynchronized &&
+      finalResult.licenseVersion
+    ) {
+      await licenseClaimFreshnessService.propagateInstituteLicenseChange({
+        instituteId,
+        licenseVersion: finalResult.licenseVersion,
+      });
+      await eventLogReference.set({
+        claimFreshnessSynchronizedAt: FieldValue.serverTimestamp(),
+      }, {merge: true});
+      finalResult = {
+        ...finalResult,
+        claimFreshnessSynchronized: true,
+      };
+    }
+
+    if (
+      !finalResult.duplicate &&
+      finalResult.instituteId &&
+      finalResult.stripeWebhookStatus
+    ) {
       const cycleId = formatCycleId(
         eventContext.billingPeriodStart ?? eventContext.effectiveDate,
       );
       await billingSnapshotService.syncStripeWebhookStatus(
-        result.instituteId,
+        finalResult.instituteId,
         cycleId,
-        result.stripeWebhookStatus,
+        finalResult.stripeWebhookStatus,
       );
       await auditLogStorageService.createVendorAuditLog({
         actionType: "PAYMENT_EVENT_PROCESSED",
         actorRole: "system",
         actorUid: "stripe_webhook",
         metadata: {
-          billingRecordPath: result.billingRecordPath,
-          eventId: result.eventId,
-          eventType: result.eventType,
-          instituteId: result.instituteId,
-          licenseHistoryPath: result.licenseHistoryPath,
-          licensePath: result.licensePath,
-          stripeWebhookStatus: result.stripeWebhookStatus,
+          billingRecordPath: finalResult.billingRecordPath,
+          eventId: finalResult.eventId,
+          eventType: finalResult.eventType,
+          instituteId: finalResult.instituteId,
+          licenseHistoryPath: finalResult.licenseHistoryPath,
+          licensePath: finalResult.licensePath,
+          stripeWebhookStatus: finalResult.stripeWebhookStatus,
         },
         targetCollection:
-          `${INSTITUTES_COLLECTION}/${result.instituteId}/license`,
+          `${INSTITUTES_COLLECTION}/${finalResult.instituteId}/license`,
         targetId: LICENSE_CURRENT_DOCUMENT_ID,
       });
     }
 
     this.logger.info("Stripe webhook processed.", {
-      billingRecordPath: result.billingRecordPath,
-      duplicate: result.duplicate,
-      eventId: result.eventId,
-      eventLogPath: result.eventLogPath,
-      eventType: result.eventType,
-      instituteId: result.instituteId,
-      licenseHistoryPath: result.licenseHistoryPath,
-      licensePath: result.licensePath,
-      status: result.status,
-      stripeWebhookStatus: result.stripeWebhookStatus,
+      billingRecordPath: finalResult.billingRecordPath,
+      duplicate: finalResult.duplicate,
+      eventId: finalResult.eventId,
+      eventLogPath: finalResult.eventLogPath,
+      eventType: finalResult.eventType,
+      instituteId: finalResult.instituteId ?? undefined,
+      licenseHistoryPath: finalResult.licenseHistoryPath,
+      licensePath: finalResult.licensePath,
+      licenseVersion: finalResult.licenseVersion,
+      status: finalResult.status,
+      stripeWebhookStatus: finalResult.stripeWebhookStatus,
     });
 
-    return result;
+    return finalResult;
   }
 }
 

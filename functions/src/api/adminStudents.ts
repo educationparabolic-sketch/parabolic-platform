@@ -111,7 +111,7 @@ export const createAdminStudentsHandler = (
 export const handleAdminStudentsRequest = createAdminStudentsHandler({
   listStudents: adminStudentsService.listStudents.bind(adminStudentsService),
   verifyIdToken: (idToken: string) =>
-    getFirebaseAdminApp().auth().verifyIdToken(idToken),
+    getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
 });
 
 export {buildSuccessResponse};

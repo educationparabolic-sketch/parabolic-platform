@@ -194,6 +194,7 @@ test(
     const stripeEvent = stripeEventSnapshot.data();
 
     assert.equal(currentLicense?.currentLayer, "L2");
+    assert.equal(typeof currentLicense?.licenseVersion, "string");
     assert.equal(currentLicense?.licenseState, "active");
     assert.equal(currentLicense?.billingCycle, "monthly");
     assert.equal(currentLicense?.planId, "L2");
@@ -203,12 +204,18 @@ test(
     assert.equal(currentLicense?.stripeSubscriptionId, "sub_build_95_ok");
     assert.equal(currentLicense?.stripeWebhookStatus, "succeeded");
     assert.equal(mainLicense?.stripeWebhookStatus, "succeeded");
+    assert.equal(mainLicense?.licenseVersion, currentLicense?.licenseVersion);
     assert.equal(billingRecord?.status, "paid");
     assert.equal(billingRecord?.amountPaid, 896);
     assert.equal(billingRecord?.stripeInvoiceId, "in_build_95_ok");
     assert.equal(billingSnapshotData?.stripeWebhookStatus, "succeeded");
     assert.equal(billingSnapshotData?.licenseTier, "L2");
     assert.equal(stripeEvent?.status, "processed");
+    assert.equal(
+      typeof stripeEvent?.claimFreshnessSynchronizedAt?.toDate,
+      "function",
+    );
+    assert.equal(stripeEvent?.licenseVersion, currentLicense?.licenseVersion);
     assert.equal(stripeEvent?.eventType, "invoice.payment_succeeded");
     assert.equal(stripeEvent?.billingRecordPath, billingRecordPath);
     assert.equal(licenseHistorySnapshot.size, 1);

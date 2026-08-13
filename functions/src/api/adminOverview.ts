@@ -111,7 +111,7 @@ export const handleAdminOverviewRequest = createAdminOverviewHandler({
     adminOverviewService,
   ),
   verifyIdToken: (idToken: string) =>
-    getFirebaseAdminApp().auth().verifyIdToken(idToken),
+    getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
 });
 
 export {buildSuccessResponse};

@@ -160,7 +160,7 @@ export const handleVendorSimulationValidationRequest =
         simulationValidationService,
       ),
     verifyIdToken: (idToken: string) =>
-      getFirebaseAdminApp().auth().verifyIdToken(idToken),
+      getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
   });
 
 export {buildSuccessResponse};

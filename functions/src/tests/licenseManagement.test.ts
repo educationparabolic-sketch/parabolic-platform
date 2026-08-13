@@ -78,6 +78,7 @@ test(
     assert.equal(result.activeStudentLimit, 250);
     assert.equal(result.licensePath, currentLicensePath);
     assert.equal(result.compatibilityLicensePath, mainLicensePath);
+    assert.equal(result.licenseVersion, result.licenseHistoryEntryId);
     assert.match(
       result.licenseHistoryPath,
       new RegExp(`^${institutePath}/licenseHistory/`),
@@ -91,20 +92,24 @@ test(
       currentLicenseSnapshot,
       mainLicenseSnapshot,
       licenseHistorySnapshot,
+      instituteSnapshot,
     ] = await Promise.all([
       firestore.doc(currentLicensePath).get(),
       firestore.doc(mainLicensePath).get(),
       firestore.doc(result.licenseHistoryPath).get(),
+      firestore.doc(institutePath).get(),
     ]);
 
     const currentLicense = currentLicenseSnapshot.data();
     const mainLicense = mainLicenseSnapshot.data();
     const licenseHistory = licenseHistorySnapshot.data();
+    const institute = instituteSnapshot.data();
 
     assert.equal(currentLicenseSnapshot.exists, true);
     assert.equal(mainLicenseSnapshot.exists, true);
     assert.equal(licenseHistorySnapshot.exists, true);
     assert.equal(currentLicense?.currentLayer, "L2");
+    assert.equal(currentLicense?.licenseVersion, result.licenseVersion);
     assert.equal(currentLicense?.planId, "L2");
     assert.equal(currentLicense?.planName, "Controlled");
     assert.equal(currentLicense?.activeStudentLimit, 250);
@@ -122,6 +127,8 @@ test(
     assert.equal(typeof currentLicense?.updatedAt?.toDate, "function");
 
     assert.equal(mainLicense?.currentLayer, "L2");
+    assert.equal(mainLicense?.licenseVersion, result.licenseVersion);
+    assert.equal(institute?.licenseVersion, result.licenseVersion);
     assert.equal(mainLicense?.planId, "L2");
     assert.equal(mainLicense?.activeStudentLimit, 250);
     assert.deepEqual(mainLicense?.featureFlags, currentLicense?.featureFlags);

@@ -151,7 +151,7 @@ export const createInternalEmailQueueHandler = (
 export const handleInternalEmailQueueRequest = createInternalEmailQueueHandler({
   enqueueEmailJob: emailQueueService.enqueueEmailJob.bind(emailQueueService),
   verifyIdToken: (idToken: string) =>
-    getFirebaseAdminApp().auth().verifyIdToken(idToken),
+    getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
 });
 
 export {buildSuccessResponse};

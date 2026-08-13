@@ -110,7 +110,7 @@ export const createAdminRunsHandler = (
 export const handleAdminRunsRequest = createAdminRunsHandler({
   createRun: adminRunsService.createRun.bind(adminRunsService),
   verifyIdToken: (idToken: string) =>
-    getFirebaseAdminApp().auth().verifyIdToken(idToken),
+    getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
 });
 
 export {buildSuccessResponse};

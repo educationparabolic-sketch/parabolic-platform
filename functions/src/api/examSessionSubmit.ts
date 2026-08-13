@@ -205,5 +205,5 @@ export const createExamSessionSubmitHandler = (
 export const handleExamSessionSubmitRequest = createExamSessionSubmitHandler({
   submitSession: submissionService.submitSession.bind(submissionService),
   verifyIdToken: (idToken: string) =>
-    getFirebaseAdminApp().auth().verifyIdToken(idToken),
+    getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
 });
