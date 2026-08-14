@@ -67,6 +67,10 @@ const POLICIES = [
     pattern: /PARABOLIC_FIXTURE_PAYLOAD:/gu,
   },
   {
+    id: "local-auth-fallback",
+    pattern: /(?:local-auth-fallback|demo-password|Parabolic#Test115)/gu,
+  },
+  {
     id: "prefilled-password-object",
     pattern: /(?:["']password["']|\bpassword)\s*:\s*["'][^"'\r\n]+["']/giu,
   },

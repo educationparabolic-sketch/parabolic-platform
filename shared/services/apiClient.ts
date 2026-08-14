@@ -1,5 +1,4 @@
 import { getIdToken, type User } from "firebase/auth";
-import { readCrossPortalIdToken } from "./crossPortalAuthSession";
 import { getFrontendEnvironment } from "./frontendEnvironment";
 import { getFirebaseAuth } from "./firebaseClient";
 import {
@@ -150,7 +149,7 @@ async function resolveToken(skipAuth?: boolean): Promise<string | null> {
   }
 
   if (!currentUser) {
-    return readCrossPortalIdToken();
+    return null;
   }
 
   return getIdToken(currentUser, false);
@@ -158,7 +157,7 @@ async function resolveToken(skipAuth?: boolean): Promise<string | null> {
 
 async function refreshToken(user: User | null): Promise<string | null> {
   if (!user) {
-    return readCrossPortalIdToken();
+    return null;
   }
 
   return getIdToken(user, true);

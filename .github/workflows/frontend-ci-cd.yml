@@ -11,7 +11,16 @@ on:
       - "apps/**"
       - "functions/**"
       - "shared/**"
+      - "tests/api-*.test.mjs"
+      - "tests/backend-ci-*.test.mjs"
+      - "tests/frontend-api-routing.test.mjs"
+      - "tests/portal-response-adapters.test.mjs"
+      - "docs/api_contract.md"
+      - "firestore.rules"
+      - "firestore.indexes.json"
+      - "storage.rules"
       - "firebase.json"
+      - "package.json"
       - "scripts/frontend-cicd/**"
   push:
     branches:
@@ -23,7 +32,16 @@ on:
       - "apps/**"
       - "functions/**"
       - "shared/**"
+      - "tests/api-*.test.mjs"
+      - "tests/backend-ci-*.test.mjs"
+      - "tests/frontend-api-routing.test.mjs"
+      - "tests/portal-response-adapters.test.mjs"
+      - "docs/api_contract.md"
+      - "firestore.rules"
+      - "firestore.indexes.json"
+      - "storage.rules"
       - "firebase.json"
+      - "package.json"
       - "scripts/frontend-cicd/**"
   workflow_dispatch:
 
@@ -41,6 +59,7 @@ jobs:
       VITE_FIREBASE_AUTH_DOMAIN: "demo-parabolic-test.firebaseapp.com"
       VITE_FIREBASE_PROJECT_ID: "demo-parabolic-test"
       VITE_FIREBASE_APP_ID: "1:000000000000:web:ci"
+      VITE_FIREBASE_AUTH_EMULATOR_URL: ""
       VITE_FIREBASE_STORAGE_BUCKET: "demo-parabolic-test.firebasestorage.app"
       VITE_FIREBASE_MESSAGING_SENDER_ID: "000000000000"
       VITE_FIREBASE_MEASUREMENT_ID: ""
@@ -129,10 +148,74 @@ jobs:
             npm --prefix "apps/${app}" run test --if-present
           done
 
+  backend-ci:
+    name: Backend Validate
+    runs-on: ubuntu-latest
+    env:
+      CI: "true"
+      NODE_ENV: "test"
+      PROJECT_ID: "demo-parabolic-test"
+      GCLOUD_PROJECT: "demo-parabolic-test"
+      GOOGLE_CLOUD_PROJECT: "demo-parabolic-test"
+      NO_GCE_CHECK: "true"
+      METADATA_SERVER_DETECTION: "none"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+
+      - name: Install backend test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm ci --prefix functions
+
+      - name: Install Chromium and pinned Firebase CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run playwright:install
+          npm install --global firebase-tools@15.9.0
+          firebase --version
+
+      - name: Lint Functions
+        run: npm --prefix functions run lint
+
+      - name: Build Functions
+        run: npm --prefix functions run build
+
+      - name: Run deterministic non-emulator tests
+        run: npm --prefix functions run test:ci:non-emulator
+
+      - name: Run accumulated emulator integration tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run test:emulators:ci
+          npm run test:emulators:failure-cleanup
+
+      - name: Validate backend CI contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run test:backend-ci-trigger-coverage
+          npm run test:backend-ci-validation
+          npm run test:emulator-harness-contract
+          npm run test:emulator-aggregate-contract
+
   frontend-deploy:
     name: Frontend Deploy
     runs-on: ubuntu-latest
-    needs: frontend-ci
+    needs: [frontend-ci, backend-ci]
     if: github.event_name == 'push' && (github.ref_name == 'dev' || github.ref_name == 'staging' || github.ref_name == 'main')
     concurrency:
       group: frontend-deploy-${{ github.ref_name }}
@@ -151,6 +234,7 @@ jobs:
       VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
       VITE_FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
       VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+      VITE_FIREBASE_AUTH_EMULATOR_URL: ""
       VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
       VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
       VITE_FIREBASE_MEASUREMENT_ID: ${{ vars.VITE_FIREBASE_MEASUREMENT_ID }}

@@ -4,6 +4,7 @@
     "lint": "eslint --ext .js,.ts .",
     "build": "tsc",
     "build:watch": "tsc --watch",
+    "test:ci:non-emulator": "node scripts/run-non-emulator-tests.mjs",
     "test:api-gateway": "npm run build && node --test tests/apiGateway.test.js",
     "test:api-route-manifest": "npm run build && node --test tests/apiRouteManifest.test.js",
     "test:audit-tamper-protection": "npm run build && node --test lib/tests/auditTamperProtection.test.js",

@@ -1,19 +1,71 @@
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
+import {randomUUID} from "node:crypto";
 
-const expectedProjectId = "demo-parabolic-test";
+import {firebaseEmulatorHarness} from "./firebase-emulator-harness-config.mjs";
+
+const expectedProjectId = firebaseEmulatorHarness.projectId;
 const npmExecutable = process.platform === "win32" ? "npm.cmd" : "npm";
+const authHost = process.env.FIREBASE_AUTH_EMULATOR_HOST;
 const firestoreHost = process.env.FIRESTORE_EMULATOR_HOST;
+const storageHost = process.env.FIREBASE_STORAGE_EMULATOR_HOST;
 const projectId = process.env.GCLOUD_PROJECT;
-const functionsOrigin = "http://127.0.0.1:5001";
-const hostingOrigin = process.env.PARABOLIC_E2E_BASE_URL ?? "http://127.0.0.1:5000";
+const functionsOrigin =
+  `http://127.0.0.1:${firebaseEmulatorHarness.ports.functions}`;
+const hostingOrigin = process.env.PARABOLIC_E2E_BASE_URL ??
+  `http://127.0.0.1:${firebaseEmulatorHarness.ports.hosting}`;
 const marker = "bwm-001-g-emulator-smoke";
 const expectedPermissionsPolicy =
   "camera=(), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(self)";
 
 assert.equal(projectId, expectedProjectId, "Unexpected Firebase emulator project ID");
+assert.ok(authHost, "FIREBASE_AUTH_EMULATOR_HOST is required");
 assert.ok(firestoreHost, "FIRESTORE_EMULATOR_HOST is required");
+assert.ok(storageHost, "FIREBASE_STORAGE_EMULATOR_HOST is required");
 assert.ok(process.env.FIREBASE_EMULATOR_HUB, "FIREBASE_EMULATOR_HUB is required");
+
+let authIdToken;
+
+async function verifyAuth() {
+  const response = await fetch(
+    `http://${authHost}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=demo-api-key`,
+    {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        email: `bwm-010-${randomUUID()}@example.invalid`,
+        password: `${randomUUID()}Aa1!`,
+        returnSecureToken: true,
+      }),
+      signal: AbortSignal.timeout(15_000),
+    },
+  );
+  const responseBody = JSON.parse(
+    await assertSuccessfulResponse(response, "Auth account creation"),
+  );
+  assert.ok(responseBody.localId);
+  assert.ok(responseBody.idToken);
+  authIdToken = responseBody.idToken;
+  console.log("[emulator-check] Auth account lifecycle verified.");
+}
+
+async function deleteSmokeAccount() {
+  if (!authIdToken) {
+    return;
+  }
+
+  const response = await fetch(
+    `http://${authHost}/identitytoolkit.googleapis.com/v1/accounts:delete?key=demo-api-key`,
+    {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({idToken: authIdToken}),
+      signal: AbortSignal.timeout(15_000),
+    },
+  );
+  await assertSuccessfulResponse(response, "Auth account cleanup");
+  authIdToken = undefined;
+}
 
 const firestoreDocumentUrl = new URL(
   `/v1/projects/${expectedProjectId}/databases/(default)/documents/emulatorSmoke/bwm-001-g`,
@@ -91,6 +143,28 @@ async function verifyFunctions() {
   console.log("[emulator-check] Functions health endpoint verified.");
 }
 
+async function verifyStorage() {
+  const objectName = encodeURIComponent("emulatorSmoke/bwm-010-harness-probe");
+  const response = await fetch(
+    `http://${storageHost}/v0/b/${expectedProjectId}.appspot.com/o` +
+      `?uploadType=media&name=${objectName}`,
+    {
+      method: "POST",
+      headers: {"Content-Type": "text/plain"},
+      body: marker,
+      signal: AbortSignal.timeout(15_000),
+    },
+  );
+  const responseBody = await response.text();
+
+  assert.equal(
+    response.status,
+    403,
+    `Storage deny-by-default rule returned HTTP ${response.status}: ${responseBody}`,
+  );
+  console.log("[emulator-check] Storage deny-by-default rules verified.");
+}
+
 async function verifyHosting() {
   for (const portal of ["admin", "student"]) {
     const response = await fetch(`${hostingOrigin}/${portal}`, {
@@ -135,8 +209,10 @@ async function verifyHosting() {
 }
 
 try {
+  await verifyAuth();
   await verifyFirestore();
   await verifyFunctions();
+  await verifyStorage();
   await verifyHosting();
 
   const browserResult = spawnSync(
@@ -150,7 +226,7 @@ try {
   }
   assert.equal(browserResult.status, 0, "Playwright Hosting smoke failed");
 } finally {
-  await deleteSmokeDocument();
+  await Promise.all([deleteSmokeAccount(), deleteSmokeDocument()]);
 }
 
 console.log("[emulator-check] PASS: real emulator and browser checks completed.");

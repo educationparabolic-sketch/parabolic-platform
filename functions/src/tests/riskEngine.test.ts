@@ -60,6 +60,8 @@ test(
 
     await firestore.doc(studentMetricsPath).set({
       avgAccuracyPercent: 72,
+      avgDisciplineIndex: 81.59,
+      avgNormalizedRiskScore: 14.3,
       avgPhaseAdherence: 80,
       avgRawScorePercent: 68,
       easyNeglectRate: 10,
@@ -84,6 +86,8 @@ test(
       undefined,
       {
         avgAccuracyPercent: 72,
+        avgDisciplineIndex: 81.59,
+        avgNormalizedRiskScore: 14.3,
         avgPhaseAdherence: 80,
         avgRawScorePercent: 68,
         easyNeglectRate: 10,
@@ -115,6 +119,8 @@ test(
 
     await firestore.doc(studentMetricsPath).set({
       avgAccuracyPercent: 75,
+      avgDisciplineIndex: 33,
+      avgNormalizedRiskScore: 85,
       avgPhaseAdherence: 25,
       avgRawScorePercent: 70,
       easyNeglectRate: 20,
@@ -145,6 +151,8 @@ test(
         },
         {
           avgAccuracyPercent: 75,
+          avgDisciplineIndex: 33,
+          avgNormalizedRiskScore: 85,
           avgPhaseAdherence: 25,
           avgRawScorePercent: 70,
           easyNeglectRate: 20,
@@ -191,6 +199,8 @@ test(
 
     await firestore.doc(studentMetricsPath).set({
       avgAccuracyPercent: 64,
+      avgDisciplineIndex: 66.85,
+      avgNormalizedRiskScore: 33.15,
       avgPhaseAdherence: 50,
       avgRawScorePercent: 60,
       easyNeglectRate: 25,
@@ -214,6 +224,8 @@ test(
       undefined,
       {
         avgAccuracyPercent: 64,
+        avgDisciplineIndex: 66.85,
+        avgNormalizedRiskScore: 33.15,
         avgPhaseAdherence: 50,
         avgRawScorePercent: 60,
         easyNeglectRate: 25,
@@ -247,6 +259,8 @@ test(
         },
         {
           avgAccuracyPercent: 64,
+          avgDisciplineIndex: 66.85,
+          avgNormalizedRiskScore: 33.15,
           avgPhaseAdherence: 50,
           avgRawScorePercent: 60,
           easyNeglectRate: 25,

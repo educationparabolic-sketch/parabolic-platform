@@ -149,6 +149,7 @@ their mapped target origins.
 | `VITE_FIREBASE_STORAGE_BUCKET` | All portals | `O` | `O` | `R` | `R` | Bucket belonging to the same selected project; never a bucket from another environment. |
 | `VITE_FIREBASE_MESSAGING_SENDER_ID` | All portals | `O` | `O` | `O` | `O` | Supply only when Firebase Messaging or another selected SDK requires it. |
 | `VITE_FIREBASE_MEASUREMENT_ID` | All portals | `O` | `O` | `O` | `O` | Supply only when approved Analytics collection is enabled for that environment. |
+| `VITE_FIREBASE_AUTH_EMULATOR_URL` | All portals | `O` | `O` | `F` | `F` | Optional origin-only `http://localhost:<port>` or `http://127.0.0.1:<port>` connection for local Auth emulator proof. Runtime use also requires the browser page itself to be on loopback; release CI injects blank and the artifact scanner rejects loopback literals. |
 | `VITE_API_BASE_URL` | All portals | `O` | `O` | `F` | `F` | Developer/test diagnostic override only. Staging and production must leave it absent/blank so the reviewed same-origin `/api/v1` rewrite is used. |
 | `VITE_CDN_BASE_URL` | All portals | `O` | `O` | `R` | `R` | Absolute environment-specific CDN origin. The local `/cdn` fallback is allowed only in development/test. |
 | `VITE_PORTAL_BASE_URL` | All portals | `O` | `O` | `R` | `R` | Absolute Admin/Student Hosting origin, without a trailing slash. Do not persist an expiring preview URL as the canonical value. |

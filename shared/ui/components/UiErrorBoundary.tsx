@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { isLoopbackHostname } from "../../services/browserRuntimeEnvironment";
 import { captureFrontendClientCrash } from "../../services/frontendMonitoring";
 import "./shared-ui-components.css";
 
@@ -38,9 +39,7 @@ function shouldTriggerLocalCrashProbe(): boolean {
     return false;
   }
 
-  const hostname = window.location.hostname;
-  const isLocalHost = hostname === "127.0.0.1" || hostname === "localhost";
-  if (!isLocalHost) {
+  if (!isLoopbackHostname(window.location.hostname)) {
     return false;
   }
 

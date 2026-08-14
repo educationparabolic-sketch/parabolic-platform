@@ -238,19 +238,14 @@ const protectedCollections = [
 ] as const;
 
 test(
-  "protected audit collections accept create requests with server timestamps",
+  "protected audit collections reject unauthenticated creates with server timestamps",
   async () => {
     for (const collection of protectedCollections) {
       const response = await createProtectedDocument(
         collection.path,
         collection.createPayload,
       );
-
-      assert.equal(
-        response.ok,
-        true,
-        `Expected create to succeed for ${collection.path}.`,
-      );
+      await assertPermissionDenied(response);
     }
   },
 );

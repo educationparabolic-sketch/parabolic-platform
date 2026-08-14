@@ -377,7 +377,10 @@ export class GovernanceSnapshotAggregationService {
       avgAccuracyPercent: aggregatedRunAnalytics.avgAccuracyPercent,
       avgPhaseAdherence: aggregatedStudentMetrics.avgPhaseAdherence,
       avgRawScorePercent: aggregatedRunAnalytics.avgRawScorePercent,
-      calibrationVersionUsed: input.versionMetadata?.calibrationVersionUsed,
+      ...(input.versionMetadata?.calibrationVersionUsed !== undefined ? {
+        calibrationVersionUsed:
+          input.versionMetadata.calibrationVersionUsed,
+      } : {}),
       createdAt: generatedAt,
       disciplineMean: aggregatedStudentMetrics.disciplineMean,
       disciplineTrend: aggregatedStudentMetrics.disciplineTrend,
@@ -396,7 +399,9 @@ export class GovernanceSnapshotAggregationService {
       month: snapshotMonth,
       overrideFrequency: aggregatedRunAnalytics.overrideFrequency,
       phaseCompliancePercent: aggregatedStudentMetrics.avgPhaseAdherence,
-      riskModelVersionUsed: input.versionMetadata?.riskModelVersionUsed,
+      ...(input.versionMetadata?.riskModelVersionUsed !== undefined ? {
+        riskModelVersionUsed: input.versionMetadata.riskModelVersionUsed,
+      } : {}),
       riskClusterDistribution: aggregatedStudentMetrics.riskDistribution,
       riskDistribution: aggregatedStudentMetrics.riskDistribution,
       rushPatternPercent: aggregatedStudentMetrics.rushPatternPercent,
@@ -407,7 +412,10 @@ export class GovernanceSnapshotAggregationService {
         aggregatedStudentMetrics.disciplineVariance,
         aggregatedRunAnalytics.templateVarianceMean,
       ),
-      templateVersionRangeUsed: input.versionMetadata?.templateVersionRangeUsed,
+      ...(input.versionMetadata?.templateVersionRangeUsed !== undefined ? {
+        templateVersionRangeUsed:
+          input.versionMetadata.templateVersionRangeUsed,
+      } : {}),
       templateVarianceMean: aggregatedRunAnalytics.templateVarianceMean,
       wrongStreakPercent: aggregatedStudentMetrics.wrongStreakPercent,
     };

@@ -1,10 +1,12 @@
 import {spawnSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
 
+import {firebaseEmulatorHarness} from "./firebase-emulator-harness-config.mjs";
+
 const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
 const npmExecutable = process.platform === "win32" ? "npm.cmd" : "npm";
 const firebaseExecutable = process.platform === "win32" ? "firebase.cmd" : "firebase";
-const projectId = "demo-parabolic-test";
+const projectId = firebaseEmulatorHarness.projectId;
 
 function run(label, executable, args, extraEnvironment = {}) {
   console.log(`\n[emulator-smoke] ${label}`);
@@ -54,7 +56,7 @@ const emulatorArgs = [
   "--project",
   projectId,
   "--only",
-  "firestore,functions,hosting:portal",
+  firebaseEmulatorHarness.services.join(","),
   "node scripts/firebase-emulator-smoke.mjs",
 ];
 
@@ -71,7 +73,14 @@ run(
     FUNCTIONS_DISCOVERY_TIMEOUT: "30",
     NODE_ENV: "test",
     PROJECT_ID: projectId,
+    GCLOUD_PROJECT: projectId,
+    GOOGLE_CLOUD_PROJECT: projectId,
+    NO_GCE_CHECK: "true",
+    METADATA_SERVER_DETECTION: "none",
   },
 );
 
-console.log("\n[emulator-smoke] PASS: Functions, Firestore, Hosting, and browser checks completed.");
+console.log(
+  "\n[emulator-smoke] PASS: Auth, Firestore, Functions, Hosting, Storage, " +
+    "and browser checks completed.",
+);

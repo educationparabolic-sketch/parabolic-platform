@@ -16,18 +16,14 @@ import {
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
 } from "firebase/auth";
+import { isLoopbackHostname } from "./browserRuntimeEnvironment";
 import { getFirebaseAuth } from "./firebaseClient";
-import {
-  clearCrossPortalAuthSession,
-  persistCrossPortalAuthSession,
-  readCrossPortalAuthSession,
-} from "./crossPortalAuthSession";
+import { clearLegacyBrowserTokenCopies } from "./legacyBrowserTokenStorage";
 import type { PortalKey } from "./portalManifest";
 import type { AuthContextValue, AuthSession, SignInInput } from "../types/authProvider";
 
 const TOKEN_REFRESH_INTERVAL_MS = 14 * 60 * 1000;
 const LOCAL_TEST_PASSWORDS = new Set(["Parabolic#Test115", "demo-password"]);
-const LOCAL_FALLBACK_STORAGE_KEY = "parabolic.localAuthToken";
 
 const AUTH_SESSION_INITIAL_STATE: AuthSession = {
   status: "loading",
@@ -61,11 +57,6 @@ const LOCAL_AUTH_IDENTITIES: Record<string, LocalAuthIdentity> = {
   "vendor.test@parabolic.local": {role: "vendor", licenseLayer: "L0"},
 };
 
-function isLocalAuthFallbackEnabled(): boolean {
-  const host = window.location.hostname.toLowerCase();
-  return host === "localhost" || host === "127.0.0.1";
-}
-
 function encodeBase64Url(value: string): string {
   return btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
@@ -87,8 +78,8 @@ function buildLocalTestToken(email: string, identity: LocalAuthIdentity): string
   return `${encodeBase64Url(JSON.stringify({alg: "none", typ: "JWT"}))}.${encodeBase64Url(JSON.stringify(payload))}.local`;
 }
 
-function tryLocalFallbackSignIn(email: string, password: string): {token: string} | null {
-  if (!isLocalAuthFallbackEnabled()) {
+function tryDevelopmentFallbackSignIn(email: string, password: string): {token: string} | null {
+  if (!isLoopbackHostname(window.location.hostname)) {
     return null;
   }
 
@@ -103,48 +94,25 @@ function tryLocalFallbackSignIn(email: string, password: string): {token: string
   };
 }
 
-function persistLocalFallbackToken(token: string): void {
-  try {
-    window.localStorage.setItem(LOCAL_FALLBACK_STORAGE_KEY, token);
-  } catch {
-    // Best-effort persistence only.
-  }
-}
-
-function readPersistedLocalFallbackToken(): string | null {
-  try {
-    const value = window.localStorage.getItem(LOCAL_FALLBACK_STORAGE_KEY);
-    if (typeof value !== "string" || value.trim().length === 0) {
-      return null;
-    }
-
-    return value;
-  } catch {
-    return null;
-  }
-}
-
-function clearPersistedLocalFallbackToken(): void {
-  try {
-    window.localStorage.removeItem(LOCAL_FALLBACK_STORAGE_KEY);
-  } catch {
-    // No-op
-  }
-}
+const tryLocalFallbackSignIn: (
+  email: string,
+  password: string,
+) => {token: string} | null = import.meta.env.MODE === "development"
+  ? tryDevelopmentFallbackSignIn
+  : () => null;
 
 interface AuthProviderProps {
   children: ReactNode;
   portalKey?: PortalKey;
 }
 
-export function AuthProvider({ children, portalKey = "admin" }: AuthProviderProps) {
+export function AuthProvider({ children }: AuthProviderProps) {
   const [session, setSession] = useState<AuthSession>(AUTH_SESSION_INITIAL_STATE);
   const authRef = useRef<ReturnType<typeof getFirebaseAuth> | null>(null);
   const localFallbackActiveRef = useRef(false);
-  const crossPortalBridgeActiveRef = useRef(false);
 
   const syncUserSession = useCallback(async (user: AuthSession["user"], status: AuthSession["status"]) => {
-    if ((localFallbackActiveRef.current || crossPortalBridgeActiveRef.current) && !user) {
+    if (localFallbackActiveRef.current && !user) {
       return;
     }
 
@@ -161,10 +129,7 @@ export function AuthProvider({ children, portalKey = "admin" }: AuthProviderProp
 
     try {
       localFallbackActiveRef.current = false;
-      crossPortalBridgeActiveRef.current = false;
-      clearPersistedLocalFallbackToken();
       const token = await getIdToken(user, false);
-      persistCrossPortalAuthSession({ sourcePortal: portalKey, idToken: token });
       setSession({
         status,
         user,
@@ -181,33 +146,11 @@ export function AuthProvider({ children, portalKey = "admin" }: AuthProviderProp
         error: normalizeErrorMessage(error),
       });
     }
-  }, [portalKey]);
+  }, []);
 
   useEffect(() => {
     let unsubscribe: (() => void) | null = null;
-    const persistedToken = readPersistedLocalFallbackToken();
-    const bridgedSession = readCrossPortalAuthSession();
-
-    if (persistedToken && isLocalAuthFallbackEnabled()) {
-      localFallbackActiveRef.current = true;
-      crossPortalBridgeActiveRef.current = false;
-      setSession({
-        status: "authenticated",
-        user: null,
-        idToken: persistedToken,
-        lastTokenRefreshAt: Date.now(),
-        error: null,
-      });
-    } else if (bridgedSession) {
-      crossPortalBridgeActiveRef.current = true;
-      setSession({
-        status: "authenticated",
-        user: null,
-        idToken: bridgedSession.idToken,
-        lastTokenRefreshAt: bridgedSession.issuedAt,
-        error: null,
-      });
-    }
+    clearLegacyBrowserTokenCopies();
 
     try {
       const auth = getFirebaseAuth();
@@ -247,7 +190,6 @@ export function AuthProvider({ children, portalKey = "admin" }: AuthProviderProp
     const refreshTimer = window.setInterval(() => {
       void getIdToken(authenticatedUser, true)
         .then((token) => {
-          persistCrossPortalAuthSession({ sourcePortal: portalKey, idToken: token });
           setSession((current) => {
             if (!current.user) {
               return current;
@@ -269,15 +211,12 @@ export function AuthProvider({ children, portalKey = "admin" }: AuthProviderProp
     }, TOKEN_REFRESH_INTERVAL_MS);
 
     return () => window.clearInterval(refreshTimer);
-  }, [portalKey, session.status, session.user]);
+  }, [session.status, session.user]);
 
   const signIn = useCallback(async ({ email, password }: SignInInput): Promise<boolean> => {
     const immediateFallback = tryLocalFallbackSignIn(email, password);
     if (immediateFallback) {
       localFallbackActiveRef.current = true;
-      crossPortalBridgeActiveRef.current = false;
-      persistLocalFallbackToken(immediateFallback.token);
-      persistCrossPortalAuthSession({ sourcePortal: portalKey, idToken: immediateFallback.token });
       setSession({
         status: "authenticated",
         user: null,
@@ -292,9 +231,6 @@ export function AuthProvider({ children, portalKey = "admin" }: AuthProviderProp
       const fallback = tryLocalFallbackSignIn(email, password);
       if (fallback) {
         localFallbackActiveRef.current = true;
-        crossPortalBridgeActiveRef.current = false;
-        persistLocalFallbackToken(fallback.token);
-        persistCrossPortalAuthSession({ sourcePortal: portalKey, idToken: fallback.token });
         setSession({
           status: "authenticated",
           user: null,
@@ -317,9 +253,6 @@ export function AuthProvider({ children, portalKey = "admin" }: AuthProviderProp
       const credential = await signInWithEmailAndPassword(authRef.current, email, password);
       const token = await getIdToken(credential.user, true);
       localFallbackActiveRef.current = false;
-      crossPortalBridgeActiveRef.current = false;
-      clearPersistedLocalFallbackToken();
-      persistCrossPortalAuthSession({ sourcePortal: portalKey, idToken: token });
 
       setSession({
         status: "authenticated",
@@ -334,9 +267,6 @@ export function AuthProvider({ children, portalKey = "admin" }: AuthProviderProp
       const fallback = tryLocalFallbackSignIn(email, password);
       if (fallback) {
         localFallbackActiveRef.current = true;
-        crossPortalBridgeActiveRef.current = false;
-        persistLocalFallbackToken(fallback.token);
-        persistCrossPortalAuthSession({ sourcePortal: portalKey, idToken: fallback.token });
         setSession({
           status: "authenticated",
           user: null,
@@ -354,14 +284,12 @@ export function AuthProvider({ children, portalKey = "admin" }: AuthProviderProp
       }));
       return false;
     }
-  }, [portalKey]);
+  }, []);
 
   const signOut = useCallback(async () => {
     if (!authRef.current) {
       localFallbackActiveRef.current = false;
-      crossPortalBridgeActiveRef.current = false;
-      clearPersistedLocalFallbackToken();
-      clearCrossPortalAuthSession();
+      clearLegacyBrowserTokenCopies();
       setSession({
         status: "unauthenticated",
         user: null,
@@ -374,9 +302,7 @@ export function AuthProvider({ children, portalKey = "admin" }: AuthProviderProp
 
     await firebaseSignOut(authRef.current);
     localFallbackActiveRef.current = false;
-    crossPortalBridgeActiveRef.current = false;
-    clearPersistedLocalFallbackToken();
-    clearCrossPortalAuthSession();
+    clearLegacyBrowserTokenCopies();
     setSession({
       status: "unauthenticated",
       user: null,
@@ -388,7 +314,6 @@ export function AuthProvider({ children, portalKey = "admin" }: AuthProviderProp
 
   const refreshIdToken = useCallback(async (): Promise<string | null> => {
     if (session.user === null && session.status === "authenticated" && session.idToken) {
-      persistCrossPortalAuthSession({ sourcePortal: portalKey, idToken: session.idToken });
       return session.idToken;
     }
 
@@ -398,7 +323,6 @@ export function AuthProvider({ children, portalKey = "admin" }: AuthProviderProp
 
     try {
       const token = await getIdToken(session.user, true);
-      persistCrossPortalAuthSession({ sourcePortal: portalKey, idToken: token });
       setSession((current) => ({
         ...current,
         idToken: token,
@@ -413,7 +337,7 @@ export function AuthProvider({ children, portalKey = "admin" }: AuthProviderProp
       }));
       return null;
     }
-  }, [portalKey, session.idToken, session.status, session.user]);
+  }, [session.idToken, session.status, session.user]);
 
   const clearError = useCallback(() => {
     setSession((current) => ({

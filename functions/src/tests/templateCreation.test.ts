@@ -60,7 +60,7 @@ const deleteDocumentIfPresent = async (path: string): Promise<void> => {
 };
 
 test(
-  "processTemplateCreated validates question ownership and normalizes draft " +
+  "processTemplateCreated validates question ownership and normalizes " +
     "template fields",
   async () => {
     const instituteId = "inst_build_16";
@@ -118,7 +118,7 @@ test(
     const templateSnapshot = await firestore.doc(templatePath).get();
     const templateData = templateSnapshot.data();
 
-    assert.equal(templateData?.status, "draft");
+    assert.equal(templateData?.status, "ready");
     assert.equal(templateData?.totalQuestions, 3);
     assert.equal(templateData?.totalRuns, 7);
     assert.ok(templateData?.createdAt instanceof Timestamp);

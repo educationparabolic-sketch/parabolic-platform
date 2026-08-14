@@ -252,6 +252,35 @@ export function validateBuildEnvironment(input = process.env) {
     }
   }
 
+  if (environment.VITE_FIREBASE_AUTH_EMULATOR_URL) {
+    if (environmentName === "staging" || environmentName === "production") {
+      errors.push("VITE_FIREBASE_AUTH_EMULATOR_URL is forbidden in release builds");
+    } else {
+      let parsed;
+      try {
+        parsed = new URL(environment.VITE_FIREBASE_AUTH_EMULATOR_URL);
+      } catch {
+        errors.push("VITE_FIREBASE_AUTH_EMULATOR_URL must be an absolute URL");
+      }
+
+      if (parsed) {
+        const isLoopback = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+        if (parsed.protocol !== "http:" || !isLoopback) {
+          errors.push("VITE_FIREBASE_AUTH_EMULATOR_URL must use a loopback HTTP origin");
+        }
+        if (
+          parsed.username ||
+          parsed.password ||
+          (parsed.pathname !== "/" && parsed.pathname !== "") ||
+          parsed.search ||
+          parsed.hash
+        ) {
+          errors.push("VITE_FIREBASE_AUTH_EMULATOR_URL must contain an origin only");
+        }
+      }
+    }
+  }
+
   if (environment.VITE_EXAM_DEV_MOCK_ENTRY !== "false") {
     errors.push("VITE_EXAM_DEV_MOCK_ENTRY must be false in CI builds");
   }

@@ -7,40 +7,26 @@ const { getAuth } = require("../../functions/node_modules/firebase-admin/lib/aut
 
 const projectId = "demo-parabolic-test";
 const authHost = process.env.FIREBASE_AUTH_EMULATOR_HOST;
-const storageKey = "parabolic.crossPortalAuthSession.v1";
 let adminApp;
-let teacherIdToken;
+let teacherEmail;
+let teacherPassword;
 let teacherUid;
 
-async function signInWithPassword(email, password) {
-  const response = await fetch(
-    `http://${authHost}/identitytoolkit.googleapis.com/v1/` +
-      "accounts:signInWithPassword?key=demo-key",
-    {
-      body: JSON.stringify({ email, password, returnSecureToken: true }),
-      headers: { "Content-Type": "application/json" },
-      method: "POST",
-    },
-  );
-  const body = await response.json();
-  expect(response.status, JSON.stringify(body)).toBe(200);
-  return body.idToken;
-}
+test.use({ bypassCSP: true });
 
 test.beforeAll(async () => {
   expect(authHost).toBeTruthy();
   adminApp = initializeApp({ projectId }, `admin-teacher-e2e-${Date.now()}`);
   const auth = getAuth(adminApp);
-  const email = `teacher-browser-${Date.now()}@example.test`;
-  const password = "bwm-008-teacher-browser";
-  const user = await auth.createUser({ email, password });
+  teacherEmail = `teacher-browser-${Date.now()}@example.test`;
+  teacherPassword = "bwm-009-teacher-browser";
+  const user = await auth.createUser({ email: teacherEmail, password: teacherPassword });
   teacherUid = user.uid;
   await auth.setCustomUserClaims(user.uid, {
     instituteId: "inst_bwm_008_teacher_browser",
     licenseLayer: "L3",
     role: "teacher",
   });
-  teacherIdToken = await signInWithPassword(email, password);
 });
 
 test.afterAll(async () => {
@@ -61,24 +47,20 @@ test("teacher opens the live Admin overview without a role denial", async ({ pag
     { timeout: 90_000 },
   );
 
-  await page.addInitScript(
-    ({ idToken, key }) => {
-      const now = Date.now();
-      window.history.replaceState(null, "", "/admin/overview");
-      window.localStorage.setItem(
-        key,
-        JSON.stringify({
-          sourcePortal: "admin",
-          idToken,
-          issuedAt: now,
-          expiresAt: now + 10 * 60 * 1000,
-        }),
-      );
-    },
-    { idToken: teacherIdToken, key: storageKey },
-  );
+  await page.addInitScript(() => {
+    window.history.replaceState(null, "", "/admin/overview");
+  });
 
   await page.goto("/admin/index.html", { waitUntil: "domcontentloaded" });
+  await expect(page).toHaveURL(/\/login$/);
+  await page.getByLabel("Email", { exact: true }).fill(teacherEmail);
+  await page.getByLabel("Password", { exact: true }).fill(teacherPassword);
+  const signInResponsePromise = page.waitForResponse(
+    (response) => response.url().includes("accounts:signInWithPassword") && response.status() === 200,
+  );
+  await page.getByRole("button", { name: "Login", exact: true }).click();
+  const signInResponse = await signInResponsePromise;
+  expect(new URL(signInResponse.url()).origin).toBe(`http://${authHost}`);
   await expect(page).toHaveURL(/\/admin\/overview$/);
   await expect(page.locator(".admin-topbar").getByRole("heading", { name: "Overview", exact: true })).toBeVisible({
     timeout: 90_000,

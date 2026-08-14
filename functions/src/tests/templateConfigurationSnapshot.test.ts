@@ -131,9 +131,9 @@ test(
       phase3Percent: 15,
     });
     assert.deepEqual(templateData?.timingProfile, {
-      easy: {max: 80, min: 30},
-      hard: {max: 200, min: 120},
-      medium: {max: 140, min: 70},
+      easy: {max: 80, min: 30, recommended: 55},
+      hard: {max: 200, min: 120, recommended: 160},
+      medium: {max: 140, min: 70, recommended: 105},
     });
 
     await deleteDocumentIfPresent(templatePath);

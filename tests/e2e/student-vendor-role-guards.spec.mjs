@@ -11,10 +11,9 @@ const { getAuth } = require("../../functions/node_modules/firebase-admin/lib/aut
 const projectId = "demo-parabolic-test";
 const authHost = process.env.FIREBASE_AUTH_EMULATOR_HOST;
 const portal = process.env.PARABOLIC_ROLE_GUARD_PORTAL;
-const storageKey = "parabolic.crossPortalAuthSession.v1";
 let adminApp;
-let allowedToken;
-let deniedToken;
+let allowedCredential;
+let deniedCredential;
 const userIds = [];
 
 async function signInWithPassword(email, password) {
@@ -32,9 +31,9 @@ async function signInWithPassword(email, password) {
   return body.idToken;
 }
 
-async function createRoleToken(auth, role, label) {
+async function createRoleCredential(auth, role, label) {
   const email = `${portal}-${label}-${Date.now()}@example.test`;
-  const password = `bwm-008-${portal}-${label}`;
+  const password = `bwm-009-${portal}-${label}`;
   const user = await auth.createUser({ email, password });
   userIds.push(user.uid);
   await auth.setCustomUserClaims(user.uid, {
@@ -42,29 +41,32 @@ async function createRoleToken(auth, role, label) {
     licenseLayer: role === "vendor" ? "L0" : "L3",
     role,
   });
-  return signInWithPassword(email, password);
+  return {
+    email,
+    idToken: await signInWithPassword(email, password),
+    password,
+  };
 }
 
-async function openPortalWithToken(browser, idToken, routePath, entryPath) {
-  const context = await browser.newContext();
+async function openPortalWithCredential(browser, credential, routePath, entryPath) {
+  const context = await browser.newContext({ bypassCSP: true });
   const page = await context.newPage();
   await page.addInitScript(
-    ({ key, path, token }) => {
-      const now = Date.now();
+    ({ path }) => {
       window.history.replaceState(null, "", path);
-      window.localStorage.setItem(
-        key,
-        JSON.stringify({
-          sourcePortal: path.startsWith("/student/") ? "student" : "vendor",
-          idToken: token,
-          issuedAt: now,
-          expiresAt: now + 10 * 60 * 1000,
-        }),
-      );
     },
-    { key: storageKey, path: routePath, token: idToken },
+    { path: routePath },
   );
   await page.goto(entryPath, { waitUntil: "domcontentloaded" });
+  await expect(page).toHaveURL(/\/login$/);
+  await page.getByLabel("Email", { exact: true }).fill(credential.email);
+  await page.getByLabel("Password", { exact: true }).fill(credential.password);
+  const signInResponsePromise = page.waitForResponse(
+    (response) => response.url().includes("accounts:signInWithPassword") && response.status() === 200,
+  );
+  await page.getByRole("button", { name: "Login", exact: true }).click();
+  const signInResponse = await signInResponsePromise;
+  expect(new URL(signInResponse.url()).origin).toBe(`http://${authHost}`);
   return { context, page };
 }
 
@@ -75,8 +77,8 @@ test.beforeAll(async () => {
   const auth = getAuth(adminApp);
   const allowedRole = portal;
   const deniedRole = portal === "student" ? "vendor" : "student";
-  allowedToken = await createRoleToken(auth, allowedRole, "allowed");
-  deniedToken = await createRoleToken(auth, deniedRole, "denied");
+  allowedCredential = await createRoleCredential(auth, allowedRole, "allowed");
+  deniedCredential = await createRoleCredential(auth, deniedRole, "denied");
 });
 
 test.afterAll(async () => {
@@ -96,16 +98,31 @@ test(`${portal} protected routes admit only the canonical role and server middle
   const allowedHeading = portal === "student" ? "Profile" : "Overview";
   const deniedHeading = portal === "student" ? "Student role required" : "Vendor role required";
 
-  const allowed = await openPortalWithToken(browser, allowedToken, routePath, entryPath);
+  const allowed = await openPortalWithCredential(
+    browser,
+    allowedCredential,
+    routePath,
+    entryPath,
+  );
   await expect(allowed.page).toHaveURL(new RegExp(`${routePath}$`));
   await expect(
-    allowed.page.getByRole("heading", { name: allowedHeading, exact: true }),
+    allowed.page.getByRole("heading", { name: allowedHeading, exact: true }).last(),
   ).toBeVisible({
     timeout: 60_000,
   });
+  await allowed.page.goto(entryPath, { waitUntil: "domcontentloaded" });
+  await expect(allowed.page).toHaveURL(new RegExp(`${routePath}$`));
+  await expect(
+    allowed.page.getByRole("heading", { name: allowedHeading, exact: true }).last(),
+  ).toBeVisible({ timeout: 60_000 });
   await allowed.context.close();
 
-  const denied = await openPortalWithToken(browser, deniedToken, routePath, entryPath);
+  const denied = await openPortalWithCredential(
+    browser,
+    deniedCredential,
+    routePath,
+    entryPath,
+  );
   await expect(denied.page).toHaveURL(/\/unauthorized$/);
   await expect(
     denied.page.getByRole("heading", { name: deniedHeading, exact: true }),
@@ -135,7 +152,7 @@ test(`${portal} protected routes admit only the canonical role and server middle
       );
       return { body: await response.json(), status: response.status };
     },
-    { currentPortal: portal, token: deniedToken },
+    { currentPortal: portal, token: deniedCredential.idToken },
   );
   expect(serverDenial.status).toBe(403);
   expect(serverDenial.body.success).toBe(false);

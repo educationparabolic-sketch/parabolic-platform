@@ -36,6 +36,7 @@ function createEnvironment(environmentName = "test") {
     VITE_FIREBASE_STORAGE_BUCKET: `${projectId}.firebasestorage.app`,
     VITE_FIREBASE_MESSAGING_SENDER_ID: "000000000000",
     VITE_FIREBASE_MEASUREMENT_ID: "",
+    VITE_FIREBASE_AUTH_EMULATOR_URL: "",
     VITE_API_BASE_URL: "",
     VITE_CDN_BASE_URL: `https://cdn.${projectId}.${domainSuffix}`,
     VITE_PORTAL_BASE_URL: `https://portal.${projectId}.${domainSuffix}`,
@@ -168,6 +169,35 @@ test("malformed release values, origins, buckets, and release overrides fail", (
     },
     "is forbidden",
   );
+  expectValidationError(
+    {
+      ...createEnvironment("production"),
+      VITE_FIREBASE_AUTH_EMULATOR_URL: "http://127.0.0.1:9099",
+    },
+    "is forbidden",
+  );
+});
+
+test("Auth emulator configuration is limited to an origin-only loopback URL", () => {
+  const validEnvironment = createEnvironment("test");
+  assert.equal(
+    validateBuildEnvironment({
+      ...validEnvironment,
+      VITE_FIREBASE_AUTH_EMULATOR_URL: "http://127.0.0.1:9099",
+    }).environment,
+    "test",
+  );
+
+  for (const [value, expectedMessage] of [
+    ["https://127.0.0.1:9099", "loopback HTTP origin"],
+    ["http://auth.test.invalid:9099", "loopback HTTP origin"],
+    ["http://127.0.0.1:9099/path", "origin only"],
+  ]) {
+    expectValidationError(
+      { ...validEnvironment, VITE_FIREBASE_AUTH_EMULATOR_URL: value },
+      expectedMessage,
+    );
+  }
 });
 
 test("test, staging, and production project boundaries cannot cross", () => {

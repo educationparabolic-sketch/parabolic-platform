@@ -19,9 +19,40 @@ const createSessionServiceForTests = (): SessionService =>
     `signed-session-token:${uid}:${claims.sessionId}`);
 
 const timingProfileSnapshotFixture = {
-  easy: {max: 60, min: 30},
-  hard: {max: 210, min: 150},
-  medium: {max: 150, min: 60},
+  easy: {max: 60, min: 30, recommended: 45},
+  hard: {max: 210, min: 150, recommended: 180},
+  medium: {max: 150, min: 60, recommended: 105},
+};
+
+const expectedQuestionTime = (
+  difficulty: keyof typeof timingProfileSnapshotFixture,
+) => {
+  const window = timingProfileSnapshotFixture[difficulty];
+  const allocate = (percent: number) => ({
+    max: window.max * percent / 100,
+    min: window.min * percent / 100,
+    recommended: window.recommended * percent / 100,
+  });
+
+  return {
+    bufferTimeSpent: 0,
+    cumulativeTimeSpent: 0,
+    enteredAt: null,
+    exitedAt: null,
+    lastEntryTimestamp: null,
+    maxTime: window.max,
+    minTime: window.min,
+    phase1TimeSpent: 0,
+    phase2TimeSpent: 0,
+    phase3TimeSpent: 0,
+    phaseTimingRules: {
+      buffer: {max: 0, min: 0, recommended: 0},
+      phase1: allocate(40),
+      phase2: allocate(45),
+      phase3: allocate(15),
+    },
+    recommendedTime: window.recommended,
+  };
 };
 
 const deleteDocumentIfPresent = async (path: string): Promise<void> => {
@@ -205,30 +236,9 @@ test(
       timingProfileSnapshotFixture,
     );
     assert.deepEqual(sessionData?.questionTimeMap, {
-      q_build_31_easy: {
-        cumulativeTimeSpent: 0,
-        enteredAt: null,
-        exitedAt: null,
-        lastEntryTimestamp: null,
-        maxTime: 60,
-        minTime: 30,
-      },
-      q_build_31_hard: {
-        cumulativeTimeSpent: 0,
-        enteredAt: null,
-        exitedAt: null,
-        lastEntryTimestamp: null,
-        maxTime: 210,
-        minTime: 150,
-      },
-      q_build_31_medium: {
-        cumulativeTimeSpent: 0,
-        enteredAt: null,
-        exitedAt: null,
-        lastEntryTimestamp: null,
-        maxTime: 150,
-        minTime: 60,
-      },
+      q_build_31_easy: expectedQuestionTime("easy"),
+      q_build_31_hard: expectedQuestionTime("hard"),
+      q_build_31_medium: expectedQuestionTime("medium"),
     });
     assert.equal(sessionData?.startedAt, null);
     assert.equal(sessionData?.submittedAt, null);

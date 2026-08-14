@@ -277,11 +277,13 @@ test(
         archived: false,
         status: "inactive",
         studentId,
+        updatedAt: Timestamp.fromDate(new Date("2026-04-02T07:55:00.000Z")),
       },
       {
         archived: false,
         status: "active",
         studentId,
+        updatedAt: Timestamp.fromDate(new Date("2026-04-02T08:00:00.000Z")),
       },
     );
 

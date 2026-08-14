@@ -69,8 +69,8 @@ function StudentLoginPage(props: { loginPath: string; protectedPath: string }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { session, signIn, clearError } = useAuthProvider();
-  const [email, setEmail] = useState("student@parabolic.local");
-  const [password, setPassword] = useState("demo-password");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

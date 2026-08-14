@@ -27,6 +27,7 @@ test("CI builds receive the canonical public and release environment", async () 
     "VITE_FIREBASE_AUTH_DOMAIN",
     "VITE_FIREBASE_PROJECT_ID",
     "VITE_FIREBASE_APP_ID",
+    "VITE_FIREBASE_AUTH_EMULATOR_URL",
     "VITE_FIREBASE_STORAGE_BUCKET",
     "VITE_FIREBASE_MESSAGING_SENDER_ID",
     "VITE_FIREBASE_MEASUREMENT_ID",
@@ -62,6 +63,7 @@ test("CI builds receive the canonical public and release environment", async () 
   }
 
   assert.equal(countOccurrences(workflow, 'VITE_API_BASE_URL: ""'), 2);
+  assert.equal(countOccurrences(workflow, 'VITE_FIREBASE_AUTH_EMULATOR_URL: ""'), 2);
   assert.equal(countOccurrences(workflow, 'VITE_DATA_MODE: "live"'), 2);
   assert.equal(countOccurrences(workflow, 'VITE_EXAM_DEV_MOCK_ENTRY: "false"'), 2);
   assert.equal(countOccurrences(workflow, "Inject release build timestamp"), 2);
