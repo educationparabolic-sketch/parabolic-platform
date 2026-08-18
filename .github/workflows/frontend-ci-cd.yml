@@ -184,6 +184,12 @@ jobs:
             package-lock.json
             functions/package-lock.json
 
+      - name: Setup Java 21 for Firebase emulators
+        uses: actions/setup-java@v5
+        with:
+          distribution: "temurin"
+          java-version: "21"
+
       - name: Install backend test dependencies
         shell: bash
         run: |
@@ -200,6 +206,7 @@ jobs:
           set -euo pipefail
           npm run playwright:install
           npm install --global firebase-tools@15.9.0
+          java -version
           firebase --version
 
       - name: Lint Functions

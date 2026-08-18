@@ -24,7 +24,16 @@ test("backend CI gates deploy on Functions lint, build, and deterministic tests"
 
   assert.ok(backendJobStart >= 0 && stagingDeployStart > backendJobStart);
   assert.match(backendJob, /^  backend-ci:\n    name: Backend Validate$/mu);
+  const javaSetup = backendJob.indexOf("uses: actions/setup-java@v5");
+  const firebaseCliInstall = backendJob.indexOf("npm install --global firebase-tools@15.9.0");
   const aggregateStart = backendJob.indexOf("npm run test:emulators:ci");
+  assert.match(backendJob, /distribution: "temurin"/u);
+  assert.match(backendJob, /java-version: "21"/u);
+  assert.match(backendJob, /java -version/u);
+  assert.ok(
+    javaSetup >= 0 && javaSetup < firebaseCliInstall && firebaseCliInstall < aggregateStart,
+    "Java 21 and the pinned Firebase CLI must be ready before the emulator aggregate",
+  );
   for (const dependencyRoot of ["apps/admin", "apps/student", "shared"]) {
     const installCommand = `npm ci --prefix ${dependencyRoot}`;
     assert.match(backendJob, new RegExp(installCommand.replace("/", "\\/"), "u"));
