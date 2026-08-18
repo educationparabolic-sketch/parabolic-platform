@@ -190,6 +190,7 @@ jobs:
           set -euo pipefail
           npm ci
           npm ci --prefix apps/admin
+          npm ci --prefix apps/student
           npm ci --prefix shared
           npm ci --prefix functions
 

@@ -25,12 +25,12 @@ test("backend CI gates deploy on Functions lint, build, and deterministic tests"
   assert.ok(backendJobStart >= 0 && stagingDeployStart > backendJobStart);
   assert.match(backendJob, /^  backend-ci:\n    name: Backend Validate$/mu);
   const aggregateStart = backendJob.indexOf("npm run test:emulators:ci");
-  for (const dependencyRoot of ["apps/admin", "shared"]) {
+  for (const dependencyRoot of ["apps/admin", "apps/student", "shared"]) {
     const installCommand = `npm ci --prefix ${dependencyRoot}`;
     assert.match(backendJob, new RegExp(installCommand.replace("/", "\\/"), "u"));
     assert.ok(
       backendJob.indexOf(installCommand) < aggregateStart,
-      `${dependencyRoot} dependencies must be installed before the aggregate builds Admin Hosting`,
+      `${dependencyRoot} dependencies must be installed before the aggregate builds Portal Hosting`,
     );
   }
   assert.match(workflow, /npm --prefix functions run lint/u);
