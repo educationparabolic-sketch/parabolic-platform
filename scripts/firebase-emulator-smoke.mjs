@@ -15,6 +15,9 @@ const functionsOrigin =
 const hostingOrigin = process.env.PARABOLIC_E2E_BASE_URL ??
   `http://127.0.0.1:${firebaseEmulatorHarness.ports.hosting}`;
 const marker = "bwm-001-g-emulator-smoke";
+const AUTH_CLEANUP_MAX_ATTEMPTS = 3;
+const AUTH_CLEANUP_RETRY_DELAY_MS = 250;
+const TRANSIENT_AUTH_CLEANUP_CODES = new Set(["UND_ERR_SOCKET", "ECONNRESET"]);
 const expectedPermissionsPolicy =
   "camera=(), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(self)";
 
@@ -54,17 +57,36 @@ async function deleteSmokeAccount() {
     return;
   }
 
-  const response = await fetch(
-    `http://${authHost}/identitytoolkit.googleapis.com/v1/accounts:delete?key=demo-api-key`,
-    {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({idToken: authIdToken}),
-      signal: AbortSignal.timeout(15_000),
-    },
-  );
-  await assertSuccessfulResponse(response, "Auth account cleanup");
-  authIdToken = undefined;
+  for (let attempt = 1; attempt <= AUTH_CLEANUP_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(
+        `http://${authHost}/identitytoolkit.googleapis.com/v1/accounts:delete?key=demo-api-key`,
+        {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({idToken: authIdToken}),
+          signal: AbortSignal.timeout(15_000),
+        },
+      );
+      await assertSuccessfulResponse(response, "Auth account cleanup");
+      authIdToken = undefined;
+      return;
+    } catch (error) {
+      const errorCode = error?.cause?.code;
+      const retryable =
+        error instanceof TypeError && TRANSIENT_AUTH_CLEANUP_CODES.has(errorCode);
+      if (!retryable || attempt === AUTH_CLEANUP_MAX_ATTEMPTS) {
+        throw error;
+      }
+
+      console.warn(
+        `[emulator-check] Auth cleanup transport retry ${attempt} of ` +
+          `${AUTH_CLEANUP_MAX_ATTEMPTS - 1}.`,
+      );
+      await new Promise((resolve) =>
+        setTimeout(resolve, AUTH_CLEANUP_RETRY_DELAY_MS * attempt));
+    }
+  }
 }
 
 const firestoreDocumentUrl = new URL(

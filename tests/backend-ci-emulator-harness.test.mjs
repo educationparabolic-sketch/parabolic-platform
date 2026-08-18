@@ -54,4 +54,9 @@ test("five-service emulator harness has stable loopback ports and demo isolation
   assert.match(runner, /GOOGLE_CLOUD_PROJECT: projectId/u);
   assert.match(smoke, /async function verifyAuth\(\)/u);
   assert.match(smoke, /async function verifyStorage\(\)/u);
+  assert.match(smoke, /AUTH_CLEANUP_MAX_ATTEMPTS = 3/u);
+  assert.match(smoke, /TRANSIENT_AUTH_CLEANUP_CODES/u);
+  assert.match(smoke, /UND_ERR_SOCKET/u);
+  assert.match(smoke, /ECONNRESET/u);
+  assert.match(smoke, /attempt === AUTH_CLEANUP_MAX_ATTEMPTS/u);
 });
