@@ -54,10 +54,11 @@ The workflow compiles and validates Functions alongside the four portals. Its
 only deployment job is an explicit manual dispatch from the `staging` branch:
 the dispatcher must opt in and type the recorded `parabolic-dev` project ID,
 and the job references the `staging` GitHub Environment before it can access
-deployment variables or credentials. Configure that environment with a
-required reviewer, disallow self-review where supported, and restrict its
-deployment branch to `staging`. Pushes never deploy, and there is no production
-deployment job; production promotion remains BWM-057 work.
+deployment variables or credentials. At the product owner's explicit direction,
+this single-owner repository uses no required reviewer; restrict the
+Environment's deployment branch to exact `staging` and retain the workflow's
+manual opt-in plus typed-project confirmation. Pushes never deploy, and there
+is no production deployment job; production promotion remains BWM-057 work.
 
 After approval, the staging job revalidates the environment/project/site unit,
 builds and scans the release artifacts, pins Firebase CLI `15.9.0`, and deploys
@@ -77,8 +78,9 @@ fails with key names and reasons, never configuration values, when:
   frontend and Functions surfaces;
 - project IDs, Firebase app IDs/API keys, hostnames, bucket names, origins,
   commit SHAs, release IDs, or UTC timestamps are malformed;
-- non-loopback origins are not HTTPS or contain paths, credentials, queries, or
-  fragments;
+- non-loopback origins are not HTTPS or contain credentials, queries, or
+  fragments; portal/API origins additionally reject paths, while the matching
+  frontend/Functions CDN base may include an environment-owned bucket path;
 - portal, Exam, and Vendor origins are not distinct;
 - the build environment disagrees with `NODE_ENV`;
 - test does not use `demo-*`, staging does not use `parabolic-dev`, or
@@ -166,7 +168,7 @@ their mapped target origins.
 | `VITE_FIREBASE_MEASUREMENT_ID` | All portals | `O` | `O` | `O` | `O` | Supply only when approved Analytics collection is enabled for that environment. |
 | `VITE_FIREBASE_AUTH_EMULATOR_URL` | All portals | `O` | `O` | `F` | `F` | Optional origin-only `http://localhost:<port>` or `http://127.0.0.1:<port>` connection for local Auth emulator proof. Runtime use also requires the browser page itself to be on loopback; release CI injects blank and the artifact scanner rejects loopback literals. |
 | `VITE_API_BASE_URL` | All portals | `O` | `O` | `F` | `F` | Developer/test diagnostic override only. Staging and production must leave it absent/blank so the reviewed same-origin `/api/v1` rewrite is used. |
-| `VITE_CDN_BASE_URL` | All portals | `O` | `O` | `R` | `R` | Absolute environment-specific CDN origin. The local `/cdn` fallback is allowed only in development/test. |
+| `VITE_CDN_BASE_URL` | All portals | `O` | `O` | `R` | `R` | Absolute environment-specific HTTPS CDN base URL. It may include an environment-owned bucket path but never credentials, query, or fragment. The local `/cdn` fallback is allowed only in development/test. |
 | `VITE_PORTAL_BASE_URL` | All portals | `O` | `O` | `R` | `R` | Absolute Admin/Student Hosting origin, without a trailing slash. Do not persist an expiring preview URL as the canonical value. |
 | `VITE_EXAM_BASE_URL` | All portals | `O` | `O` | `R` | `R` | Absolute Exam Hosting origin, without a trailing slash. |
 | `VITE_VENDOR_BASE_URL` | All portals | `O` | `O` | `R` | `R` | Absolute Vendor Hosting origin, without a trailing slash. |
@@ -193,7 +195,7 @@ fail before compilation.
 | `APP_BASE_URL` | `R` | `R` | `R` | `R` | Absolute Admin/Student origin for links and redirects. Loopback is allowed only in development/test. |
 | `EXAM_BASE_URL` | `R` | `R` | `R` | `R` | Absolute Exam origin for the selected environment. |
 | `VENDOR_BASE_URL` | `R` | `R` | `R` | `R` | Absolute Vendor origin for the selected environment. |
-| `CDN_BASE_URL` | `R` | `R` | `R` | `R` | Absolute CDN origin for the selected environment; the current example-domain fallback is never a release value. |
+| `CDN_BASE_URL` | `R` | `R` | `R` | `R` | Absolute HTTPS CDN base URL for the selected environment; an environment-owned bucket path is allowed, while credentials, query, and fragment remain forbidden. The current example-domain fallback is never a release value. |
 | `QUESTION_ASSETS_BUCKET` | `R` | `R` | `R` | `R` | Bare environment-specific bucket name; must not contain `/` and must match `PROJECT_ID` ownership policy. |
 | `REPORTS_BUCKET` | `R` | `R` | `R` | `R` | Bare environment-specific reports bucket name; must not cross environment boundaries. |
 | `RELEASE_ID` | `O` | `R` | `R` | `R` | Same immutable release identifier injected into the frontend artifacts. |

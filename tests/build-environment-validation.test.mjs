@@ -80,6 +80,38 @@ test("valid test, staging, and production environments pass", () => {
   }
 });
 
+test("CDN base URLs may include an environment-owned bucket path", () => {
+  const environment = createEnvironment("staging");
+  const bucketBaseUrl = "https://storage.googleapis.com/parabolic-dev.firebasestorage.app";
+
+  assert.equal(
+    validateBuildEnvironment({
+      ...environment,
+      VITE_CDN_BASE_URL: bucketBaseUrl,
+      CDN_BASE_URL: bucketBaseUrl,
+    }).environment,
+    "staging",
+  );
+
+  expectValidationError(
+    {
+      ...environment,
+      VITE_CDN_BASE_URL: `${bucketBaseUrl}?credential=forbidden`,
+      CDN_BASE_URL: `${bucketBaseUrl}?credential=forbidden`,
+    },
+    "without credentials, query, or fragment",
+  );
+
+  expectValidationError(
+    {
+      ...environment,
+      VITE_PORTAL_BASE_URL: "https://portal.parabolic-dev.example.com/path",
+      APP_BASE_URL: "https://portal.parabolic-dev.example.com/path",
+    },
+    "origin only",
+  );
+});
+
 test("every required CI value fails closed when missing", () => {
   const validEnvironment = createEnvironment();
   const requiredKeys = [

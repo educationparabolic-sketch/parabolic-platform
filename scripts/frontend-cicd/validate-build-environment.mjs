@@ -41,6 +41,8 @@ const ORIGIN_KEYS = [
   "CDN_BASE_URL",
 ];
 
+const PATH_CAPABLE_BASE_URL_KEYS = new Set(["VITE_CDN_BASE_URL", "CDN_BASE_URL"]);
+
 const ENVIRONMENT_BOUNDARY_KEYS = [
   "FIREBASE_PROJECT_ID",
   "VITE_FIREBASE_AUTH_DOMAIN",
@@ -108,14 +110,19 @@ function validateOrigin(key, value, environment, errors) {
     errors.push(`${key} must use HTTPS outside an allowed local/test loopback`);
   }
 
+  const hasPath = parsed.pathname !== "/" && parsed.pathname !== "";
   if (
     parsed.username ||
     parsed.password ||
-    (parsed.pathname !== "/" && parsed.pathname !== "") ||
+    (hasPath && !PATH_CAPABLE_BASE_URL_KEYS.has(key)) ||
     parsed.search ||
     parsed.hash
   ) {
-    errors.push(`${key} must contain an origin only`);
+    errors.push(
+      PATH_CAPABLE_BASE_URL_KEYS.has(key)
+        ? `${key} must contain only an HTTPS base URL without credentials, query, or fragment`
+        : `${key} must contain an origin only`,
+    );
   }
 }
 
