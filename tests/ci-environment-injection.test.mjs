@@ -69,7 +69,7 @@ test("CI builds receive the canonical public and release environment", async () 
   assert.equal(countOccurrences(workflow, "Inject release build timestamp"), 2);
   assert.equal(countOccurrences(workflow, "VITE_RELEASE_BUILT_AT=${built_at}"), 2);
   assert.equal(countOccurrences(workflow, 'echo "RELEASE_BUILT_AT=${built_at}'), 2);
-  assert.equal(countOccurrences(workflow, "npm --prefix functions run build"), 2);
+  assert.equal(countOccurrences(workflow, "npm --prefix functions run build"), 3);
   assert.equal(countOccurrences(workflow, "PARABOLIC_BUILD_ENVIRONMENT:"), 2);
   assert.equal(countOccurrences(workflow, "Validate build environment"), 2);
   assert.equal(
@@ -110,7 +110,7 @@ test("CI builds receive the canonical public and release environment", async () 
   const validationJobScan = workflow.indexOf("Scan release artifacts");
   const validationJobTests = workflow.indexOf("Run frontend automated tests");
   const deployJobScan = workflow.lastIndexOf("Scan release artifacts");
-  const firebaseCliInstall = workflow.indexOf("Install Firebase CLI");
+  const firebaseCliInstall = workflow.indexOf("Install pinned Firebase CLI");
   assert.ok(validationJobGate > 0 && validationJobGate < validationJobBuild);
   assert.ok(deployJobGate > validationJobGate && deployJobGate < deployJobBuild);
   assert.ok(deployTargetGate > deployJobGate && deployTargetGate < deployJobBuild);

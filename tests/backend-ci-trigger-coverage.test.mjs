@@ -12,9 +12,7 @@ function readEventPaths(source, eventName) {
   const eventStart = lines.findIndex((line) => line === `  ${eventName}:`);
   assert.notEqual(eventStart, -1, `${eventName} trigger must exist`);
 
-  const pathsStart = lines.findIndex(
-    (line, index) => index > eventStart && line === "    paths:",
-  );
+  const pathsStart = lines.findIndex((line, index) => index > eventStart && line === "    paths:");
   assert.notEqual(pathsStart, -1, `${eventName} paths must exist`);
 
   const paths = [];
@@ -60,6 +58,7 @@ test("push and pull-request triggers cover backend, rules, indexes, contracts, a
     "tests/api-dto-contract.test.mjs",
     "tests/api-envelope-contract.test.mjs",
     "tests/backend-ci-validation.test.mjs",
+    "tests/staging-deployment-pipeline.test.mjs",
     "tests/frontend-api-routing.test.mjs",
     "tests/portal-response-adapters.test.mjs",
     "docs/api_contract.md",

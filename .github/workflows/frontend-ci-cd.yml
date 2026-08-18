@@ -13,6 +13,7 @@ on:
       - "shared/**"
       - "tests/api-*.test.mjs"
       - "tests/backend-ci-*.test.mjs"
+      - "tests/staging-deployment-pipeline.test.mjs"
       - "tests/frontend-api-routing.test.mjs"
       - "tests/portal-response-adapters.test.mjs"
       - "docs/api_contract.md"
@@ -34,6 +35,7 @@ on:
       - "shared/**"
       - "tests/api-*.test.mjs"
       - "tests/backend-ci-*.test.mjs"
+      - "tests/staging-deployment-pipeline.test.mjs"
       - "tests/frontend-api-routing.test.mjs"
       - "tests/portal-response-adapters.test.mjs"
       - "docs/api_contract.md"
@@ -44,6 +46,16 @@ on:
       - "package.json"
       - "scripts/frontend-cicd/**"
   workflow_dispatch:
+    inputs:
+      deploy_staging:
+        description: "Deploy the validated staging release"
+        required: true
+        default: false
+        type: boolean
+      staging_project_id:
+        description: "Confirm the dedicated staging Firebase project ID"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -211,20 +223,26 @@ jobs:
           npm run test:backend-ci-validation
           npm run test:emulator-harness-contract
           npm run test:emulator-aggregate-contract
+          npm run test:staging-deployment-pipeline
 
-  frontend-deploy:
-    name: Frontend Deploy
+  staging-deploy:
+    name: Staging Deploy
     runs-on: ubuntu-latest
     needs: [frontend-ci, backend-ci]
-    if: github.event_name == 'push' && (github.ref_name == 'dev' || github.ref_name == 'staging' || github.ref_name == 'main')
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref_name == 'staging' &&
+      inputs.deploy_staging == true &&
+      inputs.staging_project_id == 'parabolic-dev'
     concurrency:
-      group: frontend-deploy-${{ github.ref_name }}
+      group: staging-deploy-parabolic-dev
       cancel-in-progress: false
     environment:
-      name: ${{ github.ref_name == 'main' && 'production' || github.ref_name == 'staging' && 'staging' || 'development' }}
+      name: staging
     env:
-      PARABOLIC_DEPLOY_BRANCH: ${{ github.ref_name }}
-      PARABOLIC_BUILD_ENVIRONMENT: ${{ github.ref_name == 'main' && 'production' || github.ref_name == 'staging' && 'staging' || 'development' }}
+      PARABOLIC_DEPLOY_BRANCH: "staging"
+      PARABOLIC_BUILD_ENVIRONMENT: "staging"
+      FIREBASE_CLI_VERSION: "15.9.0"
       FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
       FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
       FIREBASE_SITE_PORTAL: ${{ vars.FIREBASE_SITE_PORTAL }}
@@ -248,7 +266,7 @@ jobs:
       VITE_RELEASE_ID: "gha-${{ github.run_id }}-${{ github.run_attempt }}"
       VITE_RELEASE_COMMIT_SHA: "${{ github.sha }}"
       PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
-      NODE_ENV: ${{ github.ref_name == 'main' && 'production' || github.ref_name == 'staging' && 'staging' || 'development' }}
+      NODE_ENV: "staging"
       APP_BASE_URL: ${{ vars.VITE_PORTAL_BASE_URL }}
       EXAM_BASE_URL: ${{ vars.VITE_EXAM_BASE_URL }}
       VENDOR_BASE_URL: ${{ vars.VITE_VENDOR_BASE_URL }}
@@ -297,6 +315,14 @@ jobs:
       - name: Validate deploy target mapping
         run: node scripts/frontend-cicd/validate-deploy-target.mjs --validate
 
+      - name: Confirm staging deployment approval inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ inputs.deploy_staging }}" = "true"
+          test "${{ inputs.staging_project_id }}" = "${FIREBASE_PROJECT_ID}"
+          test "${FIREBASE_PROJECT_ID}" = "parabolic-dev"
+
       - name: Build deployment artifacts
         shell: bash
         run: |
@@ -315,8 +341,12 @@ jobs:
           --root apps/exam/dist
           --root apps/vendor/dist
 
-      - name: Install Firebase CLI
-        run: npm install --global firebase-tools
+      - name: Install pinned Firebase CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global "firebase-tools@${FIREBASE_CLI_VERSION}"
+          test "$(firebase --version)" = "${FIREBASE_CLI_VERSION}"
 
       - name: Validate deploy credential
         shell: bash
@@ -324,16 +354,30 @@ jobs:
           set -euo pipefail
           test -n "${FIREBASE_TOKEN}"
 
-      - name: Apply hosting targets
+      - name: Verify explicit staging project and Hosting targets
         shell: bash
         run: |
           set -euo pipefail
-          firebase target:apply hosting portal "${FIREBASE_SITE_PORTAL}" --project "${FIREBASE_PROJECT_ID}" --token "${FIREBASE_TOKEN}"
-          firebase target:apply hosting exam "${FIREBASE_SITE_EXAM}" --project "${FIREBASE_PROJECT_ID}" --token "${FIREBASE_TOKEN}"
-          firebase target:apply hosting vendor "${FIREBASE_SITE_VENDOR}" --project "${FIREBASE_PROJECT_ID}" --token "${FIREBASE_TOKEN}"
+          echo "Staging Firebase project: ${FIREBASE_PROJECT_ID}"
+          echo "Staging Hosting targets: portal=${FIREBASE_SITE_PORTAL}, exam=${FIREBASE_SITE_EXAM}, vendor=${FIREBASE_SITE_VENDOR}"
+          firebase target --project "${FIREBASE_PROJECT_ID}" --token "${FIREBASE_TOKEN}"
 
-      - name: Deploy hosting bundles
+      - name: Deploy staging Functions
         shell: bash
         run: |
           set -euo pipefail
-          firebase deploy --project "${FIREBASE_PROJECT_ID}" --only hosting:portal,hosting:exam,hosting:vendor --non-interactive --token "${FIREBASE_TOKEN}"
+          node scripts/frontend-cicd/materialize-functions-runtime-env.mjs --write
+          trap 'node scripts/frontend-cicd/materialize-functions-runtime-env.mjs --remove' EXIT
+          firebase deploy --project "${FIREBASE_PROJECT_ID}" --only functions --non-interactive --token "${FIREBASE_TOKEN}" --message "${RELEASE_ID} staging Functions"
+
+      - name: Deploy staging Firestore rules and indexes
+        shell: bash
+        run: |
+          set -euo pipefail
+          firebase deploy --project "${FIREBASE_PROJECT_ID}" --only firestore --non-interactive --token "${FIREBASE_TOKEN}" --message "${RELEASE_ID} staging Firestore"
+
+      - name: Deploy staging Hosting bundles
+        shell: bash
+        run: |
+          set -euo pipefail
+          firebase deploy --project "${FIREBASE_PROJECT_ID}" --only hosting:portal,hosting:exam,hosting:vendor --non-interactive --token "${FIREBASE_TOKEN}" --message "${RELEASE_ID} staging Hosting"

@@ -50,8 +50,21 @@ release triplet is injected as `VITE_RELEASE_*` for all four portal builds and
 as `RELEASE_*` for the Functions build. Admin and Student additionally receive
 their target-specific `VITE_BASE_PATH` values.
 
-The workflow now compiles Functions alongside the four portals but still
-deploys Hosting only. BWM-010 owns the backend test/deployment pipeline.
+The workflow compiles and validates Functions alongside the four portals. Its
+only deployment job is an explicit manual dispatch from the `staging` branch:
+the dispatcher must opt in and type the recorded `parabolic-dev` project ID,
+and the job references the `staging` GitHub Environment before it can access
+deployment variables or credentials. Configure that environment with a
+required reviewer, disallow self-review where supported, and restrict its
+deployment branch to `staging`. Pushes never deploy, and there is no production
+deployment job; production promotion remains BWM-057 work.
+
+After approval, the staging job revalidates the environment/project/site unit,
+builds and scans the release artifacts, pins Firebase CLI `15.9.0`, and deploys
+in this fail-fast order: Functions, Firestore rules plus indexes, then the three
+Hosting targets. Before the Functions deployment it creates an ignored
+`functions/.env.parabolic-dev` containing only the validated non-secret
+Functions runtime keys, then removes that file even when deployment fails.
 
 ## CI validation gate
 
@@ -105,11 +118,13 @@ the backend deployment package and pipeline.
 
 ## Branch and Firebase target contract
 
-The deployment job derives one build environment from the pushed branch and
-runs `validate-deploy-target.mjs --validate` before building or invoking any
-Firebase command. The gate rejects missing or malformed identifiers,
-branch/environment disagreement, duplicate Hosting sites, and every known
-cross-environment project/site mapping without echoing supplied values.
+The deploy-target validator retains the complete branch/environment mapping
+contract for later promotion work. The active deployment job fixes the branch
+and environment to staging and runs `validate-deploy-target.mjs --validate`
+before building or invoking any Firebase command. The gate rejects missing or
+malformed identifiers, branch/environment disagreement, duplicate Hosting
+sites, and every known cross-environment project/site mapping without echoing
+supplied values.
 
 | Git branch | GitHub Environment | Required Firebase mapping |
 |---|---|---|
@@ -119,9 +134,9 @@ cross-environment project/site mapping without echoing supplied values.
 
 Project and Hosting site IDs are public deployment identifiers and come from
 GitHub Environment `vars`; only Firebase deployment authentication remains a
-GitHub Environment secret. The workflow still passes the validated explicit
-project to every `firebase target:apply` and `firebase deploy` command. The
-tracked `.firebaserc` records only the demo/emulator and approved
+GitHub Environment secret. The workflow passes the validated explicit project
+to every Firebase inspection and deploy command. The tracked `.firebaserc`
+records only the demo/emulator and approved
 non-production mappings; it does not invent a production mapping.
 
 ## Portal target contract

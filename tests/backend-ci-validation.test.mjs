@@ -6,9 +6,7 @@ import { fileURLToPath } from "node:url";
 const workflowPath = fileURLToPath(
   new URL("../.github/workflows/frontend-ci-cd.yml", import.meta.url),
 );
-const functionsPackagePath = fileURLToPath(
-  new URL("../functions/package.json", import.meta.url),
-);
+const functionsPackagePath = fileURLToPath(new URL("../functions/package.json", import.meta.url));
 const runnerPath = fileURLToPath(
   new URL("../functions/scripts/run-non-emulator-tests.mjs", import.meta.url),
 );
@@ -27,6 +25,7 @@ test("backend CI gates deploy on Functions lint, build, and deterministic tests"
   assert.match(workflow, /npm --prefix functions run test:ci:non-emulator/u);
   assert.match(workflow, /npm run test:emulators:ci/u);
   assert.match(workflow, /npm run test:emulators:failure-cleanup/u);
+  assert.match(workflow, /npm run test:staging-deployment-pipeline/u);
   assert.match(workflow, /needs: \[frontend-ci, backend-ci\]/u);
   assert.equal(
     functionsPackage.scripts["test:ci:non-emulator"],
