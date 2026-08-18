@@ -18,8 +18,18 @@ test("backend CI gates deploy on Functions lint, build, and deterministic tests"
     readFile(runnerPath, "utf8"),
   ]);
   const functionsPackage = JSON.parse(functionsPackageSource);
+  const backendJobStart = workflow.indexOf("  backend-ci:");
+  const stagingDeployStart = workflow.indexOf("  staging-deploy:");
+  const backendJob = workflow.slice(backendJobStart, stagingDeployStart);
 
-  assert.match(workflow, /^  backend-ci:\n    name: Backend Validate$/mu);
+  assert.ok(backendJobStart >= 0 && stagingDeployStart > backendJobStart);
+  assert.match(backendJob, /^  backend-ci:\n    name: Backend Validate$/mu);
+  assert.match(backendJob, /npm ci --prefix apps\/admin/u);
+  assert.ok(
+    backendJob.indexOf("npm ci --prefix apps/admin") <
+      backendJob.indexOf("npm run test:emulators:ci"),
+    "Admin dependencies must be installed before the aggregate builds its Hosting artifact",
+  );
   assert.match(workflow, /npm --prefix functions run lint/u);
   assert.match(workflow, /npm --prefix functions run build/u);
   assert.match(workflow, /npm --prefix functions run test:ci:non-emulator/u);

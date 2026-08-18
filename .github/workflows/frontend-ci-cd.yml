@@ -189,6 +189,7 @@ jobs:
         run: |
           set -euo pipefail
           npm ci
+          npm ci --prefix apps/admin
           npm ci --prefix functions
 
       - name: Install Chromium and pinned Firebase CLI
