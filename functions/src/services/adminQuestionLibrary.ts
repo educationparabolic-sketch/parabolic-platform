@@ -1,5 +1,8 @@
 import {Timestamp} from "firebase-admin/firestore";
 import {getFirestore} from "../utils/firebaseAdmin";
+import {cdnArchitectureService} from "./cdnArchitecture";
+import {signedUrlService} from "./signedUrl";
+import {storageBucketArchitectureService} from "./storageBucketArchitecture";
 import {QuestionBankDocument} from "../types/questionIngestion";
 import {
   AdminQuestionLibraryRecord,
@@ -7,6 +10,7 @@ import {
   AdminQuestionLibraryValidatedRequest,
   AdminQuestionLibraryValidationError,
 } from "../types/adminQuestionLibrary";
+import {QuestionAssetExtension, QuestionAssetKind} from "../types/cdnArchitecture";
 
 const INSTITUTES_COLLECTION = "institutes";
 const QUESTION_BANK_COLLECTION = "questionBank";
@@ -16,6 +20,11 @@ const HOT_WINDOW_DAYS = 120;
 const COLD_WINDOW_DAYS = 365;
 
 type QuestionLifecycleState = AdminQuestionLibraryRecord["thermalState"];
+
+interface SafeQuestionAssetReference {
+  cdnPath: string;
+  previewSignedUrl: string;
+}
 
 function normalizeRequiredString(value: unknown, fieldName: string): string {
   if (typeof value !== "string" || value.trim().length === 0) {
@@ -199,8 +208,85 @@ function toQuestionBankDocument(
   };
 }
 
+function toQuestionAssetExtension(
+  value: string,
+): QuestionAssetExtension | null {
+  const extension = value.split(".").pop()?.toLowerCase();
+  return extension === "png" || extension === "webp" ? extension : null;
+}
+
+function toSafeQuestionAssetReference(
+  storedPath: string,
+  context: {
+    assetKind: Extract<QuestionAssetKind, "questionImage" | "solutionImage">;
+    instituteId: string;
+    questionId: string;
+    version: number;
+  },
+  generatePreviewUrl:
+    typeof signedUrlService.generateQuestionAssetSignedUrl,
+): SafeQuestionAssetReference {
+  const candidatePath = storedPath.trim().replace(/^\/+/, "");
+  const extension = toQuestionAssetExtension(candidatePath);
+
+  if (!candidatePath || candidatePath.includes("://") || !extension) {
+    return {cdnPath: "", previewSignedUrl: ""};
+  }
+
+  const target = storageBucketArchitectureService
+    .resolveQuestionAssetStorageTarget({
+      assetKind: context.assetKind,
+      extension,
+      instituteId: context.instituteId,
+      questionId: context.questionId,
+      version: context.version,
+    });
+
+  if (candidatePath !== target.cdnPath) {
+    return {cdnPath: "", previewSignedUrl: ""};
+  }
+
+  const preview = generatePreviewUrl({
+    accessContext: "dashboardView",
+    assetKind: context.assetKind,
+    extension,
+    instituteId: context.instituteId,
+    questionId: context.questionId,
+    version: context.version,
+  });
+
+  let parsedPreviewUrl: URL;
+  try {
+    parsedPreviewUrl = new URL(preview.signedUrl);
+  } catch {
+    return {cdnPath: "", previewSignedUrl: ""};
+  }
+
+  if (
+    preview.accessContext !== "dashboardView" ||
+    preview.cdnPath !== target.cdnPath ||
+    preview.expiresInSeconds !== 30 * 60 ||
+    parsedPreviewUrl.protocol !== "https:" ||
+    !parsedPreviewUrl.searchParams.get("Expires") ||
+    !parsedPreviewUrl.searchParams.get("KeyName") ||
+    !parsedPreviewUrl.searchParams.get("Signature")
+  ) {
+    return {cdnPath: "", previewSignedUrl: ""};
+  }
+
+  cdnArchitectureService.assertNoDirectBucketUrlExposure(preview.signedUrl);
+
+  return {
+    cdnPath: target.cdnPath,
+    previewSignedUrl: preview.signedUrl,
+  };
+}
+
 function toLibraryRecord(
   question: QuestionBankDocument,
+  instituteId: string,
+  generatePreviewUrl:
+    typeof signedUrlService.generateQuestionAssetSignedUrl,
 ): AdminQuestionLibraryRecord {
   const primaryTag = question.primaryTag ?? question.tags[0] ?? "untagged";
   const secondaryTag =
@@ -211,11 +297,32 @@ function toLibraryRecord(
     question.additionalTag ??
     question.tags.find((tag) => tag !== primaryTag && tag !== secondaryTag) ??
     "none";
+  const questionImage = toSafeQuestionAssetReference(
+    question.questionImageUrl,
+    {
+      assetKind: "questionImage",
+      instituteId,
+      questionId: question.questionId,
+      version: question.version,
+    },
+    generatePreviewUrl,
+  );
+  const solutionImage = toSafeQuestionAssetReference(
+    question.solutionImageUrl,
+    {
+      assetKind: "solutionImage",
+      instituteId,
+      questionId: question.questionId,
+      version: question.version,
+    },
+    generatePreviewUrl,
+  );
 
   return {
     academicYear: question.academicYear ?? "unassigned",
     additionalTag,
     chapter: question.chapter,
+    correctAnswer: question.correctAnswer,
     difficulty: toDifficulty(question.difficulty),
     examType: question.examType,
     id: question.questionId,
@@ -225,10 +332,13 @@ function toLibraryRecord(
     negativeMarks: question.negativeMarks,
     primaryTag,
     prompt: `${question.subject} ${question.chapter} ${question.questionType}`,
+    questionImageFile: questionImage.cdnPath,
+    questionImagePreviewUrl: questionImage.previewSignedUrl,
     questionType: question.questionType,
     secondaryTag,
     simulationLink: question.simulationLink ?? "",
-    solutionImageFile: question.solutionImageUrl,
+    solutionImageFile: solutionImage.cdnPath,
+    solutionImagePreviewUrl: solutionImage.previewSignedUrl,
     status: question.status,
     subject: question.subject,
     thermalState: toThermalState(question),
@@ -243,6 +353,9 @@ function toLibraryRecord(
 export class AdminQuestionLibraryService {
   constructor(
     private readonly firestore: FirebaseFirestore.Firestore = getFirestore(),
+    private readonly generatePreviewUrl:
+      typeof signedUrlService.generateQuestionAssetSignedUrl =
+    signedUrlService.generateQuestionAssetSignedUrl.bind(signedUrlService),
   ) {}
 
   public normalizeRequest(input: {
@@ -268,7 +381,11 @@ export class AdminQuestionLibraryService {
 
     return {
       questions: snapshot.docs.map((document) =>
-        toLibraryRecord(toQuestionBankDocument(document)),
+        toLibraryRecord(
+          toQuestionBankDocument(document),
+          request.instituteId,
+          this.generatePreviewUrl,
+        ),
       ),
     };
   }

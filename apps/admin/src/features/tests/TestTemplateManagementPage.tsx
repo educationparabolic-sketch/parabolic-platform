@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
+import { adaptAdminQuestionLibraryResult } from "../../../../../shared/services/portalResponseAdapters";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import {
   shouldUseLiveApi as shouldUseConfiguredLiveApi,
@@ -818,15 +819,7 @@ async function fetchQuestionPoolFromApi(): Promise<QuestionPoolLoadState> {
       limit: "250",
     },
   });
-  if (!payload || typeof payload !== "object") {
-    throw new Error("GET /admin/questions/library returned an invalid payload.");
-  }
-
-  const response = payload as {
-    questions?: unknown;
-  };
-  const questions = Array.isArray(response.questions) ? response.questions : [];
-  const normalizedQuestions = questions
+  const normalizedQuestions = adaptAdminQuestionLibraryResult(payload).questions
     .map((entry, index) => normalizeQuestionRecord(entry, index))
     .filter((entry): entry is QuestionBankRecord => Boolean(entry));
 

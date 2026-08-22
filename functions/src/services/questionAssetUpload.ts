@@ -1,10 +1,12 @@
+import {createHash} from "crypto";
 import {createLogger} from "./logging";
+import {auditLogStorageService} from "./auditLogStorage";
 import {signedUrlService} from "./signedUrl";
 import {storageBucketArchitectureService} from "./storageBucketArchitecture";
 import {cdnArchitectureService} from "./cdnArchitecture";
 import {StorageObjectTarget} from "../types/storageBucketArchitecture";
 import {
-  QuestionAssetUploadResult,
+  QuestionAssetStorageUploadResult,
   QuestionAssetUploadValidatedRequest,
   QuestionAssetUploadValidationError,
 } from "../types/questionAssetUpload";
@@ -30,6 +32,8 @@ const RIFF_SIGNATURE = Buffer.from("RIFF");
 const WEBP_SIGNATURE = Buffer.from("WEBP");
 
 interface QuestionAssetUploadDependencies {
+  createInstituteAuditLog:
+    typeof auditLogStorageService.createInstituteAuditLog;
   generatePreviewUrl:
     typeof signedUrlService.generateQuestionAssetSignedUrl;
   resolveStorageTarget:
@@ -38,7 +42,22 @@ interface QuestionAssetUploadDependencies {
     target: StorageObjectTarget,
     content: Buffer,
     metadata: Record<string, string>,
-  ) => Promise<void>;
+  ) => Promise<"created" | "replayed">;
+}
+
+interface ImmutableStorageFile {
+  getMetadata: () => Promise<[{
+    metadata?: Record<string, string>;
+  }]>;
+  save: (content: Buffer, options: {
+    contentType: string;
+    metadata: {
+      cacheControl: string;
+      metadata: Record<string, string>;
+    };
+    preconditionOpts: {ifGenerationMatch: number};
+    resumable: boolean;
+  }) => Promise<unknown>;
 }
 
 const normalizeRequiredString = (
@@ -210,33 +229,101 @@ const assertContentMatchesExtension = (
 
 const buildUploadMetadata = (
   request: QuestionAssetUploadValidatedRequest,
+  contentSha256: string,
 ): Record<string, string> => ({
   actorId: request.actorId,
   assetKind: request.assetKind,
+  contentSha256,
   instituteId: request.instituteId,
   questionId: request.questionId,
   uploadedAt: new Date().toISOString(),
   version: String(request.version),
 });
 
+const getStorageErrorCode = (error: unknown): number | undefined => {
+  if (typeof error !== "object" || error === null || !("code" in error)) {
+    return undefined;
+  }
+
+  const code = Number((error as {code?: unknown}).code);
+  return Number.isFinite(code) ? code : undefined;
+};
+
+const readStoredContentHash = async (
+  file: ImmutableStorageFile,
+): Promise<string | null> => {
+  try {
+    const [metadata] = await file.getMetadata();
+    return metadata.metadata?.contentSha256 ?? "";
+  } catch (error) {
+    if (getStorageErrorCode(error) === 404) {
+      return null;
+    }
+
+    throw error;
+  }
+};
+
+export const assertQuestionAssetReplayMatches = (
+  storedContentHash: string,
+  contentSha256: string,
+  objectPath: string,
+): void => {
+  if (storedContentHash === contentSha256) {
+    return;
+  }
+
+  throw new QuestionAssetUploadValidationError(
+    "VALIDATION_ERROR",
+    `Question asset "${objectPath}" is immutable; create a new question ` +
+      "version to upload different content.",
+  );
+};
+
 const defaultUploadAssetFile = async (
   target: StorageObjectTarget,
   content: Buffer,
   metadata: Record<string, string>,
-): Promise<void> => {
+): Promise<"created" | "replayed"> => {
   const bucket = storageBucketArchitectureService.getBucket("questionAssets");
-  const file = bucket.file(target.objectPath);
+  const file = bucket.file(target.objectPath) as unknown as ImmutableStorageFile;
   const hotCachePolicy = cdnArchitectureService.initializeArchitecture()
     .cachePolicies.hot.cacheControl;
 
-  await file.save(content, {
-    contentType: target.contentType,
-    metadata: {
-      cacheControl: hotCachePolicy,
-      metadata,
-    },
-    resumable: false,
-  });
+  const storedContentHash = await readStoredContentHash(file);
+  if (storedContentHash !== null) {
+    assertQuestionAssetReplayMatches(
+      storedContentHash,
+      metadata.contentSha256 ?? "",
+      target.objectPath,
+    );
+    return "replayed";
+  }
+
+  try {
+    await file.save(content, {
+      contentType: target.contentType,
+      metadata: {
+        cacheControl: hotCachePolicy,
+        metadata,
+      },
+      preconditionOpts: {ifGenerationMatch: 0},
+      resumable: false,
+    });
+    return "created";
+  } catch (error) {
+    if (getStorageErrorCode(error) !== 412) {
+      throw error;
+    }
+
+    const concurrentContentHash = await readStoredContentHash(file);
+    assertQuestionAssetReplayMatches(
+      concurrentContentHash ?? "",
+      metadata.contentSha256 ?? "",
+      target.objectPath,
+    );
+    return "replayed";
+  }
 };
 
 export class QuestionAssetUploadService {
@@ -244,6 +331,10 @@ export class QuestionAssetUploadService {
 
   constructor(
     private readonly dependencies: QuestionAssetUploadDependencies = {
+      createInstituteAuditLog:
+        auditLogStorageService.createInstituteAuditLog.bind(
+          auditLogStorageService,
+        ),
       generatePreviewUrl:
         signedUrlService.generateQuestionAssetSignedUrl.bind(signedUrlService),
       resolveStorageTarget:
@@ -300,10 +391,11 @@ export class QuestionAssetUploadService {
 
   public async uploadAsset(
     request: QuestionAssetUploadValidatedRequest,
-  ): Promise<QuestionAssetUploadResult> {
+  ): Promise<QuestionAssetStorageUploadResult> {
     const normalizedRequest = this.normalizeRequest(request);
     const content = decodeContentBase64(normalizedRequest.contentBase64);
     assertContentMatchesExtension(content, normalizedRequest.extension);
+    const contentSha256 = createHash("sha256").update(content).digest("hex");
 
     const storageTarget = this.dependencies.resolveStorageTarget({
       assetKind: normalizedRequest.assetKind,
@@ -313,11 +405,42 @@ export class QuestionAssetUploadService {
       version: normalizedRequest.version,
     });
 
-    await this.dependencies.uploadAssetFile(
+    const disposition = await this.dependencies.uploadAssetFile(
       storageTarget,
       content,
-      buildUploadMetadata(normalizedRequest),
+      buildUploadMetadata(normalizedRequest, contentSha256),
     );
+
+    const auditId = "question_asset_" + createHash("sha256")
+      .update(`${storageTarget.objectPath}:${contentSha256}`)
+      .digest("hex")
+      .slice(0, 40);
+
+    try {
+      await this.dependencies.createInstituteAuditLog(
+        normalizedRequest.instituteId,
+        {
+          actionType: "CREATE_QUESTION_ASSET",
+          actorRole: normalizedRequest.actorRole,
+          actorUid: normalizedRequest.actorId,
+          additionalFields: {
+            assetKind: normalizedRequest.assetKind,
+            contentSha256,
+            disposition,
+            ipAddress: normalizedRequest.ipAddress,
+            userAgent: normalizedRequest.userAgent,
+            version: normalizedRequest.version,
+          },
+          auditId,
+          targetCollection: "questionAssets",
+          targetId: storageTarget.objectPath,
+        },
+      );
+    } catch (error) {
+      if (getStorageErrorCode(error) !== 6) {
+        throw error;
+      }
+    }
 
     const previewUrl = this.dependencies.generatePreviewUrl({
       accessContext: "dashboardView",
@@ -328,11 +451,12 @@ export class QuestionAssetUploadService {
       version: normalizedRequest.version,
     });
 
-    const result: QuestionAssetUploadResult = {
+    const result: QuestionAssetStorageUploadResult = {
       assetKind: normalizedRequest.assetKind,
       bucketName: storageTarget.bucketName,
       cdnPath: storageTarget.cdnPath,
       contentType: storageTarget.contentType,
+      disposition,
       objectPath: storageTarget.objectPath,
       previewSignedUrl: previewUrl.signedUrl,
       questionId: normalizedRequest.questionId,
@@ -345,6 +469,7 @@ export class QuestionAssetUploadService {
       bucketName: result.bucketName,
       objectPath: result.objectPath,
       questionId: result.questionId,
+      storageDisposition: result.disposition,
       version: String(result.version),
     });
 

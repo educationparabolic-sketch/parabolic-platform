@@ -44,6 +44,7 @@ test("admin question assets handler accepts upload requests", async () => {
       bucketName: "parabolic-prod-question-assets",
       cdnPath: "inst_build_m4_api/questions/q-001/v1/question.png",
       contentType: "image/png",
+      disposition: "created",
       objectPath: "inst_build_m4_api/questions/q-001/v1/question.png",
       previewSignedUrl: "https://cdn.yourdomain.com/inst_build_m4_api/questions/q-001/v1/question.png?Expires=1",
       questionId: "q-001",
@@ -73,6 +74,13 @@ test("admin question assets handler accepts upload requests", async () => {
   assert.equal(response.statusCode, 200);
   assert.equal((response.body as {code: string}).code, "OK");
   assert.equal((response.body as {success: boolean}).success, true);
+  const responseData = (response.body as {
+    data: Record<string, unknown>;
+  }).data;
+  assert.equal(responseData.questionId, "q-001");
+  assert.equal(responseData.version, 1);
+  assert.equal(responseData.bucketName, undefined);
+  assert.equal(responseData.objectPath, undefined);
 });
 
 test("admin question assets handler rejects disallowed roles", async () => {

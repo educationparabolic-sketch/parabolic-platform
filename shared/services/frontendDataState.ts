@@ -147,7 +147,11 @@ export function beginFrontendDataRequest(method: ApiHttpMethod, path: string): n
   return requestId;
 }
 
-export function completeFrontendDataRequest(requestId: number, data: unknown): void {
+export function completeFrontendDataRequest(
+  requestId: number,
+  data: unknown,
+  emptyResultIsReady = false,
+): void {
   const request = pendingRequests.get(requestId) ?? null;
   pendingRequests.delete(requestId);
 
@@ -159,7 +163,11 @@ export function completeFrontendDataRequest(requestId: number, data: unknown): v
     return;
   }
 
-  if (request.method !== "GET" || !isFrontendDataEmpty(data)) {
+  if (
+    request.method !== "GET" ||
+    emptyResultIsReady ||
+    !isFrontendDataEmpty(data)
+  ) {
     successfulNonEmptyRequest = true;
   }
 
@@ -177,11 +185,32 @@ export function completeFrontendDataRequest(requestId: number, data: unknown): v
   });
 }
 
-export function failFrontendDataRequest(requestId: number, error: unknown): void {
+export function failFrontendDataRequest(
+  requestId: number,
+  error: unknown,
+  handledFailureIsReady = false,
+): void {
   const request = pendingRequests.get(requestId) ?? null;
   pendingRequests.delete(requestId);
 
   if (!request) {
+    return;
+  }
+
+  if (handledFailureIsReady) {
+    if (failureIsActive) {
+      return;
+    }
+
+    successfulNonEmptyRequest = true;
+    if (pendingRequests.size === 0) {
+      publish({
+        kind: "ready",
+        message: "",
+        method: request.method,
+        path: request.path,
+      });
+    }
     return;
   }
 

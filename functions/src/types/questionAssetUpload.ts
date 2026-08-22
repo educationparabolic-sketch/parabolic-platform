@@ -1,18 +1,16 @@
 import {StandardApiErrorCode} from "./apiResponse";
 import {LicenseLayer} from "./middleware";
-import {
+import type {
   QuestionAssetExtension,
   QuestionAssetKind,
-} from "./cdnArchitecture";
-
-export interface QuestionAssetUploadRequest {
-  assetKind?: QuestionAssetKind;
-  contentBase64?: string;
-  extension?: QuestionAssetExtension;
-  instituteId: string;
-  questionId?: string;
-  version?: number;
-}
+  QuestionAssetUploadResult,
+} from "../../../shared/contracts/apiDtos";
+export type {
+  QuestionAssetExtension,
+  QuestionAssetKind,
+  QuestionAssetUploadRequest,
+  QuestionAssetUploadResult,
+} from "../../../shared/contracts/apiDtos";
 
 export interface QuestionAssetUploadValidatedRequest {
   actorId: string;
@@ -28,16 +26,11 @@ export interface QuestionAssetUploadValidatedRequest {
   version: number;
 }
 
-export interface QuestionAssetUploadResult {
-  assetKind: QuestionAssetKind;
+export interface QuestionAssetStorageUploadResult
+  extends QuestionAssetUploadResult {
   bucketName: string;
-  cdnPath: string;
-  contentType: string;
+  disposition: "created" | "replayed";
   objectPath: string;
-  previewSignedUrl: string;
-  questionId: string;
-  uploaded: true;
-  version: number;
 }
 
 export interface QuestionAssetUploadSuccessResponse {

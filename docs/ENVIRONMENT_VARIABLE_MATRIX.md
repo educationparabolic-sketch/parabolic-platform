@@ -199,6 +199,12 @@ fail before compilation.
 
 ## Functions application variables
 
+`CdnArchitectureService` consumes `CDN_BASE_URL`, `QUESTION_ASSETS_BUCKET`, and
+`REPORTS_BUCKET` directly from the validated Functions runtime environment when
+its caller does not provide an explicit override. Explicit initializer values
+take precedence for isolated tests; built-in defaults are local/test fallbacks
+and are never a substitute for the required staging or production values below.
+
 | Variable | Development | Test | Staging | Production | Value contract |
 |---|---:|---:|---:|---:|---|
 | `PROJECT_ID` | `R` | `R` | `R` | `R` | Application-level project selector. Test uses a disposable `demo-*` ID, staging is `parabolic-dev`, and production remains unresolved until BWM-052. Must agree with Google/Firebase runtime metadata. |
@@ -250,7 +256,7 @@ configuration inputs and must not be copied into frontend artifacts:
 | Owner | Variables | Rule |
 |---|---|---|
 | Firebase/Google runtime | `GOOGLE_CLOUD_PROJECT`, `GCLOUD_PROJECT`, `FIREBASE_CONFIG`, `K_SERVICE`, `FUNCTION_TARGET`, `K_REVISION`, `FUNCTIONS_VERSION` | `P`; validate consistency with `PROJECT_ID`, but do not manually inject them into deployed Functions. |
-| Firebase Emulator Suite | `FIRESTORE_EMULATOR_HOST`, `FUNCTIONS_EMULATOR_HOST`, `FIREBASE_EMULATOR_HUB` | `P`; present only while the corresponding emulator is running. |
+| Firebase Emulator Suite | `FIRESTORE_EMULATOR_HOST`, `FUNCTIONS_EMULATOR_HOST`, `FIREBASE_AUTH_EMULATOR_HOST`, `FIREBASE_STORAGE_EMULATOR_HOST`, `STORAGE_EMULATOR_HOST`, `FIREBASE_EMULATOR_HUB` | `P`; present only while the corresponding emulator is running. Storage clients use the Firebase-provided host; the checked-in browser harness also supplies its HTTP-form alias only inside the local test process. |
 | Local/CI test harness | `CI`, `FUNCTIONS_DISCOVERY_TIMEOUT`, `NO_GCE_CHECK`, `METADATA_SERVER_DETECTION`, `PARABOLIC_E2E_BASE_URL`, `PARABOLIC_STAGING_PORTAL_URL`, `PARABOLIC_STAGING_EXAM_URL`, `PARABOLIC_STAGING_VENDOR_URL` | Test orchestration only; never release configuration. |
 
 ## Environment boundaries

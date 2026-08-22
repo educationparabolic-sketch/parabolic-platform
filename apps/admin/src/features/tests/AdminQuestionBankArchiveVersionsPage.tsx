@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
+import { adaptAdminQuestionLibraryResult } from "../../../../../shared/services/portalResponseAdapters";
 import {
   shouldUseLiveApi as shouldUseConfiguredLiveApi,
 } from "../../../../../shared/services/frontendEnvironment";
@@ -267,15 +268,7 @@ async function fetchArchiveLifecycleFromApi(): Promise<ArchiveLifecycleRecord[]>
       limit: "250",
     },
   });
-  if (!payload || typeof payload !== "object") {
-    throw new Error("GET /admin/questions/library returned an invalid payload.");
-  }
-
-  const response = payload as {
-    questions?: unknown;
-  };
-  const questions = Array.isArray(response.questions) ? response.questions : [];
-  return questions
+  return adaptAdminQuestionLibraryResult(payload).questions
     .map((entry, index) => normalizeQuestionRecord(entry, index))
     .filter((entry): entry is QuestionBankRecord => Boolean(entry))
     .map(toArchiveLifecycleRecord);

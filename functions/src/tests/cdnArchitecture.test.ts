@@ -20,6 +20,46 @@ test("initializeArchitecture returns deterministic CDN defaults", () => {
   );
 });
 
+test("initializeArchitecture consumes runtime asset-delivery configuration", () => {
+  const priorCdnBaseUrl = process.env.CDN_BASE_URL;
+  const priorQuestionBucket = process.env.QUESTION_ASSETS_BUCKET;
+  const priorReportsBucket = process.env.REPORTS_BUCKET;
+
+  process.env.CDN_BASE_URL = "https://assets.bwm-012.example.test";
+  process.env.QUESTION_ASSETS_BUCKET = "demo-question-assets";
+  process.env.REPORTS_BUCKET = "demo-reports";
+
+  try {
+    const result = cdnArchitectureService.initializeArchitecture();
+
+    assert.equal(
+      result.cdnBaseUrl,
+      "https://assets.bwm-012.example.test",
+    );
+    assert.equal(
+      result.buckets.questionAssets.bucketName,
+      "demo-question-assets",
+    );
+    assert.equal(result.buckets.reports.bucketName, "demo-reports");
+  } finally {
+    if (priorCdnBaseUrl === undefined) {
+      delete process.env.CDN_BASE_URL;
+    } else {
+      process.env.CDN_BASE_URL = priorCdnBaseUrl;
+    }
+    if (priorQuestionBucket === undefined) {
+      delete process.env.QUESTION_ASSETS_BUCKET;
+    } else {
+      process.env.QUESTION_ASSETS_BUCKET = priorQuestionBucket;
+    }
+    if (priorReportsBucket === undefined) {
+      delete process.env.REPORTS_BUCKET;
+    } else {
+      process.env.REPORTS_BUCKET = priorReportsBucket;
+    }
+  }
+});
+
 test(
   "resolveQuestionAssetLocation creates immutable versioned question paths",
   () => {

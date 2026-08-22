@@ -57,6 +57,28 @@ const dtoFamilies = [
     ],
   },
   {
+    backend: "functions/src/types/questionAssetUpload.ts",
+    frontend: [
+      "apps/admin/src/features/tests/QuestionBankManagementPage.tsx",
+    ],
+    names: [
+      "QuestionAssetExtension",
+      "QuestionAssetKind",
+      "QuestionAssetUploadRequest",
+      "QuestionAssetUploadResult",
+    ],
+  },
+  {
+    backend: "functions/src/types/adminQuestionLibrary.ts",
+    frontend: [
+      "apps/admin/src/features/tests/AdminQuestionBankLibraryPage.tsx",
+    ],
+    names: [
+      "AdminQuestionLibraryRecord",
+      "AdminQuestionLibraryResult",
+    ],
+  },
+  {
     backend: "functions/src/types/calibrationDeployment.ts",
     frontend: [
       "apps/vendor/src/features/calibration/vendorCalibrationDataset.ts",

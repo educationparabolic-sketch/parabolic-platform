@@ -411,10 +411,18 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
 
     try {
       const data = await executeRequest<TData, TRequestBody>(path, options);
-      completeFrontendDataRequest(dataRequestId, data);
+      completeFrontendDataRequest(
+        dataRequestId,
+        data,
+        options.emptyResultIsReady,
+      );
       return data;
     } catch (error) {
-      failFrontendDataRequest(dataRequestId, error);
+      failFrontendDataRequest(
+        dataRequestId,
+        error,
+        options.handledFailureIsReady,
+      );
       throw error;
     }
   }

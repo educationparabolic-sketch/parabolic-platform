@@ -12,6 +12,8 @@ export interface ApiClientRequestOptions<TRequestBody = unknown> {
   headers?: Record<string, string>;
   signal?: AbortSignal;
   skipAuth?: boolean;
+  emptyResultIsReady?: boolean;
+  handledFailureIsReady?: boolean;
   retry?: Partial<ApiRetryPolicy>;
   responseAdapter?: (value: unknown) => unknown;
 }

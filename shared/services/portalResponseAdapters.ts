@@ -1,5 +1,7 @@
 import type {
+  AdminQuestionLibraryResult,
   DeployCalibrationVersionResult,
+  QuestionAssetUploadResult,
   QuestionBulkUploadResult,
 } from "../contracts/apiDtos";
 
@@ -92,6 +94,19 @@ function readNumber(
   return value;
 }
 
+function readPositiveInteger(
+  value: unknown,
+  route: string,
+  field: string,
+): number {
+  const parsed = readNumber(value, route, field);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    return fail(route, field, "a positive integer");
+  }
+
+  return parsed;
+}
+
 function readString(
   value: unknown,
   route: string,
@@ -99,6 +114,18 @@ function readString(
 ): string {
   if (typeof value !== "string" || value.trim().length === 0) {
     return fail(route, field, "a non-empty string");
+  }
+
+  return value;
+}
+
+function readStringAllowEmpty(
+  value: unknown,
+  route: string,
+  field: string,
+): string {
+  if (typeof value !== "string") {
+    return fail(route, field, "a string");
   }
 
   return value;
@@ -707,6 +734,7 @@ export function adaptAdminQuestionBulkResult(
       questionId: readNullableString(row.questionId, route, `${field}.questionId`),
       rowNumber: readNumber(row.rowNumber, route, `${field}.rowNumber`),
       uniqueKey: readNullableString(row.uniqueKey, route, `${field}.uniqueKey`),
+      version: readPositiveInteger(row.version, route, `${field}.version`),
       warnings: readStringArray(row.warnings, route, `${field}.warnings`),
     };
   });
@@ -726,6 +754,160 @@ export function adaptAdminQuestionBulkResult(
     },
     uploadLogId: readNullableString(data.uploadLogId, route, "uploadLogId"),
     uploadLogPath: readNullableString(data.uploadLogPath, route, "uploadLogPath"),
+  };
+}
+
+function readSafeQuestionAssetReference(
+  record: Record<string, unknown>,
+  route: string,
+  fieldPrefix: string,
+  fileKey: string,
+  previewKey: string,
+): {cdnPath: string; previewSignedUrl: string} {
+  const fileField = `${fieldPrefix}.${fileKey}`;
+  const previewField = `${fieldPrefix}.${previewKey}`;
+  const cdnPath = readStringAllowEmpty(record[fileKey], route, fileField);
+  const previewSignedUrl = readStringAllowEmpty(
+    record[previewKey],
+    route,
+    previewField,
+  );
+
+  if (!cdnPath && !previewSignedUrl) {
+    return {cdnPath, previewSignedUrl};
+  }
+
+  if (!cdnPath || cdnPath.includes("://") || cdnPath.startsWith("/")) {
+    return fail(route, fileField, "a relative managed CDN path");
+  }
+
+  let previewUrl: URL;
+  try {
+    previewUrl = new URL(previewSignedUrl);
+  } catch {
+    return fail(route, previewField, "an HTTPS signed CDN URL");
+  }
+
+  if (
+    previewUrl.protocol !== "https:" ||
+    previewUrl.hostname.endsWith("storage.googleapis.com") ||
+    previewUrl.hostname.endsWith("firebasestorage.googleapis.com") ||
+    !previewUrl.searchParams.get("Expires") ||
+    !previewUrl.searchParams.get("KeyName") ||
+    !previewUrl.searchParams.get("Signature")
+  ) {
+    return fail(route, previewField, "an HTTPS signed CDN URL");
+  }
+
+  return {cdnPath, previewSignedUrl};
+}
+
+export function adaptAdminQuestionLibraryResult(
+  value: unknown,
+): AdminQuestionLibraryResult {
+  const route = "GET /admin/questions/library";
+  const data = readRecord(value, route);
+  const questions = readArray(data.questions, route, "questions")
+    .map((value, index) => {
+      const field = `questions[${index}]`;
+      const record = readRecord(value, route, field);
+      const questionImage = readSafeQuestionAssetReference(
+        record,
+        route,
+        field,
+        "questionImageFile",
+        "questionImagePreviewUrl",
+      );
+      const solutionImage = readSafeQuestionAssetReference(
+        record,
+        route,
+        field,
+        "solutionImageFile",
+        "solutionImagePreviewUrl",
+      );
+
+      return {
+        academicYear: readString(record.academicYear, route, `${field}.academicYear`),
+        additionalTag: readString(record.additionalTag, route, `${field}.additionalTag`),
+        chapter: readString(record.chapter, route, `${field}.chapter`),
+        correctAnswer: readString(record.correctAnswer, route, `${field}.correctAnswer`),
+        difficulty: readEnum(
+          record.difficulty,
+          ["easy", "medium", "hard"] as const,
+          route,
+          `${field}.difficulty`,
+        ),
+        examType: readString(record.examType, route, `${field}.examType`),
+        id: readString(record.id, route, `${field}.id`),
+        internalNotes: readStringAllowEmpty(record.internalNotes, route, `${field}.internalNotes`),
+        lastUsedDate: readNullableString(record.lastUsedDate, route, `${field}.lastUsedDate`),
+        marks: readNumber(record.marks, route, `${field}.marks`),
+        negativeMarks: readNumber(record.negativeMarks, route, `${field}.negativeMarks`),
+        primaryTag: readString(record.primaryTag, route, `${field}.primaryTag`),
+        prompt: readString(record.prompt, route, `${field}.prompt`),
+        questionImageFile: questionImage.cdnPath,
+        questionImagePreviewUrl: questionImage.previewSignedUrl,
+        questionType: readString(record.questionType, route, `${field}.questionType`),
+        secondaryTag: readString(record.secondaryTag, route, `${field}.secondaryTag`),
+        simulationLink: readStringAllowEmpty(record.simulationLink, route, `${field}.simulationLink`),
+        solutionImageFile: solutionImage.cdnPath,
+        solutionImagePreviewUrl: solutionImage.previewSignedUrl,
+        status: readEnum(
+          record.status,
+          ["active", "used", "archived", "deprecated"] as const,
+          route,
+          `${field}.status`,
+        ),
+        subject: readString(record.subject, route, `${field}.subject`),
+        thermalState: readEnum(
+          record.thermalState,
+          ["hot", "warm", "cold"] as const,
+          route,
+          `${field}.thermalState`,
+        ),
+        topic: readStringAllowEmpty(record.topic, route, `${field}.topic`),
+        tutorialVideoLink: readStringAllowEmpty(
+          record.tutorialVideoLink,
+          route,
+          `${field}.tutorialVideoLink`,
+        ),
+        uniqueKey: readString(record.uniqueKey, route, `${field}.uniqueKey`),
+        usedCount: readNumber(record.usedCount, route, `${field}.usedCount`),
+        version: readPositiveInteger(record.version, route, `${field}.version`),
+      };
+    });
+
+  return {questions};
+}
+
+export function adaptAdminQuestionAssetUploadResult(
+  value: unknown,
+): QuestionAssetUploadResult {
+  const route = "POST /admin/questions/assets";
+  const data = readRecord(value, route);
+  const assetKind = readEnum(
+    data.assetKind,
+    ["questionImage", "solutionImage", "solutionPdf"] as const,
+    route,
+    "assetKind",
+  );
+  const uploaded = readBoolean(data.uploaded, route, "uploaded");
+  if (!uploaded) {
+    return fail(route, "uploaded", "true");
+  }
+
+  return {
+    assetKind,
+    cdnPath: readString(data.cdnPath, route, "cdnPath"),
+    contentType: readString(data.contentType, route, "contentType"),
+    previewSignedUrl: readString(
+      data.previewSignedUrl,
+      route,
+      "previewSignedUrl",
+    ),
+    questionId: readString(data.questionId, route, "questionId"),
+    uploaded: true,
+    version: readPositiveInteger(data.version, route, "version"),
   };
 }
 

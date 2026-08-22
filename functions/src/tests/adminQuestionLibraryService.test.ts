@@ -8,6 +8,7 @@ function createFirestoreMock(): FirebaseFirestore.Firestore {
     {
       data: () => ({
         chapter: "Kinematics",
+        correctAnswer: "B",
         createdAt: Timestamp.fromDate(new Date("2026-05-10T00:00:00.000Z")),
         difficulty: "Easy",
         academicYear: "2026-27",
@@ -19,9 +20,12 @@ function createFirestoreMock(): FirebaseFirestore.Firestore {
         negativeMarks: 1,
         primaryTag: "motion",
         questionId: "q-001",
+        questionImageUrl:
+          "inst_build_m5/questions/q-001/v2/question.webp",
         questionType: "MCQ",
         simulationLink: "https://sim.example.com/motion",
-        solutionImageUrl: "solutions/ph-kin-001.png",
+        solutionImageUrl:
+          "inst_build_m5/questions/q-001/v2/solution.png",
         status: "active",
         subject: "Physics",
         tags: ["motion", "basics"],
@@ -43,6 +47,8 @@ function createFirestoreMock(): FirebaseFirestore.Firestore {
         marks: 4,
         negativeMarks: 1,
         questionId: "q-002",
+        questionImageUrl:
+          "https://storage.googleapis.com/private/question.png",
         questionType: "Integer",
         status: "archived",
         subject: "Chemistry",
@@ -78,7 +84,33 @@ function createFirestoreMock(): FirebaseFirestore.Firestore {
 }
 
 test("admin question library service maps persisted question records", async () => {
-  const service = new AdminQuestionLibraryService(createFirestoreMock());
+  const signedRequests: Array<{
+    assetKind: string;
+    questionId: string;
+    version: number;
+  }> = [];
+  const service = new AdminQuestionLibraryService(
+    createFirestoreMock(),
+    (request) => {
+      signedRequests.push(request);
+      const extension = request.extension ?? "png";
+      const fileName = request.assetKind === "questionImage" ?
+        `question.${extension}` :
+        `solution.${extension}`;
+      const cdnPath =
+        `${request.instituteId}/questions/${request.questionId}/` +
+        `v${request.version}/${fileName}`;
+      return {
+        accessContext: request.accessContext ?? "examSession",
+        cdnPath,
+        expiresAt: "2026-08-22T12:30:00.000Z",
+        expiresInSeconds: 1800,
+        signedUrl:
+          `https://cdn.example.test/${cdnPath}` +
+          "?Expires=1&KeyName=test-key&Signature=test-signature",
+      };
+    },
+  );
 
   const result = await service.getLibrary({
     instituteId: "inst_build_m5",
@@ -90,6 +122,7 @@ test("admin question library service maps persisted question records", async () 
     academicYear: "2026-27",
     additionalTag: "jee-main",
     chapter: "Kinematics",
+    correctAnswer: "B",
     difficulty: "easy",
     examType: "JEEMains",
     id: "q-001",
@@ -99,10 +132,17 @@ test("admin question library service maps persisted question records", async () 
     negativeMarks: 1,
     primaryTag: "motion",
     prompt: "Physics Kinematics MCQ",
+    questionImageFile: "inst_build_m5/questions/q-001/v2/question.webp",
+    questionImagePreviewUrl:
+      "https://cdn.example.test/inst_build_m5/questions/q-001/" +
+      "v2/question.webp?Expires=1&KeyName=test-key&Signature=test-signature",
     questionType: "MCQ",
     secondaryTag: "basics",
     simulationLink: "https://sim.example.com/motion",
-    solutionImageFile: "solutions/ph-kin-001.png",
+    solutionImageFile: "inst_build_m5/questions/q-001/v2/solution.png",
+    solutionImagePreviewUrl:
+      "https://cdn.example.test/inst_build_m5/questions/q-001/" +
+      "v2/solution.png?Expires=1&KeyName=test-key&Signature=test-signature",
     status: "active",
     subject: "Physics",
     thermalState: "hot",
@@ -120,4 +160,9 @@ test("admin question library service maps persisted question records", async () 
   assert.equal(result.questions[1]?.lastUsedDate, "2024-01-01");
   assert.equal(result.questions[1]?.internalNotes, "");
   assert.equal(result.questions[1]?.topic, "");
+  assert.equal(result.questions[1]?.questionImageFile, "");
+  assert.equal(result.questions[1]?.questionImagePreviewUrl, "");
+  assert.equal(signedRequests.length, 2);
+  assert.ok(signedRequests.every((request) => request.questionId === "q-001"));
+  assert.ok(signedRequests.every((request) => request.version === 2));
 });

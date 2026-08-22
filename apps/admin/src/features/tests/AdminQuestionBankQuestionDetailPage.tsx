@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, useParams } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
+import { adaptAdminQuestionLibraryResult } from "../../../../../shared/services/portalResponseAdapters";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import {
   shouldUseLiveApi as shouldUseConfiguredLiveApi,
@@ -64,10 +65,18 @@ function normalizeQuestionRecord(value: unknown, index: number): QuestionBankRec
     primaryTag: toNonEmptyString(record.primaryTag, fallback?.primaryTag ?? "untagged"),
     prompt: toNonEmptyString(record.prompt, fallback?.prompt ?? ""),
     questionImageFile: toNonEmptyString(record.questionImageFile, fallback?.questionImageFile ?? ""),
+    questionImagePreviewUrl: toNonEmptyString(
+      record.questionImagePreviewUrl,
+      fallback?.questionImagePreviewUrl ?? "",
+    ),
     questionType: toNonEmptyString(record.questionType, fallback?.questionType ?? "Question"),
     secondaryTag: toNonEmptyString(record.secondaryTag, fallback?.secondaryTag ?? "none"),
     simulationLink: toNonEmptyString(record.simulationLink, fallback?.simulationLink ?? ""),
     solutionImageFile: toNonEmptyString(record.solutionImageFile, fallback?.solutionImageFile ?? ""),
+    solutionImagePreviewUrl: toNonEmptyString(
+      record.solutionImagePreviewUrl,
+      fallback?.solutionImagePreviewUrl ?? "",
+    ),
     status:
       record.status === "active" || record.status === "used" || record.status === "archived" || record.status === "deprecated" ?
         record.status :
@@ -254,15 +263,7 @@ async function fetchLibraryFromApi(): Promise<QuestionBankRecord[]> {
       limit: "250",
     },
   });
-  if (!payload || typeof payload !== "object") {
-    throw new Error("GET /admin/questions/library returned an invalid payload.");
-  }
-
-  const response = payload as {
-    questions?: unknown;
-  };
-  const questions = Array.isArray(response.questions) ? response.questions : [];
-  return questions
+  return adaptAdminQuestionLibraryResult(payload).questions
     .map((entry, index) => normalizeQuestionRecord(entry, index))
     .filter((entry): entry is QuestionBankRecord => Boolean(entry));
 }
@@ -379,18 +380,6 @@ function AdminQuestionBankQuestionDetailPage() {
     `Question ${questionId} was not found in the library.` :
     null;
 
-  function openImagePreview(fileName: string, assetType: "question" | "solution") {
-    if (!fileName.trim()) {
-      return;
-    }
-
-    setPreviewAsset({
-      fileName,
-      src: toPreviewImageSrc(fileName, assetType),
-      title: assetType === "question" ? "Question Image" : "Solution Image",
-    });
-  }
-
   return (
     <section className="admin-content-card" aria-labelledby="admin-question-detail-title">
       <p className="admin-content-eyebrow">Question Bank Library</p>
@@ -486,7 +475,12 @@ function AdminQuestionBankQuestionDetailPage() {
                       <button
                         type="button"
                         className="admin-question-library-file-link"
-                        onClick={() => openImagePreview(selectedQuestion.questionImageFile ?? "", "question")}
+                        onClick={() => setPreviewAsset({
+                          fileName: selectedQuestion.questionImageFile ?? "",
+                          src: selectedQuestion.questionImagePreviewUrl ||
+                            toPreviewImageSrc(selectedQuestion.questionImageFile ?? "", "question"),
+                          title: "Question Image",
+                        })}
                       >
                         {selectedQuestion.questionImageFile}
                       </button>
@@ -502,7 +496,12 @@ function AdminQuestionBankQuestionDetailPage() {
                       <button
                         type="button"
                         className="admin-question-library-file-link"
-                        onClick={() => openImagePreview(selectedQuestion.solutionImageFile, "solution")}
+                        onClick={() => setPreviewAsset({
+                          fileName: selectedQuestion.solutionImageFile,
+                          src: selectedQuestion.solutionImagePreviewUrl ||
+                            toPreviewImageSrc(selectedQuestion.solutionImageFile, "solution"),
+                          title: "Solution Image",
+                        })}
                       >
                         {selectedQuestion.solutionImageFile}
                       </button>

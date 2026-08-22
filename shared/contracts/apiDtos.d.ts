@@ -123,6 +123,67 @@ export interface AdminInterventionResult {
   actions: InterventionActionRecord[];
 }
 
+export type QuestionAssetKind =
+  | "questionImage"
+  | "solutionImage"
+  | "solutionPdf";
+
+export type QuestionAssetExtension = "png" | "webp" | "pdf";
+
+export interface QuestionAssetUploadRequest {
+  assetKind: QuestionAssetKind;
+  contentBase64: string;
+  extension: QuestionAssetExtension;
+  instituteId: string;
+  questionId: string;
+  version: number;
+}
+
+export interface QuestionAssetUploadResult {
+  assetKind: QuestionAssetKind;
+  cdnPath: string;
+  contentType: string;
+  previewSignedUrl: string;
+  questionId: string;
+  uploaded: true;
+  version: number;
+}
+
+export interface AdminQuestionLibraryRecord {
+  academicYear: string;
+  additionalTag: string;
+  chapter: string;
+  correctAnswer: string;
+  difficulty: "easy" | "medium" | "hard";
+  examType: string;
+  id: string;
+  internalNotes: string;
+  lastUsedDate: string | null;
+  marks: number;
+  negativeMarks: number;
+  primaryTag: string;
+  prompt: string;
+  questionImageFile: string;
+  questionImagePreviewUrl: string;
+  questionType: string;
+  secondaryTag: string;
+  simulationLink: string;
+  solutionImageFile: string;
+  solutionImagePreviewUrl: string;
+  status: "active" | "used" | "archived" | "deprecated";
+  subject: string;
+  thermalState: "hot" | "warm" | "cold";
+  topic: string;
+  tutorialVideoLink: string;
+  uniqueKey: string;
+  usedCount: number;
+  version: number;
+}
+
+export interface AdminQuestionLibraryResult {
+  questions: AdminQuestionLibraryRecord[];
+}
+
 export interface QuestionBulkUploadQuestionInput {
   chapter?: string;
   correctAnswer?: string;
@@ -160,6 +221,7 @@ export interface QuestionBulkUploadRowResult {
   questionId: string | null;
   rowNumber: number;
   uniqueKey: string | null;
+  version: number;
   warnings: string[];
 }
 

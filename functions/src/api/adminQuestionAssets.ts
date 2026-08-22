@@ -16,6 +16,7 @@ import {
   questionAssetUploadService,
 } from "../services/questionAssetUpload";
 import {
+  QuestionAssetUploadResult,
   QuestionAssetUploadRequest,
   QuestionAssetUploadSuccessResponse,
   QuestionAssetUploadValidatedRequest,
@@ -32,14 +33,26 @@ const buildSuccessResponse = (
   result: Awaited<ReturnType<typeof questionAssetUploadService.uploadAsset>>,
   requestId: string,
   timestamp: string,
-): QuestionAssetUploadSuccessResponse => ({
-  code: "OK",
-  data: result,
-  message: "Question asset uploaded.",
-  requestId,
-  success: true,
-  timestamp,
-});
+): QuestionAssetUploadSuccessResponse => {
+  const publicResult: QuestionAssetUploadResult = {
+    assetKind: result.assetKind,
+    cdnPath: result.cdnPath,
+    contentType: result.contentType,
+    previewSignedUrl: result.previewSignedUrl,
+    questionId: result.questionId,
+    uploaded: true,
+    version: result.version,
+  };
+
+  return {
+    code: "OK",
+    data: publicResult,
+    message: "Question asset uploaded.",
+    requestId,
+    success: true,
+    timestamp,
+  };
+};
 
 export const createAdminQuestionAssetsHandler = (
   dependencies: AdminQuestionAssetsDependencies,

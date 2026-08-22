@@ -39,6 +39,28 @@ test("frontend data-state lifecycle classifies loading, empty, permission, valid
   dataState.completeFrontendDataRequest(emptyRequest, []);
   assert.equal(dataState.getFrontendDataStateSnapshot().kind, "empty");
 
+  const emptyCreationHistoryRequest = dataState.beginFrontendDataRequest(
+    "GET",
+    "/admin/questions/upload-logs",
+  );
+  dataState.completeFrontendDataRequest(
+    emptyCreationHistoryRequest,
+    {logs: []},
+    true,
+  );
+  assert.equal(dataState.getFrontendDataStateSnapshot().kind, "ready");
+
+  const handledMutationFailureRequest = dataState.beginFrontendDataRequest(
+    "POST",
+    "/admin/questions/assets",
+  );
+  dataState.failFrontendDataRequest(
+    handledMutationFailureRequest,
+    new Error("Network failed."),
+    true,
+  );
+  assert.equal(dataState.getFrontendDataStateSnapshot().kind, "ready");
+
   const firstParallelRequest = dataState.beginFrontendDataRequest("GET", "/admin/tests");
   const secondParallelRequest = dataState.beginFrontendDataRequest("GET", "/admin/students");
   dataState.completeFrontendDataRequest(firstParallelRequest, []);
@@ -83,11 +105,11 @@ test("shared client and every portal route boundary use the data-state contract"
   assert.match(componentSource, /data-ui-data-state-content/u);
   assert.match(componentSource, /display: "none"/u);
   assert.match(apiClientSource, /beginFrontendDataRequest\(method, requestPath\)/u);
-  assert.match(apiClientSource, /completeFrontendDataRequest\(dataRequestId, data\)/u);
-  assert.match(apiClientSource, /failFrontendDataRequest\(dataRequestId, error\)/u);
+  assert.match(apiClientSource, /options\.emptyResultIsReady/u);
+  assert.match(apiClientSource, /options\.handledFailureIsReady/u);
   assert.ok(
     apiClientSource.indexOf("options.responseAdapter(unwrapped)") <
-      apiClientSource.indexOf("completeFrontendDataRequest(dataRequestId, data)"),
+      apiClientSource.indexOf("completeFrontendDataRequest("),
     "response validation must complete before a request can publish ready data",
   );
 

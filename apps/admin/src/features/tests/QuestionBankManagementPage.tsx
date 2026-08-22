@@ -4,12 +4,23 @@ import {
   shouldUseLiveApi as shouldUseConfiguredLiveApi,
 } from "../../../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
-import { adaptAdminQuestionBulkResult } from "../../../../../shared/services/portalResponseAdapters";
+import {
+  adaptAdminQuestionAssetUploadResult,
+  adaptAdminQuestionBulkResult,
+} from "../../../../../shared/services/portalResponseAdapters";
 import type {
+  QuestionAssetUploadRequest,
+  QuestionAssetUploadResult,
   QuestionBulkUploadQuestionInput,
   QuestionBulkUploadRequest,
   QuestionBulkUploadResult as AdminQuestionsBulkValidationResult,
 } from "../../../../../shared/contracts/apiDtos";
+import {
+  buildQuestionAssetUploadPlan,
+  isSupportedQuestionImageFile,
+  uploadQuestionAssetPlan,
+  type ManagedQuestionAssetPathsByRow,
+} from "./questionAssetUploadPlan";
 import {
   UiChartContainer,
   UiForm,
@@ -157,6 +168,7 @@ interface SampleWorkbookProfile {
 
 interface QuestionPackageValidationResult {
   archiveEntries: string[];
+  assetFiles: Record<string, Uint8Array>;
   errors: string[];
   imageAssetCount: number;
   nestedFolderEntries: string[];
@@ -287,7 +299,9 @@ function normalizeUploadLogRecord(value: unknown, index: number): UploadLogRecor
 }
 
 async function fetchUploadLogsFromApi(): Promise<UploadLogRecord[]> {
-  const payload = await apiClient.get<unknown>("/admin/questions/upload-logs");
+  const payload = await apiClient.get<unknown>("/admin/questions/upload-logs", {
+    emptyResultIsReady: true,
+  });
   if (!payload || typeof payload !== "object") {
     throw new Error("GET /admin/questions/upload-logs returned an invalid payload.");
   }
@@ -638,6 +652,20 @@ function decodeIdTokenClaims(idToken: string | null): Record<string, unknown> | 
   }
 }
 
+function requireInstituteIdFromClaims(
+  claims: Record<string, unknown> | null,
+): string {
+  const instituteId = claims?.instituteId;
+  if (typeof instituteId !== "string" || instituteId.trim().length === 0) {
+    throw new Error(
+      "Your authenticated account is missing its institute scope. Sign in " +
+      "again or ask an administrator to repair the account claims.",
+    );
+  }
+
+  return instituteId.trim();
+}
+
 function normalizeWorkbookRow(row: Record<string, string>): QuestionUploadWorkbookRow {
   return {
     additionalTag: (row.AdditionalTag ?? "").trim(),
@@ -748,22 +776,25 @@ function buildKeywordHints(row: QuestionUploadWorkbookRow): string[] {
 }
 
 async function validateQuestionsWithApi(input: {
+  assetPathsByRow?: ManagedQuestionAssetPathsByRow;
   examType: string;
   instituteId: string;
   subject: string;
   workbookRows: QuestionUploadWorkbookRow[];
   commit?: boolean;
 }): Promise<AdminQuestionsBulkValidationResult> {
-  const questions: AdminQuestionsBulkRequestRow[] = input.workbookRows.map((row) => ({
+  const questions: AdminQuestionsBulkRequestRow[] = input.workbookRows.map((row, rowIndex) => ({
     chapter: row.chapter,
     correctAnswer: row.correctAnswer,
     difficulty: normalizeDifficultyForApi(row.difficulty),
     examType: input.examType,
     marks: row.marks,
     negativeMarks: Math.abs(row.negativeMarks),
+    questionImageUrl: input.assetPathsByRow?.get(rowIndex)?.questionImageUrl,
     questionTextKeywords: buildKeywordHints(row),
     questionType: row.questionType,
     simulationLink: row.simulationLink || null,
+    solutionImageUrl: input.assetPathsByRow?.get(rowIndex)?.solutionImageUrl,
     status: "active",
     subject: input.subject,
     tags: buildTags(row),
@@ -779,6 +810,7 @@ async function validateQuestionsWithApi(input: {
         instituteId: input.instituteId,
         questions,
       },
+      handledFailureIsReady: true,
     },
   );
 
@@ -1019,8 +1051,14 @@ async function validateQuestionPackage(
   const nestedFolderEntries = archiveEntries.filter((entryName) => entryName.includes("/") || entryName.includes("\\"));
   const errors: string[] = [];
   const warnings: string[] = [];
-  const rootAssetEntries = archiveEntries.filter((entryName) => entryName !== "questions.xlsx");
-  const rootAssetNames = new Set(rootAssetEntries);
+  const rootFileEntries = parsedEntries.filter((entry) =>
+    entry.name !== "questions.xlsx" &&
+    !entry.name.endsWith("/") &&
+    !entry.name.includes("/") &&
+    !entry.name.includes("\\"));
+  const rootFileNames = new Set(rootFileEntries.map((entry) => entry.name));
+  const rootAssetEntries = rootFileEntries.filter((entry) =>
+    isSupportedQuestionImageFile(entry.name));
 
   if (nestedFolderEntries.length > 0) {
     errors.push("Nested folders are not allowed inside the ZIP package.");
@@ -1031,6 +1069,7 @@ async function validateQuestionPackage(
     errors.push("questions.xlsx is required at the ZIP root.");
     return {
       archiveEntries,
+      assetFiles: {},
       errors,
       imageAssetCount: rootAssetEntries.length,
       nestedFolderEntries,
@@ -1104,8 +1143,10 @@ async function validateQuestionPackage(
         currentErrors.push("QuestionImageFile must reference a ZIP asset file name, not an external URL.");
       } else if (questionImageFile.includes("/") || questionImageFile.includes("\\")) {
         currentErrors.push("QuestionImageFile must reference a ZIP root file name without folders.");
-      } else if (!rootAssetNames.has(questionImageFile)) {
+      } else if (!rootFileNames.has(questionImageFile)) {
         currentErrors.push(`QuestionImageFile "${questionImageFile}" was not found at the ZIP root.`);
+      } else if (!isSupportedQuestionImageFile(questionImageFile)) {
+        currentErrors.push("QuestionImageFile must use a .png or .webp extension.");
       }
     }
     if (!solutionImageFile) {
@@ -1115,8 +1156,10 @@ async function validateQuestionPackage(
         currentErrors.push("SolutionImageFile must reference a ZIP asset file name, not an external URL.");
       } else if (solutionImageFile.includes("/") || solutionImageFile.includes("\\")) {
         currentErrors.push("SolutionImageFile must reference a ZIP root file name without folders.");
-      } else if (!rootAssetNames.has(solutionImageFile)) {
+      } else if (!rootFileNames.has(solutionImageFile)) {
         currentErrors.push(`SolutionImageFile "${solutionImageFile}" was not found at the ZIP root.`);
+      } else if (!isSupportedQuestionImageFile(solutionImageFile)) {
+        currentErrors.push("SolutionImageFile must use a .png or .webp extension.");
       }
     }
     if (!correctAnswer) {
@@ -1142,8 +1185,26 @@ async function validateQuestionPackage(
     warnings.push("questions.xlsx contains no question rows.");
   }
 
+  const referencedAssetNames = new Set(
+    workbookRows.flatMap((row) => [
+      row.questionImageFile,
+      row.solutionImageFile,
+    ]).filter((fileName) =>
+      rootFileNames.has(fileName) && isSupportedQuestionImageFile(fileName)),
+  );
+  const assetFiles: Record<string, Uint8Array> = {};
+  await Promise.all(Array.from(referencedAssetNames).map(async (fileName) => {
+    const entry = rootFileEntries.find((candidate) =>
+      candidate.name === fileName);
+    if (!entry) {
+      return;
+    }
+    assetFiles[fileName] = await inflateZipEntry(archiveBuffer, entry);
+  }));
+
   return {
     archiveEntries,
+    assetFiles,
     errors,
     imageAssetCount: rootAssetEntries.length,
     nestedFolderEntries,
@@ -1220,7 +1281,8 @@ function QuestionBankManagementPage() {
     uploadValidation ?
       uploadValidation.errors.length > 0 ||
       uploadValidation.rowErrors.length > 0 ||
-      (uploadValidation.serverValidation?.summary.invalid ?? 0) > 0 :
+      (uploadValidation.serverValidation?.summary.invalid ?? 0) > 0 ||
+      (shouldUseLiveApi() && !uploadValidation.serverValidation) :
       false;
 
   async function handleUploadSubmit(event: FormEvent<HTMLFormElement>) {
@@ -1252,10 +1314,7 @@ function QuestionBankManagementPage() {
       const claims = decodeIdTokenClaims(session.idToken);
 
       if (!hasLocalErrors && shouldUseLiveApi()) {
-        const instituteId =
-          typeof claims?.instituteId === "string" && claims.instituteId.trim().length > 0 ?
-            claims.instituteId :
-            "inst-build-125";
+        const instituteId = requireInstituteIdFromClaims(claims);
         serverValidation = await validateQuestionsWithApi({
           examType: selectedExamLabel,
           instituteId,
@@ -1374,12 +1433,36 @@ function QuestionBankManagementPage() {
       }
 
       const claims = decodeIdTokenClaims(session.idToken);
-      const instituteId =
-        typeof claims?.instituteId === "string" && claims.instituteId.trim().length > 0 ?
-          claims.instituteId :
-          "inst-build-125";
+      const instituteId = requireInstituteIdFromClaims(claims);
+      const serverValidation = uploadValidation.serverValidation;
+      if (!serverValidation) {
+        throw new Error(
+          "Run system validation again before uploading question assets.",
+        );
+      }
+
+      const assetPlan = buildQuestionAssetUploadPlan({
+        assetFiles: uploadValidation.assetFiles,
+        instituteId,
+        serverRows: serverValidation.rows,
+        workbookRows: uploadValidation.workbookRows,
+      });
+      const assetPathsByRow = await uploadQuestionAssetPlan(
+        assetPlan,
+        async (request): Promise<QuestionAssetUploadResult> => {
+          const response = await apiClient.post<
+          unknown,
+          QuestionAssetUploadRequest
+          >("/admin/questions/assets", {
+            body: request,
+            handledFailureIsReady: true,
+          });
+          return adaptAdminQuestionAssetUploadResult(response);
+        },
+      );
 
       const commitResponse = await validateQuestionsWithApi({
+        assetPathsByRow,
         commit: true,
         examType: selectedExamLabel,
         instituteId,
@@ -1684,8 +1767,7 @@ function QuestionBankManagementPage() {
               <li>Place <code>questions.xlsx</code> and every referenced question and solution image at the ZIP root.</li>
               <li>
                 Use clear file names such as <code>question-001.png</code> and <code>solution-001.png</code>. Keep
-                the same names in the workbook, and use supported image files such as <code>.png</code>, <code>.jpg</code>,
-                <code>.jpeg</code>, or <code>.webp</code>.
+                the same names in the workbook, and use supported image files: <code>.png</code> or <code>.webp</code>.
               </li>
               <li>Do not create folders inside the ZIP.</li>
               <li>Use one flat ZIP package only.</li>

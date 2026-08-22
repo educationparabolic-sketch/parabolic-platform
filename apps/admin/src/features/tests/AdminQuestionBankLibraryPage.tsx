@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { NavLink } from "react-router-dom";
+import type { AdminQuestionLibraryResult } from "../../../../../shared/contracts/apiDtos";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
+import { adaptAdminQuestionLibraryResult } from "../../../../../shared/services/portalResponseAdapters";
 import {
   shouldUseLiveApi as shouldUseConfiguredLiveApi,
 } from "../../../../../shared/services/frontendEnvironment";
@@ -148,10 +150,18 @@ function normalizeQuestionRecord(value: unknown, index: number): QuestionBankRec
     primaryTag: toNonEmptyString(record.primaryTag, fallback?.primaryTag ?? "untagged"),
     prompt: toNonEmptyString(record.prompt, fallback?.prompt ?? ""),
     questionImageFile: toNonEmptyString(record.questionImageFile, fallback?.questionImageFile ?? ""),
+    questionImagePreviewUrl: toNonEmptyString(
+      record.questionImagePreviewUrl,
+      fallback?.questionImagePreviewUrl ?? "",
+    ),
     questionType: toNonEmptyString(record.questionType, fallback?.questionType ?? "Question"),
     secondaryTag: toNonEmptyString(record.secondaryTag, fallback?.secondaryTag ?? "none"),
     simulationLink: toNonEmptyString(record.simulationLink, fallback?.simulationLink ?? ""),
     solutionImageFile: toNonEmptyString(record.solutionImageFile, fallback?.solutionImageFile ?? ""),
+    solutionImagePreviewUrl: toNonEmptyString(
+      record.solutionImagePreviewUrl,
+      fallback?.solutionImagePreviewUrl ?? "",
+    ),
     status: normalizeStatus(record.status, fallback?.status ?? "active"),
     subject: toNonEmptyString(record.subject, fallback?.subject ?? "General"),
     thermalState: normalizeThermalState(record.thermalState, fallback?.thermalState ?? "warm"),
@@ -204,15 +214,9 @@ async function fetchLibraryFromApi(): Promise<QuestionBankRecord[]> {
       limit: "250",
     },
   });
-  if (!payload || typeof payload !== "object") {
-    throw new Error("GET /admin/questions/library returned an invalid payload.");
-  }
-
-  const response = payload as {
-    questions?: unknown;
-  };
-  const questions = Array.isArray(response.questions) ? response.questions : [];
-  return questions
+  const response: AdminQuestionLibraryResult =
+    adaptAdminQuestionLibraryResult(payload);
+  return response.questions
     .map((entry, index) => normalizeQuestionRecord(entry, index))
     .filter((entry): entry is QuestionBankRecord => Boolean(entry));
 }

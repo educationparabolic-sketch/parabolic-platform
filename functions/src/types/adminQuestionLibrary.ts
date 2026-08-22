@@ -1,35 +1,11 @@
 import {StandardApiErrorCode} from "./apiResponse";
-
-export interface AdminQuestionLibraryRecord {
-  academicYear: string;
-  additionalTag: string;
-  difficulty: "easy" | "medium" | "hard";
-  examType: string;
-  id: string;
-  internalNotes: string;
-  lastUsedDate: string | null;
-  marks: number;
-  negativeMarks: number;
-  primaryTag: string;
-  prompt: string;
-  questionType: string;
-  secondaryTag: string;
-  simulationLink: string;
-  solutionImageFile: string;
-  status: "active" | "used" | "archived" | "deprecated";
-  subject: string;
-  chapter: string;
-  thermalState: "hot" | "warm" | "cold";
-  topic: string;
-  uniqueKey: string;
-  tutorialVideoLink: string;
-  usedCount: number;
-  version: number;
-}
-
-export interface AdminQuestionLibraryResult {
-  questions: AdminQuestionLibraryRecord[];
-}
+export type {
+  AdminQuestionLibraryRecord,
+  AdminQuestionLibraryResult,
+} from "../../../shared/contracts/apiDtos";
+import type {
+  AdminQuestionLibraryResult,
+} from "../../../shared/contracts/apiDtos";
 
 export interface AdminQuestionLibraryValidatedRequest {
   instituteId: string;

@@ -49,6 +49,7 @@ test("admin questions bulk handler accepts a validate-only request", async () =>
           questionId: "phy-motion-001-v1",
           rowNumber: 1,
           uniqueKey: "PHY-MOTION-001",
+          version: 1,
           warnings: [
             "questionId was derived from uniqueKey and version.",
           ],

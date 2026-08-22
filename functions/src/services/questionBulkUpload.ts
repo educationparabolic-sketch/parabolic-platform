@@ -1,4 +1,5 @@
-import {Timestamp} from "firebase-admin/firestore";
+import {createHash} from "crypto";
+import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import {createLogger} from "./logging";
 import {cdnArchitectureService} from "./cdnArchitecture";
 import {getFirestore} from "../utils/firebaseAdmin";
@@ -40,14 +41,23 @@ const CSV_REQUIRED_HEADERS = [
 ];
 
 interface ExistingQuestionRecord {
+  correctAnswer?: string;
   createdAt?: FirebaseFirestore.Timestamp;
+  difficulty?: string;
+  examType?: string;
   lastUsedAt?: FirebaseFirestore.Timestamp | null;
+  marks?: number;
+  negativeMarks?: number;
   primaryTag?: string | null;
   questionId: string;
+  questionImageUrl?: string;
+  questionType?: string;
   searchTokens?: string[];
   status?: QuestionStatus;
+  subject?: string;
   uniqueKey?: string;
   usedCount?: number;
+  version?: number;
 }
 
 interface PreparedRow {
@@ -404,17 +414,33 @@ const normalizeExistingQuestion = (
   data: FirebaseFirestore.DocumentData | undefined,
   questionId: string,
 ): ExistingQuestionRecord => ({
+  correctAnswer:
+    typeof data?.correctAnswer === "string" ? data.correctAnswer : undefined,
   createdAt:
     data?.createdAt instanceof Timestamp ? data.createdAt : undefined,
   lastUsedAt:
     data?.lastUsedAt instanceof Timestamp || data?.lastUsedAt === null ?
       data.lastUsedAt :
       undefined,
+  difficulty:
+    typeof data?.difficulty === "string" ? data.difficulty : undefined,
+  examType:
+    typeof data?.examType === "string" ? data.examType : undefined,
+  marks:
+    typeof data?.marks === "number" ? data.marks : undefined,
+  negativeMarks:
+    typeof data?.negativeMarks === "number" ? data.negativeMarks : undefined,
   primaryTag:
     typeof data?.primaryTag === "string" ? data.primaryTag :
       data?.primaryTag === null ? null :
         undefined,
   questionId,
+  questionImageUrl:
+    typeof data?.questionImageUrl === "string" ?
+      data.questionImageUrl :
+      undefined,
+  questionType:
+    typeof data?.questionType === "string" ? data.questionType : undefined,
   searchTokens:
     Array.isArray(data?.searchTokens) ?
       data.searchTokens.filter((entry: unknown): entry is string =>
@@ -426,6 +452,8 @@ const normalizeExistingQuestion = (
       ALLOWED_STATUSES.has(data.status as QuestionStatus) ?
       data.status as QuestionStatus :
       undefined,
+  subject:
+    typeof data?.subject === "string" ? data.subject : undefined,
   uniqueKey:
     typeof data?.uniqueKey === "string" ? data.uniqueKey :
       undefined,
@@ -433,7 +461,52 @@ const normalizeExistingQuestion = (
     typeof data?.usedCount === "number" && Number.isFinite(data.usedCount) ?
       data.usedCount :
       undefined,
+  version:
+    typeof data?.version === "number" && Number.isInteger(data.version) ?
+      data.version :
+      undefined,
 });
+
+const STRUCTURAL_FIELD_LABELS = {
+  correctAnswer: "CorrectAnswer",
+  difficulty: "Difficulty",
+  examType: "Exam",
+  marks: "Marks",
+  negativeMarks: "NegativeMarks",
+  questionImageUrl: "QuestionImageFile",
+  questionType: "QuestionType",
+  subject: "Subject",
+  uniqueKey: "UniqueKey",
+} as const;
+
+const findStructuralChanges = (
+  existing: ExistingQuestionRecord,
+  row: QuestionBulkUploadValidatedRow,
+): string[] => Object.entries(STRUCTURAL_FIELD_LABELS)
+  .filter(([field]) => existing[field as keyof ExistingQuestionRecord] !==
+    row[field as keyof QuestionBulkUploadValidatedRow])
+  .map(([, label]) => label);
+
+const isUsedQuestion = (question: ExistingQuestionRecord): boolean =>
+  (question.usedCount ?? 0) > 0 || question.status === "used";
+
+const buildUploadPayloadHash = (
+  request: QuestionBulkUploadValidatedRequest,
+): string => createHash("sha256")
+  .update(JSON.stringify({
+    instituteId: request.instituteId,
+    rows: request.rows,
+  }))
+  .digest("hex");
+
+const getFirestoreErrorCode = (error: unknown): number | undefined => {
+  if (typeof error !== "object" || error === null || !("code" in error)) {
+    return undefined;
+  }
+
+  const code = Number((error as {code?: unknown}).code);
+  return Number.isFinite(code) ? code : undefined;
+};
 
 export class QuestionBulkUploadService {
   private readonly logger = createLogger("QuestionBulkUploadService");
@@ -520,6 +593,32 @@ export class QuestionBulkUploadService {
       .collection(INSTITUTES_COLLECTION)
       .doc(request.instituteId)
       .collection(QUESTION_BANK_COLLECTION);
+    const payloadHash = buildUploadPayloadHash(request);
+    const uploadLogId = `question_upload_${payloadHash.slice(0, 40)}`;
+    const questionUploadLogReference = this.firestore
+      .collection(INSTITUTES_COLLECTION)
+      .doc(request.instituteId)
+      .collection(QUESTION_UPLOAD_LOGS_COLLECTION)
+      .doc(uploadLogId);
+
+    if (request.commit) {
+      const priorUploadSnapshot = await questionUploadLogReference.get();
+      const priorResult = priorUploadSnapshot.data()?.result as
+        QuestionBulkUploadResult | undefined;
+
+      if (
+        priorUploadSnapshot.exists &&
+        priorUploadSnapshot.data()?.payloadHash === payloadHash &&
+        priorResult?.committed === true
+      ) {
+        this.logger.info("Question bulk upload replay returned prior result.", {
+          instituteId: request.instituteId,
+          uploadLogId,
+        });
+        return priorResult;
+      }
+    }
+
     const existingSnapshots = await Promise.all(
       request.rows.map((row) => questionCollection.doc(row.questionId).get()),
     );
@@ -575,13 +674,15 @@ export class QuestionBulkUploadService {
         errors.push("UniqueKey is already assigned to another question record.");
       }
 
-      if (
-        existingQuestion?.uniqueKey &&
-        existingQuestion.uniqueKey !== row.uniqueKey
-      ) {
-        errors.push(
-          "Existing questionId is linked to a different uniqueKey.",
-        );
+      if (existingQuestion && isUsedQuestion(existingQuestion)) {
+        const structuralChanges = findStructuralChanges(existingQuestion, row);
+
+        if (structuralChanges.length > 0) {
+          errors.push(
+            "Used questions cannot overwrite structural fields " +
+              `(${structuralChanges.join(", ")}); create a new version.`,
+          );
+        }
       }
 
       if (row.questionId === buildQuestionIdFromUniqueKey(row.uniqueKey, row.version)) {
@@ -594,6 +695,7 @@ export class QuestionBulkUploadService {
         questionId: row.questionId,
         rowNumber: row.rowNumber,
         uniqueKey: row.uniqueKey,
+        version: row.version,
         warnings,
       };
 
@@ -616,17 +718,31 @@ export class QuestionBulkUploadService {
     const updatedCount = preparedRows.filter((row) => row.action === "update").length;
     const canCommit = request.commit && invalid === 0;
 
-    let uploadLogId: string | null = null;
-    let uploadLogPath: string | null = null;
+    const uploadLogPath = canCommit ? questionUploadLogReference.path : null;
+    const result: QuestionBulkUploadResult = {
+      commitRequested: request.commit,
+      committed: canCommit,
+      rows: rowResults,
+      summary: {
+        created: canCommit ? createdCount : 0,
+        invalid,
+        received: request.rows.length,
+        updated: canCommit ? updatedCount : 0,
+        valid: request.rows.length - invalid,
+        warnings: warningCount,
+      },
+      uploadLogId: canCommit ? uploadLogId : null,
+      uploadLogPath,
+    };
 
     if (canCommit) {
       const batch = this.firestore.batch();
       const now = Timestamp.fromDate(new Date());
-      const questionUploadLogReference = this.firestore
+      const auditReference = this.firestore
         .collection(INSTITUTES_COLLECTION)
         .doc(request.instituteId)
-        .collection(QUESTION_UPLOAD_LOGS_COLLECTION)
-        .doc();
+        .collection("auditLogs")
+        .doc(uploadLogId);
 
       preparedRows.forEach((entry) => {
         const documentReference = questionCollection.doc(entry.row.questionId);
@@ -665,32 +781,57 @@ export class QuestionBulkUploadService {
         created: createdCount,
         errors: invalid,
         committedAt: now,
+        payloadHash,
+        result,
+        timestamp: now,
         totalRows: request.rows.length,
         uploadedBy: request.actorId,
         versionCreated: createdCount,
         warnings: warningCount,
       });
 
-      await batch.commit();
-      uploadLogId = questionUploadLogReference.id;
-      uploadLogPath = questionUploadLogReference.path;
-    }
+      batch.create(auditReference, {
+        actionType: "IMPORT_QUESTIONS",
+        actorRole: request.actorRole,
+        actorUid: request.actorId,
+        auditId: uploadLogId,
+        instituteId: request.instituteId,
+        ipAddress: request.ipAddress ?? null,
+        metadata: {
+          commitMode: "all_or_nothing",
+          created: createdCount,
+          payloadHash,
+          questionIds: request.rows.map((row) => row.questionId),
+          rowCount: request.rows.length,
+          updated: updatedCount,
+          userAgent: request.userAgent ?? null,
+        },
+        targetCollection: QUESTION_BANK_COLLECTION,
+        targetId: uploadLogId,
+        timestamp: FieldValue.serverTimestamp(),
+      });
 
-    const result: QuestionBulkUploadResult = {
-      commitRequested: request.commit,
-      committed: canCommit,
-      rows: rowResults,
-      summary: {
-        created: canCommit ? createdCount : 0,
-        invalid,
-        received: request.rows.length,
-        updated: canCommit ? updatedCount : 0,
-        valid: request.rows.length - invalid,
-        warnings: warningCount,
-      },
-      uploadLogId,
-      uploadLogPath,
-    };
+      try {
+        await batch.commit();
+      } catch (error) {
+        if (getFirestoreErrorCode(error) !== 6) {
+          throw error;
+        }
+
+        const replaySnapshot = await questionUploadLogReference.get();
+        const replayResult = replaySnapshot.data()?.result as
+          QuestionBulkUploadResult | undefined;
+
+        if (
+          replaySnapshot.data()?.payloadHash !== payloadHash ||
+          replayResult?.committed !== true
+        ) {
+          throw error;
+        }
+
+        return replayResult;
+      }
+    }
 
     this.logger.info("Question bulk upload evaluated.", {
       committed: result.committed,

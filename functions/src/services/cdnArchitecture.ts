@@ -116,6 +116,11 @@ const normalizeBaseUrl = (value: string | undefined): string => {
   return parsedUrl.toString().replace(/\/+$/, "");
 };
 
+const getRuntimeValue = (
+  explicitValue: string | undefined,
+  environmentKey: "CDN_BASE_URL" | "QUESTION_ASSETS_BUCKET" | "REPORTS_BUCKET",
+): string | undefined => explicitValue ?? process.env[environmentKey];
+
 const normalizeBucketName = (
   value: string | undefined,
   fallback: string,
@@ -197,7 +202,10 @@ const buildBuckets = (
   questionAssets: {
     bucketKey: "questionAssets",
     bucketName: normalizeBucketName(
-      request.questionAssetsBucket,
+      getRuntimeValue(
+        request.questionAssetsBucket,
+        "QUESTION_ASSETS_BUCKET",
+      ),
       DEFAULT_QUESTION_ASSETS_BUCKET,
       "questionAssetsBucket",
     ),
@@ -207,7 +215,7 @@ const buildBuckets = (
   reports: {
     bucketKey: "reports",
     bucketName: normalizeBucketName(
-      request.reportsBucket,
+      getRuntimeValue(request.reportsBucket, "REPORTS_BUCKET"),
       DEFAULT_REPORTS_BUCKET,
       "reportsBucket",
     ),
@@ -244,7 +252,9 @@ export class CdnArchitectureService {
     return {
       buckets: buildBuckets(request),
       cachePolicies: CACHE_POLICIES,
-      cdnBaseUrl: normalizeBaseUrl(request.cdnBaseUrl),
+      cdnBaseUrl: normalizeBaseUrl(
+        getRuntimeValue(request.cdnBaseUrl, "CDN_BASE_URL"),
+      ),
       examOptimization: {
         firestoreReadsPerNavigationAllowed: false,
         generateSignedUrlPerNavigationAllowed: false,

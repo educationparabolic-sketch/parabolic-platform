@@ -9,6 +9,7 @@ import {
 import {handleAdminInterventionsRequest} from "./adminInterventions";
 import {handleAdminLicensingRequest} from "./adminLicensing";
 import {handleAdminOverviewRequest} from "./adminOverview";
+import {handleAdminQuestionAssetsRequest} from "./adminQuestionAssets";
 import {
   handleAdminQuestionDistributionRequest,
 } from "./adminQuestionDistribution";
@@ -50,6 +51,7 @@ Record<string, ApiGatewayHandler>
   adminInterventions: handleAdminInterventionsRequest,
   adminLicensing: handleAdminLicensingRequest,
   adminOverview: handleAdminOverviewRequest,
+  adminQuestionAssets: handleAdminQuestionAssetsRequest,
   adminQuestionDistribution: handleAdminQuestionDistributionRequest,
   adminQuestionLibrary: handleAdminQuestionLibraryRequest,
   adminQuestionsBulk: handleAdminQuestionsBulkRequest,

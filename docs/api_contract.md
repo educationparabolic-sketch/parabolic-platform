@@ -2,7 +2,7 @@
 
 Status: canonical route and response-envelope contract
 
-Last reconciled: 2026-08-22 (`BWM-011` Admin summary-contract alignment)
+Last reconciled: 2026-08-22 (`BWM-012` authoritative question creation and managed assets)
 
 ## Sources of truth
 
@@ -39,7 +39,7 @@ If prose and the typed manifest disagree about a route key or status, the typed 
 - `missing`: no current Functions handler/export implements the frontend contract.
 - `intentionally_retired`: explicit product/architecture evidence says the route must not be served.
 
-Current totals: 15 implemented, 8 incompatible, 6 missing, 0 intentionally retired.
+Current totals: 16 implemented, 8 incompatible, 6 missing, 0 intentionally retired.
 
 ## Canonical frontend route manifest
 
@@ -50,7 +50,7 @@ Current totals: 15 implemented, 8 incompatible, 6 missing, 0 intentionally retir
 | ADM-03 | `GET /api/v1/admin/students` | `implemented` | `adminStudents` | Firebase ID; teacher/admin; identity tenant |
 | ADM-04 | `POST /api/v1/admin/students/onboarding-resend` | `implemented` | `adminStudentOnboardingResend` | Firebase ID; admin; identity tenant |
 | ADM-05 | `POST /api/v1/admin/students/bulk` | `implemented` | `adminStudentsBulk` | Firebase ID; admin; matching body tenant |
-| ADM-06 | `GET /api/v1/admin/questions/library` | `implemented` | `adminQuestionLibrary` | Firebase ID; teacher/admin; identity tenant |
+| ADM-06 | `GET /api/v1/admin/questions/library` | `implemented` | `adminQuestionLibrary` | Firebase ID; teacher/admin; identity tenant; dashboard-signed CDN assets |
 | ADM-07 | `GET /api/v1/admin/questions/distribution` | `implemented` | `adminQuestionDistribution` | Firebase ID; teacher/admin; identity tenant |
 | ADM-08 | `GET /api/v1/admin/questions/upload-logs` | `implemented` | `adminQuestionUploadLogs` | Firebase ID; teacher/admin; identity tenant |
 | ADM-09 | `POST /api/v1/admin/questions/bulk` | `implemented` | `adminQuestionsBulk` | Firebase ID; teacher/admin; matching body tenant |
@@ -62,6 +62,7 @@ Current totals: 15 implemented, 8 incompatible, 6 missing, 0 intentionally retir
 | ADM-15 | `POST /api/v1/admin/academicYear/archive` | `implemented` | `adminAcademicYearArchive` | Firebase ID; admin/vendor; guarded tenant |
 | ADM-16 | `POST /api/v1/admin/licensing` | `incompatible` | `adminLicensing` | Firebase ID; admin/director; guarded tenant |
 | ADM-17 | `POST /api/v1/admin/interventions` | `implemented` | `adminInterventions` | Firebase ID; admin/teacher; matching tenant; L1 |
+| ADM-18 | `POST /api/v1/admin/questions/assets` | `implemented` | `adminQuestionAssets` | Firebase ID; teacher/admin; matching body tenant |
 | STU-01 | `GET /api/v1/student/dashboard` | `missing` | None | Firebase ID; student; identity tenant |
 | STU-02 | `GET /api/v1/student/tests` | `missing` | None | Firebase ID; student; identity tenant |
 | STU-03 | `GET /api/v1/student/performance` | `missing` | None | Firebase ID; student; identity tenant |
@@ -77,13 +78,19 @@ Current totals: 15 implemented, 8 incompatible, 6 missing, 0 intentionally retir
 
 The detailed request/response mismatch for each incompatible entry is recorded under the same ID in `docs/FRONTEND_API_CALL_INVENTORY.md`.
 
+ADM-06 returns the shared `AdminQuestionLibraryResult`. Each managed question or solution asset is exposed only as its canonical relative CDN path plus a freshly generated 30-minute `dashboardView` signed HTTPS URL containing `Expires`, `KeyName`, and `Signature`; malformed, noncanonical, direct-bucket, or unsigned legacy references are omitted. The public response never returns Storage bucket names or object paths.
+
+ADM-09 supports validation-only and commit modes through the shared `QuestionBulkUploadRequest`/`QuestionBulkUploadResult` contract. Every validated row returns the authoritative question ID and positive-integer version. A commit accepts only canonical relative managed asset paths, writes the question documents, deterministic immutable upload log, and institute mutation audit atomically, and replays the stored result for an exact normalized-payload retry. Once a question is used, changes to its structural exam/content/marking fields are rejected and callers must create a new version.
+
+ADM-18 accepts one shared `QuestionAssetUploadRequest` containing base64 image bytes, `questionImage` or `solutionImage` kind, PNG/WebP extension, matching institute, and the ADM-09-authoritative question ID/version. It writes only the canonical versioned question path with create-only Storage preconditions and SHA-256 metadata. Same-content retries replay safely; different content at the occupied path fails closed. The shared public result contains only asset kind, CDN path/URL, content type, question ID, version, and size; bucket name, object path, and internal created/replayed disposition never cross the API boundary.
+
 ## Backend HTTP export accounting
 
 `functions/src/apiRouteManifest.ts` accounts for all 42 current `functions.https.onRequest` exports:
 
 - `apiV1` is the single versioned `gateway` export; it resolves exact manifest method/path pairs, preserves decoded route parameters, and dispatches non-null `functionExport` mappings through the existing raw request handlers;
-- 22 exports are referenced by one or more canonical frontend routes;
-- 16 portal-oriented exports currently have no executable frontend caller and remain `unmapped_portal` rather than receiving an invented public route;
+- 23 exports are referenced by one or more canonical frontend routes;
+- 15 portal-oriented exports currently have no executable frontend caller and remain `unmapped_portal` rather than receiving an invented public route;
 - `internalEmailQueue` is `internal_only`;
 - `stripeWebhook` is a `webhook` boundary;
 - `helloWorld` is a `healthcheck` boundary.

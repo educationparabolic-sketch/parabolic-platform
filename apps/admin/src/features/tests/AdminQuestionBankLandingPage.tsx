@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
+import { adaptAdminQuestionLibraryResult } from "../../../../../shared/services/portalResponseAdapters";
 import {
   shouldUseLiveApi as shouldUseConfiguredLiveApi,
 } from "../../../../../shared/services/frontendEnvironment";
@@ -91,9 +92,6 @@ async function fetchQuestionBankLandingSummary(): Promise<QuestionBankLandingSum
     apiClient.get<unknown>("/admin/questions/upload-logs"),
   ]);
 
-  if (!libraryPayload || typeof libraryPayload !== "object") {
-    throw new Error("GET /admin/questions/library returned an invalid payload.");
-  }
   if (!distributionPayload || typeof distributionPayload !== "object") {
     throw new Error("GET /admin/questions/distribution returned an invalid payload.");
   }
@@ -101,9 +99,7 @@ async function fetchQuestionBankLandingSummary(): Promise<QuestionBankLandingSum
     throw new Error("GET /admin/questions/upload-logs returned an invalid payload.");
   }
 
-  const libraryResponse = libraryPayload as {
-    questions?: unknown;
-  };
+  const libraryResponse = adaptAdminQuestionLibraryResult(libraryPayload);
   const distributionResponse = distributionPayload as {
     summary?: unknown;
   };
@@ -111,7 +107,7 @@ async function fetchQuestionBankLandingSummary(): Promise<QuestionBankLandingSum
     logs?: unknown;
   };
 
-  const questions = Array.isArray(libraryResponse.questions) ? libraryResponse.questions : [];
+  const questions = libraryResponse.questions;
   const distributionSummary =
     distributionResponse.summary && typeof distributionResponse.summary === "object" ?
       (distributionResponse.summary as Record<string, unknown>) :
@@ -126,13 +122,8 @@ async function fetchQuestionBankLandingSummary(): Promise<QuestionBankLandingSum
   let usedQuestions = 0;
 
   questions.forEach((entry) => {
-    if (!entry || typeof entry !== "object") {
-      return;
-    }
-
-    const record = entry as Record<string, unknown>;
-    const primaryTag = toNonEmptyString(record.primaryTag);
-    const secondaryTag = toNonEmptyString(record.secondaryTag);
+    const primaryTag = entry.primaryTag;
+    const secondaryTag = entry.secondaryTag;
 
     if (primaryTag.length > 0 && primaryTag !== "none") {
       activeTags.add(primaryTag);
@@ -140,7 +131,7 @@ async function fetchQuestionBankLandingSummary(): Promise<QuestionBankLandingSum
     if (secondaryTag.length > 0 && secondaryTag !== "none") {
       activeTags.add(secondaryTag);
     }
-    if (toNumberOrZero(record.usedCount) > 0) {
+    if (entry.usedCount > 0) {
       usedQuestions += 1;
     }
   });

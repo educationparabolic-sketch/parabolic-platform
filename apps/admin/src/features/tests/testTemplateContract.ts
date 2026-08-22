@@ -28,9 +28,11 @@ export interface QuestionBankRecord {
   prompt: string;
   primaryTag: string;
   questionImageFile?: string;
+  questionImagePreviewUrl?: string;
   questionType: string;
   secondaryTag: string;
   solutionImageFile: string;
+  solutionImagePreviewUrl?: string;
   tutorialVideoLink: string;
   simulationLink: string;
   topic: string;

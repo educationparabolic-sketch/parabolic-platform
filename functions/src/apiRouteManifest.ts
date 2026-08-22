@@ -191,6 +191,14 @@ export const API_ROUTE_MANIFEST: readonly ApiRouteManifestEntry[] = [
     "adminInterventions",
   ),
   defineRoute(
+    "ADM-18",
+    "admin",
+    "POST",
+    "/admin/questions/assets",
+    "implemented",
+    "adminQuestionAssets",
+  ),
+  defineRoute(
     "STU-01",
     "student",
     "GET",
@@ -373,11 +381,6 @@ BackendHttpExportManifestEntry[] = [
   {
     disposition: "unmapped_portal",
     functionExport: "adminStudentSoftDelete",
-    routeIds: [],
-  },
-  {
-    disposition: "unmapped_portal",
-    functionExport: "adminQuestionAssets",
     routeIds: [],
   },
   {

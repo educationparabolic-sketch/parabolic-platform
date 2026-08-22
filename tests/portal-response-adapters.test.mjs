@@ -20,6 +20,12 @@ const typescript = require(join(rootDirectory, "functions/node_modules/typescrip
 const { buildSuccessResponse: buildAdminQuestionBulkSuccessResponse } = require(
   join(rootDirectory, "functions/lib/api/adminQuestionsBulk.js"),
 );
+const { buildSuccessResponse: buildAdminQuestionAssetSuccessResponse } = require(
+  join(rootDirectory, "functions/lib/api/adminQuestionAssets.js"),
+);
+const { buildSuccessResponse: buildAdminQuestionLibrarySuccessResponse } = require(
+  join(rootDirectory, "functions/lib/api/adminQuestionLibrary.js"),
+);
 const { buildSuccessResponse: buildAdminOverviewSuccessResponse } = require(
   join(rootDirectory, "functions/lib/api/adminOverview.js"),
 );
@@ -81,6 +87,7 @@ test("Admin adapter accepts backend question-bulk data and rejects defaultable d
         questionId: "question-001",
         rowNumber: 1,
         uniqueKey: "jee-physics-001",
+        version: 1,
         warnings: [],
       },
     ],
@@ -110,6 +117,113 @@ test("Admin adapter accepts backend question-bulk data and rejects defaultable d
     {
       name: "PortalResponseValidationError",
       route: "POST /admin/questions/bulk",
+    },
+  );
+});
+
+test("Admin question-library adapter preserves safe signed asset references", () => {
+  const question = {
+    academicYear: "2026-27",
+    additionalTag: "jee-main",
+    chapter: "Kinematics",
+    correctAnswer: "B",
+    difficulty: "easy",
+    examType: "JEEMains",
+    id: "question-001",
+    internalNotes: "",
+    lastUsedDate: null,
+    marks: 4,
+    negativeMarks: 1,
+    primaryTag: "motion",
+    prompt: "Physics Kinematics MCQ",
+    questionImageFile: "inst-001/questions/question-001/v2/question.webp",
+    questionImagePreviewUrl:
+      "https://cdn.example.test/inst-001/questions/question-001/" +
+      "v2/question.webp?Expires=1&KeyName=test-key&Signature=test-signature",
+    questionType: "MCQ",
+    secondaryTag: "basics",
+    simulationLink: "",
+    solutionImageFile: "inst-001/questions/question-001/v2/solution.png",
+    solutionImagePreviewUrl:
+      "https://cdn.example.test/inst-001/questions/question-001/" +
+      "v2/solution.png?Expires=1&KeyName=test-key&Signature=test-signature",
+    status: "active",
+    subject: "Physics",
+    thermalState: "cold",
+    topic: "",
+    tutorialVideoLink: "",
+    uniqueKey: "PHY-KIN-001",
+    usedCount: 0,
+    version: 2,
+  };
+  const unwrapped = unwrapApiSuccessData(
+    buildAdminQuestionLibrarySuccessResponse(
+      { questions: [question] },
+      "req-admin-library-001",
+      "2026-08-22T15:30:00.000Z",
+    ),
+  );
+
+  assert.deepEqual(
+    adapters.adaptAdminQuestionLibraryResult(unwrapped),
+    { questions: [question] },
+  );
+  assert.throws(
+    () => adapters.adaptAdminQuestionLibraryResult({
+      questions: [{
+        ...question,
+        questionImagePreviewUrl:
+          "https://storage.googleapis.com/private/question.webp",
+      }],
+    }),
+    {
+      name: "PortalResponseValidationError",
+      route: "GET /admin/questions/library",
+    },
+  );
+});
+
+test("Admin adapter accepts the safe question-asset response projection", () => {
+  const storageResult = {
+    assetKind: "questionImage",
+    bucketName: "parabolic-prod-question-assets",
+    cdnPath: "inst-001/questions/question-001/v2/question.png",
+    contentType: "image/png",
+    objectPath: "inst-001/questions/question-001/v2/question.png",
+    previewSignedUrl: "https://cdn.example.test/question.png?Expires=1",
+    questionId: "question-001",
+    uploaded: true,
+    version: 2,
+  };
+  const envelope = buildAdminQuestionAssetSuccessResponse(
+    storageResult,
+    "req-admin-asset-001",
+    "2026-08-22T15:30:00.000Z",
+  );
+  const unwrapped = unwrapApiSuccessData(envelope);
+
+  assert.deepEqual(
+    adapters.adaptAdminQuestionAssetUploadResult(unwrapped),
+    {
+      assetKind: "questionImage",
+      cdnPath: storageResult.cdnPath,
+      contentType: "image/png",
+      previewSignedUrl: storageResult.previewSignedUrl,
+      questionId: "question-001",
+      uploaded: true,
+      version: 2,
+    },
+  );
+  assert.equal("bucketName" in unwrapped, false);
+  assert.equal("objectPath" in unwrapped, false);
+  assert.throws(
+    () => adapters.adaptAdminQuestionAssetUploadResult({
+      ...unwrapped,
+      version: 0,
+    }),
+    {
+      name: "PortalResponseValidationError",
+      route: "POST /admin/questions/assets",
     },
   );
 });
@@ -448,6 +562,13 @@ test("representative production callers invoke their portal adapters", async () 
     readFile(
       join(
         rootDirectory,
+        "apps/admin/src/features/tests/AdminQuestionBankLibraryPage.tsx",
+      ),
+      "utf8",
+    ),
+    readFile(
+      join(
+        rootDirectory,
         "apps/admin/src/features/tests/QuestionBankManagementPage.tsx",
       ),
       "utf8",
@@ -472,6 +593,7 @@ test("representative production callers invoke their portal adapters", async () 
   for (const [index, adapterName] of [
     "adaptAdminOverviewResult",
     "adaptAdminAnalyticsResult",
+    "adaptAdminQuestionLibraryResult",
     "adaptAdminQuestionBulkResult",
     "adaptStudentSummaryResult",
     "adaptExamSubmitResult",

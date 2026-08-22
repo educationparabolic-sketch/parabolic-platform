@@ -49,6 +49,7 @@ test("admin question library handler accepts read requests", async () => {
             academicYear: "2026-27",
             additionalTag: "jee-main",
             chapter: "Kinematics",
+            correctAnswer: "B",
             difficulty: "easy",
             examType: "JEEMains",
             id: "q-101",
@@ -58,10 +59,21 @@ test("admin question library handler accepts read requests", async () => {
             negativeMarks: 1,
             primaryTag: "motion",
             prompt: "Physics Kinematics MCQ",
+            questionImageFile:
+              "inst_build_m5_api/questions/q-101/v2/question.png",
+            questionImagePreviewUrl:
+              "https://cdn.example.test/inst_build_m5_api/questions/" +
+              "q-101/v2/question.png" +
+              "?Expires=1&KeyName=test-key&Signature=test-signature",
             questionType: "MCQ",
             secondaryTag: "basics",
             simulationLink: "https://sim.example.com/motion",
-            solutionImageFile: "solutions/ph-kin-001.png",
+            solutionImageFile:
+              "inst_build_m5_api/questions/q-101/v2/solution.png",
+            solutionImagePreviewUrl:
+              "https://cdn.example.test/inst_build_m5_api/questions/" +
+              "q-101/v2/solution.png" +
+              "?Expires=1&KeyName=test-key&Signature=test-signature",
             status: "active",
             subject: "Physics",
             thermalState: "hot",
