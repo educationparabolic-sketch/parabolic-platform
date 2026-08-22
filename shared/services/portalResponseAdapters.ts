@@ -128,6 +128,560 @@ function readStringArray(
   return value;
 }
 
+function readArray(
+  value: unknown,
+  route: string,
+  field: string,
+): unknown[] {
+  if (!Array.isArray(value)) {
+    return fail(route, field, "an array");
+  }
+
+  return value;
+}
+
+function readNumberArray(
+  value: unknown,
+  route: string,
+  field: string,
+): number[] {
+  return readArray(value, route, field).map((entry, index) =>
+    readNumber(entry, route, `${field}[${index}]`));
+}
+
+function readEnum<TValue extends string>(
+  value: unknown,
+  allowed: readonly TValue[],
+  route: string,
+  field: string,
+): TValue {
+  if (typeof value !== "string" || !allowed.includes(value as TValue)) {
+    return fail(route, field, allowed.map((entry) => `"${entry}"`).join(", "));
+  }
+
+  return value as TValue;
+}
+
+const RAW_SESSION_FIELDS = new Set([
+  "answers",
+  "answerEvents",
+  "questionEvents",
+  "rawAnswers",
+  "rawAttempts",
+  "sessionEvents",
+  "sessionSnapshot",
+]);
+
+function assertSummaryOnly(
+  value: unknown,
+  route: string,
+  field = "data",
+): void {
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) =>
+      assertSummaryOnly(entry, route, `${field}[${index}]`));
+    return;
+  }
+
+  if (!value || typeof value !== "object") {
+    return;
+  }
+
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (RAW_SESSION_FIELDS.has(key)) {
+      fail(route, `${field}.${key}`, "summary-only data");
+    }
+    assertSummaryOnly(entry, route, `${field}.${key}`);
+  }
+}
+
+function validateNumberFields(
+  record: Record<string, unknown>,
+  fields: readonly string[],
+  route: string,
+  prefix: string,
+): void {
+  fields.forEach((field) =>
+    readNumber(record[field], route, `${prefix}.${field}`));
+}
+
+function validateStringFields(
+  record: Record<string, unknown>,
+  fields: readonly string[],
+  route: string,
+  prefix: string,
+): void {
+  fields.forEach((field) =>
+    readString(record[field], route, `${prefix}.${field}`));
+}
+
+function validateDistributionBins(
+  value: unknown,
+  route: string,
+  field: string,
+): void {
+  readArray(value, route, field).forEach((entry, index) => {
+    const prefix = `${field}[${index}]`;
+    const record = readRecord(entry, route, prefix);
+    readString(record.label, route, `${prefix}.label`);
+    readNumber(record.value, route, `${prefix}.value`);
+  });
+}
+
+export function adaptAdminOverviewResult<TSnapshot>(value: unknown): TSnapshot {
+  const route = "GET /admin/overview";
+  const data = readRecord(value, route);
+  assertSummaryOnly(data, route);
+  validateStringFields(data, ["academicYear", "computedAt"], route, "data");
+
+  const guarantees = readRecord(data.performanceGuarantees, route, "performanceGuarantees");
+  validateStringFields(
+    guarantees,
+    ["aggregationPolicy", "payloadShape", "riskDistributionCacheCadence"],
+    route,
+    "performanceGuarantees",
+  );
+  validateNumberFields(
+    guarantees,
+    ["maxSummaryDocumentsPerLoad", "targetLoadTimeMs"],
+    route,
+    "performanceGuarantees",
+  );
+  readStringArray(guarantees.sourceCollections, route, "performanceGuarantees.sourceCollections");
+
+  const operational = readRecord(data.operationalSnapshot, route, "operationalSnapshot");
+  validateNumberFields(
+    operational,
+    [
+      "activeConcurrentSessions",
+      "activeStudents",
+      "billingCount",
+      "lastTestCompletionRatePercent",
+      "testsConducted",
+      "testsScheduled",
+    ],
+    route,
+    "operationalSnapshot",
+  );
+
+  const activity = readRecord(data.currentActivity, route, "currentActivity");
+  validateNumberFields(
+    activity,
+    [
+      "activeTestSessions",
+      "controlledModeCompliancePercentage",
+      "liveBehaviorAlertCount",
+      "liveRiskCount",
+      "minTimeViolationsLive",
+      "pacingDriftPercentage",
+      "skipBurstPercentage",
+      "studentsCurrentlyInTest",
+    ],
+    route,
+    "currentActivity",
+  );
+  readString(activity.upcomingTestLabel, route, "currentActivity.upcomingTestLabel");
+  readArray(activity.lastFiveSubmissions, route, "currentActivity.lastFiveSubmissions")
+    .forEach((entry, index) => {
+      const prefix = `currentActivity.lastFiveSubmissions[${index}]`;
+      const record = readRecord(entry, route, prefix);
+      validateStringFields(
+        record,
+        ["assessmentLabel", "studentName", "submittedAt"],
+        route,
+        prefix,
+      );
+    });
+
+  const performance = readRecord(data.performanceSummary, route, "performanceSummary");
+  validateNumberFields(
+    performance,
+    [
+      "avgAccuracyPercentage",
+      "avgDisciplineIndex",
+      "avgPhaseAdherencePercentage",
+      "avgRawScorePercentage",
+      "controlledModeImprovementDelta",
+      "easyNeglectPercentage",
+      "hardBiasPercentage",
+      "participationRate",
+      "timeMisallocationPercentage",
+    ],
+    route,
+    "performanceSummary",
+  );
+  validateStringFields(
+    performance,
+    ["highestPerformingBatch", "lowestPerformingBatch", "riskDistribution"],
+    route,
+    "performanceSummary",
+  );
+  readEnum(
+    performance.executionStabilityBadge,
+    ["Stable", "Moderate", "HighVariance"] as const,
+    route,
+    "performanceSummary.executionStabilityBadge",
+  );
+  validateDistributionBins(
+    performance.distributionHistogram,
+    route,
+    "performanceSummary.distributionHistogram",
+  );
+  validateDistributionBins(
+    performance.accuracyDistributionHistogram,
+    route,
+    "performanceSummary.accuracyDistributionHistogram",
+  );
+
+  const execution = readRecord(data.executionSummary, route, "executionSummary");
+  validateNumberFields(
+    execution,
+    [
+      "disciplineRegressionAlerts",
+      "highRiskStudentCount",
+      "percentageStudentsWithRepeatedPattern",
+      "phaseCompliancePercentage",
+    ],
+    route,
+    "executionSummary",
+  );
+  validateStringFields(
+    execution,
+    [
+      "controlledModeImpactCard",
+      "mostCommonDiagnosticSignal",
+      "riskClusterBreakdown",
+      "topicWithHighestWeaknessCluster",
+    ],
+    route,
+    "executionSummary",
+  );
+
+  const risk = readRecord(data.riskSnapshot, route, "riskSnapshot");
+  validateNumberFields(
+    risk,
+    ["guessClusterPercentage", "overstayRatePercentage"],
+    route,
+    "riskSnapshot",
+  );
+  validateStringFields(
+    risk,
+    ["disciplineIndex7DayTrend", "riskDistributionPie"],
+    route,
+    "riskSnapshot",
+  );
+  readArray(risk.topFiveStudentsRequiringAttention, route, "riskSnapshot.topFiveStudentsRequiringAttention")
+    .forEach((entry, index) => {
+      const prefix = `riskSnapshot.topFiveStudentsRequiringAttention[${index}]`;
+      validateStringFields(
+        readRecord(entry, route, prefix),
+        ["riskState", "studentName"],
+        route,
+        prefix,
+      );
+    });
+
+  const governance = readRecord(data.governanceSnapshot, route, "governanceSnapshot");
+  validateNumberFields(
+    governance,
+    ["institutionalStabilityIndex", "monthOverMonthStabilityChange"],
+    route,
+    "governanceSnapshot",
+  );
+  validateStringFields(
+    governance,
+    ["miniTrendSparkline", "overrideFrequencyTrend"],
+    route,
+    "governanceSnapshot",
+  );
+  readEnum(
+    governance.disciplineTrajectoryIndicator,
+    ["Up", "Down", "Stable"] as const,
+    route,
+    "governanceSnapshot.disciplineTrajectoryIndicator",
+  );
+
+  const system = readRecord(data.systemHealthAndLicensing, route, "systemHealthAndLicensing");
+  validateNumberFields(
+    system,
+    [
+      "activeStudentCount",
+      "eligibilityL1Percentage",
+      "eligibilityL2Percentage",
+      "peakConcurrencyThisMonth",
+    ],
+    route,
+    "systemHealthAndLicensing",
+  );
+  validateStringFields(
+    system,
+    [
+      "academicYearLockStatus",
+      "lastArchiveDate",
+      "storageUsageSummary",
+      "upgradeAwarenessCard",
+    ],
+    route,
+    "systemHealthAndLicensing",
+  );
+  readEnum(
+    system.currentLayerBadge,
+    ["L0", "L1", "L2", "L3"] as const,
+    route,
+    "systemHealthAndLicensing.currentLayerBadge",
+  );
+
+  return value as TSnapshot;
+}
+
+function validateRiskDistribution(
+  value: unknown,
+  route: string,
+  field: string,
+): void {
+  const record = readRecord(value, route, field);
+  validateNumberFields(record, ["critical", "high", "low", "medium"], route, field);
+}
+
+function validateRiskSignals(
+  value: unknown,
+  route: string,
+  field: string,
+): void {
+  validateNumberFields(
+    readRecord(value, route, field),
+    [
+      "percentEasyNeglect",
+      "percentHardBias",
+      "percentLatePhaseDrop",
+      "percentPacingDrift",
+      "percentRushedPattern",
+      "percentTopicAvoidance",
+    ],
+    route,
+    field,
+  );
+}
+
+function validateYearBehaviorSummary(
+  value: unknown,
+  route: string,
+  field: string,
+): void {
+  const record = readRecord(value, route, field);
+  validateStringFields(record, ["academicYear", "computedAt"], route, field);
+  validateNumberFields(
+    record,
+    [
+      "avgDisciplineIndex",
+      "consecutiveWrongClusterPercent",
+      "controlledModeUsagePercent",
+      "executionStabilityIndex",
+      "guessProbabilityClusterPercent",
+    ],
+    route,
+    field,
+  );
+  validateRiskSignals(record.riskSignals, route, `${field}.riskSignals`);
+  validateNumberFields(
+    readRecord(record.riskStateDistribution, route, `${field}.riskStateDistribution`),
+    [
+      "critical",
+      "driftProne",
+      "high",
+      "impulsive",
+      "low",
+      "medium",
+      "overextended",
+      "stable",
+      "volatile",
+    ],
+    route,
+    `${field}.riskStateDistribution`,
+  );
+  readArray(record.batchDiagnosticHeatmap, route, `${field}.batchDiagnosticHeatmap`)
+    .forEach((entry, index) => {
+      const prefix = `${field}.batchDiagnosticHeatmap[${index}]`;
+      const batch = readRecord(entry, route, prefix);
+      validateStringFields(batch, ["batchId", "batchName"], route, prefix);
+      validateRiskSignals(batch, route, prefix);
+    });
+}
+
+export function adaptAdminAnalyticsResult<TSnapshot>(value: unknown): TSnapshot {
+  const route = "GET /admin/analytics";
+  const data = readRecord(value, route);
+  assertSummaryOnly(data, route);
+
+  readArray(data.runAnalytics, route, "runAnalytics").forEach((entry, index) => {
+    const prefix = `runAnalytics[${index}]`;
+    const record = readRecord(entry, route, prefix);
+    validateStringFields(
+      record,
+      ["academicYear", "batchId", "batchName", "mode", "runId", "runName", "startedAt"],
+      route,
+      prefix,
+    );
+    validateNumberFields(
+      record,
+      [
+        "avgAccuracyPercent",
+        "avgPhaseAdherencePercent",
+        "avgRawScorePercent",
+        "completionRatePercent",
+        "controlledCompliancePercent",
+        "disciplineIndexAverage",
+        "easyNeglectPercent",
+        "followedPhaseSplitPercent",
+        "guessRatePercent",
+        "hardBiasPercent",
+        "maxTimeViolationPercent",
+        "medianRawScorePercent",
+        "minTimeViolationPercent",
+        "pacingGuardrailViolationPercent",
+        "participants",
+        "rawScoreStdDeviation",
+        "structuralOverridePercent",
+        "timeMisallocationPercent",
+      ],
+      route,
+      prefix,
+    );
+    [
+      "accuracyHistogram",
+      "disciplineIndexDistribution",
+      "rawScoreHistogram",
+      "sectionAccuracyPercentages",
+      "topicHeatmap",
+    ].forEach((field) =>
+      readNumberArray(record[field], route, `${prefix}.${field}`));
+    validateRiskDistribution(record.riskDistribution, route, `${prefix}.riskDistribution`);
+    validateNumberFields(
+      readRecord(record.behaviorDistribution, route, `${prefix}.behaviorDistribution`),
+      ["driftPronePercent", "overextendedPercent", "rushedPercent"],
+      route,
+      `${prefix}.behaviorDistribution`,
+    );
+  });
+
+  readArray(data.studentYearMetrics, route, "studentYearMetrics")
+    .forEach((entry, index) => {
+      const prefix = `studentYearMetrics[${index}]`;
+      const record = readRecord(entry, route, prefix);
+      validateStringFields(
+        record,
+        ["batchId", "batchName", "studentId", "studentName"],
+        route,
+        prefix,
+      );
+      validateNumberFields(
+        record,
+        [
+          "avgAccuracyPercent",
+          "avgRawScorePercent",
+          "disciplineIndex",
+          "guessRatePercent",
+          "testsAttempted",
+        ],
+        route,
+        prefix,
+      );
+      readEnum(
+        record.disciplineIndexTrend,
+        ["down", "stable", "up"] as const,
+        route,
+        `${prefix}.disciplineIndexTrend`,
+      );
+      readEnum(
+        record.rollingRiskCluster,
+        ["critical", "high", "low", "medium"] as const,
+        route,
+        `${prefix}.rollingRiskCluster`,
+      );
+    });
+
+  readArray(data.monthlySummary, route, "monthlySummary").forEach((entry, index) => {
+    const prefix = `monthlySummary[${index}]`;
+    const record = readRecord(entry, route, prefix);
+    validateStringFields(record, ["monthId", "monthLabel"], route, prefix);
+    validateNumberFields(
+      record,
+      [
+        "avgAccuracyPercent",
+        "avgRawScorePercent",
+        "controlledModeEffectivenessPercent",
+        "disciplineIndexPercent",
+        "easyNeglectPercent",
+        "participationRatePercent",
+        "phaseAdherencePercent",
+        "stabilityTrajectoryPercent",
+        "topicWeaknessPercent",
+      ],
+      route,
+      prefix,
+    );
+    validateRiskDistribution(record.riskDistributionTrend, route, `${prefix}.riskDistributionTrend`);
+  });
+
+  readArray(data.templateAnalytics, route, "templateAnalytics")
+    .forEach((entry, index) => {
+      const prefix = `templateAnalytics[${index}]`;
+      const record = readRecord(entry, route, prefix);
+      validateStringFields(
+        record,
+        ["academicYear", "examType", "templateId", "templateName"],
+        route,
+        prefix,
+      );
+      validateNumberFields(
+        record,
+        [
+          "avgAccuracyPercent",
+          "avgDisciplineIndex",
+          "avgDisciplineStressScore",
+          "avgRawScorePercent",
+          "avgRiskShiftPercent",
+          "phaseAdherenceVariance",
+          "rawVariance",
+          "templateEffectivenessRating",
+          "totalRuns",
+        ],
+        route,
+        prefix,
+      );
+      readArray(record.runs, route, `${prefix}.runs`).forEach((runEntry, runIndex) => {
+        const runPrefix = `${prefix}.runs[${runIndex}]`;
+        const run = readRecord(runEntry, route, runPrefix);
+        validateStringFields(
+          run,
+          ["completedOn", "mode", "runId", "runName"],
+          route,
+          runPrefix,
+        );
+        validateNumberFields(
+          run,
+          [
+            "avgAccuracyPercent",
+            "avgRawScorePercent",
+            "disciplineStressScore",
+            "phaseAdherencePercent",
+            "riskShiftPercent",
+            "stabilityIndex",
+          ],
+          route,
+          runPrefix,
+        );
+      });
+    });
+
+  validateYearBehaviorSummary(data.yearBehaviorSummary, route, "yearBehaviorSummary");
+  readArray(data.yearSummarySnapshots, route, "yearSummarySnapshots")
+    .forEach((entry, index) =>
+      validateYearBehaviorSummary(entry, route, `yearSummarySnapshots[${index}]`));
+
+  return value as TSnapshot;
+}
+
 export function adaptAdminQuestionBulkResult(
   value: unknown,
 ): QuestionBulkUploadResult {

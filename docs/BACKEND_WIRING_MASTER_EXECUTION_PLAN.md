@@ -15,13 +15,13 @@ program: backend-wiring-and-deployment-readiness
 program_status: IN_PROGRESS
 release_decision: NO_GO
 current_phase: 1
-current_task: BWM-011
-current_substep: BWM-011 — Repair Admin Overview and Analytics envelope and field contracts
-last_completed_task: BWM-010
-next_task: BWM-011
+current_task: BWM-012
+current_substep: BWM-012 — Align question creation DTOs and persist asset-backed questions
+last_completed_task: BWM-011
+next_task: BWM-012
 blocked_tasks: []
 last_updated: 2026-08-22
-last_update_summary: BWM-010 is VERIFIED. A repository-wide contract now proves that all Firebase deploy commands remain confined to the manual, staging-Environment-bound, typed-parabolic-dev-confirmed staging job; no production dispatch input, Environment binding, project alias, or deploy command exists. The final promotion-separation contracts and all 10 workspace lint/build gates passed, closing BWM-010 on top of its recorded 70-file emulator aggregate, authorized staging deployment, and live authenticated smoke. BWM-011 is READY and becomes current for Admin Overview and Analytics contract repair; production remains NO_GO and unchanged.
+last_update_summary: BWM-011 is VERIFIED. Admin Overview and Analytics now unwrap standard envelopes, validate complete summary-only DTOs before publishing ready state, preserve exact backend fields across Overview, Analytics, assignment, and insight consumers, and fail visibly without fixture substitution. Real handler-to-adapter contracts, 43 selected non-emulator Functions suites, the seeded Auth/Firestore/Functions/Hosting Chromium proof, route accounting, affected frontend contracts, and all 10 workspace lint/build gates passed. BWM-012 is READY and becomes current; production remains NO_GO and unchanged.
 ```
 
 Do not infer progress from old build numbers, UI completion labels, or visual verification artifacts. Only this checkpoint, the task registry, checked substeps, session log, and current repository evidence determine progress for this program.
@@ -262,8 +262,8 @@ The registry is the canonical order. Detailed cards below define scope and accep
 | BWM-008 | P0 | VERIFIED | BWM-006 | Shared RBAC/capability policy and suspension enforcement |
 | BWM-009 | P0 | VERIFIED | BWM-008 | Claims synchronization, revocation, and cross-portal auth hardening |
 | BWM-010 | P0 | VERIFIED | BWM-001,BWM-004,BWM-005 | Backend CI and staging deploy pipeline |
-| BWM-011 | P0 | READY | BWM-003,BWM-006,BWM-007 | Admin Overview and Analytics live contract repair |
-| BWM-012 | P0 | PLANNED | BWM-003,BWM-006,BWM-008 | Minimum real question creation and asset ingestion |
+| BWM-011 | P0 | VERIFIED | BWM-003,BWM-006,BWM-007 | Admin Overview and Analytics live contract repair |
+| BWM-012 | P0 | READY | BWM-003,BWM-006,BWM-008 | Minimum real question creation and asset ingestion |
 | BWM-013 | P0 | PLANNED | BWM-012 | Authoritative test-template lifecycle |
 | BWM-014 | P0 | PLANNED | BWM-013 | Minimum authoritative assignment lifecycle |
 | BWM-015 | P0 | PLANNED | BWM-003,BWM-006,BWM-008,BWM-014 | Student dashboard and My Tests APIs |
@@ -1281,14 +1281,39 @@ The registry is the canonical order. Detailed cards below define scope and accep
 
 ### BWM-011 — Admin Overview and Analytics Contract Repair
 
-- **Status:** `READY`
+- **Status:** `VERIFIED`
 - **Purpose:** Prove shared routing/envelope/data-mode foundations on read-only Admin summaries.
 - **Work:** unwrap the standard envelope; align field names; validate summary-only data; remove silent fallback; cover Overview, Analytics, assignment/insight consumers; add real handler-to-normalizer contract tests.
 - **Acceptance:** Seeded emulator summaries render exact backend values and failures show explicit error states.
+- **Substeps:**
+  - [x] Align the Overview handler DTO/service fields with the rendered Admin contract.
+  - [x] Validate Overview and Analytics data strictly inside the shared API-client success boundary.
+  - [x] Remove live-mode silent fixture retention from Overview, Analytics, assignment, and insight consumers.
+  - [x] Add real handler-to-normalizer contract coverage for both summary routes.
+  - [x] Prove seeded summary values and explicit failures through Firebase emulators and a no-mock browser flow.
+  - [x] Run affected regressions and all touched-package lint/build gates.
+- **Implemented files:**
+  - Admin consumers: `apps/admin/src/features/overview/AdminOverviewPage.tsx`, `apps/admin/src/features/overview/adminOverviewDataset.ts`, `apps/admin/src/features/analytics/analyticsDataset.ts`
+  - Shared boundary: `shared/services/apiClient.ts`, `shared/types/apiClient.ts`, `shared/services/portalResponseAdapters.ts`, `shared/ui/components/UiDataStateBoundary.tsx`
+  - Functions contract: `functions/src/types/adminOverview.ts`, `functions/src/services/adminOverview.ts`, `functions/src/apiRouteManifest.ts`, `functions/src/tests/adminOverviewApi.test.ts`, `functions/src/tests/adminAnalyticsApi.test.ts`, `functions/scripts/run-non-emulator-tests.mjs`
+  - Verification: `scripts/run-admin-summary-contract-e2e.mjs`, `tests/e2e/admin-summary-contract.spec.mjs`, `tests/portal-response-adapters.test.mjs`, `tests/api-envelope-contract.test.mjs`, `tests/frontend-data-states.test.mjs`, `package.json`
+  - Registry/contract docs: `docs/api_contract.md`, `docs/FRONTEND_API_CALL_INVENTORY.md`, `docs/MODULE_REGISTRY.md`, this controller
+- **Verification:**
+  - **L1 static:** `git diff --check`; `npm --prefix apps/admin run lint`; `npm --prefix functions run lint`; `npm --prefix apps/admin run build`; `npm --prefix functions run build`; `node --check scripts/run-admin-summary-contract-e2e.mjs`; `node --check tests/e2e/admin-summary-contract.spec.mjs` — PASS. Final `node scripts/verify-workspace.mjs` passed all 10 Admin/Student/Exam/Vendor/Functions lint and build gates with frontend production-build module counts 126/100/77/97 and Functions `tsc`.
+  - **L2 unit/contract:** `npm --prefix functions run test:ci:non-emulator` — PASS, 43/43 selected files including `adminOverviewApi` and `adminAnalyticsApi`; `npm --prefix functions run test:api-route-manifest`; `npm run test:api-dto-contract`; `npm run test:api-envelope-contract`; `npm run test:portal-response-adapters`; `npm run test:frontend-data-states`; `npm run test:frontend-production-fallbacks`; `npm run test:frontend-data-mode`; `npm run test:frontend-fixture-bundling`; `npm run test:frontend-api-routing` — PASS. The handler-envelope-to-production-adapter cases preserve exact Overview/Analytics fields and reject missing or raw-session-contaminated payloads.
+  - **L3 Firebase emulator:** `npm run test:admin-summary-contracts:e2e` — PASS under `demo-parabolic-test` with Auth, Firestore, Functions, and `hosting:portal`; seeded summary documents reached both real gateway handlers and disposable Auth/Firestore records were cleaned before shutdown.
+  - **L4 browser E2E:** the same command ran one no-mock Chromium scenario against the live-mode Hosting artifact — PASS; exact seeded Overview values (`1`, `63%`, `77%`) and Analytics values rendered, and an offline reread showed `Authoritative data is unavailable` plus `Fixture data has not been substituted` while fixture nodes remained hidden.
+  - **L5 staging/preview:** N/A — no deployable environment, public runtime configuration, Hosting target, or staging resource changed in this contract-repair task.
+  - **L6 production:** N/A — reserved for BWM-057; production remained untouched and `NO_GO`.
+- **Firebase CLI version:** `15.9.0`.
+- **Authorization/external mutations:** Product-owner approval allowed the local emulator/browser command to bind loopback ports and update Firebase CLI local cache state. No remote mutation occurred; seeded emulator Auth/Firestore data was deleted and all emulators shut down.
+- **Contract/schema changes:** ADM-01 and ADM-02 are now `implemented` in `functions/src/apiRouteManifest.ts`, `docs/api_contract.md`, and `docs/FRONTEND_API_CALL_INVENTORY.md`; route totals are 15 implemented, 8 incompatible, 6 missing, 0 intentionally retired. Overview gained explicit performance/source metadata and an accuracy histogram. The shared API client gained a pre-ready response-adapter boundary. No Firestore schema, rules, indexes, or public route keys changed.
+- **Residual risks:** Overview still computes from existing summary collections rather than a newly materialized aggregate and therefore retains the architecture's sub-300-ms target as a performance goal, not staging-measured evidence. BWM-012 onward owns the authoritative content/assignment/Student/Exam golden path; production remains `NO_GO`.
+- **Completed on:** 2026-08-22
 
 ### BWM-012 — Minimum Real Question Creation and Assets
 
-- **Status:** `PLANNED`
+- **Status:** `READY`
 - **Purpose:** Create authoritative content that a real test and Exam snapshot can consume.
 - **Work:** align question create/bulk DTOs; persist questions; upload referenced assets rather than discarding ZIP files; validate managed CDN/storage paths; return authoritative IDs/versions; audit mutations.
 - **Acceptance:** A created text/image question persists, reloads from the library, and exposes only safe runtime assets.
@@ -1920,6 +1945,15 @@ Never record only “tests passed.” Include exact commands and whether tests w
 ## Session Log
 
 Append newest entries at the top.
+
+### LOG-070 — 2026-08-22 — BWM-011 Admin Summary Contract Repair
+
+- **Task:** Complete BWM-011 by aligning Admin Overview and Analytics with their real handler envelopes and fields, enforcing summary-only validation, removing visible live-mode fixture retention, and proving the result through real handler contracts plus an emulator-backed browser flow.
+- **Outcome:** Added complete Overview/Analytics response adapters inside the shared API-client success boundary, corrected authoritative analytics field handling, added the missing Overview accuracy distribution and source metadata, and kept route children mounted but hidden while global request states settle so successful loads no longer refetch indefinitely. All Analytics, assignment, and insight consumers share the repaired dataset boundary. ADM-01/02 are now classified `implemented`; BWM-011 is `VERIFIED`, BWM-012 is `READY`, and production remains `NO_GO`.
+- **Validation performed:** Focused Admin/Functions lint and builds passed. The selected non-emulator Functions command passed 43/43 files, including both Admin summary API suites. Route-manifest, DTO, envelope, handler-to-adapter, data-state, production-fallback, data-mode, fixture-bundling, and frontend-routing contracts passed. `npm run test:admin-summary-contracts:e2e` passed with Firebase CLI `15.9.0` under `demo-parabolic-test` using Auth, Firestore, Functions, `hosting:portal`, and one no-mock Chromium case: real envelopes contained the seeded values, the UI rendered exact Overview and Analytics values, the offline reread displayed the explicit unavailable/no-substitution state, disposable emulator records were removed, and all emulators shut down. `node scripts/verify-workspace.mjs` passed all 10 lint/build gates; `git diff --check` passed.
+- **Files changed:** Admin Overview/Analytics datasets and page; shared API-client types/runtime, strict portal response adapters, and data-state boundary; Overview Functions DTO/service/API tests and Analytics API test; non-emulator suite selection and API route manifest; focused root contracts plus the new emulator/browser runner/spec; API/inventory/module docs; root commands; and this controller.
+- **Cloud changes:** None. Approved execution used local emulators, local production builds, headless Chromium, disposable emulator-only Auth/Firestore data, and Firebase CLI local cache state. No staging deployment, public release, remote Firebase data, secret, or production resource changed.
+- **Next:** BWM-012 — align question create/bulk DTOs, persist authoritative questions and referenced assets, return IDs/versions, and prove safe reload behavior without beginning test-template lifecycle work early.
 
 ### LOG-069 — 2026-08-22 — BWM-010 Production Promotion Separation and Closeout
 

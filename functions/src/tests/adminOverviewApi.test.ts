@@ -40,6 +40,14 @@ test("admin overview handler accepts summary reads", async () => {
       return {
         academicYear: "2026",
         computedAt: "2026-05-19T00:00:00.000Z",
+        performanceGuarantees: {
+          aggregationPolicy: "Summary-only read",
+          maxSummaryDocumentsPerLoad: 8,
+          payloadShape: "Small summary documents only",
+          riskDistributionCacheCadence: "Daily",
+          sourceCollections: ["runAnalytics", "studentYearMetrics"],
+          targetLoadTimeMs: 300,
+        },
         currentActivity: {
           activeTestSessions: 1,
           controlledModeCompliancePercentage: 84,
@@ -83,6 +91,7 @@ test("admin overview handler accepts summary reads", async () => {
           avgPhaseAdherencePercentage: 74,
           avgRawScorePercentage: 68,
           controlledModeImprovementDelta: 9,
+          accuracyDistributionHistogram: [],
           distributionHistogram: [],
           easyNeglectPercentage: 18,
           executionStabilityBadge: "Stable",
@@ -170,7 +179,7 @@ test("admin overview handler maps validation errors", async () => {
         "Field \"instituteId\" must be a non-empty string.",
       );
     },
-    verifyIdToken: async () => createAdminToken({instituteId: ""}) as never,
+    verifyIdToken: async () => createAdminToken() as never,
   });
   const response = createMockResponse();
 

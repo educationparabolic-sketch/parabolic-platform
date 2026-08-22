@@ -68,33 +68,46 @@ function UiDataStateBoundary({ children, label }: UiDataStateBoundaryProps) {
     return () => window.clearTimeout(timeoutId);
   }, [label, liveMode]);
 
-  if (!liveMode || snapshot.kind === "ready") {
+  if (!liveMode) {
     return children;
+  }
+
+  if (snapshot.kind === "ready") {
+    return (
+      <div data-ui-data-state-content style={{ display: "contents" }}>
+        {children}
+      </div>
+    );
   }
 
   const copy = STATE_COPY[snapshot.kind];
   const canRetry = snapshot.kind !== "loading";
 
   return (
-    <main className="ui-data-state-shell">
-      <section
-        className={`ui-data-state-card ui-data-state-card-${snapshot.kind}`}
-        aria-busy={snapshot.kind === "loading"}
-        aria-live={snapshot.kind === "loading" ? "polite" : "assertive"}
-        role={snapshot.kind === "loading" ? "status" : "alert"}
-      >
-        <p className="ui-data-state-eyebrow">{copy.eyebrow}</p>
-        <h1>{copy.title}</h1>
-        <p>{copy.description}</p>
-        <p className="ui-data-state-context">View: {label}</p>
-        {snapshot.message ? <p className="ui-data-state-message">{snapshot.message}</p> : null}
-        {canRetry ? (
-          <button type="button" onClick={() => window.location.reload()}>
-            Retry
-          </button>
-        ) : null}
-      </section>
-    </main>
+    <>
+      <div aria-hidden="true" data-ui-data-state-content style={{ display: "none" }}>
+        {children}
+      </div>
+      <main className="ui-data-state-shell">
+        <section
+          className={`ui-data-state-card ui-data-state-card-${snapshot.kind}`}
+          aria-busy={snapshot.kind === "loading"}
+          aria-live={snapshot.kind === "loading" ? "polite" : "assertive"}
+          role={snapshot.kind === "loading" ? "status" : "alert"}
+        >
+          <p className="ui-data-state-eyebrow">{copy.eyebrow}</p>
+          <h1>{copy.title}</h1>
+          <p>{copy.description}</p>
+          <p className="ui-data-state-context">View: {label}</p>
+          {snapshot.message ? <p className="ui-data-state-message">{snapshot.message}</p> : null}
+          {canRetry ? (
+            <button type="button" onClick={() => window.location.reload()}>
+              Retry
+            </button>
+          ) : null}
+        </section>
+      </main>
+    </>
   );
 }
 

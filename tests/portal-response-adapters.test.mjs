@@ -20,6 +20,12 @@ const typescript = require(join(rootDirectory, "functions/node_modules/typescrip
 const { buildSuccessResponse: buildAdminQuestionBulkSuccessResponse } = require(
   join(rootDirectory, "functions/lib/api/adminQuestionsBulk.js"),
 );
+const { buildSuccessResponse: buildAdminOverviewSuccessResponse } = require(
+  join(rootDirectory, "functions/lib/api/adminOverview.js"),
+);
+const { buildSuccessResponse: buildAdminAnalyticsSuccessResponse } = require(
+  join(rootDirectory, "functions/lib/api/adminAnalytics.js"),
+);
 const { buildSubmissionSuccessResponse } = require(
   join(rootDirectory, "functions/lib/api/examSessionSubmit.js"),
 );
@@ -105,6 +111,222 @@ test("Admin adapter accepts backend question-bulk data and rejects defaultable d
       name: "PortalResponseValidationError",
       route: "POST /admin/questions/bulk",
     },
+  );
+});
+
+test("Admin summary adapters accept real handler envelopes and reject field or data-tier drift", () => {
+  const overviewData = {
+    academicYear: "2026",
+    computedAt: "2026-08-22T10:00:00.000Z",
+    performanceGuarantees: {
+      aggregationPolicy: "Summary-only read",
+      maxSummaryDocumentsPerLoad: 8,
+      payloadShape: "Small summary documents only",
+      riskDistributionCacheCadence: "Daily",
+      sourceCollections: ["runAnalytics", "studentYearMetrics"],
+      targetLoadTimeMs: 300,
+    },
+    operationalSnapshot: {
+      activeConcurrentSessions: 3,
+      activeStudents: 137,
+      billingCount: 137,
+      lastTestCompletionRatePercent: 94,
+      testsConducted: 12,
+      testsScheduled: 2,
+    },
+    currentActivity: {
+      activeTestSessions: 1,
+      controlledModeCompliancePercentage: 86,
+      lastFiveSubmissions: [{
+        assessmentLabel: "Seeded Contract Run",
+        studentName: "Seeded Student",
+        submittedAt: "2026-08-22T09:00:00.000Z",
+      }],
+      liveBehaviorAlertCount: 2,
+      liveRiskCount: 1,
+      minTimeViolationsLive: 4,
+      pacingDriftPercentage: 9,
+      skipBurstPercentage: 5,
+      studentsCurrentlyInTest: 31,
+      upcomingTestLabel: "Seeded Contract Run - 2026-08-23 09:00",
+    },
+    performanceSummary: {
+      accuracyDistributionHistogram: [{ label: "75-84", value: 1 }],
+      avgAccuracyPercentage: 77,
+      avgDisciplineIndex: 81,
+      avgPhaseAdherencePercentage: 82,
+      avgRawScorePercentage: 63,
+      controlledModeImprovementDelta: 18,
+      distributionHistogram: [{ label: "56-70", value: 1 }],
+      easyNeglectPercentage: 7,
+      executionStabilityBadge: "Stable",
+      hardBiasPercentage: 6,
+      highestPerformingBatch: "Seed Batch",
+      lowestPerformingBatch: "Seed Batch",
+      participationRate: 94,
+      riskDistribution: "Low 0% · Medium 0% · High/Critical 100%",
+      timeMisallocationPercentage: 8,
+    },
+    executionSummary: {
+      controlledModeImpactCard: "Controlled mode improved discipline by +18% this month.",
+      disciplineRegressionAlerts: 0,
+      highRiskStudentCount: 1,
+      mostCommonDiagnosticSignal: "Pacing drift",
+      percentageStudentsWithRepeatedPattern: 100,
+      phaseCompliancePercentage: 82,
+      riskClusterBreakdown: "Low 0% · Medium 0% · High 100% · Critical 0%",
+      topicWithHighestWeaknessCluster: "Seed Batch requires topic reinforcement.",
+    },
+    riskSnapshot: {
+      disciplineIndex7DayTrend: "Upward",
+      guessClusterPercentage: 13,
+      overstayRatePercentage: 6,
+      riskDistributionPie: "Low 0% · Medium 0% · High 100% · Critical 0%",
+      topFiveStudentsRequiringAttention: [{
+        riskState: "High",
+        studentName: "Seeded Student",
+      }],
+    },
+    governanceSnapshot: {
+      disciplineTrajectoryIndicator: "Up",
+      institutionalStabilityIndex: 88,
+      miniTrendSparkline: "▆",
+      monthOverMonthStabilityChange: 0,
+      overrideFrequencyTrend: "Stable",
+    },
+    systemHealthAndLicensing: {
+      academicYearLockStatus: "Unlocked",
+      activeStudentCount: 137,
+      currentLayerBadge: "L3",
+      eligibilityL1Percentage: 100,
+      eligibilityL2Percentage: 100,
+      lastArchiveDate: "No archive recorded",
+      peakConcurrencyThisMonth: 31,
+      storageUsageSummary: "HOT Unknown; archive Unknown",
+      upgradeAwarenessCard: "Full governance layer active.",
+    },
+  };
+  const analyticsData = {
+    monthlySummary: [],
+    runAnalytics: [{
+      academicYear: "2026",
+      accuracyHistogram: [0, 0, 1, 0],
+      avgAccuracyPercent: 77,
+      avgPhaseAdherencePercent: 82,
+      avgRawScorePercent: 63,
+      batchId: "batch-seed",
+      batchName: "Seed Batch",
+      behaviorDistribution: {
+        driftPronePercent: 9,
+        overextendedPercent: 4,
+        rushedPercent: 5,
+      },
+      completionRatePercent: 94,
+      controlledCompliancePercent: 86,
+      disciplineIndexAverage: 81,
+      disciplineIndexDistribution: [0, 0, 0, 1],
+      easyNeglectPercent: 7,
+      followedPhaseSplitPercent: 82,
+      guessRatePercent: 13,
+      hardBiasPercent: 6,
+      maxTimeViolationPercent: 2,
+      medianRawScorePercent: 62,
+      minTimeViolationPercent: 4,
+      mode: "Controlled",
+      pacingGuardrailViolationPercent: 9,
+      participants: 31,
+      rawScoreHistogram: [0, 0, 1, 0],
+      rawScoreStdDeviation: 5,
+      riskDistribution: { critical: 0, high: 1, low: 0, medium: 0 },
+      runId: "run-seed",
+      runName: "Seeded Contract Run",
+      sectionAccuracyPercentages: [77],
+      startedAt: "2026-08-22T09:00:00.000Z",
+      structuralOverridePercent: 3,
+      timeMisallocationPercent: 8,
+      topicHeatmap: [77, 63, 82],
+    }],
+    studentYearMetrics: [{
+      avgAccuracyPercent: 79,
+      avgRawScorePercent: 65,
+      batchId: "batch-seed",
+      batchName: "Seed Batch",
+      disciplineIndex: 81,
+      disciplineIndexTrend: "up",
+      guessRatePercent: 13,
+      rollingRiskCluster: "high",
+      studentId: "student-seed",
+      studentName: "Seeded Student",
+      testsAttempted: 4,
+    }],
+    templateAnalytics: [],
+    yearBehaviorSummary: {
+      academicYear: "2026",
+      avgDisciplineIndex: 81,
+      batchDiagnosticHeatmap: [],
+      computedAt: "2026-08-22T09:00:00.000Z",
+      consecutiveWrongClusterPercent: 100,
+      controlledModeUsagePercent: 100,
+      executionStabilityIndex: 46,
+      guessProbabilityClusterPercent: 13,
+      riskSignals: {
+        percentEasyNeglect: 15,
+        percentHardBias: 27,
+        percentLatePhaseDrop: 14,
+        percentPacingDrift: 20,
+        percentRushedPattern: 19,
+        percentTopicAvoidance: 100,
+      },
+      riskStateDistribution: {
+        critical: 0,
+        driftProne: 0,
+        high: 1,
+        impulsive: 0,
+        low: 0,
+        medium: 0,
+        overextended: 57,
+        stable: 0,
+        volatile: 0,
+      },
+    },
+    yearSummarySnapshots: [],
+  };
+
+  const overviewEnvelope = buildAdminOverviewSuccessResponse(
+    overviewData,
+    "req-overview-contract",
+    "2026-08-22T10:00:00.000Z",
+  );
+  const analyticsEnvelope = buildAdminAnalyticsSuccessResponse(
+    analyticsData,
+    "req-analytics-contract",
+    "2026-08-22T10:00:00.000Z",
+  );
+
+  assert.deepEqual(
+    adapters.adaptAdminOverviewResult(unwrapApiSuccessData(overviewEnvelope)),
+    overviewEnvelope.data,
+  );
+  assert.deepEqual(
+    adapters.adaptAdminAnalyticsResult(unwrapApiSuccessData(analyticsEnvelope)),
+    analyticsEnvelope.data,
+  );
+  assert.throws(
+    () => adapters.adaptAdminOverviewResult({
+      ...overviewData,
+      performanceSummary: {
+        ...overviewData.performanceSummary,
+        accuracyDistributionHistogram: undefined,
+      },
+    }),
+    { name: "PortalResponseValidationError", route: "GET /admin/overview" },
+  );
+  assert.throws(
+    () => adapters.adaptAdminAnalyticsResult({
+      ...analyticsData,
+      runAnalytics: [{ ...analyticsData.runAnalytics[0], rawAnswers: [] }],
+    }),
+    { name: "PortalResponseValidationError", route: "GET /admin/analytics" },
   );
 });
 
@@ -216,6 +438,14 @@ test("representative production callers invoke their portal adapters", async () 
 
   const sources = await Promise.all([
     readFile(
+      join(rootDirectory, "apps/admin/src/features/overview/adminOverviewDataset.ts"),
+      "utf8",
+    ),
+    readFile(
+      join(rootDirectory, "apps/admin/src/features/analytics/analyticsDataset.ts"),
+      "utf8",
+    ),
+    readFile(
       join(
         rootDirectory,
         "apps/admin/src/features/tests/QuestionBankManagementPage.tsx",
@@ -240,11 +470,13 @@ test("representative production callers invoke their portal adapters", async () 
   ]);
 
   for (const [index, adapterName] of [
+    "adaptAdminOverviewResult",
+    "adaptAdminAnalyticsResult",
     "adaptAdminQuestionBulkResult",
     "adaptStudentSummaryResult",
     "adaptExamSubmitResult",
     "adaptVendorCalibrationPushResult",
   ].entries()) {
-    assert.match(sources[index], new RegExp(`${adapterName}\\(`));
+    assert.match(sources[index], new RegExp(`${adapterName}(?:<[^>]+>)?\\(`));
   }
 });

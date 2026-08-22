@@ -1,4 +1,5 @@
 import { ApiClientError } from "../../../../../shared/services/apiClient";
+import { adaptAdminOverviewResult } from "../../../../../shared/services/portalResponseAdapters";
 import {
   shouldUseLiveApi as shouldUseConfiguredLiveApi,
 } from "../../../../../shared/services/frontendEnvironment";
@@ -551,9 +552,12 @@ export function getFallbackOverviewSnapshot(layer: LicenseLayer): AdminOverviewS
   return withLayer(FALLBACK_OVERVIEW_SNAPSHOT, layer);
 }
 
-export async function fetchOverviewSnapshot(layer: LicenseLayer): Promise<AdminOverviewSnapshot> {
-  const payload = await apiClient.get<unknown>("/admin/overview");
-  return withLayer(normalizeOverviewSnapshot(payload), layer);
+export async function fetchOverviewSnapshot(): Promise<AdminOverviewSnapshot> {
+  const payload = await apiClient.get<AdminOverviewSnapshot>("/admin/overview", {
+    responseAdapter: (value) =>
+      adaptAdminOverviewResult<AdminOverviewSnapshot>(value),
+  });
+  return normalizeOverviewSnapshot(payload);
 }
 
 export { ApiClientError };

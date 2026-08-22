@@ -168,7 +168,7 @@ test("admin analytics handler maps validation errors", async () => {
         "Field \"instituteId\" must be a non-empty string.",
       );
     },
-    verifyIdToken: async () => createAdminToken({instituteId: ""}) as never,
+    verifyIdToken: async () => createAdminToken() as never,
   });
   const response = createMockResponse();
 

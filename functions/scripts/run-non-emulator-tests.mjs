@@ -7,6 +7,7 @@ const functionsRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const selectedSourceSuites = [
   "adminInterventionsApi.test",
+  "adminAnalyticsApi.test",
   "adminLicensingApi.test",
   "adminQuestionAssetsApi.test",
   "adminQuestionDistributionApi.test",
@@ -16,6 +17,7 @@ const selectedSourceSuites = [
   "adminQuestionTagsApi.test",
   "adminQuestionTagsService.test",
   "adminQuestionUploadLogsApi.test",
+  "adminOverviewApi.test",
   "adminQuestionsBulkApi.test",
   "adminRunsApi.test",
   "adminSettingsApi.test",
@@ -48,14 +50,6 @@ const selectedSourceSuites = [
 ];
 
 const baselineExclusions = new Map([
-  [
-    "adminAnalyticsApi.test",
-    "existing validation assertion expects 400 but middleware currently returns 403",
-  ],
-  [
-    "adminOverviewApi.test",
-    "existing validation assertion expects 400 but middleware currently returns 403",
-  ],
   [
     "adminStudentsApi.test",
     "existing validation assertion expects 400 but middleware currently returns 403",

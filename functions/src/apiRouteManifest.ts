@@ -59,7 +59,7 @@ export const API_ROUTE_MANIFEST: readonly ApiRouteManifestEntry[] = [
     "admin",
     "GET",
     "/admin/overview",
-    "incompatible",
+    "implemented",
     "adminOverview",
   ),
   defineRoute(
@@ -67,7 +67,7 @@ export const API_ROUTE_MANIFEST: readonly ApiRouteManifestEntry[] = [
     "admin",
     "GET",
     "/admin/analytics",
-    "incompatible",
+    "implemented",
     "adminAnalytics",
   ),
   defineRoute(

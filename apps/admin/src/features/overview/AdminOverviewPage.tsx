@@ -101,7 +101,7 @@ function AdminOverviewPage() {
       }
 
       try {
-        const apiSnapshot = await fetchOverviewSnapshot(currentLayer);
+        const apiSnapshot = await fetchOverviewSnapshot();
         if (!isMounted) {
           return;
         }

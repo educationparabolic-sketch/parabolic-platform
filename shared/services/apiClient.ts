@@ -273,16 +273,18 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
         if (response.ok) {
           let data: TData;
           try {
-            data = unwrapApiSuccessData<TData>(payload);
+            const unwrapped = unwrapApiSuccessData<unknown>(payload);
+            data = options.responseAdapter ?
+              options.responseAdapter(unwrapped) as TData :
+              unwrapped as TData;
           } catch (error) {
-            if (!(error instanceof ApiEnvelopeValidationError)) {
-              throw error;
-            }
-
             const finishedAt =
               typeof performance !== "undefined" && typeof performance.now === "function" ?
                 performance.now() :
                 Date.now();
+            const message = error instanceof Error ?
+              error.message :
+              `Response validation failed for ${method} ${requestPath}`;
             captureFrontendApiFailure({
               method,
               path: requestPath,
@@ -291,9 +293,9 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
               attempt,
               durationMs: Math.max(0, Math.round(finishedAt - requestStartedAt)),
               code: "INVALID_RESPONSE",
-              message: error.message,
+              message,
             });
-            throw new ApiClientError(error.message, response.status, "INVALID_RESPONSE", payload);
+            throw new ApiClientError(message, response.status, "INVALID_RESPONSE", payload);
           }
 
           const finishedAt =

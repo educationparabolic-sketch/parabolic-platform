@@ -13,6 +13,7 @@ export interface ApiClientRequestOptions<TRequestBody = unknown> {
   signal?: AbortSignal;
   skipAuth?: boolean;
   retry?: Partial<ApiRetryPolicy>;
+  responseAdapter?: (value: unknown) => unknown;
 }
 
 export interface ApiRetryPolicy {

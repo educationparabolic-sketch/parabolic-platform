@@ -2,7 +2,7 @@
 
 Status: current-contract inventory, canonical-route assignment, and compatibility classification for `BWM-002-A` through `BWM-002-C`
 
-Inventory date: 2026-08-09
+Inventory date: 2026-08-22
 
 Scope: executable HTTP calls in `apps/admin/src`, `apps/student/src`, `apps/exam/src`, and `apps/vendor/src`
 
@@ -40,8 +40,8 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 
 | ID | Method | Current frontend path | Canonical route | Status | Classification basis |
 | --- | --- | --- | --- | --- | --- |
-| ADM-01 | `GET` | `/admin/overview` | `/api/v1/admin/overview` | `incompatible` | Handler returns the snapshot under `data`; the frontend normalizes the top-level envelope as the snapshot and silently substitutes fallback fields. |
-| ADM-02 | `GET` | `/admin/analytics` | `/api/v1/admin/analytics` | `incompatible` | Handler returns analytics under `data`; the frontend requires the arrays at the top level and rejects the envelope. |
+| ADM-01 | `GET` | `/admin/overview` | `/api/v1/admin/overview` | `implemented` | The shared client unwraps the standard success envelope, a strict response adapter validates the complete summary-only DTO, and live consumers render the handler fields without fixture substitution. |
+| ADM-02 | `GET` | `/admin/analytics` | `/api/v1/admin/analytics` | `implemented` | The shared client unwraps the standard success envelope and validates the complete summary-only analytics DTO before all analytics, assignment, and insight consumers normalize it. |
 | ADM-03 | `GET` | `/admin/students` | `/api/v1/admin/students` | `implemented` | Handler provides the consumed top-level `students` compatibility projection as well as its standard `data` payload. |
 | ADM-04 | `POST` | `/admin/students/onboarding-resend` | `/api/v1/admin/students/onboarding-resend` | `implemented` | Method, Firebase ID auth, student ID body, tenant derivation, and consumed `data` result align. |
 | ADM-05 | `POST` | `/admin/students/bulk` | `/api/v1/admin/students/bulk` | `implemented` | Bulk request fields and the consumed validation result under `data` align. |
@@ -70,14 +70,14 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 | VEN-01 | `POST` | `/vendor/calibration/simulate` | `/api/v1/vendor/calibration/simulate` | `incompatible` | Frontend sends `strategyProfileParameters`; handler requires `weights`, so the simulation request fails validation/service normalization. |
 | VEN-02 | `POST` | `/vendor/calibration/push` | `/api/v1/vendor/calibration/push` | `implemented` | Vendor auth, target/version request, and consumed deployment response align. |
 
-Classification totals: `implemented` 13, `incompatible` 10, `missing` 6, `intentionally retired` 0.
+Classification totals: `implemented` 15, `incompatible` 8, `missing` 6, `intentionally retired` 0.
 
 ## Admin portal — 17 contracts
 
 | ID | Method and current path | Frontend request | Frontend response | Auth / role / tenant / license | Current Functions handler | Frontend source |
 | --- | --- | --- | --- | --- | --- | --- |
-| ADM-01 | `GET /admin/overview` | No body | `unknown`, normalized to `AdminOverviewSnapshot` | Firebase ID; `teacher`, `admin`, or `director`; identity tenant; no license middleware | `adminOverview` (`api/adminOverview.ts`) | `features/overview/adminOverviewDataset.ts` |
-| ADM-02 | `GET /admin/analytics` | No body | `unknown`, normalized to the admin analytics dataset | Firebase ID; `teacher`, `admin`, or `director`; identity tenant; no license middleware | `adminAnalytics` (`api/adminAnalytics.ts`) | `features/analytics/analyticsDataset.ts` |
+| ADM-01 | `GET /admin/overview` | No body | Standard envelope unwrapped and strictly adapted to `AdminOverviewSnapshot` | Firebase ID; `teacher`, `admin`, or `director`; identity tenant; no license middleware | `adminOverview` (`api/adminOverview.ts`) | `features/overview/adminOverviewDataset.ts` |
+| ADM-02 | `GET /admin/analytics` | No body | Standard envelope unwrapped and strictly adapted to the Admin analytics result | Firebase ID; `teacher`, `admin`, or `director`; identity tenant; no license middleware | `adminAnalytics` (`api/adminAnalytics.ts`) | Analytics, assignment, and insight screens through `features/analytics/analyticsDataset.ts` |
 | ADM-03 | `GET /admin/students` | No body | `unknown`, normalized to student rows | Firebase ID; `teacher` or `admin`; identity tenant; no license middleware | `adminStudents` (`api/adminStudents.ts`) | Student landing, management, profile, and assignment screens |
 | ADM-04 | `POST /admin/students/onboarding-resend` | `{ studentId }` (`Record<string, unknown>`) | `StudentOnboardingResendApiResponse` | Firebase ID; `admin`; body tenant when present, otherwise identity tenant; no license middleware | `adminStudentOnboardingResend` (`api/adminStudentOnboardingResend.ts`) | Student management and profile screens |
 | ADM-05 | `POST /admin/students/bulk` | `{ commit, deactivateMissing, instituteId, students[] }` | `StudentBulkUploadApiResponse` | Firebase ID; `admin`; body tenant must match identity; no license middleware | `adminStudentsBulk` (`api/adminStudentsBulk.ts`) | `features/students/StudentManagementPage.tsx` |
@@ -123,8 +123,8 @@ Classification totals: `implemented` 13, `incompatible` 10, `missing` 6, `intent
 
 ## Classification summary for the next substeps
 
-- The 13 `implemented` entries are handler-compatible but remain unreachable through their canonical URLs until the common gateway and Hosting rewrite are implemented.
-- The 10 `incompatible` entries require contract repair by BWM-006, BWM-011, BWM-013, BWM-014, BWM-017, BWM-018, BWM-023, BWM-030, BWM-031, or BWM-038 before their affected flows can be considered wired.
+- The 15 `implemented` entries are handler-compatible through the common gateway and same-origin Hosting rewrite; each owning flow still requires its task-specific emulator and browser evidence.
+- The 8 `incompatible` entries require contract repair by BWM-006, BWM-013, BWM-014, BWM-017, BWM-018, BWM-023, BWM-030, BWM-031, or BWM-038 before their affected flows can be considered wired.
 - The 6 `missing` entries require Student/Exam handlers under BWM-015, BWM-016, and BWM-018.
 - No frontend-declared route has evidence supporting intentional retirement.
 

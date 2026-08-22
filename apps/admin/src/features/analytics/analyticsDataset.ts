@@ -1,4 +1,5 @@
 import { ApiClientError } from "../../../../../shared/services/apiClient";
+import { adaptAdminAnalyticsResult } from "../../../../../shared/services/portalResponseAdapters";
 import {
   shouldUseLiveApi as shouldUseConfiguredLiveApi,
 } from "../../../../../shared/services/frontendEnvironment";
@@ -689,7 +690,7 @@ function normalizeRunAnalyticsRecord(value: unknown, index: number): RunAnalytic
     easyNeglectPercent: toNumberOrZero(record.easyNeglectPercent),
     hardBiasPercent: toNumberOrZero(record.hardBiasPercent),
     timeMisallocationPercent: toNumberOrZero(record.timeMisallocationPercent),
-    disciplineIndexAverage: toNumberOrZero(record.avgDisciplineIndex ?? record.disciplineAverage),
+    disciplineIndexAverage: toNumberOrZero(record.disciplineIndexAverage),
     guessRatePercent: toNumberOrZero(record.guessRatePercent ?? record.guessRateClusterPercent),
     controlledCompliancePercent: toNumberOrZero(record.controlledCompliancePercent),
     minTimeViolationPercent: toNumberOrZero(record.minTimeViolationPercent),
@@ -981,16 +982,10 @@ function normalizeTemplateAnalyticsRecord(value: unknown, index: number): Templa
   const runs = Array.isArray(source.runs) ?
     source.runs.map(normalizeTemplateAnalyticsRunRecord) :
     [];
-  const totalRuns = toNumberOrZero(source.totalRuns) || runs.length;
-  const avgRiskShiftPercent = toNumberOrZero(source.avgRiskShiftPercent ?? source.riskShiftIndex);
+  const totalRuns = toNumberOrZero(source.totalRuns);
+  const avgRiskShiftPercent = toNumberOrZero(source.avgRiskShiftPercent);
   const avgDisciplineIndex = toNumberOrZero(source.avgDisciplineIndex);
-  const templateEffectivenessRating =
-    toNumberOrZero(source.templateEffectivenessRating ?? source.effectivenessRating) ||
-    clampPercent(
-      (toNumberOrZero(source.avgRawScorePercent) * 0.4) +
-        (avgDisciplineIndex * 0.3) +
-        ((100 - avgRiskShiftPercent) * 0.3),
-    );
+  const templateEffectivenessRating = toNumberOrZero(source.templateEffectivenessRating);
 
   return {
     templateId: toNonEmptyString(source.templateId, `template-${index + 1}`),
@@ -1010,7 +1005,7 @@ function normalizeTemplateAnalyticsRecord(value: unknown, index: number): Templa
   };
 }
 
-function deriveYearBehaviorSummary(
+export function deriveYearBehaviorSummary(
   runAnalytics: RunAnalyticsRecord[],
   studentYearMetrics: StudentYearMetricRecord[],
 ): YearBehaviorSummaryRecord {
@@ -1116,11 +1111,9 @@ function deriveYearBehaviorSummary(
 
 function normalizeYearBehaviorSummaryRecord(
   value: unknown,
-  runAnalytics: RunAnalyticsRecord[],
-  studentYearMetrics: StudentYearMetricRecord[],
 ): YearBehaviorSummaryRecord {
   if (!value || typeof value !== "object") {
-    return deriveYearBehaviorSummary(runAnalytics, studentYearMetrics);
+    throw new Error("GET /admin/analytics returned an invalid year behavior summary.");
   }
 
   const source = value as Record<string, unknown>;
@@ -1130,11 +1123,9 @@ function normalizeYearBehaviorSummaryRecord(
     .map((entry, index) => normalizeBatchDiagnosticRecord(entry, index))
     .filter((entry): entry is BatchDiagnosticRecord => Boolean(entry));
 
-  const academicYearDefault = String(new Date().getUTCFullYear());
-  const computedAtDefault = new Date().toISOString();
-  const normalized: YearBehaviorSummaryRecord = {
-    academicYear: toNonEmptyString(source.academicYear, academicYearDefault),
-    computedAt: toNonEmptyString(source.computedAt, computedAtDefault),
+  return {
+    academicYear: toNonEmptyString(source.academicYear),
+    computedAt: toNonEmptyString(source.computedAt),
     riskSignals,
     riskStateDistribution: normalizeExecutionRiskStateDistribution(source.riskStateDistribution),
     avgDisciplineIndex: toNumberOrZero(source.avgDisciplineIndex),
@@ -1144,17 +1135,6 @@ function normalizeYearBehaviorSummaryRecord(
     executionStabilityIndex: toNumberOrZero(source.executionStabilityIndex),
     batchDiagnosticHeatmap,
   };
-
-  if (normalized.batchDiagnosticHeatmap.length === 0) {
-    normalized.batchDiagnosticHeatmap = deriveYearBehaviorSummary(runAnalytics, studentYearMetrics).batchDiagnosticHeatmap;
-  }
-
-  const hasAnyRiskState = EXECUTION_RISK_STATES.some((state) => normalized.riskStateDistribution[state] > 0);
-  if (!hasAnyRiskState) {
-    normalized.riskStateDistribution = deriveYearBehaviorSummary(runAnalytics, studentYearMetrics).riskStateDistribution;
-  }
-
-  return normalized;
 }
 
 export function shouldUseLiveApi(): boolean {
@@ -1171,51 +1151,35 @@ export function formatIsoDate(value: string): string {
 }
 
 export async function fetchDashboardDataset(): Promise<DashboardDataset> {
-  const payload = await apiClient.get<unknown>("/admin/analytics");
-  if (!payload || typeof payload !== "object") {
-    throw new Error("GET /admin/analytics returned an invalid payload.");
-  }
-
-  const typedPayload = payload as Record<string, unknown>;
-  const monthlySummarySource = Array.isArray(typedPayload.monthlySummary) ? typedPayload.monthlySummary : [];
-  const runAnalyticsSource = Array.isArray(typedPayload.runAnalytics) ? typedPayload.runAnalytics : [];
-  const studentMetricsSource = Array.isArray(typedPayload.studentYearMetrics) ? typedPayload.studentYearMetrics : [];
-  const templateAnalyticsSource = Array.isArray(typedPayload.templateAnalytics) ? typedPayload.templateAnalytics : [];
-  const yearSummarySnapshotsSource = Array.isArray(typedPayload.yearSummarySnapshots) ?
-    typedPayload.yearSummarySnapshots :
-    [];
-
-  const runAnalytics = runAnalyticsSource
+  type AdminAnalyticsWireSnapshot = Omit<DashboardDataset, "studentAnalytics">;
+  const payload = await apiClient.get<AdminAnalyticsWireSnapshot>(
+    "/admin/analytics",
+    {
+      responseAdapter: (value) =>
+        adaptAdminAnalyticsResult<AdminAnalyticsWireSnapshot>(value),
+    },
+  );
+  const runAnalytics = payload.runAnalytics
     .map((entry, index) => normalizeRunAnalyticsRecord(entry, index))
     .filter((entry): entry is RunAnalyticsRecord => Boolean(entry));
-
-  const studentYearMetrics = studentMetricsSource
+  const studentYearMetrics = payload.studentYearMetrics
     .map((entry, index) => normalizeStudentMetricRecord(entry, index))
     .filter((entry): entry is StudentYearMetricRecord => Boolean(entry));
-  const monthlySummary = monthlySummarySource
+  const monthlySummary = payload.monthlySummary
     .map((entry, index) => normalizeMonthlySummaryRecord(entry, index))
-    .filter((entry): entry is MonthlySummaryRecord => Boolean(entry))
-    .sort((left, right) => left.monthId.localeCompare(right.monthId));
-  const templateAnalytics = templateAnalyticsSource
+    .filter((entry): entry is MonthlySummaryRecord => Boolean(entry));
+  const templateAnalytics = payload.templateAnalytics
     .map((entry, index) => normalizeTemplateAnalyticsRecord(entry, index))
-    .filter((entry): entry is TemplateAnalyticsRecord => Boolean(entry))
-    .sort((left, right) => right.totalRuns - left.totalRuns || left.templateName.localeCompare(right.templateName));
-
-  if (runAnalytics.length === 0 || studentYearMetrics.length === 0) {
-    throw new Error("GET /admin/analytics did not include runAnalytics and studentYearMetrics arrays.");
-  }
-
-  const yearSummarySnapshots = yearSummarySnapshotsSource
-    .map((entry) => normalizeYearBehaviorSummaryRecord(entry, runAnalytics, studentYearMetrics))
-    .sort((left, right) => Date.parse(right.computedAt) - Date.parse(left.computedAt));
-  const yearBehaviorSummary =
-    yearSummarySnapshots[0] ??
-    normalizeYearBehaviorSummaryRecord(
-      typedPayload.yearBehaviorSummary,
-      runAnalytics,
-      studentYearMetrics,
-    );
-  const studentAnalytics = deriveStudentAnalyticsRecords(runAnalytics, studentYearMetrics);
+    .filter((entry): entry is TemplateAnalyticsRecord => Boolean(entry));
+  const yearBehaviorSummary = normalizeYearBehaviorSummaryRecord(
+    payload.yearBehaviorSummary,
+  );
+  const yearSummarySnapshots = payload.yearSummarySnapshots.map((entry) =>
+    normalizeYearBehaviorSummaryRecord(entry));
+  const studentAnalytics = deriveStudentAnalyticsRecords(
+    runAnalytics,
+    studentYearMetrics,
+  );
 
   return {
     monthlySummary,

@@ -80,9 +80,16 @@ test("shared client and every portal route boundary use the data-state contract"
     assert.match(componentSource, new RegExp(`${state}:`, "u"));
   }
   assert.match(componentSource, /\bRetry\b/u);
+  assert.match(componentSource, /data-ui-data-state-content/u);
+  assert.match(componentSource, /display: "none"/u);
   assert.match(apiClientSource, /beginFrontendDataRequest\(method, requestPath\)/u);
   assert.match(apiClientSource, /completeFrontendDataRequest\(dataRequestId, data\)/u);
   assert.match(apiClientSource, /failFrontendDataRequest\(dataRequestId, error\)/u);
+  assert.ok(
+    apiClientSource.indexOf("options.responseAdapter(unwrapped)") <
+      apiClientSource.indexOf("completeFrontendDataRequest(dataRequestId, data)"),
+    "response validation must complete before a request can publish ready data",
+  );
 
   for (const source of appSources) {
     assert.match(source, /<UiDataStateBoundary label=/u);

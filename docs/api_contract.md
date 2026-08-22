@@ -2,7 +2,7 @@
 
 Status: canonical route and response-envelope contract
 
-Last reconciled: 2026-08-09 (`BWM-008` teacher-route alignment)
+Last reconciled: 2026-08-22 (`BWM-011` Admin summary-contract alignment)
 
 ## Sources of truth
 
@@ -39,14 +39,14 @@ If prose and the typed manifest disagree about a route key or status, the typed 
 - `missing`: no current Functions handler/export implements the frontend contract.
 - `intentionally_retired`: explicit product/architecture evidence says the route must not be served.
 
-Current totals: 13 implemented, 10 incompatible, 6 missing, 0 intentionally retired.
+Current totals: 15 implemented, 8 incompatible, 6 missing, 0 intentionally retired.
 
 ## Canonical frontend route manifest
 
 | ID | Canonical method and path | Status | Current Functions export | Security boundary |
 | --- | --- | --- | --- | --- |
-| ADM-01 | `GET /api/v1/admin/overview` | `incompatible` | `adminOverview` | Firebase ID; teacher/admin/director; identity tenant |
-| ADM-02 | `GET /api/v1/admin/analytics` | `incompatible` | `adminAnalytics` | Firebase ID; teacher/admin/director; identity tenant |
+| ADM-01 | `GET /api/v1/admin/overview` | `implemented` | `adminOverview` | Firebase ID; teacher/admin/director; identity tenant |
+| ADM-02 | `GET /api/v1/admin/analytics` | `implemented` | `adminAnalytics` | Firebase ID; teacher/admin/director; identity tenant |
 | ADM-03 | `GET /api/v1/admin/students` | `implemented` | `adminStudents` | Firebase ID; teacher/admin; identity tenant |
 | ADM-04 | `POST /api/v1/admin/students/onboarding-resend` | `implemented` | `adminStudentOnboardingResend` | Firebase ID; admin; identity tenant |
 | ADM-05 | `POST /api/v1/admin/students/bulk` | `implemented` | `adminStudentsBulk` | Firebase ID; admin; matching body tenant |

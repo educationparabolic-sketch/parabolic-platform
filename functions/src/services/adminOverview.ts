@@ -293,6 +293,28 @@ function buildHistogram(runs: OverviewRunSummary[]): AdminOverviewDistributionBi
   }));
 }
 
+function buildAccuracyHistogram(
+  runs: OverviewRunSummary[],
+): AdminOverviewDistributionBin[] {
+  const bins: Array<{label: string; min: number; max: number | null}> = [
+    {label: "<50", min: 0, max: 49.999},
+    {label: "50-64", min: 50, max: 64.999},
+    {label: "65-74", min: 65, max: 74.999},
+    {label: "75-84", min: 75, max: 84.999},
+    {label: "85+", min: 85, max: null},
+  ];
+
+  return bins.map((bin) => ({
+    label: bin.label,
+    value: runs.filter((run) =>
+      bin.max === null ?
+        run.avgAccuracyPercent >= bin.min :
+        run.avgAccuracyPercent >= bin.min &&
+          run.avgAccuracyPercent <= bin.max,
+    ).length,
+  }));
+}
+
 function buildSparkline(values: number[]): string {
   if (values.length === 0) {
     return "▁";
@@ -698,6 +720,24 @@ export class AdminOverviewService {
         latestGovernance?.generatedAt ??
         latestCompletedRun?.startedAt ??
         new Date().toISOString(),
+      performanceGuarantees: {
+        aggregationPolicy:
+          "No sessions, raw attempts, answers, or per-question records are read on Overview load",
+        maxSummaryDocumentsPerLoad: 8,
+        payloadShape: "Small summary documents only",
+        riskDistributionCacheCadence: "Daily cached risk distribution snapshot",
+        sourceCollections: [
+          "academicYears",
+          "governanceSnapshots",
+          "license",
+          "runAnalytics",
+          "runs",
+          "students",
+          "studentYearMetrics",
+          "usageMeter",
+        ],
+        targetLoadTimeMs: 300,
+      },
       currentActivity: {
         activeTestSessions: activeRuns.length,
         controlledModeCompliancePercentage: clampPercent(
@@ -781,6 +821,7 @@ export class AdminOverviewService {
         testsScheduled: scheduledRuns.length,
       },
       performanceSummary: {
+        accuracyDistributionHistogram: buildAccuracyHistogram(combinedRuns),
         avgAccuracyPercentage: clampPercent(
           average(combinedRuns.map((run) => run.avgAccuracyPercent)),
         ),

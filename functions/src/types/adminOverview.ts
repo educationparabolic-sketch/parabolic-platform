@@ -21,6 +21,14 @@ export interface AdminOverviewAttentionStudent {
 export interface AdminOverviewSnapshot {
   academicYear: string;
   computedAt: string;
+  performanceGuarantees: {
+    aggregationPolicy: string;
+    maxSummaryDocumentsPerLoad: number;
+    payloadShape: string;
+    riskDistributionCacheCadence: string;
+    sourceCollections: string[];
+    targetLoadTimeMs: number;
+  };
   operationalSnapshot: {
     activeStudents: number;
     testsConducted: number;
@@ -48,6 +56,7 @@ export interface AdminOverviewSnapshot {
     highestPerformingBatch: string;
     lowestPerformingBatch: string;
     distributionHistogram: AdminOverviewDistributionBin[];
+    accuracyDistributionHistogram: AdminOverviewDistributionBin[];
     avgPhaseAdherencePercentage: number;
     easyNeglectPercentage: number;
     hardBiasPercentage: number;

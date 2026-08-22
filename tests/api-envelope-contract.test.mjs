@@ -152,7 +152,8 @@ test("shared API boundary accepts only canonical error envelopes", async () => {
 test("shared API client consumes the validated envelope boundary", async () => {
   const source = await readFile(sharedClientPath, "utf8");
 
-  assert.match(source, /unwrapApiSuccessData<TData>\(payload\)/);
+  assert.match(source, /unwrapApiSuccessData<unknown>\(payload\)/);
+  assert.match(source, /options\.responseAdapter\(unwrapped\)/);
   assert.match(source, /errorEnvelope\s*=\s*parseApiErrorEnvelope\(payload\)/);
   assert.match(source, /"INVALID_RESPONSE"/);
   assert.doesNotMatch(source, /return payload as T(?:Response|Data)/);
