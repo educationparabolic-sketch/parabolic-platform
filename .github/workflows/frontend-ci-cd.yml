@@ -14,6 +14,8 @@ on:
       - "tests/api-*.test.mjs"
       - "tests/backend-ci-*.test.mjs"
       - "tests/staging-deployment-pipeline.test.mjs"
+      - "tests/staging-smoke.test.mjs"
+      - "tests/production-promotion-separation.test.mjs"
       - "tests/frontend-api-routing.test.mjs"
       - "tests/portal-response-adapters.test.mjs"
       - "docs/api_contract.md"
@@ -36,6 +38,8 @@ on:
       - "tests/api-*.test.mjs"
       - "tests/backend-ci-*.test.mjs"
       - "tests/staging-deployment-pipeline.test.mjs"
+      - "tests/staging-smoke.test.mjs"
+      - "tests/production-promotion-separation.test.mjs"
       - "tests/frontend-api-routing.test.mjs"
       - "tests/portal-response-adapters.test.mjs"
       - "docs/api_contract.md"
@@ -234,6 +238,8 @@ jobs:
           npm run test:emulator-harness-contract
           npm run test:emulator-aggregate-contract
           npm run test:staging-deployment-pipeline
+          npm run test:staging-smoke-contract
+          npm run test:production-promotion-separation
 
   staging-deploy:
     name: Staging Deploy
@@ -391,3 +397,8 @@ jobs:
         run: |
           set -euo pipefail
           firebase deploy --project "${FIREBASE_PROJECT_ID}" --only hosting:portal,hosting:exam,hosting:vendor --non-interactive --token "${FIREBASE_TOKEN}" --message "${RELEASE_ID} staging Hosting"
+
+      - name: Run post-deploy staging smoke
+        env:
+          FIREBASE_TOKEN: ""
+        run: npm run smoke:staging

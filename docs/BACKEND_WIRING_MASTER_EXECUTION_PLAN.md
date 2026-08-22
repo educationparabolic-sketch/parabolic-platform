@@ -14,14 +14,14 @@ For backend wiring, integration, security, testing, and deployment readiness, th
 program: backend-wiring-and-deployment-readiness
 program_status: IN_PROGRESS
 release_decision: NO_GO
-current_phase: 0
-current_task: BWM-010
-current_substep: BWM-010 — Add post-deploy API health and authenticated smoke tests
-last_completed_task: BWM-009
-next_task: BWM-010
+current_phase: 1
+current_task: BWM-011
+current_substep: BWM-011 — Repair Admin Overview and Analytics envelope and field contracts
+last_completed_task: BWM-010
+next_task: BWM-011
 blocked_tasks: []
-last_updated: 2026-08-18
-last_update_summary: BWM-010 fifth substep is complete. Cleanup retry commit a1cb407db67d152a214d02cbbe162760813edbf6 is published, push run 32126906010 passed frontend and backend validation, and authorized manual run 32127189706 passed both validation jobs plus the 6m26s owner-controlled Staging Deploy job. Firebase CLI 15.9.0 deployed 53 new Functions and updated apiV1, released the compiled Firestore rules and indexes, and published live releases 1787049715901000, 1787049716112000, and 1787049716118000 to the Portal, Exam, and Vendor sites. Read-only inventory confirms 54 ACTIVE nodejs20 Functions. BWM-010 remains IN_PROGRESS and advances to post-deploy API health and authenticated smoke tests; production remains NO_GO and unchanged.
+last_updated: 2026-08-22
+last_update_summary: BWM-010 is VERIFIED. A repository-wide contract now proves that all Firebase deploy commands remain confined to the manual, staging-Environment-bound, typed-parabolic-dev-confirmed staging job; no production dispatch input, Environment binding, project alias, or deploy command exists. The final promotion-separation contracts and all 10 workspace lint/build gates passed, closing BWM-010 on top of its recorded 70-file emulator aggregate, authorized staging deployment, and live authenticated smoke. BWM-011 is READY and becomes current for Admin Overview and Analytics contract repair; production remains NO_GO and unchanged.
 ```
 
 Do not infer progress from old build numbers, UI completion labels, or visual verification artifacts. Only this checkpoint, the task registry, checked substeps, session log, and current repository evidence determine progress for this program.
@@ -261,8 +261,8 @@ The registry is the canonical order. Detailed cards below define scope and accep
 | BWM-007 | P0 | VERIFIED | BWM-005,BWM-006 | Explicit dev fixture mode and production fail-closed behavior |
 | BWM-008 | P0 | VERIFIED | BWM-006 | Shared RBAC/capability policy and suspension enforcement |
 | BWM-009 | P0 | VERIFIED | BWM-008 | Claims synchronization, revocation, and cross-portal auth hardening |
-| BWM-010 | P0 | IN_PROGRESS | BWM-001,BWM-004,BWM-005 | Backend CI and staging deploy pipeline |
-| BWM-011 | P0 | PLANNED | BWM-003,BWM-006,BWM-007 | Admin Overview and Analytics live contract repair |
+| BWM-010 | P0 | VERIFIED | BWM-001,BWM-004,BWM-005 | Backend CI and staging deploy pipeline |
+| BWM-011 | P0 | READY | BWM-003,BWM-006,BWM-007 | Admin Overview and Analytics live contract repair |
 | BWM-012 | P0 | PLANNED | BWM-003,BWM-006,BWM-008 | Minimum real question creation and asset ingestion |
 | BWM-013 | P0 | PLANNED | BWM-012 | Authoritative test-template lifecycle |
 | BWM-014 | P0 | PLANNED | BWM-013 | Minimum authoritative assignment lifecycle |
@@ -1164,7 +1164,7 @@ The registry is the canonical order. Detailed cards below define scope and accep
 
 ### BWM-010 — Backend CI and Staging Deployment Pipeline
 
-- **Status:** `IN_PROGRESS`
+- **Status:** `VERIFIED`
 - **Purpose:** Make Functions, rules, indexes, and integration tests first-class deployment gates.
 - **Substeps:**
   - [x] Add workflow triggers for `functions/**`, rules, indexes, contracts, and gateway changes.
@@ -1172,8 +1172,8 @@ The registry is the canonical order. Detailed cards below define scope and accep
   - [x] Consume and expand the BWM-001 Auth, Firestore, Functions, Hosting, and Storage emulator harness with stable ports and an isolated test project ID.
   - [x] Run every accumulated emulator-backed integration suite through `firebase emulators:exec`; make the command clean up processes and data on both pass and failure.
   - [x] Deploy Functions, Firestore rules/indexes, and Hosting to a dedicated staging Firebase project in an ordered, approval-gated pipeline.
-  - [ ] Add post-deploy API health and authenticated smoke tests.
-  - [ ] Keep production promotion separate and approval-gated.
+  - [x] Add post-deploy API health and authenticated smoke tests.
+  - [x] Keep production promotion separate and approval-gated.
 - **Acceptance:** A backend change cannot merge/deploy with failed lint, build, unit, emulator, route, or smoke checks; CI records the Firebase CLI version and explicit non-production project ID.
 - **Required Firebase CLI proof:** `firebase emulators:exec --project demo-parabolic-test --only <required-emulators> "<integration-command>"`, followed by the approved staging deployment and smoke command configured by this task.
 - **First-substep evidence — backend CI trigger coverage:**
@@ -1246,6 +1246,34 @@ The registry is the canonical order. Detailed cards below define scope and accep
   - **Contract/schema changes:** Staging deployment is now an explicit manual, typed-project-confirmed, owner-controlled Environment operation restricted to branch `staging`; production promotion is absent. The deployable Functions runtime environment is a validated 11-key non-secret project-specific dotenv generated only inside the approved staging job. Matching frontend/Functions CDN bases may now include an HTTPS environment-owned bucket path while credentials, query, fragment, non-HTTPS release values, and paths on portal/API origins remain rejected. API routes/DTOs, authentication/authorization, Firestore rules/index definitions, persistence schema, and application behavior are unchanged.
   - **Residual risks:** The next BWM-010 substep must add public post-deploy API health and authenticated smoke tests; this deployment proof intentionally does not claim those flows. Production-promotion separation remains the final unchecked BWM-010 substep, and production remains `NO_GO`. Firebase CLI warned that token authentication is deprecated and must migrate to Application Default Credentials before removal. It also warned that the deployed Node.js 20 Functions runtime is deprecated and scheduled for decommissioning on 2026-10-30, and that `firebase-functions` `4.4.1` is outdated; runtime/SDK migration must be planned before that deadline without broadening this deployment-only substep. The default staging bucket temporarily supplies both logical question-asset and report bucket variables; owning asset/storage tasks must provision narrower infrastructure if their verified flows require it.
   - **Completed on:** 2026-08-18
+- **Sixth-substep evidence — post-deploy API health and authenticated staging smoke:**
+  - **Implemented files:** Added `scripts/frontend-cicd/run-staging-smoke.mjs` and `tests/staging-smoke.test.mjs`; updated `.github/workflows/frontend-ci-cd.yml`, `package.json`, `tests/staging-deployment-pipeline.test.mjs`, `tests/backend-ci-trigger-coverage.test.mjs`, `tests/backend-ci-validation.test.mjs`, `docs/ENVIRONMENT_VARIABLE_MATRIX.md`, and this controller.
+  - **Implementation summary:** Added one dependency-free, fail-closed smoke step immediately after staging Hosting publication. It is pinned to project `parabolic-dev` and the three recorded live Hosting origins, checks the exact `helloWorld` staging response, loads the Admin, Student, Exam, and Vendor HTML entries, proves an unknown same-origin `/api/v1` path returns canonical JSON `404 NOT_FOUND`, and distinguishes missing authentication from successful Firebase ID-token verification. For the authenticated proof it creates a random email/password Auth user through the public Firebase Auth API, sends the returned ID token to Admin Overview, requires the exact post-verification missing-required-claims response, and deletes the disposable identity in `finally`, including when the authenticated assertion fails. The script never logs or persists the generated email, password, ID token, public web API key, or deployment credential. Backend CI now runs the deterministic smoke contract, and workflow trigger coverage includes its test.
+  - **L1 static:** `node scripts/verify-workspace.mjs` — PASS; all 10 Admin, Student, Exam, Vendor, and Functions lint/build gates completed with zero lint findings, frontend production-build module counts `126`, `100`, `77`, and `97`, and successful Functions `tsc`. `node --check scripts/frontend-cicd/run-staging-smoke.mjs`, `node --check tests/staging-smoke.test.mjs`, focused Prettier, and `git diff --check` — PASS.
+  - **L2 unit/contract:** `npm run test:staging-smoke-contract`, `npm run test:staging-deployment-pipeline`, `npm run test:backend-ci-trigger-coverage`, and `npm run test:backend-ci-validation` — PASS, one file suite each. The smoke contract covers exact staging configuration, health/Hosting/API/Auth success, production-target rejection, and cleanup after an authenticated assertion failure. The workflow contracts prove the smoke runs only after Hosting deployment, consumes no deployment token, remains selected by push/pull-request paths, and is required by backend CI validation.
+  - **L3 Firebase emulator:** N/A — this bounded substep changed only deployment verification/orchestration and did not change Auth, Firestore, Functions, Hosting, Storage, rules, indexes, triggers, handlers, or runtime policy. The existing five-service aggregate remains an unchanged required predecessor in `backend-ci` and passed for the deployed staging release as recorded in the fifth-substep evidence.
+  - **L4 browser E2E:** N/A — no portal UI or user-visible cross-layer behavior changed. The public smoke performs direct HTTPS entry/API checks; full authenticated browser flows remain owned by their feature tasks and BWM-056.
+  - **L5 staging/preview:** Approved `PARABOLIC_DEPLOY_BRANCH=staging PARABOLIC_BUILD_ENVIRONMENT=staging FIREBASE_PROJECT_ID=parabolic-dev VITE_PORTAL_BASE_URL=https://parabolic-dev.web.app VITE_EXAM_BASE_URL=https://parabolic-dev-40ec9.web.app VITE_VENDOR_BASE_URL=https://parabolic-dev-vendor.web.app node --env-file=apps/admin/.env.local scripts/frontend-cicd/run-staging-smoke.mjs` — PASS against the live non-production release deployed by run `32127189706`. The exact health text named `staging` and `parabolic-dev`; Admin and Student loaded from Portal release `1787049715901000`, Exam from `1787049716112000`, and Vendor from `1787049716118000`; the same-origin unknown route returned canonical JSON 404; Admin Overview returned the distinct expected unauthenticated and verified-token 401 envelopes; and the disposable Auth identity was deleted successfully. The local dotenv supplied only the already-public matching Firebase web API key to the smoke process and its value was neither printed nor recorded.
+  - **L6 production:** N/A — BWM-057 only. No production project, URL, account, resource, workflow, or promotion path was accessed or changed.
+  - **Firebase CLI version:** `15.9.0`; the version command printed the exact pinned version. The live smoke itself uses HTTPS and Firebase Auth REST so it can run after deployment without deployment credentials or Firebase CLI state.
+  - **Authorization/external mutations:** The product owner approved the exact non-production smoke on 2026-08-22. It made HTTPS reads against the three `parabolic-dev` Hosting sites and deployed Functions, created one random disposable user in `parabolic-dev` Firebase Auth, and deleted that user in the same run. No reusable credential, remote Firestore document, deployment, Function, rule, index, Hosting release, GitHub setting, secret, domain, or production resource changed.
+  - **Contract/schema changes:** The approved staging deployment contract now includes a mandatory post-Hosting smoke and fails the job if health, Hosting, same-origin API routing, authentication, or Auth cleanup fails. No product API route/DTO, claims requirement, authorization policy, Firestore schema, rule, or index changed.
+  - **Residual risks:** The new workflow code has local verification and must pass the normal checked-in CI path before a subsequent authorized staging dispatch executes it automatically. BWM-010's final unchecked substep must prove production promotion remains separate and approval-gated before the task can become `VERIFIED`. Full role-authorized success flows still require seeded accounts/data and remain owned by BWM-011 onward and the BWM-056 staging rehearsal.
+  - **Completed on:** 2026-08-22
+- **Seventh-substep evidence — separate approval-gated production promotion boundary:**
+  - **Implemented files:** Added `tests/production-promotion-separation.test.mjs`; updated `.github/workflows/frontend-ci-cd.yml`, `package.json`, `tests/backend-ci-trigger-coverage.test.mjs`, `tests/backend-ci-validation.test.mjs`, `docs/ENVIRONMENT_VARIABLE_MATRIX.md`, and this controller.
+  - **Implementation summary:** Added a repository-wide workflow inventory that examines every tracked YAML workflow and fails if any Firebase deploy command appears outside the single `staging-deploy` job. The contract requires that job to retain its `staging` Environment, exact `staging` branch, boolean opt-in, typed `parabolic-dev` confirmation, Environment-owned project value, and four explicit project arguments. It rejects production dispatch inputs, production jobs/Environment bindings, production-like project arguments, and production Firebase aliases. The tracked workflow continues to expose only `deploy_staging` and `staging_project_id`; `.firebaserc` continues to contain only `demo-parabolic-test` and `parabolic-dev`. No production workflow was created because BWM-057 exclusively owns that future, separately approved release path.
+  - **L1 static:** `node scripts/verify-workspace.mjs` — PASS on the final BWM-010 tree; all 10 Admin, Student, Exam, Vendor, and Functions lint/build gates completed with zero lint findings, frontend production-build module counts `126`, `100`, `77`, and `97`, and successful Functions `tsc`. `node --check tests/production-promotion-separation.test.mjs`, focused Prettier, and `git diff --check` — PASS.
+  - **L2 unit/contract:** `npm run test:production-promotion-separation`, `npm run test:staging-deployment-pipeline`, `npm run test:staging-smoke-contract`, `npm run test:backend-ci-trigger-coverage`, and `npm run test:backend-ci-validation` — PASS, one file suite each. The new suite passed both named boundaries: all three Firebase deploy commands are staging-only, and manual dispatch/tracked aliases expose no production promotion. The accumulated contracts preserve ordered staging deploy, post-deploy smoke, symmetric trigger coverage, and backend CI enforcement.
+  - **L3 Firebase emulator:** N/A for this policy-only final substep because it changed no Firebase runtime, handler, Auth behavior, Firestore/Storage rule, index, trigger, or emulator configuration. BWM-010's accumulated required proof remains the passed Firebase CLI `15.9.0` aggregate recorded in the fourth/fifth evidence: 70/70 files and 217/217 assertions, 2/2 Chromium cases, intentional-failure cleanup, and complete port release under explicit `demo-parabolic-test`.
+  - **L4 browser E2E:** N/A for this policy-only substep; no browser or user-visible behavior changed. BWM-010's public entry/API checks and prior no-mock Chromium evidence remain recorded in the fifth/sixth evidence.
+  - **L5 staging/preview:** N/A for this final substep because it deliberately made no deployment or public-runtime change. BWM-010's required approved L5 proof remains Actions deployment run `32127189706`, releases `1787049715901000`, `1787049716112000`, and `1787049716118000`, plus the passed live health/authenticated smoke recorded in the sixth evidence.
+  - **L6 production:** N/A — BWM-057 only. The executable contract proves there is no current production input, job, Environment binding, alias, or Firebase deploy command and therefore no production mutation path to exercise.
+  - **Firebase CLI version:** `15.9.0`, unchanged from the pinned backend/staging workflow and accumulated BWM-010 emulator/deployment evidence.
+  - **Authorization/external mutations:** None. This final substep read local workflow/configuration files and ran local contracts, lint, typechecking, and builds only. No GitHub setting, workflow dispatch, Firebase project, account, data, Function, rule, index, Hosting release, secret, public URL, or production resource changed.
+  - **Contract/schema changes:** CI now fails if a Firebase deployment escapes the staging job or if a production promotion surface appears without deliberately updating the BWM-057-owned boundary. No API route/DTO, authentication/authorization policy, persistence schema, rule, index, or deployed runtime changed.
+  - **Residual risks:** BWM-010 acceptance is complete. The accumulated sixth/seventh-substep source changes must pass the normal checked-in CI path before any future staging dispatch; the workflow itself ensures that dispatch cannot bypass frontend/backend validation or the new post-deploy smoke. Production infrastructure, approval design, candidate binding, deployment, and live verification remain explicitly deferred to BWM-052 through BWM-057, and production remains `NO_GO`.
+  - **Completed on:** 2026-08-22
 
 ---
 
@@ -1253,7 +1281,7 @@ The registry is the canonical order. Detailed cards below define scope and accep
 
 ### BWM-011 — Admin Overview and Analytics Contract Repair
 
-- **Status:** `PLANNED`
+- **Status:** `READY`
 - **Purpose:** Prove shared routing/envelope/data-mode foundations on read-only Admin summaries.
 - **Work:** unwrap the standard envelope; align field names; validate summary-only data; remove silent fallback; cover Overview, Analytics, assignment/insight consumers; add real handler-to-normalizer contract tests.
 - **Acceptance:** Seeded emulator summaries render exact backend values and failures show explicit error states.
@@ -1725,7 +1753,7 @@ operations_owner: TBD
 | Risk | Severity | Owning tasks | Status |
 |---|---|---|---|
 | REST paths do not map to exported Functions | Critical | BWM-002..BWM-004 | Resolved 2026-08-07 |
-| Deployment lacks frontend runtime configuration and backend deploy | Critical | BWM-005,BWM-010 | Open |
+| Deployment lacks frontend runtime configuration and backend deploy | Critical | BWM-005,BWM-010 | Resolved 2026-08-22 |
 | Student summary APIs are missing | Critical | BWM-015,BWM-016 | Open |
 | Exam custom token is sent where an ID token is required | Critical | BWM-017,BWM-018 | Open |
 | Exam lifecycle remains local while submission requires active backend state | Critical | BWM-020,BWM-023 | Open |
@@ -1892,6 +1920,24 @@ Never record only “tests passed.” Include exact commands and whether tests w
 ## Session Log
 
 Append newest entries at the top.
+
+### LOG-069 — 2026-08-22 — BWM-010 Production Promotion Separation and Closeout
+
+- **Task:** Complete BWM-010's final substep by keeping production promotion separate and approval-gated, verify the complete task, and advance the controller.
+- **Outcome:** Added a repository-wide executable boundary that permits Firebase deploy commands only in the manual `staging-deploy` job and rejects production dispatch inputs, jobs, Environment bindings, project arguments, and aliases. The current workflow retains exactly three ordered staging deploy commands, four explicit `parabolic-dev` project arguments including target inspection, only `deploy_staging`/`staging_project_id` dispatch inputs, and no production mutation path. All final contracts and workspace gates passed. BWM-010 is `VERIFIED`; BWM-011 is `READY` and becomes current while production remains `NO_GO`.
+- **Validation performed:** `npm run test:production-promotion-separation`, `npm run test:staging-deployment-pipeline`, `npm run test:staging-smoke-contract`, `npm run test:backend-ci-trigger-coverage`, and `npm run test:backend-ci-validation` passed. Script syntax, focused Prettier, and `git diff --check` passed. `node scripts/verify-workspace.mjs` passed all 10 lint/build gates with frontend module counts 126/100/77/97 and Functions `tsc`. No L3-L5 rerun was applicable to this local policy-only change; BWM-010 closes on its already-recorded current-tree emulator aggregate, authorized staging releases, and approved live authenticated smoke.
+- **Files changed:** Added `tests/production-promotion-separation.test.mjs`; updated the workflow, root package commands, backend trigger/validation contracts, environment matrix, and this controller. The accumulated sixth-substep smoke runner/test and related local changes were preserved.
+- **Cloud changes:** None. No workflow was dispatched or production/staging remote resource changed in this final substep.
+- **Next:** BWM-011 — repair Admin Overview and Analytics envelope and field contracts, beginning with inspection of the frontend normalizers and real handler responses.
+
+### LOG-068 — 2026-08-22 — BWM-010 Post-Deploy Authenticated Smoke
+
+- **Task:** Complete BWM-010 sixth substep by adding and running post-deploy API health and authenticated smoke tests against the released non-production staging environment.
+- **Outcome:** Added a mandatory post-Hosting workflow smoke pinned to `parabolic-dev` and its three recorded Hosting origins. It proves the exact Functions health response, all four portal entries, same-origin API-first routing, unauthenticated rejection, successful Firebase ID-token verification, and cleanup of its random disposable Auth identity. Focused contracts and all workspace lint/build gates passed, then the approved public staging run passed against the three releases from Actions run `32127189706`. The sixth checkbox is complete and BWM-010 advances to its final production-promotion separation substep.
+- **Validation performed:** Script syntax, focused Prettier, and `git diff --check` passed. The staging-smoke, staging-pipeline, backend-trigger, and backend-validation contracts each passed. `node scripts/verify-workspace.mjs` passed all 10 lint/build gates at frontend module counts 126/100/77/97 plus Functions `tsc`. The approved HTTPS smoke observed exact staging health, four successful HTML entries, canonical JSON `404 NOT_FOUND` through the Hosting API rewrite, distinct missing-header and verified-token/missing-claims `401 UNAUTHORIZED` envelopes, and successful disposable-user deletion. Firebase CLI version remained `15.9.0`.
+- **Files changed:** `.github/workflows/frontend-ci-cd.yml`, `package.json`, `scripts/frontend-cicd/run-staging-smoke.mjs`, `tests/staging-smoke.test.mjs`, three existing CI/deployment contracts, `docs/ENVIRONMENT_VARIABLE_MATRIX.md`, and this controller.
+- **Cloud changes:** With explicit product-owner approval, the smoke read the public `parabolic-dev` Functions/Hosting endpoints, created one random disposable Firebase Auth account, and deleted it in the same run. No deployment, persistent test credential, Firestore data, GitHub setting, secret, production resource, or public release changed.
+- **Next:** BWM-010 seventh substep — keep production promotion separate and approval-gated, then run its required verification and close BWM-010 only if the final acceptance criteria pass.
 
 ### LOG-067 — 2026-08-18 — BWM-010 Ordered Staging Deployment
 

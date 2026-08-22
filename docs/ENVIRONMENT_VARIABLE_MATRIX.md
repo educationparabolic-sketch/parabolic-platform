@@ -58,7 +58,10 @@ deployment variables or credentials. At the product owner's explicit direction,
 this single-owner repository uses no required reviewer; restrict the
 Environment's deployment branch to exact `staging` and retain the workflow's
 manual opt-in plus typed-project confirmation. Pushes never deploy, and there
-is no production deployment job; production promotion remains BWM-057 work.
+is no production deployment job, input, Environment binding, project alias, or
+Firebase command. A repository-wide contract preserves that boundary;
+production promotion remains BWM-057 work and must introduce a separate,
+freshly approved production path rather than broadening the staging job.
 
 After approval, the staging job revalidates the environment/project/site unit,
 builds and scans the release artifacts, pins Firebase CLI `15.9.0`, and deploys
@@ -66,6 +69,14 @@ in this fail-fast order: Functions, Firestore rules plus indexes, then the three
 Hosting targets. Before the Functions deployment it creates an ignored
 `functions/.env.parabolic-dev` containing only the validated non-secret
 Functions runtime keys, then removes that file even when deployment fails.
+After Hosting publication, the job runs a fail-closed staging smoke against the
+exact recorded public origins. It checks the Functions health response, all
+four portal entries, same-origin API-first routing, unauthenticated rejection,
+and successful Firebase ID-token verification. The authentication proof creates
+a random disposable email/password user through Firebase Auth, verifies that a
+real ID token reaches the API's missing-claims boundary, and deletes the user in
+`finally`. No reusable test credential, ID token, password, or deployment token
+is stored or logged.
 
 ## CI validation gate
 

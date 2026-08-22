@@ -59,6 +59,8 @@ test("push and pull-request triggers cover backend, rules, indexes, contracts, a
     "tests/api-envelope-contract.test.mjs",
     "tests/backend-ci-validation.test.mjs",
     "tests/staging-deployment-pipeline.test.mjs",
+    "tests/staging-smoke.test.mjs",
+    "tests/production-promotion-separation.test.mjs",
     "tests/frontend-api-routing.test.mjs",
     "tests/portal-response-adapters.test.mjs",
     "docs/api_contract.md",

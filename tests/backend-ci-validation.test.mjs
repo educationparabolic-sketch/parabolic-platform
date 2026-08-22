@@ -48,6 +48,8 @@ test("backend CI gates deploy on Functions lint, build, and deterministic tests"
   assert.match(workflow, /npm run test:emulators:ci/u);
   assert.match(workflow, /npm run test:emulators:failure-cleanup/u);
   assert.match(workflow, /npm run test:staging-deployment-pipeline/u);
+  assert.match(workflow, /npm run test:staging-smoke-contract/u);
+  assert.match(workflow, /npm run test:production-promotion-separation/u);
   assert.match(workflow, /needs: \[frontend-ci, backend-ci\]/u);
   assert.equal(
     functionsPackage.scripts["test:ci:non-emulator"],

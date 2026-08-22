@@ -71,8 +71,10 @@ test("staging deployment is manual, project-confirmed, protected, and ordered", 
   const functionsDeploy = job.indexOf("name: Deploy staging Functions");
   const firestoreDeploy = job.indexOf("name: Deploy staging Firestore rules and indexes");
   const hostingDeploy = job.indexOf("name: Deploy staging Hosting bundles");
+  const stagingSmoke = job.indexOf("name: Run post-deploy staging smoke");
   assert.ok(functionsDeploy > 0 && functionsDeploy < firestoreDeploy);
   assert.ok(firestoreDeploy < hostingDeploy);
+  assert.ok(hostingDeploy < stagingSmoke);
 
   assert.match(job, /--project "\$\{FIREBASE_PROJECT_ID\}" --only functions/u);
   assert.match(job, /--project "\$\{FIREBASE_PROJECT_ID\}" --only firestore/u);
@@ -84,6 +86,9 @@ test("staging deployment is manual, project-confirmed, protected, and ordered", 
   assert.equal((job.match(/--token "\$\{FIREBASE_TOKEN\}"/gu) ?? []).length, 4);
   assert.match(job, /materialize-functions-runtime-env\.mjs --write/u);
   assert.match(job, /materialize-functions-runtime-env\.mjs --remove/u);
+  assert.match(job, /npm run smoke:staging/u);
+  assert.match(job.slice(stagingSmoke), /FIREBASE_TOKEN: ""/u);
+  assert.doesNotMatch(job.slice(stagingSmoke), /\$\{\{ secrets\.FIREBASE_TOKEN \}\}/u);
 });
 
 test("Functions runtime dotenv contains only validated non-secret staging values", () => {
