@@ -16,12 +16,12 @@ program_status: IN_PROGRESS
 release_decision: NO_GO
 current_phase: 1
 current_task: BWM-014
-current_substep: BWM-014 — Minimum Authoritative Assignment Lifecycle
+current_substep: BWM-014-D — Admin authoritative list/detail consumption
 last_completed_task: BWM-013
 next_task: BWM-014
 blocked_tasks: []
 last_updated: 2026-08-23
-last_update_summary: BWM-013 is VERIFIED and BWM-014 is READY. The authoritative template lifecycle now uses backend IDs, numeric optimistic structural versions, immutable prior snapshots, distinct idempotent publish/archive commands, atomic lifecycle audits, strict Admin reload reconciliation, and draft-assignment rejection. The current tree passed 44/44 deterministic Functions files, 10/10 affected shared/frontend commands, all 10 workspace lint/build gates, 8 full-service emulator suites with 19 tests plus 2 Hosting browser cases, 63 Firestore-backed files with 201 assertions, the intentional failure-cleanup proof, and the BWM-013-E one-case no-mock lifecycle browser flow. Canonical API, inventory, module, schema, and emulator-suite documentation/accounting are reconciled; production remains NO_GO and unchanged.
+last_update_summary: BWM-014-C is complete and BWM-014 remains IN_PROGRESS at D. ADM-22/23 now provide teacher/admin-authenticated, identity-tenant, current-academic-year run list/detail reads through shared strict DTOs. Lists use bounded deterministic cursor pagination with optional status filtering; missing, archived-year, and cross-tenant details fail closed. Functions/Admin static gates, focused contracts, Firestore service proof, and the 23-route gateway emulator pass. Admin page consumption remains BWM-014-D; production remains NO_GO and unchanged.
 ```
 
 Do not infer progress from old build numbers, UI completion labels, or visual verification artifacts. Only this checkpoint, the task registry, checked substeps, session log, and current repository evidence determine progress for this program.
@@ -265,7 +265,7 @@ The registry is the canonical order. Detailed cards below define scope and accep
 | BWM-011 | P0 | VERIFIED | BWM-003,BWM-006,BWM-007 | Admin Overview and Analytics live contract repair |
 | BWM-012 | P0 | VERIFIED | BWM-003,BWM-006,BWM-008 | Minimum real question creation and asset ingestion |
 | BWM-013 | P0 | VERIFIED | BWM-012 | Authoritative test-template lifecycle |
-| BWM-014 | P0 | READY | BWM-013 | Minimum authoritative assignment lifecycle |
+| BWM-014 | P0 | IN_PROGRESS | BWM-013 | Minimum authoritative assignment lifecycle |
 | BWM-015 | P0 | PLANNED | BWM-003,BWM-006,BWM-008,BWM-014 | Student dashboard and My Tests APIs |
 | BWM-016 | P0 | PLANNED | BWM-015 | Student solutions, performance, and insights APIs |
 | BWM-017 | P0 | PLANNED | BWM-014,BWM-015 | Compatible Exam start and resume contracts |
@@ -1488,10 +1488,57 @@ The registry is the canonical order. Detailed cards below define scope and accep
 
 ### BWM-014 — Minimum Authoritative Assignment Lifecycle
 
-- **Status:** `READY`
+- **Status:** `IN_PROGRESS`
 - **Purpose:** Produce a run that Student and Exam can consume.
 - **Work:** align run-create DTO; require published template/version; add secured list/detail summary reads; persist recipients, mode, schedule, year, and status; enforce idempotent create.
 - **Acceptance:** Admin creates an assignment, reloads it from backend, and assigned students can be resolved without fixtures.
+- **Substeps:**
+  - [x] **BWM-014-A — Shared authoritative create contract and exactly-once foundation.** Align the shared request/result DTO and strict adapter; send canonical mode plus numeric template version from Admin; derive identity and immutable template authority server-side; persist assignment inputs; and make exact retries/concurrent creates converge without duplicate template usage.
+  - [x] **BWM-014-B — Admin authoritative create reload boundary.** Reload the created run from the backend, reconcile its ID/version/status/recipients, and remove live-mode locally synthesized create-result state.
+  - [x] **BWM-014-C — Secured assignment list/detail routes and shared DTOs.** Add bounded institute/current-year list and detail summary reads with role, tenant, pagination/filter, and not-found enforcement.
+  - [ ] **BWM-014-D — Admin authoritative list/detail consumption.** Wire assignment list/detail views to strict backend DTOs and remove analytics/fixture substitution from live run state.
+  - [ ] **BWM-014-E — Emulator and no-mock lifecycle proof.** Prove authenticated create, reload, detail, recipient resolution, authorization, retry, and concurrency behavior through local Firebase emulators and the real Admin browser boundary.
+  - [ ] **BWM-014-F — Aggregate regressions, documentation, and closeout.** Run affected aggregate and workspace gates, reconcile canonical route/schema/module accounting, and close BWM-014 without beginning Student/Exam work early.
+- **Evidence (BWM-014-A):**
+  - **Implemented files:** Shared Admin run request/result DTOs and strict response adapter; Admin assignment create payload/response consumption; Admin Runs API/service/types; assignment transactional validation/persistence; focused handler, DTO, adapter, and Firestore concurrency tests; ADM-12 route manifest/counts; prior template-lifecycle draft-guard request compatibility; canonical API/inventory/module/schema documentation.
+  - **L1 static:** `npm --prefix functions run lint && npm --prefix functions run build` — PASS. `npm --prefix apps/admin run build` — PASS, 128 modules transformed. `git diff --check` — PASS.
+  - **L2 unit/contract:** `node --test functions/lib/tests/adminRunsApi.test.js` — PASS, 4/4 handler cases including HTTP 201 create and HTTP 200 replay. `npm run test:api-dto-contract` — PASS. `npm run test:portal-response-adapters` — PASS. Route-manifest/gateway contract verification is recorded in `LOG-083`.
+  - **L3 Firebase emulator:** `CI=true firebase emulators:exec --project demo-parabolic-test --only firestore "node --test functions/lib/tests/assignmentCreation.test.js"` — PASS, 7/7 cases on Firestore. The create case submitted two concurrent identical operations, observed one `created` plus one `replayed`, retained `totalRuns: 1`, persisted policy/recipients/snapshots, and rejected a different fingerprint without another increment. `npm run test:api-gateway:emulator` — PASS, 4/4 Functions gateway cases with all 21 implemented routes, including ADM-12, reaching their business authorization boundary.
+  - **L4 browser:** N/A — BWM-014-E owns the complete no-mock Admin create/reload/detail proof after read routes exist.
+  - **L5 staging/preview:** N/A — no deployment was requested; this substep changed no Hosting target, rewrite, secret, or release configuration.
+  - **L6 production:** N/A — reserved for BWM-057; production remains untouched and `NO_GO`.
+  - **Firebase CLI version:** `15.9.0`; Java `21.0.8`.
+  - **Authorization/external mutations:** User authorized the local Firestore emulator verification. It used loopback ports and disposable cleaned data only. No deployment, remote Firebase data, secret, endpoint, or production resource changed.
+  - **Contract/schema changes:** ADM-12 is now implemented. Canonical totals are 33 routes: 21 implemented, 6 incompatible, 6 missing, 0 intentionally retired. Scheduled runs store hashed idempotency/request fingerprints and the persisted proctoring policy in the existing run document; no collection, rule, or index was added.
+  - **Residual risks:** BWM-014-B must add the authoritative create reload/reconciliation boundary; C/D still own secured list/detail APIs and removal of live analytics/fixture run substitution. Full browser and aggregate proof remain E/F.
+  - **Completed on:** 2026-08-23
+- **Evidence (BWM-014-B):**
+  - **Implemented files:** Added the pure Admin `assignmentAuthority.ts` reconciliation boundary and its focused contract test; updated the assignment page so live create performs an exact idempotent persisted replay, verifies it against the original request and first response, stores the shared `AdminRunRecord` directly, and renders an authoritative confirmation without invoking `buildFallbackRunRecord` or `setRuns`; updated frontend inventory/module ownership documentation.
+  - **L1 static:** `npm --prefix apps/admin run lint` — PASS. `npm --prefix apps/admin run build` — PASS, 129 modules transformed. `git diff --check` — PASS.
+  - **L2 unit/contract:** `node --test tests/admin-assignment-authority.test.mjs` — PASS. The focused file accepts an exact create/replay pair, rejects a non-replay, recipient-count drift, and canonical-ID drift, and asserts that the live page branch uses two authoritative submissions plus reconciliation with no fallback run construction/state insertion.
+  - **L3 Firebase emulator:** N/A — BWM-014-B changed only the Admin reconciliation/confirmation boundary. BWM-014-A's current-tree Firestore proof already verifies the exact replay returns persisted authority and does not duplicate template usage; BWM-014-E owns the complete real-gateway browser proof.
+  - **L4 browser:** N/A — BWM-014-E owns the no-mock create/reload/detail browser lifecycle after C/D provide the read boundary.
+  - **L5 staging/preview:** N/A — no deployment was requested and no Hosting/release configuration changed.
+  - **L6 production:** N/A — reserved for BWM-057; production remains untouched and `NO_GO`.
+  - **Firebase CLI version:** N/A — no Firebase CLI command was required for this frontend-only substep.
+  - **Authorization/external mutations:** None. Verification was local and read/write effects were limited to generated Admin build artifacts ignored by Git.
+  - **Contract/schema changes:** No new API or Firestore schema. ADM-12 retains the BWM-014-A shared request/result; B now requires the second exact create to return `replayed` with a byte-equivalent authoritative run record before live confirmation state is accepted.
+  - **Residual risks:** The authoritative confirmation is component state and therefore intentionally does not survive a full browser refresh. BWM-014-C must add secured run list/detail reads; D must hydrate live list/detail state from them and remove analytics/fixture substitution.
+  - **Completed on:** 2026-08-23
+- **Evidence (BWM-014-C):**
+  - **Implemented files:** Shared DTOs/adapters now define strict lifecycle-aware run list/detail results. `adminRuns.ts` API/service/types dispatch ADM-22/23 through the existing authentication, identity-tenant, and teacher/admin boundaries; resolve only the current academic year; bound list limits to `1..50`; apply optional strict status filtering; paginate by `createdAt` plus document ID with a filter-bound opaque cursor; and return `NOT_FOUND` for out-of-scope details. `assignmentRunsApi.ts` establishes the strict Admin caller boundary for D. The route manifest, gateway parameter/count checks, Firestore index, focused handler/service/adapter/DTO tests, aggregate suite inventory, and canonical documentation were aligned.
+  - **L1 static:** `npm --prefix functions run lint && npm --prefix functions run build`; `npm --prefix apps/admin run lint && npm --prefix apps/admin run build`; JSON parsing for `firestore.indexes.json`; `git diff --check` — PASS. Functions TypeScript compiled and the Admin production build transformed 129 modules.
+  - **L2 unit/contract:** `node --test functions/lib/tests/adminRunsApi.test.js`; `node --test tests/api-dto-contract.test.mjs tests/backend-ci-emulator-aggregate.test.mjs`; `node --test functions/tests/apiRouteManifest.test.js functions/tests/apiGateway.test.js`; `node --test tests/portal-response-adapters.test.mjs` — PASS. Coverage includes list/detail dispatch, identity-derived tenant scope, query normalization, 404 mapping, shared-source DTOs, strict run statuses/cursors, both new route keys, encoded run IDs, and 23 implemented-handler registrations.
+  - **L3 Firebase emulator:** `firebase emulators:exec --project demo-parabolic-test --only firestore "node --test functions/lib/tests/adminRunsService.test.js"` — PASS, 1/1 case. It proved two-page deterministic traversal, current-year exclusion, status filtering, valid detail, cross-tenant and archived-year non-disclosure, invalid limits/cursors, cleanup, and clean shutdown. `npm run test:api-gateway:emulator` — PASS, 4/4 cases; all 23 implemented routes reached their business handlers and the Functions emulator shut down cleanly.
+  - **L4 browser:** N/A — C establishes the secured backend and strict client boundary without wiring page state. BWM-014-D owns Admin list/detail consumption, and E owns the no-mock lifecycle proof.
+  - **L5 staging/preview:** N/A — no deployment, Hosting target, public endpoint, secret, or release configuration changed.
+  - **L6 production:** N/A — reserved for BWM-057; production remains untouched and `NO_GO`.
+  - **Firebase CLI version:** `15.9.0`; Java `21.0.8`.
+  - **Authorization/external mutations:** User authorization allowed local Firestore and Functions emulator verification. Only loopback processes, disposable cleaned emulator data, and local Firebase CLI cache state changed; no remote Firebase data or cloud resource changed.
+  - **Contract/schema changes:** Added implemented ADM-22 `GET /admin/runs` and ADM-23 `GET /admin/runs/{runId}`. Canonical totals are 35 routes: 23 implemented, 6 incompatible, 6 missing, and 0 intentionally retired. Added the `runs(status ASC, createdAt DESC, __name__ DESC)` collection-scope composite index; no Firestore rule or collection path changed.
+  - **Verification repair:** The first Admin build rejected passing the typed query interface directly where the shared client requires an indexable query record. The caller now explicitly projects cursor/limit/status; Admin lint/build then passed.
+  - **Residual risks:** The existing assignment list/detail pages still hydrate analytics/fixture-backed data in live mode. BWM-014-D must consume ADM-22/23 and remove that substitution; E/F retain browser and aggregate closeout.
+  - **Completed on:** 2026-08-23
 
 ### BWM-015 — Student Dashboard and My Tests APIs
 
@@ -2106,6 +2153,33 @@ Never record only “tests passed.” Include exact commands and whether tests w
 ## Session Log
 
 Append newest entries at the top.
+
+### LOG-085 — 2026-08-23 — BWM-014-C Secured Current-Year Run Reads
+
+- **Task:** Complete only BWM-014-C by adding shared strict run list/detail DTOs and secured, bounded institute/current-year reads without wiring assignment page state early.
+- **Outcome:** ADM-22/23 now share the existing `adminRuns` export and enforce Firebase identity, teacher/admin role, identity-derived tenant, resolved current academic year, bounded deterministic pagination, optional lifecycle filtering, and not-found non-disclosure. The Admin has a strict typed API boundary ready for D, but its views remain deliberately unchanged. BWM-014 remains `IN_PROGRESS` at BWM-014-D.
+- **Validation performed:** Functions/Admin lint and production builds passed; focused handler, DTO, adapter, manifest, gateway, and aggregate-inventory contracts passed; the Firestore emulator passed the tenant/current-year pagination/filter/detail proof 1/1; the Functions gateway emulator passed 4/4 with all 23 implemented routes reaching business handlers; `git diff --check` passed.
+- **Files changed:** Added `assignmentRunsApi.ts` and `adminRunsService.test.ts`; updated shared run DTOs/adapters, Admin Runs API/service/types/tests, route manifest and gateway coverage, Firestore index and aggregate count guards, canonical API/inventory/module/schema docs, and this controller. Existing uncommitted BWM-014-A/B work remains preserved in the same working tree.
+- **Cloud changes:** None. Approved commands used local emulators and disposable cleaned emulator data only; no deployment, remote data, secret, public endpoint, or production resource changed.
+- **Next:** BWM-014-D — wire assignment list/detail views to ADM-22/23 strict authority and remove live analytics/fixture substitution without beginning emulator/browser lifecycle scope early.
+
+### LOG-084 — 2026-08-23 — BWM-014-B Admin Authoritative Create Replay Reconciliation
+
+- **Task:** Complete only BWM-014-B by replacing the remaining live-mode locally synthesized create-result state with a strict backend reload/reconciliation boundary.
+- **Outcome:** After the first authoritative create, Admin now sends the identical idempotency request once more and requires a `replayed` disposition from the persisted Firestore run. A pure reconciliation boundary compares the request, first response, and replay across run identity/path, template/version, year/status, recipients/count, mode, schedule/timezone, attempt/grace/shuffle, proctoring policy, canonical identity, and creation timestamp. Only the replayed shared `AdminRunRecord` enters live confirmation state; the live branch no longer calls fallback record construction or inserts into the analytics/fixture-backed run list. BWM-014 remains `IN_PROGRESS` at BWM-014-C.
+- **Validation performed:** Admin lint passed; the production build passed with 129 modules; the focused assignment-authority contract passed its exact authority and negative drift checks; `git diff --check` passed. No emulator rerun was required because this substep changed only the frontend boundary and BWM-014-A retains current-tree exact-replay Firestore proof.
+- **Files changed:** Added `apps/admin/src/features/assignments/assignmentAuthority.ts` and `tests/admin-assignment-authority.test.mjs`; updated the Admin assignment page, frontend API inventory, module registry, and this controller. Existing uncommitted BWM-014-A implementation remains preserved in the same working tree.
+- **Cloud changes:** None. Verification was local; no emulator, deployment, remote Firebase data, secret, public endpoint, or production resource changed.
+- **Next:** BWM-014-C — add secured, bounded, institute/current-year assignment list/detail routes and shared strict DTOs without beginning Admin list/detail wiring early.
+
+### LOG-083 — 2026-08-23 — BWM-014-A Authoritative Exactly-Once Run Create
+
+- **Task:** Complete only BWM-014-A by aligning the shared Admin run-create boundary and establishing deterministic exactly-once assignment creation before adding run list/detail routes.
+- **Outcome:** ADM-12 now accepts a shared strict request containing the current academic year, expected numeric template version, canonical mode, recipients, schedule, policy, and idempotency key. The backend ignores client-authored identity/snapshots, derives the active-year deterministic run ID and immutable template authority, persists the complete scheduled run, returns a strict authoritative created/replayed result, and rejects year/version/key conflicts. Admin replaced unsupported `Focused` with `Diagnostic`, carries the template version, sends a stable semantic idempotency key, and consumes the authoritative result. Transactional assignment persistence makes concurrent identical creates converge and increments template usage once. BWM-014 remains `IN_PROGRESS` at BWM-014-B.
+- **Validation performed:** Functions lint/build and the Admin production build passed (128 modules). Admin Runs handler tests passed 4/4; shared DTO and portal-adapter contracts passed; route-manifest/gateway/front-end routing contracts and `git diff --check` passed. Firebase CLI `15.9.0` with Java `21.0.8` passed the 7/7 Firestore assignment suite, including one-created/one-replayed concurrent operations, stable `totalRuns: 1`, persisted policy, and different-request conflict rejection.
+- **Files changed:** Shared DTO/adapter; Admin assignment page; Admin Runs API/service/types; assignment creation service/type/tests; ADM-12 handler/route/gateway/DTO/adapter tests; the BWM-013 browser draft-guard request; canonical API, frontend inventory, module registry, Firestore schema, and this controller.
+- **Cloud changes:** None. The authorized proof used only local builds, loopback Firestore emulator processes, disposable cleaned emulator data, and Firebase CLI local cache state. No deployment, remote Firebase data, secret, public endpoint, or production resource changed.
+- **Next:** BWM-014-B — add an authoritative backend reload/reconciliation boundary for the created run and remove live-mode locally synthesized create-result state, without beginning list/detail view wiring early.
 
 ### LOG-082 — 2026-08-23 — BWM-013 Aggregate Verification and Closeout
 

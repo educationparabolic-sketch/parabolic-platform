@@ -52,6 +52,10 @@ function parameterName(expression, sourceFile) {
     return "{sessionId}";
   }
 
+  if (/runId/i.test(expressionText)) {
+    return "{runId}";
+  }
+
   throw new Error(
     `Unsupported API path parameter in ${sourceFile.fileName}: ` +
       expressionText,

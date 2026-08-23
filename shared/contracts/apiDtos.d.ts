@@ -368,6 +368,75 @@ export interface AdminTestTemplateLifecycleResult {
   template: AdminTestTemplateRecord;
 }
 
+export type AdminRunMode =
+  | "Operational"
+  | "Diagnostic"
+  | "Controlled"
+  | "Hard";
+
+export type AdminRunStatus =
+  | "scheduled"
+  | "active"
+  | "completed"
+  | "stopped"
+  | "cancelled";
+
+export interface AdminRunProctoringPolicy {
+  browserIntegrityGuardEnabled: boolean;
+  faceIdentityGazeGuardEnabled: boolean;
+}
+
+export interface AdminRunCreateRequest {
+  academicYear: string;
+  attemptLimit: number;
+  endWindow: string;
+  expectedTemplateVersion: number;
+  gracePeriodMinutes: number;
+  idempotencyKey: string;
+  mode: AdminRunMode;
+  proctoringPolicy: AdminRunProctoringPolicy;
+  recipientStudentIds: string[];
+  shuffleQuestionOrder: boolean;
+  startWindow: string;
+  testId: string;
+  timezone: string;
+}
+
+export interface AdminRunRecord {
+  academicYear: string;
+  attemptLimit: number;
+  canonicalId: string;
+  createdAt: string;
+  endWindow: string;
+  gracePeriodMinutes: number;
+  id: string;
+  mode: AdminRunMode;
+  proctoringPolicy: AdminRunProctoringPolicy;
+  recipientCount: number;
+  recipientStudentIds: string[];
+  runPath: string;
+  shuffleQuestionOrder: boolean;
+  startWindow: string;
+  status: AdminRunStatus;
+  templateVersion: number;
+  testId: string;
+  timezone: string;
+}
+
+export interface AdminRunCreateResult {
+  disposition: "created" | "replayed";
+  run: AdminRunRecord;
+}
+
+export interface AdminRunListResult {
+  nextCursor: string | null;
+  runs: AdminRunRecord[];
+}
+
+export interface AdminRunDetailResult {
+  run: AdminRunRecord;
+}
+
 export interface VendorCalibrationPushRequest {
   targetInstitutes: string[];
   versionId: string;

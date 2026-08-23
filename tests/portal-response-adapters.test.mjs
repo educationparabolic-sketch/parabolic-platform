@@ -621,6 +621,97 @@ test("Exam adapter accepts the real submission result and rejects envelope/data 
   );
 });
 
+test("Admin run create adapter requires complete authoritative run data", () => {
+  const backendData = {
+    disposition: "created",
+    run: {
+      academicYear: "2026",
+      attemptLimit: 1,
+      canonicalId: "canonical-physics-1",
+      createdAt: "2026-08-20T08:00:00.000Z",
+      endWindow: "2026-08-25T11:00:00.000Z",
+      gracePeriodMinutes: 10,
+      id: "run_authoritative_1",
+      mode: "Diagnostic",
+      proctoringPolicy: {
+        browserIntegrityGuardEnabled: true,
+        faceIdentityGazeGuardEnabled: false,
+      },
+      recipientCount: 2,
+      recipientStudentIds: ["student-1", "student-2"],
+      runPath:
+        "institutes/inst-1/academicYears/2026/runs/run_authoritative_1",
+      shuffleQuestionOrder: true,
+      startWindow: "2026-08-25T09:00:00.000Z",
+      status: "scheduled",
+      templateVersion: 4,
+      testId: "test-1",
+      timezone: "Asia/Kolkata",
+    },
+  };
+
+  assert.deepEqual(adapters.adaptAdminRunCreateResult(backendData), backendData);
+  assert.throws(
+    () => adapters.adaptAdminRunCreateResult({
+      ...backendData,
+      run: {...backendData.run, recipientCount: 1},
+    }),
+    {
+      name: "PortalResponseValidationError",
+      route: "POST /admin/runs",
+    },
+  );
+});
+
+test("Admin run read adapters preserve pagination and lifecycle status", () => {
+  const run = {
+    academicYear: "2026",
+    attemptLimit: 1,
+    canonicalId: "canonical-physics-1",
+    createdAt: "2026-08-20T08:00:00.000Z",
+    endWindow: "2026-08-25T11:00:00.000Z",
+    gracePeriodMinutes: 10,
+    id: "run_authoritative_1",
+    mode: "Diagnostic",
+    proctoringPolicy: {
+      browserIntegrityGuardEnabled: true,
+      faceIdentityGazeGuardEnabled: false,
+    },
+    recipientCount: 2,
+    recipientStudentIds: ["student-1", "student-2"],
+    runPath: "institutes/inst-1/academicYears/2026/runs/run_authoritative_1",
+    shuffleQuestionOrder: true,
+    startWindow: "2026-08-25T09:00:00.000Z",
+    status: "active",
+    templateVersion: 4,
+    testId: "test-1",
+    timezone: "Asia/Kolkata",
+  };
+  const listResult = {nextCursor: "cursor-2", runs: [run]};
+
+  assert.deepEqual(adapters.adaptAdminRunListResult(listResult), listResult);
+  assert.deepEqual(adapters.adaptAdminRunDetailResult({run}), {run});
+  assert.throws(
+    () => adapters.adaptAdminRunListResult({
+      nextCursor: 2,
+      runs: [run],
+    }),
+    {
+      name: "PortalResponseValidationError",
+      route: "GET /admin/runs",
+    },
+  );
+  assert.throws(
+    () => adapters.adaptAdminRunDetailResult({
+      run: {...run, status: "draft"},
+    }),
+    {
+      name: "PortalResponseValidationError",
+      route: "GET /admin/runs/{runId}",
+    },
+  );
+});
+
 test("Vendor adapter accepts calibration deployment data and rejects the legacy subset", () => {
   const backendData = {
     calibrationSourcePath: "calibrationVersions/cal-v2",
@@ -709,6 +800,27 @@ test("representative production callers invoke their portal adapters", async () 
       "utf8",
     ),
     readFile(
+      join(
+        rootDirectory,
+        "apps/admin/src/features/assignments/AssignmentManagementPage.tsx",
+      ),
+      "utf8",
+    ),
+    readFile(
+      join(
+        rootDirectory,
+        "apps/admin/src/features/assignments/assignmentRunsApi.ts",
+      ),
+      "utf8",
+    ),
+    readFile(
+      join(
+        rootDirectory,
+        "apps/admin/src/features/assignments/assignmentRunsApi.ts",
+      ),
+      "utf8",
+    ),
+    readFile(
       join(rootDirectory, "apps/student/src/services/studentSummaryApi.ts"),
       "utf8",
     ),
@@ -732,6 +844,9 @@ test("representative production callers invoke their portal adapters", async () 
     "adaptAdminQuestionBulkResult",
     "adaptAdminTestTemplateListResult",
     "adaptAdminTestTemplateCreateResult",
+    "adaptAdminRunCreateResult",
+    "adaptAdminRunListResult",
+    "adaptAdminRunDetailResult",
     "adaptStudentSummaryResult",
     "adaptExamSubmitResult",
     "adaptVendorCalibrationPushResult",

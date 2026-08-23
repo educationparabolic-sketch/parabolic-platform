@@ -28,6 +28,7 @@ export interface AssignmentTemplateSnapshot {
 export interface AssignmentCreationResult {
   calibrationVersion: string;
   capturedTemplateSnapshot: AssignmentTemplateSnapshot;
+  disposition: "created" | "replayed";
   licenseLayer: LicenseLayer;
   recipientCount: number;
   riskModelVersion: string;

@@ -270,12 +270,18 @@ test(
     const now = Date.now();
     const draftAssignment = await request.post("/api/v1/admin/runs", {
       data: {
+        academicYear: yearId,
         attemptLimit: 1,
         endWindow: new Date(now + 90 * 60 * 1000).toISOString(),
+        expectedTemplateVersion: draftForGuard.version,
         gracePeriodMinutes: 5,
+        idempotencyKey: "bwm-013-draft-assignment-guard",
         mode: "Operational",
+        proctoringPolicy: {
+          browserIntegrityGuardEnabled: true,
+          faceIdentityGazeGuardEnabled: false,
+        },
         recipientStudentIds: [studentId],
-        runId: "run-bwm-013-draft-rejection",
         shuffleQuestionOrder: false,
         startWindow: new Date(now + 30 * 60 * 1000).toISOString(),
         testId: draftForGuard.id,

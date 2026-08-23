@@ -2,7 +2,7 @@
 
 Status: canonical route and response-envelope contract
 
-Last reconciled: 2026-08-23 (`BWM-013` authoritative test-template lifecycle)
+Last reconciled: 2026-08-23 (`BWM-014-C` authoritative run read contracts)
 
 ## Sources of truth
 
@@ -39,7 +39,7 @@ If prose and the typed manifest disagree about a route key or status, the typed 
 - `missing`: no current Functions handler/export implements the frontend contract.
 - `intentionally_retired`: explicit product/architecture evidence says the route must not be served.
 
-Current totals: 20 implemented, 7 incompatible, 6 missing, 0 intentionally retired.
+Current totals: 23 implemented, 6 incompatible, 6 missing, 0 intentionally retired.
 
 ## Canonical frontend route manifest
 
@@ -56,7 +56,7 @@ Current totals: 20 implemented, 7 incompatible, 6 missing, 0 intentionally retir
 | ADM-09 | `POST /api/v1/admin/questions/bulk` | `implemented` | `adminQuestionsBulk` | Firebase ID; teacher/admin; matching body tenant |
 | ADM-10 | `GET /api/v1/admin/tests` | `implemented` | `adminTests` | Firebase ID; teacher/admin; identity tenant |
 | ADM-11 | `POST /api/v1/admin/tests` | `implemented` | `adminTests` | Firebase ID; teacher/admin; identity tenant; draft-only create |
-| ADM-12 | `POST /api/v1/admin/runs` | `incompatible` | `adminRuns` | Firebase ID; teacher/admin; identity tenant |
+| ADM-12 | `POST /api/v1/admin/runs` | `implemented` | `adminRuns` | Firebase ID; teacher/admin; identity tenant; current academic year; expected template version; idempotency key |
 | ADM-13 | `POST /api/v1/admin/governance/snapshots` | `implemented` | `adminGovernanceSnapshots` | Firebase ID; director L3 or vendor; guarded tenant |
 | ADM-14 | `POST /api/v1/admin/settings` | `incompatible` | `adminSettings` | Firebase ID; admin/director; guarded tenant |
 | ADM-15 | `POST /api/v1/admin/academicYear/archive` | `implemented` | `adminAcademicYearArchive` | Firebase ID; admin/vendor; guarded tenant |
@@ -66,6 +66,8 @@ Current totals: 20 implemented, 7 incompatible, 6 missing, 0 intentionally retir
 | ADM-19 | `PATCH /api/v1/admin/tests/{testId}` | `implemented` | `adminTests` | Firebase ID; teacher/admin; identity tenant; expected version |
 | ADM-20 | `POST /api/v1/admin/tests/{testId}/publish` | `implemented` | `adminTests` | Firebase ID; teacher/admin; identity tenant; expected version; draft-only source |
 | ADM-21 | `POST /api/v1/admin/tests/{testId}/archive` | `implemented` | `adminTests` | Firebase ID; teacher/admin; identity tenant; expected version; ready/assigned source |
+| ADM-22 | `GET /api/v1/admin/runs` | `implemented` | `adminRuns` | Firebase ID; teacher/admin; identity tenant; current academic year; bounded cursor pagination; optional status filter |
+| ADM-23 | `GET /api/v1/admin/runs/{runId}` | `implemented` | `adminRuns` | Firebase ID; teacher/admin; identity tenant; current academic year; missing or out-of-scope IDs return 404 |
 | STU-01 | `GET /api/v1/student/dashboard` | `missing` | None | Firebase ID; student; identity tenant |
 | STU-02 | `GET /api/v1/student/tests` | `missing` | None | Firebase ID; student; identity tenant |
 | STU-03 | `GET /api/v1/student/performance` | `missing` | None | Firebase ID; student; identity tenant |

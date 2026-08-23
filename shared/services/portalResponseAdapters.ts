@@ -1,5 +1,9 @@
 import type {
   AdminQuestionLibraryResult,
+  AdminRunCreateResult,
+  AdminRunDetailResult,
+  AdminRunListResult,
+  AdminRunRecord,
   AdminTestPhaseConfigSnapshot,
   AdminTestTemplateCreateResult,
   AdminTestTemplateLifecycleResult,
@@ -110,6 +114,19 @@ function readPositiveInteger(
   const parsed = readNumber(value, route, field);
   if (!Number.isInteger(parsed) || parsed < 1) {
     return fail(route, field, "a positive integer");
+  }
+
+  return parsed;
+}
+
+function readNonNegativeInteger(
+  value: unknown,
+  route: string,
+  field: string,
+): number {
+  const parsed = readNumber(value, route, field);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return fail(route, field, "a non-negative integer");
   }
 
   return parsed;
@@ -1038,6 +1055,140 @@ export function adaptAdminTestTemplateArchiveResult(
     value,
     "POST /admin/tests/{testId}/archive",
   );
+}
+
+function adaptAdminRunRecord(
+  value: unknown,
+  route: string,
+  field = "run",
+): AdminRunRecord {
+  const record = readRecord(value, route, field);
+  const proctoring = readRecord(
+    record.proctoringPolicy,
+    route,
+    `${field}.proctoringPolicy`,
+  );
+  const recipients = readArray(
+    record.recipientStudentIds,
+    route,
+    `${field}.recipientStudentIds`,
+  ).map((recipient, index) => readString(
+    recipient,
+    route,
+    `${field}.recipientStudentIds[${index}]`,
+  ));
+  const recipientCount = readPositiveInteger(
+    record.recipientCount,
+    route,
+    `${field}.recipientCount`,
+  );
+  if (recipientCount !== recipients.length) {
+    return fail(
+      route,
+      `${field}.recipientCount`,
+      "the exact recipientStudentIds length",
+    );
+  }
+
+  return {
+    academicYear: readString(record.academicYear, route, `${field}.academicYear`),
+    attemptLimit: readPositiveInteger(record.attemptLimit, route, `${field}.attemptLimit`),
+    canonicalId: readString(record.canonicalId, route, `${field}.canonicalId`),
+    createdAt: readString(record.createdAt, route, `${field}.createdAt`),
+    endWindow: readString(record.endWindow, route, `${field}.endWindow`),
+    gracePeriodMinutes: readNonNegativeInteger(
+      record.gracePeriodMinutes,
+      route,
+      `${field}.gracePeriodMinutes`,
+    ),
+    id: readString(record.id, route, `${field}.id`),
+    mode: readEnum(
+      record.mode,
+      ["Operational", "Diagnostic", "Controlled", "Hard"] as const,
+      route,
+      `${field}.mode`,
+    ),
+    proctoringPolicy: {
+      browserIntegrityGuardEnabled: readBoolean(
+        proctoring.browserIntegrityGuardEnabled,
+        route,
+        `${field}.proctoringPolicy.browserIntegrityGuardEnabled`,
+      ),
+      faceIdentityGazeGuardEnabled: readBoolean(
+        proctoring.faceIdentityGazeGuardEnabled,
+        route,
+        `${field}.proctoringPolicy.faceIdentityGazeGuardEnabled`,
+      ),
+    },
+    recipientCount,
+    recipientStudentIds: recipients,
+    runPath: readString(record.runPath, route, `${field}.runPath`),
+    shuffleQuestionOrder: readBoolean(
+      record.shuffleQuestionOrder,
+      route,
+      `${field}.shuffleQuestionOrder`,
+    ),
+    startWindow: readString(record.startWindow, route, `${field}.startWindow`),
+    status: readEnum(
+      record.status,
+      ["scheduled", "active", "completed", "stopped", "cancelled"] as const,
+      route,
+      `${field}.status`,
+    ),
+    templateVersion: readPositiveInteger(
+      record.templateVersion,
+      route,
+      `${field}.templateVersion`,
+    ),
+    testId: readString(record.testId, route, `${field}.testId`),
+    timezone: readString(record.timezone, route, `${field}.timezone`),
+  };
+}
+
+export function adaptAdminRunCreateResult(
+  value: unknown,
+): AdminRunCreateResult {
+  const route = "POST /admin/runs";
+  const data = readRecord(value, route);
+  const result: AdminRunCreateResult = {
+    disposition: readEnum(
+      data.disposition,
+      ["created", "replayed"] as const,
+      route,
+      "disposition",
+    ),
+    run: adaptAdminRunRecord(data.run, route),
+  };
+  if (result.run.status !== "scheduled") {
+    return fail(route, "run.status", '"scheduled"');
+  }
+
+  return result;
+}
+
+export function adaptAdminRunListResult(
+  value: unknown,
+): AdminRunListResult {
+  const route = "GET /admin/runs";
+  const data = readRecord(value, route);
+  const nextCursor = data.nextCursor === null ?
+    null :
+    readString(data.nextCursor, route, "nextCursor");
+  return {
+    nextCursor,
+    runs: readArray(data.runs, route, "runs").map((run, index) =>
+      adaptAdminRunRecord(run, route, `runs[${index}]`)),
+  };
+}
+
+export function adaptAdminRunDetailResult(
+  value: unknown,
+): AdminRunDetailResult {
+  const route = "GET /admin/runs/{runId}";
+  const data = readRecord(value, route);
+  return {
+    run: adaptAdminRunRecord(data.run, route),
+  };
 }
 
 function readSafeQuestionAssetReference(

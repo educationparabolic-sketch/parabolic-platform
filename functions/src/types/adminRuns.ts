@@ -1,20 +1,33 @@
 /* eslint-disable require-jsdoc */
 import {StandardApiErrorCode} from "./apiResponse";
-import {
-  AssignmentCreationResult,
-  AssignmentMode,
-} from "./assignmentCreation";
+export type {
+  AdminRunCreateRequest,
+  AdminRunCreateResult,
+  AdminRunDetailResult,
+  AdminRunListResult,
+  AdminRunMode,
+  AdminRunProctoringPolicy,
+  AdminRunRecord,
+  AdminRunStatus,
+} from "../../../shared/contracts/apiDtos";
+import type {
+  AdminRunCreateRequest,
+  AdminRunCreateResult,
+  AdminRunDetailResult,
+  AdminRunListResult,
+  AdminRunStatus,
+} from "../../../shared/contracts/apiDtos";
 
 export interface AdminRunsCreatePayload {
   academicYear?: unknown;
   attemptLimit?: unknown;
-  canonicalId?: unknown;
   endWindow?: unknown;
+  expectedTemplateVersion?: unknown;
   gracePeriodMinutes?: unknown;
+  idempotencyKey?: unknown;
   mode?: unknown;
-  modeSnapshot?: unknown;
+  proctoringPolicy?: unknown;
   recipientStudentIds?: unknown;
-  runId?: unknown;
   shuffleQuestionOrder?: unknown;
   startWindow?: unknown;
   testId?: unknown;
@@ -25,35 +38,49 @@ export interface AdminRunsValidatedRequest {
   actorId: string;
   actorRole: string;
   instituteId: string;
-  payload: {
-    attemptLimit: number;
-    canonicalId?: string;
-    endWindow: string;
-    gracePeriodMinutes: number;
-    mode: AssignmentMode;
-    recipientStudentIds: string[];
-    runId?: string;
-    shuffleQuestionOrder: boolean;
-    startWindow: string;
-    testId: string;
-    timezone: string;
-  };
+  payload: AdminRunCreateRequest;
 }
 
-export interface AdminRunsCreateResult {
-  academicYear: string;
-  assignment: AssignmentCreationResult;
-  runId: string;
-  runPath: string;
-  status: "scheduled";
+export type AdminRunsCreateResult = AdminRunCreateResult;
+
+export interface AdminRunsListRequest {
+  cursor?: string;
+  instituteId: string;
+  limit: number;
+  status?: AdminRunStatus;
 }
+
+export interface AdminRunsDetailRequest {
+  instituteId: string;
+  runId: string;
+}
+
+export type AdminRunsListResult = AdminRunListResult;
+export type AdminRunsDetailResult = AdminRunDetailResult;
 
 export interface AdminRunsSuccessResponse {
   code: "OK";
   data: AdminRunsCreateResult;
   message: string;
   requestId: string;
-  runId: string;
+  success: true;
+  timestamp: string;
+}
+
+export interface AdminRunsListSuccessResponse {
+  code: "OK";
+  data: AdminRunsListResult;
+  message: string;
+  requestId: string;
+  success: true;
+  timestamp: string;
+}
+
+export interface AdminRunsDetailSuccessResponse {
+  code: "OK";
+  data: AdminRunsDetailResult;
+  message: string;
+  requestId: string;
   success: true;
   timestamp: string;
 }

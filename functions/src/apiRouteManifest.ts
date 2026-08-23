@@ -147,7 +147,7 @@ export const API_ROUTE_MANIFEST: readonly ApiRouteManifestEntry[] = [
     "admin",
     "POST",
     "/admin/runs",
-    "incompatible",
+    "implemented",
     "adminRuns",
   ),
   defineRoute(
@@ -221,6 +221,22 @@ export const API_ROUTE_MANIFEST: readonly ApiRouteManifestEntry[] = [
     "/admin/tests/{testId}/archive",
     "implemented",
     "adminTests",
+  ),
+  defineRoute(
+    "ADM-22",
+    "admin",
+    "GET",
+    "/admin/runs",
+    "implemented",
+    "adminRuns",
+  ),
+  defineRoute(
+    "ADM-23",
+    "admin",
+    "GET",
+    "/admin/runs/{runId}",
+    "implemented",
+    "adminRuns",
   ),
   defineRoute(
     "STU-01",

@@ -5,6 +5,12 @@ import {
   shouldUseLiveApi as shouldUseConfiguredLiveApi,
 } from "../../../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
+import { adaptAdminRunCreateResult } from "../../../../../shared/services/portalResponseAdapters";
+import type {
+  AdminRunCreateRequest,
+  AdminRunCreateResult,
+  AdminRunRecord,
+} from "../../../../../shared/contracts/apiDtos";
 import {
   UiFormField,
   UiTable,
@@ -15,10 +21,11 @@ import {
   type RunAnalyticsRecord,
 } from "../analytics/analyticsDataset";
 import AssignmentsWorkspaceNav from "./AssignmentsWorkspaceNav";
+import { reconcileCreatedRun } from "./assignmentAuthority";
 
 const apiClient = getPortalApiClient("admin");
 
-const EXECUTION_MODES = ["Operational", "Controlled", "Focused", "Hard"] as const;
+const EXECUTION_MODES = ["Operational", "Controlled", "Diagnostic", "Hard"] as const;
 const LICENSE_ORDER = ["L0", "L1", "L2", "L3"] as const;
 const RUN_STATUSES = ["Upcoming", "Live", "Completed", "Stopped", "Cancelled"] as const;
 
@@ -28,8 +35,8 @@ const CURRENT_INSTITUTE_TIMEZONE = "Asia/Kolkata";
 
 const MODE_REQUIRED_LAYER: Record<ExecutionMode, LicenseLayer> = {
   Operational: "L0",
-  Controlled: "L1",
-  Focused: "L2",
+  Controlled: "L2",
+  Diagnostic: "L1",
   Hard: "L2",
 };
 
@@ -40,6 +47,7 @@ const DEFAULT_PROCTORING_POLICY: AssignmentProctoringPolicy = {
 
 type AssignmentSection = "create" | "list" | "live";
 type ExecutionMode = (typeof EXECUTION_MODES)[number];
+type RunCreatePayload = AdminRunCreateRequest;
 type LicenseLayer = (typeof LICENSE_ORDER)[number];
 type RunStatus = (typeof RUN_STATUSES)[number];
 type TemplateAssignmentStatus = "draft" | "ready" | "assigned" | "archived" | "deprecated";
@@ -67,6 +75,7 @@ interface TemplateOption {
   lastUsedIso: string;
   phaseConfigSnapshot: string;
   timingProfileSnapshot: string;
+  version: number;
 }
 
 interface StudentOption {
@@ -242,24 +251,6 @@ interface StudentSelectionRow {
   topicWeaknesses: string[];
 }
 
-interface RunCreatePayload {
-  testId: string;
-  canonicalId: string;
-  mode: ExecutionMode;
-  modeSnapshot: ExecutionMode;
-  phaseConfigSnapshot: string;
-  timingProfileSnapshot: string;
-  recipientStudentIds: string[];
-  startWindow: string;
-  endWindow: string;
-  timezone: string;
-  attemptLimit: number;
-  gracePeriodMinutes: number;
-  shuffleQuestionOrder: boolean;
-  proctoringPolicy: AssignmentProctoringPolicy;
-  academicYear: string;
-}
-
 interface AssignmentListFilters {
   query: string;
   academicYear: string;
@@ -306,6 +297,7 @@ interface AdminTestTemplateRecord {
   status: "draft" | "ready" | "assigned" | "archived" | "deprecated";
   createdAt: string;
   updatedAt: string;
+  version: number;
 }
 
 const TEMPLATE_OPTIONS: TemplateOption[] = [
@@ -316,12 +308,13 @@ const TEMPLATE_OPTIONS: TemplateOption[] = [
     examType: "JEEMains",
     status: "ready",
     difficultyDistribution: "Easy 34% / Medium 44% / Hard 22%",
-    allowedModes: ["Operational", "Controlled", "Focused"],
+    allowedModes: ["Operational", "Controlled", "Diagnostic"],
     totalDurationMinutes: 180,
     createdAtIso: "2026-03-12T06:40:00.000Z",
     lastUsedIso: "2026-04-10T06:40:00.000Z",
     phaseConfigSnapshot: "P1 34% | P2 33% | P3 33%",
     timingProfileSnapshot: "Easy 45-90s | Medium 75-120s | Hard 105-180s",
+    version: 1,
   },
   {
     id: "tmpl-002",
@@ -330,12 +323,13 @@ const TEMPLATE_OPTIONS: TemplateOption[] = [
     examType: "NEET",
     status: "assigned",
     difficultyDistribution: "Easy 40% / Medium 38% / Hard 22%",
-    allowedModes: ["Operational", "Controlled", "Focused", "Hard"],
+    allowedModes: ["Operational", "Controlled", "Diagnostic", "Hard"],
     totalDurationMinutes: 200,
     createdAtIso: "2026-03-20T04:00:00.000Z",
     lastUsedIso: "2026-04-08T04:00:00.000Z",
     phaseConfigSnapshot: "P1 30% | P2 35% | P3 35%",
     timingProfileSnapshot: "Easy 35-75s | Medium 65-105s | Hard 95-150s",
+    version: 1,
   },
   {
     id: "tmpl-003",
@@ -350,6 +344,7 @@ const TEMPLATE_OPTIONS: TemplateOption[] = [
     lastUsedIso: "2026-03-28T09:30:00.000Z",
     phaseConfigSnapshot: "P1 20% | P2 40% | P3 40%",
     timingProfileSnapshot: "Easy 60-90s | Medium 90-135s | Hard 135-190s",
+    version: 1,
   },
 ];
 
@@ -556,8 +551,8 @@ const FALLBACK_RUNS: RunStatusRecord[] = [
     canonicalId: "canon-neet-2026-bio",
     templateName: "NEET Revision - Biology Focus",
     academicYear: "2026",
-    mode: "Focused",
-    modeSnapshot: "Focused",
+    mode: "Diagnostic",
+    modeSnapshot: "Diagnostic",
     phaseConfigSnapshot: "P1 30% | P2 35% | P3 35%",
     timingProfileSnapshot: "Easy 35-75s | Medium 65-105s | Hard 95-150s",
     batchIds: ["batch-c"],
@@ -871,6 +866,7 @@ function normalizeTestTemplateRecord(value: unknown, index: number): AdminTestTe
     status: toTemplateStatus(record.status),
     createdAt: toNonEmptyString(record.createdAt, fallback?.createdAtIso ?? fallback?.lastUsedIso ?? new Date(0).toISOString()),
     updatedAt: toNonEmptyString(record.updatedAt, fallback?.lastUsedIso ?? new Date(0).toISOString()),
+    version: Math.max(1, Math.floor(toNumberOrZero(record.version ?? fallback?.version ?? 1))),
   };
 }
 
@@ -893,10 +889,10 @@ function allowedModesForLayer(layer: LicenseLayer): ExecutionMode[] {
   }
 
   if (layer === "L1") {
-    return ["Operational", "Controlled"];
+    return ["Operational", "Diagnostic"];
   }
 
-  return ["Operational", "Controlled", "Focused", "Hard"];
+  return ["Operational", "Controlled", "Diagnostic", "Hard"];
 }
 
 function formatLayerAwareModes(layer: LicenseLayer): string {
@@ -909,8 +905,8 @@ function formatExecutionModeHelper(mode: ExecutionMode): string {
       return "Standard exam delivery with no extra control overlays.";
     case "Controlled":
       return "Adds structured pacing and controlled delivery guardrails.";
-    case "Focused":
-      return "Used for targeted, high-attention runs with tighter guidance.";
+    case "Diagnostic":
+      return "Captures a diagnostic execution profile for targeted review.";
     case "Hard":
       return "High-rigor execution mode for advanced practice and stricter control.";
     default:
@@ -956,6 +952,7 @@ function toTemplateOption(record: AdminTestTemplateRecord): TemplateOption {
     lastUsedIso: record.updatedAt,
     phaseConfigSnapshot: derivePhaseSnapshot(record.difficultyDistribution),
     timingProfileSnapshot: deriveTimingProfileSnapshot(record.timingProfile),
+    version: record.version,
   };
 }
 
@@ -976,6 +973,18 @@ async function fetchTemplateOptionsFromApi(): Promise<TemplateOption[]> {
   }
 
   return templates;
+}
+
+async function submitRunToApi(
+  payload: AdminRunCreateRequest,
+): Promise<AdminRunCreateResult> {
+  return apiClient.post<AdminRunCreateResult, AdminRunCreateRequest>(
+    "/admin/runs",
+    {
+      body: payload,
+      responseAdapter: (value) => adaptAdminRunCreateResult(value),
+    },
+  );
 }
 
 function isTemplateAssignable(template: TemplateOption): boolean {
@@ -1117,26 +1126,6 @@ function hasLicenseAccess(current: LicenseLayer, required: LicenseLayer): boolea
   return currentIndex >= requiredIndex;
 }
 
-function parseRunIdFromApiResponse(payload: unknown): string | null {
-  if (!payload || typeof payload !== "object") {
-    return null;
-  }
-
-  const objectPayload = payload as Record<string, unknown>;
-  const candidates = [
-    objectPayload.runId,
-    objectPayload.id,
-  ];
-
-  for (const value of candidates) {
-    if (typeof value === "string" && value.trim().length > 0) {
-      return value.trim();
-    }
-  }
-
-  return null;
-}
-
 function statusClassName(status: RunStatus): string {
   switch (status) {
     case "Upcoming":
@@ -1214,7 +1203,7 @@ function analyticsForRecipientCount(recipientCount: number, mode: ExecutionMode)
     riskDistributionSummary: "L 32% / M 40% / H 20% / C 8%",
     avgDisciplineIndex: Math.max(40, 76 - Math.min(24, normalizedCount)),
     controlledCompliancePercent:
-      mode === "Controlled" || mode === "Focused" || mode === "Hard" ? Math.max(50, 91 - normalizedCount) : 0,
+      mode === "Controlled" || mode === "Diagnostic" || mode === "Hard" ? Math.max(50, 91 - normalizedCount) : 0,
     guessRatePercent: Math.min(26, 8 + Math.round(normalizedCount * 0.5)),
     executionStabilityIndex: Math.max(35, 82 - Math.min(30, normalizedCount * 2)),
     executionStabilityBadge: normalizedCount > 8 ? "Drift" : "Stable",
@@ -1223,7 +1212,7 @@ function analyticsForRecipientCount(recipientCount: number, mode: ExecutionMode)
 }
 
 function toExecutionMode(mode: string): ExecutionMode {
-  if (mode === "Operational" || mode === "Controlled" || mode === "Focused" || mode === "Hard") {
+  if (mode === "Operational" || mode === "Controlled" || mode === "Diagnostic" || mode === "Hard") {
     return mode;
   }
 
@@ -1405,25 +1394,42 @@ function buildRunPayload(draft: AssignmentDraft, templates: TemplateOption[], st
     throw new Error("Assignment payload values are invalid.");
   }
 
-  return {
-    testId: template.id,
-    canonicalId: template.canonicalId,
-    mode: draft.executionMode,
-    modeSnapshot: draft.executionMode,
-    phaseConfigSnapshot: template.phaseConfigSnapshot,
-    timingProfileSnapshot: template.timingProfileSnapshot,
-    recipientStudentIds: recipientIdsFromMode(draft, students),
-    startWindow,
-    endWindow,
-    timezone: draft.timezone,
+  const recipientStudentIds = recipientIdsFromMode(draft, students);
+  const requestWithoutKey = {
+    academicYear: CURRENT_ACADEMIC_YEAR,
     attemptLimit: Number(draft.attemptLimit),
+    endWindow,
+    expectedTemplateVersion: template.version,
     gracePeriodMinutes: Number(draft.gracePeriodMinutes),
-    shuffleQuestionOrder: draft.shuffleQuestionOrder,
+    mode: draft.executionMode,
     proctoringPolicy: {
       browserIntegrityGuardEnabled: true,
       faceIdentityGazeGuardEnabled: draft.cameraIdentityGazeGuardEnabled,
     },
-    academicYear: CURRENT_ACADEMIC_YEAR,
+    recipientStudentIds,
+    shuffleQuestionOrder: draft.shuffleQuestionOrder,
+    startWindow,
+    testId: template.id,
+    timezone: draft.timezone,
+  } satisfies Omit<AdminRunCreateRequest, "idempotencyKey">;
+
+  return {
+    ...requestWithoutKey,
+    idempotencyKey: [
+      "assignment-v1",
+      requestWithoutKey.academicYear,
+      requestWithoutKey.testId,
+      String(requestWithoutKey.expectedTemplateVersion),
+      requestWithoutKey.mode,
+      requestWithoutKey.startWindow,
+      requestWithoutKey.endWindow,
+      String(requestWithoutKey.attemptLimit),
+      String(requestWithoutKey.gracePeriodMinutes),
+      String(requestWithoutKey.shuffleQuestionOrder),
+      String(requestWithoutKey.proctoringPolicy.browserIntegrityGuardEnabled),
+      String(requestWithoutKey.proctoringPolicy.faceIdentityGazeGuardEnabled),
+      [...recipientStudentIds].sort().join(","),
+    ].join("|"),
   };
 }
 
@@ -1454,13 +1460,13 @@ function buildFallbackRunRecord(
     runId,
     runName: `Run ${runId.replace(/^run-/, "")}`,
     templateId: payload.testId,
-    canonicalId: payload.canonicalId,
+    canonicalId: template?.canonicalId ?? payload.testId,
     templateName: template?.name ?? payload.testId,
     academicYear: payload.academicYear,
     mode: payload.mode,
-    modeSnapshot: payload.modeSnapshot,
-    phaseConfigSnapshot: payload.phaseConfigSnapshot,
-    timingProfileSnapshot: payload.timingProfileSnapshot,
+    modeSnapshot: payload.mode,
+    phaseConfigSnapshot: template?.phaseConfigSnapshot ?? "",
+    timingProfileSnapshot: template?.timingProfileSnapshot ?? "",
     batchIds,
     recipientStudentIds: payload.recipientStudentIds,
     startWindowIso: payload.startWindow,
@@ -1507,6 +1513,8 @@ function AssignmentManagementPage() {
   const [topicWeaknessInput, setTopicWeaknessInput] = useState("");
   const [topicWeaknessFocused, setTopicWeaknessFocused] = useState(false);
   const [runs, setRuns] = useState<RunStatusRecord[]>(FALLBACK_RUNS);
+  const [lastAuthoritativeRun, setLastAuthoritativeRun] =
+    useState<AdminRunRecord | null>(null);
   const [filters, setFilters] = useState<AssignmentListFilters>(INITIAL_FILTERS);
   const [templateFilters, setTemplateFilters] = useState<TemplateSelectionFilters>(EMPTY_TEMPLATE_FILTERS);
   const [createFlowStep, setCreateFlowStep] = useState<1 | 2 | 3 | 4 | 5>(1);
@@ -2311,26 +2319,40 @@ function AssignmentManagementPage() {
     }
 
     const payload = buildRunPayload(draft, templateOptions, studentOptions);
-    const createdAtIso = new Date().toISOString();
     setIsSubmitting(true);
 
     try {
-      let runId = `run-${Date.now()}`;
-
       if (shouldUseLiveApi()) {
-        const apiResponse = await apiClient.post<unknown, RunCreatePayload>("/admin/runs", {
-          body: payload,
-        });
-        runId = parseRunIdFromApiResponse(apiResponse) ?? runId;
+        const createResult = await submitRunToApi(payload);
+        const replayResult = await submitRunToApi(payload);
+        const authoritativeRun = reconcileCreatedRun(
+          payload,
+          createResult,
+          replayResult,
+        );
+        setLastAuthoritativeRun(authoritativeRun);
+        setInlineMessage(
+          `Run ${authoritativeRun.id} scheduled and reconciled from its ` +
+          "authoritative backend replay.",
+        );
+      } else {
+        const localRunId = `run-${Date.now()}`;
+        const nextRun = buildFallbackRunRecord(
+          payload,
+          localRunId,
+          new Date().toISOString(),
+          templateOptions,
+          studentOptions,
+        );
+        setRuns((current) => [
+          nextRun,
+          ...current.filter((run) => run.runId !== nextRun.runId),
+        ]);
+        setInlineMessage(
+          `Run ${nextRun.runId} scheduled locally with immutable ` +
+          "mode/template snapshot fields.",
+        );
       }
-
-      const nextRun = buildFallbackRunRecord(payload, runId, createdAtIso, templateOptions, studentOptions);
-      setRuns((current) => [nextRun, ...current]);
-      setInlineMessage(
-        shouldUseLiveApi() ?
-          `Run ${runId} scheduled through POST /admin/runs.` :
-          `Run ${runId} scheduled locally with immutable mode/template snapshot fields.`,
-      );
       setDraft((current) => ({
         ...current,
         assignmentStartLocal: "",
@@ -3249,6 +3271,32 @@ function AssignmentManagementPage() {
           <p className="admin-content-copy">
             Review scheduled, live, and completed assignments in one place. Use the filters below to quickly narrow the table to the test, batch, or delivery state you need.
           </p>
+
+          {lastAuthoritativeRun ? (
+            <section
+              className="admin-assignments-list-filter-card"
+              aria-label="Authoritative scheduled assignment"
+            >
+              <div className="admin-assignments-list-filter-header">
+                <div>
+                  <p className="admin-tests-section-kicker">Backend Authority</p>
+                  <h4>Scheduled run {lastAuthoritativeRun.id}</h4>
+                  <p>
+                    Template {lastAuthoritativeRun.testId} version {lastAuthoritativeRun.templateVersion}
+                    {" · "}{lastAuthoritativeRun.recipientCount} recipients
+                    {" · "}{lastAuthoritativeRun.mode}
+                  </p>
+                  <p>
+                    {formatDateTime(lastAuthoritativeRun.startWindow)} to {formatDateTime(lastAuthoritativeRun.endWindow)}
+                    {" · "}{lastAuthoritativeRun.timezone}
+                  </p>
+                </div>
+                <span className="admin-assignments-status admin-assignments-status-upcoming">
+                  {lastAuthoritativeRun.status}
+                </span>
+              </div>
+            </section>
+          ) : null}
 
           <section className="admin-assignments-list-filter-card" aria-label="Assignment list filters">
             <div className="admin-assignments-list-filter-header">

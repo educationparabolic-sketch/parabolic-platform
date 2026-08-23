@@ -140,18 +140,33 @@ test(
 
     await firestore.doc(runPath).set({
       endWindow,
+      expectedTemplateVersion: 3,
+      idempotencyKeyHash: "key_hash_build_21",
       mode: "Controlled",
+      proctoringPolicy: {
+        browserIntegrityGuardEnabled: true,
+        faceIdentityGazeGuardEnabled: false,
+      },
       recipientStudentIds: studentIds,
+      requestFingerprint: "request_fingerprint_build_21",
       runId,
       startWindow,
       status: "draft",
       testId,
     });
 
-    const result = await assignmentCreationService.processAssignmentCreated(
-      {instituteId, runId, yearId},
-      (await firestore.doc(runPath).get()).data(),
-    );
+    const createPayload = (await firestore.doc(runPath).get()).data();
+    const results = await Promise.all([
+      assignmentCreationService.processAssignmentCreated(
+        {instituteId, runId, yearId},
+        createPayload,
+      ),
+      assignmentCreationService.processAssignmentCreated(
+        {instituteId, runId, yearId},
+        createPayload,
+      ),
+    ]);
+    const result = results[0];
 
     assert.equal(result.runPath, runPath);
     assert.equal(result.testPath, testPath);
@@ -161,6 +176,10 @@ test(
     assert.equal(result.calibrationVersion, "cal_build_23_success");
     assert.equal(result.templateVersion, "3");
     assert.equal(result.riskModelVersion, "risk_v1");
+    assert.deepEqual(
+      results.map((entry) => entry.disposition).sort(),
+      ["created", "replayed"],
+    );
     assert.deepEqual(
       result.capturedTemplateSnapshot.questionIds,
       templateSnapshotFixture.questionIds,
@@ -177,6 +196,10 @@ test(
     assert.equal(runData?.riskModelVersion, "risk_v1");
     assert.deepEqual(runData?.recipientStudentIds, studentIds);
     assert.equal(runData?.mode, "Controlled");
+    assert.deepEqual(runData?.proctoringPolicy, {
+      browserIntegrityGuardEnabled: true,
+      faceIdentityGazeGuardEnabled: false,
+    });
     assert.deepEqual(
       runData?.questionIds,
       templateSnapshotFixture.questionIds,
@@ -200,6 +223,20 @@ test(
     const templateData = templateSnapshot.data();
     assert.equal(templateData?.status, "assigned");
     assert.equal(templateData?.totalRuns, 1);
+
+    await assert.rejects(
+      assignmentCreationService.processAssignmentCreated(
+        {instituteId, runId, yearId},
+        {
+          ...createPayload,
+          requestFingerprint: "different_request_fingerprint_build_21",
+        },
+      ),
+      /different request/i,
+    );
+
+    const templateAfterConflict = await firestore.doc(testPath).get();
+    assert.equal(templateAfterConflict.data()?.totalRuns, 1);
 
     await deleteDocumentIfPresent(institutePath);
     await deleteDocumentIfPresent(academicYearPath);

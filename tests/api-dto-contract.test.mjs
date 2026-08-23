@@ -103,6 +103,30 @@ const dtoFamilies = [
     ],
   },
   {
+    backend: "functions/src/types/adminRuns.ts",
+    frontend: [
+      "apps/admin/src/features/assignments/AssignmentManagementPage.tsx",
+    ],
+    names: [
+      "AdminRunMode",
+      "AdminRunProctoringPolicy",
+      "AdminRunCreateRequest",
+      "AdminRunRecord",
+      "AdminRunCreateResult",
+    ],
+  },
+  {
+    backend: "functions/src/types/adminRuns.ts",
+    frontend: [
+      "apps/admin/src/features/assignments/assignmentRunsApi.ts",
+    ],
+    names: [
+      "AdminRunStatus",
+      "AdminRunListResult",
+      "AdminRunDetailResult",
+    ],
+  },
+  {
     backend: "functions/src/types/calibrationDeployment.ts",
     frontend: [
       "apps/vendor/src/features/calibration/vendorCalibrationDataset.ts",

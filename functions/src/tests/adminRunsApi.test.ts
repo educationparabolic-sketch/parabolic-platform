@@ -13,17 +13,61 @@ const createAdminToken = (overrides: Record<string, unknown> = {}) => ({
 });
 
 const createPayload = () => ({
+  academicYear: "2026",
   attemptLimit: 1,
-  canonicalId: "jee-main-physics-v1",
   endWindow: "2026-05-20T10:30:00.000Z",
+  expectedTemplateVersion: 1,
   gracePeriodMinutes: 5,
+  idempotencyKey: "assignment-create-build-runs",
   mode: "Diagnostic",
+  proctoringPolicy: {
+    browserIntegrityGuardEnabled: true,
+    faceIdentityGazeGuardEnabled: true,
+  },
   recipientStudentIds: ["student_1", "student_2"],
   shuffleQuestionOrder: true,
   startWindow: "2026-05-20T09:00:00.000Z",
   testId: "test_build_runs",
   timezone: "Asia/Kolkata",
 });
+
+const createRunRecord = () => ({
+  academicYear: "2026",
+  attemptLimit: 1,
+  canonicalId: "jee-main-physics-v1",
+  createdAt: "2026-05-19T09:00:00.000Z",
+  endWindow: "2026-05-20T10:30:00.000Z",
+  gracePeriodMinutes: 5,
+  id: "run_build_admin_runs",
+  mode: "Diagnostic" as const,
+  proctoringPolicy: {
+    browserIntegrityGuardEnabled: true,
+    faceIdentityGazeGuardEnabled: true,
+  },
+  recipientCount: 2,
+  recipientStudentIds: ["student_1", "student_2"],
+  runPath:
+    "institutes/inst_build_admin_runs_api/academicYears/2026/" +
+    "runs/run_build_admin_runs",
+  shuffleQuestionOrder: true,
+  startWindow: "2026-05-20T09:00:00.000Z",
+  status: "scheduled" as const,
+  templateVersion: 1,
+  testId: "test_build_runs",
+  timezone: "Asia/Kolkata",
+});
+
+const unusedCreateRun = async (): Promise<never> => {
+  throw new Error("createRun should not be called");
+};
+
+const unusedGetRun = async (): Promise<never> => {
+  throw new Error("getRun should not be called");
+};
+
+const unusedListRuns = async (): Promise<never> => {
+  throw new Error("listRuns should not be called");
+};
 
 const assertStructuredError = (
   responseBody: unknown,
@@ -54,46 +98,19 @@ test("admin runs handler accepts secured scheduling requests", async () => {
         "student_1",
         "student_2",
       ]);
+      assert.equal(request.payload.expectedTemplateVersion, 1);
+      assert.equal(
+        request.payload.idempotencyKey,
+        "assignment-create-build-runs",
+      );
 
       return {
-        academicYear: "2026",
-        assignment: {
-          calibrationVersion: "cal_v1",
-          capturedTemplateSnapshot: {
-            difficultyDistribution: {
-              easy: 2,
-              hard: 1,
-              medium: 3,
-            },
-            phaseConfigSnapshot: {
-              phase1Percent: 30,
-              phase2Percent: 40,
-              phase3Percent: 30,
-            },
-            questionIds: ["q1"],
-            timingProfileSnapshot: {
-              easy: {max: 90, min: 20},
-              hard: {max: 180, min: 60},
-              medium: {max: 120, min: 40},
-            },
-          },
-          licenseLayer: "L2",
-          recipientCount: 2,
-          riskModelVersion: "risk_v1",
-          runPath:
-            "institutes/inst_build_admin_runs_api/academicYears/2026/" +
-            "runs/run_build_admin_runs",
-          status: "scheduled",
-          templateVersion: "1",
-          testPath: "institutes/inst_build_admin_runs_api/tests/test_build",
-        },
-        runId: "run_build_admin_runs",
-        runPath:
-          "institutes/inst_build_admin_runs_api/academicYears/2026/" +
-          "runs/run_build_admin_runs",
-        status: "scheduled",
+        disposition: "created" as const,
+        run: createRunRecord(),
       };
     },
+    getRun: unusedGetRun,
+    listRuns: unusedListRuns,
     verifyIdToken: async () => createAdminToken() as never,
   });
   const response = createMockResponse();
@@ -110,19 +127,48 @@ test("admin runs handler accepts secured scheduling requests", async () => {
     response as never,
   );
 
-  assert.equal(response.statusCode, 200);
+  assert.equal(response.statusCode, 201);
   assert.equal(
-    (response.body as {runId: string}).runId,
+    (response.body as {data: {run: {id: string}}}).data.run.id,
     "run_build_admin_runs",
   );
   assert.equal((response.body as {success: boolean}).success, true);
 });
 
+test("admin runs handler returns exact idempotent replays with 200", async () => {
+  const handler = createAdminRunsHandler({
+    createRun: async () => ({
+      disposition: "replayed" as const,
+      run: createRunRecord(),
+    }),
+    getRun: unusedGetRun,
+    listRuns: unusedListRuns,
+    verifyIdToken: async () => createAdminToken() as never,
+  });
+  const response = createMockResponse();
+
+  await handler(
+    createMockRequest({
+      body: createPayload(),
+      headers: {authorization: "Bearer build_admin_runs_replay"},
+      method: "POST",
+      path: "/admin/runs",
+    }) as never,
+    response as never,
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(
+    (response.body as {data: {disposition: string}}).data.disposition,
+    "replayed",
+  );
+});
+
 test("admin runs handler rejects disallowed roles", async () => {
   const handler = createAdminRunsHandler({
-    createRun: async () => {
-      throw new Error("createRun should not be called");
-    },
+    createRun: unusedCreateRun,
+    getRun: unusedGetRun,
+    listRuns: unusedListRuns,
     verifyIdToken: async () => createAdminToken({role: "student"}) as never,
   });
   const response = createMockResponse();
@@ -143,7 +189,7 @@ test("admin runs handler rejects disallowed roles", async () => {
   assertStructuredError(
     response.body,
     "FORBIDDEN",
-    "Only teacher and admin roles can schedule assignment runs.",
+    "Only teacher and admin roles can access assignment runs.",
   );
 });
 
@@ -153,9 +199,11 @@ test("admin runs handler maps validation errors", async () => {
       throw new AdminRunsValidationError(
         "VALIDATION_ERROR",
         "Template status must be \"ready\" or \"assigned\" before " +
-          "creating an assignment.",
+        "creating an assignment.",
       );
     },
+    getRun: unusedGetRun,
+    listRuns: unusedListRuns,
     verifyIdToken: async () => createAdminToken() as never,
   });
   const response = createMockResponse();
@@ -178,5 +226,106 @@ test("admin runs handler maps validation errors", async () => {
     "VALIDATION_ERROR",
     "Template status must be \"ready\" or \"assigned\" before " +
       "creating an assignment.",
+  );
+});
+
+test("admin runs handler lists tenant-current runs with bounded query data", async () => {
+  const run = {...createRunRecord(), status: "active" as const};
+  const handler = createAdminRunsHandler({
+    createRun: unusedCreateRun,
+    getRun: unusedGetRun,
+    listRuns: async (request) => {
+      assert.deepEqual(request, {
+        cursor: "cursor_build_runs",
+        instituteId: "inst_build_admin_runs_api",
+        limit: 10,
+        status: "active",
+      });
+      return {nextCursor: "cursor_build_runs_next", runs: [run]};
+    },
+    verifyIdToken: async () => createAdminToken() as never,
+  });
+  const response = createMockResponse();
+
+  await handler(
+    createMockRequest({
+      headers: {authorization: "Bearer build_admin_runs_list"},
+      method: "GET",
+      path: "/admin/runs",
+      query: {
+        cursor: "cursor_build_runs",
+        limit: "10",
+        status: "active",
+      },
+    }) as never,
+    response as never,
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(
+    (response.body as {data: unknown}).data,
+    {nextCursor: "cursor_build_runs_next", runs: [run]},
+  );
+});
+
+test("admin runs handler loads a tenant-current run detail", async () => {
+  const run = createRunRecord();
+  const handler = createAdminRunsHandler({
+    createRun: unusedCreateRun,
+    getRun: async (request) => {
+      assert.deepEqual(request, {
+        instituteId: "inst_build_admin_runs_api",
+        runId: "run_build_admin_runs",
+      });
+      return {run};
+    },
+    listRuns: unusedListRuns,
+    verifyIdToken: async () => createAdminToken() as never,
+  });
+  const response = createMockResponse();
+
+  await handler(
+    createMockRequest({
+      headers: {authorization: "Bearer build_admin_runs_detail"},
+      method: "GET",
+      params: {runId: "run_build_admin_runs"},
+      path: "/admin/runs/run_build_admin_runs",
+    }) as never,
+    response as never,
+  );
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual((response.body as {data: unknown}).data, {run});
+});
+
+test("admin runs handler maps missing tenant-current details to 404", async () => {
+  const handler = createAdminRunsHandler({
+    createRun: unusedCreateRun,
+    getRun: async () => {
+      throw new AdminRunsValidationError(
+        "NOT_FOUND",
+        "Run \"run_missing\" was not found in the current academic year.",
+      );
+    },
+    listRuns: unusedListRuns,
+    verifyIdToken: async () => createAdminToken() as never,
+  });
+  const response = createMockResponse();
+
+  await handler(
+    createMockRequest({
+      headers: {authorization: "Bearer build_admin_runs_missing"},
+      method: "GET",
+      params: {runId: "run_missing"},
+      path: "/admin/runs/run_missing",
+    }) as never,
+    response as never,
+  );
+
+  assert.equal(response.statusCode, 404);
+  assertStructuredError(
+    response.body,
+    "NOT_FOUND",
+    "Run \"run_missing\" was not found in the current academic year.",
   );
 });

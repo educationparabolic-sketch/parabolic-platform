@@ -1,6 +1,6 @@
 # Frontend API Call Inventory
 
-Status: current-contract inventory, canonical-route assignment, and compatibility classification through `BWM-013`
+Status: current-contract inventory, canonical-route assignment, and compatibility classification through `BWM-014-C`
 
 Inventory date: 2026-08-23
 
@@ -36,7 +36,7 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 - `intentionally retired`: explicit product or architecture evidence says the contract must not be served. No inventoried route currently meets this definition.
 - Gateway and Hosting reachability are excluded from per-route classification because they are common dependencies owned by BWM-003 and BWM-004.
 
-## Canonical route assignments and status — 33 contracts
+## Canonical route assignments and status — 35 contracts
 
 | ID | Method | Current frontend path | Canonical route | Status | Classification basis |
 | --- | --- | --- | --- | --- | --- |
@@ -51,7 +51,7 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 | ADM-09 | `POST` | `/admin/questions/bulk` | `/api/v1/admin/questions/bulk` | `implemented` | Bulk validation/commit request and strictly normalized `data` response align; each row returns the authoritative question ID and positive-integer version selected by the server. |
 | ADM-10 | `GET` | `/admin/tests` | `/api/v1/admin/tests` | `implemented` | Standard `data` contains the shared, strictly adapted template array with backend IDs and positive-integer versions. |
 | ADM-11 | `POST` | `/admin/tests` | `/api/v1/admin/tests` | `implemented` | Create always persists a draft under a backend-issued ID, consumes the shared authoritative result, reloads ADM-10, reconciles backend ID/canonical ID/version, and replaces UI state only from that reload. Create-as-publish is rejected in favor of ADM-20. |
-| ADM-12 | `POST` | `/admin/runs` | `/api/v1/admin/runs` | `incompatible` | Frontend sends the execution mode `Focused`; handler rejects it and instead declares the architecture mode `Diagnostic`. Other run fields and `runId` response parsing align. |
+| ADM-12 | `POST` | `/admin/runs` | `/api/v1/admin/runs` | `implemented` | Shared create DTOs align canonical mode, current academic year, expected numeric template version, recipients, schedule, proctoring, and idempotency input. Admin performs one exact idempotent replay, strictly reconciles every persisted run field against the request and first response, and stores only that authoritative confirmation rather than fabricating a live run-list record. |
 | ADM-13 | `POST` | `/admin/governance/snapshots` | `/api/v1/admin/governance/snapshots` | `implemented` | Request scope, director/vendor authorization, L3 governance policy, and consumed `data` collections align. |
 | ADM-14 | `POST` | `/admin/settings` | `/api/v1/admin/settings` | `incompatible` | Frontend declares and sends `REQUEST_ACADEMIC_YEAR_ARCHIVE`; handler's settings action union does not support that action. Other current settings actions align. |
 | ADM-15 | `POST` | `/admin/academicYear/archive` | `/api/v1/admin/academicYear/archive` | `implemented` | Double-confirmed archive body and admin/vendor tenant rules align; frontend does not consume the success body. |
@@ -61,6 +61,8 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 | ADM-19 | `PATCH` | `/admin/tests/{testId}` | `/api/v1/admin/tests/{testId}` | `implemented` | Edit sends the backend ID and expected numeric version, consumes the strict incremented record, reloads ADM-10, reconciles ID/canonical ID/version, and replaces state only from the reload; stale writes fail with HTTP 409. |
 | ADM-20 | `POST` | `/admin/tests/{testId}/publish` | `/api/v1/admin/tests/{testId}/publish` | `implemented` | Publish sends the backend ID and expected numeric version, permits only `draft -> ready`, atomically writes the immutable activation audit, replays the same command deterministically, and reconciles the authoritative ADM-10 reload. |
 | ADM-21 | `POST` | `/admin/tests/{testId}/archive` | `/api/v1/admin/tests/{testId}/archive` | `implemented` | Archive sends the backend ID and expected numeric version, permits only `ready|assigned -> archived`, atomically writes the immutable archival audit, replays the same command deterministically, and reconciles the authoritative ADM-10 reload. |
+| ADM-22 | `GET` | `/admin/runs` | `/api/v1/admin/runs` | `implemented` | The shared strict list DTO returns only identity-tenant runs from the resolved current academic year, ordered deterministically with a bounded `1..50` cursor page and optional lifecycle-status filter. |
+| ADM-23 | `GET` | `/admin/runs/{runId}` | `/api/v1/admin/runs/{runId}` | `implemented` | The shared strict detail DTO resolves the URL-encoded ID only inside the identity tenant's current academic year and returns `NOT_FOUND` for missing, old-year, or other-tenant records. |
 | STU-01 | `GET` | `/student/dashboard` | `/api/v1/student/dashboard` | `missing` | No current handler/export implements the dashboard summary contract. |
 | STU-02 | `GET` | `/student/tests` | `/api/v1/student/tests` | `missing` | No current handler/export implements paginated student tests. |
 | STU-03 | `GET` | `/student/performance` | `/api/v1/student/performance` | `missing` | No current handler/export implements the performance summary contract. |
@@ -74,9 +76,9 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 | VEN-01 | `POST` | `/vendor/calibration/simulate` | `/api/v1/vendor/calibration/simulate` | `incompatible` | Frontend sends `strategyProfileParameters`; handler requires `weights`, so the simulation request fails validation/service normalization. |
 | VEN-02 | `POST` | `/vendor/calibration/push` | `/api/v1/vendor/calibration/push` | `implemented` | Vendor auth, target/version request, and consumed deployment response align. |
 
-Classification totals: `implemented` 20, `incompatible` 7, `missing` 6, `intentionally retired` 0.
+Classification totals: `implemented` 23, `incompatible` 6, `missing` 6, `intentionally retired` 0.
 
-## Admin portal — 21 contracts
+## Admin portal — 23 contracts
 
 | ID | Method and current path | Frontend request | Frontend response | Auth / role / tenant / license | Current Functions handler | Frontend source |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -91,7 +93,7 @@ Classification totals: `implemented` 20, `incompatible` 7, `missing` 6, `intenti
 | ADM-09 | `POST /admin/questions/bulk` | `QuestionBulkUploadRequest` shape: `{ commit, instituteId, questions[] }` | Shared `QuestionBulkUploadResult`, strictly adapted with authoritative `rows[].questionId` and `rows[].version` | Firebase ID; `teacher` or `admin`; body tenant must match identity; no license middleware | `adminQuestionsBulk` (`api/adminQuestionsBulk.ts`) | `features/tests/QuestionBankManagementPage.tsx` |
 | ADM-10 | `GET /admin/tests` | No body or query | Shared `AdminTestTemplateListResult`, strictly adapted with backend ID, numeric version, and complete configuration | Firebase ID; `teacher` or `admin`; identity tenant; no license middleware | `adminTests` (`api/adminTests.ts`) | Test landing/detail/analytics, assignment, and template screens |
 | ADM-11 | `POST /admin/tests` | Shared `AdminTestTemplateCreateRequest` | Shared `AdminTestTemplateCreateResult`, strictly adapted with authoritative `template.id` and `template.version` | Firebase ID; `teacher` or `admin`; identity tenant; no license middleware | `adminTests` (`api/adminTests.ts`) | `features/tests/TestTemplateManagementPage.tsx` |
-| ADM-12 | `POST /admin/runs` | `RunCreatePayload` | `unknown`; backend declares `AdminRunsSuccessResponse` | Firebase ID; `teacher` or `admin`; identity tenant; no license middleware | `adminRuns` (`api/adminRuns.ts`) | `features/assignments/AssignmentManagementPage.tsx` |
+| ADM-12 | `POST /admin/runs` | Shared `AdminRunCreateRequest` with current year, expected template version, canonical mode, recipients, schedule, policy, and idempotency key | Shared `AdminRunCreateResult`, strictly adapted and then exact-replayed/reconciled before authoritative confirmation state is shown | Firebase ID; `teacher` or `admin`; identity tenant; current-year/template/recipient/license validation | `adminRuns` (`api/adminRuns.ts`) | `features/assignments/AssignmentManagementPage.tsx`, `features/assignments/assignmentAuthority.ts` |
 | ADM-13 | `POST /admin/governance/snapshots` | `{ instituteId, yearId, limit }` | `GovernanceSnapshotsApiResult` | Firebase ID; `director` or `vendor`; body tenant with vendor bypass; L3 for director, vendor bypass | `adminGovernanceSnapshots` (`api/adminGovernanceSnapshots.ts`) | `features/analytics/governanceDataset.ts` |
 | ADM-14 | `POST /admin/settings` | Action-discriminated `Record<string, unknown>` | `AdminSettingsApiResponse` | Firebase ID; `admin` or `director`; body tenant when present, otherwise identity tenant; no license middleware | `adminSettings` (`api/adminSettings.ts`) | `features/settings/settingsDataset.ts` |
 | ADM-15 | `POST /admin/academicYear/archive` | `{ doubleConfirm, instituteId, yearId }` | `unknown`; backend declares `AcademicYearArchiveSuccessResponse` | Firebase ID; `admin` or `vendor`; body tenant with vendor bypass; no license middleware | `adminAcademicYearArchive` (`api/adminAcademicYearArchive.ts`) | `features/settings/settingsDataset.ts` |
@@ -101,6 +103,8 @@ Classification totals: `implemented` 20, `incompatible` 7, `missing` 6, `intenti
 | ADM-19 | `PATCH /admin/tests/{testId}` | Shared `AdminTestTemplateUpdateRequest` with path ID and positive `expectedVersion` | Shared `AdminTestTemplateUpdateResult`, strictly adapted with the same ID and exactly incremented numeric version | Firebase ID; `teacher` or `admin`; identity tenant; stale/locked writes return `CONFLICT` | `adminTests` (`api/adminTests.ts`) | `features/tests/TestTemplateManagementPage.tsx` |
 | ADM-20 | `POST /admin/tests/{testId}/publish` | Shared `AdminTestTemplateLifecycleRequest` with positive `expectedVersion` | Shared `AdminTestTemplateLifecycleResult` with immutable audit ID/path and authoritative ready template | Firebase ID; `teacher` or `admin`; identity tenant; only draft may publish | `adminTests` (`api/adminTests.ts`) | `features/tests/TestTemplateManagementPage.tsx` |
 | ADM-21 | `POST /admin/tests/{testId}/archive` | Shared `AdminTestTemplateLifecycleRequest` with positive `expectedVersion` | Shared `AdminTestTemplateLifecycleResult` with immutable audit ID/path and authoritative archived template | Firebase ID; `teacher` or `admin`; identity tenant; only ready/assigned may archive | `adminTests` (`api/adminTests.ts`) | `features/tests/TestTemplateManagementPage.tsx` |
+| ADM-22 | `GET /admin/runs` | Optional query `{ cursor, limit, status }`; limit defaults to 25 and is bounded to 50 | Shared `AdminRunListResult`, strictly adapted with complete run records and opaque next cursor | Firebase ID; `teacher` or `admin`; identity tenant; current academic year only | `adminRuns` (`api/adminRuns.ts`) | `features/assignments/assignmentRunsApi.ts`; BWM-014-D owns page consumption |
+| ADM-23 | `GET /admin/runs/{runId}` | URL-encoded path `runId` | Shared `AdminRunDetailResult`, strictly adapted with one complete run record | Firebase ID; `teacher` or `admin`; identity tenant; current academic year only; missing/out-of-scope records return `NOT_FOUND` | `adminRuns` (`api/adminRuns.ts`) | `features/assignments/assignmentRunsApi.ts`; BWM-014-D owns page consumption |
 
 ## Student portal — 6 contracts
 
@@ -131,8 +135,8 @@ Classification totals: `implemented` 20, `incompatible` 7, `missing` 6, `intenti
 
 ## Classification summary for the next substeps
 
-- The 15 `implemented` entries are handler-compatible through the common gateway and same-origin Hosting rewrite; each owning flow still requires its task-specific emulator and browser evidence.
-- The 8 `incompatible` entries require contract repair by BWM-006, BWM-013, BWM-014, BWM-017, BWM-018, BWM-023, BWM-030, BWM-031, or BWM-038 before their affected flows can be considered wired.
+- The 21 `implemented` entries are handler-compatible through the common gateway and same-origin Hosting rewrite; each owning flow still requires its task-specific emulator and browser evidence.
+- The 6 `incompatible` entries require contract repair by BWM-017, BWM-018, BWM-023, BWM-030, BWM-031, or BWM-038 before their affected flows can be considered wired.
 - The 6 `missing` entries require Student/Exam handlers under BWM-015, BWM-016, and BWM-018.
 - No frontend-declared route has evidence supporting intentional retirement.
 

@@ -87,6 +87,21 @@ Subcollections:
 
 runs/{runId}
 
+Authoritative Admin-created run IDs are deterministic hashes of institute,
+active academic year, and the hashed idempotency key. Scheduled run documents
+store the canonical template ID/version and immutable question/config snapshots,
+recipient IDs/count, canonical mode, schedule/timezone, attempt/grace/shuffle and
+proctoring policy, plus hashed idempotency/request fingerprints. Exact retries
+return the existing run; key reuse with different semantics is rejected, and
+the template `totalRuns` counter advances only on the first transaction.
+
+Admin run reads resolve the current academic year from the authenticated
+institute, never accept an institute or year override from the browser, and
+read only this collection. Lists are bounded to 50 records, ordered by
+`createdAt DESC, __name__ DESC`, and use an opaque cursor; optional status
+filtering uses the `runs(status ASC, createdAt DESC, __name__ DESC)` composite
+index. Detail reads return not found for IDs outside that tenant/year boundary.
+
 runAnalytics/{runId}
 
 studentYearMetrics/{studentId}

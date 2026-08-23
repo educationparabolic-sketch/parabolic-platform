@@ -25,7 +25,8 @@ assert.ok(
 function materializePath(canonicalPath, routeId) {
   return canonicalPath
     .replace("{sessionId}", encodeURIComponent(`session ${routeId} Ω`))
-    .replace("{testId}", encodeURIComponent(`test ${routeId} Ω`));
+    .replace("{testId}", encodeURIComponent(`test ${routeId} Ω`))
+    .replace("{runId}", encodeURIComponent(`run ${routeId} Ω`));
 }
 
 async function requestGateway(requestPath, method, body) {
@@ -65,7 +66,7 @@ test(
     const implementedRoutes = API_ROUTE_MANIFEST.filter(
       (route) => route.status === "implemented",
     );
-    assert.equal(implementedRoutes.length, 20);
+    assert.equal(implementedRoutes.length, 23);
 
     for (const route of implementedRoutes) {
       const requestPath = materializePath(route.canonicalPath, route.id);

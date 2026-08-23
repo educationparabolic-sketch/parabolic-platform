@@ -4,7 +4,6 @@ import {sendErrorResponse} from "../services/apiResponse";
 import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
 import {createAuthenticationMiddleware} from "../middleware/auth";
 import {
-  createMethodMiddleware,
   createMiddlewareHandler,
   createRequestValidationMiddleware,
   setRequestData,
@@ -15,14 +14,32 @@ import {createTenantGuardMiddleware} from "../middleware/tenant";
 import {adminRunsService} from "../services/adminRuns";
 import {
   AdminRunsSuccessResponse,
+  AdminRunsDetailSuccessResponse,
+  AdminRunsListSuccessResponse,
   AdminRunsValidatedRequest,
   AdminRunsValidationError,
 } from "../types/adminRuns";
-import {MiddlewareRequest} from "../types/middleware";
+import {MiddlewareRejectionError, MiddlewareRequest} from "../types/middleware";
 
 interface AdminRunsDependencies {
   createRun: typeof adminRunsService.createRun;
+  getRun: typeof adminRunsService.getRun;
+  listRuns: typeof adminRunsService.listRuns;
   verifyIdToken: (idToken: string) => Promise<DecodedIdToken>;
+}
+
+type ValidatedAdminRunsRequest =
+  | {action: "create"; payload: AdminRunsValidatedRequest}
+  | {action: "detail"; payload: ReturnType<typeof adminRunsService.normalizeDetailRequest>}
+  | {action: "list"; payload: ReturnType<typeof adminRunsService.normalizeListRequest>};
+
+function assertSupportedMethod(method: string): void {
+  if (method !== "GET" && method !== "POST") {
+    throw new MiddlewareRejectionError(
+      "VALIDATION_ERROR",
+      "Method not allowed. Use GET or POST.",
+    );
+  }
 }
 
 const buildSuccessResponse = (
@@ -32,9 +49,10 @@ const buildSuccessResponse = (
 ): AdminRunsSuccessResponse => ({
   code: "OK",
   data: result,
-  message: "Run scheduled.",
+  message: result.disposition === "created" ?
+    "Run scheduled." :
+    "Existing scheduled run returned.",
   requestId,
-  runId: result.runId,
   success: true,
   timestamp,
 });
@@ -47,10 +65,39 @@ export const createAdminRunsHandler = (
     response: functions.Response,
   ): Promise<void> => {
     const validatedRequest = request.context
-      .requestData as unknown as AdminRunsValidatedRequest;
-    const result = await dependencies.createRun(validatedRequest);
+      .requestData as unknown as ValidatedAdminRunsRequest;
 
-    response.status(200).json(
+    if (validatedRequest.action === "list") {
+      const result = await dependencies.listRuns(validatedRequest.payload);
+      const responseBody: AdminRunsListSuccessResponse = {
+        code: "OK",
+        data: result,
+        message: "Runs loaded.",
+        requestId: request.context.requestId,
+        success: true,
+        timestamp: new Date().toISOString(),
+      };
+      response.status(200).json(responseBody);
+      return;
+    }
+
+    if (validatedRequest.action === "detail") {
+      const result = await dependencies.getRun(validatedRequest.payload);
+      const responseBody: AdminRunsDetailSuccessResponse = {
+        code: "OK",
+        data: result,
+        message: "Run loaded.",
+        requestId: request.context.requestId,
+        success: true,
+        timestamp: new Date().toISOString(),
+      };
+      response.status(200).json(responseBody);
+      return;
+    }
+
+    const result = await dependencies.createRun(validatedRequest.payload);
+
+    response.status(result.disposition === "created" ? 201 : 200).json(
       buildSuccessResponse(
         result,
         request.context.requestId,
@@ -59,7 +106,10 @@ export const createAdminRunsHandler = (
     );
   },
   middlewares: [
-    createMethodMiddleware("POST"),
+    async (request, _response, next): Promise<void> => {
+      assertSupportedMethod(request.method);
+      await next();
+    },
     createAuthenticationMiddleware(dependencies),
     createTenantGuardMiddleware({
       allowVendorBypass: false,
@@ -68,11 +118,36 @@ export const createAdminRunsHandler = (
     }),
     createRoleAuthorizationMiddleware({
       allowedRoles: ADMIN_TEACHER_ROLES,
-      forbiddenMessage: "Only teacher and admin roles can schedule assignment runs.",
+      forbiddenMessage: "Only teacher and admin roles can access assignment runs.",
     }),
     createRequestValidationMiddleware({
       validator: (request: MiddlewareRequest): void => {
         const identity = request.context.identity;
+
+        if (request.method === "GET") {
+          if (request.params.runId) {
+            setRequestData(request, {
+              action: "detail",
+              payload: adminRunsService.normalizeDetailRequest({
+                instituteId: identity?.instituteId,
+                runId: request.params.runId,
+              }),
+            });
+            return;
+          }
+
+          setRequestData(request, {
+            action: "list",
+            payload: adminRunsService.normalizeListRequest({
+              cursor: request.query.cursor,
+              instituteId: identity?.instituteId,
+              limit: request.query.limit,
+              status: request.query.status,
+            }),
+          });
+          return;
+        }
+
         const validatedRequest = adminRunsService.normalizeRequest({
           actorId: identity?.uid,
           actorRole: identity?.role,
@@ -82,7 +157,10 @@ export const createAdminRunsHandler = (
 
         setRequestData(
           request,
-          validatedRequest as unknown as Record<string, unknown>,
+          {
+            action: "create",
+            payload: validatedRequest,
+          },
         );
       },
     }),
@@ -109,6 +187,8 @@ export const createAdminRunsHandler = (
 
 export const handleAdminRunsRequest = createAdminRunsHandler({
   createRun: adminRunsService.createRun.bind(adminRunsService),
+  getRun: adminRunsService.getRun.bind(adminRunsService),
+  listRuns: adminRunsService.listRuns.bind(adminRunsService),
   verifyIdToken: (idToken: string) =>
     getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
 });

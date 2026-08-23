@@ -16,7 +16,8 @@ const {API_ROUTE_MANIFEST} = require("../lib/apiRouteManifest.js");
 function materializePath(canonicalPath, routeId) {
   return canonicalPath
     .replace("{sessionId}", encodeURIComponent(`session ${routeId} Ω`))
-    .replace("{testId}", encodeURIComponent(`test ${routeId} Ω`));
+    .replace("{testId}", encodeURIComponent(`test ${routeId} Ω`))
+    .replace("{runId}", encodeURIComponent(`run ${routeId} Ω`));
 }
 
 test("each manifest method/path resolves exactly once", () => {
@@ -40,7 +41,7 @@ test("implemented routes have one registered existing handler", () => {
   const implementedRoutes = API_ROUTE_MANIFEST.filter(
     (route) => route.status === "implemented",
   );
-  assert.equal(implementedRoutes.length, 20);
+  assert.equal(implementedRoutes.length, 23);
 
   for (const route of implementedRoutes) {
     assert.equal(typeof API_GATEWAY_HANDLERS[route.functionExport], "function");

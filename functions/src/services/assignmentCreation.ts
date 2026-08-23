@@ -66,6 +66,15 @@ export class AssignmentCreationValidationError extends Error {
   }
 }
 
+/** Raised when an idempotency key is reused for a different assignment. */
+export class AssignmentCreationConflictError extends Error {
+  /** @param {string} message Conflict detail. */
+  constructor(message: string) {
+    super(message);
+    this.name = "AssignmentCreationConflictError";
+  }
+}
+
 const isPlainObject = (
   value: unknown,
 ): value is Record<string, unknown> => typeof value === "object" &&
@@ -291,6 +300,38 @@ const normalizeOptionalBoolean = (
   return value;
 };
 
+const normalizeOptionalFingerprint = (
+  value: unknown,
+  fieldName: string,
+): string | undefined => typeof value === "undefined" ?
+  undefined :
+  normalizeRequiredString(value, fieldName);
+
+const normalizeProctoringPolicy = (
+  value: unknown,
+): {browserIntegrityGuardEnabled: boolean;
+  faceIdentityGazeGuardEnabled: boolean} => {
+  if (!isPlainObject(value)) {
+    throw new AssignmentCreationValidationError(
+      "Assignment field \"proctoringPolicy\" must be an object.",
+    );
+  }
+
+  if (
+    typeof value.browserIntegrityGuardEnabled !== "boolean" ||
+    typeof value.faceIdentityGazeGuardEnabled !== "boolean"
+  ) {
+    throw new AssignmentCreationValidationError(
+      "Assignment proctoring policy fields must be booleans.",
+    );
+  }
+
+  return {
+    browserIntegrityGuardEnabled: value.browserIntegrityGuardEnabled,
+    faceIdentityGazeGuardEnabled: value.faceIdentityGazeGuardEnabled,
+  };
+};
+
 const normalizePercentField = (
   value: unknown,
   fieldName: string,
@@ -501,6 +542,23 @@ export class AssignmentCreationService {
     const timezone = typeof data.timezone === "undefined" ?
       "UTC" :
       normalizeRequiredString(data.timezone, "timezone");
+    const proctoringPolicy = typeof data.proctoringPolicy === "undefined" ? {
+      browserIntegrityGuardEnabled: false,
+      faceIdentityGazeGuardEnabled: false,
+    } : normalizeProctoringPolicy(data.proctoringPolicy);
+    const idempotencyKeyHash = normalizeOptionalFingerprint(
+      data.idempotencyKeyHash,
+      "idempotencyKeyHash",
+    );
+    const requestFingerprint = normalizeOptionalFingerprint(
+      data.requestFingerprint,
+      "requestFingerprint",
+    );
+    const expectedTemplateVersion = typeof data.expectedTemplateVersion ===
+      "undefined" ? undefined : normalizePositiveInteger(
+        data.expectedTemplateVersion,
+        "expectedTemplateVersion",
+      );
 
     if (payloadRunId !== runId) {
       throw new AssignmentCreationValidationError(
@@ -694,13 +752,20 @@ export class AssignmentCreationService {
       instituteData?.calibrationVersion,
     );
     const templateVersion = normalizeTemplateVersion(templateData);
+    if (
+      typeof expectedTemplateVersion !== "undefined" &&
+      String(expectedTemplateVersion) !== templateVersion
+    ) {
+      throw new AssignmentCreationConflictError(
+        `Template "${testId}" changed from expected version ` +
+        `${expectedTemplateVersion} to ${templateVersion}.`,
+      );
+    }
     const riskModelVersion = normalizeRiskModelVersion(data.riskModelVersion);
-    const canonicalId = typeof data.canonicalId === "undefined" ?
-      normalizeRequiredString(
-        templateData?.canonicalId ?? testId,
-        "template.canonicalId",
-      ) :
-      normalizeRequiredString(data.canonicalId, "canonicalId");
+    const canonicalId = normalizeRequiredString(
+      templateData?.canonicalId ?? testId,
+      "template.canonicalId",
+    );
 
     const normalizedTotalSessions = typeof data.totalSessions === "number" &&
       Number.isFinite(data.totalSessions) &&
@@ -709,45 +774,103 @@ export class AssignmentCreationService {
       0;
     const createdAt = data.createdAt instanceof Timestamp ?
       data.createdAt :
-      FieldValue.serverTimestamp();
+      Timestamp.now();
 
-    await this.firestore.runTransaction(async (transaction) => {
-      transaction.set(runReference, {
-        academicYear: yearId,
-        attemptLimit,
-        calibrationVersion,
-        canonicalId,
-        createdAt,
-        difficultyDistribution:
-          capturedTemplateSnapshot.difficultyDistribution,
-        endWindow,
-        gracePeriodMinutes,
-        licenseLayer: currentLayer,
-        mode,
-        modeSnapshot: mode,
-        phaseConfigSnapshot: capturedTemplateSnapshot.phaseConfigSnapshot,
-        questionIds: capturedTemplateSnapshot.questionIds,
-        recipientCount: recipientStudentIds.length,
-        recipientStudentIds,
-        riskModelVersion,
-        runId,
-        shuffleEnabled: shuffleQuestionOrder,
-        shuffleQuestionOrder,
-        startWindow,
-        status: "scheduled",
-        testId,
-        templateVersion,
-        timezone,
-        timingProfileSnapshot:
-          capturedTemplateSnapshot.timingProfileSnapshot,
-        totalSessions: normalizedTotalSessions,
-      }, {merge: true});
+    const disposition = await this.firestore.runTransaction(
+      async (transaction): Promise<"created" | "replayed"> => {
+        const existingRunSnapshot = await transaction.get(runReference);
+        const existingRunData = existingRunSnapshot.data();
 
-      transaction.set(testReference, {
-        status: "assigned",
-        totalRuns: FieldValue.increment(1),
-      }, {merge: true});
-    });
+        if (existingRunData?.status === "scheduled") {
+          if (
+            requestFingerprint &&
+            existingRunData.requestFingerprint === requestFingerprint &&
+            existingRunData.idempotencyKeyHash === idempotencyKeyHash
+          ) {
+            return "replayed";
+          }
+
+          throw new AssignmentCreationConflictError(
+            `Run "${runId}" already exists for a different request.`,
+          );
+        }
+
+        const [currentAcademicYearSnapshot, currentTemplateSnapshot] =
+          await Promise.all([
+            transaction.get(academicYearReference),
+            transaction.get(testReference),
+          ]);
+        const currentAcademicYearData = currentAcademicYearSnapshot.data();
+        dataTierPartitionService.assertOperationalAcademicYearAccess({
+          operation: "assignment creation transaction",
+          partition: dataTierPartitionService.buildAcademicYearPartition(
+            academicYearReference.path,
+            currentAcademicYearData,
+          ),
+        });
+        const currentTemplateData = currentTemplateSnapshot.data();
+        const currentTemplateStatus = normalizeRequiredString(
+          currentTemplateData?.status,
+          "template.status",
+        ).toLowerCase();
+        const currentTemplateVersion = normalizeTemplateVersion(
+          currentTemplateData,
+        );
+
+        if (!ALLOWED_TEMPLATE_STATUSES.has(currentTemplateStatus)) {
+          throw new AssignmentCreationConflictError(
+            `Template "${testId}" is no longer assignment-ready.`,
+          );
+        }
+
+        if (currentTemplateVersion !== templateVersion) {
+          throw new AssignmentCreationConflictError(
+            `Template "${testId}" changed during assignment creation.`,
+          );
+        }
+
+        transaction.set(runReference, {
+          academicYear: yearId,
+          attemptLimit,
+          calibrationVersion,
+          canonicalId,
+          createdAt,
+          difficultyDistribution:
+            capturedTemplateSnapshot.difficultyDistribution,
+          endWindow,
+          gracePeriodMinutes,
+          licenseLayer: currentLayer,
+          mode,
+          modeSnapshot: mode,
+          phaseConfigSnapshot: capturedTemplateSnapshot.phaseConfigSnapshot,
+          proctoringPolicy,
+          questionIds: capturedTemplateSnapshot.questionIds,
+          recipientCount: recipientStudentIds.length,
+          recipientStudentIds,
+          riskModelVersion,
+          runId,
+          shuffleEnabled: shuffleQuestionOrder,
+          shuffleQuestionOrder,
+          startWindow,
+          status: "scheduled",
+          testId,
+          templateVersion,
+          timezone,
+          timingProfileSnapshot:
+            capturedTemplateSnapshot.timingProfileSnapshot,
+          totalSessions: normalizedTotalSessions,
+          ...(idempotencyKeyHash ? {idempotencyKeyHash} : {}),
+          ...(requestFingerprint ? {requestFingerprint} : {}),
+        }, {merge: true});
+
+        transaction.set(testReference, {
+          status: "assigned",
+          totalRuns: FieldValue.increment(1),
+        }, {merge: true});
+
+        return "created";
+      },
+    );
 
     this.logger.info("Assignment creation validation completed", {
       instituteId,
@@ -767,6 +890,7 @@ export class AssignmentCreationService {
     return {
       calibrationVersion,
       capturedTemplateSnapshot,
+      disposition,
       licenseLayer: currentLayer,
       recipientCount: recipientStudentIds.length,
       riskModelVersion,
