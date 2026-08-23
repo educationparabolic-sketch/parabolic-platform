@@ -1,8 +1,8 @@
 # Frontend API Call Inventory
 
-Status: current-contract inventory, canonical-route assignment, and compatibility classification for `BWM-002-A` through `BWM-002-C`
+Status: current-contract inventory, canonical-route assignment, and compatibility classification through `BWM-013`
 
-Inventory date: 2026-08-22
+Inventory date: 2026-08-23
 
 Scope: executable HTTP calls in `apps/admin/src`, `apps/student/src`, `apps/exam/src`, and `apps/vendor/src`
 
@@ -36,7 +36,7 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 - `intentionally retired`: explicit product or architecture evidence says the contract must not be served. No inventoried route currently meets this definition.
 - Gateway and Hosting reachability are excluded from per-route classification because they are common dependencies owned by BWM-003 and BWM-004.
 
-## Canonical route assignments and status — 30 contracts
+## Canonical route assignments and status — 33 contracts
 
 | ID | Method | Current frontend path | Canonical route | Status | Classification basis |
 | --- | --- | --- | --- | --- | --- |
@@ -49,8 +49,8 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 | ADM-07 | `GET` | `/admin/questions/distribution` | `/api/v1/admin/questions/distribution` | `implemented` | The `limit`/`examType` query and consumed `data.summary` result align. |
 | ADM-08 | `GET` | `/admin/questions/upload-logs` | `/api/v1/admin/questions/upload-logs` | `implemented` | Method, identity scope, and consumed `data.logs` result align. |
 | ADM-09 | `POST` | `/admin/questions/bulk` | `/api/v1/admin/questions/bulk` | `implemented` | Bulk validation/commit request and strictly normalized `data` response align; each row returns the authoritative question ID and positive-integer version selected by the server. |
-| ADM-10 | `GET` | `/admin/tests` | `/api/v1/admin/tests` | `implemented` | Current handler returns the raw template array expected by all current consumers; envelope standardization remains BWM-006 work. |
-| ADM-11 | `POST` | `/admin/tests` | `/api/v1/admin/tests` | `incompatible` | Frontend's declared selection-method union includes `upload_set`; handler accepts only `manual`, `shuffle_slice`, `offset_limit`, and `round_robin`. |
+| ADM-10 | `GET` | `/admin/tests` | `/api/v1/admin/tests` | `implemented` | Standard `data` contains the shared, strictly adapted template array with backend IDs and positive-integer versions. |
+| ADM-11 | `POST` | `/admin/tests` | `/api/v1/admin/tests` | `implemented` | Create always persists a draft under a backend-issued ID, consumes the shared authoritative result, reloads ADM-10, reconciles backend ID/canonical ID/version, and replaces UI state only from that reload. Create-as-publish is rejected in favor of ADM-20. |
 | ADM-12 | `POST` | `/admin/runs` | `/api/v1/admin/runs` | `incompatible` | Frontend sends the execution mode `Focused`; handler rejects it and instead declares the architecture mode `Diagnostic`. Other run fields and `runId` response parsing align. |
 | ADM-13 | `POST` | `/admin/governance/snapshots` | `/api/v1/admin/governance/snapshots` | `implemented` | Request scope, director/vendor authorization, L3 governance policy, and consumed `data` collections align. |
 | ADM-14 | `POST` | `/admin/settings` | `/api/v1/admin/settings` | `incompatible` | Frontend declares and sends `REQUEST_ACADEMIC_YEAR_ARCHIVE`; handler's settings action union does not support that action. Other current settings actions align. |
@@ -58,6 +58,9 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 | ADM-16 | `POST` | `/admin/licensing` | `/api/v1/admin/licensing` | `incompatible` | Frontend sends `REQUEST_LICENSE_UPGRADE` and expects `data.request`; handler supports only `GET_LICENSE_SNAPSHOT` and returns snapshot data. |
 | ADM-17 | `POST` | `/admin/interventions` | `/api/v1/admin/interventions` | `implemented` | List/mutation action bodies, L1 enforcement, and consumed `data.actions` or `data.action` variants align. |
 | ADM-18 | `POST` | `/admin/questions/assets` | `/api/v1/admin/questions/assets` | `implemented` | Final question-package upload sends validated ZIP bytes with the authoritative question ID/version, strictly validates the safe CDN response projection, and passes the returned managed paths into the later bulk commit. |
+| ADM-19 | `PATCH` | `/admin/tests/{testId}` | `/api/v1/admin/tests/{testId}` | `implemented` | Edit sends the backend ID and expected numeric version, consumes the strict incremented record, reloads ADM-10, reconciles ID/canonical ID/version, and replaces state only from the reload; stale writes fail with HTTP 409. |
+| ADM-20 | `POST` | `/admin/tests/{testId}/publish` | `/api/v1/admin/tests/{testId}/publish` | `implemented` | Publish sends the backend ID and expected numeric version, permits only `draft -> ready`, atomically writes the immutable activation audit, replays the same command deterministically, and reconciles the authoritative ADM-10 reload. |
+| ADM-21 | `POST` | `/admin/tests/{testId}/archive` | `/api/v1/admin/tests/{testId}/archive` | `implemented` | Archive sends the backend ID and expected numeric version, permits only `ready|assigned -> archived`, atomically writes the immutable archival audit, replays the same command deterministically, and reconciles the authoritative ADM-10 reload. |
 | STU-01 | `GET` | `/student/dashboard` | `/api/v1/student/dashboard` | `missing` | No current handler/export implements the dashboard summary contract. |
 | STU-02 | `GET` | `/student/tests` | `/api/v1/student/tests` | `missing` | No current handler/export implements paginated student tests. |
 | STU-03 | `GET` | `/student/performance` | `/api/v1/student/performance` | `missing` | No current handler/export implements the performance summary contract. |
@@ -71,9 +74,9 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 | VEN-01 | `POST` | `/vendor/calibration/simulate` | `/api/v1/vendor/calibration/simulate` | `incompatible` | Frontend sends `strategyProfileParameters`; handler requires `weights`, so the simulation request fails validation/service normalization. |
 | VEN-02 | `POST` | `/vendor/calibration/push` | `/api/v1/vendor/calibration/push` | `implemented` | Vendor auth, target/version request, and consumed deployment response align. |
 
-Classification totals: `implemented` 16, `incompatible` 8, `missing` 6, `intentionally retired` 0.
+Classification totals: `implemented` 20, `incompatible` 7, `missing` 6, `intentionally retired` 0.
 
-## Admin portal — 18 contracts
+## Admin portal — 21 contracts
 
 | ID | Method and current path | Frontend request | Frontend response | Auth / role / tenant / license | Current Functions handler | Frontend source |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -86,8 +89,8 @@ Classification totals: `implemented` 16, `incompatible` 8, `missing` 6, `intenti
 | ADM-07 | `GET /admin/questions/distribution` | Query `{ limit, examType? }` | `unknown`, normalized to distribution data | Firebase ID; `teacher` or `admin`; identity tenant; no license middleware | `adminQuestionDistribution` (`api/adminQuestionDistribution.ts`) | Question-bank landing and distribution screens |
 | ADM-08 | `GET /admin/questions/upload-logs` | No body | `unknown`, normalized to upload logs | Firebase ID; `teacher` or `admin`; identity tenant; no license middleware | `adminQuestionUploadLogs` (`api/adminQuestionUploadLogs.ts`) | Question-bank management, landing, validation, and template screens |
 | ADM-09 | `POST /admin/questions/bulk` | `QuestionBulkUploadRequest` shape: `{ commit, instituteId, questions[] }` | Shared `QuestionBulkUploadResult`, strictly adapted with authoritative `rows[].questionId` and `rows[].version` | Firebase ID; `teacher` or `admin`; body tenant must match identity; no license middleware | `adminQuestionsBulk` (`api/adminQuestionsBulk.ts`) | `features/tests/QuestionBankManagementPage.tsx` |
-| ADM-10 | `GET /admin/tests` | No body or query | `unknown`, normalized as test-template rows | Firebase ID; `teacher` or `admin`; identity tenant; no license middleware | `adminTests` (`api/adminTests.ts`) | Test landing/detail/analytics, assignment, and template screens |
-| ADM-11 | `POST /admin/tests` | `TemplateSubmitPayload` | `unknown`; backend accepts `AdminTestsCreateRequest` | Firebase ID; `teacher` or `admin`; identity tenant; no license middleware | `adminTests` (`api/adminTests.ts`) | `features/tests/TestTemplateManagementPage.tsx` |
+| ADM-10 | `GET /admin/tests` | No body or query | Shared `AdminTestTemplateListResult`, strictly adapted with backend ID, numeric version, and complete configuration | Firebase ID; `teacher` or `admin`; identity tenant; no license middleware | `adminTests` (`api/adminTests.ts`) | Test landing/detail/analytics, assignment, and template screens |
+| ADM-11 | `POST /admin/tests` | Shared `AdminTestTemplateCreateRequest` | Shared `AdminTestTemplateCreateResult`, strictly adapted with authoritative `template.id` and `template.version` | Firebase ID; `teacher` or `admin`; identity tenant; no license middleware | `adminTests` (`api/adminTests.ts`) | `features/tests/TestTemplateManagementPage.tsx` |
 | ADM-12 | `POST /admin/runs` | `RunCreatePayload` | `unknown`; backend declares `AdminRunsSuccessResponse` | Firebase ID; `teacher` or `admin`; identity tenant; no license middleware | `adminRuns` (`api/adminRuns.ts`) | `features/assignments/AssignmentManagementPage.tsx` |
 | ADM-13 | `POST /admin/governance/snapshots` | `{ instituteId, yearId, limit }` | `GovernanceSnapshotsApiResult` | Firebase ID; `director` or `vendor`; body tenant with vendor bypass; L3 for director, vendor bypass | `adminGovernanceSnapshots` (`api/adminGovernanceSnapshots.ts`) | `features/analytics/governanceDataset.ts` |
 | ADM-14 | `POST /admin/settings` | Action-discriminated `Record<string, unknown>` | `AdminSettingsApiResponse` | Firebase ID; `admin` or `director`; body tenant when present, otherwise identity tenant; no license middleware | `adminSettings` (`api/adminSettings.ts`) | `features/settings/settingsDataset.ts` |
@@ -95,6 +98,9 @@ Classification totals: `implemented` 16, `incompatible` 8, `missing` 6, `intenti
 | ADM-16 | `POST /admin/licensing` | `AdminLicensingRequest` actions `GET_LICENSE_SNAPSHOT` or `REQUEST_LICENSE_UPGRADE` | `AdminLicensingApiResponse` | Firebase ID; `admin` or `director`; identity/body tenant, no vendor bypass; no license middleware | `adminLicensing` (`api/adminLicensing.ts`) | `features/licensing/licensingDataset.ts` |
 | ADM-17 | `POST /admin/interventions` | `AdminInterventionRequest` actions for listing and mutation | `InterventionApiResponse` | Firebase ID; `admin` or `teacher`; body tenant must match identity; L1 | `adminInterventions` (`api/adminInterventions.ts`) | `features/insights/interventionDataset.ts` |
 | ADM-18 | `POST /admin/questions/assets` | Shared `QuestionAssetUploadRequest` with base64 image bytes extracted from the validated ZIP, asset kind, extension, institute, authoritative question ID, and version | Shared `QuestionAssetUploadResult`, strictly adapted to CDN path/preview metadata without bucket, object-path, or internal replay-disposition fields | Firebase ID; `teacher` or `admin`; body tenant must match identity; no license middleware | `adminQuestionAssets` (`api/adminQuestionAssets.ts`) | `features/tests/QuestionBankManagementPage.tsx` through the deterministic sequential `questionAssetUploadPlan` |
+| ADM-19 | `PATCH /admin/tests/{testId}` | Shared `AdminTestTemplateUpdateRequest` with path ID and positive `expectedVersion` | Shared `AdminTestTemplateUpdateResult`, strictly adapted with the same ID and exactly incremented numeric version | Firebase ID; `teacher` or `admin`; identity tenant; stale/locked writes return `CONFLICT` | `adminTests` (`api/adminTests.ts`) | `features/tests/TestTemplateManagementPage.tsx` |
+| ADM-20 | `POST /admin/tests/{testId}/publish` | Shared `AdminTestTemplateLifecycleRequest` with positive `expectedVersion` | Shared `AdminTestTemplateLifecycleResult` with immutable audit ID/path and authoritative ready template | Firebase ID; `teacher` or `admin`; identity tenant; only draft may publish | `adminTests` (`api/adminTests.ts`) | `features/tests/TestTemplateManagementPage.tsx` |
+| ADM-21 | `POST /admin/tests/{testId}/archive` | Shared `AdminTestTemplateLifecycleRequest` with positive `expectedVersion` | Shared `AdminTestTemplateLifecycleResult` with immutable audit ID/path and authoritative archived template | Firebase ID; `teacher` or `admin`; identity tenant; only ready/assigned may archive | `adminTests` (`api/adminTests.ts`) | `features/tests/TestTemplateManagementPage.tsx` |
 
 ## Student portal — 6 contracts
 

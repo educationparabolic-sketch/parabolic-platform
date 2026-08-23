@@ -17,6 +17,7 @@ const require = createRequire(import.meta.url);
 const typescript = require(join(rootDirectory, "functions/node_modules/typescript"));
 
 const expectedErrorCodes = [
+  "CONFLICT",
   "FORBIDDEN",
   "INTERNAL_ERROR",
   "LICENSE_RESTRICTED",

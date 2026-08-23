@@ -1,7 +1,10 @@
 /* eslint-disable require-jsdoc */
 import * as functions from "firebase-functions";
 import {DecodedIdToken} from "firebase-admin/auth";
-import {sendErrorResponse} from "../services/apiResponse";
+import {
+  buildSuccessResponse,
+  sendErrorResponse,
+} from "../services/apiResponse";
 import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
 import {createAuthenticationMiddleware} from "../middleware/auth";
 import {
@@ -15,26 +18,61 @@ import {createTenantGuardMiddleware} from "../middleware/tenant";
 import {adminTestsService} from "../services/adminTests";
 import {
   AdminTestsCreateRequest,
+  AdminTestsCreateSuccessResponse,
   AdminTestsListRequest,
+  AdminTestsListSuccessResponse,
+  AdminTestsLifecycleRequest,
+  AdminTestsLifecycleSuccessResponse,
+  AdminTestsUpdateRequest,
+  AdminTestsUpdateSuccessResponse,
   AdminTestsValidationError,
 } from "../types/adminTests";
 import {MiddlewareRejectionError, MiddlewareRequest} from "../types/middleware";
 
 interface AdminTestsDependencies {
+  archiveTemplate: typeof adminTestsService.archiveTemplate;
   createTemplate: typeof adminTestsService.createTemplate;
   listTemplates: typeof adminTestsService.listTemplates;
+  publishTemplate: typeof adminTestsService.publishTemplate;
+  updateTemplate: typeof adminTestsService.updateTemplate;
   verifyIdToken: (idToken: string) => Promise<DecodedIdToken>;
 }
 
 type ValidatedAdminTestsRequest =
   | {action: "list"; payload: AdminTestsListRequest}
-  | {action: "create"; payload: AdminTestsCreateRequest};
+  | {action: "create"; payload: AdminTestsCreateRequest}
+  | {action: "archive"; payload: AdminTestsLifecycleRequest}
+  | {action: "publish"; payload: AdminTestsLifecycleRequest}
+  | {action: "update"; payload: AdminTestsUpdateRequest};
+
+type TemplateLifecycleAction = "archive" | "publish";
+
+function resolveLifecycleAction(
+  request: MiddlewareRequest,
+): TemplateLifecycleAction | null {
+  if (!request.params.testId) {
+    return null;
+  }
+
+  if (request.path.endsWith("/publish")) {
+    return "publish";
+  }
+
+  if (request.path.endsWith("/archive")) {
+    return "archive";
+  }
+
+  throw new AdminTestsValidationError(
+    "VALIDATION_ERROR",
+    "Template lifecycle command must be publish or archive.",
+  );
+}
 
 function assertSupportedMethod(method: string): void {
-  if (method !== "GET" && method !== "POST") {
+  if (method !== "GET" && method !== "POST" && method !== "PATCH") {
     throw new MiddlewareRejectionError(
       "VALIDATION_ERROR",
-      "Method not allowed. Use GET or POST.",
+      "Method not allowed. Use GET, POST, or PATCH.",
     );
   }
 }
@@ -53,12 +91,59 @@ export const createAdminTestsHandler = (
       const result = await dependencies.listTemplates(
         validatedRequest.payload,
       );
-      response.status(200).json(result);
+      const responseBody: AdminTestsListSuccessResponse = buildSuccessResponse(
+        result,
+        "Test templates loaded.",
+        request.context.requestId,
+        new Date().toISOString(),
+      );
+      response.status(200).json(responseBody);
+      return;
+    }
+
+    if (validatedRequest.action === "update") {
+      const result = await dependencies.updateTemplate(
+        validatedRequest.payload,
+      );
+      const responseBody: AdminTestsUpdateSuccessResponse =
+        buildSuccessResponse(
+          result,
+          "Test template updated.",
+          request.context.requestId,
+          new Date().toISOString(),
+        );
+      response.status(200).json(responseBody);
+      return;
+    }
+
+    if (
+      validatedRequest.action === "publish" ||
+      validatedRequest.action === "archive"
+    ) {
+      const result = validatedRequest.action === "publish" ?
+        await dependencies.publishTemplate(validatedRequest.payload) :
+        await dependencies.archiveTemplate(validatedRequest.payload);
+      const responseBody: AdminTestsLifecycleSuccessResponse =
+        buildSuccessResponse(
+          result,
+          validatedRequest.action === "publish" ?
+            "Test template published." :
+            "Test template archived.",
+          request.context.requestId,
+          new Date().toISOString(),
+        );
+      response.status(200).json(responseBody);
       return;
     }
 
     const result = await dependencies.createTemplate(validatedRequest.payload);
-    response.status(200).json(result);
+    const responseBody: AdminTestsCreateSuccessResponse = buildSuccessResponse(
+      result,
+      "Test template created.",
+      request.context.requestId,
+      new Date().toISOString(),
+    );
+    response.status(201).json(responseBody);
   },
   middlewares: [
     async (request, _response, next): Promise<void> => {
@@ -85,6 +170,39 @@ export const createAdminTestsHandler = (
             payload: adminTestsService.normalizeListRequest({
               instituteId: identity?.instituteId,
               limit: request.query.limit,
+            }),
+          });
+          return;
+        }
+
+        if (request.method === "PATCH") {
+          setRequestData(request, {
+            action: "update",
+            payload: adminTestsService.normalizeUpdateRequest({
+              actorId: identity?.uid,
+              actorRole: identity?.role,
+              body: request.body,
+              instituteId: identity?.instituteId,
+              ipAddress: request.ip,
+              testId: request.params.testId,
+              userAgent: request.header("user-agent"),
+            }),
+          });
+          return;
+        }
+
+        const lifecycleAction = resolveLifecycleAction(request);
+        if (lifecycleAction) {
+          setRequestData(request, {
+            action: lifecycleAction,
+            payload: adminTestsService.normalizeLifecycleRequest({
+              actorId: identity?.uid,
+              actorRole: identity?.role,
+              body: request.body,
+              instituteId: identity?.instituteId,
+              ipAddress: request.ip,
+              testId: request.params.testId,
+              userAgent: request.header("user-agent"),
             }),
           });
           return;
@@ -125,8 +243,11 @@ export const createAdminTestsHandler = (
 });
 
 export const handleAdminTestsRequest = createAdminTestsHandler({
+  archiveTemplate: adminTestsService.archiveTemplate.bind(adminTestsService),
   createTemplate: adminTestsService.createTemplate.bind(adminTestsService),
   listTemplates: adminTestsService.listTemplates.bind(adminTestsService),
+  publishTemplate: adminTestsService.publishTemplate.bind(adminTestsService),
+  updateTemplate: adminTestsService.updateTemplate.bind(adminTestsService),
   verifyIdToken: (idToken: string) =>
     getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
 });

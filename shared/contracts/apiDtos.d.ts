@@ -243,6 +243,131 @@ export interface QuestionBulkUploadResult {
   uploadLogPath: string | null;
 }
 
+export type AdminTestTemplateStatus =
+  | "draft"
+  | "ready"
+  | "assigned"
+  | "archived"
+  | "deprecated";
+
+export type AdminTestSelectionMethod =
+  | "manual"
+  | "shuffle_slice"
+  | "offset_limit"
+  | "round_robin"
+  | "upload_set";
+
+export interface AdminTestDifficultyDistribution {
+  easy: number;
+  medium: number;
+  hard: number;
+}
+
+export interface AdminTestTimingWindow {
+  minSeconds: number;
+  recommendedSeconds: number;
+  maxSeconds: number;
+}
+
+export interface AdminTestTimingProfile {
+  easy: AdminTestTimingWindow;
+  medium: AdminTestTimingWindow;
+  hard: AdminTestTimingWindow;
+}
+
+export interface AdminTestExamSnapshot {
+  defaultDurationMinutes: number;
+  difficultyTimingMapping: AdminTestTimingProfile;
+  markingScheme: string;
+  sectionStructure: string[];
+}
+
+export interface AdminTestPhaseSplitRow {
+  difficulty: "easy" | "medium" | "hard";
+  focus: string;
+  load: number;
+  minutes: number;
+  phase: string;
+  percent: number;
+  questionCount: number;
+  weight: number;
+}
+
+export interface AdminTestPhaseConfigSnapshot {
+  difficultyWeights: {
+    easy: number;
+    medium: number;
+    hard: number;
+  };
+  phaseSplit: AdminTestPhaseSplitRow[];
+  totalLoad: number;
+}
+
+export interface AdminTestTemplateRecord {
+  id: string;
+  canonicalId: string;
+  templateName: string;
+  examType: string;
+  examSnapshot: AdminTestExamSnapshot;
+  phaseConfigSnapshot: AdminTestPhaseConfigSnapshot;
+  selectionMethod: AdminTestSelectionMethod;
+  totalDurationMinutes: number;
+  selectedQuestionIds: string[];
+  difficultyDistribution: AdminTestDifficultyDistribution;
+  timingProfile: AdminTestTimingProfile;
+  status: AdminTestTemplateStatus;
+  totalRuns: number;
+  updatedAt: string;
+  version: number;
+}
+
+export interface AdminTestTemplateCreateRequest {
+  canonicalId: string;
+  difficultyDistribution: AdminTestDifficultyDistribution;
+  examType: string;
+  examSnapshot: AdminTestExamSnapshot;
+  phaseConfigSnapshot: AdminTestPhaseConfigSnapshot;
+  questionIds: string[];
+  selectionMethod: AdminTestSelectionMethod;
+  templateName: string;
+  timingProfile: AdminTestTimingProfile;
+  totalDurationMinutes: number;
+}
+
+export type AdminTestTemplateListResult = AdminTestTemplateRecord[];
+
+export interface AdminTestTemplateCreateResult {
+  template: AdminTestTemplateRecord;
+}
+
+export interface AdminTestTemplateUpdateRequest {
+  canonicalId: string;
+  difficultyDistribution: AdminTestDifficultyDistribution;
+  examType: string;
+  examSnapshot: AdminTestExamSnapshot;
+  expectedVersion: number;
+  phaseConfigSnapshot: AdminTestPhaseConfigSnapshot;
+  questionIds: string[];
+  selectionMethod: AdminTestSelectionMethod;
+  templateName: string;
+  timingProfile: AdminTestTimingProfile;
+  totalDurationMinutes: number;
+}
+
+export interface AdminTestTemplateUpdateResult {
+  template: AdminTestTemplateRecord;
+}
+
+export interface AdminTestTemplateLifecycleRequest {
+  expectedVersion: number;
+}
+
+export interface AdminTestTemplateLifecycleResult {
+  auditId: string;
+  auditPath: string;
+  template: AdminTestTemplateRecord;
+}
+
 export interface VendorCalibrationPushRequest {
   targetInstitutes: string[];
   versionId: string;

@@ -1,99 +1,105 @@
 /* eslint-disable require-jsdoc */
 import {StandardApiErrorCode} from "./apiResponse";
-
-export type AdminTestTemplateStatus =
-  "draft" | "ready" | "assigned" | "archived" | "deprecated";
-
-export type AdminTestSelectionMethod =
-  "manual" | "shuffle_slice" | "offset_limit" | "round_robin";
-
-export interface AdminTestDifficultyDistribution {
-  easy: number;
-  medium: number;
-  hard: number;
-}
-
-export interface AdminTestTimingWindow {
-  minSeconds: number;
-  maxSeconds: number;
-}
-
-export interface AdminTestTimingProfile {
-  easy: AdminTestTimingWindow;
-  medium: AdminTestTimingWindow;
-  hard: AdminTestTimingWindow;
-}
-
-export interface AdminTestExamSnapshot {
-  defaultDurationMinutes: number;
-  difficultyTimingMapping: AdminTestTimingProfile;
-  markingScheme: string;
-  sectionStructure: string[];
-}
-
-export interface AdminTestPhaseSplitRow {
-  difficulty: "easy" | "medium" | "hard";
-  focus: string;
-  load: number;
-  minutes: number;
-  phase: string;
-  percent: number;
-  questionCount: number;
-  weight: number;
-}
-
-export interface AdminTestPhaseConfigSnapshot {
-  difficultyWeights: {
-    easy: number;
-    medium: number;
-    hard: number;
-  };
-  phaseSplit: AdminTestPhaseSplitRow[];
-  totalLoad: number;
-}
-
-export interface AdminTestTemplateRecord {
-  id: string;
-  canonicalId: string;
-  templateName: string;
-  examType: string;
-  examSnapshot: AdminTestExamSnapshot;
-  phaseConfigSnapshot: AdminTestPhaseConfigSnapshot;
-  selectionMethod: AdminTestSelectionMethod;
-  totalDurationMinutes: number;
-  selectedQuestionIds: string[];
-  difficultyDistribution: AdminTestDifficultyDistribution;
-  timingProfile: AdminTestTimingProfile;
-  status: AdminTestTemplateStatus;
-  updatedAt: string;
-}
+export type {
+  AdminTestDifficultyDistribution,
+  AdminTestExamSnapshot,
+  AdminTestPhaseConfigSnapshot,
+  AdminTestPhaseSplitRow,
+  AdminTestSelectionMethod,
+  AdminTestTemplateCreateRequest,
+  AdminTestTemplateCreateResult,
+  AdminTestTemplateListResult,
+  AdminTestTemplateLifecycleRequest,
+  AdminTestTemplateLifecycleResult,
+  AdminTestTemplateRecord,
+  AdminTestTemplateStatus,
+  AdminTestTemplateUpdateRequest,
+  AdminTestTemplateUpdateResult,
+  AdminTestTimingProfile,
+  AdminTestTimingWindow,
+} from "../../../shared/contracts/apiDtos";
+import type {
+  AdminTestTemplateCreateRequest,
+  AdminTestTemplateCreateResult,
+  AdminTestTemplateListResult,
+  AdminTestTemplateLifecycleRequest,
+  AdminTestTemplateLifecycleResult,
+  AdminTestTemplateUpdateRequest,
+  AdminTestTemplateUpdateResult,
+} from "../../../shared/contracts/apiDtos";
 
 export interface AdminTestsListRequest {
   instituteId: string;
   limit: number;
 }
 
-export interface AdminTestsCreateRequest {
+export interface AdminTestsCreateRequest extends AdminTestTemplateCreateRequest {
   actorId: string;
   actorRole: string;
-  canonicalId: string;
-  difficultyDistribution: AdminTestDifficultyDistribution;
-  examType: string;
-  examSnapshot: AdminTestExamSnapshot;
-  phaseConfigSnapshot: AdminTestPhaseConfigSnapshot;
   instituteId: string;
   ipAddress?: string;
-  publish: boolean;
-  questionIds: string[];
-  selectionMethod: AdminTestSelectionMethod;
-  templateName: string;
-  timingProfile: AdminTestTimingProfile;
-  totalDurationMinutes: number;
   userAgent?: string;
 }
 
-export interface AdminTestsCreateResult {
-  template: AdminTestTemplateRecord;
+export type AdminTestsCreateResult = AdminTestTemplateCreateResult;
+
+export interface AdminTestsUpdateRequest extends AdminTestTemplateUpdateRequest {
+  actorId: string;
+  actorRole: string;
+  instituteId: string;
+  ipAddress?: string;
+  testId: string;
+  userAgent?: string;
+}
+
+export type AdminTestsUpdateResult = AdminTestTemplateUpdateResult;
+
+export interface AdminTestsLifecycleRequest
+  extends AdminTestTemplateLifecycleRequest {
+  actorId: string;
+  actorRole: string;
+  instituteId: string;
+  ipAddress?: string;
+  testId: string;
+  userAgent?: string;
+}
+
+export type AdminTestsLifecycleResult = AdminTestTemplateLifecycleResult;
+
+export interface AdminTestsListSuccessResponse {
+  code: "OK";
+  data: AdminTestTemplateListResult;
+  message: string;
+  requestId: string;
+  success: true;
+  timestamp: string;
+}
+
+export interface AdminTestsCreateSuccessResponse {
+  code: "OK";
+  data: AdminTestTemplateCreateResult;
+  message: string;
+  requestId: string;
+  success: true;
+  timestamp: string;
+}
+
+export interface AdminTestsUpdateSuccessResponse {
+  code: "OK";
+  data: AdminTestTemplateUpdateResult;
+  message: string;
+  requestId: string;
+  success: true;
+  timestamp: string;
+}
+
+export interface AdminTestsLifecycleSuccessResponse {
+  code: "OK";
+  data: AdminTestTemplateLifecycleResult;
+  message: string;
+  requestId: string;
+  success: true;
+  timestamp: string;
 }
 
 export class AdminTestsValidationError extends Error {

@@ -1,4 +1,5 @@
 /* eslint-disable require-jsdoc */
+import {createHash} from "node:crypto";
 import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import {getFirestore} from "../utils/firebaseAdmin";
 import {
@@ -9,16 +10,23 @@ import {
   AdminTestsCreateRequest,
   AdminTestsCreateResult,
   AdminTestsListRequest,
+  AdminTestsLifecycleRequest,
+  AdminTestsLifecycleResult,
+  AdminTestsUpdateRequest,
+  AdminTestsUpdateResult,
   AdminTestSelectionMethod,
   AdminTestsValidationError,
   AdminTestTemplateRecord,
   AdminTestTemplateStatus,
+  AdminTestTemplateUpdateRequest,
   AdminTestTimingProfile,
   AdminTestTimingWindow,
 } from "../types/adminTests";
 
 const INSTITUTES_COLLECTION = "institutes";
 const TESTS_COLLECTION = "tests";
+const VERSION_SNAPSHOTS_COLLECTION = "versionSnapshots";
+const AUDIT_LOGS_COLLECTION = "auditLogs";
 const DEFAULT_LIMIT = 250;
 const MAX_LIMIT = 500;
 const SELECTION_METHODS = new Set<AdminTestSelectionMethod>([
@@ -26,6 +34,7 @@ const SELECTION_METHODS = new Set<AdminTestSelectionMethod>([
   "offset_limit",
   "round_robin",
   "shuffle_slice",
+  "upload_set",
 ]);
 const DIFFICULTY_WEIGHTS = {
   easy: 1,
@@ -221,7 +230,19 @@ function normalizeTimingWindow(
     );
   }
 
-  return {maxSeconds, minSeconds};
+  const recommendedSeconds = normalizePositiveInteger(
+    value.recommendedSeconds ?? value.recommended ??
+      Math.round((minSeconds + maxSeconds) / 2),
+    `${field}.recommendedSeconds`,
+  );
+  if (recommendedSeconds < minSeconds || recommendedSeconds > maxSeconds) {
+    throw new AdminTestsValidationError(
+      "VALIDATION_ERROR",
+      `Field "${field}" must satisfy minSeconds <= recommendedSeconds <= maxSeconds.`,
+    );
+  }
+
+  return {maxSeconds, minSeconds, recommendedSeconds};
 }
 
 function normalizeTimingProfile(value: unknown): AdminTestTimingProfile {
@@ -244,9 +265,9 @@ function defaultExamSnapshot(examType: string): AdminTestExamSnapshot {
     return {
       defaultDurationMinutes: 200,
       difficultyTimingMapping: {
-        easy: {maxSeconds: 55, minSeconds: 25},
-        hard: {maxSeconds: 210, minSeconds: 135},
-        medium: {maxSeconds: 135, minSeconds: 55},
+        easy: {maxSeconds: 55, minSeconds: 25, recommendedSeconds: 40},
+        hard: {maxSeconds: 210, minSeconds: 135, recommendedSeconds: 173},
+        medium: {maxSeconds: 135, minSeconds: 55, recommendedSeconds: 95},
       },
       markingScheme:
         "Fixed NEET snapshot: +4 correct, -1 incorrect, 0 unanswered. " +
@@ -258,9 +279,9 @@ function defaultExamSnapshot(examType: string): AdminTestExamSnapshot {
   return {
     defaultDurationMinutes: 180,
     difficultyTimingMapping: {
-      easy: {maxSeconds: 60, minSeconds: 30},
-      hard: {maxSeconds: 210, minSeconds: 150},
-      medium: {maxSeconds: 150, minSeconds: 60},
+      easy: {maxSeconds: 60, minSeconds: 30, recommendedSeconds: 45},
+      hard: {maxSeconds: 210, minSeconds: 150, recommendedSeconds: 180},
+      medium: {maxSeconds: 150, minSeconds: 60, recommendedSeconds: 105},
     },
     markingScheme:
       "Fixed JEE snapshot: +4 correct, -1 incorrect, 0 unanswered. " +
@@ -484,16 +505,24 @@ function normalizePhaseConfigSnapshot(
 
 function toTimingWindow(value: unknown): AdminTestTimingWindow {
   if (!isRecord(value)) {
-    return {maxSeconds: 60, minSeconds: 30};
+    return {maxSeconds: 60, minSeconds: 30, recommendedSeconds: 45};
   }
 
+  const minSeconds = Math.max(1, Math.round(
+    toNumber(value.minSeconds ?? value.min, 30),
+  ));
+  const maxSeconds = Math.max(minSeconds, Math.round(
+    toNumber(value.maxSeconds ?? value.max, 60),
+  ));
   return {
-    maxSeconds: Math.max(1, Math.round(
-      toNumber(value.maxSeconds ?? value.max, 60),
-    )),
-    minSeconds: Math.max(1, Math.round(
-      toNumber(value.minSeconds ?? value.min, 30),
-    )),
+    maxSeconds,
+    minSeconds,
+    recommendedSeconds: Math.min(maxSeconds, Math.max(minSeconds, Math.round(
+      toNumber(
+        value.recommendedSeconds ?? value.recommended,
+        (minSeconds + maxSeconds) / 2,
+      ),
+    ))),
   };
 }
 
@@ -524,9 +553,9 @@ function toIsoString(value: unknown): string {
 }
 
 function toTemplateRecord(
-  snapshot: FirebaseFirestore.QueryDocumentSnapshot,
+  snapshot: FirebaseFirestore.DocumentSnapshot,
 ): AdminTestTemplateRecord {
-  const data = snapshot.data();
+  const data = snapshot.data() ?? {};
   const difficultyDistribution = isRecord(data.difficultyDistribution) ?
     data.difficultyDistribution :
     {};
@@ -571,17 +600,31 @@ function toTemplateRecord(
       medium: toTimingWindow(timingProfile.medium),
     },
     totalDurationMinutes,
+    totalRuns: Math.max(0, Math.round(toNumber(data.totalRuns))),
     updatedAt: toIsoString(data.updatedAt ?? data.createdAt),
+    version: Math.max(1, Math.round(toNumber(data.version, 1))),
   };
 }
 
 function toFirestoreTimingProfile(
   value: AdminTestTimingProfile,
-): Record<string, {min: number; max: number}> {
+): Record<string, {min: number; recommended: number; max: number}> {
   return {
-    easy: {max: value.easy.maxSeconds, min: value.easy.minSeconds},
-    hard: {max: value.hard.maxSeconds, min: value.hard.minSeconds},
-    medium: {max: value.medium.maxSeconds, min: value.medium.minSeconds},
+    easy: {
+      max: value.easy.maxSeconds,
+      min: value.easy.minSeconds,
+      recommended: value.easy.recommendedSeconds,
+    },
+    hard: {
+      max: value.hard.maxSeconds,
+      min: value.hard.minSeconds,
+      recommended: value.hard.recommendedSeconds,
+    },
+    medium: {
+      max: value.medium.maxSeconds,
+      min: value.medium.minSeconds,
+      recommended: value.medium.recommendedSeconds,
+    },
   };
 }
 
@@ -605,6 +648,155 @@ function toFirestorePhaseConfigSnapshot(
     difficultyWeights: value.difficultyWeights,
     phaseSplit: value.phaseSplit.map((phase) => ({...phase})),
     totalLoad: value.totalLoad,
+  };
+}
+
+type NormalizedTemplateMutation = Omit<
+  AdminTestTemplateUpdateRequest,
+  "expectedVersion"
+>;
+
+function normalizeTemplateMutationBody(value: unknown):
+NormalizedTemplateMutation {
+  const body = isRecord(value) ? value : {};
+  const questionIds = normalizeQuestionIds(
+    body.questionIds ?? body.selectedQuestionIds,
+  );
+  const difficultyDistribution = normalizeDifficultyDistribution(
+    body.difficultyDistribution,
+  );
+  const difficultyTotal =
+    difficultyDistribution.easy +
+    difficultyDistribution.medium +
+    difficultyDistribution.hard;
+
+  if (difficultyTotal !== questionIds.length) {
+    throw new AdminTestsValidationError(
+      "VALIDATION_ERROR",
+      "difficultyDistribution total must match questionIds length.",
+    );
+  }
+
+  const examType = normalizeRequiredString(body.examType, "examType");
+  const totalDurationMinutes = normalizePositiveInteger(
+    body.totalDurationMinutes,
+    "totalDurationMinutes",
+  );
+
+  return {
+    canonicalId: normalizeRequiredString(body.canonicalId, "canonicalId"),
+    difficultyDistribution,
+    examType,
+    examSnapshot: normalizeExamSnapshot(body.examSnapshot, examType),
+    phaseConfigSnapshot: normalizePhaseConfigSnapshot(
+      body.phaseConfigSnapshot,
+      difficultyDistribution,
+      totalDurationMinutes,
+    ),
+    questionIds,
+    selectionMethod: normalizeSelectionMethod(body.selectionMethod),
+    templateName: normalizeRequiredString(body.templateName, "templateName"),
+    timingProfile: normalizeTimingProfile(body.timingProfile),
+    totalDurationMinutes,
+  };
+}
+
+function toFirestoreTemplateMutation(
+  request: NormalizedTemplateMutation,
+): Record<string, unknown> {
+  return {
+    canonicalId: request.canonicalId,
+    difficultyDistribution: request.difficultyDistribution,
+    examSnapshot: toFirestoreExamSnapshot(request.examSnapshot),
+    examType: request.examType,
+    phaseConfigSnapshot: toFirestorePhaseConfigSnapshot(
+      request.phaseConfigSnapshot,
+    ),
+    questionIds: request.questionIds,
+    selectionMethod: request.selectionMethod,
+    templateName: request.templateName,
+    timingProfile: toFirestoreTimingProfile(request.timingProfile),
+    totalDurationMinutes: request.totalDurationMinutes,
+    totalQuestions: request.questionIds.length,
+  };
+}
+
+function toFirestoreVersionSnapshot(
+  current: AdminTestTemplateRecord,
+  request: AdminTestsUpdateRequest,
+  nextVersion: number,
+): Record<string, unknown> {
+  return {
+    canonicalId: current.canonicalId,
+    difficultyDistribution: current.difficultyDistribution,
+    examSnapshot: toFirestoreExamSnapshot(current.examSnapshot),
+    examType: current.examType,
+    phaseConfigSnapshot: toFirestorePhaseConfigSnapshot(
+      current.phaseConfigSnapshot,
+    ),
+    questionIds: current.selectedQuestionIds,
+    selectionMethod: current.selectionMethod,
+    snapshotCreatedAt: FieldValue.serverTimestamp(),
+    snapshotCreatedBy: request.actorId,
+    snapshotCreatedByRole: request.actorRole,
+    status: current.status,
+    supersededByVersion: nextVersion,
+    templateName: current.templateName,
+    testId: current.id,
+    timingProfile: toFirestoreTimingProfile(current.timingProfile),
+    totalDurationMinutes: current.totalDurationMinutes,
+    totalQuestions: current.selectedQuestionIds.length,
+    version: current.version,
+  };
+}
+
+type TemplateLifecycleAction = "archive" | "publish";
+
+function buildLifecycleAuditId(
+  request: AdminTestsLifecycleRequest,
+  action: TemplateLifecycleAction,
+): string {
+  const fingerprint = createHash("sha256")
+    .update(`${request.instituteId}:${request.testId}:` +
+      `${action}:${request.expectedVersion}`)
+    .digest("hex");
+  return `template_lifecycle_${fingerprint}`;
+}
+
+function toFirestoreLifecycleAudit(input: {
+  action: TemplateLifecycleAction;
+  auditId: string;
+  beforeStatus: AdminTestTemplateStatus;
+  request: AdminTestsLifecycleRequest;
+  targetStatus: AdminTestTemplateStatus;
+}): Record<string, unknown> {
+  return {
+    actionType: input.action === "publish" ?
+      "ACTIVATE_TEST_TEMPLATE" :
+      "ARCHIVE_TEST_TEMPLATE",
+    actorId: input.request.actorId,
+    actorRole: input.request.actorRole,
+    actorUid: input.request.actorId,
+    after: {status: input.targetStatus},
+    auditId: input.auditId,
+    before: {status: input.beforeStatus},
+    entityId: input.request.testId,
+    entityType: "test",
+    instituteId: input.request.instituteId,
+    ...(input.request.ipAddress ?
+      {ipAddress: input.request.ipAddress} : {}),
+    layer: "L0",
+    metadata: {
+      command: input.action,
+      expectedVersion: input.request.expectedVersion,
+      source: "AdminTestsService",
+    },
+    targetCollection: TESTS_COLLECTION,
+    targetId: input.request.testId,
+    tenantId: input.request.instituteId,
+    timestamp: FieldValue.serverTimestamp(),
+    ...(input.request.userAgent ?
+      {userAgent: input.request.userAgent} : {}),
   };
 }
 
@@ -632,50 +824,70 @@ export class AdminTestsService {
     userAgent?: unknown;
   }): AdminTestsCreateRequest {
     const body = isRecord(input.body) ? input.body : {};
-    const questionIds = normalizeQuestionIds(
-      body.questionIds ?? body.selectedQuestionIds,
-    );
-    const difficultyDistribution = normalizeDifficultyDistribution(
-      body.difficultyDistribution,
-    );
-    const difficultyTotal =
-      difficultyDistribution.easy +
-      difficultyDistribution.medium +
-      difficultyDistribution.hard;
-
-    if (difficultyTotal !== questionIds.length) {
+    if (Object.prototype.hasOwnProperty.call(body, "publish")) {
       throw new AdminTestsValidationError(
         "VALIDATION_ERROR",
-        "difficultyDistribution total must match questionIds length.",
+        "Template creation cannot publish. Use the distinct publish command.",
       );
     }
-
-    const examType = normalizeRequiredString(body.examType, "examType");
-    const totalDurationMinutes = normalizePositiveInteger(
-      body.totalDurationMinutes,
-      "totalDurationMinutes",
-    );
+    const template = normalizeTemplateMutationBody(body);
 
     return {
       actorId: normalizeRequiredString(input.actorId, "actorId"),
       actorRole: normalizeRequiredString(input.actorRole, "actorRole"),
-      canonicalId: normalizeRequiredString(body.canonicalId, "canonicalId"),
-      difficultyDistribution,
-      examType,
-      examSnapshot: normalizeExamSnapshot(body.examSnapshot, examType),
-      phaseConfigSnapshot: normalizePhaseConfigSnapshot(
-        body.phaseConfigSnapshot,
-        difficultyDistribution,
-        totalDurationMinutes,
+      ...template,
+      instituteId: normalizeRequiredString(input.instituteId, "instituteId"),
+      ipAddress: input.ipAddress,
+      userAgent: normalizeOptionalString(input.userAgent),
+    };
+  }
+
+  public normalizeUpdateRequest(input: {
+    actorId?: unknown;
+    actorRole?: unknown;
+    body?: unknown;
+    instituteId?: unknown;
+    ipAddress?: string;
+    testId?: unknown;
+    userAgent?: unknown;
+  }): AdminTestsUpdateRequest {
+    const body = isRecord(input.body) ? input.body : {};
+
+    return {
+      actorId: normalizeRequiredString(input.actorId, "actorId"),
+      actorRole: normalizeRequiredString(input.actorRole, "actorRole"),
+      ...normalizeTemplateMutationBody(body),
+      expectedVersion: normalizePositiveInteger(
+        body.expectedVersion,
+        "expectedVersion",
       ),
       instituteId: normalizeRequiredString(input.instituteId, "instituteId"),
       ipAddress: input.ipAddress,
-      publish: body.publish === true,
-      questionIds,
-      selectionMethod: normalizeSelectionMethod(body.selectionMethod),
-      templateName: normalizeRequiredString(body.templateName, "templateName"),
-      timingProfile: normalizeTimingProfile(body.timingProfile),
-      totalDurationMinutes,
+      testId: normalizeRequiredString(input.testId, "testId"),
+      userAgent: normalizeOptionalString(input.userAgent),
+    };
+  }
+
+  public normalizeLifecycleRequest(input: {
+    actorId?: unknown;
+    actorRole?: unknown;
+    body?: unknown;
+    instituteId?: unknown;
+    ipAddress?: string;
+    testId?: unknown;
+    userAgent?: unknown;
+  }): AdminTestsLifecycleRequest {
+    const body = isRecord(input.body) ? input.body : {};
+    return {
+      actorId: normalizeRequiredString(input.actorId, "actorId"),
+      actorRole: normalizeRequiredString(input.actorRole, "actorRole"),
+      expectedVersion: normalizePositiveInteger(
+        body.expectedVersion,
+        "expectedVersion",
+      ),
+      instituteId: normalizeRequiredString(input.instituteId, "instituteId"),
+      ipAddress: input.ipAddress,
+      testId: normalizeRequiredString(input.testId, "testId"),
       userAgent: normalizeOptionalString(input.userAgent),
     };
   }
@@ -703,40 +915,213 @@ export class AdminTestsService {
       .doc(request.instituteId)
       .collection(TESTS_COLLECTION);
     const templateReference = templatesCollection.doc();
-    const status: AdminTestTemplateStatus = request.publish ? "ready" : "draft";
-
     await templateReference.set({
       academicYear: null,
-      canonicalId: request.canonicalId,
       createdAt: FieldValue.serverTimestamp(),
       createdBy: request.actorId,
       createdByRole: request.actorRole,
-      createdFromIp: request.ipAddress,
-      createdFromUserAgent: request.userAgent,
-      difficultyDistribution: request.difficultyDistribution,
-      examSnapshot: toFirestoreExamSnapshot(request.examSnapshot),
-      examType: request.examType,
-      phaseConfigSnapshot: toFirestorePhaseConfigSnapshot(
-        request.phaseConfigSnapshot,
-      ),
-      questionIds: request.questionIds,
-      selectionMethod: request.selectionMethod,
-      status,
-      templateName: request.templateName,
+      ...(request.ipAddress ? {createdFromIp: request.ipAddress} : {}),
+      ...(request.userAgent ?
+        {createdFromUserAgent: request.userAgent} : {}),
+      ...toFirestoreTemplateMutation(request),
+      status: "draft",
       testId: templateReference.id,
-      timingProfile: toFirestoreTimingProfile(request.timingProfile),
-      totalDurationMinutes: request.totalDurationMinutes,
-      totalQuestions: request.questionIds.length,
       totalRuns: 0,
       updatedAt: FieldValue.serverTimestamp(),
+      version: 1,
     });
 
     const savedSnapshot = await templateReference.get();
 
     return {
-      template: toTemplateRecord(
-        savedSnapshot as FirebaseFirestore.QueryDocumentSnapshot,
-      ),
+      template: toTemplateRecord(savedSnapshot),
+    };
+  }
+
+  public async updateTemplate(
+    request: AdminTestsUpdateRequest,
+  ): Promise<AdminTestsUpdateResult> {
+    const templateReference = this.firestore
+      .collection(INSTITUTES_COLLECTION)
+      .doc(request.instituteId)
+      .collection(TESTS_COLLECTION)
+      .doc(request.testId);
+
+    await this.firestore.runTransaction(async (transaction) => {
+      const templateSnapshot = await transaction.get(templateReference);
+      if (!templateSnapshot.exists) {
+        throw new AdminTestsValidationError(
+          "NOT_FOUND",
+          `Test template "${request.testId}" was not found.`,
+        );
+      }
+
+      const currentTemplate = toTemplateRecord(templateSnapshot);
+      if (currentTemplate.version !== request.expectedVersion) {
+        throw new AdminTestsValidationError(
+          "CONFLICT",
+          `Template version conflict: expected ${request.expectedVersion}, ` +
+            `current version is ${currentTemplate.version}.`,
+        );
+      }
+
+      if (
+        currentTemplate.status !== "draft" &&
+        currentTemplate.status !== "ready"
+      ) {
+        throw new AdminTestsValidationError(
+          "CONFLICT",
+          `Template status "${currentTemplate.status}" is structurally locked.`,
+        );
+      }
+
+      const nextVersion = currentTemplate.version + 1;
+      const versionSnapshotReference = templateReference
+        .collection(VERSION_SNAPSHOTS_COLLECTION)
+        .doc(String(currentTemplate.version));
+      const existingVersionSnapshot = await transaction.get(
+        versionSnapshotReference,
+      );
+      if (existingVersionSnapshot.exists) {
+        throw new AdminTestsValidationError(
+          "CONFLICT",
+          "Immutable snapshot for template version " +
+            `${currentTemplate.version} already exists.`,
+        );
+      }
+
+      transaction.create(
+        versionSnapshotReference,
+        toFirestoreVersionSnapshot(currentTemplate, request, nextVersion),
+      );
+      transaction.update(templateReference, {
+        ...toFirestoreTemplateMutation(request),
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: request.actorId,
+        updatedByRole: request.actorRole,
+        ...(request.ipAddress ? {updatedFromIp: request.ipAddress} : {}),
+        ...(request.userAgent ?
+          {updatedFromUserAgent: request.userAgent} : {}),
+        version: nextVersion,
+      });
+    });
+
+    const savedSnapshot = await templateReference.get();
+    return {template: toTemplateRecord(savedSnapshot)};
+  }
+
+  public async publishTemplate(
+    request: AdminTestsLifecycleRequest,
+  ): Promise<AdminTestsLifecycleResult> {
+    return this.transitionTemplateLifecycle(request, "publish");
+  }
+
+  public async archiveTemplate(
+    request: AdminTestsLifecycleRequest,
+  ): Promise<AdminTestsLifecycleResult> {
+    return this.transitionTemplateLifecycle(request, "archive");
+  }
+
+  private async transitionTemplateLifecycle(
+    request: AdminTestsLifecycleRequest,
+    action: TemplateLifecycleAction,
+  ): Promise<AdminTestsLifecycleResult> {
+    const instituteReference = this.firestore
+      .collection(INSTITUTES_COLLECTION)
+      .doc(request.instituteId);
+    const templateReference = instituteReference
+      .collection(TESTS_COLLECTION)
+      .doc(request.testId);
+    const auditId = buildLifecycleAuditId(request, action);
+    const auditReference = instituteReference
+      .collection(AUDIT_LOGS_COLLECTION)
+      .doc(auditId);
+    const targetStatus: AdminTestTemplateStatus = action === "publish" ?
+      "ready" :
+      "archived";
+
+    await this.firestore.runTransaction(async (transaction) => {
+      const [templateSnapshot, auditSnapshot] = await Promise.all([
+        transaction.get(templateReference),
+        transaction.get(auditReference),
+      ]);
+      if (!templateSnapshot.exists) {
+        throw new AdminTestsValidationError(
+          "NOT_FOUND",
+          `Test template "${request.testId}" was not found.`,
+        );
+      }
+
+      const currentTemplate = toTemplateRecord(templateSnapshot);
+      if (currentTemplate.version !== request.expectedVersion) {
+        throw new AdminTestsValidationError(
+          "CONFLICT",
+          `Template version conflict: expected ${request.expectedVersion}, ` +
+            `current version is ${currentTemplate.version}.`,
+        );
+      }
+
+      if (currentTemplate.status === targetStatus) {
+        const auditData = auditSnapshot.data();
+        if (
+          auditSnapshot.exists &&
+          auditData?.targetId === request.testId &&
+          auditData?.metadata?.command === action
+        ) {
+          return;
+        }
+
+        throw new AdminTestsValidationError(
+          "CONFLICT",
+          `Template is already ${targetStatus} without matching command ` +
+            "authority.",
+        );
+      }
+
+      const legalSourceStatuses: readonly AdminTestTemplateStatus[] =
+        action === "publish" ? ["draft"] : ["ready", "assigned"];
+      if (!legalSourceStatuses.includes(currentTemplate.status)) {
+        throw new AdminTestsValidationError(
+          "CONFLICT",
+          `Cannot ${action} template from status ` +
+            `"${currentTemplate.status}".`,
+        );
+      }
+
+      if (auditSnapshot.exists) {
+        throw new AdminTestsValidationError(
+          "CONFLICT",
+          "Lifecycle audit authority already exists for this command.",
+        );
+      }
+
+      transaction.create(auditReference, toFirestoreLifecycleAudit({
+        action,
+        auditId,
+        beforeStatus: currentTemplate.status,
+        request,
+        targetStatus,
+      }));
+      transaction.update(templateReference, {
+        status: targetStatus,
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: request.actorId,
+        updatedByRole: request.actorRole,
+        ...(action === "publish" ? {
+          publishedAt: FieldValue.serverTimestamp(),
+          publishedBy: request.actorId,
+        } : {
+          archivedAt: FieldValue.serverTimestamp(),
+          archivedBy: request.actorId,
+        }),
+      });
+    });
+
+    const savedSnapshot = await templateReference.get();
+    return {
+      auditId,
+      auditPath: auditReference.path,
+      template: toTemplateRecord(savedSnapshot),
     };
   }
 }

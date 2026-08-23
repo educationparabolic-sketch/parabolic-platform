@@ -1,5 +1,13 @@
 import type {
   AdminQuestionLibraryResult,
+  AdminTestPhaseConfigSnapshot,
+  AdminTestTemplateCreateResult,
+  AdminTestTemplateLifecycleResult,
+  AdminTestTemplateListResult,
+  AdminTestTemplateRecord,
+  AdminTestTemplateUpdateResult,
+  AdminTestTimingProfile,
+  AdminTestTimingWindow,
   DeployCalibrationVersionResult,
   QuestionAssetUploadResult,
   QuestionBulkUploadResult,
@@ -755,6 +763,281 @@ export function adaptAdminQuestionBulkResult(
     uploadLogId: readNullableString(data.uploadLogId, route, "uploadLogId"),
     uploadLogPath: readNullableString(data.uploadLogPath, route, "uploadLogPath"),
   };
+}
+
+function adaptAdminTestTimingWindow(
+  value: unknown,
+  route: string,
+  field: string,
+): AdminTestTimingWindow {
+  const window = readRecord(value, route, field);
+  const minSeconds = readPositiveInteger(
+    window.minSeconds,
+    route,
+    `${field}.minSeconds`,
+  );
+  const recommendedSeconds = readPositiveInteger(
+    window.recommendedSeconds,
+    route,
+    `${field}.recommendedSeconds`,
+  );
+  const maxSeconds = readPositiveInteger(
+    window.maxSeconds,
+    route,
+    `${field}.maxSeconds`,
+  );
+
+  if (minSeconds > recommendedSeconds || recommendedSeconds > maxSeconds) {
+    return fail(
+      route,
+      field,
+      "minSeconds <= recommendedSeconds <= maxSeconds",
+    );
+  }
+
+  return {maxSeconds, minSeconds, recommendedSeconds};
+}
+
+function adaptAdminTestTimingProfile(
+  value: unknown,
+  route: string,
+  field: string,
+): AdminTestTimingProfile {
+  const profile = readRecord(value, route, field);
+  return {
+    easy: adaptAdminTestTimingWindow(profile.easy, route, `${field}.easy`),
+    hard: adaptAdminTestTimingWindow(profile.hard, route, `${field}.hard`),
+    medium: adaptAdminTestTimingWindow(profile.medium, route, `${field}.medium`),
+  };
+}
+
+function adaptAdminTestPhaseConfigSnapshot(
+  value: unknown,
+  route: string,
+  field: string,
+): AdminTestPhaseConfigSnapshot {
+  const snapshot = readRecord(value, route, field);
+  const weights = readRecord(
+    snapshot.difficultyWeights,
+    route,
+    `${field}.difficultyWeights`,
+  );
+
+  return {
+    difficultyWeights: {
+      easy: readNumber(weights.easy, route, `${field}.difficultyWeights.easy`),
+      hard: readNumber(weights.hard, route, `${field}.difficultyWeights.hard`),
+      medium: readNumber(
+        weights.medium,
+        route,
+        `${field}.difficultyWeights.medium`,
+      ),
+    },
+    phaseSplit: readArray(snapshot.phaseSplit, route, `${field}.phaseSplit`)
+      .map((entry, index) => {
+        const rowField = `${field}.phaseSplit[${index}]`;
+        const row = readRecord(entry, route, rowField);
+        return {
+          difficulty: readEnum(
+            row.difficulty,
+            ["easy", "medium", "hard"] as const,
+            route,
+            `${rowField}.difficulty`,
+          ),
+          focus: readString(row.focus, route, `${rowField}.focus`),
+          load: readNumber(row.load, route, `${rowField}.load`),
+          minutes: readNumber(row.minutes, route, `${rowField}.minutes`),
+          percent: readNumber(row.percent, route, `${rowField}.percent`),
+          phase: readString(row.phase, route, `${rowField}.phase`),
+          questionCount: readNumber(
+            row.questionCount,
+            route,
+            `${rowField}.questionCount`,
+          ),
+          weight: readNumber(row.weight, route, `${rowField}.weight`),
+        };
+      }),
+    totalLoad: readNumber(snapshot.totalLoad, route, `${field}.totalLoad`),
+  };
+}
+
+function adaptAdminTestTemplateRecord(
+  value: unknown,
+  route: string,
+  field: string,
+): AdminTestTemplateRecord {
+  const record = readRecord(value, route, field);
+  const difficulty = readRecord(
+    record.difficultyDistribution,
+    route,
+    `${field}.difficultyDistribution`,
+  );
+  const examSnapshot = readRecord(
+    record.examSnapshot,
+    route,
+    `${field}.examSnapshot`,
+  );
+
+  return {
+    canonicalId: readString(record.canonicalId, route, `${field}.canonicalId`),
+    difficultyDistribution: {
+      easy: readNumber(
+        difficulty.easy,
+        route,
+        `${field}.difficultyDistribution.easy`,
+      ),
+      hard: readNumber(
+        difficulty.hard,
+        route,
+        `${field}.difficultyDistribution.hard`,
+      ),
+      medium: readNumber(
+        difficulty.medium,
+        route,
+        `${field}.difficultyDistribution.medium`,
+      ),
+    },
+    examSnapshot: {
+      defaultDurationMinutes: readPositiveInteger(
+        examSnapshot.defaultDurationMinutes,
+        route,
+        `${field}.examSnapshot.defaultDurationMinutes`,
+      ),
+      difficultyTimingMapping: adaptAdminTestTimingProfile(
+        examSnapshot.difficultyTimingMapping,
+        route,
+        `${field}.examSnapshot.difficultyTimingMapping`,
+      ),
+      markingScheme: readString(
+        examSnapshot.markingScheme,
+        route,
+        `${field}.examSnapshot.markingScheme`,
+      ),
+      sectionStructure: readStringArray(
+        examSnapshot.sectionStructure,
+        route,
+        `${field}.examSnapshot.sectionStructure`,
+      ),
+    },
+    examType: readString(record.examType, route, `${field}.examType`),
+    id: readString(record.id, route, `${field}.id`),
+    phaseConfigSnapshot: adaptAdminTestPhaseConfigSnapshot(
+      record.phaseConfigSnapshot,
+      route,
+      `${field}.phaseConfigSnapshot`,
+    ),
+    selectedQuestionIds: readStringArray(
+      record.selectedQuestionIds,
+      route,
+      `${field}.selectedQuestionIds`,
+    ),
+    selectionMethod: readEnum(
+      record.selectionMethod,
+      [
+        "manual",
+        "shuffle_slice",
+        "offset_limit",
+        "round_robin",
+        "upload_set",
+      ] as const,
+      route,
+      `${field}.selectionMethod`,
+    ),
+    status: readEnum(
+      record.status,
+      ["draft", "ready", "assigned", "archived", "deprecated"] as const,
+      route,
+      `${field}.status`,
+    ),
+    templateName: readString(
+      record.templateName,
+      route,
+      `${field}.templateName`,
+    ),
+    timingProfile: adaptAdminTestTimingProfile(
+      record.timingProfile,
+      route,
+      `${field}.timingProfile`,
+    ),
+    totalDurationMinutes: readPositiveInteger(
+      record.totalDurationMinutes,
+      route,
+      `${field}.totalDurationMinutes`,
+    ),
+    totalRuns: readNumber(record.totalRuns, route, `${field}.totalRuns`),
+    updatedAt: readString(record.updatedAt, route, `${field}.updatedAt`),
+    version: readPositiveInteger(record.version, route, `${field}.version`),
+  };
+}
+
+export function adaptAdminTestTemplateListResult(
+  value: unknown,
+): AdminTestTemplateListResult {
+  const route = "GET /admin/tests";
+  return readArray(value, route, "data").map((entry, index) =>
+    adaptAdminTestTemplateRecord(entry, route, `data[${index}]`));
+}
+
+export function adaptAdminTestTemplateCreateResult(
+  value: unknown,
+): AdminTestTemplateCreateResult {
+  const route = "POST /admin/tests";
+  const data = readRecord(value, route);
+  return {
+    template: adaptAdminTestTemplateRecord(
+      data.template,
+      route,
+      "template",
+    ),
+  };
+}
+
+export function adaptAdminTestTemplateUpdateResult(
+  value: unknown,
+): AdminTestTemplateUpdateResult {
+  const route = "PATCH /admin/tests/{testId}";
+  const data = readRecord(value, route);
+  return {
+    template: adaptAdminTestTemplateRecord(
+      data.template,
+      route,
+      "template",
+    ),
+  };
+}
+
+function adaptAdminTestTemplateLifecycleResult(
+  value: unknown,
+  route: string,
+): AdminTestTemplateLifecycleResult {
+  const data = readRecord(value, route);
+  return {
+    auditId: readString(data.auditId, route, "auditId"),
+    auditPath: readString(data.auditPath, route, "auditPath"),
+    template: adaptAdminTestTemplateRecord(
+      data.template,
+      route,
+      "template",
+    ),
+  };
+}
+
+export function adaptAdminTestTemplatePublishResult(
+  value: unknown,
+): AdminTestTemplateLifecycleResult {
+  return adaptAdminTestTemplateLifecycleResult(
+    value,
+    "POST /admin/tests/{testId}/publish",
+  );
+}
+
+export function adaptAdminTestTemplateArchiveResult(
+  value: unknown,
+): AdminTestTemplateLifecycleResult {
+  return adaptAdminTestTemplateLifecycleResult(
+    value,
+    "POST /admin/tests/{testId}/archive",
+  );
 }
 
 function readSafeQuestionAssetReference(

@@ -3,6 +3,7 @@ interface MockRequestOverrides {
   headers?: Record<string, string>;
   method?: string;
   originalUrl?: string;
+  params?: Record<string, string>;
   path?: string;
   query?: Record<string, string>;
   rawBody?: Buffer | string;
@@ -56,6 +57,7 @@ export const createMockRequest = (
     ip: "127.0.0.1",
     method: overrides.method ?? "POST",
     originalUrl: overrides.originalUrl ?? path,
+    params: overrides.params ?? {},
     path,
     query: overrides.query ?? {},
     rawBody:

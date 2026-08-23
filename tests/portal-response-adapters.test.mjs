@@ -121,6 +121,127 @@ test("Admin adapter accepts backend question-bulk data and rejects defaultable d
   );
 });
 
+const authoritativeTemplate = {
+  canonicalId: "canonical-template-001",
+  difficultyDistribution: { easy: 1, hard: 1, medium: 1 },
+  examSnapshot: {
+    defaultDurationMinutes: 180,
+    difficultyTimingMapping: {
+      easy: { maxSeconds: 60, minSeconds: 30, recommendedSeconds: 45 },
+      hard: { maxSeconds: 210, minSeconds: 150, recommendedSeconds: 180 },
+      medium: { maxSeconds: 150, minSeconds: 60, recommendedSeconds: 105 },
+    },
+    markingScheme: "+4/-1",
+    sectionStructure: ["Physics", "Chemistry", "Mathematics"],
+  },
+  examType: "JEEMains",
+  id: "backend-template-001",
+  phaseConfigSnapshot: {
+    difficultyWeights: { easy: 1, hard: 4, medium: 2.3 },
+    phaseSplit: [
+      {
+        difficulty: "easy",
+        focus: "Foundation",
+        load: 1,
+        minutes: 25,
+        percent: 14,
+        phase: "Foundation",
+        questionCount: 1,
+        weight: 1,
+      },
+    ],
+    totalLoad: 7.3,
+  },
+  selectedQuestionIds: ["q-easy", "q-medium", "q-hard"],
+  selectionMethod: "upload_set",
+  status: "draft",
+  templateName: "Authoritative template",
+  timingProfile: {
+    easy: { maxSeconds: 60, minSeconds: 30, recommendedSeconds: 45 },
+    hard: { maxSeconds: 210, minSeconds: 150, recommendedSeconds: 180 },
+    medium: { maxSeconds: 150, minSeconds: 60, recommendedSeconds: 105 },
+  },
+  totalDurationMinutes: 180,
+  totalRuns: 0,
+  updatedAt: "2026-08-23T00:00:00.000Z",
+  version: 1,
+};
+
+test("Admin template adapters preserve backend IDs and numeric versions", () => {
+  assert.deepEqual(
+    adapters.adaptAdminTestTemplateListResult([authoritativeTemplate]),
+    [authoritativeTemplate],
+  );
+  assert.deepEqual(
+    adapters.adaptAdminTestTemplateCreateResult({
+      template: authoritativeTemplate,
+    }),
+    { template: authoritativeTemplate },
+  );
+  assert.deepEqual(
+    adapters.adaptAdminTestTemplateUpdateResult({
+      template: { ...authoritativeTemplate, version: 2 },
+    }),
+    { template: { ...authoritativeTemplate, version: 2 } },
+  );
+  const publishedTemplate = {...authoritativeTemplate, status: "ready"};
+  const publishResult = {
+    auditId: "publish-audit-001",
+    auditPath: "institutes/inst-001/auditLogs/publish-audit-001",
+    template: publishedTemplate,
+  };
+  assert.deepEqual(
+    adapters.adaptAdminTestTemplatePublishResult(publishResult),
+    publishResult,
+  );
+  const archiveResult = {
+    auditId: "archive-audit-001",
+    auditPath: "institutes/inst-001/auditLogs/archive-audit-001",
+    template: {...authoritativeTemplate, status: "archived"},
+  };
+  assert.deepEqual(
+    adapters.adaptAdminTestTemplateArchiveResult(archiveResult),
+    archiveResult,
+  );
+  assert.throws(
+    () => adapters.adaptAdminTestTemplateCreateResult({
+      template: { ...authoritativeTemplate, version: "1" },
+    }),
+    {
+      name: "PortalResponseValidationError",
+      route: "POST /admin/tests",
+    },
+  );
+  assert.throws(
+    () => adapters.adaptAdminTestTemplateListResult([
+      { ...authoritativeTemplate, id: "" },
+    ]),
+    {
+      name: "PortalResponseValidationError",
+      route: "GET /admin/tests",
+    },
+  );
+  assert.throws(
+    () => adapters.adaptAdminTestTemplateUpdateResult({
+      template: { ...authoritativeTemplate, version: 0 },
+    }),
+    {
+      name: "PortalResponseValidationError",
+      route: "PATCH /admin/tests/{testId}",
+    },
+  );
+  assert.throws(
+    () => adapters.adaptAdminTestTemplatePublishResult({
+      ...publishResult,
+      auditId: "",
+    }),
+    {
+      name: "PortalResponseValidationError",
+      route: "POST /admin/tests/{testId}/publish",
+    },
+  );
+});
+
 test("Admin question-library adapter preserves safe signed asset references", () => {
   const question = {
     academicYear: "2026-27",
@@ -574,6 +695,20 @@ test("representative production callers invoke their portal adapters", async () 
       "utf8",
     ),
     readFile(
+      join(
+        rootDirectory,
+        "apps/admin/src/features/tests/TestTemplateManagementPage.tsx",
+      ),
+      "utf8",
+    ),
+    readFile(
+      join(
+        rootDirectory,
+        "apps/admin/src/features/tests/TestTemplateManagementPage.tsx",
+      ),
+      "utf8",
+    ),
+    readFile(
       join(rootDirectory, "apps/student/src/services/studentSummaryApi.ts"),
       "utf8",
     ),
@@ -595,6 +730,8 @@ test("representative production callers invoke their portal adapters", async () 
     "adaptAdminAnalyticsResult",
     "adaptAdminQuestionLibraryResult",
     "adaptAdminQuestionBulkResult",
+    "adaptAdminTestTemplateListResult",
+    "adaptAdminTestTemplateCreateResult",
     "adaptStudentSummaryResult",
     "adaptExamSubmitResult",
     "adaptVendorCalibrationPushResult",

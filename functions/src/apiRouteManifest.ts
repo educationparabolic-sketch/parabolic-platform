@@ -1,6 +1,6 @@
 /* eslint-disable require-jsdoc */
 
-export type ApiRouteMethod = "GET" | "POST";
+export type ApiRouteMethod = "GET" | "PATCH" | "POST";
 
 export type ApiRoutePortal = "admin" | "student" | "exam" | "vendor";
 
@@ -139,7 +139,7 @@ export const API_ROUTE_MANIFEST: readonly ApiRouteManifestEntry[] = [
     "admin",
     "POST",
     "/admin/tests",
-    "incompatible",
+    "implemented",
     "adminTests",
   ),
   defineRoute(
@@ -197,6 +197,30 @@ export const API_ROUTE_MANIFEST: readonly ApiRouteManifestEntry[] = [
     "/admin/questions/assets",
     "implemented",
     "adminQuestionAssets",
+  ),
+  defineRoute(
+    "ADM-19",
+    "admin",
+    "PATCH",
+    "/admin/tests/{testId}",
+    "implemented",
+    "adminTests",
+  ),
+  defineRoute(
+    "ADM-20",
+    "admin",
+    "POST",
+    "/admin/tests/{testId}/publish",
+    "implemented",
+    "adminTests",
+  ),
+  defineRoute(
+    "ADM-21",
+    "admin",
+    "POST",
+    "/admin/tests/{testId}/archive",
+    "implemented",
+    "adminTests",
   ),
   defineRoute(
     "STU-01",

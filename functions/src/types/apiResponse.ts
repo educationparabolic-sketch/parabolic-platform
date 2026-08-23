@@ -1,6 +1,7 @@
 export const API_SUCCESS_CODE = "OK" as const;
 
 export const STANDARD_API_ERROR_CODES = [
+  "CONFLICT",
   "FORBIDDEN",
   "INTERNAL_ERROR",
   "LICENSE_RESTRICTED",

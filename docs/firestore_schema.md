@@ -65,9 +65,13 @@ questionBank/{questionId}
 
 tests/{testId}
 
+tests/{testId}/versionSnapshots/{version}
+
 academicYears/{yearId}
 
 auditLogs/{auditId}
+
+Template publish/archive audit IDs are deterministic per institute, template, command, and expected version. The lifecycle status update and immutable `ACTIVATE_TEST_TEMPLATE` or `ARCHIVE_TEST_TEMPLATE` audit document are committed in the same server transaction.
 
 calibration/{versionId}
 

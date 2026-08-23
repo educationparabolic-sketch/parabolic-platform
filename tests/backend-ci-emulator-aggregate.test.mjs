@@ -33,7 +33,7 @@ test("backend CI aggregates every emulator-backed Functions suite", async () => 
     (file) => file.endsWith(".emulator.test.js"),
   ).length;
 
-  assert.equal(firestoreSuiteCount, 62);
+  assert.equal(firestoreSuiteCount, 63);
   assert.equal(explicitSuiteCount, 8);
   assert.equal(
     rootPackage.scripts["test:emulators:ci"],

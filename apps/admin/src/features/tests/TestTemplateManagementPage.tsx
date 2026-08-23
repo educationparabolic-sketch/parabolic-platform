@@ -1,7 +1,23 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
-import { adaptAdminQuestionLibraryResult } from "../../../../../shared/services/portalResponseAdapters";
+import {
+  adaptAdminQuestionLibraryResult,
+  adaptAdminTestTemplateCreateResult,
+  adaptAdminTestTemplateArchiveResult,
+  adaptAdminTestTemplateListResult,
+  adaptAdminTestTemplatePublishResult,
+  adaptAdminTestTemplateUpdateResult,
+} from "../../../../../shared/services/portalResponseAdapters";
+import type {
+  AdminTestTemplateCreateRequest,
+  AdminTestTemplateCreateResult,
+  AdminTestTemplateLifecycleRequest,
+  AdminTestTemplateLifecycleResult,
+  AdminTestTemplateListResult,
+  AdminTestTemplateUpdateRequest,
+  AdminTestTemplateUpdateResult,
+} from "../../../../../shared/contracts/apiDtos";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import {
   shouldUseLiveApi as shouldUseConfiguredLiveApi,
@@ -26,6 +42,11 @@ import {
   type SelectionMethod,
 } from "./testTemplateFixtures";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
+import {
+  reconcileCreatedTemplate,
+  reconcileLifecycleTemplate,
+  reconcileUpdatedTemplate,
+} from "./testTemplateAuthority";
 import TestsWorkspaceNav from "./TestsWorkspaceNav";
 
 const apiClient = getPortalApiClient("admin");
@@ -140,21 +161,16 @@ interface TestTemplateRecord extends TemplateDraft {
   thermalState: TemplateThermalState;
   totalRuns: number;
   updatedAt: string;
+  version: number;
 }
 
-interface TemplateSubmitPayload {
-  templateName: string;
-  canonicalId: string;
-  examType: string;
-  selectionMethod: SelectionMethod;
-  totalDurationMinutes: number;
-  questionIds: string[];
-  difficultyDistribution: DifficultyDistribution;
-  timingProfile: TimingProfile;
-  examSnapshot: ExamTypeSnapshot;
-  phaseConfigSnapshot: PhaseConfigSnapshot;
-  publish: boolean;
-}
+type PendingTemplateRecord = Omit<TestTemplateRecord, "id"> & {
+  id: string | null;
+};
+
+type TemplateSubmitPayload = AdminTestTemplateCreateRequest;
+type TemplateUpdatePayload = AdminTestTemplateUpdateRequest;
+type TemplateLifecyclePayload = AdminTestTemplateLifecycleRequest;
 
 interface QuestionPoolLoadState {
   questions: QuestionBankRecord[];
@@ -275,6 +291,7 @@ const FALLBACK_TEMPLATES: TestTemplateRecord[] = [
     thermalState: "warm",
     totalRuns: 0,
     updatedAt: "2026-04-10T08:30:00.000Z",
+    version: 1,
   },
   {
     id: "tmpl-002",
@@ -295,6 +312,7 @@ const FALLBACK_TEMPLATES: TestTemplateRecord[] = [
     thermalState: "hot",
     totalRuns: 8,
     updatedAt: "2026-04-08T11:45:00.000Z",
+    version: 1,
   },
   {
     id: "tmpl-003",
@@ -315,6 +333,7 @@ const FALLBACK_TEMPLATES: TestTemplateRecord[] = [
     thermalState: "cold",
     totalRuns: 14,
     updatedAt: "2024-12-20T10:15:00.000Z",
+    version: 1,
   },
   {
     id: "tmpl-004",
@@ -335,6 +354,7 @@ const FALLBACK_TEMPLATES: TestTemplateRecord[] = [
     thermalState: "warm",
     totalRuns: 3,
     updatedAt: "2025-11-05T09:00:00.000Z",
+    version: 1,
   },
 ];
 
@@ -753,10 +773,16 @@ function normalizeTemplateRecord(value: unknown, index: number): TestTemplateRec
     examSnapshotSource.sectionStructure.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0) :
     fallbackExamSnapshot.sectionStructure;
   const status = toTemplateStatus(record.status);
+  const id = typeof record.id === "string" ? record.id.trim() : "";
+  const canonicalId = typeof record.canonicalId === "string" ? record.canonicalId.trim() : "";
+
+  if (!id || !canonicalId) {
+    return null;
+  }
 
   return {
-    id: toNonEmptyString(record.id, `tmpl-${index + 1}`),
-    canonicalId: toNonEmptyString(record.canonicalId, fallback?.canonicalId ?? `canonical-${index + 1}`),
+    id,
+    canonicalId,
     templateName: toNonEmptyString(record.templateName, fallback?.templateName ?? `Template ${index + 1}`),
     examType,
     examSnapshot: {
@@ -793,14 +819,14 @@ function normalizeTemplateRecord(value: unknown, index: number): TestTemplateRec
     ),
     totalRuns: Math.max(0, toNumberOrZero(record.totalRuns ?? record.runCount ?? fallback?.totalRuns ?? 0)),
     updatedAt: toNonEmptyString(record.updatedAt, fallback?.updatedAt ?? new Date(0).toISOString()),
+    version: Math.max(1, toNumberOrZero(record.version ?? fallback?.version ?? 1)),
   };
 }
 
 async function fetchTemplatesFromApi(): Promise<TestTemplateRecord[]> {
-  const payload = await apiClient.get<unknown>("/admin/tests");
-  if (!Array.isArray(payload)) {
-    throw new Error("GET /admin/tests returned an invalid payload.");
-  }
+  const payload = await apiClient.get<AdminTestTemplateListResult>("/admin/tests", {
+    responseAdapter: (value) => adaptAdminTestTemplateListResult(value),
+  });
 
   const templates = payload
     .map((entry, index) => normalizeTemplateRecord(entry, index))
@@ -910,7 +936,7 @@ function resolveTestSubpage(pathname: string): TestSubpage {
   return "library";
 }
 
-function buildPayload(draft: TemplateDraft, publish: boolean): TemplateSubmitPayload {
+function buildPayload(draft: TemplateDraft): TemplateSubmitPayload {
   const examSnapshot = getExamTypeSnapshot(draft.examType);
   return {
     templateName: draft.templateName.trim(),
@@ -926,7 +952,33 @@ function buildPayload(draft: TemplateDraft, publish: boolean): TemplateSubmitPay
     difficultyDistribution: draft.difficultyDistribution,
     phaseConfigSnapshot: buildPhaseConfigSnapshot(draft.difficultyDistribution, draft.totalDurationMinutes),
     timingProfile: draft.timingProfile,
-    publish,
+  };
+}
+
+function buildUpdatePayload(
+  draft: TemplateDraft,
+  canonicalId: string,
+  expectedVersion: number,
+): TemplateUpdatePayload {
+  const examSnapshot = getExamTypeSnapshot(draft.examType);
+  return {
+    canonicalId,
+    difficultyDistribution: draft.difficultyDistribution,
+    examSnapshot: {
+      ...examSnapshot,
+      difficultyTimingMapping: cloneTimingProfile(draft.timingProfile),
+    },
+    examType: draft.examType,
+    expectedVersion,
+    phaseConfigSnapshot: buildPhaseConfigSnapshot(
+      draft.difficultyDistribution,
+      draft.totalDurationMinutes,
+    ),
+    questionIds: draft.selectedQuestionIds,
+    selectionMethod: draft.selectionMethod,
+    templateName: draft.templateName.trim(),
+    timingProfile: draft.timingProfile,
+    totalDurationMinutes: draft.totalDurationMinutes,
   };
 }
 
@@ -988,8 +1040,55 @@ function validateDraft(
   return null;
 }
 
-async function submitTemplateToApi(payload: TemplateSubmitPayload): Promise<void> {
-  await apiClient.post<unknown, TemplateSubmitPayload>("/admin/tests", { body: payload });
+async function submitTemplateToApi(
+  payload: TemplateSubmitPayload,
+): Promise<AdminTestTemplateCreateResult> {
+  return apiClient.post<AdminTestTemplateCreateResult, TemplateSubmitPayload>(
+    "/admin/tests",
+    {
+      body: payload,
+      responseAdapter: (value) => adaptAdminTestTemplateCreateResult(value),
+    },
+  );
+}
+
+async function updateTemplateInApi(
+  testId: string,
+  payload: TemplateUpdatePayload,
+): Promise<AdminTestTemplateUpdateResult> {
+  return apiClient.patch<AdminTestTemplateUpdateResult, TemplateUpdatePayload>(
+    `/admin/tests/${encodeURIComponent(testId)}`,
+    {
+      body: payload,
+      responseAdapter: (value) => adaptAdminTestTemplateUpdateResult(value),
+    },
+  );
+}
+
+async function publishTemplateInApi(
+  testId: string,
+  payload: TemplateLifecyclePayload,
+): Promise<AdminTestTemplateLifecycleResult> {
+  return apiClient.post<AdminTestTemplateLifecycleResult, TemplateLifecyclePayload>(
+    `/admin/tests/${encodeURIComponent(testId)}/publish`,
+    {
+      body: payload,
+      responseAdapter: (value) => adaptAdminTestTemplatePublishResult(value),
+    },
+  );
+}
+
+async function archiveTemplateInApi(
+  testId: string,
+  payload: TemplateLifecyclePayload,
+): Promise<AdminTestTemplateLifecycleResult> {
+  return apiClient.post<AdminTestTemplateLifecycleResult, TemplateLifecyclePayload>(
+    `/admin/tests/${encodeURIComponent(testId)}/archive`,
+    {
+      body: payload,
+      responseAdapter: (value) => adaptAdminTestTemplateArchiveResult(value),
+    },
+  );
 }
 
 async function fetchQuestionUploadLogsFromApi(): Promise<QuestionUploadLogRecord[]> {
@@ -1020,7 +1119,7 @@ function TestTemplateManagementPage() {
   const [questionUploadLogs, setQuestionUploadLogs] = useState<QuestionUploadLogRecord[]>(FALLBACK_QUESTION_UPLOAD_LOGS);
   const [draft, setDraft] = useState<TemplateDraft>(INITIAL_DRAFT);
   const [duplicateTemplate, setDuplicateTemplate] = useState<TestTemplateRecord | null>(null);
-  const [pendingDuplicateRecord, setPendingDuplicateRecord] = useState<TestTemplateRecord | null>(null);
+  const [pendingDuplicateRecord, setPendingDuplicateRecord] = useState<PendingTemplateRecord | null>(null);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [targetQuestionCount, setTargetQuestionCount] = useState(0);
   const [offsetStart, setOffsetStart] = useState(0);
@@ -1047,7 +1146,7 @@ function TestTemplateManagementPage() {
   const [questionPreviewImageFailed, setQuestionPreviewImageFailed] = useState(false);
   const [inlineMessage, setInlineMessage] = useState<string>(
     shouldUseLiveApi() ?
-      "Live mode enabled: template create/publish sends POST /admin/tests." :
+      "Live mode enabled: template create and update reload authoritative state." :
       "Local mode detected: using deterministic question bank and template fixtures for Build 118.",
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -1082,7 +1181,7 @@ function TestTemplateManagementPage() {
         }
 
         setTemplates(liveTemplates);
-        setInlineMessage("Live mode enabled: template library hydrated from GET /admin/tests, and create/publish sends POST /admin/tests.");
+        setInlineMessage("Live mode enabled: template library hydrated from GET /admin/tests; create and update reconcile an authoritative reload.");
       } catch (error) {
         if (!isMounted) {
           return;
@@ -1706,10 +1805,9 @@ function TestTemplateManagementPage() {
       return;
     }
 
-    const now = new Date().toISOString();
     const canonicalId = await deriveCanonicalTemplateId(draft.selectedQuestionIds);
-    const nextRecord: TestTemplateRecord = {
-      id: editingTemplateId ?? `tmpl-${Date.now()}`,
+    const nextRecord: PendingTemplateRecord = {
+      id: editingTemplateId,
       ...draft,
       canonicalId,
       lastUsedAt: editingTemplateId ?
@@ -1722,7 +1820,12 @@ function TestTemplateManagementPage() {
       totalRuns: editingTemplateId ?
         templates.find((template) => template.id === editingTemplateId)?.totalRuns ?? 0 :
         0,
-      updatedAt: now,
+      updatedAt: editingTemplateId ?
+        templates.find((template) => template.id === editingTemplateId)?.updatedAt ?? new Date(0).toISOString() :
+        new Date(0).toISOString(),
+      version: editingTemplateId ?
+        templates.find((template) => template.id === editingTemplateId)?.version ?? 1 :
+        1,
     };
 
     const duplicate = templates.find((template) => {
@@ -1738,7 +1841,7 @@ function TestTemplateManagementPage() {
     await persistDraftRecord(nextRecord);
   }
 
-  async function persistDraftRecord(nextRecord: TestTemplateRecord) {
+  async function persistDraftRecord(nextRecord: PendingTemplateRecord) {
     setIsSubmitting(true);
     setErrorMessage(null);
 
@@ -1754,32 +1857,74 @@ function TestTemplateManagementPage() {
 
     try {
       if (shouldUseLiveApi()) {
-        await submitTemplateToApi({
-          ...buildPayload(payloadDraft, false),
-          canonicalId: nextRecord.canonicalId,
-        });
-      }
+        if (nextRecord.id) {
+          const expectedVersion = nextRecord.version;
+          const updateResult = await updateTemplateInApi(
+            nextRecord.id,
+            buildUpdatePayload(
+              payloadDraft,
+              nextRecord.canonicalId,
+              expectedVersion,
+            ),
+          );
+          const reloadedTemplates = await fetchTemplatesFromApi();
+          const authoritativeTemplate = reconcileUpdatedTemplate(
+            updateResult.template,
+            reloadedTemplates,
+            expectedVersion,
+          );
 
-      setTemplates((current) => {
-        const existingIndex = current.findIndex((item) => item.id === nextRecord.id);
-        if (existingIndex === -1) {
-          return [nextRecord, ...current];
+          setTemplates(reloadedTemplates);
+          setInlineMessage(
+            `Draft template ${authoritativeTemplate.id} updated to authoritative version ${authoritativeTemplate.version}.`,
+          );
+          resetEditor();
+          return;
         }
 
-        return current.map((item) => (item.id === nextRecord.id ? nextRecord : item));
+        const createResult = await submitTemplateToApi({
+          ...buildPayload(payloadDraft),
+          canonicalId: nextRecord.canonicalId,
+        });
+        const reloadedTemplates = await fetchTemplatesFromApi();
+        const authoritativeTemplate = reconcileCreatedTemplate(
+          createResult.template,
+          reloadedTemplates,
+        );
+
+        setTemplates(reloadedTemplates);
+        setInlineMessage(
+          `Draft template created as ${authoritativeTemplate.id} at authoritative version ${authoritativeTemplate.version}.`,
+        );
+        resetEditor();
+        return;
+      }
+
+      if (!nextRecord.id) {
+        throw new Error(
+          "Template creation is unavailable in local fixture mode because only the backend may issue template IDs.",
+        );
+      }
+      const existingId = nextRecord.id;
+
+      setTemplates((current) => {
+        const updatedRecord: TestTemplateRecord = {
+          ...nextRecord,
+          id: existingId,
+          updatedAt: new Date().toISOString(),
+        };
+        return current.map((item) => (item.id === updatedRecord.id ? updatedRecord : item));
       });
 
-      setInlineMessage(
-        editingTemplateId ?
-          "Draft template updated. Structural edits remain available until published or assigned." :
-          "Draft template created successfully.",
-      );
+      setInlineMessage("Fixture template updated locally. Structural edits remain available until published or assigned.");
       resetEditor();
     } catch (error) {
       const reason =
         error instanceof ApiClientError ?
-          `POST /admin/tests failed with ${error.code} (${error.status}).` :
-          "POST /admin/tests failed unexpectedly.";
+          `Template save/reload failed with ${error.code} (${error.status}).` :
+        error instanceof Error ?
+          error.message :
+          "Template save/reload failed unexpectedly.";
       setErrorMessage(reason);
     } finally {
       setIsSubmitting(false);
@@ -1811,11 +1956,22 @@ function TestTemplateManagementPage() {
 
     try {
       if (shouldUseLiveApi()) {
-        const canonicalId = target.canonicalId || await deriveCanonicalTemplateId(target.selectedQuestionIds);
-        await submitTemplateToApi({
-          ...buildPayload(target, true),
-          canonicalId,
+        const expectedVersion = target.version;
+        const publishResult = await publishTemplateInApi(templateId, {
+          expectedVersion,
         });
+        const reloadedTemplates = await fetchTemplatesFromApi();
+        const authoritativeTemplate = reconcileLifecycleTemplate(
+          publishResult.template,
+          reloadedTemplates,
+          expectedVersion,
+          "ready",
+        );
+        setTemplates(reloadedTemplates);
+        setInlineMessage(
+          `${authoritativeTemplate.templateName} published with audit ${publishResult.auditId}.`,
+        );
+        return;
       }
 
       setTemplates((current) =>
@@ -1833,7 +1989,9 @@ function TestTemplateManagementPage() {
     } catch (error) {
       const reason =
         error instanceof ApiClientError ?
-          `POST /admin/tests failed with ${error.code} (${error.status}) during publish.` :
+          `Template publish failed with ${error.code} (${error.status}).` :
+        error instanceof Error ?
+          error.message :
           "Publish request failed unexpectedly.";
       setErrorMessage(reason);
     } finally {
@@ -1870,14 +2028,14 @@ function TestTemplateManagementPage() {
     setErrorMessage(null);
   }
 
-  function updateTemplateLifecycle(templateId: string, nextStatus: Extract<TemplateStatus, "archived" | "deprecated">) {
+  async function archiveTemplate(templateId: string) {
     const target = templates.find((template) => template.id === templateId);
     if (!target) {
       return;
     }
 
     if (target.status === "draft") {
-      setErrorMessage("Draft templates should be edited or discarded before archive/deprecation review.");
+      setErrorMessage("Draft templates cannot be archived. Publish the template first.");
       return;
     }
 
@@ -1886,29 +2044,60 @@ function TestTemplateManagementPage() {
       return;
     }
 
-    if (target.status === "deprecated" && nextStatus === "deprecated") {
-      setInlineMessage(`${target.templateName} is already deprecated and excluded from future comparisons.`);
+    if (target.status !== "ready" && target.status !== "assigned") {
+      setErrorMessage(`Templates in ${target.status} status cannot be archived.`);
       return;
     }
 
-    setTemplates((current) =>
-      current.map((template) =>
-        template.id === templateId ?
-          {
-            ...template,
-            status: nextStatus,
-            thermalState: nextStatus === "archived" ? "cold" : template.thermalState,
-            updatedAt: new Date().toISOString(),
-          } :
-          template,
-      ),
-    );
-    setInlineMessage(
-      nextStatus === "archived" ?
-        `${target.templateName} moved to archived/COLD state and is hidden from the active library table.` :
-        `${target.templateName} moved to deprecated state and is excluded from future analytics comparisons while lifecycle metadata remains retained.`,
-    );
+    setIsSubmitting(true);
     setErrorMessage(null);
+
+    try {
+      if (shouldUseLiveApi()) {
+        const expectedVersion = target.version;
+        const archiveResult = await archiveTemplateInApi(templateId, {
+          expectedVersion,
+        });
+        const reloadedTemplates = await fetchTemplatesFromApi();
+        const authoritativeTemplate = reconcileLifecycleTemplate(
+          archiveResult.template,
+          reloadedTemplates,
+          expectedVersion,
+          "archived",
+        );
+        setTemplates(reloadedTemplates);
+        setInlineMessage(
+          `${authoritativeTemplate.templateName} archived with audit ${archiveResult.auditId}.`,
+        );
+        return;
+      }
+
+      setTemplates((current) =>
+        current.map((template) =>
+          template.id === templateId ?
+            {
+              ...template,
+              status: "archived",
+              thermalState: "cold",
+              updatedAt: new Date().toISOString(),
+            } :
+            template,
+        ),
+      );
+      setInlineMessage(
+        `${target.templateName} moved to archived/COLD state in fixture mode.`,
+      );
+    } catch (error) {
+      const reason =
+        error instanceof ApiClientError ?
+          `Template archive failed with ${error.code} (${error.status}).` :
+        error instanceof Error ?
+          error.message :
+          "Archive request failed unexpectedly.";
+      setErrorMessage(reason);
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   const templateColumns: UiTableColumn<TestTemplateRecord>[] = [
@@ -1970,17 +2159,10 @@ function TestTemplateManagementPage() {
             </button>
             <button
               type="button"
-              onClick={() => updateTemplateLifecycle(template.id, "archived")}
+              onClick={() => void archiveTemplate(template.id)}
               disabled={template.status === "draft" || lifecycleLocked}
             >
               Archive
-            </button>
-            <button
-              type="button"
-              onClick={() => updateTemplateLifecycle(template.id, "deprecated")}
-              disabled={template.status === "draft" || lifecycleLocked}
-            >
-              Deprecate
             </button>
           </div>
         );

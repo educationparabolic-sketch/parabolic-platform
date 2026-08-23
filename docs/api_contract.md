@@ -2,7 +2,7 @@
 
 Status: canonical route and response-envelope contract
 
-Last reconciled: 2026-08-22 (`BWM-012` authoritative question creation and managed assets)
+Last reconciled: 2026-08-23 (`BWM-013` authoritative test-template lifecycle)
 
 ## Sources of truth
 
@@ -39,7 +39,7 @@ If prose and the typed manifest disagree about a route key or status, the typed 
 - `missing`: no current Functions handler/export implements the frontend contract.
 - `intentionally_retired`: explicit product/architecture evidence says the route must not be served.
 
-Current totals: 16 implemented, 8 incompatible, 6 missing, 0 intentionally retired.
+Current totals: 20 implemented, 7 incompatible, 6 missing, 0 intentionally retired.
 
 ## Canonical frontend route manifest
 
@@ -55,7 +55,7 @@ Current totals: 16 implemented, 8 incompatible, 6 missing, 0 intentionally retir
 | ADM-08 | `GET /api/v1/admin/questions/upload-logs` | `implemented` | `adminQuestionUploadLogs` | Firebase ID; teacher/admin; identity tenant |
 | ADM-09 | `POST /api/v1/admin/questions/bulk` | `implemented` | `adminQuestionsBulk` | Firebase ID; teacher/admin; matching body tenant |
 | ADM-10 | `GET /api/v1/admin/tests` | `implemented` | `adminTests` | Firebase ID; teacher/admin; identity tenant |
-| ADM-11 | `POST /api/v1/admin/tests` | `incompatible` | `adminTests` | Firebase ID; teacher/admin; identity tenant |
+| ADM-11 | `POST /api/v1/admin/tests` | `implemented` | `adminTests` | Firebase ID; teacher/admin; identity tenant; draft-only create |
 | ADM-12 | `POST /api/v1/admin/runs` | `incompatible` | `adminRuns` | Firebase ID; teacher/admin; identity tenant |
 | ADM-13 | `POST /api/v1/admin/governance/snapshots` | `implemented` | `adminGovernanceSnapshots` | Firebase ID; director L3 or vendor; guarded tenant |
 | ADM-14 | `POST /api/v1/admin/settings` | `incompatible` | `adminSettings` | Firebase ID; admin/director; guarded tenant |
@@ -63,6 +63,9 @@ Current totals: 16 implemented, 8 incompatible, 6 missing, 0 intentionally retir
 | ADM-16 | `POST /api/v1/admin/licensing` | `incompatible` | `adminLicensing` | Firebase ID; admin/director; guarded tenant |
 | ADM-17 | `POST /api/v1/admin/interventions` | `implemented` | `adminInterventions` | Firebase ID; admin/teacher; matching tenant; L1 |
 | ADM-18 | `POST /api/v1/admin/questions/assets` | `implemented` | `adminQuestionAssets` | Firebase ID; teacher/admin; matching body tenant |
+| ADM-19 | `PATCH /api/v1/admin/tests/{testId}` | `implemented` | `adminTests` | Firebase ID; teacher/admin; identity tenant; expected version |
+| ADM-20 | `POST /api/v1/admin/tests/{testId}/publish` | `implemented` | `adminTests` | Firebase ID; teacher/admin; identity tenant; expected version; draft-only source |
+| ADM-21 | `POST /api/v1/admin/tests/{testId}/archive` | `implemented` | `adminTests` | Firebase ID; teacher/admin; identity tenant; expected version; ready/assigned source |
 | STU-01 | `GET /api/v1/student/dashboard` | `missing` | None | Firebase ID; student; identity tenant |
 | STU-02 | `GET /api/v1/student/tests` | `missing` | None | Firebase ID; student; identity tenant |
 | STU-03 | `GET /api/v1/student/performance` | `missing` | None | Firebase ID; student; identity tenant |
@@ -81,6 +84,12 @@ The detailed request/response mismatch for each incompatible entry is recorded u
 ADM-06 returns the shared `AdminQuestionLibraryResult`. Each managed question or solution asset is exposed only as its canonical relative CDN path plus a freshly generated 30-minute `dashboardView` signed HTTPS URL containing `Expires`, `KeyName`, and `Signature`; malformed, noncanonical, direct-bucket, or unsigned legacy references are omitted. The public response never returns Storage bucket names or object paths.
 
 ADM-09 supports validation-only and commit modes through the shared `QuestionBulkUploadRequest`/`QuestionBulkUploadResult` contract. Every validated row returns the authoritative question ID and positive-integer version. A commit accepts only canonical relative managed asset paths, writes the question documents, deterministic immutable upload log, and institute mutation audit atomically, and replays the stored result for an exact normalized-payload retry. Once a question is used, changes to its structural exam/content/marking fields are rejected and callers must create a new version.
+
+ADM-10 and ADM-11 use the shared `AdminTestTemplateRecord`, `AdminTestTemplateCreateRequest`, and `AdminTestTemplateCreateResult` contracts. The server creates the Firestore document ID, always persists a draft at numeric version `1`, accepts all five declared selection methods including `upload_set`, retains recommended timing values, and returns the authoritative ID/version through a standard success envelope. Create-as-publish is rejected so lifecycle changes cannot bypass ADM-20. Admin create consumes the result, immediately reloads ADM-10, verifies the reloaded ID/canonical ID/version, and replaces UI state only with the reloaded records; the frontend never generates template IDs.
+
+ADM-19 uses the shared `AdminTestTemplateUpdateRequest` and `AdminTestTemplateUpdateResult`. The path supplies the backend-issued template ID and the request supplies a positive `expectedVersion`. A Firestore transaction rejects missing, stale, or structurally locked templates, creates the superseded immutable configuration at `institutes/{instituteId}/tests/{testId}/versionSnapshots/{version}`, updates the current template, and increments its numeric version exactly once. Version conflicts return the standard `CONFLICT` error with HTTP 409. Admin consumes the strict update result, reloads ADM-10, requires the returned version to equal `expectedVersion + 1`, reconciles ID/canonical ID/version, and installs only the reload state.
+
+ADM-20 and ADM-21 use the shared `AdminTestTemplateLifecycleRequest` and `AdminTestTemplateLifecycleResult`. Both require the current positive `expectedVersion`; lifecycle commands do not change the structural version. Publish permits only `draft -> ready`, while archive permits only `ready|assigned -> archived`. Each status change and its deterministic immutable `ACTIVATE_TEST_TEMPLATE` or `ARCHIVE_TEST_TEMPLATE` audit under `institutes/{instituteId}/auditLogs/{auditId}` are created atomically in one Firestore transaction. Exact retries return the same audit authority; stale versions and illegal transitions return HTTP 409 `CONFLICT`. Admin strictly validates the result, reloads ADM-10, reconciles unchanged version and target status, and installs only the authoritative reload.
 
 ADM-18 accepts one shared `QuestionAssetUploadRequest` containing base64 image bytes, `questionImage` or `solutionImage` kind, PNG/WebP extension, matching institute, and the ADM-09-authoritative question ID/version. It writes only the canonical versioned question path with create-only Storage preconditions and SHA-256 metadata. Same-content retries replay safely; different content at the occupied path fails closed. The shared public result contains only asset kind, CDN path/URL, content type, question ID, version, and size; bucket name, object path, and internal created/replayed disposition never cross the API boundary.
 
@@ -142,7 +151,7 @@ The target error envelope is:
 }
 ```
 
-Current exceptions, including the raw `GET /admin/tests` array and top-level compatibility fields, are implementation facts rather than new canonical precedent. BWM-006 owns shared envelope validation and unwrapping.
+Current top-level compatibility fields on legacy handlers are implementation facts rather than new canonical precedent. BWM-006 owns shared envelope validation and unwrapping; `GET` and `POST /admin/tests` now use the standard success envelope.
 
 The shared frontend client returns only validated success `data`. Canonical
 server failures throw `ApiClientError<TDetails>` with the stable error `code`,

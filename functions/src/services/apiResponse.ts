@@ -8,6 +8,7 @@ import {
 export const STANDARD_API_ERROR_STATUS: Readonly<
   Record<StandardApiErrorCode, number>
 > = {
+  CONFLICT: 409,
   FORBIDDEN: 403,
   INTERNAL_ERROR: 500,
   LICENSE_RESTRICTED: 403,

@@ -79,6 +79,30 @@ const dtoFamilies = [
     ],
   },
   {
+    backend: "functions/src/types/adminTests.ts",
+    frontend: [
+      "apps/admin/src/features/tests/TestTemplateManagementPage.tsx",
+    ],
+    names: [
+      "AdminTestTemplateStatus",
+      "AdminTestSelectionMethod",
+      "AdminTestDifficultyDistribution",
+      "AdminTestTimingWindow",
+      "AdminTestTimingProfile",
+      "AdminTestExamSnapshot",
+      "AdminTestPhaseSplitRow",
+      "AdminTestPhaseConfigSnapshot",
+      "AdminTestTemplateRecord",
+      "AdminTestTemplateCreateRequest",
+      "AdminTestTemplateListResult",
+      "AdminTestTemplateCreateResult",
+      "AdminTestTemplateUpdateRequest",
+      "AdminTestTemplateUpdateResult",
+      "AdminTestTemplateLifecycleRequest",
+      "AdminTestTemplateLifecycleResult",
+    ],
+  },
+  {
     backend: "functions/src/types/calibrationDeployment.ts",
     frontend: [
       "apps/vendor/src/features/calibration/vendorCalibrationDataset.ts",
