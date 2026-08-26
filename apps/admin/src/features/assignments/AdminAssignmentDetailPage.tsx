@@ -2,21 +2,21 @@ import { useEffect, useMemo, useState } from "react";
 import { NavLink, useParams } from "react-router-dom";
 import { UiChartContainer, UiTable, type UiChartPoint, type UiTableColumn } from "../../../../../shared/ui/components";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
+import { ApiClientError } from "../../../../../shared/services/apiClient";
+import { shouldUseLiveApi as shouldUseConfiguredLiveApi } from "../../../../../shared/services/frontendEnvironment";
+import type { AdminRunRecord, AdminRunStatus } from "../../../../../shared/contracts/apiDtos";
 import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
 import {
-  ApiClientError,
   FALLBACK_DATASET,
-  fetchDashboardDataset,
-  shouldUseLiveApi,
   type DashboardDataset,
   type RiskCluster,
-  type RunAnalyticsRecord,
   type StudentAnalyticsRecord,
 } from "../analytics/analyticsDataset";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
 import AssignmentsWorkspaceNav from "./AssignmentsWorkspaceNav";
+import { fetchAdminRunDetail } from "./assignmentRunsApi";
 
-type ExecutionMode = "Operational" | "Controlled" | "Focused" | "Hard";
+type ExecutionMode = "Operational" | "Controlled" | "Diagnostic" | "Hard";
 type RunStatus = "Upcoming" | "Live" | "Completed" | "Stopped" | "Cancelled";
 
 function escapeXml(value: string): string {
@@ -969,74 +969,19 @@ function isAttentionStudent(runSummary: StudentAnalyticsRecord["runSummaries"][n
   );
 }
 
-function toExecutionMode(mode: string): ExecutionMode {
-  if (mode === "Operational" || mode === "Controlled" || mode === "Focused" || mode === "Hard") {
-    return mode;
+function toDisplayRunStatus(status: AdminRunStatus): RunStatus {
+  switch (status) {
+    case "scheduled":
+      return "Upcoming";
+    case "active":
+      return "Live";
+    case "completed":
+      return "Completed";
+    case "stopped":
+      return "Stopped";
+    case "cancelled":
+      return "Cancelled";
   }
-
-  return "Operational";
-}
-
-function inferRunStatus(record: RunAnalyticsRecord): RunStatus {
-  if (record.completionRatePercent >= 100) {
-    return "Completed";
-  }
-
-  return "Live";
-}
-
-function toRiskDistributionSummary(record: RunAnalyticsRecord): string {
-  return `L ${Math.round(record.riskDistribution.low)}% / M ${Math.round(record.riskDistribution.medium)}% / H ${Math.round(record.riskDistribution.high)}% / C ${Math.round(record.riskDistribution.critical)}%`;
-}
-
-function toExecutionStabilityBadge(record: RunAnalyticsRecord): string {
-  if (record.controlledCompliancePercent >= 80 && record.pacingGuardrailViolationPercent <= 12) {
-    return "Stable";
-  }
-
-  if (record.controlledCompliancePercent >= 55 && record.pacingGuardrailViolationPercent <= 22) {
-    return "Drift";
-  }
-
-  return "Escalated";
-}
-
-function buildDetailRecord(record: RunAnalyticsRecord, fallback?: AssignmentDetailRecord): AssignmentDetailRecord {
-  return {
-    runId: record.runId,
-    runName: record.runName,
-    templateId: fallback?.templateId ?? record.runId,
-    canonicalId: fallback?.canonicalId ?? `analytics-${record.runId}`,
-    templateName: fallback?.templateName ?? record.runName,
-    academicYear: record.academicYear,
-    mode: toExecutionMode(record.mode),
-    status: fallback?.status ?? inferRunStatus(record),
-    batchName: record.batchName,
-    recipientCount: record.participants,
-    completionPercent: Math.round(record.completionRatePercent),
-    startWindowIso: record.startedAt,
-    endWindowIso: fallback?.endWindowIso ?? new Date(Date.parse(record.startedAt) + 3 * 60 * 60 * 1000).toISOString(),
-    timezone: fallback?.timezone ?? "Asia/Kolkata",
-    attemptLimit: fallback?.attemptLimit ?? 1,
-    gracePeriodMinutes: fallback?.gracePeriodMinutes ?? 0,
-    shuffleEnabled: fallback?.shuffleEnabled ?? false,
-    phaseConfigSnapshot: fallback?.phaseConfigSnapshot ?? "Captured from assigned template at scheduling",
-    timingProfileSnapshot: fallback?.timingProfileSnapshot ?? "Captured from assigned template at scheduling",
-    analytics: {
-      avgRawScorePercent: Math.round(record.avgRawScorePercent),
-      avgAccuracyPercent: Math.round(record.avgAccuracyPercent),
-      avgPhaseAdherencePercent: Math.round(record.avgPhaseAdherencePercent),
-      easyNeglectPercent: Math.round(record.easyNeglectPercent),
-      hardBiasPercent: Math.round(record.hardBiasPercent),
-      riskDistributionSummary: toRiskDistributionSummary(record),
-      avgDisciplineIndex: Math.round(record.disciplineIndexAverage),
-      controlledCompliancePercent: Math.round(record.controlledCompliancePercent),
-      guessRatePercent: Math.round(record.guessRatePercent),
-      executionStabilityIndex: Math.round(Math.max(0, Math.min(100, record.disciplineIndexAverage - record.guessRatePercent * 0.35))),
-      executionStabilityBadge: toExecutionStabilityBadge(record),
-      overrideCount: Math.round(record.structuralOverridePercent),
-    },
-  };
 }
 
 function statusClassName(status: RunStatus): string {
@@ -1077,7 +1022,9 @@ function AdminAssignmentDetailPage() {
   const { session } = useAuthProvider();
   const accessContext = resolveAdminAccessContext(session);
   const { runId = "" } = useParams<{ runId: string }>();
-  const [dataset, setDataset] = useState<DashboardDataset>(FALLBACK_DATASET);
+  const liveMode = shouldUseConfiguredLiveApi();
+  const [dataset, setDataset] = useState<DashboardDataset | null>(null);
+  const [authoritativeRun, setAuthoritativeRun] = useState<AdminRunRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
 
@@ -1088,7 +1035,7 @@ function AdminAssignmentDetailPage() {
       setIsLoading(true);
       setInlineMessage(null);
 
-      if (!shouldUseLiveApi()) {
+      if (!liveMode) {
         setDataset(FALLBACK_DATASET);
         setInlineMessage("Local mode detected. Loaded deterministic assignment detail fixtures.");
         setIsLoading(false);
@@ -1096,19 +1043,24 @@ function AdminAssignmentDetailPage() {
       }
 
       try {
-        const nextDataset = await fetchDashboardDataset();
+        const result = await fetchAdminRunDetail(runId);
         if (!isMounted) {
           return;
         }
 
-        setDataset(nextDataset);
-        setInlineMessage("Live mode enabled: assignment detail hydrated from GET /admin/analytics.");
+        setAuthoritativeRun(result.run);
+        setInlineMessage(
+          "Live mode enabled: assignment detail hydrated from authoritative GET /admin/runs/{runId}.",
+        );
       } catch (error) {
         if (!isMounted) {
           return;
         }
 
-        const reason = error instanceof ApiClientError ? error.message : "Failed to load assignment detail.";
+        setAuthoritativeRun(null);
+        const reason = error instanceof ApiClientError ?
+          `GET /admin/runs/{runId} failed with ${error.code} (${error.status}): ${error.message}` :
+          "Failed to load authoritative assignment detail.";
         setInlineMessage(reason);
       } finally {
         if (isMounted) {
@@ -1122,17 +1074,16 @@ function AdminAssignmentDetailPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [liveMode, runId]);
 
   const selectedRun = useMemo(() => {
-    const fallbackById = new Map(FALLBACK_ASSIGNMENT_DETAILS.map((record) => [record.runId, record]));
-    const liveMatch = dataset.runAnalytics.find((record) => record.runId === runId);
-    if (liveMatch) {
-      return buildDetailRecord(liveMatch, fallbackById.get(runId));
+    if (liveMode || !dataset) {
+      return null;
     }
 
+    const fallbackById = new Map(FALLBACK_ASSIGNMENT_DETAILS.map((record) => [record.runId, record]));
     return fallbackById.get(runId) ?? null;
-  }, [dataset.runAnalytics, runId]);
+  }, [dataset, liveMode, runId]);
 
   const phasePlanPieData = useMemo(
     () => (selectedRun ? parsePhasePlanSnapshot(selectedRun.phaseConfigSnapshot) : []),
@@ -1150,7 +1101,7 @@ function AdminAssignmentDetailPage() {
     }
 
     const isL2 = accessContext.licenseLayer === "L2" || accessContext.licenseLayer === "L3";
-    const derivedRows = dataset.studentAnalytics
+    const derivedRows = (dataset?.studentAnalytics ?? [])
       .map((student) => ({
         student,
         runSummary: student.runSummaries.find((summary) => summary.runId === selectedRun.runId) ?? null,
@@ -1194,14 +1145,14 @@ function AdminAssignmentDetailPage() {
     }
 
     return FALLBACK_ASSIGNMENT_ATTENTION_STUDENTS.filter((row) => row.runId === selectedRun.runId);
-  }, [accessContext.licenseLayer, dataset.studentAnalytics, selectedRun]);
+  }, [accessContext.licenseLayer, dataset, selectedRun]);
 
   const performanceStudentRows = useMemo<AssignmentPerformanceStudentRecord[]>(() => {
     if (!selectedRun) {
       return [];
     }
 
-    const derivedRows = dataset.studentAnalytics
+    const derivedRows = (dataset?.studentAnalytics ?? [])
       .map((student) => ({
         student,
         runSummary: student.runSummaries.find((summary) => summary.runId === selectedRun.runId) ?? null,
@@ -1231,7 +1182,7 @@ function AdminAssignmentDetailPage() {
     }
 
     return FALLBACK_ASSIGNMENT_PERFORMANCE_STUDENTS.filter((row) => row.runId === selectedRun.runId);
-  }, [dataset.studentAnalytics, selectedRun]);
+  }, [dataset, selectedRun]);
 
   const topPerformerRows = useMemo(
     () =>
@@ -1263,7 +1214,7 @@ function AdminAssignmentDetailPage() {
     }
 
     const batchNames = new Set(parseBatchNames(selectedRun.batchName));
-    const derivedRows = dataset.studentAnalytics
+    const derivedRows = (dataset?.studentAnalytics ?? [])
       .filter((student) => batchNames.has(student.batchName))
       .filter((student) => !student.runSummaries.some((summary) => summary.runId === selectedRun.runId))
       .map((student) => ({
@@ -1279,7 +1230,7 @@ function AdminAssignmentDetailPage() {
     }
 
     return FALLBACK_ASSIGNMENT_ABSENT_STUDENTS.filter((row) => row.runId === selectedRun.runId);
-  }, [dataset.studentAnalytics, selectedRun]);
+  }, [dataset, selectedRun]);
 
   const attentionStudentColumns = useMemo<UiTableColumn<AssignmentAttentionStudentRecord>[]>(() => {
     const isL2 = accessContext.licenseLayer === "L2" || accessContext.licenseLayer === "L3";
@@ -1455,6 +1406,137 @@ function AdminAssignmentDetailPage() {
     const pdfBlob = new Blob([toArrayBufferSlice(pdfBytes)], { type: "application/pdf" });
     downloadBlob(pdfBlob, `${run.runId}-sample-result-summary.pdf`);
     setInlineMessage(`Downloaded sample PDF for ${run.runId}.`);
+  }
+
+  if (liveMode) {
+    const displayStatus = authoritativeRun ? toDisplayRunStatus(authoritativeRun.status) : null;
+
+    return (
+      <section className="admin-content-card admin-assignments-detail-shell" aria-labelledby="admin-assignment-detail-title">
+        <p className="admin-content-eyebrow">Assignment Details</p>
+        <h2 id="admin-assignment-detail-title">Authoritative Assignment Detail</h2>
+        <p className="admin-content-copy">
+          This live view shows only the current-year lifecycle record returned by <code>GET /admin/runs/{`{runId}`}</code>.
+          Outcome analytics are not part of that contract and are not replaced with fixtures.
+        </p>
+
+        <AssignmentsWorkspaceNav />
+        {inlineMessage ? <p className="admin-assignments-inline-note">{inlineMessage}</p> : null}
+
+        {isLoading ? (
+          <p className="admin-assignments-inline-note">Loading authoritative assignment detail...</p>
+        ) : null}
+
+        {!isLoading && !authoritativeRun ? (
+          <section className="admin-assignments-detail-panel">
+            <h3>Assignment unavailable</h3>
+            <p>
+              The requested run was not returned from the authenticated current-year detail boundary.
+              No analytics or fixture record has been substituted.
+            </p>
+            <div className="admin-tests-row-actions">
+              <NavLink to="/admin/assignments/list">Back to Assignment List</NavLink>
+            </div>
+          </section>
+        ) : null}
+
+        {authoritativeRun && displayStatus ? (
+          <>
+            <section className="admin-assignments-detail-hero">
+              <div className="admin-assignments-detail-hero-copy">
+                <h3>{authoritativeRun.id}</h3>
+                <p>Template {authoritativeRun.testId} · version {authoritativeRun.templateVersion}</p>
+                <small>
+                  {authoritativeRun.academicYear} · {authoritativeRun.mode} · created {formatDateTime(authoritativeRun.createdAt)}
+                </small>
+                <div className="admin-assignments-detail-hero-note">
+                  <span className={statusClassName(displayStatus)}>{displayStatus}</span>
+                  <strong>Authoritative lifecycle status: {authoritativeRun.status}</strong>
+                </div>
+              </div>
+              <div className="admin-assignments-detail-actions">
+                <NavLink className="admin-primary-link" to="/admin/assignments/list">Back to List</NavLink>
+                {authoritativeRun.status === "active" ? (
+                  <NavLink className="admin-primary-link" to={`/admin/assignments/live/${authoritativeRun.id}`}>
+                    Open Live Monitor
+                  </NavLink>
+                ) : null}
+              </div>
+            </section>
+
+            <div className="admin-assignments-detail-grid">
+              <article className="admin-assignments-detail-card">
+                <span>Assigned Students</span>
+                <strong>{authoritativeRun.recipientCount}</strong>
+                <small>Exact recipients persisted on this run</small>
+              </article>
+              <article className="admin-assignments-detail-card">
+                <span>Start Window</span>
+                <strong>{formatDateTime(authoritativeRun.startWindow)}</strong>
+                <small>{authoritativeRun.timezone}</small>
+              </article>
+              <article className="admin-assignments-detail-card">
+                <span>End Window</span>
+                <strong>{formatDateTime(authoritativeRun.endWindow)}</strong>
+                <small>{authoritativeRun.gracePeriodMinutes} minute grace period</small>
+              </article>
+              <article className="admin-assignments-detail-card">
+                <span>Attempts</span>
+                <strong>{authoritativeRun.attemptLimit}</strong>
+                <small>{authoritativeRun.shuffleQuestionOrder ? "Shuffled question order" : "Fixed question order"}</small>
+              </article>
+            </div>
+
+            <section className="admin-assignments-detail-panel">
+              <h3>Persisted Run Authority</h3>
+              <div className="admin-assignments-detail-summary admin-assignments-detail-summary-compact">
+                <div>
+                  <span>Run ID</span>
+                  <strong>{authoritativeRun.id}</strong>
+                  <small>{authoritativeRun.runPath}</small>
+                </div>
+                <div>
+                  <span>Canonical Template</span>
+                  <strong>{authoritativeRun.canonicalId}</strong>
+                  <small>{authoritativeRun.testId} · version {authoritativeRun.templateVersion}</small>
+                </div>
+                <div>
+                  <span>Browser Integrity Guard</span>
+                  <strong>{authoritativeRun.proctoringPolicy.browserIntegrityGuardEnabled ? "Enabled" : "Disabled"}</strong>
+                  <small>Persisted assignment policy</small>
+                </div>
+                <div>
+                  <span>Face / Identity / Gaze Guard</span>
+                  <strong>{authoritativeRun.proctoringPolicy.faceIdentityGazeGuardEnabled ? "Enabled" : "Disabled"}</strong>
+                  <small>Persisted assignment policy</small>
+                </div>
+              </div>
+            </section>
+
+            <section className="admin-assignments-detail-panel">
+              <h3>Resolved Recipients</h3>
+              <p>
+                These identifiers come directly from the authoritative run detail response. Student profile and result
+                enrichment remain separate secured reads.
+              </p>
+              <ul>
+                {authoritativeRun.recipientStudentIds.map((studentId) => (
+                  <li key={studentId}><code>{studentId}</code></li>
+                ))}
+              </ul>
+            </section>
+
+            <section className="admin-assignments-detail-panel">
+              <h3>Outcome analytics unavailable in this contract</h3>
+              <p>
+                Score, accuracy, risk, attendance, and performance tables are intentionally omitted until an
+                authoritative run-results boundary supplies them. No `/admin/analytics` summary or fixture data is used.
+              </p>
+            </section>
+          </>
+        ) : null}
+      </section>
+    );
   }
 
   if (!selectedRun && !isLoading) {

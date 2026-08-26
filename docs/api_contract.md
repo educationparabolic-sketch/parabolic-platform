@@ -2,7 +2,7 @@
 
 Status: canonical route and response-envelope contract
 
-Last reconciled: 2026-08-23 (`BWM-014-C` authoritative run read contracts)
+Last reconciled: 2026-08-26 (`BWM-014-F` authoritative assignment lifecycle closeout)
 
 ## Sources of truth
 
@@ -88,6 +88,8 @@ ADM-06 returns the shared `AdminQuestionLibraryResult`. Each managed question or
 ADM-09 supports validation-only and commit modes through the shared `QuestionBulkUploadRequest`/`QuestionBulkUploadResult` contract. Every validated row returns the authoritative question ID and positive-integer version. A commit accepts only canonical relative managed asset paths, writes the question documents, deterministic immutable upload log, and institute mutation audit atomically, and replays the stored result for an exact normalized-payload retry. Once a question is used, changes to its structural exam/content/marking fields are rejected and callers must create a new version.
 
 ADM-10 and ADM-11 use the shared `AdminTestTemplateRecord`, `AdminTestTemplateCreateRequest`, and `AdminTestTemplateCreateResult` contracts. The server creates the Firestore document ID, always persists a draft at numeric version `1`, accepts all five declared selection methods including `upload_set`, retains recommended timing values, and returns the authoritative ID/version through a standard success envelope. Create-as-publish is rejected so lifecycle changes cannot bypass ADM-20. Admin create consumes the result, immediately reloads ADM-10, verifies the reloaded ID/canonical ID/version, and replaces UI state only with the reloaded records; the frontend never generates template IDs.
+
+ADM-12, ADM-22, and ADM-23 share the strict `AdminRunRecord` lifecycle boundary. Create derives institute and current academic year from verified identity, validates the published template and numeric version plus exact eligible recipients, persists immutable template/configuration, schedule, attempt, shuffle, proctoring, and recipient authority, and uses a deterministic idempotency fingerprint so exact retries or concurrent requests return the same run while template usage increments once. Admin accepts the created record only after one exact replay reconciles every persisted field. The live list then reloads only current-year ADM-22 records with bounded status-aware cursor pagination; the live detail route displays the exact ADM-23 record and recipient IDs. Neither live consumer derives run lifecycle state from Admin Analytics or fixtures. Missing, archived-year, and cross-tenant detail IDs return `NOT_FOUND`; Student-role callers are forbidden.
 
 ADM-19 uses the shared `AdminTestTemplateUpdateRequest` and `AdminTestTemplateUpdateResult`. The path supplies the backend-issued template ID and the request supplies a positive `expectedVersion`. A Firestore transaction rejects missing, stale, or structurally locked templates, creates the superseded immutable configuration at `institutes/{instituteId}/tests/{testId}/versionSnapshots/{version}`, updates the current template, and increments its numeric version exactly once. Version conflicts return the standard `CONFLICT` error with HTTP 409. Admin consumes the strict update result, reloads ADM-10, requires the returned version to equal `expectedVersion + 1`, reconciles ID/canonical ID/version, and installs only the reload state.
 

@@ -1,8 +1,8 @@
 # Frontend API Call Inventory
 
-Status: current-contract inventory, canonical-route assignment, and compatibility classification through `BWM-014-C`
+Status: current-contract inventory, canonical-route assignment, and compatibility classification through `BWM-014-F`
 
-Inventory date: 2026-08-23
+Inventory date: 2026-08-26
 
 Scope: executable HTTP calls in `apps/admin/src`, `apps/student/src`, `apps/exam/src`, and `apps/vendor/src`
 
@@ -103,8 +103,8 @@ Classification totals: `implemented` 23, `incompatible` 6, `missing` 6, `intenti
 | ADM-19 | `PATCH /admin/tests/{testId}` | Shared `AdminTestTemplateUpdateRequest` with path ID and positive `expectedVersion` | Shared `AdminTestTemplateUpdateResult`, strictly adapted with the same ID and exactly incremented numeric version | Firebase ID; `teacher` or `admin`; identity tenant; stale/locked writes return `CONFLICT` | `adminTests` (`api/adminTests.ts`) | `features/tests/TestTemplateManagementPage.tsx` |
 | ADM-20 | `POST /admin/tests/{testId}/publish` | Shared `AdminTestTemplateLifecycleRequest` with positive `expectedVersion` | Shared `AdminTestTemplateLifecycleResult` with immutable audit ID/path and authoritative ready template | Firebase ID; `teacher` or `admin`; identity tenant; only draft may publish | `adminTests` (`api/adminTests.ts`) | `features/tests/TestTemplateManagementPage.tsx` |
 | ADM-21 | `POST /admin/tests/{testId}/archive` | Shared `AdminTestTemplateLifecycleRequest` with positive `expectedVersion` | Shared `AdminTestTemplateLifecycleResult` with immutable audit ID/path and authoritative archived template | Firebase ID; `teacher` or `admin`; identity tenant; only ready/assigned may archive | `adminTests` (`api/adminTests.ts`) | `features/tests/TestTemplateManagementPage.tsx` |
-| ADM-22 | `GET /admin/runs` | Optional query `{ cursor, limit, status }`; limit defaults to 25 and is bounded to 50 | Shared `AdminRunListResult`, strictly adapted with complete run records and opaque next cursor | Firebase ID; `teacher` or `admin`; identity tenant; current academic year only | `adminRuns` (`api/adminRuns.ts`) | `features/assignments/assignmentRunsApi.ts`; BWM-014-D owns page consumption |
-| ADM-23 | `GET /admin/runs/{runId}` | URL-encoded path `runId` | Shared `AdminRunDetailResult`, strictly adapted with one complete run record | Firebase ID; `teacher` or `admin`; identity tenant; current academic year only; missing/out-of-scope records return `NOT_FOUND` | `adminRuns` (`api/adminRuns.ts`) | `features/assignments/assignmentRunsApi.ts`; BWM-014-D owns page consumption |
+| ADM-22 | `GET /admin/runs` | Optional query `{ cursor, limit, status }`; limit defaults to 25 and is bounded to 50 | Shared `AdminRunListResult`, strictly adapted with complete run records and opaque next cursor | Firebase ID; `teacher` or `admin`; identity tenant; current academic year only | `adminRuns` (`api/adminRuns.ts`) | `features/assignments/assignmentRunsApi.ts`, consumed by the live assignment list with server status filtering and opaque-cursor pagination |
+| ADM-23 | `GET /admin/runs/{runId}` | URL-encoded path `runId` | Shared `AdminRunDetailResult`, strictly adapted with one complete run record | Firebase ID; `teacher` or `admin`; identity tenant; current academic year only; missing/out-of-scope records return `NOT_FOUND` | `adminRuns` (`api/adminRuns.ts`) | `features/assignments/assignmentRunsApi.ts`, consumed by the live detail route for exact lifecycle, recipient, schedule, and policy authority without analytics or fixture substitution |
 
 ## Student portal — 6 contracts
 

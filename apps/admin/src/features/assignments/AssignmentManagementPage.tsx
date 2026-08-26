@@ -10,18 +10,16 @@ import type {
   AdminRunCreateRequest,
   AdminRunCreateResult,
   AdminRunRecord,
+  AdminRunStatus,
 } from "../../../../../shared/contracts/apiDtos";
 import {
   UiFormField,
   UiTable,
   type UiTableColumn,
 } from "../../../../../shared/ui/components";
-import {
-  fetchDashboardDataset,
-  type RunAnalyticsRecord,
-} from "../analytics/analyticsDataset";
 import AssignmentsWorkspaceNav from "./AssignmentsWorkspaceNav";
 import { reconcileCreatedRun } from "./assignmentAuthority";
+import { fetchAdminRuns } from "./assignmentRunsApi";
 
 const apiClient = getPortalApiClient("admin");
 
@@ -1211,94 +1209,36 @@ function analyticsForRecipientCount(recipientCount: number, mode: ExecutionMode)
   };
 }
 
-function toExecutionMode(mode: string): ExecutionMode {
-  if (mode === "Operational" || mode === "Controlled" || mode === "Diagnostic" || mode === "Hard") {
-    return mode;
+function toApiRunStatus(status: RunStatus | "all"): AdminRunStatus | undefined {
+  switch (status) {
+    case "Upcoming":
+      return "scheduled";
+    case "Live":
+      return "active";
+    case "Completed":
+      return "completed";
+    case "Stopped":
+      return "stopped";
+    case "Cancelled":
+      return "cancelled";
+    default:
+      return undefined;
   }
-
-  return "Operational";
 }
 
-function toRiskDistributionSummary(record: RunAnalyticsRecord): string {
-  return `L ${Math.round(record.riskDistribution.low)}% / M ${Math.round(record.riskDistribution.medium)}% / H ${Math.round(record.riskDistribution.high)}% / C ${Math.round(record.riskDistribution.critical)}%`;
-}
-
-function toExecutionStabilityBadge(record: RunAnalyticsRecord): string {
-  if (record.controlledCompliancePercent >= 80 && record.pacingGuardrailViolationPercent <= 12) {
-    return "Stable";
+function toDisplayRunStatus(status: AdminRunStatus): RunStatus {
+  switch (status) {
+    case "scheduled":
+      return "Upcoming";
+    case "active":
+      return "Live";
+    case "completed":
+      return "Completed";
+    case "stopped":
+      return "Stopped";
+    case "cancelled":
+      return "Cancelled";
   }
-
-  if (record.controlledCompliancePercent >= 55 && record.pacingGuardrailViolationPercent <= 22) {
-    return "Drift";
-  }
-
-  return "Escalated";
-}
-
-function inferRunStatus(record: RunAnalyticsRecord): RunStatus {
-  if (record.completionRatePercent >= 100) {
-    return "Completed";
-  }
-
-  return "Live";
-}
-
-function deriveRecipientIds(batchId: string, participantCount: number, students: StudentOption[]): string[] {
-  const matchingStudents = students
-    .filter((student) => student.status === "active" && student.batchId === batchId)
-    .slice(0, Math.max(1, participantCount));
-
-  if (matchingStudents.length > 0) {
-    return matchingStudents.map((student) => student.id);
-  }
-
-  return Array.from({ length: Math.max(1, participantCount) }, (_, index) => `${batchId}-student-${index + 1}`);
-}
-
-function buildRunRecordFromAnalytics(record: RunAnalyticsRecord, students: StudentOption[]): RunStatusRecord {
-  const mode = toExecutionMode(record.mode);
-  const recipientStudentIds = deriveRecipientIds(record.batchId, record.participants, students);
-
-  return {
-    runId: record.runId,
-    runName: record.runName,
-    templateId: record.runId,
-    canonicalId: `analytics-${record.runId}`,
-    templateName: record.runName,
-    academicYear: record.academicYear,
-    mode,
-    modeSnapshot: mode,
-    phaseConfigSnapshot: "Captured from assigned template at scheduling",
-    timingProfileSnapshot: "Captured from assigned template at scheduling",
-    batchIds: [record.batchId],
-    recipientStudentIds,
-    startWindowIso: record.startedAt,
-    endWindowIso: new Date(Date.parse(record.startedAt) + (3 * 60 * 60 * 1000)).toISOString(),
-    timezone: CURRENT_INSTITUTE_TIMEZONE,
-    attemptLimit: 1,
-    gracePeriodMinutes: 0,
-    shuffleEnabled: false,
-    proctoringPolicy: DEFAULT_PROCTORING_POLICY,
-    status: inferRunStatus(record),
-    completionPercent: Math.round(record.completionRatePercent),
-    createdAtIso: record.startedAt,
-    runAnalyticsSnapshot: {
-      avgRawScorePercent: Math.round(record.avgRawScorePercent),
-      avgAccuracyPercent: Math.round(record.avgAccuracyPercent),
-      avgPhaseAdherencePercent: Math.round(record.avgPhaseAdherencePercent),
-      easyNeglectPercent: Math.round(record.easyNeglectPercent),
-      hardBiasPercent: Math.round(record.hardBiasPercent),
-      riskDistributionSummary: toRiskDistributionSummary(record),
-      avgDisciplineIndex: Math.round(record.disciplineIndexAverage),
-      controlledCompliancePercent: Math.round(record.controlledCompliancePercent),
-      guessRatePercent: Math.round(record.guessRatePercent),
-      executionStabilityIndex: Math.round(
-        Math.max(0, Math.min(100, record.disciplineIndexAverage - record.guessRatePercent * 0.35)),
-      ),
-      executionStabilityBadge: toExecutionStabilityBadge(record),
-      overrideCount: Math.round(record.structuralOverridePercent),
-    },
-  };
 }
 
 function recipientIdsFromMode(draft: AssignmentDraft, students: StudentOption[]): string[] {
@@ -1513,6 +1453,10 @@ function AssignmentManagementPage() {
   const [topicWeaknessInput, setTopicWeaknessInput] = useState("");
   const [topicWeaknessFocused, setTopicWeaknessFocused] = useState(false);
   const [runs, setRuns] = useState<RunStatusRecord[]>(FALLBACK_RUNS);
+  const [authoritativeRuns, setAuthoritativeRuns] = useState<AdminRunRecord[]>([]);
+  const [nextRunCursor, setNextRunCursor] = useState<string | null>(null);
+  const [isRunListLoading, setIsRunListLoading] = useState(false);
+  const [isLoadingMoreRuns, setIsLoadingMoreRuns] = useState(false);
   const [lastAuthoritativeRun, setLastAuthoritativeRun] =
     useState<AdminRunRecord | null>(null);
   const [filters, setFilters] = useState<AssignmentListFilters>(INITIAL_FILTERS);
@@ -1576,7 +1520,7 @@ function AssignmentManagementPage() {
           };
         });
         setInlineMessage(
-          "Live mode enabled: assignment template selection hydrated from GET /admin/tests while run views remain backed by GET /admin/analytics and scheduling continues through POST /admin/runs.",
+          "Live mode enabled: assignment template references hydrated from GET /admin/tests.",
         );
       } catch (error) {
         if (!isMounted) {
@@ -1602,7 +1546,7 @@ function AssignmentManagementPage() {
     let isMounted = true;
 
     async function hydrateStudents(): Promise<void> {
-      if (!shouldUseLiveApi()) {
+      if (!shouldUseLiveApi() || activeSection !== "create") {
         return;
       }
 
@@ -1647,39 +1591,47 @@ function AssignmentManagementPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [activeSection]);
 
   useEffect(() => {
     let isMounted = true;
 
     async function hydrateRuns(): Promise<void> {
-      if (!shouldUseLiveApi()) {
+      if (!shouldUseLiveApi() || activeSection !== "list") {
         return;
       }
 
+      setIsRunListLoading(true);
       try {
-        const dataset = await fetchDashboardDataset();
+        const result = await fetchAdminRuns({
+          limit: 50,
+          status: toApiRunStatus(filters.status),
+        });
         if (!isMounted) {
           return;
         }
 
-        const liveRuns = dataset.runAnalytics.map((record) => buildRunRecordFromAnalytics(record, studentOptions));
-        if (liveRuns.length === 0) {
-          return;
-        }
-
-        setRuns(liveRuns);
-        setInlineMessage("Live mode enabled: assignment list, history, and bulk views hydrated from GET /admin/analytics while scheduling continues through POST /admin/runs.");
+        setAuthoritativeRuns(result.runs);
+        setNextRunCursor(result.nextCursor);
+        setInlineMessage(
+          "Live mode enabled: assignment list hydrated from authoritative GET /admin/runs records.",
+        );
       } catch (error) {
         if (!isMounted) {
           return;
         }
 
+        setAuthoritativeRuns([]);
+        setNextRunCursor(null);
         const reason =
           error instanceof ApiClientError ?
-            `GET /admin/analytics failed with ${error.code} (${error.status}).` :
-            "Failed to hydrate assignment list data from GET /admin/analytics.";
+            `GET /admin/runs failed with ${error.code} (${error.status}).` :
+            "Failed to hydrate authoritative assignment list data from GET /admin/runs.";
         setInlineMessage(reason);
+      } finally {
+        if (isMounted) {
+          setIsRunListLoading(false);
+        }
       }
     }
 
@@ -1688,7 +1640,7 @@ function AssignmentManagementPage() {
     return () => {
       isMounted = false;
     };
-  }, [studentOptions]);
+  }, [activeSection, filters.status]);
 
   const batchOptions = useMemo(() => {
     const byId = new Map<string, string>();
@@ -1983,17 +1935,61 @@ function AssignmentManagementPage() {
     () =>
       Array.from(
         new Map(
-          runs.map((run) => [
-            run.templateId,
+          (shouldUseLiveApi() ? authoritativeRuns : runs).map((run) => [
+            "testId" in run ? run.testId : run.templateId,
             {
-              id: run.templateId,
-              name: run.templateName,
+              id: "testId" in run ? run.testId : run.templateId,
+              name: "testId" in run ?
+                templateOptions.find((template) => template.id === run.testId)?.name ?? run.testId :
+                run.templateName,
             },
           ]),
         ).values(),
       ).sort((left, right) => left.name.localeCompare(right.name)),
-    [runs],
+    [authoritativeRuns, runs, templateOptions],
   );
+
+  const filteredAuthoritativeRuns = useMemo(() => {
+    const parsedStart = filters.dateStart ? Date.parse(filters.dateStart) : null;
+    const parsedEnd = filters.dateEnd ? Date.parse(`${filters.dateEnd}T23:59:59`) : null;
+    const normalizedQuery = filters.query.trim().toLowerCase();
+
+    return authoritativeRuns.filter((run) => {
+      if (normalizedQuery) {
+        const templateName = templateOptions.find((template) => template.id === run.testId)?.name ?? "";
+        const haystack = [
+          run.id,
+          run.testId,
+          run.canonicalId,
+          templateName,
+          run.recipientStudentIds.join(" "),
+        ].join(" ").toLowerCase();
+        if (!haystack.includes(normalizedQuery)) {
+          return false;
+        }
+      }
+
+      if (filters.academicYear !== "all" && run.academicYear !== filters.academicYear) {
+        return false;
+      }
+      if (filters.templateId !== "all" && run.testId !== filters.templateId) {
+        return false;
+      }
+      if (filters.mode !== "all" && run.mode !== filters.mode) {
+        return false;
+      }
+
+      const startMillis = Date.parse(run.startWindow);
+      if (parsedStart !== null && startMillis < parsedStart) {
+        return false;
+      }
+      if (parsedEnd !== null && startMillis > parsedEnd) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [authoritativeRuns, filters, templateOptions]);
 
   const filteredRuns = useMemo(() => {
     const parsedStart = filters.dateStart ? Date.parse(filters.dateStart) : null;
@@ -2183,6 +2179,83 @@ function AssignmentManagementPage() {
     ];
   })();
 
+  const authoritativeAssignmentColumns = useMemo<UiTableColumn<AdminRunRecord>[]>(() => [
+    {
+      id: "run",
+      header: "Assignment",
+      render: (row) => (
+        <div className="admin-assignments-run-cell admin-assignments-run-cell-strong">
+          <strong>{row.id}</strong>
+          <small>
+            {templateOptions.find((template) => template.id === row.testId)?.name ?? row.testId}
+            {" · version "}{row.templateVersion}
+          </small>
+          <small>{row.canonicalId}</small>
+        </div>
+      ),
+    },
+    {
+      id: "delivery",
+      header: "Delivery",
+      render: (row) => {
+        const displayStatus = toDisplayRunStatus(row.status);
+        return (
+          <div className="admin-assignments-table-stack">
+            <div className="admin-assignments-pill-row">
+              <span className="admin-assignments-metric-pill">{row.mode}</span>
+              <span className={statusClassName(displayStatus)}>{displayStatus}</span>
+            </div>
+            <small>{row.recipientCount} authoritative recipients</small>
+            <small>{row.academicYear} · {row.shuffleQuestionOrder ? "Shuffled order" : "Fixed order"}</small>
+          </div>
+        );
+      },
+    },
+    {
+      id: "window",
+      header: "Schedule",
+      render: (row) => (
+        <div className="admin-assignments-window-cell">
+          <strong>{formatDateTime(row.startWindow)}</strong>
+          <small>Ends {formatDateTime(row.endWindow)}</small>
+          <small>{row.timezone}</small>
+        </div>
+      ),
+    },
+    {
+      id: "policy",
+      header: "Run Policy",
+      render: (row) => (
+        <div className="admin-assignments-table-stack">
+          <small>{row.attemptLimit} attempt{row.attemptLimit === 1 ? "" : "s"}</small>
+          <small>{row.gracePeriodMinutes} minute grace period</small>
+          <small>
+            Browser guard {row.proctoringPolicy.browserIntegrityGuardEnabled ? "on" : "off"}
+            {" · Camera guard "}
+            {row.proctoringPolicy.faceIdentityGazeGuardEnabled ? "on" : "off"}
+          </small>
+        </div>
+      ),
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      className: "admin-assignments-actions-col",
+      render: (row) => (
+        <div className="admin-assignments-row-actions">
+          <button type="button" onClick={() => navigate(`/admin/assignments/details/${row.id}`)}>
+            View Details
+          </button>
+          {row.status === "active" ? (
+            <button type="button" onClick={() => navigate(`/admin/assignments/live/${row.id}`)}>
+              Open Live Monitor
+            </button>
+          ) : null}
+        </div>
+      ),
+    },
+  ], [navigate, templateOptions]);
+
   const liveColumns = useMemo<UiTableColumn<LiveMonitorStudentSnapshot>[]>(() => {
     const columns: UiTableColumn<LiveMonitorStudentSnapshot>[] = [
       {
@@ -2304,6 +2377,38 @@ function AssignmentManagementPage() {
         selectedStudentIds: [...current.selectedStudentIds, studentId],
       };
     });
+  }
+
+  async function loadMoreAuthoritativeRuns(): Promise<void> {
+    if (!nextRunCursor || isLoadingMoreRuns) {
+      return;
+    }
+
+    setIsLoadingMoreRuns(true);
+    setErrorMessage(null);
+    try {
+      const result = await fetchAdminRuns({
+        cursor: nextRunCursor,
+        limit: 50,
+        status: toApiRunStatus(filters.status),
+      });
+      setAuthoritativeRuns((current) => {
+        const byId = new Map(current.map((run) => [run.id, run]));
+        result.runs.forEach((run) => byId.set(run.id, run));
+        return Array.from(byId.values());
+      });
+      setNextRunCursor(result.nextCursor);
+      setInlineMessage(
+        `Loaded ${result.runs.length} additional authoritative assignment record${result.runs.length === 1 ? "" : "s"}.`,
+      );
+    } catch (error) {
+      const reason = error instanceof ApiClientError ?
+        `GET /admin/runs pagination failed with ${error.code} (${error.status}).` :
+        "Failed to load the next authoritative assignment page.";
+      setErrorMessage(reason);
+    } finally {
+      setIsLoadingMoreRuns(false);
+    }
   }
 
   async function scheduleRun(event: FormEvent<HTMLFormElement>) {
@@ -3269,8 +3374,11 @@ function AssignmentManagementPage() {
         <section className="admin-assignments-list-shell" aria-label="Assignment list">
           <h3>Assignment List</h3>
           <p className="admin-content-copy">
-            Review scheduled, live, and completed assignments in one place. Use the filters below to quickly narrow the table to the test, batch, or delivery state you need.
+            Review scheduled, live, and completed assignments in one place. Live mode reads only authoritative current-year run summaries from GET /admin/runs.
           </p>
+          {shouldUseLiveApi() && isRunListLoading ? (
+            <p className="admin-assignments-inline-note">Loading authoritative assignments...</p>
+          ) : null}
 
           {lastAuthoritativeRun ? (
             <section
@@ -3317,7 +3425,7 @@ function AssignmentManagementPage() {
             </div>
 
             <div className="admin-assignments-list-filter-grid">
-              <UiFormField label="Search" htmlFor="assignment-list-search" helper="Search run name, template, run ID, or batch">
+              <UiFormField label="Search" htmlFor="assignment-list-search" helper={shouldUseLiveApi() ? "Search run ID, template, canonical ID, or recipient" : "Search run name, template, run ID, or batch"}>
                 <input
                   id="assignment-list-search"
                   type="search"
@@ -3388,20 +3496,22 @@ function AssignmentManagementPage() {
                 </select>
               </UiFormField>
 
-              <UiFormField label="Batch" htmlFor="assignment-list-batch" helper="Show runs involving a specific batch">
-                <select
-                  id="assignment-list-batch"
-                  value={filters.batchId}
-                  onChange={(event) => {
-                    setFilters((current) => ({ ...current, batchId: event.target.value }));
-                  }}
-                >
-                  <option value="all">All batches</option>
-                  {batchOptions.map((batch) => (
-                    <option key={batch.id} value={batch.id}>{batch.name}</option>
-                  ))}
-                </select>
-              </UiFormField>
+              {!shouldUseLiveApi() ? (
+                <UiFormField label="Batch" htmlFor="assignment-list-batch" helper="Show runs involving a specific batch">
+                  <select
+                    id="assignment-list-batch"
+                    value={filters.batchId}
+                    onChange={(event) => {
+                      setFilters((current) => ({ ...current, batchId: event.target.value }));
+                    }}
+                  >
+                    <option value="all">All batches</option>
+                    {batchOptions.map((batch) => (
+                      <option key={batch.id} value={batch.id}>{batch.name}</option>
+                    ))}
+                  </select>
+                </UiFormField>
+              ) : null}
 
               <UiFormField label="Start Date From" htmlFor="assignment-list-date-start" helper="Filter by run start date">
                 <input
@@ -3427,18 +3537,41 @@ function AssignmentManagementPage() {
             </div>
 
             <div className="admin-assignments-list-filter-footnote">
-              <strong>{filteredRuns.length}</strong>
+              <strong>{shouldUseLiveApi() ? filteredAuthoritativeRuns.length : filteredRuns.length}</strong>
               <span>assignments currently match the selected filters</span>
             </div>
           </section>
 
-          <UiTable
-            caption="Run Status Table"
-            columns={assignmentColumns}
-            rows={filteredRuns}
-            rowKey={(row) => row.runId}
-            emptyStateText="No assignment runs matched the current filters."
-          />
+          {shouldUseLiveApi() ? (
+            <>
+              <UiTable
+                caption="Authoritative Run Status Table"
+                columns={authoritativeAssignmentColumns}
+                rows={filteredAuthoritativeRuns}
+                rowKey={(row) => row.id}
+                emptyStateText="No authoritative assignment runs matched the current filters."
+              />
+              {nextRunCursor ? (
+                <div className="admin-tests-row-actions">
+                  <button
+                    type="button"
+                    onClick={() => void loadMoreAuthoritativeRuns()}
+                    disabled={isLoadingMoreRuns}
+                  >
+                    {isLoadingMoreRuns ? "Loading More..." : "Load More Assignments"}
+                  </button>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <UiTable
+              caption="Fixture Run Status Table"
+              columns={assignmentColumns}
+              rows={filteredRuns}
+              rowKey={(row) => row.runId}
+              emptyStateText="No assignment runs matched the current filters."
+            />
+          )}
         </section>
       ) : null}
 
