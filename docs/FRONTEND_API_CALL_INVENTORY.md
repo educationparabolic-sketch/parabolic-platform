@@ -1,8 +1,8 @@
 # Frontend API Call Inventory
 
-Status: current-contract inventory, canonical-route assignment, and compatibility classification through `BWM-014-F`
+Status: current-contract inventory, canonical-route assignment, and compatibility classification through `BWM-015`
 
-Inventory date: 2026-08-26
+Inventory date: 2026-08-27
 
 Scope: executable HTTP calls in `apps/admin/src`, `apps/student/src`, `apps/exam/src`, and `apps/vendor/src`
 
@@ -63,8 +63,8 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 | ADM-21 | `POST` | `/admin/tests/{testId}/archive` | `/api/v1/admin/tests/{testId}/archive` | `implemented` | Archive sends the backend ID and expected numeric version, permits only `ready|assigned -> archived`, atomically writes the immutable archival audit, replays the same command deterministically, and reconciles the authoritative ADM-10 reload. |
 | ADM-22 | `GET` | `/admin/runs` | `/api/v1/admin/runs` | `implemented` | The shared strict list DTO returns only identity-tenant runs from the resolved current academic year, ordered deterministically with a bounded `1..50` cursor page and optional lifecycle-status filter. |
 | ADM-23 | `GET` | `/admin/runs/{runId}` | `/api/v1/admin/runs/{runId}` | `implemented` | The shared strict detail DTO resolves the URL-encoded ID only inside the identity tenant's current academic year and returns `NOT_FOUND` for missing, old-year, or other-tenant records. |
-| STU-01 | `GET` | `/student/dashboard` | `/api/v1/student/dashboard` | `missing` | No current handler/export implements the dashboard summary contract. |
-| STU-02 | `GET` | `/student/tests` | `/api/v1/student/tests` | `missing` | No current handler/export implements paginated student tests. |
+| STU-01 | `GET` | `/student/dashboard` | `/api/v1/student/dashboard` | `implemented` | Strict shared dashboard DTO; handler derives tenant, Student, current year, and license from verified identity and returns only that active Student's summary metrics plus assigned, licensed scheduled runs. |
+| STU-02 | `GET` | `/student/tests` | `/api/v1/student/tests` | `implemented` | Strict shared paginated tests DTO; bounded status/page queries return only current-year runs assigned to the identity Student and permitted by the identity license. |
 | STU-03 | `GET` | `/student/performance` | `/api/v1/student/performance` | `missing` | No current handler/export implements the performance summary contract. |
 | STU-04 | `GET` | `/student/insights` | `/api/v1/student/insights` | `missing` | No current handler/export implements the insights summary contract. |
 | STU-05 | `GET` | `/student/tests/{testId}/solutions` | `/api/v1/student/tests/{testId}/solutions` | `missing` | No current handler/export implements solution entitlement and summary retrieval. |
@@ -110,8 +110,8 @@ Classification totals: `implemented` 23, `incompatible` 6, `missing` 6, `intenti
 
 | ID | Method and current path | Frontend request | Frontend response | Auth / role / tenant / license | Current Functions handler | Frontend source |
 | --- | --- | --- | --- | --- | --- | --- |
-| STU-01 | `GET /student/dashboard` | No body | `unknown`, asserted and normalized to `StudentDashboardDataset` | Frontend sends Firebase ID; intended `student` and identity tenant; none server-side (missing); no route-layer minimum in UI | Missing | `features/dashboard/studentDashboardDataset.ts` via `services/studentSummaryApi.ts` |
-| STU-02 | `GET /student/tests` | Query `{ status, page, pageSize }` | `unknown`, normalized to `StudentTestsResponse` | Frontend sends Firebase ID; intended `student` and identity tenant; none server-side (missing); no route-layer minimum in UI | Missing | `features/my-tests/studentMyTestsDataset.ts` via `services/studentSummaryApi.ts` |
+| STU-01 | `GET /student/dashboard` | No body; tenant, Student, year, and license overrides are not sent | Shared `StudentDashboardResult`, strictly adapted to `StudentDashboardDataset` | Firebase ID; `student`; identity tenant/Student/license; active non-deleted Student; server-resolved current academic year; L0/L1 metric redaction and assigned-run mode filtering | `studentDashboard` (`api/studentDashboard.ts`) | `features/dashboard/studentDashboardDataset.ts` via `services/studentSummaryApi.ts` |
+| STU-02 | `GET /student/tests` | Query `{ status, page, pageSize }`; status is `all|scheduled|active|completed|archived`, page `1..100`, pageSize `1..50` | Shared `StudentTestsResult`, strictly adapted to `StudentTestsResponse` | Firebase ID; `student`; identity tenant/Student/license; active non-deleted Student; server-resolved current academic year; assigned recipient and licensed mode only | `studentTests` (`api/studentTests.ts`) | `features/my-tests/studentMyTestsDataset.ts` via `services/studentSummaryApi.ts` |
 | STU-03 | `GET /student/performance` | Query `{ lastN }` | `unknown`, asserted and normalized to `StudentPerformanceDataset` | Frontend sends Firebase ID; intended `student` and identity tenant; none server-side (missing); no route-layer minimum in UI | Missing | `features/performance/studentPerformanceDataset.ts` via `services/studentSummaryApi.ts` |
 | STU-04 | `GET /student/insights` | Query `{ limit }` | `unknown`, asserted and normalized to `StudentInsightsDataset` | Frontend sends Firebase ID; intended `student` and identity tenant; none server-side (missing); no route-layer minimum in UI | Missing | `features/insights/studentInsightsDataset.ts` via `services/studentSummaryApi.ts` |
 | STU-05 | `GET /student/tests/{testId}/solutions` | Path `testId` | `unknown`, normalized to `StudentSolutionItem[]` | Frontend sends Firebase ID; intended `student` and identity tenant; none server-side (missing); no entitlement enforcement | Missing | `features/my-tests/studentMyTestsDataset.ts` via `services/studentSummaryApi.ts` |
@@ -135,9 +135,9 @@ Classification totals: `implemented` 23, `incompatible` 6, `missing` 6, `intenti
 
 ## Classification summary for the next substeps
 
-- The 21 `implemented` entries are handler-compatible through the common gateway and same-origin Hosting rewrite; each owning flow still requires its task-specific emulator and browser evidence.
+- The 25 `implemented` entries are handler-compatible through the common gateway and same-origin Hosting rewrite; each owning flow still requires its task-specific emulator and browser evidence.
 - The 6 `incompatible` entries require contract repair by BWM-017, BWM-018, BWM-023, BWM-030, BWM-031, or BWM-038 before their affected flows can be considered wired.
-- The 6 `missing` entries require Student/Exam handlers under BWM-015, BWM-016, and BWM-018.
+- The 4 `missing` entries require Student/Exam handlers under BWM-016 and BWM-018.
 - No frontend-declared route has evidence supporting intentional retirement.
 
 ## Audit anchors

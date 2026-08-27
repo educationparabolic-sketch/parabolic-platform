@@ -2,7 +2,7 @@
 
 Status: canonical route and response-envelope contract
 
-Last reconciled: 2026-08-26 (`BWM-014-F` authoritative assignment lifecycle closeout)
+Last reconciled: 2026-08-27 (`BWM-015` Student dashboard and My Tests closeout)
 
 ## Sources of truth
 
@@ -39,7 +39,7 @@ If prose and the typed manifest disagree about a route key or status, the typed 
 - `missing`: no current Functions handler/export implements the frontend contract.
 - `intentionally_retired`: explicit product/architecture evidence says the route must not be served.
 
-Current totals: 23 implemented, 6 incompatible, 6 missing, 0 intentionally retired.
+Current totals: 25 implemented, 6 incompatible, 4 missing, 0 intentionally retired.
 
 ## Canonical frontend route manifest
 
@@ -68,8 +68,8 @@ Current totals: 23 implemented, 6 incompatible, 6 missing, 0 intentionally retir
 | ADM-21 | `POST /api/v1/admin/tests/{testId}/archive` | `implemented` | `adminTests` | Firebase ID; teacher/admin; identity tenant; expected version; ready/assigned source |
 | ADM-22 | `GET /api/v1/admin/runs` | `implemented` | `adminRuns` | Firebase ID; teacher/admin; identity tenant; current academic year; bounded cursor pagination; optional status filter |
 | ADM-23 | `GET /api/v1/admin/runs/{runId}` | `implemented` | `adminRuns` | Firebase ID; teacher/admin; identity tenant; current academic year; missing or out-of-scope IDs return 404 |
-| STU-01 | `GET /api/v1/student/dashboard` | `missing` | None | Firebase ID; student; identity tenant |
-| STU-02 | `GET /api/v1/student/tests` | `missing` | None | Firebase ID; student; identity tenant |
+| STU-01 | `GET /api/v1/student/dashboard` | `implemented` | `studentDashboard` | Firebase ID; student; identity tenant/student/license; active Student; current academic year |
+| STU-02 | `GET /api/v1/student/tests` | `implemented` | `studentTests` | Firebase ID; student; identity tenant/student/license; active Student; current academic year; bounded status/page query |
 | STU-03 | `GET /api/v1/student/performance` | `missing` | None | Firebase ID; student; identity tenant |
 | STU-04 | `GET /api/v1/student/insights` | `missing` | None | Firebase ID; student; identity tenant |
 | STU-05 | `GET /api/v1/student/tests/{testId}/solutions` | `missing` | None | Firebase ID; student; identity tenant and entitlement |
@@ -91,6 +91,8 @@ ADM-10 and ADM-11 use the shared `AdminTestTemplateRecord`, `AdminTestTemplateCr
 
 ADM-12, ADM-22, and ADM-23 share the strict `AdminRunRecord` lifecycle boundary. Create derives institute and current academic year from verified identity, validates the published template and numeric version plus exact eligible recipients, persists immutable template/configuration, schedule, attempt, shuffle, proctoring, and recipient authority, and uses a deterministic idempotency fingerprint so exact retries or concurrent requests return the same run while template usage increments once. Admin accepts the created record only after one exact replay reconciles every persisted field. The live list then reloads only current-year ADM-22 records with bounded status-aware cursor pagination; the live detail route displays the exact ADM-23 record and recipient IDs. Neither live consumer derives run lifecycle state from Admin Analytics or fixtures. Missing, archived-year, and cross-tenant detail IDs return `NOT_FOUND`; Student-role callers are forbidden.
 
+STU-01 and STU-02 use the strict shared `StudentDashboardResult` and `StudentTestsResult` boundaries. The handlers derive institute, Student, and license layer only from verified Firebase identity, require the matching active and non-deleted Student document, resolve the current operational academic year on the server, and never accept browser tenant/Student/year overrides. Dashboard metrics come directly from that Student's `studentYearMetrics` summary and upcoming runs must contain the Student in `recipientStudentIds`, be scheduled in the future, and use a mode allowed by the identity license. My Tests applies the same assignment and license boundary with strict `scheduled|active|completed|archived|all` status handling and bounded `page`/`pageSize`; stopped and cancelled runs form the archived summary view. L0/L1 responses redact higher-layer metrics, and neither route reads or returns raw session/question data. Session start/resume and completed result propagation remain owned by BWM-017 and BWM-024.
+
 ADM-19 uses the shared `AdminTestTemplateUpdateRequest` and `AdminTestTemplateUpdateResult`. The path supplies the backend-issued template ID and the request supplies a positive `expectedVersion`. A Firestore transaction rejects missing, stale, or structurally locked templates, creates the superseded immutable configuration at `institutes/{instituteId}/tests/{testId}/versionSnapshots/{version}`, updates the current template, and increments its numeric version exactly once. Version conflicts return the standard `CONFLICT` error with HTTP 409. Admin consumes the strict update result, reloads ADM-10, requires the returned version to equal `expectedVersion + 1`, reconciles ID/canonical ID/version, and installs only the reload state.
 
 ADM-20 and ADM-21 use the shared `AdminTestTemplateLifecycleRequest` and `AdminTestTemplateLifecycleResult`. Both require the current positive `expectedVersion`; lifecycle commands do not change the structural version. Publish permits only `draft -> ready`, while archive permits only `ready|assigned -> archived`. Each status change and its deterministic immutable `ACTIVATE_TEST_TEMPLATE` or `ARCHIVE_TEST_TEMPLATE` audit under `institutes/{instituteId}/auditLogs/{auditId}` are created atomically in one Firestore transaction. Exact retries return the same audit authority; stale versions and illegal transitions return HTTP 409 `CONFLICT`. Admin strictly validates the result, reloads ADM-10, reconciles unchanged version and target status, and installs only the authoritative reload.
@@ -99,10 +101,10 @@ ADM-18 accepts one shared `QuestionAssetUploadRequest` containing base64 image b
 
 ## Backend HTTP export accounting
 
-`functions/src/apiRouteManifest.ts` accounts for all 42 current `functions.https.onRequest` exports:
+`functions/src/apiRouteManifest.ts` accounts for all 44 current `functions.https.onRequest` exports:
 
 - `apiV1` is the single versioned `gateway` export; it resolves exact manifest method/path pairs, preserves decoded route parameters, and dispatches non-null `functionExport` mappings through the existing raw request handlers;
-- 23 exports are referenced by one or more canonical frontend routes;
+- 25 exports are referenced by one or more canonical frontend routes;
 - 15 portal-oriented exports currently have no executable frontend caller and remain `unmapped_portal` rather than receiving an invented public route;
 - `internalEmailQueue` is `internal_only`;
 - `stripeWebhook` is a `webhook` boundary;
@@ -197,13 +199,12 @@ Vendor calibration-push consumers normalize or use the result. These adapters
 throw `PortalResponseValidationError` with the affected route when required
 fields are missing or incompatible; they never synthesize fixture-like values.
 
-`tests/portal-response-adapters.test.mjs` feeds the current Functions success
-builders for Admin, Exam, and Vendor through the same envelope parser and portal
-adapters used by production callers. The Student summary route is still
-classified `missing`, so its representative expected summary is tested together
-with the existing summary-only raw-session-field rejection policy rather than
-being described as a current backend response. Fixture fallback outside this
-boundary remains BWM-007 work.
+`tests/portal-response-adapters.test.mjs` feeds current Student and representative
+Admin, Exam, and Vendor success data through the same envelope parser and portal
+adapters used by production callers. Student dashboard and My Tests adapters now
+strictly validate the shared DTO fields and retain the summary-only raw-session-
+field rejection policy. Fixture fallback outside this boundary remains BWM-007
+work.
 
 ## Stable error codes
 

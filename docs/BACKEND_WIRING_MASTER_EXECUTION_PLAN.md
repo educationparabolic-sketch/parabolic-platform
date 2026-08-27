@@ -15,13 +15,13 @@ program: backend-wiring-and-deployment-readiness
 program_status: IN_PROGRESS
 release_decision: NO_GO
 current_phase: 1
-current_task: BWM-015
-current_substep: BWM-015 — Student Dashboard and My Tests APIs
-last_completed_task: BWM-014
-next_task: BWM-015
+current_task: BWM-016
+current_substep: BWM-016 — Student Solutions, Performance, and Insights APIs
+last_completed_task: BWM-015
+next_task: BWM-016
 blocked_tasks: []
-last_updated: 2026-08-26
-last_update_summary: BWM-014 is VERIFIED and dependency-complete BWM-015 is READY. ADM-12/22/23 now form one authoritative create/replay/list/detail lifecycle: Admin creates and reloads exact immutable run authority, assigned students are resolvable without fixtures, live list/detail state never substitutes analytics or fixture records, and authorization/idempotency/concurrency behavior is proven through real local Firebase and Chromium boundaries. Affected contracts, all 10 workspace lint/build gates, 19 full-service assertions, 2 no-mock Hosting browser cases, 64 Firestore-backed files with 202 assertions, and intentional failure cleanup all pass. Canonical API/schema/module accounting is reconciled at 35 frontend routes (23 implemented, 6 incompatible, 6 missing, 0 retired) and 42 HTTP exports. Production remains NO_GO and unchanged; no Student or Exam work has begun.
+last_updated: 2026-08-27
+last_update_summary: BWM-015 is VERIFIED and dependency-complete BWM-016 is READY. STU-01/02 now derive institute, Student, current operational year, and license from verified identity; require an active non-deleted Student; return strict summary-only metrics and bounded assigned-run views; redact higher-layer fields; and exclude unassigned, licensed-out, raw-session, and raw-question data. Functions non-emulator CI passed 45/45 files, all 10 workspace lint/build gates passed, the full emulator aggregate passed 9 explicit suites plus 65 Firestore-backed files with 203 assertions and 2 Hosting browser cases, failure cleanup passed, and the dedicated no-mock Student Auth/Firestore/Functions/Hosting Chromium flow passed 1/1. Canonical accounting is 35 frontend routes (25 implemented, 6 incompatible, 4 missing, 0 retired) and 44 HTTP exports. Production remains NO_GO and unchanged; no Exam work has begun.
 ```
 
 Do not infer progress from old build numbers, UI completion labels, or visual verification artifacts. Only this checkpoint, the task registry, checked substeps, session log, and current repository evidence determine progress for this program.
@@ -266,8 +266,8 @@ The registry is the canonical order. Detailed cards below define scope and accep
 | BWM-012 | P0 | VERIFIED | BWM-003,BWM-006,BWM-008 | Minimum real question creation and asset ingestion |
 | BWM-013 | P0 | VERIFIED | BWM-012 | Authoritative test-template lifecycle |
 | BWM-014 | P0 | VERIFIED | BWM-013 | Minimum authoritative assignment lifecycle |
-| BWM-015 | P0 | READY | BWM-003,BWM-006,BWM-008,BWM-014 | Student dashboard and My Tests APIs |
-| BWM-016 | P0 | PLANNED | BWM-015 | Student solutions, performance, and insights APIs |
+| BWM-015 | P0 | VERIFIED | BWM-003,BWM-006,BWM-008,BWM-014 | Student dashboard and My Tests APIs |
+| BWM-016 | P0 | READY | BWM-015 | Student solutions, performance, and insights APIs |
 | BWM-017 | P0 | PLANNED | BWM-014,BWM-015 | Compatible Exam start and resume contracts |
 | BWM-018 | P0 | PLANNED | BWM-009,BWM-017 | Exam launch credential exchange and authenticated runtime |
 | BWM-019 | P0 | PLANNED | BWM-012,BWM-013,BWM-018 | Authoritative sanitized Exam runtime snapshot |
@@ -1583,14 +1583,28 @@ The registry is the canonical order. Detailed cards below define scope and accep
 
 ### BWM-015 — Student Dashboard and My Tests APIs
 
-- **Status:** `READY`
+- **Status:** `VERIFIED`
 - **Purpose:** Replace the highest-value missing Student reads.
 - **Work:** implement `/student/dashboard` and `/student/tests`; derive institute/student from identity; use summary-only queries; support status/pagination; filter deleted/unassigned records; enforce current year/license policy.
 - **Acceptance:** A Student sees only their seeded metrics and assigned runs; cross-student and cross-tenant tests fail.
+- **Evidence:**
+  - **Implemented files:** Added shared Student dashboard/My Tests DTOs; `functions/src/types/studentSummary.ts`, `functions/src/services/studentSummary.ts`, `functions/src/api/studentDashboard.ts`, and `functions/src/api/studentTests.ts`; registered direct `studentDashboard`/`studentTests` exports and implemented STU-01/02 gateway mappings; added three assigned-run composites; aligned strict portal adapters and Student datasets; added handler, Firestore-service, explicit full-service gateway, DTO/adapter, aggregate-inventory, and no-mock browser coverage in `functions/src/tests/studentSummaryApi.test.ts`, `functions/src/tests/studentSummaryService.test.ts`, `functions/tests/studentSummary.emulator.test.js`, root contract files, `scripts/run-student-summary-contract-e2e.mjs`, and `tests/e2e/student-summary-contract.spec.mjs`.
+  - **L1 static/workspace:** `node scripts/verify-workspace.mjs` — PASS, all 10 Admin/Student/Exam/Vendor/Functions lint and production-build gates. Focused Functions/Student lint and builds also passed; the final browser runner rebuilt live Admin, Student, and Functions artifacts. `node --check scripts/run-student-summary-contract-e2e.mjs`; `node --check tests/e2e/student-summary-contract.spec.mjs`; package JSON parsing; Playwright one-test discovery; `git diff --check` — PASS.
+  - **L2 unit/contract:** `npm --prefix functions run test:ci:non-emulator` — PASS, 45/45 selected files. `node --test tests/api-dto-contract.test.mjs tests/portal-response-adapters.test.mjs tests/frontend-api-routing.test.mjs tests/frontend-data-mode.test.mjs tests/frontend-production-fallbacks.test.mjs tests/backend-ci-emulator-aggregate.test.mjs` — PASS, 6/6 files. Focused route-manifest/gateway, Student handler, and strict Firestore-service tests passed.
+  - **L3 Firebase emulator:** `npm run test:emulators:ci` — PASS under `demo-parabolic-test`: 9 explicit full-service suites, 2/2 no-mock Portal Hosting browser smoke cases, and 65 Firestore-backed files with 203 assertions; all data was isolated/cleaned and all ports released. The permanent Student gateway proof passed with real Auth, Firestore, and Functions, covering identity-derived tenant/Student/license, current-year scope, redaction, assigned/licensed filtering, status/page validation, deleted/inactive rejection, and cross-Student/cross-tenant denial. `npm run test:emulators:failure-cleanup` — PASS, including the intentional inner exit-23 cleanup probe.
+  - **L4 browser E2E:** `npm run test:student-summary-contracts:e2e` — PASS, 1/1 no-mock Chromium case through built Student UI plus local Auth, Firestore, Functions, and Portal Hosting. The browser signed in as L1, loaded exact summary metrics, rendered only the assigned Operational upcoming run on Dashboard and My Tests, omitted an assigned Controlled run and another Student's Operational run, and sent no tenant or Student query override.
+  - **L5 staging/preview:** N/A — no deployment target, public URL, preview channel, secret, environment, Hosting rewrite, or release configuration changed.
+  - **L6 production:** N/A — reserved for BWM-057; production remains untouched and `NO_GO`.
+  - **Firebase CLI version:** `15.9.0`; Java `21.0.8`.
+  - **Authorization/external mutations:** User approval allowed loopback Firebase emulators and headless Chromium. Verification used disposable cleaned emulator identities/data, ignored build/test/Hosting artifacts, and Firebase CLI local state only. No deployment, remote Firebase mutation, secret mutation, public endpoint, or production resource changed.
+  - **Contract/schema changes:** STU-01 and STU-02 are implemented with strict `StudentDashboardResult`/`StudentTestsResult` DTOs. Canonical totals are 35 frontend routes: 25 implemented, 6 incompatible, 4 missing, 0 intentionally retired; Functions expose 44 HTTP handlers. Added three `runs` composites for assigned recipient plus license mode, status, and deterministic start-window ordering. No Firestore rule changed.
+  - **Verification notes:** Initial browser attempts exposed harness-only readiness defects: the sidebar link's accessible name included its subtitle, and the My Tests boundary awaited four cold-worker status reads longer than Playwright's default assertion timeout. The selector was scoped to Student navigation and the data-readiness assertion now uses the scenario's 90-second emulator budget; the final complete invocation passed and shut every emulator down cleanly. One sandboxed retry could not bind loopback ports and was not counted.
+  - **Residual risks:** BWM-016 retains solutions, performance, and insights, including completed-test entitlement/release policy and remaining layer redaction. BWM-017 retains start/resume session authority, and BWM-024 retains completed result propagation. Production remains `NO_GO`.
+  - **Completed on:** 2026-08-27
 
 ### BWM-016 — Student Solutions, Performance, and Insights APIs
 
-- **Status:** `PLANNED`
+- **Status:** `READY`
 - **Purpose:** Remove all remaining Student summary endpoint gaps.
 - **Work:** implement solutions/performance/insights routes; enforce completed-test ownership, release policy, academic year, and license redaction; align envelope normalizers and pagination.
 - **Acceptance:** All Student pages use live APIs with correct empty/error/locked states and no fallback datasets in production mode.
@@ -2028,7 +2042,7 @@ operations_owner: TBD
 |---|---|---|---|
 | REST paths do not map to exported Functions | Critical | BWM-002..BWM-004 | Resolved 2026-08-07 |
 | Deployment lacks frontend runtime configuration and backend deploy | Critical | BWM-005,BWM-010 | Resolved 2026-08-22 |
-| Student summary APIs are missing | Critical | BWM-015,BWM-016 | Open |
+| Remaining Student solutions/performance/insights APIs are missing | Critical | BWM-016 | Open |
 | Exam custom token is sent where an ID token is required | Critical | BWM-017,BWM-018 | Open |
 | Exam lifecycle remains local while submission requires active backend state | Critical | BWM-020,BWM-023 | Open |
 | Exam uses hardcoded questions/schedule/build IDs | Critical | BWM-019 | Open |
@@ -2194,6 +2208,15 @@ Never record only “tests passed.” Include exact commands and whether tests w
 ## Session Log
 
 Append newest entries at the top.
+
+### LOG-089 — 2026-08-27 — BWM-015 Student Dashboard and My Tests APIs
+
+- **Task:** Resume the interrupted BWM-015 working tree, inspect the accumulated implementation, complete only the identity-scoped Student dashboard/My Tests boundary, run the required verification ladder, reconcile canonical documentation, and advance the checkpoint without beginning BWM-016 or Exam work.
+- **Outcome:** BWM-015 is `VERIFIED`. STU-01/02 now expose strict shared DTOs through direct Functions exports and the common gateway; verified identity is the sole tenant/Student/license authority, current-year active Student scope is mandatory, Dashboard reads summary metrics plus future assigned/licensed runs, and My Tests provides bounded assigned/licensed status views. L0/L1 redaction and summary-only projection exclude higher-layer fields, raw sessions, questions, unassigned runs, and licensed-out modes. Canonical accounting is 35 routes (25 implemented, 6 incompatible, 4 missing, 0 retired) and 44 HTTP exports. BWM-016 is `READY`; production remains `NO_GO`.
+- **Validation performed:** Functions non-emulator CI passed 45/45 files; the affected root DTO/adapter/routing/data-mode/fail-closed/aggregate set passed 6/6; all 10 workspace lint/build gates passed. The full Firebase emulator aggregate passed 9 explicit suites, 2/2 Hosting Chromium smoke cases, and 65 Firestore files with 203 assertions; intentional failure cleanup passed. The dedicated `npm run test:student-summary-contracts:e2e` flow passed 1/1 real Auth/Firestore/Functions/Hosting Chromium case after harness selector/readiness repairs, with disposable data cleaned and emulators shut down.
+- **Files changed:** Added Student DTOs, service/types, STU-01/02 handlers/exports/manifest mappings, assigned-run indexes, strict adapters/dataset alignment, permanent unit/emulator/browser tests and runners, aggregate accounting, and reconciled `docs/api_contract.md`, `docs/FRONTEND_API_CALL_INVENTORY.md`, `docs/MODULE_REGISTRY.md`, `docs/firestore_schema.md`, and this controller.
+- **Cloud changes:** None. User-approved commands used demo-project loopback emulators, headless Chromium, disposable cleaned Auth/Firestore data, ignored artifacts, and Firebase CLI local state only. No deployment, remote Firebase mutation, secret, endpoint, or production resource changed.
+- **Next:** BWM-016 — inspect the first remaining Student solutions/performance/insights contract gap and implement only that bounded task with completed-test ownership, release policy, current-year scope, and license redaction.
 
 ### LOG-088 — 2026-08-26 — BWM-014-F Aggregate Closeout
 

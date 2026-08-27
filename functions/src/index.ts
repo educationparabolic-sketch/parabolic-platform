@@ -78,6 +78,12 @@ import {
   handleAdminRunsRequest,
 } from "./api/adminRuns";
 import {
+  handleStudentDashboardRequest,
+} from "./api/studentDashboard";
+import {
+  handleStudentTestsRequest,
+} from "./api/studentTests";
+import {
   handleAdminQuestionAssetsRequest,
 } from "./api/adminQuestionAssets";
 import {
@@ -232,6 +238,12 @@ export const adminStudentOnboardingResend = functions.https.onRequest(
 );
 export const adminRuns = functions.https.onRequest(
   handleAdminRunsRequest,
+);
+export const studentDashboard = functions.https.onRequest(
+  handleStudentDashboardRequest,
+);
+export const studentTests = functions.https.onRequest(
+  handleStudentTestsRequest,
 );
 export const adminQuestionAssets = functions.https.onRequest(
   handleAdminQuestionAssetsRequest,

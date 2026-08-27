@@ -12,34 +12,13 @@ import {
   getStudentSummaryResource,
   studentPortalApiClient,
 } from "../../services/studentSummaryApi";
+import type {
+  StudentTestRecord,
+  StudentTestsResult,
+  StudentTestStatus,
+} from "../../../../../shared/contracts/apiDtos";
 
-export type StudentTestStatus = "scheduled" | "active" | "completed" | "archived";
-
-export interface StudentTestRecord {
-  testId: string;
-  runId: string;
-  sessionId: string | null;
-  testName: string;
-  status: StudentTestStatus;
-  mode: string;
-  startWindow: string;
-  endWindow: string;
-  durationMinutes: number;
-  rawScorePercent: number | null;
-  accuracyPercent: number | null;
-  timeUsedMinutes: number | null;
-  rankInBatch: number | null;
-  completedAt: string | null;
-  sessionLink: string | null;
-  academicYear: string;
-  currentAcademicYear: boolean;
-  archivedSummary: string | null;
-  summaryPdfUrl: string | null;
-  attemptStatusLabel: string | null;
-  attemptedQuestions: number | null;
-  totalQuestions: number | null;
-  flaggedQuestions: number | null;
-}
+export type { StudentTestRecord, StudentTestStatus };
 
 export interface StudentSolutionItem {
   questionId: string;
@@ -51,13 +30,7 @@ export interface StudentSolutionItem {
   simulationLink: string | null;
 }
 
-interface StudentTestsResponse {
-  tests: StudentTestRecord[];
-  page: number;
-  pageSize: number;
-  total: number;
-  hasMore: boolean;
-}
+type StudentTestsResponse = StudentTestsResult;
 
 interface StartSessionResponse {
   sessionUrl: string;
@@ -411,7 +384,10 @@ function normalizeStudentTestRecord(value: unknown, index: number): StudentTestR
     sessionId,
     testName: toStringOrFallback(record.testName ?? record.runName, runId),
     status: toStatus(record.status),
-    mode: toStringOrFallback(record.mode, "Operational"),
+    mode: toStringOrFallback(
+      record.mode,
+      "Operational",
+    ) as StudentTestRecord["mode"],
     startWindow: toStringOrFallback(record.startWindow ?? record.startAt, new Date(0).toISOString()),
     endWindow: toStringOrFallback(record.endWindow ?? record.endAt, new Date(0).toISOString()),
     durationMinutes: toNumberOrNull(record.durationMinutes ?? record.duration) ?? 0,
@@ -422,7 +398,10 @@ function normalizeStudentTestRecord(value: unknown, index: number): StudentTestR
     completedAt: toOptionalString(record.completedAt ?? record.submittedAt),
     sessionLink: toSessionLink(record.sessionLink ?? record.examSessionUrl, sessionId),
     academicYear,
-    currentAcademicYear: isCurrentAcademicYear(academicYear),
+    currentAcademicYear:
+      typeof record.currentAcademicYear === "boolean" ?
+        record.currentAcademicYear :
+        isCurrentAcademicYear(academicYear),
     archivedSummary: toOptionalString(record.archivedSummary),
     summaryPdfUrl: toCdnAssetUrl(toOptionalString(record.summaryPdfUrl)),
     attemptStatusLabel: toOptionalString(record.attemptStatusLabel ?? record.attemptStatus ?? record.progressLabel),

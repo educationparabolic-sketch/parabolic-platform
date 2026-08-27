@@ -30,6 +30,8 @@ import {handleExamSessionAnswersRequest} from "./examSessionAnswers";
 import {handleExamSessionEntryRequest} from "./examSessionEntry";
 import {handleExamSessionSubmitRequest} from "./examSessionSubmit";
 import {handleExamStartRequest} from "./examStart";
+import {handleStudentDashboardRequest} from "./studentDashboard";
+import {handleStudentTestsRequest} from "./studentTests";
 import {
   handleVendorCalibrationPushRequest,
 } from "./vendorCalibrationPush";
@@ -66,6 +68,8 @@ Record<string, ApiGatewayHandler>
   examSessionEntry: handleExamSessionEntryRequest,
   examSessionSubmit: handleExamSessionSubmitRequest,
   examStart: handleExamStartRequest,
+  studentDashboard: handleStudentDashboardRequest,
+  studentTests: handleStudentTestsRequest,
   vendorCalibrationPush: handleVendorCalibrationPushRequest,
   vendorCalibrationSimulation: handleVendorCalibrationSimulationRequest,
 });

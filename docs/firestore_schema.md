@@ -102,6 +102,23 @@ read only this collection. Lists are bounded to 50 records, ordered by
 filtering uses the `runs(status ASC, createdAt DESC, __name__ DESC)` composite
 index. Detail reads return not found for IDs outside that tenant/year boundary.
 
+Student summary reads derive institute, Student ID, and license layer from the
+verified identity, require the matching active non-deleted Student document,
+and resolve the current operational academic year on the server. Dashboard
+metrics read only `studentYearMetrics/{studentId}` and upcoming tests query only
+runs whose `recipientStudentIds` contain that Student, whose mode is allowed by
+the identity license, and whose scheduled window is still upcoming. My Tests
+applies the same recipient/mode boundary with bounded status/page reads;
+`cancelled` and `stopped` runs form the archived summary view. The public
+projection contains run and metric summaries only and never reads or returns
+session documents or raw question data.
+
+These Student reads use three collection-scoped `runs` composites:
+
+- `recipientStudentIds ARRAY_CONTAINS, mode ASC, startWindow DESC, __name__ DESC`
+- `recipientStudentIds ARRAY_CONTAINS, status ASC, mode ASC, startWindow ASC, __name__ ASC`
+- `recipientStudentIds ARRAY_CONTAINS, status ASC, mode ASC, startWindow DESC, __name__ DESC`
+
 runAnalytics/{runId}
 
 studentYearMetrics/{studentId}

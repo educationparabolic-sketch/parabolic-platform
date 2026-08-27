@@ -45,6 +45,7 @@ const selectedSourceSuites = [
   "sessionWriteBatchingPolicy.test",
   "signedUrl.test",
   "storageBucketArchitecture.test",
+  "studentSummaryApi.test",
   "submissionResponseContract.test",
   "systemEventTopology.test",
   "tenantMiddleware.test",

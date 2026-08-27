@@ -3,47 +3,18 @@ import {
   shouldUseLiveApi as shouldUseConfiguredLiveApi,
 } from "../../../../../shared/services/frontendEnvironment";
 import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
+import type {
+  StudentDashboardRecentResult,
+  StudentDashboardResult,
+  StudentDashboardUpcomingTest,
+  StudentRiskState,
+} from "../../../../../shared/contracts/apiDtos";
 import { getStudentSummaryResource } from "../../services/studentSummaryApi";
 
-export type StudentRiskState = "low" | "medium" | "high" | "critical";
-
-export interface UpcomingTestRecord {
-  runId: string;
-  testName: string;
-  mode: string;
-  startAt: string;
-  endAt: string;
-  durationMinutes: number;
-}
-
-export interface RecentResultRecord {
-  runId: string;
-  testName: string;
-  completedAt: string;
-  rawScorePercent: number;
-  accuracyPercent: number;
-}
-
-export interface StudentDashboardDataset {
-  licenseLayer: LicenseLayer;
-  avgRawScorePercent: number;
-  avgAccuracyPercent: number;
-  batchRank: number | null;
-  disciplineIndex: number;
-  testsAttempted: number;
-  riskState: StudentRiskState;
-  phaseAdherencePercent: number;
-  easyNeglectPercent: number;
-  hardBiasPercent: number;
-  timeMisallocationPercent: number;
-  behaviorSummaryTag: string;
-  controlledModeImprovementDeltaPercent: number;
-  guessProbabilityPercent: number;
-  executionStabilityFlag: string;
-  phaseComplianceMiniTrend: Array<{ label: string; value: number }>;
-  upcomingTests: UpcomingTestRecord[];
-  recentResults: RecentResultRecord[];
-}
+export type UpcomingTestRecord = StudentDashboardUpcomingTest;
+export type RecentResultRecord = StudentDashboardRecentResult;
+export type StudentDashboardDataset = StudentDashboardResult;
+export type { StudentRiskState };
 
 export const STUDENT_DASHBOARD_FALLBACK_DATASET: StudentDashboardDataset = {
   licenseLayer: "L0",
@@ -199,7 +170,7 @@ function normalizeUpcomingTestRecord(value: unknown, index: number): UpcomingTes
   return {
     runId,
     testName: toStringOrFallback(record.testName ?? record.runName, runId),
-    mode: toStringOrFallback(record.mode, "Operational"),
+    mode: toStringOrFallback(record.mode, "Operational") as UpcomingTestRecord["mode"],
     startAt: toStringOrFallback(record.startAt ?? record.startWindow, new Date(0).toISOString()),
     endAt: toStringOrFallback(record.endAt ?? record.endWindow, new Date(0).toISOString()),
     durationMinutes: toNumberOrZero(record.durationMinutes ?? record.duration),

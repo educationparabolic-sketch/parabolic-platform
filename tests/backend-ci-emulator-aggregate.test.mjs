@@ -33,8 +33,8 @@ test("backend CI aggregates every emulator-backed Functions suite", async () => 
     (file) => file.endsWith(".emulator.test.js"),
   ).length;
 
-  assert.equal(firestoreSuiteCount, 64);
-  assert.equal(explicitSuiteCount, 8);
+  assert.equal(firestoreSuiteCount, 65);
+  assert.equal(explicitSuiteCount, 9);
   assert.equal(
     rootPackage.scripts["test:emulators:ci"],
     "node scripts/run-emulator-integration-suite.mjs",

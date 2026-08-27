@@ -15,6 +15,12 @@ import type {
   DeployCalibrationVersionResult,
   QuestionAssetUploadResult,
   QuestionBulkUploadResult,
+  StudentDashboardRecentResult,
+  StudentDashboardResult,
+  StudentDashboardTrendPoint,
+  StudentDashboardUpcomingTest,
+  StudentTestRecord,
+  StudentTestsResult,
 } from "../contracts/apiDtos";
 
 type StudentSummaryResource =
@@ -166,6 +172,18 @@ function readNullableString(
   }
 
   return readString(value, route, field);
+}
+
+function readNullableNumber(
+  value: unknown,
+  route: string,
+  field: string,
+): number | null {
+  if (value === null) {
+    return null;
+  }
+
+  return readNumber(value, route, field);
 }
 
 function readStringArray(
@@ -1345,14 +1363,317 @@ export function adaptAdminQuestionAssetUploadResult(
   };
 }
 
+function adaptStudentDashboardUpcomingTest(
+  value: unknown,
+  index: number,
+): StudentDashboardUpcomingTest {
+  const route = "GET /student/dashboard";
+  const field = `upcomingTests[${index}]`;
+  const record = readRecord(value, route, field);
+  return {
+    durationMinutes: readNonNegativeInteger(
+      record.durationMinutes,
+      route,
+      `${field}.durationMinutes`,
+    ),
+    endAt: readString(record.endAt, route, `${field}.endAt`),
+    mode: readEnum(
+      record.mode,
+      ["Operational", "Diagnostic", "Controlled", "Hard"] as const,
+      route,
+      `${field}.mode`,
+    ),
+    runId: readString(record.runId, route, `${field}.runId`),
+    startAt: readString(record.startAt, route, `${field}.startAt`),
+    testName: readString(record.testName, route, `${field}.testName`),
+  };
+}
+
+function adaptStudentDashboardRecentResult(
+  value: unknown,
+  index: number,
+): StudentDashboardRecentResult {
+  const route = "GET /student/dashboard";
+  const field = `recentResults[${index}]`;
+  const record = readRecord(value, route, field);
+  return {
+    accuracyPercent: readNumber(
+      record.accuracyPercent,
+      route,
+      `${field}.accuracyPercent`,
+    ),
+    completedAt: readString(
+      record.completedAt,
+      route,
+      `${field}.completedAt`,
+    ),
+    rawScorePercent: readNumber(
+      record.rawScorePercent,
+      route,
+      `${field}.rawScorePercent`,
+    ),
+    runId: readString(record.runId, route, `${field}.runId`),
+    testName: readString(record.testName, route, `${field}.testName`),
+  };
+}
+
+function adaptStudentDashboardTrendPoint(
+  value: unknown,
+  index: number,
+): StudentDashboardTrendPoint {
+  const route = "GET /student/dashboard";
+  const field = `phaseComplianceMiniTrend[${index}]`;
+  const record = readRecord(value, route, field);
+  return {
+    label: readString(record.label, route, `${field}.label`),
+    value: readNumber(record.value, route, `${field}.value`),
+  };
+}
+
+export function adaptStudentDashboardResult(
+  value: unknown,
+): StudentDashboardResult {
+  const route = "GET /student/dashboard";
+  const data = readRecord(value, route);
+  assertSummaryOnly(data, route);
+  return {
+    avgAccuracyPercent: readNumber(
+      data.avgAccuracyPercent,
+      route,
+      "avgAccuracyPercent",
+    ),
+    avgRawScorePercent: readNumber(
+      data.avgRawScorePercent,
+      route,
+      "avgRawScorePercent",
+    ),
+    batchRank: readNullableNumber(data.batchRank, route, "batchRank"),
+    behaviorSummaryTag: readString(
+      data.behaviorSummaryTag,
+      route,
+      "behaviorSummaryTag",
+    ),
+    controlledModeImprovementDeltaPercent: readNumber(
+      data.controlledModeImprovementDeltaPercent,
+      route,
+      "controlledModeImprovementDeltaPercent",
+    ),
+    disciplineIndex: readNumber(
+      data.disciplineIndex,
+      route,
+      "disciplineIndex",
+    ),
+    easyNeglectPercent: readNumber(
+      data.easyNeglectPercent,
+      route,
+      "easyNeglectPercent",
+    ),
+    executionStabilityFlag: readString(
+      data.executionStabilityFlag,
+      route,
+      "executionStabilityFlag",
+    ),
+    guessProbabilityPercent: readNumber(
+      data.guessProbabilityPercent,
+      route,
+      "guessProbabilityPercent",
+    ),
+    hardBiasPercent: readNumber(
+      data.hardBiasPercent,
+      route,
+      "hardBiasPercent",
+    ),
+    licenseLayer: readEnum(
+      data.licenseLayer,
+      ["L0", "L1", "L2", "L3"] as const,
+      route,
+      "licenseLayer",
+    ),
+    phaseAdherencePercent: readNumber(
+      data.phaseAdherencePercent,
+      route,
+      "phaseAdherencePercent",
+    ),
+    phaseComplianceMiniTrend: readArray(
+      data.phaseComplianceMiniTrend,
+      route,
+      "phaseComplianceMiniTrend",
+    ).map(adaptStudentDashboardTrendPoint),
+    recentResults: readArray(
+      data.recentResults,
+      route,
+      "recentResults",
+    ).map(adaptStudentDashboardRecentResult),
+    riskState: readEnum(
+      data.riskState,
+      ["low", "medium", "high", "critical"] as const,
+      route,
+      "riskState",
+    ),
+    testsAttempted: readNonNegativeInteger(
+      data.testsAttempted,
+      route,
+      "testsAttempted",
+    ),
+    timeMisallocationPercent: readNumber(
+      data.timeMisallocationPercent,
+      route,
+      "timeMisallocationPercent",
+    ),
+    upcomingTests: readArray(
+      data.upcomingTests,
+      route,
+      "upcomingTests",
+    ).map(adaptStudentDashboardUpcomingTest),
+  };
+}
+
+function adaptStudentTestRecord(
+  value: unknown,
+  index: number,
+): StudentTestRecord {
+  const route = "GET /student/tests";
+  const field = `tests[${index}]`;
+  const record = readRecord(value, route, field);
+  return {
+    academicYear: readString(
+      record.academicYear,
+      route,
+      `${field}.academicYear`,
+    ),
+    accuracyPercent: readNullableNumber(
+      record.accuracyPercent,
+      route,
+      `${field}.accuracyPercent`,
+    ),
+    archivedSummary: readNullableString(
+      record.archivedSummary,
+      route,
+      `${field}.archivedSummary`,
+    ),
+    attemptedQuestions: readNullableNumber(
+      record.attemptedQuestions,
+      route,
+      `${field}.attemptedQuestions`,
+    ),
+    attemptStatusLabel: readNullableString(
+      record.attemptStatusLabel,
+      route,
+      `${field}.attemptStatusLabel`,
+    ),
+    completedAt: readNullableString(
+      record.completedAt,
+      route,
+      `${field}.completedAt`,
+    ),
+    currentAcademicYear: readBoolean(
+      record.currentAcademicYear,
+      route,
+      `${field}.currentAcademicYear`,
+    ),
+    durationMinutes: readNonNegativeInteger(
+      record.durationMinutes,
+      route,
+      `${field}.durationMinutes`,
+    ),
+    endWindow: readString(record.endWindow, route, `${field}.endWindow`),
+    flaggedQuestions: readNullableNumber(
+      record.flaggedQuestions,
+      route,
+      `${field}.flaggedQuestions`,
+    ),
+    mode: readEnum(
+      record.mode,
+      ["Operational", "Diagnostic", "Controlled", "Hard"] as const,
+      route,
+      `${field}.mode`,
+    ),
+    rankInBatch: readNullableNumber(
+      record.rankInBatch,
+      route,
+      `${field}.rankInBatch`,
+    ),
+    rawScorePercent: readNullableNumber(
+      record.rawScorePercent,
+      route,
+      `${field}.rawScorePercent`,
+    ),
+    runId: readString(record.runId, route, `${field}.runId`),
+    sessionId: readNullableString(
+      record.sessionId,
+      route,
+      `${field}.sessionId`,
+    ),
+    sessionLink: readNullableString(
+      record.sessionLink,
+      route,
+      `${field}.sessionLink`,
+    ),
+    startWindow: readString(
+      record.startWindow,
+      route,
+      `${field}.startWindow`,
+    ),
+    status: readEnum(
+      record.status,
+      ["scheduled", "active", "completed", "archived"] as const,
+      route,
+      `${field}.status`,
+    ),
+    summaryPdfUrl: readNullableString(
+      record.summaryPdfUrl,
+      route,
+      `${field}.summaryPdfUrl`,
+    ),
+    testId: readString(record.testId, route, `${field}.testId`),
+    testName: readString(record.testName, route, `${field}.testName`),
+    timeUsedMinutes: readNullableNumber(
+      record.timeUsedMinutes,
+      route,
+      `${field}.timeUsedMinutes`,
+    ),
+    totalQuestions: readNullableNumber(
+      record.totalQuestions,
+      route,
+      `${field}.totalQuestions`,
+    ),
+  };
+}
+
+export function adaptStudentTestsResult(value: unknown): StudentTestsResult {
+  const route = "GET /student/tests";
+  const data = readRecord(value, route);
+  assertSummaryOnly(data, route);
+  const tests = readArray(data.tests, route, "tests")
+    .map(adaptStudentTestRecord);
+  const pageSize = readPositiveInteger(data.pageSize, route, "pageSize");
+  if (tests.length > pageSize) {
+    return fail(route, "tests", "no more than pageSize records");
+  }
+
+  return {
+    hasMore: readBoolean(data.hasMore, route, "hasMore"),
+    page: readPositiveInteger(data.page, route, "page"),
+    pageSize,
+    tests,
+    total: readNonNegativeInteger(data.total, route, "total"),
+  };
+}
+
 export function adaptStudentSummaryResult(
   value: unknown,
   resource: StudentSummaryResource,
 ): unknown {
-  const route = `GET /student/${resource}`;
-  const allowsArray = resource === "tests" || resource === "solutions";
+  if (resource === "dashboard") {
+    return adaptStudentDashboardResult(value);
+  }
 
-  if (allowsArray && Array.isArray(value)) {
+  if (resource === "tests") {
+    return adaptStudentTestsResult(value);
+  }
+
+  const route = `GET /student/${resource}`;
+  if (resource === "solutions" && Array.isArray(value)) {
     return value;
   }
 

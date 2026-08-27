@@ -437,6 +437,93 @@ export interface AdminRunDetailResult {
   run: AdminRunRecord;
 }
 
+export type StudentLicenseLayer = "L0" | "L1" | "L2" | "L3";
+
+export type StudentRiskState = "low" | "medium" | "high" | "critical";
+
+export interface StudentDashboardTrendPoint {
+  label: string;
+  value: number;
+}
+
+export interface StudentDashboardUpcomingTest {
+  runId: string;
+  testName: string;
+  mode: AdminRunMode;
+  startAt: string;
+  endAt: string;
+  durationMinutes: number;
+}
+
+export interface StudentDashboardRecentResult {
+  runId: string;
+  testName: string;
+  completedAt: string;
+  rawScorePercent: number;
+  accuracyPercent: number;
+}
+
+export interface StudentDashboardResult {
+  licenseLayer: StudentLicenseLayer;
+  avgRawScorePercent: number;
+  avgAccuracyPercent: number;
+  batchRank: number | null;
+  disciplineIndex: number;
+  testsAttempted: number;
+  riskState: StudentRiskState;
+  phaseAdherencePercent: number;
+  easyNeglectPercent: number;
+  hardBiasPercent: number;
+  timeMisallocationPercent: number;
+  behaviorSummaryTag: string;
+  controlledModeImprovementDeltaPercent: number;
+  guessProbabilityPercent: number;
+  executionStabilityFlag: string;
+  phaseComplianceMiniTrend: StudentDashboardTrendPoint[];
+  upcomingTests: StudentDashboardUpcomingTest[];
+  recentResults: StudentDashboardRecentResult[];
+}
+
+export type StudentTestStatus =
+  | "scheduled"
+  | "active"
+  | "completed"
+  | "archived";
+
+export interface StudentTestRecord {
+  testId: string;
+  runId: string;
+  sessionId: string | null;
+  testName: string;
+  status: StudentTestStatus;
+  mode: AdminRunMode;
+  startWindow: string;
+  endWindow: string;
+  durationMinutes: number;
+  rawScorePercent: number | null;
+  accuracyPercent: number | null;
+  timeUsedMinutes: number | null;
+  rankInBatch: number | null;
+  completedAt: string | null;
+  sessionLink: string | null;
+  academicYear: string;
+  currentAcademicYear: boolean;
+  archivedSummary: string | null;
+  summaryPdfUrl: string | null;
+  attemptStatusLabel: string | null;
+  attemptedQuestions: number | null;
+  totalQuestions: number | null;
+  flaggedQuestions: number | null;
+}
+
+export interface StudentTestsResult {
+  tests: StudentTestRecord[];
+  page: number;
+  pageSize: number;
+  total: number;
+  hasMore: boolean;
+}
+
 export interface VendorCalibrationPushRequest {
   targetInstitutes: string[];
   versionId: string;

@@ -66,7 +66,7 @@ test(
     const implementedRoutes = API_ROUTE_MANIFEST.filter(
       (route) => route.status === "implemented",
     );
-    assert.equal(implementedRoutes.length, 23);
+    assert.equal(implementedRoutes.length, 25);
 
     for (const route of implementedRoutes) {
       const requestPath = materializePath(route.canonicalPath, route.id);
@@ -105,12 +105,8 @@ test(
       "/api/v1/student/dashboard",
       "GET",
     );
-    assert.equal(student.status, 404);
-    assert.equal(student.body.error?.code, "NOT_FOUND");
-    assert.equal(
-      student.body.error?.message,
-      "API route is not implemented.",
-    );
+    assert.equal(student.status, 401);
+    assert.equal(student.body.error?.code, "UNAUTHORIZED");
 
     const exam = await requestGateway(
       "/api/v1/exam/session/session%20id%20%CE%A9/entry",

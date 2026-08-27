@@ -127,6 +127,24 @@ const dtoFamilies = [
     ],
   },
   {
+    backend: "functions/src/types/studentSummary.ts",
+    frontend: [
+      "apps/student/src/features/dashboard/studentDashboardDataset.ts",
+      "apps/student/src/features/my-tests/studentMyTestsDataset.ts",
+    ],
+    names: [
+      "StudentLicenseLayer",
+      "StudentRiskState",
+      "StudentDashboardTrendPoint",
+      "StudentDashboardUpcomingTest",
+      "StudentDashboardRecentResult",
+      "StudentDashboardResult",
+      "StudentTestStatus",
+      "StudentTestRecord",
+      "StudentTestsResult",
+    ],
+  },
+  {
     backend: "functions/src/types/calibrationDeployment.ts",
     frontend: [
       "apps/vendor/src/features/calibration/vendorCalibrationDataset.ts",

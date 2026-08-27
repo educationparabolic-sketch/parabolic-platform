@@ -569,15 +569,28 @@ test("Student adapter accepts summary data and rejects empty or raw-session payl
   const expectedSummary = {
     avgAccuracyPercent: 81,
     avgRawScorePercent: 74,
+    batchRank: 7,
+    behaviorSummaryTag: "Balanced execution",
+    controlledModeImprovementDeltaPercent: 0,
+    disciplineIndex: 0,
+    easyNeglectPercent: 12,
+    executionStabilityFlag: "Available with L2",
+    guessProbabilityPercent: 0,
+    hardBiasPercent: 9,
     licenseLayer: "L1",
+    phaseAdherencePercent: 88,
+    phaseComplianceMiniTrend: [{ label: "P1", value: 88 }],
     recentResults: [],
+    riskState: "low",
+    testsAttempted: 6,
+    timeMisallocationPercent: 24,
     upcomingTests: [],
   };
   const unwrapped = unwrapApiSuccessData(
     successEnvelope(expectedSummary, "req-student-001"),
   );
 
-  assert.equal(
+  assert.deepEqual(
     adapters.adaptStudentSummaryResult(unwrapped, "dashboard"),
     expectedSummary,
   );
@@ -593,6 +606,52 @@ test("Student adapter accepts summary data and rejects empty or raw-session payl
       "dashboard",
     ),
     /blocked raw-session field/,
+  );
+});
+
+test("Student tests adapter validates the strict paginated summary DTO", () => {
+  const expected = {
+    hasMore: false,
+    page: 1,
+    pageSize: 10,
+    tests: [{
+      academicYear: "2026",
+      accuracyPercent: null,
+      archivedSummary: null,
+      attemptedQuestions: null,
+      attemptStatusLabel: null,
+      completedAt: null,
+      currentAcademicYear: true,
+      durationMinutes: 90,
+      endWindow: "2026-09-01T10:30:00.000Z",
+      flaggedQuestions: null,
+      mode: "Diagnostic",
+      rankInBatch: null,
+      rawScorePercent: null,
+      runId: "run-student-001",
+      sessionId: null,
+      sessionLink: null,
+      startWindow: "2026-09-01T09:00:00.000Z",
+      status: "scheduled",
+      summaryPdfUrl: null,
+      testId: "test-student-001",
+      testName: "Student Diagnostic",
+      timeUsedMinutes: null,
+      totalQuestions: null,
+    }],
+    total: 1,
+  };
+
+  assert.deepEqual(
+    adapters.adaptStudentSummaryResult(expected, "tests"),
+    expected,
+  );
+  assert.throws(
+    () => adapters.adaptStudentSummaryResult({
+      ...expected,
+      tests: [{...expected.tests[0], runId: undefined}],
+    }, "tests"),
+    {name: "PortalResponseValidationError", route: "GET /student/tests"},
   );
 });
 
