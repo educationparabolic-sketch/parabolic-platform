@@ -35,9 +35,16 @@ export async function getStudentSummaryResource(
   return payload;
 }
 
-export async function getStudentSolutionSummary(testId: string): Promise<unknown> {
+export async function getStudentSolutionSummary(
+  testId: string,
+  page: number,
+  pageSize: number,
+): Promise<unknown> {
   const payload = adaptStudentSummaryResult(
-    await apiClient.get<unknown>(`/student/tests/${encodeURIComponent(testId)}/solutions`),
+    await apiClient.get<unknown>(
+      `/student/tests/${encodeURIComponent(testId)}/solutions`,
+      { query: { page, pageSize } },
+    ),
     "solutions",
   );
   assertStudentSummaryPayload(payload, "solutions");

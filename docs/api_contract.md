@@ -39,7 +39,7 @@ If prose and the typed manifest disagree about a route key or status, the typed 
 - `missing`: no current Functions handler/export implements the frontend contract.
 - `intentionally_retired`: explicit product/architecture evidence says the route must not be served.
 
-Current totals: 25 implemented, 6 incompatible, 4 missing, 0 intentionally retired.
+Current totals: 28 implemented, 6 incompatible, 1 missing, 0 intentionally retired.
 
 ## Canonical frontend route manifest
 
@@ -70,9 +70,9 @@ Current totals: 25 implemented, 6 incompatible, 4 missing, 0 intentionally retir
 | ADM-23 | `GET /api/v1/admin/runs/{runId}` | `implemented` | `adminRuns` | Firebase ID; teacher/admin; identity tenant; current academic year; missing or out-of-scope IDs return 404 |
 | STU-01 | `GET /api/v1/student/dashboard` | `implemented` | `studentDashboard` | Firebase ID; student; identity tenant/student/license; active Student; current academic year |
 | STU-02 | `GET /api/v1/student/tests` | `implemented` | `studentTests` | Firebase ID; student; identity tenant/student/license; active Student; current academic year; bounded status/page query |
-| STU-03 | `GET /api/v1/student/performance` | `missing` | None | Firebase ID; student; identity tenant |
-| STU-04 | `GET /api/v1/student/insights` | `missing` | None | Firebase ID; student; identity tenant |
-| STU-05 | `GET /api/v1/student/tests/{testId}/solutions` | `missing` | None | Firebase ID; student; identity tenant and entitlement |
+| STU-03 | `GET /api/v1/student/performance` | `implemented` | `studentPerformance` | Firebase ID; student; identity tenant/Student/license; active Student; current year; bounded `lastN`; L0/L1/L2 redaction |
+| STU-04 | `GET /api/v1/student/insights` | `implemented` | `studentInsights` | Firebase ID; student; identity tenant/Student/license; active Student; current year; L1+; bounded `limit` |
+| STU-05 | `GET /api/v1/student/tests/{testId}/solutions` | `implemented` | `studentSolutions` | Firebase ID; student; identity tenant/Student/license; active Student; current-year completed assigned licensed run; released owned submission; bounded page |
 | STU-06 | `POST /api/v1/exam/start` | `incompatible` | `examStart` | Firebase ID; student; identity/assignment ownership |
 | EXM-01 | `POST /api/v1/exam/session/{sessionId}/entry` | `implemented` | `examSessionEntry` | Short-lived session-entry token and matching session claim |
 | EXM-02 | `POST /api/v1/exam/session/{sessionId}/answers` | `incompatible` | `examSessionAnswers` | Target: Firebase ID student identity and matching tenant/session |
@@ -82,6 +82,8 @@ Current totals: 25 implemented, 6 incompatible, 4 missing, 0 intentionally retir
 | VEN-02 | `POST /api/v1/vendor/calibration/push` | `implemented` | `vendorCalibrationPush` | Firebase ID; vendor; global scope |
 
 The detailed request/response mismatch for each incompatible entry is recorded under the same ID in `docs/FRONTEND_API_CALL_INVENTORY.md`.
+
+STU-03 reads only the identity Student's current-year `studentYearMetrics` summary document. Its strict shared DTO returns a bounded chronological performance timeline and topic summaries, zeros or removes fields above the identity license layer, and never scans sessions. STU-04 requires L1+, reads only Student-owned current-year `insightSnapshots` plus summary metrics, and returns bounded constructive insights without raw session fields. STU-05 resolves the URL test ID only through a current-year run assigned to the identity Student and eligible under the identity license; it then requires completed state, a reached solution-release timestamp, and exactly one submitted session owned by that Student before returning a bounded page of solution-safe question fields and the Student's selected response. Archived, unreleased, unassigned, licensed-out, cross-tenant, and other-Student solution requests fail closed.
 
 ADM-06 returns the shared `AdminQuestionLibraryResult`. Each managed question or solution asset is exposed only as its canonical relative CDN path plus a freshly generated 30-minute `dashboardView` signed HTTPS URL containing `Expires`, `KeyName`, and `Signature`; malformed, noncanonical, direct-bucket, or unsigned legacy references are omitted. The public response never returns Storage bucket names or object paths.
 
@@ -101,10 +103,10 @@ ADM-18 accepts one shared `QuestionAssetUploadRequest` containing base64 image b
 
 ## Backend HTTP export accounting
 
-`functions/src/apiRouteManifest.ts` accounts for all 44 current `functions.https.onRequest` exports:
+`functions/src/apiRouteManifest.ts` accounts for all 47 current `functions.https.onRequest` exports:
 
 - `apiV1` is the single versioned `gateway` export; it resolves exact manifest method/path pairs, preserves decoded route parameters, and dispatches non-null `functionExport` mappings through the existing raw request handlers;
-- 25 exports are referenced by one or more canonical frontend routes;
+- 28 exports are referenced by one or more canonical frontend routes;
 - 15 portal-oriented exports currently have no executable frontend caller and remain `unmapped_portal` rather than receiving an invented public route;
 - `internalEmailQueue` is `internal_only`;
 - `stripeWebhook` is a `webhook` boundary;

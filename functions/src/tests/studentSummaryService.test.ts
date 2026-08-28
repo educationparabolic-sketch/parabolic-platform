@@ -37,6 +37,39 @@ interface StudentSummaryServiceContract {
     testsAttempted: number;
     upcomingTests: Array<{mode: string; runId: string}>;
   }>;
+  getInsights: (request: {
+    instituteId: string;
+    licenseLayer: "L0" | "L1";
+    limit: number;
+    studentId: string;
+  }) => Promise<{
+    snapshots: Array<{snapshotId: string}>;
+    topicWeaknessSummary: Array<{topic: string}>;
+  }>;
+  getPerformance: (request: {
+    instituteId: string;
+    lastN: number;
+    licenseLayer: "L1" | "L2";
+    studentId: string;
+  }) => Promise<{
+    disciplineIndex: number;
+    timeline: Array<{
+      disciplineIndex: number;
+      runId: string;
+    }>;
+  }>;
+  getSolutions: (request: {
+    instituteId: string;
+    licenseLayer: "L1";
+    page: number;
+    pageSize: number;
+    studentId: string;
+    testId: string;
+  }) => Promise<{
+    hasMore: boolean;
+    items: Array<{correctAnswer: string; studentAnswer: string}>;
+    total: number;
+  }>;
   listTests: (request: {
     instituteId: string;
     licenseLayer: "L1";
@@ -113,6 +146,10 @@ test(
       `${currentYearPath}/runs/run-unassigned`,
       `${oldYearPath}/runs/run-old-year`,
       `${otherYearPath}/runs/run-other-tenant`,
+      `institutes/${instituteId}/questionBank/question-solution`,
+      `${currentYearPath}/runs/run-completed-operational/sessions/` +
+        "session-completed-operational",
+      `${currentYearPath}/insightSnapshots/insight-student-owned`,
     ];
 
     await Promise.all([
@@ -157,6 +194,26 @@ test(
         riskState: "high",
         studentId,
         totalTests: 6,
+        performanceTimeline: [{
+          accuracyPercent: 84,
+          completedAt: Timestamp.fromDate(
+            new Date("2026-08-20T10:00:00.000Z"),
+          ),
+          disciplineIndex: 79,
+          guessRatePercent: 13,
+          phaseAdherencePercent: 88,
+          rawScorePercent: 76,
+          runId: "run-completed-operational",
+          runLabel: "Completed Operational",
+          timeSpentMinutes: 72,
+        }],
+        topicWeaknessSummary: [{
+          feedback: "Review vectors before the next run.",
+          simulationLink: null,
+          topic: "Vectors",
+          tutorialVideoLink: null,
+          weaknessPercent: 28,
+        }],
       }),
       firestore.doc(documentPaths[7]).set(runFixture({
         mode: "Operational",
@@ -179,20 +236,32 @@ test(
         status: "scheduled",
         testId: "test-scheduled-controlled",
       })),
-      firestore.doc(documentPaths[10]).set(runFixture({
-        mode: "Operational",
-        recipientStudentIds: [studentId],
-        startWindow: "2026-08-20T09:00:00.000Z",
-        status: "completed",
-        testId: "test-completed-operational",
-      })),
-      firestore.doc(documentPaths[11]).set(runFixture({
-        mode: "Diagnostic",
-        recipientStudentIds: [studentId],
-        startWindow: "2026-08-21T09:00:00.000Z",
-        status: "completed",
-        testId: "test-completed-diagnostic",
-      })),
+      firestore.doc(documentPaths[10]).set({
+        ...runFixture({
+          mode: "Operational",
+          recipientStudentIds: [studentId],
+          startWindow: "2026-08-20T09:00:00.000Z",
+          status: "completed",
+          testId: "test-completed-operational",
+        }),
+        questionIds: ["question-solution"],
+        solutionReleaseAt: Timestamp.fromDate(
+          new Date("2026-08-21T00:00:00.000Z"),
+        ),
+      }),
+      firestore.doc(documentPaths[11]).set({
+        ...runFixture({
+          mode: "Diagnostic",
+          recipientStudentIds: [studentId],
+          startWindow: "2026-08-21T09:00:00.000Z",
+          status: "completed",
+          testId: "test-completed-diagnostic",
+        }),
+        questionIds: ["question-solution"],
+        solutionReleaseAt: Timestamp.fromDate(
+          new Date("2026-09-21T00:00:00.000Z"),
+        ),
+      }),
       firestore.doc(documentPaths[12]).set(runFixture({
         mode: "Operational",
         recipientStudentIds: [studentId],
@@ -221,6 +290,37 @@ test(
         status: "scheduled",
         testId: "test-other-tenant",
       })),
+      firestore.doc(documentPaths[16]).set({
+        correctAnswer: "B",
+        questionId: "question-solution",
+        questionImageUrl: "questions/question-solution.png",
+        simulationLink: null,
+        solutionImageUrl: "solutions/question-solution.png",
+        tutorialVideoLink: "https://example.test/vector-review",
+      }),
+      firestore.doc(documentPaths[17]).set({
+        answerMap: {"question-solution": {selectedOption: "A"}},
+        sessionId: "session-completed-operational",
+        status: "submitted",
+        studentId,
+        submittedAt: Timestamp.fromDate(
+          new Date("2026-08-20T10:00:00.000Z"),
+        ),
+      }),
+      firestore.doc(documentPaths[18]).set({
+        generatedAt: Timestamp.fromDate(
+          new Date("2026-08-20T10:01:00.000Z"),
+        ),
+        metrics: {
+          sessionAccuracyPercent: 84,
+          sessionRawScorePercent: 76,
+        },
+        snapshotType: "student",
+        sourceSubmittedAt: Timestamp.fromDate(
+          new Date("2026-08-20T10:00:00.000Z"),
+        ),
+        studentId,
+      }),
     ]);
 
     const dashboard = await studentSummaryService.getDashboard({
@@ -246,6 +346,82 @@ test(
     assert.deepEqual(
       dashboard.phaseComplianceMiniTrend.map((point) => point.value),
       [82, 88],
+    );
+
+    const l1Performance = await studentSummaryService.getPerformance({
+      instituteId,
+      lastN: 10,
+      licenseLayer: "L1",
+      studentId,
+    });
+    assert.equal(l1Performance.timeline.length, 1);
+    assert.equal(l1Performance.timeline[0].disciplineIndex, 0);
+    assert.equal(l1Performance.disciplineIndex, 0);
+    const l2Performance = await studentSummaryService.getPerformance({
+      instituteId,
+      lastN: 10,
+      licenseLayer: "L2",
+      studentId,
+    });
+    assert.equal(l2Performance.timeline[0].disciplineIndex, 79);
+    assert.equal(l2Performance.disciplineIndex, 79);
+
+    const insights = await studentSummaryService.getInsights({
+      instituteId,
+      licenseLayer: "L1",
+      limit: 5,
+      studentId,
+    });
+    assert.deepEqual(insights.snapshots.map((entry) => entry.snapshotId), [
+      "insight-student-owned",
+    ]);
+    assert.deepEqual(
+      insights.topicWeaknessSummary.map((entry) => entry.topic),
+      ["Vectors"],
+    );
+
+    const solutions = await studentSummaryService.getSolutions({
+      instituteId,
+      licenseLayer: "L1",
+      page: 1,
+      pageSize: 1,
+      studentId,
+      testId: "test-completed-operational",
+    });
+    assert.equal(solutions.total, 1);
+    assert.equal(solutions.hasMore, false);
+    assert.equal(solutions.items[0].correctAnswer, "B");
+    assert.equal(solutions.items[0].studentAnswer, "A");
+    await assert.rejects(
+      studentSummaryService.getInsights({
+        instituteId,
+        licenseLayer: "L0",
+        limit: 5,
+        studentId,
+      }),
+      /require an L1/u,
+    );
+    await assert.rejects(
+      studentSummaryService.getSolutions({
+        instituteId,
+        licenseLayer: "L1",
+        page: 1,
+        pageSize: 10,
+        studentId,
+        testId: "test-completed-diagnostic",
+      }),
+      /not been released/u,
+    );
+    await assert.rejects(
+      studentSummaryService.getSolutions({
+        instituteId,
+        licenseLayer: "L1",
+        page: 1,
+        pageSize: 10,
+        studentId: otherStudentId,
+        testId: "test-completed-operational",
+      }),
+      /completed current-year assigned test was not found/u,
     );
 
     const firstPage = await studentSummaryService.listTests({

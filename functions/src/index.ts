@@ -81,6 +81,15 @@ import {
   handleStudentDashboardRequest,
 } from "./api/studentDashboard";
 import {
+  handleStudentInsightsRequest,
+} from "./api/studentInsights";
+import {
+  handleStudentPerformanceRequest,
+} from "./api/studentPerformance";
+import {
+  handleStudentSolutionsRequest,
+} from "./api/studentSolutions";
+import {
   handleStudentTestsRequest,
 } from "./api/studentTests";
 import {
@@ -241,6 +250,15 @@ export const adminRuns = functions.https.onRequest(
 );
 export const studentDashboard = functions.https.onRequest(
   handleStudentDashboardRequest,
+);
+export const studentPerformance = functions.https.onRequest(
+  handleStudentPerformanceRequest,
+);
+export const studentInsights = functions.https.onRequest(
+  handleStudentInsightsRequest,
+);
+export const studentSolutions = functions.https.onRequest(
+  handleStudentSolutionsRequest,
 );
 export const studentTests = functions.https.onRequest(
   handleStudentTestsRequest,

@@ -19,8 +19,18 @@ import type {
   StudentDashboardResult,
   StudentDashboardTrendPoint,
   StudentDashboardUpcomingTest,
+  StudentControlledModeComparison,
+  StudentInsightPattern,
+  StudentInsightsResult,
+  StudentInsightSnapshot,
+  StudentPerformancePoint,
+  StudentPerformanceResult,
+  StudentSolutionItem,
+  StudentSolutionsResult,
   StudentTestRecord,
   StudentTestsResult,
+  StudentTopicPerformanceEntry,
+  StudentTopicWeaknessInsight,
 } from "../contracts/apiDtos";
 
 type StudentSummaryResource =
@@ -1660,6 +1670,438 @@ export function adaptStudentTestsResult(value: unknown): StudentTestsResult {
   };
 }
 
+function adaptStudentPerformancePoint(
+  value: unknown,
+  index: number,
+): StudentPerformancePoint {
+  const route = "GET /student/performance";
+  const field = `timeline[${index}]`;
+  const record = readRecord(value, route, field);
+  return {
+    accuracyPercent: readNumber(
+      record.accuracyPercent,
+      route,
+      `${field}.accuracyPercent`,
+    ),
+    completedAt: readString(record.completedAt, route, `${field}.completedAt`),
+    disciplineIndex: readNumber(
+      record.disciplineIndex,
+      route,
+      `${field}.disciplineIndex`,
+    ),
+    guessRatePercent: readNumber(
+      record.guessRatePercent,
+      route,
+      `${field}.guessRatePercent`,
+    ),
+    maxTimeViolationPercent: readNumber(
+      record.maxTimeViolationPercent,
+      route,
+      `${field}.maxTimeViolationPercent`,
+    ),
+    minTimeViolationPercent: readNumber(
+      record.minTimeViolationPercent,
+      route,
+      `${field}.minTimeViolationPercent`,
+    ),
+    overstayFrequencyPercent: readNumber(
+      record.overstayFrequencyPercent,
+      route,
+      `${field}.overstayFrequencyPercent`,
+    ),
+    phaseAdherencePercent: readNumber(
+      record.phaseAdherencePercent,
+      route,
+      `${field}.phaseAdherencePercent`,
+    ),
+    rankInBatch: readNullableNumber(
+      record.rankInBatch,
+      route,
+      `${field}.rankInBatch`,
+    ),
+    rawScorePercent: readNumber(
+      record.rawScorePercent,
+      route,
+      `${field}.rawScorePercent`,
+    ),
+    riskState: readEnum(
+      record.riskState,
+      ["Stable", "Improving", "Building Discipline"] as const,
+      route,
+      `${field}.riskState`,
+    ),
+    runId: readString(record.runId, route, `${field}.runId`),
+    runLabel: readString(record.runLabel, route, `${field}.runLabel`),
+    timeAllocationBalancePercent: readNumber(
+      record.timeAllocationBalancePercent,
+      route,
+      `${field}.timeAllocationBalancePercent`,
+    ),
+    timeSpentMinutes: readNonNegativeInteger(
+      record.timeSpentMinutes,
+      route,
+      `${field}.timeSpentMinutes`,
+    ),
+  };
+}
+
+function adaptStudentTopicPerformance(
+  value: unknown,
+  index: number,
+): StudentTopicPerformanceEntry {
+  const route = "GET /student/performance";
+  const field = `topicPerformanceBreakdown[${index}]`;
+  const record = readRecord(value, route, field);
+  return {
+    accuracyPercent: readNumber(
+      record.accuracyPercent,
+      route,
+      `${field}.accuracyPercent`,
+    ),
+    rawScorePercent: readNumber(
+      record.rawScorePercent,
+      route,
+      `${field}.rawScorePercent`,
+    ),
+    topic: readString(record.topic, route, `${field}.topic`),
+  };
+}
+
+function adaptStudentControlledComparison(
+  value: unknown,
+): StudentControlledModeComparison {
+  const route = "GET /student/performance";
+  const field = "controlledModeComparison";
+  const record = readRecord(value, route, field);
+  return {
+    baselineLabel: readString(
+      record.baselineLabel,
+      route,
+      `${field}.baselineLabel`,
+    ),
+    currentLabel: readString(
+      record.currentLabel,
+      route,
+      `${field}.currentLabel`,
+    ),
+    disciplineIndexDeltaPercent: readNumber(
+      record.disciplineIndexDeltaPercent,
+      route,
+      `${field}.disciplineIndexDeltaPercent`,
+    ),
+    guessRateDeltaPercent: readNumber(
+      record.guessRateDeltaPercent,
+      route,
+      `${field}.guessRateDeltaPercent`,
+    ),
+    maxTimeViolationDeltaPercent: readNumber(
+      record.maxTimeViolationDeltaPercent,
+      route,
+      `${field}.maxTimeViolationDeltaPercent`,
+    ),
+    minTimeViolationDeltaPercent: readNumber(
+      record.minTimeViolationDeltaPercent,
+      route,
+      `${field}.minTimeViolationDeltaPercent`,
+    ),
+    phaseAdherenceDeltaPercent: readNumber(
+      record.phaseAdherenceDeltaPercent,
+      route,
+      `${field}.phaseAdherenceDeltaPercent`,
+    ),
+  };
+}
+
+export function adaptStudentPerformanceResult(
+  value: unknown,
+): StudentPerformanceResult {
+  const route = "GET /student/performance";
+  const data = readRecord(value, route);
+  assertSummaryOnly(data, route);
+  return {
+    controlledModeComparison: adaptStudentControlledComparison(
+      data.controlledModeComparison,
+    ),
+    controlledModeImprovementPercent: readNumber(
+      data.controlledModeImprovementPercent,
+      route,
+      "controlledModeImprovementPercent",
+    ),
+    disciplineIndex: readNumber(data.disciplineIndex, route, "disciplineIndex"),
+    easyNeglectFrequencyPercent: readNumber(
+      data.easyNeglectFrequencyPercent,
+      route,
+      "easyNeglectFrequencyPercent",
+    ),
+    guessProbabilityCluster: readEnum(
+      data.guessProbabilityCluster,
+      ["Low", "Medium", "High"] as const,
+      route,
+      "guessProbabilityCluster",
+    ),
+    guessProbabilityPercent: readNumber(
+      data.guessProbabilityPercent,
+      route,
+      "guessProbabilityPercent",
+    ),
+    hardBiasFrequencyPercent: readNumber(
+      data.hardBiasFrequencyPercent,
+      route,
+      "hardBiasFrequencyPercent",
+    ),
+    licenseLayer: readEnum(
+      data.licenseLayer,
+      ["L0", "L1", "L2", "L3"] as const,
+      route,
+      "licenseLayer",
+    ),
+    overstayFrequencyPercent: readNumber(
+      data.overstayFrequencyPercent,
+      route,
+      "overstayFrequencyPercent",
+    ),
+    phaseCompliancePercent: readNumber(
+      data.phaseCompliancePercent,
+      route,
+      "phaseCompliancePercent",
+    ),
+    timeAllocationBalancePercent: readNumber(
+      data.timeAllocationBalancePercent,
+      route,
+      "timeAllocationBalancePercent",
+    ),
+    timeline: readArray(data.timeline, route, "timeline")
+      .map(adaptStudentPerformancePoint),
+    topicPerformanceBreakdown: readArray(
+      data.topicPerformanceBreakdown,
+      route,
+      "topicPerformanceBreakdown",
+    ).map(adaptStudentTopicPerformance),
+  };
+}
+
+const STUDENT_INSIGHT_PATTERNS = [
+  "Easy Neglect",
+  "Guess Detection",
+  "Late-Phase Drop",
+  "Rushed Pattern",
+  "Skip Burst",
+  "No Pattern Yet",
+] as const satisfies readonly StudentInsightPattern[];
+
+function adaptStudentInsightSnapshot(
+  value: unknown,
+  index: number,
+): StudentInsightSnapshot {
+  const route = "GET /student/insights";
+  const field = `snapshots[${index}]`;
+  const record = readRecord(value, route, field);
+  return {
+    accuracyPercent: readNumber(
+      record.accuracyPercent,
+      route,
+      `${field}.accuracyPercent`,
+    ),
+    dominantPattern: readEnum(
+      record.dominantPattern,
+      STUDENT_INSIGHT_PATTERNS,
+      route,
+      `${field}.dominantPattern`,
+    ),
+    easyNeglectFrequencyPercent: readNumber(
+      record.easyNeglectFrequencyPercent,
+      route,
+      `${field}.easyNeglectFrequencyPercent`,
+    ),
+    generatedAt: readString(record.generatedAt, route, `${field}.generatedAt`),
+    guessDetectionPercent: readNumber(
+      record.guessDetectionPercent,
+      route,
+      `${field}.guessDetectionPercent`,
+    ),
+    latePhaseDropPercent: readNumber(
+      record.latePhaseDropPercent,
+      route,
+      `${field}.latePhaseDropPercent`,
+    ),
+    rawScorePercent: readNumber(
+      record.rawScorePercent,
+      route,
+      `${field}.rawScorePercent`,
+    ),
+    rushedPatternFrequencyPercent: readNumber(
+      record.rushedPatternFrequencyPercent,
+      route,
+      `${field}.rushedPatternFrequencyPercent`,
+    ),
+    skipBurstFrequencyPercent: readNumber(
+      record.skipBurstFrequencyPercent,
+      route,
+      `${field}.skipBurstFrequencyPercent`,
+    ),
+    snapshotId: readString(record.snapshotId, route, `${field}.snapshotId`),
+  };
+}
+
+function adaptStudentTopicWeakness(
+  value: unknown,
+  index: number,
+): StudentTopicWeaknessInsight {
+  const route = "GET /student/insights";
+  const field = `topicWeaknessSummary[${index}]`;
+  const record = readRecord(value, route, field);
+  return {
+    feedback: readString(record.feedback, route, `${field}.feedback`),
+    simulationLink: readNullableString(
+      record.simulationLink,
+      route,
+      `${field}.simulationLink`,
+    ),
+    topic: readString(record.topic, route, `${field}.topic`),
+    tutorialVideoLink: readNullableString(
+      record.tutorialVideoLink,
+      route,
+      `${field}.tutorialVideoLink`,
+    ),
+    weaknessPercent: readNumber(
+      record.weaknessPercent,
+      route,
+      `${field}.weaknessPercent`,
+    ),
+  };
+}
+
+export function adaptStudentInsightsResult(
+  value: unknown,
+): StudentInsightsResult {
+  const route = "GET /student/insights";
+  const data = readRecord(value, route);
+  assertSummaryOnly(data, route);
+  const suggestions = readArray(
+    data.disciplineImprovementSuggestions,
+    route,
+    "disciplineImprovementSuggestions",
+  ).map((entry, index) => readString(
+    entry,
+    route,
+    `disciplineImprovementSuggestions[${index}]`,
+  ));
+  if (data.currentYearSolutionAccessOnly !== true) {
+    return fail(route, "currentYearSolutionAccessOnly", "true");
+  }
+  return {
+    archivedSummaryOnlyCount: readNonNegativeInteger(
+      data.archivedSummaryOnlyCount,
+      route,
+      "archivedSummaryOnlyCount",
+    ),
+    currentYearSolutionAccessOnly: true,
+    disciplineImprovementSuggestions: suggestions,
+    guessDetectionAlertPercent: readNumber(
+      data.guessDetectionAlertPercent,
+      route,
+      "guessDetectionAlertPercent",
+    ),
+    latePhaseDropIndicatorPercent: readNumber(
+      data.latePhaseDropIndicatorPercent,
+      route,
+      "latePhaseDropIndicatorPercent",
+    ),
+    licenseLayer: readEnum(
+      data.licenseLayer,
+      ["L1", "L2", "L3"] as const,
+      route,
+      "licenseLayer",
+    ),
+    mostFrequentBehaviorPattern: readEnum(
+      data.mostFrequentBehaviorPattern,
+      STUDENT_INSIGHT_PATTERNS,
+      route,
+      "mostFrequentBehaviorPattern",
+    ),
+    phaseAdherenceFeedback: readString(
+      data.phaseAdherenceFeedback,
+      route,
+      "phaseAdherenceFeedback",
+    ),
+    rushedPatternFrequencyPercent: readNumber(
+      data.rushedPatternFrequencyPercent,
+      route,
+      "rushedPatternFrequencyPercent",
+    ),
+    skipBurstIndicatorPercent: readNumber(
+      data.skipBurstIndicatorPercent,
+      route,
+      "skipBurstIndicatorPercent",
+    ),
+    snapshots: readArray(data.snapshots, route, "snapshots")
+      .map(adaptStudentInsightSnapshot),
+    topicWeaknessSummary: readArray(
+      data.topicWeaknessSummary,
+      route,
+      "topicWeaknessSummary",
+    ).map(adaptStudentTopicWeakness),
+  };
+}
+
+function adaptStudentSolutionItem(
+  value: unknown,
+  index: number,
+): StudentSolutionItem {
+  const route = "GET /student/tests/{testId}/solutions";
+  const field = `items[${index}]`;
+  const record = readRecord(value, route, field);
+  return {
+    correctAnswer: readString(record.correctAnswer, route, `${field}.correctAnswer`),
+    questionId: readString(record.questionId, route, `${field}.questionId`),
+    questionImageUrl: readStringAllowEmpty(
+      record.questionImageUrl,
+      route,
+      `${field}.questionImageUrl`,
+    ),
+    simulationLink: readNullableString(
+      record.simulationLink,
+      route,
+      `${field}.simulationLink`,
+    ),
+    solutionImageUrl: readStringAllowEmpty(
+      record.solutionImageUrl,
+      route,
+      `${field}.solutionImageUrl`,
+    ),
+    studentAnswer: readString(record.studentAnswer, route, `${field}.studentAnswer`),
+    tutorialVideoLink: readNullableString(
+      record.tutorialVideoLink,
+      route,
+      `${field}.tutorialVideoLink`,
+    ),
+  };
+}
+
+export function adaptStudentSolutionsResult(
+  value: unknown,
+): StudentSolutionsResult {
+  const route = "GET /student/tests/{testId}/solutions";
+  const data = readRecord(value, route);
+  assertSummaryOnly(data, route);
+  const items = readArray(data.items, route, "items")
+    .map(adaptStudentSolutionItem);
+  const pageSize = readPositiveInteger(data.pageSize, route, "pageSize");
+  if (items.length > pageSize) {
+    return fail(route, "items", "no more than pageSize records");
+  }
+  return {
+    hasMore: readBoolean(data.hasMore, route, "hasMore"),
+    items,
+    page: readPositiveInteger(data.page, route, "page"),
+    pageSize,
+    releasedAt: readString(data.releasedAt, route, "releasedAt"),
+    runId: readString(data.runId, route, "runId"),
+    testId: readString(data.testId, route, "testId"),
+    total: readNonNegativeInteger(data.total, route, "total"),
+  };
+}
+
 export function adaptStudentSummaryResult(
   value: unknown,
   resource: StudentSummaryResource,
@@ -1672,11 +2114,19 @@ export function adaptStudentSummaryResult(
     return adaptStudentTestsResult(value);
   }
 
-  const route = `GET /student/${resource}`;
-  if (resource === "solutions" && Array.isArray(value)) {
-    return value;
+  if (resource === "performance") {
+    return adaptStudentPerformanceResult(value);
   }
 
+  if (resource === "insights") {
+    return adaptStudentInsightsResult(value);
+  }
+
+  if (resource === "solutions") {
+    return adaptStudentSolutionsResult(value);
+  }
+
+  const route = `GET /student/${resource}`;
   const data = readRecord(value, route);
   if (Object.keys(data).length === 0) {
     return fail(route, "data", "a non-empty summary object");

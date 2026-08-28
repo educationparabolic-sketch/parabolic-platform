@@ -10,6 +10,7 @@ import {
 } from "../../../../../shared/ui/components";
 import {
   ApiClientError,
+  EMPTY_STUDENT_PERFORMANCE_DATASET,
   STUDENT_PERFORMANCE_FALLBACK_DATASET,
   fetchStudentPerformanceDataset,
   shouldUseLiveApi,
@@ -111,9 +112,13 @@ function toDateInputEpoch(value: string, endOfDay = false): number | null {
 function StudentPerformancePage() {
   const globalState = useGlobalPortalState();
   const debugMode = isStudentDebugMode();
-  const [dataset, setDataset] = useState<StudentPerformanceDataset>(STUDENT_PERFORMANCE_FALLBACK_DATASET);
+  const [dataset, setDataset] = useState<StudentPerformanceDataset>(
+    shouldUseLiveApi() ?
+      EMPTY_STUDENT_PERFORMANCE_DATASET :
+      STUDENT_PERFORMANCE_FALLBACK_DATASET,
+  );
   const [topicWeaknessRows, setTopicWeaknessRows] = useState<TopicWeaknessInsight[]>(
-    STUDENT_INSIGHTS_FALLBACK_DATASET.topicWeaknessSummary,
+    shouldUseLiveApi() ? [] : STUDENT_INSIGHTS_FALLBACK_DATASET.topicWeaknessSummary,
   );
   const [isLoading, setIsLoading] = useState(true);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
@@ -140,16 +145,19 @@ function StudentPerformancePage() {
       }
 
       try {
-        const [apiDataset, apiInsightsDataset] = await Promise.all([
-          fetchStudentPerformanceDataset(10),
-          fetchStudentInsightsDataset(6),
-        ]);
+        const apiDataset = await fetchStudentPerformanceDataset(10);
+        const canReadInsights = LICENSE_LAYER_ORDER[
+          globalState.licenseLayer ?? apiDataset.licenseLayer
+        ] >= LICENSE_LAYER_ORDER.L1;
+        const apiInsightsDataset = canReadInsights ?
+          await fetchStudentInsightsDataset(6) :
+          null;
         if (!isMounted) {
           return;
         }
 
         setDataset(apiDataset);
-        setTopicWeaknessRows(apiInsightsDataset.topicWeaknessSummary);
+        setTopicWeaknessRows(apiInsightsDataset?.topicWeaknessSummary ?? []);
         setInlineMessage("Your performance trends are up to date.");
       } catch (error) {
         if (!isMounted) {
@@ -170,7 +178,7 @@ function StudentPerformancePage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [globalState.licenseLayer]);
 
   const activeLicenseLayer = useMemo<LicenseLayer>(() => {
     const resolvedLayer = globalState.licenseLayer ?? dataset.licenseLayer;
@@ -181,7 +189,7 @@ function StudentPerformancePage() {
   const isL2Plus = LICENSE_LAYER_ORDER[activeLicenseLayer] >= LICENSE_LAYER_ORDER.L2;
 
   const timeline = dataset.timeline;
-  const latestSnapshot = timeline[timeline.length - 1] ?? STUDENT_PERFORMANCE_FALLBACK_DATASET.timeline.at(-1);
+  const latestSnapshot = timeline[timeline.length - 1];
 
   const rawTrend = useMemo(() => toTrendPoints(timeline, (entry) => entry.rawScorePercent), [timeline]);
   const accuracyTrend = useMemo(() => toTrendPoints(timeline, (entry) => entry.accuracyPercent), [timeline]);

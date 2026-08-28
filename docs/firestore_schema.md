@@ -113,11 +113,33 @@ applies the same recipient/mode boundary with bounded status/page reads;
 projection contains run and metric summaries only and never reads or returns
 session documents or raw question data.
 
+Student Performance reads only the identity Student's current-year
+`studentYearMetrics/{studentId}` summary and returns a bounded chronological
+timeline. Fields above the identity license layer are removed or zeroed, and
+the live client does not substitute fixture data when the summary is empty.
+Student Insights requires L1 or higher and reads only bounded current-year
+`insightSnapshots` owned by the identity Student, together with summary metrics.
+
+The Student Solutions endpoint is the narrow exception to the summary-only
+rule. It may read question and session documents only after proving that the
+requested test resolves to a current-year run assigned to the identity Student,
+that the run mode is permitted by the identity license, that the run is
+completed and its solution-release policy has been reached, and that exactly
+one submitted session belongs to that Student. Its response is a bounded,
+solution-safe projection containing only the released answer material and the
+Student's selected response; raw question and session objects are never
+returned.
+
 These Student reads use three collection-scoped `runs` composites:
 
 - `recipientStudentIds ARRAY_CONTAINS, mode ASC, startWindow DESC, __name__ DESC`
 - `recipientStudentIds ARRAY_CONTAINS, status ASC, mode ASC, startWindow ASC, __name__ ASC`
 - `recipientStudentIds ARRAY_CONTAINS, status ASC, mode ASC, startWindow DESC, __name__ DESC`
+- `recipientStudentIds ARRAY_CONTAINS, status ASC, mode ASC, testId ASC`
+
+Student insight reads use the collection-scoped composite:
+
+- `insightSnapshots(snapshotType ASC, studentId ASC, sourceSubmittedAt DESC, __name__ DESC)`
 
 runAnalytics/{runId}
 

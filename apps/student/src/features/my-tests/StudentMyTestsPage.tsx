@@ -164,6 +164,9 @@ function StudentMyTestsPage() {
   const [isLaunchingSession, setIsLaunchingSession] = useState<string | null>(null);
   const [openSolutionTestId, setOpenSolutionTestId] = useState<string | null>(null);
   const [solutionItems, setSolutionItems] = useState<StudentSolutionItem[]>([]);
+  const [solutionPage, setSolutionPage] = useState(1);
+  const [solutionTotal, setSolutionTotal] = useState(0);
+  const [solutionHasMore, setSolutionHasMore] = useState(false);
   const [solutionError, setSolutionError] = useState<string | null>(null);
   const [isLoadingSolution, setIsLoadingSolution] = useState(false);
 
@@ -255,6 +258,9 @@ function StudentMyTestsPage() {
   useEffect(() => {
     setOpenSolutionTestId(null);
     setSolutionItems([]);
+    setSolutionPage(1);
+    setSolutionTotal(0);
+    setSolutionHasMore(false);
     setSolutionError(null);
   }, [activeFilter]);
 
@@ -273,20 +279,23 @@ function StudentMyTestsPage() {
     }
   }
 
-  async function openSolutions(test: StudentTestRecord) {
+  async function openSolutions(test: StudentTestRecord, page = 1) {
     if (!test.currentAcademicYear || test.status !== "completed") {
       setSolutionError("Solutions are available only for completed tests in the current academic year.");
       return;
     }
 
     setOpenSolutionTestId(test.testId);
+    setSolutionPage(page);
     setIsLoadingSolution(true);
     setSolutionError(null);
 
     try {
-      const items = await fetchStudentSolutions(test.testId);
-      setSolutionItems(items);
-      if (items.length === 0) {
+      const result = await fetchStudentSolutions(test.testId, page, 10);
+      setSolutionItems(result.items);
+      setSolutionTotal(result.total);
+      setSolutionHasMore(result.hasMore);
+      if (result.items.length === 0) {
         setSolutionError("No solution assets were returned for this test.");
       }
     } catch (error) {
@@ -504,6 +513,9 @@ function StudentMyTestsPage() {
             onClick={() => {
               setOpenSolutionTestId(null);
               setSolutionItems([]);
+              setSolutionPage(1);
+              setSolutionTotal(0);
+              setSolutionHasMore(false);
               setSolutionError(null);
             }}
           >
@@ -522,8 +534,9 @@ function StudentMyTestsPage() {
         {isLoadingSolution ? <p className="student-learning-state">Preparing your solution review...</p> : null}
 
         {!isLoadingSolution && solutionItems.length > 0 ? (
-          <div className="student-my-tests-solution-grid">
-            {solutionItems.map((item) => (
+          <>
+            <div className="student-my-tests-solution-grid">
+              {solutionItems.map((item) => (
               <article key={item.questionId} className="student-my-tests-solution-card">
                 <div className="student-my-tests-solution-card-header">
                   <h3>{`Question ${item.questionId}`}</h3>
@@ -560,8 +573,30 @@ function StudentMyTestsPage() {
                   )}
                 </div>
               </article>
-            ))}
-          </div>
+              ))}
+            </div>
+            <div className="student-performance-history-pagination" aria-label="Solution pagination">
+              <button
+                type="button"
+                disabled={solutionPage <= 1 || isLoadingSolution}
+                onClick={() => {
+                  void openSolutions(openSolutionTest, solutionPage - 1);
+                }}
+              >
+                Previous
+              </button>
+              <p>{`Page ${solutionPage} · ${solutionTotal} questions`}</p>
+              <button
+                type="button"
+                disabled={!solutionHasMore || isLoadingSolution}
+                onClick={() => {
+                  void openSolutions(openSolutionTest, solutionPage + 1);
+                }}
+              >
+                Next
+              </button>
+            </div>
+          </>
         ) : null}
       </section>
     );

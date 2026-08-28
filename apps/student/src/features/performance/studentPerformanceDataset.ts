@@ -55,6 +55,30 @@ export interface StudentPerformanceDataset {
   topicPerformanceBreakdown: TopicPerformanceEntry[];
 }
 
+export const EMPTY_STUDENT_PERFORMANCE_DATASET: StudentPerformanceDataset = {
+  licenseLayer: "L0",
+  disciplineIndex: 0,
+  phaseCompliancePercent: 0,
+  controlledModeImprovementPercent: 0,
+  overstayFrequencyPercent: 0,
+  guessProbabilityPercent: 0,
+  guessProbabilityCluster: "Low",
+  easyNeglectFrequencyPercent: 0,
+  hardBiasFrequencyPercent: 0,
+  timeAllocationBalancePercent: 0,
+  controlledModeComparison: {
+    baselineLabel: "Earlier Runs",
+    currentLabel: "Recent Controlled Runs",
+    phaseAdherenceDeltaPercent: 0,
+    disciplineIndexDeltaPercent: 0,
+    minTimeViolationDeltaPercent: 0,
+    maxTimeViolationDeltaPercent: 0,
+    guessRateDeltaPercent: 0,
+  },
+  timeline: [],
+  topicPerformanceBreakdown: [],
+};
+
 export const STUDENT_PERFORMANCE_FALLBACK_DATASET: StudentPerformanceDataset = {
   licenseLayer: "L2",
   disciplineIndex: 76,
@@ -475,14 +499,11 @@ function normalizeDataset(payload: unknown): StudentPerformanceDataset {
     timeAllocationBalancePercent: clampPercent(toNumber(record.timeAllocationBalancePercent ?? record.timeAllocationPercent)),
     controlledModeComparison: normalizeControlledModeComparison(
       record.controlledModeComparison,
-      timeline.length > 0 ? timeline : STUDENT_PERFORMANCE_FALLBACK_DATASET.timeline,
+      timeline,
       controlledModeImprovementPercent,
     ),
-    timeline: timeline.length > 0 ? timeline : STUDENT_PERFORMANCE_FALLBACK_DATASET.timeline,
-    topicPerformanceBreakdown:
-      topicPerformanceBreakdown.length > 0 ?
-        topicPerformanceBreakdown :
-        STUDENT_PERFORMANCE_FALLBACK_DATASET.topicPerformanceBreakdown,
+    timeline,
+    topicPerformanceBreakdown,
   };
 }
 

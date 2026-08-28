@@ -655,6 +655,94 @@ test("Student tests adapter validates the strict paginated summary DTO", () => {
   );
 });
 
+test("Student performance, insights, and solutions adapters reject contract drift", () => {
+  const performance = {
+    controlledModeComparison: {
+      baselineLabel: "Earlier Runs",
+      currentLabel: "Recent Controlled Runs",
+      disciplineIndexDeltaPercent: 0,
+      guessRateDeltaPercent: 0,
+      maxTimeViolationDeltaPercent: 0,
+      minTimeViolationDeltaPercent: 0,
+      phaseAdherenceDeltaPercent: 0,
+    },
+    controlledModeImprovementPercent: 0,
+    disciplineIndex: 0,
+    easyNeglectFrequencyPercent: 11,
+    guessProbabilityCluster: "Low",
+    guessProbabilityPercent: 0,
+    hardBiasFrequencyPercent: 7,
+    licenseLayer: "L1",
+    overstayFrequencyPercent: 0,
+    phaseCompliancePercent: 87,
+    timeAllocationBalancePercent: 81,
+    timeline: [],
+    topicPerformanceBreakdown: [],
+  };
+  const insights = {
+    archivedSummaryOnlyCount: 0,
+    currentYearSolutionAccessOnly: true,
+    disciplineImprovementSuggestions: [],
+    guessDetectionAlertPercent: 0,
+    latePhaseDropIndicatorPercent: 0,
+    licenseLayer: "L1",
+    mostFrequentBehaviorPattern: "No Pattern Yet",
+    phaseAdherenceFeedback: "Complete more tests.",
+    rushedPatternFrequencyPercent: 0,
+    skipBurstIndicatorPercent: 0,
+    snapshots: [],
+    topicWeaknessSummary: [],
+  };
+  const solutions = {
+    hasMore: false,
+    items: [{
+      correctAnswer: "A",
+      questionId: "question-1",
+      questionImageUrl: "",
+      simulationLink: null,
+      solutionImageUrl: "",
+      studentAnswer: "B",
+      tutorialVideoLink: null,
+    }],
+    page: 1,
+    pageSize: 10,
+    releasedAt: "2026-08-20T00:00:00.000Z",
+    runId: "run-1",
+    testId: "test-1",
+    total: 1,
+  };
+
+  assert.deepEqual(
+    adapters.adaptStudentSummaryResult(performance, "performance"),
+    performance,
+  );
+  assert.deepEqual(
+    adapters.adaptStudentSummaryResult(insights, "insights"),
+    insights,
+  );
+  assert.deepEqual(
+    adapters.adaptStudentSummaryResult(solutions, "solutions"),
+    solutions,
+  );
+  assert.throws(
+    () => adapters.adaptStudentSummaryResult({
+      ...performance,
+      timeline: [{answerMap: {"question-1": "A"}}],
+    }, "performance"),
+    {name: "PortalResponseValidationError", route: "GET /student/performance"},
+  );
+  assert.throws(
+    () => adapters.adaptStudentSummaryResult({
+      ...solutions,
+      pageSize: 0,
+    }, "solutions"),
+    {
+      name: "PortalResponseValidationError",
+      route: "GET /student/tests/{testId}/solutions",
+    },
+  );
+});
+
 test("Exam adapter accepts the real submission result and rejects envelope/data drift", () => {
   const backendEnvelope = buildSubmissionSuccessResponse(
     {

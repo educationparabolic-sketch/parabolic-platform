@@ -82,7 +82,7 @@ const runFixture = (input) => ({
   requestFingerprint: "b".repeat(64),
   runId: input.runId,
   startWindow: Timestamp.fromDate(new Date(input.startWindow)),
-  status: "scheduled",
+  status: input.status ?? "scheduled",
   testId: input.testId,
   testName: input.testName,
 });
@@ -136,13 +136,15 @@ test(
           negativeMarks: 1,
           primaryTag: "motion",
           questionId,
-          questionImageUrl: "",
+          questionImageUrl: "questions/bwm-016-question.png",
           questionType: "MCQ",
-          solutionImageUrl: "",
+          simulationLink: "https://example.test/simulation",
+          solutionImageUrl: "solutions/bwm-016-solution.png",
           status: "active",
           subject: "Physics",
           tags: ["motion"],
           topic: "Motion",
+          tutorialVideoLink: "https://example.test/tutorial",
           uniqueKey: "bwm-015-summary-question",
           usedCount: 0,
           version: 1,
@@ -165,7 +167,33 @@ test(
           avgRawScorePercent: 75,
           easyNeglectRatePercent: 11,
           hardBiasRatePercent: 7,
+          performanceTimeline: [{
+            accuracyPercent: 83,
+            completedAt: Timestamp.fromDate(
+              new Date("2026-08-20T10:00:00.000Z"),
+            ),
+            disciplineIndex: 78,
+            guessRatePercent: 14,
+            phaseAdherencePercent: 87,
+            rawScorePercent: 75,
+            runId: "run-bwm-016-a-completed",
+            runLabel: "A Completed Operational",
+            timeAllocationBalancePercent: 81,
+            timeSpentMinutes: 72,
+          }],
           studentId: studentA,
+          topicPerformanceBreakdown: [{
+            accuracyPercent: 83,
+            rawScorePercent: 75,
+            topic: "Motion",
+          }],
+          topicWeaknessSummary: [{
+            feedback: "Review motion graphs before the next run.",
+            simulationLink: "https://example.test/simulation",
+            topic: "Motion Graphs",
+            tutorialVideoLink: "https://example.test/tutorial",
+            weaknessPercent: 24,
+          }],
           totalTests: 4,
         }),
       ]);
@@ -209,6 +237,7 @@ test(
         `${yearPath}/runs/run-bwm-015-a-diagnostic`,
         `${yearPath}/runs/run-bwm-015-a-controlled`,
         `${yearPath}/runs/run-bwm-015-b-operational`,
+        `${yearPath}/runs/run-bwm-016-a-completed`,
       ];
       await Promise.all([
         firestore.doc(runPaths[0]).set(
@@ -251,14 +280,65 @@ test(
             testName: "B Operational",
           }),
         ),
+        firestore.doc(runPaths[4]).set({
+          ...runFixture({
+            mode: "Operational",
+            recipientStudentIds: [studentA],
+            runId: "run-bwm-016-a-completed",
+            startWindow: "2026-08-20T09:00:00.000Z",
+            status: "completed",
+            testId,
+            testName: "A Completed Operational",
+          }),
+          questionIds: [questionId],
+          solutionReleaseAt: Timestamp.fromDate(
+            new Date("2026-08-21T00:00:00.000Z"),
+          ),
+        }),
       ]);
-      await Promise.all(runPaths.map((path) => waitForDocumentField(
-        firestore,
-        `institutes/${instituteId}/usageMeter/2026-09/` +
-          `assignmentEvents/${path.split("/").at(-1)}`,
-        "createdAt",
-      )));
-
+      await Promise.all([
+        firestore.doc(
+          `${runPaths[4]}/sessions/session-bwm-016-a-completed`,
+        ).set({
+          answerMap: {[questionId]: {selectedOption: "B"}},
+          sessionId: "session-bwm-016-a-completed",
+          status: "submitted",
+          studentId: studentA,
+          submittedAt: Timestamp.fromDate(
+            new Date("2026-08-20T10:00:00.000Z"),
+          ),
+        }),
+        firestore.doc(
+          `${yearPath}/insightSnapshots/insight-bwm-016-a`,
+        ).set({
+          generatedAt: Timestamp.fromDate(
+            new Date("2026-08-20T10:01:00.000Z"),
+          ),
+          metrics: {
+            dominantPattern: "rushed_pattern",
+            sessionAccuracyPercent: 83,
+            sessionRawScorePercent: 75,
+          },
+          snapshotType: "student",
+          sourceSubmittedAt: Timestamp.fromDate(
+            new Date("2026-08-20T10:00:00.000Z"),
+          ),
+          studentId: studentA,
+        }),
+        firestore.doc(
+          `${yearPath}/insightSnapshots/insight-bwm-016-b`,
+        ).set({
+          generatedAt: Timestamp.fromDate(
+            new Date("2026-08-20T10:02:00.000Z"),
+          ),
+          metrics: {sessionAccuracyPercent: 99},
+          snapshotType: "student",
+          sourceSubmittedAt: Timestamp.fromDate(
+            new Date("2026-08-20T10:00:00.000Z"),
+          ),
+          studentId: studentB,
+        }),
+      ]);
       const identityA = await createIdentity(auth, "student-a", {
         instituteId,
         licenseLayer: "L1",
@@ -314,6 +394,55 @@ test(
         firstPage.body.data.tests.map((run) => run.runId),
         ["run-bwm-015-a-diagnostic"],
       );
+
+      const performance = await callStudentRoute(
+        identityA.idToken,
+        "/api/v1/student/performance?lastN=5&studentId=" +
+          encodeURIComponent(studentB),
+      );
+      assert.equal(performance.response.status, 200);
+      assert.deepEqual(
+        performance.body.data.timeline.map((entry) => entry.runId),
+        ["run-bwm-016-a-completed"],
+      );
+      assert.equal(performance.body.data.timeline[0].disciplineIndex, 0);
+      assert.equal(performance.body.data.topicPerformanceBreakdown.length, 1);
+
+      const insights = await callStudentRoute(
+        identityA.idToken,
+        "/api/v1/student/insights?limit=3",
+      );
+      assert.equal(insights.response.status, 200);
+      assert.deepEqual(
+        insights.body.data.snapshots.map((entry) => entry.snapshotId),
+        ["insight-bwm-016-a"],
+      );
+      assert.deepEqual(
+        insights.body.data.topicWeaknessSummary.map((entry) => entry.topic),
+        ["Motion Graphs"],
+      );
+
+      const solutions = await callStudentRoute(
+        identityA.idToken,
+        `/api/v1/student/tests/${testId}/solutions?page=1&pageSize=1`,
+      );
+      assert.equal(solutions.response.status, 200);
+      assert.equal(solutions.body.data.total, 1);
+      assert.equal(solutions.body.data.items[0].questionId, questionId);
+      assert.equal(solutions.body.data.items[0].correctAnswer, "A");
+      assert.equal(solutions.body.data.items[0].studentAnswer, "B");
+
+      const otherStudentSolutions = await callStudentRoute(
+        identityB.idToken,
+        `/api/v1/student/tests/${testId}/solutions`,
+      );
+      assert.equal(otherStudentSolutions.response.status, 404);
+
+      const l0Insights = await callStudentRoute(
+        identityB.idToken,
+        "/api/v1/student/insights",
+      );
+      assert.equal(l0Insights.response.status, 403);
 
       const secondStudent = await callStudentRoute(
         identityB.idToken,

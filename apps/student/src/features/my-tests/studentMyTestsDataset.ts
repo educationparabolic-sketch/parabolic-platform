@@ -14,6 +14,7 @@ import {
 } from "../../services/studentSummaryApi";
 import type {
   StudentTestRecord,
+  StudentSolutionsResult,
   StudentTestsResult,
   StudentTestStatus,
 } from "../../../../../shared/contracts/apiDtos";
@@ -29,6 +30,8 @@ export interface StudentSolutionItem {
   tutorialVideoLink: string | null;
   simulationLink: string | null;
 }
+
+export type StudentSolutionsPage = StudentSolutionsResult;
 
 type StudentTestsResponse = StudentTestsResult;
 
@@ -434,18 +437,14 @@ function normalizeStudentTestsPayload(payload: unknown): StudentTestRecord[] {
     .filter((record): record is StudentTestRecord => Boolean(record));
 }
 
-function normalizeSolutionsPayload(payload: unknown): StudentSolutionItem[] {
-  if (!payload) {
-    return [];
+function normalizeSolutionsPayload(payload: unknown): StudentSolutionsPage {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error("GET /student/tests/{testId}/solutions returned an invalid payload.");
   }
 
-  const source = Array.isArray(payload)
-    ? payload
-    : typeof payload === "object" && payload !== null && Array.isArray((payload as {items?: unknown[]}).items)
-      ? (payload as {items: unknown[]}).items
-      : [];
-
-  return source
+  const record = payload as Record<string, unknown>;
+  const source = Array.isArray(record.items) ? record.items : [];
+  const items = source
     .map((entry, index) => {
       if (!entry || typeof entry !== "object") {
         return null;
@@ -463,6 +462,17 @@ function normalizeSolutionsPayload(payload: unknown): StudentSolutionItem[] {
       };
     })
     .filter((entry): entry is StudentSolutionItem => Boolean(entry));
+
+  return {
+    hasMore: record.hasMore === true,
+    items,
+    page: toNumberOrNull(record.page) ?? 1,
+    pageSize: toNumberOrNull(record.pageSize) ?? Math.max(1, items.length),
+    releasedAt: toStringOrFallback(record.releasedAt, new Date(0).toISOString()),
+    runId: toStringOrFallback(record.runId, "unknown-run"),
+    testId: toStringOrFallback(record.testId, "unknown-test"),
+    total: toNumberOrNull(record.total) ?? items.length,
+  };
 }
 
 function paginateFallbackByStatus(status: StudentTestStatus | "all", page: number, pageSize: number): StudentTestsResponse {
@@ -528,12 +538,28 @@ export async function fetchStudentTestsPage(
   };
 }
 
-export async function fetchStudentSolutions(testId: string): Promise<StudentSolutionItem[]> {
+export async function fetchStudentSolutions(
+  testId: string,
+  page = 1,
+  pageSize = 10,
+): Promise<StudentSolutionsPage> {
   if (!shouldUseLiveApi()) {
-    return FALLBACK_SOLUTIONS[testId] ?? [];
+    const allItems = FALLBACK_SOLUTIONS[testId] ?? [];
+    const offset = (page - 1) * pageSize;
+    const items = allItems.slice(offset, offset + pageSize);
+    return {
+      hasMore: offset + items.length < allItems.length,
+      items,
+      page,
+      pageSize,
+      releasedAt: new Date(0).toISOString(),
+      runId: testId,
+      testId,
+      total: allItems.length,
+    };
   }
 
-  const payload = await getStudentSolutionSummary(testId);
+  const payload = await getStudentSolutionSummary(testId, page, pageSize);
   return normalizeSolutionsPayload(payload);
 }
 

@@ -10,7 +10,8 @@ export type InsightPattern =
   | "Guess Detection"
   | "Late-Phase Drop"
   | "Rushed Pattern"
-  | "Skip Burst";
+  | "Skip Burst"
+  | "No Pattern Yet";
 
 export interface StudentInsightSnapshot {
   snapshotId: string;
@@ -180,6 +181,10 @@ function toInsightPattern(value: unknown, fallback: InsightPattern): InsightPatt
     return "Skip Burst";
   }
 
+  if (normalized === "no pattern yet" || normalized === "no_pattern_yet") {
+    return "No Pattern Yet";
+  }
+
   return fallback;
 }
 
@@ -228,7 +233,7 @@ function normalizeSnapshot(value: unknown, index: number): StudentInsightSnapsho
     latePhaseDropPercent,
     rushedPatternFrequencyPercent,
     skipBurstFrequencyPercent,
-    dominantPattern: toInsightPattern(record.dominantPattern, "Late-Phase Drop"),
+    dominantPattern: toInsightPattern(record.dominantPattern, "No Pattern Yet"),
   };
 }
 
@@ -256,7 +261,7 @@ function deriveMostFrequentPattern(snapshots: StudentInsightSnapshot[]): Insight
     counts.set(snapshot.dominantPattern, (counts.get(snapshot.dominantPattern) ?? 0) + 1);
   });
 
-  let winner: InsightPattern = "Late-Phase Drop";
+  let winner: InsightPattern = "No Pattern Yet";
   let winnerCount = -1;
   for (const [pattern, count] of counts.entries()) {
     if (count > winnerCount) {
@@ -302,18 +307,13 @@ function normalizeDataset(payload: unknown): StudentInsightsDataset {
     .filter((entry) => entry.length > 0);
 
   const latestSnapshot = snapshots[snapshots.length - 1];
-  const effectiveSnapshots = snapshots.length > 0 ? snapshots : STUDENT_INSIGHTS_FALLBACK_DATASET.snapshots;
-
   return {
     licenseLayer: toLicenseLayer(record.licenseLayer),
     mostFrequentBehaviorPattern: toInsightPattern(
       record.mostFrequentBehaviorPattern,
-      deriveMostFrequentPattern(effectiveSnapshots),
+      deriveMostFrequentPattern(snapshots),
     ),
-    topicWeaknessSummary:
-      topicWeaknessSummary.length > 0 ?
-        topicWeaknessSummary :
-        STUDENT_INSIGHTS_FALLBACK_DATASET.topicWeaknessSummary,
+    topicWeaknessSummary,
     latePhaseDropIndicatorPercent: clampPercent(
       toNumber(record.latePhaseDropIndicatorPercent, latestSnapshot?.latePhaseDropPercent ?? 0),
     ),
@@ -328,15 +328,12 @@ function normalizeDataset(payload: unknown): StudentInsightsDataset {
     ),
     phaseAdherenceFeedback: toString(
       record.phaseAdherenceFeedback,
-      STUDENT_INSIGHTS_FALLBACK_DATASET.phaseAdherenceFeedback,
+      "Complete more tests to build a phase-adherence insight.",
     ),
-    disciplineImprovementSuggestions:
-      disciplineImprovementSuggestions.length > 0 ?
-        disciplineImprovementSuggestions :
-        STUDENT_INSIGHTS_FALLBACK_DATASET.disciplineImprovementSuggestions,
+    disciplineImprovementSuggestions,
     archivedSummaryOnlyCount: Math.max(0, Math.round(toNumber(record.archivedSummaryOnlyCount))),
     currentYearSolutionAccessOnly: record.currentYearSolutionAccessOnly !== false,
-    snapshots: effectiveSnapshots,
+    snapshots,
   };
 }
 

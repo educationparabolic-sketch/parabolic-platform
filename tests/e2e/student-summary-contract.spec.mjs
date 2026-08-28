@@ -22,6 +22,7 @@ const testId = "test_bwm_015_summary_browser";
 const authHost = process.env.FIREBASE_AUTH_EMULATOR_HOST;
 const runIds = {
   assigned: "run-bwm-015-browser-assigned",
+  completed: "run-bwm-016-browser-completed",
   licensedOut: "run-bwm-015-browser-licensed-out",
   unassigned: "run-bwm-015-browser-unassigned",
 };
@@ -44,7 +45,14 @@ async function waitForDocumentField(path, fieldName) {
   throw new Error(`Timed out waiting for ${path}.${fieldName}`);
 }
 
-function runFixture(runId, mode, recipientStudentIds, testName, startWindow) {
+function runFixture(
+  runId,
+  mode,
+  recipientStudentIds,
+  testName,
+  startWindow,
+  status = "scheduled",
+) {
   return {
     academicYear: yearId,
     createdAt: Timestamp.fromDate(new Date(startWindow)),
@@ -57,7 +65,7 @@ function runFixture(runId, mode, recipientStudentIds, testName, startWindow) {
     requestFingerprint: "d".repeat(64),
     runId,
     startWindow: Timestamp.fromDate(new Date(startWindow)),
-    status: "scheduled",
+    status,
     testId,
     testName,
   };
@@ -106,7 +114,33 @@ test.beforeAll(async () => {
       avgRawScorePercent: 75,
       easyNeglectRatePercent: 11,
       hardBiasRatePercent: 7,
+      performanceTimeline: [{
+        accuracyPercent: 83,
+        completedAt: Timestamp.fromDate(
+          new Date("2026-08-20T10:00:00.000Z"),
+        ),
+        disciplineIndex: 78,
+        guessRatePercent: 14,
+        phaseAdherencePercent: 87,
+        rawScorePercent: 75,
+        runId: runIds.completed,
+        runLabel: "Browser Completed Operational",
+        timeAllocationBalancePercent: 81,
+        timeSpentMinutes: 72,
+      }],
       studentId,
+      topicPerformanceBreakdown: [{
+        accuracyPercent: 83,
+        rawScorePercent: 75,
+        topic: "Motion",
+      }],
+      topicWeaknessSummary: [{
+        feedback: "Review motion graphs before the next run.",
+        simulationLink: null,
+        topic: "Motion Graphs",
+        tutorialVideoLink: null,
+        weaknessPercent: 24,
+      }],
       totalTests: 4,
     }),
     institute.collection("questionBank").doc(questionId).set({
@@ -118,9 +152,9 @@ test.beforeAll(async () => {
       marks: 4,
       negativeMarks: 1,
       questionId,
-      questionImageUrl: "",
+      questionImageUrl: "questions/bwm-016-browser-question.png",
       questionType: "MCQ",
-      solutionImageUrl: "",
+      solutionImageUrl: "solutions/bwm-016-browser-solution.png",
       status: "active",
       subject: "Physics",
       tags: ["motion"],
@@ -183,17 +217,57 @@ test.beforeAll(async () => {
       "Browser Unassigned Operational",
       "2026-09-03T09:00:00.000Z",
     ],
+    [
+      runIds.completed,
+      "Operational",
+      [studentId],
+      "Browser Completed Operational",
+      "2026-08-20T09:00:00.000Z",
+      "completed",
+    ],
   ];
   await Promise.all(runInputs.map((input) => {
     const [runId, mode, recipients, testName, startWindow] = input;
-    return year.collection("runs").doc(runId).set(
-      runFixture(runId, mode, recipients, testName, startWindow),
-    );
+    const status = input[5] ?? "scheduled";
+    return year.collection("runs").doc(runId).set({
+      ...runFixture(runId, mode, recipients, testName, startWindow, status),
+      ...(status === "completed" ? {
+        questionIds: [questionId],
+        solutionReleaseAt: Timestamp.fromDate(
+          new Date("2026-08-21T00:00:00.000Z"),
+        ),
+      } : {}),
+    });
   }));
-  await Promise.all(runInputs.map(([runId]) => waitForDocumentField(
-    `institutes/${instituteId}/usageMeter/2026-09/assignmentEvents/${runId}`,
-    "createdAt",
-  )));
+  await Promise.all([
+    year.collection("runs").doc(runIds.completed)
+      .collection("sessions").doc("session-bwm-016-browser-completed")
+      .set({
+        answerMap: {[questionId]: {selectedOption: "B"}},
+        sessionId: "session-bwm-016-browser-completed",
+        status: "submitted",
+        studentId,
+        submittedAt: Timestamp.fromDate(
+          new Date("2026-08-20T10:00:00.000Z"),
+        ),
+      }),
+    year.collection("insightSnapshots").doc("insight-bwm-016-browser")
+      .set({
+        generatedAt: Timestamp.fromDate(
+          new Date("2026-08-20T10:01:00.000Z"),
+        ),
+        metrics: {
+          dominantPattern: "rushed_pattern",
+          sessionAccuracyPercent: 83,
+          sessionRawScorePercent: 75,
+        },
+        snapshotType: "student",
+        sourceSubmittedAt: Timestamp.fromDate(
+          new Date("2026-08-20T10:00:00.000Z"),
+        ),
+        studentId,
+      }),
+  ]);
 });
 
 test.afterAll(async () => {
@@ -275,4 +349,54 @@ test("Student dashboard and My Tests render only identity-authorized summaries",
     .toHaveCount(0);
   await expect(page.getByText("Browser Unassigned Operational", {exact: true}))
     .toHaveCount(0);
+
+  const performanceResponsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === "/api/v1/student/performance" &&
+      response.status() === 200;
+  }, {timeout: 90_000});
+  const insightsResponsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === "/api/v1/student/insights" &&
+      response.status() === 200;
+  }, {timeout: 90_000});
+  await page.getByRole("navigation", {name: "Student navigation"})
+    .getByRole("link", {name: /^Analytics\b/})
+    .click();
+  const [performanceResponse, insightsResponse] = await Promise.all([
+    performanceResponsePromise,
+    insightsResponsePromise,
+  ]);
+  const performanceEnvelope = await performanceResponse.json();
+  const insightsEnvelope = await insightsResponse.json();
+  expect(performanceEnvelope.data.timeline.map((entry) => entry.runId))
+    .toEqual([runIds.completed]);
+  expect(performanceEnvelope.data.timeline[0].disciplineIndex).toBe(0);
+  expect(insightsEnvelope.data.snapshots.map((entry) => entry.snapshotId))
+    .toEqual(["insight-bwm-016-browser"]);
+  expect(JSON.stringify(performanceEnvelope.data)).not.toContain("answerMap");
+  expect(JSON.stringify(insightsEnvelope.data)).not.toContain("answerMap");
+  await expect(page.getByText("Browser Completed Operational", {exact: true}))
+    .toBeVisible({timeout: 30_000});
+
+  await page.getByRole("navigation", {name: "Student navigation"})
+    .getByRole("link", {name: /^My Tests\b/})
+    .click();
+  const completedCard = page.locator("article.student-test-card")
+    .filter({hasText: "Browser Completed Operational"});
+  await expect(completedCard).toBeVisible({timeout: 90_000});
+  const solutionsResponsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === `/api/v1/student/tests/${testId}/solutions` &&
+      response.status() === 200;
+  }, {timeout: 90_000});
+  await completedCard.getByRole("button", {name: "View Solutions"}).click();
+  const solutionsResponse = await solutionsResponsePromise;
+  const solutionsEnvelope = await solutionsResponse.json();
+  expect(solutionsEnvelope.data.items).toHaveLength(1);
+  expect(solutionsEnvelope.data.items[0].correctAnswer).toBe("A");
+  expect(solutionsEnvelope.data.items[0].studentAnswer).toBe("B");
+  expect(JSON.stringify(solutionsEnvelope.data)).not.toContain("answerMap");
+  await expect(page.getByText("Correct Answer: A", {exact: true}))
+    .toBeVisible({timeout: 30_000});
 });

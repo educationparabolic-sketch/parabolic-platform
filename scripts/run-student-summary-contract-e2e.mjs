@@ -82,7 +82,7 @@ console.log(
     .join(" ")}`,
 );
 run(
-  "Run no-mock Student dashboard and My Tests browser flow",
+  "Run no-mock Student summary and solution browser flow",
   firebaseExecutable,
   emulatorArgs,
   {
@@ -95,6 +95,6 @@ run(
 );
 
 console.log(
-  "\n[student-summary-contract] PASS: identity-scoped dashboard and My " +
-    "Tests values rendered from real APIs.",
+  "\n[student-summary-contract] PASS: identity-scoped dashboard, tests, " +
+    "performance, insights, and solutions rendered from real APIs.",
 );

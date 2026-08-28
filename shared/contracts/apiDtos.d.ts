@@ -524,6 +524,126 @@ export interface StudentTestsResult {
   hasMore: boolean;
 }
 
+export type StudentPerformanceRiskState =
+  | "Stable"
+  | "Improving"
+  | "Building Discipline";
+
+export interface StudentPerformancePoint {
+  runId: string;
+  runLabel: string;
+  completedAt: string;
+  riskState: StudentPerformanceRiskState;
+  timeAllocationBalancePercent: number;
+  rawScorePercent: number;
+  accuracyPercent: number;
+  phaseAdherencePercent: number;
+  guessRatePercent: number;
+  disciplineIndex: number;
+  minTimeViolationPercent: number;
+  maxTimeViolationPercent: number;
+  overstayFrequencyPercent: number;
+  timeSpentMinutes: number;
+  rankInBatch: number | null;
+}
+
+export interface StudentTopicPerformanceEntry {
+  topic: string;
+  rawScorePercent: number;
+  accuracyPercent: number;
+}
+
+export interface StudentControlledModeComparison {
+  baselineLabel: string;
+  currentLabel: string;
+  phaseAdherenceDeltaPercent: number;
+  disciplineIndexDeltaPercent: number;
+  minTimeViolationDeltaPercent: number;
+  maxTimeViolationDeltaPercent: number;
+  guessRateDeltaPercent: number;
+}
+
+export interface StudentPerformanceResult {
+  licenseLayer: StudentLicenseLayer;
+  disciplineIndex: number;
+  phaseCompliancePercent: number;
+  controlledModeImprovementPercent: number;
+  overstayFrequencyPercent: number;
+  guessProbabilityPercent: number;
+  guessProbabilityCluster: "Low" | "Medium" | "High";
+  easyNeglectFrequencyPercent: number;
+  hardBiasFrequencyPercent: number;
+  timeAllocationBalancePercent: number;
+  controlledModeComparison: StudentControlledModeComparison;
+  timeline: StudentPerformancePoint[];
+  topicPerformanceBreakdown: StudentTopicPerformanceEntry[];
+}
+
+export type StudentInsightPattern =
+  | "Easy Neglect"
+  | "Guess Detection"
+  | "Late-Phase Drop"
+  | "Rushed Pattern"
+  | "Skip Burst"
+  | "No Pattern Yet";
+
+export interface StudentInsightSnapshot {
+  snapshotId: string;
+  generatedAt: string;
+  rawScorePercent: number;
+  accuracyPercent: number;
+  easyNeglectFrequencyPercent: number;
+  guessDetectionPercent: number;
+  latePhaseDropPercent: number;
+  rushedPatternFrequencyPercent: number;
+  skipBurstFrequencyPercent: number;
+  dominantPattern: StudentInsightPattern;
+}
+
+export interface StudentTopicWeaknessInsight {
+  topic: string;
+  weaknessPercent: number;
+  feedback: string;
+  tutorialVideoLink: string | null;
+  simulationLink: string | null;
+}
+
+export interface StudentInsightsResult {
+  licenseLayer: StudentLicenseLayer;
+  mostFrequentBehaviorPattern: StudentInsightPattern;
+  topicWeaknessSummary: StudentTopicWeaknessInsight[];
+  latePhaseDropIndicatorPercent: number;
+  rushedPatternFrequencyPercent: number;
+  skipBurstIndicatorPercent: number;
+  guessDetectionAlertPercent: number;
+  phaseAdherenceFeedback: string;
+  disciplineImprovementSuggestions: string[];
+  archivedSummaryOnlyCount: number;
+  currentYearSolutionAccessOnly: true;
+  snapshots: StudentInsightSnapshot[];
+}
+
+export interface StudentSolutionItem {
+  questionId: string;
+  questionImageUrl: string;
+  solutionImageUrl: string;
+  correctAnswer: string;
+  studentAnswer: string;
+  tutorialVideoLink: string | null;
+  simulationLink: string | null;
+}
+
+export interface StudentSolutionsResult {
+  hasMore: boolean;
+  items: StudentSolutionItem[];
+  page: number;
+  pageSize: number;
+  releasedAt: string;
+  runId: string;
+  testId: string;
+  total: number;
+}
+
 export interface VendorCalibrationPushRequest {
   targetInstitutes: string[];
   versionId: string;

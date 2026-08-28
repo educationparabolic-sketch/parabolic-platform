@@ -7,13 +7,27 @@ import {
   StudentDashboardResult,
   StudentDashboardTrendPoint,
   StudentDashboardUpcomingTest,
+  StudentControlledModeComparison,
+  StudentInsightPattern,
+  StudentInsightsRequest,
+  StudentInsightsResult,
+  StudentInsightSnapshot,
   StudentLicenseLayer,
+  StudentPerformancePoint,
+  StudentPerformanceRequest,
+  StudentPerformanceResult,
+  StudentPerformanceRiskState,
   StudentRiskState,
+  StudentSolutionItem,
+  StudentSolutionsRequest,
+  StudentSolutionsResult,
   StudentSummaryValidationError,
   StudentTestRecord,
   StudentTestsRequest,
   StudentTestsResult,
   StudentTestStatus,
+  StudentTopicPerformanceEntry,
+  StudentTopicWeaknessInsight,
 } from "../types/studentSummary";
 import {AdminRunMode} from "../../../shared/contracts/apiDtos";
 
@@ -21,11 +35,18 @@ const INSTITUTES_COLLECTION = "institutes";
 const STUDENTS_COLLECTION = "students";
 const ACADEMIC_YEARS_COLLECTION = "academicYears";
 const STUDENT_YEAR_METRICS_COLLECTION = "studentYearMetrics";
+const INSIGHT_SNAPSHOTS_COLLECTION = "insightSnapshots";
 const RUNS_COLLECTION = "runs";
+const SESSIONS_COLLECTION = "sessions";
+const QUESTION_BANK_COLLECTION = "questionBank";
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 50;
 const MAX_PAGE = 100;
 const DASHBOARD_UPCOMING_LIMIT = 4;
+const DEFAULT_SUMMARY_LIMIT = 10;
+const MAX_SUMMARY_LIMIT = 20;
+const DEFAULT_SOLUTION_PAGE_SIZE = 10;
+const MAX_SOLUTION_PAGE_SIZE = 20;
 
 const CURRENT_YEAR_STATUS_PRIORITY = new Map([
   ["active", 0],
@@ -147,6 +168,12 @@ const toNonNegativeInteger = (value: unknown): number => {
 const toOptionalString = (value: unknown): string | null =>
   typeof value === "string" && value.trim() ? value.trim() : null;
 
+const toOptionalNumber = (value: unknown): number | null =>
+  typeof value === "number" && Number.isFinite(value) ? value : null;
+
+const toRecordArray = (value: unknown): Record<string, unknown>[] =>
+  Array.isArray(value) ? value.filter(isRecord) : [];
+
 const toIsoString = (value: unknown, fieldName: string): string => {
   if (value instanceof Timestamp) {
     return value.toDate().toISOString();
@@ -211,6 +238,78 @@ const toRiskState = (value: unknown): StudentRiskState => {
   default:
     return "low";
   }
+};
+
+const toPerformanceRiskState = (
+  value: unknown,
+  disciplineIndex: number,
+  phaseAdherencePercent: number,
+  guessRatePercent: number,
+): StudentPerformanceRiskState => {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized === "stable" || normalized === "low") {
+    return "Stable";
+  }
+  if (
+    normalized === "improving" ||
+    normalized === "medium" ||
+    normalized === "drift-prone"
+  ) {
+    return "Improving";
+  }
+  if (normalized) {
+    return "Building Discipline";
+  }
+  if (
+    disciplineIndex >= 75 &&
+    phaseAdherencePercent >= 70 &&
+    guessRatePercent <= 20
+  ) {
+    return "Stable";
+  }
+  if (disciplineIndex >= 60 || phaseAdherencePercent >= 60) {
+    return "Improving";
+  }
+  return "Building Discipline";
+};
+
+const toInsightPattern = (value: unknown): StudentInsightPattern => {
+  switch (String(value ?? "").trim().toLowerCase()) {
+  case "easy neglect":
+  case "easy_neglect":
+    return "Easy Neglect";
+  case "guess detection":
+  case "guess_detection":
+    return "Guess Detection";
+  case "late-phase drop":
+  case "late_phase_drop":
+    return "Late-Phase Drop";
+  case "rushed pattern":
+  case "rushed_pattern":
+    return "Rushed Pattern";
+  case "skip burst":
+  case "skip_burst":
+    return "Skip Burst";
+  default:
+    return "No Pattern Yet";
+  }
+};
+
+const toStringArray = (value: unknown): string[] =>
+  Array.isArray(value) ? value.flatMap((entry) => {
+    const normalized = toOptionalString(entry);
+    return normalized ? [normalized] : [];
+  }) : [];
+
+const toQuestionIds = (value: unknown): string[] => {
+  const ids = toStringArray(value);
+  if (ids.length === 0 || new Set(ids).size !== ids.length) {
+    throw new StudentSummaryValidationError(
+      "CONFLICT",
+      "Completed test solution authority has no valid question snapshot.",
+    );
+  }
+  return ids;
 };
 
 const compareDocumentsDescending = (
@@ -387,6 +486,186 @@ const toTrend = (
   });
 };
 
+const toPerformancePoint = (
+  entry: Record<string, unknown>,
+  index: number,
+  l1Allowed: boolean,
+  l2Allowed: boolean,
+): StudentPerformancePoint | null => {
+  const runId = toOptionalString(entry.runId ?? entry.testId);
+  const completedAt = entry.completedAt ?? entry.submittedAt;
+  if (!runId || !completedAt) {
+    return null;
+  }
+
+  const phaseAdherencePercent = l1Allowed ? toPercent(
+    entry.phaseAdherencePercent ?? entry.phaseCompliancePercent,
+  ) : 0;
+  const guessRatePercent = l2Allowed ? toPercent(
+    entry.guessRatePercent ?? entry.guessRate,
+  ) : 0;
+  const disciplineIndex = l2Allowed ?
+    toPercent(entry.disciplineIndex) :
+    0;
+  const riskState = l2Allowed ? toPerformanceRiskState(
+    entry.riskState ?? entry.riskBadge,
+    disciplineIndex,
+    phaseAdherencePercent,
+    guessRatePercent,
+  ) : "Building Discipline";
+
+  return {
+    accuracyPercent: toPercent(entry.accuracyPercent),
+    completedAt: toIsoString(completedAt, "performance.completedAt"),
+    disciplineIndex,
+    guessRatePercent,
+    maxTimeViolationPercent: l2Allowed ?
+      toPercent(entry.maxTimeViolationPercent) :
+      0,
+    minTimeViolationPercent: l2Allowed ?
+      toPercent(entry.minTimeViolationPercent) :
+      0,
+    overstayFrequencyPercent: l2Allowed ? toPercent(
+      entry.overstayFrequencyPercent ?? entry.overstayQuestionsPercent,
+    ) : 0,
+    phaseAdherencePercent,
+    rankInBatch: toOptionalNumber(entry.rankInBatch),
+    rawScorePercent: toPercent(entry.rawScorePercent),
+    riskState,
+    runId,
+    runLabel: toOptionalString(
+      entry.runLabel ?? entry.testName ?? entry.runName,
+    ) ?? `Run ${index + 1}`,
+    timeAllocationBalancePercent: l1Allowed ? toPercent(
+      entry.timeAllocationBalancePercent ?? entry.timeAllocationPercent,
+    ) : 0,
+    timeSpentMinutes: Math.max(0, Math.round(toFiniteNumber(
+      entry.timeSpentMinutes ?? entry.timeUsedMinutes,
+    ))),
+  };
+};
+
+const toTopicPerformance = (
+  value: unknown,
+): StudentTopicPerformanceEntry[] => toRecordArray(value).flatMap((entry) => {
+  const topic = toOptionalString(entry.topic ?? entry.name);
+  if (!topic) {
+    return [];
+  }
+  return [{
+    accuracyPercent: toPercent(entry.accuracyPercent),
+    rawScorePercent: toPercent(entry.rawScorePercent),
+    topic,
+  }];
+});
+
+const emptyControlledComparison = (): StudentControlledModeComparison => ({
+  baselineLabel: "Earlier Runs",
+  currentLabel: "Recent Controlled Runs",
+  disciplineIndexDeltaPercent: 0,
+  guessRateDeltaPercent: 0,
+  maxTimeViolationDeltaPercent: 0,
+  minTimeViolationDeltaPercent: 0,
+  phaseAdherenceDeltaPercent: 0,
+});
+
+const toControlledComparison = (
+  value: unknown,
+  allowed: boolean,
+): StudentControlledModeComparison => {
+  if (!allowed || !isRecord(value)) {
+    return emptyControlledComparison();
+  }
+  return {
+    baselineLabel: toOptionalString(value.baselineLabel) ?? "Earlier Runs",
+    currentLabel: toOptionalString(value.currentLabel) ??
+      "Recent Controlled Runs",
+    disciplineIndexDeltaPercent: toFiniteNumber(
+      value.disciplineIndexDeltaPercent,
+    ),
+    guessRateDeltaPercent: toFiniteNumber(value.guessRateDeltaPercent),
+    maxTimeViolationDeltaPercent: toFiniteNumber(
+      value.maxTimeViolationDeltaPercent,
+    ),
+    minTimeViolationDeltaPercent: toFiniteNumber(
+      value.minTimeViolationDeltaPercent,
+    ),
+    phaseAdherenceDeltaPercent: toFiniteNumber(
+      value.phaseAdherenceDeltaPercent,
+    ),
+  };
+};
+
+const toInsightSnapshot = (
+  document: FirebaseFirestore.QueryDocumentSnapshot,
+): StudentInsightSnapshot => {
+  const data = document.data();
+  const metrics = isRecord(data.metrics) ? data.metrics : {};
+  return {
+    accuracyPercent: toPercent(
+      metrics.sessionAccuracyPercent ?? metrics.accuracyPercent,
+    ),
+    dominantPattern: toInsightPattern(
+      data.dominantPattern ?? metrics.dominantPattern,
+    ),
+    easyNeglectFrequencyPercent: toPercent(
+      metrics.easyNeglectFrequencyPercent ?? metrics.easyNeglectPercent,
+    ),
+    generatedAt: toIsoString(
+      data.generatedAt ?? data.sourceSubmittedAt,
+      "insightSnapshots.generatedAt",
+    ),
+    guessDetectionPercent: toPercent(
+      metrics.guessDetectionPercent ?? metrics.guessRatePercent,
+    ),
+    latePhaseDropPercent: toPercent(metrics.latePhaseDropPercent),
+    rawScorePercent: toPercent(
+      metrics.sessionRawScorePercent ?? metrics.rawScorePercent,
+    ),
+    rushedPatternFrequencyPercent: toPercent(
+      metrics.rushedPatternFrequencyPercent ?? metrics.rushedPatternPercent,
+    ),
+    skipBurstFrequencyPercent: toPercent(
+      metrics.skipBurstFrequencyPercent ?? metrics.skipBurstPercent,
+    ),
+    snapshotId: document.id,
+  };
+};
+
+const toTopicWeaknesses = (
+  value: unknown,
+): StudentTopicWeaknessInsight[] => toRecordArray(value).flatMap((entry) => {
+  const topic = toOptionalString(entry.topic ?? entry.name);
+  if (!topic) {
+    return [];
+  }
+  return [{
+    feedback: toOptionalString(entry.feedback) ??
+      "Use a focused review before the next timed practice.",
+    simulationLink: toOptionalString(entry.simulationLink),
+    topic,
+    tutorialVideoLink: toOptionalString(entry.tutorialVideoLink),
+    weaknessPercent: toPercent(entry.weaknessPercent),
+  }];
+});
+
+const mostFrequentPattern = (
+  snapshots: StudentInsightSnapshot[],
+): StudentInsightPattern => {
+  const counts = new Map<StudentInsightPattern, number>();
+  for (const snapshot of snapshots) {
+    if (snapshot.dominantPattern !== "No Pattern Yet") {
+      counts.set(
+        snapshot.dominantPattern,
+        (counts.get(snapshot.dominantPattern) ?? 0) + 1,
+      );
+    }
+  }
+  return [...counts.entries()].sort((left, right) =>
+    right[1] - left[1] || left[0].localeCompare(right[0]))[0]?.[0] ??
+    "No Pattern Yet";
+};
+
 export class StudentSummaryService {
   constructor(
     private readonly firestore: FirebaseFirestore.Firestore = getFirestore(),
@@ -423,6 +702,61 @@ export class StudentSummaryService {
         MAX_PAGE_SIZE,
       ),
       status: normalizeTestStatus(input.status),
+    };
+  }
+
+  public normalizePerformanceRequest(input: {
+    instituteId?: unknown;
+    lastN?: unknown;
+    licenseLayer?: unknown;
+    studentId?: unknown;
+  }): StudentPerformanceRequest {
+    return {
+      ...this.normalizeDashboardRequest(input),
+      lastN: normalizeInteger(
+        input.lastN,
+        "lastN",
+        DEFAULT_SUMMARY_LIMIT,
+        MAX_SUMMARY_LIMIT,
+      ),
+    };
+  }
+
+  public normalizeInsightsRequest(input: {
+    instituteId?: unknown;
+    licenseLayer?: unknown;
+    limit?: unknown;
+    studentId?: unknown;
+  }): StudentInsightsRequest {
+    return {
+      ...this.normalizeDashboardRequest(input),
+      limit: normalizeInteger(
+        input.limit,
+        "limit",
+        DEFAULT_SUMMARY_LIMIT,
+        MAX_SUMMARY_LIMIT,
+      ),
+    };
+  }
+
+  public normalizeSolutionsRequest(input: {
+    instituteId?: unknown;
+    licenseLayer?: unknown;
+    page?: unknown;
+    pageSize?: unknown;
+    studentId?: unknown;
+    testId?: unknown;
+  }): StudentSolutionsRequest {
+    return {
+      ...this.normalizeDashboardRequest(input),
+      page: normalizeInteger(input.page, "page", 1, MAX_PAGE),
+      pageSize: normalizeInteger(
+        input.pageSize,
+        "pageSize",
+        DEFAULT_SOLUTION_PAGE_SIZE,
+        MAX_SOLUTION_PAGE_SIZE,
+      ),
+      testId: normalizeRequiredString(input.testId, "testId"),
     };
   }
 
@@ -641,6 +975,254 @@ export class StudentSummaryService {
       tests: selected.map((document) =>
         toStudentTestRecord(document, scope.currentYearId)),
       total,
+    };
+  }
+
+  public async getPerformance(
+    request: StudentPerformanceRequest,
+  ): Promise<StudentPerformanceResult> {
+    const scope = await this.loadStudentScope(request);
+    const metrics = scope.metricsData;
+    const l1Allowed = request.licenseLayer !== "L0";
+    const l2Allowed = request.licenseLayer === "L2" ||
+      request.licenseLayer === "L3";
+    const timelineSource = metrics.performanceTimeline ??
+      metrics.testHistory ??
+      metrics.recentResults;
+    const timeline = toRecordArray(timelineSource)
+      .map((entry, index) => toPerformancePoint(
+        entry,
+        index,
+        l1Allowed,
+        l2Allowed,
+      ))
+      .filter((entry): entry is StudentPerformancePoint => entry !== null)
+      .sort((left, right) =>
+        left.completedAt.localeCompare(right.completedAt) ||
+        left.runId.localeCompare(right.runId))
+      .slice(-request.lastN);
+    const latest = timeline[timeline.length - 1];
+    const guessProbabilityPercent = l2Allowed ? toPercent(
+      metrics.guessRatePercent ?? metrics.avgGuessRatePercent,
+    ) : 0;
+
+    return {
+      controlledModeComparison: toControlledComparison(
+        metrics.controlledModeComparison,
+        l2Allowed,
+      ),
+      controlledModeImprovementPercent: l2Allowed ? toFiniteNumber(
+        metrics.controlledModeImprovementPercent ??
+        metrics.controlledModeImprovementDeltaPercent,
+      ) : 0,
+      disciplineIndex: l2Allowed ? toPercent(
+        metrics.disciplineIndex ?? metrics.avgDisciplineIndex,
+      ) : 0,
+      easyNeglectFrequencyPercent: l1Allowed ? toPercent(
+        metrics.easyNeglectFrequencyPercent ?? metrics.easyNeglectRatePercent,
+      ) : 0,
+      guessProbabilityCluster: guessProbabilityPercent >= 30 ?
+        "High" : guessProbabilityPercent >= 15 ? "Medium" : "Low",
+      guessProbabilityPercent,
+      hardBiasFrequencyPercent: l1Allowed ? toPercent(
+        metrics.hardBiasFrequencyPercent ?? metrics.hardBiasRatePercent,
+      ) : 0,
+      licenseLayer: request.licenseLayer,
+      overstayFrequencyPercent: l2Allowed ? toPercent(
+        metrics.overstayFrequencyPercent ??
+        metrics.avgOverstayQuestionsPercent,
+      ) : 0,
+      phaseCompliancePercent: l1Allowed ? toPercent(
+        metrics.phaseCompliancePercent ?? metrics.avgPhaseAdherencePercent,
+      ) : 0,
+      timeAllocationBalancePercent: l1Allowed ? toPercent(
+        metrics.timeAllocationBalancePercent ??
+        latest?.timeAllocationBalancePercent,
+      ) : 0,
+      timeline,
+      topicPerformanceBreakdown: l1Allowed ? toTopicPerformance(
+        metrics.topicPerformanceBreakdown ?? metrics.topicPerformance,
+      ) : [],
+    };
+  }
+
+  public async getInsights(
+    request: StudentInsightsRequest,
+  ): Promise<StudentInsightsResult> {
+    const scope = await this.loadStudentScope(request);
+    if (request.licenseLayer === "L0") {
+      throw new StudentSummaryValidationError(
+        "FORBIDDEN",
+        "Student insights require an L1 or higher license.",
+      );
+    }
+
+    const snapshotQuery = await scope.currentYearReference
+      .collection(INSIGHT_SNAPSHOTS_COLLECTION)
+      .where("snapshotType", "==", "student")
+      .where("studentId", "==", request.studentId)
+      .orderBy("sourceSubmittedAt", "desc")
+      .orderBy(FieldPath.documentId(), "desc")
+      .limit(request.limit)
+      .get();
+    const snapshots = snapshotQuery.docs.map(toInsightSnapshot).reverse();
+    const metrics = scope.metricsData;
+    const latest = snapshots[snapshots.length - 1];
+    const suggestions = toStringArray(
+      metrics.disciplineImprovementSuggestions ?? metrics.suggestions,
+    ).slice(0, 5);
+
+    return {
+      archivedSummaryOnlyCount: toNonNegativeInteger(
+        metrics.archivedSummaryOnlyCount,
+      ),
+      currentYearSolutionAccessOnly: true,
+      disciplineImprovementSuggestions: suggestions,
+      guessDetectionAlertPercent: toPercent(
+        metrics.guessDetectionAlertPercent ??
+        latest?.guessDetectionPercent,
+      ),
+      latePhaseDropIndicatorPercent: toPercent(
+        metrics.latePhaseDropIndicatorPercent ??
+        latest?.latePhaseDropPercent,
+      ),
+      licenseLayer: request.licenseLayer,
+      mostFrequentBehaviorPattern: mostFrequentPattern(snapshots),
+      phaseAdherenceFeedback: toOptionalString(
+        metrics.phaseAdherenceFeedback,
+      ) ?? "Complete more tests to build a phase-adherence insight.",
+      rushedPatternFrequencyPercent: toPercent(
+        metrics.rushedPatternFrequencyPercent ??
+        latest?.rushedPatternFrequencyPercent,
+      ),
+      skipBurstIndicatorPercent: toPercent(
+        metrics.skipBurstIndicatorPercent ??
+        latest?.skipBurstFrequencyPercent,
+      ),
+      snapshots,
+      topicWeaknessSummary: toTopicWeaknesses(
+        metrics.topicWeaknessSummary ?? metrics.topicWeaknesses,
+      ),
+    };
+  }
+
+  public async getSolutions(
+    request: StudentSolutionsRequest,
+  ): Promise<StudentSolutionsResult> {
+    const scope = await this.loadStudentScope(request);
+    const runSnapshot = await this.buildAssignedRunsQuery(scope, request)
+      .where("status", "==", "completed")
+      .where("testId", "==", request.testId)
+      .limit(2)
+      .get();
+    if (runSnapshot.empty) {
+      throw new StudentSummaryValidationError(
+        "NOT_FOUND",
+        "A completed current-year assigned test was not found.",
+      );
+    }
+    if (runSnapshot.size > 1) {
+      throw new StudentSummaryValidationError(
+        "CONFLICT",
+        "Multiple completed assignments match this solution request.",
+      );
+    }
+
+    const runDocument = runSnapshot.docs[0];
+    const runData = runDocument.data();
+    const releasedAt = toIsoString(
+      runData.solutionReleaseAt ??
+      runData.solutionsReleaseAt ??
+      runData.resultReleaseAt ??
+      runData.endWindow,
+      "solutionReleaseAt",
+    );
+    if (
+      runData.solutionsReleased === false ||
+      Date.parse(releasedAt) > this.now().getTime()
+    ) {
+      throw new StudentSummaryValidationError(
+        "FORBIDDEN",
+        "Solutions have not been released for this completed test.",
+      );
+    }
+
+    const sessionSnapshot = await runDocument.ref
+      .collection(SESSIONS_COLLECTION)
+      .where("studentId", "==", request.studentId)
+      .where("status", "==", "submitted")
+      .limit(2)
+      .get();
+    if (sessionSnapshot.empty) {
+      throw new StudentSummaryValidationError(
+        "NOT_FOUND",
+        "A submitted Student attempt was not found for this test.",
+      );
+    }
+    if (sessionSnapshot.size > 1) {
+      throw new StudentSummaryValidationError(
+        "CONFLICT",
+        "Multiple submitted attempts match this solution request.",
+      );
+    }
+
+    const sessionData = sessionSnapshot.docs[0].data();
+    const templateSnapshot = isRecord(sessionData.templateSnapshot) ?
+      sessionData.templateSnapshot :
+      {};
+    const questionIds = toQuestionIds(
+      runData.questionIds ?? templateSnapshot.questionIds,
+    );
+    const offset = (request.page - 1) * request.pageSize;
+    const selectedQuestionIds = questionIds.slice(
+      offset,
+      offset + request.pageSize,
+    );
+    const questionReferences = selectedQuestionIds.map((questionId) =>
+      this.firestore.collection(INSTITUTES_COLLECTION)
+        .doc(request.instituteId)
+        .collection(QUESTION_BANK_COLLECTION)
+        .doc(questionId));
+    const questionSnapshots = questionReferences.length > 0 ?
+      await this.firestore.getAll(...questionReferences) :
+      [];
+    const answerMap = isRecord(sessionData.answerMap) ?
+      sessionData.answerMap :
+      {};
+    const items: StudentSolutionItem[] = questionSnapshots.map(
+      (questionSnapshot, index) => {
+        if (!questionSnapshot.exists) {
+          throw new StudentSummaryValidationError(
+            "CONFLICT",
+            "A released solution question snapshot is unavailable.",
+          );
+        }
+        const data = questionSnapshot.data() ?? {};
+        const storedAnswer = answerMap[selectedQuestionIds[index]];
+        const answer = isRecord(storedAnswer) ? storedAnswer : {};
+        return {
+          correctAnswer: toOptionalString(data.correctAnswer) ??
+            "Not available",
+          questionId: selectedQuestionIds[index],
+          questionImageUrl: toOptionalString(data.questionImageUrl) ?? "",
+          simulationLink: toOptionalString(data.simulationLink),
+          solutionImageUrl: toOptionalString(data.solutionImageUrl) ?? "",
+          studentAnswer: toOptionalString(answer.selectedOption) ??
+            "Not answered",
+          tutorialVideoLink: toOptionalString(data.tutorialVideoLink),
+        };
+      },
+    );
+
+    return {
+      hasMore: offset + items.length < questionIds.length,
+      items,
+      page: request.page,
+      pageSize: request.pageSize,
+      releasedAt,
+      runId: runDocument.id,
+      testId: request.testId,
+      total: questionIds.length,
     };
   }
 }

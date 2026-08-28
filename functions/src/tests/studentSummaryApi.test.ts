@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {createStudentDashboardHandler} from "../api/studentDashboard";
+import {createStudentInsightsHandler} from "../api/studentInsights";
+import {createStudentPerformanceHandler} from "../api/studentPerformance";
+import {createStudentSolutionsHandler} from "../api/studentSolutions";
 import {createStudentTestsHandler} from "../api/studentTests";
 import {StudentSummaryValidationError} from "../types/studentSummary";
 import {createMockRequest, createMockResponse} from "./helpers/http";
@@ -104,6 +107,127 @@ test("Student tests normalize bounded status pagination", async () => {
     (response.body as {data: {page: number}}).data.page,
     2,
   );
+});
+
+test("Student analytics and solutions derive all authority from identity", async () => {
+  const performance = createStudentPerformanceHandler({
+    getPerformance: async (request) => {
+      assert.deepEqual(request, {
+        instituteId: "inst_student_summary_api",
+        lastN: 7,
+        licenseLayer: "L1",
+        studentId: "student_summary_api",
+      });
+      return {
+        controlledModeComparison: {
+          baselineLabel: "Earlier Runs",
+          currentLabel: "Recent Controlled Runs",
+          disciplineIndexDeltaPercent: 0,
+          guessRateDeltaPercent: 0,
+          maxTimeViolationDeltaPercent: 0,
+          minTimeViolationDeltaPercent: 0,
+          phaseAdherenceDeltaPercent: 0,
+        },
+        controlledModeImprovementPercent: 0,
+        disciplineIndex: 0,
+        easyNeglectFrequencyPercent: 11,
+        guessProbabilityCluster: "Low",
+        guessProbabilityPercent: 0,
+        hardBiasFrequencyPercent: 7,
+        licenseLayer: "L1",
+        overstayFrequencyPercent: 0,
+        phaseCompliancePercent: 87,
+        timeAllocationBalancePercent: 80,
+        timeline: [],
+        topicPerformanceBreakdown: [],
+      };
+    },
+    verifyIdToken: async () => createStudentToken() as never,
+  });
+  const performanceResponse = createMockResponse();
+  await performance(
+    createMockRequest({
+      headers: {authorization: "Bearer student_performance"},
+      method: "GET",
+      path: "/student/performance",
+      query: {instituteId: "other", lastN: "7", studentId: "other"},
+    }) as never,
+    performanceResponse as never,
+  );
+  assert.equal(performanceResponse.statusCode, 200);
+
+  const insights = createStudentInsightsHandler({
+    getInsights: async (request) => {
+      assert.deepEqual(request, {
+        instituteId: "inst_student_summary_api",
+        licenseLayer: "L1",
+        limit: 4,
+        studentId: "student_summary_api",
+      });
+      return {
+        archivedSummaryOnlyCount: 0,
+        currentYearSolutionAccessOnly: true,
+        disciplineImprovementSuggestions: [],
+        guessDetectionAlertPercent: 0,
+        latePhaseDropIndicatorPercent: 0,
+        licenseLayer: "L1",
+        mostFrequentBehaviorPattern: "No Pattern Yet",
+        phaseAdherenceFeedback: "Complete more tests.",
+        rushedPatternFrequencyPercent: 0,
+        skipBurstIndicatorPercent: 0,
+        snapshots: [],
+        topicWeaknessSummary: [],
+      };
+    },
+    verifyIdToken: async () => createStudentToken() as never,
+  });
+  const insightsResponse = createMockResponse();
+  await insights(
+    createMockRequest({
+      headers: {authorization: "Bearer student_insights"},
+      method: "GET",
+      path: "/student/insights",
+      query: {limit: "4"},
+    }) as never,
+    insightsResponse as never,
+  );
+  assert.equal(insightsResponse.statusCode, 200);
+
+  const solutions = createStudentSolutionsHandler({
+    getSolutions: async (request) => {
+      assert.deepEqual(request, {
+        instituteId: "inst_student_summary_api",
+        licenseLayer: "L1",
+        page: 2,
+        pageSize: 5,
+        studentId: "student_summary_api",
+        testId: "test-owned",
+      });
+      return {
+        hasMore: false,
+        items: [],
+        page: 2,
+        pageSize: 5,
+        releasedAt: "2026-08-20T00:00:00.000Z",
+        runId: "run-owned",
+        testId: "test-owned",
+        total: 5,
+      };
+    },
+    verifyIdToken: async () => createStudentToken() as never,
+  });
+  const solutionsResponse = createMockResponse();
+  await solutions(
+    createMockRequest({
+      headers: {authorization: "Bearer student_solutions"},
+      method: "GET",
+      params: {testId: "test-owned"},
+      path: "/student/tests/test-owned/solutions",
+      query: {page: "2", pageSize: "5", studentId: "other"},
+    }) as never,
+    solutionsResponse as never,
+  );
+  assert.equal(solutionsResponse.statusCode, 200);
 });
 
 test("Student summary routes reject non-Student roles and missing tenants", async () => {
