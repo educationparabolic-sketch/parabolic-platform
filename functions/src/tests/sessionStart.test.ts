@@ -18,6 +18,15 @@ const firestore = getFirestore();
 const createHashForTest = (value: string): string =>
   createHash("sha256").update(value).digest("hex");
 
+const encodeBase64Url = (value: string): string =>
+  Buffer.from(value).toString("base64url");
+
+const buildCustomLaunchToken = (
+  claims: Record<string, unknown>,
+  expiresAtSeconds = Math.floor(Date.now() / 1000) + 3600,
+): string => `${encodeBase64Url(JSON.stringify({alg: "none", typ: "JWT"}))}.` +
+  `${encodeBase64Url(JSON.stringify({claims, exp: expiresAtSeconds}))}.local`;
+
 const createSessionServiceForTests = (): SessionService =>
   new SessionService(async (uid, claims) =>
     `signed-session-token:${uid}:${claims.sessionId}`);
@@ -271,6 +280,7 @@ test(
     assert.deepEqual(sessionData?.launchCredentialHashes, [
       createHashForTest(result.launchCredential),
     ]);
+    assert.deepEqual(sessionData?.consumedLaunchCredentialHashes, []);
     assert.ok(sessionData?.createdAt instanceof Timestamp);
     assert.ok(sessionData?.updatedAt instanceof Timestamp);
 
@@ -288,6 +298,106 @@ test(
     await deleteDocumentIfPresent(licensePath);
     await deleteDocumentIfPresent(studentPath);
     await deleteDocumentIfPresent(institutePath);
+  },
+);
+
+test(
+  "validateSessionEntry consumes once and rejects replay, expiry, and wrong session",
+  async () => {
+    const sessionService = createSessionServiceForTests();
+    const context = {
+      instituteId: "inst_bwm_018_entry",
+      launchNonce: "nonce_bwm_018_entry",
+      licenseLayer: "L1" as const,
+      runId: "run_bwm_018_entry",
+      sessionId: "session_bwm_018_entry",
+      studentId: "student_bwm_018_entry",
+      studentUid: "uid_bwm_018_entry",
+      yearId: "2026",
+    };
+    const sessionPath =
+      `institutes/${context.instituteId}/academicYears/${context.yearId}/` +
+      `runs/${context.runId}/sessions/${context.sessionId}`;
+    const claims = {
+      instituteId: context.instituteId,
+      launchNonce: context.launchNonce,
+      licenseLayer: context.licenseLayer,
+      role: "student",
+      runId: context.runId,
+      sessionId: context.sessionId,
+      studentId: context.studentId,
+      yearId: context.yearId,
+    };
+    const launchCredential = buildCustomLaunchToken(claims);
+    const launchCredentialHash = createHashForTest(launchCredential);
+    await firestore.doc(sessionPath).set({
+      consumedLaunchCredentialHashes: [],
+      instituteId: context.instituteId,
+      launchCredentialHashes: [launchCredentialHash],
+      licenseSnapshot: {currentLayer: "L1"},
+      mode: "Operational",
+      phaseConfigSnapshot: {phase1Percent: 100},
+      runId: context.runId,
+      sessionId: context.sessionId,
+      sessionTokenHash: launchCredentialHash,
+      status: "created",
+      studentId: context.studentId,
+      studentUid: context.studentUid,
+      templateSnapshot: {templateVersion: "1"},
+      timingProfileSnapshot: timingProfileSnapshotFixture,
+      yearId: context.yearId,
+    });
+
+    try {
+      const result = await sessionService.validateSessionEntry({
+        ...context,
+        sessionToken: launchCredential,
+      });
+      assert.equal(result.sessionId, context.sessionId);
+      const consumedSnapshot = await firestore.doc(sessionPath).get();
+      assert.deepEqual(consumedSnapshot.data()?.launchCredentialHashes, []);
+      assert.deepEqual(
+        consumedSnapshot.data()?.consumedLaunchCredentialHashes,
+        [launchCredentialHash],
+      );
+      assert.equal(consumedSnapshot.data()?.sessionTokenHash, undefined);
+
+      await assert.rejects(
+        sessionService.validateSessionEntry({
+          ...context,
+          sessionToken: launchCredential,
+        }),
+        (error: unknown) =>
+          error instanceof SessionStartValidationError &&
+          error.code === "UNAUTHORIZED" &&
+          error.message === "Launch credential has already been consumed.",
+      );
+      await assert.rejects(
+        sessionService.validateSessionEntry({
+          ...context,
+          sessionId: "session_bwm_018_wrong",
+          sessionToken: launchCredential,
+        }),
+        (error: unknown) =>
+          error instanceof SessionStartValidationError &&
+          error.code === "UNAUTHORIZED",
+      );
+      await assert.rejects(
+        sessionService.validateSessionEntry({
+          ...context,
+          sessionToken: buildCustomLaunchToken(
+            claims,
+            Math.floor(Date.now() / 1000) - 1,
+          ),
+        }),
+        (error: unknown) =>
+          error instanceof SessionStartValidationError &&
+          error.code === "UNAUTHORIZED" &&
+          error.message === "Session token has expired.",
+      );
+    } finally {
+      await deleteDocumentIfPresent(sessionPath);
+    }
   },
 );
 

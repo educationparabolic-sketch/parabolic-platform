@@ -1,8 +1,8 @@
 # Frontend API Call Inventory
 
-Status: current-contract inventory, canonical-route assignment, and compatibility classification through `BWM-017`
+Status: current-contract inventory, canonical-route assignment, and compatibility classification through `BWM-018`
 
-Inventory date: 2026-08-28
+Inventory date: 2026-08-29
 
 Scope: executable HTTP calls in `apps/admin/src`, `apps/student/src`, `apps/exam/src`, and `apps/vendor/src`
 
@@ -14,7 +14,7 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 
 - All calls use `shared/services/apiClient.ts` through `getPortalApiClient`.
 - Admin, Student, and Vendor calls use the API client's automatic Firebase ID-token bearer header. The shared client uses same-origin `/api/v1` for every supported portal topology. A non-empty `VITE_API_BASE_URL` remains a developer/diagnostic override but is not an approved release topology without an explicit CORS policy.
-- Exam-runtime calls deliberately set `skipAuth: true` and put the session token in the bearer header themselves.
+- Exam runtime exchanges the launch custom token through Firebase Auth, then all live Exam API calls use the shared client's automatic Firebase ID-token bearer. Only EXM-01 also sends the raw launch credential in its body for atomic one-time consumption.
 - The `apiV1` gateway dispatches canonical routes to the existing HTTP handlers, and every Hosting target routes `/api/v1/**` to that gateway before its SPA fallback.
 - `Auth`, `role`, `tenant`, and `license` below describe both the frontend credential and the middleware on the current handler. “None (missing)” means no backend enforcement exists for that frontend contract.
 
@@ -33,7 +33,7 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 - `implemented`: a current Functions handler/export exists and its method, credential model, request, and response as consumed by the frontend are compatible. This does not imply that the pending gateway or Hosting rewrite exists.
 - `incompatible`: a handler/export exists, but at least one current frontend-handler contract mismatch prevents correct use or produces materially incorrect data.
 - `missing`: no current Functions handler/export implements the frontend contract.
-- `intentionally retired`: explicit product or architecture evidence says the contract must not be served. No inventoried route currently meets this definition.
+- `intentionally retired`: explicit product or architecture evidence says the contract must not be served. The removed EXM-03 custom refresh call is retained as an explicit retired route key because Firebase Auth SDK refresh is authoritative.
 - Gateway and Hosting reachability are excluded from per-route classification because they are common dependencies owned by BWM-003 and BWM-004.
 
 ## Canonical route assignments and status — 35 contracts
@@ -69,14 +69,14 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 | STU-04 | `GET` | `/student/insights` | `/api/v1/student/insights` | `implemented` | Strict shared insights DTO requires L1+, bounds Student-owned current-year snapshots, and preserves truthful empty states. |
 | STU-05 | `GET` | `/student/tests/{testId}/solutions` | `/api/v1/student/tests/{testId}/solutions` | `implemented` | Strict paginated solution DTO requires a current-year assigned/licensed completed run, reached release time, and exactly one submitted session owned by the identity Student. |
 | STU-06 | `POST` | `/exam/start` | `/api/v1/exam/start` | `implemented` | Shared request sends explicit `start|resume` intent plus run ID only; handler derives tenant, Student, UID, current year, and license from verified authority, converges retries on one session, and returns a strictly adapted absolute Exam launch result. |
-| EXM-01 | `POST` | `/exam/session/{sessionId}/entry` | `/api/v1/exam/session/{sessionId}/entry` | `implemented` | Path/session-token validation request and the consumed entry response fields under `data` align. |
-| EXM-02 | `POST` | `/exam/session/{sessionId}/answers` | `/api/v1/exam/session/{sessionId}/answers` | `incompatible` | Runtime sends a session-token bearer with Firebase auth skipped; handler requires a Firebase ID token and student identity. Body and response fields otherwise align. |
-| EXM-03 | `POST` | `/exam/session/{sessionId}/token/refresh` | `/api/v1/exam/session/{sessionId}/token/refresh` | `missing` | No current handler/export implements token refresh. |
-| EXM-04 | `POST` | `/exam/session/{sessionId}/submit` | `/api/v1/exam/session/{sessionId}/submit` | `incompatible` | Runtime sends a session-token bearer with Firebase auth skipped while the handler requires Firebase ID auth; the response also omits the frontend's optional status, submitted timestamp, and idempotency indicator. |
+| EXM-01 | `POST` | `/exam/session/{sessionId}/entry` | `/api/v1/exam/session/{sessionId}/entry` | `implemented` | Runtime exchanges the nested-claim launch credential through Firebase Auth, sends the resulting ID token automatically, and supplies the raw credential only in the body; the handler verifies exact session identity and consumes the issued hash atomically once. |
+| EXM-02 | `POST` | `/exam/session/{sessionId}/answers` | `/api/v1/exam/session/{sessionId}/answers` | `implemented` | Runtime uses the Firebase-authenticated shared client; handler requires Student identity and exact institute/year/run/session/Student claim agreement before persisting. |
+| EXM-03 | `POST` | Retired (no frontend call) | `/api/v1/exam/session/{sessionId}/token/refresh` | `intentionally retired` | Firebase Auth SDK refreshes the current Exam-origin ID token; the nonexistent custom refresh request and credential fields were removed. |
+| EXM-04 | `POST` | `/exam/session/{sessionId}/submit` | `/api/v1/exam/session/{sessionId}/submit` | `implemented` | Runtime uses the Firebase-authenticated shared client; handler requires Student identity and exact institute/year/run/session/Student claim agreement, and the existing strict submit adapter accepts the authoritative metrics response. |
 | VEN-01 | `POST` | `/vendor/calibration/simulate` | `/api/v1/vendor/calibration/simulate` | `incompatible` | Frontend sends `strategyProfileParameters`; handler requires `weights`, so the simulation request fails validation/service normalization. |
 | VEN-02 | `POST` | `/vendor/calibration/push` | `/api/v1/vendor/calibration/push` | `implemented` | Vendor auth, target/version request, and consumed deployment response align. |
 
-Classification totals: `implemented` 29, `incompatible` 5, `missing` 1, `intentionally retired` 0.
+Classification totals: `implemented` 31, `incompatible` 3, `missing` 0, `intentionally retired` 1.
 
 ## Admin portal — 23 contracts
 
@@ -121,10 +121,10 @@ Classification totals: `implemented` 29, `incompatible` 5, `missing` 1, `intenti
 
 | ID | Method and current path | Frontend request | Frontend response | Auth / role / tenant / license | Current Functions handler | Frontend source |
 | --- | --- | --- | --- | --- | --- | --- |
-| EXM-01 | `POST /exam/session/{sessionId}/entry` | `{ token }` | `ExamSessionEntryResponse` | Session token in body and bearer; handler validates session/path claims rather than Firebase identity; session claims carry student and tenant scope; no license middleware | `examSessionEntry` (`api/examSessionEntry.ts`) | `apps/exam/src/ExamRuntimeApp.tsx` |
-| EXM-02 | `POST /exam/session/{sessionId}/answers` | `ExamAnswerBatchRequestBody` with tenant/run/year, timing, answers, and optional adaptive phase | `ExamAnswerBatchResponse` | Frontend sends session-token bearer; handler currently requires Firebase ID, `student`, and matching body tenant; no license middleware | `examSessionAnswers` (`api/examSessionAnswers.ts`); credential model differs | `apps/exam/src/ExamRuntimeApp.tsx` |
-| EXM-03 | `POST /exam/session/{sessionId}/token/refresh` | `{ instituteId, refreshNonce, runId, sessionId, yearId }` | `SessionTokenRefreshResponse` | Frontend sends session-token bearer; intended session-bound student and tenant; none server-side (missing) | Missing | `apps/exam/src/ExamRuntimeApp.tsx` |
-| EXM-04 | `POST /exam/session/{sessionId}/submit` | `ExamSubmitRequestBody` with tenant/run/year, reason, unanswered IDs, and client timestamp | `ExamSubmitResponse` | Frontend sends session-token bearer; handler currently requires Firebase ID, `student`, and matching body tenant; no license middleware | `examSessionSubmit` (`api/examSessionSubmit.ts`); credential model differs | `apps/exam/src/ExamRuntimeApp.tsx` |
+| EXM-01 | `POST /exam/session/{sessionId}/entry` | `{ token: launchCredential }`; bearer is the exchanged/refreshed Firebase ID token | `ExamSessionEntryResponse` | Firebase ID; `student`; exact identity tenant/license plus complete institute/year/run/session/Student/nonce claims; raw credential hash is issued, unconsumed, and atomically consumed once | `examSessionEntry` (`api/examSessionEntry.ts`) plus transactional `SessionService` | `apps/exam/src/ExamRuntimeApp.tsx` |
+| EXM-02 | `POST /exam/session/{sessionId}/answers` | `ExamAnswerBatchRequestBody` with tenant/run/year, timing, answers, and optional adaptive phase | `ExamAnswerBatchResponse` | Firebase ID from shared client; `student`; identity tenant and exact body/route/session claims; no launch credential | `examSessionAnswers` (`api/examSessionAnswers.ts`) | `apps/exam/src/ExamRuntimeApp.tsx` |
+| EXM-03 | Retired `/exam/session/{sessionId}/token/refresh` | None | None | Firebase Auth SDK owns ID-token refresh; no custom refresh route or credential | Intentionally retired; no handler/export | No frontend caller |
+| EXM-04 | `POST /exam/session/{sessionId}/submit` | `ExamSubmitRequestBody` with tenant/run/year, reason, unanswered IDs, and client timestamp | Strictly adapted `ExamSubmitResponse` metrics | Firebase ID from shared client; `student`; identity tenant and exact body/route/session claims; no launch credential | `examSessionSubmit` (`api/examSessionSubmit.ts`) | `apps/exam/src/ExamRuntimeApp.tsx` |
 
 ## Vendor portal — 2 contracts
 
@@ -135,10 +135,10 @@ Classification totals: `implemented` 29, `incompatible` 5, `missing` 1, `intenti
 
 ## Classification summary for the next substeps
 
-- The 29 `implemented` entries are handler-compatible through the common gateway and same-origin Hosting rewrite; each owning flow still requires its task-specific emulator and browser evidence.
-- The 5 `incompatible` entries require contract repair by BWM-018, BWM-023, BWM-030, BWM-031, or BWM-038 before their affected flows can be considered wired.
-- The 1 `missing` entry requires the final Exam credential-exchange decision under BWM-018.
-- No frontend-declared route has evidence supporting intentional retirement.
+- The 31 `implemented` entries are handler-compatible through the common gateway and same-origin Hosting rewrite; each owning flow still requires its task-specific emulator and browser evidence.
+- The 3 `incompatible` entries require contract repair by their remaining owning tasks before those affected flows can be considered wired.
+- No canonical route remains `missing`.
+- EXM-03 is intentionally retired: Firebase Auth SDK refresh replaces the removed custom token-refresh request, and the gateway serves no handler for it.
 
 ## Audit anchors
 

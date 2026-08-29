@@ -30,6 +30,7 @@ const selectedSourceSuites = [
   "cdnMonitoring.test",
   "cursorPagination.test",
   "customClaimSynchronization.test",
+  "examSessionEntryApi.test",
   "examStartApi.test",
   "firestoreIndexes.test",
   "firestoreQueryGovernance.test",

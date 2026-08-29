@@ -147,6 +147,7 @@ test(
     assert.deepEqual(
       (request as {context: {identity: unknown}}).context.identity,
       {
+        examSession: null,
         instituteId: "inst_build_62",
         isSuspended: false,
         isVendor: false,
@@ -169,6 +170,45 @@ test(
     ]);
   },
 );
+
+test("buildIdentityContext normalizes complete exam session claims", () => {
+  const identity = buildIdentityContext({
+    instituteId: "inst_exam_auth",
+    launchNonce: "nonce_exam_auth",
+    licenseLayer: "L1",
+    role: "student",
+    runId: "run_exam_auth",
+    sessionId: "session_exam_auth",
+    studentId: "student_exam_auth",
+    uid: "uid_exam_auth",
+    yearId: "2026",
+  } as never);
+
+  assert.deepEqual(identity.examSession, {
+    launchNonce: "nonce_exam_auth",
+    runId: "run_exam_auth",
+    sessionId: "session_exam_auth",
+    studentId: "student_exam_auth",
+    yearId: "2026",
+  });
+});
+
+test("buildIdentityContext rejects partial exam session claims", () => {
+  assert.throws(
+    () => buildIdentityContext({
+      instituteId: "inst_exam_auth",
+      licenseLayer: "L1",
+      role: "student",
+      sessionId: "session_exam_auth",
+      studentId: "student_exam_auth",
+      uid: "uid_exam_auth",
+    } as never),
+    (error: unknown) =>
+      error instanceof MiddlewareRejectionError &&
+      error.code === "UNAUTHORIZED" &&
+      error.message === "Authentication token has incomplete exam session claims.",
+  );
+});
 
 test(
   "authentication middleware skips invited-student activation for non-student roles",

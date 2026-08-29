@@ -278,7 +278,9 @@ test(
       .filter((key) => !manifestRoutes.has(key))
       .sort();
     const staleManifestEntries = [...manifestRoutes.keys()]
-      .filter((key) => !discoveredRoutes.has(key))
+      .filter((key) =>
+        !discoveredRoutes.has(key) &&
+        manifestRoutes.get(key)?.status !== "intentionally_retired")
       .sort();
 
     assert.deepEqual(
@@ -319,7 +321,7 @@ test("every HTTP Functions export has one manifest disposition", () => {
 
   for (const route of API_ROUTE_MANIFEST) {
     assert.equal(
-      route.status === "missing",
+      route.status === "missing" || route.status === "intentionally_retired",
       route.functionExport === null,
       `${route.id} handler mapping must agree with its status.`,
     );

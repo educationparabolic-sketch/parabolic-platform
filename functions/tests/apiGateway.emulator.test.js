@@ -66,7 +66,7 @@ test(
     const implementedRoutes = API_ROUTE_MANIFEST.filter(
       (route) => route.status === "implemented",
     );
-    assert.equal(implementedRoutes.length, 29);
+    assert.equal(implementedRoutes.length, 31);
 
     for (const route of implementedRoutes) {
       const requestPath = materializePath(route.canonicalPath, route.id);
@@ -113,9 +113,8 @@ test(
       "POST",
       {},
     );
-    assert.equal(exam.status, 400);
-    assert.equal(exam.body.error?.code, "VALIDATION_ERROR");
-    assert.match(exam.body.error?.message ?? "", /token/);
+    assert.equal(exam.status, 401);
+    assert.equal(exam.body.error?.code, "UNAUTHORIZED");
 
     const vendor = await requestGateway(
       "/api/v1/vendor/calibration/push",

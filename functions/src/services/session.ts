@@ -674,9 +674,11 @@ export class SessionService {
       buildDeterministicSessionId(instituteId, yearId, runId, studentId);
     const sessionReference = sessionsCollection.doc(sessionId);
     const sessionPath = sessionReference.path;
+    const launchNonce = randomUUID();
     const launchCredential = await this.signSessionToken(studentUid, {
       instituteId,
-      launchNonce: randomUUID(),
+      launchNonce,
+      licenseLayer,
       role: "student",
       runId,
       sessionId,
@@ -1019,6 +1021,7 @@ export class SessionService {
 
       const initializationRecord = this.buildSessionInitializationRecord({
         calibrationVersion,
+        consumedLaunchCredentialHashes: [],
         instituteId,
         licenseSnapshot,
         launchCredentialHashes: [launchCredentialHash],
@@ -1072,42 +1075,40 @@ export class SessionService {
   }
 
   /**
-   * Validates that an exam runtime entry token matches an existing HOT session.
-   * @param {SessionEntryValidationContext} context Entry token and route id.
+   * Consumes a launch credential and validates its exchanged Firebase identity.
+   * @param {SessionEntryValidationContext} context Credential and ID claims.
    * @return {Promise<SessionEntryValidationResult>} Validated session metadata.
    */
   public async validateSessionEntry(
     context: SessionEntryValidationContext,
   ): Promise<SessionEntryValidationResult> {
-    const routeSessionId = normalizeRequiredString(
-      context.sessionId,
-      "sessionId",
-    );
-    const token = normalizeRequiredString(
-      context.sessionToken,
-      "sessionToken",
-    );
+    const instituteId = normalizeRequiredString(context.instituteId, "instituteId");
+    const launchNonce = normalizeRequiredString(context.launchNonce, "launchNonce");
+    const licenseLayer = normalizeLicenseLayer(context.licenseLayer);
+    const runId = normalizeRequiredString(context.runId, "runId");
+    const routeSessionId = normalizeRequiredString(context.sessionId, "sessionId");
+    const token = normalizeRequiredString(context.sessionToken, "sessionToken");
+    const studentId = normalizeRequiredString(context.studentId, "studentId");
+    const studentUid = normalizeRequiredString(context.studentUid, "studentUid");
+    const yearId = normalizeRequiredString(context.yearId, "yearId");
     const claims = decodeSessionTokenClaims(token);
-    const instituteId = normalizeRequiredString(
-      claims.instituteId,
-      "token.instituteId",
-    );
-    const yearId = normalizeRequiredString(claims.yearId, "token.yearId");
-    const runId = normalizeRequiredString(claims.runId, "token.runId");
-    const tokenSessionId = normalizeRequiredString(
-      claims.sessionId,
-      "token.sessionId",
-    );
-    const studentId = normalizeRequiredString(
-      claims.studentId ?? claims.sub,
-      "token.studentId",
-    );
-
-    if (tokenSessionId !== routeSessionId) {
-      throw new SessionStartValidationError(
-        "UNAUTHORIZED",
-        "Session token does not match the requested session route.",
-      );
+    const expectedClaims: Record<string, string> = {
+      instituteId,
+      launchNonce,
+      licenseLayer,
+      role: "student",
+      runId,
+      sessionId: routeSessionId,
+      studentId,
+      yearId,
+    };
+    for (const [claimName, expectedValue] of Object.entries(expectedClaims)) {
+      if (normalizeRequiredString(claims[claimName], `token.${claimName}`) !== expectedValue) {
+        throw new SessionStartValidationError(
+          "UNAUTHORIZED",
+          "Launch credential does not match the authenticated exam session.",
+        );
+      }
     }
 
     const sessionPath =
@@ -1115,88 +1116,136 @@ export class SessionService {
       `${ACADEMIC_YEARS_COLLECTION}/${yearId}/` +
       `${RUNS_COLLECTION}/${runId}/` +
       `${SESSIONS_COLLECTION}/${routeSessionId}`;
-    const sessionSnapshot = await this.firestore.doc(sessionPath).get();
-    const sessionData = sessionSnapshot.data();
+    const sessionReference = this.firestore.doc(sessionPath);
+    const launchCredentialHash = hashSessionToken(token);
+    let result: SessionEntryValidationResult | null = null;
 
-    if (!sessionSnapshot.exists || !isPlainObject(sessionData)) {
-      throw new SessionStartValidationError(
-        "NOT_FOUND",
-        `Session "${routeSessionId}" does not exist.`,
+    await this.firestore.runTransaction(async (transaction) => {
+      const sessionSnapshot = await transaction.get(sessionReference);
+      const sessionData = sessionSnapshot.data();
+      if (!sessionSnapshot.exists || !isPlainObject(sessionData)) {
+        throw new SessionStartValidationError(
+          "NOT_FOUND",
+          `Session "${routeSessionId}" does not exist.`,
+        );
+      }
+      const status = normalizeSessionStatus(sessionData.status, "session.status");
+      if (!ACTIVE_SESSION_STATUSES.includes(status)) {
+        throw new SessionStartValidationError(
+          "SESSION_LOCKED",
+          "Session is not active for exam runtime entry.",
+        );
+      }
+      const persistedIdentity = {
+        instituteId: normalizeRequiredString(sessionData.instituteId, "session.instituteId"),
+        runId: normalizeRequiredString(sessionData.runId, "session.runId"),
+        sessionId: normalizeRequiredString(sessionData.sessionId, "session.sessionId"),
+        studentId: normalizeRequiredString(sessionData.studentId, "session.studentId"),
+        studentUid: normalizeRequiredString(sessionData.studentUid, "session.studentUid"),
+        yearId: normalizeRequiredString(sessionData.yearId, "session.yearId"),
+      };
+      if (
+        persistedIdentity.instituteId !== instituteId ||
+        persistedIdentity.runId !== runId ||
+        persistedIdentity.sessionId !== routeSessionId ||
+        persistedIdentity.studentId !== studentId ||
+        persistedIdentity.studentUid !== studentUid ||
+        persistedIdentity.yearId !== yearId
+      ) {
+        throw new SessionStartValidationError(
+          "UNAUTHORIZED",
+          "Authenticated exam identity does not own the requested session.",
+        );
+      }
+
+      const storedLaunchCredentialHashes = normalizeLaunchCredentialHashes(
+        sessionData.launchCredentialHashes,
+        sessionData.sessionTokenHash,
       );
-    }
-
-    const status = normalizeSessionStatus(
-      sessionData.status,
-      "session.status",
-    );
-    if (!ACTIVE_SESSION_STATUSES.includes(status)) {
-      throw new SessionStartValidationError(
-        "SESSION_LOCKED",
-        "Session is not active for exam runtime entry.",
+      const consumedLaunchCredentialHashes = normalizeLaunchCredentialHashes(
+        sessionData.consumedLaunchCredentialHashes,
+        undefined,
       );
-    }
+      if (consumedLaunchCredentialHashes.includes(launchCredentialHash)) {
+        throw new SessionStartValidationError(
+          "UNAUTHORIZED",
+          "Launch credential has already been consumed.",
+        );
+      }
+      if (!storedLaunchCredentialHashes.includes(launchCredentialHash)) {
+        throw new SessionStartValidationError(
+          "UNAUTHORIZED",
+          "Launch credential does not match a backend-issued session credential.",
+        );
+      }
 
-    const sessionStudentId = normalizeRequiredString(
-      sessionData.studentId,
-      "session.studentId",
-    );
-    if (sessionStudentId !== studentId) {
+      const mode = normalizeSessionExecutionMode(sessionData.mode, "session.mode");
+      const timingProfileSnapshot = normalizeTimingProfileSnapshot(
+        sessionData.timingProfileSnapshot,
+        "session.timingProfileSnapshot",
+      );
+      const phaseConfigSnapshot = normalizeSnapshotObject(
+        sessionData.phaseConfigSnapshot,
+        "phaseConfigSnapshot",
+      );
+      const licenseSnapshot = normalizeSnapshotObject(
+        sessionData.licenseSnapshot,
+        "licenseSnapshot",
+      );
+      if (licenseSnapshot.currentLayer !== licenseLayer) {
+        throw new SessionStartValidationError(
+          "LICENSE_RESTRICTED",
+          "Authenticated exam license does not match the session snapshot.",
+        );
+      }
+      const templateSnapshot = normalizeSnapshotObject(
+        sessionData.templateSnapshot,
+        "templateSnapshot",
+      );
+      const remainingCredentialHashes = storedLaunchCredentialHashes.filter(
+        (credentialHash) => credentialHash !== launchCredentialHash,
+      );
+      const nextConsumedHashes = Array.from(new Set([
+        ...consumedLaunchCredentialHashes,
+        launchCredentialHash,
+      ])).slice(-MAX_LAUNCH_CREDENTIAL_HASHES);
+      const update: FirebaseFirestore.UpdateData<FirebaseFirestore.DocumentData> = {
+        consumedLaunchCredentialHashes: nextConsumedHashes,
+        launchCredentialConsumedAt: FieldValue.serverTimestamp(),
+        launchCredentialConsumedByUid: studentUid,
+        launchCredentialHashes: remainingCredentialHashes,
+        updatedAt: FieldValue.serverTimestamp(),
+      };
+      if (sessionData.sessionTokenHash === launchCredentialHash) {
+        update.sessionTokenHash = FieldValue.delete();
+      }
+      transaction.update(sessionReference, update);
+
+      result = {
+        instituteId,
+        licenseSnapshot,
+        mode,
+        operationalDataAccessPolicy:
+          dataTierPartitionService.buildExamOperationalDataAccessPolicy(sessionPath),
+        phaseConfigSnapshot,
+        runId,
+        sessionId: routeSessionId,
+        sessionPath,
+        status,
+        studentId,
+        templateSnapshot,
+        timingProfileSnapshot,
+        yearId,
+      };
+    });
+
+    if (!result) {
       throw new SessionStartValidationError(
         "UNAUTHORIZED",
-        "Session token student does not match the session record.",
+        "Exam session entry could not be authorized.",
       );
     }
-
-    const storedLaunchCredentialHashes = normalizeLaunchCredentialHashes(
-      sessionData.launchCredentialHashes,
-      sessionData.sessionTokenHash,
-    );
-    if (!storedLaunchCredentialHashes.includes(hashSessionToken(token))) {
-      throw new SessionStartValidationError(
-        "UNAUTHORIZED",
-        "Launch credential does not match a backend-issued session credential.",
-      );
-    }
-
-    const mode = normalizeSessionExecutionMode(
-      sessionData.mode,
-      "session.mode",
-    );
-    const timingProfileSnapshot = normalizeTimingProfileSnapshot(
-      sessionData.timingProfileSnapshot,
-      "session.timingProfileSnapshot",
-    );
-    const phaseConfigSnapshot = normalizeSnapshotObject(
-      sessionData.phaseConfigSnapshot,
-      "phaseConfigSnapshot",
-    );
-    const licenseSnapshot = normalizeSnapshotObject(
-      sessionData.licenseSnapshot,
-      "licenseSnapshot",
-    );
-    const templateSnapshot = normalizeSnapshotObject(
-      sessionData.templateSnapshot,
-      "templateSnapshot",
-    );
-
-    return {
-      instituteId,
-      licenseSnapshot,
-      mode,
-      operationalDataAccessPolicy:
-        dataTierPartitionService.buildExamOperationalDataAccessPolicy(
-          sessionPath,
-        ),
-      phaseConfigSnapshot,
-      runId,
-      sessionId: routeSessionId,
-      sessionPath,
-      status,
-      studentId,
-      templateSnapshot,
-      timingProfileSnapshot,
-      yearId,
-    };
+    return result;
   }
 
   /**
@@ -1427,6 +1476,8 @@ export class SessionService {
     return {
       answerMap: {},
       calibrationVersion: context.calibrationVersion,
+      consumedLaunchCredentialHashes:
+        context.consumedLaunchCredentialHashes,
       createdAt: FieldValue.serverTimestamp(),
       instituteId: context.instituteId,
       licenseSnapshot: context.licenseSnapshot,

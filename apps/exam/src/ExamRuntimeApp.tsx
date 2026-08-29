@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Route, Routes, useLocation, useParams } from "react-router-dom";
+import { getIdToken, signInWithCustomToken } from "firebase/auth";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { buildQuestionAssetUrl, toCdnAssetUrl } from "../../../shared/services/cdnAssetDelivery";
 import { ApiClientError } from "../../../shared/services/apiClient";
 import { adaptExamSubmitResult } from "../../../shared/services/portalResponseAdapters";
 import { getFrontendEnvironment } from "../../../shared/services/frontendEnvironment";
+import { getFirebaseAuth } from "../../../shared/services/firebaseClient";
 import { getPortalApiClient } from "../../../shared/services/portalIntegration";
 import "./App.css";
 
@@ -59,13 +61,14 @@ interface TokenClaims {
   yearId: string | null;
   runId: string | null;
   sessionId: string | null;
-  refreshNonce: string | null;
+  launchNonce: string | null;
 }
 
 type EntryValidationReason =
   | "missing_token"
   | "expired_token"
   | "malformed_token"
+  | "wrong_session"
   | "iframe_blocked"
   | "server_validation_failed"
   | null;
@@ -227,10 +230,6 @@ interface ExamAnswerBatchResponse {
   persistedQuestionIds?: string[];
 }
 
-interface SessionTokenRefreshResponse {
-  token?: string;
-}
-
 interface ExamSessionEntryResponse {
   allowed?: boolean;
   mode?: ExecutionMode;
@@ -285,7 +284,6 @@ const STUDENT_PORTAL_FALLBACK_PATH = "/student/my-tests";
 const ANSWER_BATCH_INTERVAL_MS = 5_000;
 const ANSWER_BATCH_MAX_SIZE = 10;
 const HEARTBEAT_INTERVAL_MS = 20_000;
-const SESSION_TOKEN_REFRESH_WINDOW_SEC = 120;
 const RECOVERY_DB_NAME = "parabolic-exam-runtime";
 const RECOVERY_STORE_NAME = "sessionRecovery";
 const RECOVERY_SAVE_INTERVAL_MS = 3_000;
@@ -434,25 +432,30 @@ function parseTokenClaims(token: string): TokenClaims | null {
 
   try {
     const payload = JSON.parse(decodeBase64Url(tokenParts[1] ?? "")) as Record<string, unknown>;
-    const instituteId = typeof payload.instituteId === "string" ? payload.instituteId.trim() : "";
-    const yearId = typeof payload.yearId === "string" ? payload.yearId.trim() : "";
-    const runId = typeof payload.runId === "string" ? payload.runId.trim() : "";
-    const sessionId = typeof payload.sessionId === "string" ? payload.sessionId.trim() : "";
-    const refreshNonce = typeof payload.refreshNonce === "string" ? payload.refreshNonce.trim() : "";
+    const nestedClaims = payload.claims;
+    const claims = nestedClaims && typeof nestedClaims === "object" && !Array.isArray(nestedClaims) ?
+      nestedClaims as Record<string, unknown> :
+      payload;
+    const instituteId = typeof claims.instituteId === "string" ? claims.instituteId.trim() : "";
+    const yearId = typeof claims.yearId === "string" ? claims.yearId.trim() : "";
+    const runId = typeof claims.runId === "string" ? claims.runId.trim() : "";
+    const sessionId = typeof claims.sessionId === "string" ? claims.sessionId.trim() : "";
+    const launchNonce = typeof claims.launchNonce === "string" ? claims.launchNonce.trim() : "";
+    const subject = claims.studentId ?? payload.sub ?? payload.uid;
 
     return {
-      sub: typeof payload.sub === "string" && payload.sub.trim().length > 0 ? payload.sub.trim() : null,
+      sub: typeof subject === "string" && subject.trim().length > 0 ? subject.trim() : null,
       exp: typeof payload.exp === "number" && Number.isFinite(payload.exp) ? payload.exp : null,
       mode:
-        parseExecutionMode(payload.mode) ??
-        parseExecutionMode(payload.executionMode) ??
-        parseExecutionMode(payload.licenseLayer) ??
+        parseExecutionMode(claims.mode) ??
+        parseExecutionMode(claims.executionMode) ??
+        parseExecutionMode(claims.licenseLayer) ??
         "Operational",
       instituteId: instituteId.length > 0 ? instituteId : null,
       yearId: yearId.length > 0 ? yearId : null,
       runId: runId.length > 0 ? runId : null,
       sessionId: sessionId.length > 0 ? sessionId : null,
-      refreshNonce: refreshNonce.length > 0 ? refreshNonce : null,
+      launchNonce: launchNonce.length > 0 ? launchNonce : null,
     };
   } catch {
     return null;
@@ -474,7 +477,7 @@ function buildDevMockTokenClaims(sessionId: string, modeOverride: string | null)
     yearId: "year-dev-mock",
     runId: "run-dev-mock",
     sessionId: sessionId || "dev-mock-session",
-    refreshNonce: "dev-mock-refresh",
+    launchNonce: "dev-mock-launch",
   };
 }
 
@@ -495,7 +498,7 @@ function validateSessionEntry(
         yearId: null,
         runId: null,
         sessionId: null,
-        refreshNonce: null,
+        launchNonce: null,
       },
     };
   }
@@ -520,7 +523,7 @@ function validateSessionEntry(
         yearId: null,
         runId: null,
         sessionId: null,
-        refreshNonce: null,
+        launchNonce: null,
       },
     };
   }
@@ -538,7 +541,7 @@ function validateSessionEntry(
         yearId: null,
         runId: null,
         sessionId: null,
-        refreshNonce: null,
+        launchNonce: null,
       },
     };
   }
@@ -551,28 +554,19 @@ function validateSessionEntry(
     };
   }
 
+  if (!claims.sessionId || claims.sessionId !== sessionId) {
+    return {
+      allowed: false,
+      reason: "wrong_session",
+      claims,
+    };
+  }
+
   return {
     allowed: true,
     reason: null,
     claims,
   };
-}
-
-function toEpochSeconds(value: number): number {
-  return Math.floor(value / 1000);
-}
-
-function parseSessionRefreshToken(responseBody: SessionTokenRefreshResponse): string | null {
-  if (!responseBody || typeof responseBody !== "object") {
-    return null;
-  }
-
-  const refreshedToken = responseBody.token;
-  if (typeof refreshedToken !== "string" || refreshedToken.trim().length === 0) {
-    return null;
-  }
-
-  return refreshedToken.trim();
 }
 
 async function openRecoveryDb(): Promise<IDBDatabase | null> {
@@ -1366,17 +1360,17 @@ function ExamSessionPage() {
   const location = useLocation();
   const tokenFromQuery = useMemo(() => new URLSearchParams(location.search).get("token"), [location.search]);
   const modeFromQuery = useMemo(() => new URLSearchParams(location.search).get("mode"), [location.search]);
-  const [sessionToken, setSessionToken] = useState<string | null>(() => tokenFromQuery);
+  const [launchCredential] = useState<string | null>(() => tokenFromQuery);
   const devMockEntryEnabled = useMemo(() => isExamDevMockEntryEnabled(), []);
-  const devMockSessionActive = devMockEntryEnabled && sessionToken?.trim() === DEV_MOCK_SESSION_TOKEN;
-  const entryValidation = useMemo(
-    () => validateSessionEntry(sessionToken, sessionId, modeFromQuery),
-    [modeFromQuery, sessionId, sessionToken],
+  const devMockSessionActive = devMockEntryEnabled && launchCredential?.trim() === DEV_MOCK_SESSION_TOKEN;
+  const [entryValidation, setEntryValidation] = useState<EntryValidationResult>(
+    () => validateSessionEntry(launchCredential, sessionId, modeFromQuery),
   );
   const modeInstruction = MODE_INSTRUCTIONS[entryValidation.claims.mode];
   const candidateName = entryValidation.claims.sub ?? "Student Candidate";
   const examApiClient = useMemo(() => getPortalApiClient("exam"), []);
   const scheduleAnchorMsRef = useRef(Date.now());
+  const credentialExchangeStartedRef = useRef(false);
 
   const sessionSnapshot = useMemo(
     () => buildSessionSnapshot(sessionId || "runtime-session", entryValidation.claims.mode),
@@ -1428,7 +1422,6 @@ function ExamSessionPage() {
   const [syncState, setSyncState] = useState<SyncState>("idle");
   const [, setSyncMessage] = useState("No pending answer updates.");
   const [, setLastHeartbeatAtIso] = useState<string | null>(null);
-  const [, setSessionTokenRefreshAtIso] = useState<string | null>(null);
   const [recoveryApplied, setRecoveryApplied] = useState(false);
   const [submitDialogOpen, setSubmitDialogOpen] = useState(false);
   const [submitInFlight, setSubmitInFlight] = useState(false);
@@ -1467,7 +1460,6 @@ function ExamSessionPage() {
   const phaseVisibilityEnforced = isFocusedMode || isHardMode;
   const questionTimingEnforced = isHardMode;
   const isSubmitted = sessionLifecycleState === "submitted";
-  const tokenExpiryEpochSec = entryValidation.claims.exp;
   const instituteId = entryValidation.claims.instituteId ?? "inst-build-135";
   const yearId = entryValidation.claims.yearId ?? "year-build-135";
   const runId = entryValidation.claims.runId ?? "run-build-135";
@@ -1491,17 +1483,31 @@ function ExamSessionPage() {
     [responseStateByQuestionId, sessionSnapshot.questions, visitedQuestionIds],
   );
 
-  useEffect(() => {
-    setSessionToken(tokenFromQuery);
+  useLayoutEffect(() => {
+    if (!tokenFromQuery) {
+      return;
+    }
+    const sanitizedUrl = new URL(window.location.href);
+    sanitizedUrl.searchParams.delete("token");
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${sanitizedUrl.pathname}${sanitizedUrl.search}${sanitizedUrl.hash}`,
+    );
   }, [tokenFromQuery]);
 
   useEffect(() => {
-    if (!entryValidation.allowed || !sessionToken) {
+    if (credentialExchangeStartedRef.current) {
+      return;
+    }
+    credentialExchangeStartedRef.current = true;
+
+    if (!entryValidation.allowed || !launchCredential) {
       setServerEntryValidationStatus("invalid");
       return;
     }
 
-    if (devMockEntryEnabled && sessionToken.trim() === DEV_MOCK_SESSION_TOKEN) {
+    if (devMockEntryEnabled && launchCredential.trim() === DEV_MOCK_SESSION_TOKEN) {
       // TODO(EXP): remove this dev-only mock entry after exam P0/P1/P2 completion.
       setServerEntryValidationStatus("valid");
       return;
@@ -1511,22 +1517,32 @@ function ExamSessionPage() {
     const endpointPath = `/exam/session/${encodeURIComponent(sessionId)}/entry`;
 
     setServerEntryValidationStatus("pending");
-    void examApiClient
-      .post<ExamSessionEntryResponse, { token: string }>(endpointPath, {
-        body: {
-          token: sessionToken,
-        },
-        headers: {
-          Authorization: `Bearer ${sessionToken}`,
-        },
-        signal: controller.signal,
-        skipAuth: true,
+    void signInWithCustomToken(getFirebaseAuth(), launchCredential)
+      .then(async (credential) => {
+        const idToken = await getIdToken(credential.user, true);
+        const authenticatedValidation = validateSessionEntry(
+          idToken,
+          sessionId,
+          null,
+        );
+        if (!authenticatedValidation.allowed) {
+          throw new Error("Firebase ID token is not bound to this exam session.");
+        }
+        const responseBody = await examApiClient.post<ExamSessionEntryResponse, {token: string}>(
+          endpointPath,
+          {
+            body: {token: launchCredential},
+            signal: controller.signal,
+          },
+        );
+        return {authenticatedValidation, responseBody};
       })
-      .then((responseBody) => {
+      .then(({authenticatedValidation, responseBody}) => {
         const serverAllowed =
           responseBody.allowed === true &&
           responseBody.sessionId === effectiveSessionId;
 
+        setEntryValidation(authenticatedValidation);
         setServerEntryValidationStatus(serverAllowed ? "valid" : "invalid");
       })
       .catch((error) => {
@@ -1543,8 +1559,8 @@ function ExamSessionPage() {
     effectiveSessionId,
     entryValidation.allowed,
     examApiClient,
+    launchCredential,
     sessionId,
-    sessionToken,
   ]);
 
   useEffect(() => {
@@ -1671,7 +1687,7 @@ function ExamSessionPage() {
       return false;
     }
 
-    if (!sessionToken || pendingAnswers.length === 0) {
+    if (serverEntryValidationStatus !== "valid" || pendingAnswers.length === 0) {
       if (reason === "heartbeat") {
         setLastHeartbeatAtIso(new Date().toISOString());
       }
@@ -1707,10 +1723,6 @@ function ExamSessionPage() {
         endpointPath,
         {
           body: requestBody,
-          headers: {
-            Authorization: `Bearer ${sessionToken}`,
-          },
-          skipAuth: true,
         },
       );
       const persistedQuestionIds = responseBody.persistedQuestionIds ?? answersToPersist.map((answer) => answer.questionId);
@@ -1762,7 +1774,7 @@ function ExamSessionPage() {
     lastAnswerWriteAtMs,
     pendingAnswers,
     runId,
-    sessionToken,
+    serverEntryValidationStatus,
     yearId,
   ]);
 
@@ -1798,72 +1810,6 @@ function ExamSessionPage() {
 
     return () => window.clearInterval(heartbeatInterval);
   }, [flushAnswerBatch, instructionConfirmed, isSubmitted]);
-
-  useEffect(() => {
-    if (!instructionConfirmed || !sessionToken || !tokenExpiryEpochSec || isSubmitted) {
-      return;
-    }
-
-    const refreshCheckInterval = window.setInterval(() => {
-      const secondsUntilExpiry = tokenExpiryEpochSec - toEpochSeconds(Date.now());
-      if (secondsUntilExpiry > SESSION_TOKEN_REFRESH_WINDOW_SEC) {
-        return;
-      }
-
-      const refreshEndpointPath = `/exam/session/${encodeURIComponent(effectiveSessionId)}/token/refresh`;
-      void examApiClient
-        .post<SessionTokenRefreshResponse, {
-          instituteId: string;
-          refreshNonce: string | null;
-          runId: string;
-          sessionId: string;
-          yearId: string;
-        }>(refreshEndpointPath, {
-          body: {
-            instituteId,
-            refreshNonce: entryValidation.claims.refreshNonce,
-            runId,
-            sessionId: effectiveSessionId,
-            yearId,
-          },
-          headers: {
-            Authorization: `Bearer ${sessionToken}`,
-          },
-          skipAuth: true,
-        })
-        .then((responseBody) => {
-          const refreshedToken = parseSessionRefreshToken(responseBody);
-          if (!refreshedToken) {
-            throw new Error("Token refresh response was missing a token.");
-          }
-
-          setSessionToken(refreshedToken);
-          setSessionTokenRefreshAtIso(new Date().toISOString());
-          setSyncMessage("Session token refreshed.");
-        })
-        .catch((error) => {
-          setSyncState("error");
-          if (error instanceof ApiClientError) {
-            setSyncMessage(`Token refresh failed with status ${error.status}`);
-            return;
-          }
-          setSyncMessage(error instanceof Error ? error.message : "Session token refresh failed.");
-        });
-    }, 30_000);
-
-    return () => window.clearInterval(refreshCheckInterval);
-  }, [
-    examApiClient,
-    effectiveSessionId,
-    entryValidation.claims.refreshNonce,
-    instituteId,
-    instructionConfirmed,
-    isSubmitted,
-    runId,
-    sessionToken,
-    tokenExpiryEpochSec,
-    yearId,
-  ]);
 
   useEffect(() => {
     if (!instructionConfirmed || sessionLifecycleState === "submitted" || sessionLifecycleState === "terminated") {
@@ -1977,8 +1923,8 @@ function ExamSessionPage() {
   }, [effectiveSessionId, isSubmitted]);
 
   const submitSession = useCallback(async (reason: SubmissionReason, unansweredIds: string[]): Promise<void> => {
-    if (!entryValidation.allowed || !sessionToken) {
-      throw new Error("Missing valid session token for submission.");
+    if (!entryValidation.allowed || serverEntryValidationStatus !== "valid") {
+      throw new Error("Missing valid Firebase exam identity for submission.");
     }
 
     setSubmitInFlight(true);
@@ -2005,10 +1951,6 @@ function ExamSessionPage() {
           endpointPath,
           {
             body: requestBody,
-            headers: {
-              Authorization: `Bearer ${sessionToken}`,
-            },
-            skipAuth: true,
           },
         ),
       );
@@ -2034,7 +1976,7 @@ function ExamSessionPage() {
     flushAnswerBatch,
     instituteId,
     runId,
-    sessionToken,
+    serverEntryValidationStatus,
     yearId,
   ]);
 

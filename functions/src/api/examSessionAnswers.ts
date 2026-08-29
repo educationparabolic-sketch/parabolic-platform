@@ -181,6 +181,7 @@ export const createExamSessionAnswersHandler = (
       },
       message: "Session answers persisted.",
       requestId,
+      success: true,
       timestamp: new Date().toISOString(),
     });
   },
@@ -217,16 +218,33 @@ export const createExamSessionAnswersHandler = (
           "millisecondsSinceLastWrite",
         );
         const sessionId = resolveSessionIdFromRequest(request);
+        const identity = request.context.identity;
+        const examSession = identity?.examSession;
+        if (
+          !identity?.instituteId ||
+          !identity.studentId ||
+          !examSession ||
+          identity.instituteId !== instituteId ||
+          examSession.sessionId !== sessionId ||
+          examSession.studentId !== identity.studentId ||
+          examSession.runId !== runId ||
+          examSession.yearId !== yearId
+        ) {
+          throw new SessionStartValidationError(
+            "UNAUTHORIZED",
+            "Firebase identity is not authorized for this exam session.",
+          );
+        }
 
         setRequestData(request, {
           adaptivePhaseSnapshot: body.adaptivePhaseSnapshot,
           answers: body.answers,
-          instituteId: request.context.identity?.instituteId ?? instituteId,
+          instituteId: identity.instituteId,
           millisecondsSinceLastWrite,
-          runId,
+          runId: examSession.runId,
           sessionId,
-          studentId: request.context.identity?.studentId,
-          yearId,
+          studentId: identity.studentId,
+          yearId: examSession.yearId,
         });
       },
     }),

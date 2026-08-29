@@ -42,6 +42,7 @@ export interface SessionStartContext {
 export interface SessionTokenClaims {
   instituteId: string;
   launchNonce: string;
+  licenseLayer: "L0" | "L1" | "L2" | "L3";
   role: "student";
   runId: string;
   sessionId: string;
@@ -51,6 +52,7 @@ export interface SessionTokenClaims {
 
 export interface SessionDocumentInitializationContext {
   calibrationVersion: string;
+  consumedLaunchCredentialHashes: string[];
   instituteId: string;
   licenseSnapshot: Record<string, unknown>;
   launchCredentialHashes: string[];
@@ -112,6 +114,7 @@ export type SessionQuestionTimeMap = Record<string, SessionQuestionTimeRecord>;
 export interface SessionDocumentInitializationRecord {
   answerMap: Record<string, unknown>;
   calibrationVersion: string;
+  consumedLaunchCredentialHashes: string[];
   createdAt: FirebaseFirestore.FieldValue;
   instituteId: string;
   licenseSnapshot: Record<string, unknown>;
@@ -149,8 +152,15 @@ export interface SessionStartResult {
 }
 
 export interface SessionEntryValidationContext {
+  instituteId: string;
+  launchNonce: string;
+  licenseLayer: "L0" | "L1" | "L2" | "L3";
+  runId: string;
   sessionId: string;
   sessionToken: string;
+  studentId: string;
+  studentUid: string;
+  yearId: string;
 }
 
 export interface SessionEntryValidationResult {

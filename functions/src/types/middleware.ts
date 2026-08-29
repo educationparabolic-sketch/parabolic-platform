@@ -4,6 +4,14 @@ import {StandardApiErrorCode} from "./apiResponse";
 
 export type LicenseLayer = "L0" | "L1" | "L2" | "L3";
 
+export interface MiddlewareExamSessionClaims {
+  launchNonce: string;
+  runId: string;
+  sessionId: string;
+  studentId: string;
+  yearId: string;
+}
+
 export interface MiddlewareIdentityContext {
   uid: string;
   role: string;
@@ -12,6 +20,7 @@ export interface MiddlewareIdentityContext {
   licenseLayer: LicenseLayer | null;
   isVendor: boolean;
   isSuspended: boolean;
+  examSession?: MiddlewareExamSessionClaims | null;
 }
 
 export interface MiddlewareRequestContext {

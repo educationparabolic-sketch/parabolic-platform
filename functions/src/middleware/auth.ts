@@ -1,6 +1,7 @@
 import {DecodedIdToken} from "firebase-admin/auth";
 import {
   Middleware,
+  MiddlewareExamSessionClaims,
   MiddlewareIdentityContext,
   MiddlewareRejectionError,
 } from "../types/middleware";
@@ -56,6 +57,36 @@ const resolveStudentId = (
   uid: string,
 ): string => normalizeNonEmptyString(decodedToken.studentId) ?? uid;
 
+const resolveExamSessionClaims = (
+  decodedToken: Record<string, unknown>,
+): MiddlewareExamSessionClaims | null => {
+  const claims = {
+    launchNonce: normalizeNonEmptyString(decodedToken.launchNonce),
+    runId: normalizeNonEmptyString(decodedToken.runId),
+    sessionId: normalizeNonEmptyString(decodedToken.sessionId),
+    studentId: normalizeNonEmptyString(decodedToken.studentId),
+    yearId: normalizeNonEmptyString(decodedToken.yearId),
+  };
+  const sessionMarkerValues = [
+    claims.launchNonce,
+    claims.runId,
+    claims.sessionId,
+    claims.yearId,
+  ];
+  if (sessionMarkerValues.every((value) => value === null)) {
+    return null;
+  }
+  const values = Object.values(claims);
+  if (values.some((value) => value === null)) {
+    throw new MiddlewareRejectionError(
+      "UNAUTHORIZED",
+      "Authentication token has incomplete exam session claims.",
+    );
+  }
+
+  return claims as MiddlewareExamSessionClaims;
+};
+
 const getBearerToken = (
   authorizationHeader: string | undefined,
 ): string => {
@@ -93,6 +124,7 @@ const buildIdentityContext = (
   }
 
   return {
+    examSession: resolveExamSessionClaims(decodedToken),
     instituteId: resolveInstituteClaim(decodedToken),
     isSuspended: Boolean(decodedToken.isSuspended),
     isVendor: role === "vendor" || Boolean(decodedToken.isVendor),
@@ -162,5 +194,6 @@ export {
   getBearerToken,
   normalizeRole,
   resolveInstituteClaim,
+  resolveExamSessionClaims,
   resolveStudentId,
 };

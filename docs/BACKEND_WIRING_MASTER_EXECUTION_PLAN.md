@@ -15,13 +15,13 @@ program: backend-wiring-and-deployment-readiness
 program_status: IN_PROGRESS
 release_decision: NO_GO
 current_phase: 1
-current_task: BWM-018
-current_substep: BWM-018 — inspect launch credential exchange and authenticated Exam runtime
-last_completed_task: BWM-017
-next_task: BWM-018
+current_task: BWM-019
+current_substep: BWM-019 — inspect runtime snapshot authority and production buildSessionSnapshot usage
+last_completed_task: BWM-018
+next_task: BWM-019
 blocked_tasks: []
 last_updated: 2026-08-29
-last_update_summary: BWM-017 is VERIFIED. STU-06 now accepts only intent plus runId, derives institute/Student/license/current year from server authority, transactionally converges simultaneous starts on one deterministic eligible session, distinguishes created/replayed/resumed dispositions, issues nonce-distinct bounded launch credentials, and returns a strict absolute Exam URL consumed by Student My Tests. Unit, contract, workspace, focused and aggregate emulator, cleanup, and no-mock browser gates passed. BWM-018 is READY for launch-credential exchange/runtime authentication; production remains NO_GO.
+last_update_summary: BWM-018 is VERIFIED. Student launch now exchanges the nested-claim Firebase custom token, removes it from URL/history before entry, atomically consumes the backend-issued credential exactly once, and uses refreshed session-bound Firebase ID tokens through the shared client for entry, answers, and submit. Expiry, replay, wrong-session, claim, identity, tenant, and license mismatches fail closed; the nonexistent custom refresh contract is retired. Unit, contract, real emulator, Chromium Hosting, and full aggregate verification passed. BWM-019 is READY; production remains NO_GO.
 ```
 
 Do not infer progress from old build numbers, UI completion labels, or visual verification artifacts. Only this checkpoint, the task registry, checked substeps, session log, and current repository evidence determine progress for this program.
@@ -269,8 +269,8 @@ The registry is the canonical order. Detailed cards below define scope and accep
 | BWM-015 | P0 | VERIFIED | BWM-003,BWM-006,BWM-008,BWM-014 | Student dashboard and My Tests APIs |
 | BWM-016 | P0 | VERIFIED | BWM-015 | Student solutions, performance, and insights APIs |
 | BWM-017 | P0 | VERIFIED | BWM-014,BWM-015 | Compatible Exam start and resume contracts |
-| BWM-018 | P0 | READY | BWM-009,BWM-017 | Exam launch credential exchange and authenticated runtime |
-| BWM-019 | P0 | PLANNED | BWM-012,BWM-013,BWM-018 | Authoritative sanitized Exam runtime snapshot |
+| BWM-018 | P0 | VERIFIED | BWM-009,BWM-017 | Exam launch credential exchange and authenticated runtime |
+| BWM-019 | P0 | READY | BWM-012,BWM-013,BWM-018 | Authoritative sanitized Exam runtime snapshot |
 | BWM-020 | P0 | PLANNED | BWM-018,BWM-019 | Server-authoritative session lifecycle and deadline |
 | BWM-021 | P0 | PLANNED | BWM-019,BWM-020 | Correct answer DTO, clear semantics, and timing model |
 | BWM-022 | P0 | PLANNED | BWM-021 | Reliable batching, offline recovery, and full drain |
@@ -1650,14 +1650,32 @@ The registry is the canonical order. Detailed cards below define scope and accep
 
 ### BWM-018 — Exam Launch Credential Exchange and Runtime Auth
 
-- **Status:** `READY`
+- **Status:** `VERIFIED`
 - **Purpose:** Resolve Firebase custom-token versus ID-token incompatibility.
 - **Work:** parse nested custom claims correctly; exchange the custom token using Firebase Auth; immediately remove launch credentials from URL/history; use refreshed Firebase ID tokens for entry/answers/submit; remove nonexistent custom refresh endpoint; test expired/replayed/wrong-session launch credentials.
 - **Acceptance:** A real start response authenticates the Exam app, and backend `verifyIdToken` accepts subsequent requests with correct session claims.
+- **Completed substeps:**
+  - [x] Inspect the launch caller/URL, Exam runtime token handling, Firebase/Auth/API clients, entry/answer/submit handlers and services, session credential persistence, canonical contracts, and current test harnesses.
+  - [x] Implement nested launch-claim parsing, immediate URL removal, Firebase custom-token exchange, atomic one-time backend consumption, and session-bound Firebase ID-token authorization for entry/answers/submit.
+  - [x] Remove the nonexistent custom refresh request and rely on Firebase ID-token refresh through the shared authenticated API client.
+  - [x] Add permanent unit/contract and real Auth/Firestore/Functions emulator coverage for valid, expired, replayed, and wrong-session credentials.
+  - [x] Prove the real no-mock Student-start-to-Exam-authenticated-entry browser flow through local Hosting.
+  - [x] Run affected and aggregate verification, reconcile API/inventory/module/schema accounting, and close BWM-018 without beginning the authoritative runtime snapshot.
+- **Implemented files:** `apps/exam/src/ExamRuntimeApp.tsx` now parses the custom token's nested claims, strips the URL credential synchronously, exchanges through Firebase Auth, and routes authenticated entry/answer/submit calls through the shared client without a custom refresh loop. `functions/src/middleware/auth.ts`, `functions/src/types/middleware.ts`, `functions/src/types/sessionStart.ts`, `functions/src/services/session.ts`, and the three Exam session handlers implement complete session-bound claims, raw-credential validation, atomic consumption, and exact request/identity matching. `functions/src/apiRouteManifest.ts` explicitly retires EXM-03. Permanent handler, middleware, service, gateway, manifest, contract, emulator, and Chromium coverage was added or extended, including `functions/src/tests/examSessionEntryApi.test.ts`, `tests/exam-runtime-auth-contract.test.mjs`, `scripts/run-exam-launch-auth-e2e.mjs`, and `tests/e2e/exam-launch-auth.spec.mjs`.
+- **Security/data evidence:** The launch credential remains a short-lived Firebase custom token but is never accepted as bearer authorization or persisted raw. EXM-01 revoke-checks the exchanged Firebase ID token, requires Student role and complete institute/year/run/session/Student/nonce claims, compares those claims with the raw credential and persisted UID/license/session authority, and transactionally moves the credential hash from the bounded valid set to a bounded consumed set. Replay, expiry, unissued credentials, partial claims, route/body mismatch, wrong session, tenant, identity, or license all fail closed. EXM-02/04 accept only refreshed ID tokens with exact session-bound claims.
+- **Verification evidence:** `npm --prefix functions run lint`, `npm --prefix functions run build`, `npm --prefix apps/exam run lint`, and `npm --prefix apps/exam run build` passed, including an Exam production build with 87 modules and Functions TypeScript compilation. `npm --prefix functions run test:ci:non-emulator` passed 47/47 selected files; focused compiled handler/gateway/manifest tests passed, as did `npm run test:exam-runtime-auth-contract`, `npm run test:api-dto-contract`, `npm run test:api-envelope-contract`, `npm run test:frontend-api-routing`, `npm run test:per-origin-firebase-auth`, `npm run test:target-ownership-policy`, and `npm run test:emulator-aggregate-contract`. The focused Firestore `sessionStart.test.js` emulator suite passed 8/8, and the dedicated Auth/Firestore/Functions `examStart.emulator.test.js` suite passed 1/1 while proving accepted entry, replay denial, wrong-session denial, and ID-token-authenticated answer/submit requests. `npm run test:exam-launch-auth:e2e` passed 1/1 in Chromium through Auth, Firestore, Functions, Student Hosting, and Exam Hosting; it proved immediate URL removal, lobby entry, no raw credential in browser storage, distinct Firebase ID bearer use, atomic consumption, and replay rejection. `npm run test:emulators:ci` passed 10 explicit full-service suites with 21 assertions, 2/2 Hosting browser smoke cases, and 65 Firestore-backed files with 204 assertions; all emulators shut down and ports were released. Final `git diff --check` passed.
+- **L5 staging/preview:** N/A — no deployment target, preview channel, public URL, secret, environment, Hosting rewrite, or release configuration changed.
+- **L6 production:** N/A — reserved for BWM-057; production remains untouched and `NO_GO`.
+- **Firebase CLI version:** `15.9.0`; Java `21.0.8`.
+- **Authorization/external mutations:** User-approved commands used only demo-project loopback Firebase emulators, headless Chromium, disposable cleaned Auth/Firestore data, ignored local artifacts, and Firebase CLI local state. No deployment, remote Firebase mutation, secret mutation, public endpoint, or production resource changed.
+- **Contract/schema changes:** EXM-01, EXM-02, and EXM-04 are implemented; EXM-03 is intentionally retired in favor of Firebase SDK refresh. Canonical totals are 35 frontend routes (31 implemented, 3 incompatible, 0 missing, 1 intentionally retired) and 47 HTTP exports. Session records now retain a bounded consumed-credential hash set plus server-owned consumption audit fields; no Firestore rule or index changed.
+- **Verification notes:** A disposable Auth-emulator probe confirmed that Firebase itself permits the same custom token to be exchanged more than once, so replay prevention is enforced by the atomic backend consumption transaction rather than relying on SDK exchange behavior. The first browser fixture used a controlled run outside its valid activation window; the fixture was corrected to a diagnostic run with a valid launch transition, after which the complete clean flow passed.
+- **Residual risks:** BWM-019 retains the authoritative sanitized runtime snapshot and removal of production `buildSessionSnapshot`; BWM-020 retains authoritative activation/deadline state; BWM-021 through BWM-023 retain answer, batching, and submission hardening. Production remains `NO_GO`.
+- **Completed on:** 2026-08-29
 
 ### BWM-019 — Authoritative Sanitized Runtime Snapshot
 
-- **Status:** `PLANNED`
+- **Status:** `READY`
 - **Purpose:** Remove hardcoded questions, build IDs, schedule, phase, timing, and license data from real sessions.
 - **Work:** freeze sanitized question/options/assets and runtime metadata at start or expose a secured immutable snapshot read; exclude correct answers/solutions; consume every authoritative entry field in Exam; remove production `buildSessionSnapshot` usage.
 - **Acceptance:** Two different templates produce different server-driven exams; response IDs match backend `questionTimeMap`; no answer keys reach the browser.
@@ -2240,6 +2258,15 @@ Never record only “tests passed.” Include exact commands and whether tests w
 ## Session Log
 
 Append newest entries at the top.
+
+### LOG-092 — 2026-08-29 — BWM-018 Exam Launch Credential Exchange and Runtime Auth
+
+- **Task:** Resume BWM-018 at its first unchecked implementation substep, complete only custom-token exchange and one-time entry consumption, move the Exam runtime to session-bound Firebase ID-token authentication, retire the nonexistent refresh contract, run the required proof ladder, and stop before authoritative runtime snapshot work.
+- **Outcome:** BWM-018 is `VERIFIED`. The Exam app now removes the launch credential from URL/history before entry, exchanges its correctly parsed nested claims through Firebase Auth, atomically consumes the backend-issued credential, and uses refreshed Firebase ID tokens through the shared client for entry, answers, and submit. EXM-03 is explicitly retired; expiry, replay, wrong-session, partial-claim, identity, tenant, route/body, and license mismatches fail closed. Canonical accounting is 35 routes (31 implemented, 3 incompatible, 0 missing, 1 retired) and 47 HTTP exports. BWM-019 is `READY`; production remains `NO_GO`.
+- **Validation performed:** `npm --prefix functions run lint`, `npm --prefix functions run build`, `npm --prefix apps/exam run lint`, and `npm --prefix apps/exam run build` passed. `npm --prefix functions run test:ci:non-emulator` passed 47/47 files; focused handler/gateway/manifest tests and the affected root contract commands passed. The focused Firestore session suite passed 8/8, the real Auth/Firestore/Functions gateway scenario passed 1/1, and `npm run test:exam-launch-auth:e2e` passed 1/1 with URL cleanup, authenticated lobby entry, storage absence, consumption, and replay proof. `npm run test:emulators:ci` passed 10 explicit full-service suites with 21 assertions, 2/2 Hosting smoke cases, and 65 Firestore files with 204 assertions; shutdown released all ports. Final `git diff --check` passed.
+- **Files changed:** Updated Exam runtime Auth/API behavior, session-bound middleware/types/handlers, atomic launch-credential persistence and consumption, route retirement/accounting, non-emulator/Firestore/gateway tests, and canonical API/inventory/module/schema documentation; added dedicated entry-handler, runtime contract, and real Chromium launch-auth coverage.
+- **Cloud changes:** None. User-approved commands used only demo-project loopback emulators, headless Chromium, disposable cleaned Auth/Firestore data, ignored artifacts, and Firebase CLI local state. No deployment, remote data mutation, secret, endpoint, or production resource changed.
+- **Next:** BWM-019 — inspect session/template/question snapshot authority and production `buildSessionSnapshot` usage, then implement only the authoritative sanitized runtime snapshot without beginning lifecycle/deadline work.
 
 ### LOG-091 — 2026-08-29 — BWM-017 Compatible Exam Start and Resume
 

@@ -2,7 +2,7 @@
 
 Status: canonical route and response-envelope contract
 
-Last reconciled: 2026-08-28 (`BWM-017` Exam start and resume closeout)
+Last reconciled: 2026-08-29 (`BWM-018` Exam launch exchange and runtime authentication closeout)
 
 ## Sources of truth
 
@@ -21,7 +21,7 @@ If prose and the typed manifest disagree about a route key or status, the typed 
 - Gateway matching is case-sensitive, rejects trailing or extra path segments, and decodes matched parameter segments into `request.params` without rewriting the original request URL.
 - Routes with a non-null `functionExport` invoke that export's existing raw request handler, retaining its middleware, controller, and service chain.
 - A known canonical path with the wrong method returns HTTP 405, error code `METHOD_NOT_ALLOWED`, and an `Allow` header derived from every manifest entry for that path.
-- Unknown paths and canonical routes whose manifest status is `missing` return structured HTTP 404 `NOT_FOUND` errors and never fall through to a portal document.
+- Unknown paths and canonical routes whose manifest status is `missing` or `intentionally_retired` return structured HTTP 404 `NOT_FOUND` errors and never fall through to a portal document.
 - Tenant identity comes from verified server identity unless a documented vendor or session-entry boundary applies.
 - Every supported portal deployment reaches this boundary through its own Hosting target's `/api/v1/**` rewrite before the SPA fallback.
 
@@ -39,7 +39,7 @@ If prose and the typed manifest disagree about a route key or status, the typed 
 - `missing`: no current Functions handler/export implements the frontend contract.
 - `intentionally_retired`: explicit product/architecture evidence says the route must not be served.
 
-Current totals: 29 implemented, 5 incompatible, 1 missing, 0 intentionally retired.
+Current totals: 31 implemented, 3 incompatible, 0 missing, 1 intentionally retired.
 
 ## Canonical frontend route manifest
 
@@ -74,10 +74,10 @@ Current totals: 29 implemented, 5 incompatible, 1 missing, 0 intentionally retir
 | STU-04 | `GET /api/v1/student/insights` | `implemented` | `studentInsights` | Firebase ID; student; identity tenant/Student/license; active Student; current year; L1+; bounded `limit` |
 | STU-05 | `GET /api/v1/student/tests/{testId}/solutions` | `implemented` | `studentSolutions` | Firebase ID; student; identity tenant/Student/license; active Student; current-year completed assigned licensed run; released owned submission; bounded page |
 | STU-06 | `POST /api/v1/exam/start` | `implemented` | `examStart` | Firebase ID; student; identity tenant/Student/license; current-year assigned run; active window; exactly one eligible session |
-| EXM-01 | `POST /api/v1/exam/session/{sessionId}/entry` | `implemented` | `examSessionEntry` | Short-lived session-entry token and matching session claim |
-| EXM-02 | `POST /api/v1/exam/session/{sessionId}/answers` | `incompatible` | `examSessionAnswers` | Target: Firebase ID student identity and matching tenant/session |
-| EXM-03 | `POST /api/v1/exam/session/{sessionId}/token/refresh` | `missing` | None | Transitional session credential; BWM-018 owns final exchange design |
-| EXM-04 | `POST /api/v1/exam/session/{sessionId}/submit` | `incompatible` | `examSessionSubmit` | Target: Firebase ID student identity and matching tenant/session |
+| EXM-01 | `POST /api/v1/exam/session/{sessionId}/entry` | `implemented` | `examSessionEntry` | Firebase ID; student; exact session claims; raw launch credential atomically consumed once |
+| EXM-02 | `POST /api/v1/exam/session/{sessionId}/answers` | `implemented` | `examSessionAnswers` | Firebase ID; student; identity tenant and exact route/run/session/Student/year claims |
+| EXM-03 | `POST /api/v1/exam/session/{sessionId}/token/refresh` | `intentionally_retired` | None | Firebase Auth SDK refreshes the per-origin ID token; no custom refresh API is served |
+| EXM-04 | `POST /api/v1/exam/session/{sessionId}/submit` | `implemented` | `examSessionSubmit` | Firebase ID; student; identity tenant and exact route/run/session/Student/year claims |
 | VEN-01 | `POST /api/v1/vendor/calibration/simulate` | `incompatible` | `vendorCalibrationSimulation` | Firebase ID; vendor; aggregate-only global scope |
 | VEN-02 | `POST /api/v1/vendor/calibration/push` | `implemented` | `vendorCalibrationPush` | Firebase ID; vendor; global scope |
 
@@ -95,7 +95,9 @@ ADM-12, ADM-22, and ADM-23 share the strict `AdminRunRecord` lifecycle boundary.
 
 STU-01 and STU-02 use the strict shared `StudentDashboardResult` and `StudentTestsResult` boundaries. The handlers derive institute, Student, and license layer only from verified Firebase identity, require the matching active and non-deleted Student document, resolve the current operational academic year on the server, and never accept browser tenant/Student/year overrides. Dashboard metrics come directly from that Student's `studentYearMetrics` summary and upcoming runs must contain the Student in `recipientStudentIds`, be scheduled in the future, and use a mode allowed by the identity license. My Tests applies the same assignment and license boundary with strict `scheduled|active|completed|archived|all` status handling and bounded `page`/`pageSize`; stopped and cancelled runs form the archived summary view. L0/L1 responses redact higher-layer metrics, and neither route reads or returns raw session/question data. Completed result propagation remains owned by BWM-024.
 
-STU-06 uses the shared `StudentExamLaunchRequest` and `StudentExamLaunchResult` boundary. The browser sends only explicit `start|resume` intent plus the assigned run ID; institute, Student, UID, current academic year, and license authority come from verified identity and current Firestore records. A deterministic institute/year/run/Student session ID and Firestore transaction make simultaneous starts converge on one session: the first returns `created`, an exact retry returns `replayed`, and resume returns `resumed` for the same eligible `created|started|active` session. Every response includes that session ID/status, a distinct short-lived Firebase custom-token launch credential carrying a per-issuance nonce, and an absolute Exam URL whose path/token match the result. The session stores only a bounded set of credential hashes. BWM-018 retains credential exchange, URL removal, one-time consumption/replay enforcement, and Firebase ID-token runtime authentication; BWM-024 retains completed result propagation.
+STU-06 uses the shared `StudentExamLaunchRequest` and `StudentExamLaunchResult` boundary. The browser sends only explicit `start|resume` intent plus the assigned run ID; institute, Student, UID, current academic year, and license authority come from verified identity and current Firestore records. A deterministic institute/year/run/Student session ID and Firestore transaction make simultaneous starts converge on one session: the first returns `created`, an exact retry returns `replayed`, and resume returns `resumed` for the same eligible `created|started|active` session. Every response includes that session ID/status, a distinct short-lived Firebase custom-token launch credential carrying a per-issuance nonce, and an absolute Exam URL whose path/token match the result. The session stores only a bounded set of credential hashes. BWM-024 retains completed result propagation.
+
+EXM-01 is the one-time launch-exchange boundary. The Exam app parses the Firebase custom token's nested `claims`, removes `token` from the current URL with `history.replaceState`, exchanges it with `signInWithCustomToken`, obtains a refreshed Firebase ID token, and sends that ID token through the shared authenticated client while retaining the raw launch credential only in the entry request body. The handler verifies the ID token with revocation checking, requires Student role plus complete institute/year/run/session/Student/nonce claims, matches the route and persisted Student UID/license snapshot, and transactionally moves the credential hash from the bounded valid set to the bounded consumed set. Expired, already-consumed, unissued, and wrong-session credentials fail closed. EXM-02 and EXM-04 accept only the Firebase ID token and require its exact session claims to match the route and body authority. EXM-03 is retired because Firebase Auth owns ID-token refresh; no browser caller, handler, export, or custom refresh credential remains.
 
 ADM-19 uses the shared `AdminTestTemplateUpdateRequest` and `AdminTestTemplateUpdateResult`. The path supplies the backend-issued template ID and the request supplies a positive `expectedVersion`. A Firestore transaction rejects missing, stale, or structurally locked templates, creates the superseded immutable configuration at `institutes/{instituteId}/tests/{testId}/versionSnapshots/{version}`, updates the current template, and increments its numeric version exactly once. Version conflicts return the standard `CONFLICT` error with HTTP 409. Admin consumes the strict update result, reloads ADM-10, requires the returned version to equal `expectedVersion + 1`, reconciles ID/canonical ID/version, and installs only the reload state.
 
@@ -122,7 +124,7 @@ Normal portal calls require a verified Firebase ID token. Server middleware deri
 
 Immediately after successful token verification, a truthy `isSuspended` claim terminates the request with canonical `403 FORBIDDEN` and message `Account access is suspended.` Identity context, student activation, role/license/tenant middleware, and business handlers do not run for that request. Claim synchronization, token refresh, and revocation latency remain governed by BWM-009 and BWM-036.
 
-Exam entry is a credential-exchange boundary. BWM-018 must align it with the architecture decision that the Exam app exchanges the short-lived launch credential, removes it from the URL, and uses Firebase ID tokens for normal answer and submission APIs.
+Exam entry is a credential-exchange boundary. The Exam app exchanges the short-lived launch credential through Firebase Auth, removes it from URL/history before runtime entry, atomically consumes it through EXM-01, and uses refreshed session-bound Firebase ID tokens for EXM-01, EXM-02, and EXM-04. The raw launch credential is never used as bearer authorization and cannot be replayed at entry.
 
 Vendor global access is explicit per handler; the shared tenant guard defaults to no Vendor bypass. The five existing mixed-role Admin handlers that intentionally accept a cross-institute Vendor target opt in explicitly, while Vendor-only global APIs remain outside the institute guard.
 

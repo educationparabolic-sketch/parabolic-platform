@@ -299,7 +299,7 @@ export const API_ROUTE_MANIFEST: readonly ApiRouteManifestEntry[] = [
     "exam",
     "POST",
     "/exam/session/{sessionId}/answers",
-    "incompatible",
+    "implemented",
     "examSessionAnswers",
   ),
   defineRoute(
@@ -307,7 +307,7 @@ export const API_ROUTE_MANIFEST: readonly ApiRouteManifestEntry[] = [
     "exam",
     "POST",
     "/exam/session/{sessionId}/token/refresh",
-    "missing",
+    "intentionally_retired",
     null,
   ),
   defineRoute(
@@ -315,7 +315,7 @@ export const API_ROUTE_MANIFEST: readonly ApiRouteManifestEntry[] = [
     "exam",
     "POST",
     "/exam/session/{sessionId}/submit",
-    "incompatible",
+    "implemented",
     "examSessionSubmit",
   ),
   defineRoute(

@@ -34,6 +34,35 @@ async function signInWithPassword(email, password) {
   return body.idToken;
 }
 
+async function signInWithCustomToken(token) {
+  const response = await fetch(
+    `http://${authHost}/identitytoolkit.googleapis.com/v1/` +
+      "accounts:signInWithCustomToken?key=demo-key",
+    {
+      body: JSON.stringify({returnSecureToken: true, token}),
+      headers: {"Content-Type": "application/json"},
+      method: "POST",
+      signal: AbortSignal.timeout(15_000),
+    },
+  );
+  const body = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(body));
+  return body.idToken;
+}
+
+async function postExamRoute(path, idToken, body) {
+  const response = await fetch(`${gatewayOrigin}${path}`, {
+    body: JSON.stringify(body),
+    headers: {
+      "authorization": `Bearer ${idToken}`,
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+    signal: AbortSignal.timeout(90_000),
+  });
+  return {body: await response.json(), status: response.status};
+}
+
 async function launch(idToken, intent, runId) {
   const response = await fetch(`${gatewayOrigin}/api/v1/exam/start`, {
     body: JSON.stringify({
@@ -181,6 +210,64 @@ test(
       assert.equal(resumed.body.data.disposition, "resumed");
       assert.equal(resumed.body.data.sessionId, sessionIds[0]);
 
+      const firstLaunch = starts.find(
+        (entry) => entry.body.data?.disposition === "created",
+      );
+      const secondLaunch = starts.find(
+        (entry) => entry.body.data?.disposition === "replayed",
+      );
+      assert.ok(firstLaunch);
+      assert.ok(secondLaunch);
+      const runtimeIdToken = await signInWithCustomToken(
+        firstLaunch.body.data.launchCredential,
+      );
+      const entryPath =
+        `/api/v1/exam/session/${encodeURIComponent(sessionIds[0])}/entry`;
+      const entered = await postExamRoute(entryPath, runtimeIdToken, {
+        token: firstLaunch.body.data.launchCredential,
+      });
+      assert.equal(entered.status, 200, JSON.stringify(entered.body));
+      assert.equal(entered.body.success, true);
+      assert.equal(entered.body.data.sessionId, sessionIds[0]);
+
+      const replayedEntry = await postExamRoute(entryPath, runtimeIdToken, {
+        token: firstLaunch.body.data.launchCredential,
+      });
+      assert.equal(replayedEntry.status, 401);
+      assert.equal(replayedEntry.body.error?.code, "UNAUTHORIZED");
+
+      const wrongSessionIdToken = await signInWithCustomToken(
+        secondLaunch.body.data.launchCredential,
+      );
+      const wrongSessionEntry = await postExamRoute(
+        "/api/v1/exam/session/session-wrong/entry",
+        wrongSessionIdToken,
+        {token: secondLaunch.body.data.launchCredential},
+      );
+      assert.equal(wrongSessionEntry.status, 401);
+      assert.equal(wrongSessionEntry.body.error?.code, "UNAUTHORIZED");
+
+      const answerAuthProof = await postExamRoute(
+        `/api/v1/exam/session/${encodeURIComponent(sessionIds[0])}/answers`,
+        runtimeIdToken,
+        {
+          answers: [],
+          instituteId,
+          millisecondsSinceLastWrite: 5000,
+          runId,
+          yearId,
+        },
+      );
+      assert.equal(answerAuthProof.status, 400);
+      assert.equal(answerAuthProof.body.error?.code, "VALIDATION_ERROR");
+      const submitAuthProof = await postExamRoute(
+        `/api/v1/exam/session/${encodeURIComponent(sessionIds[0])}/submit`,
+        runtimeIdToken,
+        {instituteId, runId, yearId},
+      );
+      assert.notEqual(submitAuthProof.status, 401);
+      assert.notEqual(submitAuthProof.body.error?.code, "UNAUTHORIZED");
+
       const sessions = await run.collection("sessions")
         .where("studentId", "==", studentId)
         .get();
@@ -190,7 +277,11 @@ test(
       assert.equal(sessions.docs[0].data().yearId, yearId);
       assert.equal(
         sessions.docs[0].data().launchCredentialHashes.length,
-        3,
+        2,
+      );
+      assert.equal(
+        sessions.docs[0].data().consumedLaunchCredentialHashes.length,
+        1,
       );
     } finally {
       if (uid) {

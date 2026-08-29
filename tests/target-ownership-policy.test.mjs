@@ -62,8 +62,8 @@ test("every authenticated institute-scoped API has a fail-closed tenant guard", 
     );
   }
 
-  assert.equal(protectedApiCount, 43);
-  assert.equal(tenantScopedApiCount, 30);
+  assert.equal(protectedApiCount, 44);
+  assert.equal(tenantScopedApiCount, 31);
 });
 
 test("Student Exam targets come from verified identity and stored ownership checks", async () => {

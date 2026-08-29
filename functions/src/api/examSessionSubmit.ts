@@ -171,13 +171,30 @@ export const createExamSessionSubmitHandler = (
         const yearId = normalizeRequiredBodyField(body.yearId, "yearId");
         const runId = normalizeRequiredBodyField(body.runId, "runId");
         const sessionId = resolveSessionIdFromRequest(request);
+        const identity = request.context.identity;
+        const examSession = identity?.examSession;
+        if (
+          !identity?.instituteId ||
+          !identity.studentId ||
+          !examSession ||
+          identity.instituteId !== instituteId ||
+          examSession.sessionId !== sessionId ||
+          examSession.studentId !== identity.studentId ||
+          examSession.runId !== runId ||
+          examSession.yearId !== yearId
+        ) {
+          throw new SubmissionValidationError(
+            "UNAUTHORIZED",
+            "Firebase identity is not authorized for this exam session.",
+          );
+        }
 
         setRequestData(request, {
-          instituteId: request.context.identity?.instituteId ?? instituteId,
-          runId,
+          instituteId: identity.instituteId,
+          runId: examSession.runId,
           sessionId,
-          studentId: request.context.identity?.studentId,
-          yearId,
+          studentId: identity.studentId,
+          yearId: examSession.yearId,
         });
       },
     }),
