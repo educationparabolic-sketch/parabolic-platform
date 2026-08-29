@@ -2,7 +2,7 @@ import {
   FieldValue,
   Timestamp,
 } from "firebase-admin/firestore";
-import {createHash} from "node:crypto";
+import {createHash, randomUUID} from "node:crypto";
 import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
 import {createLogger} from "./logging";
 import {dataTierPartitionService} from "./dataTierPartition";
@@ -41,6 +41,21 @@ const QUESTION_BANK_COLLECTION = "questionBank";
 const LICENSE_COLLECTION = "license";
 const ACTIVE_STUDENT_STATUSES = new Set(["active"]);
 const ACTIVE_SESSION_STATUSES = ["created", "started", "active"];
+const CURRENT_YEAR_STATUS_PRIORITY = new Map([
+  ["active", 0],
+  ["started", 1],
+  ["scheduled", 2],
+]);
+const MAX_LAUNCH_CREDENTIAL_HASHES = 5;
+const ALLOWED_MODES_BY_LAYER: Record<
+  SessionStartContext["licenseLayer"],
+  SessionExecutionMode[]
+> = {
+  L0: ["Operational"],
+  L1: ["Operational", "Diagnostic"],
+  L2: ["Operational", "Diagnostic", "Controlled", "Hard"],
+  L3: ["Operational", "Diagnostic", "Controlled", "Hard"],
+};
 const SESSION_STATUS_TRANSITION_ORDER: Record<SessionStatus, number> = {
   created: 0,
   started: 1,
@@ -214,6 +229,86 @@ const normalizeSessionStatus = (
   }
 
   return normalizedValue as SessionStatus;
+};
+
+const normalizeLaunchIntent = (
+  value: unknown,
+): SessionStartContext["intent"] => {
+  const normalizedValue = normalizeRequiredString(value, "intent");
+  if (normalizedValue !== "start" && normalizedValue !== "resume") {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      "Field \"intent\" must be start or resume.",
+    );
+  }
+  return normalizedValue;
+};
+
+const normalizeLicenseLayer = (
+  value: unknown,
+): SessionStartContext["licenseLayer"] => {
+  const normalizedValue = normalizeRequiredString(value, "licenseLayer");
+  if (
+    normalizedValue !== "L0" &&
+    normalizedValue !== "L1" &&
+    normalizedValue !== "L2" &&
+    normalizedValue !== "L3"
+  ) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      "Field \"licenseLayer\" must be L0, L1, L2, or L3.",
+    );
+  }
+  return normalizedValue;
+};
+
+const resolveCurrentAcademicYear = (
+  snapshots: FirebaseFirestore.QueryDocumentSnapshot[],
+): FirebaseFirestore.QueryDocumentSnapshot => {
+  const candidates = snapshots
+    .map((snapshot) => ({
+      priority: CURRENT_YEAR_STATUS_PRIORITY.get(
+        String(snapshot.data().status ?? "").trim().toLowerCase(),
+      ),
+      snapshot,
+    }))
+    .filter((entry): entry is {
+      priority: number;
+      snapshot: FirebaseFirestore.QueryDocumentSnapshot;
+    } => entry.priority !== undefined)
+    .sort((left, right) =>
+      left.priority - right.priority ||
+      left.snapshot.id.localeCompare(right.snapshot.id));
+  const current = candidates[0]?.snapshot;
+  if (!current) {
+    throw new SessionStartValidationError(
+      "CONFLICT",
+      "The institute has no current operational academic year.",
+    );
+  }
+  return current;
+};
+
+const buildDeterministicSessionId = (
+  instituteId: string,
+  yearId: string,
+  runId: string,
+  studentId: string,
+): string => `session_${createHash("sha256")
+  .update(`${instituteId}:${yearId}:${runId}:${studentId}`)
+  .digest("hex")
+  .slice(0, 32)}`;
+
+const normalizeLaunchCredentialHashes = (
+  value: unknown,
+  legacyHash: unknown,
+): string[] => {
+  const hashes = Array.isArray(value) ? value.flatMap((entry) =>
+    typeof entry === "string" && entry.trim() ? [entry.trim()] : []) : [];
+  if (typeof legacyHash === "string" && legacyHash.trim()) {
+    hashes.push(legacyHash.trim());
+  }
+  return Array.from(new Set(hashes)).slice(-MAX_LAUNCH_CREDENTIAL_HASHES);
 };
 
 const normalizeQuestionIds = (
@@ -537,27 +632,61 @@ export class SessionService {
       context.instituteId,
       "instituteId",
     );
-    const yearId = normalizeRequiredString(context.yearId, "yearId");
+    const intent = normalizeLaunchIntent(context.intent);
+    const licenseLayer = normalizeLicenseLayer(context.licenseLayer);
     const runId = normalizeRequiredString(context.runId, "runId");
     const studentId = normalizeRequiredString(context.studentId, "studentId");
     const studentUid = normalizeRequiredString(
       context.studentUid,
       "studentUid",
     );
-
-    const runPath =
-      `${INSTITUTES_COLLECTION}/${instituteId}/` +
-      `${ACADEMIC_YEARS_COLLECTION}/${yearId}/` +
-      `${RUNS_COLLECTION}/${runId}`;
-    const sessionsCollectionPath = `${runPath}/${SESSIONS_COLLECTION}`;
-    const runReference = this.firestore.doc(runPath);
+    const instituteReference = this.firestore
+      .collection(INSTITUTES_COLLECTION)
+      .doc(instituteId);
+    const academicYearsSnapshot = await instituteReference
+      .collection(ACADEMIC_YEARS_COLLECTION)
+      .get();
+    const currentAcademicYear = resolveCurrentAcademicYear(
+      academicYearsSnapshot.docs,
+    );
+    const yearId = currentAcademicYear.id;
+    const academicYearReference = currentAcademicYear.ref;
+    const runReference = academicYearReference
+      .collection(RUNS_COLLECTION)
+      .doc(runId);
+    const sessionsCollection = runReference.collection(SESSIONS_COLLECTION);
+    const existingStudentSessions = await sessionsCollection
+      .where("studentId", "==", studentId)
+      .limit(25)
+      .get();
+    const existingActiveSessions = existingStudentSessions.docs.filter(
+      (snapshot) => ACTIVE_SESSION_STATUSES.includes(
+        String(snapshot.data().status ?? "").trim().toLowerCase(),
+      ),
+    );
+    if (existingActiveSessions.length > 1) {
+      throw new SessionStartValidationError(
+        "CONFLICT",
+        "Multiple active sessions exist for this Student and run.",
+      );
+    }
+    const sessionId = existingActiveSessions[0]?.id ??
+      buildDeterministicSessionId(instituteId, yearId, runId, studentId);
+    const sessionReference = sessionsCollection.doc(sessionId);
+    const sessionPath = sessionReference.path;
+    const launchCredential = await this.signSessionToken(studentUid, {
+      instituteId,
+      launchNonce: randomUUID(),
+      role: "student",
+      runId,
+      sessionId,
+      studentId,
+      yearId,
+    });
+    const launchCredentialHash = hashSessionToken(launchCredential);
     const studentReference = this.firestore.doc(
       `${INSTITUTES_COLLECTION}/${instituteId}/` +
       `${STUDENTS_COLLECTION}/${studentId}`,
-    );
-    const academicYearReference = this.firestore.doc(
-      `${INSTITUTES_COLLECTION}/${instituteId}/` +
-      `${ACADEMIC_YEARS_COLLECTION}/${yearId}`,
     );
     const licenseMainReference = this.firestore.doc(
       `${INSTITUTES_COLLECTION}/${instituteId}/${LICENSE_COLLECTION}/main`,
@@ -565,19 +694,8 @@ export class SessionService {
     const licenseCurrentReference = this.firestore.doc(
       `${INSTITUTES_COLLECTION}/${instituteId}/${LICENSE_COLLECTION}/current`,
     );
-    const sessionReference = this.firestore.collection(sessionsCollectionPath)
-      .doc();
-    const sessionId = sessionReference.id;
-    const sessionPath = `${sessionsCollectionPath}/${sessionId}`;
-    const sessionToken = await this.signSessionToken(studentUid, {
-      instituteId,
-      role: "student",
-      runId,
-      sessionId,
-      studentId,
-      yearId,
-    });
-
+    let disposition: SessionStartResult["disposition"] = "created";
+    let status: SessionStartResult["status"] = "created";
     await this.firestore.runTransaction(async (transaction) => {
       const [
         runSnapshot,
@@ -585,12 +703,18 @@ export class SessionService {
         academicYearSnapshot,
         licenseMainSnapshot,
         licenseCurrentSnapshot,
+        candidateSessionSnapshot,
+        studentSessionsSnapshot,
       ] = await Promise.all([
         transaction.get(runReference),
         transaction.get(studentReference),
         transaction.get(academicYearReference),
         transaction.get(licenseMainReference),
         transaction.get(licenseCurrentReference),
+        transaction.get(sessionReference),
+        transaction.get(
+          sessionsCollection.where("studentId", "==", studentId).limit(25),
+        ),
       ]);
       const academicYearData = academicYearSnapshot.data();
       const runData = runSnapshot.data();
@@ -645,6 +769,14 @@ export class SessionService {
         );
       }
 
+      const runStatus = String(runData.status ?? "").trim().toLowerCase();
+      if (runStatus !== "scheduled" && runStatus !== "active") {
+        throw new SessionStartValidationError(
+          "SESSION_LOCKED",
+          "Run is not eligible for session start or resume.",
+        );
+      }
+
       const recipientStudentIds = runData.recipientStudentIds;
 
       if (!Array.isArray(recipientStudentIds)) {
@@ -665,14 +797,25 @@ export class SessionService {
         );
       }
 
-      if (!studentSnapshot.exists) {
+      const studentData = studentSnapshot.data();
+      if (!studentSnapshot.exists || studentData?.deleted === true) {
         throw new SessionStartValidationError(
           "NOT_FOUND",
           `Student "${studentId}" does not exist in the institute.`,
         );
       }
 
-      const studentStatus = String(studentSnapshot.data()?.status ?? "")
+      const storedStudentId = typeof studentData?.studentId === "string" ?
+        studentData.studentId.trim() :
+        studentId;
+      if (storedStudentId !== studentId) {
+        throw new SessionStartValidationError(
+          "FORBIDDEN",
+          "Authenticated Student does not match the institute record.",
+        );
+      }
+
+      const studentStatus = String(studentData?.status ?? "")
         .trim()
         .toLowerCase();
 
@@ -691,23 +834,109 @@ export class SessionService {
         licenseData.currentLayer,
         "license.currentLayer",
       );
+      if (currentLayer !== licenseLayer) {
+        throw new SessionStartValidationError(
+          "LICENSE_RESTRICTED",
+          "Authenticated license layer is not current for session launch.",
+        );
+      }
 
-      const existingStudentSessionSnapshot = await transaction.get(
-        runReference.collection(SESSIONS_COLLECTION)
-          .where("studentId", "==", studentId)
-          .limit(25),
-      );
+      const mode = normalizeSessionExecutionMode(runData.mode, "run.mode");
+      if (!ALLOWED_MODES_BY_LAYER[licenseLayer].includes(mode)) {
+        throw new SessionStartValidationError(
+          "LICENSE_RESTRICTED",
+          `License layer ${licenseLayer} does not permit ${mode} sessions.`,
+        );
+      }
 
-      const hasActiveSession = existingStudentSessionSnapshot.docs.some(
+      const activeSessionDocuments = studentSessionsSnapshot.docs.filter(
         (snapshot) => ACTIVE_SESSION_STATUSES.includes(
-          String(snapshot.data()?.status ?? "").trim().toLowerCase(),
+          String(snapshot.data().status ?? "").trim().toLowerCase(),
         ),
       );
-
-      if (hasActiveSession) {
+      if (activeSessionDocuments.length > 1) {
         throw new SessionStartValidationError(
-          "SESSION_LOCKED",
-          "An active session already exists for this student and run.",
+          "CONFLICT",
+          "Multiple active sessions exist for this Student and run.",
+        );
+      }
+      const activeSessionDocument = activeSessionDocuments[0];
+      if (activeSessionDocument && activeSessionDocument.id !== sessionId) {
+        throw new SessionStartValidationError(
+          "CONFLICT",
+          "Session launch authority changed during the request; retry safely.",
+        );
+      }
+
+      if (candidateSessionSnapshot.exists) {
+        const sessionData = candidateSessionSnapshot.data();
+        const persistedSessionId = normalizeRequiredString(
+          sessionData?.sessionId,
+          "session.sessionId",
+        );
+        const persistedStudentId = normalizeRequiredString(
+          sessionData?.studentId,
+          "session.studentId",
+        );
+        const persistedStudentUid = normalizeRequiredString(
+          sessionData?.studentUid,
+          "session.studentUid",
+        );
+        const persistedRunId = normalizeRequiredString(
+          sessionData?.runId,
+          "session.runId",
+        );
+        const persistedYearId = normalizeRequiredString(
+          sessionData?.yearId,
+          "session.yearId",
+        );
+        const persistedInstituteId = normalizeRequiredString(
+          sessionData?.instituteId,
+          "session.instituteId",
+        );
+        if (
+          persistedSessionId !== sessionId ||
+          persistedStudentId !== studentId ||
+          persistedStudentUid !== studentUid ||
+          persistedRunId !== runId ||
+          persistedYearId !== yearId ||
+          persistedInstituteId !== instituteId
+        ) {
+          throw new SessionStartValidationError(
+            "CONFLICT",
+            "Existing session does not match the authenticated launch scope.",
+          );
+        }
+        const persistedStatus = normalizeSessionStatus(
+          sessionData?.status,
+          "session.status",
+        );
+        if (!ACTIVE_SESSION_STATUSES.includes(persistedStatus)) {
+          throw new SessionStartValidationError(
+            "SESSION_LOCKED",
+            "Existing session is not eligible for start or resume.",
+          );
+        }
+        const credentialHashes = normalizeLaunchCredentialHashes(
+          sessionData?.launchCredentialHashes,
+          sessionData?.sessionTokenHash,
+        );
+        credentialHashes.push(launchCredentialHash);
+        transaction.update(sessionReference, {
+          launchCredentialHashes: Array.from(new Set(credentialHashes))
+            .slice(-MAX_LAUNCH_CREDENTIAL_HASHES),
+          sessionTokenHash: launchCredentialHash,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+        disposition = intent === "resume" ? "resumed" : "replayed";
+        status = persistedStatus as SessionStartResult["status"];
+        return;
+      }
+
+      if (intent === "resume") {
+        throw new SessionStartValidationError(
+          "NOT_FOUND",
+          "No active session exists to resume for this Student and run.",
         );
       }
 
@@ -726,7 +955,6 @@ export class SessionService {
         runData.templateVersion,
         "run.templateVersion",
       );
-      const mode = normalizeSessionExecutionMode(runData.mode, "run.mode");
       const questionIds = normalizeQuestionIds(
         runData.questionIds,
         "questionIds",
@@ -793,13 +1021,14 @@ export class SessionService {
         calibrationVersion,
         instituteId,
         licenseSnapshot,
+        launchCredentialHashes: [launchCredentialHash],
         mode,
         phaseConfigSnapshot,
         questionTimeMap,
         riskModelVersion,
         runId,
         sessionId,
-        sessionTokenHash: hashSessionToken(sessionToken),
+        sessionTokenHash: launchCredentialHash,
         studentId,
         studentUid,
         templateSnapshot,
@@ -809,6 +1038,9 @@ export class SessionService {
       });
 
       transaction.create(sessionReference, initializationRecord);
+
+      disposition = "created";
+      status = "created";
 
       this.logger.info("Session start validated and document initialized", {
         instituteId,
@@ -826,14 +1058,16 @@ export class SessionService {
     });
 
     return {
+      disposition,
+      launchCredential,
       operationalDataAccessPolicy:
         dataTierPartitionService.buildExamOperationalDataAccessPolicy(
           sessionPath,
         ),
       sessionId,
       sessionPath,
-      sessionToken,
-      status: "created",
+      status,
+      yearId,
     };
   }
 
@@ -913,14 +1147,14 @@ export class SessionService {
       );
     }
 
-    const storedSessionTokenHash = normalizeRequiredString(
+    const storedLaunchCredentialHashes = normalizeLaunchCredentialHashes(
+      sessionData.launchCredentialHashes,
       sessionData.sessionTokenHash,
-      "session.sessionTokenHash",
     );
-    if (storedSessionTokenHash !== hashSessionToken(token)) {
+    if (!storedLaunchCredentialHashes.includes(hashSessionToken(token))) {
       throw new SessionStartValidationError(
         "UNAUTHORIZED",
-        "Session token does not match the backend-issued session token.",
+        "Launch credential does not match a backend-issued session credential.",
       );
     }
 
@@ -1196,6 +1430,7 @@ export class SessionService {
       createdAt: FieldValue.serverTimestamp(),
       instituteId: context.instituteId,
       licenseSnapshot: context.licenseSnapshot,
+      launchCredentialHashes: context.launchCredentialHashes,
       mode: context.mode,
       operationalDataAccessPolicy:
         dataTierPartitionService.buildExamOperationalDataAccessPolicy(

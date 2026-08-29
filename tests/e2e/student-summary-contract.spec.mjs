@@ -23,6 +23,7 @@ const authHost = process.env.FIREBASE_AUTH_EMULATOR_HOST;
 const runIds = {
   assigned: "run-bwm-015-browser-assigned",
   completed: "run-bwm-016-browser-completed",
+  launch: "run-bwm-017-browser-launch",
   licensedOut: "run-bwm-015-browser-licensed-out",
   unassigned: "run-bwm-015-browser-unassigned",
 };
@@ -399,4 +400,99 @@ test("Student dashboard and My Tests render only identity-authorized summaries",
   expect(JSON.stringify(solutionsEnvelope.data)).not.toContain("answerMap");
   await expect(page.getByText("Correct Answer: A", {exact: true}))
     .toBeVisible({timeout: 30_000});
+
+  const launchStartWindow = new Date(Date.now() + (5 * 60_000));
+  const launchRunPath =
+    `institutes/${instituteId}/academicYears/${yearId}/runs/${runIds.launch}`;
+  await firestore.doc(launchRunPath).set({
+    ...runFixture(
+      runIds.launch,
+      "Operational",
+      [studentId],
+      "Browser Launch Operational",
+      launchStartWindow.toISOString(),
+    ),
+    calibrationVersion: "cal-bwm-017-browser",
+    phaseConfigSnapshot: {
+      phase1Percent: 100,
+      phase2Percent: 0,
+      phase3Percent: 0,
+    },
+    questionIds: [questionId],
+    riskModelVersion: "risk_v3",
+    templateVersion: "1",
+    timingProfileSnapshot: {
+      easy: {max: 60, min: 30, recommended: 45},
+      hard: {max: 210, min: 150, recommended: 180},
+      medium: {max: 150, min: 60, recommended: 105},
+    },
+  });
+  await Promise.all([
+    firestore.doc(`institutes/${instituteId}/license/main`).update({
+      currentLayer: "L1",
+    }),
+    firestore.doc(launchRunPath).update({
+      endWindow: Timestamp.fromMillis(Date.now() + (85 * 60_000)),
+      startWindow: Timestamp.fromMillis(Date.now() - (5 * 60_000)),
+    }),
+  ]);
+
+  await page.getByRole("navigation", {name: "Student navigation"})
+    .getByRole("link", {name: /^Analytics\b/})
+    .click();
+  const refreshedScheduledResponse = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === "/api/v1/student/tests" &&
+      url.searchParams.get("status") === "scheduled" &&
+      response.status() === 200;
+  }, {timeout: 90_000});
+  await page.getByRole("navigation", {name: "Student navigation"})
+    .getByRole("link", {name: /^My Tests\b/})
+    .click();
+  await refreshedScheduledResponse;
+
+  const launchCard = page.locator("article.student-test-card")
+    .filter({hasText: "Browser Launch Operational"});
+  await expect(launchCard).toBeVisible({timeout: 90_000});
+  let resolveLaunchExchange;
+  const launchExchangePromise = new Promise((resolve) => {
+    resolveLaunchExchange = resolve;
+  });
+  await page.route("**/api/v1/exam/start", async (route) => {
+    const response = await route.fetch();
+    const responseBody = await response.body();
+    resolveLaunchExchange({
+      envelope: JSON.parse(responseBody.toString("utf8")),
+      request: route.request().postDataJSON(),
+      status: response.status(),
+    });
+    await route.fulfill({body: responseBody, response});
+  });
+  await launchCard.getByRole("button", {name: "Start Test"}).click({
+    noWaitAfter: true,
+  });
+  const {
+    envelope: launchEnvelope,
+    request: launchRequest,
+    status: launchStatus,
+  } = await launchExchangePromise;
+  expect(launchStatus).toBe(201);
+  expect(launchRequest).toEqual({intent: "start", runId: runIds.launch});
+  expect(launchEnvelope.success).toBe(true);
+  expect(launchEnvelope.data.disposition).toBe("created");
+  expect(launchEnvelope.data.status).toBe("created");
+  const examUrl = new URL(launchEnvelope.data.examUrl);
+  expect(examUrl.origin).toBe("http://localhost:4173");
+  expect(examUrl.pathname).toBe(
+    `/session/${encodeURIComponent(launchEnvelope.data.sessionId)}`,
+  );
+  expect(examUrl.searchParams.get("token"))
+    .toBe(launchEnvelope.data.launchCredential);
+
+  const sessions = await firestore.collection(`${launchRunPath}/sessions`)
+    .where("studentId", "==", studentId)
+    .get();
+  expect(sessions.size).toBe(1);
+  expect(sessions.docs[0].id).toBe(launchEnvelope.data.sessionId);
+  expect(sessions.docs[0].data().studentUid).toBe(studentUid);
 });

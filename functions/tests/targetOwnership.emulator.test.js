@@ -59,6 +59,7 @@ async function callExamStart(idToken, instituteId) {
   const response = await fetch(`${gatewayOrigin}/api/v1/exam/start`, {
     body: JSON.stringify({
       instituteId,
+      intent: "start",
       runId: "run_bwm_008_ownership",
       studentId: "student_client_injected",
       yearId: "year_bwm_008",
@@ -74,7 +75,7 @@ async function callExamStart(idToken, instituteId) {
 }
 
 test(
-  "Student tokens fail closed for absent and conflicting tenants",
+  "Student launch fails without a token tenant and ignores browser tenants",
   async () => {
     const app = initializeApp({projectId}, `target-ownership-${Date.now()}`);
     const auth = getAuth(app);
@@ -96,7 +97,7 @@ test(
       assert.equal(missingResult.body.error?.code, "TENANT_MISMATCH");
       assert.equal(
         missingResult.body.error?.message,
-        "Authenticated identity is missing required instituteId claim.",
+        "Authenticated Student launch authority is incomplete.",
       );
 
       const conflictingTenant = await createStudentIdentity(
@@ -109,12 +110,12 @@ test(
         conflictingTenant.idToken,
         "inst_bwm_008_requested",
       );
-      assert.equal(conflictingResult.response.status, 403);
+      assert.equal(conflictingResult.response.status, 409);
       assert.equal(conflictingResult.body.success, false);
-      assert.equal(conflictingResult.body.error?.code, "TENANT_MISMATCH");
+      assert.equal(conflictingResult.body.error?.code, "CONFLICT");
       assert.equal(
         conflictingResult.body.error?.message,
-        "Token instituteId does not match request instituteId.",
+        "The institute has no current operational academic year.",
       );
     } finally {
       await Promise.all(userIds.map((uid) => auth.deleteUser(uid)));

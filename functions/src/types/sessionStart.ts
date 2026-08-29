@@ -1,4 +1,15 @@
 import {ExamOperationalDataAccessPolicy} from "./dataTierPartition";
+import type {
+  StudentExamLaunchDisposition,
+  StudentExamLaunchIntent,
+  StudentExamSessionStatus,
+} from "../../../shared/contracts/apiDtos";
+
+export type {
+  StudentExamLaunchDisposition,
+  StudentExamLaunchIntent,
+  StudentExamSessionStatus,
+} from "../../../shared/contracts/apiDtos";
 
 export type SessionStatus =
   "created" |
@@ -9,6 +20,7 @@ export type SessionStatus =
   "terminated";
 
 export type SessionStartErrorCode =
+  "CONFLICT" |
   "FORBIDDEN" |
   "LICENSE_RESTRICTED" |
   "NOT_FOUND" |
@@ -20,14 +32,16 @@ export type SessionStartErrorCode =
 
 export interface SessionStartContext {
   instituteId: string;
+  intent: StudentExamLaunchIntent;
+  licenseLayer: "L0" | "L1" | "L2" | "L3";
   runId: string;
   studentId: string;
   studentUid: string;
-  yearId: string;
 }
 
 export interface SessionTokenClaims {
   instituteId: string;
+  launchNonce: string;
   role: "student";
   runId: string;
   sessionId: string;
@@ -39,6 +53,7 @@ export interface SessionDocumentInitializationContext {
   calibrationVersion: string;
   instituteId: string;
   licenseSnapshot: Record<string, unknown>;
+  launchCredentialHashes: string[];
   mode: SessionExecutionMode;
   phaseConfigSnapshot: Record<string, unknown>;
   questionTimeMap: SessionQuestionTimeMap;
@@ -100,6 +115,7 @@ export interface SessionDocumentInitializationRecord {
   createdAt: FirebaseFirestore.FieldValue;
   instituteId: string;
   licenseSnapshot: Record<string, unknown>;
+  launchCredentialHashes: string[];
   mode: SessionExecutionMode;
   operationalDataAccessPolicy: ExamOperationalDataAccessPolicy;
   phaseConfigSnapshot: Record<string, unknown>;
@@ -123,11 +139,13 @@ export interface SessionDocumentInitializationRecord {
 }
 
 export interface SessionStartResult {
+  disposition: StudentExamLaunchDisposition;
+  launchCredential: string;
   operationalDataAccessPolicy: ExamOperationalDataAccessPolicy;
   sessionId: string;
   sessionPath: string;
-  sessionToken: string;
-  status: SessionStatus;
+  status: StudentExamSessionStatus;
+  yearId: string;
 }
 
 export interface SessionEntryValidationContext {

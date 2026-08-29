@@ -1,4 +1,5 @@
 import { ApiClientError } from "../../../../../shared/services/apiClient";
+import { adaptStudentExamLaunchResult } from "../../../../../shared/services/portalResponseAdapters";
 import {
   shouldUseLiveApi as shouldUseConfiguredLiveApi,
 } from "../../../../../shared/services/frontendEnvironment";
@@ -14,6 +15,8 @@ import {
 } from "../../services/studentSummaryApi";
 import type {
   StudentTestRecord,
+  StudentExamLaunchRequest,
+  StudentExamLaunchResult,
   StudentSolutionsResult,
   StudentTestsResult,
   StudentTestStatus,
@@ -34,10 +37,6 @@ export interface StudentSolutionItem {
 export type StudentSolutionsPage = StudentSolutionsResult;
 
 type StudentTestsResponse = StudentTestsResult;
-
-interface StartSessionResponse {
-  sessionUrl: string;
-}
 
 const CURRENT_ACADEMIC_YEAR = "2026";
 const DEFAULT_COMPLETED_PAGE_SIZE = 5;
@@ -563,19 +562,34 @@ export async function fetchStudentSolutions(
   return normalizeSolutionsPayload(payload);
 }
 
-export async function startStudentExamSession(test: Pick<StudentTestRecord, "runId" | "testId" | "sessionLink">): Promise<string> {
+export async function startStudentExamSession(
+  test: Pick<StudentTestRecord, "runId" | "status" | "sessionLink">,
+): Promise<StudentExamLaunchResult> {
   if (!shouldUseLiveApi()) {
-    return test.sessionLink ?? `/session/mock-${test.runId}`;
+    const launchCredential = "dev";
+    const sessionId = `mock-${test.runId}`;
+    return {
+      disposition: test.status === "active" ? "resumed" : "created",
+      examUrl: test.sessionLink ?? `/session/${sessionId}?token=${launchCredential}`,
+      launchCredential,
+      sessionId,
+      status: test.status === "active" ? "active" : "created",
+    };
   }
 
-  const payload = await studentPortalApiClient.post<StartSessionResponse, {runId: string; testId: string}>("/exam/start", {
-    body: {
-      runId: test.runId,
-      testId: test.testId,
-    },
-  });
+  if (test.status !== "scheduled" && test.status !== "active") {
+    throw new Error("Only scheduled or active tests can be launched.");
+  }
+  const request: StudentExamLaunchRequest = {
+    intent: test.status === "active" ? "resume" : "start",
+    runId: test.runId,
+  };
+  const payload = await studentPortalApiClient.post<unknown, StudentExamLaunchRequest>(
+    "/exam/start",
+    { body: request },
+  );
 
-  return payload.sessionUrl;
+  return adaptStudentExamLaunchResult(payload);
 }
 
 export { ApiClientError };

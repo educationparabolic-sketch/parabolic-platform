@@ -92,7 +92,7 @@ const firestoreSuites = await discoverCompiledFirestoreSuites();
 const explicitSuites = await discoverExplicitEmulatorSuites();
 
 assert.equal(firestoreSuites.length, 65, "Firestore suite inventory changed");
-assert.equal(explicitSuites.length, 9, "explicit emulator suite inventory changed");
+assert.equal(explicitSuites.length, 10, "explicit emulator suite inventory changed");
 
 const selectedSuites = fullServicesPhase ? explicitSuites : firestoreSuites;
 const phaseLabel = fullServicesPhase ?

@@ -19,6 +19,7 @@ import type {
   StudentDashboardResult,
   StudentDashboardTrendPoint,
   StudentDashboardUpcomingTest,
+  StudentExamLaunchResult,
   StudentControlledModeComparison,
   StudentInsightPattern,
   StudentInsightsResult,
@@ -1667,6 +1668,54 @@ export function adaptStudentTestsResult(value: unknown): StudentTestsResult {
     pageSize,
     tests,
     total: readNonNegativeInteger(data.total, route, "total"),
+  };
+}
+
+export function adaptStudentExamLaunchResult(
+  value: unknown,
+): StudentExamLaunchResult {
+  const route = "POST /exam/start";
+  const data = readRecord(value, route);
+  const examUrl = readString(data.examUrl, route, "examUrl");
+  const launchCredential = readString(
+    data.launchCredential,
+    route,
+    "launchCredential",
+  );
+  const sessionId = readString(data.sessionId, route, "sessionId");
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(examUrl);
+  } catch {
+    return fail(route, "examUrl", "an absolute HTTP(S) URL");
+  }
+  if (
+    (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") ||
+    !parsedUrl.pathname.endsWith(`/session/${encodeURIComponent(sessionId)}`) ||
+    parsedUrl.searchParams.get("token") !== launchCredential
+  ) {
+    return fail(
+      route,
+      "examUrl",
+      "an absolute Exam session URL carrying the returned launch credential",
+    );
+  }
+  return {
+    disposition: readEnum(
+      data.disposition,
+      ["created", "replayed", "resumed"] as const,
+      route,
+      "disposition",
+    ),
+    examUrl,
+    launchCredential,
+    sessionId,
+    status: readEnum(
+      data.status,
+      ["created", "started", "active"] as const,
+      route,
+      "status",
+    ),
   };
 }
 

@@ -221,6 +221,8 @@ const assertStructuredError = (
 test("exam start handler accepts a valid student request", async () => {
   const handler = createExamStartHandler({
     startSession: async () => ({
+      disposition: "created",
+      launchCredential: "session_token_build_50",
       operationalDataAccessPolicy: {
         allowedOperationalCollections: ["sessions"],
         archiveExportPolicy: "BigQuery export only during academic-year archive",
@@ -245,8 +247,8 @@ test("exam start handler accepts a valid student request", async () => {
       sessionPath:
         "institutes/inst_build_50/academicYears/2026/runs/run_build_50/" +
         "sessions/session_build_50",
-      sessionToken: "session_token_build_50",
       status: "created",
+      yearId: "2026",
     }),
     verifyIdToken: async () => createStudentToken() as never,
   });

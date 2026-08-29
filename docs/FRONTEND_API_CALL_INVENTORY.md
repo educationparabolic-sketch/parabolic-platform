@@ -1,8 +1,8 @@
 # Frontend API Call Inventory
 
-Status: current-contract inventory, canonical-route assignment, and compatibility classification through `BWM-015`
+Status: current-contract inventory, canonical-route assignment, and compatibility classification through `BWM-017`
 
-Inventory date: 2026-08-27
+Inventory date: 2026-08-28
 
 Scope: executable HTTP calls in `apps/admin/src`, `apps/student/src`, `apps/exam/src`, and `apps/vendor/src`
 
@@ -68,7 +68,7 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 | STU-03 | `GET` | `/student/performance` | `/api/v1/student/performance` | `implemented` | Strict shared performance DTO reads bounded current-year summary metrics only and redacts L1/L2 fields by identity license. |
 | STU-04 | `GET` | `/student/insights` | `/api/v1/student/insights` | `implemented` | Strict shared insights DTO requires L1+, bounds Student-owned current-year snapshots, and preserves truthful empty states. |
 | STU-05 | `GET` | `/student/tests/{testId}/solutions` | `/api/v1/student/tests/{testId}/solutions` | `implemented` | Strict paginated solution DTO requires a current-year assigned/licensed completed run, reached release time, and exactly one submitted session owned by the identity Student. |
-| STU-06 | `POST` | `/exam/start` | `/api/v1/exam/start` | `incompatible` | Frontend sends `{ runId, testId }` and expects top-level `sessionUrl`; handler requires `{ instituteId, yearId, runId }` and returns session data in an envelope. |
+| STU-06 | `POST` | `/exam/start` | `/api/v1/exam/start` | `implemented` | Shared request sends explicit `start|resume` intent plus run ID only; handler derives tenant, Student, UID, current year, and license from verified authority, converges retries on one session, and returns a strictly adapted absolute Exam launch result. |
 | EXM-01 | `POST` | `/exam/session/{sessionId}/entry` | `/api/v1/exam/session/{sessionId}/entry` | `implemented` | Path/session-token validation request and the consumed entry response fields under `data` align. |
 | EXM-02 | `POST` | `/exam/session/{sessionId}/answers` | `/api/v1/exam/session/{sessionId}/answers` | `incompatible` | Runtime sends a session-token bearer with Firebase auth skipped; handler requires a Firebase ID token and student identity. Body and response fields otherwise align. |
 | EXM-03 | `POST` | `/exam/session/{sessionId}/token/refresh` | `/api/v1/exam/session/{sessionId}/token/refresh` | `missing` | No current handler/export implements token refresh. |
@@ -76,7 +76,7 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 | VEN-01 | `POST` | `/vendor/calibration/simulate` | `/api/v1/vendor/calibration/simulate` | `incompatible` | Frontend sends `strategyProfileParameters`; handler requires `weights`, so the simulation request fails validation/service normalization. |
 | VEN-02 | `POST` | `/vendor/calibration/push` | `/api/v1/vendor/calibration/push` | `implemented` | Vendor auth, target/version request, and consumed deployment response align. |
 
-Classification totals: `implemented` 23, `incompatible` 6, `missing` 6, `intentionally retired` 0.
+Classification totals: `implemented` 29, `incompatible` 5, `missing` 1, `intentionally retired` 0.
 
 ## Admin portal — 23 contracts
 
@@ -115,7 +115,7 @@ Classification totals: `implemented` 23, `incompatible` 6, `missing` 6, `intenti
 | STU-03 | `GET /student/performance` | Query `{ lastN }`, integer `1..20` | Shared `StudentPerformanceResult`, strictly adapted and normalized to `StudentPerformanceDataset` without live fallback substitution | Firebase ID; `student`; identity tenant/Student/license; active non-deleted Student; server-resolved current year; L0 baseline, L1 pacing/topic, and L2 risk/discipline redaction | `studentPerformance` (`api/studentPerformance.ts`) | `features/performance/studentPerformanceDataset.ts` via `services/studentSummaryApi.ts` |
 | STU-04 | `GET /student/insights` | Query `{ limit }`, integer `1..20` | Shared `StudentInsightsResult`, strictly adapted and normalized to truthful empty arrays when no summaries exist | Firebase ID; `student`; identity tenant/Student/license; active non-deleted Student; server-resolved current year; L1 or higher; Student-owned snapshots only | `studentInsights` (`api/studentInsights.ts`) | `features/insights/studentInsightsDataset.ts` via `services/studentSummaryApi.ts`; Analytics skips the request for L0 |
 | STU-05 | `GET /student/tests/{testId}/solutions` | URL-encoded path `testId`; query `{ page, pageSize }`, page `1..100`, pageSize `1..20` | Shared `StudentSolutionsResult` with bounded `items`, total, page, pageSize, hasMore, release timestamp, run ID, and test ID | Firebase ID; `student`; identity tenant/Student/license; current-year assigned/licensed completed run; release time reached; exactly one submitted owned session; no archived/cross-Student access | `studentSolutions` (`api/studentSolutions.ts`) | `features/my-tests/studentMyTestsDataset.ts` via `services/studentSummaryApi.ts`; page controls lazy-load bounded solution pages |
-| STU-06 | `POST /exam/start` | `{ runId, testId }` | `StartSessionResponse` with top-level `sessionUrl` | Firebase ID; `student`; handler requires body tenant; no license middleware | `examStart` (`api/examStart.ts`), but it currently expects `{ instituteId, yearId, runId }` and returns envelope data `{ sessionId, sessionPath, sessionToken, status }` | `features/my-tests/studentMyTestsDataset.ts` |
+| STU-06 | `POST /exam/start` | Shared `StudentExamLaunchRequest` `{ intent: "start"|"resume", runId }`; no browser tenant, Student, year, test, or license override | Strict shared `StudentExamLaunchResult` `{ disposition, examUrl, launchCredential, sessionId, status }` inside the standard envelope; absolute URL session/token tuple is validated | Firebase ID; `student`; identity tenant/Student/UID/license; active non-deleted Student; server-resolved current year; assigned licensed run in the active window; exactly one eligible session | `examStart` (`api/examStart.ts`) plus transactional `SessionService`; first start creates, retry replays, and resume locates the same session | `features/my-tests/studentMyTestsDataset.ts` and `StudentMyTestsPage.tsx` |
 
 ## Exam runtime — 4 contracts
 
@@ -135,9 +135,9 @@ Classification totals: `implemented` 23, `incompatible` 6, `missing` 6, `intenti
 
 ## Classification summary for the next substeps
 
-- The 25 `implemented` entries are handler-compatible through the common gateway and same-origin Hosting rewrite; each owning flow still requires its task-specific emulator and browser evidence.
-- The 6 `incompatible` entries require contract repair by BWM-017, BWM-018, BWM-023, BWM-030, BWM-031, or BWM-038 before their affected flows can be considered wired.
-- The 4 `missing` entries require Student/Exam handlers under BWM-016 and BWM-018.
+- The 29 `implemented` entries are handler-compatible through the common gateway and same-origin Hosting rewrite; each owning flow still requires its task-specific emulator and browser evidence.
+- The 5 `incompatible` entries require contract repair by BWM-018, BWM-023, BWM-030, BWM-031, or BWM-038 before their affected flows can be considered wired.
+- The 1 `missing` entry requires the final Exam credential-exchange decision under BWM-018.
 - No frontend-declared route has evidence supporting intentional retirement.
 
 ## Audit anchors

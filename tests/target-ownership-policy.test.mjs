@@ -38,9 +38,13 @@ test("every authenticated institute-scoped API has a fail-closed tenant guard", 
     }
 
     tenantScopedApiCount += 1;
-    assert.match(
-      source,
-      /createTenantGuardMiddleware\(/u,
+    const hasTenantGuard = /createTenantGuardMiddleware\(/u.test(source);
+    const hasIdentityOnlyTenantScope = fileName === "examStart.ts" &&
+      /const identity = request\.context\.identity/u.test(source) &&
+      /instituteId:\s*identity\.instituteId/u.test(source) &&
+      !/instituteId:\s*body\.instituteId/u.test(source);
+    assert.ok(
+      hasTenantGuard || hasIdentityOnlyTenantScope,
       `${fileName} must enforce the authenticated institute boundary`,
     );
 
@@ -68,9 +72,15 @@ test("Student Exam targets come from verified identity and stored ownership chec
   for (const fileName of examApiFiles) {
     const source = await readFile(join(apiDirectory, fileName), "utf8");
     assert.match(source, /attachStudentId:\s*true/u);
-    assert.match(source, /studentId:\s*request\.context\.identity\?\.studentId/u);
+    assert.match(
+      source,
+      /studentId:\s*(?:request\.context\.identity\?\.studentId|identity\.studentId)/u,
+    );
     assert.doesNotMatch(source, /studentId:\s*body\.studentId/u);
-    assert.match(source, /instituteId:\s*request\.context\.identity\?\.instituteId/u);
+    assert.match(
+      source,
+      /instituteId:\s*(?:request\.context\.identity\?\.instituteId|identity\.instituteId)/u,
+    );
   }
 
   const authSource = await readFile(

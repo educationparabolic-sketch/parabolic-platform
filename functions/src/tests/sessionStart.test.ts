@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import {createHash} from "node:crypto";
 import {Timestamp} from "firebase-admin/firestore";
 import * as gcpMetadata from "gcp-metadata";
 import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
@@ -13,6 +14,9 @@ process.env.METADATA_SERVER_DETECTION ??= "none";
 gcpMetadata.setGCPResidency(false);
 
 const firestore = getFirestore();
+
+const createHashForTest = (value: string): string =>
+  createHash("sha256").update(value).digest("hex");
 
 const createSessionServiceForTests = (): SessionService =>
   new SessionService(async (uid, claims) =>
@@ -146,22 +150,43 @@ test(
       timingProfileSnapshot: timingProfileSnapshotFixture,
     });
 
-    const result = await sessionService.startSession({
+    const launchContext = {
       instituteId,
+      intent: "start" as const,
+      licenseLayer: "L1" as const,
       runId,
       studentId,
       studentUid: `uid_${studentId}`,
-      yearId,
+    };
+    const concurrentResults = await Promise.all([
+      sessionService.startSession(launchContext),
+      sessionService.startSession(launchContext),
+    ]);
+    assert.deepEqual(
+      concurrentResults.map((entry) => entry.disposition).sort(),
+      ["created", "replayed"],
+    );
+    assert.equal(concurrentResults[0].sessionId, concurrentResults[1].sessionId);
+    const result = concurrentResults.find(
+      (entry) => entry.disposition === "created",
+    ) ?? concurrentResults[0];
+    const resumed = await sessionService.startSession({
+      ...launchContext,
+      intent: "resume",
     });
+    assert.equal(resumed.disposition, "resumed");
+    assert.equal(resumed.sessionId, result.sessionId);
 
     assert.equal(result.status, "created");
+    assert.equal(result.disposition, "created");
+    assert.equal(result.yearId, yearId);
     assert.ok(result.sessionId.length > 0);
     assert.match(
       result.sessionPath,
       new RegExp(`runs/${runId}/sessions/${result.sessionId}$`),
     );
     assert.match(
-      result.sessionToken,
+      result.launchCredential,
       new RegExp(`signed-session-token:uid_${studentId}:`),
     );
     assert.equal(result.operationalDataAccessPolicy.tier, "HOT");
@@ -243,8 +268,17 @@ test(
     assert.equal(sessionData?.startedAt, null);
     assert.equal(sessionData?.submittedAt, null);
     assert.equal(sessionData?.version, 1);
+    assert.deepEqual(sessionData?.launchCredentialHashes, [
+      createHashForTest(result.launchCredential),
+    ]);
     assert.ok(sessionData?.createdAt instanceof Timestamp);
     assert.ok(sessionData?.updatedAt instanceof Timestamp);
+
+    const sessionsSnapshot = await firestore
+      .collection(`${runPath}/sessions`)
+      .where("studentId", "==", studentId)
+      .get();
+    assert.equal(sessionsSnapshot.size, 1);
 
     await deleteDocumentIfPresent(result.sessionPath);
     await deleteDocumentIfPresent(runPath);
@@ -295,10 +329,11 @@ test(
     await assert.rejects(
       sessionService.startSession({
         instituteId,
+        intent: "start",
+        licenseLayer: "L1",
         runId,
         studentId,
         studentUid: `uid_${studentId}`,
-        yearId,
       }),
       (error: unknown) => {
         assert.ok(error instanceof SessionStartValidationError);
@@ -353,10 +388,11 @@ test(
     await assert.rejects(
       sessionService.startSession({
         instituteId,
+        intent: "start",
+        licenseLayer: "L1",
         runId,
         studentId,
         studentUid: `uid_${studentId}`,
-        yearId,
       }),
       (error: unknown) => {
         assert.ok(error instanceof SessionStartValidationError);
@@ -413,10 +449,11 @@ test(
     await assert.rejects(
       sessionService.startSession({
         instituteId,
+        intent: "start",
+        licenseLayer: "L1",
         runId,
         studentId,
         studentUid: `uid_${studentId}`,
-        yearId,
       }),
       (error: unknown) => {
         assert.ok(error instanceof SessionStartValidationError);
@@ -468,10 +505,11 @@ test(
     await assert.rejects(
       sessionService.startSession({
         instituteId,
+        intent: "start",
+        licenseLayer: "L1",
         runId,
         studentId,
         studentUid: `uid_${studentId}`,
-        yearId,
       }),
       (error: unknown) => {
         assert.ok(error instanceof SessionStartValidationError);
@@ -488,7 +526,7 @@ test(
 );
 
 test(
-  "startSession rejects when an active session already exists",
+  "startSession fails closed when multiple active sessions already exist",
   async () => {
     const sessionService = createSessionServiceForTests();
     const instituteId = "inst_build_26_duplicate_session";
@@ -501,11 +539,13 @@ test(
     const runPath =
       `${institutePath}/academicYears/${yearId}/runs/${runId}`;
     const existingSessionPath = `${runPath}/sessions/session_existing`;
+    const conflictingSessionPath = `${runPath}/sessions/session_conflicting`;
 
     await deleteDocumentIfPresent(institutePath);
     await deleteDocumentIfPresent(studentPath);
     await deleteDocumentIfPresent(licensePath);
     await deleteDocumentIfPresent(existingSessionPath);
+    await deleteDocumentIfPresent(conflictingSessionPath);
     await deleteDocumentIfPresent(runPath);
 
     await firestore.doc(institutePath).set({instituteId});
@@ -525,22 +565,29 @@ test(
       status: "active",
       studentId,
     });
+    await firestore.doc(conflictingSessionPath).set({
+      sessionId: "session_conflicting",
+      status: "created",
+      studentId,
+    });
 
     await assert.rejects(
       sessionService.startSession({
         instituteId,
+        intent: "start",
+        licenseLayer: "L1",
         runId,
         studentId,
         studentUid: `uid_${studentId}`,
-        yearId,
       }),
       (error: unknown) => {
         assert.ok(error instanceof SessionStartValidationError);
-        assert.equal(error.code, "SESSION_LOCKED");
+        assert.equal(error.code, "CONFLICT");
         return true;
       },
     );
 
+    await deleteDocumentIfPresent(conflictingSessionPath);
     await deleteDocumentIfPresent(existingSessionPath);
     await deleteDocumentIfPresent(runPath);
     await deleteDocumentIfPresent(licensePath);
@@ -587,14 +634,16 @@ test(
     await assert.rejects(
       sessionService.startSession({
         instituteId,
+        intent: "start",
+        licenseLayer: "L1",
         runId,
         studentId,
         studentUid: `uid_${studentId}`,
-        yearId,
       }),
       (error: unknown) => {
-        assert.ok(error instanceof Error);
-        assert.match(error.message, /cannot be used for session start/i);
+        assert.ok(error instanceof SessionStartValidationError);
+        assert.equal(error.code, "CONFLICT");
+        assert.match(error.message, /no current operational academic year/i);
         return true;
       },
     );

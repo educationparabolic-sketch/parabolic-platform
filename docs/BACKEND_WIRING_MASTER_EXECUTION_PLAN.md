@@ -15,13 +15,13 @@ program: backend-wiring-and-deployment-readiness
 program_status: IN_PROGRESS
 release_decision: NO_GO
 current_phase: 1
-current_task: BWM-017
-current_substep: BWM-017 — inspect Student start/resume callers and existing session authority
-last_completed_task: BWM-016
-next_task: BWM-017
+current_task: BWM-018
+current_substep: BWM-018 — inspect launch credential exchange and authenticated Exam runtime
+last_completed_task: BWM-017
+next_task: BWM-018
 blocked_tasks: []
-last_updated: 2026-08-28
-last_update_summary: BWM-016 is VERIFIED. STU-03/04/05 now provide strict identity-scoped performance, L1+ insights, and paged released-solution reads; current-year Student ownership, assignment, license, completed-run, release-time, and submitted-session checks fail closed, higher-layer fields are redacted, and live Student pages preserve truthful empty/error/locked states without fixture substitution. Canonical accounting is 35 routes (28 implemented, 6 incompatible, 1 missing, 0 retired) and 47 HTTP exports. BWM-017 is READY; production remains NO_GO and no Exam implementation has begun.
+last_updated: 2026-08-29
+last_update_summary: BWM-017 is VERIFIED. STU-06 now accepts only intent plus runId, derives institute/Student/license/current year from server authority, transactionally converges simultaneous starts on one deterministic eligible session, distinguishes created/replayed/resumed dispositions, issues nonce-distinct bounded launch credentials, and returns a strict absolute Exam URL consumed by Student My Tests. Unit, contract, workspace, focused and aggregate emulator, cleanup, and no-mock browser gates passed. BWM-018 is READY for launch-credential exchange/runtime authentication; production remains NO_GO.
 ```
 
 Do not infer progress from old build numbers, UI completion labels, or visual verification artifacts. Only this checkpoint, the task registry, checked substeps, session log, and current repository evidence determine progress for this program.
@@ -268,8 +268,8 @@ The registry is the canonical order. Detailed cards below define scope and accep
 | BWM-014 | P0 | VERIFIED | BWM-013 | Minimum authoritative assignment lifecycle |
 | BWM-015 | P0 | VERIFIED | BWM-003,BWM-006,BWM-008,BWM-014 | Student dashboard and My Tests APIs |
 | BWM-016 | P0 | VERIFIED | BWM-015 | Student solutions, performance, and insights APIs |
-| BWM-017 | P0 | READY | BWM-014,BWM-015 | Compatible Exam start and resume contracts |
-| BWM-018 | P0 | PLANNED | BWM-009,BWM-017 | Exam launch credential exchange and authenticated runtime |
+| BWM-017 | P0 | VERIFIED | BWM-014,BWM-015 | Compatible Exam start and resume contracts |
+| BWM-018 | P0 | READY | BWM-009,BWM-017 | Exam launch credential exchange and authenticated runtime |
 | BWM-019 | P0 | PLANNED | BWM-012,BWM-013,BWM-018 | Authoritative sanitized Exam runtime snapshot |
 | BWM-020 | P0 | PLANNED | BWM-018,BWM-019 | Server-authoritative session lifecycle and deadline |
 | BWM-021 | P0 | PLANNED | BWM-019,BWM-020 | Correct answer DTO, clear semantics, and timing model |
@@ -1625,14 +1625,32 @@ The registry is the canonical order. Detailed cards below define scope and accep
 
 ### BWM-017 — Compatible Exam Start and Resume Contracts
 
-- **Status:** `READY`
+- **Status:** `VERIFIED`
 - **Purpose:** Make Student start/resume create or locate exactly one valid session.
 - **Work:** define request from token-derived institute/student plus run ID; return session ID, one-time launch credential, absolute Exam URL, status, and resume disposition; separate start from resume behavior; handle active-session idempotency.
-- **Acceptance:** First start creates one session; retry returns the same disposition; resume opens the existing eligible session instead of attempting a duplicate.
+- **Acceptance:** First start creates one session; retry returns the same session with a replay disposition; resume opens the existing eligible session instead of attempting a duplicate.
+- **Completed substeps:**
+  - [x] Inspect the interrupted working tree, Student launch caller, STU-06 gateway, identity middleware, session service, current-year authority, Exam entry boundary, schema, and existing test coverage before changing code.
+  - [x] Define a strict shared start/resume request and launch result with explicit disposition, status, session ID, nonce-distinct credential, and absolute Exam URL.
+  - [x] Implement identity-derived current-year/run/assignment/license validation and deterministic transactional exactly-one-session start, replay, and resume behavior.
+  - [x] Wire Student My Tests to send only intent plus run ID and navigate only to the strict server-returned Exam URL.
+  - [x] Add permanent handler, service concurrency, gateway emulator, ownership, adapter/DTO, aggregate, and real no-mock Student browser coverage.
+  - [x] Run affected and aggregate verification, reconcile canonical API/inventory/module/schema accounting, and close BWM-017 without beginning credential exchange/runtime authentication.
+- **Implemented files:** `functions/src/types/sessionStart.ts`, `functions/src/services/session.ts`, and `functions/src/api/examStart.ts` implement the identity-derived launch boundary and deterministic session transaction. `shared/contracts/apiDtos.d.ts` and `shared/services/portalResponseAdapters.ts` define and validate the strict launch DTO. `apps/student/src/features/my-tests/studentMyTestsDataset.ts` and `StudentMyTestsPage.tsx` send the bounded request and consume the absolute URL. Route/export counts, canonical docs, focused tests, emulator suites, and the Student browser runner/spec were updated; `functions/src/tests/examStartApi.test.ts` and `functions/tests/examStart.emulator.test.js` are the new permanent gateway proofs.
+- **Security/data evidence:** The browser supplies only `intent` and `runId`; verified Firebase identity supplies institute, Student UID/document ID, and license, while the service resolves the current operational academic year. Active non-deleted Student, exact persisted identity/license agreement, assignment membership, execution-mode entitlement, and launch window are required. A deterministic institute/year/run/Student session document and Firestore transaction make simultaneous starts converge. Start retries return `replayed`; explicit resume returns `resumed`; ambiguous or ineligible state fails closed. Each custom launch credential contains a fresh nonce, only the five newest hashes remain valid, and the legacy latest hash is retained for the still-unmodified BWM-018 entry boundary.
+- **Verification evidence:** Functions non-emulator CI passed 46/46 selected files. The affected root DTO/envelope/adapter/routing/data-mode/fallback/fixture/data-state/ownership/manifest contracts passed. All 10 workspace lint/build gates passed with Admin/Student/Exam/Vendor module counts 130/100/77/97 and successful Functions TypeScript compilation. The focused session-start emulator passed 7/7, the dedicated real Auth/Firestore/Functions launch gateway suite passed 1/1, and the final full emulator aggregate passed 10 explicit full-service suites with 21 assertions, its real Hosting/browser smoke, and 65 Firestore-backed files with 203 assertions. The intentional failure-cleanup probe passed and released every port. The no-mock Student Chromium launch flow passed 1/1 through real Auth, Firestore, Functions, and Hosting, captured the unmodified gateway response, followed the absolute Exam URL, and proved exactly one identity-owned session.
+- **L5 staging/preview:** N/A — no deployment target, preview channel, public URL, secret, environment, Hosting rewrite, or release configuration changed.
+- **L6 production:** N/A — reserved for BWM-057; production remains untouched and `NO_GO`.
+- **Firebase CLI version:** `15.9.0`; Java `21.0.8`.
+- **Authorization/external mutations:** User-approved commands used only loopback Firebase emulators, headless Chromium, disposable cleaned Auth/Firestore data, ignored local artifacts, and Firebase CLI local state. No deployment, remote Firebase mutation, secret mutation, public endpoint, or production resource changed.
+- **Contract/schema changes:** STU-06 is now implemented; canonical totals are 35 frontend routes (29 implemented, 5 incompatible, 1 missing, 0 retired) and 47 HTTP exports. Session documents use a deterministic identity/run/year key and store a bounded launch-credential hash set in addition to the latest legacy hash. No Firestore rule or index changed.
+- **Verification notes:** Interrupted work was inspected before completion. Repairs made during proof included injecting first-login activation into handler tests, making credentials nonce-distinct, aligning stale tenant-ownership expectations with identity-only authority, and replacing a flaky post-navigation response read with transparent byte-for-byte Playwright pass-through capture. The first aggregate attempt exposed the stale ownership assertion; after repair, focused and full clean reruns passed. Expected transaction contention retries and the pre-existing completed-fixture assignment-trigger warning did not fail their owning suites.
+- **Residual risks:** BWM-018 retains Firebase custom-token exchange, URL/history credential removal, refreshed ID-token use, and expired/replayed/wrong-session credential proof. BWM-019 retains the authoritative sanitized runtime snapshot, BWM-024 retains result propagation, and production remains `NO_GO`.
+- **Completed on:** 2026-08-29
 
 ### BWM-018 — Exam Launch Credential Exchange and Runtime Auth
 
-- **Status:** `PLANNED`
+- **Status:** `READY`
 - **Purpose:** Resolve Firebase custom-token versus ID-token incompatibility.
 - **Work:** parse nested custom claims correctly; exchange the custom token using Firebase Auth; immediately remove launch credentials from URL/history; use refreshed Firebase ID tokens for entry/answers/submit; remove nonexistent custom refresh endpoint; test expired/replayed/wrong-session launch credentials.
 - **Acceptance:** A real start response authenticates the Exam app, and backend `verifyIdToken` accepts subsequent requests with correct session claims.
@@ -2222,6 +2240,15 @@ Never record only “tests passed.” Include exact commands and whether tests w
 ## Session Log
 
 Append newest entries at the top.
+
+### LOG-091 — 2026-08-29 — BWM-017 Compatible Exam Start and Resume
+
+- **Task:** Resume the interrupted BWM-017 working tree, inspect the accumulated changes, complete only the identity-derived exactly-one-session start/resume boundary and Student consumer, run the required verification ladder, reconcile canonical documentation, and advance without beginning Exam credential exchange/runtime work.
+- **Outcome:** BWM-017 is `VERIFIED`. STU-06 now accepts exactly `intent` plus `runId`, derives institute/Student/license/current year from authenticated server authority, validates active assignment/window/mode eligibility, and transactionally converges first starts and simultaneous retries on one deterministic session. Responses distinguish `created`, `replayed`, and `resumed`, carry nonce-distinct bounded launch credentials, and include a strict absolute Exam URL consumed by Student My Tests. Canonical accounting is 35 routes (29 implemented, 5 incompatible, 1 missing, 0 retired) and 47 HTTP exports. BWM-018 is `READY`; production remains `NO_GO`.
+- **Validation performed:** Functions non-emulator CI passed 46/46 files; affected root DTO/envelope/adapter/routing/data-mode/fallback/fixture/data-state/ownership/manifest contracts passed; all 10 workspace lint/build gates passed. The focused session transaction suite passed 7/7, the dedicated real Auth/Firestore/Functions launch suite passed 1/1, and the full Firebase aggregate passed 10 explicit suites with 21 assertions, its Hosting/browser smoke, and 65 Firestore files with 203 assertions. The no-mock Student Auth/Firestore/Functions/Hosting Chromium launch scenario passed 1/1 and proved a strict response plus one identity-owned session. The intentional failure-cleanup probe passed and released every port.
+- **Files changed:** Added the strict shared launch DTO/adapter, identity-only Exam start handler, deterministic transactional session start/resume service with bounded nonce credential hashes, Student intent/URL consumption, handler/service/contract/emulator/browser coverage, and aggregate accounting; reconciled `docs/api_contract.md`, `docs/FRONTEND_API_CALL_INVENTORY.md`, `docs/MODULE_REGISTRY.md`, `docs/firestore_schema.md`, and this controller.
+- **Cloud changes:** None. User-approved commands used only demo-project loopback emulators, headless Chromium, disposable cleaned Auth/Firestore data, ignored artifacts, and Firebase CLI local state. No deployment, remote data mutation, secret, public endpoint, or production resource changed.
+- **Next:** BWM-018 — inspect the Exam launch URL/token parsing and entry/answer/submit authentication path, then implement only secure custom-token exchange, immediate URL credential removal, and refreshed Firebase ID-token runtime authorization with replay/expiry/session-binding proof.
 
 ### LOG-090 — 2026-08-28 — BWM-016 Student Performance, Insights, and Released Solutions
 

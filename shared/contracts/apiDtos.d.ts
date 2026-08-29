@@ -524,6 +524,31 @@ export interface StudentTestsResult {
   hasMore: boolean;
 }
 
+export type StudentExamLaunchIntent = "start" | "resume";
+
+export type StudentExamLaunchDisposition =
+  | "created"
+  | "replayed"
+  | "resumed";
+
+export type StudentExamSessionStatus =
+  | "created"
+  | "started"
+  | "active";
+
+export interface StudentExamLaunchRequest {
+  intent: StudentExamLaunchIntent;
+  runId: string;
+}
+
+export interface StudentExamLaunchResult {
+  disposition: StudentExamLaunchDisposition;
+  examUrl: string;
+  launchCredential: string;
+  sessionId: string;
+  status: StudentExamSessionStatus;
+}
+
 export type StudentPerformanceRiskState =
   | "Stable"
   | "Improving"

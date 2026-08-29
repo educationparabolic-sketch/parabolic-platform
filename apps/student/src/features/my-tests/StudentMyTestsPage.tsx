@@ -269,8 +269,8 @@ function StudentMyTestsPage() {
     setInlineMessage(null);
 
     try {
-      const sessionUrl = await startStudentExamSession(test);
-      window.location.assign(sessionUrl);
+      const launch = await startStudentExamSession(test);
+      window.location.assign(launch.examUrl);
     } catch (error) {
       const reason = error instanceof ApiClientError ? error.message : "Unable to start exam session.";
       setInlineMessage(`${reason} Please try again from your assigned test list.`);

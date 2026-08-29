@@ -743,6 +743,37 @@ test("Student performance, insights, and solutions adapters reject contract drif
   );
 });
 
+test("Student exam launch adapter requires a matching absolute credential URL", () => {
+  const launch = {
+    disposition: "created",
+    examUrl: "https://exam.example.test/session/session-1?token=credential-1",
+    launchCredential: "credential-1",
+    sessionId: "session-1",
+    status: "created",
+  };
+  assert.deepEqual(adapters.adaptStudentExamLaunchResult(launch), launch);
+  assert.throws(
+    () => adapters.adaptStudentExamLaunchResult({
+      ...launch,
+      examUrl: "https://exam.example.test/session/other?token=credential-1",
+    }),
+    {
+      name: "PortalResponseValidationError",
+      route: "POST /exam/start",
+    },
+  );
+  assert.throws(
+    () => adapters.adaptStudentExamLaunchResult({
+      ...launch,
+      examUrl: "https://exam.example.test/session/session-1?token=wrong",
+    }),
+    {
+      name: "PortalResponseValidationError",
+      route: "POST /exam/start",
+    },
+  );
+});
+
 test("Exam adapter accepts the real submission result and rejects envelope/data drift", () => {
   const backendEnvelope = buildSubmissionSuccessResponse(
     {

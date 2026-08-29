@@ -96,5 +96,6 @@ run(
 
 console.log(
   "\n[student-summary-contract] PASS: identity-scoped dashboard, tests, " +
-    "performance, insights, and solutions rendered from real APIs.",
+    "performance, insights, solutions, and exam launch rendered from " +
+    "real APIs.",
 );

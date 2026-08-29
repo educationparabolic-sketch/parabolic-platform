@@ -283,7 +283,7 @@ export const API_ROUTE_MANIFEST: readonly ApiRouteManifestEntry[] = [
     "student",
     "POST",
     "/exam/start",
-    "incompatible",
+    "implemented",
     "examStart",
   ),
   defineRoute(

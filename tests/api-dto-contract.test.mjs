@@ -145,6 +145,19 @@ const dtoFamilies = [
     ],
   },
   {
+    backend: "functions/src/types/sessionStart.ts",
+    frontend: [
+      "apps/student/src/features/my-tests/studentMyTestsDataset.ts",
+    ],
+    names: [
+      "StudentExamLaunchIntent",
+      "StudentExamLaunchDisposition",
+      "StudentExamSessionStatus",
+      "StudentExamLaunchRequest",
+      "StudentExamLaunchResult",
+    ],
+  },
+  {
     backend: "functions/src/types/calibrationDeployment.ts",
     frontend: [
       "apps/vendor/src/features/calibration/vendorCalibrationDataset.ts",

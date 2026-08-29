@@ -170,10 +170,16 @@ sessions/{sessionId} documents store full student attempt data.
 
 Important fields include:
 
+instituteId
+yearId
+runId
+sessionId
 studentId  
+studentUid
 status  
 startedAt  
 submittedAt  
+launchCredentialHashes
 rawScorePercent  
 accuracyPercent  
 disciplineIndex  
@@ -181,6 +187,8 @@ riskState
 answerMap  
 
 These documents represent immutable exam execution records.
+
+For BWM-017 start/resume, the session document ID is deterministic for the authoritative institute, current academic year, run, and Student tuple. Concurrent first-start requests therefore transact against the same document; later `start` retries replay it and `resume` locates it while its status is `created`, `started`, or `active`. Browser tenant, year, test, Student, UID, and license values are not accepted as persistence authority. Each issued Firebase launch credential carries a unique nonce, while only a bounded set of SHA-256 hashes is retained in `launchCredentialHashes` (plus the transitional latest `sessionTokenHash` compatibility field). BWM-018 owns atomic one-time credential consumption and runtime Firebase ID-token exchange.
 
 ---
 
