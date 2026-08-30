@@ -235,6 +235,9 @@ test(
       assert.equal(entered.status, 200, JSON.stringify(entered.body));
       assert.equal(entered.body.success, true);
       assert.equal(entered.body.data.sessionId, sessionIds[0]);
+      assert.equal(entered.body.data.status, "started");
+      assert.equal(entered.body.data.deadlineAt, null);
+      assert.equal(entered.body.data.startedAt, null);
       assert.deepEqual(
         entered.body.data.runtimeSnapshot.questions.map((question) =>
           question.id),
@@ -267,6 +270,41 @@ test(
       assert.equal(wrongSessionEntry.status, 401);
       assert.equal(wrongSessionEntry.body.error?.code, "UNAUTHORIZED");
 
+      const activated = await postExamRoute(
+        `/api/v1/exam/session/${encodeURIComponent(sessionIds[0])}/activate`,
+        runtimeIdToken,
+        {},
+      );
+      assert.equal(activated.status, 200, JSON.stringify(activated.body));
+      assert.equal(activated.body.data.status, "active");
+      assert.equal(activated.body.data.replayed, false);
+      assert.ok(Date.parse(activated.body.data.serverTime));
+      assert.ok(Date.parse(activated.body.data.startedAt));
+      assert.ok(Date.parse(activated.body.data.deadlineAt));
+      const activationReplay = await postExamRoute(
+        `/api/v1/exam/session/${encodeURIComponent(sessionIds[0])}/activate`,
+        runtimeIdToken,
+        {},
+      );
+      assert.equal(activationReplay.status, 200);
+      assert.equal(activationReplay.body.data.status, "active");
+      assert.equal(activationReplay.body.data.replayed, true);
+      assert.equal(
+        activationReplay.body.data.startedAt,
+        activated.body.data.startedAt,
+      );
+      assert.equal(
+        activationReplay.body.data.deadlineAt,
+        activated.body.data.deadlineAt,
+      );
+
+      const activatedSession = await run.collection("sessions")
+        .doc(sessionIds[0])
+        .get();
+      assert.equal(activatedSession.data().status, "active");
+      assert.ok(activatedSession.data().startedAt);
+      assert.ok(activatedSession.data().deadlineAt);
+
       const answerAuthProof = await postExamRoute(
         `/api/v1/exam/session/${encodeURIComponent(sessionIds[0])}/answers`,
         runtimeIdToken,
@@ -295,6 +333,9 @@ test(
       assert.equal(sessions.docs[0].id, sessionIds[0]);
       assert.equal(sessions.docs[0].data().studentUid, uid);
       assert.equal(sessions.docs[0].data().yearId, yearId);
+      assert.equal(sessions.docs[0].data().status, "submitted");
+      assert.ok(sessions.docs[0].data().startedAt);
+      assert.ok(sessions.docs[0].data().deadlineAt);
       assert.deepEqual(
         sessions.docs[0].data().runtimeSnapshot.questions.map((question) =>
           question.id),

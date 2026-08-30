@@ -178,6 +178,8 @@ studentId
 studentUid
 status  
 startedAt  
+deadlineAt
+expiredAt
 submittedAt  
 launchCredentialHashes
 consumedLaunchCredentialHashes
@@ -198,6 +200,8 @@ For BWM-017 start/resume, the session document ID is deterministic for the autho
 BWM-018 makes entry consumption atomic. After Firebase custom-token exchange, EXM-01 compares the verified ID-token session claims, raw credential claims, persisted identity/UID, and license snapshot inside the entry boundary. Its Firestore transaction removes the matching SHA-256 hash from `launchCredentialHashes`, appends it to the bounded `consumedLaunchCredentialHashes` replay-denial set, records server-owned `launchCredentialConsumedAt` and `launchCredentialConsumedByUid`, and deletes the transitional `sessionTokenHash` when it represents that consumed credential. Raw launch credentials and Firebase ID tokens are never persisted.
 
 BWM-019 freezes `runtimeSnapshot` on first start beside the corresponding `questionTimeMap`. The immutable snapshot contains ordered candidate-visible question IDs, numbers, types, sections, difficulty, prompts, options, and permitted image/media/matrix data plus template version, subjects, mode, schedule, phase, timing, license, difficulty, and proctoring metadata. Its runtime question IDs are unique and their set must exactly equal `questionTimeMap`; later source-question edits do not change an existing session. Correct answers, correctness flags, solutions, solution assets, internal notes, and analytics are never projected into this snapshot or returned through EXM-01. No collection path, Firestore rule, or index changed.
+
+BWM-020 makes lifecycle and countdown authority transactional. EXM-01 atomically advances an accepted first entry from `created` to `started`; EXM-05 alone advances `started` to `active`, persists server-owned `startedAt`, and copies the immutable runtime schedule end into `deadlineAt`. Activation replays return the same stored clock authority. At or after the deadline, entry/activation reconciliation persists `expired` plus `expiredAt`; answer writes require persisted `active` state, a valid `deadlineAt`, and server time before the deadline. Browser time is used only to render the remaining interval computed from returned `serverTime` and `deadlineAt`. No collection path, Firestore rule, or index changed.
 
 ---
 

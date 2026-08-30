@@ -93,6 +93,7 @@ const isAnswerBatchErrorCode = (
 ): code is AnswerBatchErrorCode => code === "FORBIDDEN" ||
   code === "INTERNAL_ERROR" ||
   code === "NOT_FOUND" ||
+  code === "SESSION_LOCKED" ||
   code === "TENANT_MISMATCH" ||
   code === "UNAUTHORIZED" ||
   code === "VALIDATION_ERROR";

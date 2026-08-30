@@ -195,6 +195,8 @@ test("Student start authenticates Exam entry once and removes the credential", a
   const entryEnvelope = await entryResponse.json();
   expect(entryEnvelope.success).toBe(true);
   expect(entryEnvelope.data.allowed).toBe(true);
+  expect(entryEnvelope.data.status).toBe("started");
+  expect(entryEnvelope.data.deadlineAt).toBeNull();
   expect(entryEnvelope.data.sessionId).toBe(sessionId);
   expect(entryEnvelope.data.runtimeSnapshot.questionSetVersion).toBe("19");
   expect(entryEnvelope.data.runtimeSnapshot.mode).toBe("Diagnostic");
@@ -210,10 +212,26 @@ test("Student start authenticates Exam entry once and removes the credential", a
   expect(entryRequestBody).toEqual({token: launchCredential});
   expect(entryAuthorization).toMatch(/^Bearer /);
   expect(entryAuthorization).not.toBe(`Bearer ${launchCredential}`);
-  await expect(page.getByText("Entry Window Closed", {exact: true}))
+  await expect(page.getByText("Complete Entry Check", {exact: true}))
     .toBeVisible({timeout: 30_000});
+  await page.getByRole("button", {name: "Check Internet"}).click();
+  await expect(page.getByText("Entry checks complete", {exact: true}).first())
+    .toBeVisible({timeout: 30_000});
+  const activationResponsePromise = page.waitForResponse((response) =>
+    new URL(response.url()).pathname.endsWith(`/session/${sessionId}/activate`),
+  {timeout: 90_000});
+  await page.getByRole("button", {name: "Continue to Instructions"}).click();
+  await page.getByLabel(/I have read and understood the instructions/u).check();
+  const activationResponse = await activationResponsePromise;
+  expect(activationResponse.status()).toBe(200);
+  const activationEnvelope = await activationResponse.json();
+  expect(activationEnvelope.data.status).toBe("active");
+  expect(activationEnvelope.data.replayed).toBe(false);
+  expect(Date.parse(activationEnvelope.data.serverTime)).not.toBeNaN();
+  expect(Date.parse(activationEnvelope.data.startedAt)).not.toBeNaN();
+  expect(Date.parse(activationEnvelope.data.deadlineAt)).not.toBeNaN();
   await expect(page.getByText("Authoritative browser snapshot question", {exact: true}))
-    .toHaveCount(0);
+    .toBeVisible({timeout: 30_000});
   expect(await page.evaluate((credential) => ({
     local: Object.values(localStorage).includes(credential),
     session: Object.values(sessionStorage).includes(credential),
@@ -225,6 +243,9 @@ test("Student start authenticates Exam entry once and removes the credential", a
   const consumedSession = await firestore.doc(sessionPath).get();
   expect(consumedSession.data().launchCredentialHashes).toHaveLength(0);
   expect(consumedSession.data().consumedLaunchCredentialHashes).toHaveLength(1);
+  expect(consumedSession.data().status).toBe("active");
+  expect(consumedSession.data().startedAt).toBeTruthy();
+  expect(consumedSession.data().deadlineAt).toBeTruthy();
 
   const replayContext = await browser.newContext({bypassCSP: true});
   const replayPage = await replayContext.newPage();

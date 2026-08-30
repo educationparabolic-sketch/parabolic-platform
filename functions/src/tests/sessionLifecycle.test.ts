@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as gcpMetadata from "gcp-metadata";
+import {Timestamp} from "firebase-admin/firestore";
 import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
 import {SessionService, SessionStartValidationError} from "../services/session";
 
@@ -45,6 +46,94 @@ const seedSessionDocument = async (
     submittedAt: null,
     version: 1,
     yearId: "2026",
+  });
+};
+
+const seedActivationSession = async (
+  path: string,
+  status: "created" | "started" | "active" | "submitted" | "expired",
+  startsAtMs: number,
+  endsAtMs: number,
+): Promise<void> => {
+  const pathSegments = path.split("/");
+  const sessionId = pathSegments[pathSegments.length - 1];
+  const runId = pathSegments[pathSegments.length - 3];
+  const yearId = pathSegments[pathSegments.length - 5];
+  const instituteId = pathSegments[1];
+  const questionId = "question_lifecycle_authority";
+  await firestore.doc(path).set({
+    answerMap: {},
+    deadlineAt: status === "active" ? Timestamp.fromMillis(endsAtMs) : null,
+    instituteId,
+    questionTimeMap: {
+      [questionId]: {
+        cumulativeTimeSpent: 0,
+        enteredAt: null,
+        exitedAt: null,
+        lastEntryTimestamp: null,
+        maxTime: 60,
+        minTime: 30,
+      },
+    },
+    runId,
+    runtimeSnapshot: {
+      difficultyDistribution: {easyPercent: 100, hardPercent: 0, mediumPercent: 0},
+      hardModeRevisitRestricted: false,
+      license: {currentLayer: "L1", eligibilityFlags: {}, featureFlags: {}},
+      mode: "Diagnostic",
+      phaseConfigSnapshot: {
+        bufferPercent: 0,
+        phase1Percent: 40,
+        phase2Percent: 45,
+        phase3Percent: 15,
+      },
+      proctoringPolicy: {
+        browserIntegrityGuardEnabled: false,
+        faceIdentityGazeGuardEnabled: false,
+      },
+      questionSetVersion: "1",
+      questions: [{
+        difficulty: "easy",
+        id: questionId,
+        imageUrl: null,
+        matrixColumns: [],
+        matrixRows: [],
+        media: null,
+        number: 1,
+        options: [{id: "A", label: "A", text: "Option A"}],
+        section: "Physics",
+        text: "Lifecycle authority question",
+        type: "mcq",
+      }],
+      schedule: {
+        durationMs: endsAtMs - startsAtMs,
+        earlyEntryBufferMinutes: 5,
+        earlyEntryOpensAt: new Date(startsAtMs - 300_000).toISOString(),
+        sessionEndsAt: new Date(endsAtMs).toISOString(),
+        sessionStartsAt: new Date(startsAtMs).toISOString(),
+        timezone: "UTC",
+      },
+      sessionId,
+      subjects: ["Physics"],
+      timingProfile: {
+        controlledSlowdownSeconds: 12,
+        finalWindowMinutes: 10,
+        hardModeRestrictSubmitUntilAllVisited: true,
+        hardModeSequentialNavigation: false,
+        maxTimeByDifficultySec: {easy: 60, hard: 210, medium: 150},
+        minTimeByDifficultySec: {easy: 30, hard: 150, medium: 60},
+        syncEveryMs: 10_000,
+      },
+    },
+    sessionId,
+    startedAt: status === "active" ? Timestamp.fromMillis(startsAtMs) : null,
+    status,
+    studentId: "student_lifecycle_authority",
+    studentUid: "uid_lifecycle_authority",
+    submissionLock: false,
+    submittedAt: null,
+    version: 1,
+    yearId,
   });
 };
 
@@ -265,5 +354,110 @@ test(
 
     await deleteDocumentIfPresent(activeSessionPath);
     await deleteDocumentIfPresent(submittedSessionPath);
+  },
+);
+
+test(
+  "activateSession persists one server clock and replays it idempotently",
+  async () => {
+    const service = createSessionServiceForTests();
+    const startsAtMs = Date.parse("2026-08-30T10:00:00.000Z");
+    const endsAtMs = Date.parse("2026-08-30T11:00:00.000Z");
+    const sessionPath =
+      "institutes/inst_lifecycle_activate/academicYears/2026/" +
+      "runs/run_lifecycle_activate/sessions/session_lifecycle_activate";
+    const context = {
+      instituteId: "inst_lifecycle_activate",
+      runId: "run_lifecycle_activate",
+      sessionId: "session_lifecycle_activate",
+      studentId: "student_lifecycle_authority",
+      studentUid: "uid_lifecycle_authority",
+      yearId: "2026",
+    };
+    await deleteDocumentIfPresent(sessionPath);
+    await seedActivationSession(sessionPath, "started", startsAtMs, endsAtMs);
+
+    const activated = await service.activateSession(context, startsAtMs + 5000);
+    assert.equal(activated.status, "active");
+    assert.equal(activated.replayed, false);
+    assert.equal(activated.serverTime, "2026-08-30T10:00:05.000Z");
+    assert.equal(activated.startedAt, "2026-08-30T10:00:05.000Z");
+    assert.equal(activated.deadlineAt, "2026-08-30T11:00:00.000Z");
+
+    const replayed = await service.activateSession(context, startsAtMs + 15_000);
+    assert.equal(replayed.status, "active");
+    assert.equal(replayed.replayed, true);
+    assert.equal(replayed.startedAt, activated.startedAt);
+    assert.equal(replayed.deadlineAt, activated.deadlineAt);
+
+    const snapshot = await firestore.doc(sessionPath).get();
+    assert.equal(snapshot.data()?.status, "active");
+    assert.equal(
+      snapshot.data()?.startedAt.toMillis(),
+      startsAtMs + 5000,
+    );
+    assert.equal(snapshot.data()?.deadlineAt.toMillis(), endsAtMs);
+    await deleteDocumentIfPresent(sessionPath);
+  },
+);
+
+test(
+  "activateSession expires at the persisted deadline and rejects illegal states",
+  async () => {
+    const service = createSessionServiceForTests();
+    const startsAtMs = Date.parse("2026-08-30T12:00:00.000Z");
+    const endsAtMs = Date.parse("2026-08-30T13:00:00.000Z");
+    const sessionPath =
+      "institutes/inst_lifecycle_expiry/academicYears/2026/" +
+      "runs/run_lifecycle_expiry/sessions/session_lifecycle_expiry";
+    const context = {
+      instituteId: "inst_lifecycle_expiry",
+      runId: "run_lifecycle_expiry",
+      sessionId: "session_lifecycle_expiry",
+      studentId: "student_lifecycle_authority",
+      studentUid: "uid_lifecycle_authority",
+      yearId: "2026",
+    };
+    await deleteDocumentIfPresent(sessionPath);
+    await seedActivationSession(sessionPath, "active", startsAtMs, endsAtMs);
+
+    const expired = await service.activateSession(context, endsAtMs);
+    assert.equal(expired.status, "expired");
+    assert.equal(expired.replayed, true);
+    const expiredReplay = await service.activateSession(context, endsAtMs + 60_000);
+    assert.equal(expiredReplay.status, "expired");
+    assert.equal(expiredReplay.replayed, true);
+    assert.equal((await firestore.doc(sessionPath).get()).data()?.status, "expired");
+
+    await seedActivationSession(sessionPath, "created", startsAtMs, endsAtMs);
+    await assert.rejects(
+      service.activateSession(context, startsAtMs + 1000),
+      (error: unknown) => {
+        assert.ok(error instanceof SessionStartValidationError);
+        assert.equal(error.code, "SESSION_LOCKED");
+        return true;
+      },
+    );
+
+    await seedActivationSession(sessionPath, "started", startsAtMs, endsAtMs);
+    await assert.rejects(
+      service.activateSession(context, startsAtMs - 1),
+      (error: unknown) => {
+        assert.ok(error instanceof SessionStartValidationError);
+        assert.equal(error.code, "WINDOW_CLOSED");
+        return true;
+      },
+    );
+
+    await seedActivationSession(sessionPath, "submitted", startsAtMs, endsAtMs);
+    await assert.rejects(
+      service.activateSession(context, startsAtMs + 1000),
+      (error: unknown) => {
+        assert.ok(error instanceof SessionStartValidationError);
+        assert.equal(error.code, "SESSION_LOCKED");
+        return true;
+      },
+    );
+    await deleteDocumentIfPresent(sessionPath);
   },
 );

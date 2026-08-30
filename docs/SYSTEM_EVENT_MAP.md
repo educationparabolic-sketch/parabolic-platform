@@ -46,6 +46,8 @@ BillingWebhookReceived | Stripe webhook | License synchronization
 UsageUpdated | Student activation trigger | Usage metering engine
 ArchiveTriggered | Academic year closure | Archive pipeline
 
+BWM-020 separates the persisted runtime lifecycle from the historical `SessionStarted` event label: EXM-01 records `created -> started`, EXM-05 records `started -> active` and deadline expiry, and only the existing `/exam/start` topology emits `SessionStarted`. No additional trigger is introduced.
+
 ---
 
 # FIRESTORE TRIGGERS

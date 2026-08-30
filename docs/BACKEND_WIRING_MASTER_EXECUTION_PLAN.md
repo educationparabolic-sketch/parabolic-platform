@@ -15,13 +15,13 @@ program: backend-wiring-and-deployment-readiness
 program_status: IN_PROGRESS
 release_decision: NO_GO
 current_phase: 1
-current_task: BWM-020
-current_substep: BWM-020 — inspect current lifecycle and deadline authority before implementation
-last_completed_task: BWM-019
-next_task: BWM-020
+current_task: BWM-021
+current_substep: BWM-021 — inspect current answer DTO, clear, timing, and write authority before implementation
+last_completed_task: BWM-020
+next_task: BWM-021
 blocked_tasks: []
 last_updated: 2026-08-30
-last_update_summary: BWM-019 is VERIFIED. Session start now freezes an immutable candidate-safe runtime snapshot whose question IDs exactly match questionTimeMap; EXM-01 returns it through a strict shared DTO/adapter; and the Exam runtime consumes server question, schedule, mode, phase, timing, license, and proctoring authority. Correct answers, solutions, notes, analytics, and production demo snapshots are excluded. Focused contract, Firestore, Auth/Functions, no-mock Chromium, and full emulator aggregate verification passed. BWM-020 is READY; production remains NO_GO.
+last_update_summary: BWM-020 is VERIFIED. EXM-01 now persists created-to-started entry, secured idempotent EXM-05 persists started-to-active with server-owned startedAt/deadlineAt and returns serverTime, reached deadlines reconcile to expired, and answer writes require active pre-deadline authority. Exam entry/resume/timer state consumes that authority without local lifecycle/deadline transitions. Focused contracts, Firestore, authenticated Functions, no-mock Chromium, workspace, full emulator aggregate, and failure-cleanup verification passed. BWM-021 is READY; production remains NO_GO.
 ```
 
 Do not infer progress from old build numbers, UI completion labels, or visual verification artifacts. Only this checkpoint, the task registry, checked substeps, session log, and current repository evidence determine progress for this program.
@@ -271,8 +271,8 @@ The registry is the canonical order. Detailed cards below define scope and accep
 | BWM-017 | P0 | VERIFIED | BWM-014,BWM-015 | Compatible Exam start and resume contracts |
 | BWM-018 | P0 | VERIFIED | BWM-009,BWM-017 | Exam launch credential exchange and authenticated runtime |
 | BWM-019 | P0 | VERIFIED | BWM-012,BWM-013,BWM-018 | Authoritative sanitized Exam runtime snapshot |
-| BWM-020 | P0 | READY | BWM-018,BWM-019 | Server-authoritative session lifecycle and deadline |
-| BWM-021 | P0 | PLANNED | BWM-019,BWM-020 | Correct answer DTO, clear semantics, and timing model |
+| BWM-020 | P0 | VERIFIED | BWM-018,BWM-019 | Server-authoritative session lifecycle and deadline |
+| BWM-021 | P0 | READY | BWM-019,BWM-020 | Correct answer DTO, clear semantics, and timing model |
 | BWM-022 | P0 | PLANNED | BWM-021 | Reliable batching, offline recovery, and full drain |
 | BWM-023 | P0 | PLANNED | BWM-020,BWM-022 | Idempotent server submission and response contract |
 | BWM-024 | P0 | PLANNED | BWM-023 | Analytics/result propagation back to Student and Admin |
@@ -1700,14 +1700,32 @@ The registry is the canonical order. Detailed cards below define scope and accep
 
 ### BWM-020 — Server-Authoritative Session Lifecycle and Deadline
 
-- **Status:** `READY`
+- **Status:** `VERIFIED`
 - **Purpose:** Persist `created -> started -> active -> submitted/expired/terminated` transitions.
 - **Work:** add secured/idempotent activation; persist started/deadline timestamps; define server time/skew handling; make entry/resume state-aware; reject illegal transitions; stop using React state as lifecycle authority.
 - **Acceptance:** Firestore status becomes `active` before answers/submission, and expiry/illegal transition tests are deterministic.
+- **Substeps:**
+  - [x] Inspect current entry, lifecycle, answer, submit, browser timer, route/DTO, schema, and emulator/browser authority before changing implementation.
+  - [x] Define the strict activation/entry lifecycle DTOs, persisted server timestamps/deadline, legal transitions, idempotency, expiry, and clock-skew semantics.
+  - [x] Implement secured EXM-05 activation, state-aware EXM-01 entry/resume, active-only answer/submission enforcement, and server-owned deadline reconciliation.
+  - [x] Make the Exam runtime consume server lifecycle/time authority and remove local lifecycle/deadline transitions.
+  - [x] Add permanent unit/contract, Auth/Firestore/Functions emulator, and no-mock Chromium proof for activation replay, resume, expiry, skew, and illegal transitions.
+  - [x] Run affected and aggregate verification, reconcile canonical API/module/schema/controller documentation, and close BWM-020 without beginning answer-semantics work.
+- **Implemented files:** `functions/src/services/session.ts` and `functions/src/types/sessionStart.ts` now own entry/activation transitions, immutable schedule deadlines, server timestamps, replay, and expiry. New `functions/src/api/examSessionActivate.ts` is registered in the direct exports, gateway handler map, and canonical manifest as EXM-05. EXM-01 returns lifecycle clock fields; `functions/src/services/answerBatch.ts` requires active pre-deadline state. Shared DTOs/adapters and `apps/exam/src/ExamRuntimeApp.tsx` consume the authority for activation, resume, countdown, late entry, expiry reconciliation, and auto-submit. Permanent handler, service, gateway, contract, emulator, and Chromium coverage was added or extended, and the non-emulator suite classifier now includes the activation handler test.
+- **Security/data evidence:** EXM-05 accepts an empty body and derives institute, year, run, session, Student, and UID only from the revocation-checked Student Firebase identity, then compares them with the persisted session. `created` cannot activate before EXM-01 entry; terminal submitted/terminated sessions cannot reactivate. `started -> active` persists server-owned `startedAt` and the immutable runtime schedule end as `deadlineAt`; active and expired replays are deterministic. At or after that deadline the server persists `expired`/`expiredAt`. Answer writes now require stored `active` state, a valid stored deadline, and server time before it. The browser calculates a local display interval only from returned `serverTime` and `deadlineAt`; it no longer authors active/expired state or a deadline.
+- **Verification evidence:** `npm --prefix functions run lint`, Functions builds, `npm --prefix apps/exam run lint`, Exam production builds, and `node scripts/verify-workspace.mjs` passed; the workspace verifier completed all 10 lint/build checks. `npm --prefix functions run test:ci:non-emulator` passed 48/48 classified files. `npm run test:exam-runtime-auth-contract`, `npm run test:portal-response-adapters`, and `npm run test:api-dto-contract` passed, as did focused gateway/manifest/handler checks. The focused Firestore lifecycle/answer suite passed 19 tests. The real Auth/Firestore/Functions `examStart.emulator.test.js` passed 1/1 and proved persisted active state before answer/submission plus submitted terminal state. `npm run test:exam-launch-auth:e2e` passed 1/1 through real Auth, Firestore, Functions, Exam Hosting, and headless Chromium, proving authoritative activation/clock consumption and replay rejection. `npm run test:emulators:ci` passed 10 explicit full-service suites, 2/2 Hosting browser smoke cases, and 65 Firestore-backed files with 207 assertions; `npm run test:emulators:failure-cleanup` passed and released all ports. Final syntax and diff checks passed.
+- **L5 staging/preview:** N/A — no deployment target, preview channel, public URL, secret, environment, Hosting rewrite, or release configuration changed.
+- **L6 production:** N/A — reserved for BWM-057; production remains untouched and `NO_GO`.
+- **Firebase CLI version:** `15.9.0`; Java `21.0.8`.
+- **Authorization/external mutations:** User-approved verification used only demo-project loopback Firebase emulators, headless Chromium, disposable cleaned Auth/Firestore data, ignored local artifacts, and Firebase CLI local state. No deployment, remote Firebase mutation, secret mutation, public endpoint, or production resource changed.
+- **Contract/schema changes:** DEC-027 adds EXM-05 and defines the server-owned lifecycle/deadline clock. EXM-01 adds `startedAt`, `deadlineAt`, and `serverTime`; session documents add `deadlineAt` and may add `expiredAt`. Canonical totals are 36 frontend routes (32 implemented, 3 incompatible, 0 missing, 1 intentionally retired) and 48 HTTP exports. No Firestore rule, index, or collection path changed.
+- **Verification notes:** The first authenticated emulator proof correctly submitted its active session but retained a stale post-submit `active` assertion; the proof was reordered to assert active immediately before answer/submission and submitted afterward. The first browser proof exposed that late instruction entry closed before declaration acceptance; the gate was corrected to remain open until the authoritative session end, then the full browser rerun passed. The first broad Functions run stopped on the intended inventory guard until the new activation API suite was explicitly classified. Firebase's existing assignment-trigger fixture warnings remained non-owning and did not fail their suites.
+- **Residual risks:** BWM-021 retains answer clear/shape/timing semantics, BWM-022 retains reliable batching/offline drain, BWM-023 retains broader submission idempotency/response hardening, and production remains `NO_GO`.
+- **Completed on:** 2026-08-30
 
 ### BWM-021 — Correct Answer DTO and Timing Semantics
 
-- **Status:** `PLANNED`
+- **Status:** `READY`
 - **Purpose:** Prevent wrong attempts, double-counted timing, and frontend/backend scoring drift.
 - **Work:** model unanswered/cleared explicitly; validate response shapes by question type; choose timing delta or absolute semantics once; make server aggregation idempotent; align MinTime/MaxTime rules and option identifiers.
 - **Acceptance:** clear-answer, repeated save, stale write, numeric, matrix, MCQ, MinTime, and MaxTime contract tests pass without timing inflation.
@@ -2112,7 +2130,7 @@ operations_owner: TBD
 | Deployment lacks frontend runtime configuration and backend deploy | Critical | BWM-005,BWM-010 | Resolved 2026-08-22 |
 | Remaining Student solutions/performance/insights APIs are missing | Critical | BWM-016 | Resolved 2026-08-28 |
 | Exam custom token is sent where an ID token is required | Critical | BWM-017,BWM-018 | Open |
-| Exam lifecycle remains local while submission requires active backend state | Critical | BWM-020,BWM-023 | Open |
+| Exam lifecycle remains local while submission requires active backend state | Critical | BWM-020,BWM-023 | Resolved 2026-08-30; broader submission hardening remains BWM-023 |
 | Exam uses hardcoded questions/schedule/build IDs | Critical | BWM-019 | Closed |
 | Answer clear/timing/batch semantics can corrupt or omit data | Critical | BWM-021,BWM-022 | Open |
 | Production failures fall back to fixtures/fake success | Critical | BWM-007 | Resolved 2026-08-09 |
@@ -2158,6 +2176,7 @@ operations_owner: TBD
 | DEC-025 | 2026-08-14 | Use Firebase Auth SDK-managed persistence scoped by web origin as the supported browser session design. Admin and Student share their intentional Portal origin; Exam and Vendor maintain independent sessions and require sign-in on those origins. Do not add an HttpOnly exchange endpoint or any cross-origin token transfer. Permit Auth-emulator configuration only for origin-only loopback HTTP from a loopback page, forbid it in staging/production validation, inject blank in release CI, and retain loopback artifact scanning. | The existing architecture already uses one Firebase project per environment, same-origin APIs, and Firebase ID tokens; no reviewed server-session lifecycle, CSRF boundary, or exchange endpoint exists. Per-origin Firebase Auth preserves the smallest established trust boundary and avoids replacing the removed bearer bridge with a larger unneeded session surface. | Accepted |
 | DEC-026 | 2026-08-18 | Operate the non-production `staging` GitHub Environment without an independent required reviewer at the product owner's explicit direction. Retain manual dispatch, boolean opt-in, exact typed `parabolic-dev` confirmation, environment-scoped credentials, exact custom `staging` branch policy, green frontend/backend dependencies, and fail-fast ordered deployment as mandatory controls. | The repository has one owner and the product owner explicitly does not want another collaborator/reviewer. Recording the reduced separation of duties avoids falsely claiming independent approval while preserving every available owner-controlled technical gate. Production remains separately prohibited until BWM-057 and this decision does not authorize production self-promotion. | Accepted |
 | DEC-026 | 2026-08-14 | Render every portal login form without default credentials. Compile synthetic credential authentication only when Vite mode is exactly `development`, require an exact loopback hostname at runtime, and reject the fallback issuer/passwords in release artifacts. | A hostname-only condition lets a production bundle served from loopback activate test authentication, while prefilled credentials can escape into deployable UI. The compile-time boundary removes the fallback implementation from non-development bundles, the runtime boundary confines its intended developer use, and artifact/browser proofs prevent regression. | Accepted |
+| DEC-027 | 2026-08-30 | Treat EXM-01 as the one-time `created -> started` entry boundary and EXM-05 as the sole secured idempotent `started -> active` activation boundary. Persist server-owned `startedAt`, copy the immutable runtime schedule end to `deadlineAt`, return `serverTime` with lifecycle responses for skew compensation, and reconcile reached deadlines to persisted `expired`; browser state renders but does not author lifecycle or deadline authority. | Entry consumption and exam activation are distinct security events. A transactionally persisted server clock/deadline makes answer/submission eligibility deterministic across refresh, resume, retries, browser clock skew, and expiry while preventing React state or editable request data from bypassing the forward-only lifecycle. | Accepted |
 
 Add decisions here whenever implementation changes a contract, schema, security boundary, task order, or release scope.
 
@@ -2276,6 +2295,15 @@ Never record only “tests passed.” Include exact commands and whether tests w
 ## Session Log
 
 Append newest entries at the top.
+
+### LOG-094 — 2026-08-30 — BWM-020 Server-Authoritative Lifecycle and Deadline
+
+- **Task:** Resume BWM-020 at its first unchecked contract substep, implement only the server-authoritative entry/activation/deadline boundary, prove it through focused and aggregate verification, reconcile canonical documentation, and stop before answer-semantics work.
+- **Outcome:** BWM-020 is `VERIFIED`. EXM-01 atomically advances first entry to `started`; new secured idempotent EXM-05 advances to `active`, persists `startedAt` plus the immutable scheduled `deadlineAt`, returns `serverTime`, replays deterministically, and reconciles reached deadlines to `expired`. Answer writes require active pre-deadline authority, while Exam activation, resume, late entry, countdown, and expiry consume server state instead of authoring local lifecycle/deadline state. BWM-021 is `READY`; production remains `NO_GO`.
+- **Validation performed:** Functions/Exam lint and builds passed; the full workspace verifier passed 10/10 gates. Functions non-emulator CI passed 48/48 files, affected runtime/auth/adapter/DTO/gateway/manifest contracts passed, and the focused Firestore lifecycle/answer set passed 19 tests. The Auth/Firestore/Functions gateway scenario passed 1/1, and the no-mock Chromium launch/activation flow passed 1/1. The full emulator aggregate passed 10 explicit full-service suites, 2/2 Hosting browser smoke cases, and 65 Firestore files with 207 assertions; the intentional failure-cleanup probe passed and released every port. Final syntax/diff checks passed.
+- **Files changed:** Added EXM-05 handler/export/manifest/gateway wiring and strict shared DTO/adapter; transactional entry/activation/replay/expiry/deadline authority; active pre-deadline answer enforcement; server-authoritative Exam lifecycle/timer/resume handling; permanent unit/contract/emulator/browser tests; test inventory classification; and reconciled API, inventory, module, schema, event, decision, risk, and controller records.
+- **Cloud changes:** None. Verification used only demo-project loopback emulators, headless Chromium, disposable cleaned data, ignored local artifacts, and Firebase CLI local state. No deployment, remote data mutation, secret, endpoint, or production resource changed.
+- **Next:** BWM-021 — inspect the current answer DTO, question-type response shapes, clear semantics, timing aggregation, stale-write handling, and frontend/backend option identifiers before implementing only that bounded contract.
 
 ### LOG-093 — 2026-08-30 — BWM-019 Authoritative Sanitized Runtime Snapshot
 

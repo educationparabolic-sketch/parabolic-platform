@@ -15,6 +15,7 @@ import type {
   DeployCalibrationVersionResult,
   ExamRuntimeQuestion,
   ExamRuntimeSnapshot,
+  ExamSessionActivationResult,
   ExamSessionEntryResult,
   QuestionAssetUploadResult,
   QuestionBulkUploadResult,
@@ -2588,18 +2589,53 @@ export function adaptExamSessionEntryResult(
   return {
     allowed: readBoolean(data.allowed, route, "allowed") === true ? true :
       fail(route, "allowed", "true"),
+    deadlineAt: data.deadlineAt === null ? null : readExamRuntimeIsoString(
+      data.deadlineAt,
+      route,
+      "deadlineAt",
+    ),
     instituteId: readString(data.instituteId, route, "instituteId"),
     runId: readString(data.runId, route, "runId"),
     runtimeSnapshot,
+    serverTime: readExamRuntimeIsoString(data.serverTime, route, "serverTime"),
     sessionId,
+    startedAt: data.startedAt === null ? null : readExamRuntimeIsoString(
+      data.startedAt,
+      route,
+      "startedAt",
+    ),
     status: readEnum(
       data.status,
-      ["created", "started", "active"] as const,
+      ["started", "active", "expired"] as const,
       route,
       "status",
     ),
     studentId: readString(data.studentId, route, "studentId"),
     yearId: readString(data.yearId, route, "yearId"),
+  };
+}
+
+export function adaptExamSessionActivationResult(
+  value: unknown,
+): ExamSessionActivationResult {
+  const route = "POST /exam/session/{sessionId}/activate";
+  const data = readRecord(value, route);
+  return {
+    deadlineAt: readExamRuntimeIsoString(data.deadlineAt, route, "deadlineAt"),
+    replayed: readBoolean(data.replayed, route, "replayed"),
+    serverTime: readExamRuntimeIsoString(data.serverTime, route, "serverTime"),
+    sessionId: readString(data.sessionId, route, "sessionId"),
+    startedAt: data.startedAt === null ? null : readExamRuntimeIsoString(
+      data.startedAt,
+      route,
+      "startedAt",
+    ),
+    status: readEnum(
+      data.status,
+      ["active", "expired"] as const,
+      route,
+      "status",
+    ),
   };
 }
 

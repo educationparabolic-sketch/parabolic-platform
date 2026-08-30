@@ -777,6 +777,7 @@ test("Student exam launch adapter requires a matching absolute credential URL", 
 test("Exam entry adapter accepts only an aligned candidate-safe runtime snapshot", () => {
   const entry = {
     allowed: true,
+    deadlineAt: null,
     instituteId: "inst-001",
     runId: "run-001",
     runtimeSnapshot: {
@@ -839,8 +840,10 @@ test("Exam entry adapter accepts only an aligned candidate-safe runtime snapshot
         syncEveryMs: 10_000,
       },
     },
+    serverTime: "2026-08-29T07:55:00.000Z",
     sessionId: "session-001",
-    status: "created",
+    startedAt: null,
+    status: "started",
     studentId: "student-001",
     yearId: "2026",
   };
@@ -873,6 +876,31 @@ test("Exam entry adapter accepts only an aligned candidate-safe runtime snapshot
     {
       name: "PortalResponseValidationError",
       route: "POST /exam/session/{sessionId}/entry",
+    },
+  );
+});
+
+test("Exam activation adapter requires an authoritative lifecycle clock", () => {
+  const activation = {
+    deadlineAt: "2026-08-30T11:00:00.000Z",
+    replayed: false,
+    serverTime: "2026-08-30T10:00:00.000Z",
+    sessionId: "session-001",
+    startedAt: "2026-08-30T10:00:00.000Z",
+    status: "active",
+  };
+  assert.deepEqual(
+    adapters.adaptExamSessionActivationResult(activation),
+    activation,
+  );
+  assert.throws(
+    () => adapters.adaptExamSessionActivationResult({
+      ...activation,
+      deadlineAt: "not-a-date",
+    }),
+    {
+      name: "PortalResponseValidationError",
+      route: "POST /exam/session/{sessionId}/activate",
     },
   );
 });

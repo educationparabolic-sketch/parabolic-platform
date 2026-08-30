@@ -4,6 +4,7 @@ export type AnswerBatchErrorCode =
   "FORBIDDEN" |
   "INTERNAL_ERROR" |
   "NOT_FOUND" |
+  "SESSION_LOCKED" |
   "TENANT_MISMATCH" |
   "UNAUTHORIZED" |
   "VALIDATION_ERROR";

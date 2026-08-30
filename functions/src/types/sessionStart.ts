@@ -118,6 +118,7 @@ export interface SessionDocumentInitializationRecord {
   calibrationVersion: string;
   consumedLaunchCredentialHashes: string[];
   createdAt: FirebaseFirestore.FieldValue;
+  deadlineAt: null;
   instituteId: string;
   licenseSnapshot: Record<string, unknown>;
   launchCredentialHashes: string[];
@@ -167,6 +168,7 @@ export interface SessionEntryValidationContext {
 }
 
 export interface SessionEntryValidationResult {
+  deadlineAt: string | null;
   instituteId: string;
   licenseSnapshot: Record<string, unknown>;
   mode: SessionExecutionMode;
@@ -174,13 +176,34 @@ export interface SessionEntryValidationResult {
   phaseConfigSnapshot: Record<string, unknown>;
   runId: string;
   runtimeSnapshot: ExamRuntimeSnapshot;
+  serverTime: string;
   sessionId: string;
   sessionPath: string;
+  startedAt: string | null;
   status: SessionStatus;
   studentId: string;
   templateSnapshot: Record<string, unknown>;
   timingProfileSnapshot: SessionTimingProfileSnapshot;
   yearId: string;
+}
+
+export interface SessionActivationContext {
+  instituteId: string;
+  runId: string;
+  sessionId: string;
+  studentId: string;
+  studentUid: string;
+  yearId: string;
+}
+
+export interface SessionActivationResult {
+  deadlineAt: string;
+  replayed: boolean;
+  serverTime: string;
+  sessionId: string;
+  sessionPath: string;
+  startedAt: string | null;
+  status: "active" | "expired";
 }
 
 export type SessionTransitionActorType =

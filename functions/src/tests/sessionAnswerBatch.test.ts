@@ -64,6 +64,7 @@ const seedSession = async (
     },
     runId: "run_build_30",
     sessionId,
+    deadlineAt: Timestamp.fromMillis(nowMillis + 60 * 60 * 1000),
     startedAt: Timestamp.fromMillis(sessionStartMillis),
     status,
     studentId: "student_build_30",

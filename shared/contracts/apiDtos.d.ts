@@ -641,13 +641,25 @@ export interface ExamRuntimeSnapshot {
 
 export interface ExamSessionEntryResult {
   allowed: true;
+  deadlineAt: string | null;
   instituteId: string;
   runId: string;
   runtimeSnapshot: ExamRuntimeSnapshot;
+  serverTime: string;
   sessionId: string;
-  status: "created" | "started" | "active";
+  startedAt: string | null;
+  status: "started" | "active" | "expired";
   studentId: string;
   yearId: string;
+}
+
+export interface ExamSessionActivationResult {
+  deadlineAt: string;
+  replayed: boolean;
+  serverTime: string;
+  sessionId: string;
+  startedAt: string | null;
+  status: "active" | "expired";
 }
 
 export type StudentPerformanceRiskState =

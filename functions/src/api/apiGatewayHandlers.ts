@@ -27,6 +27,7 @@ import {handleAdminStudentsRequest} from "./adminStudents";
 import {handleAdminStudentsBulkRequest} from "./adminStudentsBulk";
 import {handleAdminTestsRequest} from "./adminTests";
 import {handleExamSessionAnswersRequest} from "./examSessionAnswers";
+import {handleExamSessionActivateRequest} from "./examSessionActivate";
 import {handleExamSessionEntryRequest} from "./examSessionEntry";
 import {handleExamSessionSubmitRequest} from "./examSessionSubmit";
 import {handleExamStartRequest} from "./examStart";
@@ -68,6 +69,7 @@ Record<string, ApiGatewayHandler>
   adminStudentsBulk: handleAdminStudentsBulkRequest,
   adminTests: handleAdminTestsRequest,
   examSessionAnswers: handleExamSessionAnswersRequest,
+  examSessionActivate: handleExamSessionActivateRequest,
   examSessionEntry: handleExamSessionEntryRequest,
   examSessionSubmit: handleExamSessionSubmitRequest,
   examStart: handleExamStartRequest,

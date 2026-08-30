@@ -319,6 +319,14 @@ export const API_ROUTE_MANIFEST: readonly ApiRouteManifestEntry[] = [
     "examSessionSubmit",
   ),
   defineRoute(
+    "EXM-05",
+    "exam",
+    "POST",
+    "/exam/session/{sessionId}/activate",
+    "implemented",
+    "examSessionActivate",
+  ),
+  defineRoute(
     "VEN-01",
     "vendor",
     "POST",

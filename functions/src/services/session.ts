@@ -13,6 +13,8 @@ import {
 import {
   SessionDocumentInitializationContext,
   SessionDocumentInitializationRecord,
+  SessionActivationContext,
+  SessionActivationResult,
   SessionExecutionMode,
   SessionEntryValidationContext,
   SessionEntryValidationResult,
@@ -87,7 +89,7 @@ Record<SessionStatus, SessionStatus[]> = {
   active: ["submitted", "expired"],
   created: ["started"],
   expired: ["terminated"],
-  started: ["active"],
+  started: ["active", "expired"],
   submitted: [],
   terminated: [],
 };
@@ -231,6 +233,17 @@ const normalizeRunWindowTimestamp = (
     "VALIDATION_ERROR",
     `Run field "${fieldName}" must be a timestamp or ISO date string.`,
   );
+};
+
+const normalizeOptionalSessionTimestampIso = (
+  value: unknown,
+  fieldName: string,
+): string | null => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  return normalizeRunWindowTimestamp(value, fieldName).toDate().toISOString();
 };
 
 const normalizeSessionStatus = (
@@ -1579,10 +1592,12 @@ export class SessionService {
   /**
    * Consumes a launch credential and validates its exchanged Firebase identity.
    * @param {SessionEntryValidationContext} context Credential and ID claims.
+   * @param {number} nowMillis Server time used for lifecycle reconciliation.
    * @return {Promise<SessionEntryValidationResult>} Validated session metadata.
    */
   public async validateSessionEntry(
     context: SessionEntryValidationContext,
+    nowMillis = Date.now(),
   ): Promise<SessionEntryValidationResult> {
     const instituteId = normalizeRequiredString(context.instituteId, "instituteId");
     const launchNonce = normalizeRequiredString(context.launchNonce, "launchNonce");
@@ -1631,7 +1646,7 @@ export class SessionService {
           `Session "${routeSessionId}" does not exist.`,
         );
       }
-      const status = normalizeSessionStatus(sessionData.status, "session.status");
+      let status = normalizeSessionStatus(sessionData.status, "session.status");
       if (!ACTIVE_SESSION_STATUSES.includes(status)) {
         throw new SessionStartValidationError(
           "SESSION_LOCKED",
@@ -1709,6 +1724,18 @@ export class SessionService {
         routeSessionId,
         sessionData.questionTimeMap,
       );
+      const scheduledDeadline = normalizeRunWindowTimestamp(
+        runtimeSnapshot.schedule.sessionEndsAt,
+        "runtimeSnapshot.schedule.sessionEndsAt",
+      );
+      let startedAt = normalizeOptionalSessionTimestampIso(
+        sessionData.startedAt,
+        "session.startedAt",
+      );
+      let deadlineAt = normalizeOptionalSessionTimestampIso(
+        sessionData.deadlineAt,
+        "session.deadlineAt",
+      );
       const remainingCredentialHashes = storedLaunchCredentialHashes.filter(
         (credentialHash) => credentialHash !== launchCredentialHash,
       );
@@ -1723,12 +1750,34 @@ export class SessionService {
         launchCredentialHashes: remainingCredentialHashes,
         updatedAt: FieldValue.serverTimestamp(),
       };
+      if (status === "created") {
+        status = "started";
+        update.status = status;
+      }
+      if (status === "active" && deadlineAt === null) {
+        deadlineAt = scheduledDeadline.toDate().toISOString();
+        update.deadlineAt = scheduledDeadline;
+      }
+      if (status === "active" && startedAt === null) {
+        startedAt = new Date(nowMillis).toISOString();
+        update.startedAt = Timestamp.fromMillis(nowMillis);
+      }
+      if (
+        status === "active" &&
+        deadlineAt !== null &&
+        nowMillis >= Date.parse(deadlineAt)
+      ) {
+        status = "expired";
+        update.expiredAt = Timestamp.fromMillis(nowMillis);
+        update.status = status;
+      }
       if (sessionData.sessionTokenHash === launchCredentialHash) {
         update.sessionTokenHash = FieldValue.delete();
       }
       transaction.update(sessionReference, update);
 
       result = {
+        deadlineAt,
         instituteId,
         licenseSnapshot,
         mode,
@@ -1737,8 +1786,10 @@ export class SessionService {
         phaseConfigSnapshot,
         runId,
         runtimeSnapshot,
+        serverTime: new Date(nowMillis).toISOString(),
         sessionId: routeSessionId,
         sessionPath,
+        startedAt,
         status,
         studentId,
         templateSnapshot,
@@ -1753,6 +1804,155 @@ export class SessionService {
         "Exam session entry could not be authorized.",
       );
     }
+    return result;
+  }
+
+  /**
+   * Activates an entered session using only persisted schedule and identity.
+   * @param {SessionActivationContext} context Verified session identity.
+   * @param {number} nowMillis Server time used for activation and expiry.
+   * @return {Promise<SessionActivationResult>} Authoritative lifecycle clock.
+   */
+  public async activateSession(
+    context: SessionActivationContext,
+    nowMillis = Date.now(),
+  ): Promise<SessionActivationResult> {
+    const instituteId = normalizeRequiredString(context.instituteId, "instituteId");
+    const runId = normalizeRequiredString(context.runId, "runId");
+    const sessionId = normalizeRequiredString(context.sessionId, "sessionId");
+    const studentId = normalizeRequiredString(context.studentId, "studentId");
+    const studentUid = normalizeRequiredString(context.studentUid, "studentUid");
+    const yearId = normalizeRequiredString(context.yearId, "yearId");
+    const sessionPath =
+      `${INSTITUTES_COLLECTION}/${instituteId}/` +
+      `${ACADEMIC_YEARS_COLLECTION}/${yearId}/` +
+      `${RUNS_COLLECTION}/${runId}/` +
+      `${SESSIONS_COLLECTION}/${sessionId}`;
+    const sessionReference = this.firestore.doc(sessionPath);
+
+    const result = await this.firestore.runTransaction(async (transaction) => {
+      const sessionSnapshot = await transaction.get(sessionReference);
+      const sessionData = sessionSnapshot.data();
+      if (!sessionSnapshot.exists || !isPlainObject(sessionData)) {
+        throw new SessionStartValidationError(
+          "NOT_FOUND",
+          `Session "${sessionId}" does not exist.`,
+        );
+      }
+
+      const persistedIdentity = {
+        instituteId: normalizeRequiredString(sessionData.instituteId, "session.instituteId"),
+        runId: normalizeRequiredString(sessionData.runId, "session.runId"),
+        sessionId: normalizeRequiredString(sessionData.sessionId, "session.sessionId"),
+        studentId: normalizeRequiredString(sessionData.studentId, "session.studentId"),
+        studentUid: normalizeRequiredString(sessionData.studentUid, "session.studentUid"),
+        yearId: normalizeRequiredString(sessionData.yearId, "session.yearId"),
+      };
+      if (
+        persistedIdentity.instituteId !== instituteId ||
+        persistedIdentity.runId !== runId ||
+        persistedIdentity.sessionId !== sessionId ||
+        persistedIdentity.studentId !== studentId ||
+        persistedIdentity.studentUid !== studentUid ||
+        persistedIdentity.yearId !== yearId
+      ) {
+        throw new SessionStartValidationError(
+          "UNAUTHORIZED",
+          "Authenticated exam identity does not own the requested session.",
+        );
+      }
+
+      let status = normalizeSessionStatus(sessionData.status, "session.status");
+      if (status === "created") {
+        throw new SessionStartValidationError(
+          "SESSION_LOCKED",
+          "Session entry must complete before activation.",
+        );
+      }
+      if (status === "submitted" || status === "terminated") {
+        throw new SessionStartValidationError(
+          "SESSION_LOCKED",
+          `Session cannot activate from ${status}.`,
+        );
+      }
+
+      const runtimeSnapshot = normalizeStoredRuntimeSnapshot(
+        sessionData.runtimeSnapshot,
+        sessionId,
+        sessionData.questionTimeMap,
+      );
+      const scheduledStart = normalizeRunWindowTimestamp(
+        runtimeSnapshot.schedule.sessionStartsAt,
+        "runtimeSnapshot.schedule.sessionStartsAt",
+      );
+      const scheduledDeadline = normalizeRunWindowTimestamp(
+        runtimeSnapshot.schedule.sessionEndsAt,
+        "runtimeSnapshot.schedule.sessionEndsAt",
+      );
+      let startedAt = normalizeOptionalSessionTimestampIso(
+        sessionData.startedAt,
+        "session.startedAt",
+      );
+      const deadlineAt = normalizeOptionalSessionTimestampIso(
+        sessionData.deadlineAt,
+        "session.deadlineAt",
+      ) ?? scheduledDeadline.toDate().toISOString();
+      const replayed = status === "active" || status === "expired";
+      const update: FirebaseFirestore.UpdateData<FirebaseFirestore.DocumentData> = {};
+
+      if (status === "started" && nowMillis < scheduledStart.toMillis()) {
+        throw new SessionStartValidationError(
+          "WINDOW_CLOSED",
+          "Session activation is not open yet.",
+        );
+      }
+
+      if (status === "started" && nowMillis < scheduledDeadline.toMillis()) {
+        this.assertTransitionIsAllowed("student", status, "active");
+        status = "active";
+        startedAt = new Date(nowMillis).toISOString();
+        update.startedAt = Timestamp.fromMillis(nowMillis);
+        update.status = status;
+      }
+
+      if (
+        (status === "started" || status === "active") &&
+        nowMillis >= Date.parse(deadlineAt)
+      ) {
+        this.assertTransitionIsAllowed("system", status, "expired");
+        status = "expired";
+        update.expiredAt = Timestamp.fromMillis(nowMillis);
+        update.status = status;
+      }
+
+      if (sessionData.deadlineAt === null || sessionData.deadlineAt === undefined) {
+        update.deadlineAt = scheduledDeadline;
+      }
+      if (Object.keys(update).length > 0) {
+        update.updatedAt = FieldValue.serverTimestamp();
+        transaction.update(sessionReference, update);
+      }
+
+      return {
+        deadlineAt,
+        replayed,
+        serverTime: new Date(nowMillis).toISOString(),
+        sessionId,
+        sessionPath,
+        startedAt,
+        status: status as SessionActivationResult["status"],
+      };
+    });
+
+    this.logger.info("Session activation reconciled", {
+      instituteId,
+      replayed: result.replayed,
+      runId,
+      sessionId,
+      status: result.status,
+      yearId,
+    });
+
     return result;
   }
 
@@ -1987,6 +2187,7 @@ export class SessionService {
       consumedLaunchCredentialHashes:
         context.consumedLaunchCredentialHashes,
       createdAt: FieldValue.serverTimestamp(),
+      deadlineAt: null,
       instituteId: context.instituteId,
       licenseSnapshot: context.licenseSnapshot,
       launchCredentialHashes: context.launchCredentialHashes,

@@ -8,12 +8,14 @@ import type {
   ExamRuntimeQuestionDifficulty as DifficultyBand,
   ExamRuntimeSnapshot as SessionSnapshot,
   ExamRuntimeTimingProfileSnapshot as TimingProfileSnapshot,
+  ExamSessionActivationResult,
   ExamSessionEntryResult,
 } from "../../../shared/contracts/apiDtos";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { toCdnAssetUrl } from "../../../shared/services/cdnAssetDelivery";
 import { ApiClientError } from "../../../shared/services/apiClient";
 import {
+  adaptExamSessionActivationResult,
   adaptExamSessionEntryResult,
   adaptExamSubmitResult,
 } from "../../../shared/services/portalResponseAdapters";
@@ -1180,6 +1182,8 @@ function ExamSessionPage() {
   const candidateName = entryValidation.claims.sub ?? "Student Candidate";
   const examApiClient = useMemo(() => getPortalApiClient("exam"), []);
   const credentialExchangeStartedRef = useRef(false);
+  const activationInFlightRef = useRef(false);
+  const expirySubmitAttemptedRef = useRef(false);
   const [entryAuthority, setEntryAuthority] = useState<ExamSessionEntryResult | null>(null);
   const [sessionSnapshot, setSessionSnapshot] = useState<SessionSnapshot>(() =>
     buildEmptySessionSnapshot(sessionId || "runtime-session"));
@@ -1295,6 +1299,52 @@ function ExamSessionPage() {
     [responseStateByQuestionId, sessionSnapshot.questions, visitedQuestionIds],
   );
 
+  const applyServerLifecycleAuthority = useCallback((
+    authority: Pick<ExamSessionActivationResult,
+    "deadlineAt" | "serverTime" | "sessionId" | "status">,
+  ): boolean => {
+    if (authority.sessionId !== sessionId) {
+      return false;
+    }
+    const serverNowMs = Date.parse(authority.serverTime);
+    const serverDeadlineMs = Date.parse(authority.deadlineAt);
+    if (!Number.isFinite(serverNowMs) || !Number.isFinite(serverDeadlineMs)) {
+      return false;
+    }
+
+    const authoritativeRemainingMs = Math.max(0, serverDeadlineMs - serverNowMs);
+    setDeadlineEpochMs(Date.now() + authoritativeRemainingMs);
+    setRemainingMs(authoritativeRemainingMs);
+    setSessionLifecycleState(authority.status);
+    if (authority.status === "expired") {
+      setEntryStage("entry_closed");
+    }
+    return true;
+  }, [sessionId]);
+
+  const requestServerActivation = useCallback(async (): Promise<
+  ExamSessionActivationResult | null
+  > => {
+    if (activationInFlightRef.current || !entryValidation.allowed) {
+      return null;
+    }
+    activationInFlightRef.current = true;
+    try {
+      const authority = adaptExamSessionActivationResult(
+        await examApiClient.post<unknown, Record<string, never>>(
+          `/exam/session/${encodeURIComponent(effectiveSessionId)}/activate`,
+          {body: {}},
+        ),
+      );
+      if (!applyServerLifecycleAuthority(authority)) {
+        throw new Error("Server activation authority is not bound to this session.");
+      }
+      return authority;
+    } finally {
+      activationInFlightRef.current = false;
+    }
+  }, [applyServerLifecycleAuthority, effectiveSessionId, entryValidation.allowed, examApiClient]);
+
   useLayoutEffect(() => {
     if (!tokenFromQuery) {
       return;
@@ -1403,6 +1453,24 @@ function ExamSessionPage() {
         setVisitedQuestionIds(new Set(firstQuestionId ? [firstQuestionId] : []));
         setRemainingMs(responseBody.runtimeSnapshot.schedule.durationMs);
         setSessionLifecycleState(responseBody.status);
+        if (responseBody.status === "active" || responseBody.status === "expired") {
+          if (
+            responseBody.deadlineAt === null ||
+            !applyServerLifecycleAuthority({
+              deadlineAt: responseBody.deadlineAt,
+              serverTime: responseBody.serverTime,
+              sessionId: responseBody.sessionId,
+              status: responseBody.status,
+            })
+          ) {
+            throw new Error("Server lifecycle clock is invalid for this session.");
+          }
+          if (responseBody.status === "active") {
+            setInstructionConfirmed(true);
+            setEntryStage("exam_active");
+            setRecoveryApplied(false);
+          }
+        }
         setEntryValidation(authoritativeValidation);
         setServerEntryValidationStatus(serverAllowed ? "valid" : "invalid");
       })
@@ -1421,6 +1489,7 @@ function ExamSessionPage() {
     examApiClient,
     launchCredential,
     modeFromQuery,
+    applyServerLifecycleAuthority,
     sessionId,
   ]);
 
@@ -1474,16 +1543,23 @@ function ExamSessionPage() {
   }, [deadlineEpochMs, instructionConfirmed, isSubmitted, sessionSnapshot.timingProfile.syncEveryMs]);
 
   useEffect(() => {
-    if (!instructionConfirmed || isSubmitted || remainingMs > 0) {
+    if (
+      !instructionConfirmed ||
+      isSubmitted ||
+      remainingMs > 0 ||
+      sessionLifecycleState !== "active"
+    ) {
       return;
     }
 
-    const submitTimeout = window.setTimeout(() => {
-      setSessionLifecycleState("expired");
+    const reconcileTimeout = window.setTimeout(() => {
+      void requestServerActivation().catch((error) => {
+        setSubmitError(error instanceof Error ? error.message : "Deadline reconciliation failed.");
+      });
     }, 0);
 
-    return () => window.clearTimeout(submitTimeout);
-  }, [instructionConfirmed, isSubmitted, remainingMs]);
+    return () => window.clearTimeout(reconcileTimeout);
+  }, [instructionConfirmed, isSubmitted, remainingMs, requestServerActivation, sessionLifecycleState]);
 
   const navigateToQuestion = (questionId: string) => {
     setVisitedQuestionIds((current) => {
@@ -1673,18 +1749,6 @@ function ExamSessionPage() {
   }, [flushAnswerBatch, instructionConfirmed, isSubmitted]);
 
   useEffect(() => {
-    if (!instructionConfirmed || sessionLifecycleState === "submitted" || sessionLifecycleState === "terminated") {
-      return;
-    }
-
-    if (sessionLifecycleState !== "created" && sessionLifecycleState !== "started") {
-      return;
-    }
-
-    setSessionLifecycleState("active");
-  }, [instructionConfirmed, sessionLifecycleState]);
-
-  useEffect(() => {
     if (sessionLifecycleState === "active") {
       window.sessionStorage.setItem(activeSessionGuardKey, effectiveSessionId);
       return;
@@ -1842,14 +1906,19 @@ function ExamSessionPage() {
   ]);
 
   useEffect(() => {
-    if (sessionLifecycleState !== "expired" || isSubmitted || submitInFlight) {
+    if (
+      sessionLifecycleState !== "expired" ||
+      isSubmitted ||
+      submitInFlight ||
+      expirySubmitAttemptedRef.current
+    ) {
       return;
     }
 
+    expirySubmitAttemptedRef.current = true;
     void submitSession("expiry", unansweredQuestionIdsForSubmission)
       .catch((error) => {
         setSubmitError(error instanceof Error ? error.message : "Auto-submit failed.");
-        setSessionLifecycleState("terminated");
       });
   }, [isSubmitted, sessionLifecycleState, submitInFlight, submitSession, unansweredQuestionIdsForSubmission]);
 
@@ -1991,7 +2060,7 @@ function ExamSessionPage() {
       return next;
     });
   }, [faceIdentityGazeGuardEnabled, faceVerificationState]);
-  const beginExamSession = useCallback(() => {
+  const beginExamSession = useCallback(async (): Promise<boolean> => {
     const activeSessionId = window.sessionStorage.getItem(activeSessionGuardKey);
     if (activeSessionId && activeSessionId !== effectiveSessionId) {
       setSessionConflictMessage(
@@ -1999,27 +2068,28 @@ function ExamSessionPage() {
       );
       return false;
     }
-
-    const remainingWindowMs = Math.max(0, sessionSchedule.sessionEndsAtMs - Date.now());
-    if (remainingWindowMs <= 0) {
-      setEntryStage("entry_closed");
+    try {
+      const authority = await requestServerActivation();
+      if (!authority || authority.status !== "active") {
+        return false;
+      }
+    } catch (error) {
+      setSessionConflictMessage(
+        error instanceof Error ? error.message : "Session activation failed.",
+      );
       return false;
     }
-
-    setDeadlineEpochMs(sessionSchedule.sessionEndsAtMs);
-    setRemainingMs(remainingWindowMs);
     setLastAnswerWriteAtMs(Date.now() - ANSWER_BATCH_INTERVAL_MS);
     setPendingAnswerMap({});
     setSyncState("idle");
     setSyncMessage("No pending answer updates.");
     setSessionConflictMessage(null);
     setFullscreenGateError(null);
-    setSessionLifecycleState("started");
     setRecoveryApplied(false);
     setInstructionConfirmed(true);
     setEntryStage("exam_active");
     return true;
-  }, [activeSessionGuardKey, effectiveSessionId, sessionSchedule.sessionEndsAtMs]);
+  }, [activeSessionGuardKey, effectiveSessionId, requestServerActivation]);
   const preExamChecksPassed =
     browserReadinessState === "passed" &&
     internetCheckState === "passed" &&
@@ -2032,7 +2102,7 @@ function ExamSessionPage() {
         return;
       }
 
-      if (!devMockSessionActive && Date.now() >= sessionSchedule.sessionStartsAtMs) {
+      if (!devMockSessionActive && Date.now() >= sessionSchedule.sessionEndsAtMs) {
         setEntryStage("entry_closed");
         return;
       }
@@ -2046,7 +2116,7 @@ function ExamSessionPage() {
       setFullscreenGateError(null);
       setEntryStage("instructions_waiting");
     })();
-  }, [devMockSessionActive, preExamChecksPassed, requestExamFullscreen, sessionSchedule.sessionStartsAtMs]);
+  }, [devMockSessionActive, preExamChecksPassed, requestExamFullscreen, sessionSchedule.sessionEndsAtMs]);
   const getQuestionPhaseVisibility = useCallback((question: SessionQuestion): boolean => {
     if (!phaseVisibilityEnforced || currentExamPhase === "phase1" || currentExamPhase === "buffer") {
       return true;
@@ -2329,12 +2399,12 @@ function ExamSessionPage() {
       return;
     }
 
-    if (entryStage === "entry_not_open" && nowEpochMs >= sessionSchedule.earlyEntryOpensAtMs && nowEpochMs < sessionSchedule.sessionStartsAtMs) {
+    if (entryStage === "entry_not_open" && nowEpochMs >= sessionSchedule.earlyEntryOpensAtMs && nowEpochMs < sessionSchedule.sessionEndsAtMs) {
       setEntryStage("pre_exam_lobby");
       return;
     }
 
-    if (!devMockSessionActive && entryStage === "pre_exam_lobby" && nowEpochMs >= sessionSchedule.sessionStartsAtMs) {
+    if (!devMockSessionActive && nowEpochMs >= sessionSchedule.sessionEndsAtMs) {
       setEntryStage("entry_closed");
       return;
     }
@@ -2344,10 +2414,6 @@ function ExamSessionPage() {
     }
 
     if (!declarationAccepted) {
-      if (devMockSessionActive) {
-        return;
-      }
-      setEntryStage("entry_closed");
       return;
     }
 
@@ -2356,7 +2422,7 @@ function ExamSessionPage() {
       return;
     }
 
-    beginExamSession();
+    void beginExamSession();
   }, [
     beginExamSession,
     browserIntegrityGuardEnabled,
@@ -2367,6 +2433,7 @@ function ExamSessionPage() {
     isSubmitted,
     nowEpochMs,
     sessionSchedule.earlyEntryOpensAtMs,
+    sessionSchedule.sessionEndsAtMs,
     sessionSchedule.sessionStartsAtMs,
   ]);
 

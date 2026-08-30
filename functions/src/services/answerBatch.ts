@@ -24,7 +24,7 @@ const INSTITUTES_COLLECTION = "institutes";
 const ACADEMIC_YEARS_COLLECTION = "academicYears";
 const RUNS_COLLECTION = "runs";
 const SESSIONS_COLLECTION = "sessions";
-const ACTIVE_WRITE_STATUSES = new Set(["created", "started", "active"]);
+const ACTIVE_WRITE_STATUSES = new Set(["active"]);
 const MIN_TIME_WARNING_MESSAGE = "Minimum recommended time not reached.";
 const MAX_TIME_ADVISORY_WARNING_MESSAGE =
   "Maximum recommended time exceeded. Consider moving forward.";
@@ -854,8 +854,26 @@ export class AnswerBatchService {
 
       if (!ACTIVE_WRITE_STATUSES.has(storedStatus)) {
         throw new SessionStartValidationError(
-          "VALIDATION_ERROR",
+          "SESSION_LOCKED",
           "Session is not accepting answer writes in its current status.",
+        );
+      }
+
+      const serverNowMillis = Date.now();
+      const deadlineAtMillis = normalizeOptionalTimestampMillis(
+        sessionData.deadlineAt,
+        "session.deadlineAt",
+      );
+      if (deadlineAtMillis === null) {
+        throw new SessionStartValidationError(
+          "SESSION_LOCKED",
+          "Active session deadline authority is missing.",
+        );
+      }
+      if (serverNowMillis >= deadlineAtMillis) {
+        throw new SessionStartValidationError(
+          "SESSION_LOCKED",
+          "Session deadline has expired.",
         );
       }
 
@@ -874,7 +892,6 @@ export class AnswerBatchService {
       }
 
       const sessionStartMillis = resolveSessionStartMillis(sessionData);
-      const serverNowMillis = Date.now();
 
       const updatePayload: Record<string, unknown> = {
         updatedAt: FieldValue.serverTimestamp(),

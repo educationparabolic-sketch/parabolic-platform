@@ -14,24 +14,18 @@ import {createAuthenticationMiddleware} from "../middleware/auth";
 import {createRoleAuthorizationMiddleware} from "../middleware/role";
 import {createTenantGuardMiddleware} from "../middleware/tenant";
 
-interface ExamSessionEntryRequestBody {
-  token?: unknown;
-}
-
-interface ExamSessionEntryRequestDependencies {
-  validateSessionEntry: typeof sessionService.validateSessionEntry;
+interface ExamSessionActivateRequestDependencies {
+  activateSession: typeof sessionService.activateSession;
   verifyIdToken: (idToken: string) => Promise<DecodedIdToken>;
 }
 
-interface ExamSessionEntryValidatedRequestData extends Record<string, unknown> {
+interface ExamSessionActivateValidatedRequestData
+extends Record<string, unknown> {
   instituteId: string;
-  launchNonce: string;
-  licenseLayer: "L0" | "L1" | "L2" | "L3";
   runId: string;
   sessionId: string;
   studentId: string;
   studentUid: string;
-  token: string;
   yearId: string;
 }
 
@@ -39,57 +33,37 @@ const normalizeRequiredString = (
   value: unknown,
   fieldName: string,
 ): string => {
-  if (typeof value !== "string") {
-    throw new SessionStartValidationError(
-      "VALIDATION_ERROR",
-      `Field "${fieldName}" must be a string.`,
-    );
-  }
-
-  const normalizedValue = value.trim();
-
-  if (!normalizedValue) {
+  if (typeof value !== "string" || !value.trim()) {
     throw new SessionStartValidationError(
       "VALIDATION_ERROR",
       `Field "${fieldName}" must be a non-empty string.`,
     );
   }
 
-  return normalizedValue;
+  return value.trim();
 };
 
 const resolveSessionIdFromRequest = (
   request: functions.https.Request,
 ): string => {
-  const pathCandidates = [
-    request.path,
-    request.originalUrl,
-    request.url,
-  ];
-
-  for (const pathValue of pathCandidates) {
+  for (const pathValue of [request.path, request.originalUrl, request.url]) {
     if (typeof pathValue !== "string" || !pathValue.trim()) {
       continue;
     }
-
-    const match = pathValue.match(/\/exam\/session\/([^/]+)\/entry\/?/i);
-
+    const match = pathValue.match(/\/exam\/session\/([^/]+)\/activate\/?/i);
     if (match?.[1]) {
-      return normalizeRequiredString(
-        decodeURIComponent(match[1]),
-        "sessionId",
-      );
+      return normalizeRequiredString(decodeURIComponent(match[1]), "sessionId");
     }
   }
 
   throw new SessionStartValidationError(
     "VALIDATION_ERROR",
-    "Route must include /exam/session/{sessionId}/entry.",
+    "Route must include /exam/session/{sessionId}/activate.",
   );
 };
 
-export const createExamSessionEntryHandler = (
-  dependencies: ExamSessionEntryRequestDependencies,
+export const createExamSessionActivateHandler = (
+  dependencies: ExamSessionActivateRequestDependencies,
 ) => createMiddlewareHandler({
   controller: async (
     request: MiddlewareRequest,
@@ -97,35 +71,22 @@ export const createExamSessionEntryHandler = (
   ): Promise<void> => {
     const requestId = request.context.requestId;
     const validatedData = request.context
-      .requestData as ExamSessionEntryValidatedRequestData;
-    const result = await dependencies.validateSessionEntry({
-      instituteId: validatedData.instituteId,
-      launchNonce: validatedData.launchNonce,
-      licenseLayer: validatedData.licenseLayer,
-      runId: validatedData.runId,
-      sessionId: validatedData.sessionId,
-      sessionToken: validatedData.token,
-      studentId: validatedData.studentId,
-      studentUid: validatedData.studentUid,
-      yearId: validatedData.yearId,
-    });
+      .requestData as ExamSessionActivateValidatedRequestData;
+    const result = await dependencies.activateSession(validatedData);
 
     response.status(200).json({
       code: "OK",
       data: {
-        allowed: true,
         deadlineAt: result.deadlineAt,
-        instituteId: result.instituteId,
-        runId: result.runId,
-        runtimeSnapshot: result.runtimeSnapshot,
+        replayed: result.replayed,
         serverTime: result.serverTime,
         sessionId: result.sessionId,
         startedAt: result.startedAt,
         status: result.status,
-        studentId: result.studentId,
-        yearId: result.yearId,
       },
-      message: "Exam session entry token validated server-side.",
+      message: result.replayed ?
+        "Exam session lifecycle reconciled." :
+        "Exam session activated.",
       requestId,
       success: true,
       timestamp: new Date().toISOString(),
@@ -139,18 +100,15 @@ export const createExamSessionEntryHandler = (
     }),
     createRoleAuthorizationMiddleware({
       allowedRoles: ["student"],
-      forbiddenMessage: "Only students can enter exam sessions.",
+      forbiddenMessage: "Only students can activate exam sessions.",
     }),
     createRequestValidationMiddleware({
       validator: (request: MiddlewareRequest): void => {
-        const body = (request.body ?? {}) as ExamSessionEntryRequestBody;
         const sessionId = resolveSessionIdFromRequest(request);
-        const token = normalizeRequiredString(body.token, "token");
         const identity = request.context.identity;
         const examSession = identity?.examSession;
         if (
           !identity?.instituteId ||
-          !identity.licenseLayer ||
           !identity.studentId ||
           !examSession ||
           examSession.sessionId !== sessionId ||
@@ -164,13 +122,10 @@ export const createExamSessionEntryHandler = (
 
         setRequestData(request, {
           instituteId: identity.instituteId,
-          launchNonce: examSession.launchNonce,
-          licenseLayer: identity.licenseLayer,
           runId: examSession.runId,
           sessionId,
           studentId: identity.studentId,
           studentUid: identity.uid,
-          token,
           yearId: examSession.yearId,
         });
       },
@@ -178,7 +133,7 @@ export const createExamSessionEntryHandler = (
   ],
   onError: (error, context): boolean => {
     if (error instanceof SessionStartValidationError) {
-      context.logger.warn("Exam session entry rejected", {
+      context.logger.warn("Exam session activation rejected", {
         code: error.code,
         error,
       });
@@ -193,12 +148,12 @@ export const createExamSessionEntryHandler = (
 
     return false;
   },
-  service: "ExamSessionEntryApi",
+  service: "ExamSessionActivateApi",
 });
 
-export const handleExamSessionEntryRequest = createExamSessionEntryHandler({
-  validateSessionEntry:
-    sessionService.validateSessionEntry.bind(sessionService),
-  verifyIdToken: (idToken: string) =>
-    getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
-});
+export const handleExamSessionActivateRequest =
+  createExamSessionActivateHandler({
+    activateSession: sessionService.activateSession.bind(sessionService),
+    verifyIdToken: (idToken: string) =>
+      getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
+  });

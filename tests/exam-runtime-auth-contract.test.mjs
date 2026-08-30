@@ -46,9 +46,26 @@ test("Exam production runtime consumes the authoritative sanitized entry snapsho
   assert.match(sessionService, /CANDIDATE_FORBIDDEN_RUNTIME_FIELDS/u);
 });
 
-test("Exam entry, answers, and submit handlers require session-bound Firebase identity", async () => {
+test("Exam runtime lifecycle is server-activated and deadline-authoritative", async () => {
+  const source = await readFile(runtimePath, "utf8");
+  const answerService = await readFile(
+    new URL("../functions/src/services/answerBatch.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /adaptExamSessionActivationResult/u);
+  assert.match(source, /\/activate/u);
+  assert.match(source, /serverDeadlineMs - serverNowMs/u);
+  assert.doesNotMatch(source, /setSessionLifecycleState\("active"\)/u);
+  assert.doesNotMatch(source, /setSessionLifecycleState\("expired"\)/u);
+  assert.match(answerService, /ACTIVE_WRITE_STATUSES = new Set\(\["active"\]\)/u);
+  assert.match(answerService, /session\.deadlineAt/u);
+});
+
+test("Exam entry, activation, answers, and submit require session-bound Firebase identity", async () => {
   const handlerPaths = [
     "../functions/src/api/examSessionEntry.ts",
+    "../functions/src/api/examSessionActivate.ts",
     "../functions/src/api/examSessionAnswers.ts",
     "../functions/src/api/examSessionSubmit.ts",
   ];

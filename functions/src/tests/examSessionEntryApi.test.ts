@@ -20,6 +20,7 @@ const sessionPath =
   "runs/run_exam_entry_api/sessions/session_exam_entry_api";
 
 const entryResult: SessionEntryValidationResult = {
+  deadlineAt: null,
   instituteId: identity.instituteId,
   licenseSnapshot: {currentLayer: "L1"},
   mode: "Diagnostic",
@@ -94,9 +95,11 @@ const entryResult: SessionEntryValidationResult = {
       syncEveryMs: 10_000,
     },
   },
+  serverTime: "2026-08-29T07:55:00.000Z",
   sessionId: identity.sessionId,
   sessionPath,
-  status: "created",
+  startedAt: null,
+  status: "started",
   studentId: identity.studentId,
   templateSnapshot: {templateVersion: "1"},
   timingProfileSnapshot: {

@@ -4,6 +4,7 @@ import {sendErrorResponse} from "./services/apiResponse";
 import {registerGlobalErrorHandlers} from "./services/errorReporting";
 import {createRequestLogger} from "./services/logging";
 import {handleExamStartRequest} from "./api/examStart";
+import {handleExamSessionActivateRequest} from "./api/examSessionActivate";
 import {handleExamSessionAnswersRequest} from "./api/examSessionAnswers";
 import {handleExamSessionEntryRequest} from "./api/examSessionEntry";
 import {handleExamSessionSubmitRequest} from "./api/examSessionSubmit";
@@ -164,6 +165,9 @@ export {failureRecoveryDispatch};
 export {failureRecoveryRetrySweep};
 export const apiV1 = functions.https.onRequest(handleApiV1Request);
 export const examStart = functions.https.onRequest(handleExamStartRequest);
+export const examSessionActivate = functions.https.onRequest(
+  handleExamSessionActivateRequest,
+);
 export const examSessionAnswers = functions.https.onRequest(
   handleExamSessionAnswersRequest,
 );
