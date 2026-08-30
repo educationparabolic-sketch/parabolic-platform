@@ -1,4 +1,10 @@
 import {ExamOperationalDataAccessPolicy} from "./dataTierPartition";
+import type {
+  ExamAnswerAcknowledgement,
+  ExamAnswerFlushReason,
+  ExamQuestionResponse,
+  ExamRuntimeQuestion,
+} from "../../../shared/contracts/apiDtos";
 
 export type AnswerBatchErrorCode =
   "FORBIDDEN" |
@@ -30,15 +36,23 @@ export interface AdaptivePhaseSessionSnapshot {
 
 export interface SessionAnswerWriteInput {
   clientTimestamp: number | string | Date;
+  clientRevision?: number;
   questionId: string;
-  selectedOption: string;
-  timeSpent: number;
+  response: ExamQuestionResponse;
+  timeSpentSeconds: number;
 }
+
+export type SessionQuestionResponse = ExamQuestionResponse;
+
+export type SessionRuntimeQuestion = ExamRuntimeQuestion;
 
 export interface PersistAnswerBatchInput {
   adaptivePhaseSnapshot?: unknown;
   answers: unknown;
+  batchId?: string;
+  batchSequence?: number;
   context: PersistAnswerBatchContext;
+  flushReason?: ExamAnswerFlushReason;
   millisecondsSinceLastWrite: number;
 }
 
@@ -103,7 +117,10 @@ export interface TimingMetricsExport {
 }
 
 export interface PersistAnswerBatchResult {
+  acknowledgements: ExamAnswerAcknowledgement[];
   adaptivePhaseSnapshotPersisted: boolean;
+  batchId: string;
+  batchSequence: number;
   blockedQuestionIds: string[];
   ignoredQuestionIds: string[];
   lockedQuestionIds: string[];

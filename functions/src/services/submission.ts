@@ -266,10 +266,51 @@ const hasSubmittedAnswer = (
   if (!isPlainObject(answer)) {
     return false;
   }
+  return resolveSubmittedAnswerValue(answer) !== "";
+};
 
-  const selectedOption = answer.selectedOption;
+const resolveSubmittedAnswerValue = (
+  answer: Record<string, unknown>,
+): string => {
+  if (isPlainObject(answer.response)) {
+    const response = answer.response;
+    if (response.kind === "unanswered") {
+      return "";
+    }
+  }
+  if (typeof answer.selectedOption !== "string") {
+    return "";
+  }
+  const selectedOption = answer.selectedOption.trim();
+  return selectedOption.toUpperCase() === "UNANSWERED" ? "" : selectedOption;
+};
 
-  return typeof selectedOption === "string" && selectedOption.trim() !== "";
+const isSubmittedAnswerCorrect = (
+  answer: unknown,
+  selectedValue: string,
+  correctAnswer: string,
+): boolean => {
+  const normalizedCorrectAnswer = correctAnswer.trim();
+  if (isPlainObject(answer) && isPlainObject(answer.response)) {
+    if (answer.response.kind === "numeric") {
+      const selectedNumber = Number(selectedValue);
+      const correctNumber = Number(normalizedCorrectAnswer);
+      return Number.isFinite(selectedNumber) &&
+        Number.isFinite(correctNumber) &&
+        selectedNumber === correctNumber;
+    }
+    if (answer.response.kind === "matrix") {
+      const normalizeMatrixValue = (value: string): string => value
+        .split("|")
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .sort()
+        .join("|");
+      return normalizeMatrixValue(selectedValue) ===
+        normalizeMatrixValue(normalizedCorrectAnswer);
+    }
+  }
+  return selectedValue.toUpperCase() === normalizedCorrectAnswer.toUpperCase();
 };
 
 const validateSubmissionTiming = (
@@ -460,10 +501,7 @@ export const computeSubmissionMetrics = (
 
     const answer = input.answerMap[questionId];
     const selectedOption = isPlainObject(answer) ?
-      normalizeRequiredString(
-        answer.selectedOption,
-        `session.answerMap.${questionId}.selectedOption`,
-      ) :
+      resolveSubmittedAnswerValue(answer) :
       "";
 
     const isAttempted = Boolean(selectedOption);
@@ -491,8 +529,11 @@ export const computeSubmissionMetrics = (
         hardAttemptedInPhase1Count += 1;
       }
 
-      const isCorrect = selectedOption.toUpperCase() ===
-        questionMeta.correctAnswer.toUpperCase();
+      const isCorrect = isSubmittedAnswerCorrect(
+        answer,
+        selectedOption,
+        questionMeta.correctAnswer,
+      );
 
       if (isCorrect) {
         correctCount += 1;
@@ -578,8 +619,11 @@ export const computeSubmissionMetrics = (
             MEDIUM_GUESS_FACTOR :
             HARD_GUESS_FACTOR;
         const guessThreshold = minTime * guessFactor;
-        const isCorrect = selectedOption.toUpperCase() ===
-          questionMeta.correctAnswer.toUpperCase();
+        const isCorrect = isSubmittedAnswerCorrect(
+          answer,
+          selectedOption,
+          questionMeta.correctAnswer,
+        );
 
         if (!isCorrect && totalQuestionTime < guessThreshold) {
           guessIndicatorCount += 1;

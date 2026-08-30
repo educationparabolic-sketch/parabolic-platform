@@ -12,6 +12,8 @@ import {
   PersistAnswerBatchInput,
   PersistAnswerBatchResult,
   QuestionTimingMetric,
+  SessionQuestionResponse,
+  SessionRuntimeQuestion,
   SessionAnswerWriteInput,
   TimingMetricsExport,
 } from "../types/sessionAnswerBatch";
@@ -31,9 +33,10 @@ const MAX_TIME_ADVISORY_WARNING_MESSAGE =
 
 interface NormalizedAnswerWrite {
   clientTimestamp: number;
+  clientRevision: number;
   questionId: string;
-  selectedOption: string;
-  timeSpent: number;
+  response: SessionQuestionResponse;
+  timeSpentSeconds: number;
 }
 
 interface NormalizedQuestionTimeRecord {
@@ -65,6 +68,22 @@ type NormalizedSessionExecutionMode = Lowercase<SessionExecutionMode>;
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
+
+const assertExactObjectKeys = (
+  value: Record<string, unknown>,
+  allowedKeys: string[],
+  fieldName: string,
+): void => {
+  const allowedKeySet = new Set(allowedKeys);
+  const unexpectedKey = Object.keys(value).find((key) => !allowedKeySet.has(key));
+
+  if (unexpectedKey) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Field "${fieldName}.${unexpectedKey}" is not allowed.`,
+    );
+  }
+};
 
 const normalizeRequiredString = (value: unknown, fieldName: string): string => {
   if (typeof value !== "string") {
@@ -105,6 +124,20 @@ const normalizeNonNegativeInteger = (
   }
 
   return value as number;
+};
+
+const normalizePositiveInteger = (
+  value: unknown,
+  fieldName: string,
+): number => {
+  const normalizedValue = normalizeNonNegativeInteger(value, fieldName);
+  if (normalizedValue === 0) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Field "${fieldName}" must be greater than zero.`,
+    );
+  }
+  return normalizedValue;
 };
 
 const normalizeNonNegativeNumber = (
@@ -495,7 +528,7 @@ const buildQuestionTimingUpdate = (
   | "phase2TimeSpent"
   | "phase3TimeSpent"
 > => {
-  const reportedDurationMillis = answer.timeSpent * 1000;
+  const reportedDurationMillis = answer.timeSpentSeconds * 1000;
 
   if (
     isLikelyEpochMillis(answer.clientTimestamp) &&
@@ -533,24 +566,17 @@ const buildQuestionTimingUpdate = (
     }
   }
 
-  const isIdempotentReplay =
-    questionTimeRecord.exitedAt !== null &&
-    answer.clientTimestamp <= questionTimeRecord.exitedAt;
-
-  if (isIdempotentReplay) {
-    return {
-      bufferTimeSpent: questionTimeRecord.bufferTimeSpent,
-      cumulativeTimeSpent: questionTimeRecord.cumulativeTimeSpent,
-      enteredAt: questionTimeRecord.enteredAt,
-      exitedAt: questionTimeRecord.exitedAt,
-      lastEntryTimestamp: questionTimeRecord.lastEntryTimestamp,
-      phase1TimeSpent: questionTimeRecord.phase1TimeSpent,
-      phase2TimeSpent: questionTimeRecord.phase2TimeSpent,
-      phase3TimeSpent: questionTimeRecord.phase3TimeSpent,
-    };
+  if (answer.timeSpentSeconds < questionTimeRecord.cumulativeTimeSpent) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Absolute question time cannot decrease for question "${answer.questionId}".`,
+    );
   }
 
-  const enteredAt = answer.clientTimestamp - reportedDurationMillis;
+  const cumulativeDelta =
+    answer.timeSpentSeconds - questionTimeRecord.cumulativeTimeSpent;
+  const enteredAt = questionTimeRecord.enteredAt ??
+    answer.clientTimestamp - reportedDurationMillis;
 
   if (
     sessionStartMillis !== null &&
@@ -565,25 +591,217 @@ const buildQuestionTimingUpdate = (
   }
 
   const phase1TimeSpent = questionTimeRecord.phase1TimeSpent +
-    (activePhase === "phase1" ? answer.timeSpent : 0);
+    (activePhase === "phase1" ? cumulativeDelta : 0);
   const phase2TimeSpent = questionTimeRecord.phase2TimeSpent +
-    (activePhase === "phase2" ? answer.timeSpent : 0);
+    (activePhase === "phase2" ? cumulativeDelta : 0);
   const phase3TimeSpent = questionTimeRecord.phase3TimeSpent +
-    (activePhase === "phase3" ? answer.timeSpent : 0);
+    (activePhase === "phase3" ? cumulativeDelta : 0);
   const bufferTimeSpent = questionTimeRecord.bufferTimeSpent +
-    (activePhase === "buffer" ? answer.timeSpent : 0);
+    (activePhase === "buffer" ? cumulativeDelta : 0);
 
   return {
     bufferTimeSpent,
-    cumulativeTimeSpent:
-      questionTimeRecord.cumulativeTimeSpent + answer.timeSpent,
+    cumulativeTimeSpent: answer.timeSpentSeconds,
     enteredAt,
     exitedAt: answer.clientTimestamp,
-    lastEntryTimestamp: enteredAt,
+    lastEntryTimestamp: questionTimeRecord.lastEntryTimestamp ?? enteredAt,
     phase1TimeSpent,
     phase2TimeSpent,
     phase3TimeSpent,
   };
+};
+
+const normalizeQuestionResponse = (
+  value: unknown,
+  fieldName: string,
+): SessionQuestionResponse => {
+  if (!isPlainObject(value)) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Field "${fieldName}" must be an object.`,
+    );
+  }
+
+  const kind = normalizeRequiredString(value.kind, `${fieldName}.kind`);
+
+  if (kind === "unanswered") {
+    assertExactObjectKeys(value, ["kind"], fieldName);
+    return {kind};
+  }
+
+  if (kind === "mcq") {
+    assertExactObjectKeys(value, ["kind", "optionId"], fieldName);
+    return {
+      kind,
+      optionId: normalizeRequiredString(value.optionId, `${fieldName}.optionId`),
+    };
+  }
+
+  if (kind === "numeric") {
+    assertExactObjectKeys(value, ["kind", "value"], fieldName);
+    return {
+      kind,
+      value: normalizeRequiredString(value.value, `${fieldName}.value`),
+    };
+  }
+
+  if (kind === "matrix") {
+    assertExactObjectKeys(value, ["kind", "selections"], fieldName);
+    if (!Array.isArray(value.selections) || value.selections.length === 0) {
+      throw new SessionStartValidationError(
+        "VALIDATION_ERROR",
+        `Field "${fieldName}.selections" must include at least one selection.`,
+      );
+    }
+    const seenSelections = new Set<string>();
+    const selections = value.selections.map((selection, index) => {
+      const selectionFieldName = `${fieldName}.selections[${index}]`;
+      if (!isPlainObject(selection)) {
+        throw new SessionStartValidationError(
+          "VALIDATION_ERROR",
+          `Field "${selectionFieldName}" must be an object.`,
+        );
+      }
+      assertExactObjectKeys(selection, ["column", "row"], selectionFieldName);
+      const normalizedSelection = {
+        column: normalizeRequiredString(
+          selection.column,
+          `${selectionFieldName}.column`,
+        ),
+        row: normalizeRequiredString(selection.row, `${selectionFieldName}.row`),
+      };
+      const selectionKey = `${normalizedSelection.row}\u0000${normalizedSelection.column}`;
+      if (seenSelections.has(selectionKey)) {
+        throw new SessionStartValidationError(
+          "VALIDATION_ERROR",
+          `Field "${fieldName}.selections" contains a duplicate selection.`,
+        );
+      }
+      seenSelections.add(selectionKey);
+      return normalizedSelection;
+    });
+    return {kind, selections};
+  }
+
+  throw new SessionStartValidationError(
+    "VALIDATION_ERROR",
+    `Field "${fieldName}.kind" must be unanswered, mcq, numeric, or matrix.`,
+  );
+};
+
+const normalizeRuntimeQuestions = (
+  runtimeSnapshot: unknown,
+): Map<string, SessionRuntimeQuestion> => {
+  if (!isPlainObject(runtimeSnapshot) || !Array.isArray(runtimeSnapshot.questions)) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      "Session runtime snapshot questions are missing.",
+    );
+  }
+
+  return new Map(runtimeSnapshot.questions.map((question, index) => {
+    if (!isPlainObject(question)) {
+      throw new SessionStartValidationError(
+        "VALIDATION_ERROR",
+        `runtimeSnapshot.questions[${index}] must be an object.`,
+      );
+    }
+    const questionId = normalizeRequiredString(
+      question.id,
+      `runtimeSnapshot.questions[${index}].id`,
+    );
+    const questionType = normalizeRequiredString(
+      question.type,
+      `runtimeSnapshot.questions[${index}].type`,
+    );
+    if (questionType !== "mcq" && questionType !== "numeric" && questionType !== "matrix") {
+      throw new SessionStartValidationError(
+        "VALIDATION_ERROR",
+        `Unsupported runtime question type for question "${questionId}".`,
+      );
+    }
+    return [questionId, question as unknown as SessionRuntimeQuestion];
+  }));
+};
+
+const canonicalizeNumericResponse = (value: string, fieldName: string): string => {
+  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/u.test(value)) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Field "${fieldName}" must be a finite numeric value.`,
+    );
+  }
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Field "${fieldName}" must be a finite numeric value.`,
+    );
+  }
+  return Object.is(numericValue, -0) ? "0" : String(numericValue);
+};
+
+const validateResponseForQuestion = (
+  response: SessionQuestionResponse,
+  question: SessionRuntimeQuestion,
+  fieldName: string,
+): SessionQuestionResponse => {
+  if (response.kind === "unanswered") {
+    return response;
+  }
+  if (response.kind !== question.type) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Field "${fieldName}.kind" does not match question type "${question.type}".`,
+    );
+  }
+  if (response.kind === "mcq") {
+    const optionIds = new Set(question.options.map((option) => option.id));
+    if (!optionIds.has(response.optionId)) {
+      throw new SessionStartValidationError(
+        "VALIDATION_ERROR",
+        `MCQ optionId is not valid for question "${question.id}".`,
+      );
+    }
+    return response;
+  }
+  if (response.kind === "numeric") {
+    return {
+      kind: response.kind,
+      value: canonicalizeNumericResponse(response.value, `${fieldName}.value`),
+    };
+  }
+
+  const rows = new Set(question.matrixRows);
+  const columns = new Set(question.matrixColumns);
+  response.selections.forEach((selection) => {
+    if (!rows.has(selection.row) || !columns.has(selection.column)) {
+      throw new SessionStartValidationError(
+        "VALIDATION_ERROR",
+        `Matrix selection is not valid for question "${question.id}".`,
+      );
+    }
+  });
+  return {
+    kind: response.kind,
+    selections: response.selections.slice().sort((left, right) =>
+      left.row.localeCompare(right.row) || left.column.localeCompare(right.column)),
+  };
+};
+
+const projectResponseForScoring = (response: SessionQuestionResponse): string | null => {
+  if (response.kind === "unanswered") {
+    return null;
+  }
+  if (response.kind === "mcq") {
+    return response.optionId;
+  }
+  if (response.kind === "numeric") {
+    return response.value;
+  }
+  return response.selections
+    .map((selection) => `${selection.row}::${selection.column}`)
+    .join("|");
 };
 
 const calculateCumulativeQuestionTimeSpent = (
@@ -643,6 +861,7 @@ const normalizeAnswerWrites = (answers: unknown): NormalizedAnswerWrite[] => {
     );
   }
 
+  const questionIds = new Set<string>();
   return answers.map((answer, index) => {
     if (!isPlainObject(answer)) {
       throw new SessionStartValidationError(
@@ -663,20 +882,31 @@ const normalizeAnswerWrites = (answers: unknown): NormalizedAnswerWrite[] => {
         `Field "answers[${index}].questionId" contains invalid characters.`,
       );
     }
+    if (questionIds.has(questionId)) {
+      throw new SessionStartValidationError(
+        "VALIDATION_ERROR",
+        `Field "answers" contains duplicate questionId "${questionId}".`,
+      );
+    }
+    questionIds.add(questionId);
 
     return {
       clientTimestamp: normalizeClientTimestamp(
         answer.clientTimestamp,
         `answers[${index}].clientTimestamp`,
       ),
-      questionId,
-      selectedOption: normalizeRequiredString(
-        answer.selectedOption,
-        `answers[${index}].selectedOption`,
+      clientRevision: normalizePositiveInteger(
+        answer.clientRevision ?? index + 1,
+        `answers[${index}].clientRevision`,
       ),
-      timeSpent: normalizeNonNegativeInteger(
-        answer.timeSpent,
-        `answers[${index}].timeSpent`,
+      questionId,
+      response: normalizeQuestionResponse(
+        answer.response,
+        `answers[${index}].response`,
+      ),
+      timeSpentSeconds: normalizeNonNegativeInteger(
+        answer.timeSpentSeconds,
+        `answers[${index}].timeSpentSeconds`,
       ),
     };
   });
@@ -768,6 +998,26 @@ export class AnswerBatchService {
       input.millisecondsSinceLastWrite,
       "millisecondsSinceLastWrite",
     );
+    const batchId = normalizeRequiredString(
+      input.batchId ?? `legacy-${sessionId}`,
+      "batchId",
+    );
+    const batchSequence = normalizePositiveInteger(
+      input.batchSequence ?? 1,
+      "batchSequence",
+    );
+    const flushReason = input.flushReason ?? "scheduled";
+    if (
+      flushReason !== "heartbeat" &&
+      flushReason !== "reconnect" &&
+      flushReason !== "scheduled" &&
+      flushReason !== "submission"
+    ) {
+      throw new SessionStartValidationError(
+        "VALIDATION_ERROR",
+        "Field \"flushReason\" is invalid.",
+      );
+    }
     const normalizedAnswers = normalizeAnswerWrites(input.answers);
     const adaptivePhaseSnapshot = normalizeAdaptivePhaseSnapshot(
       input.adaptivePhaseSnapshot,
@@ -779,6 +1029,7 @@ export class AnswerBatchService {
     sessionService.assertAnswerWriteBatchingConstraints(
       normalizedAnswers.length,
       millisecondsSinceLastWrite,
+      flushReason === "reconnect" || flushReason === "submission",
     );
 
     const sessionPath =
@@ -890,6 +1141,7 @@ export class AnswerBatchService {
           "Session timing map is missing.",
         );
       }
+      const runtimeQuestions = normalizeRuntimeQuestions(sessionData.runtimeSnapshot);
 
       const sessionStartMillis = resolveSessionStartMillis(sessionData);
 
@@ -916,6 +1168,18 @@ export class AnswerBatchService {
       let maxValidatedClientTimestamp = 0;
 
       for (const answer of normalizedAnswers) {
+        const runtimeQuestion = runtimeQuestions.get(answer.questionId);
+        if (!runtimeQuestion) {
+          throw new SessionStartValidationError(
+            "VALIDATION_ERROR",
+            `Question "${answer.questionId}" is not part of the session runtime snapshot.`,
+          );
+        }
+        const validatedResponse = validateResponseForQuestion(
+          answer.response,
+          runtimeQuestion,
+          `answers.${answer.questionId}.response`,
+        );
         const questionTimeRecord = normalizeQuestionTimeRecord(
           storedQuestionTimeMap[answer.questionId],
           `questionTimeMap.${answer.questionId}`,
@@ -933,6 +1197,22 @@ export class AnswerBatchService {
           continue;
         }
 
+        if (answer.clientTimestamp === currentTimestamp && isPlainObject(currentAnswer)) {
+          const currentResponse = currentAnswer.response;
+          const currentTimeSpentSeconds = currentAnswer.timeSpentSeconds;
+          if (
+            JSON.stringify(currentResponse) === JSON.stringify(validatedResponse) &&
+            currentTimeSpentSeconds === answer.timeSpentSeconds
+          ) {
+            ignoredQuestionIds.push(answer.questionId);
+            continue;
+          }
+          throw new SessionStartValidationError(
+            "VALIDATION_ERROR",
+            `Conflicting answer write timestamp for question "${answer.questionId}".`,
+          );
+        }
+
         if (
           maxTimeEnforcementLevel === "strict" &&
           questionTimeRecord.cumulativeTimeSpent >= questionTimeRecord.maxTime
@@ -945,8 +1225,9 @@ export class AnswerBatchService {
 
         updatePayload[`answerMap.${answer.questionId}`] = {
           clientTimestamp: answer.clientTimestamp,
-          selectedOption: answer.selectedOption,
-          timeSpent: answer.timeSpent,
+          response: validatedResponse,
+          selectedOption: projectResponseForScoring(validatedResponse),
+          timeSpentSeconds: answer.timeSpentSeconds,
         };
         const timingUpdate = buildQuestionTimingUpdate(
           answer,
@@ -1094,8 +1375,19 @@ export class AnswerBatchService {
     });
 
     return {
+      acknowledgements: normalizedAnswers.map((answer) => ({
+        clientRevision: answer.clientRevision,
+        disposition: writeResult.blockedQuestionIds.includes(answer.questionId) ?
+          "blocked" as const :
+          writeResult.persistedQuestionIds.includes(answer.questionId) ?
+            "persisted" as const :
+            "ignored" as const,
+        questionId: answer.questionId,
+      })),
       adaptivePhaseSnapshotPersisted:
         writeResult.adaptivePhaseSnapshotPersisted,
+      batchId,
+      batchSequence,
       blockedQuestionIds: writeResult.blockedQuestionIds,
       ignoredQuestionIds: writeResult.ignoredQuestionIds,
       lockedQuestionIds: writeResult.lockedQuestionIds,

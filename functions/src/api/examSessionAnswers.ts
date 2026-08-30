@@ -16,10 +16,14 @@ import {createAuthenticationMiddleware} from "../middleware/auth";
 import {createRoleAuthorizationMiddleware} from "../middleware/role";
 import {createTenantGuardMiddleware} from "../middleware/tenant";
 import {systemEventTopologyService} from "../services/systemEventTopology";
+import type {ExamAnswerFlushReason} from "../../../shared/contracts/apiDtos";
 
 interface ExamSessionAnswersRequestBody {
   adaptivePhaseSnapshot?: unknown;
   answers?: unknown;
+  batchId?: unknown;
+  batchSequence?: unknown;
+  flushReason?: unknown;
   instituteId?: unknown;
   millisecondsSinceLastWrite?: unknown;
   runId?: unknown;
@@ -36,6 +40,9 @@ interface ExamSessionAnswersValidatedRequestData
 extends Record<string, unknown> {
   adaptivePhaseSnapshot?: unknown;
   answers: unknown;
+  batchId: string;
+  batchSequence: number;
+  flushReason: ExamAnswerFlushReason;
   instituteId: string;
   millisecondsSinceLastWrite: number;
   runId: string;
@@ -86,6 +93,35 @@ const normalizeNonNegativeInteger = (
   }
 
   return value as number;
+};
+
+const normalizePositiveInteger = (
+  value: unknown,
+  fieldName: string,
+): number => {
+  const normalizedValue = normalizeNonNegativeInteger(value, fieldName);
+  if (normalizedValue === 0) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Field "${fieldName}" must be greater than zero.`,
+    );
+  }
+  return normalizedValue;
+};
+
+const normalizeFlushReason = (value: unknown): ExamAnswerFlushReason => {
+  if (
+    value === "heartbeat" ||
+    value === "reconnect" ||
+    value === "scheduled" ||
+    value === "submission"
+  ) {
+    return value;
+  }
+  throw new SessionStartValidationError(
+    "VALIDATION_ERROR",
+    "Field \"flushReason\" is invalid.",
+  );
 };
 
 const isAnswerBatchErrorCode = (
@@ -152,6 +188,8 @@ export const createExamSessionAnswersHandler = (
       async () => dependencies.persistIncrementalAnswers({
         adaptivePhaseSnapshot: validatedData.adaptivePhaseSnapshot,
         answers: validatedData.answers,
+        batchId: validatedData.batchId,
+        batchSequence: validatedData.batchSequence,
         context: {
           instituteId: validatedData.instituteId,
           runId: validatedData.runId,
@@ -159,6 +197,7 @@ export const createExamSessionAnswersHandler = (
           studentId: validatedData.studentId,
           yearId: validatedData.yearId,
         },
+        flushReason: validatedData.flushReason,
         millisecondsSinceLastWrite: validatedData.millisecondsSinceLastWrite,
       }),
     );
@@ -166,8 +205,11 @@ export const createExamSessionAnswersHandler = (
     response.status(200).json({
       code: "OK",
       data: {
+        acknowledgements: result.acknowledgements,
         adaptivePhaseSnapshotPersisted:
           result.adaptivePhaseSnapshotPersisted,
+        batchId: result.batchId,
+        batchSequence: result.batchSequence,
         blockedQuestionIds: result.blockedQuestionIds,
         ignoredQuestionIds: result.ignoredQuestionIds,
         lockedQuestionIds: result.lockedQuestionIds,
@@ -214,6 +256,12 @@ export const createExamSessionAnswersHandler = (
         );
         const yearId = normalizeRequiredString(body.yearId, "yearId");
         const runId = normalizeRequiredString(body.runId, "runId");
+        const batchId = normalizeRequiredString(body.batchId, "batchId");
+        const batchSequence = normalizePositiveInteger(
+          body.batchSequence,
+          "batchSequence",
+        );
+        const flushReason = normalizeFlushReason(body.flushReason);
         const millisecondsSinceLastWrite = normalizeNonNegativeInteger(
           body.millisecondsSinceLastWrite,
           "millisecondsSinceLastWrite",
@@ -240,6 +288,9 @@ export const createExamSessionAnswersHandler = (
         setRequestData(request, {
           adaptivePhaseSnapshot: body.adaptivePhaseSnapshot,
           answers: body.answers,
+          batchId,
+          batchSequence,
+          flushReason,
           instituteId: identity.instituteId,
           millisecondsSinceLastWrite,
           runId: examSession.runId,

@@ -3,6 +3,7 @@ import test from "node:test";
 import {Timestamp} from "firebase-admin/firestore";
 import * as gcpMetadata from "gcp-metadata";
 import {
+  computeSubmissionMetrics,
   submissionService,
   SubmissionService,
   SubmissionValidationError,
@@ -27,6 +28,85 @@ const ACADEMIC_YEAR_PATH =
 const SESSION_ROOT_PATH =
   `institutes/${INSTITUTE_ID}/academicYears/${YEAR_ID}/` +
   `runs/${RUN_ID}/sessions`;
+
+test("computeSubmissionMetrics treats an explicit clear as unanswered", () => {
+  const metrics = computeSubmissionMetrics({
+    answerMap: {
+      q_clear: {
+        response: {kind: "unanswered"},
+        selectedOption: null,
+        timeSpentSeconds: 30,
+      },
+    },
+    examMode: "Operational",
+    phaseConfigSnapshot: {
+      phase1Percent: 100,
+      phase2Percent: 0,
+      phase3Percent: 0,
+    },
+    questionIds: ["q_clear"],
+    questionMetaById: {
+      q_clear: {
+        correctAnswer: "A",
+        difficulty: "Easy",
+        marks: 1,
+        negativeMarks: 0.25,
+      },
+    },
+    questionTimeMap: {
+      q_clear: {cumulativeTimeSpent: 30, maxTime: 60, minTime: 10},
+    },
+  });
+
+  assert.equal(metrics.easyAttemptRatePercent, 0);
+  assert.equal(metrics.rawScorePercent, 0);
+});
+
+test("computeSubmissionMetrics scores canonical numeric and matrix responses", () => {
+  const metrics = computeSubmissionMetrics({
+    answerMap: {
+      q_numeric: {
+        response: {kind: "numeric", value: "1"},
+        selectedOption: "1",
+      },
+      q_matrix: {
+        response: {kind: "matrix", selections: [
+          {column: "C1", row: "R1"},
+          {column: "C2", row: "R2"},
+        ]},
+        selectedOption: "R1::C1|R2::C2",
+      },
+    },
+    examMode: "Operational",
+    phaseConfigSnapshot: {
+      phase1Percent: 100,
+      phase2Percent: 0,
+      phase3Percent: 0,
+    },
+    questionIds: ["q_numeric", "q_matrix"],
+    questionMetaById: {
+      q_numeric: {
+        correctAnswer: "1.00",
+        difficulty: "Easy",
+        marks: 1,
+        negativeMarks: 0.25,
+      },
+      q_matrix: {
+        correctAnswer: "R2::C2|R1::C1",
+        difficulty: "Medium",
+        marks: 1,
+        negativeMarks: 0.25,
+      },
+    },
+    questionTimeMap: {
+      q_numeric: {cumulativeTimeSpent: 30, maxTime: 60, minTime: 10},
+      q_matrix: {cumulativeTimeSpent: 30, maxTime: 60, minTime: 10},
+    },
+  });
+
+  assert.equal(metrics.accuracyPercent, 100);
+  assert.equal(metrics.rawScorePercent, 100);
+});
 
 const deleteIfPresent = async (path: string): Promise<void> => {
   const reference = firestore.doc(path);

@@ -62,6 +62,55 @@ test("Exam runtime lifecycle is server-activated and deadline-authoritative", as
   assert.match(answerService, /session\.deadlineAt/u);
 });
 
+test("Exam answers use explicit response shapes and absolute cumulative timing", async () => {
+  const source = await readFile(runtimePath, "utf8");
+  const answerService = await readFile(
+    new URL("../functions/src/services/answerBatch.ts", import.meta.url),
+    "utf8",
+  );
+  const sharedDtos = await readFile(
+    new URL("../shared/contracts/apiDtos.d.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(sharedDtos, /export type ExamQuestionResponse/u);
+  assert.match(sharedDtos, /kind: "unanswered"/u);
+  assert.match(sharedDtos, /kind: "mcq"; optionId: string/u);
+  assert.match(sharedDtos, /kind: "numeric"; value: string/u);
+  assert.match(sharedDtos, /kind: "matrix"/u);
+  assert.match(source, /timeSpentSeconds/u);
+  assert.doesNotMatch(source, /"UNANSWERED"/u);
+  assert.match(answerService, /Absolute question time cannot decrease/u);
+  assert.match(answerService, /runtime snapshot/u);
+});
+
+test("Exam answer recovery serializes revision acknowledgements and drains before submit", async () => {
+  const source = await readFile(runtimePath, "utf8");
+  const answerHandler = await readFile(
+    new URL("../functions/src/api/examSessionAnswers.ts", import.meta.url),
+    "utf8",
+  );
+  const entryHandler = await readFile(
+    new URL("../functions/src/api/examSessionEntry.ts", import.meta.url),
+    "utf8",
+  );
+  const sharedDtos = await readFile(
+    new URL("../shared/contracts/apiDtos.d.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(sharedDtos, /clientRevision: number/u);
+  assert.match(sharedDtos, /batchSequence: number/u);
+  assert.match(sharedDtos, /acknowledgements: ExamAnswerAcknowledgement\[\]/u);
+  assert.match(source, /flushInFlightRef/u);
+  assert.match(source, /shouldDrainCompletely/u);
+  assert.match(source, /currentWrite\?\.clientRevision === acknowledgement\.clientRevision/u);
+  assert.match(source, /snapshot\.ownerId !== ownerId/u);
+  assert.match(source, /auth\.authStateReady\(\)/u);
+  assert.match(answerHandler, /acknowledgements: result\.acknowledgements/u);
+  assert.match(entryHandler, /resumeSessionEntry/u);
+});
+
 test("Exam entry, activation, answers, and submit require session-bound Firebase identity", async () => {
   const handlerPaths = [
     "../functions/src/api/examSessionEntry.ts",

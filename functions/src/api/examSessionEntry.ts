@@ -15,10 +15,12 @@ import {createRoleAuthorizationMiddleware} from "../middleware/role";
 import {createTenantGuardMiddleware} from "../middleware/tenant";
 
 interface ExamSessionEntryRequestBody {
+  resume?: unknown;
   token?: unknown;
 }
 
 interface ExamSessionEntryRequestDependencies {
+  resumeSessionEntry: typeof sessionService.resumeSessionEntry;
   validateSessionEntry: typeof sessionService.validateSessionEntry;
   verifyIdToken: (idToken: string) => Promise<DecodedIdToken>;
 }
@@ -31,7 +33,7 @@ interface ExamSessionEntryValidatedRequestData extends Record<string, unknown> {
   sessionId: string;
   studentId: string;
   studentUid: string;
-  token: string;
+  token: string | null;
   yearId: string;
 }
 
@@ -98,17 +100,27 @@ export const createExamSessionEntryHandler = (
     const requestId = request.context.requestId;
     const validatedData = request.context
       .requestData as ExamSessionEntryValidatedRequestData;
-    const result = await dependencies.validateSessionEntry({
-      instituteId: validatedData.instituteId,
-      launchNonce: validatedData.launchNonce,
-      licenseLayer: validatedData.licenseLayer,
-      runId: validatedData.runId,
-      sessionId: validatedData.sessionId,
-      sessionToken: validatedData.token,
-      studentId: validatedData.studentId,
-      studentUid: validatedData.studentUid,
-      yearId: validatedData.yearId,
-    });
+    const result = validatedData.token === null ?
+      await dependencies.resumeSessionEntry({
+        instituteId: validatedData.instituteId,
+        licenseLayer: validatedData.licenseLayer,
+        runId: validatedData.runId,
+        sessionId: validatedData.sessionId,
+        studentId: validatedData.studentId,
+        studentUid: validatedData.studentUid,
+        yearId: validatedData.yearId,
+      }) :
+      await dependencies.validateSessionEntry({
+        instituteId: validatedData.instituteId,
+        launchNonce: validatedData.launchNonce,
+        licenseLayer: validatedData.licenseLayer,
+        runId: validatedData.runId,
+        sessionId: validatedData.sessionId,
+        sessionToken: validatedData.token,
+        studentId: validatedData.studentId,
+        studentUid: validatedData.studentUid,
+        yearId: validatedData.yearId,
+      });
 
     response.status(200).json({
       code: "OK",
@@ -125,7 +137,9 @@ export const createExamSessionEntryHandler = (
         studentId: result.studentId,
         yearId: result.yearId,
       },
-      message: "Exam session entry token validated server-side.",
+      message: validatedData.token === null ?
+        "Exam session restored from authenticated identity." :
+        "Exam session entry token validated server-side.",
       requestId,
       success: true,
       timestamp: new Date().toISOString(),
@@ -145,7 +159,8 @@ export const createExamSessionEntryHandler = (
       validator: (request: MiddlewareRequest): void => {
         const body = (request.body ?? {}) as ExamSessionEntryRequestBody;
         const sessionId = resolveSessionIdFromRequest(request);
-        const token = normalizeRequiredString(body.token, "token");
+        const resume = body.resume === true;
+        const token = resume ? null : normalizeRequiredString(body.token, "token");
         const identity = request.context.identity;
         const examSession = identity?.examSession;
         if (
@@ -197,6 +212,8 @@ export const createExamSessionEntryHandler = (
 });
 
 export const handleExamSessionEntryRequest = createExamSessionEntryHandler({
+  resumeSessionEntry:
+    sessionService.resumeSessionEntry.bind(sessionService),
   validateSessionEntry:
     sessionService.validateSessionEntry.bind(sessionService),
   verifyIdToken: (idToken: string) =>

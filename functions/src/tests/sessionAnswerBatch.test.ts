@@ -29,8 +29,9 @@ const seedSession = async (
     answerMap: {
       q01: {
         clientTimestamp: sessionStartMillis + 15_000,
+        response: {kind: "mcq", optionId: "A"},
         selectedOption: "A",
-        timeSpent: 12,
+        timeSpentSeconds: 12,
       },
     },
     createdAt: Timestamp.fromMillis(sessionStartMillis),
@@ -61,8 +62,48 @@ const seedSession = async (
         maxTime: 150,
         minTime: 60,
       },
+      q04: {
+        cumulativeTimeSpent: 0,
+        enteredAt: null,
+        exitedAt: null,
+        lastEntryTimestamp: null,
+        maxTime: 60,
+        minTime: 0,
+      },
+      q05: {
+        cumulativeTimeSpent: 0,
+        enteredAt: null,
+        exitedAt: null,
+        lastEntryTimestamp: null,
+        maxTime: 60,
+        minTime: 0,
+      },
     },
     runId: "run_build_30",
+    runtimeSnapshot: {
+      questions: [
+        {id: "q01", matrixColumns: [], matrixRows: [], options: [
+          {id: "A", label: "A", text: "A"},
+          {id: "B", label: "B", text: "B"},
+          {id: "C", label: "C", text: "C"},
+          {id: "D", label: "D", text: "D"},
+        ], type: "mcq"},
+        {id: "q02", matrixColumns: [], matrixRows: [], options: [
+          {id: "A", label: "A", text: "A"},
+          {id: "B", label: "B", text: "B"},
+          {id: "C", label: "C", text: "C"},
+          {id: "D", label: "D", text: "D"},
+        ], type: "mcq"},
+        {id: "q03", matrixColumns: [], matrixRows: [], options: [
+          {id: "A", label: "A", text: "A"},
+          {id: "B", label: "B", text: "B"},
+          {id: "C", label: "C", text: "C"},
+          {id: "D", label: "D", text: "D"},
+        ], type: "mcq"},
+        {id: "q04", matrixColumns: [], matrixRows: [], options: [], type: "numeric"},
+        {id: "q05", matrixColumns: ["C1", "C2"], matrixRows: ["R1", "R2"], options: [], type: "matrix"},
+      ],
+    },
     sessionId,
     deadlineAt: Timestamp.fromMillis(nowMillis + 60 * 60 * 1000),
     startedAt: Timestamp.fromMillis(sessionStartMillis),
@@ -76,6 +117,18 @@ const seedSession = async (
     yearId: "2026",
   });
 };
+
+const mcqAnswer = (
+  questionId: string,
+  optionId: string,
+  clientTimestamp: number,
+  timeSpentSeconds: number,
+) => ({
+  clientTimestamp,
+  questionId,
+  response: {kind: "mcq" as const, optionId},
+  timeSpentSeconds,
+});
 
 const deleteIfPresent = async (path: string): Promise<void> => {
   const reference = firestore.doc(path);
@@ -103,12 +156,7 @@ test(
 
     const result = await answerBatchService.persistIncrementalAnswers({
       answers: [
-        {
-          clientTimestamp: nowMillis,
-          questionId: "q02",
-          selectedOption: "C",
-          timeSpent: 20,
-        },
+        mcqAnswer("q02", "C", nowMillis, 20),
       ],
       context: {
         instituteId: "inst_build_30",
@@ -134,7 +182,7 @@ test(
     const snapshot = await firestore.doc(sessionPath).get();
     const answerMap = snapshot.data()?.answerMap as Record<string, {
       selectedOption: string;
-      timeSpent: number;
+      timeSpentSeconds: number;
       clientTimestamp: number;
     }>;
     const questionTimeMap = snapshot.data()?.questionTimeMap as Record<string, {
@@ -148,7 +196,7 @@ test(
 
     assert.equal(answerMap.q01.selectedOption, "A");
     assert.equal(answerMap.q02.selectedOption, "C");
-    assert.equal(answerMap.q02.timeSpent, 20);
+    assert.equal(answerMap.q02.timeSpentSeconds, 20);
     assert.equal(questionTimeMap.q02.cumulativeTimeSpent, 20);
     assert.equal(questionTimeMap.q02.exitedAt, nowMillis);
     assert.equal(questionTimeMap.q02.enteredAt, nowMillis - 20_000);
@@ -184,12 +232,7 @@ test(
         skipPatternScore: 88,
       },
       answers: [
-        {
-          clientTimestamp: nowMillis,
-          questionId: "q02",
-          selectedOption: "B",
-          timeSpent: 35,
-        },
+        mcqAnswer("q02", "B", nowMillis, 35),
       ],
       context: {
         instituteId: "inst_build_30",
@@ -240,12 +283,7 @@ test(
 
     const result = await answerBatchService.persistIncrementalAnswers({
       answers: [
-        {
-          clientTimestamp: nowMillis - 180_000,
-          questionId: "q01",
-          selectedOption: "D",
-          timeSpent: 70,
-        },
+        mcqAnswer("q01", "D", nowMillis - 180_000, 70),
       ],
       context: {
         instituteId: "inst_build_30",
@@ -291,12 +329,7 @@ test(
     await assert.rejects(
       answerBatchService.persistIncrementalAnswers({
         answers: [
-          {
-            clientTimestamp: 2000,
-            questionId: "q03",
-            selectedOption: "B",
-            timeSpent: 30,
-          },
+          mcqAnswer("q03", "B", 2000, 30),
         ],
         context: {
           instituteId: "inst_build_30",
@@ -320,6 +353,70 @@ test(
 );
 
 test(
+  "submission and reconnect drains bypass the interval and acknowledge exact client revisions",
+  async () => {
+    const nowMillis = Date.now();
+    const sessionPath =
+      "institutes/inst_build_30/academicYears/2026/" +
+      "runs/run_build_30/sessions/session_build_30_drain";
+
+    await deleteIfPresent(sessionPath);
+    await seedSession(sessionPath);
+    const answer = {
+      ...mcqAnswer("q02", "B", nowMillis, 20),
+      clientRevision: 41,
+    };
+
+    const firstResult = await answerBatchService.persistIncrementalAnswers({
+      answers: [answer],
+      batchId: "session_build_30_drain:student_build_30:7",
+      batchSequence: 7,
+      context: {
+        instituteId: "inst_build_30",
+        runId: "run_build_30",
+        sessionId: "session_build_30_drain",
+        studentId: "student_build_30",
+        yearId: "2026",
+      },
+      flushReason: "submission",
+      millisecondsSinceLastWrite: 0,
+    });
+
+    assert.equal(firstResult.batchId, "session_build_30_drain:student_build_30:7");
+    assert.equal(firstResult.batchSequence, 7);
+    assert.deepEqual(firstResult.acknowledgements, [{
+      clientRevision: 41,
+      disposition: "persisted",
+      questionId: "q02",
+    }]);
+
+    const replayResult = await answerBatchService.persistIncrementalAnswers({
+      answers: [answer],
+      batchId: "session_build_30_drain:student_build_30:8",
+      batchSequence: 8,
+      context: {
+        instituteId: "inst_build_30",
+        runId: "run_build_30",
+        sessionId: "session_build_30_drain",
+        studentId: "student_build_30",
+        yearId: "2026",
+      },
+      flushReason: "reconnect",
+      millisecondsSinceLastWrite: 0,
+    });
+
+    assert.deepEqual(replayResult.persistedQuestionIds, []);
+    assert.deepEqual(replayResult.acknowledgements, [{
+      clientRevision: 41,
+      disposition: "ignored",
+      questionId: "q02",
+    }]);
+
+    await deleteIfPresent(sessionPath);
+  },
+);
+
+test(
   "persistIncrementalAnswers keeps timing cumulative idempotent " +
     "for replayed timestamps",
   async () => {
@@ -333,12 +430,7 @@ test(
 
     const firstResult = await answerBatchService.persistIncrementalAnswers({
       answers: [
-        {
-          clientTimestamp: nowMillis,
-          questionId: "q03",
-          selectedOption: "A",
-          timeSpent: 15,
-        },
+        mcqAnswer("q03", "A", nowMillis, 15),
       ],
       context: {
         instituteId: "inst_build_30",
@@ -352,12 +444,7 @@ test(
 
     const secondResult = await answerBatchService.persistIncrementalAnswers({
       answers: [
-        {
-          clientTimestamp: nowMillis,
-          questionId: "q03",
-          selectedOption: "A",
-          timeSpent: 15,
-        },
+        mcqAnswer("q03", "A", nowMillis, 15),
       ],
       context: {
         instituteId: "inst_build_30",
@@ -370,7 +457,8 @@ test(
     });
 
     assert.deepEqual(firstResult.persistedQuestionIds, ["q03"]);
-    assert.deepEqual(secondResult.persistedQuestionIds, ["q03"]);
+    assert.deepEqual(secondResult.persistedQuestionIds, []);
+    assert.deepEqual(secondResult.ignoredQuestionIds, ["q03"]);
     const snapshot = await firestore.doc(sessionPath).get();
     const questionTimeMap = snapshot.data()?.questionTimeMap as Record<string, {
       cumulativeTimeSpent: number;
@@ -392,6 +480,222 @@ test(
 );
 
 test(
+  "persistIncrementalAnswers does not inflate absolute time on a newer save",
+  async () => {
+    const nowMillis = Date.now();
+    const sessionPath =
+      "institutes/inst_build_30/academicYears/2026/" +
+      "runs/run_build_30/sessions/session_build_30_absolute_replay";
+
+    await deleteIfPresent(sessionPath);
+    await seedSession(sessionPath);
+
+    await answerBatchService.persistIncrementalAnswers({
+      answers: [mcqAnswer("q03", "A", nowMillis - 1000, 15)],
+      context: {
+        instituteId: "inst_build_30",
+        runId: "run_build_30",
+        sessionId: "session_build_30_absolute_replay",
+        studentId: "student_build_30",
+        yearId: "2026",
+      },
+      millisecondsSinceLastWrite: 5000,
+    });
+
+    await answerBatchService.persistIncrementalAnswers({
+      answers: [mcqAnswer("q03", "B", nowMillis, 15)],
+      context: {
+        instituteId: "inst_build_30",
+        runId: "run_build_30",
+        sessionId: "session_build_30_absolute_replay",
+        studentId: "student_build_30",
+        yearId: "2026",
+      },
+      millisecondsSinceLastWrite: 5000,
+    });
+
+    const snapshot = await firestore.doc(sessionPath).get();
+    assert.equal(snapshot.data()?.questionTimeMap.q03.cumulativeTimeSpent, 15);
+    assert.equal(snapshot.data()?.answerMap.q03.selectedOption, "B");
+
+    await deleteIfPresent(sessionPath);
+  },
+);
+
+test(
+  "persistIncrementalAnswers stores an explicit clear without timing inflation",
+  async () => {
+    const nowMillis = Date.now();
+    const sessionPath =
+      "institutes/inst_build_30/academicYears/2026/" +
+      "runs/run_build_30/sessions/session_build_30_clear";
+
+    await deleteIfPresent(sessionPath);
+    await seedSession(sessionPath);
+
+    await answerBatchService.persistIncrementalAnswers({
+      answers: [mcqAnswer("q02", "C", nowMillis - 1000, 30)],
+      context: {
+        instituteId: "inst_build_30",
+        runId: "run_build_30",
+        sessionId: "session_build_30_clear",
+        studentId: "student_build_30",
+        yearId: "2026",
+      },
+      millisecondsSinceLastWrite: 5000,
+    });
+    await answerBatchService.persistIncrementalAnswers({
+      answers: [{
+        clientTimestamp: nowMillis,
+        questionId: "q02",
+        response: {kind: "unanswered"},
+        timeSpentSeconds: 30,
+      }],
+      context: {
+        instituteId: "inst_build_30",
+        runId: "run_build_30",
+        sessionId: "session_build_30_clear",
+        studentId: "student_build_30",
+        yearId: "2026",
+      },
+      millisecondsSinceLastWrite: 5000,
+    });
+
+    const snapshot = await firestore.doc(sessionPath).get();
+    assert.deepEqual(snapshot.data()?.answerMap.q02.response, {kind: "unanswered"});
+    assert.equal(snapshot.data()?.answerMap.q02.selectedOption, null);
+    assert.equal(snapshot.data()?.questionTimeMap.q02.cumulativeTimeSpent, 30);
+
+    await deleteIfPresent(sessionPath);
+  },
+);
+
+test(
+  "persistIncrementalAnswers validates and canonicalizes numeric and matrix responses",
+  async () => {
+    const nowMillis = Date.now();
+    const sessionPath =
+      "institutes/inst_build_30/academicYears/2026/" +
+      "runs/run_build_30/sessions/session_build_30_typed_responses";
+
+    await deleteIfPresent(sessionPath);
+    await seedSession(sessionPath);
+
+    const result = await answerBatchService.persistIncrementalAnswers({
+      answers: [{
+        clientTimestamp: nowMillis,
+        questionId: "q04",
+        response: {kind: "numeric", value: "1.00"},
+        timeSpentSeconds: 10,
+      }, {
+        clientTimestamp: nowMillis,
+        questionId: "q05",
+        response: {
+          kind: "matrix",
+          selections: [
+            {column: "C2", row: "R2"},
+            {column: "C1", row: "R1"},
+          ],
+        },
+        timeSpentSeconds: 20,
+      }],
+      context: {
+        instituteId: "inst_build_30",
+        runId: "run_build_30",
+        sessionId: "session_build_30_typed_responses",
+        studentId: "student_build_30",
+        yearId: "2026",
+      },
+      millisecondsSinceLastWrite: 5000,
+    });
+
+    assert.deepEqual(result.persistedQuestionIds, ["q04", "q05"]);
+    const snapshot = await firestore.doc(sessionPath).get();
+    assert.deepEqual(snapshot.data()?.answerMap.q04.response, {
+      kind: "numeric",
+      value: "1",
+    });
+    assert.deepEqual(snapshot.data()?.answerMap.q05.response.selections, [
+      {column: "C1", row: "R1"},
+      {column: "C2", row: "R2"},
+    ]);
+    assert.equal(snapshot.data()?.answerMap.q05.selectedOption, "R1::C1|R2::C2");
+
+    await deleteIfPresent(sessionPath);
+  },
+);
+
+test(
+  "persistIncrementalAnswers rejects invalid MCQ, numeric, matrix, and conflicting writes",
+  async () => {
+    const nowMillis = Date.now();
+    const sessionPath =
+      "institutes/inst_build_30/academicYears/2026/" +
+      "runs/run_build_30/sessions/session_build_30_invalid_responses";
+
+    await deleteIfPresent(sessionPath);
+    await seedSession(sessionPath);
+
+    const context = {
+      instituteId: "inst_build_30",
+      runId: "run_build_30",
+      sessionId: "session_build_30_invalid_responses",
+      studentId: "student_build_30",
+      yearId: "2026",
+    };
+    const invalidAnswers = [
+      mcqAnswer("q02", "UNKNOWN", nowMillis, 30),
+      {
+        clientTimestamp: nowMillis,
+        questionId: "q04",
+        response: {kind: "numeric" as const, value: "not-a-number"},
+        timeSpentSeconds: 10,
+      },
+      {
+        clientTimestamp: nowMillis,
+        questionId: "q05",
+        response: {
+          kind: "matrix" as const,
+          selections: [{column: "UNKNOWN", row: "R1"}],
+        },
+        timeSpentSeconds: 10,
+      },
+    ];
+
+    for (const invalidAnswer of invalidAnswers) {
+      await assert.rejects(
+        answerBatchService.persistIncrementalAnswers({
+          answers: [invalidAnswer],
+          context,
+          millisecondsSinceLastWrite: 5000,
+        }),
+        (error: unknown) => {
+          assert.ok(error instanceof SessionStartValidationError);
+          assert.equal(error.code, "VALIDATION_ERROR");
+          return true;
+        },
+      );
+    }
+
+    await answerBatchService.persistIncrementalAnswers({
+      answers: [mcqAnswer("q02", "A", nowMillis, 30)],
+      context,
+      millisecondsSinceLastWrite: 5000,
+    });
+    await assert.rejects(
+      answerBatchService.persistIncrementalAnswers({
+        answers: [mcqAnswer("q02", "B", nowMillis, 30)],
+        context,
+        millisecondsSinceLastWrite: 5000,
+      }),
+      /conflicting answer write timestamp/i,
+    );
+
+    await deleteIfPresent(sessionPath);
+  },
+);
+
+test(
   "persistIncrementalAnswers rejects future client timestamps",
   async () => {
     const nowMillis = Date.now();
@@ -405,12 +709,7 @@ test(
     await assert.rejects(
       answerBatchService.persistIncrementalAnswers({
         answers: [
-          {
-            clientTimestamp: nowMillis + 60_000,
-            questionId: "q02",
-            selectedOption: "B",
-            timeSpent: 20,
-          },
+          mcqAnswer("q02", "B", nowMillis + 60_000, 20),
         ],
         context: {
           instituteId: "inst_build_30",
@@ -453,12 +752,7 @@ test(
     await assert.rejects(
       answerBatchService.persistIncrementalAnswers({
         answers: [
-          {
-            clientTimestamp: sessionStartMillis + 20_000,
-            questionId: "q02",
-            selectedOption: "C",
-            timeSpent: 20,
-          },
+          mcqAnswer("q02", "C", sessionStartMillis + 20_000, 20),
         ],
         context: {
           instituteId: "inst_build_30",
@@ -502,12 +796,7 @@ test(
 
     const result = await answerBatchService.persistIncrementalAnswers({
       answers: [
-        {
-          clientTimestamp: nowMillis,
-          questionId: "q02",
-          selectedOption: "C",
-          timeSpent: 20,
-        },
+        mcqAnswer("q02", "C", nowMillis, 20),
       ],
       context: {
         instituteId: "inst_build_30",
@@ -553,12 +842,7 @@ test(
 
     const result = await answerBatchService.persistIncrementalAnswers({
       answers: [
-        {
-          clientTimestamp: nowMillis,
-          questionId: "q02",
-          selectedOption: "B",
-          timeSpent: 5,
-        },
+        mcqAnswer("q02", "B", nowMillis, 5),
       ],
       context: {
         instituteId: "inst_build_30",
@@ -599,12 +883,7 @@ test(
     await assert.rejects(
       answerBatchService.persistIncrementalAnswers({
         answers: [
-          {
-            clientTimestamp: nowMillis,
-            questionId: "q02",
-            selectedOption: "D",
-            timeSpent: 10,
-          },
+          mcqAnswer("q02", "D", nowMillis, 10),
         ],
         context: {
           instituteId: "inst_build_30",
@@ -646,12 +925,7 @@ test(
 
     const result = await answerBatchService.persistIncrementalAnswers({
       answers: [
-        {
-          clientTimestamp: nowMillis,
-          questionId: "q02",
-          selectedOption: "C",
-          timeSpent: 65,
-        },
+        mcqAnswer("q02", "C", nowMillis, 65),
       ],
       context: {
         instituteId: "inst_build_30",
@@ -700,12 +974,7 @@ test(
 
     const result = await answerBatchService.persistIncrementalAnswers({
       answers: [
-        {
-          clientTimestamp: nowMillis,
-          questionId: "q02",
-          selectedOption: "B",
-          timeSpent: 70,
-        },
+        mcqAnswer("q02", "B", nowMillis, 70),
       ],
       context: {
         instituteId: "inst_build_30",
@@ -746,12 +1015,7 @@ test(
 
     const firstResult = await answerBatchService.persistIncrementalAnswers({
       answers: [
-        {
-          clientTimestamp: nowMillis,
-          questionId: "q02",
-          selectedOption: "A",
-          timeSpent: 60,
-        },
+        mcqAnswer("q02", "A", nowMillis, 60),
       ],
       context: {
         instituteId: "inst_build_30",
@@ -773,12 +1037,7 @@ test(
 
     const secondResult = await answerBatchService.persistIncrementalAnswers({
       answers: [
-        {
-          clientTimestamp: nowMillis + 60_000,
-          questionId: "q02",
-          selectedOption: "D",
-          timeSpent: 5,
-        },
+        mcqAnswer("q02", "D", nowMillis + 60_000, 5),
       ],
       context: {
         instituteId: "inst_build_30",
@@ -803,11 +1062,11 @@ test(
     const snapshot = await firestore.doc(sessionPath).get();
     const answerMap = snapshot.data()?.answerMap as Record<string, {
       selectedOption: string;
-      timeSpent: number;
+      timeSpentSeconds: number;
     }>;
 
     assert.equal(answerMap.q02?.selectedOption, "A");
-    assert.equal(answerMap.q02?.timeSpent, 60);
+    assert.equal(answerMap.q02?.timeSpentSeconds, 60);
 
     await deleteIfPresent(sessionPath);
   },

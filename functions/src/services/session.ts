@@ -18,6 +18,7 @@ import {
   SessionExecutionMode,
   SessionEntryValidationContext,
   SessionEntryValidationResult,
+  SessionEntryResumeContext,
   SessionQuestionTimeMap,
   SessionStartContext,
   SessionStartErrorCode,
@@ -1808,6 +1809,145 @@ export class SessionService {
   }
 
   /**
+   * Restores an already-entered runtime using the session-bound Firebase identity.
+   * @param {SessionEntryResumeContext} context Verified session identity.
+   * @param {number} nowMillis Server time used for expiry reconciliation.
+   * @return {Promise<SessionEntryValidationResult>} Candidate-safe runtime state.
+   */
+  public async resumeSessionEntry(
+    context: SessionEntryResumeContext,
+    nowMillis = Date.now(),
+  ): Promise<SessionEntryValidationResult> {
+    const instituteId = normalizeRequiredString(context.instituteId, "instituteId");
+    const licenseLayer = normalizeLicenseLayer(context.licenseLayer);
+    const runId = normalizeRequiredString(context.runId, "runId");
+    const routeSessionId = normalizeRequiredString(context.sessionId, "sessionId");
+    const studentId = normalizeRequiredString(context.studentId, "studentId");
+    const studentUid = normalizeRequiredString(context.studentUid, "studentUid");
+    const yearId = normalizeRequiredString(context.yearId, "yearId");
+    const sessionPath =
+      `${INSTITUTES_COLLECTION}/${instituteId}/` +
+      `${ACADEMIC_YEARS_COLLECTION}/${yearId}/` +
+      `${RUNS_COLLECTION}/${runId}/` +
+      `${SESSIONS_COLLECTION}/${routeSessionId}`;
+    const sessionReference = this.firestore.doc(sessionPath);
+    let result: SessionEntryValidationResult | null = null;
+
+    await this.firestore.runTransaction(async (transaction) => {
+      const sessionSnapshot = await transaction.get(sessionReference);
+      const sessionData = sessionSnapshot.data();
+      if (!sessionSnapshot.exists || !isPlainObject(sessionData)) {
+        throw new SessionStartValidationError(
+          "NOT_FOUND",
+          `Session "${routeSessionId}" does not exist.`,
+        );
+      }
+      let status = normalizeSessionStatus(sessionData.status, "session.status");
+      if (status !== "started" && status !== "active" && status !== "expired") {
+        throw new SessionStartValidationError(
+          "SESSION_LOCKED",
+          "Session is not eligible for authenticated runtime recovery.",
+        );
+      }
+      const persistedIdentity = {
+        instituteId: normalizeRequiredString(sessionData.instituteId, "session.instituteId"),
+        runId: normalizeRequiredString(sessionData.runId, "session.runId"),
+        sessionId: normalizeRequiredString(sessionData.sessionId, "session.sessionId"),
+        studentId: normalizeRequiredString(sessionData.studentId, "session.studentId"),
+        studentUid: normalizeRequiredString(sessionData.studentUid, "session.studentUid"),
+        yearId: normalizeRequiredString(sessionData.yearId, "session.yearId"),
+      };
+      if (
+        persistedIdentity.instituteId !== instituteId ||
+        persistedIdentity.runId !== runId ||
+        persistedIdentity.sessionId !== routeSessionId ||
+        persistedIdentity.studentId !== studentId ||
+        persistedIdentity.studentUid !== studentUid ||
+        persistedIdentity.yearId !== yearId
+      ) {
+        throw new SessionStartValidationError(
+          "UNAUTHORIZED",
+          "Authenticated exam identity does not own the requested session.",
+        );
+      }
+
+      const mode = normalizeSessionExecutionMode(sessionData.mode, "session.mode");
+      const timingProfileSnapshot = normalizeTimingProfileSnapshot(
+        sessionData.timingProfileSnapshot,
+        "session.timingProfileSnapshot",
+      );
+      const phaseConfigSnapshot = normalizeSnapshotObject(
+        sessionData.phaseConfigSnapshot,
+        "phaseConfigSnapshot",
+      );
+      const licenseSnapshot = normalizeSnapshotObject(
+        sessionData.licenseSnapshot,
+        "licenseSnapshot",
+      );
+      if (licenseSnapshot.currentLayer !== licenseLayer) {
+        throw new SessionStartValidationError(
+          "LICENSE_RESTRICTED",
+          "Authenticated exam license does not match the session snapshot.",
+        );
+      }
+      const templateSnapshot = normalizeSnapshotObject(
+        sessionData.templateSnapshot,
+        "templateSnapshot",
+      );
+      const runtimeSnapshot = normalizeStoredRuntimeSnapshot(
+        sessionData.runtimeSnapshot,
+        routeSessionId,
+        sessionData.questionTimeMap,
+      );
+      const startedAt = normalizeOptionalSessionTimestampIso(
+        sessionData.startedAt,
+        "session.startedAt",
+      );
+      const deadlineAt = normalizeOptionalSessionTimestampIso(
+        sessionData.deadlineAt,
+        "session.deadlineAt",
+      );
+      if (status === "active" && deadlineAt !== null && nowMillis >= Date.parse(deadlineAt)) {
+        status = "expired";
+        transaction.update(sessionReference, {
+          expiredAt: Timestamp.fromMillis(nowMillis),
+          status,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      }
+
+      result = {
+        deadlineAt,
+        instituteId,
+        licenseSnapshot,
+        mode,
+        operationalDataAccessPolicy:
+          dataTierPartitionService.buildExamOperationalDataAccessPolicy(sessionPath),
+        phaseConfigSnapshot,
+        runId,
+        runtimeSnapshot,
+        serverTime: new Date(nowMillis).toISOString(),
+        sessionId: routeSessionId,
+        sessionPath,
+        startedAt,
+        status,
+        studentId,
+        templateSnapshot,
+        timingProfileSnapshot,
+        yearId,
+      };
+    });
+
+    if (!result) {
+      throw new SessionStartValidationError(
+        "UNAUTHORIZED",
+        "Exam session recovery could not be authorized.",
+      );
+    }
+    return result;
+  }
+
+  /**
    * Activates an entered session using only persisted schedule and identity.
    * @param {SessionActivationContext} context Verified session identity.
    * @param {number} nowMillis Server time used for activation and expiry.
@@ -2089,10 +2229,12 @@ export class SessionService {
    * Enforces Build 29 answer-write contract constraints for backend APIs.
    * @param {number} answersInBatchCount Answer updates in current write.
    * @param {number} millisecondsSinceLastWrite Time since previous write.
+   * @param {boolean} allowMinimumIntervalBypass Intentional drain override.
    */
   public assertAnswerWriteBatchingConstraints(
     answersInBatchCount: number,
     millisecondsSinceLastWrite: number,
+    allowMinimumIntervalBypass = false,
   ): void {
     const normalizedAnswersInBatchCount = normalizeNonNegativeInteger(
       answersInBatchCount,
@@ -2115,6 +2257,7 @@ export class SessionService {
     }
 
     if (
+      !allowMinimumIntervalBypass &&
       normalizedMillisecondsSinceLastWrite <
       SESSION_WRITE_BATCHING_POLICY.minimumWriteIntervalMs
     ) {

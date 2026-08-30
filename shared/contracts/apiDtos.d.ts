@@ -639,6 +639,65 @@ export interface ExamRuntimeSnapshot {
   timingProfile: ExamRuntimeTimingProfileSnapshot;
 }
 
+export type ExamQuestionResponse =
+  | {kind: "unanswered"}
+  | {kind: "mcq"; optionId: string}
+  | {kind: "numeric"; value: string}
+  | {
+    kind: "matrix";
+    selections: Array<{column: string; row: string}>;
+  };
+
+export interface ExamAnswerWrite {
+  clientTimestamp: number;
+  clientRevision: number;
+  questionId: string;
+  response: ExamQuestionResponse;
+  timeSpentSeconds: number;
+}
+
+export type ExamAnswerFlushReason =
+  | "heartbeat"
+  | "reconnect"
+  | "scheduled"
+  | "submission";
+
+export interface ExamAnswerAcknowledgement {
+  clientRevision: number;
+  disposition: "blocked" | "ignored" | "persisted";
+  questionId: string;
+}
+
+export interface ExamAnswerBatchRequestBody {
+  adaptivePhaseSnapshot?: {
+    answeredPercent: number;
+    currentPhase: string;
+    difficultyCompliancePercent: number;
+    disciplineIndex: number;
+    elapsedPercent: number;
+    overspendPercent: number;
+    phaseAdherencePercent: number;
+    skipPatternScore: number;
+  };
+  answers: ExamAnswerWrite[];
+  batchId: string;
+  batchSequence: number;
+  flushReason: ExamAnswerFlushReason;
+  instituteId: string;
+  millisecondsSinceLastWrite: number;
+  runId: string;
+  yearId: string;
+}
+
+export interface ExamAnswerBatchResult {
+  acknowledgements: ExamAnswerAcknowledgement[];
+  batchId: string;
+  batchSequence: number;
+  ignoredQuestionIds: string[];
+  lockedQuestionIds: string[];
+  persistedQuestionIds: string[];
+}
+
 export interface ExamSessionEntryResult {
   allowed: true;
   deadlineAt: string | null;

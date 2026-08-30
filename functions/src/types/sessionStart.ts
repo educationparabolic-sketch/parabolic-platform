@@ -187,6 +187,10 @@ export interface SessionEntryValidationResult {
   yearId: string;
 }
 
+export interface SessionEntryResumeContext extends SessionActivationContext {
+  licenseLayer: "L0" | "L1" | "L2" | "L3";
+}
+
 export interface SessionActivationContext {
   instituteId: string;
   runId: string;

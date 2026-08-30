@@ -15,13 +15,13 @@ program: backend-wiring-and-deployment-readiness
 program_status: IN_PROGRESS
 release_decision: NO_GO
 current_phase: 1
-current_task: BWM-021
-current_substep: BWM-021 — inspect current answer DTO, clear, timing, and write authority before implementation
-last_completed_task: BWM-020
-next_task: BWM-021
+current_task: BWM-023
+current_substep: BWM-023 — inspect the current submit drain, transaction/lock, replay response, server metrics consumption, and expiry submission authority
+last_completed_task: BWM-022
+next_task: BWM-023
 blocked_tasks: []
 last_updated: 2026-08-30
-last_update_summary: BWM-020 is VERIFIED. EXM-01 now persists created-to-started entry, secured idempotent EXM-05 persists started-to-active with server-owned startedAt/deadlineAt and returns serverTime, reached deadlines reconcile to expired, and answer writes require active pre-deadline authority. Exam entry/resume/timer state consumes that authority without local lifecycle/deadline transitions. Focused contracts, Firestore, authenticated Functions, no-mock Chromium, workspace, full emulator aggregate, and failure-cleanup verification passed. BWM-021 is READY; production remains NO_GO.
+last_update_summary: BWM-022 is VERIFIED. EXM-02 now uses serialized revision-aware max-ten batches with exact acknowledgements, revision-safe queue removal, complete reconnect/submission drains, and reason-scoped interval bypass. Owner/session-bound IndexedDB recovery and authenticated token-free EXM-01 resume preserve pending state across refresh, while sync UI reports offline/syncing/error truthfully. Focused contracts, Firestore, no-mock Chromium, workspace, and full emulator aggregate verification passed. BWM-023 is READY; production remains NO_GO.
 ```
 
 Do not infer progress from old build numbers, UI completion labels, or visual verification artifacts. Only this checkpoint, the task registry, checked substeps, session log, and current repository evidence determine progress for this program.
@@ -272,9 +272,9 @@ The registry is the canonical order. Detailed cards below define scope and accep
 | BWM-018 | P0 | VERIFIED | BWM-009,BWM-017 | Exam launch credential exchange and authenticated runtime |
 | BWM-019 | P0 | VERIFIED | BWM-012,BWM-013,BWM-018 | Authoritative sanitized Exam runtime snapshot |
 | BWM-020 | P0 | VERIFIED | BWM-018,BWM-019 | Server-authoritative session lifecycle and deadline |
-| BWM-021 | P0 | READY | BWM-019,BWM-020 | Correct answer DTO, clear semantics, and timing model |
-| BWM-022 | P0 | PLANNED | BWM-021 | Reliable batching, offline recovery, and full drain |
-| BWM-023 | P0 | PLANNED | BWM-020,BWM-022 | Idempotent server submission and response contract |
+| BWM-021 | P0 | VERIFIED | BWM-019,BWM-020 | Correct answer DTO, clear semantics, and timing model |
+| BWM-022 | P0 | VERIFIED | BWM-021 | Reliable batching, offline recovery, and full drain |
+| BWM-023 | P0 | READY | BWM-020,BWM-022 | Idempotent server submission and response contract |
 | BWM-024 | P0 | PLANNED | BWM-023 | Analytics/result propagation back to Student and Admin |
 | BWM-025 | P0 | PLANNED | BWM-011..BWM-024 | Emulator-backed golden-path end-to-end proof |
 | BWM-026 | P1 | PLANNED | BWM-025 | Admin student mutation completeness |
@@ -1725,21 +1725,57 @@ The registry is the canonical order. Detailed cards below define scope and accep
 
 ### BWM-021 — Correct Answer DTO and Timing Semantics
 
-- **Status:** `READY`
+- **Status:** `VERIFIED`
 - **Purpose:** Prevent wrong attempts, double-counted timing, and frontend/backend scoring drift.
 - **Work:** model unanswered/cleared explicitly; validate response shapes by question type; choose timing delta or absolute semantics once; make server aggregation idempotent; align MinTime/MaxTime rules and option identifiers.
 - **Acceptance:** clear-answer, repeated save, stale write, numeric, matrix, MCQ, MinTime, and MaxTime contract tests pass without timing inflation.
+- **Substeps:**
+  - [x] Inspect the current shared/client/server answer shapes, clear behavior, timing aggregation, immutable runtime question metadata, stale-write behavior, scoring projection, and enforcement rules.
+  - [x] Define one strict discriminated question response DTO and absolute cumulative per-question timing semantics.
+  - [x] Implement question-type validation, explicit clearing, idempotent aggregation, option-identifier alignment, and downstream attempted-answer compatibility.
+  - [x] Add permanent focused contract and Firestore coverage for clear, replay, stale/conflicting writes, MCQ, numeric, matrix, MinTime, and MaxTime behavior.
+  - [x] Run affected static, contract, emulator, and user-visible runtime verification.
+  - [x] Reconcile canonical API/schema/controller evidence and close BWM-021 without beginning batching/recovery work.
+- **Implemented files:** `shared/contracts/apiDtos.d.ts` now owns the shared discriminated `ExamQuestionResponse`, `ExamAnswerWrite`, and `ExamAnswerBatchRequestBody`. `apps/exam/src/ExamRuntimeApp.tsx` serializes clear, MCQ, numeric, and matrix state directly to that contract with absolute `timeSpentSeconds`. `functions/src/types/sessionAnswerBatch.ts` and `functions/src/services/answerBatch.ts` strictly normalize the shape, validate it against the immutable runtime question/options/matrix axes, canonicalize numeric/matrix values, reject duplicate question IDs and equal-timestamp conflicts, ignore stale/exact replays, and derive only positive timing deltas. `functions/src/services/submission.ts` treats explicit and legacy clears as unanswered and compares canonical numeric/matrix answers without frontend/backend drift. Permanent service, submission, contract, and real browser coverage was added; canonical API, inventory, module, and schema records were reconciled.
+- **Security/data evidence:** The browser cannot select a question type or identifier outside the server-frozen runtime snapshot. MCQ option IDs must exactly exist in that question; numeric values must be finite canonical numbers; matrix coordinates must be unique and belong to the frozen axes; explicit unanswered contains no answer payload. The canonical response and absolute cumulative time are transactionally written only for the exact active pre-deadline session. Stale writes cannot overwrite current state, exact replays are acknowledged without mutation, equal-timestamp conflicts fail closed, cumulative time cannot decrease, and repeated newer saves add zero timing delta. `selectedOption` remains only a nullable server-derived compatibility projection; clear values no longer count as attempts.
+- **Verification evidence:** Functions and Exam lint/build passed, and `node scripts/verify-workspace.mjs` passed all 10 cross-package lint/build gates. `npm --prefix functions run test:ci:non-emulator` passed 48/48 classified files. `npm run test:exam-runtime-auth-contract` and `npm run test:api-dto-contract` passed. The focused Firestore command `firebase emulators:exec --project demo-parabolic-test --only firestore "node --test functions/lib/tests/sessionAnswerBatch.test.js functions/lib/tests/sessionSubmission.test.js"` passed 26/26 tests covering explicit clear, exact and newer replay, stale and conflicting writes, MCQ/numeric/matrix validation, canonical scoring, tamper checks, and every MinTime/MaxTime enforcement mode. `npm run test:exam-launch-auth:e2e` passed 1/1 through real Auth, Firestore, Functions, Hosting, and headless Chromium, proving the new MCQ request and matching canonical answer/timing persistence without network mocks. `npm run test:emulators:ci` passed 10 explicit full-service suites, 2/2 Hosting browser smoke cases, and 65 Firestore-backed files with 213 passing assertions; all ports were released. Final diff/syntax checks passed.
+- **L5 staging/preview:** N/A — no deployment target, preview channel, public URL, secret, environment, Hosting rewrite, or release configuration changed.
+- **L6 production:** N/A — reserved for BWM-057; production remains untouched and `NO_GO`.
+- **Firebase CLI version:** `15.9.0`; Java `21.0.8`.
+- **Authorization/external mutations:** User-approved verification used only demo-project loopback Firebase emulators, headless Chromium, disposable cleaned Auth/Firestore data, generated ignored Hosting artifacts, and Firebase CLI local state. No deployment, remote Firebase data mutation, secret mutation, public endpoint, or production resource changed.
+- **Contract/schema changes:** EXM-02 request answers now require `{ clientTimestamp, questionId, response, timeSpentSeconds }`, where `response` is exactly one of explicit unanswered, MCQ option ID, numeric value, or matrix selections. `answerMap.{questionId}` persists that canonical response, a nullable derived `selectedOption`, and absolute cumulative `timeSpentSeconds`; no collection path, Firestore rule, index, route, or export total changed.
+- **Verification notes:** The first focused emulator launch was blocked by sandbox loopback/config permissions and was rerun successfully with user approval. One Firestore emulator transaction retry warning appeared during the focused run and resolved automatically without a failed assertion. Existing non-owning assignment-trigger fixture warnings remained present in the aggregate and did not fail its suites.
+- **Residual risks:** BWM-022 retains reliable sequencing, acknowledgements/revisions, offline recovery, more-than-ten drain, retry, and honest sync state. BWM-023 retains final submission drain/idempotency/response hardening. Production remains `NO_GO`.
+- **Completed on:** 2026-08-30
 
 ### BWM-022 — Reliable Batching, Offline Recovery, and Full Drain
 
-- **Status:** `PLANNED`
+- **Status:** `VERIFIED`
 - **Purpose:** Guarantee all pending answers reach the server before submit.
 - **Work:** sequence batches; retain acknowledgements/revisions; drain more than ten changes; reconcile backend minimum-write interval with final flush; protect IndexedDB recovery by session/user; retry safely after reconnect; expose honest sync state.
 - **Acceptance:** A test with more than ten offline changes, clears, reconnect, refresh, and final submit persists the exact final answer map once.
+- **Substeps:**
+  - [x] Inspect the current pending queue, IndexedDB snapshot keying, acknowledgement handling, interval enforcement, reconnect path, and pre-submit flush.
+  - [x] Implement serialized revision-aware batches and complete reconnect/submission drains without widening submission finalization scope.
+  - [x] Bind recovery snapshots to the authenticated session owner and preserve queue sequencing across refresh.
+  - [x] Add permanent contract, service/emulator, and no-mock browser coverage for more than ten offline changes, clear, refresh, reconnect, and final drain.
+  - [x] Run the applicable verification ladder and reconcile API/schema/module documentation.
+- **Inspection evidence:** `apps/exam/src/ExamRuntimeApp.tsx` previously sliced one ten-write batch per flush, removed pending entries by question ID without checking whether a newer edit replaced the sent write, allowed interval/heartbeat/reconnect flushes to overlap, keyed IndexedDB recovery only by `sessionId`, retried only one batch on reconnect, and treated one successful batch as a complete pre-submit drain. `functions/src/services/session.ts` rejected every sub-five-second batch, including an intentional multi-batch drain, while EXM-02 returned only question-ID arrays and no revision acknowledgement.
+- **Implemented files:** `shared/contracts/apiDtos.d.ts` now defines batch identity/sequence/reason, positive per-write client revisions, exact acknowledgement dispositions, and the strict batch result. `functions/src/api/examSessionAnswers.ts`, `functions/src/types/sessionAnswerBatch.ts`, `functions/src/services/answerBatch.ts`, and `functions/src/services/session.ts` strictly validate and echo that transport contract, return one acknowledgement per exact question/revision, and bypass the five-second interval only for bounded reconnect/submission drains. `functions/src/api/examSessionEntry.ts`, `functions/src/services/session.ts`, and `functions/src/types/sessionStart.ts` add authenticated same-owner runtime recovery after the one-time launch credential is consumed. `apps/exam/src/ExamRuntimeApp.tsx` serializes every flush caller, preserves monotonic revisions/timestamps/batch sequence, removes only matching acknowledged revisions, drains all max-ten chunks on reconnect and before submit, restores only schema/session/owner-matching IndexedDB snapshots, resumes from persisted Firebase Auth after refresh, and exposes honest offline/syncing/error counts. Permanent API, service, static, and no-mock browser proof was added in `functions/src/tests/examSessionEntryApi.test.ts`, `functions/src/tests/sessionAnswerBatch.test.ts`, `tests/exam-runtime-auth-contract.test.mjs`, and `tests/e2e/exam-launch-auth.spec.mjs`; API, inventory, module, schema, and controller records were reconciled.
+- **Security/data evidence:** Browser-supplied batch metadata never supplies tenant or owner authority. EXM-01 resume derives institute/year/run/session/Student/UID/license from the verified Firebase ID token and transactionally matches the persisted session; it cannot replay or recreate the consumed launch credential. IndexedDB recovery is applied only for exact schema version 2, route session, and authenticated Student owner. EXM-02 still enforces exact session claims, active pre-deadline authority, immutable runtime question validation, max-ten writes, and positive revisions. Every response must echo the sent batch identity and acknowledge every exact revision before the browser can remove it; an acknowledgement for an older revision cannot erase a newer queued edit. Batch/revision/recovery metadata remains transport/local-only and does not alter the canonical Firestore answer schema.
+- **Verification evidence:** `npm --prefix functions run lint`, `npm --prefix functions run build`, `npm --prefix apps/exam run lint`, and `npm --prefix apps/exam run build` passed. `node scripts/verify-workspace.mjs` passed all 10 cross-package lint/build gates. `npm --prefix functions run test:ci:non-emulator` passed 48/48 classified files, including authenticated EXM-01 resume API coverage. `npm run test:exam-runtime-auth-contract` and `npm run test:api-dto-contract` each passed 1/1. The focused Firestore command `firebase emulators:exec --project demo-parabolic-test --only firestore "node --test functions/lib/tests/sessionAnswerBatch.test.js"` passed 18/18, including back-to-back submission/reconnect drain batches with exact revision dispositions and exact replay handling. `npm run test:exam-launch-auth:e2e` passed 1/1 through real Auth, Firestore, Functions, Hosting, and Chromium: 12 unique offline changes including an explicit clear were owner-bound in IndexedDB, survived token-free refresh, resumed under Firebase identity, drained as max-ten batches after reconnect, produced the exact 12-question Firestore answer map, and completed final submit without network mocks. `npm run test:emulators:ci` passed 10 explicit full-service suites, 2/2 Hosting browser smoke cases, and 65 Firestore-backed files with 214 assertions; all ports were released. Final diff/syntax checks passed.
+- **L5 staging/preview:** N/A — no deployment target, preview channel, public URL, secret, environment, Hosting rewrite, or release configuration changed.
+- **L6 production:** N/A — reserved for BWM-057; production remains untouched and `NO_GO`.
+- **Firebase CLI version:** `15.9.0`; Java `21.0.8`.
+- **Authorization/external mutations:** User-approved verification used only the `demo-parabolic-test` loopback Firebase emulators, headless Chromium, disposable cleaned Auth/Firestore data, generated ignored Hosting artifacts, and Firebase CLI local state. No deployment, remote Firebase data mutation, secret mutation, public endpoint, or production resource changed.
+- **Contract/schema changes:** EXM-01 accepts exactly one first-entry `{ token }` or authenticated recovery `{ resume: true }` body. EXM-02 requires batch identity, positive sequence, flush reason, max-ten revision-aware answers, and returns exact revision dispositions. `answerMap` remains unchanged; batch metadata is transport-only, and IndexedDB recovery schema version 2 adds authenticated `ownerId` plus sequencing counters. No collection path, Firestore rule, index, route, or export total changed.
+- **Verification notes:** The initial browser fixture still expected the former single-question image path, then initially produced 11 pending changes because question 1 already held the chosen value; both were corrected so the acceptance scenario generated 12 unique writes. The first recovered-screen assertion expected question 1, while the valid recovery snapshot intentionally restored the last selected question 12; the assertion was corrected to verify that recovered selection. The final no-mock run and aggregate passed. Existing non-owning assignment-trigger fixture warnings remained present in the aggregate and did not fail its suites.
+- **Residual risks:** BWM-023 retains broader finalization transaction/lock/replay response hardening, authoritative already-submitted behavior, server metrics consumption, and server-aware expiry submission. Production remains `NO_GO`.
+- **Completed on:** 2026-08-30
 
 ### BWM-023 — Idempotent Submission and Response Contract
 
-- **Status:** `PLANNED`
+- **Status:** `READY`
 - **Purpose:** Make finalization atomic, replay-safe, and visible to the candidate.
 - **Work:** require active session and complete drain; finalize under transaction/lock; define already-submitted response; standardize returned status/time/metrics; consume server metrics in Exam; make expiry submission server-aware.
 - **Acceptance:** concurrent/repeated submit returns one authoritative result; no answer changes occur after finalization; UI displays server result.
@@ -2295,6 +2331,24 @@ Never record only “tests passed.” Include exact commands and whether tests w
 ## Session Log
 
 Append newest entries at the top.
+
+### LOG-096 — 2026-08-30 — BWM-022 Reliable Batching, Offline Recovery, and Full Drain
+
+- **Task:** Resume BWM-022 at its first unchecked implementation substep, implement only reliable answer batching/recovery/full-drain behavior, prove more-than-ten offline changes plus clear/refresh/reconnect/submit, reconcile canonical records, and stop before broader submission finalization work.
+- **Outcome:** BWM-022 is `VERIFIED`. EXM-02 now serializes revision-aware max-ten batches, validates echoed batch identity and complete exact acknowledgements, retains newer edits when older revisions are acknowledged, and drains every pending chunk on reconnect or before submit. IndexedDB snapshots are bound to schema/session/authenticated owner and preserve sequencing across refresh; token-free EXM-01 reload resumes only the same verified session; sync state reports offline/syncing/error with the real pending count. BWM-023 is `READY`; production remains `NO_GO`.
+- **Validation performed:** Functions/Exam lint and builds passed; the full workspace verifier passed 10/10 gates; Functions non-emulator CI passed 48/48 files; focused DTO/runtime contracts passed. The focused Firestore answer suite passed 18/18. The real Auth/Firestore/Functions/Hosting Chromium flow passed 1/1 and proved 12 offline changes including clear, owner-bound recovery after refresh, complete multi-batch reconnect drain, exact Firestore map, and final submit. The full emulator aggregate passed 10 explicit full-service suites, 2/2 Hosting browser smoke cases, and 65 Firestore files with 214 assertions; all ports were released. Final syntax/diff checks passed.
+- **Files changed:** Added batch identity/sequence/reason and exact client-revision acknowledgements; serialized and revision-safe client queue processing; complete reconnect/pre-submit drain with reason-scoped interval bypass; authenticated post-consumption EXM-01 resume; owner/session-bound IndexedDB schema version 2 recovery and sequencing; honest sync telemetry; permanent API/service/static/no-mock browser proof; and reconciled API, inventory, module, schema, and execution-controller records.
+- **Cloud changes:** None. Verification used only demo-project loopback emulators, headless Chromium, disposable cleaned data, ignored local artifacts, and Firebase CLI local state. No deployment, remote data mutation, secret, endpoint, or production resource changed.
+- **Next:** BWM-023 — inspect the current submit drain, transaction/lock, already-submitted replay response, server metrics consumption, and expiry submission authority before implementing only that bounded contract.
+
+### LOG-095 — 2026-08-30 — BWM-021 Correct Answer DTO and Timing Semantics
+
+- **Task:** Resume BWM-021 at its first unchecked inspection substep, implement only the strict answer/clear/timing/scoring boundary, prove the acceptance set, reconcile canonical records, and stop before batching/offline-recovery work.
+- **Outcome:** BWM-021 is `VERIFIED`. EXM-02 now accepts only explicit unanswered/MCQ/numeric/matrix responses validated against the frozen runtime question, stores canonical nullable scoring projections, and treats `timeSpentSeconds` as absolute cumulative per-question authority. Stale and exact replays cannot overwrite or inflate state, equal-timestamp conflicts fail closed, and numeric/matrix scoring consumes the same canonical representation. BWM-022 is `READY`; production remains `NO_GO`.
+- **Validation performed:** Functions/Exam lint and builds passed; the full workspace verifier passed 10/10 gates; Functions non-emulator CI passed 48/48 files; focused DTO/runtime contracts passed. The focused Firestore answer/submission pair passed 26/26 tests. The real Auth/Firestore/Functions/Hosting Chromium flow passed 1/1 and persisted the new MCQ shape with matching absolute timing. The full emulator aggregate passed 10 explicit full-service suites, 2/2 Hosting browser smoke cases, and 65 Firestore files with 213 assertions; all ports were released. Final syntax/diff checks passed.
+- **Files changed:** Added the shared discriminated answer DTO and absolute timing field; strict runtime question/option/matrix validation and numeric canonicalization; explicit clear and idempotent timing persistence; downstream clear and canonical scoring compatibility; permanent service, submission, contract, and no-mock browser proof; and reconciled API, inventory, module, schema, and execution-controller records.
+- **Cloud changes:** None. Verification used only demo-project loopback emulators, headless Chromium, disposable cleaned data, ignored local artifacts, and Firebase CLI local state. No deployment, remote data mutation, secret, endpoint, or production resource changed.
+- **Next:** BWM-022 — inspect the current pending-answer queue, batch sequencing, IndexedDB recovery ownership, acknowledgement/revision model, reconnect retry, more-than-ten drain, submission flush, and sync-state truthfulness before implementing only that bounded contract.
 
 ### LOG-094 — 2026-08-30 — BWM-020 Server-Authoritative Lifecycle and Deadline
 

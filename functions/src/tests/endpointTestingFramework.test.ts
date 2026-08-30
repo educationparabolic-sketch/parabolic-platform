@@ -1346,7 +1346,14 @@ test(
 test("exam session answers handler accepts a valid request", async () => {
   const handler = createExamSessionAnswersHandler({
     persistIncrementalAnswers: async (): Promise<PersistAnswerBatchResult> => ({
+      acknowledgements: [{
+        clientRevision: 1,
+        disposition: "persisted",
+        questionId: "q1",
+      }],
       adaptivePhaseSnapshotPersisted: false,
+      batchId: "batch-build-50-1",
+      batchSequence: 1,
       blockedQuestionIds: [],
       ignoredQuestionIds: [],
       lockedQuestionIds: [],
@@ -1408,6 +1415,9 @@ test("exam session answers handler accepts a valid request", async () => {
     createMockRequest({
       body: {
         answers: [],
+        batchId: "batch-build-50-1",
+        batchSequence: 1,
+        flushReason: "scheduled",
         instituteId: "inst_build_50",
         millisecondsSinceLastWrite: 5000,
         runId: "run_build_50",
@@ -1452,6 +1462,9 @@ test("exam session answers handler rejects invalid payloads", async () => {
     createMockRequest({
       body: {
         answers: [],
+        batchId: "batch-build-50-invalid",
+        batchSequence: 1,
+        flushReason: "scheduled",
         instituteId: "inst_build_50",
         millisecondsSinceLastWrite: -1,
         runId: "run_build_50",

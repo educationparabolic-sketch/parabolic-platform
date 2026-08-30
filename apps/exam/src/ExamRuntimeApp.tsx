@@ -2,7 +2,12 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Route, Routes, useLocation, useParams } from "react-router-dom";
 import { getIdToken, signInWithCustomToken } from "firebase/auth";
 import type {
+  ExamAnswerBatchResult,
+  ExamAnswerFlushReason,
+  ExamAnswerBatchRequestBody,
+  ExamAnswerWrite,
   ExamExecutionMode,
+  ExamQuestionResponse,
   ExamRuntimePhaseConfigSnapshot as PhaseConfigSnapshot,
   ExamRuntimeQuestion as SessionQuestion,
   ExamRuntimeQuestionDifficulty as DifficultyBand,
@@ -161,27 +166,7 @@ interface ExamSessionSchedule {
   timezone: string;
 }
 
-interface QueuedAnswerWrite {
-  clientTimestamp: number;
-  questionId: string;
-  selectedOption: string;
-  timeSpent: number;
-}
-
-interface ExamAnswerBatchRequestBody {
-  adaptivePhaseSnapshot?: AdaptivePhaseSnapshot;
-  answers: QueuedAnswerWrite[];
-  instituteId: string;
-  millisecondsSinceLastWrite: number;
-  runId: string;
-  yearId: string;
-}
-
-interface ExamAnswerBatchResponse {
-  ignoredQuestionIds?: string[];
-  lockedQuestionIds?: string[];
-  persistedQuestionIds?: string[];
-}
+type QueuedAnswerWrite = ExamAnswerWrite;
 
 interface ExamSubmitRequestBody {
   instituteId: string;
@@ -193,6 +178,11 @@ interface ExamSubmitRequestBody {
 }
 
 interface SessionRecoverySnapshot {
+  batchSequence: number;
+  lastIssuedClientTimestamp: number;
+  nextClientRevision: number;
+  ownerId: string;
+  schemaVersion: 2;
   sessionId: string;
   responseStateByQuestionId: Record<string, QuestionResponseState>;
   questionTimingById: Record<string, QuestionTimingState>;
@@ -207,7 +197,7 @@ interface SessionRecoverySnapshot {
   savedAtIso: string;
 }
 
-type SyncState = "idle" | "syncing" | "error";
+type SyncState = "idle" | "syncing" | "offline" | "error";
 
 interface PhasePresentation {
   shortLabel: string;
@@ -232,7 +222,7 @@ const ANSWER_BATCH_MAX_SIZE = 10;
 const HEARTBEAT_INTERVAL_MS = 20_000;
 const RECOVERY_DB_NAME = "parabolic-exam-runtime";
 const RECOVERY_STORE_NAME = "sessionRecovery";
-const RECOVERY_SAVE_INTERVAL_MS = 3_000;
+const RECOVERY_SCHEMA_VERSION = 2;
 const DEV_MOCK_SESSION_TOKEN = "dev";
 const BROWSER_INTEGRITY_EVENT_LIMIT = 60;
 const DEVTOOLS_SIZE_THRESHOLD_PX = 160;
@@ -517,7 +507,10 @@ async function openRecoveryDb(): Promise<IDBDatabase | null> {
   });
 }
 
-async function loadRecoverySnapshot(sessionId: string): Promise<SessionRecoverySnapshot | null> {
+async function loadRecoverySnapshot(
+  sessionId: string,
+  ownerId: string,
+): Promise<SessionRecoverySnapshot | null> {
   const db = await openRecoveryDb();
   if (!db) {
     return null;
@@ -533,9 +526,17 @@ async function loadRecoverySnapshot(sessionId: string): Promise<SessionRecoveryS
       resolve(null);
     };
     getRequest.onsuccess = () => {
-      const snapshot = getRequest.result as SessionRecoverySnapshot | undefined;
+      const snapshot = getRequest.result as Partial<SessionRecoverySnapshot> | undefined;
       db.close();
-      resolve(snapshot ?? null);
+      if (
+        snapshot?.schemaVersion !== RECOVERY_SCHEMA_VERSION ||
+        snapshot.sessionId !== sessionId ||
+        snapshot.ownerId !== ownerId
+      ) {
+        resolve(null);
+        return;
+      }
+      resolve(snapshot as SessionRecoverySnapshot);
     };
   });
 }
@@ -779,21 +780,35 @@ function hasAnswer(question: SessionQuestion, responseState: QuestionResponseSta
 function serializeResponseForPersistence(
   question: SessionQuestion,
   responseState: QuestionResponseState,
-): string {
+): ExamQuestionResponse {
   if (question.type === "mcq") {
-    return responseState.selectedOptionId ?? "UNANSWERED";
+    return responseState.selectedOptionId ?
+      {kind: "mcq", optionId: responseState.selectedOptionId} :
+      {kind: "unanswered"};
   }
 
   if (question.type === "numeric") {
     const normalizedValue = responseState.numericResponse.trim();
-    return normalizedValue.length > 0 ? normalizedValue : "UNANSWERED";
+    return normalizedValue.length > 0 ?
+      {kind: "numeric", value: normalizedValue} :
+      {kind: "unanswered"};
   }
 
   if (responseState.matrixSelections.length === 0) {
-    return "UNANSWERED";
+    return {kind: "unanswered"};
   }
 
-  return responseState.matrixSelections.slice().sort().join("|");
+  return {
+    kind: "matrix",
+    selections: responseState.matrixSelections
+      .map((selection) => {
+        const [row, column] = selection.split("::");
+        return {column, row};
+      })
+      .sort((left, right) =>
+        left.row.localeCompare(right.row) ||
+        left.column.localeCompare(right.column)),
+  };
 }
 
 function toPaletteStatus(question: SessionQuestion, responseState: QuestionResponseState, hasVisited: boolean): QuestionPaletteStatus {
@@ -1233,6 +1248,12 @@ function ExamSessionPage() {
   const [, setSyncMessage] = useState("No pending answer updates.");
   const [, setLastHeartbeatAtIso] = useState<string | null>(null);
   const [recoveryApplied, setRecoveryApplied] = useState(false);
+  const pendingAnswerMapRef = useRef<Record<string, QueuedAnswerWrite>>({});
+  const lastAnswerWriteAtMsRef = useRef(Date.now() - ANSWER_BATCH_INTERVAL_MS);
+  const nextClientRevisionRef = useRef(1);
+  const lastIssuedClientTimestampRef = useRef(0);
+  const batchSequenceRef = useRef(1);
+  const flushInFlightRef = useRef<Promise<boolean> | null>(null);
   const [submitDialogOpen, setSubmitDialogOpen] = useState(false);
   const [submitInFlight, setSubmitInFlight] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -1281,6 +1302,7 @@ function ExamSessionPage() {
   const tokenSessionId = entryValidation.claims.sessionId;
   const effectiveSessionId = entryAuthority?.sessionId ??
     (tokenSessionId && tokenSessionId.length > 0 ? tokenSessionId : sessionId);
+  const recoveryOwnerId = entryAuthority?.studentId ?? entryValidation.claims.sub ?? "";
   const activeSessionGuardKey = `exam-active-session::${entryAuthority?.studentId ?? entryValidation.claims.sub ?? "anonymous"}::${runId}`;
   const pendingAnswers = useMemo(() => Object.values(pendingAnswerMap), [pendingAnswerMap]);
   const unansweredQuestionIdsForSubmission = useMemo(
@@ -1364,12 +1386,16 @@ function ExamSessionPage() {
     }
     credentialExchangeStartedRef.current = true;
 
-    if (!entryValidation.allowed || !launchCredential) {
+    if (!launchCredential && !sessionId) {
       setServerEntryValidationStatus("invalid");
       return;
     }
 
-    if (import.meta.env.DEV && devMockEntryEnabled && launchCredential.trim() === DEV_MOCK_SESSION_TOKEN) {
+    if (
+      import.meta.env.DEV &&
+      devMockEntryEnabled &&
+      launchCredential?.trim() === DEV_MOCK_SESSION_TOKEN
+    ) {
       // TODO(EXP): remove this dev-only mock entry after exam P0/P1/P2 completion.
       void import("./devMockSessionSnapshot")
         .then(({buildDevMockSessionSnapshot}) => {
@@ -1397,28 +1423,46 @@ function ExamSessionPage() {
     const endpointPath = `/exam/session/${encodeURIComponent(sessionId)}/entry`;
 
     setServerEntryValidationStatus("pending");
-    void signInWithCustomToken(getFirebaseAuth(), launchCredential)
-      .then(async (credential) => {
-        const idToken = await getIdToken(credential.user, true);
-        const authenticatedValidation = validateSessionEntry(
-          idToken,
-          sessionId,
-          null,
-        );
-        if (!authenticatedValidation.allowed) {
-          throw new Error("Firebase ID token is not bound to this exam session.");
+    const authenticateAndRequestEntry = async (): Promise<{
+      authenticatedValidation: EntryValidationResult;
+      responseBody: ExamSessionEntryResult;
+    }> => {
+      let idToken: string;
+      let requestBody: {resume: true} | {token: string};
+      if (launchCredential) {
+        const credential = await signInWithCustomToken(getFirebaseAuth(), launchCredential);
+        idToken = await getIdToken(credential.user, true);
+        requestBody = {token: launchCredential};
+      } else {
+        const auth = getFirebaseAuth();
+        await auth.authStateReady();
+        if (!auth.currentUser) {
+          throw new Error("No authenticated exam session is available for recovery.");
         }
-        const responseBody = adaptExamSessionEntryResult(
-          await examApiClient.post<unknown, {token: string}>(
-            endpointPath,
-            {
-              body: {token: launchCredential},
-              signal: controller.signal,
-            },
-          ),
-        );
-        return {authenticatedValidation, responseBody};
-      })
+        idToken = await getIdToken(auth.currentUser, true);
+        requestBody = {resume: true};
+      }
+      const authenticatedValidation = validateSessionEntry(
+        idToken,
+        sessionId,
+        null,
+      );
+      if (!authenticatedValidation.allowed) {
+        throw new Error("Firebase ID token is not bound to this exam session.");
+      }
+      const responseBody = adaptExamSessionEntryResult(
+        await examApiClient.post<unknown, typeof requestBody>(
+          endpointPath,
+          {
+            body: requestBody,
+            signal: controller.signal,
+          },
+        ),
+      );
+      return {authenticatedValidation, responseBody};
+    };
+
+    void authenticateAndRequestEntry()
       .then(({authenticatedValidation, responseBody}) => {
         const serverAllowed =
           responseBody.allowed === true &&
@@ -1570,6 +1614,18 @@ function ExamSessionPage() {
     setSelectedQuestionId(questionId);
   };
 
+  const replacePendingAnswerMap = useCallback((
+    nextPendingMap: Record<string, QueuedAnswerWrite>,
+  ): void => {
+    pendingAnswerMapRef.current = nextPendingMap;
+    setPendingAnswerMap(nextPendingMap);
+  }, []);
+
+  const recordLastAnswerWriteAt = useCallback((writeAtMs: number): void => {
+    lastAnswerWriteAtMsRef.current = writeAtMs;
+    setLastAnswerWriteAtMs(writeAtMs);
+  }, []);
+
   const queueAnswerWrite = useCallback((questionId: string, nextResponseState: QuestionResponseState): void => {
     if (!entryValidation.allowed) {
       return;
@@ -1580,24 +1636,28 @@ function ExamSessionPage() {
       return;
     }
 
-    const selectedOption = serializeResponseForPersistence(question, nextResponseState);
+    const response = serializeResponseForPersistence(question, nextResponseState);
     const questionTimeSpentMs = questionTimingById[questionId]?.timeSpentMs ?? 0;
+    const clientTimestamp = Math.max(Date.now(), lastIssuedClientTimestampRef.current + 1);
+    const clientRevision = nextClientRevisionRef.current;
+    lastIssuedClientTimestampRef.current = clientTimestamp;
+    nextClientRevisionRef.current += 1;
     const queuedWrite: QueuedAnswerWrite = {
-      clientTimestamp: Date.now(),
+      clientRevision,
+      clientTimestamp,
       questionId,
-      selectedOption,
-      timeSpent: Math.max(0, Math.floor(questionTimeSpentMs / 1000)),
+      response,
+      timeSpentSeconds: Math.max(0, Math.floor(questionTimeSpentMs / 1000)),
     };
 
-    setPendingAnswerMap((current) => {
-      const nextPendingMap = {
-        ...current,
-        [questionId]: queuedWrite,
-      };
-      setSyncMessage(`Pending answer updates: ${Object.keys(nextPendingMap).length}`);
-      return nextPendingMap;
-    });
-  }, [entryValidation.allowed, questionTimingById, sessionSnapshot.questions]);
+    const nextPendingMap = {
+      ...pendingAnswerMapRef.current,
+      [questionId]: queuedWrite,
+    };
+    replacePendingAnswerMap(nextPendingMap);
+    setSyncState((current) => navigator.onLine ? current === "syncing" ? current : "idle" : "offline");
+    setSyncMessage(`Pending answer updates: ${Object.keys(nextPendingMap).length}`);
+  }, [entryValidation.allowed, questionTimingById, replacePendingAnswerMap, sessionSnapshot.questions]);
 
   const updateQuestionResponseState = useCallback((
     questionId: string,
@@ -1619,81 +1679,119 @@ function ExamSessionPage() {
     });
   }, [queueAnswerWrite]);
 
-  const flushAnswerBatch = useCallback(async (reason: "interval" | "heartbeat" | "submission"): Promise<boolean> => {
+  const executeAnswerFlush = useCallback(async (reason: ExamAnswerFlushReason): Promise<boolean> => {
     if (!entryValidation.allowed || !instructionConfirmed || isSubmitted && reason !== "submission") {
       return false;
     }
-
-    if (serverEntryValidationStatus !== "valid" || pendingAnswers.length === 0) {
-      if (reason === "heartbeat") {
-        setLastHeartbeatAtIso(new Date().toISOString());
-      }
-      return true;
+    if (serverEntryValidationStatus !== "valid") {
+      return false;
     }
-
-    const nowMs = Date.now();
-    const millisecondsSinceLastWrite = nowMs - lastAnswerWriteAtMs;
-    if (millisecondsSinceLastWrite < ANSWER_BATCH_INTERVAL_MS && reason !== "submission") {
+    if (!navigator.onLine) {
+      setSyncState("offline");
+      setSyncMessage(`Offline. ${Object.keys(pendingAnswerMapRef.current).length} answer update(s) retained locally.`);
       return false;
     }
 
-    const answersToPersist = pendingAnswers.slice(0, ANSWER_BATCH_MAX_SIZE);
-    if (answersToPersist.length === 0) {
-      return true;
-    }
-
-    const endpointPath = `/exam/session/${encodeURIComponent(effectiveSessionId)}/answers`;
-    const requestBody: ExamAnswerBatchRequestBody = {
-      adaptivePhaseSnapshot: adaptivePhaseSnapshotRef.current ?? undefined,
-      answers: answersToPersist,
-      instituteId,
-      millisecondsSinceLastWrite,
-      runId,
-      yearId,
-    };
-
-    setSyncState("syncing");
-    setSyncMessage(`Syncing ${answersToPersist.length} answer update(s)...`);
+    const shouldDrainCompletely = reason === "reconnect" || reason === "submission";
+    let acknowledgedWriteCount = 0;
 
     try {
-      const responseBody = await examApiClient.post<ExamAnswerBatchResponse, ExamAnswerBatchRequestBody>(
-        endpointPath,
-        {
-          body: requestBody,
-        },
-      );
-      const persistedQuestionIds = responseBody.persistedQuestionIds ?? answersToPersist.map((answer) => answer.questionId);
-      const ignoredQuestionIds = responseBody.ignoredQuestionIds ?? [];
-      const settledQuestionIds = new Set([...persistedQuestionIds, ...ignoredQuestionIds]);
-      const lockedQuestionIds = responseBody.lockedQuestionIds ?? [];
+      while (true) {
+        const pendingWrites = Object.values(pendingAnswerMapRef.current)
+          .sort((left, right) => left.clientRevision - right.clientRevision);
+        if (pendingWrites.length === 0) {
+          if (reason === "heartbeat") {
+            setLastHeartbeatAtIso(new Date().toISOString());
+          }
+          setSyncState("idle");
+          setSyncMessage(
+            acknowledgedWriteCount > 0 ?
+              `Synced ${acknowledgedWriteCount} answer update(s).` :
+              "All answer updates are synced.",
+          );
+          return true;
+        }
 
-      if (lockedQuestionIds.length > 0) {
-        setHardModeLockedQuestionIds((current) => {
-          const next = new Set(current);
-          lockedQuestionIds.forEach((questionId) => next.add(questionId));
-          return next;
-        });
-      }
+        const nowMs = Date.now();
+        const millisecondsSinceLastWrite = Math.max(0, nowMs - lastAnswerWriteAtMsRef.current);
+        if (millisecondsSinceLastWrite < ANSWER_BATCH_INTERVAL_MS && !shouldDrainCompletely) {
+          return false;
+        }
 
-      setPendingAnswerMap((current) => {
-        const next = {...current};
-        settledQuestionIds.forEach((questionId) => {
-          delete next[questionId];
+        const answersToPersist = pendingWrites.slice(0, ANSWER_BATCH_MAX_SIZE);
+        const batchSequence = batchSequenceRef.current;
+        batchSequenceRef.current += 1;
+        const batchId = `${effectiveSessionId}:${recoveryOwnerId}:${batchSequence}`;
+        const endpointPath = `/exam/session/${encodeURIComponent(effectiveSessionId)}/answers`;
+        const requestBody: ExamAnswerBatchRequestBody = {
+          adaptivePhaseSnapshot: adaptivePhaseSnapshotRef.current ?? undefined,
+          answers: answersToPersist,
+          batchId,
+          batchSequence,
+          flushReason: reason,
+          instituteId,
+          millisecondsSinceLastWrite,
+          runId,
+          yearId,
+        };
+
+        setSyncState("syncing");
+        setSyncMessage(`Syncing ${answersToPersist.length} answer update(s)...`);
+        const responseBody = await examApiClient.post<ExamAnswerBatchResult, ExamAnswerBatchRequestBody>(
+          endpointPath,
+          {body: requestBody},
+        );
+        if (responseBody.batchId !== batchId || responseBody.batchSequence !== batchSequence) {
+          throw new Error("Answer sync acknowledgement did not match the active batch.");
+        }
+
+        const sentRevisionKeys = new Set(
+          answersToPersist.map((answer) => `${answer.questionId}:${answer.clientRevision}`),
+        );
+        const acknowledgedRevisionKeys = new Set(
+          responseBody.acknowledgements.map(
+            (acknowledgement) => `${acknowledgement.questionId}:${acknowledgement.clientRevision}`,
+          ),
+        );
+        if (
+          acknowledgedRevisionKeys.size !== sentRevisionKeys.size ||
+          Array.from(sentRevisionKeys).some((key) => !acknowledgedRevisionKeys.has(key))
+        ) {
+          throw new Error("Answer sync response omitted one or more write acknowledgements.");
+        }
+
+        if (responseBody.lockedQuestionIds.length > 0) {
+          setHardModeLockedQuestionIds((current) => {
+            const next = new Set(current);
+            responseBody.lockedQuestionIds.forEach((questionId) => next.add(questionId));
+            return next;
+          });
+        }
+
+        const nextPendingMap = {...pendingAnswerMapRef.current};
+        responseBody.acknowledgements.forEach((acknowledgement) => {
+          const currentWrite = nextPendingMap[acknowledgement.questionId];
+          if (currentWrite?.clientRevision === acknowledgement.clientRevision) {
+            delete nextPendingMap[acknowledgement.questionId];
+          }
         });
-        const remainingPending = Object.keys(next).length;
+        replacePendingAnswerMap(nextPendingMap);
+        acknowledgedWriteCount += responseBody.acknowledgements.length;
+        recordLastAnswerWriteAt(nowMs);
+
+        const remainingPending = Object.keys(nextPendingMap).length;
         setSyncMessage(
           remainingPending > 0 ?
-            `Synced ${persistedQuestionIds.length} answer(s). Pending: ${remainingPending}` :
-            `Synced ${persistedQuestionIds.length} answer(s).`,
+            `Synced ${acknowledgedWriteCount} answer update(s). Pending: ${remainingPending}` :
+            `Synced ${acknowledgedWriteCount} answer update(s).`,
         );
-        return next;
-      });
-      setLastAnswerWriteAtMs(nowMs);
-      setSyncState("idle");
-
-      return true;
+        if (!shouldDrainCompletely) {
+          setSyncState("idle");
+          return true;
+        }
+      }
     } catch (error) {
-      setSyncState("error");
+      setSyncState(navigator.onLine ? "error" : "offline");
       if (error instanceof ApiClientError) {
         setSyncMessage(`Answer sync failed with status ${error.status}`);
       } else {
@@ -1708,12 +1806,28 @@ function ExamSessionPage() {
     instituteId,
     instructionConfirmed,
     isSubmitted,
-    lastAnswerWriteAtMs,
-    pendingAnswers,
+    recordLastAnswerWriteAt,
+    recoveryOwnerId,
+    replacePendingAnswerMap,
     runId,
     serverEntryValidationStatus,
     yearId,
   ]);
+
+  const flushAnswerBatch = useCallback(async (reason: ExamAnswerFlushReason): Promise<boolean> => {
+    while (flushInFlightRef.current) {
+      await flushInFlightRef.current;
+    }
+    const flushPromise = executeAnswerFlush(reason);
+    flushInFlightRef.current = flushPromise;
+    try {
+      return await flushPromise;
+    } finally {
+      if (flushInFlightRef.current === flushPromise) {
+        flushInFlightRef.current = null;
+      }
+    }
+  }, [executeAnswerFlush]);
 
   useEffect(() => {
     if (!instructionConfirmed || isSubmitted) {
@@ -1721,7 +1835,7 @@ function ExamSessionPage() {
     }
 
     const batchInterval = window.setInterval(() => {
-      void flushAnswerBatch("interval");
+      void flushAnswerBatch("scheduled");
     }, ANSWER_BATCH_INTERVAL_MS);
 
     return () => window.clearInterval(batchInterval);
@@ -1732,7 +1846,7 @@ function ExamSessionPage() {
       return;
     }
 
-    void flushAnswerBatch("interval");
+    void flushAnswerBatch("scheduled");
   }, [flushAnswerBatch, instructionConfirmed, isSubmitted, pendingAnswers.length]);
 
   useEffect(() => {
@@ -1764,8 +1878,9 @@ function ExamSessionPage() {
       return;
     }
 
-    void loadRecoverySnapshot(effectiveSessionId).then((snapshot) => {
+    void loadRecoverySnapshot(effectiveSessionId, recoveryOwnerId).then((snapshot) => {
       if (!snapshot) {
+        setRecoveryApplied(true);
         return;
       }
 
@@ -1776,38 +1891,52 @@ function ExamSessionPage() {
       setSelectedQuestionId(snapshot.selectedQuestionId);
       setRemainingMs(snapshot.remainingMs);
       setDeadlineEpochMs(snapshot.deadlineEpochMs);
-      setPendingAnswerMap(snapshot.pendingAnswerMap);
-      setLastAnswerWriteAtMs(snapshot.lastAnswerWriteAtMs);
+      replacePendingAnswerMap(snapshot.pendingAnswerMap);
+      recordLastAnswerWriteAt(snapshot.lastAnswerWriteAtMs);
+      nextClientRevisionRef.current = Math.max(1, snapshot.nextClientRevision);
+      lastIssuedClientTimestampRef.current = Math.max(0, snapshot.lastIssuedClientTimestamp);
+      batchSequenceRef.current = Math.max(1, snapshot.batchSequence);
       setSyncCounter(snapshot.syncCounter);
       setSyncMessage("Recovered session state from local IndexedDB snapshot.");
+      setSyncState(navigator.onLine ? "idle" : "offline");
       setRecoveryApplied(true);
     });
-  }, [effectiveSessionId, entryValidation.allowed, instructionConfirmed, isSubmitted, recoveryApplied]);
+  }, [
+    effectiveSessionId,
+    entryValidation.allowed,
+    instructionConfirmed,
+    isSubmitted,
+    recordLastAnswerWriteAt,
+    recoveryApplied,
+    recoveryOwnerId,
+    replacePendingAnswerMap,
+  ]);
 
   useEffect(() => {
-    if (!instructionConfirmed || isSubmitted) {
+    if (!instructionConfirmed || isSubmitted || !recoveryApplied || !recoveryOwnerId) {
       return;
     }
 
-    const saveInterval = window.setInterval(() => {
-      const snapshot: SessionRecoverySnapshot = {
-        sessionId: effectiveSessionId,
-        responseStateByQuestionId,
-        questionTimingById,
-        visitedQuestionIds: Array.from(visitedQuestionIds),
-        hardModeLockedQuestionIds: Array.from(hardModeLockedQuestionIds),
-        selectedQuestionId,
-        remainingMs,
-        deadlineEpochMs,
-        pendingAnswerMap,
-        lastAnswerWriteAtMs,
-        syncCounter,
-        savedAtIso: new Date().toISOString(),
-      };
-      void saveRecoverySnapshot(snapshot);
-    }, RECOVERY_SAVE_INTERVAL_MS);
-
-    return () => window.clearInterval(saveInterval);
+    const snapshot: SessionRecoverySnapshot = {
+      batchSequence: batchSequenceRef.current,
+      deadlineEpochMs,
+      hardModeLockedQuestionIds: Array.from(hardModeLockedQuestionIds),
+      lastAnswerWriteAtMs,
+      lastIssuedClientTimestamp: lastIssuedClientTimestampRef.current,
+      nextClientRevision: nextClientRevisionRef.current,
+      ownerId: recoveryOwnerId,
+      pendingAnswerMap,
+      questionTimingById,
+      remainingMs,
+      responseStateByQuestionId,
+      savedAtIso: new Date().toISOString(),
+      schemaVersion: RECOVERY_SCHEMA_VERSION,
+      selectedQuestionId,
+      sessionId: effectiveSessionId,
+      syncCounter,
+      visitedQuestionIds: Array.from(visitedQuestionIds),
+    };
+    void saveRecoverySnapshot(snapshot);
   }, [
     deadlineEpochMs,
     effectiveSessionId,
@@ -1818,6 +1947,8 @@ function ExamSessionPage() {
     pendingAnswerMap,
     questionTimingById,
     remainingMs,
+    recoveryApplied,
+    recoveryOwnerId,
     responseStateByQuestionId,
     selectedQuestionId,
     syncCounter,
@@ -1831,11 +1962,19 @@ function ExamSessionPage() {
 
     const handleOnline = () => {
       setSyncMessage("Connection restored. Syncing pending responses.");
-      void flushAnswerBatch("submission");
+      void flushAnswerBatch("reconnect");
+    };
+    const handleOffline = () => {
+      setSyncState("offline");
+      setSyncMessage(`Offline. ${Object.keys(pendingAnswerMapRef.current).length} answer update(s) retained locally.`);
     };
 
+    window.addEventListener("offline", handleOffline);
     window.addEventListener("online", handleOnline);
-    return () => window.removeEventListener("online", handleOnline);
+    return () => {
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("online", handleOnline);
+    };
   }, [flushAnswerBatch, instructionConfirmed, isSubmitted]);
 
   useEffect(() => {
@@ -2079,8 +2218,11 @@ function ExamSessionPage() {
       );
       return false;
     }
-    setLastAnswerWriteAtMs(Date.now() - ANSWER_BATCH_INTERVAL_MS);
-    setPendingAnswerMap({});
+    recordLastAnswerWriteAt(Date.now() - ANSWER_BATCH_INTERVAL_MS);
+    replacePendingAnswerMap({});
+    nextClientRevisionRef.current = 1;
+    lastIssuedClientTimestampRef.current = 0;
+    batchSequenceRef.current = 1;
     setSyncState("idle");
     setSyncMessage("No pending answer updates.");
     setSessionConflictMessage(null);
@@ -2089,7 +2231,13 @@ function ExamSessionPage() {
     setInstructionConfirmed(true);
     setEntryStage("exam_active");
     return true;
-  }, [activeSessionGuardKey, effectiveSessionId, requestServerActivation]);
+  }, [
+    activeSessionGuardKey,
+    effectiveSessionId,
+    recordLastAnswerWriteAt,
+    replacePendingAnswerMap,
+    requestServerActivation,
+  ]);
   const preExamChecksPassed =
     browserReadinessState === "passed" &&
     internetCheckState === "passed" &&
@@ -2655,11 +2803,15 @@ function ExamSessionPage() {
       hint: isControlledMode ? "Guided pacing target" : "Reference pacing",
     },
   ];
-  const syncSummaryLabel = syncState === "error"
-    ? "Sync issue"
-    : pendingAnswers.length > 0
-      ? `${pendingAnswers.length} pending`
-      : "Synced";
+  const syncSummaryLabel = syncState === "offline"
+    ? `Offline · ${pendingAnswers.length} pending`
+    : syncState === "syncing"
+      ? `Syncing · ${pendingAnswers.length} pending`
+      : syncState === "error"
+        ? `Sync issue · ${pendingAnswers.length} pending`
+        : pendingAnswers.length > 0
+          ? `${pendingAnswers.length} pending`
+          : "Synced";
   const modeTierLabel = `${sessionSnapshot.license.currentLayer} ${entryValidation.claims.mode}`;
   const activeSectionLabel = selectedSection === "All" ? "All Subjects" : selectedSection;
   const modeStudentExplanation = isOperationalMode

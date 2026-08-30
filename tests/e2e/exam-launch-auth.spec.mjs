@@ -17,7 +17,11 @@ const instituteId = "inst_bwm_018_launch_browser";
 const studentId = "student_bwm_018_launch_browser";
 const yearId = "2026";
 const runId = "run_bwm_018_launch_browser";
-const questionId = "question_bwm_018_launch_browser";
+const questionIds = Array.from(
+  {length: 12},
+  (_, index) => `question_bwm_022_launch_browser_${index + 1}`,
+);
+const questionId = questionIds[0];
 const authHost = process.env.FIREBASE_AUTH_EMULATOR_HOST;
 let adminApp;
 let firestore;
@@ -77,38 +81,41 @@ test.beforeAll(async () => {
       eligibilityFlags: {l1Eligible: true},
       featureFlags: {controlledMode: true, hardMode: false},
     }),
-    institute.collection("questionBank").doc(questionId).set({
-      chapter: "Kinematics",
-      correctAnswer: "B",
-      createdAt: Timestamp.now(),
-      difficulty: "Easy",
-      examType: "JEEMains",
-      marks: 4,
-      negativeMarks: 1,
-      options: [
-        {correct: false, id: "A", label: "A", text: "v / r"},
-        {correct: true, id: "B", label: "B", text: "v² / r"},
-      ],
-      primaryTag: "motion",
-      prompt: "Authoritative browser snapshot question",
-      questionId,
-      questionImageUrl: "questions/bwm-018-question.png",
-      questionType: "MCQ",
-      solutionImageUrl: "solutions/bwm-018-solution.png",
-      internalNotes: "must never reach the candidate",
-      status: "active",
-      subject: "Physics",
-      tags: ["motion"],
-      topic: "Motion",
-      uniqueKey: "bwm-018-launch-browser-question",
-      usedCount: 0,
-      version: 1,
-    }),
+    ...questionIds.map((currentQuestionId, index) =>
+      institute.collection("questionBank").doc(currentQuestionId).set({
+        chapter: "Kinematics",
+        correctAnswer: "B",
+        createdAt: Timestamp.now(),
+        difficulty: "Easy",
+        examType: "JEEMains",
+        internalNotes: "must never reach the candidate",
+        marks: 4,
+        negativeMarks: 1,
+        options: [
+          {correct: false, id: "A", label: "A", text: "v / r"},
+          {correct: true, id: "B", label: "B", text: "v² / r"},
+        ],
+        primaryTag: "motion",
+        prompt: index === 0 ?
+          "Authoritative browser snapshot question" :
+          `Offline recovery question ${index + 1}`,
+        questionId: currentQuestionId,
+        questionImageUrl: `questions/bwm-022-question-${index + 1}.png`,
+        questionType: "MCQ",
+        solutionImageUrl: `solutions/bwm-022-solution-${index + 1}.png`,
+        status: "active",
+        subject: "Physics",
+        tags: ["motion"],
+        topic: "Motion",
+        uniqueKey: `bwm-022-launch-browser-question-${index + 1}`,
+        usedCount: 0,
+        version: 1,
+      })),
     year.set({locked: false, status: "Active"}),
     run.set({
       calibrationVersion: "cal_bwm_018",
       endWindow: Timestamp.fromMillis(Date.now() + (60 * 60_000)),
-      mode: "Diagnostic",
+      mode: "Operational",
       phaseConfigSnapshot: {
         phase1Percent: 40,
         phase2Percent: 45,
@@ -118,7 +125,7 @@ test.beforeAll(async () => {
         browserIntegrityGuardEnabled: false,
         faceIdentityGazeGuardEnabled: false,
       },
-      questionIds: [questionId],
+      questionIds,
       recipientStudentIds: [studentId],
       riskModelVersion: "risk_v3",
       runId,
@@ -199,11 +206,11 @@ test("Student start authenticates Exam entry once and removes the credential", a
   expect(entryEnvelope.data.deadlineAt).toBeNull();
   expect(entryEnvelope.data.sessionId).toBe(sessionId);
   expect(entryEnvelope.data.runtimeSnapshot.questionSetVersion).toBe("19");
-  expect(entryEnvelope.data.runtimeSnapshot.mode).toBe("Diagnostic");
-  expect(entryEnvelope.data.runtimeSnapshot.questions).toHaveLength(1);
+  expect(entryEnvelope.data.runtimeSnapshot.mode).toBe("Operational");
+  expect(entryEnvelope.data.runtimeSnapshot.questions).toHaveLength(12);
   expect(entryEnvelope.data.runtimeSnapshot.questions[0]).toMatchObject({
     id: questionId,
-    imageUrl: "questions/bwm-018-question.png",
+    imageUrl: "questions/bwm-022-question-1.png",
     text: "Authoritative browser snapshot question",
   });
   expect(JSON.stringify(entryEnvelope.data.runtimeSnapshot)).not.toMatch(
@@ -232,6 +239,32 @@ test("Student start authenticates Exam entry once and removes the credential", a
   expect(Date.parse(activationEnvelope.data.deadlineAt)).not.toBeNaN();
   await expect(page.getByText("Authoritative browser snapshot question", {exact: true}))
     .toBeVisible({timeout: 30_000});
+  let answerRequestBody = null;
+  const answerRequestBodies = [];
+  const answerResponsePromise = page.waitForResponse((response) =>
+    new URL(response.url()).pathname.endsWith(`/session/${sessionId}/answers`),
+  {timeout: 90_000});
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.endsWith(`/session/${sessionId}/answers`)) {
+      answerRequestBody = request.postDataJSON();
+      answerRequestBodies.push(answerRequestBody);
+    }
+  });
+  await page.getByRole("radio").nth(1).check();
+  const answerResponse = await answerResponsePromise;
+  expect(answerResponse.status()).toBe(200);
+  expect(answerRequestBody.answers).toHaveLength(1);
+  expect(answerRequestBody.answers[0]).toMatchObject({
+    clientRevision: expect.any(Number),
+    questionId,
+    response: {kind: "mcq", optionId: "B"},
+  });
+  expect(answerRequestBody).toMatchObject({
+    batchId: expect.any(String),
+    batchSequence: expect.any(Number),
+    flushReason: "scheduled",
+  });
+  expect(answerRequestBody.answers[0].timeSpentSeconds).toEqual(expect.any(Number));
   expect(await page.evaluate((credential) => ({
     local: Object.values(localStorage).includes(credential),
     session: Object.values(sessionStorage).includes(credential),
@@ -246,6 +279,12 @@ test("Student start authenticates Exam entry once and removes the credential", a
   expect(consumedSession.data().status).toBe("active");
   expect(consumedSession.data().startedAt).toBeTruthy();
   expect(consumedSession.data().deadlineAt).toBeTruthy();
+  expect(consumedSession.data().answerMap[questionId]).toMatchObject({
+    response: {kind: "mcq", optionId: "B"},
+    selectedOption: "B",
+  });
+  expect(consumedSession.data().questionTimeMap[questionId].cumulativeTimeSpent)
+    .toBe(consumedSession.data().answerMap[questionId].timeSpentSeconds);
 
   const replayContext = await browser.newContext({bypassCSP: true});
   const replayPage = await replayContext.newPage();
@@ -272,4 +311,101 @@ test("Student start authenticates Exam entry once and removes the credential", a
   } finally {
     await replayContext.close();
   }
+
+  await page.context().setOffline(true);
+  const palette = page.getByLabel("Question status tiles");
+  for (let index = 0; index < questionIds.length; index += 1) {
+    await palette.getByRole("button", {name: String(index + 1), exact: true}).click();
+    if (index === 0) {
+      await page.getByRole("radio").nth(0).check();
+    }
+    await page.getByRole("radio").nth(1).check();
+    if (index === 5) {
+      await page.getByRole("button", {name: "Clear Response"}).click();
+    }
+  }
+  await expect(page.getByText("Offline · 12 pending", {exact: true}))
+    .toBeVisible({timeout: 30_000});
+  await expect.poll(async () => page.evaluate(async ({expectedOwnerId, expectedSessionId}) => {
+    const database = await new Promise((resolve, reject) => {
+      const request = indexedDB.open("parabolic-exam-runtime", 1);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result);
+    });
+    return new Promise((resolve, reject) => {
+      const transaction = database.transaction("sessionRecovery", "readonly");
+      const request = transaction.objectStore("sessionRecovery").get(expectedSessionId);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const snapshot = request.result;
+        database.close();
+        resolve({
+          ownerId: snapshot?.ownerId ?? null,
+          pendingCount: Object.keys(snapshot?.pendingAnswerMap ?? {}).length,
+          schemaVersion: snapshot?.schemaVersion ?? null,
+        });
+      };
+    });
+  }, {expectedOwnerId: studentId, expectedSessionId: sessionId})).toEqual({
+    ownerId: studentId,
+    pendingCount: 12,
+    schemaVersion: 2,
+  });
+
+  const recoveryAnswerRequestStart = answerRequestBodies.length;
+  const resumedEntryResponsePromise = page.waitForResponse((response) =>
+    new URL(response.url()).pathname.endsWith(`/session/${sessionId}/entry`),
+  {timeout: 90_000});
+  await page.context().setOffline(false);
+  await page.reload({waitUntil: "domcontentloaded"});
+  const resumedEntryResponse = await resumedEntryResponsePromise;
+  expect(resumedEntryResponse.status()).toBe(200);
+  expect(entryRequestBody).toEqual({resume: true});
+  await expect(page.getByText("Offline recovery question 12", {exact: true}))
+    .toBeVisible({timeout: 30_000});
+
+  await expect.poll(async () => {
+    const recoveredSession = await firestore.doc(sessionPath).get();
+    return Object.keys(recoveredSession.data()?.answerMap ?? {}).length;
+  }, {timeout: 90_000}).toBe(12);
+  const recoveryAnswerRequests = answerRequestBodies.slice(recoveryAnswerRequestStart);
+  expect(recoveryAnswerRequests.length).toBeGreaterThanOrEqual(2);
+  expect(recoveryAnswerRequests.every((body) => body.answers.length <= 10)).toBe(true);
+  expect(new Set(recoveryAnswerRequests.flatMap((body) =>
+    body.answers.map((answer) => answer.questionId))).size).toBe(12);
+  expect(recoveryAnswerRequests.some((body) =>
+    body.flushReason === "reconnect" || body.flushReason === "submission")).toBe(true);
+
+  const recoveredSession = await firestore.doc(sessionPath).get();
+  const recoveredAnswerMap = recoveredSession.data().answerMap;
+  for (const currentQuestionId of questionIds) {
+    if (currentQuestionId === questionIds[5]) {
+      expect(recoveredAnswerMap[currentQuestionId]).toMatchObject({
+        response: {kind: "unanswered"},
+        selectedOption: null,
+      });
+    } else {
+      expect(recoveredAnswerMap[currentQuestionId]).toMatchObject({
+        response: {kind: "mcq", optionId: "B"},
+        selectedOption: "B",
+      });
+    }
+  }
+
+  await page.getByRole("button", {name: "Submit Test"}).click();
+  await page.getByLabel(/I understand 1 question\(s\) will remain unanswered/u).check();
+  const submitResponsePromise = page.waitForResponse((response) =>
+    new URL(response.url()).pathname.endsWith(`/session/${sessionId}/submit`),
+  {timeout: 90_000});
+  await page.getByRole("button", {name: "Confirm Final Submit"}).click();
+  const submitResponse = await submitResponsePromise;
+  expect(submitResponse.status()).toBe(200);
+  await expect(page.getByRole("heading", {name: "Exam Submitted"}))
+    .toBeVisible({timeout: 30_000});
+  const submittedSession = await firestore.doc(sessionPath).get();
+  expect(submittedSession.data().status).toBe("submitted");
+  expect(Object.keys(submittedSession.data().answerMap)).toHaveLength(12);
+  expect(submittedSession.data().answerMap[questionIds[5]].response)
+    .toEqual({kind: "unanswered"});
+
 });

@@ -113,6 +113,9 @@ const entryResult: SessionEntryValidationResult = {
 test("exam entry consumes the launch credential under matching Firebase claims", async () => {
   let validationCalls = 0;
   const handler = createExamSessionEntryHandler({
+    resumeSessionEntry: async () => {
+      throw new Error("resumeSessionEntry must not run");
+    },
     validateSessionEntry: async (context) => {
       validationCalls += 1;
       assert.deepEqual(context, {
@@ -155,8 +158,48 @@ test("exam entry consumes the launch credential under matching Firebase claims",
   assert.equal("templateSnapshot" in responseData, false);
 });
 
+test("exam entry restores an entered session from the matching Firebase identity", async () => {
+  let resumeCalls = 0;
+  const handler = createExamSessionEntryHandler({
+    resumeSessionEntry: async (context) => {
+      resumeCalls += 1;
+      assert.deepEqual(context, {
+        instituteId: identity.instituteId,
+        licenseLayer: identity.licenseLayer,
+        runId: identity.runId,
+        sessionId: identity.sessionId,
+        studentId: identity.studentId,
+        studentUid: identity.uid,
+        yearId: identity.yearId,
+      });
+      return {...entryResult, status: "active"};
+    },
+    validateSessionEntry: async () => {
+      throw new Error("validateSessionEntry must not run");
+    },
+    verifyIdToken: async () => identity as never,
+  });
+  const response = createMockResponse();
+  await handler(createMockRequest({
+    body: {resume: true},
+    headers: {authorization: "Bearer firebase-id-token"},
+    method: "POST",
+    path: `/exam/session/${identity.sessionId}/entry`,
+  }) as never, response as never);
+
+  assert.equal(resumeCalls, 1);
+  assert.equal(response.statusCode, 200);
+  assert.equal(
+    (response.body as {data: {status: string}}).data.status,
+    "active",
+  );
+});
+
 test("exam entry rejects an ID token bound to another session", async () => {
   const handler = createExamSessionEntryHandler({
+    resumeSessionEntry: async () => {
+      throw new Error("resumeSessionEntry must not run");
+    },
     validateSessionEntry: async () => {
       throw new Error("validateSessionEntry must not run");
     },
