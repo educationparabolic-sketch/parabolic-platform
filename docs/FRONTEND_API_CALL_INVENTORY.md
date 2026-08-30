@@ -1,8 +1,8 @@
 # Frontend API Call Inventory
 
-Status: current-contract inventory, canonical-route assignment, and compatibility classification through `BWM-018`
+Status: current-contract inventory, canonical-route assignment, and compatibility classification through `BWM-019`
 
-Inventory date: 2026-08-29
+Inventory date: 2026-08-30
 
 Scope: executable HTTP calls in `apps/admin/src`, `apps/student/src`, `apps/exam/src`, and `apps/vendor/src`
 
@@ -69,7 +69,7 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 | STU-04 | `GET` | `/student/insights` | `/api/v1/student/insights` | `implemented` | Strict shared insights DTO requires L1+, bounds Student-owned current-year snapshots, and preserves truthful empty states. |
 | STU-05 | `GET` | `/student/tests/{testId}/solutions` | `/api/v1/student/tests/{testId}/solutions` | `implemented` | Strict paginated solution DTO requires a current-year assigned/licensed completed run, reached release time, and exactly one submitted session owned by the identity Student. |
 | STU-06 | `POST` | `/exam/start` | `/api/v1/exam/start` | `implemented` | Shared request sends explicit `start|resume` intent plus run ID only; handler derives tenant, Student, UID, current year, and license from verified authority, converges retries on one session, and returns a strictly adapted absolute Exam launch result. |
-| EXM-01 | `POST` | `/exam/session/{sessionId}/entry` | `/api/v1/exam/session/{sessionId}/entry` | `implemented` | Runtime exchanges the nested-claim launch credential through Firebase Auth, sends the resulting ID token automatically, and supplies the raw credential only in the body; the handler verifies exact session identity and consumes the issued hash atomically once. |
+| EXM-01 | `POST` | `/exam/session/{sessionId}/entry` | `/api/v1/exam/session/{sessionId}/entry` | `implemented` | Runtime exchanges the nested-claim launch credential through Firebase Auth and supplies it only in the body for atomic consumption; the strict result also carries the immutable candidate-safe server question and runtime snapshot consumed by Exam. |
 | EXM-02 | `POST` | `/exam/session/{sessionId}/answers` | `/api/v1/exam/session/{sessionId}/answers` | `implemented` | Runtime uses the Firebase-authenticated shared client; handler requires Student identity and exact institute/year/run/session/Student claim agreement before persisting. |
 | EXM-03 | `POST` | Retired (no frontend call) | `/api/v1/exam/session/{sessionId}/token/refresh` | `intentionally retired` | Firebase Auth SDK refreshes the current Exam-origin ID token; the nonexistent custom refresh request and credential fields were removed. |
 | EXM-04 | `POST` | `/exam/session/{sessionId}/submit` | `/api/v1/exam/session/{sessionId}/submit` | `implemented` | Runtime uses the Firebase-authenticated shared client; handler requires Student identity and exact institute/year/run/session/Student claim agreement, and the existing strict submit adapter accepts the authoritative metrics response. |
@@ -121,7 +121,7 @@ Classification totals: `implemented` 31, `incompatible` 3, `missing` 0, `intenti
 
 | ID | Method and current path | Frontend request | Frontend response | Auth / role / tenant / license | Current Functions handler | Frontend source |
 | --- | --- | --- | --- | --- | --- | --- |
-| EXM-01 | `POST /exam/session/{sessionId}/entry` | `{ token: launchCredential }`; bearer is the exchanged/refreshed Firebase ID token | `ExamSessionEntryResponse` | Firebase ID; `student`; exact identity tenant/license plus complete institute/year/run/session/Student/nonce claims; raw credential hash is issued, unconsumed, and atomically consumed once | `examSessionEntry` (`api/examSessionEntry.ts`) plus transactional `SessionService` | `apps/exam/src/ExamRuntimeApp.tsx` |
+| EXM-01 | `POST /exam/session/{sessionId}/entry` | `{ token: launchCredential }`; bearer is the exchanged/refreshed Firebase ID token | Strict shared `ExamSessionEntryResult` with identity/status and immutable candidate-safe question, schedule, mode, phase, timing, license, difficulty, and proctoring authority; no answer/solution/internal/analytics fields | Firebase ID; `student`; exact identity tenant/license plus complete institute/year/run/session/Student/nonce claims; raw credential hash is issued, unconsumed, and atomically consumed once | `examSessionEntry` (`api/examSessionEntry.ts`) plus transactional `SessionService` | `apps/exam/src/ExamRuntimeApp.tsx` |
 | EXM-02 | `POST /exam/session/{sessionId}/answers` | `ExamAnswerBatchRequestBody` with tenant/run/year, timing, answers, and optional adaptive phase | `ExamAnswerBatchResponse` | Firebase ID from shared client; `student`; identity tenant and exact body/route/session claims; no launch credential | `examSessionAnswers` (`api/examSessionAnswers.ts`) | `apps/exam/src/ExamRuntimeApp.tsx` |
 | EXM-03 | Retired `/exam/session/{sessionId}/token/refresh` | None | None | Firebase Auth SDK owns ID-token refresh; no custom refresh route or credential | Intentionally retired; no handler/export | No frontend caller |
 | EXM-04 | `POST /exam/session/{sessionId}/submit` | `ExamSubmitRequestBody` with tenant/run/year, reason, unanswered IDs, and client timestamp | Strictly adapted `ExamSubmitResponse` metrics | Firebase ID from shared client; `student`; identity tenant and exact body/route/session claims; no launch credential | `examSessionSubmit` (`api/examSessionSubmit.ts`) | `apps/exam/src/ExamRuntimeApp.tsx` |

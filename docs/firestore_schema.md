@@ -188,12 +188,16 @@ accuracyPercent
 disciplineIndex  
 riskState  
 answerMap  
+questionTimeMap
+runtimeSnapshot
 
 These documents represent immutable exam execution records.
 
 For BWM-017 start/resume, the session document ID is deterministic for the authoritative institute, current academic year, run, and Student tuple. Concurrent first-start requests therefore transact against the same document; later `start` retries replay it and `resume` locates it while its status is `created`, `started`, or `active`. Browser tenant, year, test, Student, UID, and license values are not accepted as persistence authority. Each issued Firebase launch credential carries a unique nonce, while only a bounded set of SHA-256 hashes is retained in `launchCredentialHashes`.
 
 BWM-018 makes entry consumption atomic. After Firebase custom-token exchange, EXM-01 compares the verified ID-token session claims, raw credential claims, persisted identity/UID, and license snapshot inside the entry boundary. Its Firestore transaction removes the matching SHA-256 hash from `launchCredentialHashes`, appends it to the bounded `consumedLaunchCredentialHashes` replay-denial set, records server-owned `launchCredentialConsumedAt` and `launchCredentialConsumedByUid`, and deletes the transitional `sessionTokenHash` when it represents that consumed credential. Raw launch credentials and Firebase ID tokens are never persisted.
+
+BWM-019 freezes `runtimeSnapshot` on first start beside the corresponding `questionTimeMap`. The immutable snapshot contains ordered candidate-visible question IDs, numbers, types, sections, difficulty, prompts, options, and permitted image/media/matrix data plus template version, subjects, mode, schedule, phase, timing, license, difficulty, and proctoring metadata. Its runtime question IDs are unique and their set must exactly equal `questionTimeMap`; later source-question edits do not change an existing session. Correct answers, correctness flags, solutions, solution assets, internal notes, and analytics are never projected into this snapshot or returned through EXM-01. No collection path, Firestore rule, or index changed.
 
 ---
 

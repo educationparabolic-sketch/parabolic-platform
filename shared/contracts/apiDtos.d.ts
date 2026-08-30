@@ -549,6 +549,107 @@ export interface StudentExamLaunchResult {
   status: StudentExamSessionStatus;
 }
 
+export type ExamExecutionMode = AdminRunMode;
+
+export type ExamRuntimeQuestionType = "mcq" | "numeric" | "matrix";
+
+export type ExamRuntimeQuestionDifficulty = "easy" | "medium" | "hard";
+
+export interface ExamRuntimeQuestionOption {
+  id: string;
+  label: string;
+  text: string;
+}
+
+export interface ExamRuntimeQuestionMedia {
+  title: string;
+  type: "audio" | "video";
+  url: string;
+}
+
+export interface ExamRuntimeQuestion {
+  difficulty: ExamRuntimeQuestionDifficulty;
+  id: string;
+  imageUrl: string;
+  matrixColumns: string[];
+  matrixRows: string[];
+  media: ExamRuntimeQuestionMedia | null;
+  number: number;
+  options: ExamRuntimeQuestionOption[];
+  section: string;
+  text: string;
+  type: ExamRuntimeQuestionType;
+}
+
+export interface ExamRuntimePhaseConfigSnapshot {
+  bufferPercent: number;
+  phase1Percent: number;
+  phase2Percent: number;
+  phase3Percent: number;
+}
+
+export interface ExamRuntimeDifficultyDistributionSnapshot {
+  easyPercent: number;
+  hardPercent: number;
+  mediumPercent: number;
+}
+
+export interface ExamRuntimeTimingProfileSnapshot {
+  controlledSlowdownSeconds: number;
+  finalWindowMinutes: number;
+  hardModeRestrictSubmitUntilAllVisited: boolean;
+  hardModeSequentialNavigation: boolean;
+  maxTimeByDifficultySec: Record<ExamRuntimeQuestionDifficulty, number>;
+  minTimeByDifficultySec: Record<ExamRuntimeQuestionDifficulty, number>;
+  syncEveryMs: number;
+}
+
+export interface ExamRuntimeScheduleSnapshot {
+  durationMs: number;
+  earlyEntryBufferMinutes: number;
+  earlyEntryOpensAt: string;
+  sessionEndsAt: string;
+  sessionStartsAt: string;
+  timezone: string;
+}
+
+export interface ExamRuntimeLicenseSnapshot {
+  currentLayer: StudentLicenseLayer;
+  eligibilityFlags: Record<string, boolean>;
+  featureFlags: Record<string, boolean>;
+}
+
+export interface ExamRuntimeProctoringPolicy {
+  browserIntegrityGuardEnabled: boolean;
+  faceIdentityGazeGuardEnabled: boolean;
+}
+
+export interface ExamRuntimeSnapshot {
+  difficultyDistribution: ExamRuntimeDifficultyDistributionSnapshot;
+  hardModeRevisitRestricted: boolean;
+  license: ExamRuntimeLicenseSnapshot;
+  mode: ExamExecutionMode;
+  phaseConfigSnapshot: ExamRuntimePhaseConfigSnapshot;
+  proctoringPolicy: ExamRuntimeProctoringPolicy;
+  questionSetVersion: string;
+  questions: ExamRuntimeQuestion[];
+  schedule: ExamRuntimeScheduleSnapshot;
+  sessionId: string;
+  subjects: string[];
+  timingProfile: ExamRuntimeTimingProfileSnapshot;
+}
+
+export interface ExamSessionEntryResult {
+  allowed: true;
+  instituteId: string;
+  runId: string;
+  runtimeSnapshot: ExamRuntimeSnapshot;
+  sessionId: string;
+  status: "created" | "started" | "active";
+  studentId: string;
+  yearId: string;
+}
+
 export type StudentPerformanceRiskState =
   | "Stable"
   | "Improving"

@@ -13,6 +13,9 @@ import type {
   AdminTestTimingProfile,
   AdminTestTimingWindow,
   DeployCalibrationVersionResult,
+  ExamRuntimeQuestion,
+  ExamRuntimeSnapshot,
+  ExamSessionEntryResult,
   QuestionAssetUploadResult,
   QuestionBulkUploadResult,
   StudentDashboardRecentResult,
@@ -66,6 +69,18 @@ export interface ExamSubmitAdapterResult {
   status?: ExamSessionStatus;
   submittedAt?: string;
 }
+
+const EXAM_RUNTIME_FORBIDDEN_FIELD_NAMES = new Set([
+  "answer",
+  "answerkey",
+  "correctanswer",
+  "correct",
+  "internalnotes",
+  "iscorrect",
+  "solution",
+  "solutionimageurl",
+  "solutionpdfurl",
+]);
 
 export class PortalResponseValidationError extends Error {
   public readonly route: string;
@@ -2182,6 +2197,410 @@ export function adaptStudentSummaryResult(
   }
 
   return value;
+}
+
+function assertCandidateSafeExamRuntime(
+  value: unknown,
+  route: string,
+  field = "runtimeSnapshot",
+): void {
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) =>
+      assertCandidateSafeExamRuntime(entry, route, `${field}[${index}]`));
+    return;
+  }
+  if (!value || typeof value !== "object") {
+    return;
+  }
+
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (EXAM_RUNTIME_FORBIDDEN_FIELD_NAMES.has(key.toLowerCase())) {
+      return fail(route, `${field}.${key}`, "candidate-safe runtime data");
+    }
+    assertCandidateSafeExamRuntime(entry, route, `${field}.${key}`);
+  }
+}
+
+function readExamRuntimeBooleanMap(
+  value: unknown,
+  route: string,
+  field: string,
+): Record<string, boolean> {
+  const record = readRecord(value, route, field);
+  return Object.fromEntries(Object.entries(record).map(([key, flag]) => [
+    key,
+    readBoolean(flag, route, `${field}.${key}`),
+  ]));
+}
+
+function readExamRuntimeIsoString(
+  value: unknown,
+  route: string,
+  field: string,
+): string {
+  const parsed = readString(value, route, field);
+  if (Number.isNaN(Date.parse(parsed))) {
+    return fail(route, field, "an ISO date string");
+  }
+  return parsed;
+}
+
+function readExamRuntimePositiveNumber(
+  value: unknown,
+  route: string,
+  field: string,
+): number {
+  const parsed = readNumber(value, route, field);
+  if (parsed <= 0) {
+    return fail(route, field, "a positive number");
+  }
+  return parsed;
+}
+
+function adaptExamRuntimeQuestion(
+  value: unknown,
+  route: string,
+  index: number,
+): ExamRuntimeQuestion {
+  const field = `runtimeSnapshot.questions[${index}]`;
+  const record = readRecord(value, route, field);
+  const options = readArray(record.options, route, `${field}.options`).map(
+    (option, optionIndex) => {
+      const optionField = `${field}.options[${optionIndex}]`;
+      const optionRecord = readRecord(option, route, optionField);
+      return {
+        id: readString(optionRecord.id, route, `${optionField}.id`),
+        label: readString(optionRecord.label, route, `${optionField}.label`),
+        text: readStringAllowEmpty(
+          optionRecord.text,
+          route,
+          `${optionField}.text`,
+        ),
+      };
+    },
+  );
+  if (new Set(options.map((option) => option.id)).size !== options.length) {
+    return fail(route, `${field}.options`, "unique option ids");
+  }
+
+  const mediaRecord = record.media === null ? null :
+    readRecord(record.media, route, `${field}.media`);
+
+  const number = readPositiveInteger(record.number, route, `${field}.number`);
+  if (number !== index + 1) {
+    return fail(route, `${field}.number`, "its one-based snapshot position");
+  }
+
+  return {
+    difficulty: readEnum(
+      record.difficulty,
+      ["easy", "medium", "hard"] as const,
+      route,
+      `${field}.difficulty`,
+    ),
+    id: readString(record.id, route, `${field}.id`),
+    imageUrl: readStringAllowEmpty(record.imageUrl, route, `${field}.imageUrl`),
+    matrixColumns: readStringArray(
+      record.matrixColumns,
+      route,
+      `${field}.matrixColumns`,
+    ),
+    matrixRows: readStringArray(
+      record.matrixRows,
+      route,
+      `${field}.matrixRows`,
+    ),
+    media: mediaRecord ? {
+      title: readString(mediaRecord.title, route, `${field}.media.title`),
+      type: readEnum(
+        mediaRecord.type,
+        ["audio", "video"] as const,
+        route,
+        `${field}.media.type`,
+      ),
+      url: readString(mediaRecord.url, route, `${field}.media.url`),
+    } : null,
+    number,
+    options,
+    section: readString(record.section, route, `${field}.section`),
+    text: readString(record.text, route, `${field}.text`),
+    type: readEnum(
+      record.type,
+      ["mcq", "numeric", "matrix"] as const,
+      route,
+      `${field}.type`,
+    ),
+  };
+}
+
+function adaptExamRuntimeSnapshot(
+  value: unknown,
+  route: string,
+): ExamRuntimeSnapshot {
+  assertCandidateSafeExamRuntime(value, route);
+  const record = readRecord(value, route, "runtimeSnapshot");
+  const difficulty = readRecord(
+    record.difficultyDistribution,
+    route,
+    "runtimeSnapshot.difficultyDistribution",
+  );
+  const phase = readRecord(
+    record.phaseConfigSnapshot,
+    route,
+    "runtimeSnapshot.phaseConfigSnapshot",
+  );
+  const license = readRecord(record.license, route, "runtimeSnapshot.license");
+  const proctoring = readRecord(
+    record.proctoringPolicy,
+    route,
+    "runtimeSnapshot.proctoringPolicy",
+  );
+  const schedule = readRecord(record.schedule, route, "runtimeSnapshot.schedule");
+  const timing = readRecord(
+    record.timingProfile,
+    route,
+    "runtimeSnapshot.timingProfile",
+  );
+  const minTiming = readRecord(
+    timing.minTimeByDifficultySec,
+    route,
+    "runtimeSnapshot.timingProfile.minTimeByDifficultySec",
+  );
+  const maxTiming = readRecord(
+    timing.maxTimeByDifficultySec,
+    route,
+    "runtimeSnapshot.timingProfile.maxTimeByDifficultySec",
+  );
+  const questions = readArray(
+    record.questions,
+    route,
+    "runtimeSnapshot.questions",
+  ).map((question, index) => adaptExamRuntimeQuestion(question, route, index));
+  if (questions.length === 0) {
+    return fail(route, "runtimeSnapshot.questions", "at least one question");
+  }
+  if (new Set(questions.map((question) => question.id)).size !== questions.length) {
+    return fail(route, "runtimeSnapshot.questions", "unique question ids");
+  }
+  const subjects = readStringArray(
+    record.subjects,
+    route,
+    "runtimeSnapshot.subjects",
+  );
+  const expectedSubjects = Array.from(new Set(questions.map((question) =>
+    question.section)));
+  if (
+    subjects.length !== expectedSubjects.length ||
+    subjects.some((subject, index) => subject !== expectedSubjects[index])
+  ) {
+    return fail(
+      route,
+      "runtimeSnapshot.subjects",
+      "the ordered unique question sections",
+    );
+  }
+
+  const readDifficultyTimes = (
+    source: Record<string, unknown>,
+    field: string,
+  ) => ({
+    easy: readNumber(source.easy, route, `${field}.easy`),
+    hard: readNumber(source.hard, route, `${field}.hard`),
+    medium: readNumber(source.medium, route, `${field}.medium`),
+  });
+  const sessionStartsAt = readExamRuntimeIsoString(
+    schedule.sessionStartsAt,
+    route,
+    "runtimeSnapshot.schedule.sessionStartsAt",
+  );
+  const sessionEndsAt = readExamRuntimeIsoString(
+    schedule.sessionEndsAt,
+    route,
+    "runtimeSnapshot.schedule.sessionEndsAt",
+  );
+  const earlyEntryOpensAt = readExamRuntimeIsoString(
+    schedule.earlyEntryOpensAt,
+    route,
+    "runtimeSnapshot.schedule.earlyEntryOpensAt",
+  );
+  const durationMs = readExamRuntimePositiveNumber(
+    schedule.durationMs,
+    route,
+    "runtimeSnapshot.schedule.durationMs",
+  );
+  if (
+    Date.parse(sessionEndsAt) <= Date.parse(sessionStartsAt) ||
+    Date.parse(earlyEntryOpensAt) > Date.parse(sessionStartsAt) ||
+    durationMs !== Date.parse(sessionEndsAt) - Date.parse(sessionStartsAt)
+  ) {
+    return fail(route, "runtimeSnapshot.schedule", "a consistent time window");
+  }
+
+  return {
+    difficultyDistribution: {
+      easyPercent: readNumber(
+        difficulty.easyPercent,
+        route,
+        "runtimeSnapshot.difficultyDistribution.easyPercent",
+      ),
+      hardPercent: readNumber(
+        difficulty.hardPercent,
+        route,
+        "runtimeSnapshot.difficultyDistribution.hardPercent",
+      ),
+      mediumPercent: readNumber(
+        difficulty.mediumPercent,
+        route,
+        "runtimeSnapshot.difficultyDistribution.mediumPercent",
+      ),
+    },
+    hardModeRevisitRestricted: readBoolean(
+      record.hardModeRevisitRestricted,
+      route,
+      "runtimeSnapshot.hardModeRevisitRestricted",
+    ),
+    license: {
+      currentLayer: readEnum(
+        license.currentLayer,
+        ["L0", "L1", "L2", "L3"] as const,
+        route,
+        "runtimeSnapshot.license.currentLayer",
+      ),
+      eligibilityFlags: readExamRuntimeBooleanMap(
+        license.eligibilityFlags,
+        route,
+        "runtimeSnapshot.license.eligibilityFlags",
+      ),
+      featureFlags: readExamRuntimeBooleanMap(
+        license.featureFlags,
+        route,
+        "runtimeSnapshot.license.featureFlags",
+      ),
+    },
+    mode: readEnum(
+      record.mode,
+      ["Operational", "Diagnostic", "Controlled", "Hard"] as const,
+      route,
+      "runtimeSnapshot.mode",
+    ),
+    phaseConfigSnapshot: {
+      bufferPercent: readNumber(
+        phase.bufferPercent,
+        route,
+        "runtimeSnapshot.phaseConfigSnapshot.bufferPercent",
+      ),
+      phase1Percent: readNumber(
+        phase.phase1Percent,
+        route,
+        "runtimeSnapshot.phaseConfigSnapshot.phase1Percent",
+      ),
+      phase2Percent: readNumber(
+        phase.phase2Percent,
+        route,
+        "runtimeSnapshot.phaseConfigSnapshot.phase2Percent",
+      ),
+      phase3Percent: readNumber(
+        phase.phase3Percent,
+        route,
+        "runtimeSnapshot.phaseConfigSnapshot.phase3Percent",
+      ),
+    },
+    proctoringPolicy: {
+      browserIntegrityGuardEnabled: readBoolean(
+        proctoring.browserIntegrityGuardEnabled,
+        route,
+        "runtimeSnapshot.proctoringPolicy.browserIntegrityGuardEnabled",
+      ),
+      faceIdentityGazeGuardEnabled: readBoolean(
+        proctoring.faceIdentityGazeGuardEnabled,
+        route,
+        "runtimeSnapshot.proctoringPolicy.faceIdentityGazeGuardEnabled",
+      ),
+    },
+    questionSetVersion: readString(
+      record.questionSetVersion,
+      route,
+      "runtimeSnapshot.questionSetVersion",
+    ),
+    questions,
+    schedule: {
+      durationMs,
+      earlyEntryBufferMinutes: readNonNegativeInteger(
+        schedule.earlyEntryBufferMinutes,
+        route,
+        "runtimeSnapshot.schedule.earlyEntryBufferMinutes",
+      ),
+      earlyEntryOpensAt,
+      sessionEndsAt,
+      sessionStartsAt,
+      timezone: readString(schedule.timezone, route, "runtimeSnapshot.schedule.timezone"),
+    },
+    sessionId: readString(record.sessionId, route, "runtimeSnapshot.sessionId"),
+    subjects,
+    timingProfile: {
+      controlledSlowdownSeconds: readExamRuntimePositiveNumber(
+        timing.controlledSlowdownSeconds,
+        route,
+        "runtimeSnapshot.timingProfile.controlledSlowdownSeconds",
+      ),
+      finalWindowMinutes: readExamRuntimePositiveNumber(
+        timing.finalWindowMinutes,
+        route,
+        "runtimeSnapshot.timingProfile.finalWindowMinutes",
+      ),
+      hardModeRestrictSubmitUntilAllVisited: readBoolean(
+        timing.hardModeRestrictSubmitUntilAllVisited,
+        route,
+        "runtimeSnapshot.timingProfile.hardModeRestrictSubmitUntilAllVisited",
+      ),
+      hardModeSequentialNavigation: readBoolean(
+        timing.hardModeSequentialNavigation,
+        route,
+        "runtimeSnapshot.timingProfile.hardModeSequentialNavigation",
+      ),
+      maxTimeByDifficultySec: readDifficultyTimes(
+        maxTiming,
+        "runtimeSnapshot.timingProfile.maxTimeByDifficultySec",
+      ),
+      minTimeByDifficultySec: readDifficultyTimes(
+        minTiming,
+        "runtimeSnapshot.timingProfile.minTimeByDifficultySec",
+      ),
+      syncEveryMs: readExamRuntimePositiveNumber(
+        timing.syncEveryMs,
+        route,
+        "runtimeSnapshot.timingProfile.syncEveryMs",
+      ),
+    },
+  };
+}
+
+export function adaptExamSessionEntryResult(
+  value: unknown,
+): ExamSessionEntryResult {
+  const route = "POST /exam/session/{sessionId}/entry";
+  const data = readRecord(value, route);
+  const runtimeSnapshot = adaptExamRuntimeSnapshot(data.runtimeSnapshot, route);
+  const sessionId = readString(data.sessionId, route, "sessionId");
+  if (runtimeSnapshot.sessionId !== sessionId) {
+    return fail(route, "runtimeSnapshot.sessionId", "the entry sessionId");
+  }
+  return {
+    allowed: readBoolean(data.allowed, route, "allowed") === true ? true :
+      fail(route, "allowed", "true"),
+    instituteId: readString(data.instituteId, route, "instituteId"),
+    runId: readString(data.runId, route, "runId"),
+    runtimeSnapshot,
+    sessionId,
+    status: readEnum(
+      data.status,
+      ["created", "started", "active"] as const,
+      route,
+      "status",
+    ),
+    studentId: readString(data.studentId, route, "studentId"),
+    yearId: readString(data.yearId, route, "yearId"),
+  };
 }
 
 export function adaptExamSubmitResult(value: unknown): ExamSubmitAdapterResult {

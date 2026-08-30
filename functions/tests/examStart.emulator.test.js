@@ -132,12 +132,18 @@ test(
         }),
         institute.collection("questionBank").doc(questionId).set({
           chapter: "Kinematics",
+          correctAnswer: "B",
           createdAt: Timestamp.now(),
           difficulty: "Easy",
           examType: "JEEMains",
           marks: 4,
           negativeMarks: 1,
+          options: [
+            {id: "A", label: "A", text: "v / r"},
+            {id: "B", label: "B", text: "v² / r"},
+          ],
           primaryTag: "motion",
+          prompt: "Which expression gives centripetal acceleration?",
           questionId,
           questionImageUrl: "questions/bwm-017-question.png",
           questionType: "MCQ",
@@ -229,6 +235,20 @@ test(
       assert.equal(entered.status, 200, JSON.stringify(entered.body));
       assert.equal(entered.body.success, true);
       assert.equal(entered.body.data.sessionId, sessionIds[0]);
+      assert.deepEqual(
+        entered.body.data.runtimeSnapshot.questions.map((question) =>
+          question.id),
+        [questionId],
+      );
+      assert.equal(
+        entered.body.data.runtimeSnapshot.questions[0].text,
+        "Which expression gives centripetal acceleration?",
+      );
+      assert.equal(entered.body.data.runtimeSnapshot.mode, "Diagnostic");
+      assert.doesNotMatch(
+        JSON.stringify(entered.body.data.runtimeSnapshot),
+        /correctAnswer|solutionImageUrl|internalNotes|"correct"/i,
+      );
 
       const replayedEntry = await postExamRoute(entryPath, runtimeIdToken, {
         token: firstLaunch.body.data.launchCredential,
@@ -275,6 +295,11 @@ test(
       assert.equal(sessions.docs[0].id, sessionIds[0]);
       assert.equal(sessions.docs[0].data().studentUid, uid);
       assert.equal(sessions.docs[0].data().yearId, yearId);
+      assert.deepEqual(
+        sessions.docs[0].data().runtimeSnapshot.questions.map((question) =>
+          question.id),
+        Object.keys(sessions.docs[0].data().questionTimeMap),
+      );
       assert.equal(
         sessions.docs[0].data().launchCredentialHashes.length,
         2,

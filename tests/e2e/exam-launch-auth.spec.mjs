@@ -79,16 +79,23 @@ test.beforeAll(async () => {
     }),
     institute.collection("questionBank").doc(questionId).set({
       chapter: "Kinematics",
+      correctAnswer: "B",
       createdAt: Timestamp.now(),
       difficulty: "Easy",
       examType: "JEEMains",
       marks: 4,
       negativeMarks: 1,
+      options: [
+        {correct: false, id: "A", label: "A", text: "v / r"},
+        {correct: true, id: "B", label: "B", text: "v² / r"},
+      ],
       primaryTag: "motion",
+      prompt: "Authoritative browser snapshot question",
       questionId,
       questionImageUrl: "questions/bwm-018-question.png",
       questionType: "MCQ",
       solutionImageUrl: "solutions/bwm-018-solution.png",
+      internalNotes: "must never reach the candidate",
       status: "active",
       subject: "Physics",
       tags: ["motion"],
@@ -107,13 +114,17 @@ test.beforeAll(async () => {
         phase2Percent: 45,
         phase3Percent: 15,
       },
+      proctoringPolicy: {
+        browserIntegrityGuardEnabled: false,
+        faceIdentityGazeGuardEnabled: false,
+      },
       questionIds: [questionId],
       recipientStudentIds: [studentId],
       riskModelVersion: "risk_v3",
       runId,
       startWindow: Timestamp.fromMillis(Date.now() + (5 * 60_000)),
       status: "scheduled",
-      templateVersion: "1",
+      templateVersion: "19",
       testId: "test_bwm_018_launch_browser",
       timingProfileSnapshot: {
         easy: {max: 60, min: 30, recommended: 45},
@@ -185,11 +196,24 @@ test("Student start authenticates Exam entry once and removes the credential", a
   expect(entryEnvelope.success).toBe(true);
   expect(entryEnvelope.data.allowed).toBe(true);
   expect(entryEnvelope.data.sessionId).toBe(sessionId);
+  expect(entryEnvelope.data.runtimeSnapshot.questionSetVersion).toBe("19");
+  expect(entryEnvelope.data.runtimeSnapshot.mode).toBe("Diagnostic");
+  expect(entryEnvelope.data.runtimeSnapshot.questions).toHaveLength(1);
+  expect(entryEnvelope.data.runtimeSnapshot.questions[0]).toMatchObject({
+    id: questionId,
+    imageUrl: "questions/bwm-018-question.png",
+    text: "Authoritative browser snapshot question",
+  });
+  expect(JSON.stringify(entryEnvelope.data.runtimeSnapshot)).not.toMatch(
+    /correctAnswer|solutionImageUrl|internalNotes|"correct"/i,
+  );
   expect(entryRequestBody).toEqual({token: launchCredential});
   expect(entryAuthorization).toMatch(/^Bearer /);
   expect(entryAuthorization).not.toBe(`Bearer ${launchCredential}`);
-  await expect(page.getByText("Pre-Exam Session Lobby", {exact: true}))
+  await expect(page.getByText("Entry Window Closed", {exact: true}))
     .toBeVisible({timeout: 30_000});
+  await expect(page.getByText("Authoritative browser snapshot question", {exact: true}))
+    .toHaveCount(0);
   expect(await page.evaluate((credential) => ({
     local: Object.values(localStorage).includes(credential),
     session: Object.values(sessionStorage).includes(credential),

@@ -1,20 +1,30 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Route, Routes, useLocation, useParams } from "react-router-dom";
 import { getIdToken, signInWithCustomToken } from "firebase/auth";
+import type {
+  ExamExecutionMode,
+  ExamRuntimePhaseConfigSnapshot as PhaseConfigSnapshot,
+  ExamRuntimeQuestion as SessionQuestion,
+  ExamRuntimeQuestionDifficulty as DifficultyBand,
+  ExamRuntimeSnapshot as SessionSnapshot,
+  ExamRuntimeTimingProfileSnapshot as TimingProfileSnapshot,
+  ExamSessionEntryResult,
+} from "../../../shared/contracts/apiDtos";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
-import { buildQuestionAssetUrl, toCdnAssetUrl } from "../../../shared/services/cdnAssetDelivery";
+import { toCdnAssetUrl } from "../../../shared/services/cdnAssetDelivery";
 import { ApiClientError } from "../../../shared/services/apiClient";
-import { adaptExamSubmitResult } from "../../../shared/services/portalResponseAdapters";
+import {
+  adaptExamSessionEntryResult,
+  adaptExamSubmitResult,
+} from "../../../shared/services/portalResponseAdapters";
 import { getFrontendEnvironment } from "../../../shared/services/frontendEnvironment";
 import { getFirebaseAuth } from "../../../shared/services/firebaseClient";
 import { getPortalApiClient } from "../../../shared/services/portalIntegration";
 import "./App.css";
 
 type QuestionPaletteStatus = "not_visited" | "not_answered" | "answered" | "marked" | "answered_marked";
-type ExecutionMode = "Operational" | "Controlled" | "Focused" | "Hard";
-type QuestionSection = "Physics" | "Chemistry" | "Mathematics";
-type QuestionType = "mcq" | "numeric" | "matrix";
-type DifficultyBand = "easy" | "medium" | "hard";
+type ExecutionMode = ExamExecutionMode;
+type QuestionSection = string;
 type PhaseId = "phase1" | "phase2" | "phase3" | "buffer";
 type SubmissionReason = "manual" | "expiry";
 type SessionLifecycleState = "created" | "started" | "active" | "submitted" | "expired" | "terminated";
@@ -97,66 +107,6 @@ interface PreExamChecklistItem {
   helper: string;
 }
 
-interface QuestionOption {
-  id: string;
-  label: string;
-  text: string;
-}
-
-interface QuestionMedia {
-  type: "video" | "audio";
-  title: string;
-  url: string;
-}
-
-interface SessionQuestion {
-  id: string;
-  number: number;
-  section: QuestionSection;
-  type: QuestionType;
-  difficulty: DifficultyBand;
-  text: string;
-  imageUrl?: string;
-  options?: QuestionOption[];
-  matrixRows?: string[];
-  matrixColumns?: string[];
-  media?: QuestionMedia;
-}
-
-interface PhaseConfigSnapshot {
-  phase1Percent: number;
-  phase2Percent: number;
-  phase3Percent: number;
-  bufferPercent: number;
-}
-
-interface DifficultyDistributionSnapshot {
-  easyPercent: number;
-  mediumPercent: number;
-  hardPercent: number;
-}
-
-interface TimingProfileSnapshot {
-  minTimeByDifficultySec: Record<DifficultyBand, number>;
-  maxTimeByDifficultySec: Record<DifficultyBand, number>;
-  finalWindowMinutes: number;
-  syncEveryMs: number;
-  controlledSlowdownSeconds: number;
-  hardModeSequentialNavigation: boolean;
-  hardModeRestrictSubmitUntilAllVisited: boolean;
-}
-
-interface SessionSnapshot {
-  sessionId: string;
-  questionSetVersion: string;
-  subjects: QuestionSection[];
-  questions: SessionQuestion[];
-  hardModeRevisitRestricted: boolean;
-  phaseConfigSnapshot: PhaseConfigSnapshot;
-  difficultyDistribution: DifficultyDistributionSnapshot;
-  timingProfile: TimingProfileSnapshot;
-}
-
 interface QuestionResponseState {
   selectedOptionId: string | null;
   numericResponse: string;
@@ -206,6 +156,7 @@ interface ExamSessionSchedule {
   sessionEndsAtMs: number;
   durationMs: number;
   earlyEntryBufferMinutes: number;
+  timezone: string;
 }
 
 interface QueuedAnswerWrite {
@@ -228,13 +179,6 @@ interface ExamAnswerBatchResponse {
   ignoredQuestionIds?: string[];
   lockedQuestionIds?: string[];
   persistedQuestionIds?: string[];
-}
-
-interface ExamSessionEntryResponse {
-  allowed?: boolean;
-  mode?: ExecutionMode;
-  sessionId?: string;
-  status?: SessionLifecycleState;
 }
 
 interface ExamSubmitRequestBody {
@@ -290,8 +234,6 @@ const RECOVERY_SAVE_INTERVAL_MS = 3_000;
 const DEV_MOCK_SESSION_TOKEN = "dev";
 const BROWSER_INTEGRITY_EVENT_LIMIT = 60;
 const DEVTOOLS_SIZE_THRESHOLD_PX = 160;
-const DEV_MOCK_SESSION_START_DELAY_MS = 60_000;
-const DEV_MOCK_EARLY_ENTRY_BUFFER_MINUTES = 1;
 
 const GAZE_CALIBRATION_POINTS = [
   { id: "center", label: "Center", x: 50, y: 50 },
@@ -332,8 +274,8 @@ const MODE_INSTRUCTIONS: Record<ExecutionMode, ModeInstruction> = {
       "Proceed to Phase 2 unlocks only after every question has been viewed.",
     ],
   },
-  Focused: {
-    title: "Focused Mode",
+  Diagnostic: {
+    title: "Diagnostic Mode",
     points: [
       "Phase transitions happen automatically at the configured phase boundaries.",
       "Phase 2 shows answered-and-marked questions only; Phase 3 shows unanswered-and-marked questions only.",
@@ -343,7 +285,7 @@ const MODE_INSTRUCTIONS: Record<ExecutionMode, ModeInstruction> = {
   Hard: {
     title: "Hard Mode",
     points: [
-      "Focused phase visibility rules are enforced.",
+      "Diagnostic phase visibility rules are enabled for this session.",
       "Minimum thinking time is enforced before navigation or save actions unlock.",
       "Sequential progression and question discipline events are captured for training analytics.",
     ],
@@ -361,10 +303,10 @@ const LOBBY_MODE_DETAILS: Record<ExecutionMode, LobbyModeDetail> = {
     summary: "Phase objectives, pacing support, and overstay visibility are enabled.",
     focus: "Complete checks before reviewing the phase plan and controlled start rules.",
   },
-  Focused: {
-    title: "Focused Execution Entry",
+  Diagnostic: {
+    title: "Diagnostic Execution Entry",
     summary: "Automatic phase transitions and filtered question visibility are enabled.",
-    focus: "Calibrate identity checks before the focused phase engine takes over.",
+    focus: "Calibrate identity checks before the diagnostic phase engine takes over.",
   },
   Hard: {
     title: "Hard Mode Entry",
@@ -382,20 +324,6 @@ const QUESTION_PALETTE_LEGEND: Array<{ status: QuestionPaletteStatus; label: str
 ];
 
 const CALCULATOR_KEYS = ["7", "8", "9", "/", "4", "5", "6", "*", "1", "2", "3", "-", "0", ".", "(", ")", "+"];
-const MOCK_INSTITUTE_ID = "inst-build-142";
-const PHYSICS_IMAGE_CDN_URL = buildQuestionAssetUrl({
-  instituteId: MOCK_INSTITUTE_ID,
-  questionId: "exam-demo-q-2",
-  version: "v1",
-  kind: "questionImage",
-});
-const CHEMISTRY_IMAGE_CDN_URL = buildQuestionAssetUrl({
-  instituteId: MOCK_INSTITUTE_ID,
-  questionId: "exam-demo-q-6",
-  version: "v1",
-  kind: "questionImage",
-});
-
 function decodeBase64Url(value: string): string {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
   const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
@@ -411,11 +339,11 @@ function parseExecutionMode(value: unknown): ExecutionMode | null {
   if (normalized === "operational" || normalized === "l0") {
     return "Operational";
   }
-  if (normalized === "controlled" || normalized === "l1") {
-    return "Controlled";
+  if (normalized === "diagnostic" || normalized === "focused" || normalized === "l1") {
+    return "Diagnostic";
   }
-  if (normalized === "focused" || normalized === "l2") {
-    return "Focused";
+  if (normalized === "controlled" || normalized === "l2") {
+    return "Controlled";
   }
   if (normalized === "hard") {
     return "Hard";
@@ -714,158 +642,6 @@ function isRestrictedKeyboardEvent(event: KeyboardEvent): boolean {
   );
 }
 
-function buildSessionSnapshot(sessionId: string, mode: ExecutionMode): SessionSnapshot {
-  const questions: SessionQuestion[] = [
-    {
-      id: "q-1",
-      number: 1,
-      section: "Physics",
-      type: "mcq",
-      difficulty: "easy",
-      text: "A particle moves in a circle of radius r with constant speed v. What is the magnitude of centripetal acceleration?",
-      options: [
-        { id: "q1-a", label: "A", text: "v / r" },
-        { id: "q1-b", label: "B", text: "v² / r" },
-        { id: "q1-c", label: "C", text: "r / v²" },
-        { id: "q1-d", label: "D", text: "v² r" },
-      ],
-      media: {
-        type: "video",
-        title: "Reference animation: circular motion setup",
-        url: "https://example.com/media/circular-motion",
-      },
-    },
-    {
-      id: "q-2",
-      number: 2,
-      section: "Physics",
-      type: "numeric",
-      difficulty: "medium",
-      text: "A body starts from rest and accelerates uniformly at 2 m/s² for 6 seconds. Enter displacement in meters.",
-      imageUrl: PHYSICS_IMAGE_CDN_URL,
-    },
-    {
-      id: "q-3",
-      number: 3,
-      section: "Physics",
-      type: "matrix",
-      difficulty: "hard",
-      text: "Match each quantity to its SI unit symbol.",
-      matrixRows: ["Force", "Power", "Frequency"],
-      matrixColumns: ["N", "W", "Hz", "J"],
-    },
-    {
-      id: "q-4",
-      number: 4,
-      section: "Chemistry",
-      type: "mcq",
-      difficulty: "easy",
-      text: "Which quantum number determines the orientation of an orbital?",
-      options: [
-        { id: "q4-a", label: "A", text: "Principal quantum number" },
-        { id: "q4-b", label: "B", text: "Azimuthal quantum number" },
-        { id: "q4-c", label: "C", text: "Magnetic quantum number" },
-        { id: "q4-d", label: "D", text: "Spin quantum number" },
-      ],
-    },
-    {
-      id: "q-5",
-      number: 5,
-      section: "Chemistry",
-      type: "numeric",
-      difficulty: "medium",
-      text: "For pH = 3 solution, enter [H+] concentration in mol/L using decimal notation.",
-    },
-    {
-      id: "q-6",
-      number: 6,
-      section: "Chemistry",
-      type: "mcq",
-      difficulty: "hard",
-      text: "Identify the compound that exhibits hydrogen bonding in pure state.",
-      options: [
-        { id: "q6-a", label: "A", text: "CH4" },
-        { id: "q6-b", label: "B", text: "NH3" },
-        { id: "q6-c", label: "C", text: "CO2" },
-        { id: "q6-d", label: "D", text: "CCl4" },
-      ],
-      imageUrl: CHEMISTRY_IMAGE_CDN_URL,
-    },
-    {
-      id: "q-7",
-      number: 7,
-      section: "Mathematics",
-      type: "mcq",
-      difficulty: "easy",
-      text: "If f(x) = x³, then f'(2) equals:",
-      options: [
-        { id: "q7-a", label: "A", text: "4" },
-        { id: "q7-b", label: "B", text: "8" },
-        { id: "q7-c", label: "C", text: "12" },
-        { id: "q7-d", label: "D", text: "16" },
-      ],
-    },
-    {
-      id: "q-8",
-      number: 8,
-      section: "Mathematics",
-      type: "matrix",
-      difficulty: "hard",
-      text: "Select all statements that are true for a 2x2 identity matrix.",
-      matrixRows: ["Determinant", "Trace", "Inverse"],
-      matrixColumns: ["Equals 1", "Equals 2", "Exists", "Zero"],
-    },
-    {
-      id: "q-9",
-      number: 9,
-      section: "Mathematics",
-      type: "numeric",
-      difficulty: "medium",
-      text: "Evaluate integral of 2x from x = 0 to x = 3.",
-      media: {
-        type: "audio",
-        title: "Optional audio instruction",
-        url: "https://example.com/media/math-audio",
-      },
-    },
-  ];
-
-  return {
-    sessionId,
-    questionSetVersion: "snapshot-v1",
-    subjects: ["Physics", "Chemistry", "Mathematics"],
-    questions,
-    hardModeRevisitRestricted: mode === "Hard",
-    phaseConfigSnapshot: {
-      phase1Percent: 40,
-      phase2Percent: 30,
-      phase3Percent: 20,
-      bufferPercent: 10,
-    },
-    difficultyDistribution: {
-      easyPercent: 35,
-      mediumPercent: 40,
-      hardPercent: 25,
-    },
-    timingProfile: {
-      minTimeByDifficultySec: {
-        easy: 20,
-        medium: 35,
-        hard: 50,
-      },
-      maxTimeByDifficultySec: {
-        easy: 180,
-        medium: 240,
-        hard: 300,
-      },
-      finalWindowMinutes: 10,
-      syncEveryMs: 10_000,
-      controlledSlowdownSeconds: 12,
-      hardModeSequentialNavigation: true,
-      hardModeRestrictSubmitUntilAllVisited: true,
-    },
-  };
-}
 
 function buildInitialResponseMap(questions: SessionQuestion[]): Record<string, QuestionResponseState> {
   return questions.reduce<Record<string, QuestionResponseState>>((accumulator, question) => {
@@ -893,14 +669,6 @@ function buildInitialTimingMap(
     };
     return accumulator;
   }, {});
-}
-
-function getSessionTotalDurationMs(sessionSnapshot: SessionSnapshot): number {
-  const totalMaxTimeSec = sessionSnapshot.questions.reduce((sum, question) => {
-    return sum + sessionSnapshot.timingProfile.maxTimeByDifficultySec[question.difficulty];
-  }, 0);
-
-  return Math.max(totalMaxTimeSec * 1000, 60_000);
 }
 
 function toDurationMinutesLabel(totalDurationMs: number): number {
@@ -932,24 +700,66 @@ function toMinuteSecondCountdownLabel(durationMs: number): string {
   return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
 }
 
-function buildDevSessionSchedule(anchorMs: number, durationMs: number): ExamSessionSchedule {
-  const sessionStartsAtMs = anchorMs + DEV_MOCK_SESSION_START_DELAY_MS;
-  const sessionEndsAtMs = sessionStartsAtMs + durationMs;
-
+function buildEmptySessionSnapshot(sessionId: string): SessionSnapshot {
+  const nowIso = new Date().toISOString();
+  const endIso = new Date(Date.now() + 60_000).toISOString();
   return {
-    earlyEntryOpensAtMs: sessionStartsAtMs - DEV_MOCK_EARLY_ENTRY_BUFFER_MINUTES * 60_000,
-    sessionStartsAtMs,
-    sessionEndsAtMs,
-    durationMs,
-    earlyEntryBufferMinutes: DEV_MOCK_EARLY_ENTRY_BUFFER_MINUTES,
+    difficultyDistribution: {easyPercent: 0, hardPercent: 0, mediumPercent: 0},
+    hardModeRevisitRestricted: false,
+    license: {currentLayer: "L0", eligibilityFlags: {}, featureFlags: {}},
+    mode: "Operational",
+    phaseConfigSnapshot: {
+      bufferPercent: 0,
+      phase1Percent: 100,
+      phase2Percent: 0,
+      phase3Percent: 0,
+    },
+    proctoringPolicy: {
+      browserIntegrityGuardEnabled: false,
+      faceIdentityGazeGuardEnabled: false,
+    },
+    questionSetVersion: "pending",
+    questions: [],
+    schedule: {
+      durationMs: 60_000,
+      earlyEntryBufferMinutes: 0,
+      earlyEntryOpensAt: nowIso,
+      sessionEndsAt: endIso,
+      sessionStartsAt: nowIso,
+      timezone: "UTC",
+    },
+    sessionId,
+    subjects: [],
+    timingProfile: {
+      controlledSlowdownSeconds: 1,
+      finalWindowMinutes: 1,
+      hardModeRestrictSubmitUntilAllVisited: false,
+      hardModeSequentialNavigation: false,
+      maxTimeByDifficultySec: {easy: 1, hard: 1, medium: 1},
+      minTimeByDifficultySec: {easy: 0, hard: 0, medium: 0},
+      syncEveryMs: 10_000,
+    },
   };
 }
 
-function toTimeLabel(epochMs: number): string {
+function toExamSessionSchedule(snapshot: SessionSnapshot): ExamSessionSchedule {
+  return {
+    durationMs: snapshot.schedule.durationMs,
+    earlyEntryBufferMinutes: snapshot.schedule.earlyEntryBufferMinutes,
+    earlyEntryOpensAtMs: Date.parse(snapshot.schedule.earlyEntryOpensAt),
+    sessionEndsAtMs: Date.parse(snapshot.schedule.sessionEndsAt),
+    sessionStartsAtMs: Date.parse(snapshot.schedule.sessionStartsAt),
+    timezone: snapshot.schedule.timezone,
+  };
+}
+
+function toTimeLabel(epochMs: number, timezone: string): string {
   return new Date(epochMs).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
+    timeZone: timezone,
+    timeZoneName: "short",
   });
 }
 
@@ -1369,23 +1179,19 @@ function ExamSessionPage() {
   const modeInstruction = MODE_INSTRUCTIONS[entryValidation.claims.mode];
   const candidateName = entryValidation.claims.sub ?? "Student Candidate";
   const examApiClient = useMemo(() => getPortalApiClient("exam"), []);
-  const scheduleAnchorMsRef = useRef(Date.now());
   const credentialExchangeStartedRef = useRef(false);
-
-  const sessionSnapshot = useMemo(
-    () => buildSessionSnapshot(sessionId || "runtime-session", entryValidation.claims.mode),
-    [entryValidation.claims.mode, sessionId],
-  );
-  const templateDurationMs = useMemo(() => getSessionTotalDurationMs(sessionSnapshot), [sessionSnapshot]);
+  const [entryAuthority, setEntryAuthority] = useState<ExamSessionEntryResult | null>(null);
+  const [sessionSnapshot, setSessionSnapshot] = useState<SessionSnapshot>(() =>
+    buildEmptySessionSnapshot(sessionId || "runtime-session"));
   const sessionSchedule = useMemo(
-    () => buildDevSessionSchedule(scheduleAnchorMsRef.current, templateDurationMs),
-    [templateDurationMs],
+    () => toExamSessionSchedule(sessionSnapshot),
+    [sessionSnapshot],
   );
   const totalDurationMs = sessionSchedule.durationMs;
   const totalDurationMinutesLabel = useMemo(() => toDurationMinutesLabel(totalDurationMs), [totalDurationMs]);
 
   const [selectedSection, setSelectedSection] = useState<QuestionSection | "All">("All");
-  const [selectedQuestionId, setSelectedQuestionId] = useState(sessionSnapshot.questions[0]?.id ?? "q-1");
+  const [selectedQuestionId, setSelectedQuestionId] = useState(sessionSnapshot.questions[0]?.id ?? "");
   const [entryStage, setEntryStage] = useState<ExamEntryStage>("pre_exam_lobby");
   const [declarationAccepted, setDeclarationAccepted] = useState(false);
   const [instructionConfirmed, setInstructionConfirmed] = useState(false);
@@ -1450,22 +1256,28 @@ function ExamSessionPage() {
 
   const isOperationalMode = entryValidation.claims.mode === "Operational";
   const isControlledMode = entryValidation.claims.mode === "Controlled";
-  const isFocusedMode = entryValidation.claims.mode === "Focused";
+  const isDiagnosticMode = entryValidation.claims.mode === "Diagnostic";
   const isHardMode = entryValidation.claims.mode === "Hard";
+  const browserIntegrityGuardEnabled =
+    sessionSnapshot.proctoringPolicy.browserIntegrityGuardEnabled;
   const faceIdentityGazeGuardEnabled = useMemo(() => {
+    if (!devMockSessionActive) {
+      return sessionSnapshot.proctoringPolicy.faceIdentityGazeGuardEnabled;
+    }
     const value = new URLSearchParams(location.search).get("faceGaze");
     return value?.toLowerCase() !== "off";
-  }, [location.search]);
+  }, [devMockSessionActive, location.search, sessionSnapshot.proctoringPolicy.faceIdentityGazeGuardEnabled]);
   const hardModeMinimalUI = isHardMode;
-  const phaseVisibilityEnforced = isFocusedMode || isHardMode;
+  const phaseVisibilityEnforced = isDiagnosticMode || isHardMode;
   const questionTimingEnforced = isHardMode;
   const isSubmitted = sessionLifecycleState === "submitted";
-  const instituteId = entryValidation.claims.instituteId ?? "inst-build-135";
-  const yearId = entryValidation.claims.yearId ?? "year-build-135";
-  const runId = entryValidation.claims.runId ?? "run-build-135";
+  const instituteId = entryAuthority?.instituteId ?? entryValidation.claims.instituteId ?? "";
+  const yearId = entryAuthority?.yearId ?? entryValidation.claims.yearId ?? "";
+  const runId = entryAuthority?.runId ?? entryValidation.claims.runId ?? "";
   const tokenSessionId = entryValidation.claims.sessionId;
-  const effectiveSessionId = tokenSessionId && tokenSessionId.length > 0 ? tokenSessionId : sessionId;
-  const activeSessionGuardKey = `exam-active-session::${entryValidation.claims.sub ?? "anonymous"}::${runId}`;
+  const effectiveSessionId = entryAuthority?.sessionId ??
+    (tokenSessionId && tokenSessionId.length > 0 ? tokenSessionId : sessionId);
+  const activeSessionGuardKey = `exam-active-session::${entryAuthority?.studentId ?? entryValidation.claims.sub ?? "anonymous"}::${runId}`;
   const pendingAnswers = useMemo(() => Object.values(pendingAnswerMap), [pendingAnswerMap]);
   const unansweredQuestionIdsForSubmission = useMemo(
     () =>
@@ -1507,9 +1319,27 @@ function ExamSessionPage() {
       return;
     }
 
-    if (devMockEntryEnabled && launchCredential.trim() === DEV_MOCK_SESSION_TOKEN) {
+    if (import.meta.env.DEV && devMockEntryEnabled && launchCredential.trim() === DEV_MOCK_SESSION_TOKEN) {
       // TODO(EXP): remove this dev-only mock entry after exam P0/P1/P2 completion.
-      setServerEntryValidationStatus("valid");
+      void import("./devMockSessionSnapshot")
+        .then(({buildDevMockSessionSnapshot}) => {
+          const snapshot = buildDevMockSessionSnapshot(
+            sessionId || "runtime-session",
+            parseExecutionMode(modeFromQuery) ?? "Operational",
+          );
+          const firstQuestionId = snapshot.questions[0]?.id ?? "";
+          setSessionSnapshot(snapshot);
+          setSelectedQuestionId(firstQuestionId);
+          setResponseStateByQuestionId(buildInitialResponseMap(snapshot.questions));
+          setQuestionTimingById(buildInitialTimingMap(
+            snapshot.questions,
+            snapshot.timingProfile,
+          ));
+          setVisitedQuestionIds(new Set(firstQuestionId ? [firstQuestionId] : []));
+          setRemainingMs(snapshot.schedule.durationMs);
+          setServerEntryValidationStatus("valid");
+        })
+        .catch(() => setServerEntryValidationStatus("invalid"));
       return;
     }
 
@@ -1528,21 +1358,52 @@ function ExamSessionPage() {
         if (!authenticatedValidation.allowed) {
           throw new Error("Firebase ID token is not bound to this exam session.");
         }
-        const responseBody = await examApiClient.post<ExamSessionEntryResponse, {token: string}>(
-          endpointPath,
-          {
-            body: {token: launchCredential},
-            signal: controller.signal,
-          },
+        const responseBody = adaptExamSessionEntryResult(
+          await examApiClient.post<unknown, {token: string}>(
+            endpointPath,
+            {
+              body: {token: launchCredential},
+              signal: controller.signal,
+            },
+          ),
         );
         return {authenticatedValidation, responseBody};
       })
       .then(({authenticatedValidation, responseBody}) => {
         const serverAllowed =
           responseBody.allowed === true &&
-          responseBody.sessionId === effectiveSessionId;
+          responseBody.sessionId === sessionId &&
+          responseBody.runtimeSnapshot.sessionId === sessionId &&
+          responseBody.instituteId === authenticatedValidation.claims.instituteId &&
+          responseBody.yearId === authenticatedValidation.claims.yearId &&
+          responseBody.runId === authenticatedValidation.claims.runId;
+        if (!serverAllowed) {
+          throw new Error("Server runtime snapshot is not bound to the authenticated session.");
+        }
 
-        setEntryValidation(authenticatedValidation);
+        const authoritativeValidation: EntryValidationResult = {
+          ...authenticatedValidation,
+          claims: {
+            ...authenticatedValidation.claims,
+            mode: responseBody.runtimeSnapshot.mode,
+          },
+        };
+        const firstQuestionId = responseBody.runtimeSnapshot.questions[0]?.id ?? "";
+        setEntryAuthority(responseBody);
+        setSessionSnapshot(responseBody.runtimeSnapshot);
+        setSelectedSection("All");
+        setSelectedQuestionId(firstQuestionId);
+        setResponseStateByQuestionId(
+          buildInitialResponseMap(responseBody.runtimeSnapshot.questions),
+        );
+        setQuestionTimingById(buildInitialTimingMap(
+          responseBody.runtimeSnapshot.questions,
+          responseBody.runtimeSnapshot.timingProfile,
+        ));
+        setVisitedQuestionIds(new Set(firstQuestionId ? [firstQuestionId] : []));
+        setRemainingMs(responseBody.runtimeSnapshot.schedule.durationMs);
+        setSessionLifecycleState(responseBody.status);
+        setEntryValidation(authoritativeValidation);
         setServerEntryValidationStatus(serverAllowed ? "valid" : "invalid");
       })
       .catch((error) => {
@@ -1556,10 +1417,10 @@ function ExamSessionPage() {
     return () => controller.abort();
   }, [
     devMockEntryEnabled,
-    effectiveSessionId,
     entryValidation.allowed,
     examApiClient,
     launchCredential,
+    modeFromQuery,
     sessionId,
   ]);
 
@@ -2045,6 +1906,9 @@ function ExamSessionPage() {
     }
   }, [currentExamPhase, entryStage, getIntegritySeverity, instructionConfirmed]);
   const requestExamFullscreen = useCallback(async (): Promise<boolean> => {
+    if (!browserIntegrityGuardEnabled) {
+      return true;
+    }
     if (isBrowserFullscreenActive()) {
       return true;
     }
@@ -2059,7 +1923,7 @@ function ExamSessionPage() {
       recordBrowserIntegrityEvent("FULLSCREEN_REQUEST_FAILED", "Browser rejected fullscreen entry from exam start.", "warning");
       return false;
     }
-  }, [recordBrowserIntegrityEvent]);
+  }, [browserIntegrityGuardEnabled, recordBrowserIntegrityEvent]);
   const startInternetCheck = useCallback(() => {
     if (!navigator.onLine) {
       setInternetCheckState("failed");
@@ -2487,7 +2351,7 @@ function ExamSessionPage() {
       return;
     }
 
-    if (!isBrowserFullscreenActive()) {
+    if (browserIntegrityGuardEnabled && !isBrowserFullscreenActive()) {
       setIntegrityBlockingReason("Fullscreen is required at official exam start. Re-enter fullscreen to open the question paper.");
       return;
     }
@@ -2495,6 +2359,7 @@ function ExamSessionPage() {
     beginExamSession();
   }, [
     beginExamSession,
+    browserIntegrityGuardEnabled,
     declarationAccepted,
     devMockSessionActive,
     entryStage,
@@ -2506,6 +2371,9 @@ function ExamSessionPage() {
   ]);
 
   useEffect(() => {
+    if (!browserIntegrityGuardEnabled) {
+      return;
+    }
     if ((!instructionConfirmed && entryStage !== "instructions_waiting") || isSubmitted) {
       return;
     }
@@ -2609,7 +2477,7 @@ function ExamSessionPage() {
       window.removeEventListener("offline", handleOffline);
       window.removeEventListener("online", handleOnline);
     };
-  }, [entryStage, instructionConfirmed, isSubmitted, recordBrowserIntegrityEvent]);
+  }, [browserIntegrityGuardEnabled, entryStage, instructionConfirmed, isSubmitted, recordBrowserIntegrityEvent]);
 
   const timerMinutes = Math.floor(remainingMs / 1000 / 60);
   const finalWindowThresholdMinutes = sessionSnapshot.timingProfile.finalWindowMinutes;
@@ -2725,21 +2593,15 @@ function ExamSessionPage() {
     : pendingAnswers.length > 0
       ? `${pendingAnswers.length} pending`
       : "Synced";
-  const modeTierLabel = isOperationalMode
-    ? "L0 Operational"
-    : isControlledMode
-      ? "L1 Controlled"
-      : isFocusedMode
-        ? "L2 Focused"
-        : "L2 Hard";
+  const modeTierLabel = `${sessionSnapshot.license.currentLayer} ${entryValidation.claims.mode}`;
   const activeSectionLabel = selectedSection === "All" ? "All Subjects" : selectedSection;
   const modeStudentExplanation = isOperationalMode
     ? "Standard exam delivery. You can navigate freely and submit anytime."
     : isControlledMode
       ? "Phase guidance is active. You control transitions, and expiry starts overstay instead of forcing movement."
-      : isFocusedMode
-        ? "Focused execution is active. Phase timing and phase visibility are enforced automatically."
-        : "Hard execution is active. Focused phase rules plus minimum thinking time and progression locks are enforced.";
+      : isDiagnosticMode
+        ? "Diagnostic execution is active. Phase timing and phase visibility are driven by the session snapshot."
+        : "Hard execution is active. Diagnostic phase rules plus minimum thinking time and progression locks are enforced.";
   const phaseSchedule = useMemo(
     () => buildPhaseSchedule(totalDurationMs, sessionSnapshot.phaseConfigSnapshot),
     [sessionSnapshot.phaseConfigSnapshot, totalDurationMs],
@@ -2775,7 +2637,7 @@ function ExamSessionPage() {
           `${currentPhaseRemainingLabel} left in phase`,
           automaticPhaseId !== controlledPhaseId ? "Overstay active" : "Within phase window",
         ]
-      : isFocusedMode
+      : isDiagnosticMode
         ? [
             `${currentPhasePresentation.shortLabel}: ${currentPhasePresentation.title}`,
             `${visibleQuestionsForCurrentPhase.length} visible questions`,
@@ -2844,7 +2706,7 @@ function ExamSessionPage() {
     ? "operational"
     : isControlledMode
       ? "controlled"
-      : isFocusedMode
+      : isDiagnosticMode
         ? "focused"
         : "hard";
   const faceStatusState = !faceIdentityGazeGuardEnabled
@@ -2907,8 +2769,8 @@ function ExamSessionPage() {
               : "Confirm the skipped lab checks and proceed to instructions.";
   const lobbyModeStudentNote = isControlledMode
     ? "Controlled mode shows phase goals and overstay status during the exam."
-    : isFocusedMode
-      ? "Focused mode may show only the questions available in the current phase."
+    : isDiagnosticMode
+      ? "Diagnostic mode may show only the questions available in the current phase."
       : isHardMode
         ? "Hard mode applies navigation locks and minimum thinking-time rules."
         : "Operational mode keeps navigation open while integrity events are captured silently.";
@@ -2956,7 +2818,7 @@ function ExamSessionPage() {
           <p>
             Student entry opens at
             {" "}
-            <strong>{toTimeLabel(sessionSchedule.earlyEntryOpensAtMs)}</strong>
+            <strong>{toTimeLabel(sessionSchedule.earlyEntryOpensAtMs, sessionSchedule.timezone)}</strong>
             .
           </p>
           <p className="exam-lobby-countdown">
@@ -2978,7 +2840,7 @@ function ExamSessionPage() {
           <p>
             This exam started at
             {" "}
-            <strong>{toTimeLabel(sessionSchedule.sessionStartsAtMs)}</strong>
+            <strong>{toTimeLabel(sessionSchedule.sessionStartsAtMs, sessionSchedule.timezone)}</strong>
             . New entry is not allowed after the official start time.
           </p>
           <button
@@ -3010,7 +2872,7 @@ function ExamSessionPage() {
             </div>
             <div className="exam-lobby-start-panel" aria-label="Exam start countdown">
               <span>Official Start</span>
-              <strong>{toTimeLabel(sessionSchedule.sessionStartsAtMs)}</strong>
+              <strong>{toTimeLabel(sessionSchedule.sessionStartsAtMs, sessionSchedule.timezone)}</strong>
               <p>
                 Starts in
                 {" "}
@@ -3027,6 +2889,14 @@ function ExamSessionPage() {
             <div>
               <span>Attempt Mode</span>
               <strong>{entryValidation.claims.mode}</strong>
+            </div>
+            <div>
+              <span>Question Set</span>
+              <strong>{sessionSnapshot.questionSetVersion}</strong>
+            </div>
+            <div>
+              <span>Total Questions</span>
+              <strong>{sessionSnapshot.questions.length}</strong>
             </div>
             <div>
               <span>Checks Done</span>
@@ -3296,7 +3166,7 @@ function ExamSessionPage() {
               <p>
                 Opens at
                 {" "}
-                {toTimeLabel(sessionSchedule.sessionStartsAtMs)}
+                {toTimeLabel(sessionSchedule.sessionStartsAtMs, sessionSchedule.timezone)}
               </p>
             </div>
           </header>
@@ -3689,7 +3559,7 @@ function ExamSessionPage() {
 
           <div className="exam-header-group exam-header-metrics exam-header-metrics-compact">
             <p>
-              <span className={isOperationalMode ? "exam-mode-badge operational" : isControlledMode ? "exam-mode-badge controlled" : isFocusedMode ? "exam-mode-badge focused" : "exam-mode-badge hard"}>
+              <span className={isOperationalMode ? "exam-mode-badge operational" : isControlledMode ? "exam-mode-badge controlled" : isDiagnosticMode ? "exam-mode-badge focused" : "exam-mode-badge hard"}>
                 {modeTierLabel}
               </span>
             </p>
@@ -3782,7 +3652,7 @@ function ExamSessionPage() {
               {!isOperationalMode ? (
                 <span className="exam-question-status-chip">{selectedQuestionHeaderStatus}</span>
               ) : null}
-              {(isControlledMode || isFocusedMode || isHardMode) ? (
+              {(isControlledMode || isDiagnosticMode || isHardMode) ? (
                 <button
                   type="button"
                   className="exam-header-utility-button"
@@ -3795,7 +3665,7 @@ function ExamSessionPage() {
           </div>
           {!isOperationalMode ? (
             <div
-              className={isControlledMode ? "exam-inline-mode-strip controlled" : isFocusedMode ? "exam-inline-mode-strip focused" : "exam-inline-mode-strip hard"}
+              className={isControlledMode ? "exam-inline-mode-strip controlled" : isDiagnosticMode ? "exam-inline-mode-strip focused" : "exam-inline-mode-strip hard"}
               aria-label="Execution mode strip"
             >
               <div className="exam-inline-mode-strip-signals">

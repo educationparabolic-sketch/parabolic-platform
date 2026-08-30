@@ -337,7 +337,70 @@ test(
       licenseSnapshot: {currentLayer: "L1"},
       mode: "Operational",
       phaseConfigSnapshot: {phase1Percent: 100},
+      questionTimeMap: {
+        question_bwm_018_entry: expectedQuestionTime("easy"),
+      },
       runId: context.runId,
+      runtimeSnapshot: {
+        difficultyDistribution: {
+          easyPercent: 100,
+          hardPercent: 0,
+          mediumPercent: 0,
+        },
+        hardModeRevisitRestricted: false,
+        license: {
+          currentLayer: "L1",
+          eligibilityFlags: {},
+          featureFlags: {},
+        },
+        mode: "Operational",
+        phaseConfigSnapshot: {
+          bufferPercent: 0,
+          phase1Percent: 100,
+          phase2Percent: 0,
+          phase3Percent: 0,
+        },
+        proctoringPolicy: {
+          browserIntegrityGuardEnabled: false,
+          faceIdentityGazeGuardEnabled: false,
+        },
+        questionSetVersion: "1",
+        questions: [{
+          difficulty: "easy",
+          id: "question_bwm_018_entry",
+          imageUrl: "questions/question_bwm_018_entry/v1/question.png",
+          matrixColumns: [],
+          matrixRows: [],
+          media: null,
+          number: 1,
+          options: [
+            {id: "A", label: "A", text: ""},
+            {id: "B", label: "B", text: ""},
+          ],
+          section: "Physics",
+          text: "Refer to the question image.",
+          type: "mcq",
+        }],
+        schedule: {
+          durationMs: 3_600_000,
+          earlyEntryBufferMinutes: 0,
+          earlyEntryOpensAt: "2026-08-29T08:00:00.000Z",
+          sessionEndsAt: "2026-08-29T09:00:00.000Z",
+          sessionStartsAt: "2026-08-29T08:00:00.000Z",
+          timezone: "UTC",
+        },
+        sessionId: context.sessionId,
+        subjects: ["Physics"],
+        timingProfile: {
+          controlledSlowdownSeconds: 12,
+          finalWindowMinutes: 10,
+          hardModeRestrictSubmitUntilAllVisited: true,
+          hardModeSequentialNavigation: true,
+          maxTimeByDifficultySec: {easy: 60, hard: 210, medium: 150},
+          minTimeByDifficultySec: {easy: 30, hard: 150, medium: 60},
+          syncEveryMs: 10_000,
+        },
+      },
       sessionId: context.sessionId,
       sessionTokenHash: launchCredentialHash,
       status: "created",
@@ -398,6 +461,140 @@ test(
     } finally {
       await deleteDocumentIfPresent(sessionPath);
     }
+  },
+);
+
+test(
+  "startSession freezes distinct candidate-safe runtime snapshots with exact timing ids",
+  async () => {
+    const sessionService = createSessionServiceForTests();
+    const instituteId = "inst_bwm_019_runtime_snapshots";
+    const yearId = "2026";
+    const studentId = "student_bwm_019_runtime_snapshots";
+    const institutePath = `institutes/${instituteId}`;
+    const studentPath = `${institutePath}/students/${studentId}`;
+    const licensePath = `${institutePath}/license/main`;
+    const questionIds = ["question_bwm_019_alpha", "question_bwm_019_beta"];
+    const runIds = ["run_bwm_019_alpha", "run_bwm_019_beta"];
+    const questionPaths = questionIds.map((questionId) =>
+      `${institutePath}/questionBank/${questionId}`);
+    const runPaths = runIds.map((runId) =>
+      `${institutePath}/academicYears/${yearId}/runs/${runId}`);
+
+    await firestore.doc(institutePath).set({instituteId});
+    await seedAcademicYear(instituteId, yearId);
+    await firestore.doc(studentPath).set({status: "active", studentId});
+    await firestore.doc(licensePath).set({
+      currentLayer: "L1",
+      eligibilityFlags: {diagnosticEligible: true},
+      featureFlags: {browserRuntime: true},
+    });
+    await Promise.all(questionPaths.map((questionPath, index) =>
+      firestore.doc(questionPath).set({
+        correctAnswer: index === 0 ? "A" : "B",
+        difficulty: index === 0 ? "Easy" : "Hard",
+        internalNotes: `private-note-${index}`,
+        options: [
+          {correct: index === 0, id: "A", label: "A", text: `Alpha ${index}`},
+          {correct: index === 1, id: "B", label: "B", text: `Beta ${index}`},
+        ],
+        prompt: `Authoritative prompt ${index + 1}`,
+        questionId: questionIds[index],
+        questionImageUrl: `questions/${questionIds[index]}/v1/question.png`,
+        questionType: "MCQ",
+        solutionImageUrl: `questions/${questionIds[index]}/v1/solution.png`,
+        subject: index === 0 ? "Physics" : "Mathematics",
+      })));
+    await Promise.all(runPaths.map((runPath, index) =>
+      firestore.doc(runPath).set({
+        calibrationVersion: `cal_bwm_019_${index}`,
+        endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
+        mode: "Diagnostic",
+        phaseConfigSnapshot: {
+          phase1Percent: 40,
+          phase2Percent: 45,
+          phase3Percent: 15,
+        },
+        proctoringPolicy: {
+          browserIntegrityGuardEnabled: index === 1,
+          faceIdentityGazeGuardEnabled: false,
+        },
+        questionIds: [questionIds[index]],
+        recipientStudentIds: [studentId],
+        riskModelVersion: "risk_v3",
+        runId: runIds[index],
+        startWindow: Timestamp.fromMillis(Date.now() - 5 * 60 * 1000),
+        status: "scheduled",
+        templateVersion: index + 1,
+        timezone: "Asia/Kolkata",
+        timingProfileSnapshot: timingProfileSnapshotFixture,
+      })));
+
+    const results = await Promise.all(runIds.map((runId) =>
+      sessionService.startSession({
+        instituteId,
+        intent: "start",
+        licenseLayer: "L1",
+        runId,
+        studentId,
+        studentUid: `uid_${studentId}`,
+      })));
+    const sessionDocuments = await Promise.all(results.map((result) =>
+      firestore.doc(result.sessionPath).get()));
+    const runtimeSnapshots = sessionDocuments.map((snapshot) =>
+      snapshot.data()?.runtimeSnapshot as Record<string, unknown>);
+    assert.notDeepEqual(runtimeSnapshots[0], runtimeSnapshots[1]);
+    assert.deepEqual(
+      (runtimeSnapshots[0].questions as Array<{id: string}>).map((question) =>
+        question.id),
+      [questionIds[0]],
+    );
+    assert.deepEqual(
+      (runtimeSnapshots[1].questions as Array<{id: string}>).map((question) =>
+        question.id),
+      [questionIds[1]],
+    );
+    sessionDocuments.forEach((snapshot, index) => {
+      const sessionData = snapshot.data();
+      const runtimeQuestionIds = (
+        sessionData?.runtimeSnapshot.questions as Array<{id: string}>
+      ).map((question) => question.id);
+      assert.deepEqual(runtimeQuestionIds, Object.keys(sessionData?.questionTimeMap));
+      assert.equal(sessionData?.runtimeSnapshot.questionSetVersion, String(index + 1));
+      const serializedRuntime = JSON.stringify(sessionData?.runtimeSnapshot);
+      assert.doesNotMatch(
+        serializedRuntime,
+        /correctAnswer|solutionImageUrl|internalNotes|"correct"/i,
+      );
+    });
+
+    const frozenRuntimeSnapshot = runtimeSnapshots[0];
+    await firestore.doc(questionPaths[0]).update({
+      correctAnswer: "D",
+      prompt: "Mutated after session start",
+      solutionImageUrl: "questions/mutated/solution.png",
+    });
+    const resumed = await sessionService.startSession({
+      instituteId,
+      intent: "resume",
+      licenseLayer: "L1",
+      runId: runIds[0],
+      studentId,
+      studentUid: `uid_${studentId}`,
+    });
+    assert.equal(resumed.disposition, "resumed");
+    assert.deepEqual(
+      (await firestore.doc(results[0].sessionPath).get()).data()?.runtimeSnapshot,
+      frozenRuntimeSnapshot,
+    );
+
+    await Promise.all(results.map((result) =>
+      deleteDocumentIfPresent(result.sessionPath)));
+    await Promise.all(runPaths.map(deleteDocumentIfPresent));
+    await Promise.all(questionPaths.map(deleteDocumentIfPresent));
+    await deleteDocumentIfPresent(licensePath);
+    await deleteDocumentIfPresent(studentPath);
+    await deleteDocumentIfPresent(institutePath);
   },
 );
 

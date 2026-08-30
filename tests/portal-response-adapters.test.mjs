@@ -774,6 +774,109 @@ test("Student exam launch adapter requires a matching absolute credential URL", 
   );
 });
 
+test("Exam entry adapter accepts only an aligned candidate-safe runtime snapshot", () => {
+  const entry = {
+    allowed: true,
+    instituteId: "inst-001",
+    runId: "run-001",
+    runtimeSnapshot: {
+      difficultyDistribution: {
+        easyPercent: 100,
+        hardPercent: 0,
+        mediumPercent: 0,
+      },
+      hardModeRevisitRestricted: false,
+      license: {
+        currentLayer: "L1",
+        eligibilityFlags: {diagnosticEligible: true},
+        featureFlags: {},
+      },
+      mode: "Diagnostic",
+      phaseConfigSnapshot: {
+        bufferPercent: 0,
+        phase1Percent: 40,
+        phase2Percent: 45,
+        phase3Percent: 15,
+      },
+      proctoringPolicy: {
+        browserIntegrityGuardEnabled: false,
+        faceIdentityGazeGuardEnabled: false,
+      },
+      questionSetVersion: "3",
+      questions: [{
+        difficulty: "easy",
+        id: "question-001",
+        imageUrl: "inst-001/questions/question-001/v1/question.png",
+        matrixColumns: [],
+        matrixRows: [],
+        media: null,
+        number: 1,
+        options: [
+          {id: "A", label: "A", text: ""},
+          {id: "B", label: "B", text: ""},
+        ],
+        section: "Physics",
+        text: "Refer to the question image.",
+        type: "mcq",
+      }],
+      schedule: {
+        durationMs: 3_600_000,
+        earlyEntryBufferMinutes: 0,
+        earlyEntryOpensAt: "2026-08-29T08:00:00.000Z",
+        sessionEndsAt: "2026-08-29T09:00:00.000Z",
+        sessionStartsAt: "2026-08-29T08:00:00.000Z",
+        timezone: "UTC",
+      },
+      sessionId: "session-001",
+      subjects: ["Physics"],
+      timingProfile: {
+        controlledSlowdownSeconds: 12,
+        finalWindowMinutes: 10,
+        hardModeRestrictSubmitUntilAllVisited: true,
+        hardModeSequentialNavigation: true,
+        maxTimeByDifficultySec: {easy: 60, hard: 210, medium: 150},
+        minTimeByDifficultySec: {easy: 30, hard: 150, medium: 60},
+        syncEveryMs: 10_000,
+      },
+    },
+    sessionId: "session-001",
+    status: "created",
+    studentId: "student-001",
+    yearId: "2026",
+  };
+
+  assert.deepEqual(adapters.adaptExamSessionEntryResult(entry), entry);
+  assert.throws(
+    () => adapters.adaptExamSessionEntryResult({
+      ...entry,
+      runtimeSnapshot: {
+        ...entry.runtimeSnapshot,
+        questions: [{
+          ...entry.runtimeSnapshot.questions[0],
+          correctAnswer: "A",
+        }],
+      },
+    }),
+    {
+      name: "PortalResponseValidationError",
+      route: "POST /exam/session/{sessionId}/entry",
+    },
+  );
+  assert.throws(
+    () => adapters.adaptExamSessionEntryResult({
+      ...entry,
+      runtimeSnapshot: {
+        ...entry.runtimeSnapshot,
+        sessionId: "session-other",
+      },
+    }),
+    {
+      name: "PortalResponseValidationError",
+      route: "POST /exam/session/{sessionId}/entry",
+    },
+  );
+});
+
 test("Exam adapter accepts the real submission result and rejects envelope/data drift", () => {
   const backendEnvelope = buildSubmissionSuccessResponse(
     {
@@ -1007,6 +1110,10 @@ test("representative production callers invoke their portal adapters", async () 
       "utf8",
     ),
     readFile(
+      join(rootDirectory, "apps/exam/src/ExamRuntimeApp.tsx"),
+      "utf8",
+    ),
+    readFile(
       join(
         rootDirectory,
         "apps/vendor/src/features/calibration/vendorCalibrationDataset.ts",
@@ -1026,6 +1133,7 @@ test("representative production callers invoke their portal adapters", async () 
     "adaptAdminRunListResult",
     "adaptAdminRunDetailResult",
     "adaptStudentSummaryResult",
+    "adaptExamSessionEntryResult",
     "adaptExamSubmitResult",
     "adaptVendorCalibrationPushResult",
   ].entries()) {

@@ -17,6 +17,33 @@ test("Exam runtime exchanges and removes launch credentials before ID-token APIs
   assert.doesNotMatch(source, /token\/refresh/u);
   assert.doesNotMatch(source, /Authorization: `Bearer \$\{launchCredential\}`/u);
   assert.doesNotMatch(source, /skipAuth: true/u);
+  assert.match(source, /adaptExamSessionEntryResult/u);
+  assert.match(source, /setSessionSnapshot\(responseBody\.runtimeSnapshot\)/u);
+  assert.doesNotMatch(source, /function buildSessionSnapshot/u);
+  assert.doesNotMatch(source, /inst-build-135|year-build-135|run-build-135/u);
+});
+
+test("Exam production runtime consumes the authoritative sanitized entry snapshot", async () => {
+  const source = await readFile(runtimePath, "utf8");
+  const entryHandler = await readFile(
+    new URL("../functions/src/api/examSessionEntry.ts", import.meta.url),
+    "utf8",
+  );
+  const sessionService = await readFile(
+    new URL("../functions/src/services/session.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(source, /responseBody\.runtimeSnapshot\.questions/u);
+  assert.match(source, /responseBody\.runtimeSnapshot\.timingProfile/u);
+  assert.match(source, /toExamSessionSchedule\(sessionSnapshot\)/u);
+  assert.match(source, /sessionSnapshot\.proctoringPolicy/u);
+  assert.match(entryHandler, /runtimeSnapshot: result\.runtimeSnapshot/u);
+  assert.doesNotMatch(entryHandler, /licenseSnapshot: result\.licenseSnapshot/u);
+  assert.doesNotMatch(entryHandler, /templateSnapshot: result\.templateSnapshot/u);
+  assert.match(sessionService, /buildCandidateSafeRuntimeQuestion/u);
+  assert.match(sessionService, /runtime snapshot question ids must exactly match questionTimeMap ids/i);
+  assert.match(sessionService, /CANDIDATE_FORBIDDEN_RUNTIME_FIELDS/u);
 });
 
 test("Exam entry, answers, and submit handlers require session-bound Firebase identity", async () => {

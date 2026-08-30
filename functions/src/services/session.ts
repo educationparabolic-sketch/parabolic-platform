@@ -31,6 +31,10 @@ import {
   SessionTokenClaims,
 } from "../types/sessionStart";
 import {DEFAULT_RISK_MODEL_VERSION} from "../types/riskEngine";
+import type {
+  ExamRuntimeQuestion,
+  ExamRuntimeSnapshot,
+} from "../../../shared/contracts/apiDtos";
 
 const INSTITUTES_COLLECTION = "institutes";
 const ACADEMIC_YEARS_COLLECTION = "academicYears";
@@ -47,6 +51,20 @@ const CURRENT_YEAR_STATUS_PRIORITY = new Map([
   ["scheduled", 2],
 ]);
 const MAX_LAUNCH_CREDENTIAL_HASHES = 5;
+const DEFAULT_RUNTIME_FINAL_WINDOW_MINUTES = 10;
+const DEFAULT_RUNTIME_SYNC_EVERY_MS = 10_000;
+const DEFAULT_RUNTIME_CONTROLLED_SLOWDOWN_SECONDS = 12;
+const CANDIDATE_FORBIDDEN_RUNTIME_FIELDS = new Set([
+  "answer",
+  "answerkey",
+  "correctanswer",
+  "correct",
+  "internalnotes",
+  "iscorrect",
+  "solution",
+  "solutionimageurl",
+  "solutionpdfurl",
+]);
 const ALLOWED_MODES_BY_LAYER: Record<
   SessionStartContext["licenseLayer"],
   SessionExecutionMode[]
@@ -487,7 +505,9 @@ const normalizeSessionExecutionMode = (
 const normalizeVersionString = (
   value: unknown,
   fieldName: string,
-): string => normalizeRequiredString(value, fieldName);
+): string => Number.isInteger(value) && (value as number) > 0 ?
+  String(value) :
+  normalizeRequiredString(value, fieldName);
 
 const normalizeSnapshotObject = (
   value: unknown,
@@ -557,6 +577,471 @@ const buildTemplateSnapshot = (
   }
 
   return snapshot;
+};
+
+const normalizeRuntimeOptionalString = (value: unknown): string =>
+  typeof value === "string" ? value.trim() : "";
+
+const normalizeRuntimePositiveNumber = (
+  value: unknown,
+  fallback: number,
+  fieldName: string,
+): number => {
+  if (value === undefined || value === null || value === "") {
+    return fallback;
+  }
+  if (!Number.isFinite(value) || (value as number) <= 0) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Run field "${fieldName}" must be a positive number.`,
+    );
+  }
+  return Number(value);
+};
+
+const normalizeRuntimeNonNegativeInteger = (
+  value: unknown,
+  fallback: number,
+  fieldName: string,
+): number => value === undefined ? fallback :
+  normalizeNonNegativeInteger(value, fieldName);
+
+const normalizeRuntimeQuestionType = (
+  value: unknown,
+): ExamRuntimeQuestion["type"] => {
+  if (value === undefined || value === null || value === "") {
+    return "mcq";
+  }
+  const normalized = normalizeRequiredString(value, "question.questionType")
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+  if (["mcq", "multiplechoice", "singlechoice"].includes(normalized)) {
+    return "mcq";
+  }
+  if (["numeric", "numerical", "number"].includes(normalized)) {
+    return "numeric";
+  }
+  if (["matrix", "matrixmatch", "matching"].includes(normalized)) {
+    return "matrix";
+  }
+  throw new SessionStartValidationError(
+    "VALIDATION_ERROR",
+    `Question type "${String(value)}" is not supported by the Exam runtime.`,
+  );
+};
+
+const normalizeRuntimeStringList = (
+  value: unknown,
+  fieldName: string,
+): string[] => {
+  if (value === undefined || value === null) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Question field "${fieldName}" must be an array.`,
+    );
+  }
+  const normalized = value.map((entry, index) =>
+    normalizeRequiredString(entry, `${fieldName}[${index}]`));
+  if (new Set(normalized).size !== normalized.length) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Question field "${fieldName}" must contain unique values.`,
+    );
+  }
+  return normalized;
+};
+
+const normalizeRuntimeQuestionOptions = (
+  questionData: FirebaseFirestore.DocumentData,
+  questionType: ExamRuntimeQuestion["type"],
+): ExamRuntimeQuestion["options"] => {
+  const source = questionData.responseOptions ?? questionData.options;
+  if (source === undefined || source === null) {
+    return questionType === "mcq" ? ["A", "B", "C", "D"].map((label) => ({
+      id: label,
+      label,
+      text: "",
+    })) : [];
+  }
+  if (!Array.isArray(source)) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      "Question field \"responseOptions\" must be an array.",
+    );
+  }
+  const options = source.map((entry, index) => {
+    if (typeof entry === "string") {
+      const label = normalizeRequiredString(entry, `responseOptions[${index}]`);
+      return {id: label, label, text: ""};
+    }
+    if (!isPlainObject(entry)) {
+      throw new SessionStartValidationError(
+        "VALIDATION_ERROR",
+        `Question field "responseOptions[${index}]" must be a string or object.`,
+      );
+    }
+    const id = normalizeRequiredString(
+      entry.id ?? entry.value ?? entry.label,
+      `responseOptions[${index}].id`,
+    );
+    return {
+      id,
+      label: normalizeRuntimeOptionalString(entry.label) || id,
+      text: normalizeRuntimeOptionalString(entry.text),
+    };
+  });
+  if (new Set(options.map((option) => option.id)).size !== options.length) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      "Question response option ids must be unique.",
+    );
+  }
+  if (questionType === "mcq" && options.length < 2) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      "MCQ questions require at least two response options.",
+    );
+  }
+  return options;
+};
+
+const normalizeRuntimeQuestionMedia = (
+  value: unknown,
+): ExamRuntimeQuestion["media"] => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (!isPlainObject(value)) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      "Question field \"questionMedia\" must be an object.",
+    );
+  }
+  const type = normalizeRequiredString(value.type, "questionMedia.type")
+    .toLowerCase();
+  if (type !== "audio" && type !== "video") {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      "Question media type must be audio or video.",
+    );
+  }
+  return {
+    title: normalizeRequiredString(value.title, "questionMedia.title"),
+    type,
+    url: normalizeRequiredString(value.url, "questionMedia.url"),
+  };
+};
+
+const buildCandidateSafeRuntimeQuestion = (
+  questionId: string,
+  questionData: FirebaseFirestore.DocumentData,
+  number: number,
+): ExamRuntimeQuestion => {
+  const payloadQuestionId = normalizeRuntimeOptionalString(questionData.questionId);
+  if (payloadQuestionId && payloadQuestionId !== questionId) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Question payload id does not match questionBank document "${questionId}".`,
+    );
+  }
+  const type = normalizeRuntimeQuestionType(questionData.questionType);
+  const section = normalizeRuntimeOptionalString(questionData.subject) || "General";
+  const imageUrl = normalizeRuntimeOptionalString(questionData.questionImageUrl);
+  const explicitText = [
+    questionData.prompt,
+    questionData.questionText,
+    questionData.stem,
+  ].map(normalizeRuntimeOptionalString).find(Boolean);
+  const metadataText = [
+    normalizeRuntimeOptionalString(questionData.subject),
+    normalizeRuntimeOptionalString(questionData.chapter),
+    normalizeRuntimeOptionalString(questionData.questionType),
+  ].filter(Boolean).join(" · ");
+  const matrixRows = normalizeRuntimeStringList(
+    questionData.matrixRows,
+    "matrixRows",
+  );
+  const matrixColumns = normalizeRuntimeStringList(
+    questionData.matrixColumns,
+    "matrixColumns",
+  );
+  if (type === "matrix" && (matrixRows.length === 0 || matrixColumns.length === 0)) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Matrix question "${questionId}" requires matrixRows and matrixColumns.`,
+    );
+  }
+  return {
+    difficulty: normalizeQuestionDifficulty(
+      questionData.difficulty,
+      `questionBank.${questionId}.difficulty`,
+    ),
+    id: questionId,
+    imageUrl,
+    matrixColumns,
+    matrixRows,
+    media: normalizeRuntimeQuestionMedia(questionData.questionMedia),
+    number,
+    options: normalizeRuntimeQuestionOptions(questionData, type),
+    section,
+    text: explicitText || (imageUrl ? "Refer to the question image." : metadataText || questionId),
+    type,
+  };
+};
+
+const normalizeRuntimePercent = (
+  value: unknown,
+  fieldName: string,
+): number => {
+  if (!Number.isFinite(value) || (value as number) < 0 || (value as number) > 100) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      `Run field "${fieldName}" must be between 0 and 100.`,
+    );
+  }
+  return Number(value);
+};
+
+const buildSessionRuntimeSnapshot = (input: {
+  licenseSnapshot: Record<string, unknown>;
+  mode: SessionExecutionMode;
+  phaseConfigSnapshot: Record<string, unknown>;
+  questionIds: string[];
+  questionSnapshots: FirebaseFirestore.DocumentSnapshot[];
+  runData: FirebaseFirestore.DocumentData;
+  sessionId: string;
+  templateVersion: string;
+  timingProfileSnapshot: SessionTimingProfileSnapshot;
+}): ExamRuntimeSnapshot => {
+  const questionsById = new Map(input.questionSnapshots.map((snapshot) => [
+    snapshot.id,
+    snapshot,
+  ]));
+  const orderedQuestionIds = input.runData.shuffleQuestionOrder === true ?
+    [...input.questionIds].sort((left, right) =>
+      createHash("sha256").update(`${input.sessionId}:${left}`).digest("hex")
+        .localeCompare(
+          createHash("sha256").update(`${input.sessionId}:${right}`).digest("hex"),
+        )) :
+    input.questionIds;
+  const questions = orderedQuestionIds.map((questionId, index) => {
+    const snapshot = questionsById.get(questionId);
+    if (!snapshot?.exists) {
+      throw new SessionStartValidationError(
+        "VALIDATION_ERROR",
+        `Run references missing questionBank document "${questionId}".`,
+      );
+    }
+    return buildCandidateSafeRuntimeQuestion(
+      questionId,
+      snapshot.data() ?? {},
+      index + 1,
+    );
+  });
+  const phase1Percent = normalizeRuntimePercent(
+    input.phaseConfigSnapshot.phase1Percent,
+    "phaseConfigSnapshot.phase1Percent",
+  );
+  const phase2Percent = normalizeRuntimePercent(
+    input.phaseConfigSnapshot.phase2Percent,
+    "phaseConfigSnapshot.phase2Percent",
+  );
+  const phase3Percent = normalizeRuntimePercent(
+    input.phaseConfigSnapshot.phase3Percent,
+    "phaseConfigSnapshot.phase3Percent",
+  );
+  const configuredPhasePercent = phase1Percent + phase2Percent + phase3Percent;
+  if (configuredPhasePercent > 100) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      "Run phase percentages must not exceed 100 in total.",
+    );
+  }
+  const startWindow = normalizeRunWindowTimestamp(
+    input.runData.startWindow,
+    "run.startWindow",
+  );
+  const endWindow = normalizeRunWindowTimestamp(
+    input.runData.endWindow,
+    "run.endWindow",
+  );
+  const earlyEntryBufferMinutes = normalizeRuntimeNonNegativeInteger(
+    input.runData.earlyEntryBufferMinutes,
+    0,
+    "earlyEntryBufferMinutes",
+  );
+  const difficultyCounts = questions.reduce<Record<ExamRuntimeQuestion["difficulty"], number>>(
+    (counts, question) => ({
+      ...counts,
+      [question.difficulty]: counts[question.difficulty] + 1,
+    }),
+    {easy: 0, hard: 0, medium: 0},
+  );
+  const toPercent = (count: number): number =>
+    Number(((count / questions.length) * 100).toFixed(4));
+  const licenseCurrentLayer = normalizeLicenseLayer(
+    input.licenseSnapshot.currentLayer,
+  );
+  const proctoringPolicy = isPlainObject(input.runData.proctoringPolicy) ?
+    input.runData.proctoringPolicy : {};
+
+  return {
+    difficultyDistribution: {
+      easyPercent: toPercent(difficultyCounts.easy),
+      hardPercent: toPercent(difficultyCounts.hard),
+      mediumPercent: toPercent(difficultyCounts.medium),
+    },
+    hardModeRevisitRestricted: input.mode === "Hard",
+    license: {
+      currentLayer: licenseCurrentLayer,
+      eligibilityFlags: normalizeBooleanFlagMap(
+        input.licenseSnapshot.eligibilityFlags,
+      ),
+      featureFlags: normalizeBooleanFlagMap(input.licenseSnapshot.featureFlags),
+    },
+    mode: input.mode,
+    phaseConfigSnapshot: {
+      bufferPercent: 100 - configuredPhasePercent,
+      phase1Percent,
+      phase2Percent,
+      phase3Percent,
+    },
+    proctoringPolicy: {
+      browserIntegrityGuardEnabled:
+        proctoringPolicy.browserIntegrityGuardEnabled === true,
+      faceIdentityGazeGuardEnabled:
+        proctoringPolicy.faceIdentityGazeGuardEnabled === true,
+    },
+    questionSetVersion: input.templateVersion,
+    questions,
+    schedule: {
+      durationMs: endWindow.toMillis() - startWindow.toMillis(),
+      earlyEntryBufferMinutes,
+      earlyEntryOpensAt: new Date(
+        startWindow.toMillis() - earlyEntryBufferMinutes * 60_000,
+      ).toISOString(),
+      sessionEndsAt: endWindow.toDate().toISOString(),
+      sessionStartsAt: startWindow.toDate().toISOString(),
+      timezone: normalizeRuntimeOptionalString(input.runData.timezone) || "UTC",
+    },
+    sessionId: input.sessionId,
+    subjects: Array.from(new Set(questions.map((question) => question.section))),
+    timingProfile: {
+      controlledSlowdownSeconds: normalizeRuntimePositiveNumber(
+        input.runData.controlledSlowdownSeconds,
+        DEFAULT_RUNTIME_CONTROLLED_SLOWDOWN_SECONDS,
+        "controlledSlowdownSeconds",
+      ),
+      finalWindowMinutes: normalizeRuntimePositiveNumber(
+        input.runData.finalWindowMinutes,
+        DEFAULT_RUNTIME_FINAL_WINDOW_MINUTES,
+        "finalWindowMinutes",
+      ),
+      hardModeRestrictSubmitUntilAllVisited:
+        input.runData.hardModeRestrictSubmitUntilAllVisited !== false,
+      hardModeSequentialNavigation:
+        input.runData.hardModeSequentialNavigation !== false,
+      maxTimeByDifficultySec: {
+        easy: input.timingProfileSnapshot.easy.max,
+        hard: input.timingProfileSnapshot.hard.max,
+        medium: input.timingProfileSnapshot.medium.max,
+      },
+      minTimeByDifficultySec: {
+        easy: input.timingProfileSnapshot.easy.min,
+        hard: input.timingProfileSnapshot.hard.min,
+        medium: input.timingProfileSnapshot.medium.min,
+      },
+      syncEveryMs: normalizeRuntimePositiveNumber(
+        input.runData.syncEveryMs,
+        DEFAULT_RUNTIME_SYNC_EVERY_MS,
+        "syncEveryMs",
+      ),
+    },
+  };
+};
+
+const assertCandidateSafeRuntimeSnapshot = (
+  value: unknown,
+  fieldName = "runtimeSnapshot",
+): void => {
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) =>
+      assertCandidateSafeRuntimeSnapshot(entry, `${fieldName}[${index}]`));
+    return;
+  }
+  if (!isPlainObject(value)) {
+    return;
+  }
+  for (const [key, entry] of Object.entries(value)) {
+    if (CANDIDATE_FORBIDDEN_RUNTIME_FIELDS.has(key.toLowerCase())) {
+      throw new SessionStartValidationError(
+        "VALIDATION_ERROR",
+        `Session field "${fieldName}.${key}" is not candidate-safe.`,
+      );
+    }
+    assertCandidateSafeRuntimeSnapshot(entry, `${fieldName}.${key}`);
+  }
+};
+
+const normalizeStoredRuntimeSnapshot = (
+  value: unknown,
+  sessionId: string,
+  questionTimeMap: unknown,
+): ExamRuntimeSnapshot => {
+  if (!isPlainObject(value)) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      "Session field \"runtimeSnapshot\" must be an object.",
+    );
+  }
+  assertCandidateSafeRuntimeSnapshot(value);
+  if (normalizeRequiredString(value.sessionId, "runtimeSnapshot.sessionId") !== sessionId) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      "Runtime snapshot sessionId does not match the session document.",
+    );
+  }
+  if (!Array.isArray(value.questions) || value.questions.length === 0) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      "Runtime snapshot must contain at least one question.",
+    );
+  }
+  const runtimeQuestionIds = value.questions.map((question, index) => {
+    if (!isPlainObject(question)) {
+      throw new SessionStartValidationError(
+        "VALIDATION_ERROR",
+        `Runtime snapshot question ${index + 1} must be an object.`,
+      );
+    }
+    return normalizeRequiredString(question.id, `runtimeSnapshot.questions[${index}].id`);
+  });
+  if (new Set(runtimeQuestionIds).size !== runtimeQuestionIds.length) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      "Runtime snapshot question ids must be unique.",
+    );
+  }
+  if (!isPlainObject(questionTimeMap)) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      "Session field \"questionTimeMap\" must be an object.",
+    );
+  }
+  const timingQuestionIds = Object.keys(questionTimeMap);
+  if (
+    runtimeQuestionIds.length !== timingQuestionIds.length ||
+    runtimeQuestionIds.some((questionId) => !Object.prototype.hasOwnProperty.call(questionTimeMap, questionId))
+  ) {
+    throw new SessionStartValidationError(
+      "VALIDATION_ERROR",
+      "Runtime snapshot question ids must exactly match questionTimeMap ids.",
+    );
+  }
+  return JSON.parse(JSON.stringify(value)) as ExamRuntimeSnapshot;
 };
 
 const normalizeRiskModelVersion = (value: unknown): string => {
@@ -977,20 +1462,36 @@ export class SessionService {
         )
       );
       const questionSnapshots = await transaction.getAll(...questionReferences);
+      const runtimeSnapshot = buildSessionRuntimeSnapshot({
+        licenseSnapshot,
+        mode,
+        phaseConfigSnapshot,
+        questionIds,
+        questionSnapshots,
+        runData,
+        sessionId,
+        templateVersion,
+        timingProfileSnapshot,
+      });
+      const questionSnapshotsById = new Map(questionSnapshots.map((snapshot) => [
+        snapshot.id,
+        snapshot,
+      ]));
       const questionTimeMap: SessionQuestionTimeMap = {};
 
-      questionSnapshots.forEach((questionSnapshot, index) => {
-        if (!questionSnapshot.exists) {
+      runtimeSnapshot.questions.forEach((runtimeQuestion) => {
+        const questionSnapshot = questionSnapshotsById.get(runtimeQuestion.id);
+        if (!questionSnapshot?.exists) {
           throw new SessionStartValidationError(
             "VALIDATION_ERROR",
             "Run references a question that does not exist in institute " +
-              `questionBank: "${questionIds[index]}".`,
+              `questionBank: "${runtimeQuestion.id}".`,
           );
         }
 
         const difficulty = normalizeQuestionDifficulty(
           questionSnapshot.data()?.difficulty,
-          `questionBank.${questionIds[index]}.difficulty`,
+          `questionBank.${runtimeQuestion.id}.difficulty`,
         );
         const timingWindow = timingProfileSnapshot[difficulty];
         const phaseTimingRules = buildQuestionPhaseTimingRuleSet(
@@ -1003,7 +1504,7 @@ export class SessionService {
           },
         );
 
-        questionTimeMap[questionIds[index]] = {
+        questionTimeMap[runtimeQuestion.id] = {
           bufferTimeSpent: 0,
           cumulativeTimeSpent: 0,
           enteredAt: null,
@@ -1029,6 +1530,7 @@ export class SessionService {
         phaseConfigSnapshot,
         questionTimeMap,
         riskModelVersion,
+        runtimeSnapshot,
         runId,
         sessionId,
         sessionTokenHash: launchCredentialHash,
@@ -1202,6 +1704,11 @@ export class SessionService {
         sessionData.templateSnapshot,
         "templateSnapshot",
       );
+      const runtimeSnapshot = normalizeStoredRuntimeSnapshot(
+        sessionData.runtimeSnapshot,
+        routeSessionId,
+        sessionData.questionTimeMap,
+      );
       const remainingCredentialHashes = storedLaunchCredentialHashes.filter(
         (credentialHash) => credentialHash !== launchCredentialHash,
       );
@@ -1229,6 +1736,7 @@ export class SessionService {
           dataTierPartitionService.buildExamOperationalDataAccessPolicy(sessionPath),
         phaseConfigSnapshot,
         runId,
+        runtimeSnapshot,
         sessionId: routeSessionId,
         sessionPath,
         status,
@@ -1493,6 +2001,7 @@ export class SessionService {
       phaseConfigSnapshot: context.phaseConfigSnapshot,
       questionTimeMap: context.questionTimeMap,
       riskModelVersion: context.riskModelVersion,
+      runtimeSnapshot: context.runtimeSnapshot,
       runId: context.runId,
       sessionId: context.sessionId,
       sessionTokenHash: context.sessionTokenHash,

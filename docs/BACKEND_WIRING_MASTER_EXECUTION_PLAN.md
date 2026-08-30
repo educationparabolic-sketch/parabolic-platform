@@ -15,13 +15,13 @@ program: backend-wiring-and-deployment-readiness
 program_status: IN_PROGRESS
 release_decision: NO_GO
 current_phase: 1
-current_task: BWM-019
-current_substep: BWM-019 — inspect runtime snapshot authority and production buildSessionSnapshot usage
-last_completed_task: BWM-018
-next_task: BWM-019
+current_task: BWM-020
+current_substep: BWM-020 — inspect current lifecycle and deadline authority before implementation
+last_completed_task: BWM-019
+next_task: BWM-020
 blocked_tasks: []
-last_updated: 2026-08-29
-last_update_summary: BWM-018 is VERIFIED. Student launch now exchanges the nested-claim Firebase custom token, removes it from URL/history before entry, atomically consumes the backend-issued credential exactly once, and uses refreshed session-bound Firebase ID tokens through the shared client for entry, answers, and submit. Expiry, replay, wrong-session, claim, identity, tenant, and license mismatches fail closed; the nonexistent custom refresh contract is retired. Unit, contract, real emulator, Chromium Hosting, and full aggregate verification passed. BWM-019 is READY; production remains NO_GO.
+last_updated: 2026-08-30
+last_update_summary: BWM-019 is VERIFIED. Session start now freezes an immutable candidate-safe runtime snapshot whose question IDs exactly match questionTimeMap; EXM-01 returns it through a strict shared DTO/adapter; and the Exam runtime consumes server question, schedule, mode, phase, timing, license, and proctoring authority. Correct answers, solutions, notes, analytics, and production demo snapshots are excluded. Focused contract, Firestore, Auth/Functions, no-mock Chromium, and full emulator aggregate verification passed. BWM-020 is READY; production remains NO_GO.
 ```
 
 Do not infer progress from old build numbers, UI completion labels, or visual verification artifacts. Only this checkpoint, the task registry, checked substeps, session log, and current repository evidence determine progress for this program.
@@ -270,8 +270,8 @@ The registry is the canonical order. Detailed cards below define scope and accep
 | BWM-016 | P0 | VERIFIED | BWM-015 | Student solutions, performance, and insights APIs |
 | BWM-017 | P0 | VERIFIED | BWM-014,BWM-015 | Compatible Exam start and resume contracts |
 | BWM-018 | P0 | VERIFIED | BWM-009,BWM-017 | Exam launch credential exchange and authenticated runtime |
-| BWM-019 | P0 | READY | BWM-012,BWM-013,BWM-018 | Authoritative sanitized Exam runtime snapshot |
-| BWM-020 | P0 | PLANNED | BWM-018,BWM-019 | Server-authoritative session lifecycle and deadline |
+| BWM-019 | P0 | VERIFIED | BWM-012,BWM-013,BWM-018 | Authoritative sanitized Exam runtime snapshot |
+| BWM-020 | P0 | READY | BWM-018,BWM-019 | Server-authoritative session lifecycle and deadline |
 | BWM-021 | P0 | PLANNED | BWM-019,BWM-020 | Correct answer DTO, clear semantics, and timing model |
 | BWM-022 | P0 | PLANNED | BWM-021 | Reliable batching, offline recovery, and full drain |
 | BWM-023 | P0 | PLANNED | BWM-020,BWM-022 | Idempotent server submission and response contract |
@@ -1675,14 +1675,32 @@ The registry is the canonical order. Detailed cards below define scope and accep
 
 ### BWM-019 — Authoritative Sanitized Runtime Snapshot
 
-- **Status:** `READY`
+- **Status:** `VERIFIED`
 - **Purpose:** Remove hardcoded questions, build IDs, schedule, phase, timing, and license data from real sessions.
 - **Work:** freeze sanitized question/options/assets and runtime metadata at start or expose a secured immutable snapshot read; exclude correct answers/solutions; consume every authoritative entry field in Exam; remove production `buildSessionSnapshot` usage.
 - **Acceptance:** Two different templates produce different server-driven exams; response IDs match backend `questionTimeMap`; no answer keys reach the browser.
+- **Substeps:**
+  - [x] Inspect session start/entry, assignment/template/question authority, current session persistence, Exam `buildSessionSnapshot` usage, strict-boundary patterns, and emulator/browser fixtures.
+  - [x] Define and freeze an immutable candidate-safe runtime snapshot whose ordered question IDs exactly match `questionTimeMap` and whose projection excludes answers, solutions, notes, and analytics.
+  - [x] Return the snapshot through a strict shared EXM-01 DTO/adapter and make the Exam runtime consume its question, schedule, mode, phase, timing, license, and proctoring authority.
+  - [x] Remove production `buildSessionSnapshot` use while retaining only the explicit development mock boundary.
+  - [x] Add permanent contract/emulator/browser proof for distinct templates, immutable content, exact ID alignment, server-driven rendering, and answer-key exclusion.
+  - [x] Run affected and aggregate verification, reconcile canonical contract/module/schema documentation, and close BWM-019 without beginning lifecycle/deadline work.
+- **Implemented files:** `functions/src/services/session.ts` builds, persists, validates, and reuses the immutable candidate-safe snapshot at first start; `functions/src/types/sessionStart.ts` and `functions/src/api/examSessionEntry.ts` carry only the strict public entry result. `shared/contracts/apiDtos.d.ts` and `shared/services/portalResponseAdapters.ts` define and recursively validate the runtime DTO while rejecting answer/solution/internal fields. `apps/exam/src/ExamRuntimeApp.tsx` resets and hydrates production state from EXM-01 authority, while `apps/exam/src/devMockSessionSnapshot.ts` is reachable only behind the direct Vite development guard. Service, handler, emulator, adapter, source-contract, and Chromium tests were extended for the new boundary.
+- **Security/data evidence:** The server projects only candidate-visible question identity, order, type, section, difficulty, prompt, options, and permitted media/assets together with version, subjects, mode, schedule, phase, timing, license, and proctoring metadata. Recursive validation rejects answer keys, correctness flags, solutions, solution assets, internal notes, and analytics. Runtime question IDs are unique and their set must equal the persisted `questionTimeMap`; source-question changes after first start cannot mutate the session snapshot.
+- **Verification evidence:** `npm --prefix functions run lint`, `npm --prefix functions run build`, `npm --prefix apps/exam run lint`, and `npm --prefix apps/exam run build` passed; the production artifact scan found no development question/prompt/build identifiers. The affected root contract command passed 7/7 files and `npm --prefix functions run test:ci:non-emulator` passed 47/47 selected files. The focused Firestore `sessionStart.test.js` suite passed 9/9; the dedicated Auth/Firestore/Functions `examStart.emulator.test.js` scenario passed 1/1; and `npm run test:exam-launch-auth:e2e` passed 1/1 without mocked network behavior. `npm run test:emulators:ci` passed all 10 explicit full-service suites, 2/2 Hosting browser smoke cases, and 65 Firestore-backed files with 205 assertions; all emulator ports were released. Final `git diff --check` passed.
+- **L5 staging/preview:** N/A — no deployment target, preview channel, public URL, secret, environment, Hosting rewrite, or release configuration changed.
+- **L6 production:** N/A — reserved for BWM-057; production remains untouched and `NO_GO`.
+- **Firebase CLI version:** `15.9.0`; Java `21.0.8`.
+- **Authorization/external mutations:** Verification used only the demo-project loopback Firebase emulators, headless Chromium, disposable cleaned Auth/Firestore data, ignored local artifacts, and Firebase CLI local state. The CLI's read-only demo-project metadata probe returned the expected authorization failure; no deployment, remote Firebase mutation, secret mutation, public endpoint, or production resource changed.
+- **Contract/schema changes:** EXM-01 now returns strict `ExamSessionEntryResult` authority including `runtimeSnapshot`; session records persist the immutable snapshot beside the exactly aligned `questionTimeMap`. Canonical route/export totals remain 35 routes (31 implemented, 3 incompatible, 0 missing, 1 intentionally retired) and 47 HTTP exports. No Firestore rule, index, or collection path changed.
+- **Verification notes:** The initial production build exposed that an indirect development guard still emitted a dev-fixture chunk, so the import was moved behind a direct `import.meta.env.DEV` guard and a clean rebuild plus artifact scan proved exclusion. The first browser expectation assumed the pre-BWM-020 local lobby even though the authoritative fixture's start time had passed; the test was corrected to assert the current fail-closed entry window and absence of premature question rendering, preserving lifecycle/deadline work for BWM-020.
+- **Residual risks:** BWM-020 retains authoritative activation/deadline state, BWM-021 through BWM-023 retain answer, batching, and submission hardening, and production remains `NO_GO`.
+- **Completed on:** 2026-08-30
 
 ### BWM-020 — Server-Authoritative Session Lifecycle and Deadline
 
-- **Status:** `PLANNED`
+- **Status:** `READY`
 - **Purpose:** Persist `created -> started -> active -> submitted/expired/terminated` transitions.
 - **Work:** add secured/idempotent activation; persist started/deadline timestamps; define server time/skew handling; make entry/resume state-aware; reject illegal transitions; stop using React state as lifecycle authority.
 - **Acceptance:** Firestore status becomes `active` before answers/submission, and expiry/illegal transition tests are deterministic.
@@ -2095,7 +2113,7 @@ operations_owner: TBD
 | Remaining Student solutions/performance/insights APIs are missing | Critical | BWM-016 | Resolved 2026-08-28 |
 | Exam custom token is sent where an ID token is required | Critical | BWM-017,BWM-018 | Open |
 | Exam lifecycle remains local while submission requires active backend state | Critical | BWM-020,BWM-023 | Open |
-| Exam uses hardcoded questions/schedule/build IDs | Critical | BWM-019 | Open |
+| Exam uses hardcoded questions/schedule/build IDs | Critical | BWM-019 | Closed |
 | Answer clear/timing/batch semantics can corrupt or omit data | Critical | BWM-021,BWM-022 | Open |
 | Production failures fall back to fixtures/fake success | Critical | BWM-007 | Resolved 2026-08-09 |
 | Admin/Vendor actions mutate React/localStorage only | High | BWM-026..BWM-041 | Open |
@@ -2258,6 +2276,15 @@ Never record only “tests passed.” Include exact commands and whether tests w
 ## Session Log
 
 Append newest entries at the top.
+
+### LOG-093 — 2026-08-30 — BWM-019 Authoritative Sanitized Runtime Snapshot
+
+- **Task:** Resume BWM-019 after interrupted work, inspect the accumulated implementation, finish only the immutable candidate-safe session snapshot and Exam consumer, run its complete verification ladder, reconcile canonical documentation, and stop before lifecycle/deadline changes.
+- **Outcome:** BWM-019 is `VERIFIED`. First start now freezes one server-owned runtime snapshot with ordered candidate-visible questions and complete runtime metadata; its unique question IDs exactly match `questionTimeMap`. EXM-01 exposes only a strict adapted entry result, and Exam production state is hydrated from that authority. Recursive forbidden-field guards exclude answers, solutions, notes, correctness, and analytics, while development fixtures are isolated from production output. BWM-020 is `READY`; production remains `NO_GO`.
+- **Validation performed:** Functions and Exam lint/build gates passed, including a clean production-artifact scan. Seven affected root contract files passed and Functions non-emulator CI passed 47/47 files. The focused Firestore suite passed 9/9, the real Auth/Firestore/Functions entry scenario passed 1/1, and the no-mock Chromium launch flow passed 1/1. The full emulator aggregate passed its 10 explicit service suites, 2/2 Hosting browser smoke cases, and 65 Firestore files with 205 assertions; all ports were released. Final `git diff --check` passed.
+- **Files changed:** Added strict shared runtime DTO/adapter validation; server snapshot projection, immutability, persistence, and membership checks; minimal EXM-01 output; authoritative Exam state hydration; dev-only mock isolation; permanent service/handler/emulator/contract/browser coverage; and reconciled API, inventory, module, schema, and execution-controller documentation.
+- **Cloud changes:** None. Verification used only demo-project loopback emulators, headless Chromium, disposable cleaned data, ignored artifacts, and Firebase CLI local state. No deployment, remote data mutation, secret, endpoint, or production resource changed.
+- **Next:** BWM-020 — inspect current entry, status transition, server timestamp, deadline, answer, submit, and resume authority, then implement only the server-authoritative lifecycle/deadline boundary.
 
 ### LOG-092 — 2026-08-29 — BWM-018 Exam Launch Credential Exchange and Runtime Auth
 

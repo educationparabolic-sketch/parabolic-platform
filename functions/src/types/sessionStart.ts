@@ -1,5 +1,6 @@
 import {ExamOperationalDataAccessPolicy} from "./dataTierPartition";
 import type {
+  ExamRuntimeSnapshot,
   StudentExamLaunchDisposition,
   StudentExamLaunchIntent,
   StudentExamSessionStatus,
@@ -60,6 +61,7 @@ export interface SessionDocumentInitializationContext {
   phaseConfigSnapshot: Record<string, unknown>;
   questionTimeMap: SessionQuestionTimeMap;
   riskModelVersion: string;
+  runtimeSnapshot: ExamRuntimeSnapshot;
   runId: string;
   sessionId: string;
   sessionTokenHash: string;
@@ -124,6 +126,7 @@ export interface SessionDocumentInitializationRecord {
   phaseConfigSnapshot: Record<string, unknown>;
   questionTimeMap: SessionQuestionTimeMap;
   riskModelVersion: string;
+  runtimeSnapshot: ExamRuntimeSnapshot;
   runId: string;
   sessionId: string;
   sessionTokenHash: string;
@@ -170,6 +173,7 @@ export interface SessionEntryValidationResult {
   operationalDataAccessPolicy: ExamOperationalDataAccessPolicy;
   phaseConfigSnapshot: Record<string, unknown>;
   runId: string;
+  runtimeSnapshot: ExamRuntimeSnapshot;
   sessionId: string;
   sessionPath: string;
   status: SessionStatus;
