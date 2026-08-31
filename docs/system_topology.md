@@ -174,6 +174,11 @@ Responsibilities:
 - scoring computation
 - discipline metrics
 - guess detection
+- server-deadline-derived manual/expiry disposition
+- atomic single-result persistence and exact retry/concurrency replay
+- immutable post-submission answer boundary
+
+The Exam client drains every pending answer before a manual request, then sends only institute, year, run, and claimed reason. The server validates that claim against the persisted deadline, owns the submitted timestamp and complete candidate-visible metrics, and makes parallel/repeated requests converge on the one stored result. Only the actual state transition triggers analytics; replay does not re-finalize the session.
 
 Submission triggers analytics pipelines.
 

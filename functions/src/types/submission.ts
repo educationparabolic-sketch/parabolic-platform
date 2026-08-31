@@ -1,4 +1,10 @@
 import {ExamOperationalDataAccessPolicy} from "./dataTierPartition";
+import type {
+  ExamSubmissionReason,
+  ExamSubmissionRiskState,
+  ExamSubmitRequestBody,
+  ExamSubmitResult,
+} from "../../../shared/contracts/apiDtos";
 
 export type SubmissionErrorCode =
   "FORBIDDEN" |
@@ -10,20 +16,12 @@ export type SubmissionErrorCode =
   "UNAUTHORIZED" |
   "VALIDATION_ERROR";
 
-export interface SubmissionContext {
-  instituteId: string;
-  runId: string;
+export interface SubmissionContext extends ExamSubmitRequestBody {
   sessionId: string;
   studentId: string;
-  yearId: string;
 }
 
-export type SubmissionRiskState =
-  "Stable" |
-  "Drift-Prone" |
-  "Impulsive" |
-  "Overextended" |
-  "Volatile";
+export type SubmissionRiskState = ExamSubmissionRiskState;
 
 export interface SubmissionMetrics {
   accuracyPercent: number;
@@ -53,14 +51,13 @@ export interface SubmissionMetrics {
 export interface SubmissionResult extends SubmissionMetrics {
   idempotent: boolean;
   sessionPath: string;
+  status: "submitted";
+  submissionReason: ExamSubmissionReason;
+  submittedAt: string;
 }
 
-export interface SubmissionResponseData {
-  accuracyPercent: number;
-  disciplineIndex: number;
+export interface SubmissionResponseData extends ExamSubmitResult {
   operationalDataAccessPolicy: ExamOperationalDataAccessPolicy;
-  rawScorePercent: number;
-  riskState: SubmissionRiskState;
 }
 
 export interface SubmissionSuccessResponse {

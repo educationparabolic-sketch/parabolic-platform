@@ -17,6 +17,7 @@ import type {
   ExamRuntimeSnapshot,
   ExamSessionActivationResult,
   ExamSessionEntryResult,
+  ExamSubmitResult,
   QuestionAssetUploadResult,
   QuestionBulkUploadResult,
   StudentDashboardRecentResult,
@@ -45,31 +46,7 @@ type StudentSummaryResource =
   | "insights"
   | "solutions";
 
-type ExamSubmissionRiskState =
-  | "Stable"
-  | "Drift-Prone"
-  | "Impulsive"
-  | "Overextended"
-  | "Volatile";
-
-type ExamSessionStatus =
-  | "created"
-  | "started"
-  | "active"
-  | "submitted"
-  | "expired"
-  | "terminated";
-
-export interface ExamSubmitAdapterResult {
-  accuracyPercent: number;
-  alreadySubmitted?: boolean;
-  disciplineIndex: number;
-  operationalDataAccessPolicy: Record<string, unknown>;
-  rawScorePercent: number;
-  riskState: ExamSubmissionRiskState;
-  status?: ExamSessionStatus;
-  submittedAt?: string;
-}
+export type ExamSubmitAdapterResult = ExamSubmitResult;
 
 const EXAM_RUNTIME_FORBIDDEN_FIELD_NAMES = new Set([
   "answer",
@@ -2653,42 +2630,41 @@ export function adaptExamSubmitResult(value: unknown): ExamSubmitAdapterResult {
     return fail(route, "riskState", "a supported submission risk state");
   }
 
-  const status = data.status;
-  if (
-    status !== undefined &&
-    status !== "created" &&
-    status !== "started" &&
-    status !== "active" &&
-    status !== "submitted" &&
-    status !== "expired" &&
-    status !== "terminated"
-  ) {
-    return fail(route, "status", "a supported session status");
-  }
-
-  const submittedAt = data.submittedAt;
-  if (submittedAt !== undefined && typeof submittedAt !== "string") {
-    return fail(route, "submittedAt", "a string when present");
-  }
-
-  const alreadySubmitted = data.alreadySubmitted;
-  if (alreadySubmitted !== undefined && typeof alreadySubmitted !== "boolean") {
-    return fail(route, "alreadySubmitted", "a boolean when present");
-  }
-
   return {
     accuracyPercent: readNumber(data.accuracyPercent, route, "accuracyPercent"),
+    alreadySubmitted: readBoolean(data.alreadySubmitted, route, "alreadySubmitted"),
     disciplineIndex: readNumber(data.disciplineIndex, route, "disciplineIndex"),
+    guessRatePercent: readNumber(data.guessRatePercent, route, "guessRatePercent"),
+    maxTimeViolationPercent: readNumber(
+      data.maxTimeViolationPercent,
+      route,
+      "maxTimeViolationPercent",
+    ),
+    minTimeViolationPercent: readNumber(
+      data.minTimeViolationPercent,
+      route,
+      "minTimeViolationPercent",
+    ),
     operationalDataAccessPolicy: readRecord(
       data.operationalDataAccessPolicy,
       route,
       "operationalDataAccessPolicy",
     ),
+    phaseAdherencePercent: readNumber(
+      data.phaseAdherencePercent,
+      route,
+      "phaseAdherencePercent",
+    ),
     rawScorePercent: readNumber(data.rawScorePercent, route, "rawScorePercent"),
     riskState,
-    ...(alreadySubmitted === undefined ? {} : {alreadySubmitted}),
-    ...(status === undefined ? {} : {status}),
-    ...(submittedAt === undefined ? {} : {submittedAt}),
+    status: readEnum(data.status, ["submitted"] as const, route, "status"),
+    submissionReason: readEnum(
+      data.submissionReason,
+      ["manual", "expiry"] as const,
+      route,
+      "submissionReason",
+    ),
+    submittedAt: readExamRuntimeIsoString(data.submittedAt, route, "submittedAt"),
   };
 }
 

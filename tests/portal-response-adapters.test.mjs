@@ -909,10 +909,19 @@ test("Exam adapter accepts the real submission result and rejects envelope/data 
   const backendEnvelope = buildSubmissionSuccessResponse(
     {
       accuracyPercent: 81,
+      guessRate: 12,
+      guessRatePercent: 12,
+      maxTimeViolationPercent: 4,
+      minTimeViolationPercent: 8,
+      phaseAdherencePercent: 91,
       disciplineIndex: 86,
+      idempotent: false,
       rawScorePercent: 74,
       riskState: "Stable",
       sessionPath: "institutes/inst-001/years/2026/sessions/session-001",
+      status: "submitted",
+      submissionReason: "manual",
+      submittedAt: "2026-08-08T15:29:59.000Z",
     },
     "req-exam-001",
     "2026-08-08T15:30:00.000Z",
@@ -923,6 +932,20 @@ test("Exam adapter accepts the real submission result and rejects envelope/data 
   assert.deepEqual(adapters.adaptExamSubmitResult(unwrapped), backendData);
   assert.throws(
     () => adapters.adaptExamSubmitResult({ data: backendData }),
+    {
+      name: "PortalResponseValidationError",
+      route: "POST /exam/session/{sessionId}/submit",
+    },
+  );
+  assert.throws(
+    () => adapters.adaptExamSubmitResult({...backendData, submittedAt: "invalid"}),
+    {
+      name: "PortalResponseValidationError",
+      route: "POST /exam/session/{sessionId}/submit",
+    },
+  );
+  assert.throws(
+    () => adapters.adaptExamSubmitResult({...backendData, alreadySubmitted: undefined}),
     {
       name: "PortalResponseValidationError",
       route: "POST /exam/session/{sessionId}/submit",

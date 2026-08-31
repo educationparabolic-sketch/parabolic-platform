@@ -118,6 +118,15 @@ const createStudentToken = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+const createExamStudentToken = (overrides: Record<string, unknown> = {}) =>
+  createStudentToken({
+    launchNonce: "launch_nonce_build_50",
+    runId: "run_build_50",
+    sessionId: "session_build_50",
+    yearId: "2026",
+    ...overrides,
+  });
+
 const createServiceToken = (overrides: Record<string, unknown> = {}) => ({
   instituteId: "inst_build_50",
   licenseLayer: "L0",
@@ -1407,7 +1416,7 @@ test("exam session answers handler accepts a valid request", async () => {
         },
       },
     }),
-    verifyIdToken: async () => createStudentToken() as never,
+    verifyIdToken: async () => createExamStudentToken() as never,
   });
   const response = createMockResponse();
 
@@ -1454,7 +1463,7 @@ test("exam session answers handler rejects invalid payloads", async () => {
     persistIncrementalAnswers: async () => {
       throw new Error("persistIncrementalAnswers should not be called");
     },
-    verifyIdToken: async () => createStudentToken() as never,
+    verifyIdToken: async () => createExamStudentToken() as never,
   });
   const response = createMockResponse();
 
@@ -1492,7 +1501,7 @@ test("exam session answers handler rejects cross-tenant access", async () => {
       throw new Error("persistIncrementalAnswers should not be called");
     },
     verifyIdToken: async () =>
-      createStudentToken({instituteId: "inst_other_build_50"}) as never,
+      createExamStudentToken({instituteId: "inst_other_build_50"}) as never,
   });
   const response = createMockResponse();
 
@@ -1540,8 +1549,11 @@ test("exam session submit handler accepts a valid request", async () => {
         "institutes/inst_build_50/academicYears/2026/runs/run_build_50/" +
         "sessions/session_build_50",
       skipBurstCount: 0,
+      status: "submitted",
+      submissionReason: "manual",
+      submittedAt: "2026-08-31T10:00:00.000Z",
     }),
-    verifyIdToken: async () => createStudentToken() as never,
+    verifyIdToken: async () => createExamStudentToken() as never,
   });
   const response = createMockResponse();
 
@@ -1549,6 +1561,7 @@ test("exam session submit handler accepts a valid request", async () => {
     createMockRequest({
       body: {
         instituteId: "inst_build_50",
+        reason: "manual",
         runId: "run_build_50",
         yearId: "2026",
       },
@@ -1568,13 +1581,73 @@ test("exam session submit handler accepts a valid request", async () => {
   );
 });
 
+test("exam session submit handler enforces the exact reason-bound request", async () => {
+  let submitCallCount = 0;
+  const handler = createExamSessionSubmitHandler({
+    submitSession: async () => {
+      submitCallCount += 1;
+      throw new Error("submitSession should not be called");
+    },
+    verifyIdToken: async () => createExamStudentToken() as never,
+  });
+  const missingReasonResponse = createMockResponse();
+
+  await handler(
+    createMockRequest({
+      body: {
+        instituteId: "inst_build_50",
+        runId: "run_build_50",
+        yearId: "2026",
+      },
+      headers: {
+        authorization: "Bearer build_50_submit_missing_reason",
+      },
+      path: "/exam/session/session_build_50/submit",
+    }) as never,
+    missingReasonResponse as never,
+  );
+
+  assert.equal(missingReasonResponse.statusCode, 400);
+  assertStructuredError(
+    missingReasonResponse.body,
+    "VALIDATION_ERROR",
+    "Field \"reason\" must be manual or expiry.",
+  );
+
+  const legacyFieldResponse = createMockResponse();
+  await handler(
+    createMockRequest({
+      body: {
+        clientSubmittedAt: "2026-08-31T10:00:00.000Z",
+        instituteId: "inst_build_50",
+        reason: "manual",
+        runId: "run_build_50",
+        yearId: "2026",
+      },
+      headers: {
+        authorization: "Bearer build_50_submit_legacy_field",
+      },
+      path: "/exam/session/session_build_50/submit",
+    }) as never,
+    legacyFieldResponse as never,
+  );
+
+  assert.equal(legacyFieldResponse.statusCode, 400);
+  assertStructuredError(
+    legacyFieldResponse.body,
+    "VALIDATION_ERROR",
+    "Unexpected submission field \"clientSubmittedAt\".",
+  );
+  assert.equal(submitCallCount, 0);
+});
+
 test("exam session submit handler rejects cross-tenant access", async () => {
   const handler = createExamSessionSubmitHandler({
     submitSession: async () => {
       throw new Error("submitSession should not be called");
     },
     verifyIdToken: async () =>
-      createStudentToken({instituteId: "inst_other_build_50"}) as never,
+      createExamStudentToken({instituteId: "inst_other_build_50"}) as never,
   });
   const response = createMockResponse();
 
@@ -1582,6 +1655,7 @@ test("exam session submit handler rejects cross-tenant access", async () => {
     createMockRequest({
       body: {
         instituteId: "inst_build_50",
+        reason: "manual",
         runId: "run_build_50",
         yearId: "2026",
       },
@@ -1611,7 +1685,7 @@ test(
           "Session must be active before submission.",
         );
       },
-      verifyIdToken: async () => createStudentToken() as never,
+      verifyIdToken: async () => createExamStudentToken() as never,
     });
     const response = createMockResponse();
 
@@ -1619,6 +1693,7 @@ test(
       createMockRequest({
         body: {
           instituteId: "inst_build_50",
+          reason: "manual",
           runId: "run_build_50",
           yearId: "2026",
         },

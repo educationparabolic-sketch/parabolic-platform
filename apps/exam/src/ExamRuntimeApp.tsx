@@ -15,6 +15,9 @@ import type {
   ExamRuntimeTimingProfileSnapshot as TimingProfileSnapshot,
   ExamSessionActivationResult,
   ExamSessionEntryResult,
+  ExamSubmissionReason,
+  ExamSubmitRequestBody,
+  ExamSubmitResult,
 } from "../../../shared/contracts/apiDtos";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { toCdnAssetUrl } from "../../../shared/services/cdnAssetDelivery";
@@ -33,7 +36,7 @@ type QuestionPaletteStatus = "not_visited" | "not_answered" | "answered" | "mark
 type ExecutionMode = ExamExecutionMode;
 type QuestionSection = string;
 type PhaseId = "phase1" | "phase2" | "phase3" | "buffer";
-type SubmissionReason = "manual" | "expiry";
+type SubmissionReason = ExamSubmissionReason;
 type SessionLifecycleState = "created" | "started" | "active" | "submitted" | "expired" | "terminated";
 type ExamEntryStage = "entry_not_open" | "pre_exam_lobby" | "instructions_waiting" | "entry_closed" | "exam_active";
 type PreExamCheckState = "pending" | "passed" | "failed" | "skipped";
@@ -167,15 +170,6 @@ interface ExamSessionSchedule {
 }
 
 type QueuedAnswerWrite = ExamAnswerWrite;
-
-interface ExamSubmitRequestBody {
-  instituteId: string;
-  runId: string;
-  yearId: string;
-  reason: SubmissionReason;
-  unansweredQuestionIds: string[];
-  clientSubmittedAt: string;
-}
 
 interface SessionRecoverySnapshot {
   batchSequence: number;
@@ -1241,6 +1235,7 @@ function ExamSessionPage() {
   const [sessionLifecycleState, setSessionLifecycleState] = useState<SessionLifecycleState>("created");
   const [submittedAtIso, setSubmittedAtIso] = useState<string | null>(null);
   const [submissionReason, setSubmissionReason] = useState<SubmissionReason | null>(null);
+  const [submissionResult, setSubmissionResult] = useState<ExamSubmitResult | null>(null);
   const [nowEpochMs, setNowEpochMs] = useState(() => Date.now());
   const [lastAnswerWriteAtMs, setLastAnswerWriteAtMs] = useState(() => Date.now() - ANSWER_BATCH_INTERVAL_MS);
   const [pendingAnswerMap, setPendingAnswerMap] = useState<Record<string, QueuedAnswerWrite>>({});
@@ -1986,7 +1981,7 @@ function ExamSessionPage() {
     void clearRecoverySnapshot(effectiveSessionId);
   }, [effectiveSessionId, isSubmitted]);
 
-  const submitSession = useCallback(async (reason: SubmissionReason, unansweredIds: string[]): Promise<void> => {
+  const submitSession = useCallback(async (reason: SubmissionReason): Promise<void> => {
     if (!entryValidation.allowed || serverEntryValidationStatus !== "valid") {
       throw new Error("Missing valid Firebase exam identity for submission.");
     }
@@ -1996,8 +1991,14 @@ function ExamSessionPage() {
 
     try {
       const answeredPersisted = await flushAnswerBatch("submission");
-      if (!answeredPersisted) {
+      if (reason === "manual" && !answeredPersisted) {
         throw new Error("Unable to flush pending answers before submission.");
+      }
+      if (
+        reason === "manual" &&
+        Object.keys(pendingAnswerMapRef.current).length > 0
+      ) {
+        throw new Error("Pending answers remain after the submission drain.");
       }
 
       const endpointPath = `/exam/session/${encodeURIComponent(effectiveSessionId)}/submit`;
@@ -2006,8 +2007,6 @@ function ExamSessionPage() {
         runId,
         yearId,
         reason,
-        unansweredQuestionIds: unansweredIds,
-        clientSubmittedAt: new Date().toISOString(),
       };
 
       const responseBody = adaptExamSubmitResult(
@@ -2018,9 +2017,11 @@ function ExamSessionPage() {
           },
         ),
       );
-      setSubmissionReason(reason);
-      setSubmittedAtIso(responseBody.submittedAt ?? new Date().toISOString());
-      setSessionLifecycleState("submitted");
+      setSubmissionResult(responseBody);
+      setSubmissionReason(responseBody.submissionReason);
+      setSubmittedAtIso(responseBody.submittedAt);
+      setSessionLifecycleState(responseBody.status);
+      replacePendingAnswerMap({});
       setSubmitDialogOpen(false);
       setSubmitWarningAcknowledged(false);
       setEarlySubmitOverrideAccepted(false);
@@ -2039,6 +2040,7 @@ function ExamSessionPage() {
     entryValidation.allowed,
     flushAnswerBatch,
     instituteId,
+    replacePendingAnswerMap,
     runId,
     serverEntryValidationStatus,
     yearId,
@@ -2055,11 +2057,11 @@ function ExamSessionPage() {
     }
 
     expirySubmitAttemptedRef.current = true;
-    void submitSession("expiry", unansweredQuestionIdsForSubmission)
+    void submitSession("expiry")
       .catch((error) => {
         setSubmitError(error instanceof Error ? error.message : "Auto-submit failed.");
       });
-  }, [isSubmitted, sessionLifecycleState, submitInFlight, submitSession, unansweredQuestionIdsForSubmission]);
+  }, [isSubmitted, sessionLifecycleState, submitInFlight, submitSession]);
 
   const palette = useMemo<PaletteTile[]>(
     () =>
@@ -3694,7 +3696,7 @@ function ExamSessionPage() {
       );
     }
 
-    await submitSession("manual", unansweredQuestionIdsForSubmission).catch((error) => {
+    await submitSession("manual").catch((error) => {
       setSubmitError(error instanceof Error ? error.message : "Submission failed.");
     });
   };
@@ -3738,23 +3740,23 @@ function ExamSessionPage() {
             {" "}
             <strong>{submittedAtIso ?? "N/A"}</strong>
           </p>
-          <div className="exam-submission-metrics">
-            <p>
-              Phase Adherence:
-              {" "}
-              <strong>{adaptivePhaseSnapshot.phaseAdherencePercent.toFixed(1)}%</strong>
-            </p>
-            <p>
-              Overspend:
-              {" "}
-              <strong>{adaptivePhaseSnapshot.overspendPercent.toFixed(1)}%</strong>
-            </p>
-            <p>
-              Difficulty Compliance:
-              {" "}
-              <strong>{adaptivePhaseSnapshot.difficultyCompliancePercent.toFixed(1)}%</strong>
-            </p>
-          </div>
+          {submissionResult ? (
+            <div className="exam-submission-metrics" aria-label="Authoritative submission metrics">
+              <p>Raw Score: <strong>{submissionResult.rawScorePercent.toFixed(2)}%</strong></p>
+              <p>Accuracy: <strong>{submissionResult.accuracyPercent.toFixed(2)}%</strong></p>
+              <p>Discipline Index: <strong>{submissionResult.disciplineIndex.toFixed(2)}%</strong></p>
+              <p>Risk State: <strong>{submissionResult.riskState}</strong></p>
+              <p>Phase Adherence: <strong>{submissionResult.phaseAdherencePercent.toFixed(2)}%</strong></p>
+              <p>Guess Rate: <strong>{submissionResult.guessRatePercent.toFixed(2)}%</strong></p>
+              <p>Min-Time Violations: <strong>{submissionResult.minTimeViolationPercent.toFixed(2)}%</strong></p>
+              <p>Max-Time Violations: <strong>{submissionResult.maxTimeViolationPercent.toFixed(2)}%</strong></p>
+              <p>
+                Server Disposition:
+                {" "}
+                <strong>{submissionResult.alreadySubmitted ? "Already finalized" : "Finalized now"}</strong>
+              </p>
+            </div>
+          ) : null}
           <button
             type="button"
             className="exam-start-button"

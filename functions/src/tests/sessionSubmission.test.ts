@@ -8,6 +8,7 @@ import {
   SubmissionService,
   SubmissionValidationError,
 } from "../services/submission";
+import {answerBatchService} from "../services/answerBatch";
 import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
 
 process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8080";
@@ -180,9 +181,10 @@ const seedRun = async (): Promise<void> => {
 
 const seedSession = async (
   sessionId: string,
-  status: "active" | "created" | "submitted",
+  status: "active" | "created" | "expired" | "submitted",
   submissionLock: boolean,
   mode = "Controlled",
+  deadlineOffsetMs = 60_000,
 ): Promise<void> => {
   const nowMillis = Date.now();
   const sessionPath = `${SESSION_ROOT_PATH}/${sessionId}`;
@@ -202,6 +204,7 @@ const seedSession = async (
     },
     calibrationVersion: "cal_v2026_04",
     createdAt: Timestamp.fromMillis(nowMillis - 120_000),
+    deadlineAt: Timestamp.fromMillis(nowMillis + deadlineOffsetMs),
     instituteId: INSTITUTE_ID,
     mode,
     questionTimeMap: {
@@ -238,6 +241,7 @@ const seedSession = async (
     studentId: STUDENT_ID,
     studentUid: "uid_build_36",
     submissionLock,
+    submissionReason: status === "submitted" ? "manual" : null,
     submittedAt: status === "submitted" ?
       Timestamp.fromMillis(nowMillis - 5000) :
       null,
@@ -278,6 +282,8 @@ test.after(async () => {
     "session_build_36_locked",
     "session_build_36_hard_timing_rejected",
     "session_build_36_not_active",
+    "session_build_36_expiry",
+    "session_build_36_expiry_too_early",
   ];
 
   await Promise.all(sessionIds.map((sessionId) =>
@@ -306,6 +312,7 @@ test("submitSession finalizes active session atomically", async () => {
 
   const result = await submissionService.submitSession({
     instituteId: INSTITUTE_ID,
+    reason: "manual",
     runId: RUN_ID,
     sessionId,
     studentId: STUDENT_ID,
@@ -316,12 +323,16 @@ test("submitSession finalizes active session atomically", async () => {
   assert.equal(result.rawScorePercent, 25);
   assert.equal(result.accuracyPercent, 50);
   assert.equal(result.riskState, "Impulsive");
+  assert.equal(result.status, "submitted");
+  assert.equal(result.submissionReason, "manual");
+  assert.equal(Date.parse(result.submittedAt) > 0, true);
 
   const snapshot = await firestore.doc(sessionPath).get();
   const data = snapshot.data();
   assert.equal(data?.status, "submitted");
   assert.equal(data?.submissionLock, false);
   assert.ok(data?.submittedAt instanceof Timestamp);
+  assert.equal(data?.submissionReason, "manual");
   assert.equal(data?.calibrationVersion, "cal_v2026_04");
   assert.equal(data?.riskModelVersion, "risk_v3");
   assert.equal(data?.templateVersion, "5");
@@ -338,6 +349,37 @@ test("submitSession finalizes active session atomically", async () => {
   assert.equal(data?.consecutiveWrongStreakMax, 1);
   assert.equal(data?.skipBurstCount, 0);
 
+  const answerMapAtSubmission = data?.answerMap;
+  await assert.rejects(
+    answerBatchService.persistIncrementalAnswers({
+      answers: [{
+        clientRevision: 999,
+        clientTimestamp: Date.now(),
+        questionId: "q36_1",
+        response: {kind: "mcq", optionId: "B"},
+        timeSpentSeconds: 50,
+      }],
+      batchId: "post-submit-write",
+      batchSequence: 999,
+      context: {
+        instituteId: INSTITUTE_ID,
+        runId: RUN_ID,
+        sessionId,
+        studentId: STUDENT_ID,
+        yearId: YEAR_ID,
+      },
+      flushReason: "submission",
+      millisecondsSinceLastWrite: 5_000,
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof SubmissionValidationError || error instanceof Error);
+      assert.equal((error as {code?: string}).code, "SESSION_LOCKED");
+      return true;
+    },
+  );
+  const afterWriteAttempt = await firestore.doc(sessionPath).get();
+  assert.deepEqual(afterWriteAttempt.data()?.answerMap, answerMapAtSubmission);
+
   await deleteIfPresent(sessionPath);
 });
 
@@ -353,6 +395,7 @@ test(
     await assert.rejects(
       submissionService.submitSession({
         instituteId: INSTITUTE_ID,
+        reason: "manual",
         runId: RUN_ID,
         sessionId,
         studentId: STUDENT_ID,
@@ -387,6 +430,7 @@ test(
 
     const result = await submissionService.submitSession({
       instituteId: INSTITUTE_ID,
+      reason: "manual",
       runId: RUN_ID,
       sessionId,
       studentId: STUDENT_ID,
@@ -396,6 +440,10 @@ test(
     assert.equal(result.idempotent, true);
     assert.equal(result.rawScorePercent, 62.5);
     assert.equal(result.disciplineIndex, 80);
+    assert.equal(result.status, "submitted");
+    assert.equal(result.submissionReason, "manual");
+    assert.equal(result.submittedAt, (await firestore.doc(sessionPath).get())
+      .data()?.submittedAt.toDate().toISOString());
 
     const snapshot = await firestore.doc(sessionPath).get();
     assert.equal(snapshot.data()?.status, "submitted");
@@ -431,6 +479,7 @@ test(
 
     const result = await submissionService.submitSession({
       instituteId: INSTITUTE_ID,
+      reason: "manual",
       runId: RUN_ID,
       sessionId,
       studentId: STUDENT_ID,
@@ -457,8 +506,12 @@ test("submitSession rejects concurrent submission lock", async () => {
   await seedSession(sessionId, "active", true);
 
   await assert.rejects(
-    submissionService.submitSession({
+    new SubmissionService({
+      lockPollIntervalMs: 10,
+      lockWaitTimeoutMs: 30,
+    }).submitSession({
       instituteId: INSTITUTE_ID,
+      reason: "manual",
       runId: RUN_ID,
       sessionId,
       studentId: STUDENT_ID,
@@ -478,7 +531,7 @@ test("submitSession rejects concurrent submission lock", async () => {
 });
 
 test(
-  "submitSession rejects parallel submission while lock is held",
+  "submitSession converges parallel submissions on the stored authoritative result",
   async () => {
     const sessionId = "session_build_36_parallel_lock";
     const sessionPath = `${SESSION_ROOT_PATH}/${sessionId}`;
@@ -493,6 +546,7 @@ test(
     const primarySubmissionPromise = slowSubmissionService
       .submitSession({
         instituteId: INSTITUTE_ID,
+        reason: "manual",
         runId: RUN_ID,
         sessionId,
         studentId: STUDENT_ID,
@@ -501,24 +555,21 @@ test(
 
     await new Promise((resolve) => setTimeout(resolve, 30));
 
-    await assert.rejects(
-      submissionService.submitSession({
-        instituteId: INSTITUTE_ID,
-        runId: RUN_ID,
-        sessionId,
-        studentId: STUDENT_ID,
-        yearId: YEAR_ID,
-      }),
-      (error: unknown) => {
-        assert.ok(error instanceof SubmissionValidationError);
-        assert.equal(error.code, "SUBMISSION_LOCKED");
-        return true;
-      },
-    );
+    const concurrentResult = await submissionService.submitSession({
+      instituteId: INSTITUTE_ID,
+      reason: "manual",
+      runId: RUN_ID,
+      sessionId,
+      studentId: STUDENT_ID,
+      yearId: YEAR_ID,
+    });
 
     const primaryResult = await primarySubmissionPromise;
 
     assert.equal(primaryResult.idempotent, false);
+    assert.equal(concurrentResult.idempotent, true);
+    assert.equal(concurrentResult.submittedAt, primaryResult.submittedAt);
+    assert.equal(concurrentResult.rawScorePercent, primaryResult.rawScorePercent);
 
     const snapshot = await firestore.doc(sessionPath).get();
     const data = snapshot.data();
@@ -539,6 +590,7 @@ test("submitSession rejects non-active sessions", async () => {
   await assert.rejects(
     submissionService.submitSession({
       instituteId: INSTITUTE_ID,
+      reason: "manual",
       runId: RUN_ID,
       sessionId,
       studentId: STUDENT_ID,
@@ -553,6 +605,60 @@ test("submitSession rejects non-active sessions", async () => {
 
   const snapshot = await firestore.doc(sessionPath).get();
   assert.equal(snapshot.data()?.status, "created");
+
+  await deleteIfPresent(sessionPath);
+});
+
+test("submitSession derives expiry from the persisted server deadline", async () => {
+  const sessionId = "session_build_36_expiry";
+  const sessionPath = `${SESSION_ROOT_PATH}/${sessionId}`;
+
+  await deleteIfPresent(sessionPath);
+  await seedSession(sessionId, "expired", false, "Controlled", -1_000);
+
+  const result = await submissionService.submitSession({
+    instituteId: INSTITUTE_ID,
+    reason: "manual",
+    runId: RUN_ID,
+    sessionId,
+    studentId: STUDENT_ID,
+    yearId: YEAR_ID,
+  });
+
+  assert.equal(result.submissionReason, "expiry");
+  const snapshot = await firestore.doc(sessionPath).get();
+  assert.equal(snapshot.data()?.submissionReason, "expiry");
+  assert.equal(snapshot.data()?.status, "submitted");
+
+  await deleteIfPresent(sessionPath);
+});
+
+test("submitSession rejects a claimed expiry before the server deadline", async () => {
+  const sessionId = "session_build_36_expiry_too_early";
+  const sessionPath = `${SESSION_ROOT_PATH}/${sessionId}`;
+
+  await deleteIfPresent(sessionPath);
+  await seedSession(sessionId, "active", false, "Controlled", 60_000);
+
+  await assert.rejects(
+    submissionService.submitSession({
+      instituteId: INSTITUTE_ID,
+      reason: "expiry",
+      runId: RUN_ID,
+      sessionId,
+      studentId: STUDENT_ID,
+      yearId: YEAR_ID,
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof SubmissionValidationError);
+      assert.equal(error.code, "VALIDATION_ERROR");
+      assert.match(error.message, /server deadline/u);
+      return true;
+    },
+  );
+  const snapshot = await firestore.doc(sessionPath).get();
+  assert.equal(snapshot.data()?.status, "active");
+  assert.equal(snapshot.data()?.submissionLock, false);
 
   await deleteIfPresent(sessionPath);
 });

@@ -158,6 +158,16 @@ const dtoFamilies = [
     ],
   },
   {
+    backend: "functions/src/types/submission.ts",
+    frontend: ["apps/exam/src/ExamRuntimeApp.tsx"],
+    names: [
+      "ExamSubmissionReason",
+      "ExamSubmissionRiskState",
+      "ExamSubmitRequestBody",
+      "ExamSubmitResult",
+    ],
+  },
+  {
     backend: "functions/src/types/calibrationDeployment.ts",
     frontend: [
       "apps/vendor/src/features/calibration/vendorCalibrationDataset.ts",

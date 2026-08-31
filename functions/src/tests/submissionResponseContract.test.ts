@@ -22,6 +22,9 @@ test(
       sessionPath:
         "institutes/inst_40/academicYears/2026/runs/run_40/sessions/session_40",
       skipBurstCount: 0,
+      status: "submitted",
+      submissionReason: "manual",
+      submittedAt: "2026-03-25T09:59:59.000Z",
     };
 
     const response = buildSubmissionSuccessResponse(
@@ -34,7 +37,11 @@ test(
       code: "OK",
       data: {
         accuracyPercent: 81,
+        alreadySubmitted: true,
         disciplineIndex: 76,
+        guessRatePercent: 22.22,
+        maxTimeViolationPercent: 33.33,
+        minTimeViolationPercent: 11.11,
         operationalDataAccessPolicy: {
           allowedOperationalCollections: ["sessions"],
           archiveExportPolicy: "BigQuery export only during academic-year archive",
@@ -56,8 +63,12 @@ test(
         },
         rawScorePercent: 72,
         riskState: "Drift-Prone",
+        phaseAdherencePercent: 88.89,
+        status: "submitted",
+        submissionReason: "manual",
+        submittedAt: "2026-03-25T09:59:59.000Z",
       },
-      message: "Session submitted successfully.",
+      message: "Session submission already finalized.",
       requestId: "req_build_40",
       success: true,
       timestamp: "2026-03-25T10:00:00.000Z",
@@ -65,10 +76,10 @@ test(
 
     assert.equal("guessRate" in response.data, false);
     assert.equal("idempotent" in response.data, false);
-    assert.equal("maxTimeViolationPercent" in response.data, false);
-    assert.equal("minTimeViolationPercent" in response.data, false);
+    assert.equal(response.data.alreadySubmitted, true);
+    assert.equal(response.data.status, "submitted");
     assert.equal("operationalDataAccessPolicy" in response.data, true);
-    assert.equal("phaseAdherencePercent" in response.data, false);
+    assert.equal("phaseAdherencePercent" in response.data, true);
     assert.equal("sessionPath" in response.data, false);
   },
 );

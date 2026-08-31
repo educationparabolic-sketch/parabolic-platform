@@ -15,13 +15,13 @@ program: backend-wiring-and-deployment-readiness
 program_status: IN_PROGRESS
 release_decision: NO_GO
 current_phase: 1
-current_task: BWM-023
-current_substep: BWM-023 — inspect the current submit drain, transaction/lock, replay response, server metrics consumption, and expiry submission authority
-last_completed_task: BWM-022
-next_task: BWM-023
+current_task: BWM-024
+current_substep: BWM-024 — inspect the submission trigger/event topology, analytics initialization idempotency, and Student/Admin result consumers
+last_completed_task: BWM-023
+next_task: BWM-024
 blocked_tasks: []
-last_updated: 2026-08-30
-last_update_summary: BWM-022 is VERIFIED. EXM-02 now uses serialized revision-aware max-ten batches with exact acknowledgements, revision-safe queue removal, complete reconnect/submission drains, and reason-scoped interval bypass. Owner/session-bound IndexedDB recovery and authenticated token-free EXM-01 resume preserve pending state across refresh, while sync UI reports offline/syncing/error truthfully. Focused contracts, Firestore, no-mock Chromium, workspace, and full emulator aggregate verification passed. BWM-023 is READY; production remains NO_GO.
+last_updated: 2026-08-31
+last_update_summary: BWM-023 is VERIFIED. EXM-04 now accepts one exact four-field shared request, derives expiry authority and the submitted timestamp/reason on the server, atomically persists one complete result, makes parallel/repeated callers replay it, rejects all post-finalization answer writes, and renders only authoritative metrics in Exam. Focused contracts, Firestore concurrency/replay, no-mock Chromium, workspace, and full emulator aggregate verification passed. BWM-024 is READY; production remains NO_GO.
 ```
 
 Do not infer progress from old build numbers, UI completion labels, or visual verification artifacts. Only this checkpoint, the task registry, checked substeps, session log, and current repository evidence determine progress for this program.
@@ -274,8 +274,8 @@ The registry is the canonical order. Detailed cards below define scope and accep
 | BWM-020 | P0 | VERIFIED | BWM-018,BWM-019 | Server-authoritative session lifecycle and deadline |
 | BWM-021 | P0 | VERIFIED | BWM-019,BWM-020 | Correct answer DTO, clear semantics, and timing model |
 | BWM-022 | P0 | VERIFIED | BWM-021 | Reliable batching, offline recovery, and full drain |
-| BWM-023 | P0 | READY | BWM-020,BWM-022 | Idempotent server submission and response contract |
-| BWM-024 | P0 | PLANNED | BWM-023 | Analytics/result propagation back to Student and Admin |
+| BWM-023 | P0 | VERIFIED | BWM-020,BWM-022 | Idempotent server submission and response contract |
+| BWM-024 | P0 | READY | BWM-023 | Analytics/result propagation back to Student and Admin |
 | BWM-025 | P0 | PLANNED | BWM-011..BWM-024 | Emulator-backed golden-path end-to-end proof |
 | BWM-026 | P1 | PLANNED | BWM-025 | Admin student mutation completeness |
 | BWM-027 | P1 | PLANNED | BWM-025 | Admin Question Bank lifecycle completeness |
@@ -1775,14 +1775,32 @@ The registry is the canonical order. Detailed cards below define scope and accep
 
 ### BWM-023 — Idempotent Submission and Response Contract
 
-- **Status:** `READY`
+- **Status:** `VERIFIED`
 - **Purpose:** Make finalization atomic, replay-safe, and visible to the candidate.
 - **Work:** require active session and complete drain; finalize under transaction/lock; define already-submitted response; standardize returned status/time/metrics; consume server metrics in Exam; make expiry submission server-aware.
 - **Acceptance:** concurrent/repeated submit returns one authoritative result; no answer changes occur after finalization; UI displays server result.
+- **Substeps:**
+  - [x] Inspect the current pre-submit drain, request/response DTOs, transaction/lock behavior, stored replay result, expiry path, frontend adapter, and submitted UI.
+  - [x] Define one strict shared submit request/result with server-owned status, time, reason, replay disposition, and candidate-visible metrics.
+  - [x] Make parallel/repeated submits converge on one stored authoritative result, enforce server-aware expiry, and consume only that result in Exam.
+  - [x] Add permanent contract, Firestore, and no-mock browser coverage for concurrency, replay, post-finalization answer rejection, expiry authority, and submitted metrics UI.
+  - [x] Run the applicable verification ladder and reconcile API/schema/module/event documentation.
+- **Inspection evidence:** `apps/exam/src/ExamRuntimeApp.tsx` already awaited BWM-022's complete answer drain, but then sent locally defined `reason`, `unansweredQuestionIds`, and `clientSubmittedAt`, accepted optional response status/time/replay fields, fell back to the browser clock, and rendered local adaptive estimates instead of returned server metrics. `functions/src/api/examSessionSubmit.ts` validated only institute/year/run and returned four metrics without status, `submittedAt`, reason, or replay disposition. `functions/src/services/submission.ts` atomically finalized under a lock and replayed stored metrics, but a simultaneous caller received `SUBMISSION_LOCKED`, no deterministic stored timestamp/reason was returned, and a claimed expiry was not checked against the persisted server deadline.
+- **Implemented files:** `shared/contracts/apiDtos.d.ts` and `functions/src/types/submission.ts` define the exact shared request and complete authoritative result. `functions/src/api/examSessionSubmit.ts` rejects unknown/legacy fields and returns only the strict result. `functions/src/services/submission.ts` derives expiry from the persisted deadline, stores one exact server timestamp/reason/status/metrics result, lets parallel callers await and replay it, and preserves stale-lock failure behavior. `apps/exam/src/ExamRuntimeApp.tsx` drains manual submissions, handles deadline finalization without trusting a rejected late answer write, sends only the four allowed fields, clears recovery state after success, and displays only returned metrics. `shared/services/portalResponseAdapters.ts` strictly validates every result field. Permanent contract, service, endpoint, adapter, static, and real-browser coverage was added or extended in `functions/src/tests/submissionResponseContract.test.ts`, `functions/src/tests/endpointTestingFramework.test.ts`, `functions/src/tests/sessionSubmission.test.ts`, `functions/tests/examStart.emulator.test.js`, `tests/api-dto-contract.test.mjs`, `tests/portal-response-adapters.test.mjs`, `tests/exam-runtime-auth-contract.test.mjs`, and `tests/e2e/exam-launch-auth.spec.mjs`; API, inventory, module, schema, topology, event, and controller records were reconciled.
+- **Security/data evidence:** EXM-04 still derives Student/session authority from the refreshed Firebase ID token and requires exact institute/year/run/session/Student agreement. Its body permits only `instituteId`, `reason`, `runId`, and `yearId`; client timestamps, unanswered IDs, and unknown keys cannot influence persisted authority. A claimed expiry before the server deadline fails closed, a manual request at or after the deadline is classified as expiry, and `submittedAt` is server-owned. The lock protects the sole transition while concurrent callers read the stored result; every later EXM-02 write is rejected because the session is no longer active.
+- **Verification evidence:** Functions and Exam lint/build commands passed, and `node scripts/verify-workspace.mjs` passed all 10 cross-package lint/build gates. `npm --prefix functions run test:ci:non-emulator` passed all 48 classified files; the focused shared DTO, submit-response, adapter, and runtime static contracts passed. The focused Firestore command targeting `submitSession|exam session submit` passed 13 tests with 67 unrelated cases skipped, covering exact endpoint bodies plus service transaction, replay, concurrency, expiry, and post-submit rejection behavior. `npm run test:exam-launch-auth:e2e` passed 1/1 through real Auth, Firestore, Functions, Hosting, and Chromium, rendered authoritative metrics, replayed the identical submit with `alreadySubmitted: true`, and proved a later answer request returned HTTP 409 without changing stored answers. The clean `npm run test:emulators:ci` rerun passed 10 explicit full-service suites, 2/2 Hosting browser smoke cases, and 65 Firestore-backed files with 216 assertions; all ports were released. Final diff checks passed.
+- **L5 staging/preview:** N/A — no deployment target, preview channel, public URL, secret, environment, Hosting rewrite, or release configuration changed.
+- **L6 production:** N/A — reserved for BWM-057; production remains untouched and `NO_GO`.
+- **Firebase CLI version:** `15.9.0`; Java `21.0.8`.
+- **Authorization/external mutations:** Verification used only the `demo-parabolic-test` loopback Firebase emulators, headless Chromium, disposable cleaned Auth/Firestore data, generated ignored Hosting artifacts, and Firebase CLI local state. No deployment, remote Firebase data mutation, secret mutation, public endpoint, or production resource changed.
+- **Contract/schema changes:** EXM-04 accepts exactly `{ instituteId, reason, runId, yearId }` and returns required server-owned `status`, `submissionReason`, `submittedAt`, `alreadySubmitted`, raw/accuracy/discipline/guess/phase/min/max/risk metrics, and the operational data-access policy. Session documents now persist the derived reason and already-computed result fields alongside the existing transient lock and server timestamp. No collection path, Firestore rule, index, route, or export total changed.
+- **Verification notes:** The first full aggregate run exposed an older emulator fixture that omitted the now-required `reason`; the fixture was updated to send `manual`, after which the complete aggregate reran cleanly. Existing non-owning assignment-trigger fixture warnings remained present and did not fail their suites.
+- **Residual risks:** BWM-024 retains idempotent analytics initialization, eventual-consistency/retry definition, and completed-result propagation into Student and Admin summary consumers. Production remains `NO_GO`.
+- **Completed on:** 2026-08-31
 
 ### BWM-024 — Analytics and Result Propagation
 
-- **Status:** `PLANNED`
+- **Status:** `READY`
 - **Purpose:** Close the loop back to Student and Admin summaries.
 - **Work:** verify submission trigger/event topology; make analytics initialization idempotent; refresh Student completed tests/performance/insights and Admin run/overview summaries; define eventual-consistency status and retry.
 - **Acceptance:** A submitted session produces expected run/student metrics and both portals show them without fixture data or manual mutation.
@@ -2166,7 +2184,7 @@ operations_owner: TBD
 | Deployment lacks frontend runtime configuration and backend deploy | Critical | BWM-005,BWM-010 | Resolved 2026-08-22 |
 | Remaining Student solutions/performance/insights APIs are missing | Critical | BWM-016 | Resolved 2026-08-28 |
 | Exam custom token is sent where an ID token is required | Critical | BWM-017,BWM-018 | Open |
-| Exam lifecycle remains local while submission requires active backend state | Critical | BWM-020,BWM-023 | Resolved 2026-08-30; broader submission hardening remains BWM-023 |
+| Exam lifecycle remains local while submission requires active backend state | Critical | BWM-020,BWM-023 | Resolved 2026-08-31; lifecycle/deadline authority and idempotent server finalization are verified |
 | Exam uses hardcoded questions/schedule/build IDs | Critical | BWM-019 | Closed |
 | Answer clear/timing/batch semantics can corrupt or omit data | Critical | BWM-021,BWM-022 | Open |
 | Production failures fall back to fixtures/fake success | Critical | BWM-007 | Resolved 2026-08-09 |
@@ -2331,6 +2349,15 @@ Never record only “tests passed.” Include exact commands and whether tests w
 ## Session Log
 
 Append newest entries at the top.
+
+### LOG-097 — 2026-08-31 — BWM-023 Idempotent Submission and Authoritative Result
+
+- **Task:** Resume BWM-023 at its first unchecked contract substep, implement only atomic replay-safe submission and authoritative candidate-result behavior, prove concurrency/replay/expiry/post-finalization/UI acceptance, reconcile canonical records, and stop before analytics propagation.
+- **Outcome:** BWM-023 is `VERIFIED`. EXM-04 accepts one exact four-field request, derives deadline expiry and the submitted timestamp/reason on the server, atomically stores one complete result, makes parallel and repeated callers return that stored authority, rejects later answer writes, and renders only returned metrics in Exam. BWM-024 is `READY`; production remains `NO_GO`.
+- **Validation performed:** Functions/Exam lint and builds passed; the workspace verifier passed 10/10 gates; Functions non-emulator CI passed 48/48 files; focused DTO/response/adapter/runtime contracts passed. The focused Firestore submit/endpoint selection passed 13 tests with 67 unrelated cases skipped. The real Auth/Firestore/Functions/Hosting Chromium flow passed 1/1 and proved authoritative metric rendering, identical replay with `alreadySubmitted: true`, and HTTP 409 post-submit answer rejection without stored mutation. After correcting an older emulator fixture to include the required reason, the full aggregate rerun passed 10 explicit full-service suites, 2/2 Hosting browser smoke cases, and 65 Firestore files with 216 assertions; all ports were released. Final diff checks passed.
+- **Files changed:** Added the exact shared submit request/result and strict adapter; server-derived expiry/reason/time authority; transaction-lock convergence and exact replay; complete authoritative result persistence/response; manual drain and expiry-aware Exam orchestration; server metrics UI; permanent endpoint/service/contract/static/no-mock browser proof; and reconciled API, inventory, module, schema, topology, event, and execution-controller records.
+- **Cloud changes:** None. Verification used only demo-project loopback emulators, headless Chromium, disposable cleaned data, ignored local artifacts, and Firebase CLI local state. No deployment, remote data mutation, secret, endpoint, or production resource changed.
+- **Next:** BWM-024 — inspect the submission trigger/event topology, analytics initialization idempotency, eventual-consistency/retry behavior, and Student/Admin completed-result consumers before implementing only that bounded contract.
 
 ### LOG-096 — 2026-08-30 — BWM-022 Reliable Batching, Offline Recovery, and Full Drain
 

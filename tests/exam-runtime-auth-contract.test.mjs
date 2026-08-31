@@ -111,6 +111,36 @@ test("Exam answer recovery serializes revision acknowledgements and drains befor
   assert.match(entryHandler, /resumeSessionEntry/u);
 });
 
+test("Exam submission uses the strict shared contract and renders server authority", async () => {
+  const source = await readFile(runtimePath, "utf8");
+  const submitHandler = await readFile(
+    new URL("../functions/src/api/examSessionSubmit.ts", import.meta.url),
+    "utf8",
+  );
+  const submissionService = await readFile(
+    new URL("../functions/src/services/submission.ts", import.meta.url),
+    "utf8",
+  );
+  const sharedDtos = await readFile(
+    new URL("../shared/contracts/apiDtos.d.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(sharedDtos, /export interface ExamSubmitRequestBody/u);
+  assert.match(sharedDtos, /reason: ExamSubmissionReason/u);
+  assert.match(sharedDtos, /export interface ExamSubmitResult/u);
+  assert.match(sharedDtos, /alreadySubmitted: boolean/u);
+  assert.match(source, /const requestBody: ExamSubmitRequestBody/u);
+  assert.match(source, /setSubmittedAtIso\(responseBody\.submittedAt\)/u);
+  assert.match(source, /Authoritative submission metrics/u);
+  assert.match(source, /submissionResult\.rawScorePercent/u);
+  assert.doesNotMatch(source, /setSubmittedAtIso\(new Date/u);
+  assert.match(submitHandler, /Unexpected submission field/u);
+  assert.match(submitHandler, /alreadySubmitted: result\.idempotent/u);
+  assert.match(submissionService, /waitForSubmittedResult/u);
+  assert.match(submissionService, /Timestamp\.fromMillis\(serverSubmittedAtMillis\)/u);
+});
+
 test("Exam entry, activation, answers, and submit require session-bound Firebase identity", async () => {
   const handlerPaths = [
     "../functions/src/api/examSessionEntry.ts",

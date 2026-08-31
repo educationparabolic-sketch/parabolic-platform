@@ -698,6 +698,38 @@ export interface ExamAnswerBatchResult {
   persistedQuestionIds: string[];
 }
 
+export type ExamSubmissionReason = "manual" | "expiry";
+
+export type ExamSubmissionRiskState =
+  | "Stable"
+  | "Drift-Prone"
+  | "Impulsive"
+  | "Overextended"
+  | "Volatile";
+
+export interface ExamSubmitRequestBody {
+  instituteId: string;
+  reason: ExamSubmissionReason;
+  runId: string;
+  yearId: string;
+}
+
+export interface ExamSubmitResult {
+  accuracyPercent: number;
+  alreadySubmitted: boolean;
+  disciplineIndex: number;
+  guessRatePercent: number;
+  maxTimeViolationPercent: number;
+  minTimeViolationPercent: number;
+  operationalDataAccessPolicy: object;
+  phaseAdherencePercent: number;
+  rawScorePercent: number;
+  riskState: ExamSubmissionRiskState;
+  status: "submitted";
+  submissionReason: ExamSubmissionReason;
+  submittedAt: string;
+}
+
 export interface ExamSessionEntryResult {
   allowed: true;
   deadlineAt: string | null;

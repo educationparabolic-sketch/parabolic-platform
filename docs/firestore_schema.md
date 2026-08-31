@@ -181,6 +181,8 @@ startedAt
 deadlineAt
 expiredAt
 submittedAt  
+submissionReason
+submissionLock
 launchCredentialHashes
 consumedLaunchCredentialHashes
 launchCredentialConsumedAt
@@ -189,6 +191,10 @@ rawScorePercent
 accuracyPercent  
 disciplineIndex  
 riskState  
+guessRatePercent
+phaseAdherencePercent
+minTimeViolationPercent
+maxTimeViolationPercent
 answerMap  
 questionTimeMap
 runtimeSnapshot
@@ -206,6 +212,8 @@ BWM-020 makes lifecycle and countdown authority transactional. EXM-01 atomically
 BWM-021 defines each `answerMap.{questionId}` as `{ clientTimestamp, response, selectedOption, timeSpentSeconds }`. `response` is canonical and discriminated: `{kind: "unanswered"}`, `{kind: "mcq", optionId}`, `{kind: "numeric", value}`, or `{kind: "matrix", selections: [{row, column}]}`. `selectedOption` is only a nullable compatibility projection for existing scoring and analytics readers. `timeSpentSeconds` is absolute cumulative question time; the server derives the positive delta against `questionTimeMap.{questionId}.cumulativeTimeSpent`, so replay cannot inflate cumulative or phase timing. Explicit clears persist `selectedOption: null` and are not attempts. No collection path, Firestore rule, or index changed.
 
 BWM-022 keeps `clientRevision`, `batchId`, `batchSequence`, `flushReason`, and per-write acknowledgements as transport/recovery metadata; they are not added to Firestore answer documents. The Exam browser's IndexedDB schema version 2 snapshot stores the exact `sessionId` plus authenticated `ownerId`, pending revision-aware writes, monotonic timestamp/revision counters, and next batch sequence. A snapshot is applied only when its schema, session, and owner all match the authenticated entry authority. Authenticated EXM-01 resume returns the already-owned session after one-time credential consumption without changing collection paths or persisting any browser recovery payload. No collection path, Firestore rule, or index changed.
+
+BWM-023 makes finalization authority exact and replayable. EXM-04 accepts only institute/run/year plus claimed manual/expiry reason, verifies that claim against the persisted deadline, and atomically stores `status: submitted`, server-owned `submittedAt`, derived `submissionReason`, and the complete scoring/discipline/guess/phase/timing/risk metrics. `submissionLock` is transient and is cleared when finalization commits; a parallel or repeated caller waits for and returns the same stored result rather than recomputing it. Submitted sessions reject all later answer mutations, and an idempotent replay does not create a second submitted-state transition. No collection path, Firestore rule, or index changed.
 
 ---
 

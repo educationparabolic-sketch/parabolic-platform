@@ -22,12 +22,14 @@ import {MiddlewareRequest} from "../types/middleware";
 import {createAuthenticationMiddleware} from "../middleware/auth";
 import {createRoleAuthorizationMiddleware} from "../middleware/role";
 import {createTenantGuardMiddleware} from "../middleware/tenant";
+import type {
+  ExamSubmissionReason,
+  ExamSubmitRequestBody,
+} from "../../../shared/contracts/apiDtos";
 
-interface ExamSessionSubmitRequestBody {
-  instituteId?: unknown;
-  runId?: unknown;
-  yearId?: unknown;
-}
+type ExamSessionSubmitRequestBody = Partial<
+  Record<keyof ExamSubmitRequestBody, unknown>
+> & Record<string, unknown>;
 
 interface ExamSessionSubmitRequestDependencies {
   submitSession: typeof submissionService.submitSession;
@@ -37,6 +39,7 @@ interface ExamSessionSubmitRequestDependencies {
 interface ExamSessionSubmitValidatedRequestData
 extends Record<string, unknown> {
   instituteId: string;
+  reason: ExamSubmissionReason;
   runId: string;
   sessionId: string;
   studentId: string;
@@ -66,17 +69,35 @@ const normalizeRequiredBodyField = (
   return normalizedValue;
 };
 
+const normalizeSubmissionReason = (value: unknown): ExamSubmissionReason => {
+  if (value === "manual" || value === "expiry") {
+    return value;
+  }
+  throw new SubmissionValidationError(
+    "VALIDATION_ERROR",
+    "Field \"reason\" must be manual or expiry.",
+  );
+};
+
 const buildSubmissionResponseData = (
   result: SubmissionResult,
 ): SubmissionResponseData => ({
   accuracyPercent: result.accuracyPercent,
+  alreadySubmitted: result.idempotent,
   disciplineIndex: result.disciplineIndex,
+  guessRatePercent: result.guessRatePercent ?? result.guessRate,
+  maxTimeViolationPercent: result.maxTimeViolationPercent,
+  minTimeViolationPercent: result.minTimeViolationPercent,
   operationalDataAccessPolicy:
     dataTierPartitionService.buildExamOperationalDataAccessPolicy(
       result.sessionPath,
     ),
+  phaseAdherencePercent: result.phaseAdherencePercent,
   rawScorePercent: result.rawScorePercent,
   riskState: result.riskState,
+  status: result.status,
+  submissionReason: result.submissionReason,
+  submittedAt: result.submittedAt,
 });
 
 export const buildSubmissionSuccessResponse = (
@@ -86,7 +107,9 @@ export const buildSubmissionSuccessResponse = (
 ): SubmissionSuccessResponse => ({
   code: "OK",
   data: buildSubmissionResponseData(result),
-  message: "Session submitted successfully.",
+  message: result.idempotent ?
+    "Session submission already finalized." :
+    "Session submitted successfully.",
   requestId,
   success: true,
   timestamp,
@@ -164,12 +187,21 @@ export const createExamSessionSubmitHandler = (
     createRequestValidationMiddleware({
       validator: (request: MiddlewareRequest): void => {
         const body = (request.body ?? {}) as ExamSessionSubmitRequestBody;
+        const allowedFields = new Set(["instituteId", "reason", "runId", "yearId"]);
+        const unexpectedField = Object.keys(body).find((field) => !allowedFields.has(field));
+        if (unexpectedField) {
+          throw new SubmissionValidationError(
+            "VALIDATION_ERROR",
+            `Unexpected submission field "${unexpectedField}".`,
+          );
+        }
         const instituteId = normalizeRequiredBodyField(
           body.instituteId,
           "instituteId",
         );
         const yearId = normalizeRequiredBodyField(body.yearId, "yearId");
         const runId = normalizeRequiredBodyField(body.runId, "runId");
+        const reason = normalizeSubmissionReason(body.reason);
         const sessionId = resolveSessionIdFromRequest(request);
         const identity = request.context.identity;
         const examSession = identity?.examSession;
@@ -191,6 +223,7 @@ export const createExamSessionSubmitHandler = (
 
         setRequestData(request, {
           instituteId: identity.instituteId,
+          reason,
           runId: examSession.runId,
           sessionId,
           studentId: identity.studentId,

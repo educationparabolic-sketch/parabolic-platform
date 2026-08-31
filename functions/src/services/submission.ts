@@ -1,4 +1,4 @@
-import {FieldValue} from "firebase-admin/firestore";
+import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import {createLogger} from "./logging";
 import {dataTierPartitionService} from "./dataTierPartition";
 import {getFirestore} from "../utils/firebaseAdmin";
@@ -58,6 +58,9 @@ interface SubmissionQuestionTimeSnapshot {
 
 interface SubmissionServiceOptions {
   lockHoldDurationMs?: number;
+  lockPollIntervalMs?: number;
+  lockWaitTimeoutMs?: number;
+  nowMillis?: () => number;
 }
 
 interface ValidatedSessionIdentity {
@@ -116,6 +119,44 @@ const normalizeRiskModelVersion = (value: unknown): string => {
 
   const normalizedValue = value.trim();
   return normalizedValue || DEFAULT_RISK_MODEL_VERSION;
+};
+
+const normalizeSubmissionReason = (
+  value: unknown,
+  fieldName: string,
+): SubmissionContext["reason"] => {
+  if (value === "manual" || value === "expiry") {
+    return value;
+  }
+  throw new SubmissionValidationError(
+    "VALIDATION_ERROR",
+    `Field "${fieldName}" must be manual or expiry.`,
+  );
+};
+
+const normalizeTimestampMillis = (
+  value: unknown,
+  fieldName: string,
+): number => {
+  if (value instanceof Timestamp) {
+    return value.toMillis();
+  }
+  if (value instanceof Date) {
+    const dateMillis = value.getTime();
+    if (Number.isFinite(dateMillis)) {
+      return dateMillis;
+    }
+  }
+  if (typeof value === "string") {
+    const dateMillis = Date.parse(value);
+    if (Number.isFinite(dateMillis)) {
+      return dateMillis;
+    }
+  }
+  throw new SubmissionValidationError(
+    "VALIDATION_ERROR",
+    `Field "${fieldName}" must be a valid timestamp.`,
+  );
 };
 
 const normalizeNonNegativeNumber = (
@@ -316,6 +357,7 @@ const isSubmittedAnswerCorrect = (
 const validateSubmissionTiming = (
   sessionData: Record<string, unknown>,
   questionIds: string[],
+  allowHardTimingViolations = false,
 ): SubmissionTimingValidation => {
   const mode = normalizeSessionExecutionMode(sessionData.mode, "session.mode");
   const answerMap = isPlainObject(sessionData.answerMap) ?
@@ -365,6 +407,7 @@ const validateSubmissionTiming = (
 
   if (
     mode === "hard" &&
+    !allowHardTimingViolations &&
     (
       minTimeViolationQuestionIds.length > 0 ||
       maxTimeViolationQuestionIds.length > 0
@@ -887,6 +930,36 @@ const normalizeStoredResult = (
   ),
 });
 
+const buildStoredSubmissionResult = (
+  value: Record<string, unknown>,
+  sessionPath: string,
+): SubmissionResult => {
+  const submittedAtMillis = normalizeTimestampMillis(
+    value.submittedAt,
+    "session.submittedAt",
+  );
+  let submissionReason: SubmissionContext["reason"];
+  if (value.submissionReason === "manual" || value.submissionReason === "expiry") {
+    submissionReason = value.submissionReason;
+  } else {
+    const deadlineAtMillis = value.deadlineAt === undefined || value.deadlineAt === null ?
+      null :
+      normalizeTimestampMillis(value.deadlineAt, "session.deadlineAt");
+    submissionReason = deadlineAtMillis !== null && submittedAtMillis >= deadlineAtMillis ?
+      "expiry" :
+      "manual";
+  }
+
+  return {
+    ...normalizeStoredResult(value),
+    idempotent: true,
+    sessionPath,
+    status: "submitted",
+    submissionReason,
+    submittedAt: new Date(submittedAtMillis).toISOString(),
+  };
+};
+
 const isFirestorePreconditionFailure = (error: unknown): boolean => {
   if (!(error instanceof Error)) {
     return false;
@@ -1002,9 +1075,8 @@ export class SubmissionService {
   }
 
   /**
-   * Acquires the submission lock using a single write precondition so
-   * parallel submit attempts fail fast instead of waiting on transaction
-   * retries.
+   * Acquires the submission lock using a single write precondition. Parallel
+   * attempts wait briefly for and replay the authoritative stored result.
    * @param {FirebaseFirestore.DocumentReference} sessionReference Session ref.
    * @param {SubmissionContext} context Submission request identifiers.
    * @param {string} sessionPath Fully qualified session path.
@@ -1029,24 +1101,24 @@ export class SubmissionService {
     const validatedSession = this.validateSessionIdentity(sessionData, context);
 
     if (validatedSession.status === "submitted") {
-      return {
-        ...normalizeStoredResult(validatedSession.sessionData),
-        idempotent: true,
+      return buildStoredSubmissionResult(
+        validatedSession.sessionData,
         sessionPath,
-      };
-    }
-
-    if (validatedSession.sessionData.submissionLock === true) {
-      throw new SubmissionValidationError(
-        "SUBMISSION_LOCKED",
-        "Submission is already in progress for this session.",
       );
     }
 
-    if (validatedSession.status !== "active") {
+    if (validatedSession.sessionData.submissionLock === true) {
+      return this.waitForSubmittedResult(
+        sessionReference,
+        context,
+        sessionPath,
+      );
+    }
+
+    if (validatedSession.status !== "active" && validatedSession.status !== "expired") {
       throw new SubmissionValidationError(
         "SESSION_NOT_ACTIVE",
-        "Session must be active before submission.",
+        "Session must be active or server-expired before submission.",
       );
     }
 
@@ -1077,11 +1149,18 @@ export class SubmissionService {
       const latestSession = this.validateSessionIdentity(latestData, context);
 
       if (latestSession.status === "submitted") {
-        return {
-          ...normalizeStoredResult(latestSession.sessionData),
-          idempotent: true,
+        return buildStoredSubmissionResult(
+          latestSession.sessionData,
           sessionPath,
-        };
+        );
+      }
+
+      if (latestSession.sessionData.submissionLock === true) {
+        return this.waitForSubmittedResult(
+          sessionReference,
+          context,
+          sessionPath,
+        );
       }
 
       throw new SubmissionValidationError(
@@ -1089,6 +1168,50 @@ export class SubmissionService {
         "Submission is already in progress for this session.",
       );
     }
+  }
+
+  /**
+   * Waits for an in-flight owner submission to expose its stored result.
+   * @param {FirebaseFirestore.DocumentReference} sessionReference Session ref.
+   * @param {SubmissionContext} context Submission request identifiers.
+   * @param {string} sessionPath Fully qualified session path.
+   * @return {Promise<SubmissionResult>} Stored authoritative replay result.
+   */
+  private async waitForSubmittedResult(
+    sessionReference: FirebaseFirestore.DocumentReference,
+    context: SubmissionContext,
+    sessionPath: string,
+  ): Promise<SubmissionResult> {
+    const pollIntervalMs = Math.max(10, this.options.lockPollIntervalMs ?? 25);
+    const waitDeadlineMs = Date.now() +
+      Math.max(pollIntervalMs, this.options.lockWaitTimeoutMs ?? 5_000);
+
+    while (Date.now() <= waitDeadlineMs) {
+      await delay(pollIntervalMs);
+      const snapshot = await sessionReference.get();
+      const sessionData = snapshot.data();
+      if (!snapshot.exists || !isPlainObject(sessionData)) {
+        throw new SubmissionValidationError(
+          "NOT_FOUND",
+          `Session "${context.sessionId}" does not exist.`,
+        );
+      }
+      const validatedSession = this.validateSessionIdentity(sessionData, context);
+      if (validatedSession.status === "submitted") {
+        return buildStoredSubmissionResult(sessionData, sessionPath);
+      }
+      if (validatedSession.sessionData.submissionLock !== true) {
+        throw new SubmissionValidationError(
+          "SUBMISSION_LOCKED",
+          "Concurrent submission did not finalize; retry the request.",
+        );
+      }
+    }
+
+    throw new SubmissionValidationError(
+      "SUBMISSION_LOCKED",
+      "Submission is still in progress; retry the request.",
+    );
   }
 
   /**
@@ -1113,7 +1236,7 @@ export class SubmissionService {
       ).toLowerCase();
       const submissionLock = sessionData.submissionLock === true;
 
-      if (status === "active" && submissionLock) {
+      if ((status === "active" || status === "expired") && submissionLock) {
         transaction.update(sessionReference, {
           submissionLock: false,
           updatedAt: FieldValue.serverTimestamp(),
@@ -1138,6 +1261,7 @@ export class SubmissionService {
     const runId = normalizeRequiredString(context.runId, "runId");
     const sessionId = normalizeRequiredString(context.sessionId, "sessionId");
     const studentId = normalizeRequiredString(context.studentId, "studentId");
+    const requestedReason = normalizeSubmissionReason(context.reason, "reason");
 
     const sessionPath =
       `${INSTITUTES_COLLECTION}/${instituteId}/` +
@@ -1160,6 +1284,7 @@ export class SubmissionService {
       sessionReference,
       {
         instituteId,
+        reason: requestedReason,
         runId,
         sessionId,
         studentId,
@@ -1220,6 +1345,7 @@ export class SubmissionService {
 
           const validatedSession = this.validateSessionIdentity(sessionData, {
             instituteId,
+            reason: requestedReason,
             runId,
             sessionId,
             studentId,
@@ -1228,17 +1354,13 @@ export class SubmissionService {
           const status = validatedSession.status;
 
           if (status === "submitted") {
-            return {
-              ...normalizeStoredResult(sessionData),
-              idempotent: true,
-              sessionPath,
-            };
+            return buildStoredSubmissionResult(sessionData, sessionPath);
           }
 
-          if (status !== "active") {
+          if (status !== "active" && status !== "expired") {
             throw new SubmissionValidationError(
               "SESSION_NOT_ACTIVE",
-              "Session must be active before submission.",
+              "Session must be active or server-expired before submission.",
             );
           }
 
@@ -1273,9 +1395,24 @@ export class SubmissionService {
           const normalizedQuestionIds = questionIds.map((questionId, index) =>
             normalizeRequiredString(questionId, `run.questionIds[${index}]`),
           );
+          const deadlineAtMillis = normalizeTimestampMillis(
+            sessionData.deadlineAt,
+            "session.deadlineAt",
+          );
+          const serverSubmittedAtMillis = this.options.nowMillis?.() ?? Date.now();
+          if (requestedReason === "expiry" && serverSubmittedAtMillis < deadlineAtMillis) {
+            throw new SubmissionValidationError(
+              "VALIDATION_ERROR",
+              "Expiry submission is not allowed before the server deadline.",
+            );
+          }
+          const submissionReason: SubmissionContext["reason"] =
+            serverSubmittedAtMillis >= deadlineAtMillis ? "expiry" : "manual";
+          const submittedAt = Timestamp.fromMillis(serverSubmittedAtMillis);
           const submissionTimingValidation = validateSubmissionTiming(
             sessionData,
             normalizedQuestionIds,
+            submissionReason === "expiry",
           );
 
           const phaseConfigSnapshot = runData.phaseConfigSnapshot;
@@ -1401,9 +1538,10 @@ export class SubmissionService {
             skipBurstCount: metrics.skipBurstCount,
             behaviourTagSummary: metrics.behaviourTagSummary,
             status: "submitted",
+            submissionReason,
             submissionTimingValidation,
             submissionLock: false,
-            submittedAt: FieldValue.serverTimestamp(),
+            submittedAt,
             templateVersion,
             updatedAt: FieldValue.serverTimestamp(),
           });
@@ -1412,6 +1550,9 @@ export class SubmissionService {
             ...metrics,
             idempotent: false,
             sessionPath,
+            status: "submitted" as const,
+            submissionReason,
+            submittedAt: submittedAt.toDate().toISOString(),
           };
         },
       );

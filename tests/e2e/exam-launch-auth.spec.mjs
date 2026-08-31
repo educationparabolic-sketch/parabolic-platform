@@ -240,12 +240,14 @@ test("Student start authenticates Exam entry once and removes the credential", a
   await expect(page.getByText("Authoritative browser snapshot question", {exact: true}))
     .toBeVisible({timeout: 30_000});
   let answerRequestBody = null;
+  let answerAuthorization = "";
   const answerRequestBodies = [];
   const answerResponsePromise = page.waitForResponse((response) =>
     new URL(response.url()).pathname.endsWith(`/session/${sessionId}/answers`),
   {timeout: 90_000});
   page.on("request", (request) => {
     if (new URL(request.url()).pathname.endsWith(`/session/${sessionId}/answers`)) {
+      answerAuthorization = request.headers().authorization ?? "";
       answerRequestBody = request.postDataJSON();
       answerRequestBodies.push(answerRequestBody);
     }
@@ -392,6 +394,14 @@ test("Student start authenticates Exam entry once and removes the credential", a
     }
   }
 
+  let submitAuthorization = "";
+  let submitRequestBody = null;
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.endsWith(`/session/${sessionId}/submit`)) {
+      submitAuthorization = request.headers().authorization ?? "";
+      submitRequestBody = request.postDataJSON();
+    }
+  });
   await page.getByRole("button", {name: "Submit Test"}).click();
   await page.getByLabel(/I understand 1 question\(s\) will remain unanswered/u).check();
   const submitResponsePromise = page.waitForResponse((response) =>
@@ -400,12 +410,89 @@ test("Student start authenticates Exam entry once and removes the credential", a
   await page.getByRole("button", {name: "Confirm Final Submit"}).click();
   const submitResponse = await submitResponsePromise;
   expect(submitResponse.status()).toBe(200);
+  const submitEnvelope = await submitResponse.json();
+  const submitResult = submitEnvelope.data;
+  expect(submitRequestBody).toEqual({
+    instituteId,
+    reason: "manual",
+    runId,
+    yearId,
+  });
+  expect(submitAuthorization).toMatch(/^Bearer /u);
+  expect(submitResult).toMatchObject({
+    accuracyPercent: expect.any(Number),
+    alreadySubmitted: false,
+    disciplineIndex: expect.any(Number),
+    guessRatePercent: expect.any(Number),
+    maxTimeViolationPercent: expect.any(Number),
+    minTimeViolationPercent: expect.any(Number),
+    phaseAdherencePercent: expect.any(Number),
+    rawScorePercent: expect.any(Number),
+    riskState: expect.any(String),
+    status: "submitted",
+    submissionReason: "manual",
+    submittedAt: expect.any(String),
+  });
+  expect(Date.parse(submitResult.submittedAt)).not.toBeNaN();
   await expect(page.getByRole("heading", {name: "Exam Submitted"}))
     .toBeVisible({timeout: 30_000});
+  const authoritativeMetrics = page.getByLabel("Authoritative submission metrics");
+  await expect(authoritativeMetrics).toContainText(
+    `Raw Score: ${submitResult.rawScorePercent.toFixed(2)}%`,
+  );
+  await expect(authoritativeMetrics).toContainText(
+    `Accuracy: ${submitResult.accuracyPercent.toFixed(2)}%`,
+  );
+  await expect(authoritativeMetrics).toContainText(
+    `Discipline Index: ${submitResult.disciplineIndex.toFixed(2)}%`,
+  );
+  await expect(authoritativeMetrics).toContainText(`Risk State: ${submitResult.riskState}`);
+  await expect(authoritativeMetrics).toContainText("Server Disposition: Finalized now");
   const submittedSession = await firestore.doc(sessionPath).get();
   expect(submittedSession.data().status).toBe("submitted");
   expect(Object.keys(submittedSession.data().answerMap)).toHaveLength(12);
   expect(submittedSession.data().answerMap[questionIds[5]].response)
     .toEqual({kind: "unanswered"});
+
+  const replayResponse = await page.request.post(
+    `/api/v1/exam/session/${encodeURIComponent(sessionId)}/submit`,
+    {
+      data: submitRequestBody,
+      headers: {Authorization: submitAuthorization},
+      timeout: 90_000,
+    },
+  );
+  expect(replayResponse.status()).toBe(200);
+  const replayEnvelope = await replayResponse.json();
+  expect(replayEnvelope.data).toEqual({
+    ...submitResult,
+    alreadySubmitted: true,
+  });
+
+  const finalAnswerRequest = answerRequestBodies.at(-1);
+  const postSubmitAnswerBody = {
+    ...finalAnswerRequest,
+    answers: [{
+      ...finalAnswerRequest.answers[0],
+      clientRevision: finalAnswerRequest.answers[0].clientRevision + 1_000,
+      response: {kind: "mcq", optionId: "A"},
+    }],
+    batchId: `post-submit-${Date.now()}`,
+    batchSequence: finalAnswerRequest.batchSequence + 1_000,
+  };
+  const postSubmitAnswerResponse = await page.request.post(
+    `/api/v1/exam/session/${encodeURIComponent(sessionId)}/answers`,
+    {
+      data: postSubmitAnswerBody,
+      headers: {Authorization: answerAuthorization},
+      timeout: 90_000,
+    },
+  );
+  expect(postSubmitAnswerResponse.status()).toBe(409);
+  const postSubmitAnswerEnvelope = await postSubmitAnswerResponse.json();
+  expect(postSubmitAnswerEnvelope.error.code).toBe("SESSION_LOCKED");
+  const immutableSession = await firestore.doc(sessionPath).get();
+  expect(immutableSession.data().answerMap[questionId].response)
+    .toEqual(submittedSession.data().answerMap[questionId].response);
 
 });

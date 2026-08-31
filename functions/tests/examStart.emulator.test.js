@@ -321,7 +321,7 @@ test(
       const submitAuthProof = await postExamRoute(
         `/api/v1/exam/session/${encodeURIComponent(sessionIds[0])}/submit`,
         runtimeIdToken,
-        {instituteId, runId, yearId},
+        {instituteId, reason: "manual", runId, yearId},
       );
       assert.notEqual(submitAuthProof.status, 401);
       assert.notEqual(submitAuthProof.body.error?.code, "UNAUTHORIZED");
