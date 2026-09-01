@@ -13,6 +13,7 @@ import {SubmissionRiskState} from "../types/submission";
 const INSTITUTES_COLLECTION = "institutes";
 const QUESTION_ANALYTICS_COLLECTION = "questionAnalytics";
 const QUESTION_BANK_COLLECTION = "questionBank";
+const PROCESSING_MARKERS_COLLECTION = "processingMarkers";
 
 interface SubmittedSessionSnapshot {
   accuracyPercent?: unknown;
@@ -314,14 +315,29 @@ export class QuestionAnalyticsEngineService {
           `${QUESTION_BANK_COLLECTION}/${questionId}`,
         )
       );
+      const processingMarkerReferences = questionAnalyticsReferences.map(
+        (reference) => reference
+          .collection(PROCESSING_MARKERS_COLLECTION)
+          .doc(context.sessionId),
+      );
       const questionAnalyticsSnapshots = await transaction.getAll(
         ...questionAnalyticsReferences,
       );
       const questionBankSnapshots = await transaction.getAll(
         ...questionBankReferences,
       );
+      const processingMarkerSnapshots = await transaction.getAll(
+        ...processingMarkerReferences,
+      );
 
-      const alreadyProcessed = questionAnalyticsSnapshots.every((snapshot) => {
+      const alreadyProcessed = questionAnalyticsSnapshots.every((snapshot, index) => {
+        const markerData = processingMarkerSnapshots[index].data();
+        const markerEngine = isPlainObject(markerData) &&
+          isPlainObject(markerData.questionAnalyticsEngine) ?
+          markerData.questionAnalyticsEngine : undefined;
+        if (markerEngine?.processed === true) {
+          return true;
+        }
         const snapshotData = snapshot.data();
         const data = isPlainObject(snapshotData) ? snapshotData : {};
         const processingMarkers = isPlainObject(data.processingMarkers) ?
@@ -351,6 +367,26 @@ export class QuestionAnalyticsEngineService {
       questionIds.forEach((questionId, index) => {
         const analyticsSnapshot = questionAnalyticsSnapshots[index];
         const questionBankSnapshot = questionBankSnapshots[index];
+        const markerData = processingMarkerSnapshots[index].data();
+        const markerEngine = isPlainObject(markerData) &&
+          isPlainObject(markerData.questionAnalyticsEngine) ?
+          markerData.questionAnalyticsEngine : undefined;
+        const analyticsSnapshotData = analyticsSnapshot.data();
+        const existingAnalyticsData = isPlainObject(analyticsSnapshotData) ?
+          analyticsSnapshotData : {};
+        const existingProcessingMarkers = isPlainObject(
+          existingAnalyticsData.processingMarkers,
+        ) ? existingAnalyticsData.processingMarkers : undefined;
+        const existingEngineState = isPlainObject(
+          existingProcessingMarkers?.questionAnalyticsEngine,
+        ) ? existingProcessingMarkers.questionAnalyticsEngine : undefined;
+        if (
+          markerEngine?.processed === true ||
+          toNonEmptyString(existingEngineState?.lastProcessedSessionId) ===
+            context.sessionId
+        ) {
+          return;
+        }
         const questionBankData = isPlainObject(questionBankSnapshot.data()) ?
           questionBankSnapshot.data() :
           undefined;
@@ -473,6 +509,16 @@ export class QuestionAnalyticsEngineService {
           },
           {merge: true},
         );
+        transaction.set(processingMarkerReferences[index], {
+          questionAnalyticsEngine: {
+            eventId: context.eventId ?? null,
+            processed: true,
+            processedAt: FieldValue.serverTimestamp(),
+            submittedAt,
+          },
+          sessionId: context.sessionId,
+          submittedAt,
+        }, {merge: true});
       });
 
       return {

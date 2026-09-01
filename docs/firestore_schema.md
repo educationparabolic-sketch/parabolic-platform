@@ -113,6 +113,15 @@ applies the same recipient/mode boundary with bounded status/page reads;
 projection contains run and metric summaries only and never reads or returns
 session documents or raw question data.
 
+BWM-024 persists each completed Student projection at
+`studentYearMetrics/{studentId}/results/{runId}`. The summary record contains
+only run/test labels and IDs, session/result timestamps, mode, score/accuracy,
+discipline/guess/phase/timing/risk metrics, attempted/flagged/total question
+counts, elapsed minutes, and Student/year ownership. Dashboard recent results,
+completed My Tests fields, and Performance timelines read this bounded
+Student-owned subcollection; no answer map, question-time map, raw session, or
+question content is copied into it.
+
 Student Performance reads only the identity Student's current-year
 `studentYearMetrics/{studentId}` summary and returns a bounded chronological
 timeline. Fields above the identity license layer are removed or zeroed, and
@@ -142,8 +151,14 @@ Student insight reads use the collection-scoped composite:
 - `insightSnapshots(snapshotType ASC, studentId ASC, sourceSubmittedAt DESC, __name__ DESC)`
 
 runAnalytics/{runId}
+  processingMarkers/{sessionId}
 
 studentYearMetrics/{studentId}
+  processingMarkers/{sessionId}
+  results/{runId}
+
+questionAnalytics/{questionId}
+  processingMarkers/{sessionId}
 
 templateAnalytics/{testId}
 
@@ -215,6 +230,25 @@ BWM-022 keeps `clientRevision`, `batchId`, `batchSequence`, `flushReason`, and p
 
 BWM-023 makes finalization authority exact and replayable. EXM-04 accepts only institute/run/year plus claimed manual/expiry reason, verifies that claim against the persisted deadline, and atomically stores `status: submitted`, server-owned `submittedAt`, derived `submissionReason`, and the complete scoring/discipline/guess/phase/timing/risk metrics. `submissionLock` is transient and is cleared when finalization commits; a parallel or repeated caller waits for and returns the same stored result rather than recomputing it. Submitted sessions reject all later answer mutations, and an idempotent replay does not create a second submitted-state transition. No collection path, Firestore rule, or index changed.
 
+BWM-024 makes downstream processing deterministic and explicitly eventually
+consistent. `runAnalytics/{runId}` and
+`studentYearMetrics/{studentId}` carry a newest-session `resultPropagation`
+object with `sessionId`, authoritative `submittedAt`, `updatedAt`, `state`
+(`processing|available`), and `retryAfterSeconds` (`2` while processing, `0`
+when available). The real submitted transition creates deterministic
+`processingMarkers/{sessionId}` documents. Component maps identify the queued
+analytics trigger and the run/Student/question engine's `processed: true`
+authority; a `pipeline.completed: true` marker is written only after the full
+post-submission pipeline succeeds. Older event retries cannot replace a newer
+propagation state, and exact retries cannot increment an aggregate twice.
+
+Run analytics initialization is create-only and includes run/test/batch/mode,
+schedule, status, and participant metadata. Incremental aggregation updates
+that metadata and completion metrics; when submitted sessions reach the
+recipient count, both `runs/{runId}` and `runAnalytics/{runId}` become
+completed. These additions use existing collection-group boundaries and need
+no new Firestore rule or composite index.
+
 ---
 
 # Analytics Collections
@@ -224,8 +258,11 @@ Analytics engines must read from summary collections rather than raw session dat
 Summary collections include:
 
 runAnalytics/{runId}
+  processingMarkers/{sessionId}
 
 studentYearMetrics/{studentId}
+  processingMarkers/{sessionId}
+  results/{runId}
 
 templateAnalytics/{testId}
 

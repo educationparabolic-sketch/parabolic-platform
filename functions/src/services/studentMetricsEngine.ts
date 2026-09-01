@@ -8,11 +8,16 @@ import {
 
 const INSTITUTES_COLLECTION = "institutes";
 const ACADEMIC_YEARS_COLLECTION = "academicYears";
+const RUNS_COLLECTION = "runs";
+const STUDENTS_COLLECTION = "students";
 const STUDENT_YEAR_METRICS_COLLECTION = "studentYearMetrics";
+const PROCESSING_MARKERS_COLLECTION = "processingMarkers";
+const RESULTS_COLLECTION = "results";
 const GOVERNANCE_TREND_WINDOW_SIZE = 5;
 
 interface SubmittedSessionSnapshot {
   accuracyPercent?: unknown;
+  answerMap?: unknown;
   behaviourTagSummary?: unknown;
   consecutiveWrongStreakMax?: unknown;
   disciplineIndex?: unknown;
@@ -32,10 +37,13 @@ interface SubmittedSessionSnapshot {
   phaseAdherencePercent?: unknown;
   phaseTimingAdherencePercent?: unknown;
   rawScorePercent?: unknown;
+  riskState?: unknown;
   skipBurstCount?: unknown;
+  startedAt?: unknown;
   status?: unknown;
   studentId?: unknown;
   submittedAt?: unknown;
+  questionTimeMap?: unknown;
 }
 
 interface StudentMetricsComputationState {
@@ -365,17 +373,88 @@ export class StudentMetricsEngineService {
       afterData?.consecutiveWrongStreakMax,
       0,
     );
+    const answerMap = isPlainObject(afterData?.answerMap) ?
+      afterData.answerMap : {};
+    const questionTimeMap = isPlainObject(afterData?.questionTimeMap) ?
+      afterData.questionTimeMap : {};
+    const questionIds = Array.from(new Set([
+      ...Object.keys(questionTimeMap),
+      ...Object.keys(answerMap),
+    ]));
+    const attemptedQuestions = Object.values(answerMap).filter((value) => {
+      if (!isPlainObject(value)) {
+        return false;
+      }
+      const response = isPlainObject(value.response) ? value.response : undefined;
+      return response?.kind !== "unanswered" &&
+        (response !== undefined || toNonEmptyString(value.selectedOption) !== undefined);
+    }).length;
+    const flaggedQuestions = Object.values(answerMap).filter((value) =>
+      isPlainObject(value) && value.markedForReview === true
+    ).length;
+    const startedAt = toTimestampOrUndefined(afterData?.startedAt);
+    const totalQuestionTimeSeconds = Object.values(questionTimeMap)
+      .reduce<number>((total, value) => {
+        if (!isPlainObject(value)) {
+          return total;
+        }
+        const elapsed = typeof value.cumulativeTimeSpent === "number" &&
+          Number.isFinite(value.cumulativeTimeSpent) &&
+          value.cumulativeTimeSpent > 0 ? value.cumulativeTimeSpent : 0;
+        return total + elapsed;
+      }, 0);
+    const elapsedSessionMinutes = startedAt ?
+      Math.max(0, Math.round(
+        (submittedAt.toMillis() - startedAt.toMillis()) / 60_000,
+      )) :
+      Math.max(0, Math.round(totalQuestionTimeSeconds / 60));
 
     const result = await this.firestore.runTransaction(async (transaction) => {
       const studentMetricsReference = this.firestore.doc(
         studentYearMetricsPath,
       );
-      const studentMetricsSnapshot = await transaction.get(
-        studentMetricsReference,
+      const runReference = this.firestore.doc(
+        `${INSTITUTES_COLLECTION}/${instituteId}/` +
+        `${ACADEMIC_YEARS_COLLECTION}/${yearId}/` +
+        `${RUNS_COLLECTION}/${context.runId}`,
       );
+      const studentReference = this.firestore.doc(
+        `${INSTITUTES_COLLECTION}/${instituteId}/` +
+        `${STUDENTS_COLLECTION}/${studentId}`,
+      );
+      const processingMarkerReference = studentMetricsReference
+        .collection(PROCESSING_MARKERS_COLLECTION)
+        .doc(sessionId);
+      const resultReference = studentMetricsReference
+        .collection(RESULTS_COLLECTION)
+        .doc(context.runId);
+      const [
+        studentMetricsSnapshot,
+        runSnapshot,
+        studentSnapshot,
+        processingMarkerSnapshot,
+      ] = await Promise.all([
+        transaction.get(studentMetricsReference),
+        transaction.get(runReference),
+        transaction.get(studentReference),
+        transaction.get(processingMarkerReference),
+      ]);
       const studentMetricsData = isPlainObject(studentMetricsSnapshot.data()) ?
         studentMetricsSnapshot.data() :
         undefined;
+      const runSnapshotData = runSnapshot.data();
+      const studentSnapshotData = studentSnapshot.data();
+      const runData: Record<string, unknown> = isPlainObject(runSnapshotData) ?
+        runSnapshotData : {};
+      const studentData: Record<string, unknown> = isPlainObject(
+        studentSnapshotData,
+      ) ? studentSnapshotData : {};
+      const processingMarkerData = isPlainObject(
+        processingMarkerSnapshot.data(),
+      ) ? processingMarkerSnapshot.data() : undefined;
+      const processedEngineMarker = isPlainObject(
+        processingMarkerData?.studentMetricsEngine,
+      ) ? processingMarkerData.studentMetricsEngine : undefined;
       const processingMarkers = isPlainObject(
         studentMetricsData?.processingMarkers,
       ) ?
@@ -390,7 +469,10 @@ export class StudentMetricsEngineService {
         engineState?.lastProcessedSessionId,
       );
 
-      if (lastProcessedSessionId === sessionId) {
+      if (
+        processedEngineMarker?.processed === true ||
+        lastProcessedSessionId === sessionId
+      ) {
         return {
           idempotent: true,
           reason: "already_processed" as const,
@@ -427,7 +509,10 @@ export class StudentMetricsEngineService {
           sessionId,
           submittedAt,
         },
-      ].slice(-GOVERNANCE_TREND_WINDOW_SIZE);
+      ].sort((left, right) =>
+        left.submittedAt.toMillis() - right.submittedAt.toMillis() ||
+        left.sessionId.localeCompare(right.sessionId)
+      ).slice(-GOVERNANCE_TREND_WINDOW_SIZE);
       const disciplineIndexTrend = computeMetricTrend(
         recentGovernanceMetrics,
         (point) => point.disciplineIndex,
@@ -436,6 +521,62 @@ export class StudentMetricsEngineService {
         recentGovernanceMetrics,
         (point) => point.guessRate,
       );
+      const existingLastSubmissionAt = toTimestampOrUndefined(
+        studentMetricsData?.lastSubmissionAt,
+      );
+      const isLatestResult = !existingLastSubmissionAt ||
+        submittedAt.toMillis() >= existingLastSubmissionAt.toMillis();
+      const runName = toNonEmptyString(runData.runName) ??
+        toNonEmptyString(runData.testName) ?? context.runId;
+      const testId = toNonEmptyString(runData.testId) ?? context.runId;
+      const studentName = toNonEmptyString(studentData.name) ??
+        toNonEmptyString(studentData.fullName) ??
+        toNonEmptyString(studentMetricsData?.studentName) ?? studentId;
+      const latestSessionSummary = {
+        accuracyPercent,
+        behaviourTagSummary: typeof afterData?.behaviourTagSummary === "string" ?
+          afterData.behaviourTagSummary : null,
+        consecutiveWrongStreakMax,
+        easyAttemptRatePercent: toPercentOrDefault(
+          afterData?.easyAttemptRatePercent,
+          0,
+        ),
+        easyNeglectRatePercent: easyNeglectRate,
+        easyRemainingAfterPhase1Percent: toPercentOrDefault(
+          afterData?.easyRemainingAfterPhase1Percent,
+          0,
+        ),
+        guessRate,
+        guessRatePercent: guessRate,
+        hardAttemptRatioPercent: toPercentOrDefault(
+          afterData?.hardAttemptRatioPercent,
+          0,
+        ),
+        hardBiasRatePercent: hardBiasRate,
+        hardInPhase1Percent: toPercentOrDefault(
+          afterData?.hardInPhase1Percent,
+          0,
+        ),
+        maxTimeViolationPercent,
+        minTimeViolationPercent,
+        normalizedRiskScore,
+        overstayQuestionsPercent,
+        phaseObjectiveAdherencePercent: toPercentOrDefault(
+          afterData?.phaseObjectiveAdherencePercent,
+          phaseAdherencePercent,
+        ),
+        phaseAdherencePercent,
+        phaseTimingAdherencePercent: toPercentOrDefault(
+          afterData?.phaseTimingAdherencePercent,
+          phaseAdherencePercent,
+        ),
+        rawScorePercent,
+        runId: context.runId,
+        runName,
+        sessionId,
+        skipBurstCount,
+        submittedAt,
+      };
 
       transaction.set(
         studentMetricsReference,
@@ -477,6 +618,11 @@ export class StudentMetricsEngineService {
           hardBiasRatePercent: roundToTwoDecimals(
             sumHardBiasRate / totalTests,
           ),
+          ...(isLatestResult ? {
+            lastAssessmentLabel: runName,
+            lastSubmissionAt: submittedAt,
+            studentName,
+          } : {}),
           lastUpdated: FieldValue.serverTimestamp(),
           overstayQuestionsPercent: roundToTwoDecimals(
             sumOverstayQuestionsPercent / totalTests,
@@ -496,59 +642,59 @@ export class StudentMetricsEngineService {
               sumPhaseAdherencePercent,
               sumRawScorePercent,
               totalTests,
-              latestSessionSummary: {
-                accuracyPercent,
-                behaviourTagSummary: typeof afterData?.behaviourTagSummary === "string" ?
-                  afterData.behaviourTagSummary :
-                  null,
-                consecutiveWrongStreakMax,
-                easyAttemptRatePercent: toPercentOrDefault(
-                  afterData?.easyAttemptRatePercent,
-                  0,
-                ),
-                easyNeglectRatePercent: easyNeglectRate,
-                easyRemainingAfterPhase1Percent: toPercentOrDefault(
-                  afterData?.easyRemainingAfterPhase1Percent,
-                  0,
-                ),
-                guessRate,
-                guessRatePercent: guessRate,
-                hardAttemptRatioPercent: toPercentOrDefault(
-                  afterData?.hardAttemptRatioPercent,
-                  0,
-                ),
-                hardBiasRatePercent: hardBiasRate,
-                hardInPhase1Percent: toPercentOrDefault(
-                  afterData?.hardInPhase1Percent,
-                  0,
-                ),
-                maxTimeViolationPercent,
-                minTimeViolationPercent,
-                normalizedRiskScore,
-                overstayQuestionsPercent,
-                phaseObjectiveAdherencePercent: toPercentOrDefault(
-                  afterData?.phaseObjectiveAdherencePercent,
-                  phaseAdherencePercent,
-                ),
-                phaseAdherencePercent,
-                phaseTimingAdherencePercent: toPercentOrDefault(
-                  afterData?.phaseTimingAdherencePercent,
-                  phaseAdherencePercent,
-                ),
-                rawScorePercent,
-                sessionId,
-                skipBurstCount,
-                submittedAt,
-              },
+              latestSessionSummary: isLatestResult ? latestSessionSummary :
+                engineState?.latestSessionSummary ?? latestSessionSummary,
               recentGovernanceMetrics,
               updatedAt: FieldValue.serverTimestamp(),
             },
           },
           studentId,
+          studentName,
+          testsAttempted: totalTests,
           totalTests,
         },
         {merge: true},
       );
+
+      transaction.set(resultReference, {
+        accuracyPercent,
+        attemptedQuestions,
+        completedAt: submittedAt,
+        disciplineIndex,
+        endWindow: runData.endWindow ?? submittedAt,
+        flaggedQuestions,
+        guessRatePercent: guessRate,
+        maxTimeViolationPercent,
+        minTimeViolationPercent,
+        mode: toNonEmptyString(runData.mode) ?? "Operational",
+        phaseAdherencePercent,
+        rankInBatch: null,
+        rawScorePercent,
+        riskState: toNonEmptyString(afterData?.riskState) ?? "Stable",
+        runId: context.runId,
+        runName,
+        sessionId,
+        startWindow: runData.startWindow ?? startedAt ?? submittedAt,
+        studentId,
+        submittedAt,
+        testId,
+        testName: runName,
+        timeSpentMinutes: elapsedSessionMinutes,
+        totalQuestions: questionIds.length,
+        updatedAt: FieldValue.serverTimestamp(),
+        yearId,
+      }, {merge: true});
+
+      transaction.set(processingMarkerReference, {
+        sessionId,
+        studentMetricsEngine: {
+          eventId: context.eventId ?? null,
+          processed: true,
+          processedAt: FieldValue.serverTimestamp(),
+          submittedAt,
+        },
+        submittedAt,
+      }, {merge: true});
 
       return {
         idempotent: false,

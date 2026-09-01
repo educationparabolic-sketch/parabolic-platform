@@ -33,6 +33,14 @@ implements PostSubmissionRetryExecutor {
     afterData: Record<string, unknown>,
     dispatchContext?: SystemEventDispatchContext,
   ): Promise<void> {
+    const previousStatus = typeof beforeData.status === "string" ?
+      beforeData.status.trim().toLowerCase() : "";
+    const nextStatus = typeof afterData.status === "string" ?
+      afterData.status.trim().toLowerCase() : "";
+    if (nextStatus !== "submitted" || previousStatus === "submitted") {
+      return;
+    }
+
     const eventContext = {
       eventId: context.eventId,
       instituteId: context.instituteId,
@@ -99,6 +107,11 @@ implements PostSubmissionRetryExecutor {
     await notificationQueueGenerationService.processSubmittedSession(
       eventContext,
       beforeData,
+      afterData,
+    );
+
+    await submissionAnalyticsTriggerService.markResultPropagationAvailable(
+      eventContext,
       afterData,
     );
   }

@@ -59,8 +59,24 @@ test(
     const studentMetricsPath =
       `institutes/${instituteId}/academicYears/${yearId}/` +
       `studentYearMetrics/${studentId}`;
+    const runPath =
+      `institutes/${instituteId}/academicYears/${yearId}/runs/${runId}`;
+    const studentPath = `institutes/${instituteId}/students/${studentId}`;
 
     await deleteDocumentIfPresent(studentMetricsPath);
+    await firestore.doc(runPath).set({
+      endWindow: Timestamp.fromMillis(Date.now() + 60_000),
+      mode: "Operational",
+      runId,
+      runName: "BWM-024 Student Result Run",
+      startWindow: Timestamp.fromMillis(Date.now() - 60_000),
+      testId: "test_bwm_024_student_result",
+    });
+    await firestore.doc(studentPath).set({
+      name: "BWM-024 Student",
+      status: "active",
+      studentId,
+    });
 
     const firstResult =
       await studentMetricsEngineService.processSubmittedSession(
@@ -76,6 +92,9 @@ test(
         },
         {
           accuracyPercent: 80,
+          answerMap: {
+            q1: {response: {kind: "mcq", optionId: "A"}, selectedOption: "A"},
+          },
           consecutiveWrongStreakMax: 1,
           disciplineIndex: 90,
           easyRemainingAfterPhase1Percent: 20,
@@ -85,10 +104,13 @@ test(
           minTimeViolationPercent: 10,
           phaseAdherencePercent: 70,
           rawScorePercent: 60,
+          riskState: "Stable",
           skipBurstCount: 0,
+          startedAt: Timestamp.fromMillis(Date.now() - 30_000),
           status: "submitted",
           studentId,
           submittedAt: Timestamp.fromMillis(Date.now()),
+          questionTimeMap: {q1: {cumulativeTimeSpent: 30}},
         },
       );
 
@@ -171,8 +193,19 @@ test(
         ?.maxTimeViolationPercent,
       0,
     );
+    assert.equal(secondData?.testsAttempted, 2);
+    assert.equal(secondData?.studentName, "BWM-024 Student");
+    const resultSummary = (await firestore.doc(
+      `${studentMetricsPath}/results/${runId}`,
+    ).get()).data();
+    assert.equal(resultSummary?.runName, "BWM-024 Student Result Run");
+    assert.equal(resultSummary?.testId, "test_bwm_024_student_result");
+    assert.equal(resultSummary?.sessionId, "session_build_43_2");
+    assert.ok(resultSummary?.submittedAt instanceof Timestamp);
 
     await deleteDocumentIfPresent(studentMetricsPath);
+    await deleteDocumentIfPresent(runPath);
+    await deleteDocumentIfPresent(studentPath);
   },
 );
 
@@ -223,6 +256,24 @@ test(
 
     assert.equal(firstResult.triggered, true);
 
+    const newerResult =
+      await studentMetricsEngineService.processSubmittedSession(
+        {
+          eventId: "event_build_43_idempotent_newer",
+          instituteId,
+          runId: "run_build_43_idempotent_newer",
+          sessionId: "session_build_43_idempotent_newer",
+          yearId,
+        },
+        {status: "active"},
+        {
+          ...payload,
+          rawScorePercent: 55,
+          submittedAt: Timestamp.fromMillis(submittedAt.toMillis() + 1_000),
+        },
+      );
+    assert.equal(newerResult.triggered, true);
+
     const secondResult =
       await studentMetricsEngineService.processSubmittedSession(
         {
@@ -244,8 +295,17 @@ test(
 
     const studentMetricsData = (await firestore.doc(studentMetricsPath).get())
       .data();
-    assert.equal(studentMetricsData?.totalTests, 1);
-    assert.equal(studentMetricsData?.avgRawScorePercent, 45);
+    assert.equal(studentMetricsData?.totalTests, 2);
+    assert.equal(studentMetricsData?.avgRawScorePercent, 50);
+    assert.equal(
+      studentMetricsData?.processingMarkers?.studentMetricsEngine
+        ?.latestSessionSummary?.sessionId,
+      "session_build_43_idempotent_newer",
+    );
+    const originalMarker = (await firestore.doc(
+      `${studentMetricsPath}/processingMarkers/${sessionId}`,
+    ).get()).data();
+    assert.equal(originalMarker?.studentMetricsEngine?.processed, true);
 
     await deleteDocumentIfPresent(studentMetricsPath);
   },

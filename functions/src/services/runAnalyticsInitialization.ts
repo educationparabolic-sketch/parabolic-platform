@@ -94,19 +94,38 @@ export class RunAnalyticsInitializationService {
       `${ACADEMIC_YEARS_COLLECTION}/${yearId}/` +
       `${RUN_ANALYTICS_COLLECTION}/${runId}`;
     const runAnalyticsReference = this.firestore.doc(runAnalyticsPath);
+    const recipientCount = Array.isArray(runData.recipientStudentIds) ?
+      runData.recipientStudentIds.length :
+      typeof runData.recipientCount === "number" ? runData.recipientCount : 0;
+    const runName = typeof runData.runName === "string" && runData.runName.trim() ?
+      runData.runName.trim() :
+      typeof runData.testName === "string" && runData.testName.trim() ?
+        runData.testName.trim() :
+        runId;
 
     try {
       await runAnalyticsReference.create({
         avgAccuracyPercent: 0,
         avgRawScorePercent: 0,
+        batchId: runData.batchId ?? null,
+        batchName: runData.batchName ?? null,
         completionRate: 0,
+        completionRatePercent: 0,
         createdAt: FieldValue.serverTimestamp(),
         disciplineAverage: 0,
         guessRateAverage: 0,
+        mode: runData.mode ?? "Operational",
         overrideCount: 0,
         phaseAdherenceAverage: 0,
+        runId,
+        runName,
         riskDistribution: {},
+        startedAt: runData.startWindow ?? null,
+        status: runData.status ?? "scheduled",
         stdDeviation: 0,
+        testId: runData.testId ?? null,
+        testName: runName,
+        totalParticipants: recipientCount,
       });
 
       this.logger.info("Run analytics initialized", {

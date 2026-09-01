@@ -17,6 +17,20 @@ gcpMetadata.setGCPResidency(false);
 const firestore = getFirestore();
 
 interface SubmissionAnalyticsTriggerServiceContract {
+  markResultPropagationAvailable: (
+    context: {
+      eventId?: string;
+      instituteId: string;
+      runId: string;
+      sessionId: string;
+      yearId: string;
+    },
+    afterData: {
+      status?: unknown;
+      studentId?: unknown;
+      submittedAt?: unknown;
+    } | undefined,
+  ) => Promise<void>;
   processSessionSubmissionTransition: (
     context: {
       eventId?: string;
@@ -124,6 +138,9 @@ test(
         ?.behavioralPatternDetectionQueuedAt instanceof Timestamp,
     );
     assert.equal(runAnalyticsData?.runId, runId);
+    assert.equal(runAnalyticsData?.resultPropagation?.state, "processing");
+    assert.equal(runAnalyticsData?.resultPropagation?.sessionId, sessionId);
+    assert.equal(runAnalyticsData?.resultPropagation?.retryAfterSeconds, 2);
 
     const studentMetricsSnapshot = await firestore.doc(studentYearMetricsPath)
       .get();
@@ -134,6 +151,31 @@ test(
       sessionId,
     );
     assert.equal(studentMetricsData?.studentId, studentId);
+    assert.equal(studentMetricsData?.resultPropagation?.state, "processing");
+
+    await submissionAnalyticsTriggerService.markResultPropagationAvailable(
+      {
+        eventId: "event_build_39_1",
+        instituteId,
+        runId,
+        sessionId,
+        yearId,
+      },
+      {
+        status: "submitted",
+        studentId,
+        submittedAt,
+      },
+    );
+
+    const availableRunAnalytics = (await firestore.doc(runAnalyticsPath).get())
+      .data();
+    const availableStudentMetrics = (
+      await firestore.doc(studentYearMetricsPath).get()
+    ).data();
+    assert.equal(availableRunAnalytics?.resultPropagation?.state, "available");
+    assert.equal(availableRunAnalytics?.resultPropagation?.retryAfterSeconds, 0);
+    assert.equal(availableStudentMetrics?.resultPropagation?.state, "available");
 
     const secondResult =
       await submissionAnalyticsTriggerService
@@ -160,6 +202,10 @@ test(
     assert.equal(secondResult.triggered, false);
     assert.equal(secondResult.idempotent, true);
     assert.equal(secondResult.reason, "already_processed");
+
+    const preservedAvailableRun = (await firestore.doc(runAnalyticsPath).get())
+      .data();
+    assert.equal(preservedAvailableRun?.resultPropagation?.state, "available");
 
     await deleteDocumentIfPresent(runAnalyticsPath);
     await deleteDocumentIfPresent(studentYearMetricsPath);

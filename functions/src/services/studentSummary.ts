@@ -39,6 +39,7 @@ const INSIGHT_SNAPSHOTS_COLLECTION = "insightSnapshots";
 const RUNS_COLLECTION = "runs";
 const SESSIONS_COLLECTION = "sessions";
 const QUESTION_BANK_COLLECTION = "questionBank";
+const RESULTS_COLLECTION = "results";
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 50;
 const MAX_PAGE = 100;
@@ -76,6 +77,7 @@ interface StudentScope {
   currentYearId: string;
   currentYearReference: FirebaseFirestore.DocumentReference;
   metricsData: FirebaseFirestore.DocumentData;
+  metricsReference: FirebaseFirestore.DocumentReference;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -352,38 +354,45 @@ const resolveCurrentYear = (
 };
 
 const toStudentTestRecord = (
-  document: FirebaseFirestore.QueryDocumentSnapshot,
+  document: FirebaseFirestore.DocumentSnapshot,
   academicYear: string,
+  resultData?: Record<string, unknown>,
 ): StudentTestRecord => {
-  const data = document.data();
+  const data = document.data() ?? {};
   const startWindow = toIsoString(data.startWindow, "startWindow");
   const endWindow = toIsoString(data.endWindow, "endWindow");
   const startMillis = Date.parse(startWindow);
   const endMillis = Date.parse(endWindow);
   const testId = normalizeRequiredString(data.testId, "testId");
-  const status = toStudentStatus(data.status);
+  const status = resultData ? "completed" : toStudentStatus(data.status);
 
   return {
     academicYear,
-    accuracyPercent: null,
+    accuracyPercent: resultData ? toPercent(resultData.accuracyPercent) : null,
     archivedSummary: status === "archived" ?
       "Assignment closed in the current academic year." :
       null,
-    attemptedQuestions: null,
-    attemptStatusLabel: null,
-    completedAt: null,
+    attemptedQuestions: resultData ?
+      toNonNegativeInteger(resultData.attemptedQuestions) : null,
+    attemptStatusLabel: resultData ? "Result available" : null,
+    completedAt: resultData ?
+      toIsoString(
+        resultData.completedAt ?? resultData.submittedAt,
+        "result.completedAt",
+      ) : null,
     currentAcademicYear: true,
     durationMinutes: Math.max(
       0,
       Math.round((endMillis - startMillis) / 60_000),
     ),
     endWindow,
-    flaggedQuestions: null,
+    flaggedQuestions: resultData ?
+      toNonNegativeInteger(resultData.flaggedQuestions) : null,
     mode: toRunMode(data.mode),
-    rankInBatch: null,
-    rawScorePercent: null,
+    rankInBatch: resultData ? toOptionalNumber(resultData.rankInBatch) : null,
+    rawScorePercent: resultData ? toPercent(resultData.rawScorePercent) : null,
     runId: document.id,
-    sessionId: null,
+    sessionId: resultData ? toOptionalString(resultData.sessionId) : null,
     sessionLink: null,
     startWindow,
     status,
@@ -391,8 +400,10 @@ const toStudentTestRecord = (
     testId,
     testName:
       toOptionalString(data.testName ?? data.runName) ?? testId,
-    timeUsedMinutes: null,
-    totalQuestions: null,
+    timeUsedMinutes: resultData ?
+      Math.max(0, Math.round(toFiniteNumber(resultData.timeSpentMinutes))) : null,
+    totalQuestions: resultData ?
+      toNonNegativeInteger(resultData.totalQuestions) : null,
   };
 };
 
@@ -793,15 +804,16 @@ export class StudentSummaryService {
 
     const currentYearSnapshot = resolveCurrentYear(yearsSnapshot.docs);
     const currentYearReference = currentYearSnapshot.ref;
-    const metricsSnapshot = await currentYearReference
+    const metricsReference = currentYearReference
       .collection(STUDENT_YEAR_METRICS_COLLECTION)
-      .doc(request.studentId)
-      .get();
+      .doc(request.studentId);
+    const metricsSnapshot = await metricsReference.get();
 
     return {
       currentYearId: currentYearSnapshot.id,
       currentYearReference,
       metricsData: metricsSnapshot.data() ?? {},
+      metricsReference,
     };
   }
 
@@ -819,13 +831,19 @@ export class StudentSummaryService {
     request: StudentDashboardRequest,
   ): Promise<StudentDashboardResult> {
     const scope = await this.loadStudentScope(request);
-    const upcomingSnapshot = await this.buildAssignedRunsQuery(scope, request)
-      .where("status", "==", "scheduled")
-      .where("startWindow", ">=", Timestamp.fromDate(this.now()))
-      .orderBy("startWindow", "asc")
-      .orderBy(FieldPath.documentId(), "asc")
-      .limit(DASHBOARD_UPCOMING_LIMIT)
-      .get();
+    const [upcomingSnapshot, recentResultSnapshot] = await Promise.all([
+      this.buildAssignedRunsQuery(scope, request)
+        .where("status", "==", "scheduled")
+        .where("startWindow", ">=", Timestamp.fromDate(this.now()))
+        .orderBy("startWindow", "asc")
+        .orderBy(FieldPath.documentId(), "asc")
+        .limit(DASHBOARD_UPCOMING_LIMIT)
+        .get(),
+      scope.metricsReference.collection(RESULTS_COLLECTION)
+        .orderBy("submittedAt", "desc")
+        .limit(5)
+        .get(),
+    ]);
     const metrics = scope.metricsData;
     const l1Allowed = request.licenseLayer !== "L0";
     const l2Allowed = request.licenseLayer === "L2" ||
@@ -884,7 +902,11 @@ export class StudentSummaryService {
         ) :
         0,
       phaseComplianceMiniTrend: l1Allowed ? toTrend(metrics) : [],
-      recentResults: toRecentResults(metrics.recentResults),
+      recentResults: toRecentResults(
+        recentResultSnapshot.empty ?
+          metrics.recentResults :
+          recentResultSnapshot.docs.map((document) => document.data()),
+      ),
       riskState: l2Allowed ?
         toRiskState(metrics.riskState ?? metrics.rollingRiskCluster) :
         "low",
@@ -936,10 +958,53 @@ export class StudentSummaryService {
   ): Promise<StudentTestsResult> {
     const scope = await this.loadStudentScope(request);
     const offset = (request.page - 1) * request.pageSize;
-    let documents: FirebaseFirestore.QueryDocumentSnapshot[];
+    let documents: FirebaseFirestore.DocumentSnapshot[];
     let total: number;
+    const resultByRunId = new Map<string, Record<string, unknown>>();
 
-    if (request.status === "archived") {
+    if (request.status === "completed") {
+      const resultCollection = scope.metricsReference.collection(
+        RESULTS_COLLECTION,
+      );
+      const [countSnapshot, resultSnapshot] = await Promise.all([
+        resultCollection.count().get(),
+        resultCollection
+          .orderBy("submittedAt", "desc")
+          .orderBy(FieldPath.documentId(), "desc")
+          .offset(offset)
+          .limit(request.pageSize + 1)
+          .get(),
+      ]);
+
+      if (!resultSnapshot.empty) {
+        resultSnapshot.docs.forEach((document) => {
+          resultByRunId.set(document.id, document.data());
+        });
+        const runReferences = resultSnapshot.docs.map((document) =>
+          scope.currentYearReference
+            .collection(RUNS_COLLECTION)
+            .doc(document.id));
+        const runSnapshots = await this.firestore.getAll(...runReferences);
+        documents = runSnapshots.filter((snapshot) => {
+          const data = snapshot.data();
+          return snapshot.exists &&
+            Array.isArray(data?.recipientStudentIds) &&
+            data.recipientStudentIds.includes(request.studentId) &&
+            ALLOWED_MODES_BY_LAYER[request.licenseLayer].includes(
+              data.mode as AdminRunMode,
+            );
+        });
+        total = countSnapshot.data().count;
+      } else {
+        const result = await this.loadTestsForStatus(
+          scope,
+          request,
+          "completed",
+        );
+        documents = result.documents;
+        total = result.total;
+      }
+    } else if (request.status === "archived") {
       const fetchLimit = offset + request.pageSize + 1;
       const [cancelled, stopped] = await Promise.all([
         this.loadTestsForStatus(
@@ -968,12 +1033,28 @@ export class StudentSummaryService {
     }
 
     const selected = documents.slice(0, request.pageSize);
+    if (request.status === "all" && selected.length > 0) {
+      const resultSnapshots = await this.firestore.getAll(
+        ...selected.map((document) => scope.metricsReference
+          .collection(RESULTS_COLLECTION)
+          .doc(document.id)),
+      );
+      resultSnapshots.forEach((document) => {
+        if (document.exists && isRecord(document.data())) {
+          resultByRunId.set(document.id, document.data() as Record<string, unknown>);
+        }
+      });
+    }
     return {
       hasMore: offset + selected.length < total,
       page: request.page,
       pageSize: request.pageSize,
       tests: selected.map((document) =>
-        toStudentTestRecord(document, scope.currentYearId)),
+        toStudentTestRecord(
+          document,
+          scope.currentYearId,
+          resultByRunId.get(document.id),
+        )),
       total,
     };
   }
@@ -986,9 +1067,14 @@ export class StudentSummaryService {
     const l1Allowed = request.licenseLayer !== "L0";
     const l2Allowed = request.licenseLayer === "L2" ||
       request.licenseLayer === "L3";
-    const timelineSource = metrics.performanceTimeline ??
-      metrics.testHistory ??
-      metrics.recentResults;
+    const resultSnapshot = await scope.metricsReference
+      .collection(RESULTS_COLLECTION)
+      .orderBy("submittedAt", "desc")
+      .limit(request.lastN)
+      .get();
+    const timelineSource = resultSnapshot.empty ?
+      metrics.performanceTimeline ?? metrics.testHistory ?? metrics.recentResults :
+      resultSnapshot.docs.map((document) => document.data());
     const timeline = toRecordArray(timelineSource)
       .map((entry, index) => toPerformancePoint(
         entry,

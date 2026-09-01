@@ -79,7 +79,12 @@ interface StudentSummaryServiceContract {
     studentId: string;
   }) => Promise<{
     hasMore: boolean;
-    tests: Array<{runId: string; status: string}>;
+    tests: Array<{
+      rawScorePercent: number | null;
+      runId: string;
+      sessionId: string | null;
+      status: string;
+    }>;
     total: number;
   }>;
   normalizeTestsRequest: (request: {
@@ -150,6 +155,10 @@ test(
       `${currentYearPath}/runs/run-completed-operational/sessions/` +
         "session-completed-operational",
       `${currentYearPath}/insightSnapshots/insight-student-owned`,
+      `${currentYearPath}/studentYearMetrics/${studentId}/results/` +
+        "run-completed-operational",
+      `${currentYearPath}/studentYearMetrics/${studentId}/results/` +
+        "run-completed-diagnostic",
     ];
 
     await Promise.all([
@@ -321,6 +330,38 @@ test(
         ),
         studentId,
       }),
+      firestore.doc(documentPaths[19]).set({
+        accuracyPercent: 84,
+        attemptedQuestions: 1,
+        completedAt: Timestamp.fromDate(new Date("2026-08-20T10:00:00.000Z")),
+        disciplineIndex: 79,
+        flaggedQuestions: 0,
+        guessRatePercent: 13,
+        phaseAdherencePercent: 88,
+        rawScorePercent: 76,
+        runId: "run-completed-operational",
+        runName: "Completed Operational",
+        sessionId: "session-completed-operational",
+        submittedAt: Timestamp.fromDate(new Date("2026-08-20T10:00:00.000Z")),
+        timeSpentMinutes: 72,
+        totalQuestions: 1,
+      }),
+      firestore.doc(documentPaths[20]).set({
+        accuracyPercent: 70,
+        attemptedQuestions: 1,
+        completedAt: Timestamp.fromDate(new Date("2026-08-21T10:00:00.000Z")),
+        disciplineIndex: 75,
+        flaggedQuestions: 0,
+        guessRatePercent: 15,
+        phaseAdherencePercent: 80,
+        rawScorePercent: 68,
+        runId: "run-completed-diagnostic",
+        runName: "Completed Diagnostic",
+        sessionId: "session-completed-diagnostic",
+        submittedAt: Timestamp.fromDate(new Date("2026-08-21T10:00:00.000Z")),
+        timeSpentMinutes: 70,
+        totalQuestions: 1,
+      }),
     ]);
 
     const dashboard = await studentSummaryService.getDashboard({
@@ -341,6 +382,7 @@ test(
       ["Operational", "Diagnostic"],
     );
     assert.deepEqual(dashboard.recentResults.map((run) => run.runId), [
+      "run-completed-diagnostic",
       "run-completed-operational",
     ]);
     assert.deepEqual(
@@ -354,7 +396,7 @@ test(
       licenseLayer: "L1",
       studentId,
     });
-    assert.equal(l1Performance.timeline.length, 1);
+    assert.equal(l1Performance.timeline.length, 2);
     assert.equal(l1Performance.timeline[0].disciplineIndex, 0);
     assert.equal(l1Performance.disciplineIndex, 0);
     const l2Performance = await studentSummaryService.getPerformance({
@@ -462,6 +504,8 @@ test(
     });
     assert.equal(completed.total, 2);
     assert.ok(completed.tests.every((run) => run.status === "completed"));
+    assert.ok(completed.tests.every((run) => run.sessionId !== null));
+    assert.ok(completed.tests.every((run) => run.rawScorePercent !== null));
 
     const archived = await studentSummaryService.listTests({
       instituteId,

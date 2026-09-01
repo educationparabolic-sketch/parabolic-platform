@@ -10,6 +10,8 @@ const INSTITUTES_COLLECTION = "institutes";
 const ACADEMIC_YEARS_COLLECTION = "academicYears";
 const RUN_ANALYTICS_COLLECTION = "runAnalytics";
 const STUDENT_YEAR_METRICS_COLLECTION = "studentYearMetrics";
+const PROCESSING_MARKERS_COLLECTION = "processingMarkers";
+const RESULT_PROPAGATION_RETRY_AFTER_SECONDS = 2;
 
 interface SessionStateSnapshot {
   status?: unknown;
@@ -52,6 +54,53 @@ const toTimestampOrUndefined = (
 
 const toStatus = (value: unknown): string | undefined =>
   toNonEmptyString(value)?.toLowerCase();
+
+const isPlainObject = (
+  value: unknown,
+): value is Record<string, unknown> => typeof value === "object" &&
+  value !== null &&
+  !Array.isArray(value) &&
+  !(value instanceof Timestamp);
+
+const hasQueuedMarker = (value: unknown): boolean => {
+  if (!isPlainObject(value) || !isPlainObject(value.analyticsTrigger)) {
+    return false;
+  }
+  return value.analyticsTrigger.queued === true;
+};
+
+const buildProcessingPropagation = (
+  currentData: FirebaseFirestore.DocumentData | undefined,
+  sessionId: string,
+  submittedAt: FirebaseFirestore.Timestamp,
+): Record<string, unknown> => {
+  const current = isPlainObject(currentData?.resultPropagation) ?
+    currentData.resultPropagation :
+    undefined;
+  const currentSubmittedAt = toTimestampOrUndefined(current?.submittedAt);
+  const currentSessionId = toNonEmptyString(current?.sessionId);
+  const currentState = toNonEmptyString(current?.state);
+
+  if (
+    currentSubmittedAt &&
+    currentSubmittedAt.toMillis() > submittedAt.toMillis()
+  ) {
+    return {};
+  }
+  if (currentSessionId === sessionId && currentState === "available") {
+    return {};
+  }
+
+  return {
+    resultPropagation: {
+      retryAfterSeconds: RESULT_PROPAGATION_RETRY_AFTER_SECONDS,
+      sessionId,
+      state: "processing",
+      submittedAt,
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+  };
+};
 
 /**
  * Handles Build 39 post-submission analytics trigger orchestration.
@@ -118,23 +167,27 @@ export class SubmissionAnalyticsTriggerService {
       const studentMetricsReference = this.firestore.doc(
         resolvedStudentYearMetricsPath,
       );
+      const runMarkerReference = runAnalyticsReference
+        .collection(PROCESSING_MARKERS_COLLECTION)
+        .doc(context.sessionId);
+      const studentMarkerReference = studentMetricsReference
+        .collection(PROCESSING_MARKERS_COLLECTION)
+        .doc(context.sessionId);
 
-      const [runAnalyticsSnapshot, studentMetricsSnapshot] = await Promise.all([
+      const [
+        runAnalyticsSnapshot,
+        studentMetricsSnapshot,
+        runMarkerSnapshot,
+        studentMarkerSnapshot,
+      ] = await Promise.all([
         transaction.get(runAnalyticsReference),
         transaction.get(studentMetricsReference),
+        transaction.get(runMarkerReference),
+        transaction.get(studentMarkerReference),
       ]);
 
-      const runAnalyticsLastProcessedSessionId = toNonEmptyString(
-        runAnalyticsSnapshot
-          .data()?.processingMarkers?.analyticsTrigger?.lastProcessedSessionId,
-      );
-      const studentMetricsLastProcessedSessionId = toNonEmptyString(
-        studentMetricsSnapshot
-          .data()?.processingMarkers?.analyticsTrigger?.lastProcessedSessionId,
-      );
-      const alreadyProcessed =
-        runAnalyticsLastProcessedSessionId === context.sessionId &&
-        studentMetricsLastProcessedSessionId === context.sessionId;
+      const alreadyProcessed = hasQueuedMarker(runMarkerSnapshot.data()) &&
+        hasQueuedMarker(studentMarkerSnapshot.data());
 
       if (alreadyProcessed) {
         return {
@@ -159,6 +212,11 @@ export class SubmissionAnalyticsTriggerService {
       transaction.set(
         runAnalyticsReference,
         {
+          ...buildProcessingPropagation(
+            runAnalyticsSnapshot.data(),
+            context.sessionId,
+            submittedAt,
+          ),
           processingMarkers: {
             analyticsTrigger: processingMarkerPayload,
           },
@@ -170,6 +228,11 @@ export class SubmissionAnalyticsTriggerService {
       transaction.set(
         studentMetricsReference,
         {
+          ...buildProcessingPropagation(
+            studentMetricsSnapshot.data(),
+            context.sessionId,
+            submittedAt,
+          ),
           processingMarkers: {
             analyticsTrigger: processingMarkerPayload,
           },
@@ -177,6 +240,28 @@ export class SubmissionAnalyticsTriggerService {
         },
         {merge: true},
       );
+
+      transaction.set(runMarkerReference, {
+        analyticsTrigger: {
+          eventId: context.eventId ?? null,
+          queued: true,
+          queuedAt: submittedAt,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        sessionId: context.sessionId,
+        submittedAt,
+      }, {merge: true});
+
+      transaction.set(studentMarkerReference, {
+        analyticsTrigger: {
+          eventId: context.eventId ?? null,
+          queued: true,
+          queuedAt: submittedAt,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        sessionId: context.sessionId,
+        submittedAt,
+      }, {merge: true});
 
       return {
         idempotent: false,
@@ -205,6 +290,77 @@ export class SubmissionAnalyticsTriggerService {
     }
 
     return result;
+  }
+
+  /**
+   * Marks the newest queued result as available after the full pipeline.
+   * Older retries cannot overwrite a newer processing state.
+   * @param {SubmissionAnalyticsTriggerContext} context Trigger path context.
+   * @param {SessionStateSnapshot | undefined} afterData Submitted session.
+   */
+  public async markResultPropagationAvailable(
+    context: SubmissionAnalyticsTriggerContext,
+    afterData: SessionStateSnapshot | undefined,
+  ): Promise<void> {
+    const studentId = toNonEmptyString(afterData?.studentId);
+    const submittedAt = toTimestampOrUndefined(afterData?.submittedAt);
+    if (!studentId || !submittedAt) {
+      throw new SubmissionAnalyticsTriggerValidationError(
+        "Available result propagation requires studentId and submittedAt.",
+      );
+    }
+
+    const runAnalyticsReference = this.firestore.doc(
+      `${INSTITUTES_COLLECTION}/${context.instituteId}/` +
+      `${ACADEMIC_YEARS_COLLECTION}/${context.yearId}/` +
+      `${RUN_ANALYTICS_COLLECTION}/${context.runId}`,
+    );
+    const studentMetricsReference = this.firestore.doc(
+      `${INSTITUTES_COLLECTION}/${context.instituteId}/` +
+      `${ACADEMIC_YEARS_COLLECTION}/${context.yearId}/` +
+      `${STUDENT_YEAR_METRICS_COLLECTION}/${studentId}`,
+    );
+    const markerReferences = [runAnalyticsReference, studentMetricsReference]
+      .map((reference) => reference
+        .collection(PROCESSING_MARKERS_COLLECTION)
+        .doc(context.sessionId));
+
+    await this.firestore.runTransaction(async (transaction) => {
+      const [runSnapshot, studentSnapshot] = await Promise.all([
+        transaction.get(runAnalyticsReference),
+        transaction.get(studentMetricsReference),
+      ]);
+      const summaryEntries = [
+        [runAnalyticsReference, runSnapshot],
+        [studentMetricsReference, studentSnapshot],
+      ] as const;
+
+      for (const [reference, snapshot] of summaryEntries) {
+        const current = isPlainObject(snapshot.data()?.resultPropagation) ?
+          snapshot.data()?.resultPropagation as Record<string, unknown> :
+          undefined;
+        if (toNonEmptyString(current?.sessionId) !== context.sessionId) {
+          continue;
+        }
+        transaction.set(reference, {
+          resultPropagation: {
+            retryAfterSeconds: 0,
+            sessionId: context.sessionId,
+            state: "available",
+            submittedAt,
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+        }, {merge: true});
+      }
+
+      markerReferences.forEach((reference) => transaction.set(reference, {
+        pipeline: {
+          availableAt: FieldValue.serverTimestamp(),
+          completed: true,
+          eventId: context.eventId ?? null,
+        },
+      }, {merge: true}));
+    });
   }
 }
 

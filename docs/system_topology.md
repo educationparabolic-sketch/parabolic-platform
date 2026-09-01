@@ -182,6 +182,16 @@ The Exam client drains every pending answer before a manual request, then sends 
 
 Submission triggers analytics pipelines.
 
+BWM-024 makes that downstream path explicitly eventually consistent. The
+submitted transition writes deterministic per-session queue markers and a
+newest-session `processing` projection with a two-second retry hint under the
+run and Student summaries. The failure-recoverable post-submission pipeline
+runs usage, run, Student, question, insight, and notification processing; only
+after the complete pipeline succeeds does it publish `available` with a
+zero-second retry hint. Exact or out-of-order trigger replay is absorbed by
+component-specific `processingMarkers/{sessionId}` documents and cannot count
+the same session twice or reset a newer result.
+
 ---
 
 # ANALYTICS DOMAIN
@@ -197,10 +207,22 @@ Pattern Engine
 Analytics outputs:
 
 runAnalytics/{runId}
+  processingMarkers/{sessionId}
 
 questionAnalytics/{questionId}
+  processingMarkers/{sessionId}
 
 studentYearMetrics/{studentId}
+  processingMarkers/{sessionId}
+  results/{runId}
+
+`runAnalytics` carries assignment metadata from create-only initialization and
+becomes completed with the owning run once every recipient has submitted.
+`studentYearMetrics/{studentId}/results/{runId}` is the summary-only Student
+projection used by dashboard recent results, completed My Tests fields, and the
+performance timeline. Admin overview/analytics consume and deduplicate
+propagated run/Student summaries. Neither portal needs fixture data, manual
+mutation, or raw-session scans to display the completed result.
 
 ---
 

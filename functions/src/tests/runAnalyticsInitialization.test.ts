@@ -60,7 +60,15 @@ test(
     const firstResult =
       await runAnalyticsInitializationService.initializeRunAnalytics(
         {instituteId, runId, yearId},
-        {runId},
+        {
+          mode: "Controlled",
+          recipientStudentIds: ["student-1", "student-2"],
+          runId,
+          startWindow: Timestamp.fromMillis(Date.now()),
+          status: "scheduled",
+          testId: "test_bwm_024_initialization",
+          testName: "BWM-024 Initialized Run",
+        },
       );
     assert.equal(firstResult.wasCreated, true);
     assert.equal(firstResult.runAnalyticsPath, runAnalyticsPath);
@@ -78,6 +86,11 @@ test(
     assert.equal(firstData?.guessRateAverage, 0);
     assert.equal(firstData?.overrideCount, 0);
     assert.ok(firstData?.createdAt instanceof Timestamp);
+    assert.equal(firstData?.runId, runId);
+    assert.equal(firstData?.runName, "BWM-024 Initialized Run");
+    assert.equal(firstData?.mode, "Controlled");
+    assert.equal(firstData?.testId, "test_bwm_024_initialization");
+    assert.equal(firstData?.totalParticipants, 2);
 
     await firestore.doc(runAnalyticsPath).set({
       avgRawScorePercent: 77.25,
@@ -86,7 +99,7 @@ test(
     const secondResult =
       await runAnalyticsInitializationService.initializeRunAnalytics(
         {instituteId, runId, yearId},
-        {runId},
+        {runId, testName: "Must Not Overwrite"},
       );
     assert.equal(secondResult.wasCreated, false);
 

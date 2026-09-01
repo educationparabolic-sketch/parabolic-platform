@@ -223,8 +223,13 @@ test(
     await deleteDocumentIfPresent(runAnalyticsPath);
 
     await firestore.doc(runPath).set({
+      mode: "Operational",
       recipientCount: 2,
       runId,
+      runName: "BWM-024 Result Run",
+      startWindow: Timestamp.fromMillis(Date.now() - 60_000),
+      status: "active",
+      testId: "test_bwm_024_result",
     });
     await firestore.doc(runAnalyticsPath).set({
       avgAccuracyPercent: 0,
@@ -264,6 +269,28 @@ test(
 
     assert.equal(firstResult.triggered, true);
 
+    const newerResult = await runAnalyticsEngineService.processSubmittedSession(
+      {
+        eventId: "event_build_41_idempotent_2",
+        instituteId,
+        runId,
+        sessionId: "session_build_41_newer",
+        yearId,
+      },
+      {status: "active"},
+      {
+        accuracyPercent: 85,
+        disciplineIndex: 75,
+        guessRate: 8,
+        phaseAdherencePercent: 65,
+        rawScorePercent: 55,
+        riskState: "Stable",
+        status: "submitted",
+        submittedAt: Timestamp.fromMillis(submittedAt.toMillis() + 1_000),
+      },
+    );
+    assert.equal(newerResult.triggered, true);
+
     const secondResult =
       await runAnalyticsEngineService.processSubmittedSession(
         {
@@ -296,9 +323,20 @@ test(
     const data = snapshot.data();
     assert.equal(
       data?.processingMarkers?.runAnalyticsEngine?.submittedSessionCount,
-      1,
+      2,
     );
     assert.equal(data?.riskDistribution?.["Drift-Prone"], 1);
+    assert.equal(data?.riskDistribution?.Stable, 1);
+    assert.equal(data?.runName, "BWM-024 Result Run");
+    assert.equal(data?.testId, "test_bwm_024_result");
+    assert.equal(data?.status, "completed");
+    assert.equal(data?.completionRate, 100);
+    const completedRun = (await firestore.doc(runPath).get()).data();
+    assert.equal(completedRun?.status, "completed");
+    assert.ok(completedRun?.completedAt instanceof Timestamp);
+    const markerPath = `${runAnalyticsPath}/processingMarkers/${sessionId}`;
+    const marker = (await firestore.doc(markerPath).get()).data();
+    assert.equal(marker?.runAnalyticsEngine?.processed, true);
 
     await deleteDocumentIfPresent(runAnalyticsPath);
     await deleteDocumentIfPresent(runPath);

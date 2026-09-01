@@ -11,6 +11,7 @@ const INSTITUTES_COLLECTION = "institutes";
 const ACADEMIC_YEARS_COLLECTION = "academicYears";
 const RUNS_COLLECTION = "runs";
 const RUN_ANALYTICS_COLLECTION = "runAnalytics";
+const PROCESSING_MARKERS_COLLECTION = "processingMarkers";
 const ALLOWED_RISK_STATES = new Set<SubmissionRiskState>([
   "Stable",
   "Drift-Prone",
@@ -365,14 +366,28 @@ export class RunAnalyticsEngineService {
     const result = await this.firestore.runTransaction(async (transaction) => {
       const runAnalyticsReference = this.firestore.doc(runAnalyticsPath);
       const runReference = this.firestore.doc(runPath);
-      const [runAnalyticsSnapshot, runSnapshot] = await Promise.all([
+      const processingMarkerReference = runAnalyticsReference
+        .collection(PROCESSING_MARKERS_COLLECTION)
+        .doc(sessionId);
+      const [
+        runAnalyticsSnapshot,
+        runSnapshot,
+        processingMarkerSnapshot,
+      ] = await Promise.all([
         transaction.get(runAnalyticsReference),
         transaction.get(runReference),
+        transaction.get(processingMarkerReference),
       ]);
 
       const runAnalyticsData = isPlainObject(runAnalyticsSnapshot.data()) ?
         runAnalyticsSnapshot.data() :
         undefined;
+      const processingMarkerData = isPlainObject(
+        processingMarkerSnapshot.data(),
+      ) ? processingMarkerSnapshot.data() : undefined;
+      const processedEngineMarker = isPlainObject(
+        processingMarkerData?.runAnalyticsEngine,
+      ) ? processingMarkerData.runAnalyticsEngine : undefined;
       const processingMarkers = isPlainObject(
         runAnalyticsData?.processingMarkers,
       ) ?
@@ -385,7 +400,10 @@ export class RunAnalyticsEngineService {
         engineState?.lastProcessedSessionId,
       );
 
-      if (lastProcessedSessionId === sessionId) {
+      if (
+        processedEngineMarker?.processed === true ||
+        lastProcessedSessionId === sessionId
+      ) {
         return {
           idempotent: true,
           reason: "already_processed" as const,
@@ -397,6 +415,9 @@ export class RunAnalyticsEngineService {
       const expectedSessionCount = resolveExpectedSessionCount(
         runSnapshot.data(),
       );
+      const runSnapshotData = runSnapshot.data();
+      const runData: Record<string, unknown> = isPlainObject(runSnapshotData) ?
+        runSnapshotData : {};
       const computationState = readComputationState(runAnalyticsData);
       const submittedSessionCount = computationState.submittedSessionCount + 1;
       const sumRawScorePercent =
@@ -467,6 +488,8 @@ export class RunAnalyticsEngineService {
           avgPhaseAdherencePercent: phaseAdherenceAverage,
           avgRawScorePercent,
           completionRate,
+          completionRatePercent: completionRate,
+          completedAt: completionRate >= 100 ? submittedAt : null,
           disciplineAverage,
           disciplineIndexAverage: disciplineAverage,
           guessRatePercent: guessRateAverage,
@@ -497,10 +520,42 @@ export class RunAnalyticsEngineService {
           riskScoreAverage,
           riskDistribution,
           runId,
+          runName: toNonEmptyString(runData.runName) ??
+            toNonEmptyString(runData.testName) ?? runId,
+          batchId: toNonEmptyString(runData.batchId) ?? null,
+          batchName: toNonEmptyString(runData.batchName) ?? null,
+          mode: toNonEmptyString(runData.mode) ?? "Operational",
+          startedAt: runData.startWindow ?? runData.startedAt ?? null,
+          status: completionRate >= 100 ? "completed" :
+            toNonEmptyString(runData.status) ?? "active",
           stdDeviation,
+          testId: toNonEmptyString(runData.testId) ?? null,
+          testName: toNonEmptyString(runData.testName) ??
+            toNonEmptyString(runData.runName) ?? runId,
+          totalParticipants: expectedSessionCount,
         },
         {merge: true},
       );
+
+      transaction.set(processingMarkerReference, {
+        runAnalyticsEngine: {
+          eventId: context.eventId ?? null,
+          processed: true,
+          processedAt: FieldValue.serverTimestamp(),
+          submittedAt,
+        },
+        sessionId,
+        submittedAt,
+      }, {merge: true});
+
+      if (completionRate >= 100 && runSnapshot.exists) {
+        transaction.set(runReference, {
+          completedAt: submittedAt,
+          lastSubmissionAt: submittedAt,
+          status: "completed",
+          updatedAt: FieldValue.serverTimestamp(),
+        }, {merge: true});
+      }
 
       return {
         idempotent: false,

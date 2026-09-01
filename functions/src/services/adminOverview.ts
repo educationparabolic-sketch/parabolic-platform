@@ -570,7 +570,11 @@ export class AdminOverviewService {
       normalizeRunSummary(document),
     );
     const runs = runsSnapshot.docs.map((document) => normalizeRunSummary(document));
-    const combinedRuns = [...runAnalytics, ...runs]
+    const analyticsRunIds = new Set(runAnalytics.map((run) => run.runId));
+    const combinedRuns = [
+      ...runAnalytics,
+      ...runs.filter((run) => !analyticsRunIds.has(run.runId)),
+    ]
       .sort((left, right) => compareIsoDescending(left.startedAt, right.startedAt));
     const latestRun = combinedRuns[0] ?? null;
     const students = studentMetricsSnapshot.docs.length > 0 ?

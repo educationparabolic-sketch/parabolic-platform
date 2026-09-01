@@ -15,13 +15,13 @@ program: backend-wiring-and-deployment-readiness
 program_status: IN_PROGRESS
 release_decision: NO_GO
 current_phase: 1
-current_task: BWM-024
-current_substep: BWM-024 — inspect the submission trigger/event topology, analytics initialization idempotency, and Student/Admin result consumers
-last_completed_task: BWM-023
-next_task: BWM-024
+current_task: BWM-025
+current_substep: BWM-025 — inspect the complete golden-path emulator scenario, fixture dependencies, negative cases, cleanup, and one-command harness
+last_completed_task: BWM-024
+next_task: BWM-025
 blocked_tasks: []
-last_updated: 2026-08-31
-last_update_summary: BWM-023 is VERIFIED. EXM-04 now accepts one exact four-field shared request, derives expiry authority and the submitted timestamp/reason on the server, atomically persists one complete result, makes parallel/repeated callers replay it, rejects all post-finalization answer writes, and renders only authoritative metrics in Exam. Focused contracts, Firestore concurrency/replay, no-mock Chromium, workspace, and full emulator aggregate verification passed. BWM-024 is READY; production remains NO_GO.
+last_updated: 2026-09-01
+last_update_summary: BWM-024 is VERIFIED. The submitted transition now drives one idempotent failure-recoverable pipeline with deterministic per-session engine markers, explicit processing/available retry authority, metadata-rich run completion, and Student-owned summary result records. Student dashboard/My Tests/performance/insights and Admin overview/analytics consume the propagated summaries without fixture or raw-session reads. Focused Firestore, contract, no-mock browser, workspace, non-emulator, and full emulator verification passed. BWM-025 is READY; production remains NO_GO.
 ```
 
 Do not infer progress from old build numbers, UI completion labels, or visual verification artifacts. Only this checkpoint, the task registry, checked substeps, session log, and current repository evidence determine progress for this program.
@@ -275,8 +275,8 @@ The registry is the canonical order. Detailed cards below define scope and accep
 | BWM-021 | P0 | VERIFIED | BWM-019,BWM-020 | Correct answer DTO, clear semantics, and timing model |
 | BWM-022 | P0 | VERIFIED | BWM-021 | Reliable batching, offline recovery, and full drain |
 | BWM-023 | P0 | VERIFIED | BWM-020,BWM-022 | Idempotent server submission and response contract |
-| BWM-024 | P0 | READY | BWM-023 | Analytics/result propagation back to Student and Admin |
-| BWM-025 | P0 | PLANNED | BWM-011..BWM-024 | Emulator-backed golden-path end-to-end proof |
+| BWM-024 | P0 | VERIFIED | BWM-023 | Analytics/result propagation back to Student and Admin |
+| BWM-025 | P0 | READY | BWM-011..BWM-024 | Emulator-backed golden-path end-to-end proof |
 | BWM-026 | P1 | PLANNED | BWM-025 | Admin student mutation completeness |
 | BWM-027 | P1 | PLANNED | BWM-025 | Admin Question Bank lifecycle completeness |
 | BWM-028 | P1 | PLANNED | BWM-025 | Admin assignment operations and live controls |
@@ -1800,14 +1800,32 @@ The registry is the canonical order. Detailed cards below define scope and accep
 
 ### BWM-024 — Analytics and Result Propagation
 
-- **Status:** `READY`
+- **Status:** `VERIFIED`
 - **Purpose:** Close the loop back to Student and Admin summaries.
 - **Work:** verify submission trigger/event topology; make analytics initialization idempotent; refresh Student completed tests/performance/insights and Admin run/overview summaries; define eventual-consistency status and retry.
 - **Acceptance:** A submitted session produces expected run/student metrics and both portals show them without fixture data or manual mutation.
+- **Substeps:**
+  - [x] Inspect the submission trigger/event topology, analytics initialization and retry idempotency, summary persistence, and Student/Admin result consumers.
+  - [x] Persist deterministic per-session processing markers, summary-only Student result records, run metadata/completion, and explicit processing/available retry authority.
+  - [x] Consume propagated results in Student dashboard/My Tests/performance/insights and Admin analytics/overview without fixture or raw-session reads.
+  - [x] Add permanent Firestore, contract, and no-mock browser proof for one submission, retry idempotency, eventual availability, and both portal projections.
+  - [x] Run the applicable verification ladder and reconcile API/schema/module/event documentation.
+- **Inspection evidence:** `functions/src/triggers/sessionSubmission.ts` already invokes the failure-recoverable post-submission pipeline only for the submitted transition. However, `runAnalyticsEngine.ts`, `studentMetricsEngine.ts`, and `questionAnalyticsEngine.ts` use only `lastProcessedSessionId`, so an older event retried after a newer event can be counted twice. `studentMetricsEngine.ts` updates aggregate fields but does not write the `recentResults` or `performanceTimeline` data consumed by `studentSummary.ts`; My Tests derives completion only from whole-run status and returns null result fields. `runAnalyticsInitialization.ts` creates zero stubs without run metadata, while `runAnalyticsEngine.ts` does not propagate that metadata or complete a fully submitted run, leaving Admin analytics/overview labels and current activity dependent on seed-shaped documents. No processing/available status or retry interval crosses the summary boundary.
+- **Implemented files:** `functions/src/services/submissionAnalyticsTrigger.ts` now transactionally creates deterministic run/Student `processingMarkers/{sessionId}`, publishes newest-session processing/available authority, and protects newer state from older replay. `postSubmissionPipeline.ts` publishes availability only after the complete pipeline. `runAnalyticsInitialization.ts`, `runAnalyticsEngine.ts`, `studentMetricsEngine.ts`, and `questionAnalyticsEngine.ts` add create-only metadata, exact per-session replay protection, run completion, Student result summaries, and question markers. `studentSummary.ts` consumes Student-owned results for dashboard, My Tests, and performance while retaining summary/snapshot-only insights; `adminOverview.ts` deduplicates run lifecycle and analytics projections by run ID and prefers analytics. Permanent coverage was added or extended in the five affected Functions service test files, `scripts/run-result-propagation-e2e.mjs`, `tests/e2e/result-propagation.spec.mjs`, and the root package scripts. API, inventory, module, schema, topology, event, and this controller record were reconciled.
+- **Security/data evidence:** The existing trigger remains restricted to the one real submitted-state transition, and all portal handlers retain verified identity, role, tenant, Student, current-year, assignment, and license boundaries. Student result documents contain only run/test labels and IDs, timestamps, mode, score/accuracy, discipline/guess/phase/timing/risk metrics, question counts, and elapsed minutes; answer maps, question timing maps, question content, and raw session objects are not copied. Admin consumes only run/Student summary collections. Result propagation state is tied to the authoritative server `submittedAt` and newest session, so an older retry cannot overwrite later state.
+- **Verification evidence:** `node scripts/verify-workspace.mjs` passed all 10 portal/Functions lint and build gates. `npm --prefix functions run test:ci:non-emulator` passed all 48 classified files. Root `test:api-dto-contract`, `test:api-envelope-contract`, `test:frontend-data-states`, and `test:portal-response-adapters` each passed 1/1. The focused Firebase CLI Firestore command running the run-initialization, submission-trigger, run, Student, question, and summary suites passed 15/15. The BWM-024 no-mock command ran Auth, Firestore, Functions, and Portal Hosting and passed Chromium 1/1 after a real submission plus exact pipeline replay; it verified processing-to-available authority, unchanged aggregate counts, Student dashboard/My Tests/performance/insights, and Admin overview/analytics. The full-service emulator phase passed 10 explicit suites with 21 assertions, Hosting browser smoke passed 2/2, and the exact standalone Firestore aggregate with `PROJECT_ID`, `GCLOUD_PROJECT`, and `GOOGLE_CLOUD_PROJECT` set to `demo-parabolic-test` passed 65 files with 216 assertions and released all ports. Final JavaScript syntax and diff checks passed.
+- **L5 staging/preview:** N/A — no deployment target, public URL, environment, secret, Hosting rewrite, or release configuration changed.
+- **L6 production:** N/A — reserved for BWM-057; production remains untouched and `NO_GO`.
+- **Firebase CLI version:** `15.9.0`.
+- **Authorization/external mutations:** Verification used only the `demo-parabolic-test` loopback Firebase emulators, headless Chromium, disposable cleaned Auth/Firestore data, generated ignored Hosting artifacts, and local Firebase CLI state. No deployment, remote Firebase mutation, secret change, public endpoint, or production resource changed.
+- **Contract/schema changes:** Existing HTTP routes and DTO shapes remain unchanged. `runAnalytics/{runId}` and `studentYearMetrics/{studentId}` now carry `resultPropagation` with `processing|available` state and 2/0-second retry authority plus deterministic `processingMarkers/{sessionId}` subcollections; question analytics uses the same per-session marker pattern. Student yearly metrics add summary-only `results/{runId}`. Run analytics stubs and updates now persist run/test/batch/mode/schedule/status/participant metadata and complete with the owning run. No Firestore rule, composite index, gateway route, or Functions export changed.
+- **Verification notes:** The no-mock runner seeds the analytics initialization stub directly to isolate BWM-024 from an unrelated assignment worker; create-only initialization remains covered by its owning focused Firestore test. Its hook timeout was raised for cold emulator discovery and the Admin assertion was scoped to the overview metric card. Two standalone Firestore follow-ups exited before executing tests because wrapper-provided project aliases were absent; the exact invocation with all three aliases passed the full aggregate. Expected SDK upgrade warnings and existing idempotent already-exists, rule-denial, transaction-retry, and unrelated assignment-fixture logs did not fail their owning suites.
+- **Residual risks:** BWM-025 must combine the already-proven bounded flows into one deterministic, negative-case-complete golden-path emulator command with namespace cleanup. Later tasks retain secondary portal mutations, production infrastructure, staging acceptance, and production approval. Production remains `NO_GO`.
+- **Completed on:** 2026-09-01
 
 ### BWM-025 — Golden-Path Emulator E2E Proof
 
-- **Status:** `PLANNED`
+- **Status:** `READY`
 - **Purpose:** Establish the first real deployment candidate path.
 - **Scenario:** Admin login -> question -> template create/edit/publish -> assignment -> Student login -> dashboard/My Tests -> start -> Exam credential exchange -> entry -> activate -> answer/clear/offline recover -> submit -> analytics -> Student/Admin result refresh.
 - **Negative cases:** unauthenticated, wrong role, wrong tenant, suspended, insufficient license, draft template, duplicate start, token replay, stale batch, duplicate submit.
@@ -2349,6 +2367,15 @@ Never record only “tests passed.” Include exact commands and whether tests w
 ## Session Log
 
 Append newest entries at the top.
+
+### LOG-098 — 2026-09-01 — BWM-024 Analytics and Result Propagation
+
+- **Task:** Resume BWM-024 at deterministic analytics processing and implement only the submission-to-summary propagation boundary, including retry idempotency, explicit eventual availability, Student/Admin consumers, permanent proof, and canonical documentation.
+- **Outcome:** BWM-024 is `VERIFIED`. One submitted transition now creates deterministic run/Student/question engine markers, moves newest-session result authority from `processing` to `available` only after the full recovery-capable pipeline, persists metadata-complete run analytics and Student-owned summary result records, completes fully submitted runs, and refreshes Student dashboard/My Tests/performance/insights plus Admin overview/analytics without fixture data, manual mutation, or raw-session scans. BWM-025 is `READY`; production remains `NO_GO`.
+- **Validation performed:** Workspace verification passed 10/10 lint/build gates; Functions non-emulator CI passed 48/48 files; four affected root contract commands passed 1/1 each; the focused Firestore analytics/summary command passed 15/15. The real Auth/Firestore/Functions/Hosting Chromium flow passed 1/1 after submission and replay, proving processing-to-available state, invariant counts, and all Student/Admin projections. The complete emulator phases passed 10 explicit full-service suites with 21 assertions, 2/2 Hosting browser smoke cases, and 65 Firestore files with 216 assertions. Syntax, documentation consistency, and diff checks passed; emulator ports were released.
+- **Files changed:** Updated the submission marker/orchestration, run initialization/aggregation, Student/question aggregation, Student summary, and Admin overview services; expanded five focused Functions test files; added the deterministic BWM-024 no-mock runner/spec and package commands; reconciled API, inventory, module, Firestore schema, topology, event, and execution-controller documentation.
+- **Cloud changes:** None. Verification used only `demo-parabolic-test` loopback emulators, headless Chromium, disposable cleaned data, ignored generated artifacts, and local Firebase CLI state. No deployment, remote data/secret mutation, public endpoint, or production resource changed.
+- **Next:** BWM-025 — inspect the existing end-to-end harnesses and fixture dependencies, then define the one-command Admin → Student → Exam → analytics golden-path scenario, required negative cases, deterministic cleanup, and exact Firebase CLI proof before implementation.
 
 ### LOG-097 — 2026-08-31 — BWM-023 Idempotent Submission and Authoritative Result
 

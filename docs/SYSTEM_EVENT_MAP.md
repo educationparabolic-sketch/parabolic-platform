@@ -50,6 +50,8 @@ BWM-020 separates the persisted runtime lifecycle from the historical `SessionSt
 
 BWM-023 makes `SessionSubmitted` a single authoritative `active|expired -> submitted` transition with server-owned `submittedAt` and deadline-derived `submissionReason`. Parallel and repeated EXM-04 requests replay the stored result without re-finalizing or re-emitting the transition; post-finalization answer writes are rejected.
 
+BWM-024 routes that one transition through the failure-recoverable post-submission pipeline. It first persists deterministic `processingMarkers/{sessionId}` and newest-session `resultPropagation: processing` authority under the run and Student summaries, then runs usage, run/Student/question analytics, insights, and notifications. The full pipeline alone publishes `resultPropagation: available`; exact and out-of-order retries are absorbed by component markers, so aggregates are not incremented twice and an older event cannot overwrite newer availability.
+
 ---
 
 # FIRESTORE TRIGGERS
@@ -58,7 +60,7 @@ Trigger | Event | Purpose
 ---|---|---
 questionBank onCreate | QuestionCreated | Generate search tokens
 students onWrite | UsageUpdated | Update active student count
-sessions onUpdate | SessionSubmitted | Launch analytics pipeline
+sessions onUpdate | SessionSubmitted | Launch the idempotent pipeline only for the real submitted-state transition; persist deterministic per-session markers and processing/available result authority
 
 ---
 
