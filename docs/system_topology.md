@@ -192,6 +192,17 @@ zero-second retry hint. Exact or out-of-order trigger replay is absorbed by
 component-specific `processingMarkers/{sessionId}` documents and cannot count
 the same session twice or reset a newer result.
 
+The BWM-025 local acceptance topology packages the built Admin, Student, and
+Exam applications under `/admin`, `/student`, and `/exam` on one test-only
+Hosting emulator. A same-origin `/api/v1/**` rewrite reaches the Functions
+emulator, while Firebase Auth and Firestore remain on loopback ports. One
+namespace-backed Chromium scenario follows the complete content-to-results
+lifecycle, exercises the required authorization, replay, stale-write, and
+draft-state failures, verifies audit and analytics records, then removes its
+institute tree, root notification jobs, and Auth identities. This combined
+artifact is verification infrastructure only; production retains the separate
+Portal and Exam Hosting targets.
+
 ---
 
 # ANALYTICS DOMAIN

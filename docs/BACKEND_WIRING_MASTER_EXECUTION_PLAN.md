@@ -14,14 +14,14 @@ For backend wiring, integration, security, testing, and deployment readiness, th
 program: backend-wiring-and-deployment-readiness
 program_status: IN_PROGRESS
 release_decision: NO_GO
-current_phase: 1
-current_task: BWM-025
-current_substep: BWM-025 — inspect the complete golden-path emulator scenario, fixture dependencies, negative cases, cleanup, and one-command harness
-last_completed_task: BWM-024
-next_task: BWM-025
+current_phase: 2
+current_task: BWM-026
+current_substep: BWM-026 — inspect visible Admin Student mutations, current API/Auth/audit authority, persistence, reload behavior, and unsupported controls
+last_completed_task: BWM-025
+next_task: BWM-026
 blocked_tasks: []
 last_updated: 2026-09-01
-last_update_summary: BWM-024 is VERIFIED. The submitted transition now drives one idempotent failure-recoverable pipeline with deterministic per-session engine markers, explicit processing/available retry authority, metadata-rich run completion, and Student-owned summary result records. Student dashboard/My Tests/performance/insights and Admin overview/analytics consume the propagated summaries without fixture or raw-session reads. Focused Firestore, contract, no-mock browser, workspace, non-emulator, and full emulator verification passed. BWM-025 is READY; production remains NO_GO.
+last_update_summary: BWM-025 is VERIFIED. One deterministic Firebase CLI command now builds and serves live Admin, Student, and Exam artifacts, carries one namespace from question/template/assignment through authenticated Exam offline recovery, submission, analytics, and Student/Admin refresh, proves all ten required negative cases plus audit outputs, and removes its Firestore/Auth data. Focused Firestore, harness, no-mock browser, workspace, and non-emulator verification passed. The broader emulator aggregate retains one unrelated time-bound BWM-015 fixture failure recorded in BWM-025 evidence. BWM-026 is READY; production remains NO_GO.
 ```
 
 Do not infer progress from old build numbers, UI completion labels, or visual verification artifacts. Only this checkpoint, the task registry, checked substeps, session log, and current repository evidence determine progress for this program.
@@ -276,8 +276,8 @@ The registry is the canonical order. Detailed cards below define scope and accep
 | BWM-022 | P0 | VERIFIED | BWM-021 | Reliable batching, offline recovery, and full drain |
 | BWM-023 | P0 | VERIFIED | BWM-020,BWM-022 | Idempotent server submission and response contract |
 | BWM-024 | P0 | VERIFIED | BWM-023 | Analytics/result propagation back to Student and Admin |
-| BWM-025 | P0 | READY | BWM-011..BWM-024 | Emulator-backed golden-path end-to-end proof |
-| BWM-026 | P1 | PLANNED | BWM-025 | Admin student mutation completeness |
+| BWM-025 | P0 | VERIFIED | BWM-011..BWM-024 | Emulator-backed golden-path end-to-end proof |
+| BWM-026 | P1 | READY | BWM-025 | Admin student mutation completeness |
 | BWM-027 | P1 | PLANNED | BWM-025 | Admin Question Bank lifecycle completeness |
 | BWM-028 | P1 | PLANNED | BWM-025 | Admin assignment operations and live controls |
 | BWM-029 | P1 | PLANNED | BWM-025 | Admin governance reports and interventions |
@@ -1825,12 +1825,33 @@ The registry is the canonical order. Detailed cards below define scope and accep
 
 ### BWM-025 — Golden-Path Emulator E2E Proof
 
-- **Status:** `READY`
+- **Status:** `VERIFIED`
 - **Purpose:** Establish the first real deployment candidate path.
 - **Scenario:** Admin login -> question -> template create/edit/publish -> assignment -> Student login -> dashboard/My Tests -> start -> Exam credential exchange -> entry -> activate -> answer/clear/offline recover -> submit -> analytics -> Student/Admin result refresh.
 - **Negative cases:** unauthenticated, wrong role, wrong tenant, suspended, insufficient license, draft template, duplicate start, token replay, stale batch, duplicate submit.
 - **Required Firebase CLI proof:** run the complete scenario under `firebase emulators:exec --project demo-parabolic-test --only auth,firestore,functions,hosting "<golden-path-command>"` (plus Storage when asset ingestion is exercised).
 - **Acceptance:** One deterministic Firebase CLI command seeds, runs, verifies Firestore/audit outputs, cleans the emulator namespace and shuts down all emulator processes; no network call is mocked.
+- **Substeps:**
+  - [x] Inspect existing question/template/assignment/Student/Exam/result emulator harnesses, fixture dependencies, negative-case coverage, Hosting topology, and cleanup behavior.
+  - [x] Add one shared live Admin/Student/Exam Hosting artifact, deterministic Firebase CLI runner, and continuous namespace-backed scenario.
+  - [x] Prove every required negative case, authoritative Firestore/audit outputs, no mocked network, and complete Auth/Firestore namespace cleanup.
+  - [x] Run the mandatory verification ladder, reconcile affected harness documentation, record evidence/session log, and advance the checkpoint.
+- **Inspection evidence:** Existing BWM-012 through BWM-024 Playwright scenarios independently prove their owning slices, but each seeds a different institute/run and launches its own emulator command. No command carries one Admin-created question through template edit/publish, assignment, Student launch, Exam offline recovery/submission, analytics, and both result projections. The production Hosting configuration intentionally separates Portal and Exam origins, while the emulator has one configured Hosting port; BWM-025 therefore needs a test-only combined artifact/config that preserves route-specific SPA entry points without changing release Hosting topology. Existing tests cover many negatives in isolation, but no single scenario accounts for all ten required cases or asserts cleanup of both institute-scoped data and root notification jobs.
+- **Evidence:**
+  - **Implemented files:** Added `firebase.golden-path.json`, `scripts/prepare-golden-path-hosting.mjs`, `scripts/run-golden-path-e2e.mjs`, `tests/e2e/golden-path.spec.mjs`, `tests/golden-path-harness.test.mjs`, and the root golden-path package commands. `apps/exam/vite.config.ts` now honors an optional normalized `VITE_BASE_PATH` while retaining `/` by default. `AssignmentCreationService` now consumes both its legacy phase percentages and the rich Admin template phase split, normalizes one-point rounding to an exact total, and persists the template name on the run; its focused Firestore fixture covers the compatibility boundary. Module and topology records were reconciled.
+  - **Scenario/negative/cleanup proof:** The one Chromium case logs into the built Admin UI, creates a question, creates/edits/publishes a template, assigns it, logs into Student, reloads Dashboard and My Tests, starts and replays the run, exchanges and consumes the Exam credential, enters and activates the session, selects then clears while offline, verifies owner-bound IndexedDB recovery after reload/reconnect, proves a stale batch is ignored, submits and exactly replays submission, waits for available analytics, and refreshes Student performance/insights plus Admin overview/analytics. It proves unauthenticated, wrong-role, wrong-tenant, suspended, insufficient-license, draft-template, duplicate-start, token-replay, stale-batch, and duplicate-submit outcomes. Final assertions cover publish audit, question upload/version/session/processing markers, zero external requests, deletion of the institute tree and matching root `emailQueue` jobs, deletion of every disposable Auth identity, and empty post-cleanup queries.
+  - **L1 static/workspace:** `node scripts/verify-workspace.mjs` — PASS, all 10 Admin/Student/Exam/Vendor/Functions lint and production-build gates. `node --check scripts/prepare-golden-path-hosting.mjs`; `node --check scripts/run-golden-path-e2e.mjs`; `node --check tests/e2e/golden-path.spec.mjs`; `node --check tests/golden-path-harness.test.mjs`; package JSON parsing; and `git diff --check` — PASS. The final runner rebuilt live Admin, Student, and Exam artifacts plus Functions; the Exam artifact used `/exam/assets/**` under the combined host.
+  - **L2 unit/contract:** `npm --prefix functions run test:ci:non-emulator` — PASS, 48/48 selected files. `npm run test:golden-path-harness` — PASS, 2/2 harness contracts covering the exact Firebase boundary, no-mock prohibition, all negative-case markers, audit/cleanup/external-request accounting, and test-only Hosting paths. `npm run test:e2e:golden-path -- --list` discovered exactly one Chromium case.
+  - **L3 Firebase emulator:** `npm run test:golden-path:e2e` — PASS under the exact required `firebase emulators:exec --config firebase.golden-path.json --project demo-parabolic-test --only auth,firestore,functions,hosting "npm run test:e2e:golden-path"` boundary. The focused `firebase emulators:exec --project demo-parabolic-test --only firestore "npm --prefix functions run test:assignment-creation"` suite also passed 7/7, including rich phase normalization, run-name persistence, replay/concurrency, validation, license, and HOT-year guards. Both commands shut their emulators down.
+  - **L4 browser E2E:** The same golden-path command passed 1/1 no-mock Chromium scenario against built live-mode Admin, Student, and Exam applications. No Playwright route interception, fulfillment, abort, application mock, fixture mode, or external network request participated in the proof.
+  - **L5 staging/preview:** N/A — this task adds local test-only Hosting configuration and changes no deployment target, preview channel, public runtime configuration, secret, or remote resource.
+  - **L6 production:** N/A — reserved for BWM-057; production remained untouched and `NO_GO`.
+  - **Firebase CLI version:** `15.9.0`; Java `21.0.8`.
+  - **Authorization/external mutations:** User approval allowed loopback Firebase emulators and headless Chromium. Verification wrote disposable local emulator Auth/Firestore records, ignored build/Hosting/Playwright artifacts, and Firebase CLI local state; the scenario deleted application data and identities, and Firebase CLI stopped every emulator. No deployment, remote Firebase mutation, secret mutation, public endpoint, or production resource changed.
+  - **Contract/schema changes:** No HTTP route, request/response DTO, Firestore rule, index, exported Function, or production Hosting target changed. Assignment creation extends compatibility with the already-persisted Admin rich `phaseConfigSnapshot`, continues writing the canonical legacy percentages into run snapshots, and adds the existing template name to run summary authority. The combined Hosting config and loopback CSP allowance are test-only.
+  - **Verification notes:** Iterative complete runs exposed and repaired only integrated seams: stable Admin selectors, Admin-rich phase compatibility, missing run display name, the combined Exam SPA rewrite/base path, and token setup leaking across Student-to-Exam navigation. The full golden-path rerun passed after those repairs. A final `npm run test:emulators:ci` attempt reached 20/21 full-service assertions but failed the pre-existing BWM-015 Student-summary case because its fixed `2026-09-01T09:00:00Z` Operational run has a 90-minute window and was correctly absent when verification ran after 10:30Z; the expected array still requires that expired run. The failure is time-fixture drift outside BWM-025, not a golden-path or changed-service regression, and the affected assignment Firestore suite plus the complete BWM-025 emulator/browser proof passed.
+  - **Residual risks:** BWM-049 owns the deterministic full backend command and repair of the date-bound Student-summary endpoint fixture. BWM-026 onward retain secondary Admin mutations, broader operational completeness, staging qualification, and production approval. Production remains `NO_GO`.
+  - **Completed on:** 2026-09-01
 
 ---
 
@@ -1838,7 +1859,7 @@ The registry is the canonical order. Detailed cards below define scope and accep
 
 ### BWM-026 — Admin Student Mutations
 
-- **Status:** `PLANNED`
+- **Status:** `READY`
 - **Work:** persist profile edits, batch assignment, activate/deactivate, invitation resend, photo review, export, archive/soft-delete, and supported bulk operations; use Firebase Auth where identity changes; audit and make destructive actions idempotent.
 - **Acceptance:** Every visible Student action either persists and survives reload or is disabled; export/delete handlers are actually consumed.
 
@@ -2367,6 +2388,15 @@ Never record only “tests passed.” Include exact commands and whether tests w
 ## Session Log
 
 Append newest entries at the top.
+
+### LOG-099 — 2026-09-01 — BWM-025 Golden-Path Emulator E2E Proof
+
+- **Task:** Resume BWM-025 after inspection and implement only one deterministic, continuous, no-mock Admin → Student → Exam → analytics emulator scenario with every required negative case, authoritative output proof, namespace cleanup, and one Firebase CLI entry point.
+- **Outcome:** BWM-025 is `VERIFIED`. `npm run test:golden-path:e2e` now builds live Admin, Student, Exam, and Functions artifacts, packages the three SPAs into one test-only Hosting target, and passes the complete question/template/assignment/session/submission/result lifecycle through real Auth, Firestore, Functions, Hosting, and Chromium. All ten negative cases, audit/marker/version records, zero external requests, and complete institute/root-job/Auth cleanup are asserted. BWM-026 is `READY`; production remains `NO_GO`.
+- **Validation performed:** Workspace verification passed all 10 lint/build gates; Functions non-emulator CI passed 48/48 files; the golden-path harness passed 2/2 contracts; one Chromium case was discovered and passed 1/1 under the exact Firebase CLI boundary; the focused assignment Firestore suite passed 7/7. A broader aggregate follow-up passed 20/21 full-service assertions and exposed one unrelated date-bound BWM-015 fixture that expects a run after its fixed window expired; it is recorded for BWM-049 and did not invalidate the passing affected suite or BWM-025 acceptance command.
+- **Files changed:** Added the test-only combined Firebase/Hosting config, artifact preparer, runner, no-mock Playwright scenario, harness contract, and package commands; made Exam builds base-path aware; aligned assignment creation with the Admin phase snapshot and run display name; expanded focused assignment coverage; and reconciled module, topology, and execution-controller documentation.
+- **Cloud changes:** None. Verification used only `demo-parabolic-test` loopback emulators, headless Chromium, disposable cleaned data, ignored generated artifacts, and local Firebase CLI state. No deployment, remote data/secret mutation, public endpoint, or production resource changed.
+- **Next:** BWM-026 — inspect every visible Admin Student mutation against its current API, Firebase Auth, audit, reload, and error-state authority before implementing only the first missing bounded mutation slice.
 
 ### LOG-098 — 2026-09-01 — BWM-024 Analytics and Result Propagation
 

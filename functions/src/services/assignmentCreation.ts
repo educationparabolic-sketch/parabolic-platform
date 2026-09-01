@@ -412,19 +412,66 @@ const normalizePhaseConfigSnapshot = (
     );
   }
 
+  if (
+    value.phase1Percent !== undefined ||
+    value.phase2Percent !== undefined ||
+    value.phase3Percent !== undefined
+  ) {
+    return {
+      phase1Percent: normalizePercentField(
+        value.phase1Percent,
+        "phaseConfigSnapshot.phase1Percent",
+      ),
+      phase2Percent: normalizePercentField(
+        value.phase2Percent,
+        "phaseConfigSnapshot.phase2Percent",
+      ),
+      phase3Percent: normalizePercentField(
+        value.phase3Percent,
+        "phaseConfigSnapshot.phase3Percent",
+      ),
+    };
+  }
+
+  const phaseSplit = value.phaseSplit;
+  if (!Array.isArray(phaseSplit)) {
+    throw new AssignmentCreationValidationError(
+      "Template field \"phaseConfigSnapshot.phaseSplit\" must be an array.",
+    );
+  }
+
+  const percentageForDifficulty = (
+    difficulty: "easy" | "medium" | "hard",
+  ): number => {
+    const row = phaseSplit.find((entry) =>
+      isPlainObject(entry) && entry.difficulty === difficulty,
+    );
+    if (!isPlainObject(row)) {
+      throw new AssignmentCreationValidationError(
+        `Template field "phaseConfigSnapshot.phaseSplit" must contain ${difficulty}.`,
+      );
+    }
+
+    return normalizePercentField(
+      row.percent,
+      `phaseConfigSnapshot.phaseSplit.${difficulty}.percent`,
+    );
+  };
+  const phase1Percent = percentageForDifficulty("easy");
+  const phase2Percent = percentageForDifficulty("medium");
+  const providedPhase3Percent = percentageForDifficulty("hard");
+  const providedTotal = phase1Percent + phase2Percent + providedPhase3Percent;
+
+  if (Math.abs(providedTotal - 100) > 1) {
+    throw new AssignmentCreationValidationError(
+      "Template field \"phaseConfigSnapshot.phaseSplit\" percentages must sum to 100.",
+    );
+  }
+
   return {
-    phase1Percent: normalizePercentField(
-      value.phase1Percent,
-      "phaseConfigSnapshot.phase1Percent",
-    ),
-    phase2Percent: normalizePercentField(
-      value.phase2Percent,
-      "phaseConfigSnapshot.phase2Percent",
-    ),
-    phase3Percent: normalizePercentField(
-      value.phase3Percent,
-      "phaseConfigSnapshot.phase3Percent",
-    ),
+    phase1Percent,
+    phase2Percent,
+    phase3Percent: Number((100 - phase1Percent - phase2Percent).toFixed(2)),
   };
 };
 
@@ -766,6 +813,10 @@ export class AssignmentCreationService {
       templateData?.canonicalId ?? testId,
       "template.canonicalId",
     );
+    const testName = normalizeRequiredString(
+      templateData?.templateName ?? testId,
+      "template.templateName",
+    );
 
     const normalizedTotalSessions = typeof data.totalSessions === "number" &&
       Number.isFinite(data.totalSessions) &&
@@ -854,6 +905,7 @@ export class AssignmentCreationService {
           startWindow,
           status: "scheduled",
           testId,
+          testName,
           templateVersion,
           timezone,
           timingProfileSnapshot:

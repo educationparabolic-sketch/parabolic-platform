@@ -79,6 +79,43 @@ const templateSnapshotFixture = {
   },
 };
 
+const adminPhaseConfigSnapshotFixture = {
+  difficultyWeights: {easy: 1, hard: 4, medium: 2.3},
+  phaseSplit: [
+    {
+      difficulty: "easy",
+      focus: "Foundation",
+      load: 3,
+      minutes: 9,
+      percent: 30,
+      phase: "Foundation",
+      questionCount: 2,
+      weight: 1,
+    },
+    {
+      difficulty: "medium",
+      focus: "Diagnostic Core",
+      load: 6.9,
+      minutes: 12,
+      percent: 40,
+      phase: "Diagnostic Core",
+      questionCount: 3,
+      weight: 2.3,
+    },
+    {
+      difficulty: "hard",
+      focus: "Challenge Control",
+      load: 4,
+      minutes: 9,
+      percent: 30,
+      phase: "Challenge Control",
+      questionCount: 1,
+      weight: 4,
+    },
+  ],
+  totalLoad: 13.9,
+};
+
 test(
   "processAssignmentCreated validates assignment payload and enforces " +
     "scheduled state",
@@ -113,9 +150,10 @@ test(
     await firestore.doc(testPath).set({
       allowedModes: ["Operational", "Diagnostic", "Controlled", "Hard"],
       difficultyDistribution: templateSnapshotFixture.difficultyDistribution,
-      phaseConfigSnapshot: templateSnapshotFixture.phaseConfigSnapshot,
+      phaseConfigSnapshot: adminPhaseConfigSnapshotFixture,
       questionIds: templateSnapshotFixture.questionIds,
       status: "ready",
+      templateName: "Build 21 assignment template",
       testId,
       timingProfile: templateSnapshotFixture.timingProfile,
       totalRuns: 0,
@@ -196,6 +234,7 @@ test(
     assert.equal(runData?.riskModelVersion, "risk_v1");
     assert.deepEqual(runData?.recipientStudentIds, studentIds);
     assert.equal(runData?.mode, "Controlled");
+    assert.equal(runData?.testName, "Build 21 assignment template");
     assert.deepEqual(runData?.proctoringPolicy, {
       browserIntegrityGuardEnabled: true,
       faceIdentityGazeGuardEnabled: false,
