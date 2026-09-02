@@ -56,6 +56,10 @@ function parameterName(expression, sourceFile) {
     return "{runId}";
   }
 
+  if (/studentId/i.test(expressionText)) {
+    return "{studentId}";
+  }
+
   throw new Error(
     `Unsupported API path parameter in ${sourceFile.fileName}: ` +
       expressionText,
@@ -280,6 +284,7 @@ test(
     const staleManifestEntries = [...manifestRoutes.keys()]
       .filter((key) =>
         !discoveredRoutes.has(key) &&
+        manifestRoutes.get(key)?.declaration === "frontend" &&
         manifestRoutes.get(key)?.status !== "intentionally_retired")
       .sort();
 
@@ -293,6 +298,20 @@ test(
       [],
       "API_ROUTE_MANIFEST entries without a frontend declaration.",
     );
+
+    const plannedRoutes = API_ROUTE_MANIFEST.filter(
+      (route) => route.declaration === "planned",
+    );
+    assert.equal(plannedRoutes.length, 4);
+    for (const route of plannedRoutes) {
+      assert.equal(route.portal, "admin");
+      assert.equal(route.status, "missing");
+      assert.equal(route.functionExport, null);
+      assert.equal(discoveredRoutes.has(routeKey(
+        route.method,
+        route.currentFrontendPath,
+      )), false);
+    }
   },
 );
 

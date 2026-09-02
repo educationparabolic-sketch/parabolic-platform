@@ -36,15 +36,15 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 - `intentionally retired`: explicit product or architecture evidence says the contract must not be served. The removed EXM-03 custom refresh call is retained as an explicit retired route key because Firebase Auth SDK refresh is authoritative.
 - Gateway and Hosting reachability are excluded from per-route classification because they are common dependencies owned by BWM-003 and BWM-004.
 
-## Canonical route assignments and status — 36 contracts
+## Canonical route assignments and status — 42 contracts
 
 | ID | Method | Current frontend path | Canonical route | Status | Classification basis |
 | --- | --- | --- | --- | --- | --- |
 | ADM-01 | `GET` | `/admin/overview` | `/api/v1/admin/overview` | `implemented` | The shared client unwraps the standard success envelope, a strict response adapter validates the complete summary-only DTO, and live consumers render propagated run/Student summaries without fixture substitution; duplicate lifecycle/analytics run IDs collapse to the analytics projection. |
 | ADM-02 | `GET` | `/admin/analytics` | `/api/v1/admin/analytics` | `implemented` | The shared client unwraps the standard success envelope and validates propagated `runAnalytics` plus `studentYearMetrics` summaries before all analytics, assignment, and insight consumers normalize them; duplicate run IDs prefer analytics. |
 | ADM-03 | `GET` | `/admin/students` | `/api/v1/admin/students` | `implemented` | Handler provides the consumed top-level `students` compatibility projection as well as its standard `data` payload. |
-| ADM-04 | `POST` | `/admin/students/onboarding-resend` | `/api/v1/admin/students/onboarding-resend` | `implemented` | Method, Firebase ID auth, student ID body, tenant derivation, and consumed `data` result align. |
-| ADM-05 | `POST` | `/admin/students/bulk` | `/api/v1/admin/students/bulk` | `implemented` | Bulk request fields and the consumed validation result under `data` align. |
+| ADM-04 | `POST` | `/admin/students/onboarding-resend` | `/api/v1/admin/students/onboarding-resend` | `implemented` | Shared idempotent request/result, Firebase ID auth, identity tenant, deterministic audit/job authority, and ADM-03 reload consumer align. |
+| ADM-05 | `POST` | `/admin/students/bulk` | `/api/v1/admin/students/bulk` | `implemented` | Shared idempotent preview/commit request and replay result, identity tenant, recoverable Auth reconciliation, and ADM-03 reload consumer align. |
 | ADM-06 | `GET` | `/admin/questions/library` | `/api/v1/admin/questions/library` | `implemented` | The `limit` query and shared, strictly adapted `data.questions` result align; canonical relative asset paths are paired with fresh dashboard-signed CDN previews and bucket/object internals are excluded. |
 | ADM-07 | `GET` | `/admin/questions/distribution` | `/api/v1/admin/questions/distribution` | `implemented` | The `limit`/`examType` query and consumed `data.summary` result align. |
 | ADM-08 | `GET` | `/admin/questions/upload-logs` | `/api/v1/admin/questions/upload-logs` | `implemented` | Method, identity scope, and consumed `data.logs` result align. |
@@ -63,6 +63,12 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 | ADM-21 | `POST` | `/admin/tests/{testId}/archive` | `/api/v1/admin/tests/{testId}/archive` | `implemented` | Archive sends the backend ID and expected numeric version, permits only `ready|assigned -> archived`, atomically writes the immutable archival audit, replays the same command deterministically, and reconciles the authoritative ADM-10 reload. |
 | ADM-22 | `GET` | `/admin/runs` | `/api/v1/admin/runs` | `implemented` | The shared strict list DTO returns only identity-tenant runs from the resolved current academic year, ordered deterministically with a bounded `1..50` cursor page and optional lifecycle-status filter. |
 | ADM-23 | `GET` | `/admin/runs/{runId}` | `/api/v1/admin/runs/{runId}` | `implemented` | The shared strict detail DTO resolves the URL-encoded ID only inside the identity tenant's current academic year and returns `NOT_FOUND` for missing, old-year, or other-tenant records. |
+| ADM-24 | `PATCH` | Planned (no frontend call) | `/api/v1/admin/students/{studentId}/profile` | `missing` | BWM-026 strict profile update contract; target Student is path-bound and tenant/actor authority is server-derived. |
+| ADM-25 | `POST` | Planned (no frontend call) | `/api/v1/admin/students/batch-assignment` | `missing` | BWM-026 bounded versioned batch-target contract with an idempotency key. |
+| ADM-26 | `POST` | Planned (no frontend call) | `/api/v1/admin/students/{studentId}/lifecycle` | `missing` | BWM-026 legal lifecycle transition contract with expected version, audit, and Auth/session reconciliation result. |
+| ADM-27 | `POST` | Planned (no frontend call) | `/api/v1/admin/students/{studentId}/photo-review` | `missing` | BWM-026 photo decision contract bound to the expected capture and Student version. |
+| ADM-28 | `POST` | `/admin/students/{studentId}/data-export` | `/api/v1/admin/students/{studentId}/data-export` | `implemented` | Admin consumes the path-bound idempotent export and receives only public signed-download metadata/counts; Storage internals are redacted. |
+| ADM-29 | `POST` | `/admin/students/{studentId}/soft-delete` | `/api/v1/admin/students/{studentId}/soft-delete` | `implemented` | Admin consumes expected-version/idempotent soft deletion, while the service rejects any retained run session and reconciles Auth after the atomic Student/audit write. |
 | STU-01 | `GET` | `/student/dashboard` | `/api/v1/student/dashboard` | `implemented` | Strict shared dashboard DTO; handler derives tenant, Student, current year, and license from verified identity and returns only that active Student's yearly summary, Student-owned propagated recent results, and assigned/licensed scheduled runs. |
 | STU-02 | `GET` | `/student/tests` | `/api/v1/student/tests` | `implemented` | Strict shared paginated tests DTO; bounded status/page queries return only current-year assigned/licensed runs and fill completed result fields from Student-owned `results/{runId}` summaries. |
 | STU-03 | `GET` | `/student/performance` | `/api/v1/student/performance` | `implemented` | Strict shared performance DTO reads the bounded Student-owned propagated result timeline plus current-year summary metrics and redacts L1/L2 fields by identity license. |
@@ -77,17 +83,17 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 | VEN-01 | `POST` | `/vendor/calibration/simulate` | `/api/v1/vendor/calibration/simulate` | `incompatible` | Frontend sends `strategyProfileParameters`; handler requires `weights`, so the simulation request fails validation/service normalization. |
 | VEN-02 | `POST` | `/vendor/calibration/push` | `/api/v1/vendor/calibration/push` | `implemented` | Vendor auth, target/version request, and consumed deployment response align. |
 
-Classification totals: `implemented` 32, `incompatible` 3, `missing` 0, `intentionally retired` 1.
+Classification totals: `implemented` 34, `incompatible` 3, `missing` 4, `intentionally retired` 1. ADM-24 through ADM-27 remain explicitly `planned`; ADM-28 and ADM-29 now have real Admin callers and canonical gateway handlers.
 
-## Admin portal — 23 contracts
+## Admin portal — 25 contracts
 
 | ID | Method and current path | Frontend request | Frontend response | Auth / role / tenant / license | Current Functions handler | Frontend source |
 | --- | --- | --- | --- | --- | --- | --- |
 | ADM-01 | `GET /admin/overview` | No body | Standard envelope unwrapped and strictly adapted to `AdminOverviewSnapshot` from propagated summaries, with run-ID deduplication that prefers analytics | Firebase ID; `teacher`, `admin`, or `director`; identity tenant; no license middleware | `adminOverview` (`api/adminOverview.ts`) | `features/overview/adminOverviewDataset.ts` |
 | ADM-02 | `GET /admin/analytics` | No body | Standard envelope unwrapped and strictly adapted from propagated `runAnalytics` plus `studentYearMetrics` summaries, with run-ID deduplication | Firebase ID; `teacher`, `admin`, or `director`; identity tenant; no license middleware | `adminAnalytics` (`api/adminAnalytics.ts`) | Analytics, assignment, and insight screens through `features/analytics/analyticsDataset.ts` |
 | ADM-03 | `GET /admin/students` | No body | `unknown`, normalized to student rows | Firebase ID; `teacher` or `admin`; identity tenant; no license middleware | `adminStudents` (`api/adminStudents.ts`) | Student landing, management, profile, and assignment screens |
-| ADM-04 | `POST /admin/students/onboarding-resend` | `{ studentId }` (`Record<string, unknown>`) | `StudentOnboardingResendApiResponse` | Firebase ID; `admin`; body tenant when present, otherwise identity tenant; no license middleware | `adminStudentOnboardingResend` (`api/adminStudentOnboardingResend.ts`) | Student management and profile screens |
-| ADM-05 | `POST /admin/students/bulk` | `{ commit, deactivateMissing, instituteId, students[] }` | `StudentBulkUploadApiResponse` | Firebase ID; `admin`; body tenant must match identity; no license middleware | `adminStudentsBulk` (`api/adminStudentsBulk.ts`) | `features/students/StudentManagementPage.tsx` |
+| ADM-04 | `POST /admin/students/onboarding-resend` | Shared `{ idempotencyKey, studentId }` | Shared replayable result with audit/job authority | Firebase ID; `admin`; identity tenant; no license middleware | `adminStudentOnboardingResend` (`api/adminStudentOnboardingResend.ts`) | Student management and profile screens; success requires ADM-03 reload reconciliation |
+| ADM-05 | `POST /admin/students/bulk` | Shared `{ commit?, csvContent?, deactivateMissing?, idempotencyKey, students? }` | Shared preview or replayable committed result with audit authority | Firebase ID; `admin`; identity tenant; no license middleware | `adminStudentsBulk` (`api/adminStudentsBulk.ts`) | `features/students/StudentManagementPage.tsx`; commit success requires ADM-03 reload reconciliation |
 | ADM-06 | `GET /admin/questions/library` | Query `{ limit }` | Shared `AdminQuestionLibraryResult`, strictly adapted with authoritative answer/version fields and canonical relative question/solution paths paired with 30-minute dashboard-signed CDN preview URLs | Firebase ID; `teacher` or `admin`; identity tenant; no license middleware; no bucket/object exposure | `adminQuestionLibrary` (`api/adminQuestionLibrary.ts`) | All six question-bank/test-template library consumers through `adaptAdminQuestionLibraryResult` |
 | ADM-07 | `GET /admin/questions/distribution` | Query `{ limit, examType? }` | `unknown`, normalized to distribution data | Firebase ID; `teacher` or `admin`; identity tenant; no license middleware | `adminQuestionDistribution` (`api/adminQuestionDistribution.ts`) | Question-bank landing and distribution screens |
 | ADM-08 | `GET /admin/questions/upload-logs` | No body | `unknown`, normalized to upload logs | Firebase ID; `teacher` or `admin`; identity tenant; no license middleware | `adminQuestionUploadLogs` (`api/adminQuestionUploadLogs.ts`) | Question-bank management, landing, validation, and template screens |
@@ -106,6 +112,8 @@ Classification totals: `implemented` 32, `incompatible` 3, `missing` 0, `intenti
 | ADM-21 | `POST /admin/tests/{testId}/archive` | Shared `AdminTestTemplateLifecycleRequest` with positive `expectedVersion` | Shared `AdminTestTemplateLifecycleResult` with immutable audit ID/path and authoritative archived template | Firebase ID; `teacher` or `admin`; identity tenant; only ready/assigned may archive | `adminTests` (`api/adminTests.ts`) | `features/tests/TestTemplateManagementPage.tsx` |
 | ADM-22 | `GET /admin/runs` | Optional query `{ cursor, limit, status }`; limit defaults to 25 and is bounded to 50 | Shared `AdminRunListResult`, strictly adapted with complete run records and opaque next cursor | Firebase ID; `teacher` or `admin`; identity tenant; current academic year only | `adminRuns` (`api/adminRuns.ts`) | `features/assignments/assignmentRunsApi.ts`, consumed by the live assignment list with server status filtering and opaque-cursor pagination |
 | ADM-23 | `GET /admin/runs/{runId}` | URL-encoded path `runId` | Shared `AdminRunDetailResult`, strictly adapted with one complete run record | Firebase ID; `teacher` or `admin`; identity tenant; current academic year only; missing/out-of-scope records return `NOT_FOUND` | `adminRuns` (`api/adminRuns.ts`) | `features/assignments/assignmentRunsApi.ts`, consumed by the live detail route for exact lifecycle, recipient, schedule, and policy authority without analytics or fixture substitution |
+| ADM-28 | `POST /admin/students/{studentId}/data-export` | Shared `AdminStudentDataExportRequest` with idempotency key and explicit AI-summary inclusion | Shared `AdminStudentDataExportResult` with audit/replay authority, expiring signed URL, hash, and record counts; no bucket/object fields | Firebase ID; `admin`; identity tenant and path Student; no browser tenant/actor override | `adminStudentDataExport` (`api/adminStudentDataExport.ts`) | `features/students/StudentManagementPage.tsx` |
+| ADM-29 | `POST /admin/students/{studentId}/soft-delete` | Shared `AdminStudentSoftDeleteRequest` with expected version, idempotency key, and reason | Shared `AdminStudentSoftDeleteResult`; Admin requires the subsequent ADM-03 reload to omit the deleted record | Firebase ID; `admin`; identity tenant and path Student; authoritative retained-session count must be zero | `adminStudentSoftDelete` (`api/adminStudentSoftDelete.ts`) | `features/students/StudentManagementPage.tsx` |
 
 ## Student portal — 6 contracts
 
@@ -137,9 +145,9 @@ Classification totals: `implemented` 32, `incompatible` 3, `missing` 0, `intenti
 
 ## Classification summary for the next substeps
 
-- The 32 `implemented` entries are handler-compatible through the common gateway and same-origin Hosting rewrite; each owning flow still requires its task-specific emulator and browser evidence.
+- The 34 `implemented` entries are handler-compatible through the common gateway and same-origin Hosting rewrite; each owning flow still requires its task-specific emulator and browser evidence.
 - The 3 `incompatible` entries require contract repair by their remaining owning tasks before those affected flows can be considered wired.
-- No canonical route remains `missing`.
+- Four canonical Admin Student routes remain explicitly planned and `missing` under BWM-026.
 - EXM-03 is intentionally retired: Firebase Auth SDK refresh replaces the removed custom token-refresh request, and the gateway serves no handler for it.
 
 ## Audit anchors

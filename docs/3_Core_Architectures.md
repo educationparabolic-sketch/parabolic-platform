@@ -1479,10 +1479,30 @@ Fields:
       avgPhaseAdherence: number,
       disciplineIndex: number,
       guessRate: number,
+      version: number,
+      identityPhotoCapturedAt?: timestamp,
+      identityPhotoVerified?: boolean,
+      identityPhotoReviewDecision?: "verified | unverified",
+      identityPhotoReviewReason?: string | null,
+      identityPhotoReviewedAt?: timestamp,
+      identityPhotoReviewedBy?: string,
+      lifecycleReason?: string,
+      statusChangedAt?: timestamp,
+      statusChangedBy?: string,
       lastActiveAt: timestamp,
       createdAt: timestamp,
-      updatedAt: timestamp
+      updatedAt: timestamp,
+      updatedBy?: string
     }
+
+Profile, batch, lifecycle, and identity-photo review changes are
+optimistic-versioned server commands. The Student update and its deterministic
+immutable institute audit record commit in the same Firestore transaction.
+Only a SHA-256 idempotency-key hash is stored. Exact retries replay the audit
+result, while different key semantics, stale versions, and concurrent losing
+commands fail closed. Identity-photo review binds to the stored capture
+timestamp and does not create or replace photo media; photo enrollment,
+consent, retention, access, replacement, and deletion remain owned by BWM-042.
 
 ---
 
@@ -15505,6 +15525,20 @@ Retention policies must be configurable.
 
 ---
 
+## 37.8.1 Administrative Student command recovery
+
+Onboarding resend and roster commit use server-derived institute/actor
+authority and deterministic idempotency records. Resend commits its email job
+and immutable audit together. Bulk commit writes Student versions, onboarding
+jobs, and its immutable import audit in one Firestore transaction before
+reconciling Firebase Auth. Because Auth and Firestore cannot share a
+transaction, an exact retry replays Firestore authority and resumes user,
+claims, disabled-state, and session reconciliation without duplicating durable
+effects. Admin UI success is conditional on an authoritative Student-list
+reload.
+
+---
+
 ## 37.9 User Data Export Requests
 
 Supports compliance with data protection laws.
@@ -15516,6 +15550,13 @@ Export process:
 3. System generates export bundle
 4. Secure download link generated
 5. Export action logged
+
+The ADM-28 implementation is admin-only and derives institute, actor, and
+Student target from verified identity plus the canonical path. Its deterministic
+idempotency audit makes exact retries replay the same public export result. Only
+the expiring signed URL, hash, timestamps, counts, Student ID, audit ID, and
+disposition cross the API; Storage bucket and object-path coordinates remain
+internal.
 
 Export bundle includes:
 
@@ -15556,6 +15597,12 @@ Deletion workflow:
 5. Log deletion request
 
 Session and analytics documents must never be physically deleted.
+
+ADM-29 enforces this workflow only for an expected-version Student whose
+authoritative retained institute session query is empty (`totalRuns = 0`). The
+Student versioned soft-delete fields and immutable replay audit commit in one
+transaction; managed Auth claims are then cleared and refresh tokens revoked,
+with exact retry available to complete that cross-system reconciliation.
 
 ---
 
@@ -18061,6 +18108,3 @@ The system architecture now includes:
 - Unified system event topology
 
 This topology completes the deterministic operational design of the platform.
-
-
-

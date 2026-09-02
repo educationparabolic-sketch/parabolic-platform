@@ -82,6 +82,8 @@
     "test:admin-interventions": "npm run build && node --test lib/tests/adminInterventionsApi.test.js",
     "test:admin-runs-api": "npm run build && node --test lib/tests/adminRunsApi.test.js",
     "test:admin-students-api": "npm run build && node --test lib/tests/adminStudentsApi.test.js",
+    "test:admin-student-mutations": "npm run build && NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none firebase emulators:exec --project demo-parabolic-test --only auth,firestore \"GCLOUD_PROJECT=demo-parabolic-test GOOGLE_CLOUD_PROJECT=demo-parabolic-test node --test lib/tests/adminStudentMutations.test.js\"",
+    "test:admin-student-ingestion": "npm run build && NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none firebase emulators:exec --project demo-parabolic-test --only firestore \"GCLOUD_PROJECT=demo-parabolic-test GOOGLE_CLOUD_PROJECT=demo-parabolic-test node --test lib/tests/adminStudentOnboardingResend.test.js lib/tests/studentBulkIngestion.test.js\"",
     "test:admin-settings-api": "npm run build && node --test lib/tests/adminSettingsApi.test.js",
     "test:admin-settings": "GCLOUD_PROJECT=parabolic-platform-build-125-tests GOOGLE_CLOUD_PROJECT=parabolic-platform-build-125-tests NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none firebase emulators:exec --only firestore \"node --test lib/tests/adminSettings.test.js\"",
     "test:intervention-tools": "GCLOUD_PROJECT=parabolic-platform-build-124-tests GOOGLE_CLOUD_PROJECT=parabolic-platform-build-124-tests NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none firebase emulators:exec --only firestore \"node --test lib/tests/interventionTools.test.js\"",

@@ -1,5 +1,6 @@
+import {createHash} from "node:crypto";
+import {Timestamp} from "firebase-admin/firestore";
 import {getFirestore} from "../utils/firebaseAdmin";
-import {emailQueueService} from "./emailQueue";
 import {
   AdminStudentOnboardingResendResult,
   AdminStudentOnboardingResendValidatedRequest,
@@ -8,36 +9,40 @@ import {
 
 const INSTITUTES_COLLECTION = "institutes";
 const STUDENTS_COLLECTION = "students";
+const AUDIT_LOGS_COLLECTION = "auditLogs";
+const EMAIL_QUEUE_COLLECTION = "emailQueue";
 const STUDENT_ONBOARDING_TEMPLATE = "student_onboarding";
 
-const toRequiredString = (value: unknown, fieldName: string): string => {
-  if (typeof value !== "string" || value.trim().length === 0) {
+const required = (value: unknown, field: string, maximum = 256): string => {
+  if (typeof value !== "string" || !value.trim()) {
     throw new AdminStudentOnboardingResendValidationError(
-      "VALIDATION_ERROR",
-      `Field "${fieldName}" must be a non-empty string.`,
+      "VALIDATION_ERROR", `Field "${field}" must be a non-empty string.`,
     );
   }
-
-  return value.trim();
-};
-
-const toOptionalEmail = (value: unknown): string | null => {
-  if (typeof value !== "string") {
-    return null;
+  const normalized = value.trim();
+  if (normalized.length > maximum) {
+    throw new AdminStudentOnboardingResendValidationError(
+      "VALIDATION_ERROR", `Field "${field}" must be at most ${maximum} characters.`,
+    );
   }
-
-  const normalized = value.trim().toLowerCase();
-  return normalized.length > 0 ? normalized : null;
+  return normalized;
 };
+
+const optionalEmail = (value: unknown): string | null => {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  return normalized || null;
+};
+
+const sha256 = (value: string): string =>
+  createHash("sha256").update(value).digest("hex");
 
 export class AdminStudentOnboardingResendService {
   constructor(
     private readonly dependencies: {
-      enqueueEmailJob: typeof emailQueueService.enqueueEmailJob;
       firestore: FirebaseFirestore.Firestore;
       getCurrentTimestamp: () => Date;
     } = {
-      enqueueEmailJob: emailQueueService.enqueueEmailJob.bind(emailQueueService),
       firestore: getFirestore(),
       getCurrentTimestamp: () => new Date(),
     },
@@ -45,79 +50,126 @@ export class AdminStudentOnboardingResendService {
 
   public normalizeRequest(
     input: Partial<AdminStudentOnboardingResendValidatedRequest> & {
+      idempotencyKey?: unknown;
       instituteId?: unknown;
       studentId?: unknown;
     },
   ): AdminStudentOnboardingResendValidatedRequest {
+    const actorRole = required(input.actorRole, "actorRole").toLowerCase();
+    if (actorRole !== "admin") {
+      throw new AdminStudentOnboardingResendValidationError(
+        "FORBIDDEN", "Only admin roles can resend student onboarding emails.",
+      );
+    }
     return {
-      actorId: toRequiredString(input.actorId, "actorId"),
-      actorRole: toRequiredString(input.actorRole, "actorRole").toLowerCase(),
-      instituteId: toRequiredString(input.instituteId, "instituteId"),
-      studentId: toRequiredString(input.studentId, "studentId"),
+      actorId: required(input.actorId, "actorId"),
+      actorRole,
+      idempotencyKey: required(input.idempotencyKey, "idempotencyKey", 200),
+      instituteId: required(input.instituteId, "instituteId"),
+      studentId: required(input.studentId, "studentId"),
     };
   }
 
   public async resendOnboardingEmail(
     request: AdminStudentOnboardingResendValidatedRequest,
   ): Promise<AdminStudentOnboardingResendResult> {
-    const studentSnapshot = await this.dependencies.firestore
-      .collection(INSTITUTES_COLLECTION)
-      .doc(request.instituteId)
-      .collection(STUDENTS_COLLECTION)
-      .doc(request.studentId)
-      .get();
+    const keyHash = sha256(request.idempotencyKey);
+    const authorityHash = sha256(`${request.instituteId}:${keyHash}`).slice(0, 40);
+    const auditId = `student_onboarding_resend_${authorityHash}`;
+    const jobId = `student_onboarding_${authorityHash}`;
+    const fingerprint = sha256(JSON.stringify({studentId: request.studentId}));
+    const institute = this.dependencies.firestore
+      .collection(INSTITUTES_COLLECTION).doc(request.instituteId);
+    const audit = institute.collection(AUDIT_LOGS_COLLECTION).doc(auditId);
+    const student = institute.collection(STUDENTS_COLLECTION).doc(request.studentId);
+    const job = this.dependencies.firestore.collection(EMAIL_QUEUE_COLLECTION).doc(jobId);
 
-    if (!studentSnapshot.exists) {
-      throw new AdminStudentOnboardingResendValidationError(
-        "VALIDATION_ERROR",
-        `Student "${request.studentId}" was not found in the current institute roster.`,
-      );
-    }
+    return this.dependencies.firestore.runTransaction(async (transaction) => {
+      const auditSnapshot = await transaction.get(audit);
+      if (auditSnapshot.exists) {
+        if (auditSnapshot.get("metadata.requestFingerprint") !== fingerprint) {
+          throw new AdminStudentOnboardingResendValidationError(
+            "CONFLICT",
+            "The idempotency key was already used for a different onboarding resend.",
+          );
+        }
+        const stored = auditSnapshot.get("metadata.result") as
+          Omit<AdminStudentOnboardingResendResult, "disposition"> | undefined;
+        if (!stored) {
+          throw new AdminStudentOnboardingResendValidationError(
+            "CONFLICT", "The onboarding resend authority is incomplete.",
+          );
+        }
+        return {...stored, disposition: "replayed"};
+      }
 
-    const studentData = studentSnapshot.data() ?? {};
-    const status =
-      typeof studentData.status === "string" ? studentData.status.trim().toLowerCase() : "";
-    const recipientEmail = toOptionalEmail(studentData.email);
-    const fullName =
-      typeof studentData.fullName === "string" && studentData.fullName.trim().length > 0 ?
-        studentData.fullName.trim() :
-        typeof studentData.name === "string" && studentData.name.trim().length > 0 ?
-          studentData.name.trim() :
-          request.studentId;
+      const studentSnapshot = await transaction.get(student);
+      if (!studentSnapshot.exists) {
+        throw new AdminStudentOnboardingResendValidationError(
+          "NOT_FOUND",
+          `Student "${request.studentId}" was not found in the current institute roster.`,
+        );
+      }
+      const data = studentSnapshot.data() ?? {};
+      const status = typeof data.status === "string" ? data.status.trim().toLowerCase() : "";
+      const recipientEmail = optionalEmail(data.email);
+      const fullName = typeof data.fullName === "string" && data.fullName.trim() ?
+        data.fullName.trim() : typeof data.name === "string" && data.name.trim() ?
+          data.name.trim() : request.studentId;
+      if (status !== "invited") {
+        throw new AdminStudentOnboardingResendValidationError(
+          "VALIDATION_ERROR",
+          "Onboarding email resend is only available for invited students.",
+        );
+      }
+      if (!recipientEmail) {
+        throw new AdminStudentOnboardingResendValidationError(
+          "VALIDATION_ERROR",
+          "The selected student does not have a valid email address for onboarding resend.",
+        );
+      }
 
-    if (status !== "invited") {
-      throw new AdminStudentOnboardingResendValidationError(
-        "VALIDATION_ERROR",
-        "Onboarding email resend is only available for invited students.",
-      );
-    }
-
-    if (!recipientEmail) {
-      throw new AdminStudentOnboardingResendValidationError(
-        "VALIDATION_ERROR",
-        "The selected student does not have a valid email address for onboarding resend.",
-      );
-    }
-
-    const queuedAt = this.dependencies.getCurrentTimestamp().toISOString();
-    const result = await this.dependencies.enqueueEmailJob({
-      payload: {
-        fullName,
-        instituteId: request.instituteId,
+      const now = this.dependencies.getCurrentTimestamp();
+      const queuedAt = now.toISOString();
+      const persisted = {
+        auditId,
+        jobId,
+        queuedAt,
+        recipientEmail,
+        status: "pending" as const,
         studentId: request.studentId,
-      },
-      recipientEmail,
-      templateType: STUDENT_ONBOARDING_TEMPLATE,
+      };
+      const timestamp = Timestamp.fromDate(now);
+      transaction.create(job, {
+        createdAt: timestamp,
+        instituteId: request.instituteId,
+        payload: {fullName, instituteId: request.instituteId, studentId: request.studentId},
+        recipientEmail,
+        retryCount: 0,
+        sentAt: null,
+        status: "pending",
+        subject: STUDENT_ONBOARDING_TEMPLATE,
+        templateType: STUDENT_ONBOARDING_TEMPLATE,
+      });
+      transaction.create(audit, {
+        actionType: "RESEND_STUDENT_ONBOARDING",
+        actorId: request.actorId,
+        actorRole: request.actorRole,
+        afterState: {jobId, queuedAt, recipientEmail},
+        beforeState: {jobId: null},
+        entityId: request.studentId,
+        entityType: "student",
+        instituteId: request.instituteId,
+        metadata: {
+          idempotencyKeyHash: keyHash,
+          requestFingerprint: fingerprint,
+          result: persisted,
+        },
+        targetCollection: STUDENTS_COLLECTION,
+        timestamp,
+      });
+      return {...persisted, disposition: "applied"};
     });
-
-    return {
-      jobId: result.jobId,
-      jobPath: result.jobPath,
-      queuedAt,
-      recipientEmail,
-      status: result.status,
-      studentId: request.studentId,
-    };
   }
 }
 

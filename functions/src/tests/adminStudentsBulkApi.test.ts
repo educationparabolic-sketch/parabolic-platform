@@ -40,9 +40,11 @@ const assertStructuredError = (
 test("admin students bulk handler accepts a validate-only request", async () => {
   const handler = createAdminStudentsBulkHandler({
     ingestStudents: async () => ({
+      auditId: null,
       commitRequested: false,
       committed: false,
       deactivateMissing: false,
+      disposition: null,
       rows: [
         {
           action: "create",
@@ -69,7 +71,7 @@ test("admin students bulk handler accepts a validate-only request", async () => 
 
   const request = createMockRequest({
     body: {
-      instituteId: "inst_build_m2_api",
+      idempotencyKey: "bulk-api-preview-1",
       students: [
         {
           batch: "Batch-A",
@@ -106,7 +108,7 @@ test("admin students bulk handler rejects non-admin role", async () => {
   await handler(
     createMockRequest({
       body: {
-        instituteId: "inst_build_m2_api",
+        idempotencyKey: "bulk-api-teacher-1",
         students: [
           {
             batch: "Batch-A",
@@ -144,7 +146,7 @@ test("admin students bulk handler maps validation errors", async () => {
   });
   const request = createMockRequest({
     body: {
-      instituteId: "inst_build_m2_api",
+      idempotencyKey: "bulk-api-invalid-1",
       students: [
         {
           batch: "Batch-A",

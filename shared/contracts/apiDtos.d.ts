@@ -7,17 +7,155 @@
  */
 
 export interface AdminStudentOnboardingResendRequest {
-  instituteId?: string;
-  studentId?: string;
+  idempotencyKey: string;
+  studentId: string;
 }
 
 export interface AdminStudentOnboardingResendResult {
+  auditId: string;
+  disposition: AdminStudentMutationDisposition;
   jobId: string;
-  jobPath: string;
   queuedAt: string;
   recipientEmail: string;
   status: "pending";
   studentId: string;
+}
+
+export type AdminStudentMutationDisposition = "applied" | "replayed";
+
+export type AdminStudentLifecycleStatus =
+  | "active"
+  | "archived"
+  | "inactive"
+  | "suspended";
+
+export type AdminStudentPhotoReviewDecision = "unverified" | "verified";
+
+export interface AdminStudentIdentityMutationResult {
+  claimsSynchronized: boolean | null;
+  refreshTokensRevoked: boolean;
+  userMissing: boolean;
+  userUpdated: boolean;
+}
+
+export interface AdminStudentVersionedTarget {
+  expectedVersion: number;
+  studentId: string;
+}
+
+export interface AdminStudentProfileUpdateRequest {
+  email: string;
+  expectedVersion: number;
+  fullName: string;
+  idempotencyKey: string;
+}
+
+export interface AdminStudentProfileUpdateResult {
+  auditId: string;
+  auth: AdminStudentIdentityMutationResult;
+  disposition: AdminStudentMutationDisposition;
+  email: string;
+  fullName: string;
+  studentId: string;
+  updatedAt: string;
+  version: number;
+}
+
+export interface AdminStudentBatchAssignmentRequest {
+  idempotencyKey: string;
+  students: AdminStudentVersionedTarget[];
+  targetBatch: string;
+}
+
+export interface AdminStudentBatchAssignmentRecord {
+  batch: string;
+  previousBatch: string;
+  studentId: string;
+  version: number;
+}
+
+export interface AdminStudentBatchAssignmentResult {
+  auditId: string;
+  disposition: AdminStudentMutationDisposition;
+  students: AdminStudentBatchAssignmentRecord[];
+  targetBatch: string;
+  updatedAt: string;
+}
+
+export interface AdminStudentLifecycleUpdateRequest {
+  expectedVersion: number;
+  idempotencyKey: string;
+  reason: string;
+  status: AdminStudentLifecycleStatus;
+}
+
+export interface AdminStudentLifecycleUpdateResult {
+  auditId: string;
+  auth: AdminStudentIdentityMutationResult;
+  disposition: AdminStudentMutationDisposition;
+  previousStatus: AdminStudentLifecycleStatus | "invited";
+  status: AdminStudentLifecycleStatus;
+  studentId: string;
+  updatedAt: string;
+  version: number;
+}
+
+export interface AdminStudentPhotoReviewRequest {
+  decision: AdminStudentPhotoReviewDecision;
+  expectedPhotoCapturedAt: string;
+  expectedVersion: number;
+  idempotencyKey: string;
+  reason?: string;
+}
+
+export interface AdminStudentPhotoReviewResult {
+  auditId: string;
+  decision: AdminStudentPhotoReviewDecision;
+  disposition: AdminStudentMutationDisposition;
+  photoCapturedAt: string;
+  reviewedAt: string;
+  studentId: string;
+  version: number;
+}
+
+export interface AdminStudentDataExportRequest {
+  idempotencyKey: string;
+  includeAiSummaries: boolean;
+}
+
+export interface AdminStudentDataExportRecordCounts {
+  academicYearCount: number;
+  aiSummaryCount: number;
+  metricDocumentCount: number;
+  sessionCount: number;
+}
+
+export interface AdminStudentDataExportResult {
+  auditId: string;
+  disposition: AdminStudentMutationDisposition;
+  downloadUrl: string;
+  expiresAt: string;
+  exportHash: string;
+  generatedAt: string;
+  records: AdminStudentDataExportRecordCounts;
+  studentId: string;
+}
+
+export interface AdminStudentSoftDeleteRequest {
+  expectedVersion: number;
+  idempotencyKey: string;
+  reason: string;
+}
+
+export interface AdminStudentSoftDeleteResult {
+  alreadyDeleted: boolean;
+  analyticsPreserved: true;
+  auditId: string;
+  deletedAt: string;
+  disposition: AdminStudentMutationDisposition;
+  sessionHistoryPreserved: true;
+  studentId: string;
+  version: number;
 }
 
 export interface StudentBulkIngestionStudentInput {
@@ -37,7 +175,7 @@ export interface StudentBulkIngestionRequest {
   commit?: boolean;
   csvContent?: string;
   deactivateMissing?: boolean;
-  instituteId: string;
+  idempotencyKey: string;
   students?: StudentBulkIngestionStudentInput[];
 }
 
@@ -68,9 +206,11 @@ export interface StudentBulkIngestionSummary {
 }
 
 export interface StudentBulkIngestionResult {
+  auditId: string | null;
   commitRequested: boolean;
   committed: boolean;
   deactivateMissing: boolean;
+  disposition: AdminStudentMutationDisposition | null;
   rows: StudentBulkIngestionRowResult[];
   summary: StudentBulkIngestionSummary;
 }

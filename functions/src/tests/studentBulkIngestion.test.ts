@@ -70,6 +70,15 @@ const createAuthStub = () => {
 
       return {uid, email: existing.email, disabled: existing.disabled};
     },
+    getUserByEmail: async (email: string) => {
+      const existing = [...users.values()].find((user) => user.email === email);
+      if (!existing) {
+        const error = new Error("auth user not found") as Error & {code?: string};
+        error.code = "auth/user-not-found";
+        throw error;
+      }
+      return {uid: existing.uid, email: existing.email, disabled: existing.disabled};
+    },
     setCustomUserClaims: async (
       uid: string,
       claims: Record<string, unknown>,
@@ -180,10 +189,12 @@ test(
         "STU-002,Existing Student,existing@example.com,Batch-C,parent2@example.com,+1555000002,2025",
       ].join("\n"),
       deactivateMissing: true,
+      idempotencyKey: "bulk-build-m2-commit-1",
       instituteId,
     });
 
     const result = await service.ingestStudents(request);
+    const replay = await service.ingestStudents(request);
     const createdSnapshot = await firestore.doc(`${studentsPath}/STU-001`).get();
     const updatedSnapshot = await firestore.doc(existingStudentPath).get();
     const deactivatedSnapshot = await firestore.doc(staleStudentPath).get();
@@ -196,6 +207,9 @@ test(
       .get();
 
     assert.equal(result.committed, true);
+    assert.equal(result.disposition, "applied");
+    assert.equal(replay.auditId, result.auditId);
+    assert.equal(replay.disposition, "replayed");
     assert.equal(result.summary.created, 1);
     assert.equal(result.summary.updated, 1);
     assert.equal(result.summary.deactivated, 1);
@@ -217,7 +231,17 @@ test(
       role: "student",
       studentId: "STU-001",
     });
-    assert.deepEqual(revokedStudentIds, ["STU-999"]);
+    assert.deepEqual(revokedStudentIds, ["STU-999", "STU-999"]);
+    assert.equal(createdSnapshot.get("version"), 1);
+    assert.equal(updatedSnapshot.get("version"), 2);
+    await assert.rejects(
+      service.ingestStudents({
+        ...request,
+        deactivateMissing: false,
+      }),
+      (error: unknown) => error instanceof StudentBulkIngestionValidationError &&
+        error.code === "CONFLICT",
+    );
 
     await deleteCollectionDocuments(auditLogsPath);
     await deleteCollectionDocuments(emailQueuePath);
@@ -263,6 +287,7 @@ test(
       actorRole: "admin",
       commit: true,
       deactivateMissing: false,
+      idempotencyKey: "bulk-build-m2-conflict-1",
       instituteId,
       students: [
         {
@@ -301,6 +326,78 @@ test(
   },
 );
 
+test(
+  "student bulk ingestion resumes Auth reconciliation after Firestore commit failure",
+  async () => {
+    const instituteId = "inst_build_m2_reconcile";
+    const studentsPath = `institutes/${instituteId}/students`;
+    const authStub = createAuthStub();
+    const setClaims = authStub.setCustomUserClaims;
+    let failClaimsOnce = true;
+    authStub.setCustomUserClaims = async (uid, claims) => {
+      if (failClaimsOnce) {
+        failClaimsOnce = false;
+        throw new Error("injected post-commit Auth failure");
+      }
+      await setClaims(uid, claims);
+    };
+    const service = new StudentBulkIngestionService({
+      auth: authStub,
+      firestore,
+      getCurrentTimestamp: () => new Date("2026-05-03T09:45:00.000Z"),
+      logStudentImport:
+        administrativeActionLoggingService.logStudentImport.bind(
+          administrativeActionLoggingService,
+        ),
+    });
+    await deleteCollectionDocuments(`institutes/${instituteId}/auditLogs`);
+    await deleteCollectionDocuments(studentsPath);
+    await firestore.doc(`institutes/${instituteId}`).set({instituteId});
+    const request = service.normalizeRequest({
+      actorId: "admin_build_m2_reconcile",
+      actorLicenseLayer: "L2",
+      actorRole: "admin",
+      commit: true,
+      deactivateMissing: false,
+      idempotencyKey: "bulk-build-m2-reconcile-1",
+      instituteId,
+      students: [{
+        batch: "Batch-A",
+        email: "reconcile@example.com",
+        fullName: "Reconcile Student",
+        studentId: "STU-RECONCILE",
+      }],
+    });
+
+    await assert.rejects(
+      service.ingestStudents(request),
+      /injected post-commit Auth failure/,
+    );
+    const replay = await service.ingestStudents(request);
+    const audits = await firestore.collection(`institutes/${instituteId}/auditLogs`)
+      .where("actionType", "==", "IMPORT_STUDENTS").get();
+    const jobs = await firestore.collection("emailQueue")
+      .where("instituteId", "==", instituteId).get();
+
+    assert.equal(replay.disposition, "replayed");
+    assert.equal(audits.size, 1);
+    assert.equal(jobs.size, 1);
+    assert.deepEqual(authStub.users.get("STU-RECONCILE")?.claims, {
+      instituteId,
+      licenseLayer: "L2",
+      role: "student",
+      studentId: "STU-RECONCILE",
+    });
+
+    await Promise.all([
+      ...audits.docs.map((document) => document.ref.delete()),
+      ...jobs.docs.map((document) => document.ref.delete()),
+    ]);
+    await deleteCollectionDocuments(studentsPath);
+    await deleteDocumentIfPresent(`institutes/${instituteId}`);
+  },
+);
+
 test("student bulk ingestion rejects malformed input rows", () => {
   const service = new StudentBulkIngestionService({
     auth: createAuthStub(),
@@ -318,6 +415,7 @@ test("student bulk ingestion rejects malformed input rows", () => {
         actorId: "admin_build_m2_invalid",
         actorLicenseLayer: "L2",
         actorRole: "admin",
+        idempotencyKey: "bulk-build-m2-invalid-1",
         instituteId: "inst_build_m2_invalid",
         students: [
           {

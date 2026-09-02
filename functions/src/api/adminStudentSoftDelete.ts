@@ -63,19 +63,13 @@ export const createAdminStudentSoftDeleteHandler = (
     createMethodMiddleware("POST"),
     createAuthenticationMiddleware(dependencies),
     createTenantGuardMiddleware({
-      allowVendorBypass: true,
-      resolveRequestInstituteId: (request): string | null => {
-        const body = (request.body ?? {}) as StudentSoftDeleteRequest;
-
-        return typeof body.instituteId === "string" ?
-          body.instituteId :
-          null;
-      },
+      allowVendorBypass: false,
+      resolveRequestInstituteId: (request): string | null =>
+        request.context.identity?.instituteId ?? null,
     }),
     createRoleAuthorizationMiddleware({
-      allowedRoles: ["admin", "vendor"],
-      forbiddenMessage:
-        "Only admin and vendor roles can soft-delete student records.",
+      allowedRoles: ["admin"],
+      forbiddenMessage: "Only admin roles can soft-delete student records.",
     }),
     createRequestValidationMiddleware({
       validator: (request: MiddlewareRequest): void => {
@@ -84,12 +78,13 @@ export const createAdminStudentSoftDeleteHandler = (
         const validatedRequest = studentSoftDeleteService.normalizeRequest({
           actorId: identity?.uid,
           actorRole: identity?.role,
-          instituteId:
-            identity?.isVendor ?
-              body.instituteId :
-              identity?.instituteId ?? body.instituteId,
+          expectedVersion: body.expectedVersion,
+          idempotencyKey: body.idempotencyKey,
+          instituteId: identity?.instituteId ?? undefined,
           ipAddress: request.ip,
-          studentId: body.studentId,
+          reason: body.reason,
+          studentId: typeof request.params.studentId === "string" ?
+            request.params.studentId : undefined,
           userAgent: request.header("user-agent"),
         });
 

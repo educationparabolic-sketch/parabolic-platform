@@ -665,6 +665,10 @@ function normalizeStudentRecord(input: {
         input.metricsData.weakTopicSummary,
       "No topic weakness summary",
     ),
+    version:
+      typeof input.studentData.version === "number" &&
+      Number.isInteger(input.studentData.version) &&
+      input.studentData.version > 0 ? input.studentData.version : 1,
   };
 }
 

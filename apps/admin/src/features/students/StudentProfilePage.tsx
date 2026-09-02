@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, useParams } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
@@ -554,6 +554,12 @@ function shouldUseLiveApi(): boolean {
   return shouldUseConfiguredLiveApi();
 }
 
+function createOnboardingIdempotencyKey(studentId: string): string {
+  const suffix = typeof crypto.randomUUID === "function" ?
+    crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+  return `student-onboarding:${studentId}:${suffix}`;
+}
+
 function formatPercent(value: number | null): string {
   return value === null ? "Not available" : `${value.toFixed(1)}%`;
 }
@@ -632,6 +638,7 @@ function StudentProfilePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadMessage, setLoadMessage] = useState<string | null>(null);
   const [onboardingUiState, setOnboardingUiState] = useState<StudentOnboardingUiState | null>(null);
+  const onboardingIdempotencyKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -695,6 +702,7 @@ function StudentProfilePage() {
 
   useEffect(() => {
     setOnboardingUiState(null);
+    onboardingIdempotencyKeyRef.current = null;
   }, [student?.id]);
 
   async function resendStudentOnboardingEmail() {
@@ -714,16 +722,35 @@ function StudentProfilePage() {
       status: "pending",
     }));
 
+    const idempotencyKey = onboardingIdempotencyKeyRef.current ??
+      createOnboardingIdempotencyKey(student.id);
+    onboardingIdempotencyKeyRef.current = idempotencyKey;
+
+    let authorityAccepted = false;
     try {
       if (shouldUseLiveApi()) {
         const response = await apiClient.post<StudentOnboardingResendResult, AdminStudentOnboardingResendRequest>(
           "/admin/students/onboarding-resend",
           {
             body: {
+              idempotencyKey,
               studentId: student.id,
             },
           },
         );
+
+        if (response.studentId !== student.id || !response.auditId) {
+          throw new Error("Onboarding resend returned an incompatible authority result.");
+        }
+        authorityAccepted = true;
+        const refreshedStudents = await fetchStudentsFromApi();
+        const refreshedStudent = refreshedStudents.find((entry) => entry.id === student.id);
+        if (!refreshedStudent || refreshedStudent.status !== "invited" ||
+          refreshedStudent.email !== response.recipientEmail) {
+          throw new Error("Onboarding resend did not survive authoritative roster reload.");
+        }
+        setStudents(refreshedStudents);
+        onboardingIdempotencyKeyRef.current = null;
 
         setOnboardingUiState({
           isSubmitting: false,
@@ -742,6 +769,9 @@ function StudentProfilePage() {
 
       setLoadMessage(`Onboarding email queued again for ${student.fullName} at ${student.email}.`);
     } catch (error) {
+      if (authorityAccepted) {
+        onboardingIdempotencyKeyRef.current = null;
+      }
       setOnboardingUiState((current) => ({
         isSubmitting: false,
         lastQueuedAt: current?.lastQueuedAt ?? null,

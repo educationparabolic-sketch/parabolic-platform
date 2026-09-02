@@ -55,6 +55,7 @@ export interface AdminStudentRecord {
   testsAttempted: number;
   timeMisallocationPercent: number;
   topicWeaknessSummary: string;
+  version: number;
 }
 
 export interface AdminStudentsSnapshot {

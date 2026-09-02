@@ -1,51 +1,30 @@
-import {SignedUrlGenerationResult} from "./signedUrl";
 import {StandardApiErrorCode} from "./apiResponse";
+import type {
+  AdminStudentDataExportRecordCounts,
+  AdminStudentDataExportRequest,
+  AdminStudentDataExportResult,
+} from "../../../shared/contracts/apiDtos";
 
-export interface StudentDataExportRequest {
-  includeAiSummaries?: boolean;
-  instituteId: string;
-  studentId: string;
-}
+export type {
+  AdminStudentDataExportRecordCounts as StudentDataExportRecordCounts,
+  AdminStudentDataExportRequest as StudentDataExportRequest,
+  AdminStudentDataExportResult as StudentDataExportResult,
+};
 
 export interface StudentDataExportValidatedRequest {
   actorId: string;
   actorRole: string;
-  includeAiSummaries: boolean;
+  idempotencyKey: string;
+  includeAiSummaries: AdminStudentDataExportRequest["includeAiSummaries"];
   instituteId: string;
   ipAddress?: string;
   studentId: string;
   userAgent?: string;
 }
 
-export interface StudentDataExportStorageLocation {
-  bucketName: string;
-  objectPath: string;
-}
-
-export interface StudentDataExportRecordCounts {
-  academicYearCount: number;
-  aiSummaryCount: number;
-  metricDocumentCount: number;
-  sessionCount: number;
-}
-
-export interface StudentDataExportResult {
-  approvedBy: string;
-  download: SignedUrlGenerationResult;
-  expiresAt: string;
-  exportHash: string;
-  generatedAt: string;
-  includeAiSummaries: boolean;
-  instituteId: string;
-  records: StudentDataExportRecordCounts;
-  requestedBy: string;
-  storage: StudentDataExportStorageLocation;
-  studentId: string;
-}
-
 export interface StudentDataExportSuccessResponse {
   code: "OK";
-  data: StudentDataExportResult;
+  data: AdminStudentDataExportResult;
   message: string;
   requestId: string;
   success: true;

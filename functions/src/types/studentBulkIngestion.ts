@@ -30,6 +30,7 @@ export interface StudentBulkIngestionValidatedRequest {
   actorRole: string;
   commit: boolean;
   deactivateMissing: boolean;
+  idempotencyKey: string;
   instituteId: string;
   ipAddress?: string;
   rows: StudentBulkIngestionValidatedRow[];

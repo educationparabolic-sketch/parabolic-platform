@@ -67,10 +67,8 @@ export const createAdminStudentsBulkHandler = (
     createAuthenticationMiddleware(dependencies),
     createTenantGuardMiddleware({
       allowVendorBypass: false,
-      resolveRequestInstituteId: (request): string | null => {
-        const body = (request.body ?? {}) as StudentBulkIngestionRequest;
-        return typeof body.instituteId === "string" ? body.instituteId : null;
-      },
+      resolveRequestInstituteId: (request): string | null =>
+        request.context.identity?.instituteId ?? null,
     }),
     createRoleAuthorizationMiddleware({
       allowedRoles: ["admin"],
@@ -88,7 +86,8 @@ export const createAdminStudentsBulkHandler = (
           commit: body.commit,
           csvContent: body.csvContent,
           deactivateMissing: body.deactivateMissing,
-          instituteId: identity?.instituteId ?? body.instituteId,
+          idempotencyKey: body.idempotencyKey,
+          instituteId: identity?.instituteId ?? undefined,
           ipAddress: request.ip,
           students: body.students,
           userAgent: request.header("user-agent"),

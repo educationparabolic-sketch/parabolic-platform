@@ -76,6 +76,7 @@ test("admin students handler accepts tenant-scoped summary reads", async () => {
             testsAttempted: 6,
             timeMisallocationPercent: 11,
             topicWeaknessSummary: "Algebra",
+            version: 1,
           },
         ],
       };

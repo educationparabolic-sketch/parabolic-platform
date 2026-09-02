@@ -1,4 +1,5 @@
-import {FieldValue, Timestamp} from "firebase-admin/firestore";
+import {createHash} from "node:crypto";
+import {Timestamp} from "firebase-admin/firestore";
 import {createLogger} from "./logging";
 import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
 import {
@@ -20,11 +21,13 @@ import {LicenseLayer} from "../types/middleware";
 
 const INSTITUTES_COLLECTION = "institutes";
 const STUDENTS_COLLECTION = "students";
+const AUDIT_LOGS_COLLECTION = "auditLogs";
 const EMAIL_QUEUE_COLLECTION = "emailQueue";
 const AUTH_NOT_FOUND_CODE = "auth/user-not-found";
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CSV_REQUIRED_HEADERS = ["studentid", "fullname", "email", "batch"];
 const STUDENT_ONBOARDING_TEMPLATE = "student_onboarding";
+const MAX_BULK_ROWS = 100;
 
 interface StudentBulkIngestionAuthUserRecord {
   disabled?: boolean;
@@ -41,6 +44,7 @@ interface StudentBulkIngestionAuthDependencies {
   }) => Promise<StudentBulkIngestionAuthUserRecord>;
   deleteUser: (uid: string) => Promise<void>;
   getUser: (uid: string) => Promise<StudentBulkIngestionAuthUserRecord>;
+  getUserByEmail: (email: string) => Promise<StudentBulkIngestionAuthUserRecord>;
   setCustomUserClaims: (
     uid: string,
     claims: Record<string, unknown>,
@@ -77,6 +81,7 @@ interface StudentDocumentRecord {
   phone?: unknown;
   status?: unknown;
   studentId?: unknown;
+  version?: unknown;
 }
 
 interface ExistingStudentRecord {
@@ -89,6 +94,7 @@ interface ExistingStudentRecord {
   phone?: string;
   status?: string;
   studentId: string;
+  version: number;
 }
 
 interface PreparedRow {
@@ -104,7 +110,11 @@ interface QueuedOnboardingEmail {
   studentId: string;
 }
 
-const normalizeRequiredString = (value: unknown, fieldName: string): string => {
+const normalizeRequiredString = (
+  value: unknown,
+  fieldName: string,
+  maximumLength = 512,
+): string => {
   if (typeof value !== "string") {
     throw new StudentBulkIngestionValidationError(
       "VALIDATION_ERROR",
@@ -118,6 +128,13 @@ const normalizeRequiredString = (value: unknown, fieldName: string): string => {
     throw new StudentBulkIngestionValidationError(
       "VALIDATION_ERROR",
       `Field "${fieldName}" must be a non-empty string.`,
+    );
+  }
+
+  if (normalizedValue.length > maximumLength) {
+    throw new StudentBulkIngestionValidationError(
+      "VALIDATION_ERROR",
+      `Field "${fieldName}" must be at most ${maximumLength} characters.`,
     );
   }
 
@@ -285,8 +302,13 @@ const toStudentDocumentRecord = (
     studentId:
       normalizeOptionalString(record.studentId) ??
       studentId,
+    version: typeof record.version === "number" &&
+      Number.isInteger(record.version) && record.version > 0 ? record.version : 1,
   };
 };
+
+const sha256 = (value: string): string =>
+  createHash("sha256").update(value).digest("hex");
 
 /**
  * Validates and commits student roster uploads.
@@ -303,6 +325,8 @@ export class StudentBulkIngestionService {
         createUser: (input) => getFirebaseAdminApp().auth().createUser(input),
         deleteUser: (uid) => getFirebaseAdminApp().auth().deleteUser(uid),
         getUser: (uid) => getFirebaseAdminApp().auth().getUser(uid),
+        getUserByEmail: (email) =>
+          getFirebaseAdminApp().auth().getUserByEmail(email),
         setCustomUserClaims: (uid, claims) =>
           getFirebaseAdminApp().auth().setCustomUserClaims(uid, claims),
         updateUser: (uid, input) =>
@@ -328,6 +352,7 @@ export class StudentBulkIngestionService {
       commit?: unknown;
       csvContent?: unknown;
       deactivateMissing?: unknown;
+      idempotencyKey?: unknown;
       students?: unknown;
     },
   ): StudentBulkIngestionValidatedRequest {
@@ -375,17 +400,37 @@ export class StudentBulkIngestionService {
       );
     }
 
+    if (parsedStudents.length > MAX_BULK_ROWS) {
+      throw new StudentBulkIngestionValidationError(
+        "VALIDATION_ERROR",
+        `Bulk ingestion supports at most ${MAX_BULK_ROWS} student rows.`,
+      );
+    }
+
     const rows = parsedStudents.map((row, index) =>
       this.normalizeRow(row, index + 1),
     );
 
+    const actorRole = normalizeRequiredString(input.actorRole, "actorRole")
+      .toLowerCase();
+    if (actorRole !== "admin") {
+      throw new StudentBulkIngestionValidationError(
+        "FORBIDDEN",
+        "Only admin roles can run student bulk ingestion.",
+      );
+    }
+
     return {
       actorId: normalizeRequiredString(input.actorId, "actorId"),
       actorLicenseLayer,
-      actorRole: normalizeRequiredString(input.actorRole, "actorRole")
-        .toLowerCase(),
+      actorRole,
       commit: input.commit === true,
       deactivateMissing: input.deactivateMissing === true,
+      idempotencyKey: normalizeRequiredString(
+        input.idempotencyKey,
+        "idempotencyKey",
+        200,
+      ),
       instituteId: normalizeRequiredString(input.instituteId, "instituteId"),
       ipAddress: normalizeOptionalString(input.ipAddress),
       rows,
@@ -401,6 +446,14 @@ export class StudentBulkIngestionService {
   public async ingestStudents(
     request: StudentBulkIngestionValidatedRequest,
   ): Promise<StudentBulkIngestionResult> {
+    if (request.commit) {
+      const replay = await this.loadReplay(request);
+      if (replay) {
+        await this.reconcileAuth(request, replay);
+        return replay;
+      }
+    }
+
     const studentCollection = this.dependencies.firestore
       .collection(INSTITUTES_COLLECTION)
       .doc(request.instituteId)
@@ -500,49 +553,15 @@ export class StudentBulkIngestionService {
     const queuedOnboardingEmails = preparedRows.filter((row) =>
       (row.existingStudent?.status ?? "invited") === "invited",
     ).length;
-    const canCommit = request.commit && invalid === 0;
-
-    if (canCommit) {
-      const createdAuthUsers: string[] = [];
-
-      try {
-        await Promise.all(
-          preparedRows.map((entry) =>
-            this.upsertAuthUser(request, entry, createdAuthUsers),
-          ),
-        );
-      } catch (error) {
-        await Promise.all(
-          createdAuthUsers.map((uid) =>
-            this.dependencies.auth.deleteUser(uid).catch(() => undefined),
-          ),
-        );
-        throw error;
-      }
-
-      try {
-        await this.commitRows(
-          request,
-          preparedRows,
-          deactivationCandidates,
-        );
-      } catch (error) {
-        await Promise.all(
-          createdAuthUsers.map((uid) =>
-            this.dependencies.auth.deleteUser(uid).catch(() => undefined),
-          ),
-        );
-        throw error;
-      }
-
-      const sessionSecurity =
-        this.dependencies.sessionSecurity ?? identitySessionSecurityService;
-      await Promise.all(
-        deactivationCandidates.map((candidate) =>
-          sessionSecurity.clearClaimsAndRevokeSessions(candidate.studentId),
-        ),
+    const transactionWrites = preparedRows.length +
+      deactivationCandidates.length + queuedOnboardingEmails + 1;
+    if (request.commit && invalid === 0 && transactionWrites > 450) {
+      throw new StudentBulkIngestionValidationError(
+        "VALIDATION_ERROR",
+        "Bulk ingestion would exceed the safe atomic commit limit; split the roster change.",
       );
     }
+    const canCommit = request.commit && invalid === 0;
 
     if (canCommit && deactivationCandidates.length > 0) {
       rowResults.push(
@@ -557,10 +576,12 @@ export class StudentBulkIngestionService {
       );
     }
 
-    const result: StudentBulkIngestionResult = {
+    let result: StudentBulkIngestionResult = {
+      auditId: null,
       commitRequested: request.commit,
       committed: canCommit,
       deactivateMissing: request.deactivateMissing,
+      disposition: null,
       rows: rowResults,
       summary: {
         created: canCommit ? created : 0,
@@ -573,6 +594,17 @@ export class StudentBulkIngestionService {
         valid: request.rows.length - invalid,
       },
     };
+
+    if (canCommit) {
+      await this.preflightAuth(request, preparedRows);
+      result = await this.commitRows(
+        request,
+        preparedRows,
+        deactivationCandidates,
+        result,
+      );
+      await this.reconcileAuth(request, result);
+    }
 
     this.logger.info("Student bulk ingestion evaluated.", {
       committed: result.committed,
@@ -643,40 +675,121 @@ export class StudentBulkIngestionService {
       );
   }
 
+  private buildAuthority(request: StudentBulkIngestionValidatedRequest): {
+    auditId: string;
+    fingerprint: string;
+    keyHash: string;
+  } {
+    const keyHash = sha256(request.idempotencyKey);
+    return {
+      auditId: `student_import_${sha256(
+        `${request.instituteId}:${keyHash}`,
+      ).slice(0, 40)}`,
+      fingerprint: sha256(JSON.stringify({
+        actorLicenseLayer: request.actorLicenseLayer,
+        deactivateMissing: request.deactivateMissing,
+        rows: request.rows,
+      })),
+      keyHash,
+    };
+  }
+
+  private async loadReplay(
+    request: StudentBulkIngestionValidatedRequest,
+  ): Promise<StudentBulkIngestionResult | null> {
+    const authority = this.buildAuthority(request);
+    const snapshot = await this.dependencies.firestore
+      .collection(INSTITUTES_COLLECTION).doc(request.instituteId)
+      .collection(AUDIT_LOGS_COLLECTION).doc(authority.auditId).get();
+    if (!snapshot.exists) return null;
+    if (snapshot.get("metadata.requestFingerprint") !== authority.fingerprint) {
+      throw new StudentBulkIngestionValidationError(
+        "CONFLICT",
+        "The idempotency key was already used for a different bulk ingestion.",
+      );
+    }
+    const result = snapshot.get("metadata.result") as
+      StudentBulkIngestionResult | undefined;
+    if (!result) {
+      throw new StudentBulkIngestionValidationError(
+        "CONFLICT", "The bulk-ingestion authority is incomplete.",
+      );
+    }
+    return {...result, disposition: "replayed"};
+  }
+
+  private async preflightAuth(
+    request: StudentBulkIngestionValidatedRequest,
+    preparedRows: PreparedRow[],
+  ): Promise<void> {
+    await Promise.all(preparedRows.map(async (entry) => {
+      try {
+        const user = await this.dependencies.auth.getUser(entry.row.studentId);
+        const email = normalizeOptionalEmail(user.email, "auth.email");
+        if (email && email !== entry.row.email) {
+          throw new StudentBulkIngestionValidationError(
+            "VALIDATION_ERROR",
+            `Auth account for "${entry.row.studentId}" is linked to a different email address.`,
+          );
+        }
+      } catch (error) {
+        if (!(error instanceof Error && "code" in error &&
+          (error as {code?: string}).code === AUTH_NOT_FOUND_CODE)) {
+          throw error;
+        }
+      }
+      try {
+        const emailOwner = await this.dependencies.auth.getUserByEmail(
+          entry.row.email,
+        );
+        if (emailOwner.uid !== entry.row.studentId) {
+          throw new StudentBulkIngestionValidationError(
+            "VALIDATION_ERROR",
+            `Email for "${entry.row.studentId}" belongs to another Auth account.`,
+          );
+        }
+      } catch (error) {
+        if (!(error instanceof Error && "code" in error &&
+          (error as {code?: string}).code === AUTH_NOT_FOUND_CODE)) {
+          throw error;
+        }
+      }
+    }));
+  }
+
   private async upsertAuthUser(
     request: StudentBulkIngestionValidatedRequest,
-    entry: PreparedRow,
-    createdAuthUsers: string[],
+    row: StudentBulkIngestionValidatedRow,
   ): Promise<void> {
-    const displayName = entry.row.fullName;
+    const displayName = row.fullName;
     const claims = {
       instituteId: request.instituteId,
       licenseLayer: request.actorLicenseLayer,
       role: "student",
-      studentId: entry.row.studentId,
+      studentId: row.studentId,
     };
 
     try {
       const existingAuthUser = await this.dependencies.auth.getUser(
-        entry.row.studentId,
+        row.studentId,
       );
       const existingEmail = normalizeOptionalEmail(
         existingAuthUser.email,
         "auth.email",
       );
 
-      if (existingEmail && existingEmail !== entry.row.email) {
+      if (existingEmail && existingEmail !== row.email) {
         throw new StudentBulkIngestionValidationError(
           "VALIDATION_ERROR",
-          `Auth account for "${entry.row.studentId}" is linked to a ` +
+          `Auth account for "${row.studentId}" is linked to a ` +
             "different email address.",
         );
       }
 
-      await this.dependencies.auth.updateUser(entry.row.studentId, {
+      await this.dependencies.auth.updateUser(row.studentId, {
         disabled: false,
         displayName,
-        email: entry.row.email,
+        email: row.email,
       });
     } catch (error) {
       if (
@@ -687,10 +800,9 @@ export class StudentBulkIngestionService {
         await this.dependencies.auth.createUser({
           disabled: false,
           displayName,
-          email: entry.row.email,
-          uid: entry.row.studentId,
+          email: row.email,
+          uid: row.studentId,
         });
-        createdAuthUsers.push(entry.row.studentId);
       } else if (error instanceof StudentBulkIngestionValidationError) {
         throw error;
       } else {
@@ -698,15 +810,66 @@ export class StudentBulkIngestionService {
       }
     }
 
-    await this.dependencies.auth.setCustomUserClaims(entry.row.studentId, claims);
+    await this.dependencies.auth.setCustomUserClaims(row.studentId, claims);
+  }
+
+  private async reconcileAuth(
+    request: StudentBulkIngestionValidatedRequest,
+    result: StudentBulkIngestionResult,
+  ): Promise<void> {
+    const sessionSecurity =
+      this.dependencies.sessionSecurity ?? identitySessionSecurityService;
+    const studentCollection = this.dependencies.firestore
+      .collection(INSTITUTES_COLLECTION).doc(request.instituteId)
+      .collection(STUDENTS_COLLECTION);
+    const targetIds = [...new Set(result.rows
+      .filter((row) => row.action !== "none" && row.studentId)
+      .map((row) => row.studentId as string))];
+
+    await Promise.all(targetIds.map(async (studentId) => {
+      const snapshot = await studentCollection.doc(studentId).get();
+      if (!snapshot.exists) return;
+      const current = toStudentDocumentRecord(snapshot.data(), studentId);
+      if (current.deleted || current.status === "inactive" ||
+        current.status === "archived") {
+        try {
+          await this.dependencies.auth.updateUser(studentId, {disabled: true});
+        } catch (error) {
+          if (!(error instanceof Error && "code" in error &&
+            (error as {code?: string}).code === AUTH_NOT_FOUND_CODE)) {
+            throw error;
+          }
+        }
+        await sessionSecurity.clearClaimsAndRevokeSessions(studentId);
+        return;
+      }
+      if (!current.email) {
+        throw new StudentBulkIngestionValidationError(
+          "VALIDATION_ERROR",
+          `Student "${studentId}" cannot reconcile Auth without an email.`,
+        );
+      }
+      await this.upsertAuthUser(request, {
+        batchId: current.batchId ?? "unassigned",
+        email: current.email,
+        fullName: current.fullName ?? studentId,
+        parentEmail: current.parentEmail,
+        phone: current.phone,
+        rowNumber: 0,
+        studentId,
+      });
+    }));
   }
 
   private async commitRows(
     request: StudentBulkIngestionValidatedRequest,
     preparedRows: PreparedRow[],
     deactivationCandidates: ExistingStudentRecord[],
-  ): Promise<void> {
+    proposedResult: StudentBulkIngestionResult,
+  ): Promise<StudentBulkIngestionResult> {
+    const authority = this.buildAuthority(request);
     const now = this.dependencies.getCurrentTimestamp();
+    const timestamp = Timestamp.fromDate(now);
     const studentCollection = this.dependencies.firestore
       .collection(INSTITUTES_COLLECTION)
       .doc(request.instituteId)
@@ -723,19 +886,53 @@ export class StudentBulkIngestionService {
     );
     const emailJobs = onboardingEmails.map((emailJob) => ({
       ...emailJob,
-      reference: emailQueueCollection.doc(),
+      reference: emailQueueCollection.doc(
+        `student_import_${sha256(
+          `${request.instituteId}:${authority.keyHash}:${emailJob.studentId}`,
+        ).slice(0, 40)}`,
+      ),
     }));
+    const auditReference = this.dependencies.firestore
+      .collection(INSTITUTES_COLLECTION).doc(request.instituteId)
+      .collection(AUDIT_LOGS_COLLECTION).doc(authority.auditId);
 
-    await this.dependencies.firestore.runTransaction(async (transaction) => {
+    return this.dependencies.firestore.runTransaction(async (transaction) => {
+      const auditSnapshot = await transaction.get(auditReference);
+      if (auditSnapshot.exists) {
+        if (auditSnapshot.get("metadata.requestFingerprint") !== authority.fingerprint) {
+          throw new StudentBulkIngestionValidationError(
+            "CONFLICT",
+            "The idempotency key was already used for a different bulk ingestion.",
+          );
+        }
+        const stored = auditSnapshot.get("metadata.result") as
+          StudentBulkIngestionResult | undefined;
+        if (!stored) {
+          throw new StudentBulkIngestionValidationError(
+            "CONFLICT", "The bulk-ingestion authority is incomplete.",
+          );
+        }
+        return {...stored, disposition: "replayed"};
+      }
+
+      const targetSnapshots = await Promise.all([
+        ...preparedRows.map((entry) =>
+          transaction.get(studentCollection.doc(entry.row.studentId))),
+        ...deactivationCandidates.map((candidate) =>
+          transaction.get(studentCollection.doc(candidate.studentId))),
+      ]);
       preparedRows.forEach((entry) => {
         const documentReference = studentCollection.doc(entry.row.studentId);
+        const currentSnapshot = targetSnapshots.shift();
+        const current = currentSnapshot?.exists ?
+          toStudentDocumentRecord(currentSnapshot.data(), entry.row.studentId) : null;
         const baseDocument = {
           academicYear: entry.row.enrollmentYear ?? null,
           batch: entry.row.batchId,
           batchId: entry.row.batchId,
           class: entry.row.className ?? null,
           createdAt:
-            entry.existingStudent?.createdAt ?? FieldValue.serverTimestamp(),
+            current?.createdAt ?? timestamp,
           deleted: false,
           email: entry.row.email,
           enrollmentYear: entry.row.enrollmentYear ?? null,
@@ -743,24 +940,29 @@ export class StudentBulkIngestionService {
           name: entry.row.fullName,
           parentEmail: entry.row.parentEmail ?? null,
           phone: entry.row.phone ?? null,
-          status: entry.existingStudent?.status ?? "invited",
+          status: current?.status ?? "invited",
           studentId: entry.row.studentId,
-          updatedAt: FieldValue.serverTimestamp(),
+          updatedAt: timestamp,
+          version: (current?.version ?? 0) + 1,
         };
 
         transaction.set(documentReference, baseDocument, {merge: true});
       });
 
       deactivationCandidates.forEach((candidate) => {
+        const currentSnapshot = targetSnapshots.shift();
+        const current = currentSnapshot?.exists ?
+          toStudentDocumentRecord(currentSnapshot.data(), candidate.studentId) : candidate;
         transaction.set(studentCollection.doc(candidate.studentId), {
           status: "inactive",
-          updatedAt: FieldValue.serverTimestamp(),
+          updatedAt: timestamp,
+          version: current.version + 1,
         }, {merge: true});
       });
 
       emailJobs.forEach((emailJob) => {
         transaction.create(emailJob.reference, {
-          createdAt: FieldValue.serverTimestamp(),
+          createdAt: timestamp,
           instituteId: request.instituteId,
           payload: {
             fullName: emailJob.fullName,
@@ -775,31 +977,38 @@ export class StudentBulkIngestionService {
           templateType: STUDENT_ONBOARDING_TEMPLATE,
         });
       });
-    });
-
-    await this.dependencies.logStudentImport({
-      actorId: request.actorId,
-      actorRole: request.actorRole,
-      afterState: {
-        committedAt: now.toISOString(),
-        created: preparedRows.filter((row) => row.action === "create").length,
-        deactivated: deactivationCandidates.length,
-        importedStudentIds: preparedRows.map((row) => row.row.studentId),
-        onboardingEmailsQueued: onboardingEmails.length,
-        updated: preparedRows.filter((row) => row.action === "update").length,
-      },
-      beforeState: {
-        committedAt: null,
-      },
-      entityId: `student_import_${now.getTime()}`,
-      instituteId: request.instituteId,
-      ipAddress: request.ipAddress,
-      metadata: {
-        commitMode: "all_or_nothing",
-        deactivateMissing: request.deactivateMissing,
-        rowCount: request.rows.length,
-      },
-      userAgent: request.userAgent,
+      const result: StudentBulkIngestionResult = {
+        ...proposedResult,
+        auditId: authority.auditId,
+        disposition: "applied",
+      };
+      transaction.create(auditReference, {
+        actionType: "IMPORT_STUDENTS",
+        actorId: request.actorId,
+        actorRole: request.actorRole,
+        afterState: {
+          committedAt: now.toISOString(),
+          created: result.summary.created,
+          deactivated: result.summary.deactivated,
+          onboardingEmailsQueued: result.summary.onboardingEmailsQueued,
+          updated: result.summary.updated,
+        },
+        beforeState: {committedAt: null},
+        entityId: authority.auditId,
+        entityType: "student",
+        instituteId: request.instituteId,
+        metadata: {
+          commitMode: "all_or_nothing",
+          deactivateMissing: request.deactivateMissing,
+          idempotencyKeyHash: authority.keyHash,
+          requestFingerprint: authority.fingerprint,
+          result,
+          rowCount: request.rows.length,
+        },
+        targetCollection: STUDENTS_COLLECTION,
+        timestamp,
+      });
+      return result;
     });
   }
 }

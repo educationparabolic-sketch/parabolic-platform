@@ -6,9 +6,6 @@ import {
   StudentSoftDeleteService,
 } from "../services/studentSoftDelete";
 import {
-  administrativeActionLoggingService,
-} from "../services/administrativeActionLogging";
-import {
   StudentSoftDeleteValidationError,
 } from "../types/studentSoftDelete";
 
@@ -55,10 +52,6 @@ test(
     const revokedStudentIds: string[] = [];
     const service = new StudentSoftDeleteService({
       firestore,
-      logStudentSoftDelete:
-        administrativeActionLoggingService.logStudentSoftDelete.bind(
-          administrativeActionLoggingService,
-        ),
       sessionSecurity: {
         clearClaimsAndRevokeSessions: async (uid) => {
           revokedStudentIds.push(uid);
@@ -109,7 +102,19 @@ test(
     const result = await service.softDeleteStudent({
       actorId: "admin_build_104",
       actorRole: "admin",
+      expectedVersion: 1,
+      idempotencyKey: "soft-delete-build-104",
       instituteId,
+      reason: "Zero-run cleanup",
+      studentId,
+    });
+    const replay = await service.softDeleteStudent({
+      actorId: "admin_build_104",
+      actorRole: "admin",
+      expectedVersion: 1,
+      idempotencyKey: "soft-delete-build-104",
+      instituteId,
+      reason: "Zero-run cleanup",
       studentId,
     });
 
@@ -119,13 +124,16 @@ test(
       .where("actionType", "==", "SOFT_DELETE_STUDENT")
       .get();
 
-    assert.equal(result.deleted, true);
     assert.equal(result.alreadyDeleted, false);
+    assert.equal(result.disposition, "applied");
+    assert.equal(result.version, 2);
+    assert.equal(replay.disposition, "replayed");
+    assert.equal(replay.auditId, result.auditId);
     assert.equal(studentSnapshot.get("deleted"), true);
     assert.equal(metricsSnapshot.exists, true);
     assert.equal(auditSnapshot.size, 1);
     assert.equal(auditSnapshot.docs[0]?.get("targetId"), studentId);
-    assert.deepEqual(revokedStudentIds, [studentId]);
+    assert.deepEqual(revokedStudentIds, [studentId, studentId]);
 
     await deleteCollectionDocuments(auditLogsPath);
     await Promise.all([
@@ -140,6 +148,82 @@ test(
 );
 
 test(
+  "softDeleteStudent rejects students with retained run sessions",
+  async () => {
+    const instituteId = "inst_build_104_has_runs";
+    const studentId = "student_build_104_has_runs";
+    const studentPath = `institutes/${instituteId}/students/${studentId}`;
+    const sessionPath =
+      `institutes/${instituteId}/academicYears/2025/runs/run_1/` +
+      "sessions/session_1";
+    const auditLogsPath = `institutes/${instituteId}/auditLogs`;
+    const revokedStudentIds: string[] = [];
+    const service = new StudentSoftDeleteService({
+      firestore,
+      sessionSecurity: {
+        clearClaimsAndRevokeSessions: async (uid) => {
+          revokedStudentIds.push(uid);
+          return {
+            claimsChanged: true,
+            refreshTokensRevoked: true,
+            uid,
+            userMissing: false,
+          };
+        },
+      },
+    });
+
+    await deleteCollectionDocuments(auditLogsPath);
+    await Promise.all([
+      deleteDocumentIfPresent(sessionPath),
+      deleteDocumentIfPresent(studentPath),
+    ]);
+    await firestore.doc(studentPath).set({
+      deleted: false,
+      status: "inactive",
+      studentId,
+      version: 1,
+    });
+    await firestore.doc(sessionPath).set({studentId});
+
+    await assert.rejects(
+      service.softDeleteStudent({
+        actorId: "admin_build_104",
+        actorRole: "admin",
+        expectedVersion: 1,
+        idempotencyKey: "soft-delete-build-104-has-runs",
+        instituteId,
+        reason: "Should be rejected",
+        studentId,
+      }),
+      (error: unknown) => {
+        assert.equal(error instanceof StudentSoftDeleteValidationError, true);
+        assert.equal(
+          (error as StudentSoftDeleteValidationError).code,
+          "CONFLICT",
+        );
+        assert.equal(
+          (error as Error).message,
+          "Student deletion is allowed only when totalRuns is 0.",
+        );
+        return true;
+      },
+    );
+
+    const studentSnapshot = await firestore.doc(studentPath).get();
+    const auditSnapshot = await firestore.collection(auditLogsPath).get();
+    assert.equal(studentSnapshot.get("deleted"), false);
+    assert.equal(auditSnapshot.size, 0);
+    assert.deepEqual(revokedStudentIds, []);
+
+    await Promise.all([
+      deleteDocumentIfPresent(sessionPath),
+      deleteDocumentIfPresent(studentPath),
+    ]);
+  },
+);
+
+test(
   "softDeleteStudent is idempotent for already deleted students",
   async () => {
     const instituteId = "inst_build_104_idempotent";
@@ -149,10 +233,6 @@ test(
     const revokedStudentIds: string[] = [];
     const service = new StudentSoftDeleteService({
       firestore,
-      logStudentSoftDelete:
-        administrativeActionLoggingService.logStudentSoftDelete.bind(
-          administrativeActionLoggingService,
-        ),
       sessionSecurity: {
         clearClaimsAndRevokeSessions: async (uid) => {
           revokedStudentIds.push(uid);
@@ -174,14 +254,19 @@ test(
 
     await firestore.doc(`institutes/${instituteId}`).set({instituteId});
     await firestore.doc(studentPath).set({
+      deletedAt: "2026-04-07T00:00:00.000Z",
       deleted: true,
       studentId,
+      version: 2,
     });
 
     const result = await service.softDeleteStudent({
       actorId: "admin_build_104",
       actorRole: "admin",
+      expectedVersion: 2,
+      idempotencyKey: "soft-delete-build-104-idempotent",
       instituteId,
+      reason: "Repeat zero-run cleanup",
       studentId,
     });
 
@@ -190,7 +275,9 @@ test(
       .get();
 
     assert.equal(result.alreadyDeleted, true);
-    assert.equal(auditSnapshot.size, 0);
+    assert.equal(result.disposition, "applied");
+    assert.equal(result.version, 2);
+    assert.equal(auditSnapshot.size, 1);
     assert.deepEqual(revokedStudentIds, [studentId]);
 
     await deleteCollectionDocuments(auditLogsPath);
@@ -204,10 +291,6 @@ test(
 test("softDeleteStudent rejects missing students", async () => {
   const service = new StudentSoftDeleteService({
     firestore,
-    logStudentSoftDelete:
-      administrativeActionLoggingService.logStudentSoftDelete.bind(
-        administrativeActionLoggingService,
-      ),
   });
 
   await assert.rejects(
@@ -215,7 +298,10 @@ test("softDeleteStudent rejects missing students", async () => {
       await service.softDeleteStudent({
         actorId: "admin_build_104",
         actorRole: "admin",
+        expectedVersion: 1,
+        idempotencyKey: "soft-delete-build-104-missing",
         instituteId: "inst_build_104_missing",
+        reason: "Missing cleanup",
         studentId: "student_missing",
       });
     },

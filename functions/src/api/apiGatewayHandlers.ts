@@ -25,6 +25,12 @@ import {
 } from "./adminStudentOnboardingResend";
 import {handleAdminStudentsRequest} from "./adminStudents";
 import {handleAdminStudentsBulkRequest} from "./adminStudentsBulk";
+import {
+  handleAdminStudentDataExportRequest,
+} from "./adminStudentDataExport";
+import {
+  handleAdminStudentSoftDeleteRequest,
+} from "./adminStudentSoftDelete";
 import {handleAdminTestsRequest} from "./adminTests";
 import {handleExamSessionAnswersRequest} from "./examSessionAnswers";
 import {handleExamSessionActivateRequest} from "./examSessionActivate";
@@ -64,7 +70,9 @@ Record<string, ApiGatewayHandler>
   adminQuestionUploadLogs: handleAdminQuestionUploadLogsRequest,
   adminRuns: handleAdminRunsRequest,
   adminSettings: handleAdminSettingsRequest,
+  adminStudentDataExport: handleAdminStudentDataExportRequest,
   adminStudentOnboardingResend: handleAdminStudentOnboardingResendRequest,
+  adminStudentSoftDelete: handleAdminStudentSoftDeleteRequest,
   adminStudents: handleAdminStudentsRequest,
   adminStudentsBulk: handleAdminStudentsBulkRequest,
   adminTests: handleAdminTestsRequest,

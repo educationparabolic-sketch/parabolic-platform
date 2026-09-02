@@ -170,6 +170,15 @@ test(
     const result = await service.generateExport({
       actorId: "admin_build_103",
       actorRole: "admin",
+      idempotencyKey: "export-build-103",
+      includeAiSummaries: true,
+      instituteId,
+      studentId,
+    });
+    const replay = await service.generateExport({
+      actorId: "admin_build_103",
+      actorRole: "admin",
+      idempotencyKey: "export-build-103",
       includeAiSummaries: true,
       instituteId,
       studentId,
@@ -180,12 +189,19 @@ test(
       .get();
 
     assert.equal(result.studentId, studentId);
-    assert.equal(result.approvedBy, "admin_build_103");
+    assert.match(result.auditId, /^student_export_/);
+    assert.equal(result.disposition, "applied");
+    assert.equal(replay.disposition, "replayed");
+    assert.equal(replay.auditId, result.auditId);
+    assert.equal(replay.exportHash, result.exportHash);
     assert.equal(result.records.academicYearCount, 1);
     assert.equal(result.records.metricDocumentCount, 1);
     assert.equal(result.records.sessionCount, 1);
     assert.equal(result.records.aiSummaryCount, 1);
-    assert.equal(result.download.accessContext, "dataExportDownload");
+    assert.equal(
+      result.downloadUrl,
+      "https://cdn.example.com/build-103-export.csv",
+    );
     assert.equal(uploads.length, 1);
     assert.equal(
       uploads[0]?.target.objectPath,
@@ -237,6 +253,7 @@ test("generateExport rejects missing students", async () => {
       await service.generateExport({
         actorId: "admin_build_103",
         actorRole: "admin",
+        idempotencyKey: "export-build-103-missing",
         includeAiSummaries: true,
         instituteId: "inst_build_103_missing",
         studentId: "student_missing",

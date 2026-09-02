@@ -65,10 +65,8 @@ export const createAdminStudentOnboardingResendHandler = (
     createAuthenticationMiddleware(dependencies),
     createTenantGuardMiddleware({
       allowVendorBypass: false,
-      resolveRequestInstituteId: (request): string | null => {
-        const body = (request.body ?? {}) as AdminStudentOnboardingResendRequest;
-        return typeof body.instituteId === "string" ? body.instituteId : request.context.identity?.instituteId ?? null;
-      },
+      resolveRequestInstituteId: (request): string | null =>
+        request.context.identity?.instituteId ?? null,
     }),
     createRoleAuthorizationMiddleware({
       allowedRoles: ["admin"],
@@ -82,7 +80,8 @@ export const createAdminStudentOnboardingResendHandler = (
         const validatedRequest = adminStudentOnboardingResendService.normalizeRequest({
           actorId: identity?.uid,
           actorRole: identity?.role,
-          instituteId: identity?.instituteId ?? body.instituteId,
+          idempotencyKey: body.idempotencyKey,
+          instituteId: identity?.instituteId ?? undefined,
           studentId: body.studentId,
         });
 

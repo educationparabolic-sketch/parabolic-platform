@@ -61,19 +61,13 @@ export const createAdminStudentDataExportHandler = (
     createMethodMiddleware("POST"),
     createAuthenticationMiddleware(dependencies),
     createTenantGuardMiddleware({
-      allowVendorBypass: true,
-      resolveRequestInstituteId: (request): string | null => {
-        const body = (request.body ?? {}) as StudentDataExportRequest;
-
-        return typeof body.instituteId === "string" ?
-          body.instituteId :
-          null;
-      },
+      allowVendorBypass: false,
+      resolveRequestInstituteId: (request): string | null =>
+        request.context.identity?.instituteId ?? null,
     }),
     createRoleAuthorizationMiddleware({
-      allowedRoles: ["admin", "director", "vendor"],
-      forbiddenMessage:
-        "Only admin, director, and vendor roles can approve data exports.",
+      allowedRoles: ["admin"],
+      forbiddenMessage: "Only admin roles can approve data exports.",
     }),
     createRequestValidationMiddleware({
       validator: (request: MiddlewareRequest): void => {
@@ -82,13 +76,12 @@ export const createAdminStudentDataExportHandler = (
         const validatedRequest = studentDataExportService.normalizeRequest({
           actorId: identity?.uid,
           actorRole: identity?.role,
+          idempotencyKey: body.idempotencyKey,
           includeAiSummaries: body.includeAiSummaries,
-          instituteId:
-            identity?.isVendor ?
-              body.instituteId :
-              identity?.instituteId ?? body.instituteId,
+          instituteId: identity?.instituteId ?? undefined,
           ipAddress: request.ip,
-          studentId: body.studentId,
+          studentId: typeof request.params.studentId === "string" ?
+            request.params.studentId : undefined,
           userAgent: request.header("user-agent"),
         });
 

@@ -7,8 +7,12 @@ import {
 } from "../../../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import type {
+  AdminStudentDataExportRequest,
+  AdminStudentDataExportResult,
   AdminStudentOnboardingResendRequest,
   AdminStudentOnboardingResendResult as StudentOnboardingResendResult,
+  AdminStudentSoftDeleteRequest,
+  AdminStudentSoftDeleteResult,
   StudentBulkIngestionRequest,
   StudentBulkIngestionResult as StudentBulkUploadResult,
   StudentBulkIngestionRowResult as StudentBulkUploadRowResult,
@@ -56,6 +60,7 @@ const FALLBACK_STUDENTS: StudentRecord[] = [
     guessRatePercent: 11,
     executionStabilityFlag: "Stable",
     lastActive: "2026-04-09",
+    version: 1,
   },
   {
     id: "student-002",
@@ -82,6 +87,7 @@ const FALLBACK_STUDENTS: StudentRecord[] = [
     guessRatePercent: 19,
     executionStabilityFlag: "Moderate",
     lastActive: "2026-04-02",
+    version: 1,
   },
   {
     id: "student-003",
@@ -108,6 +114,7 @@ const FALLBACK_STUDENTS: StudentRecord[] = [
     guessRatePercent: 8,
     executionStabilityFlag: "Stable",
     lastActive: "2026-04-10",
+    version: 1,
   },
   {
     id: "student-004",
@@ -134,6 +141,7 @@ const FALLBACK_STUDENTS: StudentRecord[] = [
     guessRatePercent: 31,
     executionStabilityFlag: "Unstable",
     lastActive: "2026-03-29",
+    version: 1,
   },
   {
     id: "student-005",
@@ -160,6 +168,7 @@ const FALLBACK_STUDENTS: StudentRecord[] = [
     guessRatePercent: 0,
     executionStabilityFlag: "Pending",
     lastActive: null,
+    version: 1,
   },
 ];
 
@@ -200,6 +209,7 @@ interface StudentRecord {
   guessRatePercent: number;
   executionStabilityFlag: string;
   lastActive: string | null;
+  version: number;
 }
 
 interface StudentFilterState {
@@ -267,6 +277,11 @@ interface StudentOnboardingUiState {
   lastQueuedAt: string | null;
   recipientEmail: string | null;
   status: "pending";
+}
+
+interface StudentDataActionUiState {
+  deleting: boolean;
+  exporting: boolean;
 }
 
 interface StudentBulkUploadPreviewSummary {
@@ -456,27 +471,6 @@ function toNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
-function decodeIdTokenClaims(idToken: string | null): Record<string, unknown> | null {
-  if (!idToken) {
-    return null;
-  }
-
-  const segments = idToken.split(".");
-  if (segments.length !== 3) {
-    return null;
-  }
-
-  try {
-    const payloadSegment = segments[1].replace(/-/g, "+").replace(/_/g, "/");
-    const paddedPayload = payloadSegment.padEnd(Math.ceil(payloadSegment.length / 4) * 4, "=");
-    const payload = atob(paddedPayload);
-    const claims = JSON.parse(payload);
-    return claims && typeof claims === "object" ? (claims as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
-}
-
 function toNumberOrZero(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -572,6 +566,7 @@ function normalizeStudentRecord(value: unknown, index: number): StudentRecord | 
       record.executionStabilityFlag ?? record.executionStabilityBadge ?? record.stabilityFlag,
     ) ?? "Pending",
     lastActive: toNonEmptyString(record.lastActive),
+    version: Math.max(1, Math.floor(toNumberOrZero(record.version) || 1)),
   };
 }
 
@@ -581,11 +576,12 @@ async function fetchStudentsFromApi(): Promise<StudentRecord[]> {
     .map((entry, index) => normalizeStudentRecord(entry, index))
     .filter((entry): entry is StudentRecord => Boolean(entry));
 
-  if (rows.length === 0) {
-    throw new Error("No students were returned by GET /admin/students.");
-  }
-
   return rows;
+}
+
+function createStudentActionIdempotencyKey(action: string, studentId: string): string {
+  const suffix = typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+  return `${action}:${studentId}:${suffix}`;
 }
 
 function shouldUseLiveApi(): boolean {
@@ -1381,9 +1377,11 @@ function validateBulkUploadRows(
   }
 
   return {
+    auditId: null,
     commitRequested: commit,
     committed,
     deactivateMissing,
+    disposition: null,
     rows: rowResults,
     summary: {
       created: committed ? createdCount : 0,
@@ -1455,6 +1453,7 @@ function applyBulkUploadCommit(
         guessRatePercent: 0,
         hardBiasRate: 0,
         lastActive: null,
+        version: 1,
         phaseAdherencePercent: 0,
         riskState: "low" as const,
         scorePercentile: null,
@@ -1514,9 +1513,11 @@ function StudentManagementPage() {
   const [bulkUploadDeactivateMissing, setBulkUploadDeactivateMissing] = useState(false);
   const [helperTab, setHelperTab] = useState<StudentHelperTab>("status");
   const [onboardingUiByStudentId, setOnboardingUiByStudentId] = useState<Record<string, StudentOnboardingUiState>>({});
+  const [dataActionUiByStudentId, setDataActionUiByStudentId] = useState<Record<string, StudentDataActionUiState>>({});
   const [selectedBatchForAnalysis, setSelectedBatchForAnalysis] = useState("");
   const [archiveScopeByYear, setArchiveScopeByYear] = useState<Record<string, ArchiveScopeConfig>>({});
   const inlineEditorRef = useRef<HTMLElement | null>(null);
+  const actionIdempotencyKeysRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
     let isMounted = true;
@@ -2153,6 +2154,7 @@ function StudentManagementPage() {
   }
 
   function resetBulkUploadWorkflow() {
+    delete actionIdempotencyKeysRef.current["bulk-ingestion:commit"];
     setBulkUploadFileName("");
     setBulkUploadRows([]);
     setBulkUploadResult(null);
@@ -2179,16 +2181,36 @@ function StudentManagementPage() {
       },
     }));
 
+    const keyName = `onboarding:${student.id}`;
+    const idempotencyKey = actionIdempotencyKeysRef.current[keyName] ??
+      createStudentActionIdempotencyKey("student-onboarding", student.id);
+    actionIdempotencyKeysRef.current[keyName] = idempotencyKey;
+
+    let authorityAccepted = false;
     try {
       if (shouldUseLiveApi()) {
         const response = await apiClient.post<StudentOnboardingResendResult, AdminStudentOnboardingResendRequest>(
           "/admin/students/onboarding-resend",
           {
             body: {
+              idempotencyKey,
               studentId: student.id,
             },
           },
         );
+
+        if (response.studentId !== student.id || !response.auditId) {
+          throw new Error("Onboarding resend returned an incompatible authority result.");
+        }
+        authorityAccepted = true;
+        const refreshedStudents = await fetchStudentsFromApi();
+        const refreshedStudent = refreshedStudents.find((entry) => entry.id === student.id);
+        if (!refreshedStudent || refreshedStudent.status !== "invited" ||
+          refreshedStudent.email !== response.recipientEmail) {
+          throw new Error("Onboarding resend did not survive authoritative roster reload.");
+        }
+        setStudents(refreshedStudents);
+        delete actionIdempotencyKeysRef.current[keyName];
 
         setOnboardingUiByStudentId((current) => ({
           ...current,
@@ -2213,6 +2235,9 @@ function StudentManagementPage() {
 
       setLoadMessage(`Onboarding email queued again for ${student.fullName} at ${student.email}.`);
     } catch (error) {
+      if (authorityAccepted) {
+        delete actionIdempotencyKeysRef.current[keyName];
+      }
       setOnboardingUiByStudentId((current) => ({
         ...current,
         [student.id]: {
@@ -2229,6 +2254,126 @@ function StudentManagementPage() {
           error.message :
           "Onboarding resend failed.";
       setLoadMessage(message);
+    }
+  }
+
+  async function exportStudentData(student: StudentRecord) {
+    if (!isBulkUploadAdmin || !shouldUseLiveApi()) {
+      setLoadMessage("Student data export is available only to admins in live mode.");
+      return;
+    }
+    setDataActionUiByStudentId((current) => ({
+      ...current,
+      [student.id]: {
+        deleting: current[student.id]?.deleting ?? false,
+        exporting: true,
+      },
+    }));
+    const keyName = `export:${student.id}`;
+    const idempotencyKey = actionIdempotencyKeysRef.current[keyName] ??
+      createStudentActionIdempotencyKey("student-export", student.id);
+    actionIdempotencyKeysRef.current[keyName] = idempotencyKey;
+
+    try {
+      const studentId = encodeURIComponent(student.id);
+      const result = await apiClient.post<AdminStudentDataExportResult, AdminStudentDataExportRequest>(
+        `/admin/students/${studentId}/data-export`,
+        {body: {idempotencyKey, includeAiSummaries: true}},
+      );
+      if (result.studentId !== student.id || !result.downloadUrl || !result.auditId) {
+        throw new Error("Student export returned an incompatible authority result.");
+      }
+      const anchor = document.createElement("a");
+      anchor.href = result.downloadUrl;
+      anchor.download = `${student.studentId}-data-export.csv`;
+      anchor.rel = "noopener";
+      anchor.click();
+      delete actionIdempotencyKeysRef.current[keyName];
+      setLoadMessage(
+        `Data export generated for ${student.fullName}; ${result.records.sessionCount} session records included.`,
+      );
+    } catch (error) {
+      setLoadMessage(
+        error instanceof ApiClientError ?
+          `Student export failed with ${error.code} (${error.status}).` :
+          error instanceof Error ? error.message : "Student export failed.",
+      );
+    } finally {
+      setDataActionUiByStudentId((current) => ({
+        ...current,
+        [student.id]: {
+          deleting: current[student.id]?.deleting ?? false,
+          exporting: false,
+        },
+      }));
+    }
+  }
+
+  async function softDeleteStudent(student: StudentRecord) {
+    if (!isBulkUploadAdmin || !shouldUseLiveApi()) {
+      setLoadMessage("Student soft deletion is available only to admins in live mode.");
+      return;
+    }
+    if (student.testsAttempted > 0) {
+      setLoadMessage("Student deletion is allowed only when totalRuns is 0.");
+      return;
+    }
+    if (!window.confirm(
+      `Soft-delete ${student.fullName}? Session history and analytics will be preserved.`,
+    )) {
+      return;
+    }
+    setDataActionUiByStudentId((current) => ({
+      ...current,
+      [student.id]: {
+        deleting: true,
+        exporting: current[student.id]?.exporting ?? false,
+      },
+    }));
+    const keyName = `delete:${student.id}`;
+    const idempotencyKey = actionIdempotencyKeysRef.current[keyName] ??
+      createStudentActionIdempotencyKey("student-soft-delete", student.id);
+    actionIdempotencyKeysRef.current[keyName] = idempotencyKey;
+
+    try {
+      const studentId = encodeURIComponent(student.id);
+      const result = await apiClient.post<AdminStudentSoftDeleteResult, AdminStudentSoftDeleteRequest>(
+        `/admin/students/${studentId}/soft-delete`,
+        {
+          body: {
+            expectedVersion: student.version,
+            idempotencyKey,
+            reason: "Admin-approved zero-run student record removal.",
+          },
+        },
+      );
+      if (result.studentId !== student.id || result.version < student.version || !result.auditId) {
+        throw new Error("Student deletion returned an incompatible authority result.");
+      }
+      const refreshedStudents = await fetchStudentsFromApi();
+      if (refreshedStudents.some((entry) => entry.id === student.id)) {
+        throw new Error("Student deletion did not survive authoritative roster reload.");
+      }
+      setStudents(refreshedStudents);
+      setSelectedStudentIds((current) => current.filter((id) => id !== student.id));
+      delete actionIdempotencyKeysRef.current[keyName];
+      setLoadMessage(
+        `${student.fullName} was soft-deleted; session history and analytics were preserved.`,
+      );
+    } catch (error) {
+      setLoadMessage(
+        error instanceof ApiClientError ?
+          `Student deletion failed with ${error.code} (${error.status}).` :
+          error instanceof Error ? error.message : "Student deletion failed.",
+      );
+    } finally {
+      setDataActionUiByStudentId((current) => ({
+        ...current,
+        [student.id]: {
+          deleting: false,
+          exporting: current[student.id]?.exporting ?? false,
+        },
+      }));
     }
   }
 
@@ -2252,6 +2397,7 @@ function StudentManagementPage() {
   }
 
   async function handleBulkUploadFileSelection(file: File | null) {
+    delete actionIdempotencyKeysRef.current["bulk-ingestion:commit"];
     setBulkUploadResult(null);
     setBulkUploadError(null);
     setBulkUploadMessage(null);
@@ -2287,6 +2433,7 @@ function StudentManagementPage() {
   }
 
   function updateBulkUploadRow(rowId: string, field: StudentBulkUploadField, value: string) {
+    delete actionIdempotencyKeysRef.current["bulk-ingestion:commit"];
     setBulkUploadRows((current) =>
       current.map((row) =>
         row.id === rowId ?
@@ -2305,6 +2452,7 @@ function StudentManagementPage() {
   }
 
   function removeBulkUploadRow(rowId: string) {
+    delete actionIdempotencyKeysRef.current["bulk-ingestion:commit"];
     setBulkUploadRows((current) => current.filter((row) => row.id !== rowId));
     setBulkUploadResult(null);
     setBulkUploadError(null);
@@ -2328,22 +2476,26 @@ function StudentManagementPage() {
     setBulkUploadError(null);
     setBulkUploadMessage(null);
 
+    let commitAuthorityAccepted = false;
     try {
+      const keyName = "bulk-ingestion:commit";
+      const idempotencyKey = commit ?
+        actionIdempotencyKeysRef.current[keyName] ??
+          createStudentActionIdempotencyKey("student-bulk", "roster") :
+        createStudentActionIdempotencyKey("student-bulk-preview", "roster");
+      if (commit) {
+        actionIdempotencyKeysRef.current[keyName] = idempotencyKey;
+      }
       const result =
         shouldUseLiveApi() ?
           await (async () => {
-            const claims = decodeIdTokenClaims(session.idToken);
-            const instituteId =
-              typeof claims?.instituteId === "string" && claims.instituteId.trim().length > 0 ?
-                claims.instituteId :
-                "inst-build-125";
             const response = await apiClient.post<StudentBulkUploadResult, StudentBulkIngestionRequest>(
               "/admin/students/bulk",
               {
                 body: {
                   commit,
                   deactivateMissing: bulkUploadDeactivateMissing,
-                  instituteId,
+                  idempotencyKey,
                   students: bulkUploadRows.map((row) => ({
                     batch: row.batch.trim(),
                     class: row.className.trim() || undefined,
@@ -2372,12 +2524,33 @@ function StudentManagementPage() {
         }
 
         if (shouldUseLiveApi()) {
-          try {
-            const refreshedStudents = await fetchStudentsFromApi();
-            setStudents(refreshedStudents);
-          } catch {
-            // Keep success state even if the follow-up refresh misses.
+          if (!result.auditId || !result.disposition) {
+            throw new Error("Bulk ingestion returned an incompatible authority result.");
           }
+          commitAuthorityAccepted = true;
+          const refreshedStudents = await fetchStudentsFromApi();
+          const refreshedById = new Map(refreshedStudents.map((entry) => [entry.id, entry]));
+          const submittedById = new Map(bulkUploadRows.map((entry) => [
+            entry.studentId.trim(),
+            entry,
+          ]));
+          const unreconciled = result.rows.find((row) => {
+            if (!row.studentId || row.action === "none") return false;
+            const authoritative = refreshedById.get(row.studentId);
+            if (row.action === "deactivate") return authoritative?.status !== "inactive";
+            const submitted = submittedById.get(row.studentId);
+            return !authoritative || !submitted ||
+              authoritative.email !== submitted.email.trim().toLowerCase() ||
+              authoritative.fullName !== submitted.fullName.trim() ||
+              authoritative.batch !== submitted.batch.trim();
+          });
+          if (unreconciled) {
+            throw new Error(
+              `Bulk ingestion did not survive authoritative reload for ${unreconciled.studentId}.`,
+            );
+          }
+          setStudents(refreshedStudents);
+          delete actionIdempotencyKeysRef.current["bulk-ingestion:commit"];
         } else {
           setStudents((current) =>
             applyBulkUploadCommit(
@@ -2404,6 +2577,9 @@ function StudentManagementPage() {
           "Validation passed. Review the create, update, and deactivation summary before confirming.",
       );
     } catch (error) {
+      if (commitAuthorityAccepted) {
+        delete actionIdempotencyKeysRef.current["bulk-ingestion:commit"];
+      }
       const message =
         error instanceof ApiClientError ?
           `Student bulk ingestion failed with ${error.code} (${error.status}).` :
@@ -2542,6 +2718,7 @@ function StudentManagementPage() {
       className: "admin-student-actions-col",
       render: (student) => {
         const onboardingUi = onboardingUiByStudentId[student.id];
+        const dataActionUi = dataActionUiByStudentId[student.id];
 
         return (
           <div className="admin-student-row-actions">
@@ -2589,6 +2766,38 @@ function StudentManagementPage() {
               <small className="admin-student-row-meta">
                 Queued to {onboardingUi.recipientEmail} on {formatDateTimeLabel(onboardingUi.lastQueuedAt)}.
               </small>
+            ) : null}
+            {isBulkUploadAdmin ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void exportStudentData(student);
+                  }}
+                  disabled={!shouldUseLiveApi() || dataActionUi?.exporting || dataActionUi?.deleting}
+                >
+                  {dataActionUi?.exporting ? "Preparing export..." : "Export data"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void softDeleteStudent(student);
+                  }}
+                  disabled={
+                    !shouldUseLiveApi() ||
+                    student.testsAttempted > 0 ||
+                    dataActionUi?.deleting ||
+                    dataActionUi?.exporting
+                  }
+                  title={
+                    student.testsAttempted > 0 ?
+                      "Deletion is allowed only when totalRuns is 0." :
+                      "Soft-delete this zero-run student while preserving history."
+                  }
+                >
+                  {dataActionUi?.deleting ? "Deleting..." : "Soft delete"}
+                </button>
+              </>
             ) : null}
           </div>
         );
@@ -3372,7 +3581,10 @@ function StudentManagementPage() {
                 id="admin-students-bulk-deactivate-missing"
                 type="checkbox"
                 checked={bulkUploadDeactivateMissing}
-                onChange={(event) => setBulkUploadDeactivateMissing(event.target.checked)}
+                onChange={(event) => {
+                  delete actionIdempotencyKeysRef.current["bulk-ingestion:commit"];
+                  setBulkUploadDeactivateMissing(event.target.checked);
+                }}
               />
               <span>Deactivate students not in file</span>
             </label>

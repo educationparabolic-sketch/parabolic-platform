@@ -486,31 +486,17 @@ test(
   async () => {
     const handler = createAdminStudentDataExportHandler({
       generateExport: async () => ({
-        approvedBy: "admin_build_103",
-        download: {
-          accessContext: "dataExportDownload",
-          cdnPath: "inst_build_103/reports/2026/04/student_103-data-export.csv",
-          expiresAt: "2026-04-08T00:00:00.000Z",
-          expiresInSeconds: 86400,
-          signedUrl: "https://cdn.example.com/export.csv",
-        },
+        auditId: "audit_export_103",
+        disposition: "applied",
+        downloadUrl: "https://cdn.example.com/export.csv",
         expiresAt: "2026-04-08T00:00:00.000Z",
         exportHash: "hash_103",
         generatedAt: "2026-04-07T00:00:00.000Z",
-        includeAiSummaries: true,
-        instituteId: "inst_build_103",
         records: {
           academicYearCount: 1,
           aiSummaryCount: 1,
           metricDocumentCount: 1,
           sessionCount: 2,
-        },
-        requestedBy: "student_103",
-        storage: {
-          bucketName: "bucket-reports",
-          objectPath:
-          "inst_build_103/reports/2026/04/" +
-          "student_103-data-export.csv",
         },
         studentId: "student_103",
       }),
@@ -521,14 +507,14 @@ test(
     await handler(
     createMockRequest({
       body: {
+        idempotencyKey: "export-handler-103",
         includeAiSummaries: true,
-        instituteId: "inst_build_103",
-        studentId: "student_103",
       },
       headers: {
         authorization: "Bearer build_103_admin",
       },
       path: "/admin/students/data-export",
+      params: {studentId: "student_103"},
     }) as never,
     response as never,
     );
@@ -556,13 +542,14 @@ test(
     await handler(
     createMockRequest({
       body: {
-        instituteId: "inst_build_103",
-        studentId: "student_103",
+        idempotencyKey: "export-handler-teacher-103",
+        includeAiSummaries: true,
       },
       headers: {
         authorization: "Bearer build_103_teacher",
       },
       path: "/admin/students/data-export",
+      params: {studentId: "student_103"},
     }) as never,
     response as never,
     );
@@ -571,7 +558,7 @@ test(
     assertStructuredError(
       response.body,
       "FORBIDDEN",
-      "Only admin, director, and vendor roles can approve data exports.",
+      "Only admin roles can approve data exports.",
     );
   },
 );
@@ -593,13 +580,14 @@ test(
     await handler(
     createMockRequest({
       body: {
-        instituteId: "inst_build_103",
-        studentId: "student_404",
+        idempotencyKey: "export-handler-missing-103",
+        includeAiSummaries: true,
       },
       headers: {
         authorization: "Bearer build_103_missing_student",
       },
       path: "/admin/students/data-export",
+      params: {studentId: "student_404"},
     }) as never,
     response as never,
     );
@@ -620,10 +608,12 @@ test(
       softDeleteStudent: async () => ({
         alreadyDeleted: false,
         analyticsPreserved: true,
-        deleted: true,
-        instituteId: "inst_build_104",
+        auditId: "audit_delete_104",
+        deletedAt: "2026-04-08T00:00:00.000Z",
+        disposition: "applied",
         sessionHistoryPreserved: true,
         studentId: "student_104",
+        version: 2,
       }),
       verifyIdToken: async () => createAdminToken() as never,
     });
@@ -632,13 +622,15 @@ test(
     await handler(
       createMockRequest({
         body: {
-          instituteId: "inst_build_104",
-          studentId: "student_104",
+          expectedVersion: 1,
+          idempotencyKey: "delete-handler-104",
+          reason: "Zero-run cleanup",
         },
         headers: {
           authorization: "Bearer build_104_admin",
         },
         path: "/admin/students/soft-delete",
+        params: {studentId: "student_104"},
       }) as never,
       response as never,
     );
@@ -666,13 +658,15 @@ test(
     await handler(
       createMockRequest({
         body: {
-          instituteId: "inst_build_104",
-          studentId: "student_104",
+          expectedVersion: 1,
+          idempotencyKey: "delete-handler-teacher-104",
+          reason: "Zero-run cleanup",
         },
         headers: {
           authorization: "Bearer build_104_teacher",
         },
         path: "/admin/students/soft-delete",
+        params: {studentId: "student_104"},
       }) as never,
       response as never,
     );
@@ -681,7 +675,7 @@ test(
     assertStructuredError(
       response.body,
       "FORBIDDEN",
-      "Only admin and vendor roles can soft-delete student records.",
+      "Only admin roles can soft-delete student records.",
     );
   },
 );
@@ -703,13 +697,15 @@ test(
     await handler(
       createMockRequest({
         body: {
-          instituteId: "inst_build_104",
-          studentId: "student_404",
+          expectedVersion: 1,
+          idempotencyKey: "delete-handler-missing-104",
+          reason: "Zero-run cleanup",
         },
         headers: {
           authorization: "Bearer build_104_missing_student",
         },
         path: "/admin/students/soft-delete",
+        params: {studentId: "student_404"},
       }) as never,
       response as never,
     );

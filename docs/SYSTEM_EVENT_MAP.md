@@ -52,6 +52,28 @@ BWM-023 makes `SessionSubmitted` a single authoritative `active|expired -> submi
 
 BWM-024 routes that one transition through the failure-recoverable post-submission pipeline. It first persists deterministic `processingMarkers/{sessionId}` and newest-session `resultPropagation: processing` authority under the run and Student summaries, then runs usage, run/Student/question analytics, insights, and notifications. The full pipeline alone publishes `resultPropagation: available`; exact and out-of-order retries are absorbed by component markers, so aggregates are not incremented twice and an older event cannot overwrite newer availability.
 
+BWM-026 profile, batch, lifecycle, and photo-review operations are synchronous
+commands, not new events or triggers. Their Student change and immutable audit
+authority commit atomically; profile/lifecycle Auth reconciliation resumes on an
+exact command retry. Lifecycle status writes continue to flow through the one
+existing `students onWrite -> UsageUpdated` topology, so no second usage or
+activation trigger is introduced.
+
+ADM-28 export and ADM-29 soft deletion are also synchronous commands. Export
+creates one deterministic immutable `DATA_EXPORT` audit and secure report
+object without emitting a domain trigger. Soft deletion transactionally commits
+the versioned Student state and `SOFT_DELETE_STUDENT` audit only after a retained
+session query proves `totalRuns = 0`; the existing Student write trigger remains
+the sole usage event, and Auth claim/session cleanup runs as retryable
+post-commit reconciliation.
+
+ADM-04 onboarding resend and ADM-05 roster commit remain synchronous commands,
+not triggers. Resend atomically creates one deterministic queue job and audit.
+Bulk atomically creates versioned roster state, deterministic onboarding jobs,
+and its import audit, after which Firebase Auth/session state is reconciled.
+Exact retries resume reconciliation from the immutable result without emitting
+another queue job, Student version, audit, or usage event.
+
 ---
 
 # FIRESTORE TRIGGERS

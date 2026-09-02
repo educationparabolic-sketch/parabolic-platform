@@ -1,13 +1,38 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import {readFile} from "node:fs/promises";
+import {join} from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import {fileURLToPath} from "node:url";
 
 const rootDirectory = fileURLToPath(new URL("../", import.meta.url));
 const sharedContractPath = join(rootDirectory, "shared/contracts/apiDtos.d.ts");
 
 const dtoFamilies = [
+  {
+    backend: "functions/src/types/adminStudentMutations.ts",
+    frontend: [],
+    names: [
+      "AdminStudentMutationDisposition",
+      "AdminStudentLifecycleStatus",
+      "AdminStudentPhotoReviewDecision",
+      "AdminStudentIdentityMutationResult",
+      "AdminStudentVersionedTarget",
+      "AdminStudentProfileUpdateRequest",
+      "AdminStudentProfileUpdateResult",
+      "AdminStudentBatchAssignmentRequest",
+      "AdminStudentBatchAssignmentRecord",
+      "AdminStudentBatchAssignmentResult",
+      "AdminStudentLifecycleUpdateRequest",
+      "AdminStudentLifecycleUpdateResult",
+      "AdminStudentPhotoReviewRequest",
+      "AdminStudentPhotoReviewResult",
+      "AdminStudentDataExportRequest",
+      "AdminStudentDataExportRecordCounts",
+      "AdminStudentDataExportResult",
+      "AdminStudentSoftDeleteRequest",
+      "AdminStudentSoftDeleteResult",
+    ],
+  },
   {
     backend: "functions/src/types/adminStudentOnboardingResend.ts",
     frontend: [

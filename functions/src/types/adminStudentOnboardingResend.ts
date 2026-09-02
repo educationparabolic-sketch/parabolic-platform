@@ -10,6 +10,7 @@ export type {
 export interface AdminStudentOnboardingResendValidatedRequest {
   actorId: string;
   actorRole: string;
+  idempotencyKey: string;
   instituteId: string;
   studentId: string;
 }

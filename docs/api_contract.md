@@ -39,7 +39,13 @@ If prose and the typed manifest disagree about a route key or status, the typed 
 - `missing`: no current Functions handler/export implements the frontend contract.
 - `intentionally_retired`: explicit product/architecture evidence says the route must not be served.
 
-Current totals: 32 implemented, 3 incompatible, 0 missing, 1 intentionally retired.
+Current totals: 34 implemented, 3 incompatible, 4 missing, 1 intentionally retired.
+
+Routes marked `planned` in the code manifest are canonical contracts reserved by
+the active owning task before a browser caller or gateway handler exists. They
+must remain `missing` with no handler mapping until the owning implementation
+substep wires both sides; frontend-declared routes retain bidirectional source
+coverage.
 
 ## Canonical frontend route manifest
 
@@ -49,7 +55,7 @@ Current totals: 32 implemented, 3 incompatible, 0 missing, 1 intentionally retir
 | ADM-02 | `GET /api/v1/admin/analytics` | `implemented` | `adminAnalytics` | Firebase ID; teacher/admin/director; identity tenant |
 | ADM-03 | `GET /api/v1/admin/students` | `implemented` | `adminStudents` | Firebase ID; teacher/admin; identity tenant |
 | ADM-04 | `POST /api/v1/admin/students/onboarding-resend` | `implemented` | `adminStudentOnboardingResend` | Firebase ID; admin; identity tenant |
-| ADM-05 | `POST /api/v1/admin/students/bulk` | `implemented` | `adminStudentsBulk` | Firebase ID; admin; matching body tenant |
+| ADM-05 | `POST /api/v1/admin/students/bulk` | `implemented` | `adminStudentsBulk` | Firebase ID; admin; identity tenant |
 | ADM-06 | `GET /api/v1/admin/questions/library` | `implemented` | `adminQuestionLibrary` | Firebase ID; teacher/admin; identity tenant; dashboard-signed CDN assets |
 | ADM-07 | `GET /api/v1/admin/questions/distribution` | `implemented` | `adminQuestionDistribution` | Firebase ID; teacher/admin; identity tenant |
 | ADM-08 | `GET /api/v1/admin/questions/upload-logs` | `implemented` | `adminQuestionUploadLogs` | Firebase ID; teacher/admin; identity tenant |
@@ -68,6 +74,12 @@ Current totals: 32 implemented, 3 incompatible, 0 missing, 1 intentionally retir
 | ADM-21 | `POST /api/v1/admin/tests/{testId}/archive` | `implemented` | `adminTests` | Firebase ID; teacher/admin; identity tenant; expected version; ready/assigned source |
 | ADM-22 | `GET /api/v1/admin/runs` | `implemented` | `adminRuns` | Firebase ID; teacher/admin; identity tenant; current academic year; bounded cursor pagination; optional status filter |
 | ADM-23 | `GET /api/v1/admin/runs/{runId}` | `implemented` | `adminRuns` | Firebase ID; teacher/admin; identity tenant; current academic year; missing or out-of-scope IDs return 404 |
+| ADM-24 | `PATCH /api/v1/admin/students/{studentId}/profile` | `missing` (`planned`) | None | Firebase ID; admin; identity tenant; institute-scoped target; expected version and idempotency key; Auth/Firestore reconciliation |
+| ADM-25 | `POST /api/v1/admin/students/batch-assignment` | `missing` (`planned`) | None | Firebase ID; admin; identity tenant; bounded versioned targets; idempotency key |
+| ADM-26 | `POST /api/v1/admin/students/{studentId}/lifecycle` | `missing` (`planned`) | None | Firebase ID; admin; identity tenant; legal transition and expected version; Auth claims/session reconciliation; idempotency key |
+| ADM-27 | `POST /api/v1/admin/students/{studentId}/photo-review` | `missing` (`planned`) | None | Firebase ID; admin; identity tenant; expected capture/version; idempotency key |
+| ADM-28 | `POST /api/v1/admin/students/{studentId}/data-export` | `implemented` | `adminStudentDataExport` | Firebase ID; admin; identity tenant; idempotency key; public result excludes bucket/object internals |
+| ADM-29 | `POST /api/v1/admin/students/{studentId}/soft-delete` | `implemented` | `adminStudentSoftDelete` | Firebase ID; admin; identity tenant; expected version; zero-run eligibility; Auth claims/session reconciliation; idempotency key |
 | STU-01 | `GET /api/v1/student/dashboard` | `implemented` | `studentDashboard` | Firebase ID; student; identity tenant/student/license; active Student; current academic year |
 | STU-02 | `GET /api/v1/student/tests` | `implemented` | `studentTests` | Firebase ID; student; identity tenant/student/license; active Student; current academic year; bounded status/page query |
 | STU-03 | `GET /api/v1/student/performance` | `implemented` | `studentPerformance` | Firebase ID; student; identity tenant/Student/license; active Student; current year; bounded `lastN`; L0/L1/L2 redaction |
@@ -84,7 +96,46 @@ Current totals: 32 implemented, 3 incompatible, 0 missing, 1 intentionally retir
 
 The detailed request/response mismatch for each incompatible entry is recorded under the same ID in `docs/FRONTEND_API_CALL_INVENTORY.md`.
 
+ADM-04 accepts only `{ idempotencyKey, studentId }`; ADM-05 accepts the shared
+bulk payload with `idempotencyKey` and no browser institute field. Both derive
+tenant and actor authority from the verified Firebase identity and enforce the
+admin role again during service normalization. Resend returns one deterministic
+audit/job result. Bulk previews return null audit/disposition, while successful
+commits return one `applied|replayed` audit result. Firestore roster/audit/queue
+authority commits before retryable Firebase Auth reconciliation, and Admin
+accepts either mutation only after an ADM-03 reload matches the authority.
+
 STU-03 reads only the identity Student's current-year `studentYearMetrics` summary document. Its strict shared DTO returns a bounded chronological performance timeline and topic summaries, zeros or removes fields above the identity license layer, and never scans sessions. STU-04 requires L1+, reads only Student-owned current-year `insightSnapshots` plus summary metrics, and returns bounded constructive insights without raw session fields. STU-05 resolves the URL test ID only through a current-year run assigned to the identity Student and eligible under the identity license; it then requires completed state, a reached solution-release timestamp, and exactly one submitted session owned by that Student before returning a bounded page of solution-safe question fields and the Student's selected response. Archived, unreleased, unassigned, licensed-out, cross-tenant, and other-Student solution requests fail closed.
+
+ADM-24 through ADM-29 define the BWM-026 individual Student mutation surface.
+The selected Student comes from the URL path (or the bounded versioned target
+list for ADM-25), while institute, actor, role, license, and suspension authority
+come only from the verified Firebase identity. Every mutation request carries a
+non-empty idempotency key; record-changing requests also carry an expected
+version, and photo review binds to the expected capture timestamp. Results
+declare `applied|replayed`, the immutable audit ID, authoritative version/time,
+and any Auth reconciliation outcome. ADM-28 returns a signed download URL and
+record counts without Storage bucket or object-path internals. ADM-24 through
+ADM-27 remain fail-closed `missing`; ADM-28 and ADM-29 are routed and consumed.
+
+The backend service authority for ADM-24 through ADM-27 is implemented but is
+not yet routed. Profile, bounded batch, lifecycle, and photo-review commands
+atomically update Student records and create deterministic immutable institute
+audit records with only a SHA-256 idempotency-key hash. Exact retries replay the
+stored result; different semantics under the same key, stale expected versions,
+and concurrent losers return `CONFLICT`. Profile and lifecycle retries reconcile
+Firebase Auth from the latest Student record after the Firestore commit: active,
+invited, and suspended identities receive synchronized claims plus refresh-token
+revocation, while inactive and archived identities are disabled, stripped of
+managed claims, and revoked. Legal lifecycle transitions are
+`invited -> active|suspended`, `active -> inactive|suspended`,
+`inactive -> active|suspended|archived`, and
+`suspended -> active|inactive|archived`; archived is terminal. Photo review never
+creates or replaces an image and succeeds only when the expected capture
+timestamp still matches the stored identity photo. The admin role is enforced
+again at service normalization, while institute, actor, and target context remain
+server-supplied. ADM-24 through ADM-27 still return canonical 404 until the later
+handler/routing and browser-consumption substeps.
 
 ADM-06 returns the shared `AdminQuestionLibraryResult`. Each managed question or solution asset is exposed only as its canonical relative CDN path plus a freshly generated 30-minute `dashboardView` signed HTTPS URL containing `Expires`, `KeyName`, and `Signature`; malformed, noncanonical, direct-bucket, or unsigned legacy references are omitted. The public response never returns Storage bucket names or object paths.
 
@@ -110,6 +161,8 @@ ADM-19 uses the shared `AdminTestTemplateUpdateRequest` and `AdminTestTemplateUp
 
 ADM-20 and ADM-21 use the shared `AdminTestTemplateLifecycleRequest` and `AdminTestTemplateLifecycleResult`. Both require the current positive `expectedVersion`; lifecycle commands do not change the structural version. Publish permits only `draft -> ready`, while archive permits only `ready|assigned -> archived`. Each status change and its deterministic immutable `ACTIVATE_TEST_TEMPLATE` or `ARCHIVE_TEST_TEMPLATE` audit under `institutes/{instituteId}/auditLogs/{auditId}` are created atomically in one Firestore transaction. Exact retries return the same audit authority; stale versions and illegal transitions return HTTP 409 `CONFLICT`. Admin strictly validates the result, reloads ADM-10, reconciles unchanged version and target status, and installs only the authoritative reload.
 
+ADM-28 and ADM-29 are admin-only, path-bound Student commands whose institute and actor authority come exclusively from the verified Firebase identity. ADM-28 preserves the existing secure CSV generation and signed-download authority, adds deterministic idempotency/audit replay, and returns only the shared public URL/hash/count result; report bucket names, object paths, and other Storage internals remain server-only. ADM-29 requires the current Student version and a reason, transactionally queries retained institute session history, and rejects deletion unless the authoritative session count is zero. An eligible delete increments the Student version and atomically writes the soft-delete fields plus immutable replay audit, then clears managed claims and revokes sessions; an exact retry replays the audit result and repeats Auth reconciliation. Admin reloads ADM-03 after deletion and accepts success only when the Student is absent from the authoritative roster.
+
 ADM-18 accepts one shared `QuestionAssetUploadRequest` containing base64 image bytes, `questionImage` or `solutionImage` kind, PNG/WebP extension, matching institute, and the ADM-09-authoritative question ID/version. It writes only the canonical versioned question path with create-only Storage preconditions and SHA-256 metadata. Same-content retries replay safely; different content at the occupied path fails closed. The shared public result contains only asset kind, CDN path/URL, content type, question ID, version, and size; bucket name, object path, and internal created/replayed disposition never cross the API boundary.
 
 ## Backend HTTP export accounting
@@ -117,8 +170,8 @@ ADM-18 accepts one shared `QuestionAssetUploadRequest` containing base64 image b
 `functions/src/apiRouteManifest.ts` accounts for all 48 current `functions.https.onRequest` exports:
 
 - `apiV1` is the single versioned `gateway` export; it resolves exact manifest method/path pairs, preserves decoded route parameters, and dispatches non-null `functionExport` mappings through the existing raw request handlers;
-- 29 exports are referenced by one or more canonical frontend routes;
-- 15 portal-oriented exports currently have no executable frontend caller and remain `unmapped_portal` rather than receiving an invented public route;
+- 31 exports are referenced by one or more canonical frontend routes;
+- 13 portal-oriented exports currently have no executable frontend caller and remain `unmapped_portal` rather than receiving an invented public route;
 - `internalEmailQueue` is `internal_only`;
 - `stripeWebhook` is a `webhook` boundary;
 - `helloWorld` is a `healthcheck` boundary.

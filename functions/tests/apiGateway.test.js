@@ -17,7 +17,8 @@ function materializePath(canonicalPath, routeId) {
   return canonicalPath
     .replace("{sessionId}", encodeURIComponent(`session ${routeId} Ω`))
     .replace("{testId}", encodeURIComponent(`test ${routeId} Ω`))
-    .replace("{runId}", encodeURIComponent(`run ${routeId} Ω`));
+    .replace("{runId}", encodeURIComponent(`run ${routeId} Ω`))
+    .replace("{studentId}", encodeURIComponent(`student ${routeId} Ω`));
 }
 
 test("each manifest method/path resolves exactly once", () => {
@@ -41,7 +42,7 @@ test("implemented routes have one registered existing handler", () => {
   const implementedRoutes = API_ROUTE_MANIFEST.filter(
     (route) => route.status === "implemented",
   );
-  assert.equal(implementedRoutes.length, 32);
+  assert.equal(implementedRoutes.length, 34);
 
   for (const route of implementedRoutes) {
     assert.equal(typeof API_GATEWAY_HANDLERS[route.functionExport], "function");
@@ -65,6 +66,12 @@ test("router preserves encoded parameters and rejects path drift", () => {
   const studentMatch = resolveApiRoute("GET", studentPath);
   assert.equal(studentMatch?.route.id, "STU-05");
   assert.equal(studentMatch?.parameters.testId, "test id Ω");
+
+  const adminStudentPath =
+    "/api/v1/admin/students/student%20id%20%CE%A9/profile";
+  const adminStudentMatch = resolveApiRoute("PATCH", adminStudentPath);
+  assert.equal(adminStudentMatch?.route.id, "ADM-24");
+  assert.equal(adminStudentMatch?.parameters.studentId, "student id Ω");
 
   assert.equal(resolveApiRoute("DELETE", "/api/v1/admin/students"), null);
   assert.equal(resolveApiRoute("GET", "/api/v1/admin/students/"), null);

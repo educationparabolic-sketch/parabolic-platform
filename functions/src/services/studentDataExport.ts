@@ -21,6 +21,7 @@ const SESSIONS_COLLECTION = "sessions";
 const STUDENTS_COLLECTION = "students";
 const STUDENT_YEAR_METRICS_COLLECTION = "studentYearMetrics";
 const INSIGHT_SNAPSHOTS_COLLECTION = "insightSnapshots";
+const AUDIT_LOGS_COLLECTION = "auditLogs";
 
 interface ExportAcademicYearRecord {
   yearId: string;
@@ -83,7 +84,11 @@ interface StudentDataExportDependencies {
   ) => Promise<void>;
 }
 
-const normalizeRequiredString = (value: unknown, fieldName: string): string => {
+const normalizeRequiredString = (
+  value: unknown,
+  fieldName: string,
+  maxLength = 500,
+): string => {
   if (typeof value !== "string") {
     throw new StudentDataExportValidationError(
       "VALIDATION_ERROR",
@@ -99,6 +104,12 @@ const normalizeRequiredString = (value: unknown, fieldName: string): string => {
       `Field "${fieldName}" must be a non-empty string.`,
     );
   }
+  if (normalizedValue.length > maxLength) {
+    throw new StudentDataExportValidationError(
+      "VALIDATION_ERROR",
+      `Field "${fieldName}" must be at most ${maxLength} characters.`,
+    );
+  }
 
   return normalizedValue;
 };
@@ -112,8 +123,51 @@ const normalizeOptionalString = (value: unknown): string | null => {
   return normalizedValue || null;
 };
 
-const normalizeBoolean = (value: unknown, fallback: boolean): boolean =>
-  value === undefined ? fallback : value === true;
+const normalizeBoolean = (value: unknown, fieldName: string): boolean => {
+  if (typeof value !== "boolean") {
+    throw new StudentDataExportValidationError(
+      "VALIDATION_ERROR",
+      `Field "${fieldName}" must be a boolean.`,
+    );
+  }
+
+  return value;
+};
+
+const stableJson = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableJson).join(",")}]`;
+  }
+  if (typeof value === "object" && value !== null) {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((key) =>
+      `${JSON.stringify(key)}:${stableJson(record[key])}`).join(",")}}`;
+  }
+
+  return JSON.stringify(value);
+};
+
+const sha256 = (value: string): string =>
+  createHash("sha256").update(value).digest("hex");
+
+const buildExportAuthority = (input: {
+  idempotencyKey: string;
+  includeAiSummaries: boolean;
+  instituteId: string;
+  studentId: string;
+}): {auditId: string; idempotencyKeyHash: string; requestFingerprint: string} => {
+  const idempotencyKeyHash = sha256(input.idempotencyKey);
+  return {
+    auditId: `student_export_${sha256(
+      `${input.instituteId}:${idempotencyKeyHash}`,
+    ).slice(0, 40)}`,
+    idempotencyKeyHash,
+    requestFingerprint: sha256(stableJson({
+      includeAiSummaries: input.includeAiSummaries,
+      studentId: input.studentId,
+    })),
+  };
+};
 
 const toNullableNumber = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) ? value : null;
@@ -268,10 +322,27 @@ export class StudentDataExportService {
   public normalizeRequest(
     input: Partial<StudentDataExportValidatedRequest>,
   ): StudentDataExportValidatedRequest {
+    const actorRole = normalizeRequiredString(input.actorRole, "actorRole")
+      .toLowerCase();
+    if (actorRole !== "admin") {
+      throw new StudentDataExportValidationError(
+        "FORBIDDEN",
+        "Student data exports require the admin role.",
+      );
+    }
+
     return {
       actorId: normalizeRequiredString(input.actorId, "actorId"),
-      actorRole: normalizeRequiredString(input.actorRole, "actorRole"),
-      includeAiSummaries: normalizeBoolean(input.includeAiSummaries, true),
+      actorRole,
+      idempotencyKey: normalizeRequiredString(
+        input.idempotencyKey,
+        "idempotencyKey",
+        128,
+      ),
+      includeAiSummaries: normalizeBoolean(
+        input.includeAiSummaries,
+        "includeAiSummaries",
+      ),
       instituteId: normalizeRequiredString(input.instituteId, "instituteId"),
       ipAddress: normalizeOptionalString(input.ipAddress) ?? undefined,
       studentId: normalizeRequiredString(input.studentId, "studentId"),
@@ -288,6 +359,18 @@ export class StudentDataExportService {
     request: StudentDataExportValidatedRequest,
   ): Promise<StudentDataExportResult> {
     const normalizedRequest = this.normalizeRequest(request);
+    const authority = buildExportAuthority(normalizedRequest);
+    const auditReference = this.dependencies.firestore.doc(
+      `${INSTITUTES_COLLECTION}/${normalizedRequest.instituteId}/` +
+      `${AUDIT_LOGS_COLLECTION}/${authority.auditId}`,
+    );
+    const existingAudit = await auditReference.get();
+    if (existingAudit.exists) {
+      return this.readReplayResult(
+        existingAudit,
+        authority.requestFingerprint,
+      );
+    }
     const studentReference = this.dependencies.firestore.doc(
       `${INSTITUTES_COLLECTION}/${normalizedRequest.instituteId}/` +
       `${STUDENTS_COLLECTION}/${normalizedRequest.studentId}`,
@@ -420,21 +503,52 @@ export class StudentDataExportService {
       }),
     );
 
-    await this.dependencies.createExportAuditLog({
-      actorId: normalizedRequest.actorId,
-      actorRole: normalizedRequest.actorRole,
-      entityId: normalizedRequest.studentId,
-      instituteId: normalizedRequest.instituteId,
-      ipAddress: normalizedRequest.ipAddress,
-      metadata: {
-        approvedBy: normalizedRequest.actorId,
-        expiresAt,
-        exportHash: finalizedExportHash,
-        includeAiSummaries: normalizedRequest.includeAiSummaries,
-        requestedBy: normalizedRequest.studentId,
+    const result: StudentDataExportResult = {
+      auditId: authority.auditId,
+      disposition: "applied",
+      downloadUrl: download.signedUrl,
+      expiresAt,
+      exportHash: finalizedExportHash,
+      generatedAt: generatedAt.toISOString(),
+      records: {
+        academicYearCount: academicYears.length,
+        aiSummaryCount: insightRows.length,
+        metricDocumentCount: metricRows.length,
+        sessionCount: sessionRows.length,
       },
-      userAgent: normalizedRequest.userAgent,
-    });
+      studentId: normalizedRequest.studentId,
+    };
+
+    try {
+      await this.dependencies.createExportAuditLog({
+        auditId: authority.auditId,
+        actorId: normalizedRequest.actorId,
+        actorRole: normalizedRequest.actorRole,
+        entityId: normalizedRequest.studentId,
+        instituteId: normalizedRequest.instituteId,
+        ipAddress: normalizedRequest.ipAddress,
+        metadata: {
+          approvedBy: normalizedRequest.actorId,
+          expiresAt,
+          exportHash: finalizedExportHash,
+          idempotencyKeyHash: authority.idempotencyKeyHash,
+          includeAiSummaries: normalizedRequest.includeAiSummaries,
+          requestFingerprint: authority.requestFingerprint,
+          requestedBy: normalizedRequest.studentId,
+          result,
+        },
+        userAgent: normalizedRequest.userAgent,
+      });
+    } catch (error) {
+      const concurrentAudit = await auditReference.get();
+      if (concurrentAudit.exists) {
+        return this.readReplayResult(
+          concurrentAudit,
+          authority.requestFingerprint,
+        );
+      }
+      throw error;
+    }
 
     this.logger.info("Student data export generated.", {
       expiresAt,
@@ -444,26 +558,31 @@ export class StudentDataExportService {
       studentId: normalizedRequest.studentId,
     });
 
+    return result;
+  }
+
+  private readReplayResult(
+    snapshot: FirebaseFirestore.DocumentSnapshot,
+    requestFingerprint: string,
+  ): StudentDataExportResult {
+    const metadata = snapshot.get("metadata") as Record<string, unknown> | null;
+    if (!metadata || metadata.requestFingerprint !== requestFingerprint) {
+      throw new StudentDataExportValidationError(
+        "CONFLICT",
+        "Idempotency key has already been used for a different export.",
+      );
+    }
+    const result = metadata.result;
+    if (typeof result !== "object" || result === null || Array.isArray(result)) {
+      throw new StudentDataExportValidationError(
+        "CONFLICT",
+        "Export idempotency authority is missing its immutable result.",
+      );
+    }
+
     return {
-      approvedBy: normalizedRequest.actorId,
-      download,
-      expiresAt,
-      exportHash: finalizedExportHash,
-      generatedAt: generatedAt.toISOString(),
-      includeAiSummaries: normalizedRequest.includeAiSummaries,
-      instituteId: normalizedRequest.instituteId,
-      records: {
-        academicYearCount: academicYears.length,
-        aiSummaryCount: insightRows.length,
-        metricDocumentCount: metricRows.length,
-        sessionCount: sessionRows.length,
-      },
-      requestedBy: normalizedRequest.studentId,
-      storage: {
-        bucketName: storageTarget.bucketName,
-        objectPath: storageTarget.objectPath,
-      },
-      studentId: normalizedRequest.studentId,
+      ...(result as StudentDataExportResult),
+      disposition: "replayed",
     };
   }
 

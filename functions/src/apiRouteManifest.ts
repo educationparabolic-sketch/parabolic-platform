@@ -4,6 +4,8 @@ export type ApiRouteMethod = "GET" | "PATCH" | "POST";
 
 export type ApiRoutePortal = "admin" | "student" | "exam" | "vendor";
 
+export type ApiRouteDeclaration = "frontend" | "planned";
+
 export type ApiRouteStatus =
   | "implemented"
   | "incompatible"
@@ -13,6 +15,7 @@ export type ApiRouteStatus =
 export interface ApiRouteManifestEntry {
   canonicalPath: string;
   currentFrontendPath: string;
+  declaration: ApiRouteDeclaration;
   functionExport: string | null;
   id: string;
   method: ApiRouteMethod;
@@ -41,10 +44,12 @@ function defineRoute(
   currentFrontendPath: string,
   status: ApiRouteStatus,
   functionExport: string | null,
+  declaration: ApiRouteDeclaration = "frontend",
 ): ApiRouteManifestEntry {
   return {
     canonicalPath: `/api/v1${currentFrontendPath}`,
     currentFrontendPath,
+    declaration,
     functionExport,
     id,
     method,
@@ -239,6 +244,58 @@ export const API_ROUTE_MANIFEST: readonly ApiRouteManifestEntry[] = [
     "adminRuns",
   ),
   defineRoute(
+    "ADM-24",
+    "admin",
+    "PATCH",
+    "/admin/students/{studentId}/profile",
+    "missing",
+    null,
+    "planned",
+  ),
+  defineRoute(
+    "ADM-25",
+    "admin",
+    "POST",
+    "/admin/students/batch-assignment",
+    "missing",
+    null,
+    "planned",
+  ),
+  defineRoute(
+    "ADM-26",
+    "admin",
+    "POST",
+    "/admin/students/{studentId}/lifecycle",
+    "missing",
+    null,
+    "planned",
+  ),
+  defineRoute(
+    "ADM-27",
+    "admin",
+    "POST",
+    "/admin/students/{studentId}/photo-review",
+    "missing",
+    null,
+    "planned",
+  ),
+  defineRoute(
+    "ADM-28",
+    "admin",
+    "POST",
+    "/admin/students/{studentId}/data-export",
+    "implemented",
+    "adminStudentDataExport",
+  ),
+  defineRoute(
+    "ADM-29",
+    "admin",
+    "POST",
+    "/admin/students/{studentId}/soft-delete",
+    "implemented",
+    "adminStudentSoftDelete",
+  ),
+  defineRoute(
     "STU-01",
     "student",
     "GET",
@@ -419,16 +476,6 @@ BackendHttpExportManifestEntry[] = [
   {
     disposition: "unmapped_portal",
     functionExport: "adminGovernanceReports",
-    routeIds: [],
-  },
-  {
-    disposition: "unmapped_portal",
-    functionExport: "adminStudentDataExport",
-    routeIds: [],
-  },
-  {
-    disposition: "unmapped_portal",
-    functionExport: "adminStudentSoftDelete",
     routeIds: [],
   },
   {

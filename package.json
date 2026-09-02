@@ -13,6 +13,7 @@
     "test:emulators:failure-cleanup": "node scripts/run-emulator-integration-suite.mjs --failure-cleanup-probe",
     "test:api-gateway:emulator": "node scripts/run-api-gateway-emulator-tests.mjs",
     "test:api-dto-contract": "node --test tests/api-dto-contract.test.mjs",
+    "test:admin-student-mutation-contract": "npm --prefix functions run build && node --test tests/admin-student-mutation-contract.test.mjs",
     "test:api-envelope-contract": "node --test tests/api-envelope-contract.test.mjs",
     "test:exam-runtime-auth-contract": "node --test tests/exam-runtime-auth-contract.test.mjs",
     "test:exam-launch-auth:e2e": "node scripts/run-exam-launch-auth-e2e.mjs",

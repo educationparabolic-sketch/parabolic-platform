@@ -61,6 +61,47 @@ license/main
 
 students/{studentId}
 
+BWM-026 makes individual Student administration optimistic-versioned. Existing
+records without `version` are read as version 1; every successful profile,
+batch, lifecycle, or photo-review command increments it and writes `updatedAt`,
+`updatedBy`, plus the command-specific fields. Profile updates keep `name` and
+`fullName` aligned. Batch assignment keeps `batch` and `batchId` aligned.
+Lifecycle updates add `statusChangedAt`, `statusChangedBy`, and
+`lifecycleReason`. Photo review consumes an existing
+`identityPhotoCapturedAt` (or the legacy `livePhotoCapturedAt` compatibility
+source) and writes `identityPhotoReviewDecision`,
+`identityPhotoReviewReason`, `identityPhotoReviewedAt`,
+`identityPhotoReviewedBy`, and aligned identity/live verification booleans; it
+does not create, upload, replace, or expose an image.
+
+Each command atomically creates one deterministic immutable record in the
+existing `institutes/{instituteId}/auditLogs/{auditId}` collection. The audit
+stores a SHA-256 idempotency-key hash, normalized request fingerprint, and
+authoritative result. It never stores the raw key. Exact retries replay the
+record, while key reuse with different semantics and stale/concurrent versions
+fail closed. No new collection path, rule, or composite index is introduced.
+
+ADM-29 extends that version authority to Student soft deletion. In one Firestore
+transaction it reads the Student, deterministic audit, and the `sessions`
+collection-group matches for that Student, filters them to the identity tenant,
+and rejects unless the retained session count is zero. An eligible record gains
+`deleted`, `deletedAt`, `deletedBy`, `deletionReason`, `status: archived`,
+`updatedAt`, and the incremented `version`; the same transaction creates the
+immutable `SOFT_DELETE_STUDENT` audit result. Existing session and analytics
+documents are preserved. ADM-28 writes no Student schema: its deterministic
+`DATA_EXPORT` audit stores only the idempotency-key hash, request fingerprint,
+and public result metadata; Storage bucket/object coordinates remain internal.
+
+ADM-04 onboarding resend and committed ADM-05 roster ingestion also use the
+existing audit collection as their deterministic command authority. Resend
+atomically creates one deterministic root `emailQueue/{jobId}` and one
+`RESEND_STUDENT_ONBOARDING` audit. Bulk commit atomically writes the roster,
+version increments, deterministic onboarding jobs, and one `IMPORT_STUDENTS`
+audit. Both audits store only the idempotency-key hash, request fingerprint,
+and replay result. Firebase Auth is reconciled after the Firestore commit from
+that durable result; an exact retry resumes incomplete user/claim/disable and
+session-revocation work without another roster version, audit, or queue job.
+
 questionBank/{questionId}
 
 tests/{testId}

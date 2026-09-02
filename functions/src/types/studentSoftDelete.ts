@@ -1,31 +1,29 @@
 import {StandardApiErrorCode} from "./apiResponse";
+import type {
+  AdminStudentSoftDeleteRequest,
+  AdminStudentSoftDeleteResult,
+} from "../../../shared/contracts/apiDtos";
 
-export interface StudentSoftDeleteRequest {
-  instituteId: string;
-  studentId: string;
-}
+export type {
+  AdminStudentSoftDeleteRequest as StudentSoftDeleteRequest,
+  AdminStudentSoftDeleteResult as StudentSoftDeleteResult,
+};
 
 export interface StudentSoftDeleteValidatedRequest {
   actorId: string;
   actorRole: string;
+  expectedVersion: number;
+  idempotencyKey: string;
   instituteId: string;
   ipAddress?: string;
+  reason: string;
   studentId: string;
   userAgent?: string;
 }
 
-export interface StudentSoftDeleteResult {
-  alreadyDeleted: boolean;
-  analyticsPreserved: true;
-  deleted: true;
-  instituteId: string;
-  sessionHistoryPreserved: true;
-  studentId: string;
-}
-
 export interface StudentSoftDeleteSuccessResponse {
   code: "OK";
-  data: StudentSoftDeleteResult;
+  data: AdminStudentSoftDeleteResult;
   message: string;
   requestId: string;
   success: true;

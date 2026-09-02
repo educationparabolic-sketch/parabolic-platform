@@ -26,7 +26,8 @@ function materializePath(canonicalPath, routeId) {
   return canonicalPath
     .replace("{sessionId}", encodeURIComponent(`session ${routeId} Ω`))
     .replace("{testId}", encodeURIComponent(`test ${routeId} Ω`))
-    .replace("{runId}", encodeURIComponent(`run ${routeId} Ω`));
+    .replace("{runId}", encodeURIComponent(`run ${routeId} Ω`))
+    .replace("{studentId}", encodeURIComponent(`student ${routeId} Ω`));
 }
 
 async function requestGateway(requestPath, method, body) {
@@ -66,7 +67,7 @@ test(
     const implementedRoutes = API_ROUTE_MANIFEST.filter(
       (route) => route.status === "implemented",
     );
-    assert.equal(implementedRoutes.length, 32);
+    assert.equal(implementedRoutes.length, 34);
 
     for (const route of implementedRoutes) {
       const requestPath = materializePath(route.canonicalPath, route.id);
@@ -125,6 +126,28 @@ test(
     assert.equal(vendor.body.error?.code, "UNAUTHORIZED");
   },
 );
+
+test("planned Admin Student mutations remain fail-closed", async () => {
+  const plannedRoutes = API_ROUTE_MANIFEST.filter(
+    (route) => route.declaration === "planned",
+  );
+  assert.equal(plannedRoutes.length, 4);
+
+  for (const route of plannedRoutes) {
+    const result = await requestGateway(
+      materializePath(route.canonicalPath, route.id),
+      route.method,
+      route.method === "POST" || route.method === "PATCH" ? {} : undefined,
+    );
+    assert.equal(result.status, 404, route.id);
+    assertCanonicalErrorEnvelope(result.body);
+    assert.equal(result.body.error?.code, "NOT_FOUND");
+    assert.equal(
+      result.body.error?.message,
+      "API route is not implemented.",
+    );
+  }
+});
 
 test(
   "method errors expose Allow and unknown paths never return SPA HTML",
