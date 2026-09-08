@@ -76,6 +76,9 @@ import {
   handleAdminStudentOnboardingResendRequest,
 } from "./api/adminStudentOnboardingResend";
 import {
+  handleAdminStudentMutationsRequest,
+} from "./api/adminStudentMutations";
+import {
   handleAdminRunsRequest,
 } from "./api/adminRuns";
 import {
@@ -248,6 +251,9 @@ export const adminStudents = functions.https.onRequest(
 );
 export const adminStudentOnboardingResend = functions.https.onRequest(
   handleAdminStudentOnboardingResendRequest,
+);
+export const adminStudentMutations = functions.https.onRequest(
+  handleAdminStudentMutationsRequest,
 );
 export const adminRuns = functions.https.onRequest(
   handleAdminRunsRequest,

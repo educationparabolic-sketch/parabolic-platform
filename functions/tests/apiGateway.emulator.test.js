@@ -67,7 +67,7 @@ test(
     const implementedRoutes = API_ROUTE_MANIFEST.filter(
       (route) => route.status === "implemented",
     );
-    assert.equal(implementedRoutes.length, 34);
+    assert.equal(implementedRoutes.length, 38);
 
     for (const route of implementedRoutes) {
       const requestPath = materializePath(route.canonicalPath, route.id);
@@ -127,25 +127,21 @@ test(
   },
 );
 
-test("planned Admin Student mutations remain fail-closed", async () => {
-  const plannedRoutes = API_ROUTE_MANIFEST.filter(
-    (route) => route.declaration === "planned",
+test("Admin Student mutation routes reach the secured handler", async () => {
+  const mutationRoutes = API_ROUTE_MANIFEST.filter(
+    (route) => ["ADM-24", "ADM-25", "ADM-26", "ADM-27"].includes(route.id),
   );
-  assert.equal(plannedRoutes.length, 4);
+  assert.equal(mutationRoutes.length, 4);
 
-  for (const route of plannedRoutes) {
+  for (const route of mutationRoutes) {
     const result = await requestGateway(
       materializePath(route.canonicalPath, route.id),
       route.method,
       route.method === "POST" || route.method === "PATCH" ? {} : undefined,
     );
-    assert.equal(result.status, 404, route.id);
+    assert.equal(result.status, 401, route.id);
     assertCanonicalErrorEnvelope(result.body);
-    assert.equal(result.body.error?.code, "NOT_FOUND");
-    assert.equal(
-      result.body.error?.message,
-      "API route is not implemented.",
-    );
+    assert.equal(result.body.error?.code, "UNAUTHORIZED");
   }
 });
 

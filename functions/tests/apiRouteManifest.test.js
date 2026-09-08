@@ -302,16 +302,7 @@ test(
     const plannedRoutes = API_ROUTE_MANIFEST.filter(
       (route) => route.declaration === "planned",
     );
-    assert.equal(plannedRoutes.length, 4);
-    for (const route of plannedRoutes) {
-      assert.equal(route.portal, "admin");
-      assert.equal(route.status, "missing");
-      assert.equal(route.functionExport, null);
-      assert.equal(discoveredRoutes.has(routeKey(
-        route.method,
-        route.currentFrontendPath,
-      )), false);
-    }
+    assert.deepEqual(plannedRoutes, []);
   },
 );
 

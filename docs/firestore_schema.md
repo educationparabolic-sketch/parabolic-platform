@@ -65,7 +65,8 @@ BWM-026 makes individual Student administration optimistic-versioned. Existing
 records without `version` are read as version 1; every successful profile,
 batch, lifecycle, or photo-review command increments it and writes `updatedAt`,
 `updatedBy`, plus the command-specific fields. Profile updates keep `name` and
-`fullName` aligned. Batch assignment keeps `batch` and `batchId` aligned.
+`fullName` aligned. Batch assignment keeps `batch`, `batchId`, and `batchName`
+aligned for the existing roster compatibility projections.
 Lifecycle updates add `statusChangedAt`, `statusChangedBy`, and
 `lifecycleReason`. Photo review consumes an existing
 `identityPhotoCapturedAt` (or the legacy `livePhotoCapturedAt` compatibility

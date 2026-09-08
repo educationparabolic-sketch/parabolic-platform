@@ -1466,8 +1466,11 @@ Fields:
     {
       studentId: string,
       name: string,
+      fullName: string,
       email: string,
       batch: string,
+      batchId: string,
+      batchName: string,
       status: "invited | active | inactive | archived | suspended",
       enrollmentYear: string,
       parentEmail: string,
@@ -1498,6 +1501,8 @@ Fields:
 Profile, batch, lifecycle, and identity-photo review changes are
 optimistic-versioned server commands. The Student update and its deterministic
 immutable institute audit record commit in the same Firestore transaction.
+Profile writes keep `name` and `fullName` aligned, while batch writes keep
+`batch`, `batchId`, and `batchName` aligned for existing roster projections.
 Only a SHA-256 idempotency-key hash is stored. Exact retries replay the audit
 result, while different key semantics, stale versions, and concurrent losing
 commands fail closed. Identity-photo review binds to the stored capture

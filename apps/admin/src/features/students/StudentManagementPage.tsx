@@ -7,10 +7,18 @@ import {
 } from "../../../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import type {
+  AdminStudentBatchAssignmentRequest,
+  AdminStudentBatchAssignmentResult,
   AdminStudentDataExportRequest,
   AdminStudentDataExportResult,
+  AdminStudentLifecycleUpdateRequest,
+  AdminStudentLifecycleUpdateResult,
   AdminStudentOnboardingResendRequest,
   AdminStudentOnboardingResendResult as StudentOnboardingResendResult,
+  AdminStudentPhotoReviewRequest,
+  AdminStudentPhotoReviewResult,
+  AdminStudentProfileUpdateRequest,
+  AdminStudentProfileUpdateResult,
   AdminStudentSoftDeleteRequest,
   AdminStudentSoftDeleteResult,
   StudentBulkIngestionRequest,
@@ -570,8 +578,11 @@ function normalizeStudentRecord(value: unknown, index: number): StudentRecord | 
   };
 }
 
-async function fetchStudentsFromApi(): Promise<StudentRecord[]> {
-  const payload = await apiClient.get<unknown>("/admin/students");
+async function fetchStudentsFromApi(handledFailureIsReady = false): Promise<StudentRecord[]> {
+  const payload = await apiClient.get<unknown>("/admin/students", {
+    emptyResultIsReady: true,
+    handledFailureIsReady,
+  });
   const rows = extractStudentArray(payload)
     .map((entry, index) => normalizeStudentRecord(entry, index))
     .filter((entry): entry is StudentRecord => Boolean(entry));
@@ -582,6 +593,30 @@ async function fetchStudentsFromApi(): Promise<StudentRecord[]> {
 function createStudentActionIdempotencyKey(action: string, studentId: string): string {
   const suffix = typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
   return `${action}:${studentId}:${suffix}`;
+}
+
+function hasStudentMutationAuthority(result: {
+  auditId?: unknown;
+  disposition?: unknown;
+  updatedAt?: unknown;
+}): boolean {
+  return typeof result.auditId === "string" && result.auditId.length > 0 &&
+    (result.disposition === "applied" || result.disposition === "replayed") &&
+    typeof result.updatedAt === "string" && !Number.isNaN(Date.parse(result.updatedAt));
+}
+
+function hasStudentIdentityAuthority(result: {
+  auth?: unknown;
+}): boolean {
+  if (!result.auth || typeof result.auth !== "object") {
+    return false;
+  }
+
+  const auth = result.auth as Record<string, unknown>;
+  return (typeof auth.claimsSynchronized === "boolean" || auth.claimsSynchronized === null) &&
+    typeof auth.refreshTokensRevoked === "boolean" &&
+    typeof auth.userMissing === "boolean" &&
+    typeof auth.userUpdated === "boolean";
 }
 
 function shouldUseLiveApi(): boolean {
@@ -1515,7 +1550,7 @@ function StudentManagementPage() {
   const [onboardingUiByStudentId, setOnboardingUiByStudentId] = useState<Record<string, StudentOnboardingUiState>>({});
   const [dataActionUiByStudentId, setDataActionUiByStudentId] = useState<Record<string, StudentDataActionUiState>>({});
   const [selectedBatchForAnalysis, setSelectedBatchForAnalysis] = useState("");
-  const [archiveScopeByYear, setArchiveScopeByYear] = useState<Record<string, ArchiveScopeConfig>>({});
+  const [studentMutationPendingKey, setStudentMutationPendingKey] = useState<string | null>(null);
   const inlineEditorRef = useRef<HTMLElement | null>(null);
   const actionIdempotencyKeysRef = useRef<Record<string, string>>({});
 
@@ -1566,6 +1601,7 @@ function StudentManagementPage() {
   }, []);
 
   const currentSubpage = resolveStudentSubpage(location.pathname);
+  const canMutateStudentRecords = isBulkUploadAdmin && shouldUseLiveApi();
 
   const uniqueBatches = useMemo(() => {
     const batches = new Set<string>();
@@ -1690,21 +1726,11 @@ function StudentManagementPage() {
     () => archiveYearStudents.filter((student) => student.status === "archived" || student.status === "suspended"),
     [archiveYearStudents],
   );
-  useEffect(() => {
-    setArchiveScopeByYear((current) => (
-      current[archiveYear] ?
-        current :
-        {
-          ...current,
-          [archiveYear]: createArchiveScopeDefaults(archiveYear),
-        }
-    ));
-  }, [archiveYear]);
   const archiveGraduatingBatches = useMemo(
     () => new Set(archiveYearStudents.map((student) => student.batch)).size,
     [archiveYearStudents],
   );
-  const archiveScope = archiveScopeByYear[archiveYear] ?? createArchiveScopeDefaults(archiveYear);
+  const archiveScope = createArchiveScopeDefaults(archiveYear);
   const archiveBatches = useMemo(
     () => Array.from(new Set(archiveYearStudents.map((student) => student.batch))).sort((left, right) => left.localeCompare(right)),
     [archiveYearStudents],
@@ -2062,58 +2088,200 @@ function StudentManagementPage() {
     );
   }
 
-  function applyBatchAssignment(event: FormEvent<HTMLFormElement>) {
+  async function applyBatchAssignment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const normalizedBatch = batchAssignmentValue.trim();
     if (!normalizedBatch || selectedStudentIds.length === 0) {
       return;
     }
+    if (!canMutateStudentRecords || studentMutationPendingKey) {
+      setLoadMessage("Batch assignment is available only to admins in live mode.");
+      return;
+    }
 
-    setStudents((current) =>
-      current.map((student) =>
-        selectedStudentIds.includes(student.id) ?
-          {
-            ...student,
-            batch: normalizedBatch,
-          } :
-          student,
-      ),
-    );
+    const targets = students.filter((student) => selectedStudentIds.includes(student.id));
+    if (targets.length !== selectedStudentIds.length) {
+      setLoadMessage("Batch assignment selection is stale. Reload the roster and select the students again.");
+      return;
+    }
+    const keyName = `batch:${targets.map((student) => student.id).sort().join(",")}:${normalizedBatch}`;
+    const idempotencyKey = actionIdempotencyKeysRef.current[keyName] ??
+      createStudentActionIdempotencyKey("student-batch", normalizedBatch);
+    actionIdempotencyKeysRef.current[keyName] = idempotencyKey;
+    setStudentMutationPendingKey("batch");
+    setLoadMessage(null);
 
-    setSelectedStudentIds([]);
+    try {
+      const result = await apiClient.post<AdminStudentBatchAssignmentResult, AdminStudentBatchAssignmentRequest>(
+        "/admin/students/batch-assignment",
+        {
+          handledFailureIsReady: true,
+          body: {
+            idempotencyKey,
+            students: targets.map((student) => ({
+              expectedVersion: student.version,
+              studentId: student.id,
+            })),
+            targetBatch: normalizedBatch,
+          },
+        },
+      );
+      const expectedVersions = new Map(targets.map((student) => [student.id, student.version + 1]));
+      if (
+        !hasStudentMutationAuthority(result) ||
+        result.targetBatch !== normalizedBatch ||
+        result.students.length !== targets.length ||
+        new Set(result.students.map((record) => record.studentId)).size !== targets.length ||
+        result.students.some((record) =>
+          record.batch !== normalizedBatch || expectedVersions.get(record.studentId) !== record.version)
+      ) {
+        throw new Error("Batch assignment returned an incompatible authority result.");
+      }
+      const refreshedStudents = await fetchStudentsFromApi(true);
+      const refreshedById = new Map(refreshedStudents.map((student) => [student.id, student]));
+      if (targets.some((student) => {
+        const refreshed = refreshedById.get(student.id);
+        return !refreshed || refreshed.batch !== normalizedBatch ||
+          refreshed.version !== student.version + 1;
+      })) {
+        throw new Error("Batch assignment did not survive authoritative roster reload.");
+      }
+      setStudents(refreshedStudents);
+      setSelectedStudentIds([]);
+      delete actionIdempotencyKeysRef.current[keyName];
+      setLoadMessage(`${targets.length} students assigned to ${normalizedBatch}.`);
+    } catch (error) {
+      setLoadMessage(
+        error instanceof ApiClientError ?
+          `Batch assignment failed with ${error.code} (${error.status}).` :
+          error instanceof Error ? error.message : "Batch assignment failed.",
+      );
+    } finally {
+      setStudentMutationPendingKey(null);
+    }
   }
 
-  function setStudentStatus(studentId: string, nextStatus: StudentStatus) {
-    setStudents((current) =>
-      current.map((student) => {
-        if (student.id !== studentId) {
-          return student;
-        }
+  async function setStudentStatus(student: StudentRecord, nextStatus: StudentStatus) {
+    if (!canMutateStudentRecords || studentMutationPendingKey) {
+      setLoadMessage("Student lifecycle changes are available only to admins in live mode.");
+      return;
+    }
+    if (nextStatus === "invited") {
+      setLoadMessage("Student lifecycle cannot be reset to invited.");
+      return;
+    }
 
-        return {
-          ...student,
-          status: nextStatus,
-        };
-      }),
-    );
+    const keyName = `lifecycle:${student.id}:${nextStatus}`;
+    const idempotencyKey = actionIdempotencyKeysRef.current[keyName] ??
+      createStudentActionIdempotencyKey("student-lifecycle", student.id);
+    actionIdempotencyKeysRef.current[keyName] = idempotencyKey;
+    setStudentMutationPendingKey(keyName);
+    setLoadMessage(null);
+
+    try {
+      const studentId = encodeURIComponent(student.id);
+      const result = await apiClient.post<AdminStudentLifecycleUpdateResult, AdminStudentLifecycleUpdateRequest>(
+        `/admin/students/${studentId}/lifecycle`,
+        {
+          handledFailureIsReady: true,
+          body: {
+            expectedVersion: student.version,
+            idempotencyKey,
+            reason: `Admin changed Student lifecycle from ${student.status} to ${nextStatus}.`,
+            status: nextStatus,
+          },
+        },
+      );
+      if (
+        !hasStudentMutationAuthority(result) || !hasStudentIdentityAuthority(result) ||
+        result.studentId !== student.id ||
+        result.previousStatus !== student.status || result.status !== nextStatus ||
+        result.version !== student.version + 1
+      ) {
+        throw new Error("Student lifecycle update returned an incompatible authority result.");
+      }
+      const refreshedStudents = await fetchStudentsFromApi(true);
+      const refreshed = refreshedStudents.find((entry) => entry.id === student.id);
+      if (!refreshed || refreshed.status !== nextStatus || refreshed.version !== result.version) {
+        throw new Error("Student lifecycle update did not survive authoritative roster reload.");
+      }
+      setStudents(refreshedStudents);
+      delete actionIdempotencyKeysRef.current[keyName];
+      setLoadMessage(`${student.fullName} lifecycle changed to ${nextStatus}.`);
+    } catch (error) {
+      setLoadMessage(
+        error instanceof ApiClientError ?
+          `Student lifecycle update failed with ${error.code} (${error.status}).` :
+          error instanceof Error ? error.message : "Student lifecycle update failed.",
+      );
+    } finally {
+      setStudentMutationPendingKey(null);
+    }
   }
 
-  function setLivePhotoVerification(studentId: string, verified: boolean) {
-    setStudents((current) =>
-      current.map((student) =>
-        student.id === studentId ?
-          {
-            ...student,
-            livePhotoVerified: verified,
-          } :
-          student,
-      ),
-    );
-    const targetStudent = students.find((student) => student.id === studentId);
-    setLoadMessage(
-      `${targetStudent?.fullName ?? studentId} live photo marked ${verified ? "verified" : "unverified"} for admin review.`,
-    );
+  async function setLivePhotoVerification(student: StudentRecord, verified: boolean) {
+    if (!canMutateStudentRecords || studentMutationPendingKey) {
+      setLoadMessage("Student photo review is available only to admins in live mode.");
+      return;
+    }
+    if (!student.livePhotoUrl || !student.livePhotoCapturedAt) {
+      setLoadMessage("A captured live photo is required before review.");
+      return;
+    }
+
+    const decision = verified ? "verified" : "unverified";
+    const keyName = `photo:${student.id}:${decision}`;
+    const idempotencyKey = actionIdempotencyKeysRef.current[keyName] ??
+      createStudentActionIdempotencyKey("student-photo-review", student.id);
+    actionIdempotencyKeysRef.current[keyName] = idempotencyKey;
+    setStudentMutationPendingKey(keyName);
+    setLoadMessage(null);
+
+    try {
+      const studentId = encodeURIComponent(student.id);
+      const result = await apiClient.post<AdminStudentPhotoReviewResult, AdminStudentPhotoReviewRequest>(
+        `/admin/students/${studentId}/photo-review`,
+        {
+          handledFailureIsReady: true,
+          body: {
+            decision,
+            expectedPhotoCapturedAt: student.livePhotoCapturedAt,
+            expectedVersion: student.version,
+            idempotencyKey,
+            reason: "Admin identity photo review.",
+          },
+        },
+      );
+      if (
+        !result.auditId || result.disposition !== "applied" && result.disposition !== "replayed" ||
+        Number.isNaN(Date.parse(result.reviewedAt)) || result.studentId !== student.id ||
+        result.decision !== decision || result.version !== student.version + 1 ||
+        result.photoCapturedAt !== new Date(student.livePhotoCapturedAt).toISOString()
+      ) {
+        throw new Error("Student photo review returned an incompatible authority result.");
+      }
+      const refreshedStudents = await fetchStudentsFromApi(true);
+      const refreshed = refreshedStudents.find((entry) => entry.id === student.id);
+      if (
+        !refreshed || refreshed.livePhotoVerified !== verified ||
+        refreshed.livePhotoCapturedAt !== result.photoCapturedAt ||
+        refreshed.version !== result.version
+      ) {
+        throw new Error("Student photo review did not survive authoritative roster reload.");
+      }
+      setStudents(refreshedStudents);
+      delete actionIdempotencyKeysRef.current[keyName];
+      setLoadMessage(`${student.fullName} live photo marked ${decision}.`);
+    } catch (error) {
+      setLoadMessage(
+        error instanceof ApiClientError ?
+          `Student photo review failed with ${error.code} (${error.status}).` :
+          error instanceof Error ? error.message : "Student photo review failed.",
+      );
+    } finally {
+      setStudentMutationPendingKey(null);
+    }
   }
 
   function openEditModal(studentId: string) {
@@ -2130,27 +2298,79 @@ function StudentManagementPage() {
     });
   }
 
-  function saveEditChanges(event: FormEvent<HTMLFormElement>) {
+  async function saveEditChanges(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!editingStudent) {
       return;
     }
 
-    setStudents((current) =>
-      current.map((student) =>
-        student.id === editingStudent.id ?
-          {
-            ...student,
-            fullName: editingStudent.fullName.trim() || student.fullName,
-            email: editingStudent.email.trim() || student.email,
-            batch: editingStudent.batch.trim() || student.batch,
-          } :
-          student,
-      ),
-    );
+    if (!canMutateStudentRecords || studentMutationPendingKey) {
+      setLoadMessage("Student profile changes are available only to admins in live mode.");
+      return;
+    }
+    const student = students.find((entry) => entry.id === editingStudent.id);
+    if (!student) {
+      setLoadMessage("The Student profile is no longer present in the roster.");
+      return;
+    }
+    const fullName = editingStudent.fullName.trim();
+    const email = editingStudent.email.trim().toLowerCase();
+    if (!fullName || !email) {
+      setLoadMessage("Full name and email are required.");
+      return;
+    }
 
-    setEditingStudent(null);
+    const keyName = `profile:${student.id}`;
+    const idempotencyKey = actionIdempotencyKeysRef.current[keyName] ??
+      createStudentActionIdempotencyKey("student-profile", student.id);
+    actionIdempotencyKeysRef.current[keyName] = idempotencyKey;
+    setStudentMutationPendingKey(keyName);
+    setLoadMessage(null);
+
+    try {
+      const studentId = encodeURIComponent(student.id);
+      const result = await apiClient.patch<AdminStudentProfileUpdateResult, AdminStudentProfileUpdateRequest>(
+        `/admin/students/${studentId}/profile`,
+        {
+          handledFailureIsReady: true,
+          body: {
+            email,
+            expectedVersion: student.version,
+            fullName,
+            idempotencyKey,
+          },
+        },
+      );
+      if (
+        !hasStudentMutationAuthority(result) || !hasStudentIdentityAuthority(result) ||
+        result.studentId !== student.id ||
+        result.email !== email || result.fullName !== fullName ||
+        result.version !== student.version + 1
+      ) {
+        throw new Error("Student profile update returned an incompatible authority result.");
+      }
+      const refreshedStudents = await fetchStudentsFromApi(true);
+      const refreshed = refreshedStudents.find((entry) => entry.id === student.id);
+      if (
+        !refreshed || refreshed.email !== result.email ||
+        refreshed.fullName !== result.fullName || refreshed.version !== result.version
+      ) {
+        throw new Error("Student profile update did not survive authoritative roster reload.");
+      }
+      setStudents(refreshedStudents);
+      setEditingStudent(null);
+      delete actionIdempotencyKeysRef.current[keyName];
+      setLoadMessage(`${fullName} profile details updated.`);
+    } catch (error) {
+      setLoadMessage(
+        error instanceof ApiClientError ?
+          `Student profile update failed with ${error.code} (${error.status}).` :
+          error instanceof Error ? error.message : "Student profile update failed.",
+      );
+    } finally {
+      setStudentMutationPendingKey(null);
+    }
   }
 
   function resetBulkUploadWorkflow() {
@@ -2186,12 +2406,12 @@ function StudentManagementPage() {
       createStudentActionIdempotencyKey("student-onboarding", student.id);
     actionIdempotencyKeysRef.current[keyName] = idempotencyKey;
 
-    let authorityAccepted = false;
     try {
       if (shouldUseLiveApi()) {
         const response = await apiClient.post<StudentOnboardingResendResult, AdminStudentOnboardingResendRequest>(
           "/admin/students/onboarding-resend",
           {
+            handledFailureIsReady: true,
             body: {
               idempotencyKey,
               studentId: student.id,
@@ -2202,8 +2422,7 @@ function StudentManagementPage() {
         if (response.studentId !== student.id || !response.auditId) {
           throw new Error("Onboarding resend returned an incompatible authority result.");
         }
-        authorityAccepted = true;
-        const refreshedStudents = await fetchStudentsFromApi();
+        const refreshedStudents = await fetchStudentsFromApi(true);
         const refreshedStudent = refreshedStudents.find((entry) => entry.id === student.id);
         if (!refreshedStudent || refreshedStudent.status !== "invited" ||
           refreshedStudent.email !== response.recipientEmail) {
@@ -2235,9 +2454,6 @@ function StudentManagementPage() {
 
       setLoadMessage(`Onboarding email queued again for ${student.fullName} at ${student.email}.`);
     } catch (error) {
-      if (authorityAccepted) {
-        delete actionIdempotencyKeysRef.current[keyName];
-      }
       setOnboardingUiByStudentId((current) => ({
         ...current,
         [student.id]: {
@@ -2278,7 +2494,10 @@ function StudentManagementPage() {
       const studentId = encodeURIComponent(student.id);
       const result = await apiClient.post<AdminStudentDataExportResult, AdminStudentDataExportRequest>(
         `/admin/students/${studentId}/data-export`,
-        {body: {idempotencyKey, includeAiSummaries: true}},
+        {
+          body: {idempotencyKey, includeAiSummaries: true},
+          handledFailureIsReady: true,
+        },
       );
       if (result.studentId !== student.id || !result.downloadUrl || !result.auditId) {
         throw new Error("Student export returned an incompatible authority result.");
@@ -2340,6 +2559,7 @@ function StudentManagementPage() {
       const result = await apiClient.post<AdminStudentSoftDeleteResult, AdminStudentSoftDeleteRequest>(
         `/admin/students/${studentId}/soft-delete`,
         {
+          handledFailureIsReady: true,
           body: {
             expectedVersion: student.version,
             idempotencyKey,
@@ -2350,7 +2570,7 @@ function StudentManagementPage() {
       if (result.studentId !== student.id || result.version < student.version || !result.auditId) {
         throw new Error("Student deletion returned an incompatible authority result.");
       }
-      const refreshedStudents = await fetchStudentsFromApi();
+      const refreshedStudents = await fetchStudentsFromApi(true);
       if (refreshedStudents.some((entry) => entry.id === student.id)) {
         throw new Error("Student deletion did not survive authoritative roster reload.");
       }
@@ -2476,7 +2696,6 @@ function StudentManagementPage() {
     setBulkUploadError(null);
     setBulkUploadMessage(null);
 
-    let commitAuthorityAccepted = false;
     try {
       const keyName = "bulk-ingestion:commit";
       const idempotencyKey = commit ?
@@ -2492,6 +2711,7 @@ function StudentManagementPage() {
             const response = await apiClient.post<StudentBulkUploadResult, StudentBulkIngestionRequest>(
               "/admin/students/bulk",
               {
+                handledFailureIsReady: true,
                 body: {
                   commit,
                   deactivateMissing: bulkUploadDeactivateMissing,
@@ -2527,8 +2747,7 @@ function StudentManagementPage() {
           if (!result.auditId || !result.disposition) {
             throw new Error("Bulk ingestion returned an incompatible authority result.");
           }
-          commitAuthorityAccepted = true;
-          const refreshedStudents = await fetchStudentsFromApi();
+          const refreshedStudents = await fetchStudentsFromApi(true);
           const refreshedById = new Map(refreshedStudents.map((entry) => [entry.id, entry]));
           const submittedById = new Map(bulkUploadRows.map((entry) => [
             entry.studentId.trim(),
@@ -2577,9 +2796,6 @@ function StudentManagementPage() {
           "Validation passed. Review the create, update, and deactivation summary before confirming.",
       );
     } catch (error) {
-      if (commitAuthorityAccepted) {
-        delete actionIdempotencyKeysRef.current["bulk-ingestion:commit"];
-      }
       const message =
         error instanceof ApiClientError ?
           `Student bulk ingestion failed with ${error.code} (${error.status}).` :
@@ -2603,6 +2819,7 @@ function StudentManagementPage() {
           aria-label={`Select ${student.studentId}`}
           checked={selectedStudentIds.includes(student.id)}
           onChange={() => toggleSingleSelection(student.id)}
+          disabled={!canMutateStudentRecords || Boolean(studentMutationPendingKey)}
         />
       ),
     },
@@ -2649,13 +2866,21 @@ function StudentManagementPage() {
             {student.livePhotoVerified ? "Verified" : "Unverified"}
           </span>
           <small>{student.livePhotoCapturedAt ? formatDateTimeLabel(student.livePhotoCapturedAt) : "Not captured"}</small>
-          {student.livePhotoUrl ? (
+          {student.livePhotoUrl && isBulkUploadAdmin ? (
             <div className="admin-student-inline-actions">
               <button
                 type="button"
-                onClick={() => setLivePhotoVerification(student.id, !student.livePhotoVerified)}
+                onClick={() => {
+                  void setLivePhotoVerification(student, !student.livePhotoVerified);
+                }}
+                disabled={
+                  !canMutateStudentRecords || !student.livePhotoCapturedAt ||
+                  Boolean(studentMutationPendingKey)
+                }
               >
-                {student.livePhotoVerified ? "Mark unverified" : "Verify photo"}
+                {studentMutationPendingKey === `photo:${student.id}:${student.livePhotoVerified ? "unverified" : "verified"}` ?
+                  "Saving review..." :
+                  student.livePhotoVerified ? "Mark unverified" : "Verify photo"}
               </button>
             </div>
           ) : null}
@@ -2723,32 +2948,68 @@ function StudentManagementPage() {
         return (
           <div className="admin-student-row-actions">
             <NavLink to={`/admin/students/${student.id}`}>View profile</NavLink>
-            <button type="button" onClick={() => openEditModal(student.id)}>
-              Edit
-            </button>
-            {student.status === "active" ? (
+            {isBulkUploadAdmin ? (
+              <button
+                type="button"
+                onClick={() => openEditModal(student.id)}
+                disabled={!canMutateStudentRecords || Boolean(studentMutationPendingKey)}
+              >
+                Edit
+              </button>
+            ) : null}
+            {student.status === "active" && isBulkUploadAdmin ? (
               <>
-                <button type="button" onClick={() => setStudentStatus(student.id, "inactive")}>
-                  Set inactive
+                <button
+                  type="button"
+                  onClick={() => {
+                    void setStudentStatus(student, "inactive");
+                  }}
+                  disabled={!canMutateStudentRecords || Boolean(studentMutationPendingKey)}
+                >
+                  {studentMutationPendingKey === `lifecycle:${student.id}:inactive` ? "Saving..." : "Set inactive"}
                 </button>
-                <button type="button" onClick={() => setStudentStatus(student.id, "suspended")}>
-                  Suspend
+                <button
+                  type="button"
+                  onClick={() => {
+                    void setStudentStatus(student, "suspended");
+                  }}
+                  disabled={!canMutateStudentRecords || Boolean(studentMutationPendingKey)}
+                >
+                  {studentMutationPendingKey === `lifecycle:${student.id}:suspended` ? "Saving..." : "Suspend"}
                 </button>
               </>
             ) : null}
-            {student.status === "inactive" || student.status === "invited" ? (
+            {(student.status === "inactive" || student.status === "invited") && isBulkUploadAdmin ? (
               <>
-                <button type="button" onClick={() => setStudentStatus(student.id, "active")}>
-                  Activate
+                <button
+                  type="button"
+                  onClick={() => {
+                    void setStudentStatus(student, "active");
+                  }}
+                  disabled={!canMutateStudentRecords || Boolean(studentMutationPendingKey)}
+                >
+                  {studentMutationPendingKey === `lifecycle:${student.id}:active` ? "Saving..." : "Activate"}
                 </button>
-                <button type="button" onClick={() => setStudentStatus(student.id, "suspended")}>
-                  Suspend
+                <button
+                  type="button"
+                  onClick={() => {
+                    void setStudentStatus(student, "suspended");
+                  }}
+                  disabled={!canMutateStudentRecords || Boolean(studentMutationPendingKey)}
+                >
+                  {studentMutationPendingKey === `lifecycle:${student.id}:suspended` ? "Saving..." : "Suspend"}
                 </button>
               </>
             ) : null}
-            {student.status === "suspended" ? (
-              <button type="button" onClick={() => setStudentStatus(student.id, "active")}>
-                Reinstate
+            {student.status === "suspended" && isBulkUploadAdmin ? (
+              <button
+                type="button"
+                onClick={() => {
+                  void setStudentStatus(student, "active");
+                }}
+                disabled={!canMutateStudentRecords || Boolean(studentMutationPendingKey)}
+              >
+                {studentMutationPendingKey === `lifecycle:${student.id}:active` ? "Saving..." : "Reinstate"}
               </button>
             ) : null}
             {student.status === "invited" && isBulkUploadAdmin ? (
@@ -3182,8 +3443,16 @@ function StudentManagementPage() {
 
           <UiForm
             title="Batch Assignment"
-            description="Assign selected students to a target batch."
-            submitLabel="Assign Batch"
+            description={
+              canMutateStudentRecords ?
+                "Assign selected students to a target batch through the live Student authority." :
+                "Read-only: batch assignment requires an admin role and live API mode."
+            }
+            submitDisabled={
+              !canMutateStudentRecords || selectedStudentIds.length === 0 ||
+              Boolean(studentMutationPendingKey)
+            }
+            submitLabel={studentMutationPendingKey === "batch" ? "Assigning..." : "Assign Batch"}
             onSubmit={applyBatchAssignment}
             footer={<span className="admin-student-form-footnote">Selected students: {selectedStudentIds.length}</span>}
           >
@@ -3238,6 +3507,7 @@ function StudentManagementPage() {
                       type="text"
                       value={batchAssignmentValue}
                       onChange={(event) => setBatchAssignmentValue(event.target.value)}
+                      disabled={!canMutateStudentRecords || Boolean(studentMutationPendingKey)}
                     />
                   </UiFormField>
                 </div>
@@ -3247,7 +3517,11 @@ function StudentManagementPage() {
         </div>
 
         <div className="admin-student-table-toolbar">
-          <button type="button" onClick={toggleVisibleSelection}>
+          <button
+            type="button"
+            onClick={toggleVisibleSelection}
+            disabled={!canMutateStudentRecords || Boolean(studentMutationPendingKey)}
+          >
             {allVisibleSelected ? "Unselect visible" : "Select visible"}
           </button>
           <span>
@@ -3274,7 +3548,11 @@ function StudentManagementPage() {
                 <h3 id="admin-student-inline-editor-title">Edit Student Details</h3>
                 <p>Update identity and batch details for the selected student without leaving the roster table.</p>
               </div>
-              <button type="button" onClick={() => setEditingStudent(null)}>
+              <button
+                type="button"
+                onClick={() => setEditingStudent(null)}
+                disabled={Boolean(studentMutationPendingKey)}
+              >
                 Close Editor
               </button>
             </div>
@@ -3318,21 +3596,22 @@ function StudentManagementPage() {
                   id="admin-edit-student-batch"
                   type="text"
                   value={editingStudent.batch}
-                  onChange={(event) =>
-                    setEditingStudent((current) =>
-                      current ?
-                        {
-                          ...current,
-                          batch: event.target.value,
-                        } :
-                        null,
-                    )
-                  }
+                  disabled
+                  title="Use Batch Assignment to change this value."
                 />
               </UiFormField>
               <div className="admin-student-edit-actions">
-                <button type="submit">Save Details</button>
-                <button type="button" onClick={() => setEditingStudent(null)}>
+                <button
+                  type="submit"
+                  disabled={!canMutateStudentRecords || Boolean(studentMutationPendingKey)}
+                >
+                  {studentMutationPendingKey === `profile:${editingStudent.id}` ? "Saving..." : "Save Details"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingStudent(null)}
+                  disabled={Boolean(studentMutationPendingKey)}
+                >
                   Cancel
                 </button>
               </div>
@@ -4064,20 +4343,10 @@ function StudentManagementPage() {
         `${archiveBatches.join(", ")} included in the current archive scope.` :
         "No batches are currently available in the selected archive scope.";
 
-    const setArchiveScopeField = <K extends keyof ArchiveScopeConfig>(field: K, value: ArchiveScopeConfig[K]) => {
-      setArchiveScopeByYear((current) => ({
-        ...current,
-        [archiveYear]: {
-          ...(current[archiveYear] ?? createArchiveScopeDefaults(archiveYear)),
-          [field]: value,
-        },
-      }));
-    };
-
     return (
       <div className="admin-student-stack">
         <p className="admin-content-copy">
-          Academic-year archive keeps historical student summaries visible while giving admins one controlled place to schedule the year lock and cold-data transition for archived cohorts.
+          Academic-year archive keeps historical student summaries visible. Scheduling is read-only here until Settings &amp; Academic-Year Operations owns the mutation in BWM-030.
         </p>
         <section className="admin-student-archive-warning" aria-label="Academic year archive warning">
           <div>
@@ -4093,7 +4362,7 @@ function StudentManagementPage() {
           <div className="admin-student-archive-section-header">
             <div>
               <h3 id="admin-students-archive-scope-title">Archive Scope</h3>
-              <p>Set the year scope, archive scheduling, and cold-data transition timing for the selected cohort group.</p>
+              <p>Review the year scope and proposed transition timing. Archive scheduling remains read-only until BWM-030.</p>
             </div>
             <div className="admin-student-archive-meta">
               <span>{archiveYear}</span>
@@ -4115,7 +4384,8 @@ function StudentManagementPage() {
               <span>Archive Status</span>
               <select
                 value={archiveScope.archiveStatus}
-                onChange={(event) => setArchiveScopeField("archiveStatus", event.target.value as ArchiveLifecycleStatus)}
+                disabled
+                aria-label="Archive status (read-only until BWM-030)"
               >
                 <option value="open">Open</option>
                 <option value="scheduled">Scheduled</option>
@@ -4127,7 +4397,8 @@ function StudentManagementPage() {
               <input
                 type="date"
                 value={archiveScope.archiveDate}
-                onChange={(event) => setArchiveScopeField("archiveDate", event.target.value)}
+                disabled
+                aria-label="Archive date (read-only until BWM-030)"
               />
             </label>
             <label className="admin-student-archive-field">
@@ -4135,11 +4406,14 @@ function StudentManagementPage() {
               <input
                 type="date"
                 value={archiveScope.coldDataTransitionDate}
-                onChange={(event) => setArchiveScopeField("coldDataTransitionDate", event.target.value)}
+                disabled
+                aria-label="Cold data transition date (read-only until BWM-030)"
               />
             </label>
           </div>
-          <p className="admin-student-inline-note">{archiveScopeNote}</p>
+          <p className="admin-student-inline-note">
+            {archiveScopeNote} Scheduling controls are read-only and will be activated by BWM-030.
+          </p>
         </section>
         <section className="admin-student-archive-section" aria-labelledby="admin-students-archive-summary-title">
           <div className="admin-student-archive-section-header">

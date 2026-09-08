@@ -21,6 +21,7 @@ const selectedSourceSuites = [
   "adminQuestionsBulkApi.test",
   "adminRunsApi.test",
   "adminSettingsApi.test",
+  "adminStudentMutationsApi.test",
   "adminStudentsBulkApi.test",
   "adminTestsApi.test",
   "apiErrorHandling.test",

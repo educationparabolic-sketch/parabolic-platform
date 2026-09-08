@@ -10,6 +10,14 @@ const sharedContractPath = new URL(
   "../shared/contracts/apiDtos.d.ts",
   import.meta.url,
 );
+const browserProofPath = new URL(
+  "./e2e/admin-student-mutations.spec.mjs",
+  import.meta.url,
+);
+const browserRunnerPath = new URL(
+  "../scripts/run-admin-student-mutations-e2e.mjs",
+  import.meta.url,
+);
 
 function interfaceFields(source, name) {
   const match = source.match(
@@ -42,19 +50,15 @@ test("BWM-026 Admin Student route declarations are exact", () => {
     assert.equal(route.currentFrontendPath, canonicalPath.slice(7));
     assert.equal(route.method, method);
     assert.equal(route.portal, "admin");
-    if (routeId === "ADM-28" || routeId === "ADM-29") {
-      assert.equal(route.declaration, "frontend");
-      assert.equal(route.status, "implemented");
-      assert.equal(
-        route.functionExport,
-        routeId === "ADM-28" ?
-          "adminStudentDataExport" : "adminStudentSoftDelete",
-      );
-    } else {
-      assert.equal(route.declaration, "planned");
-      assert.equal(route.functionExport, null);
-      assert.equal(route.status, "missing");
-    }
+    assert.equal(route.declaration, "frontend");
+    assert.equal(route.status, "implemented");
+    assert.equal(
+      route.functionExport,
+      routeId === "ADM-28" ?
+        "adminStudentDataExport" :
+        routeId === "ADM-29" ?
+          "adminStudentSoftDelete" : "adminStudentMutations",
+    );
   }
 
   assert.equal(
@@ -171,4 +175,20 @@ test("BWM-026 public export DTO omits storage internals", async () => {
   );
   assert.ok(resultMatch);
   assert.doesNotMatch(resultMatch[1], /bucketName|objectPath|storage:/);
+});
+
+test("BWM-026 browser proof is permanently wired to local Firebase without response mocks", async () => {
+  const [proof, runner] = await Promise.all([
+    readFile(browserProofPath, "utf8"),
+    readFile(browserRunnerPath, "utf8"),
+  ]);
+
+  assert.match(runner, /--only", "auth,firestore,functions,hosting:portal,storage"/);
+  assert.match(runner, /test:e2e:admin-student-mutations/);
+  assert.match(proof, /FIREBASE_AUTH_EMULATOR_HOST/);
+  assert.match(proof, /FIRESTORE_EMULATOR_HOST/);
+  assert.match(proof, /FIREBASE_STORAGE_EMULATOR_HOST/);
+  assert.match(proof, /waitForEvent\("download"\)/);
+  assert.match(proof, /setOffline\(true\)/);
+  assert.doesNotMatch(proof, /\.route\(|route\.fulfill|route\.abort/);
 });

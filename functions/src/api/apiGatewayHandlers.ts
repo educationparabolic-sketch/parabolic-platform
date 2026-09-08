@@ -23,6 +23,9 @@ import {handleAdminSettingsRequest} from "./adminSettings";
 import {
   handleAdminStudentOnboardingResendRequest,
 } from "./adminStudentOnboardingResend";
+import {
+  handleAdminStudentMutationsRequest,
+} from "./adminStudentMutations";
 import {handleAdminStudentsRequest} from "./adminStudents";
 import {handleAdminStudentsBulkRequest} from "./adminStudentsBulk";
 import {
@@ -71,6 +74,7 @@ Record<string, ApiGatewayHandler>
   adminRuns: handleAdminRunsRequest,
   adminSettings: handleAdminSettingsRequest,
   adminStudentDataExport: handleAdminStudentDataExportRequest,
+  adminStudentMutations: handleAdminStudentMutationsRequest,
   adminStudentOnboardingResend: handleAdminStudentOnboardingResendRequest,
   adminStudentSoftDelete: handleAdminStudentSoftDeleteRequest,
   adminStudents: handleAdminStudentsRequest,

@@ -617,6 +617,17 @@ function normalizeStudentRecord(input: {
     ),
     id: input.studentDocumentId,
     lastActive,
+    livePhotoCapturedAt: toIsoString(
+      input.studentData.identityPhotoCapturedAt ??
+        input.studentData.livePhotoCapturedAt,
+    ),
+    livePhotoUrl: toNonEmptyString(
+      input.studentData.identityPhotoUrl ?? input.studentData.livePhotoUrl,
+      "",
+    ) || null,
+    livePhotoVerified:
+      input.studentData.identityPhotoVerified === true ||
+      input.studentData.livePhotoVerified === true,
     maxTimeViolationPercent: toNumberOrZero(
       input.metricsData.maxTimeViolationPercent ??
         input.metricsData.maxTimeViolationsPercent,

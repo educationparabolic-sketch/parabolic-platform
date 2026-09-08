@@ -57,7 +57,8 @@ commands, not new events or triggers. Their Student change and immutable audit
 authority commit atomically; profile/lifecycle Auth reconciliation resumes on an
 exact command retry. Lifecycle status writes continue to flow through the one
 existing `students onWrite -> UsageUpdated` topology, so no second usage or
-activation trigger is introduced.
+activation trigger is introduced. The shared `adminStudentMutations` HTTP
+dispatcher is therefore an API boundary, not a new event source.
 
 ADM-28 export and ADM-29 soft deletion are also synchronous commands. Export
 creates one deterministic immutable `DATA_EXPORT` audit and secure report

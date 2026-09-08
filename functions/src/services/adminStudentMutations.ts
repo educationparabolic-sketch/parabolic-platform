@@ -693,6 +693,7 @@ export class AdminStudentMutationsService {
           transaction.update(reference, {
             batch: request.targetBatch,
             batchId: request.targetBatch,
+            batchName: request.targetBatch,
             updatedAt: timestamp,
             updatedBy: request.actorId,
             version: records[index].version,

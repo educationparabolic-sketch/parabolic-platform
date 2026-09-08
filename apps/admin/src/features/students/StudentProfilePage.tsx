@@ -537,8 +537,8 @@ function normalizeOverrideRecord(value: unknown, studentIndex: number, entryInde
   };
 }
 
-async function fetchStudentsFromApi(): Promise<StudentRecord[]> {
-  const payload = await apiClient.get<unknown>("/admin/students");
+async function fetchStudentsFromApi(handledFailureIsReady = false): Promise<StudentRecord[]> {
+  const payload = await apiClient.get<unknown>("/admin/students", {handledFailureIsReady});
   const rows = extractStudentArray(payload)
     .map((entry, index) => normalizeStudentRecord(entry, index))
     .filter((entry): entry is StudentRecord => Boolean(entry));
@@ -726,12 +726,12 @@ function StudentProfilePage() {
       createOnboardingIdempotencyKey(student.id);
     onboardingIdempotencyKeyRef.current = idempotencyKey;
 
-    let authorityAccepted = false;
     try {
       if (shouldUseLiveApi()) {
         const response = await apiClient.post<StudentOnboardingResendResult, AdminStudentOnboardingResendRequest>(
           "/admin/students/onboarding-resend",
           {
+            handledFailureIsReady: true,
             body: {
               idempotencyKey,
               studentId: student.id,
@@ -742,8 +742,7 @@ function StudentProfilePage() {
         if (response.studentId !== student.id || !response.auditId) {
           throw new Error("Onboarding resend returned an incompatible authority result.");
         }
-        authorityAccepted = true;
-        const refreshedStudents = await fetchStudentsFromApi();
+        const refreshedStudents = await fetchStudentsFromApi(true);
         const refreshedStudent = refreshedStudents.find((entry) => entry.id === student.id);
         if (!refreshedStudent || refreshedStudent.status !== "invited" ||
           refreshedStudent.email !== response.recipientEmail) {
@@ -769,9 +768,6 @@ function StudentProfilePage() {
 
       setLoadMessage(`Onboarding email queued again for ${student.fullName} at ${student.email}.`);
     } catch (error) {
-      if (authorityAccepted) {
-        onboardingIdempotencyKeyRef.current = null;
-      }
       setOnboardingUiState((current) => ({
         isSubmitting: false,
         lastQueuedAt: current?.lastQueuedAt ?? null,

@@ -41,6 +41,9 @@ export interface AdminStudentRecord {
   hardBiasRate: number;
   id: string;
   lastActive: string | null;
+  livePhotoCapturedAt: string | null;
+  livePhotoUrl: string | null;
+  livePhotoVerified: boolean;
   maxTimeViolationPercent: number;
   minTimeViolationPercent: number;
   overrideRecords: unknown[];

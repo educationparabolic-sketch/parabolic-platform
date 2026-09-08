@@ -3,6 +3,7 @@ import type { FormEvent, ReactNode } from "react";
 export interface UiFormProps {
   title: string;
   description?: string;
+  submitDisabled?: boolean;
   submitLabel?: string;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   children: ReactNode;
@@ -26,7 +27,15 @@ export function UiFormField({ label, htmlFor, helper, children }: UiFormFieldPro
   );
 }
 
-function UiForm({ title, description, submitLabel, onSubmit, children, footer }: UiFormProps) {
+function UiForm({
+  title,
+  description,
+  submitDisabled = false,
+  submitLabel,
+  onSubmit,
+  children,
+  footer,
+}: UiFormProps) {
   return (
     <section className="ui-form-card" aria-label={title}>
       <header className="ui-form-header">
@@ -36,7 +45,9 @@ function UiForm({ title, description, submitLabel, onSubmit, children, footer }:
       <form className="ui-form" onSubmit={onSubmit}>
         <div className="ui-form-content">{children}</div>
         <div className="ui-form-actions">
-          <button type="submit">{submitLabel ?? "Apply"}</button>
+          <button type="submit" disabled={submitDisabled}>
+            {submitLabel ?? "Apply"}
+          </button>
           {footer}
         </div>
       </form>

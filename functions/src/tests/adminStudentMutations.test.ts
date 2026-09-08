@@ -96,6 +96,7 @@ async function prepareInstitute(
     firestore.doc(`${institutePath}/students/${student.studentId}`).set({
       batch: "Batch A",
       batchId: "Batch A",
+      batchName: "Legacy Batch A",
       deleted: false,
       email: `${student.studentId}@example.test`,
       fullName: `Student ${student.studentId}`,
@@ -422,6 +423,10 @@ test("batch mutation is atomic, bounded, versioned, and replayable", async () =>
     );
     assert.equal(audits.size, 1);
     assert.equal(audits.docs[0]?.get("actionType"), "ASSIGN_STUDENT_BATCH");
+    assert.deepEqual(
+      snapshots.map((snapshot) => snapshot.get("batchName")),
+      ["Batch B", "Batch B"],
+    );
   } finally {
     await cleanupInstitute(instituteId);
   }
