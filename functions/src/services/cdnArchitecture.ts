@@ -47,14 +47,16 @@ Record<AssetCacheTier, CdnArchitectureCachePolicy> = {
 const resolveQuestionAssetFileName = (
   assetKind: QuestionAssetKind,
   extension: QuestionAssetExtension,
+  revision?: number,
 ): string => {
+  const revisionSuffix = revision === undefined ? "" : `-r${revision}`;
   switch (assetKind) {
   case "questionImage":
-    return `question.${extension}`;
+    return `question${revisionSuffix}.${extension}`;
   case "solutionImage":
-    return `solution.${extension}`;
+    return `solution${revisionSuffix}.${extension}`;
   case "solutionPdf":
-    return `solution.${extension}`;
+    return `solution${revisionSuffix}.${extension}`;
   default: {
     const exhaustiveAssetKind: never = assetKind;
     throw new Error(`Unsupported question asset kind: ${exhaustiveAssetKind}`);
@@ -288,6 +290,8 @@ export class CdnArchitectureService {
     const instituteId = requirePathSegment(request.instituteId, "instituteId");
     const questionId = requirePathSegment(request.questionId, "questionId");
     const version = normalizePositiveInteger(request.version, "version");
+    const revision = request.revision === undefined ? undefined :
+      normalizePositiveInteger(request.revision, "revision");
     const extension = request.extension ??
       resolveDefaultQuestionExtension(request.assetKind);
 
@@ -311,6 +315,7 @@ export class CdnArchitectureService {
     const fileName = resolveQuestionAssetFileName(
       request.assetKind,
       extension,
+      revision,
     );
     const objectPath =
       `${instituteId}/questions/${questionId}/v${version}/${fileName}`;

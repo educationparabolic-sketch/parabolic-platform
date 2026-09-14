@@ -27,7 +27,10 @@ function materializePath(canonicalPath, routeId) {
     .replace("{sessionId}", encodeURIComponent(`session ${routeId} Ω`))
     .replace("{testId}", encodeURIComponent(`test ${routeId} Ω`))
     .replace("{runId}", encodeURIComponent(`run ${routeId} Ω`))
-    .replace("{studentId}", encodeURIComponent(`student ${routeId} Ω`));
+    .replace("{studentId}", encodeURIComponent(`student ${routeId} Ω`))
+    .replace("{questionId}", encodeURIComponent(`question ${routeId} Ω`))
+    .replace("{packageId}", encodeURIComponent(`package ${routeId} Ω`))
+    .replace("{uploadLogId}", encodeURIComponent(`upload ${routeId} Ω`));
 }
 
 async function requestGateway(requestPath, method, body) {
@@ -67,7 +70,7 @@ test(
     const implementedRoutes = API_ROUTE_MANIFEST.filter(
       (route) => route.status === "implemented",
     );
-    assert.equal(implementedRoutes.length, 38);
+    assert.equal(implementedRoutes.length, 47);
 
     for (const route of implementedRoutes) {
       const requestPath = materializePath(route.canonicalPath, route.id);
@@ -144,6 +147,27 @@ test("Admin Student mutation routes reach the secured handler", async () => {
     assert.equal(result.body.error?.code, "UNAUTHORIZED");
   }
 });
+
+test(
+  "all planned Question Bank routes reach secured handlers",
+  async () => {
+    const plannedRoutes = API_ROUTE_MANIFEST.filter(
+      (route) => route.declaration === "planned",
+    );
+    assert.equal(plannedRoutes.length, 11);
+
+    for (const route of plannedRoutes) {
+      const result = await requestGateway(
+        materializePath(route.canonicalPath, route.id),
+        route.method,
+        route.method === "POST" || route.method === "PATCH" ? {} : undefined,
+      );
+      assert.equal(result.status, 401, route.id);
+      assertCanonicalErrorEnvelope(result.body);
+      assert.equal(result.body.error?.code, "UNAUTHORIZED");
+    }
+  },
+);
 
 test(
   "method errors expose Allow and unknown paths never return SPA HTML",

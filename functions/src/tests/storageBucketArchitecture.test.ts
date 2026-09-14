@@ -15,8 +15,11 @@ test(
     );
     assert.equal(
       result.buckets.questionAssets.directoryTemplate,
-      "/{instituteId}/questions/{questionId}/v{version}/question.png|" +
-        "solution.png|solution.pdf",
+      "/{instituteId}/questions/{questionId}/v{version}/" +
+        "question.png|question.webp|question-r{revision}.png|" +
+        "question-r{revision}.webp|solution.png|solution.webp|solution.pdf|" +
+        "solution-r{revision}.png|solution-r{revision}.webp|" +
+        "solution-r{revision}.pdf",
     );
     assert.equal(result.buckets.questionAssets.immutableObjects, true);
     assert.equal(result.buckets.reports.bucketName, "parabolic-prod-reports");
@@ -53,6 +56,27 @@ test(
         "inst_build_72/questions/q_301/v4/solution.webp",
     );
     assert.equal(result.contentType, "image/webp");
+  },
+);
+
+test(
+  "resolveQuestionAssetStorageTarget accepts revisioned edit assets",
+  () => {
+    const result = storageBucketArchitectureService
+      .resolveQuestionAssetStorageTarget({
+        assetKind: "solutionImage",
+        extension: "png",
+        instituteId: "inst_build_72",
+        questionId: "q_301",
+        revision: 2,
+        version: 4,
+      });
+
+    assert.equal(
+      result.objectPath,
+      "inst_build_72/questions/q_301/v4/solution-r2.png",
+    );
+    assert.equal(result.contentType, "image/png");
   },
 );
 

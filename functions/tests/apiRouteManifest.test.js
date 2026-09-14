@@ -60,6 +60,18 @@ function parameterName(expression, sourceFile) {
     return "{studentId}";
   }
 
+  if (/questionId/i.test(expressionText)) {
+    return "{questionId}";
+  }
+
+  if (/packageId/i.test(expressionText)) {
+    return "{packageId}";
+  }
+
+  if (/uploadLogId/i.test(expressionText)) {
+    return "{uploadLogId}";
+  }
+
   throw new Error(
     `Unsupported API path parameter in ${sourceFile.fileName}: ` +
       expressionText,
@@ -302,7 +314,26 @@ test(
     const plannedRoutes = API_ROUTE_MANIFEST.filter(
       (route) => route.declaration === "planned",
     );
-    assert.deepEqual(plannedRoutes, []);
+    assert.deepEqual(
+      plannedRoutes.map((route) => route.id),
+      [
+        "ADM-30",
+        "ADM-31",
+        "ADM-32",
+        "ADM-33",
+        "ADM-34",
+        "ADM-35",
+        "ADM-36",
+        "ADM-37",
+        "ADM-38",
+        "ADM-39",
+        "ADM-40",
+      ],
+    );
+    plannedRoutes.forEach((route) => {
+      assert.equal(route.status, "implemented");
+      assert.equal(typeof route.functionExport, "string");
+    });
   },
 );
 

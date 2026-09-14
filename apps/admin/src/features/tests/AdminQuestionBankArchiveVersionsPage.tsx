@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
-import { adaptAdminQuestionLibraryResult } from "../../../../../shared/services/portalResponseAdapters";
+import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import {
   shouldUseLiveApi as shouldUseConfiguredLiveApi,
 } from "../../../../../shared/services/frontendEnvironment";
-import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import { UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
 import QuestionBankWorkspaceNav from "./QuestionBankWorkspaceNav";
 import { QUESTION_BANK, type QuestionBankRecord } from "./testTemplateFixtures";
-
-const apiClient = getPortalApiClient("admin");
+import { resolveAdminAccessContext } from "../../portals/adminAccess";
+import { createQuestionBankIdempotencyKey, createQuestionVersion, getQuestionLibrary } from "./questionBankApi";
 
 interface ArchiveLifecycleRecord {
   id: string;
@@ -18,6 +17,7 @@ interface ArchiveLifecycleRecord {
   chapter: string;
   thermalState: "hot" | "warm" | "cold";
   version: number;
+  revision: number;
   status: "active" | "archived" | "deprecated" | "used";
   usedCount: number;
   lastUsedDate: string;
@@ -39,41 +39,6 @@ interface LifecyclePolicyRow {
 
 function shouldUseLiveApi(): boolean {
   return shouldUseConfiguredLiveApi();
-}
-
-function toNonEmptyString(value: unknown, fallback = ""): string {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
-}
-
-function toNumberOrZero(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-
-  return 0;
-}
-
-function toOptionalDateString(value: unknown, fallback: string | null): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
-}
-
-function normalizeThermalState(
-  value: unknown,
-  fallback: QuestionBankRecord["thermalState"],
-): QuestionBankRecord["thermalState"] {
-  return value === "hot" || value === "warm" || value === "cold" ? value : fallback;
-}
-
-function normalizeStatus(
-  value: unknown,
-  fallback: QuestionBankRecord["status"],
-): QuestionBankRecord["status"] {
-  return value === "active" || value === "used" || value === "archived" || value === "deprecated" ? value : fallback;
 }
 
 function toArchiveBucket(thermalState: ArchiveLifecycleRecord["thermalState"]): string {
@@ -193,6 +158,7 @@ function toArchiveLifecycleRecord(
     uniqueKey: question.uniqueKey,
     usedCount: question.usedCount,
     version: question.version,
+    revision: question.revision ?? 1,
   };
 }
 
@@ -223,63 +189,22 @@ const LIFECYCLE_POLICY_ROWS: LifecyclePolicyRow[] = [
   },
 ];
 
-function normalizeQuestionRecord(value: unknown, index: number): QuestionBankRecord | null {
-  if (!value || typeof value !== "object") {
-    return null;
-  }
-
-  const record = value as Record<string, unknown>;
-  const fallback = QUESTION_BANK[index] ?? QUESTION_BANK[0];
-
-  return {
-    academicYear: toNonEmptyString(record.academicYear, fallback?.academicYear ?? "unassigned"),
-    additionalTag: toNonEmptyString(record.additionalTag, fallback?.additionalTag ?? "none"),
-    chapter: toNonEmptyString(record.chapter, fallback?.chapter ?? `Chapter ${index + 1}`),
-    difficulty:
-      record.difficulty === "easy" || record.difficulty === "medium" || record.difficulty === "hard" ?
-        record.difficulty :
-        (fallback?.difficulty ?? "medium"),
-    examType: toNonEmptyString(record.examType, fallback?.examType ?? "General"),
-    id: toNonEmptyString(record.id, fallback?.id ?? `q-${index + 1}`),
-    lastUsedDate: toOptionalDateString(record.lastUsedDate, fallback?.lastUsedDate ?? null),
-    marks: Math.max(0, toNumberOrZero(record.marks ?? fallback?.marks ?? 0)),
-    negativeMarks: Math.max(0, toNumberOrZero(record.negativeMarks ?? fallback?.negativeMarks ?? 0)),
-    primaryTag: toNonEmptyString(record.primaryTag, fallback?.primaryTag ?? "untagged"),
-    prompt: toNonEmptyString(record.prompt, fallback?.prompt ?? ""),
-    questionType: toNonEmptyString(record.questionType, fallback?.questionType ?? "Question"),
-    secondaryTag: toNonEmptyString(record.secondaryTag, fallback?.secondaryTag ?? "none"),
-    simulationLink: toNonEmptyString(record.simulationLink, fallback?.simulationLink ?? ""),
-    solutionImageFile: toNonEmptyString(record.solutionImageFile, fallback?.solutionImageFile ?? ""),
-    status: normalizeStatus(record.status, fallback?.status ?? "active"),
-    subject: toNonEmptyString(record.subject, fallback?.subject ?? "General"),
-    thermalState: normalizeThermalState(record.thermalState, fallback?.thermalState ?? "warm"),
-    topic: toNonEmptyString(record.topic, fallback?.topic ?? ""),
-    uniqueKey: toNonEmptyString(record.uniqueKey, fallback?.uniqueKey ?? `Q-${index + 1}`),
-    tutorialVideoLink: toNonEmptyString(record.tutorialVideoLink, fallback?.tutorialVideoLink ?? ""),
-    internalNotes: toNonEmptyString(record.internalNotes, fallback?.internalNotes ?? ""),
-    usedCount: Math.max(0, toNumberOrZero(record.usedCount ?? fallback?.usedCount ?? 0)),
-    version: Math.max(1, toNumberOrZero(record.version ?? fallback?.version ?? 1)),
-  };
-}
-
 async function fetchArchiveLifecycleFromApi(): Promise<ArchiveLifecycleRecord[]> {
-  const payload = await apiClient.get<unknown>("/admin/questions/library", {
-    query: {
-      limit: "250",
-    },
-  });
-  return adaptAdminQuestionLibraryResult(payload).questions
-    .map((entry, index) => normalizeQuestionRecord(entry, index))
-    .filter((entry): entry is QuestionBankRecord => Boolean(entry))
+  return (await getQuestionLibrary({ limit: "100" })).questions
     .map(toArchiveLifecycleRecord);
 }
 
 function AdminQuestionBankArchiveVersionsPage() {
-  const [records, setRecords] = useState<ArchiveLifecycleRecord[]>(ARCHIVE_LIFECYCLE_FIXTURES);
+  const { session } = useAuthProvider();
+  const role = resolveAdminAccessContext(session).role;
+  const canManage = shouldUseLiveApi() && (role === "teacher" || role === "admin");
+  const [records, setRecords] = useState<ArchiveLifecycleRecord[]>(() =>
+    shouldUseLiveApi() ? [] : ARCHIVE_LIFECYCLE_FIXTURES);
   const [inlineMessage, setInlineMessage] = useState(
     "Archive / Versions now has its own mounted workspace for HOT/WARM/COLD lifecycle review and version-safe controls.",
   );
   const [isLoading, setIsLoading] = useState(false);
+  const [pendingQuestionId, setPendingQuestionId] = useState<string | null>(null);
 
   useEffect(() => {
     let isActive = true;
@@ -335,7 +260,7 @@ function AdminQuestionBankArchiveVersionsPage() {
     [records],
   );
 
-  function createSuccessorVersion(questionId: string) {
+  async function createSuccessorVersion(questionId: string) {
     const target = records.find((record) => record.id === questionId);
     if (!target) {
       return;
@@ -346,31 +271,28 @@ function AdminQuestionBankArchiveVersionsPage() {
       return;
     }
 
-    const nextVersion = target.version + 1;
-    const successor: ArchiveLifecycleRecord = {
-      ...target,
-      id: `${target.id}-v${nextVersion}`,
-      uniqueKey: `${target.uniqueKey}-v${nextVersion}`,
-      version: nextVersion,
-      usedCount: 0,
-      status: "active",
-      thermalState: "warm",
-      lastUsedDate: "Pending use",
-      archiveBucket: toArchiveBucket("warm"),
-      lifecycleRule: toLifecycleRule("warm"),
-      metadataTreatment: toMetadataTreatment("warm"),
-      mediaTreatment: toMediaTreatment("warm"),
-      transitionReadiness: "New successor: available for future templates only.",
-      nextOperatorAction: "Use in future templates after review.",
-    };
-
-    setRecords((current) => [
-      successor,
-      ...current.map((record) => (
-        record.id === target.id ? { ...record, status: "deprecated" as const } : record
-      )),
-    ]);
-    setInlineMessage(`Created successor version v${nextVersion} for ${target.id}. Previous version remains deprecated for audit-safe history.`);
+    if (!canManage || pendingQuestionId) {
+      setInlineMessage("Version creation requires a live teacher or admin session.");
+      return;
+    }
+    setPendingQuestionId(target.id);
+    try {
+      const result = await createQuestionVersion(target.id, {
+        expectedRevision: target.revision,
+        idempotencyKey: createQuestionBankIdempotencyKey("archive-version"),
+      });
+      const nextRecords = await fetchArchiveLifecycleFromApi();
+      if (!nextRecords.some((record) => record.id === result.successorQuestionId &&
+        record.revision === result.successorRevision)) {
+        throw new Error("Version created, but authoritative reload did not return its successor.");
+      }
+      setRecords(nextRecords);
+      setInlineMessage(`Created and reloaded successor ${result.successorQuestionId}.`);
+    } catch (error) {
+      setInlineMessage(error instanceof Error ? error.message : "Question version creation failed.");
+    } finally {
+      setPendingQuestionId(null);
+    }
   }
 
   const versionColumns: UiTableColumn<ArchiveLifecycleRecord>[] = [
@@ -430,7 +352,7 @@ function AdminQuestionBankArchiveVersionsPage() {
       className: "admin-tests-actions-col",
       render: (record) => (
         <div className="admin-tests-row-actions">
-          <button type="button" onClick={() => createSuccessorVersion(record.id)}>
+          <button type="button" onClick={() => void createSuccessorVersion(record.id)} disabled={!canManage || Boolean(pendingQuestionId) || record.usedCount === 0}>
             Create Version
           </button>
           <button

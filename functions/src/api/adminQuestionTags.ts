@@ -1,3 +1,4 @@
+/* eslint-disable require-jsdoc */
 import * as functions from "firebase-functions";
 import {DecodedIdToken} from "firebase-admin/auth";
 import {sendErrorResponse} from "../services/apiResponse";
@@ -13,11 +14,13 @@ import {ADMIN_TEACHER_ROLES} from "../policy/adminRolePolicy";
 import {createTenantGuardMiddleware} from "../middleware/tenant";
 import {adminQuestionTagsService} from "../services/adminQuestionTags";
 import {
-  AdminQuestionTagsMutationRequest,
-  AdminQuestionTagsReadRequest,
-  AdminQuestionTagsSuccessResponse,
-  AdminQuestionTagsValidationError,
-} from "../types/adminQuestionTags";
+  AdminQuestionBankValidationError,
+  AdminQuestionTagMutationResult,
+  AdminQuestionTagMutationValidatedRequest,
+  AdminQuestionTagReadValidatedRequest,
+  AdminQuestionTagsResult,
+} from "../types/adminQuestionBank";
+import {StandardApiSuccessResponse} from "../types/apiResponse";
 import {MiddlewareRejectionError, MiddlewareRequest} from "../types/middleware";
 
 interface AdminQuestionTagsDependencies {
@@ -26,12 +29,14 @@ interface AdminQuestionTagsDependencies {
   verifyIdToken: (idToken: string) => Promise<DecodedIdToken>;
 }
 
+type TagResponse = AdminQuestionTagsResult | AdminQuestionTagMutationResult;
+
 const buildSuccessResponse = (
-  result: Awaited<ReturnType<typeof adminQuestionTagsService.getTags>>,
+  result: TagResponse,
   message: string,
   requestId: string,
   timestamp: string,
-): AdminQuestionTagsSuccessResponse => ({
+): StandardApiSuccessResponse<TagResponse> => ({
   code: "OK",
   data: result,
   message,
@@ -49,32 +54,26 @@ export const createAdminQuestionTagsHandler = (
   ): Promise<void> => {
     if (request.method === "GET") {
       const validatedRequest = request.context
-        .requestData as unknown as AdminQuestionTagsReadRequest;
+        .requestData as unknown as AdminQuestionTagReadValidatedRequest;
       const result = await dependencies.getTags(validatedRequest);
-
-      response.status(200).json(
-        buildSuccessResponse(
-          result,
-          "Question tags loaded.",
-          request.context.requestId,
-          new Date().toISOString(),
-        ),
-      );
+      response.status(200).json(buildSuccessResponse(
+        result,
+        "Question tags loaded.",
+        request.context.requestId,
+        new Date().toISOString(),
+      ));
       return;
     }
 
     const validatedRequest = request.context
-      .requestData as unknown as AdminQuestionTagsMutationRequest;
+      .requestData as unknown as AdminQuestionTagMutationValidatedRequest;
     const result = await dependencies.mutateTags(validatedRequest);
-
-    response.status(200).json(
-      buildSuccessResponse(
-        result,
-        `Question tag ${validatedRequest.actionType} completed.`,
-        request.context.requestId,
-        new Date().toISOString(),
-      ),
-    );
+    response.status(200).json(buildSuccessResponse(
+      result,
+      `Question tag ${validatedRequest.mutation.action} completed.`,
+      request.context.requestId,
+      new Date().toISOString(),
+    ));
   },
   middlewares: [
     async (request, _response, next): Promise<void> => {
@@ -84,7 +83,6 @@ export const createAdminQuestionTagsHandler = (
           "Method not allowed. Use GET or POST.",
         );
       }
-
       await next();
     },
     createAuthenticationMiddleware(dependencies),
@@ -101,27 +99,28 @@ export const createAdminQuestionTagsHandler = (
     createRequestValidationMiddleware({
       validator: (request: MiddlewareRequest): void => {
         const identity = request.context.identity;
-        const requestData =
-          request.method === "GET" ?
-            adminQuestionTagsService.normalizeReadRequest({
-              instituteId: identity?.instituteId,
-            }) :
-            adminQuestionTagsService.normalizeMutationRequest({
-              actionType: request.body?.actionType,
-              instituteId: identity?.instituteId,
-              primaryTag: request.body?.primaryTag,
-              secondaryTag: request.body?.secondaryTag,
-            });
-
-        setRequestData(
-          request,
-          requestData as unknown as Record<string, unknown>,
-        );
+        const context = {
+          actorId: identity?.uid,
+          actorRole: identity?.role,
+          instituteId: identity?.instituteId,
+          ipAddress: request.ip,
+          userAgent: request.get("user-agent"),
+        };
+        const requestData = request.method === "GET" ?
+          adminQuestionTagsService.normalizeReadRequest({
+            ...context,
+            field: request.query?.field,
+          }) :
+          adminQuestionTagsService.normalizeMutationRequest({
+            ...context,
+            body: request.body,
+          });
+        setRequestData(request, requestData as unknown as Record<string, unknown>);
       },
     }),
   ],
   onError: (error, context): boolean => {
-    if (error instanceof AdminQuestionTagsValidationError) {
+    if (error instanceof AdminQuestionBankValidationError) {
       context.logger.warn("Question tag governance request rejected.", {
         code: error.code,
         error,
@@ -134,22 +133,16 @@ export const createAdminQuestionTagsHandler = (
       );
       return true;
     }
-
     return false;
   },
   service: "AdminQuestionTagsApi",
 });
 
-export const handleAdminQuestionTagsRequest =
-  createAdminQuestionTagsHandler({
-    getTags: adminQuestionTagsService.getTags.bind(
-      adminQuestionTagsService,
-    ),
-    mutateTags: adminQuestionTagsService.mutateTags.bind(
-      adminQuestionTagsService,
-    ),
-    verifyIdToken: (idToken: string) =>
-      getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
-  });
+export const handleAdminQuestionTagsRequest = createAdminQuestionTagsHandler({
+  getTags: adminQuestionTagsService.getTags.bind(adminQuestionTagsService),
+  mutateTags: adminQuestionTagsService.mutateTags.bind(adminQuestionTagsService),
+  verifyIdToken: (idToken: string) =>
+    getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
+});
 
 export {buildSuccessResponse};

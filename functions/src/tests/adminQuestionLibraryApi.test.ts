@@ -44,6 +44,8 @@ test("admin question library handler accepts read requests", async () => {
       assert.equal(request.limit, 12);
 
       return {
+        currentAcademicYear: "2026-27",
+        nextCursor: null,
         questions: [
           {
             academicYear: "2026-27",
@@ -54,10 +56,13 @@ test("admin question library handler accepts read requests", async () => {
             examType: "JEEMains",
             id: "q-101",
             internalNotes: "Review after next mock test.",
+            createdAt: "2026-05-10T00:00:00.000Z",
+            lastUsedAcademicYear: "2026-27",
             lastUsedDate: "2026-05-10",
             marks: 4,
             negativeMarks: 1,
             primaryTag: "motion",
+            parentQuestionId: null,
             prompt: "Physics Kinematics MCQ",
             questionImageFile:
               "inst_build_m5_api/questions/q-101/v2/question.png",
@@ -66,6 +71,7 @@ test("admin question library handler accepts read requests", async () => {
               "q-101/v2/question.png" +
               "?Expires=1&KeyName=test-key&Signature=test-signature",
             questionType: "MCQ",
+            revision: 2,
             secondaryTag: "basics",
             simulationLink: "https://sim.example.com/motion",
             solutionImageFile:
@@ -79,12 +85,17 @@ test("admin question library handler accepts read requests", async () => {
             thermalState: "hot",
             topic: "Uniform acceleration",
             uniqueKey: "PH-KIN-001",
+            updatedAt: "2026-05-10T00:00:00.000Z",
             tutorialVideoLink: "https://learning.example.com/motion",
             usedCount: 3,
+            usedInTemplate: true,
             version: 2,
           },
         ],
       };
+    },
+    getQuestionDetail: async () => {
+      throw new Error("getQuestionDetail should not be called");
     },
     verifyIdToken: async () => createAdminToken() as never,
   });
@@ -112,6 +123,9 @@ test("admin question library handler accepts read requests", async () => {
 
 test("admin question library handler rejects disallowed roles", async () => {
   const handler = createAdminQuestionLibraryHandler({
+    getQuestionDetail: async () => {
+      throw new Error("getQuestionDetail should not be called");
+    },
     getLibrary: async () => {
       throw new Error("getLibrary should not be called");
     },
@@ -140,6 +154,9 @@ test("admin question library handler rejects disallowed roles", async () => {
 
 test("admin question library handler maps validation errors", async () => {
   const handler = createAdminQuestionLibraryHandler({
+    getQuestionDetail: async () => {
+      throw new Error("getQuestionDetail should not be called");
+    },
     getLibrary: async () => {
       throw new AdminQuestionLibraryValidationError(
         "VALIDATION_ERROR",
@@ -168,6 +185,34 @@ test("admin question library handler maps validation errors", async () => {
   assertStructuredError(
     response.body,
     "VALIDATION_ERROR",
-    "Field \"limit\" must be a positive integer.",
+    "Field \"limit\" must be an integer between 1 and 100.",
   );
+});
+
+test("admin question library handler dispatches authoritative detail", async () => {
+  const handler = createAdminQuestionLibraryHandler({
+    getLibrary: async () => {
+      throw new Error("getLibrary should not be called");
+    },
+    getQuestionDetail: async (request) => {
+      assert.equal(request.instituteId, "inst_build_m5_api");
+      assert.equal(request.questionId, "q-101");
+      return {
+        analytics: null,
+        question: {} as never,
+        templateUsage: [],
+        versions: [],
+      };
+    },
+    verifyIdToken: async () => createAdminToken() as never,
+  });
+  const response = createMockResponse();
+  await handler(createMockRequest({
+    headers: {authorization: "Bearer build_m5_detail"},
+    method: "GET",
+    params: {questionId: "q-101"},
+    path: "/admin/questions/library/q-101",
+  }) as never, response as never);
+  assert.equal(response.statusCode, 200);
+  assert.equal((response.body as {data: {analytics: null}}).data.analytics, null);
 });

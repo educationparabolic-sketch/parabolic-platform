@@ -33,7 +33,7 @@ test("backend CI aggregates every emulator-backed Functions suite", async () => 
     (file) => file.endsWith(".emulator.test.js"),
   ).length;
 
-  assert.equal(firestoreSuiteCount, 67);
+  assert.equal(firestoreSuiteCount, 71);
   assert.equal(explicitSuiteCount, 10);
   assert.equal(
     rootPackage.scripts["test:emulators:ci"],
@@ -51,6 +51,8 @@ test("backend CI aggregates every emulator-backed Functions suite", async () => 
   assert.match(outerRunner, /FUNCTIONS_EMULATOR_HOST:/u);
   assert.match(outerRunner, /--full-services/u);
   assert.match(outerRunner, /--firestore-only/u);
+  assert.match(outerRunner, /\["firestore", "storage"\]/u);
+  assert.match(outerRunner, /QUESTION_ASSETS_BUCKET:/u);
   assert.match(innerRunner, /--test-concurrency=1/u);
   assert.match(innerRunner, /selectedSuites\.map\(\(suite\) => \[suite\]\)/u);
   assert.match(innerRunner, /firstFailedResult \?\? result/u);

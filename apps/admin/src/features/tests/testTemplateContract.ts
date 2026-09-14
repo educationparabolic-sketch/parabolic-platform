@@ -43,6 +43,12 @@ export interface QuestionBankRecord {
   version: number;
   thermalState: "hot" | "warm" | "cold";
   status: "active" | "used" | "archived" | "deprecated";
+  revision?: number;
+  usedInTemplate?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  parentQuestionId?: string | null;
+  lastUsedAcademicYear?: string | null;
 }
 
 export async function deriveCanonicalTemplateId(questionIds: string[]): Promise<string> {

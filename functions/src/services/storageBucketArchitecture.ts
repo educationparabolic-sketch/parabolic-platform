@@ -16,7 +16,8 @@ import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
 
 const QUESTION_ASSET_OBJECT_PATH_PATTERN = new RegExp(
   "^[^/]+/questions/[^/]+/v[1-9]\\d*/" +
-  "(?:question|solution)\\.(?:png|webp|pdf)$",
+  "(?:question(?:-r[1-9]\\d*)?\\.(?:png|webp)|" +
+  "solution(?:-r[1-9]\\d*)?\\.(?:png|webp|pdf))$",
 );
 
 const REPORT_OBJECT_PATH_PATTERN =
@@ -31,8 +32,11 @@ const CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
 
 const STORAGE_BUCKET_DIRECTORY_TEMPLATES: Record<AssetBucketKey, string> = {
   questionAssets:
-    "/{instituteId}/questions/{questionId}/v{version}/question.png|" +
-    "solution.png|solution.pdf",
+    "/{instituteId}/questions/{questionId}/v{version}/" +
+    "question.png|question.webp|question-r{revision}.png|" +
+    "question-r{revision}.webp|solution.png|solution.webp|solution.pdf|" +
+    "solution-r{revision}.png|solution-r{revision}.webp|" +
+    "solution-r{revision}.pdf",
   reports: "/{instituteId}/reports/{year}/{month}/{fileName}",
 };
 

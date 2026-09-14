@@ -65,6 +65,7 @@ export interface ResolveQuestionAssetPathRequest {
   extension?: QuestionAssetExtension;
   instituteId: string;
   questionId: string;
+  revision?: number;
   version: number;
 }
 

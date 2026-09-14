@@ -184,9 +184,10 @@ if (fullServicesResult.status !== 0) {
 }
 
 const firestoreResult = await runEmulatorPhase(
-  "Firestore-backed Functions integration suites",
-  ["firestore"],
+  "Firestore/Storage-backed Functions integration suites",
+  ["firestore", "storage"],
   "node scripts/firebase-emulator-integration-suite.mjs --firestore-only",
+  {QUESTION_ASSETS_BUCKET: `${projectId}.appspot.com`},
 );
 if (firestoreResult.status !== 0) {
   process.exit(firestoreResult.status ?? 1);

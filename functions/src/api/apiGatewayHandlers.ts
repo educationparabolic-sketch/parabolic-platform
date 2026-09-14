@@ -9,12 +9,13 @@ import {
 import {handleAdminInterventionsRequest} from "./adminInterventions";
 import {handleAdminLicensingRequest} from "./adminLicensing";
 import {handleAdminOverviewRequest} from "./adminOverview";
-import {handleAdminQuestionAssetsRequest} from "./adminQuestionAssets";
 import {
   handleAdminQuestionDistributionRequest,
 } from "./adminQuestionDistribution";
 import {handleAdminQuestionLibraryRequest} from "./adminQuestionLibrary";
-import {handleAdminQuestionsBulkRequest} from "./adminQuestionsBulk";
+import {handleAdminQuestionMutationsRequest} from "./adminQuestionMutations";
+import {handleAdminQuestionPackagesRequest} from "./adminQuestionPackages";
+import {handleAdminQuestionTagsRequest} from "./adminQuestionTags";
 import {
   handleAdminQuestionUploadLogsRequest,
 } from "./adminQuestionUploadLogs";
@@ -66,10 +67,11 @@ Record<string, ApiGatewayHandler>
   adminInterventions: handleAdminInterventionsRequest,
   adminLicensing: handleAdminLicensingRequest,
   adminOverview: handleAdminOverviewRequest,
-  adminQuestionAssets: handleAdminQuestionAssetsRequest,
   adminQuestionDistribution: handleAdminQuestionDistributionRequest,
   adminQuestionLibrary: handleAdminQuestionLibraryRequest,
-  adminQuestionsBulk: handleAdminQuestionsBulkRequest,
+  adminQuestionMutations: handleAdminQuestionMutationsRequest,
+  adminQuestionPackages: handleAdminQuestionPackagesRequest,
+  adminQuestionTags: handleAdminQuestionTagsRequest,
   adminQuestionUploadLogs: handleAdminQuestionUploadLogsRequest,
   adminRuns: handleAdminRunsRequest,
   adminSettings: handleAdminSettingsRequest,

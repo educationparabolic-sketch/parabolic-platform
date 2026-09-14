@@ -2,6 +2,8 @@
 
 This document defines the event-driven topology of the platform.
 
+Last reconciled: 2026-09-14 (`BWM-027` Question Bank lifecycle closeout)
+
 Each event represents a state transition or trigger that initiates downstream processing.
 
 AI agents must consult this map before creating new triggers.
@@ -75,6 +77,52 @@ and its import audit, after which Firebase Auth/session state is reconciled.
 Exact retries resume reconciliation from the immutable result without emitting
 another queue job, Student version, audit, or usage event.
 
+BWM-027 question metadata, structure, successor-version, and lifecycle writes
+are synchronous transactional commands, not new events or triggers. Each
+question change and deterministic immutable audit commits together. Existing
+template assignment authority (`status: assigned` or `totalRuns > 0`) is read
+through a bounded usage guard; successor creation writes the old/new lineage in
+that same transaction. A question write also reconciles its stored distribution
+contribution; a newly created successor therefore reaches both search indexing
+and distribution projection without changing mutation authority.
+Managed metadata/structure replacement uploads are part of the same command
+boundary: create-only revisioned Storage objects are bound by the Firestore
+mutation, and a rejected mutation compensates the new object or records
+recoverable cleanup. No separate asset-success event authorizes the question.
+
+BWM-027 package validation and commit are likewise synchronous commands. A
+bounded valid ZIP is staged under deterministic content/package authority;
+commit creates and verifies canonical versioned assets before one Firestore
+transaction writes every question, the package result, upload-log transition,
+and immutable `IMPORT_QUESTION_PACKAGE` audit. Storage cleanup is represented
+by explicit recoverable package state and must finish before `committed` is
+reported. Newly imported questions reach the existing search indexer and the
+idempotent distribution reconciler; package-state transitions emit no separate
+domain event.
+
+ADM-39 rollback is also synchronous. Its Firestore transaction removes only
+still-current create-only package questions, writes one immutable rollback
+audit, and advances package/log cleanup authority. Canonical asset deletion is
+then completed or left explicitly recoverable for exact retry; only completed
+cleanup reports `rolled_back`. It emits no new domain event.
+
+BWM-027 tag create, rename, merge, and deprecate are synchronous ADM-36
+commands, not triggers. One expected-dictionary-revision transaction writes the
+bounded question/tag-governance changes and deterministic immutable
+`MUTATE_QUESTION_TAGS` audit. Those question writes may invoke the distribution
+reconciler, whose contribution hash makes tag-only changes no-ops, and do not
+compete with the `questionBank onCreate` search-index topology.
+
+BWM-027 adds three projection-only triggers. `questionBank` and
+`questionAnalytics` writes reconcile one question into deterministic all/exam
+distribution summaries, chapter accumulators, and field-scoped tag counts using
+prior-contribution items. `tests` writes reconcile assigned question IDs/run
+counts and ready/assigned active references into question usage fields through
+a per-template item; unchanged retries are no-ops.
+Assignment creation stamps the template's last-used time and academic year in
+its existing transaction. These projections do not authorize a command, create
+an audit, or replace the owning question/template/analytics documents.
+
 ---
 
 # FIRESTORE TRIGGERS
@@ -82,6 +130,9 @@ another queue job, Student version, audit, or usage event.
 Trigger | Event | Purpose
 ---|---|---
 questionBank onCreate | QuestionCreated | Generate search tokens
+questionBank onWrite | QuestionReadProjectionsReconciled | Replace one question's contribution in all/exam/chapter distribution and field-scoped tag projections
+questionAnalytics onWrite | QuestionDistributionReconciled | Replace the matching question's analytics contribution without a Question Bank scan
+tests onWrite | QuestionUsageReconciled | Apply template usage/active-reference deltas exactly once and maintain last-used year/time authority
 students onWrite | UsageUpdated | Update active student count
 sessions onUpdate | SessionSubmitted | Launch the idempotent pipeline only for the real submitted-state transition; persist deterministic per-session markers and processing/available result authority
 

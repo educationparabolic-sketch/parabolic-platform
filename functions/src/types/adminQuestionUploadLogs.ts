@@ -1,4 +1,7 @@
 import {StandardApiErrorCode} from "./apiResponse";
+import type {
+  AdminQuestionUploadLogDetailResult,
+} from "../../../shared/contracts/apiDtos";
 
 export interface AdminQuestionUploadLogRecord {
   created: number;
@@ -20,9 +23,23 @@ export interface AdminQuestionUploadLogsValidatedRequest {
   limit: number;
 }
 
+export interface AdminQuestionUploadLogDetailValidatedRequest {
+  instituteId: string;
+  uploadLogId: string;
+}
+
 export interface AdminQuestionUploadLogsSuccessResponse {
   code: "OK";
   data: AdminQuestionUploadLogsResult;
+  message: string;
+  requestId: string;
+  success: true;
+  timestamp: string;
+}
+
+export interface AdminQuestionUploadLogDetailSuccessResponse {
+  code: "OK";
+  data: AdminQuestionUploadLogDetailResult;
   message: string;
   requestId: string;
   success: true;

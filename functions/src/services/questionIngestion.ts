@@ -351,6 +351,8 @@ const normalizeQuestionDocument = (
     status: normalizedQuestion.status,
     tags: normalizedTags,
     usedCount: normalizedQuestion.usedCount,
+    usedInTemplate:
+      normalizedQuestion.usedCount > 0 || normalizedQuestion.status === "used",
   };
 
   return {

@@ -916,6 +916,8 @@ export class AssignmentCreationService {
         }, {merge: true});
 
         transaction.set(testReference, {
+          lastUsedAcademicYear: yearId,
+          lastUsedAt: createdAt,
           status: "assigned",
           totalRuns: FieldValue.increment(1),
         }, {merge: true});

@@ -1,12 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { NavLink } from "react-router-dom";
-import type { AdminQuestionLibraryResult } from "../../../../../shared/contracts/apiDtos";
+import type { AdminQuestionImageAssetMutation } from "../../../../../shared/contracts/apiDtos";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
-import { adaptAdminQuestionLibraryResult } from "../../../../../shared/services/portalResponseAdapters";
+import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import {
   shouldUseLiveApi as shouldUseConfiguredLiveApi,
 } from "../../../../../shared/services/frontendEnvironment";
-import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import {
   UiForm,
   UiFormField,
@@ -21,8 +20,16 @@ import {
   type QuestionBankRecord,
 } from "./testTemplateFixtures";
 import QuestionBankWorkspaceNav from "./QuestionBankWorkspaceNav";
-
-const apiClient = getPortalApiClient("admin");
+import { resolveAdminAccessContext } from "../../portals/adminAccess";
+import {
+  createQuestionBankIdempotencyKey,
+  createQuestionVersion as createQuestionVersionWithApi,
+  fileToBase64,
+  getQuestionLibrary,
+  updateQuestionLifecycle,
+  updateQuestionMetadata,
+  updateQuestionStructure,
+} from "./questionBankApi";
 
 interface QuestionFilterDraft {
   academicYear: string;
@@ -89,91 +96,6 @@ function shouldUseLiveApi(): boolean {
   return shouldUseConfiguredLiveApi();
 }
 
-function toNonEmptyString(value: unknown, fallback = ""): string {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
-}
-
-function toNumberOrZero(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-
-  return 0;
-}
-
-function toOptionalDateString(value: unknown, fallback: string | null): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
-}
-
-function normalizeDifficulty(value: unknown, fallback: DifficultyLevel): DifficultyLevel {
-  return value === "easy" || value === "medium" || value === "hard" ? value : fallback;
-}
-
-function normalizeThermalState(
-  value: unknown,
-  fallback: QuestionBankRecord["thermalState"],
-): QuestionBankRecord["thermalState"] {
-  return value === "hot" || value === "warm" || value === "cold" ? value : fallback;
-}
-
-function normalizeStatus(
-  value: unknown,
-  fallback: QuestionBankRecord["status"],
-): QuestionBankRecord["status"] {
-  return value === "active" || value === "used" || value === "archived" || value === "deprecated" ? value : fallback;
-}
-
-function normalizeQuestionRecord(value: unknown, index: number): QuestionBankRecord | null {
-  if (!value || typeof value !== "object") {
-    return null;
-  }
-
-  const record = value as Record<string, unknown>;
-  const fallback = QUESTION_BANK[index] ?? QUESTION_BANK[0];
-
-  return {
-    academicYear: toNonEmptyString(record.academicYear, fallback?.academicYear ?? "unassigned"),
-    additionalTag: toNonEmptyString(record.additionalTag, fallback?.additionalTag ?? "none"),
-    chapter: toNonEmptyString(record.chapter, fallback?.chapter ?? `Chapter ${index + 1}`),
-    correctAnswer: toNonEmptyString(record.correctAnswer, fallback?.correctAnswer ?? ""),
-    difficulty: normalizeDifficulty(record.difficulty, fallback?.difficulty ?? "medium"),
-    examType: toNonEmptyString(record.examType, fallback?.examType ?? "General"),
-    id: toNonEmptyString(record.id, fallback?.id ?? `q-${index + 1}`),
-    lastUsedDate: toOptionalDateString(record.lastUsedDate, fallback?.lastUsedDate ?? null),
-    marks: Math.max(0, toNumberOrZero(record.marks ?? fallback?.marks ?? 0)),
-    negativeMarks: Math.max(0, toNumberOrZero(record.negativeMarks ?? fallback?.negativeMarks ?? 0)),
-    primaryTag: toNonEmptyString(record.primaryTag, fallback?.primaryTag ?? "untagged"),
-    prompt: toNonEmptyString(record.prompt, fallback?.prompt ?? ""),
-    questionImageFile: toNonEmptyString(record.questionImageFile, fallback?.questionImageFile ?? ""),
-    questionImagePreviewUrl: toNonEmptyString(
-      record.questionImagePreviewUrl,
-      fallback?.questionImagePreviewUrl ?? "",
-    ),
-    questionType: toNonEmptyString(record.questionType, fallback?.questionType ?? "Question"),
-    secondaryTag: toNonEmptyString(record.secondaryTag, fallback?.secondaryTag ?? "none"),
-    simulationLink: toNonEmptyString(record.simulationLink, fallback?.simulationLink ?? ""),
-    solutionImageFile: toNonEmptyString(record.solutionImageFile, fallback?.solutionImageFile ?? ""),
-    solutionImagePreviewUrl: toNonEmptyString(
-      record.solutionImagePreviewUrl,
-      fallback?.solutionImagePreviewUrl ?? "",
-    ),
-    status: normalizeStatus(record.status, fallback?.status ?? "active"),
-    subject: toNonEmptyString(record.subject, fallback?.subject ?? "General"),
-    thermalState: normalizeThermalState(record.thermalState, fallback?.thermalState ?? "warm"),
-    topic: toNonEmptyString(record.topic, fallback?.topic ?? ""),
-    uniqueKey: toNonEmptyString(record.uniqueKey, fallback?.uniqueKey ?? `Q-${index + 1}`),
-    tutorialVideoLink: toNonEmptyString(record.tutorialVideoLink, fallback?.tutorialVideoLink ?? ""),
-    internalNotes: toNonEmptyString(record.internalNotes, fallback?.internalNotes ?? ""),
-    usedCount: Math.max(0, toNumberOrZero(record.usedCount ?? fallback?.usedCount ?? 0)),
-    version: Math.max(1, toNumberOrZero(record.version ?? fallback?.version ?? 1)),
-  };
-}
-
 function toMetadataFieldDraft(question: QuestionBankRecord): MetadataFieldDraft {
   return {
     additionalTag: question.additionalTag,
@@ -209,19 +131,14 @@ function toStructuralFieldDraft(question: QuestionBankRecord): StructuralFieldDr
 }
 
 async function fetchLibraryFromApi(): Promise<QuestionBankRecord[]> {
-  const payload = await apiClient.get<unknown>("/admin/questions/library", {
-    query: {
-      limit: "250",
-    },
-  });
-  const response: AdminQuestionLibraryResult =
-    adaptAdminQuestionLibraryResult(payload);
-  return response.questions
-    .map((entry, index) => normalizeQuestionRecord(entry, index))
-    .filter((entry): entry is QuestionBankRecord => Boolean(entry));
+  return (await getQuestionLibrary({ limit: "100" })).questions;
 }
 
 function AdminQuestionBankLibraryPage() {
+  const { session } = useAuthProvider();
+  const accessContext = resolveAdminAccessContext(session);
+  const canManageQuestionBank = shouldUseLiveApi() &&
+    (accessContext.role === "teacher" || accessContext.role === "admin");
   const [questions, setQuestions] = useState<QuestionBankRecord[]>(QUESTION_BANK);
   const [filters, setFilters] = useState<QuestionFilterDraft>(INITIAL_FILTERS);
   const [page, setPage] = useState(1);
@@ -233,8 +150,18 @@ function AdminQuestionBankLibraryPage() {
   const [metadataDraft, setMetadataDraft] = useState<MetadataFieldDraft | null>(null);
   const [structureEditQuestionId, setStructureEditQuestionId] = useState<string | null>(null);
   const [structureDraft, setStructureDraft] = useState<StructuralFieldDraft | null>(null);
+  const [metadataSolutionImage, setMetadataSolutionImage] = useState<File | null>(null);
+  const [structureQuestionImage, setStructureQuestionImage] = useState<File | null>(null);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const idempotencyKeysRef = useRef<Record<string, string>>({});
   const metadataEditorRef = useRef<HTMLElement | null>(null);
   const structureEditorRef = useRef<HTMLElement | null>(null);
+
+  const reloadLibrary = useCallback(async (): Promise<QuestionBankRecord[]> => {
+    const nextQuestions = await fetchLibraryFromApi();
+    setQuestions(nextQuestions);
+    return nextQuestions;
+  }, []);
 
   useEffect(() => {
     let isActive = true;
@@ -247,7 +174,7 @@ function AdminQuestionBankLibraryPage() {
       }
 
       try {
-        const nextQuestions = await fetchLibraryFromApi();
+        const nextQuestions = await reloadLibrary();
         if (!isActive) {
           return;
         }
@@ -274,7 +201,7 @@ function AdminQuestionBankLibraryPage() {
     return () => {
       isActive = false;
     };
-  }, []);
+  }, [reloadLibrary]);
 
   const subjects = useMemo(() => ["all", ...new Set(questions.map((question) => question.subject))], [questions]);
   const examTypes = useMemo(() => ["all", ...new Set(questions.map((question) => question.examType))], [questions]);
@@ -395,6 +322,7 @@ function AdminQuestionBankLibraryPage() {
     setStructureDraft(null);
     setMetadataEditQuestionId(question.id);
     setMetadataDraft(toMetadataFieldDraft(question));
+    setMetadataSolutionImage(null);
     setInlineMessage("Update tags, notes, links, topic, and the solution image for future use here.");
     setErrorMessage(null);
   }
@@ -411,6 +339,7 @@ function AdminQuestionBankLibraryPage() {
     setMetadataDraft(null);
     setStructureEditQuestionId(question.id);
     setStructureDraft(toStructuralFieldDraft(question));
+    setStructureQuestionImage(null);
     setInlineMessage("This question is still open, so you can edit the full structure here.");
     setErrorMessage(null);
   }
@@ -429,6 +358,11 @@ function AdminQuestionBankLibraryPage() {
       return;
     }
 
+    if (file.type !== "image/png" && file.type !== "image/webp") {
+      setErrorMessage("Choose a PNG or WebP image. JPEG assets are not accepted by the managed boundary.");
+      return;
+    }
+    setMetadataSolutionImage(file);
     updateMetadataDraft("solutionImageFile", file.name);
     setInlineMessage(`Selected updated solution image: ${file.name}. Save the metadata changes to keep it.`);
     setErrorMessage(null);
@@ -443,36 +377,77 @@ function AdminQuestionBankLibraryPage() {
       return;
     }
 
+    if (file.type !== "image/png" && file.type !== "image/webp") {
+      setErrorMessage("Choose a PNG or WebP image. JPEG assets are not accepted by the managed boundary.");
+      return;
+    }
+    if (field === "questionImageFile") {
+      setStructureQuestionImage(file);
+    } else {
+      setErrorMessage("Replace solution images from Metadata so the managed mutation remains explicit.");
+      return;
+    }
     updateStructureDraft(field, file.name);
     setInlineMessage(`Selected ${field === "questionImageFile" ? "question" : "solution"} image: ${file.name}. Save the structure changes to keep it.`);
     setErrorMessage(null);
   }
 
-  function saveMetadataEdits(event: FormEvent<HTMLFormElement>) {
+  async function saveMetadataEdits(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!metadataEditQuestionId || !metadataDraft) {
       return;
     }
 
-    setQuestions((current) =>
-      current.map((question) =>
-        question.id === metadataEditQuestionId ?
-          {
-            ...question,
-            additionalTag: metadataDraft.additionalTag.trim() || "none",
-            internalNotes: metadataDraft.internalNotes.trim(),
-            primaryTag: metadataDraft.primaryTag.trim() || "untagged",
-            secondaryTag: metadataDraft.secondaryTag.trim() || "none",
-            simulationLink: metadataDraft.simulationLink.trim(),
-            solutionImageFile: metadataDraft.solutionImageFile.trim(),
-            topic: metadataDraft.topic.trim(),
-            tutorialVideoLink: metadataDraft.tutorialVideoLink.trim(),
-          } :
-          question,
-      ),
-    );
-    setInlineMessage(`Metadata saved for ${metadataEditQuestionId}. Future views will use the updated information.`);
+    const target = questions.find((question) => question.id === metadataEditQuestionId);
+    if (!target || !canManageQuestionBank || pendingAction) {
+      setErrorMessage("Question mutations require a live teacher or admin session.");
+      return;
+    }
+    if (!metadataSolutionImage && metadataDraft.solutionImageFile.trim() !== (target.solutionImageFile ?? "")) {
+      setErrorMessage("Choose a managed PNG/WebP file, retain the current asset, or clear the filename to remove it.");
+      return;
+    }
+    const actionKey = `metadata:${target.id}:${target.revision ?? 1}`;
+    const idempotencyKey = idempotencyKeysRef.current[actionKey] ?? createQuestionBankIdempotencyKey("question-metadata");
+    idempotencyKeysRef.current[actionKey] = idempotencyKey;
+    setPendingAction(actionKey);
     setErrorMessage(null);
+    try {
+      let solutionImage: AdminQuestionImageAssetMutation = { action: "retain" };
+      if (metadataSolutionImage) {
+        solutionImage = {
+          action: "replace",
+          contentBase64: await fileToBase64(metadataSolutionImage),
+          extension: metadataSolutionImage.type === "image/webp" ? "webp" : "png",
+        };
+      } else if (!metadataDraft.solutionImageFile.trim() && target.solutionImageFile) {
+        solutionImage = { action: "remove" };
+      }
+      const result = await updateQuestionMetadata(target.id, {
+        additionalTag: metadataDraft.additionalTag.trim() || null,
+        expectedRevision: target.revision ?? 1,
+        idempotencyKey,
+        internalNotes: metadataDraft.internalNotes.trim() || null,
+        primaryTag: metadataDraft.primaryTag.trim() || null,
+        secondaryTag: metadataDraft.secondaryTag.trim() || null,
+        simulationLink: metadataDraft.simulationLink.trim() || null,
+        solutionImage,
+        topic: metadataDraft.topic.trim() || null,
+        tutorialVideoLink: metadataDraft.tutorialVideoLink.trim() || null,
+      });
+      const reloaded = await reloadLibrary();
+      if (reloaded.find((question) => question.id === target.id)?.revision !== result.revision) {
+        throw new Error("Metadata saved, but authoritative reload did not reconcile its revision.");
+      }
+      delete idempotencyKeysRef.current[actionKey];
+      setMetadataSolutionImage(null);
+      setMetadataDraft(toMetadataFieldDraft(reloaded.find((question) => question.id === target.id) ?? target));
+      setInlineMessage(`Metadata saved and reloaded for ${target.id}.`);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Question metadata update failed.");
+    } finally {
+      setPendingAction(null);
+    }
   }
 
   function closeMetadataEditor() {
@@ -481,39 +456,65 @@ function AdminQuestionBankLibraryPage() {
     setInlineMessage("Question library is ready.");
   }
 
-  function saveStructureEdits(event: FormEvent<HTMLFormElement>) {
+  async function saveStructureEdits(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!structureEditQuestionId || !structureDraft) {
       return;
     }
 
-    setQuestions((current) =>
-      current.map((question) =>
-        question.id === structureEditQuestionId ?
-          {
-            ...question,
-            academicYear: structureDraft.academicYear.trim() || question.academicYear,
-            additionalTag: structureDraft.additionalTag.trim() || "none",
-            chapter: structureDraft.chapter.trim() || question.chapter,
-            correctAnswer: structureDraft.correctAnswer.trim().toUpperCase(),
-            difficulty: structureDraft.difficulty,
-            examType: structureDraft.examType.trim() || question.examType,
-            marks: Math.max(0, Number(structureDraft.marks) || 0),
-            negativeMarks: Math.max(0, Number(structureDraft.negativeMarks) || 0),
-            primaryTag: structureDraft.primaryTag.trim() || "untagged",
-            questionImageFile: structureDraft.questionImageFile.trim(),
-            questionType: structureDraft.questionType.trim() || question.questionType,
-            secondaryTag: structureDraft.secondaryTag.trim() || "none",
-            solutionImageFile: structureDraft.solutionImageFile.trim(),
-            subject: structureDraft.subject.trim() || question.subject,
-            topic: structureDraft.topic.trim(),
-            uniqueKey: structureDraft.uniqueKey.trim() || question.uniqueKey,
-          } :
-          question,
-      ),
-    );
-    setInlineMessage(`Structure saved for ${structureEditQuestionId}. This question is still open because it has not been used in assigned runs yet.`);
+    const target = questions.find((question) => question.id === structureEditQuestionId);
+    if (!target || !canManageQuestionBank || pendingAction) {
+      setErrorMessage("Question mutations require a live teacher or admin session.");
+      return;
+    }
+    if (!structureQuestionImage && structureDraft.questionImageFile.trim() !== (target.questionImageFile ?? "")) {
+      setErrorMessage("Choose a managed PNG/WebP file, retain the current question image, or clear it to remove it.");
+      return;
+    }
+    const actionKey = `structure:${target.id}:${target.revision ?? 1}`;
+    const idempotencyKey = idempotencyKeysRef.current[actionKey] ?? createQuestionBankIdempotencyKey("question-structure");
+    idempotencyKeysRef.current[actionKey] = idempotencyKey;
+    setPendingAction(actionKey);
     setErrorMessage(null);
+    try {
+      let questionImage: AdminQuestionImageAssetMutation = { action: "retain" };
+      if (structureQuestionImage) {
+        questionImage = {
+          action: "replace",
+          contentBase64: await fileToBase64(structureQuestionImage),
+          extension: structureQuestionImage.type === "image/webp" ? "webp" : "png",
+        };
+      } else if (!structureDraft.questionImageFile.trim() && target.questionImageFile) {
+        questionImage = { action: "remove" };
+      }
+      const result = await updateQuestionStructure(target.id, {
+        academicYear: structureDraft.academicYear.trim() || null,
+        chapter: structureDraft.chapter.trim(),
+        correctAnswer: structureDraft.correctAnswer.trim(),
+        difficulty: structureDraft.difficulty === "easy" ? "Easy" : structureDraft.difficulty === "hard" ? "Hard" : "Medium",
+        examType: structureDraft.examType.trim(),
+        expectedRevision: target.revision ?? 1,
+        idempotencyKey,
+        marks: Number(structureDraft.marks),
+        negativeMarks: Number(structureDraft.negativeMarks),
+        questionImage,
+        questionType: structureDraft.questionType.trim(),
+        subject: structureDraft.subject.trim(),
+        uniqueKey: structureDraft.uniqueKey.trim(),
+      });
+      const reloaded = await reloadLibrary();
+      if (reloaded.find((question) => question.id === target.id)?.revision !== result.revision) {
+        throw new Error("Structure saved, but authoritative reload did not reconcile its revision.");
+      }
+      delete idempotencyKeysRef.current[actionKey];
+      setStructureQuestionImage(null);
+      setStructureDraft(toStructuralFieldDraft(reloaded.find((question) => question.id === target.id) ?? target));
+      setInlineMessage(`Structure saved and reloaded for ${target.id}.`);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Question structure update failed.");
+    } finally {
+      setPendingAction(null);
+    }
   }
 
   function closeStructureEditor() {
@@ -522,7 +523,7 @@ function AdminQuestionBankLibraryPage() {
     setInlineMessage("Question library is ready.");
   }
 
-  function createQuestionVersion(questionId: string) {
+  async function createQuestionVersion(questionId: string) {
     const target = questions.find((question) => question.id === questionId);
     if (!target) {
       return;
@@ -534,35 +535,35 @@ function AdminQuestionBankLibraryPage() {
       return;
     }
 
-    const newVersionId = `${target.id}-v${target.version + 1}`;
-    const nextQuestion: QuestionBankRecord = {
-      ...target,
-      id: newVersionId,
-      uniqueKey: `${target.uniqueKey}-v${target.version + 1}`,
-      version: target.version + 1,
-      usedCount: 0,
-      thermalState: "warm",
-      status: "active",
-    };
-
-    setQuestions((current) => [
-      nextQuestion,
-      ...current.map((question): QuestionBankRecord => (
-        question.id === target.id ? { ...question, status: "deprecated" as const } : question
-      )),
-    ]);
-    setPage(1);
-    setMetadataEditQuestionId(null);
-    setMetadataDraft(null);
-    setStructureEditQuestionId(nextQuestion.id);
-    setStructureDraft(toStructuralFieldDraft(nextQuestion));
-    setInlineMessage(
-      `Created version ${nextQuestion.id} from ${target.id}. You are now editing the new version for future use.`,
-    );
+    if (!canManageQuestionBank || pendingAction) return;
+    const actionKey = `version:${target.id}:${target.revision ?? 1}`;
+    const idempotencyKey = idempotencyKeysRef.current[actionKey] ?? createQuestionBankIdempotencyKey("question-version");
+    idempotencyKeysRef.current[actionKey] = idempotencyKey;
+    setPendingAction(actionKey);
     setErrorMessage(null);
+    try {
+      const result = await createQuestionVersionWithApi(target.id, {
+        expectedRevision: target.revision ?? 1,
+        idempotencyKey,
+      });
+      const reloaded = await reloadLibrary();
+      const successor = reloaded.find((question) => question.id === result.successorQuestionId);
+      if (!successor || successor.revision !== result.successorRevision) {
+        throw new Error("Version created, but authoritative reload did not return its successor.");
+      }
+      delete idempotencyKeysRef.current[actionKey];
+      setPage(1);
+      setStructureEditQuestionId(successor.id);
+      setStructureDraft(toStructuralFieldDraft(successor));
+      setInlineMessage(`Created and reloaded successor ${successor.id}.`);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Question version creation failed.");
+    } finally {
+      setPendingAction(null);
+    }
   }
 
-  function markQuestionDeprecated(questionId: string) {
+  async function markQuestionDeprecated(questionId: string) {
     const target = questions.find((question) => question.id === questionId);
     if (!target) {
       return;
@@ -573,13 +574,30 @@ function AdminQuestionBankLibraryPage() {
       return;
     }
 
-    setQuestions((current) =>
-      current.map((question) =>
-        question.id === questionId ? { ...question, status: "deprecated" as const, thermalState: "cold" } : question,
-      ),
-    );
-    setInlineMessage(`${questionId} is now marked deprecated and will stay available only for history and audit review.`);
+    if (!canManageQuestionBank || pendingAction) return;
+    const actionKey = `deprecate:${target.id}:${target.revision ?? 1}`;
+    const idempotencyKey = idempotencyKeysRef.current[actionKey] ?? createQuestionBankIdempotencyKey("question-deprecate");
+    idempotencyKeysRef.current[actionKey] = idempotencyKey;
+    setPendingAction(actionKey);
     setErrorMessage(null);
+    try {
+      const result = await updateQuestionLifecycle(target.id, {
+        action: "deprecate",
+        expectedRevision: target.revision ?? 1,
+        idempotencyKey,
+        reason: "Deprecated from the Admin Question Bank library.",
+      });
+      const reloaded = await reloadLibrary();
+      if (reloaded.find((question) => question.id === target.id)?.revision !== result.revision) {
+        throw new Error("Lifecycle changed, but authoritative reload did not reconcile its revision.");
+      }
+      delete idempotencyKeysRef.current[actionKey];
+      setInlineMessage(`${questionId} is deprecated and the authoritative library has been reloaded.`);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Question deprecation failed.");
+    } finally {
+      setPendingAction(null);
+    }
   }
 
   const questionColumns: UiTableColumn<QuestionBankRecord>[] = [
@@ -645,24 +663,24 @@ function AdminQuestionBankLibraryPage() {
       render: (question) => (
         <div className="admin-question-library-actions">
           <NavLink to={`/admin/question-bank/library/${question.id}`}>View</NavLink>
-          <button type="button" onClick={() => openMetadataEditor(question)}>
+          <button type="button" onClick={() => openMetadataEditor(question)} disabled={!canManageQuestionBank || Boolean(pendingAction)}>
             Metadata
           </button>
           <button
             type="button"
             onClick={() => openStructureEditor(question)}
-            disabled={question.usedCount > 0}
+            disabled={!canManageQuestionBank || Boolean(pendingAction) || question.usedCount > 0}
             title={question.usedCount > 0 ? STRUCTURAL_LOCK_TOOLTIP : "Edit full question structure"}
           >
             Structure
           </button>
-          <button type="button" onClick={() => createQuestionVersion(question.id)} disabled={question.usedCount === 0}>
+          <button type="button" onClick={() => void createQuestionVersion(question.id)} disabled={!canManageQuestionBank || Boolean(pendingAction) || question.usedCount === 0}>
             Version
           </button>
           <button
             type="button"
-            onClick={() => markQuestionDeprecated(question.id)}
-            disabled={question.usedCount > 0 || question.status === "deprecated"}
+            onClick={() => void markQuestionDeprecated(question.id)}
+            disabled={!canManageQuestionBank || Boolean(pendingAction) || question.usedCount > 0 || question.status === "deprecated"}
           >
             Deprecate
           </button>
@@ -682,7 +700,8 @@ function AdminQuestionBankLibraryPage() {
 
       <QuestionBankWorkspaceNav />
 
-      <p className="admin-tests-inline-note">{inlineMessage}</p>
+      <p className="admin-tests-inline-note">{pendingAction ? "Saving through the authoritative Question Bank API..." : inlineMessage}</p>
+      {!canManageQuestionBank ? <p className="admin-tests-inline-note">Question changes are available only to teacher/admin identities in live API mode.</p> : null}
       {errorMessage ? <p className="admin-tests-inline-error">{errorMessage}</p> : null}
 
       <div className="admin-analytics-kpi-grid">
@@ -977,7 +996,7 @@ function AdminQuestionBankLibraryPage() {
                 <input
                   id="admin-question-metadata-solution-image-upload"
                   type="file"
-                  accept=".png,.jpg,.jpeg,.webp"
+                  accept=".png,.webp,image/png,image/webp"
                   onChange={(event) => handleMetadataSolutionImageSelection(event.target.files)}
                 />
               </UiFormField>
@@ -1167,7 +1186,7 @@ function AdminQuestionBankLibraryPage() {
               <input
                 id="admin-question-structure-question-image-upload"
                 type="file"
-                accept=".png,.jpg,.jpeg,.webp"
+                accept=".png,.webp,image/png,image/webp"
                 onChange={(event) => handleStructureAssetSelection("questionImageFile", event.target.files)}
               />
             </UiFormField>
@@ -1179,12 +1198,12 @@ function AdminQuestionBankLibraryPage() {
                 onChange={(event) => updateStructureDraft("solutionImageFile", event.target.value)}
               />
             </UiFormField>
-            <UiFormField label="Upload Solution Image" htmlFor="admin-question-structure-solution-image-upload">
+            <UiFormField label="Solution Image" htmlFor="admin-question-structure-solution-image-upload" helper="Use Metadata to replace the managed solution image.">
               <input
                 id="admin-question-structure-solution-image-upload"
                 type="file"
-                accept=".png,.jpg,.jpeg,.webp"
-                onChange={(event) => handleStructureAssetSelection("solutionImageFile", event.target.files)}
+                accept=".png,.webp,image/png,image/webp"
+                disabled
               />
             </UiFormField>
             <UiFormField label="Primary Tag" htmlFor="admin-question-structure-primary-tag">

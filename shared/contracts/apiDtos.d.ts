@@ -324,6 +324,335 @@ export interface AdminQuestionLibraryResult {
   questions: AdminQuestionLibraryRecord[];
 }
 
+export type AdminQuestionMutationDisposition = "applied" | "replayed";
+
+export type AdminQuestionLifecycleAction = "archive" | "deprecate";
+
+export type AdminQuestionLifecycleStatus =
+  | "active"
+  | "used"
+  | "archived"
+  | "deprecated";
+
+export type AdminQuestionThermalState = "hot" | "warm" | "cold";
+
+export type AdminQuestionTagField =
+  | "primaryTag"
+  | "secondaryTag"
+  | "additionalTag"
+  | "topic";
+
+export type AdminQuestionImageAssetMutation =
+  | { action: "retain" }
+  | { action: "remove" }
+  | {
+      action: "replace";
+      contentBase64: string;
+      extension: Extract<QuestionAssetExtension, "png" | "webp">;
+    };
+
+export interface AdminQuestionMetadataUpdateRequest {
+  additionalTag: string | null;
+  expectedRevision: number;
+  idempotencyKey: string;
+  internalNotes: string | null;
+  primaryTag: string | null;
+  secondaryTag: string | null;
+  simulationLink: string | null;
+  solutionImage: AdminQuestionImageAssetMutation;
+  topic: string | null;
+  tutorialVideoLink: string | null;
+}
+
+export interface AdminQuestionStructureUpdateRequest {
+  academicYear: string | null;
+  chapter: string;
+  correctAnswer: string;
+  difficulty: "Easy" | "Medium" | "Hard";
+  examType: string;
+  expectedRevision: number;
+  idempotencyKey: string;
+  marks: number;
+  negativeMarks: number;
+  questionImage: AdminQuestionImageAssetMutation;
+  questionType: string;
+  subject: string;
+  uniqueKey: string;
+}
+
+export interface AdminQuestionUpdateResult {
+  auditId: string;
+  disposition: AdminQuestionMutationDisposition;
+  questionId: string;
+  revision: number;
+  updatedAt: string;
+  version: number;
+}
+
+export interface AdminQuestionVersionCreateRequest {
+  expectedRevision: number;
+  idempotencyKey: string;
+}
+
+export interface AdminQuestionVersionCreateResult {
+  auditId: string;
+  disposition: AdminQuestionMutationDisposition;
+  sourceQuestionId: string;
+  sourceRevision: number;
+  sourceStatus: "deprecated";
+  sourceVersion: number;
+  successorQuestionId: string;
+  successorRevision: number;
+  successorStatus: "active";
+  successorVersion: number;
+  updatedAt: string;
+}
+
+export interface AdminQuestionLifecycleRequest {
+  action: AdminQuestionLifecycleAction;
+  expectedRevision: number;
+  idempotencyKey: string;
+  reason: string;
+}
+
+export interface AdminQuestionLifecycleResult {
+  action: AdminQuestionLifecycleAction;
+  auditId: string;
+  disposition: AdminQuestionMutationDisposition;
+  previousStatus: AdminQuestionLifecycleStatus;
+  questionId: string;
+  revision: number;
+  status: Extract<AdminQuestionLifecycleStatus, "archived" | "deprecated">;
+  thermalState: AdminQuestionThermalState;
+  updatedAt: string;
+  version: number;
+}
+
+export interface AdminQuestionLibraryQuery {
+  academicYear?: string;
+  additionalTag?: string;
+  chapter?: string;
+  cursor?: string;
+  difficulty?: "Easy" | "Medium" | "Hard";
+  examType?: string;
+  limit?: number;
+  primaryTag?: string;
+  query?: string;
+  questionType?: string;
+  secondaryTag?: string;
+  status?: AdminQuestionLifecycleStatus;
+  subject?: string;
+  thermalState?: AdminQuestionThermalState;
+  usedInTemplate?: boolean;
+}
+
+export interface AdminQuestionAuthoritativeRecord
+  extends AdminQuestionLibraryRecord {
+  createdAt: string;
+  lastUsedAcademicYear: string | null;
+  parentQuestionId: string | null;
+  revision: number;
+  updatedAt: string;
+  usedInTemplate: boolean;
+}
+
+export interface AdminQuestionLibraryPageResult {
+  currentAcademicYear: string;
+  nextCursor: string | null;
+  questions: AdminQuestionAuthoritativeRecord[];
+}
+
+export interface AdminQuestionVersionSummary {
+  createdAt: string;
+  parentQuestionId: string | null;
+  questionId: string;
+  revision: number;
+  status: AdminQuestionLifecycleStatus;
+  version: number;
+}
+
+export interface AdminQuestionTemplateUsageRecord {
+  lastUsedAt: string | null;
+  runCount: number;
+  status: "draft" | "ready" | "assigned" | "archived" | "deprecated";
+  testId: string;
+  testName: string;
+  version: number;
+}
+
+export interface AdminQuestionAnalyticsRecord {
+  avgAccuracyWhenUsed: number;
+  avgRawPercentWhenUsed: number;
+  averageResponseTimeMs: number;
+  correctAttemptCount: number;
+  disciplineStressIndex: number;
+  guessRate: number;
+  incorrectAttemptCount: number;
+  overstayRate: number;
+  riskImpactScore: number;
+}
+
+export interface AdminQuestionDetailResult {
+  analytics: AdminQuestionAnalyticsRecord | null;
+  question: AdminQuestionAuthoritativeRecord;
+  templateUsage: AdminQuestionTemplateUsageRecord[];
+  versions: AdminQuestionVersionSummary[];
+}
+
+interface AdminQuestionTagMutationBase {
+  expectedDictionaryRevision: number;
+  field: AdminQuestionTagField;
+  idempotencyKey: string;
+}
+
+export type AdminQuestionTagMutationRequest =
+  | (AdminQuestionTagMutationBase & {
+      action: "create";
+      name: string;
+    })
+  | (AdminQuestionTagMutationBase & {
+      action: "rename";
+      destinationName: string;
+      sourceName: string;
+    })
+  | (AdminQuestionTagMutationBase & {
+      action: "merge";
+      destinationName: string;
+      sourceNames: string[];
+    })
+  | (AdminQuestionTagMutationBase & {
+      action: "deprecate";
+      name: string;
+    });
+
+export interface AdminQuestionTagAuthorityRecord {
+  field: AdminQuestionTagField;
+  name: string;
+  questionCount: number;
+  status: "active" | "deprecated";
+  usedInActiveTemplate: boolean;
+}
+
+export interface AdminQuestionTagsResult {
+  dictionaryRevision: number;
+  tags: AdminQuestionTagAuthorityRecord[];
+}
+
+export interface AdminQuestionTagMutationResult
+  extends AdminQuestionTagsResult {
+  affectedQuestionCount: number;
+  auditId: string;
+  disposition: AdminQuestionMutationDisposition;
+  updatedAt: string;
+}
+
+export type AdminQuestionPackageState =
+  | "validation_failed"
+  | "validated"
+  | "committing"
+  | "committed"
+  | "rollback_pending"
+  | "rolled_back"
+  | "failed_recoverable";
+
+export interface AdminQuestionPackageValidateRequest {
+  contentBase64: string;
+  examType: string;
+  fileName: string;
+  idempotencyKey: string;
+  subject: string | null;
+}
+
+export interface AdminQuestionPackageRowResult {
+  action: "create" | "update" | "none";
+  errors: string[];
+  questionId: string | null;
+  rowNumber: number;
+  uniqueKey: string | null;
+  version: number | null;
+  warnings: string[];
+}
+
+export interface AdminQuestionPackageSummary {
+  assetCount: number;
+  created: number;
+  invalid: number;
+  received: number;
+  updated: number;
+  valid: number;
+  warnings: number;
+}
+
+export interface AdminQuestionPackageValidationResult {
+  contentSha256: string;
+  disposition: AdminQuestionMutationDisposition;
+  expiresAt: string;
+  packageId: string;
+  packageRevision: number;
+  rows: AdminQuestionPackageRowResult[];
+  state: Extract<AdminQuestionPackageState, "validation_failed" | "validated">;
+  summary: AdminQuestionPackageSummary;
+  uploadLogId: string;
+  validatedAt: string;
+}
+
+export interface AdminQuestionPackageCommitRequest {
+  expectedPackageRevision: number;
+  idempotencyKey: string;
+}
+
+export interface AdminQuestionPackageCommittedQuestion {
+  action: "create" | "update";
+  questionId: string;
+  revision: number;
+  version: number;
+}
+
+export interface AdminQuestionPackageCommitResult {
+  assetCount: number;
+  auditId: string;
+  committedAt: string;
+  disposition: AdminQuestionMutationDisposition;
+  packageId: string;
+  packageRevision: number;
+  questions: AdminQuestionPackageCommittedQuestion[];
+  state: "committed";
+  uploadLogId: string;
+}
+
+export interface AdminQuestionPackageRollbackRequest {
+  expectedPackageRevision: number;
+  idempotencyKey: string;
+  reason: string;
+}
+
+export interface AdminQuestionPackageRollbackResult {
+  auditId: string;
+  disposition: AdminQuestionMutationDisposition;
+  packageId: string;
+  packageRevision: number;
+  removedAssetCount: number;
+  removedQuestionCount: number;
+  rolledBackAt: string;
+  state: "rolled_back";
+  uploadLogId: string;
+}
+
+export interface AdminQuestionUploadLogDetailResult {
+  committedAt: string | null;
+  contentSha256: string;
+  packageId: string;
+  packageRevision: number;
+  rollbackEligible: boolean;
+  rollbackReason: string | null;
+  rows: AdminQuestionPackageRowResult[];
+  state: AdminQuestionPackageState;
+  summary: AdminQuestionPackageSummary;
+  uploadLogId: string;
+  uploadedBy: string;
+  validatedAt: string;
+}
+
 export interface QuestionBulkUploadQuestionInput {
   chapter?: string;
   correctAnswer?: string;

@@ -3,14 +3,13 @@ import { ApiClientError } from "../../../../../shared/services/apiClient";
 import {
   shouldUseLiveApi as shouldUseConfiguredLiveApi,
 } from "../../../../../shared/services/frontendEnvironment";
-import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import { UiChartContainer, UiTable, type UiChartPoint, type UiTableColumn } from "../../../../../shared/ui/components";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { LICENSE_LAYER_ORDER } from "../../../../../shared/types/portalRouting";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
+import { getQuestionDistribution } from "./questionBankApi";
 import QuestionBankWorkspaceNav from "./QuestionBankWorkspaceNav";
 
-const apiClient = getPortalApiClient("admin");
 
 interface DifficultyBandMetric {
   difficulty: "Easy" | "Medium" | "Hard";
@@ -399,23 +398,6 @@ function shouldUseLiveApi(): boolean {
   return shouldUseConfiguredLiveApi();
 }
 
-function toNumberOrZero(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-
-  return 0;
-}
-
-function toNonEmptyString(value: unknown, fallback = ""): string {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
-}
-
 function formatPercent(value: number): string {
   return `${value}%`;
 }
@@ -434,110 +416,8 @@ function formatDistributionScopeLabel(filter: ExamDistributionFilter): string {
   return `${option?.label ?? filter} questions`;
 }
 
-function normalizeDifficultyMetric(value: unknown, index: number): DifficultyBandMetric | null {
-  if (!value || typeof value !== "object") {
-    return null;
-  }
-
-  const record = value as Record<string, unknown>;
-  const fallback =
-    FALLBACK_DISTRIBUTION_SNAPSHOT.difficulties[index] ??
-    FALLBACK_DISTRIBUTION_SNAPSHOT.difficulties[0];
-  const difficulty = record.difficulty;
-
-  return {
-    difficulty:
-      difficulty === "Easy" || difficulty === "Medium" || difficulty === "Hard" ?
-        difficulty :
-        fallback?.difficulty ?? "Easy",
-    guessRatePercent: Math.max(0, toNumberOrZero(record.guessRatePercent ?? fallback?.guessRatePercent ?? 0)),
-    marksPercent: Math.max(0, toNumberOrZero(record.marksPercent ?? fallback?.marksPercent ?? 0)),
-    overstayPercent: Math.max(0, toNumberOrZero(record.overstayPercent ?? fallback?.overstayPercent ?? 0)),
-    questionCount: Math.max(0, toNumberOrZero(record.questionCount ?? fallback?.questionCount ?? 0)),
-    sharePercent: Math.max(0, toNumberOrZero(record.sharePercent ?? fallback?.sharePercent ?? 0)),
-  };
-}
-
-function normalizeChapterCoverageRecord(value: unknown, index: number): ChapterCoverageRecord | null {
-  if (!value || typeof value !== "object") {
-    return null;
-  }
-
-  const record = value as Record<string, unknown>;
-  const fallback =
-    FALLBACK_DISTRIBUTION_SNAPSHOT.chapters[index] ??
-    FALLBACK_DISTRIBUTION_SNAPSHOT.chapters[0];
-
-  return {
-    chapter: toNonEmptyString(record.chapter, fallback?.chapter ?? `Chapter ${index + 1}`),
-    disciplineStressIndex: Math.max(
-      0,
-      toNumberOrZero(record.disciplineStressIndex ?? fallback?.disciplineStressIndex ?? 0),
-    ),
-    easyPercent: Math.max(0, toNumberOrZero(record.easyPercent ?? fallback?.easyPercent ?? 0)),
-    hardPercent: Math.max(0, toNumberOrZero(record.hardPercent ?? fallback?.hardPercent ?? 0)),
-    marksPercent: Math.max(0, toNumberOrZero(record.marksPercent ?? fallback?.marksPercent ?? 0)),
-    mediumPercent: Math.max(0, toNumberOrZero(record.mediumPercent ?? fallback?.mediumPercent ?? 0)),
-    questionCount: Math.max(0, toNumberOrZero(record.questionCount ?? fallback?.questionCount ?? 0)),
-    riskImpactScore: Math.max(0, toNumberOrZero(record.riskImpactScore ?? fallback?.riskImpactScore ?? 0)),
-    subject: toNonEmptyString(record.subject, fallback?.subject ?? "General"),
-  };
-}
-
-function normalizeDistributionSnapshot(payload: unknown): QuestionDistributionSnapshot {
-  if (!payload || typeof payload !== "object") {
-    throw new Error("GET /admin/questions/distribution returned an invalid payload.");
-  }
-
-  const response = payload as {
-    summary?: unknown;
-  };
-  const summary = response.summary;
-  if (!summary || typeof summary !== "object") {
-    throw new Error("GET /admin/questions/distribution did not include a summary payload.");
-  }
-
-  const record = summary as Record<string, unknown>;
-  const difficultiesSource = Array.isArray(record.difficulties) ? record.difficulties : [];
-  const chaptersSource = Array.isArray(record.chapters) ? record.chapters : [];
-  const difficulties = difficultiesSource
-    .map((entry, index) => normalizeDifficultyMetric(entry, index))
-    .filter((entry): entry is DifficultyBandMetric => Boolean(entry));
-  const chapters = chaptersSource
-    .map((entry, index) => normalizeChapterCoverageRecord(entry, index))
-    .filter((entry): entry is ChapterCoverageRecord => Boolean(entry));
-
-  return {
-    chapters: chapters.length > 0 ? chapters : FALLBACK_DISTRIBUTION_SNAPSHOT.chapters,
-    analyticsQuestionCount: Math.max(
-      0,
-      toNumberOrZero(record.analyticsQuestionCount ?? FALLBACK_DISTRIBUTION_SNAPSHOT.analyticsQuestionCount),
-    ),
-    computedAt: toNonEmptyString(record.computedAt, FALLBACK_DISTRIBUTION_SNAPSHOT.computedAt),
-    difficulties: difficulties.length > 0 ? difficulties : FALLBACK_DISTRIBUTION_SNAPSHOT.difficulties,
-    examType: toNonEmptyString(record.examType, FALLBACK_DISTRIBUTION_SNAPSHOT.examType),
-    imbalanceWarnings: Math.max(
-      0,
-      toNumberOrZero(record.imbalanceWarnings ?? FALLBACK_DISTRIBUTION_SNAPSHOT.imbalanceWarnings),
-    ),
-    missingDifficultyWarnings: Math.max(
-      0,
-      toNumberOrZero(
-        record.missingDifficultyWarnings ?? FALLBACK_DISTRIBUTION_SNAPSHOT.missingDifficultyWarnings,
-      ),
-    ),
-    totalQuestions: Math.max(0, toNumberOrZero(record.totalQuestions ?? FALLBACK_DISTRIBUTION_SNAPSHOT.totalQuestions)),
-  };
-}
-
 async function fetchDistributionSnapshotFromApi(examFilter: ExamDistributionFilter): Promise<QuestionDistributionSnapshot> {
-  const payload = await apiClient.get<unknown>("/admin/questions/distribution", {
-    query: {
-      ...(examFilter !== "all" ? { examType: examFilter } : {}),
-      limit: "6",
-    },
-  });
-  return normalizeDistributionSnapshot(payload);
+  return getQuestionDistribution(examFilter === "all" ? undefined : examFilter);
 }
 
 function AdminQuestionBankDistributionPage() {
@@ -546,7 +426,16 @@ function AdminQuestionBankDistributionPage() {
   const isL2OrAbove =
     accessContext.licenseLayer !== null && LICENSE_LAYER_ORDER[accessContext.licenseLayer] >= LICENSE_LAYER_ORDER.L2;
   const [examFilter, setExamFilter] = useState<ExamDistributionFilter>("all");
-  const [snapshot, setSnapshot] = useState<QuestionDistributionSnapshot>(FALLBACK_DISTRIBUTION_SNAPSHOTS.all);
+  const [snapshot, setSnapshot] = useState<QuestionDistributionSnapshot>(() => shouldUseLiveApi() ? {
+    analyticsQuestionCount: 0,
+    chapters: [],
+    computedAt: "",
+    difficulties: [],
+    examType: "All",
+    imbalanceWarnings: 0,
+    missingDifficultyWarnings: 0,
+    totalQuestions: 0,
+  } : FALLBACK_DISTRIBUTION_SNAPSHOTS.all);
   const [inlineMessage, setInlineMessage] = useState(
     "Choose an exam scope to review question distribution for all questions or for a specific exam bank.",
   );

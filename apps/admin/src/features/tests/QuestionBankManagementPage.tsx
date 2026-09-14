@@ -3,23 +3,12 @@ import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import {
   shouldUseLiveApi as shouldUseConfiguredLiveApi,
 } from "../../../../../shared/services/frontendEnvironment";
-import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
-import {
-  adaptAdminQuestionAssetUploadResult,
-  adaptAdminQuestionBulkResult,
-} from "../../../../../shared/services/portalResponseAdapters";
 import type {
-  QuestionAssetUploadRequest,
-  QuestionAssetUploadResult,
-  QuestionBulkUploadQuestionInput,
-  QuestionBulkUploadRequest,
+  AdminQuestionPackageValidationResult,
   QuestionBulkUploadResult as AdminQuestionsBulkValidationResult,
 } from "../../../../../shared/contracts/apiDtos";
 import {
-  buildQuestionAssetUploadPlan,
   isSupportedQuestionImageFile,
-  uploadQuestionAssetPlan,
-  type ManagedQuestionAssetPathsByRow,
 } from "./questionAssetUploadPlan";
 import {
   UiChartContainer,
@@ -32,8 +21,14 @@ import {
   type ExamType,
 } from "./testTemplateFixtures";
 import QuestionBankWorkspaceNav from "./QuestionBankWorkspaceNav";
-
-const apiClient = getPortalApiClient("admin");
+import { resolveAdminAccessContext } from "../../portals/adminAccess";
+import {
+  commitQuestionPackage,
+  createQuestionBankIdempotencyKey,
+  fileToBase64,
+  getQuestionUploadLogs,
+  validateQuestionPackage as validateQuestionPackageWithApi,
+} from "./questionBankApi";
 const EXAM_SUBJECTS: Record<ExamType, string[]> = {
   JEEMains: ["Physics", "Chemistry", "Mathematics"],
   NEET: ["Physics", "Chemistry", "Biology"],
@@ -140,24 +135,6 @@ interface QuestionUploadWorkbookRow {
   uniqueKey: string;
 }
 
-interface AdminQuestionsBulkRequestRow extends QuestionBulkUploadQuestionInput {
-  chapter: string;
-  correctAnswer: string;
-  difficulty: "Easy" | "Medium" | "Hard";
-  examType: string;
-  marks: number;
-  negativeMarks: number;
-  questionTextKeywords?: string[];
-  questionType: string;
-  simulationLink?: string | null;
-  status: "active";
-  subject: string;
-  tags: string[];
-  tutorialVideoLink?: string | null;
-  uniqueKey: string;
-  version: number;
-}
-
 interface SampleWorkbookProfile {
   columns: string[];
   fileName: string;
@@ -172,6 +149,7 @@ interface QuestionPackageValidationResult {
   errors: string[];
   imageAssetCount: number;
   nestedFolderEntries: string[];
+  packageAuthority: AdminQuestionPackageValidationResult | null;
   rowErrors: QuestionPackageValidationRow[];
   sheetNames: string[];
   serverValidation: AdminQuestionsBulkValidationResult | null;
@@ -199,17 +177,6 @@ interface DistributionPreview {
 function formatIsoDate(value: string): string {
   const parsed = Date.parse(value);
   return Number.isNaN(parsed) ? value : new Date(parsed).toISOString().slice(0, 10);
-}
-
-function toNumberOrZero(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-  return 0;
 }
 
 function formatExamTypeLabel(value: string): string {
@@ -245,75 +212,14 @@ function toFiniteNumber(value: string, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function toNonEmptyString(value: unknown, fallback = ""): string {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
-}
-
-function normalizeStringArray(value: unknown, fallback: string[]): string[] {
-  if (!Array.isArray(value)) {
-    return fallback;
-  }
-
-  const normalized = value
-    .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
-    .filter((entry) => entry.length > 0);
-
-  return normalized.length > 0 ? normalized : fallback;
-}
-
-function normalizeRollbackEligibility(value: unknown, fallback: "eligible" | "blocked"): "eligible" | "blocked" {
-  return value === "eligible" || value === "blocked" ? value : fallback;
-}
-
-function normalizeUploadLogRecord(value: unknown, index: number): UploadLogRecord | null {
-  if (!value || typeof value !== "object") {
-    return null;
-  }
-
-  const record = value as Record<string, unknown>;
-  const fallback = FALLBACK_UPLOAD_LOGS[index] ?? FALLBACK_UPLOAD_LOGS[0];
-
-  return {
-    created: Math.max(0, toNumberOrZero(record.created ?? fallback?.created ?? 0)),
-    errorDetails: normalizeStringArray(record.errorDetails ?? record.errorMessages, fallback?.errorDetails ?? []),
-    errors: Math.max(0, toNumberOrZero(record.errors ?? fallback?.errors ?? 0)),
-    id: toNonEmptyString(record.id, fallback?.id ?? `upl-${index + 1}`),
-    rollbackEligibility: normalizeRollbackEligibility(
-      record.rollbackEligibility,
-      fallback?.rollbackEligibility ?? "blocked",
-    ),
-    rollbackReason: toNonEmptyString(
-      record.rollbackReason,
-      fallback?.rollbackReason ?? "Rollback requires every created question to be unused in assigned templates.",
-    ),
-    timestamp: toNonEmptyString(record.timestamp, fallback?.timestamp ?? new Date(0).toISOString()),
-    totalRows: Math.max(0, toNumberOrZero(record.totalRows ?? fallback?.totalRows ?? 0)),
-    uploadedBy: toNonEmptyString(record.uploadedBy, fallback?.uploadedBy ?? "unknown"),
-    versionCreated: Math.max(0, toNumberOrZero(record.versionCreated ?? fallback?.versionCreated ?? 0)),
-    warningDetails: normalizeStringArray(
-      record.warningDetails ?? record.warningMessages,
-      fallback?.warningDetails ?? [],
-    ),
-    warnings: Math.max(0, toNumberOrZero(record.warnings ?? fallback?.warnings ?? 0)),
-  };
-}
-
 async function fetchUploadLogsFromApi(): Promise<UploadLogRecord[]> {
-  const payload = await apiClient.get<unknown>("/admin/questions/upload-logs", {
-    emptyResultIsReady: true,
-  });
-  if (!payload || typeof payload !== "object") {
-    throw new Error("GET /admin/questions/upload-logs returned an invalid payload.");
-  }
-
-  const response = payload as {
-    logs?: unknown;
-  };
-  const logs = Array.isArray(response.logs) ? response.logs : [];
-
-  return logs
-    .map((entry, index) => normalizeUploadLogRecord(entry, index))
-    .filter((entry): entry is UploadLogRecord => Boolean(entry));
+  return (await getQuestionUploadLogs()).map((log) => ({
+    ...log,
+    errorDetails: [],
+    rollbackEligibility: "blocked",
+    rollbackReason: "Open Validation Logs for authoritative rollback eligibility.",
+    warningDetails: [],
+  }));
 }
 
 function encodeCsvCell(value: string): string {
@@ -631,41 +537,6 @@ function shouldUseLiveApi(): boolean {
   return shouldUseConfiguredLiveApi();
 }
 
-function decodeIdTokenClaims(idToken: string | null): Record<string, unknown> | null {
-  if (!idToken) {
-    return null;
-  }
-
-  const segments = idToken.split(".");
-  if (segments.length !== 3) {
-    return null;
-  }
-
-  try {
-    const payloadSegment = segments[1].replace(/-/g, "+").replace(/_/g, "/");
-    const paddedPayload = payloadSegment.padEnd(Math.ceil(payloadSegment.length / 4) * 4, "=");
-    const payload = atob(paddedPayload);
-    const claims = JSON.parse(payload);
-    return claims && typeof claims === "object" ? (claims as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
-}
-
-function requireInstituteIdFromClaims(
-  claims: Record<string, unknown> | null,
-): string {
-  const instituteId = claims?.instituteId;
-  if (typeof instituteId !== "string" || instituteId.trim().length === 0) {
-    throw new Error(
-      "Your authenticated account is missing its institute scope. Sign in " +
-      "again or ask an administrator to repair the account claims.",
-    );
-  }
-
-  return instituteId.trim();
-}
-
 function normalizeWorkbookRow(row: Record<string, string>): QuestionUploadWorkbookRow {
   return {
     additionalTag: (row.AdditionalTag ?? "").trim(),
@@ -761,60 +632,6 @@ function normalizeDifficultyForApi(value: string): "Easy" | "Medium" | "Hard" {
     return "Medium";
   }
   return "Easy";
-}
-
-function buildTags(row: QuestionUploadWorkbookRow): string[] {
-  return [row.primaryTag, row.secondaryTag, row.additionalTag]
-    .map((value) => value.trim())
-    .filter((value, index, values) => value.length > 0 && values.indexOf(value) === index);
-}
-
-function buildKeywordHints(row: QuestionUploadWorkbookRow): string[] {
-  return [row.chapter, row.topic, row.questionType]
-    .map((value) => value.trim())
-    .filter((value, index, values) => value.length > 0 && values.indexOf(value) === index);
-}
-
-async function validateQuestionsWithApi(input: {
-  assetPathsByRow?: ManagedQuestionAssetPathsByRow;
-  examType: string;
-  instituteId: string;
-  subject: string;
-  workbookRows: QuestionUploadWorkbookRow[];
-  commit?: boolean;
-}): Promise<AdminQuestionsBulkValidationResult> {
-  const questions: AdminQuestionsBulkRequestRow[] = input.workbookRows.map((row, rowIndex) => ({
-    chapter: row.chapter,
-    correctAnswer: row.correctAnswer,
-    difficulty: normalizeDifficultyForApi(row.difficulty),
-    examType: input.examType,
-    marks: row.marks,
-    negativeMarks: Math.abs(row.negativeMarks),
-    questionImageUrl: input.assetPathsByRow?.get(rowIndex)?.questionImageUrl,
-    questionTextKeywords: buildKeywordHints(row),
-    questionType: row.questionType,
-    simulationLink: row.simulationLink || null,
-    solutionImageUrl: input.assetPathsByRow?.get(rowIndex)?.solutionImageUrl,
-    status: "active",
-    subject: input.subject,
-    tags: buildTags(row),
-    tutorialVideoLink: row.tutorialVideoLink || null,
-    uniqueKey: row.uniqueKey,
-    version: 1,
-  }));
-  const response = await apiClient.post<unknown, QuestionBulkUploadRequest>(
-    "/admin/questions/bulk",
-    {
-      body: {
-        commit: input.commit === true,
-        instituteId: input.instituteId,
-        questions,
-      },
-      handledFailureIsReady: true,
-    },
-  );
-
-  return adaptAdminQuestionBulkResult(response);
 }
 
 function normalizeWorkbookPath(target: string): string {
@@ -1073,6 +890,7 @@ async function validateQuestionPackage(
       errors,
       imageAssetCount: rootAssetEntries.length,
       nestedFolderEntries,
+      packageAuthority: null,
       rowErrors: [],
       serverValidation: null,
       sheetNames: [],
@@ -1208,6 +1026,7 @@ async function validateQuestionPackage(
     errors,
     imageAssetCount: rootAssetEntries.length,
     nestedFolderEntries,
+    packageAuthority: null,
     rowErrors,
     sheetNames: workbook.sheetNames,
     serverValidation: null,
@@ -1219,6 +1038,8 @@ async function validateQuestionPackage(
 
 function QuestionBankManagementPage() {
   const { session } = useAuthProvider();
+  const role = resolveAdminAccessContext(session).role;
+  const canManagePackages = shouldUseLiveApi() && (role === "teacher" || role === "admin");
   const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null);
   const [uploadExamType, setUploadExamType] = useState<UploadExamOption>("JEEMains");
   const [customExamName, setCustomExamName] = useState("");
@@ -1282,7 +1103,7 @@ function QuestionBankManagementPage() {
       uploadValidation.errors.length > 0 ||
       uploadValidation.rowErrors.length > 0 ||
       (uploadValidation.serverValidation?.summary.invalid ?? 0) > 0 ||
-      (shouldUseLiveApi() && !uploadValidation.serverValidation) :
+      (shouldUseLiveApi() && uploadValidation.packageAuthority?.state !== "validated") :
       false;
 
   async function handleUploadSubmit(event: FormEvent<HTMLFormElement>) {
@@ -1308,51 +1129,83 @@ function QuestionBankManagementPage() {
     setErrorMessage(null);
 
     try {
-      const validation = await validateQuestionPackage(selectedUploadFile);
-      const hasLocalErrors = validation.errors.length > 0 || validation.rowErrors.length > 0;
-      let serverValidation: AdminQuestionsBulkValidationResult | null = null;
-      const claims = decodeIdTokenClaims(session.idToken);
-
-      if (!hasLocalErrors && shouldUseLiveApi()) {
-        const instituteId = requireInstituteIdFromClaims(claims);
-        serverValidation = await validateQuestionsWithApi({
-          examType: selectedExamLabel,
-          instituteId,
-          subject: selectedSubjectLabel,
-          workbookRows: validation.workbookRows,
-        });
+      if (shouldUseLiveApi() && !canManagePackages) {
+        throw new Error("Question package validation requires a live teacher or admin session.");
       }
+      const packageAuthority = shouldUseLiveApi() ? await validateQuestionPackageWithApi({
+        contentBase64: await fileToBase64(selectedUploadFile),
+        examType: selectedExamLabel,
+        fileName: selectedUploadFile.name,
+        idempotencyKey: createQuestionBankIdempotencyKey("question-package-validate"),
+        subject: selectedSubjectLabel === OTHER_EXAM_SUBJECT_LABEL ? null : selectedSubjectLabel,
+      }) : null;
+      let localPreviewWarning: string | null = null;
+      let validation: QuestionPackageValidationResult;
+      try {
+        validation = await validateQuestionPackage(selectedUploadFile);
+      } catch (previewError) {
+        if (!packageAuthority) {
+          throw previewError;
+        }
+        localPreviewWarning = "The browser preview could not be generated. The authoritative server validation is shown below.";
+        validation = {
+          archiveEntries: [],
+          assetFiles: {},
+          errors: [],
+          imageAssetCount: 0,
+          nestedFolderEntries: [],
+          packageAuthority: null,
+          rowErrors: [],
+          serverValidation: null,
+          sheetNames: [],
+          totalRows: packageAuthority.summary.received,
+          warnings: [],
+          workbookRows: [],
+        };
+      }
+      const authoritativeRowErrors = packageAuthority?.rows
+        .filter((row) => row.errors.length > 0)
+        .map((row) => ({
+          errors: row.errors,
+          rowNumber: row.rowNumber,
+          uniqueKey: row.uniqueKey ?? "",
+        })) ?? validation.rowErrors;
+      const serverValidation: AdminQuestionsBulkValidationResult | null = packageAuthority ? {
+        commitRequested: false,
+        committed: false,
+        rows: packageAuthority.rows.map((row) => ({
+          action: row.action,
+          errors: row.errors,
+          questionId: row.questionId,
+          rowNumber: row.rowNumber,
+          uniqueKey: row.uniqueKey,
+          version: row.version ?? 1,
+          warnings: row.warnings,
+        })),
+        summary: packageAuthority.summary,
+        uploadLogId: packageAuthority.uploadLogId,
+        uploadLogPath: null,
+      } : null;
 
       const finalValidation: QuestionPackageValidationResult = {
         ...validation,
+        errors: packageAuthority ? packageAuthority.rows.filter((row) => row.rowNumber === 0)
+          .flatMap((row) => row.errors) : validation.errors,
+        packageAuthority,
+        rowErrors: authoritativeRowErrors,
         serverValidation,
+        totalRows: packageAuthority?.summary.received ?? validation.totalRows,
+        warnings: packageAuthority ? [
+          ...packageAuthority.rows.flatMap((row) => row.warnings),
+          ...(localPreviewWarning ? [localPreviewWarning] : []),
+        ] : validation.warnings,
       };
       setUploadValidation(finalValidation);
-      const actorEmail =
-        session.user?.email ??
-        (typeof claims?.sub === "string" ? claims.sub : "admin@parabolic.local");
-
-      const nextLog: UploadLogRecord = {
-        created: serverValidation?.summary.created ?? 0,
-        errorDetails: validation.errors.concat(validation.rowErrors.flatMap((row) => row.errors)),
-        errors:
-          validation.errors.length +
-          validation.rowErrors.length +
-          (serverValidation?.summary.invalid ?? 0),
-        id: `upl-${Date.now()}`,
-        rollbackEligibility: "blocked",
-        rollbackReason: "Review assigned-template usage before any rollback decision.",
-        timestamp: new Date().toISOString(),
-        totalRows: finalValidation.totalRows,
-        uploadedBy: actorEmail,
-        versionCreated: serverValidation?.summary.updated ?? 0,
-        warnings: validation.warnings.length + (serverValidation?.summary.warnings ?? 0),
-        warningDetails: validation.warnings,
-      };
-
-      setUploadLogs((current) => [nextLog, ...current]);
+      if (shouldUseLiveApi()) {
+        setUploadLogs(await fetchUploadLogsFromApi());
+      }
       setInlineMessage(
-        validation.errors.length > 0 || validation.rowErrors.length > 0 ?
+        finalValidation.errors.length > 0 || finalValidation.rowErrors.length > 0 ?
           `Validation found issues in ${selectedUploadFile.name}. Download the error report, correct the workbook or ZIP contents, and upload the package again.` :
         serverValidation ?
           serverValidation.summary.invalid > 0 ?
@@ -1432,43 +1285,22 @@ function QuestionBankManagementPage() {
         return;
       }
 
-      const claims = decodeIdTokenClaims(session.idToken);
-      const instituteId = requireInstituteIdFromClaims(claims);
-      const serverValidation = uploadValidation.serverValidation;
-      if (!serverValidation) {
-        throw new Error(
-          "Run system validation again before uploading question assets.",
-        );
+      const packageAuthority = uploadValidation.packageAuthority;
+      if (!packageAuthority || packageAuthority.state !== "validated") {
+        throw new Error("Run authoritative package validation again before commit.");
       }
-
-      const assetPlan = buildQuestionAssetUploadPlan({
-        assetFiles: uploadValidation.assetFiles,
-        instituteId,
-        serverRows: serverValidation.rows,
-        workbookRows: uploadValidation.workbookRows,
+      const commitResult = await commitQuestionPackage(packageAuthority.packageId, {
+        expectedPackageRevision: packageAuthority.packageRevision,
+        idempotencyKey: createQuestionBankIdempotencyKey("question-package-commit"),
       });
-      const assetPathsByRow = await uploadQuestionAssetPlan(
-        assetPlan,
-        async (request): Promise<QuestionAssetUploadResult> => {
-          const response = await apiClient.post<
-          unknown,
-          QuestionAssetUploadRequest
-          >("/admin/questions/assets", {
-            body: request,
-            handledFailureIsReady: true,
-          });
-          return adaptAdminQuestionAssetUploadResult(response);
-        },
-      );
-
-      const commitResponse = await validateQuestionsWithApi({
-        assetPathsByRow,
-        commit: true,
-        examType: selectedExamLabel,
-        instituteId,
-        subject: selectedSubjectLabel,
-        workbookRows: uploadValidation.workbookRows,
-      });
+      const commitResponse: AdminQuestionsBulkValidationResult = {
+        commitRequested: true,
+        committed: commitResult.state === "committed",
+        rows: uploadValidation.serverValidation?.rows ?? [],
+        summary: packageAuthority.summary,
+        uploadLogId: commitResult.uploadLogId,
+        uploadLogPath: null,
+      };
 
       setUploadValidation((current) =>
         current ?
@@ -1478,19 +1310,7 @@ function QuestionBankManagementPage() {
           } :
           current,
       );
-      setUploadLogs((current) =>
-        current.map((log, index) =>
-          index === 0 ?
-            {
-              ...log,
-              created: commitResponse.summary.created,
-              errors: commitResponse.summary.invalid,
-              versionCreated: commitResponse.summary.updated,
-              warnings: commitResponse.summary.warnings,
-            } :
-            log,
-        ),
-      );
+      setUploadLogs(await fetchUploadLogsFromApi());
       setInlineMessage(
         commitResponse.committed ?
           `Upload successful. ${commitResponse.summary.created} questions were added and ${commitResponse.summary.updated} existing versions were updated.` :

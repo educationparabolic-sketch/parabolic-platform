@@ -2,7 +2,7 @@
 
 Status: canonical route and response-envelope contract
 
-Last reconciled: 2026-09-08 (`BWM-026` Admin Student mutation closeout)
+Last reconciled: 2026-09-14 (`BWM-027` Question Bank lifecycle closeout)
 
 ## Sources of truth
 
@@ -34,20 +34,21 @@ If prose and the typed manifest disagree about a route key or status, the typed 
 
 ## Route status meanings
 
-- `implemented`: the current frontend and existing handler contracts are compatible once routed.
+- `implemented`: the canonical contract has a registered compatible handler; a
+  `planned` declaration may still have no frontend caller.
 - `incompatible`: a handler exists, but its current credential, request, or response contract conflicts with the frontend.
-- `missing`: no current Functions handler/export implements the frontend contract.
+- `missing`: no current Functions handler/export implements the canonical contract.
 - `intentionally_retired`: explicit product/architecture evidence says the route must not be served.
 
-Current totals: 38 implemented, 3 incompatible, 0 missing, 1 intentionally retired.
+Current totals: 47 implemented, 3 incompatible, 0 missing, 3 intentionally retired.
 
 Routes marked `planned` in the code manifest are canonical contracts reserved by
-the active owning task before a browser caller or gateway handler exists. They
-must remain `missing` with no handler mapping until the owning implementation
-substep wires both sides; frontend-declared routes retain bidirectional source
-coverage.
+the active owning task and do not count as executable frontend tuples. They stay
+`missing` until an owning implementation substep deliberately registers a
+handler; they may then be backend-ready while a later substep still owns the
+frontend caller. Frontend-declared routes retain bidirectional source coverage.
 
-## Canonical frontend route manifest
+## Canonical route manifest
 
 | ID | Canonical method and path | Status | Current Functions export | Security boundary |
 | --- | --- | --- | --- | --- |
@@ -56,10 +57,10 @@ coverage.
 | ADM-03 | `GET /api/v1/admin/students` | `implemented` | `adminStudents` | Firebase ID; teacher/admin; identity tenant |
 | ADM-04 | `POST /api/v1/admin/students/onboarding-resend` | `implemented` | `adminStudentOnboardingResend` | Firebase ID; admin; identity tenant |
 | ADM-05 | `POST /api/v1/admin/students/bulk` | `implemented` | `adminStudentsBulk` | Firebase ID; admin; identity tenant |
-| ADM-06 | `GET /api/v1/admin/questions/library` | `implemented` | `adminQuestionLibrary` | Firebase ID; teacher/admin; identity tenant; dashboard-signed CDN assets |
-| ADM-07 | `GET /api/v1/admin/questions/distribution` | `implemented` | `adminQuestionDistribution` | Firebase ID; teacher/admin; identity tenant |
+| ADM-06 | `GET /api/v1/admin/questions/library` | `implemented` | `adminQuestionLibrary` | Firebase ID; teacher/admin; identity tenant; max-100 indexed cursor page; governed filters; current-year lifecycle; signed CDN assets |
+| ADM-07 | `GET /api/v1/admin/questions/distribution` | `implemented` | `adminQuestionDistribution` | Firebase ID; teacher/admin; identity tenant; precomputed projection only; optional exam scope; max-20 chapters |
 | ADM-08 | `GET /api/v1/admin/questions/upload-logs` | `implemented` | `adminQuestionUploadLogs` | Firebase ID; teacher/admin; identity tenant |
-| ADM-09 | `POST /api/v1/admin/questions/bulk` | `implemented` | `adminQuestionsBulk` | Firebase ID; teacher/admin; matching body tenant |
+| ADM-09 | `POST /api/v1/admin/questions/bulk` | `intentionally_retired` | None | Superseded by package-authoritative ADM-37/ADM-38; no canonical browser dispatch |
 | ADM-10 | `GET /api/v1/admin/tests` | `implemented` | `adminTests` | Firebase ID; teacher/admin; identity tenant |
 | ADM-11 | `POST /api/v1/admin/tests` | `implemented` | `adminTests` | Firebase ID; teacher/admin; identity tenant; draft-only create |
 | ADM-12 | `POST /api/v1/admin/runs` | `implemented` | `adminRuns` | Firebase ID; teacher/admin; identity tenant; current academic year; expected template version; idempotency key |
@@ -68,7 +69,7 @@ coverage.
 | ADM-15 | `POST /api/v1/admin/academicYear/archive` | `implemented` | `adminAcademicYearArchive` | Firebase ID; admin/vendor; guarded tenant |
 | ADM-16 | `POST /api/v1/admin/licensing` | `incompatible` | `adminLicensing` | Firebase ID; admin/director; guarded tenant |
 | ADM-17 | `POST /api/v1/admin/interventions` | `implemented` | `adminInterventions` | Firebase ID; admin/teacher; matching tenant; L1 |
-| ADM-18 | `POST /api/v1/admin/questions/assets` | `implemented` | `adminQuestionAssets` | Firebase ID; teacher/admin; matching body tenant |
+| ADM-18 | `POST /api/v1/admin/questions/assets` | `intentionally_retired` | None | Superseded by package-coordinated assets and revisioned ADM-31/ADM-32 replacements; no canonical browser dispatch |
 | ADM-19 | `PATCH /api/v1/admin/tests/{testId}` | `implemented` | `adminTests` | Firebase ID; teacher/admin; identity tenant; expected version |
 | ADM-20 | `POST /api/v1/admin/tests/{testId}/publish` | `implemented` | `adminTests` | Firebase ID; teacher/admin; identity tenant; expected version; draft-only source |
 | ADM-21 | `POST /api/v1/admin/tests/{testId}/archive` | `implemented` | `adminTests` | Firebase ID; teacher/admin; identity tenant; expected version; ready/assigned source |
@@ -80,6 +81,17 @@ coverage.
 | ADM-27 | `POST /api/v1/admin/students/{studentId}/photo-review` | `implemented` | `adminStudentMutations` | Firebase ID; admin; identity tenant; expected capture/version; idempotency key |
 | ADM-28 | `POST /api/v1/admin/students/{studentId}/data-export` | `implemented` | `adminStudentDataExport` | Firebase ID; admin; identity tenant; idempotency key; public result excludes bucket/object internals |
 | ADM-29 | `POST /api/v1/admin/students/{studentId}/soft-delete` | `implemented` | `adminStudentSoftDelete` | Firebase ID; admin; identity tenant; expected version; zero-run eligibility; Auth claims/session reconciliation; idempotency key |
+| ADM-30 | `GET /api/v1/admin/questions/library/{questionId}` | `implemented` | `adminQuestionLibrary` | Firebase ID; teacher/admin; identity tenant; path-bound question; explicit lineage, actual template usage, and persisted analytics |
+| ADM-31 | `PATCH /api/v1/admin/questions/{questionId}/metadata` | `implemented` | `adminQuestionMutations` | Firebase ID; teacher/admin; identity tenant; expected revision; idempotency key; managed revisioned PNG/WebP solution asset |
+| ADM-32 | `PATCH /api/v1/admin/questions/{questionId}/structure` | `implemented` | `adminQuestionMutations` | Firebase ID; teacher/admin; identity tenant; expected revision; authoritative usage lock; managed revisioned PNG/WebP question asset |
+| ADM-33 | `POST /api/v1/admin/questions/{questionId}/versions` | `implemented` | `adminQuestionMutations` | Firebase ID; teacher/admin; identity tenant; expected revision; successor lineage; idempotency key |
+| ADM-34 | `POST /api/v1/admin/questions/{questionId}/lifecycle` | `implemented` | `adminQuestionMutations` | Firebase ID; teacher/admin; identity tenant; expected revision; guarded archive/deprecate; idempotency key |
+| ADM-35 | `GET /api/v1/admin/questions/tags` | `implemented` | `adminQuestionTags` | Firebase ID; teacher/admin; identity tenant; optional explicit field; bounded authoritative dictionary revision/inventory |
+| ADM-36 | `POST /api/v1/admin/questions/tags` | `implemented` | `adminQuestionTags` | Firebase ID; teacher/admin; identity tenant; expected dictionary revision; max-100-question atomic create/rename/max-20-source merge/deprecate; active-template lock; idempotency key |
+| ADM-37 | `POST /api/v1/admin/questions/packages/validate` | `implemented` | `adminQuestionPackages` | Firebase ID; teacher/admin; identity tenant; 12-MiB/100-row bounded workbook/ZIP bytes; idempotency key; durable row-level results; 24-hour staged authority |
+| ADM-38 | `POST /api/v1/admin/questions/packages/{packageId}/commit` | `implemented` | `adminQuestionPackages` | Firebase ID; teacher/admin; identity tenant; expected package revision; hash-verified asset creation; atomic question/log/audit write; recoverable cleanup; idempotency key |
+| ADM-39 | `POST /api/v1/admin/questions/upload-logs/{uploadLogId}/rollback` | `implemented` | `adminQuestionPackages` | Firebase ID; teacher/admin; identity tenant; expected package revision; create-only rollback eligibility; asset cleanup; idempotency key |
+| ADM-40 | `GET /api/v1/admin/questions/upload-logs/{uploadLogId}` | `implemented` | `adminQuestionUploadLogs` | Firebase ID; teacher/admin; identity tenant; immutable package-verified rows and conservative rollback eligibility |
 | STU-01 | `GET /api/v1/student/dashboard` | `implemented` | `studentDashboard` | Firebase ID; student; identity tenant/student/license; active Student; current academic year |
 | STU-02 | `GET /api/v1/student/tests` | `implemented` | `studentTests` | Firebase ID; student; identity tenant/student/license; active Student; current academic year; bounded status/page query |
 | STU-03 | `GET /api/v1/student/performance` | `implemented` | `studentPerformance` | Firebase ID; student; identity tenant/Student/license; active Student; current year; bounded `lastN`; L0/L1/L2 redaction |
@@ -95,6 +107,42 @@ coverage.
 | VEN-02 | `POST /api/v1/vendor/calibration/push` | `implemented` | `vendorCalibrationPush` | Firebase ID; vendor; global scope |
 
 The detailed request/response mismatch for each incompatible entry is recorded under the same ID in `docs/FRONTEND_API_CALL_INVENTORY.md`.
+
+ADM-30 through ADM-40 are live canonical transport declarations with strict
+Admin callers and secured handlers. Their shared public DTOs keep institute and actor authority out of
+browser input, separate mutable record `revision` from immutable content
+`version`, require deterministic mutation keys and the applicable expected
+revision, and expose package recovery state without Storage bucket/object
+coordinates. ADM-31..ADM-34 share the secured `adminQuestionMutations` export
+and transactionally implement expected-revision question mutations. ADM-30 reuses the secured
+`adminQuestionLibrary` export for direct authoritative detail, and ADM-40 reuses
+`adminQuestionUploadLogs` for immutable package-verified log detail and
+conservative rollback eligibility. ADM-35/ADM-36 are registered
+through `adminQuestionTags`: the handler derives tenant/actor authority from the
+verified identity and reads indexed tag-count/active-use projections for the
+four explicit fields, while commands serialize through a dictionary revision and atomically write at
+most 100 affected questions plus deterministic audit/dictionary authority, and
+rejects source removal referenced by ready/assigned templates. Exact retries
+replay the immutable audit result and raw idempotency keys are never stored. The
+ADM-37..ADM-39 share the secured `adminQuestionPackages` export. They enforce bounded ZIP/XLSX parsing, row-level validation,
+24-hour deterministic staging, complete supported metadata preservation,
+hash-verified create-only canonical assets, atomic question/package/log/audit
+writes, explicit cleanup recovery, and create-only rollback with current
+revision/version/usage revalidation. Metadata and structure replacement assets
+accept only canonical base64 PNG/WebP bytes, upload the next record revision's
+create-only object, persist its URL/hash/revision with the question mutation,
+and compensate or record recoverable cleanup when the transaction rejects. ADM-06 now uses
+stable filter-bound cursor pages and current academic-year/two-year lifecycle
+authority. ADM-07 and ADM-35 read only trigger-maintained distribution/tag
+projections; existing institutes require governed BWM-053 backfill-complete
+authority before either endpoint can return projected data. Template writes maintain per-question usage counters and last
+used academic-year/time authority idempotently. The Admin Question Bank now
+consumes ADM-06/07/08 and ADM-30..ADM-40 through one strict adapter, exposes
+mutations only to live teacher/admin capabilities, and accepts mutation success
+only after an authoritative reload verifies it. Empty successful collection
+responses remain usable empty states. ADM-09 and ADM-18 are retired from the
+canonical gateway; their direct exports remain internal compatibility surfaces,
+not browser API authority.
 
 ADM-04 accepts only `{ idempotencyKey, studentId }`; ADM-05 accepts the shared
 bulk payload with `idempotencyKey` and no browser institute field. Both derive
@@ -142,7 +190,10 @@ owns that separate mutation surface.
 
 ADM-06 returns the shared `AdminQuestionLibraryResult`. Each managed question or solution asset is exposed only as its canonical relative CDN path plus a freshly generated 30-minute `dashboardView` signed HTTPS URL containing `Expires`, `KeyName`, and `Signature`; malformed, noncanonical, direct-bucket, or unsigned legacy references are omitted. The public response never returns Storage bucket names or object paths.
 
-ADM-09 supports validation-only and commit modes through the shared `QuestionBulkUploadRequest`/`QuestionBulkUploadResult` contract. Every validated row returns the authoritative question ID and positive-integer version. A commit accepts only canonical relative managed asset paths, writes the question documents, deterministic immutable upload log, and institute mutation audit atomically, and replays the stored result for an exact normalized-payload retry. Once a question is used, changes to its structural exam/content/marking fields are rejected and callers must create a new version.
+ADM-09 is intentionally retired from the canonical browser surface. Its legacy
+direct export remains internal-only for compatibility, but Admin no longer
+sends tenant-authored bulk rows or treats independently uploaded assets as
+commit authority. ADM-37/ADM-38 now own package validation and commit.
 
 ADM-10 and ADM-11 use the shared `AdminTestTemplateRecord`, `AdminTestTemplateCreateRequest`, and `AdminTestTemplateCreateResult` contracts. The server creates the Firestore document ID, always persists a draft at numeric version `1`, accepts all five declared selection methods including `upload_set`, retains recommended timing values, and returns the authoritative ID/version through a standard success envelope. Create-as-publish is rejected so lifecycle changes cannot bypass ADM-20. Admin create consumes the result, immediately reloads ADM-10, verifies the reloaded ID/canonical ID/version, and replaces UI state only with the reloaded records; the frontend never generates template IDs.
 
@@ -166,16 +217,20 @@ ADM-20 and ADM-21 use the shared `AdminTestTemplateLifecycleRequest` and `AdminT
 
 ADM-28 and ADM-29 are admin-only, path-bound Student commands whose institute and actor authority come exclusively from the verified Firebase identity. ADM-28 preserves the existing secure CSV generation and signed-download authority, adds deterministic idempotency/audit replay, and returns only the shared public URL/hash/count result; report bucket names, object paths, and other Storage internals remain server-only. ADM-29 requires the current Student version and a reason, transactionally queries retained institute session history, and rejects deletion unless the authoritative session count is zero. An eligible delete increments the Student version and atomically writes the soft-delete fields plus immutable replay audit, then clears managed claims and revokes sessions; an exact retry replays the audit result and repeats Auth reconciliation. Admin reloads ADM-03 after deletion and accepts success only when the Student is absent from the authoritative roster.
 
-ADM-18 accepts one shared `QuestionAssetUploadRequest` containing base64 image bytes, `questionImage` or `solutionImage` kind, PNG/WebP extension, matching institute, and the ADM-09-authoritative question ID/version. It writes only the canonical versioned question path with create-only Storage preconditions and SHA-256 metadata. Same-content retries replay safely; different content at the occupied path fails closed. The shared public result contains only asset kind, CDN path/URL, content type, question ID, version, and size; bucket name, object path, and internal created/replayed disposition never cross the API boundary.
+ADM-18 is intentionally retired from the canonical browser surface. Package
+assets are coordinated inside ADM-38, while individual edit replacements are
+part of ADM-31/ADM-32 and use the next question revision in their canonical
+managed path. The legacy direct asset export is internal-only and is not a
+supported browser transport.
 
 ## Backend HTTP export accounting
 
-`functions/src/apiRouteManifest.ts` accounts for all 49 current `functions.https.onRequest` exports:
+`functions/src/apiRouteManifest.ts` accounts for all 51 current `functions.https.onRequest` exports:
 
 - `apiV1` is the single versioned `gateway` export; it resolves exact manifest method/path pairs, preserves decoded route parameters, and dispatches non-null `functionExport` mappings through the existing raw request handlers;
-- 32 exports are referenced by one or more canonical frontend routes;
-- 13 portal-oriented exports currently have no executable frontend caller and remain `unmapped_portal` rather than receiving an invented public route;
-- `internalEmailQueue` is `internal_only`;
+- 33 exports are referenced by one or more canonical frontend routes;
+- 12 portal-oriented exports currently have no executable frontend caller and remain `unmapped_portal` rather than receiving an invented public route;
+- `internalEmailQueue`, `adminQuestionsBulk`, and `adminQuestionAssets` are `internal_only`;
 - `stripeWebhook` is a `webhook` boundary;
 - `helloWorld` is a `healthcheck` boundary.
 

@@ -1,20 +1,44 @@
 import {StandardApiErrorCode} from "./apiResponse";
 export type {
+  AdminQuestionAuthoritativeRecord,
+  AdminQuestionDetailResult,
+  AdminQuestionLibraryPageResult,
+  AdminQuestionLibraryQuery,
   AdminQuestionLibraryRecord,
   AdminQuestionLibraryResult,
 } from "../../../shared/contracts/apiDtos";
 import type {
-  AdminQuestionLibraryResult,
+  AdminQuestionLibraryPageResult,
+  AdminQuestionLibraryQuery,
 } from "../../../shared/contracts/apiDtos";
 
-export interface AdminQuestionLibraryValidatedRequest {
+export interface AdminQuestionLibraryValidatedRequest
+  extends AdminQuestionLibraryQuery {
+  actorId: string;
+  actorRole: string;
   instituteId: string;
   limit: number;
 }
 
+export interface AdminQuestionDetailValidatedRequest {
+  actorId: string;
+  actorRole: string;
+  instituteId: string;
+  questionId: string;
+}
+
 export interface AdminQuestionLibrarySuccessResponse {
   code: "OK";
-  data: AdminQuestionLibraryResult;
+  data: AdminQuestionLibraryPageResult;
+  message: string;
+  requestId: string;
+  success: true;
+  timestamp: string;
+}
+
+export interface AdminQuestionDetailSuccessResponse {
+  code: "OK";
+  data: import("../../../shared/contracts/apiDtos").AdminQuestionDetailResult;
   message: string;
   requestId: string;
   success: true;

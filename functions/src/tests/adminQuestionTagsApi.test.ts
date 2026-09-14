@@ -1,21 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  createAdminQuestionTagsHandler,
-} from "../api/adminQuestionTags";
-import {
-  AdminQuestionTagsValidationError,
-} from "../types/adminQuestionTags";
-import {
-  createMockRequest,
-  createMockResponse,
-} from "./helpers/http";
+import {createAdminQuestionTagsHandler} from "../api/adminQuestionTags";
+import {AdminQuestionBankValidationError} from "../types/adminQuestionBank";
+import {createMockRequest, createMockResponse} from "./helpers/http";
 
 const createAdminToken = (overrides: Record<string, unknown> = {}) => ({
-  instituteId: "inst_build_m126_api",
+  instituteId: "inst_bwm_027_tags_api",
   licenseLayer: "L2",
   role: "admin",
-  uid: "admin_build_m126",
+  uid: "admin_bwm_027_tags",
   ...overrides,
 });
 
@@ -24,105 +17,83 @@ const assertStructuredError = (
   expectedCode: string,
   expectedMessage: string,
 ): void => {
-  const errorResponse = responseBody as {
-    error: {
-      code: string;
-      message: string;
-    };
+  const response = responseBody as {
+    error: {code: string; message: string};
     success: boolean;
   };
-
-  assert.equal(errorResponse.error.code, expectedCode);
-  assert.equal(errorResponse.error.message, expectedMessage);
-  assert.equal(errorResponse.success, false);
+  assert.equal(response.error.code, expectedCode);
+  assert.equal(response.error.message, expectedMessage);
+  assert.equal(response.success, false);
 };
 
-test("admin question tags handler accepts read requests", async () => {
+test("tag read derives tenant and actor authority from the token", async () => {
   const handler = createAdminQuestionTagsHandler({
     getTags: async (request) => {
-      assert.equal(request.instituteId, "inst_build_m126_api");
-      return {
-        tags: [
-          {
-            id: "motion",
-            name: "motion",
-            questionCount: 3,
-            status: "active",
-            usedInActiveTemplate: true,
-          },
-        ],
-      };
+      assert.equal(request.actorId, "admin_bwm_027_tags");
+      assert.equal(request.actorRole, "admin");
+      assert.equal(request.instituteId, "inst_bwm_027_tags_api");
+      assert.equal(request.field, "additionalTag");
+      return {dictionaryRevision: 4, tags: []};
     },
     mutateTags: async () => {
       throw new Error("mutateTags should not be called");
     },
     verifyIdToken: async () => createAdminToken() as never,
   });
-
   const response = createMockResponse();
-
-  await handler(
-    createMockRequest({
-      headers: {
-        authorization: "Bearer build_m126_tags_read",
-      },
-      method: "GET",
-      path: "/admin/questions/tags",
-    }) as never,
-    response as never,
-  );
+  await handler(createMockRequest({
+    headers: {authorization: "Bearer tags-read"},
+    method: "GET",
+    path: "/api/v1/admin/questions/tags",
+    query: {field: "additionalTag"},
+  }) as never, response as never);
 
   assert.equal(response.statusCode, 200);
-  assert.equal((response.body as {code: string}).code, "OK");
+  assert.equal((response.body as {data: {dictionaryRevision: number}})
+    .data.dictionaryRevision, 4);
 });
 
-test("admin question tags handler accepts mutation requests", async () => {
+test("tag mutation accepts the strict multi-source contract", async () => {
   const handler = createAdminQuestionTagsHandler({
     getTags: async () => {
       throw new Error("getTags should not be called");
     },
     mutateTags: async (request) => {
-      assert.equal(request.instituteId, "inst_build_m126_api");
-      assert.equal(request.actionType, "deprecate");
-      assert.equal(request.primaryTag, "motion");
-
+      assert.equal(request.instituteId, "inst_bwm_027_tags_api");
+      assert.equal(request.mutation.action, "merge");
+      if (request.mutation.action !== "merge") throw new Error("type guard");
+      assert.deepEqual(request.mutation.sourceNames, ["Motion", "Velocity"]);
       return {
-        tags: [
-          {
-            id: "motion",
-            name: "motion",
-            questionCount: 1,
-            status: "deprecated",
-            usedInActiveTemplate: false,
-          },
-        ],
+        affectedQuestionCount: 2,
+        auditId: "question_tags_audit",
+        dictionaryRevision: 2,
+        disposition: "applied",
+        tags: [],
+        updatedAt: "2026-09-12T00:00:00.000Z",
       };
     },
     verifyIdToken: async () => createAdminToken() as never,
   });
-
   const response = createMockResponse();
-
-  await handler(
-    createMockRequest({
-      body: {
-        actionType: "deprecate",
-        primaryTag: "motion",
-      },
-      headers: {
-        authorization: "Bearer build_m126_tags_write",
-      },
-      method: "POST",
-      path: "/admin/questions/tags",
-    }) as never,
-    response as never,
-  );
+  await handler(createMockRequest({
+    body: {
+      action: "merge",
+      destinationName: "Mechanics",
+      expectedDictionaryRevision: 1,
+      field: "primaryTag",
+      idempotencyKey: "api-merge-key",
+      sourceNames: ["Motion", "Velocity"],
+    },
+    headers: {authorization: "Bearer tags-write"},
+    method: "POST",
+    path: "/api/v1/admin/questions/tags",
+  }) as never, response as never);
 
   assert.equal(response.statusCode, 200);
   assert.equal((response.body as {success: boolean}).success, true);
 });
 
-test("admin question tags handler rejects disallowed roles", async () => {
+test("tag handler rejects unsupported fields before service execution", async () => {
   const handler = createAdminQuestionTagsHandler({
     getTags: async () => {
       throw new Error("getTags should not be called");
@@ -130,21 +101,44 @@ test("admin question tags handler rejects disallowed roles", async () => {
     mutateTags: async () => {
       throw new Error("mutateTags should not be called");
     },
+    verifyIdToken: async () => createAdminToken() as never,
+  });
+  const response = createMockResponse();
+  await handler(createMockRequest({
+    body: {
+      action: "create",
+      expectedDictionaryRevision: 1,
+      field: "tags",
+      idempotencyKey: "invalid-field-key",
+      name: "Motion",
+    },
+    headers: {authorization: "Bearer invalid-field"},
+    method: "POST",
+    path: "/api/v1/admin/questions/tags",
+  }) as never, response as never);
+
+  assert.equal(response.statusCode, 400);
+  assertStructuredError(
+    response.body,
+    "VALIDATION_ERROR",
+    "Field \"field\" must be primaryTag, secondaryTag, additionalTag, or topic.",
+  );
+});
+
+test("tag handler rejects disallowed roles", async () => {
+  const handler = createAdminQuestionTagsHandler({
+    getTags: async () => ({dictionaryRevision: 1, tags: []}),
+    mutateTags: async () => {
+      throw new Error("mutateTags should not be called");
+    },
     verifyIdToken: async () => createAdminToken({role: "student"}) as never,
   });
-
   const response = createMockResponse();
-
-  await handler(
-    createMockRequest({
-      headers: {
-        authorization: "Bearer build_m126_teacher",
-      },
-      method: "GET",
-      path: "/admin/questions/tags",
-    }) as never,
-    response as never,
-  );
+  await handler(createMockRequest({
+    headers: {authorization: "Bearer student"},
+    method: "GET",
+    path: "/api/v1/admin/questions/tags",
+  }) as never, response as never);
 
   assert.equal(response.statusCode, 403);
   assertStructuredError(
@@ -154,41 +148,37 @@ test("admin question tags handler rejects disallowed roles", async () => {
   );
 });
 
-test("admin question tags handler maps validation errors", async () => {
+test("tag handler maps domain conflicts to the standard envelope", async () => {
   const handler = createAdminQuestionTagsHandler({
     getTags: async () => {
       throw new Error("getTags should not be called");
     },
     mutateTags: async () => {
-      throw new AdminQuestionTagsValidationError(
-        "VALIDATION_ERROR",
-        "Tag already exists.",
+      throw new AdminQuestionBankValidationError(
+        "CONFLICT",
+        "Tag dictionary revision conflict.",
       );
     },
     verifyIdToken: async () => createAdminToken() as never,
   });
-
   const response = createMockResponse();
+  await handler(createMockRequest({
+    body: {
+      action: "create",
+      expectedDictionaryRevision: 1,
+      field: "topic",
+      idempotencyKey: "conflict-key",
+      name: "Vectors",
+    },
+    headers: {authorization: "Bearer conflict"},
+    method: "POST",
+    path: "/api/v1/admin/questions/tags",
+  }) as never, response as never);
 
-  await handler(
-    createMockRequest({
-      body: {
-        actionType: "create",
-        primaryTag: "motion",
-      },
-      headers: {
-        authorization: "Bearer build_m126_invalid",
-      },
-      method: "POST",
-      path: "/admin/questions/tags",
-    }) as never,
-    response as never,
-  );
-
-  assert.equal(response.statusCode, 400);
+  assert.equal(response.statusCode, 409);
   assertStructuredError(
     response.body,
-    "VALIDATION_ERROR",
-    "Tag already exists.",
+    "CONFLICT",
+    "Tag dictionary revision conflict.",
   );
 });

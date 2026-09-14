@@ -250,6 +250,9 @@ test(
     );
 
     await Promise.all(questionPaths.map(deleteDocumentIfPresent));
+    await firestore.doc(
+      `institutes/${instituteId}/academicYears/2026-27`,
+    ).set({status: "Active"});
     const request = uploadService.normalizeRequest({
       actorId: "admin_build_m3",
       actorLicenseLayer: "L2",
@@ -314,6 +317,8 @@ test(
       },
     );
     const libraryResult = await libraryService.getLibrary({
+      actorId: "admin_build_m3",
+      actorRole: "admin",
       instituteId,
       limit: 10,
     });

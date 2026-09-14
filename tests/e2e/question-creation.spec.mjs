@@ -19,7 +19,6 @@ const {
 
 const projectId = "demo-parabolic-test";
 const instituteId = "inst_bwm_012_question_browser";
-const otherInstituteId = "inst_bwm_012_other";
 const questionAssetsBucket = process.env.QUESTION_ASSETS_BUCKET ??
   `${projectId}.appspot.com`;
 const expectedCdnHost = "assets.bwm-012.example.test";
@@ -49,9 +48,6 @@ async function cleanupResources() {
   await Promise.all(files.map((file) => file.delete({ignoreNotFound: true})));
   await firestore.recursiveDelete(
     firestore.collection("institutes").doc(instituteId),
-  );
-  await firestore.recursiveDelete(
-    firestore.collection("institutes").doc(otherInstituteId),
   );
   const userIds = [teacherUid, studentUid].filter(Boolean);
   if (userIds.length > 0) {
@@ -129,8 +125,10 @@ test.beforeAll(async () => {
     firestore.collection("institutes").doc(instituteId).set({
       profile: {instituteName: "BWM-012 Question Institute"},
     }),
-    firestore.collection("institutes").doc(otherInstituteId).set({
-      profile: {instituteName: "BWM-012 Other Institute"},
+    firestore.doc(
+      `institutes/${instituteId}/academicYears/2026-2027`,
+    ).set({
+      status: "active",
     }),
   ]);
 });
@@ -143,7 +141,7 @@ test.afterAll(async () => {
 });
 
 test(
-  "Admin creates and safely reloads an image question with retry-safe access boundaries",
+  "Admin validates, commits, and reloads an authoritative question package",
   async ({page, request}) => {
     test.setTimeout(240_000);
 
@@ -157,34 +155,21 @@ test(
       studentEmail,
       studentPassword,
     );
-    const negativeRequestBody = {
-      assetKind: "questionImage",
-      contentBase64: pngContentBase64,
-      extension: "png",
-      instituteId,
-      questionId: "negative-probe",
-      version: 1,
-    };
-
     const roleDenied = await request.post(
-      "/api/v1/admin/questions/assets",
+      "/api/v1/admin/questions/packages/validate",
       {
-        data: negativeRequestBody,
+        data: {
+          contentBase64: pngContentBase64,
+          examType: "JEEMains",
+          fileName: "forbidden.zip",
+          idempotencyKey: "forbidden-package-probe",
+          subject: "Physics",
+        },
         headers: {Authorization: `Bearer ${studentToken}`},
       },
     );
     expect(roleDenied.status()).toBe(403);
     expect((await roleDenied.json()).error.code).toBe("FORBIDDEN");
-
-    const tenantDenied = await request.post(
-      "/api/v1/admin/questions/assets",
-      {
-        data: {...negativeRequestBody, instituteId: otherInstituteId},
-        headers: {Authorization: `Bearer ${teacherToken}`},
-      },
-    );
-    expect(tenantDenied.status()).toBe(403);
-    expect((await tenantDenied.json()).error.code).toBe("TENANT_MISMATCH");
 
     await page.addInitScript(() => {
       window.history.replaceState(
@@ -218,19 +203,20 @@ test(
       (response) => {
         if (
           new URL(response.url()).pathname !==
-            "/api/v1/admin/questions/bulk" ||
+            "/api/v1/admin/questions/packages/validate" ||
           response.status() !== 200
         ) {
           return false;
         }
-        return response.request().postDataJSON()?.commit === false;
+        return true;
       },
       {timeout: 90_000},
     );
     await page.getByRole("button", {name: "Validate ZIP Package"}).click();
     const validateEnvelope = await (await validateResponsePromise).json();
     expect(validateEnvelope.success).toBe(true);
-    expect(validateEnvelope.data.committed).toBe(false);
+    expect(validateEnvelope.data.state).toBe("validated");
+    expect(validateEnvelope.data.packageRevision).toBe(1);
     expect(validateEnvelope.data.summary.valid).toBe(1);
     const authoritativeRow = validateEnvelope.data.rows[0];
     const questionId = authoritativeRow.questionId;
@@ -240,66 +226,26 @@ test(
       page.getByText(/Validation successful for bwm-012-question-package\.zip/u),
     ).toBeVisible();
 
-    let assetAttemptCount = 0;
-    await page.route("**/api/v1/admin/questions/assets", async (route) => {
-      assetAttemptCount += 1;
-      if (assetAttemptCount === 2) {
-        await route.abort("connectionfailed");
-        return;
-      }
-      await route.continue();
-    });
-    const firstAssetResponsePromise = page.waitForResponse(
-      (response) =>
-        new URL(response.url()).pathname ===
-          "/api/v1/admin/questions/assets" &&
-        response.status() === 200,
-      {timeout: 90_000},
-    );
-    await page.getByRole("button", {name: "Final Upload"}).click();
-    const firstAssetEnvelope = await (await firstAssetResponsePromise).json();
-    expect(firstAssetEnvelope.data.assetKind).toBe("questionImage");
-    await expect(page.locator(".admin-tests-inline-error")).toBeVisible({
-      timeout: 30_000,
-    });
-    expect(assetAttemptCount).toBe(2);
-
-    const questionPrefix = `${instituteId}/questions/${questionId}/v1/`;
-    let [partialFiles] = await storageBucket.getFiles({prefix: questionPrefix});
-    expect(partialFiles.map((file) => file.name)).toEqual([
-      `${questionPrefix}question.png`,
-    ]);
-    expect(
-      (await firestore
-        .collection("institutes")
-        .doc(instituteId)
-        .collection("questionBank")
-        .doc(questionId)
-        .get()).exists,
-    ).toBe(false);
-
-    await page.unroute("**/api/v1/admin/questions/assets");
     const commitResponsePromise = page.waitForResponse(
       (response) => {
-        if (
-          new URL(response.url()).pathname !==
-            "/api/v1/admin/questions/bulk" ||
-          response.status() !== 200
-        ) {
-          return false;
-        }
-        return response.request().postDataJSON()?.commit === true;
+        return new URL(response.url()).pathname ===
+          `/api/v1/admin/questions/packages/${validateEnvelope.data.packageId}/commit` &&
+          response.status() === 200;
       },
       {timeout: 90_000},
     );
     await page.getByRole("button", {name: "Final Upload"}).click();
     const commitEnvelope = await (await commitResponsePromise).json();
     expect(commitEnvelope.success).toBe(true);
-    expect(commitEnvelope.data.committed).toBe(true);
-    expect(commitEnvelope.data.summary.created).toBe(1);
+    expect(commitEnvelope.data.state).toBe("committed");
+    expect(commitEnvelope.data.packageRevision).toBe(2);
+    expect(commitEnvelope.data.questions).toHaveLength(1);
+    expect(commitEnvelope.data.questions[0].questionId).toBe(questionId);
     await expect(
       page.getByText("Upload successful. 1 questions were added and 0 existing versions were updated."),
     ).toBeVisible();
+
+    const questionPrefix = `${instituteId}/questions/${questionId}/v1/`;
 
     const questionSnapshot = await firestore
       .collection("institutes")
@@ -363,7 +309,7 @@ test(
     const detailResponsePromise = page.waitForResponse(
       (response) =>
         new URL(response.url()).pathname ===
-          "/api/v1/admin/questions/library" &&
+          `/api/v1/admin/questions/library/${questionId}` &&
         response.status() === 200,
       {timeout: 90_000},
     );
@@ -374,7 +320,7 @@ test(
     ).toBeVisible();
     await expect(
       page.locator(".admin-question-library-definition-list").filter({
-        hasText: "Correct Answer",
+        hasText: "Answer",
       }),
     ).toContainText("A");
     await page.getByRole("button", {
@@ -393,7 +339,8 @@ test(
     );
 
     const uploadLog = await firestore.doc(
-      commitEnvelope.data.uploadLogPath,
+      `institutes/${instituteId}/questionUploadLogs/` +
+        commitEnvelope.data.uploadLogId,
     ).get();
     expect(uploadLog.exists).toBe(true);
     const auditSnapshot = await firestore
@@ -401,7 +348,44 @@ test(
       .doc(instituteId)
       .collection("auditLogs")
       .get();
-    expect(auditSnapshot.size).toBe(3);
+    expect(auditSnapshot.size).toBe(1);
+
+    await page.evaluate(() => {
+      window.history.pushState(
+        null,
+        "",
+        "/admin/question-bank/validation-logs",
+      );
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    await expect(page.getByRole("heading", {
+      name: "Immutable Upload Log Review",
+    })).toBeVisible({timeout: 90_000});
+    const logRow = page.getByRole("row").filter({
+      hasText: commitEnvelope.data.uploadLogId,
+    });
+    const rollbackResponsePromise = page.waitForResponse(
+      (response) => new URL(response.url()).pathname ===
+        `/api/v1/admin/questions/upload-logs/${commitEnvelope.data.uploadLogId}/rollback` &&
+        response.status() === 200,
+      {timeout: 90_000},
+    );
+    await logRow.getByRole("button", {name: "Rollback"}).click();
+    const rollbackEnvelope = await (await rollbackResponsePromise).json();
+    expect(rollbackEnvelope.data.state).toBe("rolled_back");
+    await expect(page.getByText(new RegExp(
+      `Rollback finalized for ${commitEnvelope.data.uploadLogId}`,
+      "u",
+    ))).toBeVisible();
+    expect((await firestore.doc(
+      `institutes/${instituteId}/questionBank/${questionId}`,
+    ).get()).exists).toBe(false);
+    const [rolledBackFiles] = await storageBucket.getFiles({
+      prefix: questionPrefix,
+    });
+    expect(rolledBackFiles).toHaveLength(0);
+    expect((await firestore.collection("institutes").doc(instituteId)
+      .collection("auditLogs").get()).size).toBe(2);
 
     await cleanupResources();
     const [remainingFiles] = await storageBucket.getFiles({

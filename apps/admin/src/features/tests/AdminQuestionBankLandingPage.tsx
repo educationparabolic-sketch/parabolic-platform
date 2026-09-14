@@ -1,14 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
-import { adaptAdminQuestionLibraryResult } from "../../../../../shared/services/portalResponseAdapters";
 import {
   shouldUseLiveApi as shouldUseConfiguredLiveApi,
 } from "../../../../../shared/services/frontendEnvironment";
-import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import AdminWorkspaceLandingPage from "../shared/AdminWorkspaceLandingPage";
 import { QUESTION_BANK } from "./testTemplateFixtures";
-
-const apiClient = getPortalApiClient("admin");
+import { getQuestionDistribution, getQuestionLibrary, getQuestionTags, getQuestionUploadLogs } from "./questionBankApi";
 
 interface QuestionBankLandingSummary {
   totalQuestions: number;
@@ -61,106 +58,35 @@ function shouldUseLiveApi(): boolean {
   return shouldUseConfiguredLiveApi();
 }
 
-function toNonEmptyString(value: unknown, fallback = ""): string {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
-}
-
-function toNumberOrZero(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-  return 0;
-}
-
 function formatIsoDate(value: string): string {
   const parsed = Date.parse(value);
   return Number.isNaN(parsed) ? value : new Date(parsed).toISOString().slice(0, 10);
 }
 
 async function fetchQuestionBankLandingSummary(): Promise<QuestionBankLandingSummary> {
-  const [libraryPayload, distributionPayload, uploadLogsPayload] = await Promise.all([
-    apiClient.get<unknown>("/admin/questions/library", {
-      query: { limit: "250" },
-    }),
-    apiClient.get<unknown>("/admin/questions/distribution", {
-      query: { limit: "6" },
-    }),
-    apiClient.get<unknown>("/admin/questions/upload-logs"),
+  const [library, distribution, uploadLogs, tags] = await Promise.all([
+    getQuestionLibrary({ limit: "100" }),
+    getQuestionDistribution(),
+    getQuestionUploadLogs(),
+    getQuestionTags(),
   ]);
-
-  if (!distributionPayload || typeof distributionPayload !== "object") {
-    throw new Error("GET /admin/questions/distribution returned an invalid payload.");
-  }
-  if (!uploadLogsPayload || typeof uploadLogsPayload !== "object") {
-    throw new Error("GET /admin/questions/upload-logs returned an invalid payload.");
-  }
-
-  const libraryResponse = adaptAdminQuestionLibraryResult(libraryPayload);
-  const distributionResponse = distributionPayload as {
-    summary?: unknown;
-  };
-  const uploadLogsResponse = uploadLogsPayload as {
-    logs?: unknown;
-  };
-
-  const questions = libraryResponse.questions;
-  const distributionSummary =
-    distributionResponse.summary && typeof distributionResponse.summary === "object" ?
-      (distributionResponse.summary as Record<string, unknown>) :
-      null;
-  const uploadLogs = Array.isArray(uploadLogsResponse.logs) ? uploadLogsResponse.logs : [];
-
-  if (questions.length === 0 || !distributionSummary) {
-    throw new Error("Question bank landing summary is missing required admin question data.");
-  }
-
-  const activeTags = new Set<string>();
-  let usedQuestions = 0;
-
-  questions.forEach((entry) => {
-    const primaryTag = entry.primaryTag;
-    const secondaryTag = entry.secondaryTag;
-
-    if (primaryTag.length > 0 && primaryTag !== "none") {
-      activeTags.add(primaryTag);
-    }
-    if (secondaryTag.length > 0 && secondaryTag !== "none") {
-      activeTags.add(secondaryTag);
-    }
-    if (entry.usedCount > 0) {
-      usedQuestions += 1;
-    }
-  });
-
-  const latestUpload = uploadLogs.reduce<Record<string, unknown> | null>((latest, entry) => {
-    if (!entry || typeof entry !== "object") {
-      return latest;
-    }
-
-    const current = entry as Record<string, unknown>;
-    const currentTimestamp = Date.parse(toNonEmptyString(current.timestamp, new Date(0).toISOString()));
-    const latestTimestamp =
-      latest ? Date.parse(toNonEmptyString(latest.timestamp, new Date(0).toISOString())) : Number.NEGATIVE_INFINITY;
-
-    return currentTimestamp > latestTimestamp ? current : latest;
-  }, null);
+  const latestUpload = uploadLogs[0] ?? null;
 
   return {
-    totalQuestions: Math.max(0, questions.length),
-    activeTags: Math.max(0, activeTags.size),
-    imbalanceWarnings: Math.max(0, toNumberOrZero(distributionSummary.imbalanceWarnings)),
-    latestUploadDate: toNonEmptyString(latestUpload?.timestamp, FALLBACK_SUMMARY.latestUploadDate),
-    latestUploadRows: Math.max(0, toNumberOrZero(latestUpload?.totalRows ?? FALLBACK_SUMMARY.latestUploadRows)),
-    usedQuestions: Math.max(0, usedQuestions),
+    totalQuestions: distribution.totalQuestions,
+    activeTags: tags.tags.filter((tag) => tag.status === "active").length,
+    imbalanceWarnings: distribution.imbalanceWarnings,
+    latestUploadDate: latestUpload?.timestamp ?? "No uploads",
+    latestUploadRows: latestUpload?.totalRows ?? 0,
+    usedQuestions: library.questions.filter((question) => question.usedInTemplate).length,
   };
 }
 
 function AdminQuestionBankLandingPage() {
-  const [summary, setSummary] = useState<QuestionBankLandingSummary>(FALLBACK_SUMMARY);
+  const [summary, setSummary] = useState<QuestionBankLandingSummary>(() => shouldUseLiveApi() ? {
+    activeTags: 0, imbalanceWarnings: 0, latestUploadDate: "No uploads", latestUploadRows: 0,
+    totalQuestions: 0, usedQuestions: 0,
+  } : FALLBACK_SUMMARY);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -204,7 +130,7 @@ function AdminQuestionBankLandingPage() {
       {
         label: "Tracked Questions",
         value: String(summary.totalQuestions),
-        detail: `${summary.usedQuestions} already used in delivered work`,
+        detail: `${summary.usedQuestions} active-template references in the loaded governed page`,
       },
       {
         label: "Active Tags",

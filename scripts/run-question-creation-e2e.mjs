@@ -95,5 +95,5 @@ run("Run no-mock question creation browser flow", firebaseExecutable, emulatorAr
 });
 
 console.log(
-  "\n[question-creation] PASS: creation, partial retry, safe reload, access rejection, and cleanup verified.",
+  "\n[question-creation] PASS: package commit/rollback, lifecycle mutations, pagination, identity boundaries, authoritative reload, audits, and cleanup verified.",
 );

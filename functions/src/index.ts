@@ -115,6 +115,12 @@ import {
   handleAdminQuestionTagsRequest,
 } from "./api/adminQuestionTags";
 import {
+  handleAdminQuestionMutationsRequest,
+} from "./api/adminQuestionMutations";
+import {
+  handleAdminQuestionPackagesRequest,
+} from "./api/adminQuestionPackages";
+import {
   handleAdminInterventionsRequest,
 } from "./api/adminInterventions";
 import {
@@ -137,6 +143,11 @@ import {
   questionBankOnCreate,
   questionBankOnUpdate,
 } from "./triggers/questionIngestion";
+import {
+  questionDistributionOnAnalyticsWrite,
+  questionDistributionOnQuestionWrite,
+  questionUsageOnTemplateWrite,
+} from "./triggers/questionReadProjections";
 import {examSessionOnUpdate} from "./triggers/sessionSubmission";
 import {instituteStudentOnWrite} from "./triggers/studentUsageMetering";
 import {studentYearMetricsOnWrite} from "./triggers/studentYearMetrics";
@@ -156,6 +167,9 @@ systemEventTopologyService.assertTopologyInvariants();
 
 export {questionBankOnCreate};
 export {questionBankOnUpdate};
+export {questionDistributionOnAnalyticsWrite};
+export {questionDistributionOnQuestionWrite};
+export {questionUsageOnTemplateWrite};
 export {runAssignmentOnCreate};
 export {examSessionOnUpdate};
 export {instituteStudentOnWrite};
@@ -290,6 +304,12 @@ export const adminQuestionsBulk = functions.https.onRequest(
 );
 export const adminQuestionTags = functions.https.onRequest(
   handleAdminQuestionTagsRequest,
+);
+export const adminQuestionMutations = functions.https.onRequest(
+  handleAdminQuestionMutationsRequest,
+);
+export const adminQuestionPackages = functions.https.onRequest(
+  handleAdminQuestionPackagesRequest,
 );
 export const adminInterventions = functions.https.onRequest(
   handleAdminInterventionsRequest,

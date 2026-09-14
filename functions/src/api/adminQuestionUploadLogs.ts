@@ -14,16 +14,21 @@ import {ADMIN_TEACHER_ROLES} from "../policy/adminRolePolicy";
 import {createTenantGuardMiddleware} from "../middleware/tenant";
 import {adminQuestionUploadLogsService} from "../services/adminQuestionUploadLogs";
 import {
+  AdminQuestionUploadLogDetailSuccessResponse,
   AdminQuestionUploadLogsSuccessResponse,
-  AdminQuestionUploadLogsValidatedRequest,
   AdminQuestionUploadLogsValidationError,
 } from "../types/adminQuestionUploadLogs";
 import {MiddlewareRequest} from "../types/middleware";
 
 interface AdminQuestionUploadLogsDependencies {
+  getLogDetail: typeof adminQuestionUploadLogsService.getLogDetail;
   getLogs: typeof adminQuestionUploadLogsService.getLogs;
   verifyIdToken: (idToken: string) => Promise<DecodedIdToken>;
 }
+
+type ValidatedUploadLogRead =
+  | {action: "detail"; payload: ReturnType<typeof adminQuestionUploadLogsService.normalizeDetailRequest>}
+  | {action: "list"; payload: ReturnType<typeof adminQuestionUploadLogsService.normalizeRequest>};
 
 const buildSuccessResponse = (
   result: Awaited<ReturnType<typeof adminQuestionUploadLogsService.getLogs>>,
@@ -46,8 +51,21 @@ export const createAdminQuestionUploadLogsHandler = (
     response: functions.Response,
   ): Promise<void> => {
     const validatedRequest = request.context
-      .requestData as unknown as AdminQuestionUploadLogsValidatedRequest;
-    const result = await dependencies.getLogs(validatedRequest);
+      .requestData as unknown as ValidatedUploadLogRead;
+    if (validatedRequest.action === "detail") {
+      const result = await dependencies.getLogDetail(validatedRequest.payload);
+      const body: AdminQuestionUploadLogDetailSuccessResponse = {
+        code: "OK",
+        data: result,
+        message: "Question upload log detail loaded.",
+        requestId: request.context.requestId,
+        success: true,
+        timestamp: new Date().toISOString(),
+      };
+      response.status(200).json(body);
+      return;
+    }
+    const result = await dependencies.getLogs(validatedRequest.payload);
 
     response.status(200).json(
       buildSuccessResponse(
@@ -73,15 +91,22 @@ export const createAdminQuestionUploadLogsHandler = (
     createRequestValidationMiddleware({
       validator: (request: MiddlewareRequest): void => {
         const identity = request.context.identity;
+        if (request.params.uploadLogId) {
+          setRequestData(request, {
+            action: "detail",
+            payload: adminQuestionUploadLogsService.normalizeDetailRequest({
+              instituteId: identity?.instituteId,
+              uploadLogId: request.params.uploadLogId,
+            }),
+          });
+          return;
+        }
         const validatedRequest = adminQuestionUploadLogsService.normalizeRequest({
           instituteId: identity?.instituteId,
           limit: request.query.limit,
         });
 
-        setRequestData(
-          request,
-          validatedRequest as unknown as Record<string, unknown>,
-        );
+        setRequestData(request, {action: "list", payload: validatedRequest});
       },
     }),
   ],
@@ -107,6 +132,9 @@ export const createAdminQuestionUploadLogsHandler = (
 
 export const handleAdminQuestionUploadLogsRequest =
   createAdminQuestionUploadLogsHandler({
+    getLogDetail: adminQuestionUploadLogsService.getLogDetail.bind(
+      adminQuestionUploadLogsService,
+    ),
     getLogs: adminQuestionUploadLogsService.getLogs.bind(
       adminQuestionUploadLogsService,
     ),

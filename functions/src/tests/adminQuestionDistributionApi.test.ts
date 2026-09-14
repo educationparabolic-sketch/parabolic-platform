@@ -138,6 +138,6 @@ test("admin question distribution handler maps validation errors", async () => {
   assertStructuredError(
     response.body,
     "VALIDATION_ERROR",
-    "Field \"limit\" must be a positive integer.",
+    "Field \"limit\" must be an integer between 1 and 20.",
   );
 });

@@ -9,6 +9,47 @@ const sharedContractPath = join(rootDirectory, "shared/contracts/apiDtos.d.ts");
 
 const dtoFamilies = [
   {
+    backend: "functions/src/types/adminQuestionBank.ts",
+    frontend: [],
+    names: [
+      "AdminQuestionMutationDisposition",
+      "AdminQuestionLifecycleAction",
+      "AdminQuestionLifecycleStatus",
+      "AdminQuestionThermalState",
+      "AdminQuestionTagField",
+      "AdminQuestionImageAssetMutation",
+      "AdminQuestionMetadataUpdateRequest",
+      "AdminQuestionStructureUpdateRequest",
+      "AdminQuestionUpdateResult",
+      "AdminQuestionVersionCreateRequest",
+      "AdminQuestionVersionCreateResult",
+      "AdminQuestionLifecycleRequest",
+      "AdminQuestionLifecycleResult",
+      "AdminQuestionLibraryQuery",
+      "AdminQuestionAuthoritativeRecord",
+      "AdminQuestionLibraryPageResult",
+      "AdminQuestionVersionSummary",
+      "AdminQuestionTemplateUsageRecord",
+      "AdminQuestionAnalyticsRecord",
+      "AdminQuestionDetailResult",
+      "AdminQuestionTagMutationRequest",
+      "AdminQuestionTagAuthorityRecord",
+      "AdminQuestionTagsResult",
+      "AdminQuestionTagMutationResult",
+      "AdminQuestionPackageState",
+      "AdminQuestionPackageValidateRequest",
+      "AdminQuestionPackageRowResult",
+      "AdminQuestionPackageSummary",
+      "AdminQuestionPackageValidationResult",
+      "AdminQuestionPackageCommitRequest",
+      "AdminQuestionPackageCommittedQuestion",
+      "AdminQuestionPackageCommitResult",
+      "AdminQuestionPackageRollbackRequest",
+      "AdminQuestionPackageRollbackResult",
+      "AdminQuestionUploadLogDetailResult",
+    ],
+  },
+  {
     backend: "functions/src/types/adminStudentMutations.ts",
     frontend: [],
     names: [
@@ -282,7 +323,7 @@ test("portal requests use shared request DTO generics", async () => {
   const questions = await readFile(
     join(
       rootDirectory,
-      "apps/admin/src/features/tests/QuestionBankManagementPage.tsx",
+      "apps/admin/src/features/tests/questionBankApi.ts",
     ),
     "utf8",
   );
@@ -291,7 +332,9 @@ test("portal requests use shared request DTO generics", async () => {
   assert.match(studentManagement, /StudentBulkIngestionRequest>/);
   assert.match(studentProfile, /AdminStudentOnboardingResendRequest>/);
   assert.match(interventions, /AdminInterventionRequest>/g);
-  assert.match(questions, /QuestionBulkUploadRequest>/);
+  assert.match(questions, /AdminQuestionPackageValidateRequest>/);
+  assert.match(questions, /AdminQuestionPackageCommitRequest>/);
+  assert.match(questions, /AdminQuestionPackageRollbackRequest>/);
 
   const calibration = await readFile(
     join(

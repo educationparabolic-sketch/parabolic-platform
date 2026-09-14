@@ -569,6 +569,9 @@ Root structure:
         ├── students/{studentId}
         ├── tests/{testId}
         ├── questionBank/{questionId}
+        ├── tagDictionary/{tagId}
+        ├── questionPackages/{packageId}
+        ├── questionUploadLogs/{uploadLogId}
         ├── academicYears/{yearId}
               ├── runs/{runId}
                     ├── sessions/{sessionId}
@@ -1523,25 +1526,105 @@ Fields:
       questionId: string,
       uniqueKey: string,
       version: number,
+      revision: number,
       parentQuestionId: string | null,
+      successorQuestionId: string | null,
       examType: string,
       subject: string,
       chapter: string,
+      academicYear: string | null,
       difficulty: "Easy | Medium | Hard",
       questionType: string,
       marks: number,
       negativeMarks: number,
       correctAnswer: string,
+      questionNo: string,
+      questionText: string | null,
       questionImageUrl: string,
+      questionImageSha256: string,
       solutionImageUrl: string,
+      solutionImageSha256: string,
       tutorialVideoLink: string | null,
       simulationLink: string | null,
+      primaryTag: string | null,
+      secondaryTag: string | null,
+      additionalTag: string | null,
+      topic: string | null,
+      internalNotes: string | null,
       tags: string[],
       usedCount: number,
       lastUsedAt: timestamp,
       status: "active | used | archived | deprecated",
-      createdAt: timestamp
+      createdAt: timestamp,
+      createdBy: string | null,
+      updatedAt: timestamp,
+      updatedBy: string,
+      deprecatedAt: timestamp | null,
+      deprecatedBy: string | null,
+      archivedAt: timestamp | null,
+      archivedBy: string | null,
+      lifecycleReason: string | null
     }
+
+`version` is immutable within a record; `revision` is incremented by each
+metadata, structure, or lifecycle mutation. Used-question detection is derived
+from bounded referencing template records whose assignment transaction owns
+`status: assigned` and `totalRuns`, with persisted `usedCount/status` retained
+as a conservative compatibility signal. Metadata remains editable after use;
+structure and direct retirement do not. A used source is instead atomically
+deprecated while an active successor with explicit parent lineage and the next
+version is created. Version-bound asset references are cleared on the successor
+until a new canonical object is installed; they never point the new identity at
+the source version's object path. Archive requires zero authoritative usage and
+more than two years without activity.
+
+### 4.6.1 Question Package Authority
+
+Locations:
+
+    institutes/{instituteId}/questionPackages/{packageId}
+    institutes/{instituteId}/questionUploadLogs/{uploadLogId}
+
+Validation authority records contain deterministic package/upload-log IDs,
+SHA-256 idempotency/content/request/row fingerprints, actor/institute identity,
+exam/subject/file metadata, a bounded asset manifest and normalized valid rows,
+the row-level validation result, `packageRevision`, `validatedAt`, `expiresAt`,
+and the current package `state`. Valid packages temporarily include a private
+`stagingPath`; commit/recovery records add the commit fingerprint/audit ID,
+phase, canonical objects created by the attempt when cleanup is pending, and
+the authoritative commit result. Raw idempotency keys and package bytes are
+never stored in Firestore.
+
+The paired upload log stores the public row results and summary plus validation,
+commit, and rollback timestamps; package revision/state; uploader identity; and
+rollback eligibility/reason. Validation creates the package/log authority atomically.
+The final question transaction also advances the package and log and creates
+one immutable import audit; only subsequent successful staging cleanup advances
+both records to `committed`.
+
+### 4.6.2 Question Tag Governance Authority
+
+Locations:
+
+    institutes/{instituteId}/tagDictionary/question_tag_governance_state
+    institutes/{instituteId}/tagDictionary/governed_{field}_{sha256}
+
+The state document stores `kind: question_tag_governance_state`, a positive
+global `dictionaryRevision`, `updatedAt`, and `updatedBy`. Each governed tag
+document stores `kind: question_tag_governance`, one exact supported `field`
+(`primaryTag`, `secondaryTag`, `additionalTag`, or `topic`), `name`, active or
+deprecated status, creation/update actors, and timestamps. It deliberately has
+no `tagName`, so legacy normalized autocomplete queries continue to read only
+the existing `tagName`/`usageCount` documents.
+
+ADM-36 uses the state revision as optimistic concurrency authority and commits
+at most 100 affected question updates, every touched governed-tag document, the
+incremented state, and one deterministic immutable `MUTATE_QUESTION_TAGS` audit
+in one Firestore transaction. The audit stores a key hash, request fingerprint,
+bounded affected IDs, and replay result but never the raw idempotency key. Exact
+retries replay; stale, changed-key, over-bound, and concurrent losing commands
+fail closed. Rename, merge, and deprecate additionally reject when any affected
+question is referenced by a ready or assigned template.
 
 ---
 
@@ -15804,7 +15887,19 @@ Directory structure:
     /{instituteId}/questions/{questionId}/v{version}/question.png
     /{instituteId}/questions/{questionId}/v{version}/solution.png
 
+Validated Question Bank packages use an internal, short-lived staging prefix in
+the same server-managed bucket:
+
+    /{instituteId}/question-packages/{packageId}/{contentSha256}.zip
+
 Versioning ensures that question assets remain immutable once a version is finalized.
+The package object is private and non-cacheable, has a 24-hour validation
+authority, and is deleted before the package can report `committed`. Canonical
+question/solution objects are create-only and carry content-hash/package
+metadata. A failed upload removes only objects created by that attempt; an
+interrupted cleanup records `failed_recoverable` for exact retry. Browser
+Storage access remains denied; ADM-37/ADM-38 reach this authority through the
+secured API and never disclose bucket/object coordinates.
 
 ---
 
@@ -17576,33 +17671,81 @@ System lifecycle overview:
 
 ## 42.5 Content Domain Flow
 
-### Event
-ZIP question upload confirmed.
+### Command
+Question package validation and commit.
 
-### Trigger
-Document creation:
+### Synchronous Processing
 
-    questions/{questionId}
+- Reject archives above 12 MiB compressed, more than 256 entries, more than
+  40 MiB expanded, workbooks above 8 MiB or 100 question rows, unsafe paths,
+  and unsupported/encrypted ZIP entries before durable authority is created.
+- Preserve row-level errors, including invalid or missing PNG/WebP assets, and
+  the supported rich question schema without Storage-staging invalid packages.
+- Stage valid ZIP bytes under deterministic package/hash authority for 24 hours.
+- Create and verify immutable versioned assets, then atomically recheck
+  question/key/version/template-usage authority and write the question records,
+  upload-log transition, package result, and `IMPORT_QUESTION_PACKAGE` audit.
+- Delete staging before reporting committed; retain explicit recoverable state
+  when Storage cleanup must be retried.
+- ADM-39 rolls back only a still-current, create-only, unused committed package.
+  It atomically deletes questions and writes its immutable audit before canonical
+  asset cleanup; interrupted cleanup remains recoverable and exact retry resumes
+  it before `rolled_back` is reported.
+- ADM-31/ADM-32 edit replacements accept only canonical base64 PNG/WebP bytes,
+  upload a create-only `question-r{revision}` or `solution-r{revision}` object,
+  and transactionally bind its URL/hash/revision to the question. Rejected
+  writes clean the new object or leave explicit recoverable cleanup authority.
+- ADM-35 reads indexed precomputed counts and active-template flags for the four
+  explicit Question Bank tag fields, joined with governance status/revision.
+- ADM-36 serializes create/rename/merge/deprecate through the expected global
+  dictionary revision. A single transaction updates no more than 100 matching
+  questions, field-scoped governance state, and one deterministic immutable
+  `MUTATE_QUESTION_TAGS` audit; source removal fails closed when a ready or
+  assigned template references an affected question.
+- ADM-06 lists by stable `createdAt DESC, questionId ASC` cursor pages (25 by
+  default, 100 maximum), binds opaque cursors to the normalized filters, and
+  limits filter shapes to declared composite indexes. Its lifecycle source is
+  the single active academic year plus `lastUsedAcademicYear`/activity time:
+  current-year use is HOT, inactivity older than two years (or retired state)
+  is COLD, and all other records are WARM.
+- ADM-30 reads one question, explicit parent/successor lineage, actual bounded
+  template references, and persisted `questionAnalytics`; it never infers
+  versions from naming conventions or invents usage/analytics values.
+- ADM-40 verifies the log's hash/rows/summary against the immutable package
+  validation result and grants rollback eligibility only for unchanged,
+  create-only, unused questions with no active template reference.
+- ADM-07 consumes only trigger-maintained all/exam distribution summaries and
+  bounded chapter projections. Missing projections require the governed
+  BWM-053 backfill and fail closed instead of scanning `questionBank`.
+- The Admin Question Bank consumes these routes through one strict response
+  boundary. Live pages never substitute fixtures or derive business lineage,
+  analytics, distribution, tags, or log state. Teacher/admin mutations expose
+  pending/error/success states and install state only after a fresh authoritative
+  reload; browser parsing, filtering, previews, and downloads remain
+  presentation-only.
 
-### Cloud Function Processing
-
-Operations performed:
-
-- Validate question schema
-- Normalize tag taxonomy
-- Generate search tokens
-- Increment chapter distribution counters
-- Initialize question analytics document
+The existing `questionBank onCreate` trigger retains search indexing. Separate
+idempotent onWrite reconcilers maintain distribution/tag contributions from
+`questionBank`/`questionAnalytics` and usage/active-template authority from templates. Prior
+per-source projection items make exact trigger retries no-ops; these derived
+writers do not authorize Question Bank commands.
 
 ### Output Collections
 
 | Collection | Purpose |
 |---|---|
-|questions|Question metadata|
+|questionBank|Question metadata and immutable version lineage|
 |questionAnalytics|Question performance metrics|
-|tagDictionary|Autocomplete metadata|
+|tagDictionary|Autocomplete metadata plus field-scoped tag governance and dictionary revision|
 |chapterDictionary|Chapter reference metadata|
-|auditLogs|Upload activity trace|
+|questionPackages|Package validation/commit/recovery authority|
+|questionUploadLogs|Durable row outcomes and package state|
+|questionUsageProjectionItems|Per-template applied usage contribution and replay state|
+|questionDistributionItems|Per-question prior distribution contribution and fingerprint|
+|questionDistributionProjections|All/exam summary accumulators and bounded chapter projections|
+|questionTagProjectionItems|Per-question prior field-scoped tag contribution and fingerprint|
+|questionTagProjections|Indexed field/name counts and active-template usage flags|
+|auditLogs|Immutable successful import audit|
 
 No student metrics are affected during this stage.
 

@@ -14,16 +14,21 @@ import {ADMIN_TEACHER_ROLES} from "../policy/adminRolePolicy";
 import {createTenantGuardMiddleware} from "../middleware/tenant";
 import {adminQuestionLibraryService} from "../services/adminQuestionLibrary";
 import {
+  AdminQuestionDetailSuccessResponse,
   AdminQuestionLibrarySuccessResponse,
-  AdminQuestionLibraryValidatedRequest,
   AdminQuestionLibraryValidationError,
 } from "../types/adminQuestionLibrary";
 import {MiddlewareRequest} from "../types/middleware";
 
 interface AdminQuestionLibraryDependencies {
   getLibrary: typeof adminQuestionLibraryService.getLibrary;
+  getQuestionDetail: typeof adminQuestionLibraryService.getQuestionDetail;
   verifyIdToken: (idToken: string) => Promise<DecodedIdToken>;
 }
+
+type ValidatedQuestionRead =
+  | {action: "detail"; payload: ReturnType<typeof adminQuestionLibraryService.normalizeDetailRequest>}
+  | {action: "list"; payload: ReturnType<typeof adminQuestionLibraryService.normalizeRequest>};
 
 const buildSuccessResponse = (
   result: Awaited<ReturnType<typeof adminQuestionLibraryService.getLibrary>>,
@@ -46,8 +51,23 @@ export const createAdminQuestionLibraryHandler = (
     response: functions.Response,
   ): Promise<void> => {
     const validatedRequest = request.context
-      .requestData as unknown as AdminQuestionLibraryValidatedRequest;
-    const result = await dependencies.getLibrary(validatedRequest);
+      .requestData as unknown as ValidatedQuestionRead;
+
+    if (validatedRequest.action === "detail") {
+      const result = await dependencies.getQuestionDetail(validatedRequest.payload);
+      const body: AdminQuestionDetailSuccessResponse = {
+        code: "OK",
+        data: result,
+        message: "Question detail loaded.",
+        requestId: request.context.requestId,
+        success: true,
+        timestamp: new Date().toISOString(),
+      };
+      response.status(200).json(body);
+      return;
+    }
+
+    const result = await dependencies.getLibrary(validatedRequest.payload);
 
     response.status(200).json(
       buildSuccessResponse(
@@ -73,15 +93,40 @@ export const createAdminQuestionLibraryHandler = (
     createRequestValidationMiddleware({
       validator: (request: MiddlewareRequest): void => {
         const identity = request.context.identity;
+        if (request.params.questionId) {
+          setRequestData(request, {
+            action: "detail",
+            payload: adminQuestionLibraryService.normalizeDetailRequest({
+              actorId: identity?.uid,
+              actorRole: identity?.role,
+              instituteId: identity?.instituteId,
+              questionId: request.params.questionId,
+            }),
+          });
+          return;
+        }
         const validatedRequest = adminQuestionLibraryService.normalizeRequest({
+          academicYear: request.query.academicYear,
+          actorId: identity?.uid,
+          actorRole: identity?.role,
+          additionalTag: request.query.additionalTag,
+          chapter: request.query.chapter,
+          cursor: request.query.cursor,
+          difficulty: request.query.difficulty,
+          examType: request.query.examType,
           instituteId: identity?.instituteId,
           limit: request.query.limit,
+          primaryTag: request.query.primaryTag,
+          query: request.query.query,
+          questionType: request.query.questionType,
+          secondaryTag: request.query.secondaryTag,
+          status: request.query.status,
+          subject: request.query.subject,
+          thermalState: request.query.thermalState,
+          usedInTemplate: request.query.usedInTemplate,
         });
 
-        setRequestData(
-          request,
-          validatedRequest as unknown as Record<string, unknown>,
-        );
+        setRequestData(request, {action: "list", payload: validatedRequest});
       },
     }),
   ],
@@ -108,6 +153,9 @@ export const createAdminQuestionLibraryHandler = (
 export const handleAdminQuestionLibraryRequest =
   createAdminQuestionLibraryHandler({
     getLibrary: adminQuestionLibraryService.getLibrary.bind(
+      adminQuestionLibraryService,
+    ),
+    getQuestionDetail: adminQuestionLibraryService.getQuestionDetail.bind(
       adminQuestionLibraryService,
     ),
     verifyIdToken: (idToken: string) =>

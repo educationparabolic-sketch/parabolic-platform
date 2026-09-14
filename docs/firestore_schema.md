@@ -2,6 +2,8 @@
 
 This document provides a simplified reference of the Firestore data hierarchy.
 
+Last reconciled: 2026-09-14 (`BWM-027` Question Bank lifecycle closeout)
+
 The authoritative schema definition exists in:
 
 3_Core_Architectures.md  
@@ -104,6 +106,152 @@ that durable result; an exact retry resumes incomplete user/claim/disable and
 session-revocation work without another roster version, audit, or queue job.
 
 questionBank/{questionId}
+
+BWM-027 question mutations treat `version` as immutable content lineage and
+`revision` as the optimistic-concurrency counter (`1` for legacy records that
+do not yet store it). Metadata edits may change `primaryTag`, `secondaryTag`,
+`additionalTag`, `topic`, internal notes, links, and managed solution-image
+presence after use; structural edits may change the exam/content/marking fields
+and managed question-image presence only while authoritative template usage is
+zero. Each successful command increments `revision`, stamps `updatedAt` and
+`updatedBy`, and creates its deterministic immutable `auditLogs/{auditId}` in
+the same transaction. The audit stores only the SHA-256 idempotency-key hash,
+the normalized request fingerprint, the before/result projection, and bounded
+usage evidence; the raw key is never persisted.
+
+Successor creation is required once a question is referenced by a template
+whose assignment authority has `status: assigned` or `totalRuns > 0`. It
+atomically deprecates the source and creates the active successor with
+`parentQuestionId`, incremented `version`, `revision: 1`, and `usedCount: 0`.
+Version-bound question/solution asset references are cleared on that successor
+rather than pointing its new identity at the source version's canonical path.
+ADM-31/ADM-32 install a replacement only from canonical base64 PNG/WebP bytes at
+the next record revision (`question-r{revision}` or `solution-r{revision}`), use
+create-only Storage preconditions, and persist the public URL, SHA-256 hash, and
+asset revision in the same question transaction. A rejected transaction deletes
+only the newly created object; cleanup failure creates deterministic recoverable
+cleanup authority for retry rather than reporting mutation success.
+Direct deprecation and archive are limited to unused mutable records; archive
+also requires more than two years since `lastUsedAt` (or `createdAt` when never
+used). Usage discovery is capped at 100 referencing templates and fails closed
+above that bound. Retain/remove remain explicit asset actions; remove clears the
+URL, hash, and asset-revision fields together.
+
+Template writes now reconcile `usedCount`, `usedInTemplate`, `lastUsedAt`, and
+`lastUsedAcademicYear` onto each referenced question. The current academic year
+is the single institute year whose status is `Active`/`active`. ADM-06/ADM-30
+derive HOT only when `lastUsedAcademicYear` matches that current year, COLD when
+the record is archived/deprecated or its last activity is more than two years
+old, and WARM otherwise (including newly created, never-used questions during
+their first two years). Library pages use `createdAt` plus `questionId` as the
+stable cursor order; cursors are bound to the normalized filter fingerprint.
+
+BWM-027 package validation now preserves the complete supported import schema
+on committed questions: `academicYear`, `additionalTag`, `chapter`,
+`correctAnswer`, `difficulty`, `examType`, `internalNotes`, `marks`,
+`negativeMarks`, `primaryTag`, `questionNo`, `questionText`, `questionType`,
+`secondaryTag`, `simulationLink`, `subject`, `topic`, `tutorialVideoLink`,
+`uniqueKey`, immutable `version`, mutable `revision`, canonical versioned image
+paths, and their SHA-256 hashes. Updates retain existing creation, lineage,
+usage, and search-token authority and recheck unique-key ownership, immutable
+version, and authoritative template usage in the final transaction.
+
+questionPackages/{packageId}
+
+This internal command authority is deterministic from the institute and hashed
+validation idempotency key; raw keys are never stored. It retains the normalized
+request/content fingerprints, bounded validated rows and asset manifest,
+package revision, 24-hour expiry, private staging path, validation result, and
+the saga `state`/`phase` needed to distinguish `staging`, `validated`,
+`validation_failed`, `committing`, `failed_recoverable`, `committed`,
+`rolling_back`, and `rolled_back`.
+The raw ZIP is staged at
+`{instituteId}/question-packages/{packageId}/{contentSha256}.zip` in the Question
+Asset bucket with create-only hash authority. The final Firestore transaction
+atomically writes all questions, advances package/log state, and creates the
+immutable `IMPORT_QUESTION_PACKAGE` audit. The package is reported committed
+only after staging deletion; interrupted canonical-asset or staging cleanup is
+explicitly retryable and never reported as successful.
+
+ADM-39 permits rollback only for a committed create-only package whose exact
+idempotency fingerprint and expected package revision match, every created
+question is still at the committed revision/version, and no authoritative usage
+or ready/assigned template reference exists. One transaction deletes those
+questions, advances the package/log to rollback cleanup, and creates an immutable
+`ROLLBACK_QUESTION_PACKAGE` audit. Canonical assets are then deleted; cleanup
+failure remains `failed_recoverable`, exact retry resumes it, and only completed
+cleanup advances package/log authority to `rolled_back`.
+
+tagDictionary/{tagId}
+
+Existing `{tagId}` documents with `tagName` and `usageCount` remain the small
+autocomplete source. BWM-027 adds field-scoped governance records with
+`kind: question_tag_governance`, explicit `field` (`primaryTag`,
+`secondaryTag`, `additionalTag`, or `topic`), `name`, `status`, creation/update
+actors, and timestamps. Their deterministic hash IDs are independent of legacy
+autocomplete IDs, and they intentionally omit `tagName` so existing autocomplete
+ordering excludes them. The fixed `question_tag_governance_state` document
+stores the positive global `dictionaryRevision` and last update authority.
+
+Every applied ADM-36 command increments that revision once. Rename and merge
+update at most 100 matching question documents, rebuild the denormalized `tags`
+array from the three explicit tag fields, increment each question `revision`,
+and atomically write source/destination governance records plus one immutable
+`MUTATE_QUESTION_TAGS` audit. Deprecate changes only governance authority;
+create adds an empty active field-scoped name. Ready/assigned template
+references are queried before source removal and reject the whole transaction.
+Audits store only the SHA-256 key hash/fingerprint and replay result, never the
+raw idempotency key. Legacy missing state reads as revision 1.
+
+questionUploadLogs/{uploadLogId}
+
+Package validation creates the durable row errors/warnings and summary in the
+same transaction as its package authority. Commit transitions the same log
+through `committing` to `committed`, records the package revision and commit
+time. ADM-40 rereads the owning package and rejects any log whose content hash,
+rows, or summary diverge from the immutable package validation result. It marks
+rollback eligible only when every committed action was a create, every question
+still exists at its committed version/revision, and no question has use or an
+active template reference; updates remain ineligible until inverse snapshots
+exist. Invalid packages retain row outcomes without a staged object; hard
+archive/workbook resource-bound violations create neither package nor log.
+
+questionUsageProjectionItems/{testId}
+
+Each item stores the normalized assigned-template contribution (`questionIds`,
+`runCount`, `lastUsedAt`, and `lastUsedAcademicYear`). The template onWrite
+reconciler subtracts the prior contribution and adds the new one in the same
+transaction as question usage updates. An unchanged source fingerprint/state is
+a no-op, so trigger retry does not increment usage twice.
+
+questionDistributionItems/{questionId}
+
+Each item stores one question's last normalized active contribution and hash.
+Question and question-analytics onWrite triggers use it to subtract old and add
+new values without scanning the Question Bank; archived/deprecated records
+contribute nothing. Exact unchanged replay is a no-op.
+
+questionDistributionProjections/{scopeId}
+
+`all` and deterministic hashed exam-type scope documents store question/mark,
+difficulty, missing-difficulty, exam-type, and analytics accumulator totals plus
+`computedAt`. Their `chapters/{chapterId}` subcollections store subject/chapter
+counts, marks, difficulty counts, and analytics sums ordered by question count,
+risk impact, and stable chapter key. ADM-07 reads only one scope and a bounded
+chapter page. Existing data requires the governed BWM-053 backfill; a missing or
+invalid projection fails closed instead of falling back to a collection scan.
+
+questionTagProjectionItems/{questionId}
+
+Each item stores one question's prior four-field tag contribution, active-use
+flag, and fingerprint so a question write can replace its contribution exactly
+once. `questionTagProjections/{tagId}` stores deterministic `field`/`name`
+question counts plus active-template counts/flags. ADM-35 reads this indexed
+projection and governance documents only; it never scans questions or templates.
+The `tagDictionary/question_tag_projection_state` document must explicitly set
+`backfillComplete: true`, and distribution summaries must carry the same flag,
+before their read endpoints serve projected data. BWM-053 owns establishing
+those markers only after existing records have been fully reconciled.
 
 tests/{testId}
 

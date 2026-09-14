@@ -39,6 +39,9 @@ const assertStructuredError = (
 
 test("admin question upload logs handler accepts read requests", async () => {
   const handler = createAdminQuestionUploadLogsHandler({
+    getLogDetail: async () => {
+      throw new Error("getLogDetail should not be called");
+    },
     getLogs: async (request) => {
       assert.equal(request.instituteId, "inst_build_m5_api");
       assert.equal(request.limit, 5);
@@ -84,6 +87,9 @@ test("admin question upload logs handler accepts read requests", async () => {
 
 test("admin question upload logs handler rejects disallowed roles", async () => {
   const handler = createAdminQuestionUploadLogsHandler({
+    getLogDetail: async () => {
+      throw new Error("getLogDetail should not be called");
+    },
     getLogs: async () => {
       throw new Error("getLogs should not be called");
     },
@@ -112,6 +118,9 @@ test("admin question upload logs handler rejects disallowed roles", async () => 
 
 test("admin question upload logs handler maps validation errors", async () => {
   const handler = createAdminQuestionUploadLogsHandler({
+    getLogDetail: async () => {
+      throw new Error("getLogDetail should not be called");
+    },
     getLogs: async () => {
       throw new AdminQuestionUploadLogsValidationError(
         "VALIDATION_ERROR",
@@ -141,5 +150,51 @@ test("admin question upload logs handler maps validation errors", async () => {
     response.body,
     "VALIDATION_ERROR",
     "Field \"limit\" must be a positive integer.",
+  );
+});
+
+test("admin question upload logs handler dispatches immutable detail", async () => {
+  const handler = createAdminQuestionUploadLogsHandler({
+    getLogDetail: async (request) => {
+      assert.equal(request.uploadLogId, "package-1");
+      return {
+        committedAt: null,
+        contentSha256: "a".repeat(64),
+        packageId: "package-1",
+        packageRevision: 1,
+        rollbackEligible: false,
+        rollbackReason: "Package has not been committed.",
+        rows: [],
+        state: "validated",
+        summary: {
+          assetCount: 0,
+          created: 0,
+          invalid: 0,
+          received: 0,
+          updated: 0,
+          valid: 0,
+          warnings: 0,
+        },
+        uploadLogId: "package-1",
+        uploadedBy: "admin_build_m5",
+        validatedAt: "2026-05-14T00:00:00.000Z",
+      };
+    },
+    getLogs: async () => {
+      throw new Error("getLogs should not be called");
+    },
+    verifyIdToken: async () => createAdminToken() as never,
+  });
+  const response = createMockResponse();
+  await handler(createMockRequest({
+    headers: {authorization: "Bearer build_m5_log_detail"},
+    method: "GET",
+    params: {uploadLogId: "package-1"},
+    path: "/admin/questions/upload-logs/package-1",
+  }) as never, response as never);
+  assert.equal(response.statusCode, 200);
+  assert.equal(
+    (response.body as {data: {uploadLogId: string}}).data.uploadLogId,
+    "package-1",
   );
 });
