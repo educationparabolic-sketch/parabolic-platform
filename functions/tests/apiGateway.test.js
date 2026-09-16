@@ -45,7 +45,7 @@ test("implemented routes have one registered existing handler", () => {
   const implementedRoutes = API_ROUTE_MANIFEST.filter(
     (route) => route.status === "implemented",
   );
-  assert.equal(implementedRoutes.length, 47);
+  assert.equal(implementedRoutes.length, 55);
 
   for (const route of implementedRoutes) {
     assert.equal(typeof API_GATEWAY_HANDLERS[route.functionExport], "function");
@@ -61,7 +61,9 @@ test("implemented routes have one registered existing handler", () => {
 
 test("Question Bank planned declarations are fully routed", () => {
   const plannedRoutes = API_ROUTE_MANIFEST.filter(
-    (route) => route.declaration === "planned",
+    (route) =>
+      route.declaration === "planned" &&
+      Number(route.id.replace("ADM-", "")) <= 40,
   );
 
   assert.equal(plannedRoutes.length, 11);
@@ -70,6 +72,27 @@ test("Question Bank planned declarations are fully routed", () => {
     assert.equal(typeof API_GATEWAY_HANDLERS[route.functionExport], "function");
   });
 });
+
+test(
+  "BWM-028 planned declarations reach the secured assignment handler",
+  () => {
+    const plannedRoutes = API_ROUTE_MANIFEST.filter(
+      (route) =>
+        Number(route.id.replace("ADM-", "")) >= 41 &&
+        Number(route.id.replace("ADM-", "")) <= 48,
+    );
+
+    assert.equal(plannedRoutes.length, 8);
+    plannedRoutes.forEach((route) => {
+      assert.equal(route.status, "implemented");
+      assert.equal(route.functionExport, "adminAssignmentOperations");
+      assert.equal(
+        typeof API_GATEWAY_HANDLERS[route.functionExport],
+        "function",
+      );
+    });
+  },
+);
 
 test("router preserves encoded parameters and rejects path drift", () => {
   const examPath = "/api/v1/exam/session/session%20id%20%CE%A9/entry";
@@ -105,6 +128,20 @@ test("router preserves encoded parameters and rejects path drift", () => {
   const uploadLogMatch = resolveApiRoute("GET", uploadLogPath);
   assert.equal(uploadLogMatch?.route.id, "ADM-40");
   assert.equal(uploadLogMatch?.parameters.uploadLogId, "upload id Ω");
+
+  const assignmentOverridePath =
+    "/api/v1/admin/runs/run%20id%20%CE%A9/sessions/" +
+    "session%20id%20%CE%A9/overrides";
+  const assignmentOverrideMatch = resolveApiRoute(
+    "POST",
+    assignmentOverridePath,
+  );
+  assert.equal(assignmentOverrideMatch?.route.id, "ADM-48");
+  assert.equal(assignmentOverrideMatch?.parameters.runId, "run id Ω");
+  assert.equal(
+    assignmentOverrideMatch?.parameters.sessionId,
+    "session id Ω",
+  );
 
   assert.equal(resolveApiRoute("DELETE", "/api/v1/admin/students"), null);
   assert.equal(resolveApiRoute("GET", "/api/v1/admin/students/"), null);

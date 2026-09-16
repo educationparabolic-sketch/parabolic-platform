@@ -1,5 +1,8 @@
 import * as functions from "firebase-functions";
 import {handleApiV1Request} from "./api/apiGateway";
+import {
+  handleAdminAssignmentOperationsRequest,
+} from "./api/adminAssignmentOperations";
 import {sendErrorResponse} from "./services/apiResponse";
 import {registerGlobalErrorHandlers} from "./services/errorReporting";
 import {createRequestLogger} from "./services/logging";
@@ -271,6 +274,9 @@ export const adminStudentMutations = functions.https.onRequest(
 );
 export const adminRuns = functions.https.onRequest(
   handleAdminRunsRequest,
+);
+export const adminAssignmentOperations = functions.https.onRequest(
+  handleAdminAssignmentOperationsRequest,
 );
 export const studentDashboard = functions.https.onRequest(
   handleStudentDashboardRequest,

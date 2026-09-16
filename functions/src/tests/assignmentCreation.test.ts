@@ -256,7 +256,9 @@ test(
       templateSnapshotFixture.timingProfile,
     );
     assert.ok(runData?.createdAt instanceof Timestamp);
+    assert.equal(runData?.revision, 1);
     assert.equal(runData?.totalSessions, 0);
+    assert.ok(runData?.updatedAt instanceof Timestamp);
 
     const templateSnapshot = await firestore.doc(testPath).get();
     const templateData = templateSnapshot.data();

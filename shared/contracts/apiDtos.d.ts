@@ -850,6 +850,20 @@ export type AdminRunStatus =
   | "stopped"
   | "cancelled";
 
+export type AdminRunLifecycleStatus =
+  | "scheduled"
+  | "active"
+  | "collecting"
+  | "completed"
+  | "archived"
+  | "cancelled"
+  | "terminated";
+
+export type AdminRunTerminalStatus = Extract<
+  AdminRunLifecycleStatus,
+  "completed" | "archived" | "cancelled" | "terminated"
+>;
+
 export interface AdminRunProctoringPolicy {
   browserIntegrityGuardEnabled: boolean;
   faceIdentityGazeGuardEnabled: boolean;
@@ -904,6 +918,210 @@ export interface AdminRunListResult {
 
 export interface AdminRunDetailResult {
   run: AdminRunRecord;
+}
+
+export type AdminRunCommandDisposition = "applied" | "replayed";
+
+export type AdminRunCommandRecoveryState =
+  | "complete"
+  | "pending"
+  | "failed_recoverable";
+
+export interface AdminRunVersionedRecord
+  extends Omit<AdminRunRecord, "status"> {
+  revision: number;
+  status: AdminRunLifecycleStatus;
+  updatedAt: string;
+}
+
+export interface AdminRunLiveVersionedRecord
+  extends Omit<AdminRunVersionedRecord, "status"> {
+  status: Extract<AdminRunLifecycleStatus, "active" | "collecting">;
+}
+
+export interface AdminRunHistoryVersionedRecord
+  extends Omit<AdminRunVersionedRecord, "status"> {
+  status: AdminRunTerminalStatus;
+}
+
+export interface AdminRunLiveListQuery {
+  cursor?: string;
+  limit?: number;
+}
+
+export interface AdminRunLiveSummary {
+  activeSessionCount: number;
+  notStartedCount: number;
+  submittedCount: number;
+  terminatedSessionCount: number;
+  totalRecipients: number;
+}
+
+export interface AdminRunLiveListRecord {
+  run: AdminRunLiveVersionedRecord;
+  summary: AdminRunLiveSummary;
+}
+
+export interface AdminRunLiveListResult {
+  nextCursor: string | null;
+  runs: AdminRunLiveListRecord[];
+  serverTime: string;
+}
+
+export interface AdminRunLiveDetailQuery {
+  cursor?: string;
+  limit?: number;
+}
+
+export type AdminRunLiveSessionStatus =
+  | "not_started"
+  | "created"
+  | "started"
+  | "active"
+  | "submitted"
+  | "expired"
+  | "terminated";
+
+export interface AdminRunLiveStudentRecord {
+  controlledCompliancePercent: number | null;
+  currentPhase: string | null;
+  maxTimeViolationCount: number | null;
+  minTimeViolationCount: number | null;
+  overrideUsed: boolean;
+  pacingDrift: boolean | null;
+  progressPercent: number;
+  provisionalRiskScore: number | null;
+  rapidGuess: boolean | null;
+  sessionId: string | null;
+  sessionRevision: number | null;
+  skipBurst: boolean | null;
+  status: AdminRunLiveSessionStatus;
+  studentId: string;
+  studentName: string;
+  timeRemainingSeconds: number;
+}
+
+export interface AdminRunLiveDetailResult {
+  nextCursor: string | null;
+  run: AdminRunLiveVersionedRecord;
+  serverTime: string;
+  students: AdminRunLiveStudentRecord[];
+  summary: AdminRunLiveSummary;
+}
+
+export interface AdminRunHistoryQuery {
+  academicYear?: string;
+  cursor?: string;
+  limit?: number;
+  mode?: AdminRunMode;
+  status?: AdminRunTerminalStatus;
+}
+
+export interface AdminRunHistoryAnalytics {
+  avgAccuracyPercent: number | null;
+  avgDisciplineIndex: number | null;
+  avgRawScorePercent: number | null;
+  completionPercent: number;
+  controlledCompliancePercent: number | null;
+  executionStability: string | null;
+  riskDistribution: Record<string, number> | null;
+}
+
+export interface AdminRunHistoryRecord {
+  analytics: AdminRunHistoryAnalytics;
+  run: AdminRunHistoryVersionedRecord;
+}
+
+export interface AdminRunHistoryResult {
+  nextCursor: string | null;
+  runs: AdminRunHistoryRecord[];
+}
+
+export interface AdminRunDuplicateRequest {
+  endWindow: string;
+  expectedSourceRevision: number;
+  idempotencyKey: string;
+  startWindow: string;
+  timezone: string;
+}
+
+export interface AdminRunReassignRequest
+  extends AdminRunDuplicateRequest {
+  recipientStudentIds: string[];
+}
+
+export interface AdminRunDerivedCreateResult {
+  auditId: string;
+  disposition: AdminRunCommandDisposition;
+  run: AdminRunVersionedRecord;
+  sourceRunId: string;
+}
+
+export type AdminRunLifecycleAction =
+  | "extend"
+  | "cancel"
+  | "terminate"
+  | "archive";
+
+export interface AdminRunLifecycleCommandBase {
+  expectedRevision: number;
+  idempotencyKey: string;
+  justification: string;
+}
+
+export type AdminRunLifecycleRequest =
+  | (AdminRunLifecycleCommandBase & {
+    action: "extend";
+    extensionMinutes: number;
+  })
+  | (AdminRunLifecycleCommandBase & {
+    action: "cancel" | "terminate" | "archive";
+  });
+
+export interface AdminRunLifecycleResult {
+  auditId: string;
+  disposition: AdminRunCommandDisposition;
+  recoveryState: AdminRunCommandRecoveryState;
+  run: AdminRunVersionedRecord;
+}
+
+export interface AdminRunNotificationResendRequest {
+  expectedRevision: number;
+  idempotencyKey: string;
+  recipientStudentIds?: string[];
+}
+
+export interface AdminRunNotificationResendResult {
+  auditId: string;
+  disposition: AdminRunCommandDisposition;
+  queuedNotificationCount: number;
+  recipientCount: number;
+  recoveryState: AdminRunCommandRecoveryState;
+  runId: string;
+}
+
+export type AdminRunSessionOverrideType =
+  | "minimum_time_bypass"
+  | "force_submit";
+
+export interface AdminRunSessionOverrideRequest {
+  expectedRunRevision: number;
+  expectedSessionRevision: number;
+  idempotencyKey: string;
+  justification: string;
+  overrideType: AdminRunSessionOverrideType;
+}
+
+export interface AdminRunSessionOverrideResult {
+  auditId: string;
+  disposition: AdminRunCommandDisposition;
+  overrideId: string;
+  overrideUsed: true;
+  recoveryState: AdminRunCommandRecoveryState;
+  runId: string;
+  sessionId: string;
+  sessionRevision: number;
+  sessionStatus: Exclude<AdminRunLiveSessionStatus, "not_started">;
 }
 
 export type StudentLicenseLayer = "L0" | "L1" | "L2" | "L3";

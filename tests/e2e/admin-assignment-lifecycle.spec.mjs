@@ -24,6 +24,10 @@ const templateName = "BWM-014 Authoritative Assignment";
 const questionId = "question-bwm-014-assignment";
 const studentId = "student-bwm-014-recipient";
 const studentName = "BWM-014 Recipient Student";
+const liveRunId = "run-bwm-028-live-browser";
+const liveSessionId = "session-bwm-028-live-browser";
+const concurrentOperationRunId = "run-bwm-028-concurrent-operation";
+const oldYearRunId = "run-bwm-028-old-year-live";
 const authHost = process.env.FIREBASE_AUTH_EMULATOR_HOST;
 let adminApp;
 let firestore;
@@ -36,6 +40,15 @@ let studentUid;
 let otherTeacherEmail;
 let otherTeacherPassword;
 let otherTeacherUid;
+let l0TeacherEmail;
+let l0TeacherPassword;
+let l0TeacherUid;
+let suspendedTeacherEmail;
+let suspendedTeacherPassword;
+let suspendedTeacherUid;
+let unlicensedTeacherEmail;
+let unlicensedTeacherPassword;
+let unlicensedTeacherUid;
 
 test.use({bypassCSP: true});
 
@@ -126,6 +139,45 @@ test.beforeAll(async () => {
     role: "teacher",
   });
 
+  l0TeacherEmail = `assignment-l0-${Date.now()}@example.test`;
+  l0TeacherPassword = "bwm-028-assignment-l0";
+  const l0Teacher = await auth.createUser({
+    email: l0TeacherEmail,
+    password: l0TeacherPassword,
+  });
+  l0TeacherUid = l0Teacher.uid;
+  await auth.setCustomUserClaims(l0TeacherUid, {
+    instituteId,
+    licenseLayer: "L0",
+    role: "teacher",
+  });
+
+  suspendedTeacherEmail = `assignment-suspended-${Date.now()}@example.test`;
+  suspendedTeacherPassword = "bwm-028-assignment-suspended";
+  const suspendedTeacher = await auth.createUser({
+    email: suspendedTeacherEmail,
+    password: suspendedTeacherPassword,
+  });
+  suspendedTeacherUid = suspendedTeacher.uid;
+  await auth.setCustomUserClaims(suspendedTeacherUid, {
+    instituteId,
+    isSuspended: true,
+    licenseLayer: "L2",
+    role: "teacher",
+  });
+
+  unlicensedTeacherEmail = `assignment-unlicensed-${Date.now()}@example.test`;
+  unlicensedTeacherPassword = "bwm-028-assignment-unlicensed";
+  const unlicensedTeacher = await auth.createUser({
+    email: unlicensedTeacherEmail,
+    password: unlicensedTeacherPassword,
+  });
+  unlicensedTeacherUid = unlicensedTeacher.uid;
+  await auth.setCustomUserClaims(unlicensedTeacherUid, {
+    instituteId,
+    role: "teacher",
+  });
+
   const institute = firestore.collection("institutes").doc(instituteId);
   const year = institute.collection("academicYears").doc(yearId);
   const otherInstitute = firestore
@@ -137,6 +189,11 @@ test.beforeAll(async () => {
       profile: {instituteName: "BWM-014 Assignment Institute"},
     }),
     year.set({label: yearId, locked: false, status: "Active"}),
+    institute.collection("academicYears").doc("2025").set({
+      label: "2025",
+      locked: true,
+      status: "Locked",
+    }),
     institute.collection("license").doc("main").set({
       currentLayer: "L2",
       featureFlags: {controlledMode: true, hardMode: true},
@@ -229,6 +286,81 @@ test.beforeAll(async () => {
     updatedAt: Timestamp.now(),
     version: 1,
   });
+
+  const now = Date.now();
+  const activeRun = (runId, academicYear = yearId) => ({
+    academicYear,
+    attemptLimit: 1,
+    calibrationVersion: "cal-bwm-028",
+    canonicalId,
+    createdAt: Timestamp.fromMillis(now - 3_600_000),
+    difficultyDistribution: {easy: 1, hard: 0, medium: 0},
+    endWindow: Timestamp.fromMillis(now + 7_200_000),
+    gracePeriodMinutes: 5,
+    licenseLayer: "L2",
+    mode: "Operational",
+    modeSnapshot: "Operational",
+    phaseConfigSnapshot: {
+      phase1Percent: 100,
+      phase2Percent: 0,
+      phase3Percent: 0,
+    },
+    proctoringPolicy: {
+      browserIntegrityGuardEnabled: true,
+      faceIdentityGazeGuardEnabled: false,
+    },
+    questionIds: [questionId],
+    recipientCount: 1,
+    recipientStudentIds: [studentId],
+    revision: 1,
+    riskModelVersion: "risk-bwm-028",
+    runId,
+    shuffleEnabled: false,
+    shuffleQuestionOrder: false,
+    startWindow: Timestamp.fromMillis(now - 1_800_000),
+    status: "active",
+    testId: templateId,
+    testName: templateName,
+    templateVersion: 1,
+    timezone: "Asia/Kolkata",
+    timingProfileSnapshot: {totalDurationMinutes: 120},
+    totalSessions: 1,
+    updatedAt: Timestamp.fromMillis(now - 1_800_000),
+  });
+  const liveRunPath = year.collection("runs").doc(liveRunId);
+  await Promise.all([
+    liveRunPath.set(activeRun(liveRunId)),
+    year.collection("runs").doc(concurrentOperationRunId).set(
+      activeRun(concurrentOperationRunId),
+    ),
+    institute.collection("academicYears").doc("2025")
+      .collection("runs").doc(oldYearRunId).set(
+        activeRun(oldYearRunId, "2025"),
+      ),
+    liveRunPath.collection("sessions").doc(liveSessionId).set({
+      adaptivePhaseSnapshot: {answeredPercent: 35, currentPhase: "phase1"},
+      controlledCompliancePercent: 92,
+      createdAt: Timestamp.fromMillis(now - 1_800_000),
+      deadlineAt: Timestamp.fromMillis(now + 7_200_000),
+      instituteId,
+      maxTimeViolationCount: 0,
+      minTimeViolationCount: 1,
+      overrideUsed: false,
+      pacingDrift: false,
+      progressPercent: 35,
+      rapidGuess: false,
+      revision: 1,
+      runId: liveRunId,
+      sessionId: liveSessionId,
+      skipBurst: false,
+      status: "active",
+      studentId,
+      submissionLock: false,
+      updatedAt: Timestamp.fromMillis(now - 300_000),
+      version: 1,
+      yearId,
+    }),
+  ]);
 });
 
 test.afterAll(async () => {
@@ -244,7 +376,14 @@ test.afterAll(async () => {
       firestore.collection("institutes").doc(otherInstituteId),
     ),
   ]);
-  const userIds = [teacherUid, studentUid, otherTeacherUid].filter(Boolean);
+  const userIds = [
+    teacherUid,
+    studentUid,
+    otherTeacherUid,
+    l0TeacherUid,
+    suspendedTeacherUid,
+    unlicensedTeacherUid,
+  ].filter(Boolean);
   if (userIds.length > 0) {
     await getAuth(adminApp).deleteUsers(userIds);
   }
@@ -271,6 +410,21 @@ test(
       otherTeacherEmail,
       otherTeacherPassword,
     );
+    const l0TeacherToken = await signInThroughAuthEmulator(
+      request,
+      l0TeacherEmail,
+      l0TeacherPassword,
+    );
+    const suspendedTeacherToken = await signInThroughAuthEmulator(
+      request,
+      suspendedTeacherEmail,
+      suspendedTeacherPassword,
+    );
+    const unlicensedTeacherToken = await signInThroughAuthEmulator(
+      request,
+      unlicensedTeacherEmail,
+      unlicensedTeacherPassword,
+    );
 
     const studentListDenied = await request.get("/api/v1/admin/runs", {
       headers: {Authorization: `Bearer ${studentToken}`},
@@ -278,11 +432,43 @@ test(
     expect(studentListDenied.status()).toBe(403);
     expect((await studentListDenied.json()).error.code).toBe("FORBIDDEN");
 
+    const l0LiveList = await request.get("/api/v1/admin/live-runs?limit=1", {
+      headers: {Authorization: `Bearer ${l0TeacherToken}`},
+    });
+    expect(l0LiveList.status()).toBe(200);
+    expect((await l0LiveList.json()).data.runs).toHaveLength(1);
+
+    const suspendedLiveList = await request.get("/api/v1/admin/live-runs", {
+      headers: {Authorization: `Bearer ${suspendedTeacherToken}`},
+    });
+    expect(suspendedLiveList.status()).toBe(403);
+    expect((await suspendedLiveList.json()).error.code).toBe("FORBIDDEN");
+
+    const unlicensedLiveList = await request.get("/api/v1/admin/live-runs", {
+      headers: {Authorization: `Bearer ${unlicensedTeacherToken}`},
+    });
+    expect(unlicensedLiveList.status()).toBe(401);
+    expect((await unlicensedLiveList.json()).error.code).toBe("UNAUTHORIZED");
+
+    const overBoundedLiveList = await request.get(
+      "/api/v1/admin/live-runs?limit=51",
+      {headers: {Authorization: `Bearer ${teacherToken}`}},
+    );
+    expect(overBoundedLiveList.status()).toBe(400);
+    expect((await overBoundedLiveList.json()).error.code)
+      .toBe("VALIDATION_ERROR");
+
     const otherTenantList = await request.get("/api/v1/admin/runs", {
       headers: {Authorization: `Bearer ${otherTeacherToken}`},
     });
     expect(otherTenantList.status()).toBe(200);
     expect((await otherTenantList.json()).data.runs).toEqual([]);
+    const otherTenantLiveList = await request.get(
+      "/api/v1/admin/live-runs",
+      {headers: {Authorization: `Bearer ${otherTeacherToken}`}},
+    );
+    expect(otherTenantLiveList.status()).toBe(200);
+    expect((await otherTenantLiveList.json()).data.runs).toEqual([]);
 
     let analyticsRequestCount = 0;
     const createResponses = [];
@@ -388,6 +574,78 @@ test(
     expect(createdRun.status).toBe("scheduled");
     expect(createdRun.shuffleQuestionOrder).toBe(true);
 
+    const illegalTermination = await request.post(
+      `/api/v1/admin/runs/${createdRun.id}/lifecycle`,
+      {
+        data: {
+          action: "terminate",
+          expectedRevision: 1,
+          idempotencyKey: "bwm-028-illegal-scheduled-termination",
+          justification: "Must be rejected for a scheduled run.",
+        },
+        headers: {Authorization: `Bearer ${teacherToken}`},
+      },
+    );
+    expect(illegalTermination.status()).toBe(409);
+    expect((await illegalTermination.json()).error.code).toBe("CONFLICT");
+
+    const concurrentOperationPayload = {
+      action: "extend",
+      expectedRevision: 1,
+      extensionMinutes: 5,
+      idempotencyKey: "bwm-028-concurrent-operation-proof",
+      justification: "Concurrent command convergence proof.",
+    };
+    const concurrentOperationResponses = await Promise.all([
+      request.post(
+        `/api/v1/admin/runs/${concurrentOperationRunId}/lifecycle`,
+        {
+          data: concurrentOperationPayload,
+          headers: {Authorization: `Bearer ${teacherToken}`},
+        },
+      ),
+      request.post(
+        `/api/v1/admin/runs/${concurrentOperationRunId}/lifecycle`,
+        {
+          data: concurrentOperationPayload,
+          headers: {Authorization: `Bearer ${teacherToken}`},
+        },
+      ),
+    ]);
+    expect(concurrentOperationResponses.map((response) => response.status()))
+      .toEqual([200, 200]);
+    const concurrentOperationEnvelopes = await Promise.all(
+      concurrentOperationResponses.map((response) => response.json()),
+    );
+    expect(concurrentOperationEnvelopes
+      .map((envelope) => envelope.data.disposition).sort())
+      .toEqual(["applied", "replayed"]);
+    expect(concurrentOperationEnvelopes[0].data.run)
+      .toEqual(concurrentOperationEnvelopes[1].data.run);
+
+    const unsupportedOverride = await request.post(
+      `/api/v1/admin/runs/${liveRunId}/sessions/${liveSessionId}/overrides`,
+      {
+        data: {
+          expectedRunRevision: 1,
+          expectedSessionRevision: 1,
+          idempotencyKey: "bwm-028-unsupported-face-override",
+          justification: "Unsupported browser request.",
+          overrideType: "face_override",
+        },
+        headers: {Authorization: `Bearer ${teacherToken}`},
+      },
+    );
+    expect(unsupportedOverride.status()).toBe(400);
+    expect((await unsupportedOverride.json()).error.code)
+      .toBe("VALIDATION_ERROR");
+
+    const otherTenantLiveDetail = await request.get(
+      `/api/v1/admin/live-runs/${liveRunId}`,
+      {headers: {Authorization: `Bearer ${otherTeacherToken}`}},
+    );
+    expect(otherTenantLiveDetail.status()).toBe(404);
+
     await expect(page.locator("#admin-assignments-title"))
       .toHaveText("Assignment List");
     await expect(page.locator("#admin-assignments-title"))
@@ -459,6 +717,160 @@ test(
     expect(studentDetailDenied.status()).toBe(403);
     expect((await studentDetailDenied.json()).error.code).toBe("FORBIDDEN");
 
+    const liveListResponsePromise = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/api/v1/admin/live-runs" &&
+        response.request().method() === "GET" &&
+        response.status() === 200,
+      {timeout: 90_000},
+    );
+    await page.getByRole("link", {name: "Live Runs", exact: true}).click();
+    const liveListEnvelope = await (await liveListResponsePromise).json();
+    expect(liveListEnvelope.data.runs.map((row) => row.run.id))
+      .toContain(liveRunId);
+    expect(liveListEnvelope.data.runs.map((row) => row.run.id))
+      .not.toContain(oldYearRunId);
+    await expect(page.getByRole("heading", {name: "Authoritative Live Runs"}))
+      .toBeVisible();
+    const liveRow = page.getByRole("row").filter({hasText: liveRunId});
+    await expect(liveRow).toContainText("1 active");
+
+    const liveDetailResponsePromise = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname ===
+          `/api/v1/admin/live-runs/${liveRunId}` &&
+        response.request().method() === "GET" &&
+        response.status() === 200,
+      {timeout: 90_000},
+    );
+    await liveRow.getByRole("link", {name: "Open live monitor"}).click();
+    await liveDetailResponsePromise;
+    await expect(page.getByRole("heading", {name: liveRunId})).toBeVisible();
+    await expect(page.getByText(studentName, {exact: true})).toBeVisible();
+    await expect(page.getByRole("button", {name: /face/i})).toHaveCount(0);
+    await expect(page.getByRole("button", {name: /cancel|stop/i}))
+      .toHaveCount(0);
+
+    await page.getByLabel("Justification").fill(
+      "BWM-028 supervised browser operation proof.",
+    );
+    const bypassResponsePromise = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname ===
+          `/api/v1/admin/runs/${liveRunId}/sessions/${liveSessionId}/overrides` &&
+        response.request().method() === "POST" &&
+        response.status() === 200,
+      {timeout: 90_000},
+    );
+    await page.getByRole("button", {name: "Bypass minimum time"}).click();
+    await bypassResponsePromise;
+    await expect(page.getByRole("status"))
+      .toContainText("Minimum-time bypass reconciled");
+
+    await page.getByLabel("Extension minutes").fill("10");
+    const extendResponsePromise = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname ===
+          `/api/v1/admin/runs/${liveRunId}/lifecycle` &&
+        response.request().method() === "POST" &&
+        response.status() === 200,
+      {timeout: 90_000},
+    );
+    await page.getByRole("button", {name: "Extend window"}).click();
+    await extendResponsePromise;
+    await expect(page.getByRole("status")).toContainText("Run extended");
+
+    const resendResponsePromise = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname ===
+          `/api/v1/admin/runs/${liveRunId}/notifications/resend` &&
+        response.request().method() === "POST" &&
+        response.status() === 200,
+      {timeout: 90_000},
+    );
+    await page.getByRole("button", {name: "Resend notifications"}).click();
+    await resendResponsePromise;
+    await expect(page.getByRole("status"))
+      .toContainText("1 notification jobs queued");
+
+    const terminateResponsePromise = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname ===
+          `/api/v1/admin/runs/${liveRunId}/lifecycle` &&
+        response.request().method() === "POST" &&
+        response.status() === 200,
+      {timeout: 90_000},
+    );
+    const historyResponsePromise = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/api/v1/admin/run-history" &&
+        response.request().method() === "GET" &&
+        response.status() === 200,
+      {timeout: 90_000},
+    );
+    await page.getByRole("button", {name: "Terminate run"}).click();
+    await Promise.all([terminateResponsePromise, historyResponsePromise]);
+    await expect(page.getByRole("heading", {
+      name: "Authoritative Terminal Run History",
+    })).toBeVisible();
+    let historyRow = page.getByRole("row").filter({hasText: liveRunId});
+    await expect(historyRow).toContainText("terminated");
+
+    const reloadHistoryResponse = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/api/v1/admin/run-history" &&
+        response.request().method() === "GET" &&
+        response.status() === 200,
+      {timeout: 90_000},
+    );
+    await page.evaluate(() => {
+      window.sessionStorage.setItem(
+        "bwm014.adminAssignmentRoute",
+        "/admin/assignments/history",
+      );
+    });
+    await page.goto("/admin/index.html", {waitUntil: "domcontentloaded"});
+    await reloadHistoryResponse;
+    historyRow = page.getByRole("row").filter({hasText: liveRunId});
+    await expect(historyRow).toContainText("terminated");
+
+    const liveRunSnapshot = await firestore.doc(
+      `institutes/${instituteId}/academicYears/${yearId}/runs/${liveRunId}`,
+    ).get();
+    expect(liveRunSnapshot.get("status")).toBe("terminated");
+    expect(liveRunSnapshot.get("revision")).toBe(5);
+    const liveSessionSnapshot = await firestore.doc(
+      `institutes/${instituteId}/academicYears/${yearId}/runs/${liveRunId}/` +
+        `sessions/${liveSessionId}`,
+    ).get();
+    expect(liveSessionSnapshot.get("status")).toBe("terminated");
+    expect(liveSessionSnapshot.get("revision")).toBe(3);
+    expect(liveSessionSnapshot.get("overrideUsed")).toBe(true);
+    const notificationJobs = await firestore.collection("emailQueue")
+      .where("payload.runId", "==", liveRunId).get();
+    expect(notificationJobs.size).toBe(1);
+    expect(notificationJobs.docs[0].get("templateType"))
+      .toBe("assignment_notification");
+    const overrideLogs = await firestore
+      .collection(`institutes/${instituteId}/overrideLogs`).get();
+    const liveOverride = overrideLogs.docs.find(
+      (document) => document.get("runId") === liveRunId,
+    );
+    expect(liveOverride).toBeTruthy();
+    expect(liveOverride?.get("overrideType")).toBe("MIN_TIME_BYPASS");
+    expect(liveOverride?.get("recoveryState")).toBe("complete");
+    const auditLogs = await firestore
+      .collection(`institutes/${instituteId}/auditLogs`).get();
+    const liveAuditActions = auditLogs.docs
+      .filter((document) => document.get("targetId") === liveRunId)
+      .map((document) => document.get("actionType"));
+    expect(liveAuditActions).toEqual(expect.arrayContaining([
+      "EXTEND_ASSIGNMENT",
+      "OVERRIDE_ASSIGNMENT_SESSION",
+      "RESEND_ASSIGNMENT_NOTIFICATION",
+      "TERMINATE_ASSIGNMENT",
+    ]));
+
     const uiRequestPayload = createResponses[0].request().postDataJSON();
     const concurrentPayload = {
       ...uiRequestPayload,
@@ -494,7 +906,7 @@ test(
       .doc(yearId)
       .collection("runs")
       .get();
-    expect(finalRuns.size).toBe(2);
+    expect(finalRuns.size).toBe(4);
     const finalTemplate = await firestore
       .collection("institutes")
       .doc(instituteId)

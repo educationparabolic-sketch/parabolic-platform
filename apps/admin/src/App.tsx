@@ -51,6 +51,8 @@ const BatchAnalyticsDashboardPage = lazy(() => import("./features/analytics/Batc
 const AdminGovernanceLandingPage = lazy(() => import("./features/analytics/AdminGovernanceLandingPage"));
 const GovernanceMonitoringDashboardPage = lazy(() => import("./features/analytics/GovernanceMonitoringDashboardPage"));
 const AdminAssignmentLiveRunPage = lazy(() => import("./features/assignments/AdminAssignmentLiveRunPage"));
+const AdminAssignmentsLivePage = lazy(() => import("./features/assignments/AdminAssignmentsLivePage"));
+const AdminAssignmentsHistoryPage = lazy(() => import("./features/assignments/AdminAssignmentsHistoryPage"));
 const AdminAssignmentDetailPage = lazy(() => import("./features/assignments/AdminAssignmentDetailPage"));
 const AdminAssignmentsLandingPage = lazy(() => import("./features/assignments/AdminAssignmentsLandingPage"));
 const AssignmentManagementPage = lazy(() => import("./features/assignments/AssignmentManagementPage"));
@@ -714,7 +716,7 @@ function App() {
         />
         <Route
           path="assignments/live"
-          element={<Navigate to="/admin/assignments/list" replace />}
+          element={<AdminRouteBoundary label="Loading assignment live runs"><AdminAssignmentsLivePage /></AdminRouteBoundary>}
         />
         <Route
           path="assignments/live/:runId"
@@ -726,7 +728,7 @@ function App() {
         />
         <Route
           path="assignments/history"
-          element={<Navigate to="/admin/assignments/list" replace />}
+          element={<AdminRouteBoundary label="Loading assignment history"><AdminAssignmentsHistoryPage /></AdminRouteBoundary>}
         />
         <Route
           path="assignments/bulk"

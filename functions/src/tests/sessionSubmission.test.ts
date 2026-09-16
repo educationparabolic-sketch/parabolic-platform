@@ -281,6 +281,8 @@ test.after(async () => {
     "session_build_36_parallel_lock",
     "session_build_36_locked",
     "session_build_36_hard_timing_rejected",
+    "session_build_36_hard_timing_override",
+    "session_build_36_owned_lock_recovery",
     "session_build_36_not_active",
     "session_build_36_expiry",
     "session_build_36_expiry_too_early",
@@ -418,6 +420,69 @@ test(
     await deleteIfPresent(sessionPath);
   },
 );
+
+test(
+  "submitSession honors persisted minimum-time override without browser authority",
+  async () => {
+    const sessionId = "session_build_36_hard_timing_override";
+    const sessionPath = `${SESSION_ROOT_PATH}/${sessionId}`;
+
+    await deleteIfPresent(sessionPath);
+    await seedSession(sessionId, "active", false, "Hard");
+    await firestore.doc(sessionPath).update({
+      overrideUsed: true,
+      submissionTimingOverride: {
+        active: true,
+        overrideId: "override-minimum-time",
+        type: "minimum_time_bypass",
+      },
+    });
+
+    const result = await submissionService.submitSession({
+      instituteId: INSTITUTE_ID,
+      reason: "manual",
+      runId: RUN_ID,
+      sessionId,
+      studentId: STUDENT_ID,
+      yearId: YEAR_ID,
+    });
+
+    assert.equal(result.status, "submitted");
+    assert.equal(result.submissionReason, "manual");
+    assert.deepEqual(
+      (await firestore.doc(sessionPath).get()).get(
+        "submissionTimingValidation.minTimeViolationQuestionIds",
+      ),
+      ["q36_1", "q36_2"],
+    );
+    await deleteIfPresent(sessionPath);
+  },
+);
+
+test("submitSession resumes a durable lock owned by the same command", async () => {
+  const sessionId = "session_build_36_owned_lock_recovery";
+  const sessionPath = `${SESSION_ROOT_PATH}/${sessionId}`;
+  const lockOwnerId = "assignment_override_owned_lock";
+
+  await deleteIfPresent(sessionPath);
+  await seedSession(sessionId, "active", true);
+  await firestore.doc(sessionPath).update({submissionLockOwnerId: lockOwnerId});
+
+  const result = await submissionService.submitSession({
+    instituteId: INSTITUTE_ID,
+    reason: "manual",
+    runId: RUN_ID,
+    sessionId,
+    studentId: STUDENT_ID,
+    yearId: YEAR_ID,
+  }, {lockOwnerId});
+
+  assert.equal(result.status, "submitted");
+  const snapshot = await firestore.doc(sessionPath).get();
+  assert.equal(snapshot.get("submissionLock"), false);
+  assert.equal(snapshot.get("submissionLockOwnerId"), undefined);
+  await deleteIfPresent(sessionPath);
+});
 
 test(
   "submitSession returns existing result for submitted session",

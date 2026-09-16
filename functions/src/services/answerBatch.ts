@@ -1081,7 +1081,15 @@ export class AnswerBatchService {
         sessionData.mode,
         "session.mode",
       );
-      const minTimeEnforcementLevel = resolveMinTimeEnforcementLevel(mode);
+      const timingOverride = isPlainObject(sessionData.submissionTimingOverride) ?
+        sessionData.submissionTimingOverride : null;
+      const minimumTimeBypassActive = timingOverride?.active === true &&
+        timingOverride.type === "minimum_time_bypass";
+      const configuredMinTimeEnforcementLevel =
+        resolveMinTimeEnforcementLevel(mode);
+      const minTimeEnforcementLevel = minimumTimeBypassActive &&
+        configuredMinTimeEnforcementLevel === "strict" ?
+        "track_only" : configuredMinTimeEnforcementLevel;
       const maxTimeEnforcementLevel = resolveMaxTimeEnforcementLevel(mode);
 
       if (
@@ -1107,6 +1115,13 @@ export class AnswerBatchService {
         throw new SessionStartValidationError(
           "SESSION_LOCKED",
           "Session is not accepting answer writes in its current status.",
+        );
+      }
+
+      if (sessionData.submissionLock === true) {
+        throw new SessionStartValidationError(
+          "SESSION_LOCKED",
+          "Session submission is already in progress.",
         );
       }
 

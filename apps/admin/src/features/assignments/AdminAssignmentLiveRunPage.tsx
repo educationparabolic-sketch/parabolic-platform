@@ -1,991 +1,328 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { NavLink, useParams } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { NavLink, useNavigate, useParams } from "react-router-dom";
+import type {
+  AdminRunLiveDetailResult,
+  AdminRunLiveStudentRecord,
+  AdminRunSessionOverrideType,
+} from "../../../../../shared/contracts/apiDtos";
+import { ApiClientError } from "../../../../../shared/services/apiClient";
+import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
-import {
-  ApiClientError,
-  type DashboardDataset,
-  fetchDashboardDataset,
-  shouldUseLiveApi,
-  type RunAnalyticsRecord,
-  type StudentAnalyticsRecord,
-} from "../analytics/analyticsDataset";
+import { resolveAdminAccessContext } from "../../portals/adminAccess";
+import { shouldUseLiveApi } from "../analytics/analyticsDataset";
 import AssignmentsWorkspaceNav from "./AssignmentsWorkspaceNav";
+import {
+  applyAdminSessionOverride,
+  fetchAdminLiveRun,
+  fetchAdminRunHistory,
+  resendAdminRunNotifications,
+  updateAdminRunLifecycle,
+} from "./assignmentOperationsApi";
 
-type ExecutionMode = "Operational" | "Controlled" | "Focused" | "Hard";
-type RunStatus = "Live";
-type LiveProctorViolationType = "gaze" | "fullscreen" | "face";
-type LiveProctorSeverity = "watch" | "warning" | "blocking";
-
-interface RunAnalyticsSnapshot {
-  avgRawScorePercent: number;
-  avgAccuracyPercent: number;
-  avgPhaseAdherencePercent: number;
-  easyNeglectPercent: number;
-  hardBiasPercent: number;
-  riskDistributionSummary: string;
-  avgDisciplineIndex: number;
-  controlledCompliancePercent: number;
-  guessRatePercent: number;
-  executionStabilityBadge: string;
-  overrideCount: number;
+function commandKey(): string {
+  return typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `admin-assignment-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
-
-interface RunStatusRecord {
-  runId: string;
-  runName: string;
-  batchName: string;
-  mode: ExecutionMode;
-  batchIds: string[];
-  recipientCount: number;
-  startedAtIso: string;
-  originalEndWindowIso: string;
-  endWindowIso: string;
-  timezone: string;
-  gracePeriodMinutes: number;
-  shuffleEnabled: boolean;
-  status: RunStatus;
-  completionPercent: number;
-  runAnalyticsSnapshot: RunAnalyticsSnapshot;
-}
-
-interface LiveMonitorStudentSnapshot {
-  runId: string;
-  studentId: string;
-  studentName: string;
-  progressPercent: number;
-  timeRemainingMinutes: number;
-  submissionStatus: "in_progress" | "submitted";
-  currentPhase: "P1" | "P2" | "P3";
-  pacingDriftFlag: boolean;
-  skipBurstFlag: boolean;
-  rapidGuessFlag: boolean;
-  minTimeViolationsLive: number;
-  maxTimeViolationsLive: number;
-  consecutiveWrongIndicator: number;
-  provisionalRiskScore: number;
-  controlledCompliancePercent: number;
-  faceGuardEnabled: boolean;
-  faceVerificationStatus: "verified" | "problem" | "override";
-  faceOverrideNote: string | null;
-  proctorViolations: LiveProctorViolation[];
-}
-
-interface LiveProctorViolation {
-  id: string;
-  type: LiveProctorViolationType;
-  severity: LiveProctorSeverity;
-  label: string;
-  detail: string;
-  observedAtIso: string;
-}
-
-function createRelativeIso(minutesFromNow: number): string {
-  return new Date(Date.now() + minutesFromNow * 60_000).toISOString();
-}
-
-const LIVE_RUNS: RunStatusRecord[] = [
-  {
-    runId: "run-2026-0416-003",
-    runName: "Run 2026-0416-003",
-    batchName: "Batch-C",
-    mode: "Controlled",
-    batchIds: ["batch-c"],
-    recipientCount: 3,
-    startedAtIso: createRelativeIso(-42),
-    originalEndWindowIso: createRelativeIso(128),
-    endWindowIso: createRelativeIso(128),
-    timezone: "Asia/Kolkata",
-    gracePeriodMinutes: 15,
-    shuffleEnabled: true,
-    status: "Live",
-    completionPercent: 64,
-    runAnalyticsSnapshot: {
-      avgRawScorePercent: 63,
-      avgAccuracyPercent: 68,
-      avgPhaseAdherencePercent: 71,
-      easyNeglectPercent: 14,
-      hardBiasPercent: 23,
-      riskDistributionSummary: "L 34% / M 40% / H 20% / C 6%",
-      avgDisciplineIndex: 66,
-      controlledCompliancePercent: 87,
-      guessRatePercent: 12,
-      executionStabilityBadge: "Drift",
-      overrideCount: 1,
-    },
-  },
-];
-
-const LIVE_MONITOR_ROWS: LiveMonitorStudentSnapshot[] = [
-  {
-    runId: "run-2026-0416-003",
-    studentId: "STU-021",
-    studentName: "Priya Menon",
-    progressPercent: 58,
-    timeRemainingMinutes: 44,
-    submissionStatus: "in_progress",
-    currentPhase: "P2",
-    pacingDriftFlag: false,
-    skipBurstFlag: false,
-    rapidGuessFlag: false,
-    minTimeViolationsLive: 0,
-    maxTimeViolationsLive: 0,
-    consecutiveWrongIndicator: 1,
-    provisionalRiskScore: 34,
-    controlledCompliancePercent: 91,
-    faceGuardEnabled: true,
-    faceVerificationStatus: "verified",
-    faceOverrideNote: null,
-    proctorViolations: [
-      {
-        id: "STU-021-fullscreen-1",
-        type: "fullscreen",
-        severity: "watch",
-        label: "Fullscreen Re-entered",
-        detail: "Student returned to fullscreen after a short exit.",
-        observedAtIso: createRelativeIso(-12),
-      },
-    ],
-  },
-  {
-    runId: "run-2026-0416-003",
-    studentId: "STU-022",
-    studentName: "Arjun Das",
-    progressPercent: 49,
-    timeRemainingMinutes: 48,
-    submissionStatus: "in_progress",
-    currentPhase: "P2",
-    pacingDriftFlag: true,
-    skipBurstFlag: false,
-    rapidGuessFlag: false,
-    minTimeViolationsLive: 1,
-    maxTimeViolationsLive: 0,
-    consecutiveWrongIndicator: 2,
-    provisionalRiskScore: 46,
-    controlledCompliancePercent: 84,
-    faceGuardEnabled: true,
-    faceVerificationStatus: "problem",
-    faceOverrideNote: null,
-    proctorViolations: [
-      {
-        id: "STU-022-gaze-1",
-        type: "gaze",
-        severity: "warning",
-        label: "Gaze Away",
-        detail: "Gaze stayed outside calibrated bounds for 9 seconds.",
-        observedAtIso: createRelativeIso(-8),
-      },
-      {
-        id: "STU-022-face-1",
-        type: "face",
-        severity: "blocking",
-        label: "Face Match Problem",
-        detail: "Identity confidence dropped below the live threshold.",
-        observedAtIso: createRelativeIso(-5),
-      },
-    ],
-  },
-  {
-    runId: "run-2026-0416-003",
-    studentId: "STU-023",
-    studentName: "Sara Khan",
-    progressPercent: 71,
-    timeRemainingMinutes: 31,
-    submissionStatus: "in_progress",
-    currentPhase: "P3",
-    pacingDriftFlag: true,
-    skipBurstFlag: true,
-    rapidGuessFlag: true,
-    minTimeViolationsLive: 3,
-    maxTimeViolationsLive: 1,
-    consecutiveWrongIndicator: 4,
-    provisionalRiskScore: 73,
-    controlledCompliancePercent: 64,
-    faceGuardEnabled: true,
-    faceVerificationStatus: "problem",
-    faceOverrideNote: null,
-    proctorViolations: [
-      {
-        id: "STU-023-gaze-1",
-        type: "gaze",
-        severity: "blocking",
-        label: "Repeated Gaze Away",
-        detail: "Multiple side-look violations during the current live window.",
-        observedAtIso: createRelativeIso(-14),
-      },
-      {
-        id: "STU-023-fullscreen-1",
-        type: "fullscreen",
-        severity: "blocking",
-        label: "Fullscreen Disabled",
-        detail: "Exam fullscreen was exited and required re-entry.",
-        observedAtIso: createRelativeIso(-11),
-      },
-    ],
-  },
-];
 
 function formatDateTime(value: string): string {
   const parsed = Date.parse(value);
-  if (Number.isNaN(parsed)) {
-    return value;
-  }
-
-  return new Date(parsed).toISOString().slice(0, 16).replace("T", " ");
+  return Number.isNaN(parsed) ? value : new Date(parsed).toLocaleString();
 }
 
-function formatCountdownFromMs(milliseconds: number): string {
-  const totalSeconds = Math.floor(Math.max(0, milliseconds) / 1000);
-  const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, "0");
-  const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
-  const seconds = String(totalSeconds % 60).padStart(2, "0");
-  return `${hours}:${minutes}:${seconds}`;
+function formatDuration(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return `${minutes}m ${remainder}s`;
 }
 
-function clampPercent(value: number): number {
-  return Math.max(0, Math.min(100, Math.round(value)));
+function describeError(error: unknown): string {
+  return error instanceof ApiClientError
+    ? `${error.code} (${error.status}): ${error.message}`
+    : error instanceof Error ? error.message : "Unexpected assignment operation failure.";
 }
 
-function clampNonNegative(value: number): number {
-  return Math.max(0, Math.round(value));
-}
-
-function toExecutionMode(mode: string): ExecutionMode {
-  if (mode === "Operational" || mode === "Controlled" || mode === "Focused" || mode === "Hard") {
-    return mode;
-  }
-
-  return "Operational";
-}
-
-function toRiskDistributionSummary(record: RunAnalyticsRecord): string {
-  const low = record.riskDistribution.low ?? 0;
-  const medium = record.riskDistribution.medium ?? 0;
-  const high = record.riskDistribution.high ?? 0;
-  const critical = record.riskDistribution.critical ?? 0;
-  return `L ${low}% / M ${medium}% / H ${high}% / C ${critical}%`;
-}
-
-function toStabilityBadge(record: RunAnalyticsRecord): string {
-  if (record.controlledCompliancePercent >= 80 && record.pacingGuardrailViolationPercent <= 12) {
-    return "Stable";
-  }
-
-  if (record.controlledCompliancePercent >= 55 && record.pacingGuardrailViolationPercent <= 22) {
-    return "Drift";
-  }
-
-  return "Escalated";
-}
-
-function buildRunRecord(record: RunAnalyticsRecord, fallback?: RunStatusRecord): RunStatusRecord {
-  const fallbackOriginalEndWindow =
-    fallback?.originalEndWindowIso ??
-    new Date(Date.parse(record.startedAt) + 3 * 60 * 60 * 1000).toISOString();
-  const fallbackEndWindow = fallback?.endWindowIso ?? fallbackOriginalEndWindow;
-  const endWindowIso =
-    Date.parse(fallbackEndWindow) <= Date.now() ?
-      new Date(Date.now() + 45 * 60 * 1000).toISOString() :
-      fallbackEndWindow;
+async function loadCompleteLiveDetail(runId: string): Promise<AdminRunLiveDetailResult> {
+  const first = await fetchAdminLiveRun(runId, { limit: 50 });
+  if (!first.nextCursor) return first;
+  const second = await fetchAdminLiveRun(runId, { cursor: first.nextCursor, limit: 50 });
+  if (second.nextCursor) throw new Error("Live detail exceeded the supported 100-recipient bound.");
   return {
-    runId: record.runId,
-    runName: record.runName,
-    batchName: record.batchName,
-    mode: toExecutionMode(record.mode),
-    batchIds: fallback?.batchIds ?? [record.batchId],
-    recipientCount: record.participants,
-    startedAtIso: record.startedAt,
-    originalEndWindowIso: fallbackOriginalEndWindow,
-    endWindowIso,
-    timezone: fallback?.timezone ?? "Asia/Kolkata",
-    gracePeriodMinutes: fallback?.gracePeriodMinutes ?? 0,
-    shuffleEnabled: fallback?.shuffleEnabled ?? false,
-    status: "Live",
-    completionPercent: Math.round(record.completionRatePercent),
-    runAnalyticsSnapshot: {
-      avgRawScorePercent: Math.round(record.avgRawScorePercent),
-      avgAccuracyPercent: Math.round(record.avgAccuracyPercent),
-      avgPhaseAdherencePercent: Math.round(record.avgPhaseAdherencePercent),
-      easyNeglectPercent: Math.round(record.easyNeglectPercent),
-      hardBiasPercent: Math.round(record.hardBiasPercent),
-      riskDistributionSummary: toRiskDistributionSummary(record),
-      avgDisciplineIndex: Math.round(record.disciplineIndexAverage),
-      controlledCompliancePercent: Math.round(record.controlledCompliancePercent),
-      guessRatePercent: Math.round(record.guessRatePercent),
-      executionStabilityBadge: toStabilityBadge(record),
-      overrideCount: Math.round(record.structuralOverridePercent),
-    },
+    ...second,
+    students: [...first.students, ...second.students],
   };
 }
 
-function buildLiveRunRecords(runAnalytics: RunAnalyticsRecord[]): RunStatusRecord[] {
-  const fallbackById = new Map(LIVE_RUNS.map((run) => [run.runId, run]));
-
-  return [...runAnalytics]
-    .sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt))
-    .map((record) => buildRunRecord(record, fallbackById.get(record.runId)));
-}
-
-function phaseFromProgress(progressPercent: number): LiveMonitorStudentSnapshot["currentPhase"] {
-  if (progressPercent >= 67) {
-    return "P3";
+async function verifyTerminalRun(runId: string, status: "completed" | "terminated"): Promise<void> {
+  let cursor: string | undefined;
+  for (let page = 0; page < 2; page += 1) {
+    const result = await fetchAdminRunHistory({ cursor, limit: 50, status });
+    if (result.runs.some((row) => row.run.id === runId)) return;
+    if (!result.nextCursor) break;
+    cursor = result.nextCursor;
   }
-  if (progressPercent >= 34) {
-    return "P2";
-  }
-  return "P1";
-}
-
-function buildLiveMonitorRow(
-  student: StudentAnalyticsRecord,
-  runSummary: StudentAnalyticsRecord["runSummaries"][number],
-  run: RunAnalyticsRecord,
-  index: number,
-): LiveMonitorStudentSnapshot {
-  const progressPercent = clampPercent(
-    (run.completionRatePercent * 0.55) + (runSummary.phaseAdherencePercent * 0.25) + (runSummary.accuracyPercent * 0.2) - index * 4,
-  );
-  const timeRemainingMinutes = clampNonNegative(
-    ((100 - progressPercent) * 1.2) + ((100 - runSummary.phaseAdherencePercent) * 0.15) + (index % 3) * 3,
-  );
-  const pacingDriftFlag =
-    runSummary.phaseAdherencePercent < run.avgPhaseAdherencePercent ||
-    runSummary.overstayPercent >= 14;
-  const skipBurstFlag =
-    runSummary.easyNeglectPercent > run.easyNeglectPercent ||
-    runSummary.topicWeaknessScore >= 36;
-  const rapidGuessFlag =
-    runSummary.guessRatePercent > run.guessRatePercent ||
-    runSummary.riskState === "high" ||
-    runSummary.riskState === "critical";
-  const minTimeViolationsLive = clampNonNegative(
-    Math.max(0, runSummary.overstayPercent - 8) / 6,
-  );
-  const maxTimeViolationsLive = clampNonNegative(
-    (run.mode === "Hard" ? runSummary.hardBiasPercent : runSummary.overstayPercent - 18) / 12,
-  );
-  const consecutiveWrongIndicator = clampNonNegative(
-    (runSummary.topicWeaknessScore / 18) + (runSummary.riskState === "critical" ? 2 : runSummary.riskState === "high" ? 1 : 0),
-  );
-  const provisionalRiskScore = clampPercent(
-    (runSummary.guessRatePercent * 0.35) +
-      ((100 - runSummary.disciplineIndex) * 0.35) +
-      (runSummary.overstayPercent * 0.2) +
-      (runSummary.topicWeaknessScore * 0.1),
-  );
-  const controlledCompliancePercent = clampPercent(
-    run.mode === "Controlled" || run.mode === "Hard" ?
-      runSummary.phaseAdherencePercent - runSummary.controlledModeDelta + 8 :
-      runSummary.phaseAdherencePercent,
-  );
-  const proctorViolations: LiveProctorViolation[] = [];
-  if (pacingDriftFlag || runSummary.overstayPercent >= 14) {
-    proctorViolations.push({
-      id: `${run.runId}-${student.studentId}-gaze-${index}`,
-      type: "gaze",
-      severity: runSummary.riskState === "critical" || runSummary.riskState === "high" ? "blocking" : "warning",
-      label: "Gaze Attention Drift",
-      detail: "Live gaze signal moved outside the calibrated tolerance window.",
-      observedAtIso: createRelativeIso(-4 - index * 2),
-    });
-  }
-  if (runSummary.controlledModeDelta < -4 || runSummary.disciplineIndex < 60) {
-    proctorViolations.push({
-      id: `${run.runId}-${student.studentId}-fullscreen-${index}`,
-      type: "fullscreen",
-      severity: runSummary.disciplineIndex < 45 ? "blocking" : "warning",
-      label: "Fullscreen Integrity Alert",
-      detail: "Browser integrity guard reported a live fullscreen interruption.",
-      observedAtIso: createRelativeIso(-7 - index * 2),
-    });
-  }
-  if (runSummary.riskState === "critical") {
-    proctorViolations.push({
-      id: `${run.runId}-${student.studentId}-face-${index}`,
-      type: "face",
-      severity: "blocking",
-      label: "Face Verification Problem",
-      detail: "Face verification needs teacher review for this live session.",
-      observedAtIso: createRelativeIso(-3 - index),
-    });
-  }
-
-  return {
-    runId: run.runId,
-    studentId: student.studentId,
-    studentName: student.studentName,
-    progressPercent,
-    timeRemainingMinutes,
-    submissionStatus: progressPercent >= 95 ? "submitted" : "in_progress",
-    currentPhase: phaseFromProgress(progressPercent),
-    pacingDriftFlag,
-    skipBurstFlag,
-    rapidGuessFlag,
-    minTimeViolationsLive,
-    maxTimeViolationsLive,
-    consecutiveWrongIndicator,
-    provisionalRiskScore,
-    controlledCompliancePercent,
-    faceGuardEnabled: true,
-    faceVerificationStatus: runSummary.riskState === "critical" ? "problem" : "verified",
-    faceOverrideNote: null,
-    proctorViolations,
-  };
-}
-
-function buildLiveMonitorRows(dataset: DashboardDataset): LiveMonitorStudentSnapshot[] {
-  return dataset.runAnalytics.flatMap((run) => {
-    const matchingStudents = dataset.studentAnalytics
-      .map((student) => ({
-        student,
-        runSummary: student.runSummaries.find((summary) => summary.runId === run.runId) ?? null,
-      }))
-      .filter(
-        (
-          entry,
-        ): entry is {
-          student: StudentAnalyticsRecord;
-          runSummary: StudentAnalyticsRecord["runSummaries"][number];
-        } => Boolean(entry.runSummary),
-      )
-      .sort((left, right) => {
-        if (left.student.batchId !== right.student.batchId) {
-          return left.student.batchId === run.batchId ? -1 : 1;
-        }
-        return right.runSummary.guessRatePercent - left.runSummary.guessRatePercent;
-      })
-      .slice(0, Math.max(1, Math.min(run.participants, 12)));
-
-    return matchingStudents.map(({ student, runSummary }, index) =>
-      buildLiveMonitorRow(student, runSummary, run, index),
-    );
-  });
-}
-
-function classifyLiveRisk(snapshot: LiveMonitorStudentSnapshot): "Stable" | "Drift" | "HighRisk" {
-  if (
-    snapshot.rapidGuessFlag ||
-    snapshot.skipBurstFlag ||
-    snapshot.provisionalRiskScore >= 70 ||
-    snapshot.maxTimeViolationsLive >= 2
-  ) {
-    return "HighRisk";
-  }
-
-  if (snapshot.pacingDriftFlag || snapshot.minTimeViolationsLive > 0 || snapshot.provisionalRiskScore >= 45) {
-    return "Drift";
-  }
-
-  return "Stable";
-}
-
-function liveIndicatorClass(risk: "Stable" | "Drift" | "HighRisk"): string {
-  if (risk === "HighRisk") {
-    return "admin-live-indicator admin-live-indicator-highrisk";
-  }
-  if (risk === "Drift") {
-    return "admin-live-indicator admin-live-indicator-drift";
-  }
-  return "admin-live-indicator admin-live-indicator-stable";
-}
-
-function formatLiveFlag(isActive: boolean): string {
-  return isActive ? "Flagged" : "Clear";
-}
-
-function formatProctorTime(value: string): string {
-  const parsed = Date.parse(value);
-  if (Number.isNaN(parsed)) {
-    return value;
-  }
-
-  return new Date(parsed).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-}
-
-function violationTone(type: LiveProctorViolationType): string {
-  if (type === "fullscreen") {
-    return "admin-live-violation-fullscreen";
-  }
-  if (type === "face") {
-    return "admin-live-violation-face";
-  }
-  return "admin-live-violation-gaze";
+  throw new Error("The terminated run was not present in the bounded authoritative history reload.");
 }
 
 function AdminAssignmentLiveRunPage() {
-  const params = useParams<{ runId?: string }>();
-  const [runs, setRuns] = useState<RunStatusRecord[]>(LIVE_RUNS);
-  const [liveRows, setLiveRows] = useState<LiveMonitorStudentSnapshot[]>(LIVE_MONITOR_ROWS);
-  const [isLoading, setIsLoading] = useState(true);
-  const [inlineMessage, setInlineMessage] = useState<string | null>(null);
-  const [currentTime, setCurrentTime] = useState(() => Date.now());
-  const [extensionPreset, setExtensionPreset] = useState<"5" | "10" | "15" | "30" | "custom">("15");
-  const [customExtensionMinutes, setCustomExtensionMinutes] = useState("");
+  const { runId } = useParams<{ runId: string }>();
+  const navigate = useNavigate();
+  const { session } = useAuthProvider();
+  const role = resolveAdminAccessContext(session).role;
+  const canManage = shouldUseLiveApi() && (role === "teacher" || role === "admin");
+  const retryKeys = useRef(new Map<string, string>());
+  const [detail, setDetail] = useState<AdminRunLiveDetailResult | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [extensionMinutes, setExtensionMinutes] = useState("15");
+  const [justification, setJustification] = useState("");
+
+  const reload = useCallback(async (): Promise<AdminRunLiveDetailResult> => {
+    if (!runId) throw new Error("The live route is missing its run identifier.");
+    const result = await loadCompleteLiveDetail(runId);
+    setDetail(result);
+    return result;
+  }, [runId]);
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      setCurrentTime(Date.now());
-    }, 1000);
-
-    return () => window.clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadRunDetail() {
-      setIsLoading(true);
-      setInlineMessage(null);
-
+    let mounted = true;
+    async function load(): Promise<void> {
       if (!shouldUseLiveApi()) {
-        setRuns(LIVE_RUNS);
-        setLiveRows(LIVE_MONITOR_ROWS);
-        setInlineMessage(
-          "Local mode detected. Loaded deterministic focused-run fixtures; per-student live flags stay local in this mode.",
-        );
-        setIsLoading(false);
+        setError("Authoritative live detail is available only when the live API is enabled; no fixture has been substituted.");
         return;
       }
-
+      setIsLoading(true);
+      setError(null);
       try {
-        const dataset = await fetchDashboardDataset();
-        if (!isMounted) {
-          return;
-        }
-
-        const nextRuns = buildLiveRunRecords(dataset.runAnalytics);
-        const nextLiveRows = buildLiveMonitorRows(dataset);
-        setRuns(nextRuns);
-        setLiveRows(nextLiveRows);
-        setInlineMessage(
-          "Live mode enabled: focused run summary and per-student live flags hydrated from GET /admin/analytics with deterministic fallback coverage.",
-        );
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-
-        const reason = error instanceof ApiClientError ? error.message : "Failed to load focused live run data.";
-        setInlineMessage(reason);
+        const result = await loadCompleteLiveDetail(runId ?? "");
+        if (mounted) setDetail(result);
+      } catch (caught) {
+        if (mounted) setError(`GET /admin/live-runs/{runId} failed: ${describeError(caught)}`);
       } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+        if (mounted) setIsLoading(false);
       }
     }
+    void load();
+    return () => { mounted = false; };
+  }, [runId]);
 
-    void loadRunDetail();
+  function idempotencyKey(action: string): string {
+    const existing = retryKeys.current.get(action);
+    if (existing) return existing;
+    const created = commandKey();
+    retryKeys.current.set(action, created);
+    return created;
+  }
 
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const selectedRun = useMemo(() => {
-    return runs.find((run) => run.runId === params.runId) ?? runs[0] ?? null;
-  }, [params.runId, runs]);
-
-  const studentRows = useMemo(
-    () => liveRows.filter((row) => row.runId === selectedRun?.runId),
-    [liveRows, selectedRun],
-  );
-
-  const countdownLabel = useMemo(() => {
-    if (!selectedRun) {
-      return "--:--:--";
+  async function runCommand(action: string, operation: () => Promise<string>): Promise<void> {
+    if (!canManage || pendingAction) return;
+    setPendingAction(action);
+    setError(null);
+    setNotice(null);
+    try {
+      const message = await operation();
+      retryKeys.current.delete(action);
+      setNotice(message);
+    } catch (caught) {
+      setError(`${action} failed: ${describeError(caught)} Retrying this action will reuse its idempotency key.`);
+    } finally {
+      setPendingAction(null);
     }
+  }
 
-    const remainingMs = Math.max(0, Date.parse(selectedRun.endWindowIso) - currentTime);
-    return formatCountdownFromMs(remainingMs);
-  }, [currentTime, selectedRun]);
-
-  const extensionMinutes = useMemo(() => {
-    if (extensionPreset === "custom") {
-      const parsed = Number(customExtensionMinutes);
-      return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : null;
-    }
-
-    return Number(extensionPreset);
-  }, [customExtensionMinutes, extensionPreset]);
-
-  const previewEndWindowIso = useMemo(() => {
-    if (!selectedRun || extensionMinutes === null) {
-      return selectedRun?.endWindowIso ?? null;
-    }
-
-    return new Date(Date.parse(selectedRun.endWindowIso) + extensionMinutes * 60 * 1000).toISOString();
-  }, [extensionMinutes, selectedRun]);
-
-  const previewCountdownLabel = useMemo(() => {
-    if (!previewEndWindowIso) {
-      return "--:--:--";
-    }
-
-    return formatCountdownFromMs(Math.max(0, Date.parse(previewEndWindowIso) - currentTime));
-  }, [currentTime, previewEndWindowIso]);
-
-  function extendWindow() {
-    if (!selectedRun || extensionMinutes === null) {
-      setInlineMessage("Enter a valid extension time before applying the new window.");
+  async function extendRun(): Promise<void> {
+    if (!detail || !runId) return;
+    const minutes = Number(extensionMinutes);
+    if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440 || !justification.trim()) {
+      setError("Enter 1–1440 extension minutes and a justification.");
       return;
     }
-
-    setRuns((currentRuns) =>
-      currentRuns.map((run) =>
-        run.runId === selectedRun.runId ?
-          {
-            ...run,
-            endWindowIso: new Date(Date.parse(run.endWindowIso) + extensionMinutes * 60 * 1000).toISOString(),
-          } :
-          run,
-      ),
-    );
-    setInlineMessage(`Time window extended by ${extensionMinutes} minutes for ${selectedRun.runId}.`);
-    if (extensionPreset === "custom") {
-      setCustomExtensionMinutes("");
-    }
+    const expectedRevision = detail.run.revision;
+    await runCommand("Extend run", async () => {
+      const result = await updateAdminRunLifecycle(runId, {
+        action: "extend",
+        expectedRevision,
+        extensionMinutes: minutes,
+        idempotencyKey: idempotencyKey("Extend run"),
+        justification: justification.trim(),
+      });
+      const reloaded = await reload();
+      if (reloaded.run.revision !== result.run.revision || reloaded.run.endWindow !== result.run.endWindow) {
+        throw new Error("Authoritative reload did not match the extend command result.");
+      }
+      return `Run extended to ${formatDateTime(reloaded.run.endWindow)} and reconciled at revision ${reloaded.run.revision}.`;
+    });
   }
 
-  const overrideFaceDetection = useCallback((studentId: string) => {
-    setLiveRows((currentRows) =>
-      currentRows.map((row) =>
-        row.runId === selectedRun?.runId && row.studentId === studentId ?
-          {
-            ...row,
-            faceVerificationStatus: "override",
-            faceOverrideNote: "Teacher manually accepted the student identity for this live session.",
-            proctorViolations: row.proctorViolations.map((violation) =>
-              violation.type === "face" ?
-                {
-                  ...violation,
-                  severity: "watch",
-                  detail: `${violation.detail} Manual live override applied by admin.`,
-                } :
-                violation,
-            ),
-          } :
-          row,
-      ),
-    );
-    setInlineMessage(`Face verification manually overridden for ${studentId}. This live-only action is not stored after the test.`);
-  }, [selectedRun?.runId]);
-
-  const liveSummaryLabel = useMemo(() => {
-    if (selectedRun.runAnalyticsSnapshot.avgPhaseAdherencePercent >= 75 && selectedRun.runAnalyticsSnapshot.guessRatePercent <= 12) {
-      return "Steady live run with healthy pacing";
-    }
-    if (selectedRun.runAnalyticsSnapshot.avgPhaseAdherencePercent >= 65) {
-      return "Live run is progressing with some pacing drift";
-    }
-    return "Teacher attention recommended for this live run";
-  }, [selectedRun]);
-
-  const liveColumns = useMemo<UiTableColumn<LiveMonitorStudentSnapshot>[]>(
-    () => [
-      {
-        id: "studentName",
-        header: "Student",
-        render: (row) => (
-          <div className="admin-assignments-run-cell">
-            <strong>{row.studentName}</strong>
-            <small>{row.studentId}</small>
-          </div>
-        ),
-      },
-      {
-        id: "progress",
-        header: "Progress",
-        render: (row) => `${row.progressPercent}%`,
-      },
-      {
-        id: "timeRemaining",
-        header: "Time Remaining",
-        render: (row) => `${row.timeRemainingMinutes} min`,
-      },
-      {
-        id: "phase",
-        header: "Current Phase",
-        render: (row) => row.currentPhase,
-      },
-      {
-        id: "status",
-        header: "Submission",
-        render: (row) => row.submissionStatus,
-      },
-      {
-        id: "l1BehavioralFlags",
-        header: "L1 Behavioral Flags",
-        render: (row) => (
-          <div className="admin-assignments-table-stack">
-            <span>Pacing drift: <strong>{formatLiveFlag(row.pacingDriftFlag)}</strong></span>
-            <span>Skip burst: <strong>{formatLiveFlag(row.skipBurstFlag)}</strong></span>
-            <span>Rapid guess: <strong>{formatLiveFlag(row.rapidGuessFlag)}</strong></span>
-            <small>Derived from refreshed session snapshot.</small>
-          </div>
-        ),
-      },
-      {
-        id: "risk",
-        header: "Live Risk",
-        render: (row) => {
-          const risk = classifyLiveRisk(row);
-          return <span className={liveIndicatorClass(risk)}>{risk}</span>;
-        },
-      },
-      {
-        id: "proctoring",
-        header: "Proctor Violations",
-        render: (row) => (
-          <div className="admin-live-violation-stack">
-            {row.proctorViolations.length > 0 ? (
-              row.proctorViolations.map((violation) => (
-                <span
-                  key={violation.id}
-                  className={`admin-live-violation-pill ${violationTone(violation.type)} admin-live-violation-${violation.severity}`}
-                  title={violation.detail}
-                >
-                  {violation.label} · {formatProctorTime(violation.observedAtIso)}
-                </span>
-              ))
-            ) : (
-              <span className="admin-live-violation-pill admin-live-violation-clear">No live violations</span>
-            )}
-            <small>Visible only while the assignment is live.</small>
-          </div>
-        ),
-      },
-      {
-        id: "faceGuard",
-        header: "Face Guard",
-        render: (row) => (
-          <div className="admin-live-face-guard-cell">
-            <span className={`admin-live-face-status admin-live-face-status-${row.faceVerificationStatus}`}>
-              {row.faceGuardEnabled ? row.faceVerificationStatus : "off"}
-            </span>
-            {row.faceOverrideNote ? <small>{row.faceOverrideNote}</small> : null}
-            {row.faceGuardEnabled && row.faceVerificationStatus === "problem" ? (
-              <button type="button" onClick={() => overrideFaceDetection(row.studentId)}>
-                Override Face
-              </button>
-            ) : null}
-          </div>
-        ),
-      },
-      {
-        id: "l2ExecutionCounters",
-        header: "L2 Execution Counters",
-        render: (row) => (
-          <div className="admin-assignments-table-stack">
-            <span>Min time: <strong>{row.minTimeViolationsLive}</strong></span>
-            <span>Max time: <strong>{row.maxTimeViolationsLive}</strong></span>
-            <span>Consecutive wrong: <strong>{row.consecutiveWrongIndicator}</strong></span>
-            <span>Provisional risk: <strong>{row.provisionalRiskScore}</strong></span>
-            <span>Controlled compliance: <strong>{row.controlledCompliancePercent}%</strong></span>
-          </div>
-        ),
-      },
-    ],
-    [overrideFaceDetection],
-  );
-
-  const liveProctorSummary = useMemo(() => {
-    const violations = studentRows.flatMap((row) => row.proctorViolations);
-    return {
-      gaze: violations.filter((violation) => violation.type === "gaze").length,
-      fullscreen: violations.filter((violation) => violation.type === "fullscreen").length,
-      faceProblems: studentRows.filter((row) => row.faceGuardEnabled && row.faceVerificationStatus === "problem").length,
-      overrides: studentRows.filter((row) => row.faceVerificationStatus === "override").length,
-    };
-  }, [studentRows]);
-
-  if (!selectedRun) {
-    return null;
+  async function resendNotifications(): Promise<void> {
+    if (!detail || !runId) return;
+    const expectedRevision = detail.run.revision;
+    await runCommand("Resend notifications", async () => {
+      const result = await resendAdminRunNotifications(runId, {
+        expectedRevision,
+        idempotencyKey: idempotencyKey("Resend notifications"),
+      });
+      const reloaded = await reload();
+      if (reloaded.run.revision !== expectedRevision + 1) {
+        throw new Error("Authoritative reload did not advance the run revision after notification resend.");
+      }
+      return `${result.queuedNotificationCount} notification jobs queued and reconciled at run revision ${reloaded.run.revision}.`;
+    });
   }
+
+  async function terminateRun(): Promise<void> {
+    if (!detail || !runId || !justification.trim()) {
+      setError("Enter a justification before terminating the run.");
+      return;
+    }
+    const expectedRevision = detail.run.revision;
+    await runCommand("Terminate run", async () => {
+      const result = await updateAdminRunLifecycle(runId, {
+        action: "terminate",
+        expectedRevision,
+        idempotencyKey: idempotencyKey("Terminate run"),
+        justification: justification.trim(),
+      });
+      if (result.run.status !== "terminated" || result.recoveryState !== "complete") {
+        throw new Error("Termination did not return a complete terminal result.");
+      }
+      await verifyTerminalRun(runId, "terminated");
+      navigate("/admin/assignments/history", { replace: true });
+      return `Run ${runId} terminated and reconciled from authoritative history.`;
+    });
+  }
+
+  async function overrideSession(student: AdminRunLiveStudentRecord, overrideType: AdminRunSessionOverrideType): Promise<void> {
+    if (!detail || !runId || !student.sessionId || !student.sessionRevision || !justification.trim()) {
+      setError("A persisted session revision and justification are required for an override.");
+      return;
+    }
+    const action = `${overrideType}:${student.sessionId}`;
+    const expectedRunRevision = detail.run.revision;
+    await runCommand(action, async () => {
+      const result = await applyAdminSessionOverride(runId, student.sessionId!, {
+        expectedRunRevision,
+        expectedSessionRevision: student.sessionRevision!,
+        idempotencyKey: idempotencyKey(action),
+        justification: justification.trim(),
+        overrideType,
+      });
+      try {
+        const reloaded = await reload();
+        const reloadedStudent = reloaded.students.find((row) => row.sessionId === result.sessionId);
+        if (!reloadedStudent || reloadedStudent.sessionRevision !== result.sessionRevision || reloadedStudent.status !== result.sessionStatus) {
+          throw new Error("Authoritative live reload did not match the session override result.");
+        }
+      } catch (caught) {
+        if (overrideType !== "force_submit") throw caught;
+        if (result.sessionStatus !== "submitted") throw caught;
+        try {
+          await verifyTerminalRun(runId, "completed");
+        } catch {
+          await verifyTerminalRun(runId, "terminated");
+        }
+      }
+      return `${overrideType === "force_submit" ? "Force submit" : "Minimum-time bypass"} reconciled for ${student.studentName} at session revision ${result.sessionRevision}.`;
+    });
+  }
+
+  const columns: UiTableColumn<AdminRunLiveStudentRecord>[] = [
+    {
+      id: "student",
+      header: "Student",
+      render: (row) => <div className="admin-assignments-run-cell"><strong>{row.studentName}</strong><small>{row.studentId}</small></div>,
+    },
+    { id: "status", header: "Session", render: (row) => `${row.status}${row.sessionRevision ? ` · r${row.sessionRevision}` : ""}` },
+    { id: "progress", header: "Progress", render: (row) => `${row.progressPercent}%` },
+    { id: "remaining", header: "Remaining", render: (row) => formatDuration(row.timeRemainingSeconds) },
+    { id: "phase", header: "Phase", render: (row) => row.currentPhase ?? "Not stored" },
+    {
+      id: "signals",
+      header: "Stored signals",
+      render: (row) => (
+        <div className="admin-assignments-table-stack">
+          <span>Pacing {row.pacingDrift === null ? "not licensed/stored" : row.pacingDrift ? "drift" : "stable"}</span>
+          <small>Minimum {row.minTimeViolationCount ?? "—"} · Maximum {row.maxTimeViolationCount ?? "—"} · Override {row.overrideUsed ? "used" : "not used"}</small>
+        </div>
+      ),
+    },
+    {
+      id: "actions",
+      header: "Permitted controls",
+      render: (row) => {
+        const mutable = Boolean(row.sessionId && row.sessionRevision && !["submitted", "expired", "terminated"].includes(row.status));
+        return (
+          <div className="admin-assignments-row-actions">
+            <button type="button" disabled={!canManage || !mutable || Boolean(pendingAction)} onClick={() => void overrideSession(row, "minimum_time_bypass")}>
+              Bypass minimum time
+            </button>
+            <button type="button" disabled={!canManage || !mutable || Boolean(pendingAction)} onClick={() => void overrideSession(row, "force_submit")}>
+              Force submit
+            </button>
+          </div>
+        );
+      },
+    },
+  ];
 
   return (
     <section className="admin-content-card admin-assignments-live-drilldown-shell" aria-labelledby="admin-assignment-live-run-title">
-      <p className="admin-content-eyebrow">Assignment Live Run Workspace</p>
-      <h2 id="admin-assignment-live-run-title">Live Assignment Monitor</h2>
+      <p className="admin-content-eyebrow">Assignment Live Monitor</p>
+      <h2 id="admin-assignment-live-run-title">{detail?.run.id ?? runId ?? "Unknown run"}</h2>
       <p className="admin-content-copy">
-        This page helps a teacher supervise one live assignment, check overall progress quickly, and extend the time window when needed.
+        This view uses only <code>GET /admin/live-runs/{`{runId}`}</code> and persisted session projections. Face/camera overrides are intentionally unavailable until their policy owner is implemented.
       </p>
-
       <AssignmentsWorkspaceNav />
+      <div className="admin-assignments-detail-actions">
+        <NavLink className="admin-primary-link" to="/admin/assignments/live">Back to Live Runs</NavLink>
+        <NavLink className="admin-primary-link" to={`/admin/assignments/details/${encodeURIComponent(runId ?? "")}`}>Run Setup</NavLink>
+      </div>
 
-      {inlineMessage ? <p className="admin-assignments-inline-note">{inlineMessage}</p> : null}
-      {isLoading ? (
-        <p className="admin-assignments-inline-note">Loading focused run summary from GET /admin/analytics...</p>
+      {error ? <p className="admin-tests-inline-error" role="alert">{error}</p> : null}
+      {notice ? <p className="admin-assignments-inline-note" role="status">{notice}</p> : null}
+      {isLoading ? <p className="admin-assignments-inline-note">Loading authoritative live detail…</p> : null}
+      {!canManage ? <p className="admin-assignments-inline-note">Mutation controls require a live teacher/admin session.</p> : null}
+
+      {detail ? (
+        <>
+          <div className="admin-assignments-detail-grid">
+            <article className="admin-assignments-detail-card"><span>Status</span><strong>{detail.run.status}</strong><small>run revision {detail.run.revision}</small></article>
+            <article className="admin-assignments-detail-card"><span>Recipients</span><strong>{detail.summary.totalRecipients}</strong><small>{detail.summary.notStartedCount} not started</small></article>
+            <article className="admin-assignments-detail-card"><span>Active</span><strong>{detail.summary.activeSessionCount}</strong><small>persisted session states</small></article>
+            <article className="admin-assignments-detail-card"><span>Submitted</span><strong>{detail.summary.submittedCount}</strong><small>{detail.summary.terminatedSessionCount} terminated</small></article>
+            <article className="admin-assignments-detail-card"><span>End window</span><strong>{formatDateTime(detail.run.endWindow)}</strong><small>{detail.run.timezone}</small></article>
+          </div>
+
+          <section className="admin-assignments-detail-panel">
+            <h3>Revision-bound run controls</h3>
+            <label>
+              Justification
+              <input value={justification} maxLength={500} onChange={(event) => setJustification(event.target.value)} placeholder="Required audit justification" />
+            </label>
+            <label>
+              Extension minutes
+              <input type="number" min="1" max="1440" value={extensionMinutes} onChange={(event) => setExtensionMinutes(event.target.value)} />
+            </label>
+            <div className="admin-assignments-row-actions">
+              <button type="button" disabled={!canManage || Boolean(pendingAction)} onClick={() => void extendRun()}>Extend window</button>
+              <button type="button" disabled={!canManage || Boolean(pendingAction)} onClick={() => void resendNotifications()}>Resend notifications</button>
+              <button type="button" disabled={!canManage || Boolean(pendingAction)} onClick={() => void terminateRun()}>Terminate run</button>
+            </div>
+            {pendingAction ? <p className="admin-assignments-inline-note">{pendingAction} is pending authoritative reconciliation…</p> : null}
+          </section>
+
+          <UiTable
+            caption="Authoritative live student session projections"
+            columns={columns}
+            rows={detail.students}
+            rowKey={(row) => row.studentId}
+            emptyStateText="No recipient session projections are available."
+          />
+          <p className="admin-assignments-inline-note">Server snapshot: {formatDateTime(detail.serverTime)}</p>
+        </>
       ) : null}
-
-      <section className="admin-assignments-live-hero">
-        <div className="admin-assignments-live-hero-copy">
-          <h3>{selectedRun.runName}</h3>
-          <p>{selectedRun.batchName} · {selectedRun.mode} · {selectedRun.status}</p>
-          <small>{liveSummaryLabel}</small>
-        </div>
-        <div className="admin-assignments-live-hero-side">
-          <div className="admin-assignments-detail-actions">
-            <NavLink className="admin-primary-link" to="/admin/assignments/list">Back to List</NavLink>
-          </div>
-          <div className="admin-assignments-live-hero-timer">
-            <span>Time Left</span>
-            <strong>{countdownLabel}</strong>
-            <small>Countdown to the current assignment close time</small>
-          </div>
-        </div>
-      </section>
-
-      <div className="admin-assignments-live-summary-grid">
-        <article className="admin-assignments-detail-card">
-          <span>Students In Run</span>
-          <strong>{selectedRun.recipientCount}</strong>
-          <small>Assigned students currently counted in this live run</small>
-        </article>
-        <article className="admin-assignments-detail-card">
-          <span>Completion So Far</span>
-          <strong>{selectedRun.completionPercent}%</strong>
-          <small>Live completion across the assigned students</small>
-        </article>
-        <article className="admin-assignments-detail-card">
-          <span>Avg Raw %</span>
-          <strong>{selectedRun.runAnalyticsSnapshot.avgRawScorePercent}%</strong>
-          <small>Latest run summary available to the teacher</small>
-        </article>
-        <article className="admin-assignments-detail-card">
-          <span>Avg Accuracy %</span>
-          <strong>{selectedRun.runAnalyticsSnapshot.avgAccuracyPercent}%</strong>
-          <small>Latest run summary available to the teacher</small>
-        </article>
-        <article className="admin-assignments-detail-card">
-          <span>Gaze Violations</span>
-          <strong>{liveProctorSummary.gaze}</strong>
-          <small>Live-only proctoring events from active students</small>
-        </article>
-        <article className="admin-assignments-detail-card">
-          <span>Fullscreen Violations</span>
-          <strong>{liveProctorSummary.fullscreen}</strong>
-          <small>Browser integrity alerts during this live run</small>
-        </article>
-        <article className="admin-assignments-detail-card">
-          <span>Face Problems</span>
-          <strong>{liveProctorSummary.faceProblems}</strong>
-          <small>Students waiting for manual live review</small>
-        </article>
-        <article className="admin-assignments-detail-card">
-          <span>Face Overrides</span>
-          <strong>{liveProctorSummary.overrides}</strong>
-          <small>Admin overrides applied only for this live session</small>
-        </article>
-      </div>
-
-      <div className="admin-assignments-live-layout">
-        <section className="admin-assignments-detail-panel">
-          <h3>Live Snapshot</h3>
-          <p>The key live timing and teaching signals are grouped here for quick supervision.</p>
-          <div className="admin-assignments-detail-summary">
-            <div>
-              <span>Started</span>
-              <strong>{formatDateTime(selectedRun.startedAtIso)}</strong>
-            </div>
-            <div>
-              <span>Current End Time</span>
-              <strong>{formatDateTime(selectedRun.endWindowIso)}</strong>
-            </div>
-            <div>
-              <span>Batch</span>
-              <strong>{selectedRun.batchName}</strong>
-            </div>
-            <div>
-              <span>Timezone</span>
-              <strong>{selectedRun.timezone}</strong>
-            </div>
-            <div>
-              <span>Phase Adherence</span>
-              <strong>{selectedRun.runAnalyticsSnapshot.avgPhaseAdherencePercent}%</strong>
-            </div>
-            <div>
-              <span>Discipline</span>
-              <strong>{selectedRun.runAnalyticsSnapshot.avgDisciplineIndex}</strong>
-            </div>
-            <div>
-              <span>Guess Rate</span>
-              <strong>{selectedRun.runAnalyticsSnapshot.guessRatePercent}%</strong>
-            </div>
-            <div>
-              <span>Risk Mix</span>
-              <strong>{selectedRun.runAnalyticsSnapshot.riskDistributionSummary}</strong>
-            </div>
-          </div>
-        </section>
-
-        <section className="admin-assignments-detail-panel admin-assignments-live-window-panel">
-          <h3>Extend Time Window</h3>
-          <p>Give extra time to the students already inside this live assignment by previewing the revised close time before applying it.</p>
-          <div className="admin-assignments-detail-summary admin-assignments-live-window-summary">
-            <div>
-              <span>Original End Time</span>
-              <strong>{formatDateTime(selectedRun.originalEndWindowIso)}</strong>
-            </div>
-            <div>
-              <span>Current End Time</span>
-              <strong>{formatDateTime(selectedRun.endWindowIso)}</strong>
-            </div>
-            <div>
-              <span>Preview New End Time</span>
-              <strong>{previewEndWindowIso ? formatDateTime(previewEndWindowIso) : "--"}</strong>
-            </div>
-            <div>
-              <span>Time Left After Change</span>
-              <strong>{previewCountdownLabel}</strong>
-            </div>
-          </div>
-          <div className="admin-assignments-live-extension-row">
-            {(["5", "10", "15", "30", "custom"] as const).map((option) => (
-              <label key={option} className="admin-assignments-mode-option">
-                <input
-                  type="radio"
-                  name="live-extension-minutes"
-                  value={option}
-                  checked={extensionPreset === option}
-                  onChange={() => setExtensionPreset(option)}
-                />
-                <span>{option === "custom" ? "Custom" : `${option} min`}</span>
-              </label>
-            ))}
-          </div>
-          {extensionPreset === "custom" ? (
-            <div className="admin-assignments-live-extension-custom">
-              <label>
-                Custom Minutes
-                <input
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={customExtensionMinutes}
-                  onChange={(event) => setCustomExtensionMinutes(event.target.value)}
-                  placeholder="Enter custom minutes"
-                />
-              </label>
-            </div>
-          ) : null}
-          <div className="admin-tests-row-actions" style={{ marginTop: 12 }}>
-            <button type="button" onClick={extendWindow} disabled={extensionMinutes === null}>
-              Apply Time Extension
-            </button>
-          </div>
-          <small>Grace period stays at {selectedRun.gracePeriodMinutes} minutes, and the teacher countdown refreshes as soon as the new time is applied.</small>
-        </section>
-      </div>
-
-      <section className="admin-analytics-run-summary" aria-labelledby="admin-assignment-live-run-table-title">
-        <h3 id="admin-assignment-live-run-table-title">Student Live Monitor</h3>
-        <UiTable
-          caption={`Live monitor for ${selectedRun.runId}`}
-          columns={liveColumns}
-          rows={studentRows}
-          rowKey={(row) => `${row.runId}-${row.studentId}`}
-          emptyStateText="No live student rows are available for this run yet."
-        />
-      </section>
     </section>
   );
 }

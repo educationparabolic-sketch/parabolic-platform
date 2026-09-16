@@ -292,6 +292,74 @@ read only this collection. Lists are bounded to 50 records, ordered by
 filtering uses the `runs(status ASC, createdAt DESC, __name__ DESC)` composite
 index. Detail reads return not found for IDs outside that tenant/year boundary.
 
+BWM-028 now initializes positive `revision` and server-owned `updatedAt`
+authority on newly created run records. Its internal assignment-operations
+service atomically creates duplicate/reassigned runs plus immutable institute
+audit records, and atomically applies extend/cancel/archive commands plus their
+audits. Session start promotes `scheduled -> active`, run analytics promotes
+the final eligible run to `completed`, and the reconciliation service handles
+`active -> collecting` plus legacy `stopped -> terminated`; each transition
+increments the run revision and writes a deterministic immutable audit. These
+writers reconcile the lifecycle to
+`scheduled|active|collecting|completed|archived|cancelled|terminated`.
+The legal transitions are `scheduled -> active|cancelled`,
+`active -> collecting|completed|terminated`,
+`collecting -> completed|terminated`, and
+`completed|cancelled|terminated -> archived`; archived is terminal. An active
+extension changes only `endWindow`, revision, and update metadata. The existing
+`stopped` value is compatibility-only and normalizes to `terminated` through
+the reconciliation service. A derived run stores `sourceRunId`,
+`sourceRunRevision`, `derivedCommand`, positive `revision`, hashed idempotency
+authority, actor/update metadata, and a frozen copy of the source run snapshot;
+it never mutates the source run. Duplicate/reassign are bounded to 100 active
+recipients and re-check operational academic-year, template, and current
+license authority in the transaction. ADM-41..ADM-48 expose this persistence
+behavior only through the shared revocation-checked, identity-tenant,
+teacher/admin assignment-operations handler.
+
+The internal BWM-028 assignment read service does not add a collection or
+writer. Live list resolves the current operational year, queries only
+`active|collecting` runs in created-at/document-ID order, and reads no more than
+100 selected session headers for each of at most 50 runs. Live detail pages the
+run's already-bounded recipient IDs and selects only session identity, lifecycle,
+revision, deadline, adaptive-phase summary, and explicitly persisted live metric
+fields; it never selects or returns `answerMap`, `questionTimeMap`,
+`runtimeSnapshot`, or raw question content. Student names come from the exact
+institute Student documents, and duplicate, unassigned, over-limit, or malformed
+session projections fail closed. Its opaque cursor is bound to institute-derived
+year, run ID, and run revision.
+
+History reads exactly one configured institute academic year (the operational
+year by default), only terminal runs, and at most 50 matching `runAnalytics`
+summary documents. Year, status, and mode filters are cursor-bound, so an old
+year page cannot resume in the current year. Compatibility `stopped` records
+project as canonical `terminated`. Current license authority redacts advanced
+analytics below L2 and absent projections remain explicit null/zero values rather
+than fixtures. Optional mode filtering uses the collection-scoped composite
+`runs(status ASC, mode ASC, createdAt DESC, __name__ DESC)`; the existing
+status/created-at index serves unfiltered live/history pages. ADM-41..ADM-43
+are consumed through strict mounted Admin live-list, live-detail, and history
+adapters with authoritative reload reconciliation.
+
+BWM-028 session-effect commands are reachable only through secured
+ADM-46..ADM-48 transport. Assignment notification resend writes deterministic root
+`emailQueue/{jobId}` documents plus the run revision and immutable institute
+audit in one transaction. Active/collecting termination updates the run, at
+most 100 owned nonterminal session documents, any existing runAnalytics status,
+and its audit atomically; submitted sessions remain immutable. New sessions
+initialize `revision: 1`, and each termination or override increments the
+affected session revision. Permitted overrides use deterministic
+`institutes/{instituteId}/overrideLogs/{overrideId}` records. Minimum-time bypass
+commits run/session/log/audit atomically. Force-submit first persists a mutable
+`institutes/{instituteId}/assignmentOperationRecoveries/{overrideId}` record in
+`pending|failed_recoverable` state and uses a deterministic submission lock
+owner. The canonical scoring submission engine then completes the session; an
+exact retry resumes the same owner and atomically completes the recovery record
+while create-only writing the immutable override log and audit. Idempotency keys
+are hashed and never stored in plaintext. A minimum-time bypass downgrades only
+Hard-mode minimum-time enforcement to tracked (maximum-time enforcement remains
+strict); a force-submit-owned submission lock rejects further answer batches.
+
 Student summary reads derive institute, Student ID, and license layer from the
 verified identity, require the matching active non-deleted Student document,
 and resolve the current operational academic year on the server. Dashboard

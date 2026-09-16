@@ -5,6 +5,7 @@ import {getFirestore} from "../utils/firebaseAdmin";
 import {
   SubmissionContext,
   SubmissionErrorCode,
+  SubmissionExecutionOptions,
   SubmissionMetrics,
   SubmissionResult,
   SubmissionRiskState,
@@ -357,7 +358,10 @@ const isSubmittedAnswerCorrect = (
 const validateSubmissionTiming = (
   sessionData: Record<string, unknown>,
   questionIds: string[],
-  allowHardTimingViolations = false,
+  options: {
+    allowHardMaximumTimeViolations: boolean;
+    allowHardMinimumTimeViolations: boolean;
+  },
 ): SubmissionTimingValidation => {
   const mode = normalizeSessionExecutionMode(sessionData.mode, "session.mode");
   const answerMap = isPlainObject(sessionData.answerMap) ?
@@ -407,10 +411,11 @@ const validateSubmissionTiming = (
 
   if (
     mode === "hard" &&
-    !allowHardTimingViolations &&
     (
-      minTimeViolationQuestionIds.length > 0 ||
-      maxTimeViolationQuestionIds.length > 0
+      (!options.allowHardMinimumTimeViolations &&
+        minTimeViolationQuestionIds.length > 0) ||
+      (!options.allowHardMaximumTimeViolations &&
+        maxTimeViolationQuestionIds.length > 0)
     )
   ) {
     throw new SubmissionValidationError(
@@ -1080,6 +1085,7 @@ export class SubmissionService {
    * @param {FirebaseFirestore.DocumentReference} sessionReference Session ref.
    * @param {SubmissionContext} context Submission request identifiers.
    * @param {string} sessionPath Fully qualified session path.
+   * @param {SubmissionExecutionOptions} options Internal lock authority.
    * @return {Promise<SubmissionResult | null>} Idempotent result or null when
    * lock acquisition succeeds for a new submission.
    */
@@ -1087,6 +1093,7 @@ export class SubmissionService {
     sessionReference: FirebaseFirestore.DocumentReference,
     context: SubmissionContext,
     sessionPath: string,
+    options: SubmissionExecutionOptions,
   ): Promise<SubmissionResult | null> {
     const sessionSnapshot = await sessionReference.get();
     const sessionData = sessionSnapshot.data();
@@ -1107,6 +1114,12 @@ export class SubmissionService {
       );
     }
 
+    if (validatedSession.sessionData.submissionLock === true &&
+      options.lockOwnerId &&
+      validatedSession.sessionData.submissionLockOwnerId === options.lockOwnerId) {
+      return null;
+    }
+
     if (validatedSession.sessionData.submissionLock === true) {
       return this.waitForSubmittedResult(
         sessionReference,
@@ -1125,6 +1138,7 @@ export class SubmissionService {
     try {
       await sessionReference.update({
         submissionLock: true,
+        submissionLockOwnerId: options.lockOwnerId ?? FieldValue.delete(),
         updatedAt: FieldValue.serverTimestamp(),
       }, {
         lastUpdateTime: sessionSnapshot.updateTime,
@@ -1217,10 +1231,12 @@ export class SubmissionService {
   /**
    * Releases an active submission lock after a failed finalize attempt.
    * @param {FirebaseFirestore.DocumentReference} sessionReference Session ref.
+   * @param {SubmissionExecutionOptions} options Internal lock authority.
    * @return {Promise<void>} Resolves after lock cleanup attempt.
    */
   private async releaseSubmissionLock(
     sessionReference: FirebaseFirestore.DocumentReference,
+    options: SubmissionExecutionOptions,
   ): Promise<void> {
     await this.firestore.runTransaction(async (transaction) => {
       const sessionSnapshot = await transaction.get(sessionReference);
@@ -1235,10 +1251,16 @@ export class SubmissionService {
         "session.status",
       ).toLowerCase();
       const submissionLock = sessionData.submissionLock === true;
+      const storedLockOwnerId = typeof sessionData.submissionLockOwnerId === "string" ?
+        sessionData.submissionLockOwnerId : null;
+      const ownsLock = options.lockOwnerId ?
+        storedLockOwnerId === options.lockOwnerId : storedLockOwnerId === null;
 
-      if ((status === "active" || status === "expired") && submissionLock) {
+      if ((status === "active" || status === "expired") &&
+        submissionLock && ownsLock) {
         transaction.update(sessionReference, {
           submissionLock: false,
+          submissionLockOwnerId: FieldValue.delete(),
           updatedAt: FieldValue.serverTimestamp(),
         });
       }
@@ -1248,10 +1270,12 @@ export class SubmissionService {
   /**
    * Finalizes a session using an atomic Firestore transaction.
    * @param {SubmissionContext} context Submission request identifiers.
+   * @param {SubmissionExecutionOptions} executionOptions Recovery authority.
    * @return {Promise<SubmissionResult>} Deterministic submission metrics.
    */
   public async submitSession(
     context: SubmissionContext,
+    executionOptions: SubmissionExecutionOptions = {},
   ): Promise<SubmissionResult> {
     const instituteId = normalizeRequiredString(
       context.instituteId,
@@ -1262,6 +1286,8 @@ export class SubmissionService {
     const sessionId = normalizeRequiredString(context.sessionId, "sessionId");
     const studentId = normalizeRequiredString(context.studentId, "studentId");
     const requestedReason = normalizeSubmissionReason(context.reason, "reason");
+    const lockOwnerId = executionOptions.lockOwnerId === undefined ? undefined :
+      normalizeRequiredString(executionOptions.lockOwnerId, "lockOwnerId");
 
     const sessionPath =
       `${INSTITUTES_COLLECTION}/${instituteId}/` +
@@ -1291,6 +1317,7 @@ export class SubmissionService {
         yearId,
       },
       sessionPath,
+      {lockOwnerId},
     );
 
     if (idempotentResult) {
@@ -1409,10 +1436,20 @@ export class SubmissionService {
           const submissionReason: SubmissionContext["reason"] =
             serverSubmittedAtMillis >= deadlineAtMillis ? "expiry" : "manual";
           const submittedAt = Timestamp.fromMillis(serverSubmittedAtMillis);
+          const timingOverride = isPlainObject(
+            sessionData.submissionTimingOverride,
+          ) && sessionData.submissionTimingOverride.active === true ?
+            sessionData.submissionTimingOverride.type : null;
           const submissionTimingValidation = validateSubmissionTiming(
             sessionData,
             normalizedQuestionIds,
-            submissionReason === "expiry",
+            {
+              allowHardMaximumTimeViolations: submissionReason === "expiry" ||
+                timingOverride === "force_submit",
+              allowHardMinimumTimeViolations: submissionReason === "expiry" ||
+                timingOverride === "force_submit" ||
+                timingOverride === "minimum_time_bypass",
+            },
           );
 
           const phaseConfigSnapshot = runData.phaseConfigSnapshot;
@@ -1541,6 +1578,7 @@ export class SubmissionService {
             submissionReason,
             submissionTimingValidation,
             submissionLock: false,
+            submissionLockOwnerId: FieldValue.delete(),
             submittedAt,
             templateVersion,
             updatedAt: FieldValue.serverTimestamp(),
@@ -1570,7 +1608,7 @@ export class SubmissionService {
       return result;
     } catch (error) {
       try {
-        await this.releaseSubmissionLock(sessionReference);
+        await this.releaseSubmissionLock(sessionReference, {lockOwnerId});
       } catch (unlockError) {
         this.logger.error("Failed to release submission lock after error", {
           instituteId,

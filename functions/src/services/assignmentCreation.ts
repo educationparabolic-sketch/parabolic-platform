@@ -899,6 +899,7 @@ export class AssignmentCreationService {
           recipientCount: recipientStudentIds.length,
           recipientStudentIds,
           riskModelVersion,
+          revision: 1,
           runId,
           shuffleEnabled: shuffleQuestionOrder,
           shuffleQuestionOrder,
@@ -911,6 +912,7 @@ export class AssignmentCreationService {
           timingProfileSnapshot:
             capturedTemplateSnapshot.timingProfileSnapshot,
           totalSessions: normalizedTotalSessions,
+          updatedAt: createdAt,
           ...(idempotencyKeyHash ? {idempotencyKeyHash} : {}),
           ...(requestFingerprint ? {requestFingerprint} : {}),
         }, {merge: true});

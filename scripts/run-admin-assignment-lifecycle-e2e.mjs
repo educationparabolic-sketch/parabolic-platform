@@ -97,5 +97,7 @@ run(
 
 console.log(
   "\n[admin-assignment-lifecycle] PASS: authenticated UI create/reload/" +
-    "detail, recipients, authorization, replay, and concurrency verified.",
+    "detail/live/history, authorization/license/suspension, lifecycle/" +
+    "notification/override/audit persistence, replay, bounds, and " +
+    "concurrency verified.",
 );

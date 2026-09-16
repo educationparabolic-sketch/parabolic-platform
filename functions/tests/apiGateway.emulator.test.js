@@ -70,7 +70,7 @@ test(
     const implementedRoutes = API_ROUTE_MANIFEST.filter(
       (route) => route.status === "implemented",
     );
-    assert.equal(implementedRoutes.length, 47);
+    assert.equal(implementedRoutes.length, 55);
 
     for (const route of implementedRoutes) {
       const requestPath = materializePath(route.canonicalPath, route.id);
@@ -152,7 +152,9 @@ test(
   "all planned Question Bank routes reach secured handlers",
   async () => {
     const plannedRoutes = API_ROUTE_MANIFEST.filter(
-      (route) => route.declaration === "planned",
+      (route) =>
+        route.declaration === "planned" &&
+        Number(route.id.replace("ADM-", "")) <= 40,
     );
     assert.equal(plannedRoutes.length, 11);
 
@@ -161,6 +163,29 @@ test(
         materializePath(route.canonicalPath, route.id),
         route.method,
         route.method === "POST" || route.method === "PATCH" ? {} : undefined,
+      );
+      assert.equal(result.status, 401, route.id);
+      assertCanonicalErrorEnvelope(result.body);
+      assert.equal(result.body.error?.code, "UNAUTHORIZED");
+    }
+  },
+);
+
+test(
+  "BWM-028 assignment routes reach revocation-checked authentication",
+  async () => {
+    const plannedRoutes = API_ROUTE_MANIFEST.filter(
+      (route) =>
+        Number(route.id.replace("ADM-", "")) >= 41 &&
+        Number(route.id.replace("ADM-", "")) <= 48,
+    );
+    assert.equal(plannedRoutes.length, 8);
+
+    for (const route of plannedRoutes) {
+      const result = await requestGateway(
+        materializePath(route.canonicalPath, route.id),
+        route.method,
+        route.method === "POST" ? {} : undefined,
       );
       assert.equal(result.status, 401, route.id);
       assertCanonicalErrorEnvelope(result.body);

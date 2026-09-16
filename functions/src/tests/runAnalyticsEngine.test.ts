@@ -333,13 +333,26 @@ test(
     assert.equal(data?.completionRate, 100);
     const completedRun = (await firestore.doc(runPath).get()).data();
     assert.equal(completedRun?.status, "completed");
+    assert.equal(completedRun?.revision, 2);
     assert.ok(completedRun?.completedAt instanceof Timestamp);
+    const lifecycleAudits = await firestore
+      .collection(`institutes/${instituteId}/auditLogs`)
+      .where("targetId", "==", runId)
+      .get();
+    assert.equal(lifecycleAudits.size, 1);
+    assert.equal(
+      lifecycleAudits.docs[0].get("actionType"),
+      "RECONCILE_ASSIGNMENT_LIFECYCLE",
+    );
     const markerPath = `${runAnalyticsPath}/processingMarkers/${sessionId}`;
     const marker = (await firestore.doc(markerPath).get()).data();
     assert.equal(marker?.runAnalyticsEngine?.processed, true);
 
     await deleteDocumentIfPresent(runAnalyticsPath);
     await deleteDocumentIfPresent(runPath);
+    await Promise.all(lifecycleAudits.docs.map((document) =>
+      document.ref.delete(),
+    ));
   },
 );
 
@@ -363,5 +376,67 @@ test(
 
     assert.equal(result.triggered, false);
     assert.equal(result.reason, "status_not_transitioned");
+  },
+);
+
+test(
+  "processSubmittedSession preserves a terminal run lifecycle",
+  async () => {
+    const instituteId = "inst_build_41_terminal";
+    const yearId = "2026";
+    const runId = "run_build_41_terminal";
+    const runPath =
+      `institutes/${instituteId}/academicYears/${yearId}/runs/${runId}`;
+    const runAnalyticsPath =
+      `institutes/${instituteId}/academicYears/${yearId}/runAnalytics/${runId}`;
+
+    await deleteDocumentIfPresent(runPath);
+    await deleteDocumentIfPresent(runAnalyticsPath);
+
+    await firestore.doc(runPath).set({
+      recipientCount: 1,
+      revision: 5,
+      runId,
+      status: "cancelled",
+    });
+
+    const result = await runAnalyticsEngineService.processSubmittedSession(
+      {
+        eventId: "event_build_41_terminal",
+        instituteId,
+        runId,
+        sessionId: "session_build_41_terminal",
+        yearId,
+      },
+      {status: "active"},
+      {
+        accuracyPercent: 75,
+        disciplineIndex: 65,
+        guessRate: 12,
+        phaseAdherencePercent: 55,
+        rawScorePercent: 45,
+        riskState: "Drift-Prone",
+        status: "submitted",
+        submittedAt: Timestamp.fromMillis(Date.now()),
+      },
+    );
+
+    assert.equal(result.triggered, true);
+    const runData = (await firestore.doc(runPath).get()).data();
+    assert.equal(runData?.status, "cancelled");
+    assert.equal(runData?.revision, 5);
+    const analyticsData =
+      (await firestore.doc(runAnalyticsPath).get()).data();
+    assert.equal(analyticsData?.completionRate, 100);
+    assert.equal(analyticsData?.status, "cancelled");
+    assert.equal(analyticsData?.completedAt, null);
+    const lifecycleAudits = await firestore
+      .collection(`institutes/${instituteId}/auditLogs`)
+      .where("targetId", "==", runId)
+      .get();
+    assert.equal(lifecycleAudits.size, 0);
+
+    await deleteDocumentIfPresent(runAnalyticsPath);
+    await deleteDocumentIfPresent(runPath);
   },
 );

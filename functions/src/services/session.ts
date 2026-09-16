@@ -41,6 +41,7 @@ import type {
 
 const INSTITUTES_COLLECTION = "institutes";
 const ACADEMIC_YEARS_COLLECTION = "academicYears";
+const AUDIT_LOGS_COLLECTION = "auditLogs";
 const RUNS_COLLECTION = "runs";
 const SESSIONS_COLLECTION = "sessions";
 const STUDENTS_COLLECTION = "students";
@@ -1277,6 +1278,63 @@ export class SessionService {
           "Run is not eligible for session start or resume.",
         );
       }
+      const promoteScheduledRun = (): void => {
+        if (runStatus !== "scheduled") {
+          return;
+        }
+        const revision = typeof runData.revision === "number" &&
+          Number.isInteger(runData.revision) && runData.revision > 0 ?
+          runData.revision : 1;
+        const transitionAt = Timestamp.fromMillis(nowMillis);
+        const transitionKey = `${instituteId}:${yearId}:${runId}:` +
+          `${revision}:scheduled:active`;
+        const transitionHash = createHash("sha256")
+          .update(transitionKey)
+          .digest("hex");
+        const auditId = `assignment_reconcile_${transitionHash.slice(0, 40)}`;
+        const result = {
+          auditId,
+          disposition: "applied",
+          revision: revision + 1,
+          runId,
+          status: "active",
+        };
+        transaction.set(runReference, {
+          revision: revision + 1,
+          status: "active",
+          updatedAt: transitionAt,
+          updatedBy: "system:session-start",
+        }, {merge: true});
+        transaction.create(
+          this.firestore.doc(
+            `${INSTITUTES_COLLECTION}/${instituteId}/` +
+            `${AUDIT_LOGS_COLLECTION}/${auditId}`,
+          ),
+          {
+            actionType: "RECONCILE_ASSIGNMENT_LIFECYCLE",
+            actorId: "system:session-start",
+            actorRole: "system",
+            actorUid: "system:session-start",
+            after: result,
+            auditId,
+            before: {revision, status: "scheduled"},
+            entityId: runId,
+            entityType: "assignment",
+            instituteId,
+            layer: "L0",
+            metadata: {
+              command: "lifecycle-reconcile",
+              requestFingerprint: transitionHash,
+              result,
+              source: "SessionService",
+            },
+            targetCollection: RUNS_COLLECTION,
+            targetId: runId,
+            tenantId: instituteId,
+            timestamp: transitionAt,
+          },
+        );
+      };
 
       const recipientStudentIds = runData.recipientStudentIds;
 
@@ -1423,6 +1481,7 @@ export class SessionService {
           sessionData?.sessionTokenHash,
         );
         credentialHashes.push(launchCredentialHash);
+        promoteScheduledRun();
         transaction.update(sessionReference, {
           launchCredentialHashes: Array.from(new Set(credentialHashes))
             .slice(-MAX_LAUNCH_CREDENTIAL_HASHES),
@@ -1556,6 +1615,7 @@ export class SessionService {
         yearId,
       });
 
+      promoteScheduledRun();
       transaction.create(sessionReference, initializationRecord);
 
       disposition = "created";
@@ -2344,6 +2404,7 @@ export class SessionService {
         ),
       phaseConfigSnapshot: context.phaseConfigSnapshot,
       questionTimeMap: context.questionTimeMap,
+      revision: 1,
       riskModelVersion: context.riskModelVersion,
       runtimeSnapshot: context.runtimeSnapshot,
       runId: context.runId,

@@ -21,6 +21,10 @@ export interface SubmissionContext extends ExamSubmitRequestBody {
   studentId: string;
 }
 
+export interface SubmissionExecutionOptions {
+  lockOwnerId?: string;
+}
+
 export type SubmissionRiskState = ExamSubmissionRiskState;
 
 export interface SubmissionMetrics {

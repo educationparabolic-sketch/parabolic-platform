@@ -1,5 +1,8 @@
 import * as functions from "firebase-functions";
 import {
+  handleAdminAssignmentOperationsRequest,
+} from "./adminAssignmentOperations";
+import {
   handleAdminAcademicYearArchiveRequest,
 } from "./adminAcademicYearArchive";
 import {handleAdminAnalyticsRequest} from "./adminAnalytics";
@@ -62,6 +65,7 @@ export const API_GATEWAY_HANDLERS: Readonly<
 Record<string, ApiGatewayHandler>
 > = Object.freeze({
   adminAcademicYearArchive: handleAdminAcademicYearArchiveRequest,
+  adminAssignmentOperations: handleAdminAssignmentOperationsRequest,
   adminAnalytics: handleAdminAnalyticsRequest,
   adminGovernanceSnapshots: handleAdminGovernanceSnapshotsRequest,
   adminInterventions: handleAdminInterventionsRequest,

@@ -36,7 +36,7 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 - `intentionally retired`: explicit product or architecture evidence says the contract must not be served. The removed EXM-03 custom refresh call is retained as an explicit retired route key because Firebase Auth SDK refresh is authoritative.
 - Gateway and Hosting reachability are excluded from per-route classification because they are common dependencies owned by BWM-003 and BWM-004.
 
-## Canonical route assignments and status — 53 contracts
+## Canonical route assignments and status — 61 contracts
 
 | ID | Method | Current frontend path | Canonical route | Status | Classification basis |
 | --- | --- | --- | --- | --- | --- |
@@ -80,6 +80,14 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 | ADM-38 | `POST` | `/admin/questions/packages/{packageId}/commit` | `/api/v1/admin/questions/packages/{packageId}/commit` | `implemented` | Expected package revision coordinates assets, questions, log, audit, cleanup, and exact replay before Admin reloads the log/library. |
 | ADM-39 | `POST` | `/admin/questions/upload-logs/{uploadLogId}/rollback` | `/api/v1/admin/questions/upload-logs/{uploadLogId}/rollback` | `implemented` | Eligible create-only imports are rollback/revision bound; success is accepted only after refreshed log authority reports `rolled_back`. |
 | ADM-40 | `GET` | `/admin/questions/upload-logs/{uploadLogId}` | `/api/v1/admin/questions/upload-logs/{uploadLogId}` | `implemented` | Validation-log detail consumes immutable package-verified rows, state, and conservative rollback eligibility. |
+| ADM-41 | `GET` | `/admin/live-runs` | `/api/v1/admin/live-runs` | `implemented` | Mounted live landing consumes bounded current-year active/collecting summaries without analytics inference or fixture fallback. |
+| ADM-42 | `GET` | `/admin/live-runs/{runId}` | `/api/v1/admin/live-runs/{runId}` | `implemented` | Mounted live detail consumes bounded per-student persisted session projections with server time and no question content. |
+| ADM-43 | `GET` | `/admin/run-history` | `/api/v1/admin/run-history` | `implemented` | Mounted history consumes terminal runs joined only to summary analytics with license redaction. |
+| ADM-44 | `POST` | `/admin/runs/{runId}/duplicate` | `/api/v1/admin/runs/{runId}/duplicate` | `implemented` | History operation creates a revision-bound scheduled run and verifies it through ADM-23 before success. |
+| ADM-45 | `POST` | `/admin/runs/{runId}/reassign` | `/api/v1/admin/runs/{runId}/reassign` | `implemented` | History operation sends explicit recipients and verifies the new scheduled run through ADM-23 before success. |
+| ADM-46 | `POST` | `/admin/runs/{runId}/lifecycle` | `/api/v1/admin/runs/{runId}/lifecycle` | `implemented` | Live/history operations expose legal extend/terminate/archive controls and reconcile through ADM-42/43. |
+| ADM-47 | `POST` | `/admin/runs/{runId}/notifications/resend` | `/api/v1/admin/runs/{runId}/notifications/resend` | `implemented` | Live control queues deterministic owned-recipient jobs and verifies the advanced run revision through ADM-42. |
+| ADM-48 | `POST` | `/admin/runs/{runId}/sessions/{sessionId}/overrides` | `/api/v1/admin/runs/{runId}/sessions/{sessionId}/overrides` | `implemented` | Live detail exposes only minimum-time bypass and force-submit, then reloads live or terminal authority before success. |
 | STU-01 | `GET` | `/student/dashboard` | `/api/v1/student/dashboard` | `implemented` | Strict shared dashboard DTO; handler derives tenant, Student, current year, and license from verified identity and returns only that active Student's yearly summary, Student-owned propagated recent results, and assigned/licensed scheduled runs. |
 | STU-02 | `GET` | `/student/tests` | `/api/v1/student/tests` | `implemented` | Strict shared paginated tests DTO; bounded status/page queries return only current-year assigned/licensed runs and fill completed result fields from Student-owned `results/{runId}` summaries. |
 | STU-03 | `GET` | `/student/performance` | `/api/v1/student/performance` | `implemented` | Strict shared performance DTO reads the bounded Student-owned propagated result timeline plus current-year summary metrics and redacts L1/L2 fields by identity license. |
@@ -94,10 +102,10 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 | VEN-01 | `POST` | `/vendor/calibration/simulate` | `/api/v1/vendor/calibration/simulate` | `incompatible` | Frontend sends `strategyProfileParameters`; handler requires `weights`, so the simulation request fails validation/service normalization. |
 | VEN-02 | `POST` | `/vendor/calibration/push` | `/api/v1/vendor/calibration/push` | `implemented` | Vendor auth, target/version request, and consumed deployment response align. |
 
-Canonical classification totals are `implemented` 47, `incompatible` 3,
-`missing` 0, and `intentionally retired` 3. All ADM-30..ADM-40 declarations now
-have strict Admin callers and secured gateway handlers. ADM-09 and ADM-18 retain
-explicit retired route keys but no browser caller.
+Canonical classification totals are `implemented` 55, `incompatible` 3,
+`missing` 0, and `intentionally retired` 3. ADM-30..ADM-48 have strict Admin
+callers and secured gateway handlers. ADM-09 and ADM-18
+retain explicit retired route keys but no browser caller.
 
 ## Question Bank lifecycle routes — live frontend callers
 
@@ -111,7 +119,7 @@ Every successful mutation is reconciled against a fresh authoritative read.
 Local filters, ZIP/workbook previews, CSV/sample downloads, and navigation remain
 client-side because they do not claim to mutate business authority.
 
-| ID | Method | Planned path | Intended authority/result boundary |
+| ID | Method | Live path | Authority/result boundary |
 | --- | --- | --- | --- |
 | ADM-30 | `GET` | `/admin/questions/library/{questionId}` | Strict direct detail caller for explicit lineage, actual usage, persisted analytics, and signed assets |
 | ADM-31 | `PATCH` | `/admin/questions/{questionId}/metadata` | Strict expected-revision metadata/solution-asset caller plus ADM-06 reload |
@@ -125,7 +133,31 @@ client-side because they do not claim to mutate business authority.
 | ADM-39 | `POST` | `/admin/questions/upload-logs/{uploadLogId}/rollback` | Strict eligible rollback caller plus refreshed log authority |
 | ADM-40 | `GET` | `/admin/questions/upload-logs/{uploadLogId}` | Strict immutable detail and rollback-eligibility caller |
 
-## Admin portal — 40 contracts
+## Assignment operations routes — live frontend callers
+
+| ID | Method | Live path | Authority/result boundary |
+| --- | --- | --- | --- |
+| ADM-41 | `GET` | `/admin/live-runs` | Bounded current-year active/collecting run summaries plus server time |
+| ADM-42 | `GET` | `/admin/live-runs/{runId}` | Bounded per-student session projection, positive revisions, server time, and no question content |
+| ADM-43 | `GET` | `/admin/run-history` | Bounded terminal-run history with summary-only analytics and license redaction |
+| ADM-44 | `POST` | `/admin/runs/{runId}/duplicate` | Expected-source-revision/idempotent new scheduled run plus immutable audit ID |
+| ADM-45 | `POST` | `/admin/runs/{runId}/reassign` | Expected-source-revision/idempotent new scheduled run for explicit eligible recipients |
+| ADM-46 | `POST` | `/admin/runs/{runId}/lifecycle` | Expected-revision extend/cancel/terminate/archive command with replay, audit, and recovery state |
+| ADM-47 | `POST` | `/admin/runs/{runId}/notifications/resend` | Expected-revision deterministic recipient queue jobs and audit without email/path leakage |
+| ADM-48 | `POST` | `/admin/runs/{runId}/sessions/{sessionId}/overrides` | Expected run/session revisions; minimum-time bypass or force-submit only; justification and recovery state |
+
+These routes use strict frontend adapters. Their shared DTOs
+separate the canonical run lifecycle from the legacy `stopped` value, require
+optimistic revision plus idempotency authority for every command, and keep
+institute/actor identity out of public inputs. Live/history read models
+now enforce max-50 cursor pages, current/configured-year isolation, max-100
+projection-safe session reads, revision-bound detail pages, same-year analytics
+joins, and current-license redaction without exposing question/answer content.
+The mounted live and history destinations use pending/error/success states,
+capability-gated mutations, retry-stable idempotency keys, and authoritative
+read-back reconciliation.
+
+## Admin portal — 48 contracts
 
 | ID | Method and current path | Frontend request | Frontend response | Auth / role / tenant / license | Current Functions handler | Frontend source |
 | --- | --- | --- | --- | --- | --- | --- |

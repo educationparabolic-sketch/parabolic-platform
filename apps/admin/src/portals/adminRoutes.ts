@@ -245,6 +245,14 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     allowedRoles: ADMIN_TEACHER_ROLES,
   },
   {
+    path: "/admin/assignments/history",
+    title: "Assignment History",
+    section: "Assignments",
+    description: "Bounded terminal assignment history with summary-safe analytics and revisioned follow-up operations.",
+    mountedPath: "/admin/assignments",
+    allowedRoles: ADMIN_TEACHER_ROLES,
+  },
+  {
     path: "/admin/analytics",
     title: "Analytics",
     section: "Analytics",

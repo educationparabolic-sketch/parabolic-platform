@@ -210,6 +210,18 @@ test(
 
     const sessionSnapshot = await firestore.doc(result.sessionPath).get();
     const sessionData = sessionSnapshot.data();
+    const promotedRun = (await firestore.doc(runPath).get()).data();
+    assert.equal(promotedRun?.status, "active");
+    assert.equal(promotedRun?.revision, 2);
+    const promotionAudits = await firestore
+      .collection(`${institutePath}/auditLogs`)
+      .where("targetId", "==", runId)
+      .get();
+    assert.equal(promotionAudits.size, 1);
+    assert.equal(
+      promotionAudits.docs[0].get("actionType"),
+      "RECONCILE_ASSIGNMENT_LIFECYCLE",
+    );
     assert.equal(sessionData?.sessionId, result.sessionId);
     assert.equal(sessionData?.instituteId, instituteId);
     assert.equal(sessionData?.yearId, yearId);
@@ -276,6 +288,7 @@ test(
     });
     assert.equal(sessionData?.startedAt, null);
     assert.equal(sessionData?.submittedAt, null);
+    assert.equal(sessionData?.revision, 1);
     assert.equal(sessionData?.version, 1);
     assert.deepEqual(sessionData?.launchCredentialHashes, [
       createHashForTest(result.launchCredential),
@@ -292,6 +305,9 @@ test(
 
     await deleteDocumentIfPresent(result.sessionPath);
     await deleteDocumentIfPresent(runPath);
+    await Promise.all(promotionAudits.docs.map((document) =>
+      document.ref.delete(),
+    ));
     await deleteDocumentIfPresent(questionMediumPath);
     await deleteDocumentIfPresent(questionHardPath);
     await deleteDocumentIfPresent(questionEasyPath);

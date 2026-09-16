@@ -9,6 +9,14 @@ const ASSIGNMENTS_WORKSPACE_LINKS = [
     label: "Assignment List",
     to: "/admin/assignments/list",
   },
+  {
+    label: "Live Runs",
+    to: "/admin/assignments/live",
+  },
+  {
+    label: "Run History",
+    to: "/admin/assignments/history",
+  },
 ] as const;
 
 function AssignmentsWorkspaceNav() {

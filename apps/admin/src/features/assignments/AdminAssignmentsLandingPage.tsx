@@ -1,154 +1,58 @@
-import { useEffect, useMemo, useState } from "react";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
 import AdminWorkspaceLandingPage from "../shared/AdminWorkspaceLandingPage";
-import {
-  ApiClientError,
-  FALLBACK_DATASET,
-  fetchDashboardDataset,
-  shouldUseLiveApi,
-  type DashboardDataset,
-} from "../analytics/analyticsDataset";
+import { shouldUseLiveApi } from "../analytics/analyticsDataset";
 
 const ASSIGNMENT_WORKSPACES = [
   {
     title: "Create Assignment",
     description: "Run scheduling workspace for template selection, mode eligibility, recipients, and execution window setup.",
     to: "/admin/assignments/create",
-    meta: "Scheduling and assignment creation flow",
+    meta: "POST /admin/runs",
   },
   {
     title: "Assignment List",
-    description: "Primary list workspace for filtering runs by year, status, mode, batch, and start window.",
+    description: "Current-year assignment setup records and lifecycle destinations.",
     to: "/admin/assignments/list",
-    meta: "Operational run review and filters",
+    meta: "GET /admin/runs",
+  },
+  {
+    title: "Live Runs",
+    description: "Authoritative active and collecting run summaries with persisted session drill-down and permitted controls.",
+    to: "/admin/assignments/live",
+    meta: "GET /admin/live-runs",
+  },
+  {
+    title: "Run History",
+    description: "Authoritative terminal run history with license-redacted analytics and revision-bound follow-up operations.",
+    to: "/admin/assignments/history",
+    meta: "GET /admin/run-history",
   },
 ] as const;
 
 function AdminAssignmentsLandingPage() {
   const { session } = useAuthProvider();
-  const accessContext = resolveAdminAccessContext(session);
-  const [dataset, setDataset] = useState<DashboardDataset>(FALLBACK_DATASET);
-  const [isLoading, setIsLoading] = useState(true);
-  const [inlineMessage, setInlineMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function hydrate(): Promise<void> {
-      setIsLoading(true);
-      setInlineMessage(null);
-
-      if (!shouldUseLiveApi()) {
-        setDataset(FALLBACK_DATASET);
-        setInlineMessage(
-          "Local mode detected. Loaded deterministic assignment landing summaries from analytics fixtures.",
-        );
-        setIsLoading(false);
-        return;
-      }
-
-      try {
-        const nextDataset = await fetchDashboardDataset();
-        if (!isMounted) {
-          return;
-        }
-
-        setDataset(nextDataset);
-        setInlineMessage("Live mode enabled: assignments landing hydrated from GET /admin/analytics.");
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-
-        const reason = error instanceof ApiClientError ? error.message : "Failed to load assignments landing.";
-        setInlineMessage(reason);
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    void hydrate();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const activeRuns = useMemo(
-    () => dataset.runAnalytics.filter((run) => run.completionRatePercent < 100),
-    [dataset],
-  );
-  const uniqueBatchCount = useMemo(
-    () => new Set(dataset.runAnalytics.map((run) => run.batchId)).size,
-    [dataset],
-  );
-  const averageCompletion = useMemo(() => {
-    if (dataset.runAnalytics.length === 0) {
-      return 0;
-    }
-
-    return Math.round(
-      dataset.runAnalytics.reduce((sum, run) => sum + run.completionRatePercent, 0) / dataset.runAnalytics.length,
-    );
-  }, [dataset]);
-  const assignmentsWorkspaces = useMemo(
-    () => ASSIGNMENT_WORKSPACES.map((workspace) => {
-      switch (workspace.to) {
-        case "/admin/assignments/create":
-          return {
-            ...workspace,
-            meta: `${dataset.runAnalytics.length} recent run summaries available for operator context`,
-          };
-        case "/admin/assignments/list":
-          return {
-            ...workspace,
-            meta: `${uniqueBatchCount} batches represented across current run analytics`,
-          };
-        default:
-          return workspace;
-      }
-    }),
-    [dataset, uniqueBatchCount],
-  );
-  const note = isLoading ?
-    "Loading assignments landing summary from GET /admin/analytics..." :
-    `${inlineMessage ?? "Assignments landing workspace ready."} Role: ${accessContext.role ?? "unknown"}. Current layer: ${accessContext.licenseLayer ?? "unlicensed"}.`;
+  const access = resolveAdminAccessContext(session);
+  const liveApi = shouldUseLiveApi();
 
   return (
     <AdminWorkspaceLandingPage
       eyebrow="Assignments Workspace"
-      title="Dedicated Assignments Landing Workspace"
+      title="Assignments Operations"
       description={[
-        "This route turns /admin/assignments into a dedicated workspace index instead of redirecting directly into the create-assignment flow.",
-        "Assignment operations are grouped into focused destinations for scheduling, run review, live monitoring, history, and bulk follow-up actions.",
+        "Choose the authoritative destination for scheduling, current-run setup, live execution, or terminal history.",
+        "This index does not infer live state or history from aggregate analytics and does not substitute fixture counts.",
       ]}
-      note={note}
+      note={liveApi
+        ? `Live API enabled. Role: ${access.role ?? "unknown"}. Current layer: ${access.licenseLayer ?? "unlicensed"}.`
+        : "Live API disabled. Authoritative assignment reads and mutations are unavailable; no fixture has been substituted."}
       stats={[
-        {
-          label: "Workspaces",
-          value: String(ASSIGNMENT_WORKSPACES.length),
-          detail: "Dedicated assignment management destinations",
-        },
-        {
-          label: "Runs Indexed",
-          value: String(dataset.runAnalytics.length),
-          detail: `${dataset.yearBehaviorSummary.academicYear} runAnalytics records`,
-        },
-        {
-          label: "Live Scope",
-          value: String(activeRuns.length),
-          detail: "live assignments available through row-level monitor buttons",
-        },
-        {
-          label: "Avg Completion",
-          value: `${averageCompletion}%`,
-          detail: "summary-safe execution progress across indexed runs",
-        },
+        { label: "Workspaces", value: String(ASSIGNMENT_WORKSPACES.length), detail: "Dedicated assignment destinations" },
+        { label: "Live Authority", value: "ADM-41/42", detail: "Bounded current-year live projections" },
+        { label: "History Authority", value: "ADM-43", detail: "Bounded terminal run summaries" },
+        { label: "Commands", value: "ADM-44–48", detail: "Revisioned and auditable operations" },
       ]}
-      links={assignmentsWorkspaces}
+      links={[...ASSIGNMENT_WORKSPACES]}
     />
   );
 }

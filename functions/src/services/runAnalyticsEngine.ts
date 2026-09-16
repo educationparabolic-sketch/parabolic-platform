@@ -1,4 +1,5 @@
 import {FieldValue, Timestamp} from "firebase-admin/firestore";
+import {createHash} from "node:crypto";
 import {createLogger} from "./logging";
 import {getFirestore} from "../utils/firebaseAdmin";
 import {
@@ -9,6 +10,7 @@ import {SubmissionRiskState} from "../types/submission";
 
 const INSTITUTES_COLLECTION = "institutes";
 const ACADEMIC_YEARS_COLLECTION = "academicYears";
+const AUDIT_LOGS_COLLECTION = "auditLogs";
 const RUNS_COLLECTION = "runs";
 const RUN_ANALYTICS_COLLECTION = "runAnalytics";
 const PROCESSING_MARKERS_COLLECTION = "processingMarkers";
@@ -465,6 +467,13 @@ export class RunAnalyticsEngineService {
       const completionRate = roundToTwoDecimals(
         Math.min(1, submittedSessionCount / denominator) * 100,
       );
+      const currentRunStatus =
+        toNonEmptyString(runData.status)?.toLowerCase();
+      const completesEligibleRun = completionRate >= 100 &&
+        runSnapshot.exists &&
+        (currentRunStatus === "scheduled" ||
+          currentRunStatus === "active" ||
+          currentRunStatus === "collecting");
       const riskDistribution = incrementRiskDistribution(
         isPlainObject(runAnalyticsData?.riskDistribution) ?
           toHistogramRecord(runAnalyticsData?.riskDistribution) :
@@ -489,7 +498,7 @@ export class RunAnalyticsEngineService {
           avgRawScorePercent,
           completionRate,
           completionRatePercent: completionRate,
-          completedAt: completionRate >= 100 ? submittedAt : null,
+          completedAt: completesEligibleRun ? submittedAt : null,
           disciplineAverage,
           disciplineIndexAverage: disciplineAverage,
           guessRatePercent: guessRateAverage,
@@ -526,7 +535,7 @@ export class RunAnalyticsEngineService {
           batchName: toNonEmptyString(runData.batchName) ?? null,
           mode: toNonEmptyString(runData.mode) ?? "Operational",
           startedAt: runData.startWindow ?? runData.startedAt ?? null,
-          status: completionRate >= 100 ? "completed" :
+          status: completesEligibleRun ? "completed" :
             toNonEmptyString(runData.status) ?? "active",
           stdDeviation,
           testId: toNonEmptyString(runData.testId) ?? null,
@@ -548,13 +557,66 @@ export class RunAnalyticsEngineService {
         submittedAt,
       }, {merge: true});
 
-      if (completionRate >= 100 && runSnapshot.exists) {
+      if (completesEligibleRun) {
+        const currentRevision = typeof runData.revision === "number" &&
+          Number.isInteger(runData.revision) && runData.revision > 0 ?
+          runData.revision : 1;
+        const currentStatus = currentRunStatus as
+          "scheduled" | "active" | "collecting";
+        const transitionCount = currentStatus === "scheduled" ? 2 : 1;
+        const transitionKey = `${instituteId}:${yearId}:${runId}:` +
+          `${currentRevision}:${currentStatus}:completed`;
+        const transitionHash = createHash("sha256")
+          .update(transitionKey)
+          .digest("hex");
+        const auditId = `assignment_reconcile_${transitionHash.slice(0, 40)}`;
+        const transitionResult = {
+          auditId,
+          disposition: "applied",
+          revision: currentRevision + transitionCount,
+          runId,
+          status: "completed",
+          transitionPath: currentStatus === "scheduled" ?
+            ["scheduled", "active", "completed"] :
+            [currentStatus, "completed"],
+        };
         transaction.set(runReference, {
           completedAt: submittedAt,
           lastSubmissionAt: submittedAt,
+          revision: currentRevision + transitionCount,
           status: "completed",
-          updatedAt: FieldValue.serverTimestamp(),
+          updatedAt: submittedAt,
+          updatedBy: "system:run-analytics",
         }, {merge: true});
+        transaction.create(
+          this.firestore.doc(
+            `${INSTITUTES_COLLECTION}/${instituteId}/` +
+            `${AUDIT_LOGS_COLLECTION}/${auditId}`,
+          ),
+          {
+            actionType: "RECONCILE_ASSIGNMENT_LIFECYCLE",
+            actorId: "system:run-analytics",
+            actorRole: "system",
+            actorUid: "system:run-analytics",
+            after: transitionResult,
+            auditId,
+            before: {revision: currentRevision, status: currentStatus},
+            entityId: runId,
+            entityType: "assignment",
+            instituteId,
+            layer: "L0",
+            metadata: {
+              command: "lifecycle-reconcile",
+              requestFingerprint: transitionHash,
+              result: transitionResult,
+              source: "RunAnalyticsEngineService",
+            },
+            targetCollection: RUNS_COLLECTION,
+            targetId: runId,
+            tenantId: instituteId,
+            timestamp: submittedAt,
+          },
+        );
       }
 
       return {

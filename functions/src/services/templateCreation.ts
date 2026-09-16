@@ -463,17 +463,32 @@ export class TemplateCreationService {
       0;
     const normalizedStatus = normalizeInitialTemplateStatus(data);
 
-    await templateReference.set({
-      createdAt,
-      difficultyDistribution: normalizedTemplate.difficultyDistribution,
-      phaseConfigSnapshot: normalizedTemplate.phaseConfigSnapshot,
-      questionIds: normalizedTemplate.questionIds,
-      status: normalizedStatus,
-      testId,
-      timingProfile: normalizedTemplate.timingProfile,
-      totalQuestions: normalizedTemplate.totalQuestions,
-      totalRuns: normalizedTotalRuns,
-    }, {merge: true});
+    await this.firestore.runTransaction(async (transaction) => {
+      const currentTemplateSnapshot = await transaction.get(templateReference);
+      const currentTemplateData = currentTemplateSnapshot.data();
+      const currentTotalRuns = typeof currentTemplateData?.totalRuns ===
+          "number" &&
+        Number.isFinite(currentTemplateData.totalRuns) &&
+        currentTemplateData.totalRuns >= 0 ?
+        Math.floor(currentTemplateData.totalRuns) :
+        normalizedTotalRuns;
+      const currentStatus = currentTemplateData?.status === "assigned" &&
+        currentTotalRuns > 0 ?
+        "assigned" :
+        normalizedStatus;
+
+      transaction.set(templateReference, {
+        createdAt,
+        difficultyDistribution: normalizedTemplate.difficultyDistribution,
+        phaseConfigSnapshot: normalizedTemplate.phaseConfigSnapshot,
+        questionIds: normalizedTemplate.questionIds,
+        status: currentStatus,
+        testId,
+        timingProfile: normalizedTemplate.timingProfile,
+        totalQuestions: normalizedTemplate.totalQuestions,
+        totalRuns: currentTotalRuns,
+      }, {merge: true});
+    });
 
     this.logger.info("Template creation validation completed", {
       instituteId,

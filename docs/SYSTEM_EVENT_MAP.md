@@ -123,6 +123,31 @@ Assignment creation stamps the template's last-used time and academic year in
 its existing transaction. These projections do not authorize a command, create
 an audit, or replace the owning question/template/analytics documents.
 
+BWM-028 ADM-41..ADM-48 are registered synchronous HTTP edges through the shared
+secured assignment-operations handler and introduce no new trigger. The
+assignment-operations service treats duplicate/reassign,
+extend/cancel/archive, bounded
+run/session termination, notification resend, and minimum-time bypass as
+synchronous idempotent Firestore transactions with deterministic audit,
+email-job, and override-log authority. Existing session-start authority performs
+an audited revisioned `scheduled -> active` transition, and the existing run
+analytics transaction performs the audited final `active|collecting ->
+completed` transition. Service reconciliation owns `active -> collecting` and
+legacy `stopped -> terminated`. Existing `AssignmentCreated`,
+session-submission, analytics, notification, and academic-year archive event
+owners otherwise remain unchanged. Force-submit is a recoverable service
+composition: durable pending override authority invokes the existing scored
+submission service with a deterministic resumable lock owner, then completes
+the override log and immutable audit. No new trigger may infer an administrator
+command from a browser or duplicate post-submission processing.
+
+The BWM-028 live/history read-model service is query-only and adds no event,
+trigger, audit, queue, or projection writer. It composes bounded current-year
+run/session headers for live views and same-year terminal runAnalytics summaries
+for history, with filter/revision-bound cursors and current-license redaction.
+ADM-41..ADM-43 now create query-only HTTP edges consumed by the mounted Admin
+live list/detail and terminal-history destinations.
+
 ---
 
 # FIRESTORE TRIGGERS

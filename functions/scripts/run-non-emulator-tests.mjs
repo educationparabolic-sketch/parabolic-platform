@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 const functionsRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const selectedSourceSuites = [
+  "adminAssignmentOperationsApi.test",
   "adminInterventionsApi.test",
   "adminAnalyticsApi.test",
   "adminLicensingApi.test",

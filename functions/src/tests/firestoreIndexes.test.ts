@@ -108,3 +108,20 @@ test(
     );
   },
 );
+
+test(
+  "firestore index manifest includes assignment history filters",
+  () => {
+    const manifest = readManifest();
+
+    assert.equal(
+      hasIndex(manifest.indexes, "runs", [
+        {fieldPath: "status", order: "ASCENDING"},
+        {fieldPath: "mode", order: "ASCENDING"},
+        {fieldPath: "createdAt", order: "DESCENDING"},
+        {fieldPath: "__name__", order: "DESCENDING"},
+      ]),
+      true,
+    );
+  },
+);

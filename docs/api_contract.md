@@ -40,7 +40,7 @@ If prose and the typed manifest disagree about a route key or status, the typed 
 - `missing`: no current Functions handler/export implements the canonical contract.
 - `intentionally_retired`: explicit product/architecture evidence says the route must not be served.
 
-Current totals: 47 implemented, 3 incompatible, 0 missing, 3 intentionally retired.
+Current totals: 55 implemented, 3 incompatible, 0 missing, 3 intentionally retired.
 
 Routes marked `planned` in the code manifest are canonical contracts reserved by
 the active owning task and do not count as executable frontend tuples. They stay
@@ -92,6 +92,14 @@ frontend caller. Frontend-declared routes retain bidirectional source coverage.
 | ADM-38 | `POST /api/v1/admin/questions/packages/{packageId}/commit` | `implemented` | `adminQuestionPackages` | Firebase ID; teacher/admin; identity tenant; expected package revision; hash-verified asset creation; atomic question/log/audit write; recoverable cleanup; idempotency key |
 | ADM-39 | `POST /api/v1/admin/questions/upload-logs/{uploadLogId}/rollback` | `implemented` | `adminQuestionPackages` | Firebase ID; teacher/admin; identity tenant; expected package revision; create-only rollback eligibility; asset cleanup; idempotency key |
 | ADM-40 | `GET /api/v1/admin/questions/upload-logs/{uploadLogId}` | `implemented` | `adminQuestionUploadLogs` | Firebase ID; teacher/admin; identity tenant; immutable package-verified rows and conservative rollback eligibility |
+| ADM-41 | `GET /api/v1/admin/live-runs` | `implemented` | `adminAssignmentOperations` | Firebase ID; teacher/admin; identity tenant; current-year active/collecting runs; bounded cursor page |
+| ADM-42 | `GET /api/v1/admin/live-runs/{runId}` | `implemented` | `adminAssignmentOperations` | Firebase ID; teacher/admin; identity tenant; bounded live session projection; no question content |
+| ADM-43 | `GET /api/v1/admin/run-history` | `implemented` | `adminAssignmentOperations` | Firebase ID; teacher/admin; identity tenant; bounded terminal-run/analytics history with license redaction |
+| ADM-44 | `POST /api/v1/admin/runs/{runId}/duplicate` | `implemented` | `adminAssignmentOperations` | Firebase ID; teacher/admin; identity tenant; expected source revision; new run; idempotency key |
+| ADM-45 | `POST /api/v1/admin/runs/{runId}/reassign` | `implemented` | `adminAssignmentOperations` | Firebase ID; teacher/admin; identity tenant; explicit eligible recipients; expected source revision; new run; idempotency key |
+| ADM-46 | `POST /api/v1/admin/runs/{runId}/lifecycle` | `implemented` | `adminAssignmentOperations` | Firebase ID; teacher/admin; identity tenant; expected revision; legal extend/cancel/terminate/archive; idempotency key |
+| ADM-47 | `POST /api/v1/admin/runs/{runId}/notifications/resend` | `implemented` | `adminAssignmentOperations` | Firebase ID; teacher/admin; identity tenant; expected revision; deterministic recipient jobs/audit; idempotency key |
+| ADM-48 | `POST /api/v1/admin/runs/{runId}/sessions/{sessionId}/overrides` | `implemented` | `adminAssignmentOperations` | Firebase ID; teacher/admin; identity tenant; expected run/session revisions; minimum-time bypass or force-submit only; idempotency key |
 | STU-01 | `GET /api/v1/student/dashboard` | `implemented` | `studentDashboard` | Firebase ID; student; identity tenant/student/license; active Student; current academic year |
 | STU-02 | `GET /api/v1/student/tests` | `implemented` | `studentTests` | Firebase ID; student; identity tenant/student/license; active Student; current academic year; bounded status/page query |
 | STU-03 | `GET /api/v1/student/performance` | `implemented` | `studentPerformance` | Firebase ID; student; identity tenant/Student/license; active Student; current year; bounded `lastN`; L0/L1/L2 redaction |
@@ -143,6 +151,58 @@ only after an authoritative reload verifies it. Empty successful collection
 responses remain usable empty states. ADM-09 and ADM-18 are retired from the
 canonical gateway; their direct exports remain internal compatibility surfaces,
 not browser API authority.
+
+ADM-41 through ADM-48 are registered through one revocation-checked,
+identity-tenant, teacher/admin `adminAssignmentOperations` handler. The
+`AdminAssignmentOperationsService` owns transactional duplicate,
+reassign, extend, cancel, terminate, archive, lifecycle reconciliation,
+notification resend, and permitted session-override behavior. The
+`AdminAssignmentReadModelsService` implements live list/detail and history
+result authority. Live list/detail and history are separate bounded reads so
+`/admin/runs/{runId}`
+cannot ambiguously capture a literal live/history path. Public command bodies
+carry only path-bound run/session targets, expected run/session revisions,
+idempotency keys, and operation inputs; institute and actor authority remain
+server-derived. Duplicate and reassign always create a new scheduled run.
+Lifecycle commands use the canonical run states
+`scheduled|active|collecting|completed|archived|cancelled|terminated`; `stopped`
+is a legacy compatibility value only and must converge to `terminated` when the
+owning implementation migrates existing records. Legal state transitions are
+`scheduled -> active|cancelled`, `active -> collecting|completed|terminated`,
+`collecting -> completed|terminated`, and
+`completed|cancelled|terminated -> archived`; archived is terminal. Extension
+is an active-run schedule mutation, not a mode/structure transition. Public
+session overrides are limited to minimum-time bypass and force-submit with a
+justification; mode changes remain prohibited after activation and face/camera
+decisions remain BWM-045-owned. Mutation results expose deterministic
+`applied|replayed` authority plus explicit complete/pending/recoverable state so
+multi-session or notification effects cannot masquerade as atomic completion.
+Duplicate/reassign are bounded to 100 active recipients, re-check current
+template and license eligibility, and require a future schedule. Extensions
+are active-only and bounded to 1,440 minutes. Termination atomically marks an
+active/collecting run and its at-most-100 nonterminal sessions terminated,
+preserves submitted sessions, aligns any existing analytics status, and writes
+one immutable audit. Notification resend atomically advances the run revision
+and creates deterministic per-recipient `emailQueue` jobs plus its audit.
+Minimum-time bypass is one atomic run/session/override-log/audit command;
+force-submit durably records pending override authority, invokes the canonical
+scored submission engine under a resumable lock owner, and completes its
+override log and audit on exact retry after any recoverable interruption.
+
+Live reads resolve only the current operational academic year. They return at
+most 50 active/collecting runs per opaque created-at/document-ID cursor; each
+summary reads at most 100 selected session headers. Detail pages bind the cursor
+to run ID, year, and revision, page the bounded recipient set, load authoritative
+Student names, and select only projection-safe session fields. Status, progress,
+phase, stored flags, and countdown derive from persisted session/run authority;
+no question/answer content or fixture fallback is read or returned. History
+defaults to the current year but may select only a configured institute academic
+year, returns at most 50 terminal runs, joins only same-year `runAnalytics`
+documents, and binds year/status/mode filters into its cursor. Legacy `stopped`
+history projects as `terminated`. L0/L1 history redacts discipline, controlled,
+stability, and risk fields; L2/L3 may return only their stored values. The
+status+mode history filter uses the declared
+`runs(status ASC, mode ASC, createdAt DESC, __name__ DESC)` index.
 
 ADM-04 accepts only `{ idempotencyKey, studentId }`; ADM-05 accepts the shared
 bulk payload with `idempotencyKey` and no browser institute field. Both derive

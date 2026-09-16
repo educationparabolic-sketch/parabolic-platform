@@ -2154,17 +2154,14 @@ function AssignmentManagementPage() {
         render: (row) => (
           <div className="admin-assignments-row-actions">
             {row.status === "Upcoming" ? (
-              <button type="button" onClick={() => runBulkOperation("Cancel", row)}>
-                Cancel
+              <button type="button" onClick={() => navigate(`/admin/assignments/details/${row.runId}`)}>
+                View Details
               </button>
             ) : null}
             {row.status === "Live" ? (
               <>
                 <button type="button" onClick={() => navigate(`/admin/assignments/live/${row.runId}`)}>
                   Open Live Monitor
-                </button>
-                <button type="button" onClick={() => runBulkOperation("Terminate", row)}>
-                  Stop
                 </button>
               </>
             ) : null}
@@ -2476,96 +2473,6 @@ function AssignmentManagementPage() {
     } finally {
       setIsSubmitting(false);
     }
-  }
-
-  function runBulkOperation(operation: string, sourceRun: RunStatusRecord) {
-    const nowIso = new Date().toISOString();
-
-    setRuns((currentRuns) => {
-      if (operation === "DuplicateRun") {
-        const copyId = `run-${Date.now()}-dup`;
-        const duplicated = {
-          ...sourceRun,
-          runId: copyId,
-          runName: `Run ${copyId.replace(/^run-/, "")}`,
-          status: "Upcoming" as const,
-          completionPercent: 0,
-          createdAtIso: nowIso,
-        };
-        return [duplicated, ...currentRuns];
-      }
-
-      if (operation === "ReassignToBatch") {
-        const reassignId = `run-${Date.now()}-batch`;
-        const fallbackBatchId = batchOptions[0]?.id ?? "batch-a";
-        const recipients = studentOptions
-          .filter((student) => student.status === "active" && student.batchId === fallbackBatchId)
-          .map((student) => student.id);
-
-        const reassigned = {
-          ...sourceRun,
-          runId: reassignId,
-          runName: `Run ${reassignId.replace(/^run-/, "")}`,
-          batchIds: [fallbackBatchId],
-          recipientStudentIds: recipients,
-          status: "Upcoming" as const,
-          completionPercent: 0,
-          createdAtIso: nowIso,
-          runAnalyticsSnapshot: analyticsForRecipientCount(recipients.length, sourceRun.mode),
-        };
-
-        return [reassigned, ...currentRuns];
-      }
-
-      return currentRuns.map((run) => {
-        if (run.runId !== sourceRun.runId) {
-          return run;
-        }
-
-        if (operation === "ExtendWindow" && run.status === "Live") {
-          return {
-            ...run,
-            endWindowIso: new Date(Date.parse(run.endWindowIso) + (15 * 60 * 1000)).toISOString(),
-          };
-        }
-
-        if (operation === "Cancel" && run.status === "Upcoming") {
-          return {
-            ...run,
-            status: "Cancelled",
-          };
-        }
-
-        if (operation === "Terminate" && run.status === "Live") {
-          return {
-            ...run,
-            status: "Stopped",
-            completionPercent: 100,
-          };
-        }
-
-        if (operation === "Archive" && run.status !== "Live") {
-          return {
-            ...run,
-            status: "Completed",
-          };
-        }
-
-        return run;
-      });
-    });
-
-    if (operation === "ExportRunSummary") {
-      setInlineMessage(`ExportRunSummary executed for ${sourceRun.runId} using runAnalytics-only summaries.`);
-      return;
-    }
-
-    if (operation === "ResendNotification") {
-      setInlineMessage(`ResendNotification queued for ${sourceRun.runId}.`);
-      return;
-    }
-
-    setInlineMessage(`${operation} completed for ${sourceRun.runId}.`);
   }
 
   function updateRecipientMode(nextMode: RecipientSelectionMode) {

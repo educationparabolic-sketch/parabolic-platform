@@ -126,6 +126,7 @@ export interface SessionDocumentInitializationRecord {
   operationalDataAccessPolicy: ExamOperationalDataAccessPolicy;
   phaseConfigSnapshot: Record<string, unknown>;
   questionTimeMap: SessionQuestionTimeMap;
+  revision: 1;
   riskModelVersion: string;
   runtimeSnapshot: ExamRuntimeSnapshot;
   runId: string;

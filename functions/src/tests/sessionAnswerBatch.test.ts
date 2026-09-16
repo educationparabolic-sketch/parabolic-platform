@@ -913,6 +913,82 @@ test(
 );
 
 test(
+  "persistIncrementalAnswers honors a persisted Hard minimum-time bypass",
+  async () => {
+    const nowMillis = Date.now();
+    const sessionPath =
+      "institutes/inst_build_30/academicYears/2026/" +
+      "runs/run_build_30/sessions/session_build_33_min_time_override";
+
+    await deleteIfPresent(sessionPath);
+    await seedSession(sessionPath, "active", "Hard");
+    await firestore.doc(sessionPath).update({
+      overrideUsed: true,
+      submissionTimingOverride: {
+        active: true,
+        overrideId: "override-min-time",
+        type: "minimum_time_bypass",
+      },
+    });
+
+    const result = await answerBatchService.persistIncrementalAnswers({
+      answers: [mcqAnswer("q02", "D", nowMillis, 10)],
+      context: {
+        instituteId: "inst_build_30",
+        runId: "run_build_30",
+        sessionId: "session_build_33_min_time_override",
+        studentId: "student_build_30",
+        yearId: "2026",
+      },
+      millisecondsSinceLastWrite: 5000,
+    });
+
+    assert.equal(result.minTimeEnforcementLevel, "track_only");
+    assert.deepEqual(result.persistedQuestionIds, ["q02"]);
+    assert.equal(result.minTimeViolations.length, 1);
+    assert.equal(
+      (await firestore.doc(sessionPath).get()).get("answerMap.q02.selectedOption"),
+      "D",
+    );
+    await deleteIfPresent(sessionPath);
+  },
+);
+
+test("persistIncrementalAnswers rejects a force-submit-owned session lock", async () => {
+  const nowMillis = Date.now();
+  const sessionPath =
+    "institutes/inst_build_30/academicYears/2026/" +
+    "runs/run_build_30/sessions/session_build_33_force_submit_lock";
+
+  await deleteIfPresent(sessionPath);
+  await seedSession(sessionPath, "active", "Hard");
+  await firestore.doc(sessionPath).update({
+    submissionLock: true,
+    submissionLockOwnerId: "assignment_override_force_submit",
+  });
+
+  await assert.rejects(
+    answerBatchService.persistIncrementalAnswers({
+      answers: [mcqAnswer("q02", "D", nowMillis, 10)],
+      context: {
+        instituteId: "inst_build_30",
+        runId: "run_build_30",
+        sessionId: "session_build_33_force_submit_lock",
+        studentId: "student_build_30",
+        yearId: "2026",
+      },
+      millisecondsSinceLastWrite: 5000,
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof SessionStartValidationError);
+      assert.equal(error.code, "SESSION_LOCKED");
+      return true;
+    },
+  );
+  await deleteIfPresent(sessionPath);
+});
+
+test(
   "persistIncrementalAnswers tracks max-time violations in Diagnostic mode",
   async () => {
     const nowMillis = Date.now();

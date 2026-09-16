@@ -100,9 +100,15 @@ test(
       totalRuns: 7,
     });
 
+    const creationPayload = (await firestore.doc(templatePath).get()).data();
+    await firestore.doc(templatePath).update({
+      status: "assigned",
+      totalRuns: 8,
+    });
+
     const result = await templateCreationService.processTemplateCreated(
       {instituteId, testId},
-      (await firestore.doc(templatePath).get()).data(),
+      creationPayload,
     );
 
     assert.equal(result.templatePath, templatePath);
@@ -118,9 +124,9 @@ test(
     const templateSnapshot = await firestore.doc(templatePath).get();
     const templateData = templateSnapshot.data();
 
-    assert.equal(templateData?.status, "ready");
+    assert.equal(templateData?.status, "assigned");
     assert.equal(templateData?.totalQuestions, 3);
-    assert.equal(templateData?.totalRuns, 7);
+    assert.equal(templateData?.totalRuns, 8);
     assert.ok(templateData?.createdAt instanceof Timestamp);
     assert.deepEqual(templateData?.phaseConfigSnapshot, {
       phase1Percent: 13.7,

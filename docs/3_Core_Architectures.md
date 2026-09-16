@@ -1707,13 +1707,56 @@ Fields:
       endWindow: timestamp,
       recipientStudentIds: string[],
       recipientCount: number,
-      status: "scheduled | active | collecting | completed | archived | cancelled",
+      status: "scheduled | active | collecting | completed | archived | cancelled | terminated",
+      revision: number,
+      updatedAt: timestamp,
       calibrationVersion: string,
       createdAt: timestamp,
       totalSessions: number
     }
 
 Runs represent test assignments distributed to students.
+
+The canonical run state graph is:
+
+    scheduled -> active -> collecting -> completed -> archived
+         |           |          |             ^
+         v           +----------+             |
+    cancelled         v                        |
+                  terminated -----------------+
+
+`scheduled -> cancelled` is the only pre-activation terminal transition;
+`active|collecting -> terminated` is the operator stop path; and
+`completed|cancelled|terminated -> archived` changes operational visibility
+without deleting run, session, or analytics authority. `archived` is terminal.
+Extensions are allowed only while active and change only the end window plus
+revision. Mode and structural snapshots never change after activation.
+`stopped` is a legacy compatibility value, not a canonical state, and must be
+normalized to `terminated` by BWM-028 migration/read authority.
+
+The BWM-028 command service enforces this graph with positive run
+revisions and immutable institute audits. Duplicate/reassign create a new
+scheduled run from the frozen source snapshot after re-checking current-year,
+template, license, and active-recipient authority; they never rewrite the
+source run. Session start and final run analytics own the audited automatic
+active/completed transitions. The read-model service resolves live
+state only from current-year active/collecting runs plus bounded selected session
+projections, and resolves history from one configured year plus same-year
+runAnalytics summaries. Opaque cursors bind the selected year and filters;
+live-detail cursors additionally bind run revision. Only persisted Student names,
+session status/deadline/adaptive summaries, and explicitly stored metrics are
+projected; raw questions/answers and fixture inference are excluded. Current
+license authority redacts advanced live/history analytics below L2, and legacy
+stopped history normalizes to terminated. Public ADM-41..ADM-48 routes share a
+revocation-checked teacher/admin identity-tenant handler and strict Admin adapters
+with authoritative reload reconciliation. The command service coordinates bounded
+active/collecting run termination with all nonterminal sessions and any existing
+analytics projection in one transaction. It also creates deterministic
+assignment email jobs, atomic minimum-time bypass records, and recoverable
+force-submit override records that resume the canonical scoring submission
+engine under a deterministic lock owner before completing their immutable audit.
+Minimum-time bypass keeps violations tracked while relaxing only the Hard-mode
+minimum gate; force-submit locks out further answer batches before scoring.
 
 ---
 
@@ -1731,6 +1774,7 @@ Fields:
       instituteId: string,
       licenseLayer: string,
       calibrationVersion: string,
+      revision: number,
       status: "created | started | active | submitted | expired | terminated",
       startedAt: timestamp,
       submittedAt: timestamp,
@@ -1744,6 +1788,11 @@ Fields:
       maxTimeViolationPercent: number,
       riskState: string,
       overrideUsed: boolean,
+      submissionTimingOverride: {
+        active: boolean,
+        overrideId: string,
+        type: "minimum_time_bypass | force_submit"
+      },
       answerMap: {
         questionId: {
           selectedOption: string,
