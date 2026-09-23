@@ -88,6 +88,7 @@ export const createAdminGovernanceSnapshotsHandler = (
         >;
         const validatedRequest =
           governanceSnapshotAccessService.normalizeRequest({
+            cursor: body.cursor,
             instituteId:
               request.context.identity?.isVendor ?
                 body.instituteId :

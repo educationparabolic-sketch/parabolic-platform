@@ -1893,6 +1893,40 @@ Fields:
 
 Governance snapshots store monthly institutional performance indicators.
 
+BWM-029 registers ADM-49..ADM-55 as secured contracts. Governance snapshot
+reads become bounded, cursor-based projections of stored fields only. Report
+generation binds an immutable snapshot plus fixed event cutoff, is idempotent
+and auditable, persists real PDF bytes and immutable hash/size/source metadata,
+and exposes only an expiring download URL. Director governance requires L3 and
+`governanceAccess`; a Vendor target selector is separately authorized and never
+tenant authority. Intervention records are explicitly advisory recommendations:
+they do not claim to assign tests or send messages. Teacher/admin mutation
+requires L1 plus `riskOverview`; bounded timeline read additionally permits
+Director at L3, and Vendor is excluded. Actor and resolved institute authority
+remain server-derived. The report artifact layer now implements deterministic
+PDF rendering, unique immutable report object paths, create-only Storage writes,
+stored-byte/hash inspection, deterministic command reservation, atomic ready
+metadata plus immutable audit completion, exact replay, and a verified CDN URL
+capped at ten minutes. Corrupt or incomplete completion state fails closed and
+public results never expose bucket or object coordinates. ADM-49..ADM-52 share
+revocation-checked Director/Vendor governance transport, while the mounted Admin
+view uses strict snapshot/report adapters, capability-aligned states, and
+authoritative report reloads. Legacy ADM-13 and the unmapped preview export are
+retired from public dispatch.
+
+The canonical intervention layer now implements the reserved advisory model at
+schema version 2. It binds creation to the exact stored student-metrics update
+time, deterministically derives command/recommendation/audit authority, and
+atomically creates the recommendation, completed replay result, and immutable
+audit. Outcome commands atomically enforce expected revision, persist the new
+revision and audit, and retain their historical result for exact replay after
+later changes. Timeline queries filter canonical schema and optional student
+before default-25/max-50 `limit + 1` pagination with filter-bound cursors.
+Declared composites cover both timeline shapes. No command assigns a run or
+delivers a message. ADM-53..ADM-55 use separate read/mutation capability
+boundaries and the mounted workspace reloads timeline authority after commands;
+legacy ADM-17 is retired from public dispatch.
+
 ---
 
 ## 4.15 Calibration Collections

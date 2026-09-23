@@ -263,6 +263,205 @@ export interface AdminInterventionResult {
   actions: InterventionActionRecord[];
 }
 
+export type AdminGovernanceMutationDisposition = "applied" | "replayed";
+
+/**
+ * Optional Vendor-only institute selector. It is never authorization input:
+ * Directors omit it and Functions resolve their institute from verified claims;
+ * Vendor callers are separately authorized before this selector is resolved.
+ */
+export interface AdminGovernanceTargetQuery {
+  targetInstituteId?: string;
+}
+
+export interface AdminGovernanceRiskDistribution {
+  driftProne: number;
+  impulsive: number;
+  overextended: number;
+  stable: number;
+  volatile: number;
+}
+
+export interface AdminGovernanceSnapshotRecord {
+  academicYear: string;
+  avgAccuracyPercent: number;
+  avgPhaseAdherence: number;
+  avgRawScorePercent: number;
+  calibrationVersionUsed: string | null;
+  createdAt: string;
+  disciplineMean: number;
+  disciplineTrend: number;
+  disciplineVariance: number;
+  documentId: string;
+  easyNeglectPercent: number;
+  executionIntegrityScore: number;
+  generatedAt: string;
+  hardBiasPercent: number;
+  immutable: true;
+  month: string;
+  overrideFrequency: number;
+  phaseCompliancePercent: number;
+  riskClusterDistribution: AdminGovernanceRiskDistribution;
+  riskModelVersionUsed: string | null;
+  rushPatternPercent: number;
+  schemaVersion: 1;
+  skipBurstPercent: number;
+  stabilityIndex: number;
+  templateVarianceMean: number;
+  templateVersionRangeUsed: string | null;
+  wrongStreakPercent: number;
+}
+
+export interface AdminGovernanceSnapshotListQuery
+  extends AdminGovernanceTargetQuery {
+  cursor?: string;
+  limit?: number;
+  month?: string;
+  yearId: string;
+}
+
+export interface AdminGovernanceSnapshotListResult {
+  nextCursor: string | null;
+  snapshots: AdminGovernanceSnapshotRecord[];
+  yearId: string;
+}
+
+export type AdminGovernanceReportStatus = "ready";
+
+export interface AdminGovernanceReportSourceAuthority {
+  calibrationVersionUsed: string | null;
+  eventCutoffAt: string;
+  eventRecordCount: number;
+  riskModelVersionUsed: string | null;
+  snapshotGeneratedAt: string;
+  snapshotId: string;
+  snapshotSha256: string;
+  templateVersionRangeUsed: string | null;
+}
+
+export interface AdminGovernanceReportRecord {
+  auditId: string;
+  contentType: "application/pdf";
+  createdAt: string;
+  fileName: string;
+  immutable: true;
+  month: string;
+  reportId: string;
+  sha256: string;
+  sizeBytes: number;
+  source: AdminGovernanceReportSourceAuthority;
+  status: AdminGovernanceReportStatus;
+  yearId: string;
+}
+
+export interface AdminGovernanceReportGenerateRequest
+  extends AdminGovernanceTargetQuery {
+  idempotencyKey: string;
+  snapshotId: string;
+  yearId: string;
+}
+
+export interface AdminGovernanceReportGenerateResult {
+  disposition: AdminGovernanceMutationDisposition;
+  report: AdminGovernanceReportRecord;
+}
+
+export interface AdminGovernanceReportListQuery
+  extends AdminGovernanceTargetQuery {
+  cursor?: string;
+  limit?: number;
+  yearId: string;
+}
+
+export interface AdminGovernanceReportListResult {
+  nextCursor: string | null;
+  reports: AdminGovernanceReportRecord[];
+  yearId: string;
+}
+
+export interface AdminGovernanceReportDownloadQuery
+  extends AdminGovernanceTargetQuery {}
+
+export interface AdminGovernanceReportDownloadResult {
+  contentType: "application/pdf";
+  downloadUrl: string;
+  expiresAt: string;
+  fileName: string;
+  reportId: string;
+  sha256: string;
+  sizeBytes: number;
+}
+
+export type AdminInterventionRecommendationType =
+  | "remedial_test"
+  | "student_message";
+
+export type AdminInterventionRecommendationStatus =
+  | "pending"
+  | "improving"
+  | "no_change"
+  | "escalated"
+  | "resolved";
+
+export interface AdminInterventionRecommendationRecord {
+  advisoryOnly: true;
+  auditId: string;
+  createdAt: string;
+  interventionId: string;
+  messageDraft: string | null;
+  outcomeNotes: string | null;
+  recommendationType: AdminInterventionRecommendationType;
+  recommendedTestId: string | null;
+  revision: number;
+  riskCluster: string;
+  sourceMetricsUpdatedAt: string;
+  status: AdminInterventionRecommendationStatus;
+  studentId: string;
+  studentName: string;
+  updatedAt: string;
+  yearId: string;
+}
+
+export interface AdminInterventionRecommendationCreateRequest {
+  idempotencyKey: string;
+  messageDraft?: string;
+  recommendationType: AdminInterventionRecommendationType;
+  recommendedTestId?: string;
+  sourceMetricsUpdatedAt: string;
+  studentId: string;
+  yearId: string;
+}
+
+export interface AdminInterventionRecommendationCreateResult {
+  disposition: AdminGovernanceMutationDisposition;
+  recommendation: AdminInterventionRecommendationRecord;
+}
+
+export interface AdminInterventionTimelineQuery {
+  cursor?: string;
+  limit?: number;
+  studentId?: string;
+  yearId: string;
+}
+
+export interface AdminInterventionTimelineResult {
+  nextCursor: string | null;
+  recommendations: AdminInterventionRecommendationRecord[];
+  yearId: string;
+}
+
+export interface AdminInterventionOutcomeUpdateRequest {
+  expectedRevision: number;
+  idempotencyKey: string;
+  outcomeNotes?: string;
+  status: Exclude<AdminInterventionRecommendationStatus, "pending">;
+}
+
+export interface AdminInterventionOutcomeUpdateResult {
+  disposition: AdminGovernanceMutationDisposition;
+  recommendation: AdminInterventionRecommendationRecord;
+}
+
 export type QuestionAssetKind =
   | "questionImage"
   | "solutionImage"

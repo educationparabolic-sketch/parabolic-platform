@@ -298,6 +298,17 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     readOnlyRoles: ["director"],
   },
   {
+    path: "/admin/insights/interventions",
+    title: "Intervention Recommendations",
+    section: "Insights",
+    description: "Advisory intervention creation, timeline review, and revisioned outcome tracking.",
+    mountedPath: "/admin/insights",
+    allowedRoles: CAPABILITY_MATRIX["admin.interventions.read"].allowedRoles,
+    minimumLicenseLayer: "L1",
+    redirectOnDenied: "/admin/overview",
+    readOnlyRoles: ["director"],
+  },
+  {
     path: "/admin/governance",
     title: "Governance",
     section: "Governance",

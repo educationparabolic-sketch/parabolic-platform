@@ -36,7 +36,7 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 - `intentionally retired`: explicit product or architecture evidence says the contract must not be served. The removed EXM-03 custom refresh call is retained as an explicit retired route key because Firebase Auth SDK refresh is authoritative.
 - Gateway and Hosting reachability are excluded from per-route classification because they are common dependencies owned by BWM-003 and BWM-004.
 
-## Canonical route assignments and status — 61 contracts
+## Canonical route assignments and status — 68 contracts
 
 | ID | Method | Current frontend path | Canonical route | Status | Classification basis |
 | --- | --- | --- | --- | --- | --- |
@@ -52,11 +52,11 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 | ADM-10 | `GET` | `/admin/tests` | `/api/v1/admin/tests` | `implemented` | Standard `data` contains the shared, strictly adapted template array with backend IDs and positive-integer versions. |
 | ADM-11 | `POST` | `/admin/tests` | `/api/v1/admin/tests` | `implemented` | Create always persists a draft under a backend-issued ID, consumes the shared authoritative result, reloads ADM-10, reconciles backend ID/canonical ID/version, and replaces UI state only from that reload. Create-as-publish is rejected in favor of ADM-20. |
 | ADM-12 | `POST` | `/admin/runs` | `/api/v1/admin/runs` | `implemented` | Shared create DTOs align canonical mode, current academic year, expected numeric template version, recipients, schedule, proctoring, and idempotency input. Admin performs one exact idempotent replay, strictly reconciles every persisted run field against the request and first response, and stores only that authoritative confirmation rather than fabricating a live run-list record. |
-| ADM-13 | `POST` | `/admin/governance/snapshots` | `/api/v1/admin/governance/snapshots` | `implemented` | Request scope, director/vendor authorization, L3 governance policy, and consumed `data` collections align. |
+| ADM-13 | `POST` | Retired (no frontend call) | `/api/v1/admin/governance/snapshots` | `intentionally_retired` | Superseded by ADM-49. |
 | ADM-14 | `POST` | `/admin/settings` | `/api/v1/admin/settings` | `incompatible` | Frontend declares and sends `REQUEST_ACADEMIC_YEAR_ARCHIVE`; handler's settings action union does not support that action. Other current settings actions align. |
 | ADM-15 | `POST` | `/admin/academicYear/archive` | `/api/v1/admin/academicYear/archive` | `implemented` | Double-confirmed archive body and admin/vendor tenant rules align; frontend does not consume the success body. |
 | ADM-16 | `POST` | `/admin/licensing` | `/api/v1/admin/licensing` | `incompatible` | Frontend sends `REQUEST_LICENSE_UPGRADE` and expects `data.request`; handler supports only `GET_LICENSE_SNAPSHOT` and returns snapshot data. |
-| ADM-17 | `POST` | `/admin/interventions` | `/api/v1/admin/interventions` | `implemented` | List/mutation action bodies, L1 enforcement, and consumed `data.actions` or `data.action` variants align. |
+| ADM-17 | `POST` | Retired (no frontend call) | `/api/v1/admin/interventions` | `intentionally_retired` | Superseded by ADM-53..ADM-55. |
 | ADM-18 | `POST` | Retired (no frontend call) | `/api/v1/admin/questions/assets` | `intentionally retired` | ADM-38 coordinates package assets and ADM-31/ADM-32 coordinate revisioned edit replacements; standalone browser asset upload is no longer authoritative. |
 | ADM-19 | `PATCH` | `/admin/tests/{testId}` | `/api/v1/admin/tests/{testId}` | `implemented` | Edit sends the backend ID and expected numeric version, consumes the strict incremented record, reloads ADM-10, reconciles ID/canonical ID/version, and replaces state only from the reload; stale writes fail with HTTP 409. |
 | ADM-20 | `POST` | `/admin/tests/{testId}/publish` | `/api/v1/admin/tests/{testId}/publish` | `implemented` | Publish sends the backend ID and expected numeric version, permits only `draft -> ready`, atomically writes the immutable activation audit, replays the same command deterministically, and reconciles the authoritative ADM-10 reload. |
@@ -88,6 +88,13 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 | ADM-46 | `POST` | `/admin/runs/{runId}/lifecycle` | `/api/v1/admin/runs/{runId}/lifecycle` | `implemented` | Live/history operations expose legal extend/terminate/archive controls and reconcile through ADM-42/43. |
 | ADM-47 | `POST` | `/admin/runs/{runId}/notifications/resend` | `/api/v1/admin/runs/{runId}/notifications/resend` | `implemented` | Live control queues deterministic owned-recipient jobs and verifies the advanced run revision through ADM-42. |
 | ADM-48 | `POST` | `/admin/runs/{runId}/sessions/{sessionId}/overrides` | `/api/v1/admin/runs/{runId}/sessions/{sessionId}/overrides` | `implemented` | Live detail exposes only minimum-time bypass and force-submit, then reloads live or terminal authority before success. |
+| ADM-49 | `GET` | `/admin/governance/snapshots` | `/api/v1/admin/governance/snapshots` | `implemented` | Strict bounded snapshot caller sends year/filter data only; tenant and actor authority remain server-derived. |
+| ADM-50 | `POST` | `/admin/governance/reports` | `/api/v1/admin/governance/reports` | `implemented` | Generates an idempotent immutable-source PDF, then reloads the authoritative report list. |
+| ADM-51 | `GET` | `/admin/governance/reports` | `/api/v1/admin/governance/reports` | `implemented` | Strict max-50 immutable report-metadata timeline. |
+| ADM-52 | `GET` | `/admin/governance/reports/{reportId}/download` | `/api/v1/admin/governance/reports/{reportId}/download` | `implemented` | Verifies ready bytes before returning a maximum-ten-minute URL without Storage coordinates. |
+| ADM-53 | `GET` | `/admin/interventions` | `/api/v1/admin/interventions` | `implemented` | Mounted default-25/max-50 timeline for teacher/admin and read-only L3 Director; no Vendor access. |
+| ADM-54 | `POST` | `/admin/interventions/recommendations` | `/api/v1/admin/interventions/recommendations` | `implemented` | Source-bound advisory creation only; it neither assigns a run nor delivers a message and reloads the timeline. |
+| ADM-55 | `PATCH` | `/admin/interventions/{interventionId}/outcome` | `/api/v1/admin/interventions/{interventionId}/outcome` | `implemented` | Expected-revision outcome command followed by authoritative timeline reload. |
 | STU-01 | `GET` | `/student/dashboard` | `/api/v1/student/dashboard` | `implemented` | Strict shared dashboard DTO; handler derives tenant, Student, current year, and license from verified identity and returns only that active Student's yearly summary, Student-owned propagated recent results, and assigned/licensed scheduled runs. |
 | STU-02 | `GET` | `/student/tests` | `/api/v1/student/tests` | `implemented` | Strict shared paginated tests DTO; bounded status/page queries return only current-year assigned/licensed runs and fill completed result fields from Student-owned `results/{runId}` summaries. |
 | STU-03 | `GET` | `/student/performance` | `/api/v1/student/performance` | `implemented` | Strict shared performance DTO reads the bounded Student-owned propagated result timeline plus current-year summary metrics and redacts L1/L2 fields by identity license. |
@@ -102,10 +109,10 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 | VEN-01 | `POST` | `/vendor/calibration/simulate` | `/api/v1/vendor/calibration/simulate` | `incompatible` | Frontend sends `strategyProfileParameters`; handler requires `weights`, so the simulation request fails validation/service normalization. |
 | VEN-02 | `POST` | `/vendor/calibration/push` | `/api/v1/vendor/calibration/push` | `implemented` | Vendor auth, target/version request, and consumed deployment response align. |
 
-Canonical classification totals are `implemented` 55, `incompatible` 3,
-`missing` 0, and `intentionally retired` 3. ADM-30..ADM-48 have strict Admin
-callers and secured gateway handlers. ADM-09 and ADM-18
-retain explicit retired route keys but no browser caller.
+Canonical classification totals are `implemented` 60, `incompatible` 3,
+`missing` 0, and `intentionally retired` 5. ADM-30..ADM-55 have strict Admin
+callers and secured gateway handlers. ADM-09, ADM-13, ADM-17, ADM-18, and
+EXM-03 retain explicit retired route keys but no browser caller.
 
 ## Question Bank lifecycle routes — live frontend callers
 
@@ -157,7 +164,29 @@ The mounted live and history destinations use pending/error/success states,
 capability-gated mutations, retry-stable idempotency keys, and authoritative
 read-back reconciliation.
 
-## Admin portal — 48 contracts
+## Governance and intervention routes — mounted canonical contracts
+
+ADM-49..ADM-55 have secured handlers and strict mounted callers. Their public DTOs provide
+bounded cursor results, immutable report source/hash metadata, short-lived
+download URLs, advisory-only intervention language, idempotent mutation
+dispositions, and expected-revision outcome updates. Browser requests contain
+no actor or resolved institute authority. The optional `targetInstituteId`
+selector is Vendor-only and never grants access; Director tenancy comes only
+from verified claims. Governance requires L3 plus `governanceAccess` for
+Director, while intervention mutation requires teacher/admin L1 plus
+`riskOverview`, and timeline read additionally permits Director at L3. Vendor is
+excluded from interventions. ADM-13 and ADM-17 are retired from gateway and
+direct HTTP export dispatch. Snapshot pages default
+to 12/max 36, report and intervention pages default to 25/max 50, report source
+events fail closed above 1,000 rather than truncate. The internal artifact
+service now persists and verifies real immutable PDF bytes, replay metadata, and
+audit authority and caps report download URLs at ten minutes; report generation
+and download are now reachable from the governance reports view.
+The canonical intervention service likewise implements source-bound advisory
+creation, revisioned outcomes, exact replay, and filtered cursor reads through
+the mounted interventions destination with authoritative reloads.
+
+## Admin portal — 53 frontend-declared contracts
 
 | ID | Method and current path | Frontend request | Frontend response | Auth / role / tenant / license | Current Functions handler | Frontend source |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -173,11 +202,11 @@ read-back reconciliation.
 | ADM-10 | `GET /admin/tests` | No body or query | Shared `AdminTestTemplateListResult`, strictly adapted with backend ID, numeric version, and complete configuration | Firebase ID; `teacher` or `admin`; identity tenant; no license middleware | `adminTests` (`api/adminTests.ts`) | Test landing/detail/analytics, assignment, and template screens |
 | ADM-11 | `POST /admin/tests` | Shared `AdminTestTemplateCreateRequest` | Shared `AdminTestTemplateCreateResult`, strictly adapted with authoritative `template.id` and `template.version` | Firebase ID; `teacher` or `admin`; identity tenant; no license middleware | `adminTests` (`api/adminTests.ts`) | `features/tests/TestTemplateManagementPage.tsx` |
 | ADM-12 | `POST /admin/runs` | Shared `AdminRunCreateRequest` with current year, expected template version, canonical mode, recipients, schedule, policy, and idempotency key | Shared `AdminRunCreateResult`, strictly adapted and then exact-replayed/reconciled before authoritative confirmation state is shown | Firebase ID; `teacher` or `admin`; identity tenant; current-year/template/recipient/license validation | `adminRuns` (`api/adminRuns.ts`) | `features/assignments/AssignmentManagementPage.tsx`, `features/assignments/assignmentAuthority.ts` |
-| ADM-13 | `POST /admin/governance/snapshots` | `{ instituteId, yearId, limit }` | `GovernanceSnapshotsApiResult` | Firebase ID; `director` or `vendor`; body tenant with vendor bypass; L3 for director, vendor bypass | `adminGovernanceSnapshots` (`api/adminGovernanceSnapshots.ts`) | `features/analytics/governanceDataset.ts` |
+| ADM-13 | Retired (no frontend call) | None | Canonical 404 | Superseded by ADM-49 | None in gateway | No frontend caller |
 | ADM-14 | `POST /admin/settings` | Action-discriminated `Record<string, unknown>` | `AdminSettingsApiResponse` | Firebase ID; `admin` or `director`; body tenant when present, otherwise identity tenant; no license middleware | `adminSettings` (`api/adminSettings.ts`) | `features/settings/settingsDataset.ts` |
 | ADM-15 | `POST /admin/academicYear/archive` | `{ doubleConfirm, instituteId, yearId }` | `unknown`; backend declares `AcademicYearArchiveSuccessResponse` | Firebase ID; `admin` or `vendor`; body tenant with vendor bypass; no license middleware | `adminAcademicYearArchive` (`api/adminAcademicYearArchive.ts`) | `features/settings/settingsDataset.ts` |
 | ADM-16 | `POST /admin/licensing` | `AdminLicensingRequest` actions `GET_LICENSE_SNAPSHOT` or `REQUEST_LICENSE_UPGRADE` | `AdminLicensingApiResponse` | Firebase ID; `admin` or `director`; identity/body tenant, no vendor bypass; no license middleware | `adminLicensing` (`api/adminLicensing.ts`) | `features/licensing/licensingDataset.ts` |
-| ADM-17 | `POST /admin/interventions` | `AdminInterventionRequest` actions for listing and mutation | `InterventionApiResponse` | Firebase ID; `admin` or `teacher`; body tenant must match identity; L1 | `adminInterventions` (`api/adminInterventions.ts`) | `features/insights/interventionDataset.ts` |
+| ADM-17 | Retired (no frontend call) | None | Canonical 404 | Superseded by ADM-53..ADM-55 | None in gateway | No frontend caller |
 | ADM-18 | Retired (no frontend call) | None | Canonical 404 | Legacy direct export is internal-only | None in gateway | Superseded by ADM-31/ADM-32 and ADM-38 |
 | ADM-19 | `PATCH /admin/tests/{testId}` | Shared `AdminTestTemplateUpdateRequest` with path ID and positive `expectedVersion` | Shared `AdminTestTemplateUpdateResult`, strictly adapted with the same ID and exactly incremented numeric version | Firebase ID; `teacher` or `admin`; identity tenant; stale/locked writes return `CONFLICT` | `adminTests` (`api/adminTests.ts`) | `features/tests/TestTemplateManagementPage.tsx` |
 | ADM-20 | `POST /admin/tests/{testId}/publish` | Shared `AdminTestTemplateLifecycleRequest` with positive `expectedVersion` | Shared `AdminTestTemplateLifecycleResult` with immutable audit ID/path and authoritative ready template | Firebase ID; `teacher` or `admin`; identity tenant; only draft may publish | `adminTests` (`api/adminTests.ts`) | `features/tests/TestTemplateManagementPage.tsx` |
@@ -201,6 +230,13 @@ read-back reconciliation.
 | ADM-38 | `POST /admin/questions/packages/{packageId}/commit` | Shared expected-package-revision/idempotency request | Strict `AdminQuestionPackageCommitResult`; success reloads logs/library | Firebase ID; `teacher` or `admin`; identity tenant; staged hash/expiry authority | `adminQuestionPackages` | Package workspace through `features/tests/questionBankApi.ts` |
 | ADM-39 | `POST /admin/questions/upload-logs/{uploadLogId}/rollback` | Shared expected-package-revision/idempotency request | Strict `AdminQuestionPackageRollbackResult`; success reloads log detail | Firebase ID; `teacher` or `admin`; identity tenant; create-only current revision/version/no-use eligibility | `adminQuestionPackages` | Validation log workspace through `features/tests/questionBankApi.ts` |
 | ADM-40 | `GET /admin/questions/upload-logs/{uploadLogId}` | URL-encoded path ID | Strict `AdminQuestionUploadLogDetailResult` | Firebase ID; `teacher` or `admin`; identity tenant; immutable package comparison | `adminQuestionUploadLogs` | Validation log workspace through `features/tests/questionBankApi.ts` |
+| ADM-49 | `GET /admin/governance/snapshots` | Query `{ yearId, month?, cursor?, limit? }`; no tenant/actor fields | Strict stored snapshot cursor page | Firebase ID; Director L3 + `governanceAccess`, or Vendor + explicit selector | `adminGovernanceTransport` | Governance dashboard via `governanceDataset.ts` |
+| ADM-50 | `POST /admin/governance/reports` | Shared snapshot/year/idempotency request; no tenant/actor fields | Applied/replayed immutable ready report | Same governance boundary | `adminGovernanceTransport` | Governance reports view via `governanceDataset.ts` |
+| ADM-51 | `GET /admin/governance/reports` | Query `{ yearId, cursor?, limit? }`; no tenant/actor fields | Strict immutable report cursor page | Same governance boundary | `adminGovernanceTransport` | Governance reports view via `governanceDataset.ts` |
+| ADM-52 | `GET /admin/governance/reports/{reportId}/download` | Path report ID only | Verified short-lived PDF URL/hash/size; no Storage coordinates | Same governance boundary | `adminGovernanceTransport` | Governance reports view via `governanceDataset.ts` |
+| ADM-53 | `GET /admin/interventions` | Query `{ yearId, studentId?, cursor?, limit? }`; no tenant/actor fields | Strict advisory recommendation timeline | Firebase ID; teacher/admin L1 or Director L3 + `riskOverview`; no Vendor | `adminInterventionTimeline` | Mounted interventions and student context via `interventionDataset.ts` |
+| ADM-54 | `POST /admin/interventions/recommendations` | Shared source-bound advisory request; no tenant/actor fields | Applied/replayed recommendation | Firebase ID; teacher/admin L1 + `riskOverview` | `adminInterventionMutation` | Mounted interventions via `interventionDataset.ts` |
+| ADM-55 | `PATCH /admin/interventions/{interventionId}/outcome` | Shared expected-revision/idempotency outcome | Applied/replayed revised recommendation | Firebase ID; teacher/admin L1 + `riskOverview` | `adminInterventionMutation` | Mounted interventions via `interventionDataset.ts` |
 
 ## Student portal — 6 contracts
 
@@ -232,10 +268,10 @@ read-back reconciliation.
 
 ## Classification summary for the current tree
 
-- The 38 `implemented` entries are handler-compatible through the common gateway and same-origin Hosting rewrite; each owning flow retains its task-specific emulator and browser evidence.
+- The 60 `implemented` entries are handler-compatible through the common gateway and same-origin Hosting rewrite; each owning flow retains its task-specific verification ownership.
 - The 3 `incompatible` entries require contract repair by their remaining owning tasks before those affected flows can be considered wired.
 - No canonical route is currently `missing`; ADM-24 through ADM-29 are implemented and consumed with permanent BWM-026 emulator/browser proof.
-- EXM-03 is intentionally retired: Firebase Auth SDK refresh replaces the removed custom token-refresh request, and the gateway serves no handler for it.
+- ADM-09, ADM-13, ADM-17, ADM-18, and EXM-03 are intentionally retired; their superseding canonical flows own browser dispatch and the gateway serves no handler for them.
 
 ## Audit anchors
 

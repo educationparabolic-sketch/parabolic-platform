@@ -16,6 +16,9 @@ function InsightsWorkspaceNav(props: InsightsWorkspaceNavProps) {
       <NavLink className="admin-primary-link" to="/admin/insights/risk">
         Risk Overview
       </NavLink>
+      <NavLink className="admin-primary-link" to="/admin/insights/interventions">
+        Interventions
+      </NavLink>
     </div>
   );
 }

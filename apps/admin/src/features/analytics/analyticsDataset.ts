@@ -65,6 +65,7 @@ export interface StudentYearMetricRecord {
   guessRatePercent: number;
   disciplineIndexTrend: DisciplineTrend;
   rollingRiskCluster: RiskCluster;
+  sourceMetricsUpdatedAt?: string | null;
   testsAttempted: number;
 }
 
@@ -738,6 +739,11 @@ function normalizeStudentMetricRecord(value: unknown, index: number): StudentYea
     guessRatePercent: toNumberOrZero(record.guessRatePercent ?? record.avgGuessRatePercent),
     disciplineIndexTrend: disciplineTrend,
     rollingRiskCluster: toRiskCluster(record.rollingRiskCluster ?? record.riskState),
+    sourceMetricsUpdatedAt:
+      typeof record.sourceMetricsUpdatedAt === "string" &&
+      record.sourceMetricsUpdatedAt.trim() ?
+        record.sourceMetricsUpdatedAt.trim() :
+        null,
     testsAttempted: toNumberOrZero(record.testsAttempted),
   };
 }

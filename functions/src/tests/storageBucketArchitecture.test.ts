@@ -104,6 +104,25 @@ test("resolveReportAssetStorageTarget returns report metadata", () => {
   assert.equal(result.contentType, "text/csv");
 });
 
+test("resolveReportAssetStorageTarget versions governance PDF names", () => {
+  const result =
+    storageBucketArchitectureService.resolveReportAssetStorageTarget({
+      extension: "pdf",
+      instituteId: "inst_build_72",
+      month: 9,
+      reportId: "governance_report_1234567890abcdef1234567890abcdef12345678",
+      reportKind: "governanceReport",
+      year: 2026,
+    });
+
+  assert.equal(
+    result.objectPath,
+    "inst_build_72/reports/2026/09/" +
+      "governance_report_1234567890abcdef1234567890abcdef12345678.pdf",
+  );
+  assert.equal(result.contentType, "application/pdf");
+});
+
 test("getBucket returns the configured storage bucket handle", () => {
   const bucket = storageBucketArchitectureService.getBucket("reports");
 

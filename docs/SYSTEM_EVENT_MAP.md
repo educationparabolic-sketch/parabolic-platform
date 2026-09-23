@@ -148,6 +148,24 @@ for history, with filter/revision-bound cursors and current-license redaction.
 ADM-41..ADM-43 now create query-only HTTP edges consumed by the mounted Admin
 live list/detail and terminal-history destinations.
 
+BWM-029 ADM-49..ADM-55 are registered synchronous HTTP edges. The report
+artifact command creates a deterministic
+snapshot/cutoff-bound PDF object and, only after stored-byte verification,
+atomically creates immutable ready metadata, one institute
+`GENERATE_GOVERNANCE_REPORT` audit, and completed replay authority. Exact retry
+is query/replay-only; download revalidates authoritative bytes before signing.
+ADM-49/ADM-51/ADM-52 are query-only; ADM-50 invokes the artifact command through
+the secured transport without adding a queue or Firestore/Storage trigger. The
+intervention command atomically
+creates a schema-version-2 advisory recommendation, completed replay authority,
+and immutable `CREATE_INTERVENTION_RECOMMENDATION` audit after validating exact
+student-metrics time. Outcome commands atomically apply expected-revision state,
+completed replay authority, and immutable `UPDATE_INTERVENTION_OUTCOME` audit.
+Exact retry is replay-only; timeline reads are query-only. Neither command emits
+an assignment, notification, email, queue, or trigger event. Existing governance
+snapshot scheduling is unchanged. Legacy ADM-13, ADM-17, and the unmapped
+report preview export are retired from gateway/direct HTTP dispatch.
+
 ---
 
 # FIRESTORE TRIGGERS

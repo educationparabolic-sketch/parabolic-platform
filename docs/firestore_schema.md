@@ -535,6 +535,63 @@ Monthly governance indicators are stored in:
 institutes/{instituteId}/academicYears/{yearId}/governanceSnapshots/{monthId}
 
 These documents summarize institutional stability and performance metrics.
+ADM-49 validates document ID/month, institute/year, `immutable: true`, and
+`schemaVersion: 1`, then performs either an exact document read or a
+default-12/max-36 descending `month` query with an opaque source-bound cursor.
+The Admin live adapter exposes only stored fields and never fabricates absent
+batch, template, controlled-mode, or per-teacher metrics.
+
+The internal report-source composer reads one exact immutable snapshot, uses its
+`generatedAt` as the event cutoff and its captured calibration, risk, and
+template versions, and bounds each event query before rejecting a combined
+source set above 1,000. Its former direct JSON-preview export is retired. The
+composer exposes no bucket, object, or `gs://` coordinate and is invoked by the
+durable artifact service behind ADM-50.
+
+BWM-029 persists immutable report metadata at:
+
+institutes/{instituteId}/academicYears/{yearId}/governanceReports/{reportId}
+
+Each ready record binds one immutable governance snapshot, its captured model
+versions, fixed event cutoff/count, snapshot and PDF SHA-256 hashes, PDF byte
+size/content type/file name, immutable audit ID, and creation time. It contains
+no bucket or object coordinate. Generation reserves deterministic replay state
+at:
+
+institutes/{instituteId}/academicYears/{yearId}/governanceReportCommands/{reportId}
+
+The command hashes the idempotency key, request semantics, and immutable source.
+The service creates a unique generation-preconditioned PDF object, downloads and
+hashes the stored bytes, then atomically creates the ready metadata and institute
+`GENERATE_GOVERNANCE_REPORT` audit while completing the command. Exact concurrent
+retries converge to `applied|replayed`; conflicting key reuse, missing completion
+authority, or mismatched bytes fail closed. Download authority rechecks the ready
+record and actual object before returning a CDN URL capped at ten minutes. The
+ADM-50..ADM-52 expose this persistence through secured governance transport and
+the mounted report workspace; no trigger is added.
+
+Canonical and compatibility intervention recommendation records use:
+
+interventionRecommendations/{yearId}/institutes/{instituteId}/actions/{interventionId}
+
+Schema-version-2 canonical records are explicitly advisory-only: a
+`remedial_test` stores a recommended test ID and a `student_message` stores an
+undelivered message draft. Creation transactionally validates the exact
+`studentYearMetrics.lastUpdated` authority, then creates a deterministic
+recommendation, completed replay command, and immutable institute audit.
+Revisioned outcome transactions require expected revision plus idempotency and
+atomically update the recommendation while creating their completed command and
+immutable audit. Replay commands are stored at:
+
+interventionRecommendations/{yearId}/institutes/{instituteId}/commands/{commandId}
+
+Commands retain their exact public result, so retry remains stable after later
+outcome revisions. Timeline reads select only schema-version-2 records, apply
+year/institute and optional student filters before a default-25/max-50
+`limit + 1` query, and bind opaque cursors to those filters. The declared
+`actions` composites cover unfiltered and student-filtered descending creation
+time/document-ID order. ADM-53..ADM-55 expose the canonical service through the
+mounted intervention workspace; legacy ADM-17 is retired from public dispatch.
 
 ---
 

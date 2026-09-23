@@ -1,51 +1,33 @@
 import {StandardApiErrorCode} from "./apiResponse";
-import {GovernanceRiskDistribution} from "./governanceSnapshot";
+import type {
+  AdminGovernanceSnapshotRecord,
+} from "../../../shared/contracts/apiDtos";
 
 export interface GovernanceSnapshotAccessRequest {
+  cursor?: string;
   instituteId: string;
+  limit?: number;
   month?: string;
   yearId: string;
 }
 
 export interface GovernanceSnapshotAccessValidatedRequest {
+  cursor?: string;
   instituteId: string;
   limit: number;
   month?: string;
   yearId: string;
 }
 
-export interface GovernanceSnapshotAccessRecord {
-  academicYear: string;
-  avgAccuracyPercent: number;
-  avgPhaseAdherence: number;
-  avgRawScorePercent: number;
-  createdAt: string;
-  disciplineMean: number;
-  disciplineTrend: number;
-  disciplineVariance: number;
-  documentId: string;
+export interface GovernanceSnapshotAccessRecord
+  extends AdminGovernanceSnapshotRecord {
   documentPath: string;
-  executionIntegrityScore: number;
-  generatedAt: string;
-  immutable: true;
   instituteId: string;
-  month: string;
-  overrideFrequency: number;
-  phaseCompliancePercent: number;
-  riskClusterDistribution: GovernanceRiskDistribution;
-  riskDistribution: GovernanceRiskDistribution;
-  rushPatternPercent: number;
-  easyNeglectPercent: number;
-  hardBiasPercent: number;
-  skipBurstPercent: number;
-  schemaVersion: 1;
-  stabilityIndex: number;
-  templateVarianceMean: number;
-  wrongStreakPercent: number;
 }
 
 export interface GovernanceSnapshotAccessResult {
   instituteId: string;
+  nextCursor: string | null;
   requestedMonth?: string;
   snapshots: GovernanceSnapshotAccessRecord[];
   yearId: string;

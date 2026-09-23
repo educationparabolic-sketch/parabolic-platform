@@ -57,6 +57,26 @@ const resolveStudentId = (
   uid: string,
 ): string => normalizeNonEmptyString(decodedToken.studentId) ?? uid;
 
+const resolveFeatureFlags = (
+  decodedToken: Record<string, unknown>,
+): Readonly<Record<string, boolean>> => {
+  const direct = decodedToken.featureFlags;
+  const license = decodedToken.license;
+  const nested = typeof license === "object" && license !== null ?
+    (license as Record<string, unknown>).featureFlags :
+    undefined;
+  const source = typeof direct === "object" && direct !== null ?
+    direct :
+    nested;
+  if (typeof source !== "object" || source === null || Array.isArray(source)) {
+    return {};
+  }
+  return Object.fromEntries(
+    Object.entries(source as Record<string, unknown>)
+      .map(([key, value]) => [key, value === true]),
+  );
+};
+
 const resolveExamSessionClaims = (
   decodedToken: Record<string, unknown>,
 ): MiddlewareExamSessionClaims | null => {
@@ -125,6 +145,7 @@ const buildIdentityContext = (
 
   return {
     examSession: resolveExamSessionClaims(decodedToken),
+    featureFlags: resolveFeatureFlags(decodedToken),
     instituteId: resolveInstituteClaim(decodedToken),
     isSuspended: Boolean(decodedToken.isSuspended),
     isVendor: role === "vendor" || Boolean(decodedToken.isVendor),
@@ -195,5 +216,6 @@ export {
   normalizeRole,
   resolveInstituteClaim,
   resolveExamSessionClaims,
+  resolveFeatureFlags,
   resolveStudentId,
 };

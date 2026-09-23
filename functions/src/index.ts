@@ -55,11 +55,12 @@ import {
   handleStripeWebhookRequest,
 } from "./api/stripeWebhook";
 import {
-  handleAdminGovernanceSnapshotsRequest,
-} from "./api/adminGovernanceSnapshots";
+  handleAdminGovernanceTransportRequest,
+} from "./api/adminGovernanceTransport";
 import {
-  handleAdminGovernanceReportsRequest,
-} from "./api/adminGovernanceReports";
+  handleAdminInterventionMutationRequest,
+  handleAdminInterventionTimelineRequest,
+} from "./api/adminInterventionRecommendations";
 import {
   handleAdminAcademicYearArchiveRequest,
 } from "./api/adminAcademicYearArchive";
@@ -123,9 +124,6 @@ import {
 import {
   handleAdminQuestionPackagesRequest,
 } from "./api/adminQuestionPackages";
-import {
-  handleAdminInterventionsRequest,
-} from "./api/adminInterventions";
 import {
   handleAdminSettingsRequest,
 } from "./api/adminSettings";
@@ -242,11 +240,14 @@ export const vendorCalibrationSimulation = functions.https.onRequest(
 export const stripeWebhook = functions.https.onRequest(
   handleStripeWebhookRequest,
 );
-export const adminGovernanceSnapshots = functions.https.onRequest(
-  handleAdminGovernanceSnapshotsRequest,
+export const adminGovernanceTransport = functions.https.onRequest(
+  handleAdminGovernanceTransportRequest,
 );
-export const adminGovernanceReports = functions.https.onRequest(
-  handleAdminGovernanceReportsRequest,
+export const adminInterventionTimeline = functions.https.onRequest(
+  handleAdminInterventionTimelineRequest,
+);
+export const adminInterventionMutation = functions.https.onRequest(
+  handleAdminInterventionMutationRequest,
 );
 export const adminAnalytics = functions.https.onRequest(
   handleAdminAnalyticsRequest,
@@ -316,9 +317,6 @@ export const adminQuestionMutations = functions.https.onRequest(
 );
 export const adminQuestionPackages = functions.https.onRequest(
   handleAdminQuestionPackagesRequest,
-);
-export const adminInterventions = functions.https.onRequest(
-  handleAdminInterventionsRequest,
 );
 export const adminSettings = functions.https.onRequest(
   handleAdminSettingsRequest,

@@ -321,6 +321,7 @@ function normalizeStudentMetricRecord(
     rollingRiskCluster: toRiskCluster(
       data.rollingRiskCluster ?? data.riskState,
     ),
+    sourceMetricsUpdatedAt: toIsoString(data.lastUpdated ?? data.updatedAt),
     studentId: toNonEmptyString(data.studentId, document.id),
     studentName: toNonEmptyString(
       data.studentName ?? data.fullName ?? data.name,

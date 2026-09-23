@@ -26,6 +26,8 @@ export type AdministrativeActionType =
   | "RESEND_ASSIGNMENT_NOTIFICATION"
   | "OVERRIDE_ASSIGNMENT_SESSION"
   | "RECONCILE_ASSIGNMENT_LIFECYCLE"
+  | "GENERATE_GOVERNANCE_REPORT"
+  | "CREATE_INTERVENTION_RECOMMENDATION"
   | "IMPORT_STUDENTS"
   | "CHANGE_ROLE"
   | "UPDATE_CALIBRATION"
@@ -37,6 +39,8 @@ export type AdministrativeActionEntityType =
   | "test"
   | "academicYear"
   | "assignment"
+  | "governanceReport"
+  | "interventionRecommendation"
   | "student"
   | "role"
   | "calibration";

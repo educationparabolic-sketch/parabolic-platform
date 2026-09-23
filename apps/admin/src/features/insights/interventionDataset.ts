@@ -1,22 +1,16 @@
 import {ApiClientError} from "../../../../../shared/services/apiClient";
 import {getPortalApiClient} from "../../../../../shared/services/portalIntegration";
 import type {
-  AdminInterventionRequest,
-  AdminInterventionResult,
-  InterventionActionRecord,
-  InterventionActionType,
-  InterventionOutcomeStatus,
-} from "../../../../../shared/contracts/apiDtos";
-export type {
-  InterventionActionRecord,
-  InterventionActionType,
-  InterventionOutcomeStatus,
+  AdminInterventionOutcomeUpdateRequest,
+  AdminInterventionOutcomeUpdateResult,
+  AdminInterventionRecommendationCreateRequest,
+  AdminInterventionRecommendationCreateResult,
+  AdminInterventionRecommendationRecord,
+  AdminInterventionRecommendationStatus,
+  AdminInterventionTimelineResult,
 } from "../../../../../shared/contracts/apiDtos";
 import {
   fetchDashboardDataset,
-  FALLBACK_DATASET,
-  formatPercent,
-  shouldUseLiveApi,
   type DashboardDataset,
   type StudentYearMetricRecord,
 } from "../analytics/analyticsDataset";
@@ -25,295 +19,164 @@ const apiClient = getPortalApiClient("admin");
 
 export interface HighRiskInterventionCandidate extends StudentYearMetricRecord {
   interventionPriority: number;
-  suggestedOutcomeStatus: InterventionOutcomeStatus;
+  suggestedMessageDraft: string;
   suggestedRemedialTestId: string;
-  suggestedAlertMessage: string;
 }
 
-export interface StructuralInterventionRecommendation {
-  recommendationId: string;
-  title: string;
-  targetScope: string;
-  triggerRule: string;
-  observedValuePercent: number;
-  recommendation: string;
-  sourcePath: string;
-}
-
-export const DEFAULT_INTERVENTION_HISTORY: InterventionActionRecord[] = [
-  {
-    actionType: "ASSIGN_REMEDIAL_TEST",
-    instituteId: "inst-build-124",
-    interventionId: "intervention_local_001",
-    remedialTestId: "remedial-physics-paced",
-    riskCluster: "critical",
-    studentId: "STU-005",
-    studentName: "Rehan Patel",
-    timestamp: "2026-04-10T09:30:00.000Z",
-    yearId: "2026",
-  },
-  {
-    actionType: "SEND_ALERT",
-    alertMessage: "Please complete the remedial pacing drill before the next mock.",
-    instituteId: "inst-build-124",
-    interventionId: "intervention_local_002",
-    riskCluster: "high",
-    studentId: "STU-004",
-    studentName: "Naina Iyer",
-    timestamp: "2026-04-10T10:15:00.000Z",
-    yearId: "2026",
-  },
-  {
-    actionType: "TRACK_OUTCOME",
-    instituteId: "inst-build-124",
-    interventionId: "intervention_local_003",
-    outcomeNotes: "Guess-rate dropped in follow-up diagnostic.",
-    outcomeStatus: "improving",
-    riskCluster: "high",
-    studentId: "STU-004",
-    studentName: "Naina Iyer",
-    timestamp: "2026-04-11T06:10:00.000Z",
-    yearId: "2026",
-  },
-];
-
-function severityScore(cluster: StudentYearMetricRecord["rollingRiskCluster"]): number {
-  if (cluster === "critical") {
-    return 4;
+const requireObject = (value: unknown, field: string): Record<string, unknown> => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`Intervention field "${field}" must be an object.`);
   }
+  return value as Record<string, unknown>;
+};
 
-  if (cluster === "high") {
-    return 3;
+const requireString = (value: unknown, field: string): string => {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`Intervention field "${field}" must be a non-empty string.`);
   }
+  return value.trim();
+};
 
-  if (cluster === "medium") {
-    return 2;
+const requireNullableString = (value: unknown, field: string): string | null =>
+  value === null ? null : requireString(value, field);
+
+const requirePositiveInteger = (value: unknown, field: string): number => {
+  if (!Number.isInteger(value) || Number(value) < 1) {
+    throw new Error(`Intervention field "${field}" must be a positive integer.`);
   }
+  return Number(value);
+};
 
-  return 1;
-}
+const STATUSES = new Set<AdminInterventionRecommendationStatus>([
+  "pending",
+  "improving",
+  "no_change",
+  "escalated",
+  "resolved",
+]);
 
-function normalizeInterventionRecord(value: unknown): InterventionActionRecord | null {
-  if (!value || typeof value !== "object") {
-    return null;
+function normalizeRecommendation(value: unknown): AdminInterventionRecommendationRecord {
+  const record = requireObject(value, "recommendation");
+  if (record.advisoryOnly !== true ||
+    (record.recommendationType !== "remedial_test" &&
+      record.recommendationType !== "student_message") ||
+    !STATUSES.has(record.status as AdminInterventionRecommendationStatus)) {
+    throw new Error("Intervention recommendation has an invalid advisory contract.");
   }
-
-  const typed = value as Record<string, unknown>;
-
-  const actionType =
-    typeof typed.actionType === "string" ?
-      (typed.actionType as InterventionActionType) :
-      "LIST_ACTIONS";
-
-  if (!typed.interventionId || typeof typed.interventionId !== "string") {
-    return null;
-  }
-
   return {
-    actionType,
-    alertMessage: typeof typed.alertMessage === "string" ? typed.alertMessage : undefined,
-    auditId: typeof typed.auditId === "string" ? typed.auditId : undefined,
-    auditPath: typeof typed.auditPath === "string" ? typed.auditPath : undefined,
-    instituteId: typeof typed.instituteId === "string" ? typed.instituteId : "",
-    interventionId: typed.interventionId,
-    outcomeNotes: typeof typed.outcomeNotes === "string" ? typed.outcomeNotes : undefined,
-    outcomeStatus:
-      typeof typed.outcomeStatus === "string" ?
-        (typed.outcomeStatus as InterventionOutcomeStatus) :
-        undefined,
-    remedialTestId: typeof typed.remedialTestId === "string" ? typed.remedialTestId : undefined,
-    riskCluster: typeof typed.riskCluster === "string" ? typed.riskCluster : undefined,
-    studentId: typeof typed.studentId === "string" ? typed.studentId : undefined,
-    studentName: typeof typed.studentName === "string" ? typed.studentName : undefined,
-    timestamp: typeof typed.timestamp === "string" ? typed.timestamp : new Date(0).toISOString(),
-    yearId: typeof typed.yearId === "string" ? typed.yearId : "",
+    advisoryOnly: true,
+    auditId: requireString(record.auditId, "auditId"),
+    createdAt: requireString(record.createdAt, "createdAt"),
+    interventionId: requireString(record.interventionId, "interventionId"),
+    messageDraft: requireNullableString(record.messageDraft, "messageDraft"),
+    outcomeNotes: requireNullableString(record.outcomeNotes, "outcomeNotes"),
+    recommendationType: record.recommendationType,
+    recommendedTestId: requireNullableString(record.recommendedTestId, "recommendedTestId"),
+    revision: requirePositiveInteger(record.revision, "revision"),
+    riskCluster: requireString(record.riskCluster, "riskCluster"),
+    sourceMetricsUpdatedAt: requireString(record.sourceMetricsUpdatedAt, "sourceMetricsUpdatedAt"),
+    status: record.status as AdminInterventionRecommendationStatus,
+    studentId: requireString(record.studentId, "studentId"),
+    studentName: requireString(record.studentName, "studentName"),
+    updatedAt: requireString(record.updatedAt, "updatedAt"),
+    yearId: requireString(record.yearId, "yearId"),
   };
 }
 
-export async function fetchInterventionDataset(): Promise<DashboardDataset> {
-  if (!shouldUseLiveApi()) {
-    return FALLBACK_DATASET;
-  }
+const severity = (cluster: StudentYearMetricRecord["rollingRiskCluster"]): number =>
+  cluster === "critical" ? 4 : cluster === "high" ? 3 : 1;
 
-  return fetchDashboardDataset();
-}
-
-export function buildHighRiskCandidates(dataset: DashboardDataset): HighRiskInterventionCandidate[] {
+export function buildHighRiskCandidates(
+  dataset: DashboardDataset,
+): HighRiskInterventionCandidate[] {
   return dataset.studentYearMetrics
-    .filter((student) => student.rollingRiskCluster === "high" || student.rollingRiskCluster === "critical")
-    .map((student) => {
-      const cluster = student.rollingRiskCluster;
-      const suggestedRemedialTestId =
-        cluster === "critical" ?
-          "remedial-controlled-discipline" :
-          "remedial-structured-pacing";
-      const suggestedAlertMessage =
-        cluster === "critical" ?
-          "High-risk flag detected. Complete the controlled remedial test and review pacing errors today." :
-          "High-risk trend detected. Complete the structured pacing remedial test before your next run.";
-
-      return {
-        ...student,
-        interventionPriority:
-          severityScore(student.rollingRiskCluster) * 100 +
-          Math.round(student.guessRatePercent * 2) +
-          (100 - Math.round(student.disciplineIndex)),
-        suggestedAlertMessage,
-        suggestedOutcomeStatus: "pending" as InterventionOutcomeStatus,
-        suggestedRemedialTestId,
-      };
-    })
+    .filter((student) =>
+      student.rollingRiskCluster === "high" ||
+      student.rollingRiskCluster === "critical")
+    .map((student) => ({
+      ...student,
+      interventionPriority: severity(student.rollingRiskCluster) * 100 +
+        Math.round(student.guessRatePercent * 2) +
+        (100 - Math.round(student.disciplineIndex)),
+      suggestedMessageDraft:
+        "Please review the current risk signals and complete the recommended follow-up.",
+      suggestedRemedialTestId: student.rollingRiskCluster === "critical" ?
+        "remedial-controlled-discipline" :
+        "remedial-structured-pacing",
+    }))
     .sort((left, right) => right.interventionPriority - left.interventionPriority);
 }
 
-export function buildStructuralInterventionRecommendations(
-  dataset: DashboardDataset,
-): StructuralInterventionRecommendation[] {
-  const summary = dataset.yearBehaviorSummary;
-  const runCount = Math.max(1, dataset.runAnalytics.length);
-  const impulsivePercent = summary.riskStateDistribution.impulsive;
-  const averageOverstayPercent =
-    dataset.runAnalytics.reduce((sum, run) => sum + run.maxTimeViolationPercent, 0) / runCount;
-  const averagePhaseDeviationPercent =
-    dataset.runAnalytics.reduce((sum, run) => sum + (100 - run.avgPhaseAdherencePercent), 0) / runCount;
-  const easyNeglectPercent = summary.riskSignals.percentEasyNeglect;
-
-  return [
-    {
-      recommendationId: "structural-controlled-mode",
-      title: "Controlled Mode Recommendation",
-      targetScope: "Current academic year cohort",
-      triggerRule: "If Impulsive cluster > 35%",
-      observedValuePercent: impulsivePercent,
-      recommendation:
-        impulsivePercent > 35 ?
-          "Suggest Controlled Mode for the next mock cycle." :
-          "Keep Controlled Mode as advisory; impulsive cluster is below threshold.",
-      sourcePath: `interventionRecommendations/${summary.academicYear}/structural-controlled-mode`,
-    },
-    {
-      recommendationId: "structural-hard-mode-limited",
-      title: "Hard Mode Limited Recommendation",
-      targetScope: "Runs with repeated overstay",
-      triggerRule: "If Overstay > 25%",
-      observedValuePercent: averageOverstayPercent,
-      recommendation:
-        averageOverstayPercent > 25 ?
-          "Suggest limited Hard Mode practice for overstay-heavy runs." :
-          "Do not escalate to Hard Mode; overstay remains below the structural threshold.",
-      sourcePath: `interventionRecommendations/${summary.academicYear}/structural-hard-mode-limited`,
-    },
-    {
-      recommendationId: "structural-phase-training",
-      title: "Phase Training Recommendation",
-      targetScope: "Students with phase deviation",
-      triggerRule: "If Phase Deviation > 30%",
-      observedValuePercent: averagePhaseDeviationPercent,
-      recommendation:
-        averagePhaseDeviationPercent > 30 ?
-          "Suggest Phase Training before the next scheduled assessment." :
-          "Keep phase guidance soft; deviation is below the L2 structural trigger.",
-      sourcePath: `interventionRecommendations/${summary.academicYear}/structural-phase-training`,
-    },
-    {
-      recommendationId: "structural-easy-first-template",
-      title: "Easy-First Template Design",
-      targetScope: "Cohort easy-neglect pattern",
-      triggerRule: "If Easy Neglect > 40%",
-      observedValuePercent: easyNeglectPercent,
-      recommendation:
-        easyNeglectPercent > 40 ?
-          "Suggest Easy-First Template design for the next remedial mock." :
-          "No Easy-First Template escalation; easy neglect is below threshold.",
-      sourcePath: `interventionRecommendations/${summary.academicYear}/structural-easy-first-template`,
-    },
-  ];
+export async function fetchInterventionDataset(): Promise<DashboardDataset> {
+  return fetchDashboardDataset();
 }
 
-export async function listInterventionActions(
-  input: {
-    instituteId: string;
-    yearId: string;
-    studentId?: string;
-    limit?: number;
-  },
-): Promise<InterventionActionRecord[]> {
-  if (!shouldUseLiveApi()) {
-    return DEFAULT_INTERVENTION_HISTORY.filter((entry) =>
-      entry.yearId === input.yearId && (!input.studentId || entry.studentId === input.studentId),
-    );
-  }
-
-  const payload = await apiClient.post<AdminInterventionResult, AdminInterventionRequest>(
+export async function listInterventionRecommendations(input: {
+  cursor?: string;
+  limit?: number;
+  studentId?: string;
+  yearId: string;
+}): Promise<AdminInterventionTimelineResult> {
+  const payload = requireObject(await apiClient.get<unknown>(
     "/admin/interventions",
-    {
-      body: {
-        actionType: "LIST_ACTIONS",
-        instituteId: input.instituteId,
-        limit: input.limit ?? 20,
-        studentId: input.studentId,
-        yearId: input.yearId,
-      },
-    },
-  );
-
-  const rawActions = Array.isArray(payload.actions) ? payload.actions : [];
-  return rawActions
-    .map((entry) => normalizeInterventionRecord(entry))
-    .filter((entry): entry is InterventionActionRecord => Boolean(entry));
+    {query: input},
+  ), "response");
+  if (!Array.isArray(payload.recommendations)) {
+    throw new Error("Intervention response must include recommendations.");
+  }
+  const yearId = requireString(payload.yearId, "yearId");
+  if (yearId !== input.yearId) {
+    throw new Error("Intervention response year does not match the request.");
+  }
+  return {
+    nextCursor: payload.nextCursor === null ? null :
+      requireString(payload.nextCursor, "nextCursor"),
+    recommendations: payload.recommendations.map(normalizeRecommendation),
+    yearId,
+  };
 }
 
-export async function createInterventionAction(
-  input: {
-    actionType: Exclude<InterventionActionType, "LIST_ACTIONS">;
-    instituteId: string;
-    yearId: string;
-    studentId: string;
-    remedialTestId?: string;
-    alertMessage?: string;
-    outcomeStatus?: InterventionOutcomeStatus;
-    outcomeNotes?: string;
-  },
-): Promise<InterventionActionRecord> {
-  if (!shouldUseLiveApi()) {
-    const localAction: InterventionActionRecord = {
-      actionType: input.actionType,
-      alertMessage: input.alertMessage,
-      instituteId: input.instituteId,
-      interventionId: `intervention_local_${Date.now()}`,
-      outcomeNotes: input.outcomeNotes,
-      outcomeStatus: input.outcomeStatus,
-      remedialTestId: input.remedialTestId,
-      studentId: input.studentId,
-      timestamp: new Date().toISOString(),
-      yearId: input.yearId,
-    };
-    return localAction;
+export async function createInterventionRecommendation(
+  input: AdminInterventionRecommendationCreateRequest,
+): Promise<AdminInterventionRecommendationCreateResult> {
+  const payload = requireObject(await apiClient.post<
+    unknown,
+    AdminInterventionRecommendationCreateRequest
+  >(
+    "/admin/interventions/recommendations",
+    {body: input},
+  ), "response");
+  if (payload.disposition !== "applied" && payload.disposition !== "replayed") {
+    throw new Error("Intervention create response has an invalid disposition.");
   }
-
-  const payload = await apiClient.post<AdminInterventionResult, AdminInterventionRequest>(
-    "/admin/interventions",
-    {
-      body: {
-        actionType: input.actionType,
-        alertMessage: input.alertMessage,
-        instituteId: input.instituteId,
-        outcomeNotes: input.outcomeNotes,
-        outcomeStatus: input.outcomeStatus,
-        remedialTestId: input.remedialTestId,
-        studentId: input.studentId,
-        yearId: input.yearId,
-      },
-    },
-  );
-
-  const action = normalizeInterventionRecord(payload.action);
-
-  if (!action) {
-    throw new Error("POST /admin/interventions did not return a valid intervention action.");
-  }
-
-  return action;
+  return {
+    disposition: payload.disposition,
+    recommendation: normalizeRecommendation(payload.recommendation),
+  };
 }
 
-export {ApiClientError, formatPercent, shouldUseLiveApi};
+export async function updateInterventionOutcome(
+  interventionId: string,
+  input: AdminInterventionOutcomeUpdateRequest,
+): Promise<AdminInterventionOutcomeUpdateResult> {
+  const payload = requireObject(await apiClient.patch<
+    unknown,
+    AdminInterventionOutcomeUpdateRequest
+  >(
+    `/admin/interventions/${interventionId}/outcome`,
+    {body: input},
+  ), "response");
+  if (payload.disposition !== "applied" && payload.disposition !== "replayed") {
+    throw new Error("Intervention outcome response has an invalid disposition.");
+  }
+  return {
+    disposition: payload.disposition,
+    recommendation: normalizeRecommendation(payload.recommendation),
+  };
+}
+
+export {ApiClientError};
+export type {
+  AdminInterventionRecommendationRecord,
+  AdminInterventionRecommendationStatus,
+};

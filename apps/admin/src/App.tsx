@@ -58,6 +58,7 @@ const AdminAssignmentsLandingPage = lazy(() => import("./features/assignments/Ad
 const AssignmentManagementPage = lazy(() => import("./features/assignments/AssignmentManagementPage"));
 const AdminInsightsLandingPage = lazy(() => import("./features/insights/AdminInsightsLandingPage"));
 const AdminRiskOverviewPage = lazy(() => import("./features/insights/AdminRiskOverviewPage"));
+const InterventionToolsPage = lazy(() => import("./features/insights/InterventionToolsPage"));
 const AdminHelpSupportPage = lazy(() => import("./features/support/AdminHelpSupportPage"));
 const AdminLicensingWorkspace = lazy(() => import("./features/licensing/AdminLicensingWorkspace"));
 const AdminOverviewPage = lazy(() => import("./features/overview/AdminOverviewPage"));
@@ -823,7 +824,7 @@ function App() {
         />
         <Route
           path="insights/interventions"
-          element={<Navigate to="/admin/insights/risk" replace />}
+          element={<AdminRouteBoundary label="Loading intervention recommendations"><InterventionToolsPage /></AdminRouteBoundary>}
         />
         <Route
           path="insights/risk"

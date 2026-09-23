@@ -2,16 +2,16 @@ import {StandardApiErrorCode} from "./apiResponse";
 import {GovernanceRiskDistribution} from "./governanceSnapshot";
 
 export interface GovernanceReportingRequest {
-  includePdfExport?: boolean;
   instituteId: string;
   month?: string;
+  snapshotId?: string;
   yearId: string;
 }
 
 export interface GovernanceReportingValidatedRequest {
-  includePdfExport: boolean;
   instituteId: string;
   month?: string;
+  snapshotId?: string;
   yearId: string;
 }
 
@@ -56,23 +56,19 @@ export interface GovernanceDisciplineDeviation {
   summary: string;
 }
 
-export interface GovernanceReportPdfExport {
-  bucketName: string;
-  cdnPath: string;
-  contentType: string;
-  fileName: string;
-  gsUri: string;
-  objectPath: string;
-}
-
 export interface GovernanceReportHeader {
   academicYear: string;
   calibrationVersion: string | null;
-  generatedAt: string;
+  eventCutoffAt: string;
+  eventRecordCount: number;
   instituteId: string;
   month: string;
+  reportPreparedAt: string;
+  riskModelVersion: string | null;
   schemaVersion: 1;
-  snapshotDocumentPath: string;
+  snapshotGeneratedAt: string;
+  snapshotId: string;
+  templateVersionRange: string | null;
 }
 
 export interface GovernanceReportingResult {
@@ -80,7 +76,6 @@ export interface GovernanceReportingResult {
   header: GovernanceReportHeader;
   incidentTimeline: GovernanceReportTimelineEntry[];
   majorIncidentAlerts: GovernanceReportIncident[];
-  pdfExport?: GovernanceReportPdfExport;
   performance: {
     avgAccuracyPercent: number;
     avgRawScorePercent: number;

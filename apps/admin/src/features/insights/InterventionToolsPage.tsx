@@ -1,593 +1,287 @@
 import {useCallback, useEffect, useMemo, useState} from "react";
 import {useAuthProvider} from "../../../../../shared/services/authProvider";
-import {LICENSE_LAYER_ORDER} from "../../../../../shared/types/portalRouting";
+import {resolveGlobalPortalState} from "../../../../../shared/services/globalPortalState";
 import {UiTable, type UiTableColumn} from "../../../../../shared/ui/components";
-import {resolveAdminAccessContext} from "../../portals/adminAccess";
 import {
   ApiClientError,
   buildHighRiskCandidates,
-  buildStructuralInterventionRecommendations,
-  createInterventionAction,
+  createInterventionRecommendation,
   fetchInterventionDataset,
-  formatPercent,
-  listInterventionActions,
-  shouldUseLiveApi,
+  listInterventionRecommendations,
+  updateInterventionOutcome,
+  type AdminInterventionRecommendationRecord,
+  type AdminInterventionRecommendationStatus,
   type HighRiskInterventionCandidate,
-  type InterventionActionRecord,
-  type InterventionOutcomeStatus,
-  type StructuralInterventionRecommendation,
 } from "./interventionDataset";
 import InsightsWorkspaceNav from "./InsightsWorkspaceNav";
 
-const FALLBACK_INTERVENTION_INSTITUTE_ID = "inst-build-125";
-const FALLBACK_INTERVENTION_YEAR_ID = "2026";
+type OutcomeStatus = Exclude<AdminInterventionRecommendationStatus, "pending">;
 
-const OUTCOME_OPTIONS: InterventionOutcomeStatus[] = [
-  "pending",
+const OUTCOME_OPTIONS: OutcomeStatus[] = [
   "improving",
   "no_change",
   "escalated",
   "resolved",
 ];
 
-interface OutcomeDraftState {
-  [studentId: string]: {
-    notes: string;
-    status: InterventionOutcomeStatus;
-  };
+interface OutcomeDraft {
+  notes: string;
+  status: OutcomeStatus;
 }
 
-interface InterventionRecommendationCard {
-  title: string;
-  summary: string;
-  helper: string;
-}
-
-interface InterventionRequestContext {
-  instituteId: string;
-  yearId: string;
-}
-
-function decodeIdTokenClaims(idToken: string | null): Record<string, unknown> | null {
-  if (!idToken) {
-    return null;
-  }
-
-  const segments = idToken.split(".");
-  if (segments.length !== 3) {
-    return null;
-  }
-
-  try {
-    const payloadSegment = segments[1].replace(/-/g, "+").replace(/_/g, "/");
-    const paddedPayload = payloadSegment.padEnd(Math.ceil(payloadSegment.length / 4) * 4, "=");
-    const payload = atob(paddedPayload);
-    const claims = JSON.parse(payload);
-    return claims && typeof claims === "object" ? (claims as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
-}
-
-function resolveInterventionContext(
-  idToken: string | null,
-  fallbackYearId: string,
-): InterventionRequestContext {
-  const claims = decodeIdTokenClaims(idToken);
-  const instituteId =
-    typeof claims?.instituteId === "string" && claims.instituteId.trim().length > 0 ?
-      claims.instituteId :
-      FALLBACK_INTERVENTION_INSTITUTE_ID;
-
-  return {
-    instituteId,
-    yearId: fallbackYearId.trim().length > 0 ? fallbackYearId : FALLBACK_INTERVENTION_YEAR_ID,
-  };
-}
-
-function formatTimestamp(value: string): string {
+const formatTimestamp = (value: string): string => {
   const parsed = Date.parse(value);
-  return Number.isNaN(parsed) ? value : new Date(parsed).toISOString().replace("T", " ").slice(0, 16);
-}
+  return Number.isNaN(parsed) ? value :
+    new Date(parsed).toISOString().replace("T", " ").slice(0, 16);
+};
 
 function InterventionToolsPage() {
   const {session} = useAuthProvider();
-  const accessContext = resolveAdminAccessContext(session);
-  const isL2OrAbove =
-    accessContext.licenseLayer !== null && LICENSE_LAYER_ORDER[accessContext.licenseLayer] >= LICENSE_LAYER_ORDER.L2;
+  const portalState = resolveGlobalPortalState({portal: "admin", session});
+  const canRead = portalState.license.featureFlags.riskOverview;
+  const canMutate = canRead &&
+    (portalState.role === "teacher" || portalState.role === "admin");
+  const [yearId, setYearId] = useState("");
+  const [candidates, setCandidates] = useState<HighRiskInterventionCandidate[]>([]);
+  const [timeline, setTimeline] = useState<AdminInterventionRecommendationRecord[]>([]);
+  const [outcomeDrafts, setOutcomeDrafts] = useState<Record<string, OutcomeDraft>>({});
+  const [pendingId, setPendingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSubmittingByStudent, setIsSubmittingByStudent] = useState<Record<string, boolean>>({});
-  const [highRiskStudents, setHighRiskStudents] = useState<HighRiskInterventionCandidate[]>([]);
-  const [history, setHistory] = useState<InterventionActionRecord[]>([]);
-  const [inlineMessage, setInlineMessage] = useState<string | null>(null);
-  const [outcomeDrafts, setOutcomeDrafts] = useState<OutcomeDraftState>({});
-  const [structuralRecommendations, setStructuralRecommendations] = useState<StructuralInterventionRecommendation[]>([]);
-  const [requestContext, setRequestContext] = useState<InterventionRequestContext>({
-    instituteId: FALLBACK_INTERVENTION_INSTITUTE_ID,
-    yearId: FALLBACK_INTERVENTION_YEAR_ID,
-  });
+  const [message, setMessage] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const totalPendingOutcomes = useMemo(
-    () => history.filter((entry) => entry.actionType === "TRACK_OUTCOME" && entry.outcomeStatus === "pending").length,
-    [history],
-  );
-
-  const criticalStudents = useMemo(
-    () => highRiskStudents.filter((entry) => entry.rollingRiskCluster === "critical").length,
-    [highRiskStudents],
-  );
-
-  const hydratedStudents = useMemo(
-    () => highRiskStudents.slice(0, 12),
-    [highRiskStudents],
-  );
-  const studentRouteTarget = useMemo(
-    () => highRiskStudents[0]?.studentId ?? history[0]?.studentId ?? "",
-    [highRiskStudents, history],
-  );
-
-  const recommendationCards = useMemo<InterventionRecommendationCard[]>(() => {
-    const highestPriorityStudent = highRiskStudents[0] ?? null;
-    const criticalCount = highRiskStudents.filter((entry) => entry.rollingRiskCluster === "critical").length;
-    const alertHeavyCount = highRiskStudents.filter((entry) => entry.guessRatePercent >= 24).length;
-    const lowDisciplineCount = highRiskStudents.filter((entry) => entry.disciplineIndex <= 55).length;
-    const downwardTrendCount = highRiskStudents.filter((entry) => entry.disciplineIndexTrend === "down").length;
-
-    const cards: InterventionRecommendationCard[] = [
-      {
-        title: "Controlled Mode Recommendation",
-        summary:
-          criticalCount > 0 ?
-            `${criticalCount} critical-risk students should be routed into the next controlled remedial cycle.` :
-            "No critical cluster spike detected. Keep intervention handling in advisory mode for now.",
-        helper: "L2 structural suggestion driven by high-risk clustering",
-      },
-      {
-        title: "Phase Discipline Reinforcement",
-        summary:
-          lowDisciplineCount > 0 ?
-            `${lowDisciplineCount} students are below the discipline threshold and should receive phase-training follow-up.` :
-            "Discipline indicators are holding above the intervention threshold across the current queue.",
-        helper: "Derived from discipline index thresholds in studentYearMetrics",
-      },
-      {
-        title: "Alert and Outcome Watch",
-        summary:
-          highestPriorityStudent ?
-            `${highestPriorityStudent.studentName} is the highest-priority candidate; ${alertHeavyCount} queued students also exceed the guess-rate alert threshold.` :
-            "No intervention candidates currently require alert escalation or outcome tracking.",
-        helper: "Summary-safe escalation view for the dedicated intervention workspace",
-      },
-    ];
-
-    if (downwardTrendCount > 0) {
-      cards.push({
-        title: "Trend Regression Monitor",
-        summary: `${downwardTrendCount} students show a declining discipline trend and should remain on the intervention watchlist.`,
-        helper: "Rolling trend follow-up before governance escalation",
-      });
-    }
-
-    return cards;
-  }, [highRiskStudents]);
+  const reloadTimeline = useCallback(async (activeYearId: string) => {
+    const result = await listInterventionRecommendations({
+      limit: 50,
+      yearId: activeYearId,
+    });
+    setTimeline(result.recommendations);
+  }, []);
 
   useEffect(() => {
-    let isMounted = true;
-
-    async function hydrate() {
+    let mounted = true;
+    async function load(): Promise<void> {
       setIsLoading(true);
-      setInlineMessage(null);
-
+      setLoadError(null);
+      if (!canRead) {
+        setIsLoading(false);
+        return;
+      }
       try {
         const dataset = await fetchInterventionDataset();
-        const nextContext = resolveInterventionContext(
-          session.idToken,
-          dataset.yearBehaviorSummary.academicYear,
-        );
-        const interventionHistory = await listInterventionActions(nextContext);
-
-        if (!isMounted) {
-          return;
-        }
-
-        const candidates = buildHighRiskCandidates(dataset);
-        setRequestContext(nextContext);
-        setHighRiskStudents(candidates);
-        setStructuralRecommendations(buildStructuralInterventionRecommendations(dataset));
-        setHistory(interventionHistory);
-        setOutcomeDrafts(
-          Object.fromEntries(
-            candidates.map((student) => [
-              student.studentId,
-              {
-                notes: "",
-                status: student.suggestedOutcomeStatus,
-              },
-            ]),
-          ),
-        );
-
-        if (!shouldUseLiveApi()) {
-          setInlineMessage(
-            "Local mode detected. Loaded deterministic intervention candidates and audit-history fixtures for Build 124.",
-          );
-        } else {
-          setInlineMessage(
-            `Live mode enabled: intervention tools hydrated from GET /admin/analytics and POST /admin/interventions for ${nextContext.instituteId} (${nextContext.yearId}).`,
-          );
+        const activeYearId = dataset.yearBehaviorSummary.academicYear;
+        const result = await listInterventionRecommendations({
+          limit: 50,
+          yearId: activeYearId,
+        });
+        if (mounted) {
+          setYearId(activeYearId);
+          setCandidates(buildHighRiskCandidates(dataset));
+          setTimeline(result.recommendations);
         }
       } catch (error) {
-        if (!isMounted) {
-          return;
+        if (mounted) {
+          setLoadError(error instanceof Error ? error.message :
+            "Failed to load intervention recommendations.");
         }
-
-        const reason = error instanceof ApiClientError ? error.message : "Failed to load intervention tools.";
-        setInlineMessage(reason);
       } finally {
-        if (isMounted) {
+        if (mounted) {
           setIsLoading(false);
         }
       }
     }
-
-    void hydrate();
-
+    void load();
     return () => {
-      isMounted = false;
+      mounted = false;
     };
-  }, [session.idToken]);
+  }, [canRead]);
 
-  const submitAction = useCallback(async (
-    student: HighRiskInterventionCandidate,
-    actionType: "ASSIGN_REMEDIAL_TEST" | "SEND_ALERT" | "TRACK_OUTCOME",
+  const createRecommendation = useCallback(async (
+    candidate: HighRiskInterventionCandidate,
+    recommendationType: "remedial_test" | "student_message",
   ): Promise<void> => {
-    setIsSubmittingByStudent((current) => ({
-      ...current,
-      [student.studentId]: true,
-    }));
-    setInlineMessage(null);
-
-    const draft = outcomeDrafts[student.studentId] ?? {
-      notes: "",
-      status: "pending",
-    };
-
-    try {
-      const action = await createInterventionAction({
-        actionType,
-        alertMessage:
-          actionType === "SEND_ALERT" ?
-            student.suggestedAlertMessage :
-            undefined,
-        instituteId: requestContext.instituteId,
-        outcomeNotes:
-          actionType === "TRACK_OUTCOME" ?
-            draft.notes || `Outcome updated for ${student.studentName}.` :
-            undefined,
-        outcomeStatus:
-          actionType === "TRACK_OUTCOME" ?
-            draft.status :
-            undefined,
-        remedialTestId:
-          actionType === "ASSIGN_REMEDIAL_TEST" ?
-            student.suggestedRemedialTestId :
-            undefined,
-        studentId: student.studentId,
-        yearId: requestContext.yearId,
-      });
-
-      setHistory((current) => [action, ...current]);
-      setInlineMessage(`${actionType.replaceAll("_", " ")} logged for ${student.studentName}. Immutable audit entry captured.`);
-    } catch (error) {
-      const reason = error instanceof ApiClientError ? error.message : "Intervention request failed.";
-      setInlineMessage(reason);
-    } finally {
-      setIsSubmittingByStudent((current) => ({
-        ...current,
-        [student.studentId]: false,
-      }));
+    if (!canMutate || !yearId || !candidate.sourceMetricsUpdatedAt) {
+      return;
     }
-  }, [outcomeDrafts, requestContext.instituteId, requestContext.yearId]);
+    setPendingId(candidate.studentId);
+    setMessage(null);
+    try {
+      await createInterventionRecommendation({
+        idempotencyKey: crypto.randomUUID(),
+        ...(recommendationType === "remedial_test" ? {
+          recommendedTestId: candidate.suggestedRemedialTestId,
+        } : {
+          messageDraft: candidate.suggestedMessageDraft,
+        }),
+        recommendationType,
+        sourceMetricsUpdatedAt: candidate.sourceMetricsUpdatedAt,
+        studentId: candidate.studentId,
+        yearId,
+      });
+      await reloadTimeline(yearId);
+      setMessage(`Advisory ${recommendationType.replace("_", " ")} recommendation saved.`);
+    } catch (error) {
+      setMessage(error instanceof ApiClientError || error instanceof Error ?
+        error.message : "Recommendation creation failed.");
+    } finally {
+      setPendingId(null);
+    }
+  }, [canMutate, reloadTimeline, yearId]);
 
-  const interventionColumns = useMemo<UiTableColumn<HighRiskInterventionCandidate>[]>(
+  const updateOutcome = useCallback(async (
+    recommendation: AdminInterventionRecommendationRecord,
+  ): Promise<void> => {
+    const draft = outcomeDrafts[recommendation.interventionId] ?? {
+      notes: "",
+      status: "improving" as const,
+    };
+    setPendingId(recommendation.interventionId);
+    setMessage(null);
+    try {
+      await updateInterventionOutcome(recommendation.interventionId, {
+        expectedRevision: recommendation.revision,
+        idempotencyKey: crypto.randomUUID(),
+        outcomeNotes: draft.notes || undefined,
+        status: draft.status,
+      });
+      await reloadTimeline(yearId);
+      setMessage("Outcome saved and reconciled from the authoritative timeline.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Outcome update failed.");
+    } finally {
+      setPendingId(null);
+    }
+  }, [outcomeDrafts, reloadTimeline, yearId]);
+
+  const candidateColumns = useMemo<UiTableColumn<HighRiskInterventionCandidate>[]>(
     () => [
       {
         id: "student",
         header: "Student",
-        render: (student) => (
-          <div className="admin-risk-student-cell">
-            <strong>{student.studentName}</strong>
-            <small>{student.studentId}</small>
-          </div>
-        ),
+        render: (row) => <div><strong>{row.studentName}</strong><small>{row.studentId}</small></div>,
       },
-      {
-        id: "risk",
-        header: "Risk",
-        render: (student) => (
-          <span className={`admin-risk-chip admin-risk-chip-${student.rollingRiskCluster}`}>
-            {student.rollingRiskCluster}
-          </span>
-        ),
-      },
-      {
-        id: "signals",
-        header: "Signals",
-        render: (student) => (
-          <div className="admin-intervention-signal-cell">
-            <small>Guess-rate: {formatPercent(student.guessRatePercent)}</small>
-            <small>Discipline: {formatPercent(student.disciplineIndex)}</small>
-            <small>Priority: {student.interventionPriority}</small>
-          </div>
-        ),
-      },
+      {id: "risk", header: "Risk", render: (row) => row.rollingRiskCluster},
+      {id: "discipline", header: "Discipline", render: (row) => Math.round(row.disciplineIndex)},
       {
         id: "actions",
-        header: "Intervention Actions",
-        render: (student) => {
-          const draft = outcomeDrafts[student.studentId] ?? {
-            notes: "",
-            status: "pending",
-          };
-          const isSubmitting = Boolean(isSubmittingByStudent[student.studentId]);
+        header: "Advisory actions",
+        render: (row) => (
+          <div className="admin-intervention-action-cell">
+            <button
+              type="button"
+              className="admin-compact-button"
+              disabled={!canMutate || !row.sourceMetricsUpdatedAt || pendingId !== null}
+              onClick={() => void createRecommendation(row, "remedial_test")}
+            >Recommend remedial test</button>
+            <button
+              type="button"
+              className="admin-compact-button"
+              disabled={!canMutate || !row.sourceMetricsUpdatedAt || pendingId !== null}
+              onClick={() => void createRecommendation(row, "student_message")}
+            >Draft student message</button>
+            {!row.sourceMetricsUpdatedAt ? <small>Source metrics timestamp unavailable.</small> : null}
+          </div>
+        ),
+      },
+    ],
+    [canMutate, createRecommendation, pendingId],
+  );
 
+  const timelineColumns = useMemo<UiTableColumn<AdminInterventionRecommendationRecord>[]>(
+    () => [
+      {id: "updated", header: "Updated", render: (row) => formatTimestamp(row.updatedAt)},
+      {
+        id: "student",
+        header: "Student",
+        render: (row) => <div><strong>{row.studentName}</strong><small>{row.studentId}</small></div>,
+      },
+      {
+        id: "recommendation",
+        header: "Recommendation",
+        render: (row) => row.recommendedTestId ?? row.messageDraft ?? "Advisory only",
+      },
+      {id: "status", header: "Status", render: (row) => `${row.status} · rev ${row.revision}`},
+      {
+        id: "outcome",
+        header: "Outcome",
+        render: (row) => {
+          const draft = outcomeDrafts[row.interventionId] ?? {
+            notes: row.outcomeNotes ?? "",
+            status: row.status === "pending" ? "improving" : row.status,
+          };
           return (
-            <div className="admin-intervention-action-cell">
+            <div className="admin-intervention-outcome-editor">
+              <select
+                disabled={!canMutate || pendingId !== null}
+                value={draft.status}
+                onChange={(event) => setOutcomeDrafts((current) => ({
+                  ...current,
+                  [row.interventionId]: {
+                    notes: draft.notes,
+                    status: event.target.value as OutcomeStatus,
+                  },
+                }))}
+              >
+                {OUTCOME_OPTIONS.map((status) => <option key={status}>{status}</option>)}
+              </select>
+              <input
+                disabled={!canMutate || pendingId !== null}
+                placeholder="Outcome notes"
+                value={draft.notes}
+                onChange={(event) => setOutcomeDrafts((current) => ({
+                  ...current,
+                  [row.interventionId]: {notes: event.target.value, status: draft.status},
+                }))}
+              />
               <button
                 type="button"
                 className="admin-compact-button"
-                disabled={isSubmitting}
-                onClick={() => {
-                  void submitAction(student, "ASSIGN_REMEDIAL_TEST");
-                }}
-              >
-                Assign Remedial
-              </button>
-              <button
-                type="button"
-                className="admin-compact-button"
-                disabled={isSubmitting}
-                onClick={() => {
-                  void submitAction(student, "SEND_ALERT");
-                }}
-              >
-                Send Alert
-              </button>
-              <div className="admin-intervention-outcome-editor">
-                <select
-                  value={draft.status}
-                  onChange={(event) => {
-                    const nextStatus = event.target.value as InterventionOutcomeStatus;
-                    setOutcomeDrafts((current) => ({
-                      ...current,
-                      [student.studentId]: {
-                        notes: current[student.studentId]?.notes ?? "",
-                        status: nextStatus,
-                      },
-                    }));
-                  }}
-                >
-                  {OUTCOME_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  value={draft.notes}
-                  placeholder="Outcome notes"
-                  onChange={(event) => {
-                    const nextNotes = event.target.value;
-                    setOutcomeDrafts((current) => ({
-                      ...current,
-                      [student.studentId]: {
-                        notes: nextNotes,
-                        status: current[student.studentId]?.status ?? "pending",
-                      },
-                    }));
-                  }}
-                />
-                <button
-                  type="button"
-                  className="admin-compact-button"
-                  disabled={isSubmitting}
-                  onClick={() => {
-                    void submitAction(student, "TRACK_OUTCOME");
-                  }}
-                >
-                  Track Outcome
-                </button>
-              </div>
+                disabled={!canMutate || pendingId !== null}
+                onClick={() => void updateOutcome(row)}
+              >{pendingId === row.interventionId ? "Saving…" : "Save outcome"}</button>
             </div>
           );
         },
       },
     ],
-    [isSubmittingByStudent, outcomeDrafts, submitAction],
-  );
-
-  const historyColumns = useMemo<UiTableColumn<InterventionActionRecord>[]>(
-    () => [
-      {
-        id: "timestamp",
-        header: "Timestamp",
-        render: (entry) => formatTimestamp(entry.timestamp),
-      },
-      {
-        id: "student",
-        header: "Student",
-        render: (entry) => (
-          <div className="admin-risk-student-cell">
-            <strong>{entry.studentName ?? entry.studentId ?? "Unknown"}</strong>
-            <small>{entry.studentId ?? "N/A"}</small>
-          </div>
-        ),
-      },
-      {
-        id: "action",
-        header: "Action",
-        render: (entry) => (
-          <div className="admin-intervention-history-cell">
-            <strong>{entry.actionType.replaceAll("_", " ")}</strong>
-            <small>{entry.remedialTestId ?? entry.alertMessage ?? entry.outcomeStatus ?? "No payload"}</small>
-          </div>
-        ),
-      },
-      {
-        id: "audit",
-        header: "Audit",
-        render: (entry) => (
-          <div className="admin-intervention-history-cell">
-            <strong>{entry.auditId ?? "local-fixture"}</strong>
-            <small>{entry.auditPath ?? "institutes/{instituteId}/auditLogs/{auditId}"}</small>
-          </div>
-        ),
-      },
-    ],
-    [],
-  );
-
-  const structuralRecommendationColumns = useMemo<UiTableColumn<StructuralInterventionRecommendation>[]>(
-    () => [
-      {
-        id: "recommendation",
-        header: "Recommendation",
-        render: (entry) => (
-          <div className="admin-intervention-history-cell">
-            <strong>{entry.title}</strong>
-            <small>{entry.targetScope}</small>
-          </div>
-        ),
-      },
-      {
-        id: "trigger",
-        header: "Trigger Rule",
-        render: (entry) => entry.triggerRule,
-      },
-      {
-        id: "observed",
-        header: "Observed",
-        render: (entry) => formatPercent(entry.observedValuePercent),
-      },
-      {
-        id: "action",
-        header: "Structural Recommendation",
-        render: (entry) => entry.recommendation,
-      },
-      {
-        id: "source",
-        header: "Stored As",
-        render: (entry) => entry.sourcePath,
-      },
-    ],
-    [],
+    [canMutate, outcomeDrafts, pendingId, updateOutcome],
   );
 
   return (
-    <section className="admin-content-card" aria-labelledby="admin-intervention-tools-title">
-      <p className="admin-content-eyebrow">Intervention Tools</p>
-      <h2 id="admin-intervention-tools-title">High-Risk Intervention Workflow</h2>
+    <section className="admin-content-card" aria-labelledby="intervention-tools-title">
+      <p className="admin-content-eyebrow">Insights / Interventions</p>
+      <h2 id="intervention-tools-title">Intervention Recommendations</h2>
       <p className="admin-content-copy">
-        This dedicated intervention workspace keeps <code>/admin/insights/interventions</code> separate from the
-        shared insights landing page. It uses summary-safe <code>studentYearMetrics</code> signals to stage
-        remedial actions, intervention alerts, and immutable outcome tracking without scanning raw sessions.
+        Recommendations are advisory only. They do not assign a run or deliver a student message.
       </p>
-      <p className="admin-settings-inline-note">
-        Context: {requestContext.instituteId} · Academic year {requestContext.yearId}
-      </p>
-
-      <InsightsWorkspaceNav studentRouteTarget={studentRouteTarget} />
-
-      <p className="admin-analytics-inline-note">
-        {isLoading ? "Loading intervention tools..." : inlineMessage ?? "Intervention tools ready."}
-      </p>
-
-      <div className="admin-risk-summary-card">
-        <h4>Intervention Engine Scope</h4>
-        <p>
-          Soft guidance remains available from L1 signals, while the recommendation cards below surface L2-style
-          structural follow-up for controlled mode, phase discipline, and outcome review.
-        </p>
-        <small>Route: /admin/insights/interventions · Recommendations are never auto-applied.</small>
-      </div>
-
-      {recommendationCards.map((card) => (
-        <article key={card.title} className="admin-risk-summary-card">
-          <h4>{card.title}</h4>
-          <p>{card.summary}</p>
-          <small>{card.helper}</small>
-        </article>
-      ))}
-
-      <div className="admin-intervention-kpi-grid">
-        <article className="admin-intervention-kpi-card">
-          <p>High-Risk Students</p>
-          <h3>{highRiskStudents.length}</h3>
-          <small>high + critical clusters</small>
-        </article>
-        <article className="admin-intervention-kpi-card">
-          <p>Critical Priority</p>
-          <h3>{criticalStudents}</h3>
-          <small>requires immediate remediation</small>
-        </article>
-        <article className="admin-intervention-kpi-card">
-          <p>Audit Actions</p>
-          <h3>{history.length}</h3>
-          <small>POST /admin/interventions</small>
-        </article>
-        <article className="admin-intervention-kpi-card">
-          <p>Pending Outcomes</p>
-          <h3>{totalPendingOutcomes}</h3>
-          <small>track and close loop</small>
-        </article>
-      </div>
-
-      <section className="admin-intervention-table-section" aria-labelledby="admin-intervention-candidates-title">
-        <h3 id="admin-intervention-candidates-title">High-Risk Student Intervention Queue</h3>
-        <UiTable
-          caption="High-risk intervention actions for remedial assignment, alerts, and outcome tracking"
-          columns={interventionColumns}
-          rows={hydratedStudents}
-          rowKey={(row) => row.studentId}
-          emptyStateText="No high-risk students currently require intervention."
-        />
-      </section>
-
-      <section className="admin-intervention-table-section" aria-labelledby="admin-structural-recommendations-title">
-        <h3 id="admin-structural-recommendations-title">L2 Structural Intervention Recommendations</h3>
-        {isL2OrAbove ? (
-          <>
-            <p className="admin-risk-heatmap-copy">
-              Rule-driven recommendations are derived only from summary-safe analytics and are represented as
-              <code>interventionRecommendations/{requestContext.yearId}</code> records. Teachers must review and
-              apply any action manually.
-            </p>
-            <UiTable
-              caption="Rule-driven L2 structural recommendations"
-              columns={structuralRecommendationColumns}
-              rows={structuralRecommendations}
-              rowKey={(row) => row.recommendationId}
-              emptyStateText="No structural intervention recommendations available."
-            />
-          </>
-        ) : (
-          <p className="admin-risk-heatmap-copy">
-            Structural recommendations for Controlled Mode, limited Hard Mode, Phase Training, and Easy-First
-            Template design unlock at L2. L1 keeps intervention guidance soft and non-enforcing.
-          </p>
-        )}
-      </section>
-
-      <section className="admin-intervention-table-section" aria-labelledby="admin-intervention-history-title">
-        <h3 id="admin-intervention-history-title">Intervention Audit Timeline</h3>
-        <UiTable
-          caption="Immutable intervention action timeline from institute audit logs"
-          columns={historyColumns}
-          rows={history}
-          rowKey={(row, index) => `${row.interventionId}-${index}`}
-          emptyStateText="No intervention actions available."
-        />
-      </section>
+      <InsightsWorkspaceNav />
+      {!canRead ? (
+        <p role="alert">Intervention access is disabled because riskOverview is not enabled.</p>
+      ) : null}
+      {portalState.role === "director" && canRead ? (
+        <p role="status">Director access is read-only.</p>
+      ) : null}
+      {isLoading ? <p role="status">Loading authoritative intervention data…</p> : null}
+      {loadError ? <p role="alert">{loadError}</p> : null}
+      {message ? <p role="status">{message}</p> : null}
+      {!isLoading && !loadError && canRead ? (
+        <>
+          <UiTable
+            caption="High-risk candidates with source-bound advisory actions"
+            columns={candidateColumns}
+            rows={candidates}
+            rowKey={(row) => row.studentId}
+            emptyStateText="No high-risk candidates are available."
+          />
+          <UiTable
+            caption="Authoritative intervention recommendation timeline"
+            columns={timelineColumns}
+            rows={timeline}
+            rowKey={(row) => row.interventionId}
+            emptyStateText="No intervention recommendations are available."
+          />
+        </>
+      ) : null}
     </section>
   );
 }

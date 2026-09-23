@@ -16,6 +16,7 @@ import {createLogger} from "./logging";
 
 const DEFAULT_SIGNED_URL_KEY_NAME = "cdn-signing-key";
 const DASHBOARD_VIEW_EXPIRY_SECONDS = 30 * 60;
+const GOVERNANCE_REPORT_DOWNLOAD_EXPIRY_SECONDS = 10 * 60;
 const DATA_EXPORT_DOWNLOAD_EXPIRY_SECONDS = 24 * 60 * 60;
 const EXAM_SESSION_EXPIRY_SECONDS = 2 * 60 * 60;
 const RESERVED_SIGNED_URL_QUERY_PARAMETERS = new Set([
@@ -71,6 +72,10 @@ const buildContextPolicies = () => ({
   examSession: {
     accessContext: "examSession",
     expiresInSeconds: EXAM_SESSION_EXPIRY_SECONDS,
+  },
+  governanceReportDownload: {
+    accessContext: "governanceReportDownload",
+    expiresInSeconds: GOVERNANCE_REPORT_DOWNLOAD_EXPIRY_SECONDS,
   },
 } as const);
 

@@ -109,6 +109,28 @@ test(
   },
 );
 
+test("firestore index manifest includes intervention timeline composites", () => {
+  const manifest = readManifest();
+
+  assert.equal(
+    hasIndex(manifest.indexes, "actions", [
+      {fieldPath: "schemaVersion", order: "ASCENDING"},
+      {fieldPath: "createdAt", order: "DESCENDING"},
+      {fieldPath: "__name__", order: "DESCENDING"},
+    ]),
+    true,
+  );
+  assert.equal(
+    hasIndex(manifest.indexes, "actions", [
+      {fieldPath: "schemaVersion", order: "ASCENDING"},
+      {fieldPath: "studentId", order: "ASCENDING"},
+      {fieldPath: "createdAt", order: "DESCENDING"},
+      {fieldPath: "__name__", order: "DESCENDING"},
+    ]),
+    true,
+  );
+});
+
 test(
   "firestore index manifest includes assignment history filters",
   () => {

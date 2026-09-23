@@ -1,4 +1,4 @@
-import {FieldPath, Timestamp} from "firebase-admin/firestore";
+import {Timestamp} from "firebase-admin/firestore";
 import {createLogger} from "./logging";
 import {getFirestore} from "../utils/firebaseAdmin";
 import {GovernanceSnapshotDocument} from "../types/governanceSnapshot";
@@ -12,8 +12,14 @@ import {
 const INSTITUTES_COLLECTION = "institutes";
 const ACADEMIC_YEARS_COLLECTION = "academicYears";
 const GOVERNANCE_SNAPSHOTS_COLLECTION = "governanceSnapshots";
-const DEFAULT_LIMIT = 6;
-const MAX_LIMIT = 10;
+const DEFAULT_LIMIT = 12;
+const MAX_LIMIT = 36;
+
+interface GovernanceSnapshotCursor {
+  documentId: string;
+  instituteId: string;
+  yearId: string;
+}
 
 const isPlainObject = (
   value: unknown,
@@ -98,6 +104,102 @@ const normalizeOptionalLimit = (
   return value;
 };
 
+const normalizeOptionalString = (
+  value: unknown,
+  fieldName: string,
+): string | null => {
+  if (typeof value === "undefined" || value === null) {
+    return null;
+  }
+
+  if (typeof value !== "string" || !value.trim()) {
+    throw new GovernanceSnapshotAccessValidationError(
+      "INTERNAL_ERROR",
+      `Governance snapshot field "${fieldName}" must be a string when set.`,
+    );
+  }
+
+  return value.trim();
+};
+
+const normalizeRequiredNumber = (
+  value: unknown,
+  fieldName: string,
+): number => {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new GovernanceSnapshotAccessValidationError(
+      "INTERNAL_ERROR",
+      `Governance snapshot field "${fieldName}" must be a finite number.`,
+    );
+  }
+
+  return value;
+};
+
+const normalizeRiskDistribution = (
+  value: unknown,
+): GovernanceSnapshotAccessRecord["riskClusterDistribution"] => {
+  if (!isPlainObject(value)) {
+    throw new GovernanceSnapshotAccessValidationError(
+      "INTERNAL_ERROR",
+      "Governance snapshot risk distribution is missing.",
+    );
+  }
+
+  return {
+    driftProne: normalizeRequiredNumber(value.driftProne, "driftProne"),
+    impulsive: normalizeRequiredNumber(value.impulsive, "impulsive"),
+    overextended: normalizeRequiredNumber(
+      value.overextended,
+      "overextended",
+    ),
+    stable: normalizeRequiredNumber(value.stable, "stable"),
+    volatile: normalizeRequiredNumber(value.volatile, "volatile"),
+  };
+};
+
+const encodeCursor = (cursor: GovernanceSnapshotCursor): string =>
+  Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+
+const normalizeCursor = (
+  value: unknown,
+  instituteId: string,
+  yearId: string,
+): GovernanceSnapshotCursor | undefined => {
+  if (typeof value === "undefined") {
+    return undefined;
+  }
+
+  if (typeof value !== "string" || !value.trim()) {
+    throw new GovernanceSnapshotAccessValidationError(
+      "VALIDATION_ERROR",
+      "Field \"cursor\" must be a non-empty opaque string.",
+    );
+  }
+
+  try {
+    const parsed = JSON.parse(
+      Buffer.from(value, "base64url").toString("utf8"),
+    ) as Partial<GovernanceSnapshotCursor>;
+
+    if (
+      parsed.instituteId !== instituteId ||
+      parsed.yearId !== yearId ||
+      typeof parsed.documentId !== "string" ||
+      !/^\d{4}_\d{2}$/.test(parsed.documentId)
+    ) {
+      throw new Error("cursor binding mismatch");
+    }
+
+    return parsed as GovernanceSnapshotCursor;
+  } catch {
+    throw new GovernanceSnapshotAccessValidationError(
+      "VALIDATION_ERROR",
+      "Field \"cursor\" is invalid for this governance snapshot query.",
+    );
+  }
+};
+
 const toTimestampString = (value: unknown, fieldName: string): string => {
   if (value instanceof Timestamp) {
     return value.toDate().toISOString();
@@ -108,7 +210,10 @@ const toTimestampString = (value: unknown, fieldName: string): string => {
   }
 
   if (typeof value === "string" && value.trim()) {
-    return value;
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString();
+    }
   }
 
   throw new GovernanceSnapshotAccessValidationError(
@@ -121,6 +226,8 @@ const normalizeSnapshotDocument = (
   data: FirebaseFirestore.DocumentData | undefined,
   documentId: string,
   documentPath: string,
+  expectedInstituteId: string,
+  expectedYearId: string,
 ): GovernanceSnapshotAccessRecord => {
   if (!isPlainObject(data)) {
     throw new GovernanceSnapshotAccessValidationError(
@@ -130,50 +237,115 @@ const normalizeSnapshotDocument = (
   }
 
   const snapshot = data as Partial<GovernanceSnapshotDocument>;
+  const academicYear = normalizeRequiredString(
+    snapshot.academicYear,
+    "academicYear",
+  );
+  const instituteId = normalizeRequiredString(snapshot.instituteId, "instituteId");
+  const month = normalizeRequiredString(snapshot.month, "month");
+
+  if (
+    instituteId !== expectedInstituteId ||
+    academicYear !== expectedYearId ||
+    documentId !== month.replace("-", "_") ||
+    snapshot.immutable !== true ||
+    snapshot.schemaVersion !== 1
+  ) {
+    throw new GovernanceSnapshotAccessValidationError(
+      "INTERNAL_ERROR",
+      "Governance snapshot authority does not match its immutable path.",
+    );
+  }
 
   return {
-    academicYear: normalizeRequiredString(
-      snapshot.academicYear,
-      "academicYear",
+    academicYear,
+    avgAccuracyPercent: normalizeRequiredNumber(
+      snapshot.avgAccuracyPercent,
+      "avgAccuracyPercent",
     ),
-    avgAccuracyPercent: Number(snapshot.avgAccuracyPercent ?? 0),
-    avgPhaseAdherence: Number(snapshot.avgPhaseAdherence ?? 0),
-    avgRawScorePercent: Number(snapshot.avgRawScorePercent ?? 0),
+    avgPhaseAdherence: normalizeRequiredNumber(
+      snapshot.avgPhaseAdherence,
+      "avgPhaseAdherence",
+    ),
+    avgRawScorePercent: normalizeRequiredNumber(
+      snapshot.avgRawScorePercent,
+      "avgRawScorePercent",
+    ),
+    calibrationVersionUsed: normalizeOptionalString(
+      snapshot.calibrationVersionUsed,
+      "calibrationVersionUsed",
+    ),
     createdAt: toTimestampString(snapshot.createdAt, "createdAt"),
-    disciplineMean: Number(snapshot.disciplineMean ?? 0),
-    disciplineTrend: Number(snapshot.disciplineTrend ?? 0),
-    disciplineVariance: Number(snapshot.disciplineVariance ?? 0),
+    disciplineMean: normalizeRequiredNumber(
+      snapshot.disciplineMean,
+      "disciplineMean",
+    ),
+    disciplineTrend: normalizeRequiredNumber(
+      snapshot.disciplineTrend,
+      "disciplineTrend",
+    ),
+    disciplineVariance: normalizeRequiredNumber(
+      snapshot.disciplineVariance,
+      "disciplineVariance",
+    ),
     documentId,
     documentPath,
-    easyNeglectPercent: Number(snapshot.easyNeglectPercent ?? 0),
-    executionIntegrityScore: Number(snapshot.executionIntegrityScore ?? 0),
+    easyNeglectPercent: normalizeRequiredNumber(
+      snapshot.easyNeglectPercent,
+      "easyNeglectPercent",
+    ),
+    executionIntegrityScore: normalizeRequiredNumber(
+      snapshot.executionIntegrityScore,
+      "executionIntegrityScore",
+    ),
     generatedAt: toTimestampString(snapshot.generatedAt, "generatedAt"),
-    hardBiasPercent: Number(snapshot.hardBiasPercent ?? 0),
+    hardBiasPercent: normalizeRequiredNumber(
+      snapshot.hardBiasPercent,
+      "hardBiasPercent",
+    ),
     immutable: true,
-    instituteId: normalizeRequiredString(snapshot.instituteId, "instituteId"),
-    month: normalizeRequiredString(snapshot.month, "month"),
-    overrideFrequency: Number(snapshot.overrideFrequency ?? 0),
-    phaseCompliancePercent: Number(snapshot.phaseCompliancePercent ?? 0),
-    riskClusterDistribution: snapshot.riskClusterDistribution ?? {
-      driftProne: 0,
-      impulsive: 0,
-      overextended: 0,
-      stable: 0,
-      volatile: 0,
-    },
-    riskDistribution: snapshot.riskDistribution ?? {
-      driftProne: 0,
-      impulsive: 0,
-      overextended: 0,
-      stable: 0,
-      volatile: 0,
-    },
-    rushPatternPercent: Number(snapshot.rushPatternPercent ?? 0),
+    instituteId,
+    month,
+    overrideFrequency: normalizeRequiredNumber(
+      snapshot.overrideFrequency,
+      "overrideFrequency",
+    ),
+    phaseCompliancePercent: normalizeRequiredNumber(
+      snapshot.phaseCompliancePercent,
+      "phaseCompliancePercent",
+    ),
+    riskClusterDistribution: normalizeRiskDistribution(
+      snapshot.riskClusterDistribution,
+    ),
+    riskModelVersionUsed: normalizeOptionalString(
+      snapshot.riskModelVersionUsed,
+      "riskModelVersionUsed",
+    ),
+    rushPatternPercent: normalizeRequiredNumber(
+      snapshot.rushPatternPercent,
+      "rushPatternPercent",
+    ),
     schemaVersion: 1,
-    skipBurstPercent: Number(snapshot.skipBurstPercent ?? 0),
-    stabilityIndex: Number(snapshot.stabilityIndex ?? 0),
-    templateVarianceMean: Number(snapshot.templateVarianceMean ?? 0),
-    wrongStreakPercent: Number(snapshot.wrongStreakPercent ?? 0),
+    skipBurstPercent: normalizeRequiredNumber(
+      snapshot.skipBurstPercent,
+      "skipBurstPercent",
+    ),
+    stabilityIndex: normalizeRequiredNumber(
+      snapshot.stabilityIndex,
+      "stabilityIndex",
+    ),
+    templateVarianceMean: normalizeRequiredNumber(
+      snapshot.templateVarianceMean,
+      "templateVarianceMean",
+    ),
+    templateVersionRangeUsed: normalizeOptionalString(
+      snapshot.templateVersionRangeUsed,
+      "templateVersionRangeUsed",
+    ),
+    wrongStreakPercent: normalizeRequiredNumber(
+      snapshot.wrongStreakPercent,
+      "wrongStreakPercent",
+    ),
   };
 };
 
@@ -194,11 +366,24 @@ export class GovernanceSnapshotAccessService {
       limit?: unknown;
     },
   ): GovernanceSnapshotAccessRequest & {limit: number} {
+    const instituteId = normalizeRequiredString(input.instituteId, "instituteId");
+    const yearId = normalizeRequiredString(input.yearId, "yearId");
+    const month = normalizeOptionalMonth(input.month);
+    const cursor = normalizeCursor(input.cursor, instituteId, yearId);
+
+    if (month && cursor) {
+      throw new GovernanceSnapshotAccessValidationError(
+        "VALIDATION_ERROR",
+        "Field \"cursor\" cannot be combined with a specific month.",
+      );
+    }
+
     return {
-      instituteId: normalizeRequiredString(input.instituteId, "instituteId"),
+      cursor: cursor ? encodeCursor(cursor) : undefined,
+      instituteId,
       limit: normalizeOptionalLimit(input.limit),
-      month: normalizeOptionalMonth(input.month),
-      yearId: normalizeRequiredString(input.yearId, "yearId"),
+      month,
+      yearId,
     };
   }
 
@@ -224,6 +409,7 @@ export class GovernanceSnapshotAccessService {
     );
 
     let snapshots: GovernanceSnapshotAccessRecord[];
+    let nextCursor: string | null = null;
 
     if (input.month) {
       const documentId = input.month.replace("-", "_");
@@ -241,26 +427,41 @@ export class GovernanceSnapshotAccessService {
           snapshot.data(),
           snapshot.id,
           snapshot.ref.path,
+          input.instituteId,
+          input.yearId,
         ),
       ];
     } else {
-      // Governance snapshots are bounded to one immutable monthly document per
-      // academic year, so an ascending read plus tail slice stays bounded
-      // while remaining compatible with the Firestore emulator.
-      const querySnapshot = await collectionReference
-        .orderBy(FieldPath.documentId(), "asc")
-        .get();
+      const decodedCursor = input.cursor ?
+        normalizeCursor(input.cursor, input.instituteId, input.yearId) :
+        undefined;
+      let query = collectionReference
+        .orderBy("month", "desc")
+        .limit(input.limit + 1);
 
-      snapshots = querySnapshot.docs
-        .slice(-input.limit)
-        .reverse()
-        .map((snapshot) =>
-          normalizeSnapshotDocument(
-            snapshot.data(),
-            snapshot.id,
-            snapshot.ref.path,
-          ),
-        );
+      if (decodedCursor) {
+        query = query.startAfter(decodedCursor.documentId.replace("_", "-"));
+      }
+
+      const querySnapshot = await query.get();
+      const pageDocuments = querySnapshot.docs.slice(0, input.limit);
+      snapshots = pageDocuments.map((snapshot) =>
+        normalizeSnapshotDocument(
+          snapshot.data(),
+          snapshot.id,
+          snapshot.ref.path,
+          input.instituteId,
+          input.yearId,
+        ),
+      );
+      if (querySnapshot.docs.length > input.limit) {
+        const lastDocument = pageDocuments[pageDocuments.length - 1];
+        nextCursor = encodeCursor({
+          documentId: lastDocument.id,
+          instituteId: input.instituteId,
+          yearId: input.yearId,
+        });
+      }
     }
 
     this.logger.info("Governance snapshots retrieved.", {
@@ -272,6 +473,7 @@ export class GovernanceSnapshotAccessService {
 
     return {
       instituteId: input.instituteId,
+      nextCursor,
       requestedMonth: input.month,
       snapshots,
       yearId: input.yearId,

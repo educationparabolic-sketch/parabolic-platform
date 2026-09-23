@@ -37,6 +37,7 @@ This matrix assumes an authenticated, active, non-suspended identity. Every prod
 | `admin.analytics.advanced` | teacher, admin, director | L2 | director: L3 | - |
 | `admin.insights.read` | teacher, admin, director | L1 | director: L3 | riskOverview |
 | `admin.interventions.manage` | teacher, admin | L1 | - | riskOverview |
+| `admin.interventions.read` | teacher, admin, director | L1 | director: L3 | riskOverview |
 | `admin.governance.read` | director | L3 | - | governanceAccess |
 | `admin.governance.export` | director | L3 | - | governanceAccess |
 | `admin.settings.read` | admin, director | L0 | director: L3 | - |

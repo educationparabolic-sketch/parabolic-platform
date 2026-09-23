@@ -5,15 +5,11 @@ import {
   governanceSnapshotAccessService,
 } from "./governanceSnapshotAccess";
 import {
-  storageBucketArchitectureService,
-} from "./storageBucketArchitecture";
-import {
   GovernanceSnapshotAccessRecord,
 } from "../types/governanceAccess";
 import {
   GovernanceDisciplineDeviation,
   GovernanceReportIncident,
-  GovernanceReportPdfExport,
   GovernanceReportTimelineEntry,
   GovernanceReportingRequest,
   GovernanceReportingResult,
@@ -24,7 +20,7 @@ import {
 const INSTITUTES_COLLECTION = "institutes";
 const AUDIT_LOGS_COLLECTION = "auditLogs";
 const OVERRIDE_LOGS_COLLECTION = "overrideLogs";
-const MAX_EVENT_DOCUMENTS = 200;
+const MAX_EVENT_DOCUMENTS = 1000;
 
 interface InstituteAuditEvent {
   actionType?: string;
@@ -93,19 +89,21 @@ const normalizeOptionalMonth = (
   return normalizedValue;
 };
 
-const normalizeIncludePdfExport = (value: unknown): boolean => {
+const normalizeOptionalSnapshotId = (
+  value: unknown,
+): string | undefined => {
   if (typeof value === "undefined") {
-    return true;
+    return undefined;
   }
 
-  if (typeof value !== "boolean") {
+  if (typeof value !== "string" || !/^\d{4}_\d{2}$/.test(value.trim())) {
     throw new GovernanceReportingValidationError(
       "VALIDATION_ERROR",
-      "Field \"includePdfExport\" must be a boolean.",
+      "Field \"snapshotId\" must match the YYYY_MM format.",
     );
   }
 
-  return value;
+  return value.trim();
 };
 
 const toIsoString = (value: unknown): string | null => {
@@ -137,30 +135,6 @@ const buildMonthRange = (
 const uniqueSortedValues = (values: Array<string | undefined>): string[] =>
   Array.from(new Set(values.filter((value): value is string => Boolean(value))))
     .sort((left, right) => left.localeCompare(right));
-
-const buildPdfExport = (
-  instituteId: string,
-  snapshotMonth: string,
-): GovernanceReportPdfExport => {
-  const [yearValue, monthValue] = snapshotMonth.split("-").map(Number);
-  const target = storageBucketArchitectureService
-    .resolveReportAssetStorageTarget({
-      extension: "pdf",
-      instituteId,
-      month: monthValue,
-      reportKind: "governanceReport",
-      year: yearValue,
-    });
-
-  return {
-    bucketName: target.bucketName,
-    cdnPath: target.cdnPath,
-    contentType: target.contentType,
-    fileName: target.objectPath.split("/").pop() ?? "governance.pdf",
-    gsUri: target.gsUri,
-    objectPath: target.objectPath,
-  };
-};
 
 const buildSnapshotTimelineEntry = (
   snapshot: GovernanceSnapshotAccessRecord,
@@ -390,10 +364,20 @@ export class GovernanceReportingService {
   public normalizeRequest(
     input: Partial<GovernanceReportingRequest>,
   ): GovernanceReportingValidatedRequest {
+    const month = normalizeOptionalMonth(input.month);
+    const snapshotId = normalizeOptionalSnapshotId(input.snapshotId);
+
+    if (month && snapshotId && snapshotId !== month.replace("-", "_")) {
+      throw new GovernanceReportingValidationError(
+        "VALIDATION_ERROR",
+        "Fields \"month\" and \"snapshotId\" must identify the same snapshot.",
+      );
+    }
+
     return {
-      includePdfExport: normalizeIncludePdfExport(input.includePdfExport),
       instituteId: normalizeRequiredString(input.instituteId, "instituteId"),
-      month: normalizeOptionalMonth(input.month),
+      month: month ?? snapshotId?.replace("_", "-"),
+      snapshotId,
       yearId: normalizeRequiredString(input.yearId, "yearId"),
     };
   }
@@ -423,13 +407,34 @@ export class GovernanceReportingService {
       );
     }
 
-    const [calibrationVersion, overrideEvents, auditEvents] = await Promise.all(
-      [
-        this.readCalibrationVersion(input.instituteId),
-        this.readOverrideEvents(input.instituteId, snapshot.month),
-        this.readAuditEvents(input.instituteId, snapshot.month),
-      ],
-    );
+    if (input.snapshotId && snapshot.documentId !== input.snapshotId) {
+      throw new GovernanceReportingValidationError(
+        "NOT_FOUND",
+        "Governance snapshot does not match the requested immutable source.",
+      );
+    }
+
+    const eventCutoff = new Date(snapshot.generatedAt);
+    const [overrideEvents, auditEvents] = await Promise.all([
+      this.readOverrideEvents(
+        input.instituteId,
+        snapshot.month,
+        eventCutoff,
+      ),
+      this.readAuditEvents(
+        input.instituteId,
+        snapshot.month,
+        eventCutoff,
+      ),
+    ]);
+
+    if (overrideEvents.length + auditEvents.length > MAX_EVENT_DOCUMENTS) {
+      throw new GovernanceReportingValidationError(
+        "CONFLICT",
+        "Governance report source exceeds the supported immutable event bound.",
+      );
+    }
+    const calibrationVersion = snapshot.calibrationVersionUsed;
     const incidentTimeline = buildIncidentTimeline(
       snapshot,
       overrideEvents,
@@ -459,11 +464,16 @@ export class GovernanceReportingService {
       header: {
         academicYear: snapshot.academicYear,
         calibrationVersion,
-        generatedAt: new Date().toISOString(),
+        eventCutoffAt: snapshot.generatedAt,
+        eventRecordCount: overrideEvents.length + auditEvents.length,
         instituteId: snapshot.instituteId,
         month: snapshot.month,
+        reportPreparedAt: new Date().toISOString(),
+        riskModelVersion: snapshot.riskModelVersionUsed,
         schemaVersion: 1,
-        snapshotDocumentPath: snapshot.documentPath,
+        snapshotGeneratedAt: snapshot.generatedAt,
+        snapshotId: snapshot.documentId,
+        templateVersionRange: snapshot.templateVersionRangeUsed,
       },
       incidentTimeline,
       majorIncidentAlerts,
@@ -484,10 +494,6 @@ export class GovernanceReportingService {
       yearId: snapshotResult.yearId,
     };
 
-    if (input.includePdfExport) {
-      result.pdfExport = buildPdfExport(input.instituteId, snapshot.month);
-    }
-
     this.logger.info("Governance report generated.", {
       affectedRunCount: result.summary.affectedRunCount,
       incidentCount: result.summary.incidentCount,
@@ -500,50 +506,30 @@ export class GovernanceReportingService {
   }
 
   /**
-   * Reads the institute calibration version used for report metadata.
-   * @param {string} instituteId Institute identifier.
-   * @return {Promise<string | null>} Calibration version or null.
-   */
-  private async readCalibrationVersion(
-    instituteId: string,
-  ): Promise<string | null> {
-    const instituteSnapshot = await this.firestore
-      .collection(INSTITUTES_COLLECTION)
-      .doc(instituteId)
-      .get();
-
-    if (!instituteSnapshot.exists) {
-      return null;
-    }
-
-    const calibrationVersion = instituteSnapshot.get("calibrationVersion");
-    return typeof calibrationVersion === "string" && calibrationVersion.trim() ?
-      calibrationVersion.trim() :
-      null;
-  }
-
-  /**
    * Reads bounded month-specific institute override events.
    * @param {string} instituteId Institute identifier.
    * @param {string} snapshotMonth Governance report month.
+   * @param {Date} eventCutoff Immutable snapshot event cutoff.
    * @return {Promise<InstituteOverrideEvent[]>} Matching override events.
    */
   private async readOverrideEvents(
     instituteId: string,
     snapshotMonth: string,
+    eventCutoff: Date,
   ): Promise<InstituteOverrideEvent[]> {
     const range = buildMonthRange(snapshotMonth);
-    const querySnapshot = await this.firestore
+    let query = this.firestore
       .collection(
         `${INSTITUTES_COLLECTION}/${instituteId}/${OVERRIDE_LOGS_COLLECTION}`,
       )
       .where("timestamp", ">=", range.start)
-      .where("timestamp", "<", range.end)
-      .orderBy("timestamp", "asc")
-      .limit(MAX_EVENT_DOCUMENTS)
-      .get();
+      .orderBy("timestamp", "asc");
+    query = eventCutoff < range.end ?
+      query.where("timestamp", "<=", eventCutoff) :
+      query.where("timestamp", "<", range.end);
+    const querySnapshot = await query.limit(MAX_EVENT_DOCUMENTS + 1).get();
 
-    return querySnapshot.docs.flatMap((document) => {
+    return querySnapshot.docs.map((document) => {
       const timestamp = toIsoString(document.get("timestamp"));
       const overrideType = document.get("overrideType");
       const performedBy = document.get("performedBy");
@@ -555,15 +541,18 @@ export class GovernanceReportingService {
         typeof performedBy !== "string" ||
         typeof runId !== "string"
       ) {
-        return [];
+        throw new GovernanceReportingValidationError(
+          "INTERNAL_ERROR",
+          "Governance override event is missing required immutable fields.",
+        );
       }
 
-      return [{
+      return {
         at: timestamp,
         overrideType,
         performedBy,
         runId,
-      }];
+      };
     });
   }
 
@@ -571,48 +560,56 @@ export class GovernanceReportingService {
    * Reads bounded month-specific institute audit events.
    * @param {string} instituteId Institute identifier.
    * @param {string} snapshotMonth Governance report month.
+   * @param {Date} eventCutoff Immutable snapshot event cutoff.
    * @return {Promise<InstituteAuditEvent[]>} Matching audit events.
    */
   private async readAuditEvents(
     instituteId: string,
     snapshotMonth: string,
+    eventCutoff: Date,
   ): Promise<InstituteAuditEvent[]> {
     const range = buildMonthRange(snapshotMonth);
-    const querySnapshot = await this.firestore
+    let query = this.firestore
       .collection(
         `${INSTITUTES_COLLECTION}/${instituteId}/${AUDIT_LOGS_COLLECTION}`,
       )
       .where("timestamp", ">=", range.start)
-      .where("timestamp", "<", range.end)
-      .orderBy("timestamp", "asc")
-      .limit(MAX_EVENT_DOCUMENTS)
-      .get();
+      .orderBy("timestamp", "asc");
+    query = eventCutoff < range.end ?
+      query.where("timestamp", "<=", eventCutoff) :
+      query.where("timestamp", "<", range.end);
+    const querySnapshot = await query.limit(MAX_EVENT_DOCUMENTS + 1).get();
 
-    return querySnapshot.docs.flatMap((document) => {
+    return querySnapshot.docs.map((document) => {
       const timestamp = toIsoString(document.get("timestamp"));
       const actionType = document.get("actionType");
       const actorId =
         document.get("actorId") ??
         document.get("actorUid");
+      const directRunId = document.get("runId");
       const additionalFields = document.get("additionalFields");
       const runId =
-        typeof additionalFields === "object" &&
-        additionalFields !== null &&
-        typeof (additionalFields as Record<string, unknown>).runId ===
-          "string" ?
-          (additionalFields as Record<string, string>).runId :
-          undefined;
+        typeof directRunId === "string" ? directRunId :
+          typeof additionalFields === "object" &&
+            additionalFields !== null &&
+            typeof (additionalFields as Record<string, unknown>).runId ===
+              "string" ?
+            (additionalFields as Record<string, string>).runId :
+            undefined;
 
       if (!timestamp) {
-        return [];
+        throw new GovernanceReportingValidationError(
+          "INTERNAL_ERROR",
+          "Governance audit event is missing its immutable timestamp.",
+        );
       }
 
-      return [{
+      return {
         actionType: typeof actionType === "string" ? actionType : undefined,
         actorId: typeof actorId === "string" ? actorId : undefined,
         at: timestamp,
         runId,
-      }];
+      };
     });
   }
 }

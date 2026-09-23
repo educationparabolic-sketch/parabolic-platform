@@ -19,9 +19,9 @@ const firestore = getFirestore();
 interface GovernanceReportingServiceContract {
   generateReport: (
     input: {
-      includePdfExport?: boolean;
       instituteId: string;
       month?: string;
+      snapshotId?: string;
       yearId: string;
     },
   ) => Promise<GovernanceReportingResult>;
@@ -45,7 +45,7 @@ test.after(async () => {
 });
 
 test(
-  "generateReport composes governance incidents and pdf export metadata",
+  "generateReport binds incidents to immutable snapshot authority",
   async () => {
     const instituteId = "inst_build_90";
     const yearId = "2026";
@@ -62,7 +62,7 @@ test(
     ]);
 
     await firestore.doc(`institutes/${instituteId}`).set({
-      calibrationVersion: "cal_v2026_03",
+      calibrationVersion: "cal_current_must_not_replace_snapshot",
       name: instituteId,
     });
     await firestore
@@ -73,6 +73,7 @@ test(
       avgAccuracyPercent: 73,
       avgPhaseAdherence: 69,
       avgRawScorePercent: 64,
+      calibrationVersionUsed: "cal_snapshot_v2026_03",
       createdAt: Timestamp.now(),
       disciplineMean: 71,
       disciplineTrend: -6.2,
@@ -91,6 +92,7 @@ test(
         stable: 48,
         volatile: 12,
       },
+      riskModelVersionUsed: "risk_snapshot_v2026_03",
       riskDistribution: {
         driftProne: 18,
         impulsive: 10,
@@ -105,6 +107,7 @@ test(
       skipBurstPercent: 5,
       stabilityIndex: 58,
       templateVarianceMean: 6.1,
+      templateVersionRangeUsed: "template_v2..v9",
       wrongStreakPercent: 3,
     });
     await Promise.all([
@@ -135,12 +138,10 @@ test(
         actorId: "director_1",
         actorRole: "director",
         actorUid: "director_uid_1",
-        additionalFields: {
-          runId: "run_build_90",
-        },
         auditId: "audit_1",
         instituteId,
         metadata: {},
+        runId: "run_build_90",
         targetCollection: "globalCalibration",
         targetId: "cal_v2026_03",
         timestamp: Timestamp.fromDate(new Date("2026-03-12T12:00:00.000Z")),
@@ -148,22 +149,23 @@ test(
     ]);
 
     const result = await governanceReportingService.generateReport({
-      includePdfExport: true,
       instituteId,
-      month: snapshotMonth,
+      snapshotId: "2026_03",
       yearId,
     });
 
     assert.equal(result.header.instituteId, instituteId);
-    assert.equal(result.header.calibrationVersion, "cal_v2026_03");
+    assert.equal(result.header.calibrationVersion, "cal_snapshot_v2026_03");
+    assert.equal(result.header.riskModelVersion, "risk_snapshot_v2026_03");
+    assert.equal(result.header.templateVersionRange, "template_v2..v9");
     assert.equal(result.header.month, snapshotMonth);
     assert.equal(result.disciplineDeviation.deviationLevel, "major");
     assert.ok(result.majorIncidentAlerts.length >= 4);
     assert.equal(result.summary.affectedRunCount, 2);
-    assert.equal(
-      result.pdfExport?.objectPath,
-      `${instituteId}/reports/2026/03/governance.pdf`,
-    );
+    assert.equal(result.header.snapshotId, "2026_03");
+    assert.equal(result.header.eventCutoffAt, "2026-04-01T00:00:00.000Z");
+    assert.equal(result.header.eventRecordCount, 3);
+    assert.equal("pdfExport" in result, false);
     assert.equal(
       result.majorIncidentAlerts.some((incident) =>
         incident.type === "override_spike"),
@@ -275,14 +277,13 @@ test(
     ]);
 
     const result = await governanceReportingService.generateReport({
-      includePdfExport: false,
       instituteId,
       yearId,
     });
 
     assert.equal(result.header.month, "2026-03");
     assert.equal(result.requestedMonth, undefined);
-    assert.equal(result.pdfExport, undefined);
+    assert.equal("pdfExport" in result, false);
     assert.equal(result.summary.incidentCount, 0);
 
     await deleteCollectionDocuments(governanceSnapshotsPath);

@@ -21,7 +21,12 @@ function materializePath(canonicalPath, routeId) {
     .replace("{studentId}", encodeURIComponent(`student ${routeId} Ω`))
     .replace("{questionId}", encodeURIComponent(`question ${routeId} Ω`))
     .replace("{packageId}", encodeURIComponent(`package ${routeId} Ω`))
-    .replace("{uploadLogId}", encodeURIComponent(`upload ${routeId} Ω`));
+    .replace("{uploadLogId}", encodeURIComponent(`upload ${routeId} Ω`))
+    .replace("{reportId}", encodeURIComponent(`report ${routeId} Ω`))
+    .replace(
+      "{interventionId}",
+      encodeURIComponent(`intervention ${routeId} Ω`),
+    );
 }
 
 test("each manifest method/path resolves exactly once", () => {
@@ -45,7 +50,7 @@ test("implemented routes have one registered existing handler", () => {
   const implementedRoutes = API_ROUTE_MANIFEST.filter(
     (route) => route.status === "implemented",
   );
-  assert.equal(implementedRoutes.length, 55);
+  assert.equal(implementedRoutes.length, 60);
 
   for (const route of implementedRoutes) {
     assert.equal(typeof API_GATEWAY_HANDLERS[route.functionExport], "function");
@@ -89,6 +94,34 @@ test(
       assert.equal(
         typeof API_GATEWAY_HANDLERS[route.functionExport],
         "function",
+      );
+    });
+  },
+);
+
+test(
+  "BWM-029 governance and intervention routes reach secured handlers",
+  () => {
+    const plannedRoutes = API_ROUTE_MANIFEST.filter((route) =>
+      Number(route.id.replace("ADM-", "")) >= 49 &&
+      Number(route.id.replace("ADM-", "")) <= 55,
+    );
+
+    assert.equal(plannedRoutes.length, 7);
+    plannedRoutes.forEach((route) => {
+      assert.equal(route.declaration, "planned");
+      assert.equal(route.status, "implemented");
+      assert.equal(
+        typeof API_GATEWAY_HANDLERS[route.functionExport],
+        "function",
+      );
+      assert.equal(
+        resolveApiRoute(
+          route.method,
+          materializePath(route.canonicalPath, route.id),
+        )
+          ?.route.id,
+        route.id,
       );
     });
   },
@@ -141,6 +174,24 @@ test("router preserves encoded parameters and rejects path drift", () => {
   assert.equal(
     assignmentOverrideMatch?.parameters.sessionId,
     "session id Ω",
+  );
+
+  const reportDownloadPath =
+    "/api/v1/admin/governance/reports/report%20id%20%CE%A9/download";
+  const reportDownloadMatch = resolveApiRoute("GET", reportDownloadPath);
+  assert.equal(reportDownloadMatch?.route.id, "ADM-52");
+  assert.equal(reportDownloadMatch?.parameters.reportId, "report id Ω");
+
+  const interventionOutcomePath =
+    "/api/v1/admin/interventions/intervention%20id%20%CE%A9/outcome";
+  const interventionOutcomeMatch = resolveApiRoute(
+    "PATCH",
+    interventionOutcomePath,
+  );
+  assert.equal(interventionOutcomeMatch?.route.id, "ADM-55");
+  assert.equal(
+    interventionOutcomeMatch?.parameters.interventionId,
+    "intervention id Ω",
   );
 
   assert.equal(resolveApiRoute("DELETE", "/api/v1/admin/students"), null);

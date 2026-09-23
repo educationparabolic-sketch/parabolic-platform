@@ -7,6 +7,7 @@ const functionsRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const selectedSourceSuites = [
   "adminAssignmentOperationsApi.test",
+  "adminGovernanceInterventionsApi.test",
   "adminInterventionsApi.test",
   "adminAnalyticsApi.test",
   "adminLicensingApi.test",
@@ -39,6 +40,7 @@ const selectedSourceSuites = [
   "firestoreIndexes.test",
   "firestoreQueryGovernance.test",
   "governanceAccessMiddleware.test",
+  "governanceReportPdf.test",
   "identitySessionSecurity.test",
   "indexedQueryValidation.test",
   "licenseClaimFreshness.test",

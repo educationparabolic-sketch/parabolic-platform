@@ -60,6 +60,14 @@ function parameterName(expression, sourceFile) {
     return "{studentId}";
   }
 
+  if (/reportId/i.test(expressionText)) {
+    return "{reportId}";
+  }
+
+  if (/interventionId/i.test(expressionText)) {
+    return "{interventionId}";
+  }
+
   if (/questionId/i.test(expressionText)) {
     return "{questionId}";
   }
@@ -328,6 +336,13 @@ test(
         "ADM-38",
         "ADM-39",
         "ADM-40",
+        "ADM-49",
+        "ADM-50",
+        "ADM-51",
+        "ADM-52",
+        "ADM-53",
+        "ADM-54",
+        "ADM-55",
       ],
     );
     plannedRoutes.forEach((route) => {

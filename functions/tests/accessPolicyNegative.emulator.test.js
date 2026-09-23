@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const {deleteApp, initializeApp} = require("firebase-admin/app");
 const {getAuth} = require("firebase-admin/auth");
-const {getFirestore} = require("firebase-admin/firestore");
+const {getFirestore, Timestamp} = require("firebase-admin/firestore");
 
 const expectedProjectId = "demo-parabolic-test";
 const projectId = process.env.GCLOUD_PROJECT;
@@ -98,6 +98,10 @@ test(
     const upgradedLicenseReference = firestore.doc(
       `institutes/${upgradedInstituteId}/license/current`,
     );
+    const vendorTargetSnapshotReference = firestore.doc(
+      "institutes/inst_bwm_008_vendor_target/academicYears/2026/" +
+      "governanceSnapshots/2026_09",
+    );
 
     const createTrackedIdentity = async (label, claims) => {
       const identity = await createIdentity(auth, label, claims);
@@ -135,27 +139,33 @@ test(
         });
       });
 
-      await t.test("cross-tenant target returns canonical 403", async () => {
-        const teacher = await createTrackedIdentity("cross-tenant", {
-          instituteId: "inst_bwm_008_claimed",
-          licenseLayer: "L3",
-          role: "teacher",
-        });
-        const result = await callJson(
-          `${gatewayOrigin}/api/v1/admin/interventions`,
-          {
-            body: {instituteId: "inst_bwm_008_requested"},
-            idToken: teacher.idToken,
-            method: "POST",
-          },
-        );
+      await t.test(
+        "browser tenant fields cannot override intervention scope",
+        async () => {
+          const teacher = await createTrackedIdentity("cross-tenant", {
+            featureFlags: {riskOverview: true},
+            instituteId: "inst_bwm_008_claimed",
+            licenseLayer: "L3",
+            role: "teacher",
+          });
+          const result = await callJson(
+            `${gatewayOrigin}/api/v1/admin/interventions?yearId=2026&` +
+            "instituteId=inst_bwm_008_requested",
+            {
+              idToken: teacher.idToken,
+            },
+          );
 
-        assertCanonicalError(result, {
-          code: "TENANT_MISMATCH",
-          message: "Token instituteId does not match request instituteId.",
-          status: 403,
-        });
-      });
+          assert.equal(
+            result.response.status,
+            200,
+            JSON.stringify(result.payload),
+          );
+          assert.equal(result.payload.success, true);
+          assert.equal(result.payload.data.yearId, "2026");
+          assert.deepEqual(result.payload.data.recommendations, []);
+        },
+      );
 
       await t.test("suspended identity returns canonical 403", async () => {
         const admin = await createTrackedIdentity("suspended", {
@@ -185,22 +195,21 @@ test(
             licenseLayer: "L3",
           });
           const teacher = await createTrackedIdentity("stale-license", {
+            featureFlags: {riskOverview: true},
             instituteId: upgradedInstituteId,
             licenseLayer: "L0",
             role: "teacher",
           });
           const result = await callJson(
-            `${gatewayOrigin}/api/v1/admin/interventions`,
+            `${gatewayOrigin}/api/v1/admin/interventions?yearId=2026`,
             {
-              body: {instituteId: upgradedInstituteId},
               idToken: teacher.idToken,
-              method: "POST",
             },
           );
 
           assertCanonicalError(result, {
             code: "LICENSE_RESTRICTED",
-            message: "Intervention tools require L1 or higher license access.",
+            message: "Capability requires license layer L1.",
             status: 403,
           });
         },
@@ -227,27 +236,64 @@ test(
       await t.test(
         "non-Vendor cannot use an explicit Vendor tenant bypass",
         async () => {
-          const admin = await createTrackedIdentity("non-vendor-bypass", {
-            instituteId: "inst_bwm_008_admin",
+          await vendorTargetSnapshotReference.set({
+            academicYear: "2026",
+            avgAccuracyPercent: 70,
+            avgPhaseAdherence: 70,
+            avgRawScorePercent: 70,
+            createdAt: Timestamp.now(),
+            disciplineMean: 70,
+            disciplineTrend: 0,
+            disciplineVariance: 0,
+            executionIntegrityScore: 70,
+            generatedAt: Timestamp.now(),
+            immutable: true,
+            instituteId: "inst_bwm_008_vendor_target",
+            month: "2026-09",
+            overrideFrequency: 0,
+            phaseCompliancePercent: 70,
+            riskClusterDistribution: {
+              driftProne: 0,
+              impulsive: 0,
+              overextended: 0,
+              stable: 100,
+              volatile: 0,
+            },
+            riskDistribution: {
+              driftProne: 0,
+              impulsive: 0,
+              overextended: 0,
+              stable: 100,
+              volatile: 0,
+            },
+            rushPatternPercent: 0,
+            easyNeglectPercent: 0,
+            hardBiasPercent: 0,
+            skipBurstPercent: 0,
+            schemaVersion: 1,
+            stabilityIndex: 70,
+            templateVarianceMean: 0,
+            wrongStreakPercent: 0,
+          });
+          const director = await createTrackedIdentity("non-vendor-bypass", {
+            featureFlags: {governanceAccess: true},
+            instituteId: "inst_bwm_008_director",
             licenseLayer: "L3",
-            role: "admin",
+            role: "director",
           });
           const result = await callJson(
-            `${functionsOrigin}/adminStudentSoftDelete`,
+            `${gatewayOrigin}/api/v1/admin/governance/snapshots?` +
+            "yearId=2026&month=2026-09&" +
+            "targetInstituteId=inst_bwm_008_vendor_target",
             {
-              body: {
-                instituteId: "inst_bwm_008_other",
-                studentId: "student_bwm_008_missing",
-              },
-              idToken: admin.idToken,
-              method: "POST",
+              idToken: director.idToken,
             },
           );
 
           assertCanonicalError(result, {
-            code: "TENANT_MISMATCH",
-            message: "Token instituteId does not match request instituteId.",
-            status: 403,
+            code: "NOT_FOUND",
+            message: "Governance snapshot not found for the requested month.",
+            status: 404,
           });
         },
       );
@@ -263,20 +309,17 @@ test(
             },
           );
           const result = await callJson(
-            `${functionsOrigin}/adminStudentSoftDelete`,
+            `${gatewayOrigin}/api/v1/admin/governance/snapshots?` +
+            "yearId=2026&month=2026-08&" +
+            "targetInstituteId=inst_bwm_008_vendor_target",
             {
-              body: {
-                instituteId: "inst_bwm_008_vendor_target",
-                studentId: "student_bwm_008_missing",
-              },
               idToken: vendor.idToken,
-              method: "POST",
             },
           );
 
           assertCanonicalError(result, {
             code: "NOT_FOUND",
-            message: "Student record was not found for soft delete.",
+            message: "Governance snapshot not found for the requested month.",
             status: 404,
           });
         },
@@ -284,6 +327,7 @@ test(
     } finally {
       await Promise.all(createdUserIds.map((uid) => auth.deleteUser(uid)));
       await upgradedLicenseReference.delete();
+      await vendorTargetSnapshotReference.delete();
       await deleteApp(app);
     }
   },

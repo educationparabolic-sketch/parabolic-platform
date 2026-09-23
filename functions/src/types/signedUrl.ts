@@ -7,6 +7,7 @@ import {
 export type SignedUrlAccessContext =
   "examSession" |
   "dashboardView" |
+  "governanceReportDownload" |
   "dataExportDownload";
 
 export interface SignedUrlContextPolicy {

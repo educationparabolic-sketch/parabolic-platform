@@ -98,6 +98,30 @@ test("generateReportAssetSignedUrl signs student data export URLs", () => {
   );
 });
 
+test("generateReportAssetSignedUrl caps governance downloads at ten minutes", () => {
+  const result = signedUrlService.generateReportAssetSignedUrl({
+    accessContext: "governanceReportDownload",
+    extension: "pdf",
+    instituteId: "inst_build_73",
+    month: 3,
+    reportId: "governance_report_1234567890abcdef1234567890abcdef12345678",
+    reportKind: "governanceReport",
+    year: 2026,
+  }, {
+    cdnBaseUrl: "https://cdn.example.com",
+    signedUrlKeyName: "reports_key",
+    signedUrlKeyValue: TEST_SIGNING_KEY,
+  });
+
+  assert.equal(result.accessContext, "governanceReportDownload");
+  assert.equal(result.expiresInSeconds, 600);
+  assert.equal(
+    new URL(result.signedUrl).pathname,
+    "/inst_build_73/reports/2026/03/" +
+      "governance_report_1234567890abcdef1234567890abcdef12345678.pdf",
+  );
+});
+
 test(
   "generateRestrictedMediaSignedUrl supports pre-resolved restricted paths",
   () => {

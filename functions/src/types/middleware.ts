@@ -13,6 +13,7 @@ export interface MiddlewareExamSessionClaims {
 }
 
 export interface MiddlewareIdentityContext {
+  featureFlags?: Readonly<Record<string, boolean>>;
   uid: string;
   role: string;
   instituteId: string | null;

@@ -9,6 +9,36 @@ const sharedContractPath = join(rootDirectory, "shared/contracts/apiDtos.d.ts");
 
 const dtoFamilies = [
   {
+    backend: "functions/src/types/adminGovernanceInterventions.ts",
+    frontend: ["apps/admin/src/features/analytics/governanceDataset.ts"],
+    names: [
+      "AdminGovernanceMutationDisposition",
+      "AdminGovernanceTargetQuery",
+      "AdminGovernanceRiskDistribution",
+      "AdminGovernanceSnapshotRecord",
+      "AdminGovernanceSnapshotListQuery",
+      "AdminGovernanceSnapshotListResult",
+      "AdminGovernanceReportStatus",
+      "AdminGovernanceReportSourceAuthority",
+      "AdminGovernanceReportRecord",
+      "AdminGovernanceReportGenerateRequest",
+      "AdminGovernanceReportGenerateResult",
+      "AdminGovernanceReportListQuery",
+      "AdminGovernanceReportListResult",
+      "AdminGovernanceReportDownloadQuery",
+      "AdminGovernanceReportDownloadResult",
+      "AdminInterventionRecommendationType",
+      "AdminInterventionRecommendationStatus",
+      "AdminInterventionRecommendationRecord",
+      "AdminInterventionRecommendationCreateRequest",
+      "AdminInterventionRecommendationCreateResult",
+      "AdminInterventionTimelineQuery",
+      "AdminInterventionTimelineResult",
+      "AdminInterventionOutcomeUpdateRequest",
+      "AdminInterventionOutcomeUpdateResult",
+    ],
+  },
+  {
     backend: "functions/src/types/adminAssignmentOperations.ts",
     frontend: [],
     names: [
@@ -367,7 +397,14 @@ test("portal requests use shared request DTO generics", async () => {
   assert.match(studentManagement, /AdminStudentOnboardingResendRequest>/);
   assert.match(studentManagement, /StudentBulkIngestionRequest>/);
   assert.match(studentProfile, /AdminStudentOnboardingResendRequest>/);
-  assert.match(interventions, /AdminInterventionRequest>/g);
+  assert.match(
+    interventions,
+    /AdminInterventionRecommendationCreateRequest\s*>/g,
+  );
+  assert.match(
+    interventions,
+    /AdminInterventionOutcomeUpdateRequest\s*>/g,
+  );
   assert.match(questions, /AdminQuestionPackageValidateRequest>/);
   assert.match(questions, /AdminQuestionPackageCommitRequest>/);
   assert.match(questions, /AdminQuestionPackageRollbackRequest>/);

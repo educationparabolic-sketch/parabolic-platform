@@ -85,12 +85,12 @@ export const createAdminGovernanceReportsHandler = (
           GovernanceReportingValidatedRequest
         >;
         const validatedRequest = governanceReportingService.normalizeRequest({
-          includePdfExport: body.includePdfExport,
           instituteId:
             request.context.identity?.isVendor ?
               body.instituteId :
               request.context.identity?.instituteId ?? body.instituteId,
           month: body.month,
+          snapshotId: body.snapshotId,
           yearId: body.yearId,
         });
 

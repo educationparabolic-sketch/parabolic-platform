@@ -109,6 +109,12 @@ export const CAPABILITY_MATRIX = {
     minimumLicenseLayer: "L1",
     requiredFeatureFlags: ["riskOverview"],
   },
+  "admin.interventions.read": {
+    allowedRoles: ["teacher", "admin", "director"],
+    minimumLicenseLayer: "L1",
+    requiredFeatureFlags: ["riskOverview"],
+    roleMinimumLicenseLayers: { director: "L3" },
+  },
   "admin.governance.read": {
     allowedRoles: ["director"],
     minimumLicenseLayer: "L3",

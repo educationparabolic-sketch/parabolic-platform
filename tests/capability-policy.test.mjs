@@ -45,7 +45,7 @@ test("shared capability matrix is complete and internally safe", async () => {
   );
   const entries = Object.entries(CAPABILITY_MATRIX);
 
-  assert.equal(entries.length, 49);
+  assert.equal(entries.length, 50);
   assert.deepEqual(new Set(LICENSE_FEATURE_FLAG_NAMES), new Set(Object.keys(featureMinimumLayers)));
 
   for (const [capability, policy] of entries) {
@@ -93,6 +93,12 @@ test("shared capability matrix is complete and internally safe", async () => {
     allowedRoles: ["teacher", "admin"],
     minimumLicenseLayer: "L1",
     requiredFeatureFlags: ["riskOverview"],
+  });
+  assert.deepEqual(CAPABILITY_MATRIX["admin.interventions.read"], {
+    allowedRoles: ["teacher", "admin", "director"],
+    minimumLicenseLayer: "L1",
+    requiredFeatureFlags: ["riskOverview"],
+    roleMinimumLicenseLayers: { director: "L3" },
   });
   assert.deepEqual(CAPABILITY_MATRIX["exam.mode.hard.execute"], {
     allowedRoles: ["student"],

@@ -4,7 +4,6 @@ import { UiChartContainer, UiTable, type UiTableColumn } from "../../../../../sh
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { LICENSE_LAYER_ORDER } from "../../../../../shared/types/portalRouting";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
-import { resolveAdminInstituteId } from "../settings/settingsDataset";
 import {
   ApiClientError,
   DEFAULT_STUDENT_INTELLIGENCE_ID,
@@ -18,9 +17,9 @@ import {
 } from "../analytics/analyticsDataset";
 import {
   buildHighRiskCandidates,
-  listInterventionActions,
+  listInterventionRecommendations,
+  type AdminInterventionRecommendationRecord,
   type HighRiskInterventionCandidate,
-  type InterventionActionRecord,
 } from "./interventionDataset";
 import InsightsWorkspaceNav from "./InsightsWorkspaceNav";
 
@@ -103,10 +102,8 @@ function StudentIntelligencePage() {
   const accessContext = resolveAdminAccessContext(session);
   const isL2OrAbove =
     accessContext.licenseLayer !== null && LICENSE_LAYER_ORDER[accessContext.licenseLayer] >= LICENSE_LAYER_ORDER.L2;
-  const insightsInstituteId = useMemo(() => resolveAdminInstituteId(session.idToken), [session.idToken]);
-
   const [dataset, setDataset] = useState<DashboardDataset>(FALLBACK_DATASET);
-  const [interventionHistory, setInterventionHistory] = useState<InterventionActionRecord[]>([]);
+  const [interventionHistory, setInterventionHistory] = useState<AdminInterventionRecommendationRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [inlineMessage, setInlineMessage] = useState<string | null>(null);
 
@@ -127,8 +124,7 @@ function StudentIntelligencePage() {
           nextStudent && "academicYear" in nextStudent && typeof nextStudent.academicYear === "string" ?
             nextStudent.academicYear :
             nextDataset.yearBehaviorSummary.academicYear;
-        const nextHistory = await listInterventionActions({
-          instituteId: insightsInstituteId,
+        const nextHistory = await listInterventionRecommendations({
           studentId,
           yearId,
         });
@@ -138,7 +134,7 @@ function StudentIntelligencePage() {
         }
 
         setDataset(nextDataset);
-        setInterventionHistory(nextHistory);
+        setInterventionHistory(nextHistory.recommendations);
         setInlineMessage(
           shouldUseLiveApi() ?
             "Live mode enabled: student intelligence hydrated from summary-safe analytics and intervention history APIs." :
@@ -164,7 +160,7 @@ function StudentIntelligencePage() {
     return () => {
       isMounted = false;
     };
-  }, [insightsInstituteId, studentId]);
+  }, [studentId]);
 
   const student = useMemo(
     () => dataset.studentAnalytics.find((entry) => entry.studentId === studentId) ?? null,
@@ -334,27 +330,27 @@ function StudentIntelligencePage() {
     [],
   );
 
-  const historyColumns = useMemo<UiTableColumn<InterventionActionRecord>[]>(
+  const historyColumns = useMemo<UiTableColumn<AdminInterventionRecommendationRecord>[]>(
     () => [
       {
         id: "timestamp",
         header: "Timestamp",
-        render: (entry) => formatIsoDate(entry.timestamp),
+        render: (entry) => formatIsoDate(entry.updatedAt),
       },
       {
         id: "actionType",
         header: "Action",
-        render: (entry) => entry.actionType.replaceAll("_", " "),
+        render: (entry) => entry.recommendationType.replaceAll("_", " "),
       },
       {
         id: "status",
         header: "Outcome",
-        render: (entry) => entry.outcomeStatus ?? entry.riskCluster ?? "-",
+        render: (entry) => entry.status,
       },
       {
         id: "notes",
         header: "Details",
-        render: (entry) => entry.outcomeNotes ?? entry.alertMessage ?? entry.remedialTestId ?? "Immutable audit record logged.",
+        render: (entry) => entry.outcomeNotes ?? entry.messageDraft ?? entry.recommendedTestId ?? "Immutable audit record logged.",
       },
     ],
     [],
@@ -649,7 +645,7 @@ function StudentIntelligencePage() {
             <article className="admin-risk-summary-card">
               <p className="admin-content-eyebrow">Suggested Remedial</p>
               <h4>{highRiskCandidate.suggestedRemedialTestId}</h4>
-              <p>{highRiskCandidate.suggestedAlertMessage}</p>
+              <p>{highRiskCandidate.suggestedMessageDraft}</p>
             </article>
             <article className="admin-risk-summary-card">
               <p className="admin-content-eyebrow">Intervention Priority</p>

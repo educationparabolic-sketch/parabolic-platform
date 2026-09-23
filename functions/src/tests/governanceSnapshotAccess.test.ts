@@ -19,6 +19,7 @@ const firestore = getFirestore();
 interface GovernanceSnapshotAccessServiceContract {
   readSnapshots: (
     input: {
+      cursor?: string;
       instituteId: string;
       limit?: number;
       month?: string;
@@ -141,19 +142,29 @@ test(
 
     const result = await governanceSnapshotAccessService.readSnapshots({
       instituteId,
-      limit: 2,
+      limit: 1,
       yearId,
     });
 
     assert.equal(result.instituteId, instituteId);
     assert.equal(result.yearId, yearId);
-    assert.equal(result.snapshots.length, 2);
+    assert.equal(result.snapshots.length, 1);
     assert.equal(result.snapshots[0]?.month, "2026-02");
-    assert.equal(result.snapshots[1]?.month, "2026-01");
+    assert.equal(typeof result.nextCursor, "string");
     assert.equal(
       result.snapshots[0]?.documentPath,
       `${collectionPath}/2026_02`,
     );
+
+    const nextPage = await governanceSnapshotAccessService.readSnapshots({
+      cursor: result.nextCursor ?? undefined,
+      instituteId,
+      limit: 1,
+      yearId,
+    });
+    assert.equal(nextPage.snapshots.length, 1);
+    assert.equal(nextPage.snapshots[0]?.month, "2026-01");
+    assert.equal(nextPage.nextCursor, null);
 
     await deleteCollectionDocuments(collectionPath);
   },
@@ -222,6 +233,7 @@ test(
     assert.equal(result.snapshots.length, 1);
     assert.equal(result.snapshots[0]?.documentId, "2026_03");
     assert.equal(result.snapshots[0]?.month, "2026-03");
+    assert.equal(result.nextCursor, null);
 
     await deleteCollectionDocuments(collectionPath);
   },

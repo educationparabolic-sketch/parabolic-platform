@@ -30,7 +30,12 @@ function materializePath(canonicalPath, routeId) {
     .replace("{studentId}", encodeURIComponent(`student ${routeId} Ω`))
     .replace("{questionId}", encodeURIComponent(`question ${routeId} Ω`))
     .replace("{packageId}", encodeURIComponent(`package ${routeId} Ω`))
-    .replace("{uploadLogId}", encodeURIComponent(`upload ${routeId} Ω`));
+    .replace("{uploadLogId}", encodeURIComponent(`upload ${routeId} Ω`))
+    .replace("{reportId}", encodeURIComponent(`report ${routeId} Ω`))
+    .replace(
+      "{interventionId}",
+      encodeURIComponent(`intervention ${routeId} Ω`),
+    );
 }
 
 async function requestGateway(requestPath, method, body) {
@@ -70,7 +75,7 @@ test(
     const implementedRoutes = API_ROUTE_MANIFEST.filter(
       (route) => route.status === "implemented",
     );
-    assert.equal(implementedRoutes.length, 55);
+    assert.equal(implementedRoutes.length, 60);
 
     for (const route of implementedRoutes) {
       const requestPath = materializePath(route.canonicalPath, route.id);
@@ -186,6 +191,28 @@ test(
         materializePath(route.canonicalPath, route.id),
         route.method,
         route.method === "POST" ? {} : undefined,
+      );
+      assert.equal(result.status, 401, route.id);
+      assertCanonicalErrorEnvelope(result.body);
+      assert.equal(result.body.error?.code, "UNAUTHORIZED");
+    }
+  },
+);
+
+test(
+  "BWM-029 governance and intervention routes require authentication",
+  async () => {
+    const plannedRoutes = API_ROUTE_MANIFEST.filter((route) =>
+      Number(route.id.replace("ADM-", "")) >= 49 &&
+      Number(route.id.replace("ADM-", "")) <= 55,
+    );
+    assert.equal(plannedRoutes.length, 7);
+
+    for (const route of plannedRoutes) {
+      const result = await requestGateway(
+        materializePath(route.canonicalPath, route.id),
+        route.method,
+        route.method === "POST" || route.method === "PATCH" ? {} : undefined,
       );
       assert.equal(result.status, 401, route.id);
       assertCanonicalErrorEnvelope(result.body);

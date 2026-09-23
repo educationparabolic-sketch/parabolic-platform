@@ -59,6 +59,7 @@ export interface AdminAnalyticsStudentMetricRecord {
   disciplineIndexTrend: "down" | "stable" | "up";
   guessRatePercent: number;
   rollingRiskCluster: "critical" | "high" | "low" | "medium";
+  sourceMetricsUpdatedAt: string | null;
   studentId: string;
   studentName: string;
   testsAttempted: number;

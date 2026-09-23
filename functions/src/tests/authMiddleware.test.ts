@@ -148,6 +148,7 @@ test(
       (request as {context: {identity: unknown}}).context.identity,
       {
         examSession: null,
+        featureFlags: {},
         instituteId: "inst_build_62",
         isSuspended: false,
         isVendor: false,

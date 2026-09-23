@@ -73,6 +73,7 @@ export interface ResolveReportAssetPathRequest {
   extension?: "csv" | "pdf";
   instituteId: string;
   month: number;
+  reportId?: string;
   reportKind: ReportAssetKind;
   studentId?: string;
   year: number;

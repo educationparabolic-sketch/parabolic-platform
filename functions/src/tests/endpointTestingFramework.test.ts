@@ -725,12 +725,14 @@ test(
     const handler = createAdminGovernanceSnapshotsHandler({
       readSnapshots: async () => ({
         instituteId: "inst_build_89",
+        nextCursor: null,
         snapshots: [
           {
             academicYear: "2026",
             avgAccuracyPercent: 74,
             avgPhaseAdherence: 71,
             avgRawScorePercent: 65,
+            calibrationVersionUsed: "cal_v2026_03",
             createdAt: "2026-04-01T00:00:00.000Z",
             disciplineMean: 72,
             disciplineTrend: 1.2,
@@ -755,6 +757,7 @@ test(
               stable: 61,
               volatile: 8,
             },
+            riskModelVersionUsed: "risk_v2026_03",
             riskDistribution: {
               driftProne: 18,
               impulsive: 9,
@@ -767,6 +770,7 @@ test(
             skipBurstPercent: 4,
             stabilityIndex: 79,
             templateVarianceMean: 5.4,
+            templateVersionRangeUsed: "template_v1..v4",
             wrongStreakPercent: 2,
           },
         ],
@@ -911,6 +915,7 @@ test(
     const handler = createAdminGovernanceSnapshotsHandler({
       readSnapshots: async (input) => ({
         instituteId: input.instituteId ?? "inst_vendor_target_build_89",
+        nextCursor: null,
         snapshots: [],
         yearId: input.yearId ?? "2026",
       }),
@@ -961,13 +966,16 @@ test(
         header: {
           academicYear: "2026",
           calibrationVersion: "cal_v2026_03",
-          generatedAt: "2026-04-03T10:00:00.000Z",
+          eventCutoffAt: "2026-04-01T00:00:00.000Z",
+          eventRecordCount: 1,
           instituteId: "inst_build_90",
           month: "2026-03",
+          reportPreparedAt: "2026-04-03T10:00:00.000Z",
+          riskModelVersion: "risk_v2026_03",
           schemaVersion: 1,
-          snapshotDocumentPath:
-            "institutes/inst_build_90/academicYears/2026/" +
-            "governanceSnapshots/2026_03",
+          snapshotGeneratedAt: "2026-04-01T00:00:00.000Z",
+          snapshotId: "2026_03",
+          templateVersionRange: "template_v1..v4",
         },
         incidentTimeline: [
           {
@@ -997,14 +1005,6 @@ test(
             userActionsInvolved: ["FORCE_SUBMIT"],
           },
         ],
-        pdfExport: {
-          bucketName: "bucket-reports",
-          cdnPath: "inst_build_90/reports/2026/03/governance.pdf",
-          contentType: "application/pdf",
-          fileName: "governance.pdf",
-          gsUri: "gs://bucket-reports/inst_build_90/reports/2026/03/governance.pdf",
-          objectPath: "inst_build_90/reports/2026/03/governance.pdf",
-        },
         performance: {
           avgAccuracyPercent: 74,
           avgRawScorePercent: 66,
@@ -1160,14 +1160,16 @@ test(
         header: {
           academicYear: input.yearId ?? "2026",
           calibrationVersion: null,
-          generatedAt: "2026-04-03T10:00:00.000Z",
+          eventCutoffAt: "2026-04-01T00:00:00.000Z",
+          eventRecordCount: 0,
           instituteId: input.instituteId ?? "inst_vendor_target_build_90",
           month: input.month ?? "2026-03",
+          reportPreparedAt: "2026-04-03T10:00:00.000Z",
+          riskModelVersion: null,
           schemaVersion: 1,
-          snapshotDocumentPath:
-            `institutes/${input.instituteId ?? "inst_vendor_target_build_90"}` +
-            `/academicYears/${input.yearId ?? "2026"}/` +
-            "governanceSnapshots/2026_03",
+          snapshotGeneratedAt: "2026-04-01T00:00:00.000Z",
+          snapshotId: "2026_03",
+          templateVersionRange: null,
         },
         incidentTimeline: [],
         majorIncidentAlerts: [],

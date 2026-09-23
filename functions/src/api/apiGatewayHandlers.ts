@@ -7,9 +7,12 @@ import {
 } from "./adminAcademicYearArchive";
 import {handleAdminAnalyticsRequest} from "./adminAnalytics";
 import {
-  handleAdminGovernanceSnapshotsRequest,
-} from "./adminGovernanceSnapshots";
-import {handleAdminInterventionsRequest} from "./adminInterventions";
+  handleAdminGovernanceTransportRequest,
+} from "./adminGovernanceTransport";
+import {
+  handleAdminInterventionMutationRequest,
+  handleAdminInterventionTimelineRequest,
+} from "./adminInterventionRecommendations";
 import {handleAdminLicensingRequest} from "./adminLicensing";
 import {handleAdminOverviewRequest} from "./adminOverview";
 import {
@@ -67,8 +70,9 @@ Record<string, ApiGatewayHandler>
   adminAcademicYearArchive: handleAdminAcademicYearArchiveRequest,
   adminAssignmentOperations: handleAdminAssignmentOperationsRequest,
   adminAnalytics: handleAdminAnalyticsRequest,
-  adminGovernanceSnapshots: handleAdminGovernanceSnapshotsRequest,
-  adminInterventions: handleAdminInterventionsRequest,
+  adminGovernanceTransport: handleAdminGovernanceTransportRequest,
+  adminInterventionMutation: handleAdminInterventionMutationRequest,
+  adminInterventionTimeline: handleAdminInterventionTimelineRequest,
   adminLicensing: handleAdminLicensingRequest,
   adminOverview: handleAdminOverviewRequest,
   adminQuestionDistribution: handleAdminQuestionDistributionRequest,

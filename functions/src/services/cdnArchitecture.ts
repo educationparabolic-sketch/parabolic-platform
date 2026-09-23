@@ -72,13 +72,14 @@ const resolveDefaultQuestionExtension = (
 const resolveReportFileName = (
   reportKind: ReportAssetKind,
   extension: "csv" | "pdf",
+  reportId?: string,
   studentId?: string,
 ): string => {
   switch (reportKind) {
   case "studentMonthlyStatement":
     return `${requirePathSegment(studentId, "studentId")}.${extension}`;
   case "governanceReport":
-    return `governance.${extension}`;
+    return `${requirePathSegment(reportId, "reportId")}.${extension}`;
   case "analyticsExport":
     return `analytics-export.${extension}`;
   case "studentDataExport":
@@ -372,6 +373,7 @@ export class CdnArchitectureService {
     const fileName = resolveReportFileName(
       request.reportKind,
       extension,
+      request.reportId,
       request.studentId,
     );
     const objectPath =

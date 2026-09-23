@@ -40,7 +40,7 @@ If prose and the typed manifest disagree about a route key or status, the typed 
 - `missing`: no current Functions handler/export implements the canonical contract.
 - `intentionally_retired`: explicit product/architecture evidence says the route must not be served.
 
-Current totals: 55 implemented, 3 incompatible, 0 missing, 3 intentionally retired.
+Current totals: 60 implemented, 3 incompatible, 0 missing, 5 intentionally retired.
 
 Routes marked `planned` in the code manifest are canonical contracts reserved by
 the active owning task and do not count as executable frontend tuples. They stay
@@ -64,11 +64,11 @@ frontend caller. Frontend-declared routes retain bidirectional source coverage.
 | ADM-10 | `GET /api/v1/admin/tests` | `implemented` | `adminTests` | Firebase ID; teacher/admin; identity tenant |
 | ADM-11 | `POST /api/v1/admin/tests` | `implemented` | `adminTests` | Firebase ID; teacher/admin; identity tenant; draft-only create |
 | ADM-12 | `POST /api/v1/admin/runs` | `implemented` | `adminRuns` | Firebase ID; teacher/admin; identity tenant; current academic year; expected template version; idempotency key |
-| ADM-13 | `POST /api/v1/admin/governance/snapshots` | `implemented` | `adminGovernanceSnapshots` | Firebase ID; director L3 or vendor; guarded tenant |
+| ADM-13 | `POST /api/v1/admin/governance/snapshots` | `intentionally_retired` | None | Superseded by query-canonical ADM-49; no canonical browser dispatch |
 | ADM-14 | `POST /api/v1/admin/settings` | `incompatible` | `adminSettings` | Firebase ID; admin/director; guarded tenant |
 | ADM-15 | `POST /api/v1/admin/academicYear/archive` | `implemented` | `adminAcademicYearArchive` | Firebase ID; admin/vendor; guarded tenant |
 | ADM-16 | `POST /api/v1/admin/licensing` | `incompatible` | `adminLicensing` | Firebase ID; admin/director; guarded tenant |
-| ADM-17 | `POST /api/v1/admin/interventions` | `implemented` | `adminInterventions` | Firebase ID; admin/teacher; matching tenant; L1 |
+| ADM-17 | `POST /api/v1/admin/interventions` | `intentionally_retired` | None | Superseded by advisory ADM-53..ADM-55; no canonical browser dispatch |
 | ADM-18 | `POST /api/v1/admin/questions/assets` | `intentionally_retired` | None | Superseded by package-coordinated assets and revisioned ADM-31/ADM-32 replacements; no canonical browser dispatch |
 | ADM-19 | `PATCH /api/v1/admin/tests/{testId}` | `implemented` | `adminTests` | Firebase ID; teacher/admin; identity tenant; expected version |
 | ADM-20 | `POST /api/v1/admin/tests/{testId}/publish` | `implemented` | `adminTests` | Firebase ID; teacher/admin; identity tenant; expected version; draft-only source |
@@ -100,6 +100,13 @@ frontend caller. Frontend-declared routes retain bidirectional source coverage.
 | ADM-46 | `POST /api/v1/admin/runs/{runId}/lifecycle` | `implemented` | `adminAssignmentOperations` | Firebase ID; teacher/admin; identity tenant; expected revision; legal extend/cancel/terminate/archive; idempotency key |
 | ADM-47 | `POST /api/v1/admin/runs/{runId}/notifications/resend` | `implemented` | `adminAssignmentOperations` | Firebase ID; teacher/admin; identity tenant; expected revision; deterministic recipient jobs/audit; idempotency key |
 | ADM-48 | `POST /api/v1/admin/runs/{runId}/sessions/{sessionId}/overrides` | `implemented` | `adminAssignmentOperations` | Firebase ID; teacher/admin; identity tenant; expected run/session revisions; minimum-time bypass or force-submit only; idempotency key |
+| ADM-49 | `GET /api/v1/admin/governance/snapshots` | `implemented` | `adminGovernanceTransport` | Firebase ID; Director L3 plus `governanceAccess` in identity tenant, or Vendor with explicit target selector; bounded cursor page |
+| ADM-50 | `POST /api/v1/admin/governance/reports` | `implemented` | `adminGovernanceTransport` | Same governance boundary; immutable snapshot ID; idempotency key; real PDF completion before success |
+| ADM-51 | `GET /api/v1/admin/governance/reports` | `implemented` | `adminGovernanceTransport` | Same governance boundary; bounded immutable report-metadata cursor page |
+| ADM-52 | `GET /api/v1/admin/governance/reports/{reportId}/download` | `implemented` | `adminGovernanceTransport` | Same governance boundary; verified short-lived URL only; no Storage coordinates |
+| ADM-53 | `GET /api/v1/admin/interventions` | `implemented` | `adminInterventionTimeline` | Firebase ID; teacher/admin L1 or Director L3; `riskOverview`; identity tenant; bounded cursor timeline; no Vendor access |
+| ADM-54 | `POST /api/v1/admin/interventions/recommendations` | `implemented` | `adminInterventionMutation` | Firebase ID; teacher/admin L1 plus `riskOverview`; identity tenant; advisory-only recommendation; idempotency key |
+| ADM-55 | `PATCH /api/v1/admin/interventions/{interventionId}/outcome` | `implemented` | `adminInterventionMutation` | Same mutation boundary; expected revision; idempotency key; advisory outcome only |
 | STU-01 | `GET /api/v1/student/dashboard` | `implemented` | `studentDashboard` | Firebase ID; student; identity tenant/student/license; active Student; current academic year |
 | STU-02 | `GET /api/v1/student/tests` | `implemented` | `studentTests` | Firebase ID; student; identity tenant/student/license; active Student; current academic year; bounded status/page query |
 | STU-03 | `GET /api/v1/student/performance` | `implemented` | `studentPerformance` | Firebase ID; student; identity tenant/Student/license; active Student; current year; bounded `lastN`; L0/L1/L2 redaction |
@@ -188,6 +195,42 @@ Minimum-time bypass is one atomic run/session/override-log/audit command;
 force-submit durably records pending override authority, invokes the canonical
 scored submission engine under a resumable lock owner, and completes its
 override log and audit on exact retry after any recoverable interruption.
+
+ADM-49 through ADM-55 are the registered BWM-029 governance and intervention
+boundary. Mounted Admin callers use only these canonical routes; legacy ADM-13
+and ADM-17 are intentionally retired and have no gateway or direct HTTP export.
+Governance read/export is Director L3 plus `governanceAccess`; Vendor may use an
+explicit target selector only after separate global-role authorization, while a
+Director's institute always comes from verified identity. Reports bind one
+immutable snapshot and event cutoff, persist immutable PDF hash/size/source
+metadata, replay by idempotency key, and expose only a short-lived download URL.
+The internal artifact service now enforces that contract with deterministic PDF
+bytes, a unique create-only Storage object, stored-byte/hash verification,
+deterministic command reservation, and atomic ready-metadata/audit completion.
+Exact concurrent retries replay; conflicting reuse or corrupt/incomplete state
+fails closed. Download rechecks the object before returning a CDN URL capped at
+ten minutes and never returns Storage coordinates. ADM-50..ADM-52 expose the
+service through the revocation-checked governance transport; the mounted report
+view reloads ready metadata after generation.
+Intervention creation is explicitly advisory: `remedial_test` recommends a test
+and `student_message` supplies a draft, but neither claims to assign a run or
+deliver a message. Teacher/admin may mutate at L1 plus `riskOverview`; bounded
+timeline reads additionally permit Director only at L3. Vendor has no
+intervention access. All actor and resolved institute authority remains
+server-derived, and outcome mutation requires expected revision plus
+idempotency. The internal canonical service enforces these semantics with
+schema-version-2 records: creation binds the exact stored metrics timestamp and
+atomically writes recommendation, replay command, and immutable audit; outcome
+updates atomically enforce revision and retain an exact historical replay result.
+Timeline queries filter year/institute and optional student before their bounded
+cursor window. It assigns no run and delivers no message. ADM-53..ADM-55 are
+mounted through the strict intervention workspace, which reloads authoritative
+timeline state after each mutation. Snapshot pages
+default to 12 and cap at 36; report and intervention
+pages default to 25 and cap at 50. Report generation pages immutable incidents
+through the snapshot's `generatedAt` cutoff, fails rather than truncates beyond
+1,000 source events, and download URLs expire within ten minutes. The browser
+never submits actor, role, or resolved institute authority.
 
 Live reads resolve only the current operational academic year. They return at
 most 50 active/collecting runs per opaque created-at/document-ID cursor; each
@@ -285,16 +328,16 @@ supported browser transport.
 
 ## Backend HTTP export accounting
 
-`functions/src/apiRouteManifest.ts` accounts for all 51 current `functions.https.onRequest` exports:
+`functions/src/apiRouteManifest.ts` accounts for all 52 current `functions.https.onRequest` exports:
 
 - `apiV1` is the single versioned `gateway` export; it resolves exact manifest method/path pairs, preserves decoded route parameters, and dispatches non-null `functionExport` mappings through the existing raw request handlers;
-- 33 exports are referenced by one or more canonical frontend routes;
-- 12 portal-oriented exports currently have no executable frontend caller and remain `unmapped_portal` rather than receiving an invented public route;
+- 35 exports are referenced by one or more canonical frontend routes;
+- 11 portal-oriented Vendor exports currently have no executable frontend caller and remain `unmapped_portal` rather than receiving an invented public route;
 - `internalEmailQueue`, `adminQuestionsBulk`, and `adminQuestionAssets` are `internal_only`;
 - `stripeWebhook` is a `webhook` boundary;
 - `helloWorld` is a `healthcheck` boundary.
 
-Unmapped exports remain directly exported legacy Functions until an owning task explicitly assigns, retires, or restricts them. The BWM-003 router dispatches only entries in `API_ROUTE_MANIFEST`; it does not automatically expose `unmapped_portal`, `internal_only`, webhook, or health-check exports under `/api/v1`.
+Unmapped exports remain directly exported legacy Functions until an owning task explicitly assigns, retires, or restricts them. ADM-13, ADM-17, and the former governance-report preview export are no longer direct HTTP exports. The BWM-003 router dispatches only entries in `API_ROUTE_MANIFEST`; it does not automatically expose `unmapped_portal`, `internal_only`, webhook, or health-check exports under `/api/v1`.
 
 ## Authentication and authorization
 
