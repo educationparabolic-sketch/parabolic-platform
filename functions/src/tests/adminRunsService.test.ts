@@ -70,6 +70,32 @@ const createRunFixture = (
   timezone: "Asia/Kolkata",
 });
 
+const createInstituteFixture = () => ({
+  profile: {
+    academicYearFormat: "YYYY-YY",
+    contactEmail: "operations@example.test",
+    contactPhone: "+1-555-0100",
+    defaultExamType: "JEE_MAIN",
+    instituteName: "Admin Runs Test Institute",
+    logoReference: "logos/admin-runs-test.png",
+    timeZone: "Asia/Kolkata",
+  },
+  securitySettings: {
+    allowMultipleAdminSessions: false,
+    forceLogoutOnPasswordChange: true,
+    sessionTimeoutDuration: 30,
+  },
+  settingsRevision: 0,
+  settingsUsers: {},
+});
+
+const createYearFixture = (academicYearLabel: string, status: string) => ({
+  academicYearLabel,
+  runCount: 0,
+  status,
+  studentCount: 0,
+});
+
 test(
   "Admin runs reads are tenant-current, cursor-paginated, filtered, and strict",
   async () => {
@@ -91,10 +117,13 @@ test(
     const oldRunPath = `${oldYearPath}/runs/run-old`;
 
     await Promise.all([
-      firestore.doc(currentYearPath).set({status: "Active"}),
-      firestore.doc(oldYearPath).set({status: "Archived"}),
-      firestore.doc(otherYearPath).set({status: "Active"}),
-      firestore.doc(archivedOnlyYearPath).set({status: "Archived"}),
+      firestore.doc(`institutes/${instituteId}`).set(createInstituteFixture()),
+      firestore.doc(`institutes/${otherInstituteId}`).set(createInstituteFixture()),
+      firestore.doc(`institutes/${archivedOnlyInstituteId}`).set(createInstituteFixture()),
+      firestore.doc(currentYearPath).set(createYearFixture("2026-27", "Active")),
+      firestore.doc(oldYearPath).set(createYearFixture("2025-26", "Archived")),
+      firestore.doc(otherYearPath).set(createYearFixture("2026-27", "Active")),
+      firestore.doc(archivedOnlyYearPath).set(createYearFixture("2025-26", "Archived")),
       firestore.doc(currentRunPaths[0]).set(createRunFixture(
         "run-1",
         "2026-08-20T08:00:00.000Z",

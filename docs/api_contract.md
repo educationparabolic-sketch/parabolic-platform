@@ -2,7 +2,7 @@
 
 Status: canonical route and response-envelope contract
 
-Last reconciled: 2026-09-14 (`BWM-027` Question Bank lifecycle closeout)
+Last reconciled: 2026-09-25 (`BWM-030` settings, staff Auth, and academic-year operations closeout)
 
 ## Sources of truth
 
@@ -40,7 +40,7 @@ If prose and the typed manifest disagree about a route key or status, the typed 
 - `missing`: no current Functions handler/export implements the canonical contract.
 - `intentionally_retired`: explicit product/architecture evidence says the route must not be served.
 
-Current totals: 60 implemented, 3 incompatible, 0 missing, 5 intentionally retired.
+Current totals: 61 implemented, 2 incompatible, 0 missing, 5 intentionally retired.
 
 Routes marked `planned` in the code manifest are canonical contracts reserved by
 the active owning task and do not count as executable frontend tuples. They stay
@@ -65,8 +65,8 @@ frontend caller. Frontend-declared routes retain bidirectional source coverage.
 | ADM-11 | `POST /api/v1/admin/tests` | `implemented` | `adminTests` | Firebase ID; teacher/admin; identity tenant; draft-only create |
 | ADM-12 | `POST /api/v1/admin/runs` | `implemented` | `adminRuns` | Firebase ID; teacher/admin; identity tenant; current academic year; expected template version; idempotency key |
 | ADM-13 | `POST /api/v1/admin/governance/snapshots` | `intentionally_retired` | None | Superseded by query-canonical ADM-49; no canonical browser dispatch |
-| ADM-14 | `POST /api/v1/admin/settings` | `incompatible` | `adminSettings` | Firebase ID; admin/director; guarded tenant |
-| ADM-15 | `POST /api/v1/admin/academicYear/archive` | `implemented` | `adminAcademicYearArchive` | Firebase ID; admin/vendor; guarded tenant |
+| ADM-14 | `POST /api/v1/admin/settings` | `implemented` | `adminSettings` | Firebase ID; admin/director; identity tenant; Admin L0 mutation, Director L3 read-only; strict revision/idempotency authority |
+| ADM-15 | `POST /api/v1/admin/academicYear/archive` | `implemented` | `adminAcademicYearArchive` | Firebase ID; admin L0 or separately authorized vendor target; irreversible confirmation; durable replay/recovery authority |
 | ADM-16 | `POST /api/v1/admin/licensing` | `incompatible` | `adminLicensing` | Firebase ID; admin/director; guarded tenant |
 | ADM-17 | `POST /api/v1/admin/interventions` | `intentionally_retired` | None | Superseded by advisory ADM-53..ADM-55; no canonical browser dispatch |
 | ADM-18 | `POST /api/v1/admin/questions/assets` | `intentionally_retired` | None | Superseded by package-coordinated assets and revisioned ADM-31/ADM-32 replacements; no canonical browser dispatch |
@@ -356,6 +356,27 @@ deployable Functions mirror is in `functions/src/types/apiResponse.ts`. A
 permanent contract test requires their success code, stable error-code set, and
 envelope fields to remain identical. Success and error correlation fields are
 top-level fields; legacy `meta` nesting is not part of the canonical contract.
+
+ADM-14 is the shared BWM-030 settings boundary. `GET_SETTINGS_SNAPSHOT` returns
+only strict, bounded profile/session-policy, academic-year, staff-access, and
+newest-50 audit authority. The six supported mutations require an observed
+`settingsRevision` and UUID command, atomically persist one deterministic
+command receipt and immutable settings audit, and reconcile staff Firebase Auth,
+managed claims, disabled state, refresh-token revocation, or a redacted
+invitation/password-reset email job as applicable. Public intents never supply
+actor, institute, or primary-administrator authority. Profile writes exclude
+Vendor-owned registered name/logo fields; session policy is limited to the
+three mounted institute-owned controls. Exact replays return the original
+receipt, while stale revisions or changed-intent command reuse fail closed.
+
+ADM-15 is the separate irreversible academic-year archive command. It accepts
+the exact year label, explicit confirmation, expected settings revision, and
+UUID command; requires a locked year with no non-terminal run or session; and
+reserves one leased durable operation before BigQuery export and the final
+governance snapshot. Export and snapshot checkpoints are recoverable without
+reinsertion. Finalization atomically seals the year and creates deterministic
+settings and administrative audits. Concurrent commands have one winner, and
+completed exact replay returns the original authoritative receipt.
 
 The target success envelope is:
 

@@ -3,6 +3,7 @@ import {DecodedIdToken} from "firebase-admin/auth";
 import {sendErrorResponse} from "../services/apiResponse";
 import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
 import {createAuthenticationMiddleware} from "../middleware/auth";
+import {createCapabilityAuthorizationMiddleware} from "../middleware/capability";
 import {
   createMethodMiddleware,
   createMiddlewareHandler,
@@ -56,7 +57,7 @@ export const createAdminAcademicYearArchiveHandler = (
       {
         instituteId: validatedRequest.instituteId,
         requestId: request.context.requestId,
-        yearId: validatedRequest.yearId,
+        yearId: validatedRequest.academicYearId,
       },
       async () => dependencies.archiveAcademicYear(validatedRequest),
     );
@@ -76,16 +77,20 @@ export const createAdminAcademicYearArchiveHandler = (
       allowVendorBypass: true,
       resolveRequestInstituteId: (request): string | null => {
         const body = (request.body ?? {}) as AcademicYearArchiveRequest;
-
-        return typeof body.instituteId === "string" ?
-          body.instituteId :
-          null;
+        return request.context.identity?.isVendor === true &&
+          typeof body.targetInstituteId === "string" ?
+          body.targetInstituteId :
+          request.context.identity?.instituteId ?? null;
       },
     }),
     createRoleAuthorizationMiddleware({
       allowedRoles: ["admin", "vendor"],
       forbiddenMessage:
         "Only admin and vendor roles can archive academic years.",
+    }),
+    createCapabilityAuthorizationMiddleware({
+      minimumLicenseLayer: "L0",
+      vendorBypass: true,
     }),
     createRequestValidationMiddleware({
       validator: (request: MiddlewareRequest): void => {
@@ -95,17 +100,20 @@ export const createAdminAcademicYearArchiveHandler = (
         const identity = request.context.identity;
 
         const validatedRequest = archivePipelineService.normalizeRequest({
+          academicYearId: body.academicYearId,
           actorId: identity?.uid,
           actorRole: identity?.role,
-          doubleConfirm: body.doubleConfirm === true ? true : undefined,
+          commandId: body.commandId,
+          confirmIrreversibleArchive:
+            body.confirmIrreversibleArchive === true ? true : undefined,
+          expectedRevision: body.expectedRevision,
           instituteId:
             identity?.isVendor ?
-              body.instituteId :
-              identity?.instituteId ?? body.instituteId,
+              body.targetInstituteId ?? undefined :
+              identity?.instituteId ?? undefined,
           ipAddress: request.ip,
           isVendor: identity?.isVendor === true,
           userAgent: request.header("user-agent"),
-          yearId: body.yearId,
         });
 
         setRequestData(

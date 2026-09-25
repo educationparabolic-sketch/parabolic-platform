@@ -242,6 +242,8 @@ ignored local environment or an approved secret store.
 | `STRIPE_WEBHOOK_SECRET` | `STRIPE_WEBHOOK_SECRET_NAME` | Stripe webhook verification is enabled. | Ephemeral local/test secret value. | Runtime secret binding only. | Value variable forbidden; reference must resolve through Google Secret Manager. |
 | `AI_API_KEY` | `AI_API_KEY_SECRET_NAME` | AI-backed generation or summaries are enabled. | Ephemeral local/test secret value. | Runtime secret binding only. | Value variable forbidden; reference must resolve through Google Secret Manager. |
 | `EMAIL_PROVIDER_KEY` | `EMAIL_PROVIDER_KEY_SECRET_NAME` | External email delivery is enabled. | Ephemeral local/test secret value. | Runtime secret binding only. | Value variable forbidden; reference must resolve through Google Secret Manager. |
+| `EMAIL_FROM_ADDRESS` | N/A | Transactional email delivery is enabled. | Verified development sender address. | Verified provider sender address. | Non-secret sender identity; provider verification remains an operations responsibility under BWM-052. |
+| `EMAIL_FROM_NAME` | N/A | Optional. | `Parabolic Platform` | Approved transactional sender name. | Defaults to `Parabolic Platform` when omitted. |
 
 Secret reference values may be a secret ID in the selected project or a full
 `projects/<project>/secrets/<secret>/versions/<version>` resource name. A

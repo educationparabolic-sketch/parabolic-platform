@@ -17,6 +17,9 @@ const emulatorMarkers = [
   "FIREBASE_AUTH_EMULATOR_HOST",
   "firebase emulators",
 ];
+const cleanupMaxAttempts = 3;
+const cleanupRetryDelayMs = 250;
+const transientCleanupCodes = new Set(["UND_ERR_SOCKET", "ECONNRESET"]);
 
 assert.notEqual(
   fullServicesPhase,
@@ -75,15 +78,37 @@ async function clearEmulatorData() {
       "/databases/(default)/documents",
   ]);
 
-  const results = await Promise.all(cleanupRequests.map(async ([label, url]) => {
-    const response = await fetch(url, {
-      method: "DELETE",
-      signal: AbortSignal.timeout(15_000),
-    });
-    const body = await response.text();
-    assert.ok(response.ok, `${label} cleanup failed with HTTP ${response.status}: ${body}`);
-    return label;
-  }));
+  const results = [];
+  for (const [label, url] of cleanupRequests) {
+    for (let attempt = 1; attempt <= cleanupMaxAttempts; attempt += 1) {
+      try {
+        const response = await fetch(url, {
+          method: "DELETE",
+          signal: AbortSignal.timeout(15_000),
+        });
+        const body = await response.text();
+        assert.ok(
+          response.ok,
+          `${label} cleanup failed with HTTP ${response.status}: ${body}`,
+        );
+        results.push(label);
+        break;
+      } catch (error) {
+        const errorCode = error?.cause?.code;
+        const retryable =
+          error instanceof TypeError && transientCleanupCodes.has(errorCode);
+        if (!retryable || attempt === cleanupMaxAttempts) {
+          throw error;
+        }
+        console.warn(
+          `[emulator-suite] ${label} cleanup transport retry ${attempt} of ` +
+            `${cleanupMaxAttempts - 1}.`,
+        );
+        await new Promise((resolve) =>
+          setTimeout(resolve, cleanupRetryDelayMs * attempt));
+      }
+    }
+  }
 
   console.log(`[emulator-suite] Cleared ${results.join(" and ")} test data.`);
 }
@@ -91,7 +116,7 @@ async function clearEmulatorData() {
 const firestoreSuites = await discoverCompiledFirestoreSuites();
 const explicitSuites = await discoverExplicitEmulatorSuites();
 
-assert.equal(firestoreSuites.length, 75, "Firestore suite inventory changed");
+assert.equal(firestoreSuites.length, 76, "Firestore suite inventory changed");
 assert.equal(explicitSuites.length, 10, "explicit emulator suite inventory changed");
 
 const selectedSuites = fullServicesPhase ? explicitSuites : firestoreSuites;

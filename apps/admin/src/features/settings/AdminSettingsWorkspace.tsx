@@ -1,29 +1,31 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { CAPABILITY_MATRIX } from "../../../../../shared/contracts/capabilityPolicy";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
+import { LICENSE_LAYER_ORDER } from "../../../../../shared/types/portalRouting";
 import { UiFormField, UiStatCard } from "../../../../../shared/ui/components";
 import { resolveAdminAccessContext } from "../../portals/adminAccess";
 import {
   ApiClientError,
   FALLBACK_SNAPSHOT,
+  archiveAcademicYear,
   fetchSettingsSnapshot,
+  inviteStaff,
   isLocalSettingsReadMode,
   lockAcademicYear,
   removeUserAccess,
-  requestAcademicYearArchive,
   resetUserPassword,
-  resolveAdminInstituteId,
   updateInstituteProfile,
   updateSecuritySettings,
-  upsertUserAccess,
+  updateUserAccess,
   type AdminSettingsSnapshot,
   type InstituteProfileSettings,
-  type SettingsAuditEntry,
-  type StaffAccessRecord,
+  type SecuritySettings,
   type StaffRole,
+  type StaffStatus,
 } from "./settingsDataset";
 
-type SettingsView = "general" | "academic" | "access" | "activity";
+type SettingsView = "general" | "academic" | "access" | "activity" | "unavailable";
 
 const SETTINGS_VIEWS: Array<{ id: SettingsView; label: string; path: string }> = [
   { id: "general", label: "General", path: "/admin/settings/profile" },
@@ -32,25 +34,25 @@ const SETTINGS_VIEWS: Array<{ id: SettingsView; label: string; path: string }> =
   { id: "activity", label: "Activity", path: "/admin/settings/audit-history" },
 ];
 
-interface ArchiveRequest {
-  id: string;
-  yearId: string;
-  yearLabel: string;
-  requestedAt: string;
-  status: "pending";
-}
-
 interface UserDraft {
   displayName: string;
   email: string;
-  role: Exclude<StaffRole, "support">;
+  role: StaffRole;
+}
+
+interface PendingCommand {
+  id: string;
+  intentKey: string;
 }
 
 const EMPTY_USER_DRAFT: UserDraft = { displayName: "", email: "", role: "teacher" };
-const MAX_LOGO_FILE_BYTES = 500 * 1024;
-const ALLOWED_LOGO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 function resolveView(pathname: string): SettingsView {
+  if (
+    pathname.endsWith("/execution-policy") ||
+    pathname.endsWith("/data") ||
+    pathname.endsWith("/system")
+  ) return "unavailable";
   if (pathname.endsWith("/academic-year")) return "academic";
   if (pathname.endsWith("/access")) return "access";
   if (pathname.endsWith("/audit-history")) return "activity";
@@ -105,34 +107,21 @@ function instituteInitials(name: string): string {
     .join("");
 }
 
-function localAudit(
-  area: string,
-  actionType: SettingsAuditEntry["actionType"],
-  summary: string,
-): SettingsAuditEntry {
-  const timestamp = new Date().toISOString();
-  const eventId = `settings_audit_${Date.now()}`;
-  return {
-    eventId,
-    timestamp,
-    actor: "admin.current",
-    actorRole: "admin",
-    actionType,
-    area,
-    summary,
-    target: area.toLowerCase().replaceAll(" ", "."),
-    sourcePath: `institutes/local/settingsAudit/${eventId}`,
-  };
-}
-
 function AdminSettingsWorkspace() {
   const location = useLocation();
   const navigate = useNavigate();
   const { session } = useAuthProvider();
   const accessContext = resolveAdminAccessContext(session);
-  const isDirector = accessContext.role === "director";
-  const instituteId = useMemo(() => resolveAdminInstituteId(session.idToken), [session.idToken]);
   const activeView = resolveView(location.pathname);
+  const fixtureMode = isLocalSettingsReadMode();
+  const managePolicy = CAPABILITY_MATRIX["admin.settings.manage"];
+  const minimumManageLayer = managePolicy.minimumLicenseLayer;
+  const hasManageCapability = accessContext.role !== null &&
+    managePolicy.allowedRoles.some((allowedRole) => allowedRole === accessContext.role) &&
+    accessContext.licenseLayer !== null &&
+    minimumManageLayer !== null &&
+    LICENSE_LAYER_ORDER[accessContext.licenseLayer] >= LICENSE_LAYER_ORDER[minimumManageLayer];
+  const canManageSettings = !fixtureMode && hasManageCapability;
   const [snapshot, setSnapshot] = useState<AdminSettingsSnapshot>(FALLBACK_SNAPSHOT);
   const [profileDraft, setProfileDraft] = useState<InstituteProfileSettings>(
     FALLBACK_SNAPSHOT.profile,
@@ -146,35 +135,50 @@ function AdminSettingsWorkspace() {
   const [lockConfirmed, setLockConfirmed] = useState(false);
   const [archiveConfirmed, setArchiveConfirmed] = useState(false);
   const [archiveTypedLabel, setArchiveTypedLabel] = useState("");
-  const [archiveRequests, setArchiveRequests] = useState<ArchiveRequest[]>([]);
   const [userDraft, setUserDraft] = useState<UserDraft>(EMPTY_USER_DRAFT);
   const [selectedUserId, setSelectedUserId] = useState(FALLBACK_SNAPSHOT.users[0]?.userId ?? "");
   const [activityQuery, setActivityQuery] = useState("");
   const [activityArea, setActivityArea] = useState("all");
   const [sessionTimeoutDraft, setSessionTimeoutDraft] = useState(
-    String(FALLBACK_SNAPSHOT.security.sessionTimeoutDuration),
+    String(FALLBACK_SNAPSHOT.sessionPolicy.sessionTimeoutDuration),
   );
-  const [logoFileName, setLogoFileName] = useState("");
-  const [logoError, setLogoError] = useState("");
+  const [sessionPolicyDraft, setSessionPolicyDraft] = useState<SecuritySettings>(
+    FALLBACK_SNAPSHOT.sessionPolicy,
+  );
   const [logoImageFailed, setLogoImageFailed] = useState(false);
-  const [logoInputKey, setLogoInputKey] = useState(0);
+  const profileCommand = useRef<PendingCommand | null>(null);
+  const sessionPolicyCommand = useRef<PendingCommand | null>(null);
+  const inviteCommand = useRef<PendingCommand | null>(null);
+  const updateStaffCommand = useRef<PendingCommand | null>(null);
+  const removeStaffCommand = useRef<PendingCommand | null>(null);
+  const resetPasswordCommand = useRef<PendingCommand | null>(null);
+  const lockYearCommand = useRef<PendingCommand | null>(null);
+  const archiveYearCommand = useRef<PendingCommand | null>(null);
+
+  function commandIdFor(reference: { current: PendingCommand | null }, intentKey: string) {
+    if (reference.current?.intentKey !== intentKey) {
+      reference.current = { id: crypto.randomUUID(), intentKey };
+    }
+    return reference.current.id;
+  }
 
   useEffect(() => {
     let mounted = true;
     async function hydrate() {
       setIsLoading(true);
       try {
-        const nextSnapshot = await fetchSettingsSnapshot(instituteId);
+        const nextSnapshot = await fetchSettingsSnapshot();
         if (!mounted) return;
         setSnapshot(nextSnapshot);
         setProfileDraft(nextSnapshot.profile);
-        setSessionTimeoutDraft(String(nextSnapshot.security.sessionTimeoutDuration));
+        setSessionTimeoutDraft(String(nextSnapshot.sessionPolicy.sessionTimeoutDuration));
+        setSessionPolicyDraft(nextSnapshot.sessionPolicy);
         setLogoImageFailed(false);
         setSelectedYearId(nextSnapshot.academicYears[0]?.yearId ?? "");
         setSelectedUserId(nextSnapshot.users[0]?.userId ?? "");
         setMessage(
-          isLocalSettingsReadMode()
-            ? "Local institute settings loaded."
+          fixtureMode
+            ? "Fixture settings loaded read-only; mutations require the secured API."
             : "Institute settings loaded from the secured API.",
         );
       } catch (error) {
@@ -190,7 +194,7 @@ function AdminSettingsWorkspace() {
     return () => {
       mounted = false;
     };
-  }, [instituteId]);
+  }, [fixtureMode, session.idToken]);
 
   const activeYear = snapshot.academicYears.find((year) => year.status === "Active") ?? null;
   const selectedYear =
@@ -198,91 +202,60 @@ function AdminSettingsWorkspace() {
     snapshot.academicYears[0] ??
     null;
   const selectedUser = snapshot.users.find((user) => user.userId === selectedUserId) ?? null;
-  const primaryAdmin = snapshot.users.find((user) => user.role === "admin") ?? null;
   const activeUsers = snapshot.users.filter((user) => user.status === "active").length;
-  const activityAreas = [...new Set(snapshot.settingsAudit.map((entry) => entry.area))].sort();
-  const filteredActivity = snapshot.settingsAudit.filter((entry) => {
+  const activityAreas = [...new Set(snapshot.audit.items.map((entry) => entry.area))].sort();
+  const filteredActivity = snapshot.audit.items.filter((entry) => {
     if (activityArea !== "all" && entry.area !== activityArea) return false;
     const query = activityQuery.trim().toLowerCase();
     if (!query) return true;
-    return [entry.actor, entry.area, entry.summary, entry.actionType, entry.target]
+    return [entry.actorUserId, entry.area, entry.summary, entry.actionType, entry.targetId]
       .join(" ")
       .toLowerCase()
       .includes(query);
   });
 
-  function applyLocalSnapshot(nextSnapshot: AdminSettingsSnapshot, nextMessage: string) {
+  function applyAuthoritativeSnapshot(nextSnapshot: AdminSettingsSnapshot, nextMessage: string) {
     setSnapshot(nextSnapshot);
     setProfileDraft(nextSnapshot.profile);
-    setMessage(nextMessage);
-  }
-
-  function resetLogoSelection() {
-    setProfileDraft((current) => ({ ...current, logoReference: snapshot.profile.logoReference }));
-    setLogoFileName("");
-    setLogoError("");
+    setSessionPolicyDraft(nextSnapshot.sessionPolicy);
+    setSessionTimeoutDraft(String(nextSnapshot.sessionPolicy.sessionTimeoutDuration));
+    setSelectedYearId((current) =>
+      nextSnapshot.academicYears.some((year) => year.yearId === current)
+        ? current
+        : nextSnapshot.academicYears[0]?.yearId ?? "");
+    setSelectedUserId((current) =>
+      nextSnapshot.users.some((user) => user.userId === current)
+        ? current
+        : nextSnapshot.users[0]?.userId ?? "");
     setLogoImageFailed(false);
-    setLogoInputKey((current) => current + 1);
-  }
-
-  function handleLogoSelection(file: File | null) {
-    setLogoError("");
-    if (!file) return;
-    if (!ALLOWED_LOGO_TYPES.has(file.type)) {
-      setLogoError("Use a PNG, JPG, or WebP image.");
-      setLogoInputKey((current) => current + 1);
-      return;
-    }
-    if (file.size > MAX_LOGO_FILE_BYTES) {
-      setLogoError("Logo must be 500 KB or smaller.");
-      setLogoInputKey((current) => current + 1);
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result !== "string") {
-        setLogoError("Unable to read the selected image.");
-        return;
-      }
-      setProfileDraft((current) => ({ ...current, logoReference: reader.result as string }));
-      setLogoFileName(file.name);
-      setLogoImageFailed(false);
-    };
-    reader.onerror = () => setLogoError("Unable to read the selected image.");
-    reader.readAsDataURL(file);
+    setMessage(nextMessage);
   }
 
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isDirector) return;
+    if (!hasManageCapability) return;
+    if (fixtureMode) {
+      setMessage("Profile updates require the secured API and are unavailable in fixture mode.");
+      return;
+    }
     setIsSaving(true);
     try {
-      if (isLocalSettingsReadMode()) {
-        applyLocalSnapshot(
-          {
-            ...snapshot,
-            profile: profileDraft,
-            settingsAudit: [
-              localAudit(
-                "Institute Profile",
-                "UPDATE_INSTITUTE_PROFILE",
-                "Operational institute profile updated.",
-              ),
-              ...snapshot.settingsAudit,
-            ],
-          },
-          "Institute profile saved.",
-        );
-      } else {
-        applyLocalSnapshot(
-          await updateInstituteProfile(instituteId, profileDraft),
-          "Institute profile saved.",
-        );
-      }
-      setLogoFileName("");
-      setLogoError("");
-      setLogoInputKey((current) => current + 1);
+      const profileIntent = {
+        academicYearFormat: profileDraft.academicYearFormat,
+        contactEmail: profileDraft.contactEmail,
+        contactPhone: profileDraft.contactPhone,
+        defaultExamType: profileDraft.defaultExamType,
+        timeZone: profileDraft.timeZone,
+      };
+      applyAuthoritativeSnapshot(
+        await updateInstituteProfile(
+          profileIntent,
+          snapshot.revision,
+          commandIdFor(profileCommand, JSON.stringify(profileIntent)),
+        ),
+        "Institute profile saved.",
+      );
+      profileCommand.current = null;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to save institute profile.");
     } finally {
@@ -291,31 +264,22 @@ function AdminSettingsWorkspace() {
   }
 
   async function handleLockYear() {
-    if (!selectedYear || selectedYear.status !== "Active" || !lockConfirmed || isDirector) return;
+    if (!selectedYear || selectedYear.status !== "Active" || !lockConfirmed || !hasManageCapability) return;
+    if (fixtureMode) {
+      setMessage("Academic-year mutations require the secured API and are unavailable in fixture mode.");
+      return;
+    }
     setIsSaving(true);
     try {
-      if (isLocalSettingsReadMode()) {
-        const nextSnapshot = {
-          ...snapshot,
-          academicYears: snapshot.academicYears.map((year) =>
-            year.yearId === selectedYear.yearId ? { ...year, status: "Locked" as const } : year,
-          ),
-          settingsAudit: [
-            localAudit(
-              "Academic Year Management",
-              "LOCK_ACADEMIC_YEAR",
-              `${selectedYear.academicYearLabel} locked after active-attempt confirmation.`,
-            ),
-            ...snapshot.settingsAudit,
-          ],
-        };
-        applyLocalSnapshot(nextSnapshot, `${selectedYear.academicYearLabel} locked.`);
-      } else {
-        applyLocalSnapshot(
-          await lockAcademicYear(instituteId, selectedYear.yearId),
-          `${selectedYear.academicYearLabel} locked.`,
-        );
-      }
+      applyAuthoritativeSnapshot(
+        await lockAcademicYear(
+          selectedYear.yearId,
+          snapshot.revision,
+          commandIdFor(lockYearCommand, selectedYear.yearId),
+        ),
+        `${selectedYear.academicYearLabel} locked.`,
+      );
+      lockYearCommand.current = null;
       setLockConfirmed(false);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to lock academic year.");
@@ -330,50 +294,31 @@ function AdminSettingsWorkspace() {
       selectedYear.status !== "Locked" ||
       !archiveConfirmed ||
       archiveTypedLabel.trim() !== selectedYear.academicYearLabel ||
-      isDirector
+      !hasManageCapability
     ) {
       setMessage("Select a locked year, confirm the request, and type its exact label.");
       return;
     }
-    if (archiveRequests.some((request) => request.yearId === selectedYear.yearId)) {
-      setMessage("An archive request is already pending for this academic year.");
+    if (fixtureMode) {
+      setMessage("Academic-year mutations require the secured API and are unavailable in fixture mode.");
       return;
     }
     setIsSaving(true);
     try {
-      if (isLocalSettingsReadMode()) {
-        setSnapshot((current) => ({
-          ...current,
-          settingsAudit: [
-            localAudit(
-              "Academic Year Management",
-              "REQUEST_ACADEMIC_YEAR_ARCHIVE",
-              `Archive requested for ${selectedYear.academicYearLabel}; no data was deleted.`,
-            ),
-            ...current.settingsAudit,
-          ],
-        }));
-      } else {
-        applyLocalSnapshot(
-          await requestAcademicYearArchive(instituteId, selectedYear.yearId),
-          `Archive request submitted for ${selectedYear.academicYearLabel}.`,
-        );
-      }
-      setArchiveRequests((current) => [
-        {
-          id: `archive_request_${Date.now()}`,
-          yearId: selectedYear.yearId,
-          yearLabel: selectedYear.academicYearLabel,
-          requestedAt: new Date().toISOString(),
-          status: "pending",
-        },
-        ...current,
-      ]);
+      const result = await archiveAcademicYear(
+        selectedYear.yearId,
+        snapshot.revision,
+        commandIdFor(archiveYearCommand, selectedYear.yearId),
+      );
+      applyAuthoritativeSnapshot(
+        result.snapshot,
+        `${selectedYear.academicYearLabel} archived after export and governance snapshot completion.`,
+      );
+      archiveYearCommand.current = null;
       setArchiveConfirmed(false);
       setArchiveTypedLabel("");
-      setMessage(`Archive request submitted for ${selectedYear.academicYearLabel}.`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to submit archive request.");
+      setMessage(error instanceof Error ? error.message : "Unable to archive academic year.");
     } finally {
       setIsSaving(false);
     }
@@ -381,37 +326,34 @@ function AdminSettingsWorkspace() {
 
   async function inviteUser(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isDirector) return;
+    if (!hasManageCapability) return;
+    if (fixtureMode) {
+      setMessage("Staff mutations require the secured API and are unavailable in fixture mode.");
+      return;
+    }
     setIsSaving(true);
-    const nextUser: StaffAccessRecord = {
-      userId: `staff_${Date.now()}`,
+    const invitation = {
       displayName: userDraft.displayName.trim(),
       email: userDraft.email.trim().toLowerCase(),
       role: userDraft.role,
-      status: "active",
-      updatedAt: new Date().toISOString(),
     };
     try {
-      if (isLocalSettingsReadMode()) {
-        const nextSnapshot = {
-          ...snapshot,
-          users: [...snapshot.users, nextUser],
-          settingsAudit: [
-            localAudit(
-              "User & Role Management",
-              "UPSERT_USER_ACCESS",
-              `Invited ${nextUser.email} as ${nextUser.role}.`,
-            ),
-            ...snapshot.settingsAudit,
-          ],
-        };
-        applyLocalSnapshot(nextSnapshot, `Invitation created for ${nextUser.email}.`);
-      } else {
-        applyLocalSnapshot(
-          await upsertUserAccess(instituteId, nextUser),
-          `Invitation created for ${nextUser.email}.`,
-        );
-      }
+      const intentKey = JSON.stringify(invitation);
+      const result = await inviteStaff(
+        invitation,
+        snapshot.revision,
+        commandIdFor(inviteCommand, intentKey),
+      );
+      const deliveryMessage = result.communication?.status === "delivered"
+        ? `Invitation email delivered to ${invitation.email}.`
+        : result.communication?.status === "failed"
+          ? `Invitation created for ${invitation.email}, but email delivery failed.`
+          : `Invitation email queued for ${invitation.email}.`;
+      applyAuthoritativeSnapshot(
+        result.snapshot,
+        deliveryMessage,
+      );
+      inviteCommand.current = null;
       setUserDraft(EMPTY_USER_DRAFT);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to invite user.");
@@ -420,35 +362,29 @@ function AdminSettingsWorkspace() {
     }
   }
 
-  async function updateSelectedUser(changes: Partial<Pick<StaffAccessRecord, "role" | "status">>) {
-    if (!selectedUser || selectedUser.userId === primaryAdmin?.userId || isDirector) return;
-    const nextUser = { ...selectedUser, ...changes, updatedAt: new Date().toISOString() };
+  async function updateSelectedUser(changes: { role?: StaffRole; status?: StaffStatus }) {
+    if (
+      !selectedUser ||
+      selectedUser.isPrimaryAdministrator ||
+      selectedUser.userId === session.user?.uid ||
+      !hasManageCapability
+    ) return;
+    if (fixtureMode) {
+      setMessage("Staff mutations require the secured API and are unavailable in fixture mode.");
+      return;
+    }
     setIsSaving(true);
     try {
-      if (isLocalSettingsReadMode()) {
-        applyLocalSnapshot(
-          {
-            ...snapshot,
-            users: snapshot.users.map((user) =>
-              user.userId === nextUser.userId ? nextUser : user,
-            ),
-            settingsAudit: [
-              localAudit(
-                "User & Role Management",
-                "UPSERT_USER_ACCESS",
-                `Updated access for ${nextUser.email}.`,
-              ),
-              ...snapshot.settingsAudit,
-            ],
-          },
-          `Access updated for ${nextUser.email}.`,
-        );
-      } else {
-        applyLocalSnapshot(
-          await upsertUserAccess(instituteId, nextUser),
-          `Access updated for ${nextUser.email}.`,
-        );
-      }
+      const intent = { targetUserId: selectedUser.userId, ...changes };
+      applyAuthoritativeSnapshot(
+        await updateUserAccess(
+          intent,
+          snapshot.revision,
+          commandIdFor(updateStaffCommand, JSON.stringify(intent)),
+        ),
+        `Access updated for ${selectedUser.email}.`,
+      );
+      updateStaffCommand.current = null;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to update user access.");
     } finally {
@@ -457,33 +393,25 @@ function AdminSettingsWorkspace() {
   }
 
   async function removeSelectedUser() {
-    if (!selectedUser || selectedUser.userId === primaryAdmin?.userId || isDirector) return;
+    if (
+      !selectedUser ||
+      selectedUser.isPrimaryAdministrator ||
+      selectedUser.userId === session.user?.uid ||
+      !hasManageCapability
+    ) return;
+    if (fixtureMode) {
+      setMessage("Staff mutations require the secured API and are unavailable in fixture mode.");
+      return;
+    }
     setIsSaving(true);
     try {
-      if (isLocalSettingsReadMode()) {
-        const remainingUsers = snapshot.users.filter((user) => user.userId !== selectedUser.userId);
-        applyLocalSnapshot(
-          {
-            ...snapshot,
-            users: remainingUsers,
-            settingsAudit: [
-              localAudit(
-                "User & Role Management",
-                "REMOVE_USER_ACCESS",
-                `Removed ${selectedUser.email}.`,
-              ),
-              ...snapshot.settingsAudit,
-            ],
-          },
-          `${selectedUser.email} removed from institute access.`,
-        );
-        setSelectedUserId(remainingUsers[0]?.userId ?? "");
-      } else {
-        applyLocalSnapshot(
-          await removeUserAccess(instituteId, selectedUser.userId),
-          `${selectedUser.email} removed from institute access.`,
-        );
-      }
+      const nextSnapshot = await removeUserAccess(
+        selectedUser.userId,
+        snapshot.revision,
+        commandIdFor(removeStaffCommand, selectedUser.userId),
+      );
+      removeStaffCommand.current = null;
+      applyAuthoritativeSnapshot(nextSnapshot, `${selectedUser.email} removed from institute access.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to remove user access.");
     } finally {
@@ -491,18 +419,29 @@ function AdminSettingsWorkspace() {
     }
   }
 
-  async function sendResetEmail() {
-    if (!selectedUser || isDirector) return;
+  async function sendPasswordReset() {
+    if (!selectedUser || !hasManageCapability) return;
+    if (fixtureMode) {
+      setMessage("Password reset requires the secured API and is unavailable in fixture mode.");
+      return;
+    }
     setIsSaving(true);
     try {
-      if (!isLocalSettingsReadMode()) {
-        applyLocalSnapshot(
-          await resetUserPassword(instituteId, selectedUser.userId),
-          `Password reset email requested for ${selectedUser.email}.`,
-        );
-      } else {
-        setMessage(`Password reset email requested for ${selectedUser.email}.`);
-      }
+      const result = await resetUserPassword(
+        selectedUser.userId,
+        snapshot.revision,
+        commandIdFor(resetPasswordCommand, selectedUser.userId),
+      );
+      const deliveryMessage = result.communication?.status === "delivered"
+        ? `Password-reset email delivered to ${selectedUser.email}.`
+        : result.communication?.status === "failed"
+          ? `Sessions revoked for ${selectedUser.email}, but email delivery failed.`
+          : `Sessions revoked and password-reset email queued for ${selectedUser.email}.`;
+      applyAuthoritativeSnapshot(
+        result.snapshot,
+        deliveryMessage,
+      );
+      resetPasswordCommand.current = null;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to request password reset.");
     } finally {
@@ -512,7 +451,11 @@ function AdminSettingsWorkspace() {
 
   async function saveSessionPolicy(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isDirector) return;
+    if (!hasManageCapability) return;
+    if (fixtureMode) {
+      setMessage("Session-policy updates require the secured API and are unavailable in fixture mode.");
+      return;
+    }
     const sessionTimeoutDuration = Number(sessionTimeoutDraft);
     if (
       !Number.isInteger(sessionTimeoutDuration) ||
@@ -522,29 +465,16 @@ function AdminSettingsWorkspace() {
       setMessage("Idle timeout must be a whole number between 5 and 720 minutes.");
       return;
     }
-    const nextSecurity = { ...snapshot.security, sessionTimeoutDuration };
+    const nextSecurity = { ...sessionPolicyDraft, sessionTimeoutDuration };
     setIsSaving(true);
     try {
-      if (isLocalSettingsReadMode()) {
-        setSnapshot((current) => ({
-          ...current,
-          security: nextSecurity,
-          settingsAudit: [
-            localAudit(
-              "Security & Access",
-              "UPDATE_SECURITY_SETTINGS",
-              "Institute session policy updated.",
-            ),
-            ...current.settingsAudit,
-          ],
-        }));
-        setMessage("Session policy saved.");
-      } else {
-        applyLocalSnapshot(
-          await updateSecuritySettings(instituteId, nextSecurity),
-          "Session policy saved.",
-        );
-      }
+      const nextSnapshot = await updateSecuritySettings(
+        nextSecurity,
+        snapshot.revision,
+        commandIdFor(sessionPolicyCommand, JSON.stringify(nextSecurity)),
+      );
+      applyAuthoritativeSnapshot(nextSnapshot, "Session policy saved.");
+      sessionPolicyCommand.current = null;
       setSessionTimeoutDraft(String(sessionTimeoutDuration));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to save session policy.");
@@ -566,7 +496,7 @@ function AdminSettingsWorkspace() {
         </div>
         <div className="admin-settings-posture">
           <span>Access posture</span>
-          <strong>{isDirector ? "Read only" : "Administrator"}</strong>
+          <strong>{canManageSettings ? "Administrator" : fixtureMode ? "Fixture read only" : "Read only"}</strong>
           <small>
             {activeUsers} active users · {activeYear?.academicYearLabel ?? "No active year"}
           </small>
@@ -653,41 +583,8 @@ function AdminSettingsWorkspace() {
                   <span id="settings-logo-label" className="ui-form-label">
                     Institute logo
                   </span>
-                  <strong>{logoFileName || "Current institute logo"}</strong>
-                  <small>PNG, JPG, or WebP. Maximum 500 KB. A square image works best.</small>
-                  <div className="admin-settings-logo-actions">
-                    <label
-                      htmlFor="settings-logo-upload"
-                      className={
-                        isDirector || isSaving ? "admin-settings-logo-upload-disabled" : ""
-                      }
-                    >
-                      Choose Image
-                    </label>
-                    {logoFileName ? (
-                      <button
-                        type="button"
-                        onClick={resetLogoSelection}
-                        disabled={isDirector || isSaving}
-                      >
-                        Discard
-                      </button>
-                    ) : null}
-                  </div>
-                  <input
-                    key={logoInputKey}
-                    id="settings-logo-upload"
-                    className="admin-settings-logo-input"
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    disabled={isDirector || isSaving}
-                    onChange={(event) => handleLogoSelection(event.target.files?.[0] ?? null)}
-                  />
-                  {logoError ? (
-                    <small className="admin-settings-logo-error" role="alert">
-                      {logoError}
-                    </small>
-                  ) : null}
+                  <strong>Current institute logo</strong>
+                  <small>Vendor-managed asset. Contact platform support to replace it.</small>
                 </div>
               </section>
               <UiFormField label="Operational email" htmlFor="settings-email">
@@ -695,7 +592,7 @@ function AdminSettingsWorkspace() {
                   id="settings-email"
                   type="email"
                   value={profileDraft.contactEmail}
-                  disabled={isDirector || isSaving}
+                  disabled={!canManageSettings || isSaving}
                   onChange={(event) =>
                     setProfileDraft((current) => ({ ...current, contactEmail: event.target.value }))
                   }
@@ -706,7 +603,7 @@ function AdminSettingsWorkspace() {
                 <input
                   id="settings-phone"
                   value={profileDraft.contactPhone}
-                  disabled={isDirector || isSaving}
+                  disabled={!canManageSettings || isSaving}
                   onChange={(event) =>
                     setProfileDraft((current) => ({ ...current, contactPhone: event.target.value }))
                   }
@@ -717,7 +614,7 @@ function AdminSettingsWorkspace() {
                 <select
                   id="settings-timezone"
                   value={profileDraft.timeZone}
-                  disabled={isDirector || isSaving}
+                  disabled={!canManageSettings || isSaving}
                   onChange={(event) =>
                     setProfileDraft((current) => ({ ...current, timeZone: event.target.value }))
                   }
@@ -731,7 +628,7 @@ function AdminSettingsWorkspace() {
                 <select
                   id="settings-exam"
                   value={profileDraft.defaultExamType}
-                  disabled={isDirector || isSaving}
+                  disabled={!canManageSettings || isSaving}
                   onChange={(event) =>
                     setProfileDraft((current) => ({
                       ...current,
@@ -749,7 +646,7 @@ function AdminSettingsWorkspace() {
                 <select
                   id="settings-year-format"
                   value={profileDraft.academicYearFormat}
-                  disabled={isDirector || isSaving}
+                  disabled={!canManageSettings || isSaving}
                   onChange={(event) =>
                     setProfileDraft((current) => ({
                       ...current,
@@ -767,19 +664,16 @@ function AdminSettingsWorkspace() {
                 type="button"
                 onClick={() => {
                   setProfileDraft(snapshot.profile);
-                  setLogoFileName("");
-                  setLogoError("");
                   setLogoImageFailed(false);
-                  setLogoInputKey((current) => current + 1);
                 }}
-                disabled={isDirector || isSaving}
+                disabled={!canManageSettings || isSaving}
               >
                 Reset
               </button>
               <button
                 type="submit"
                 className="admin-primary-link"
-                disabled={isDirector || isSaving}
+                disabled={!canManageSettings || isSaving}
               >
                 {isSaving ? "Saving..." : "Save General Settings"}
               </button>
@@ -870,22 +764,22 @@ function AdminSettingsWorkspace() {
                   <div className="admin-settings-year-action">
                     <strong>Lock academic year</strong>
                     <p>
-                      Locking blocks new tests and assignments for this year. The backend must
-                      confirm there are no active attempts.
+                      Locking blocks new assignments, session starts, and operational writes for this year. The backend must
+                      atomically confirm every run and session is terminal.
                     </p>
                     <label>
                       <input
                         type="checkbox"
                         checked={lockConfirmed}
-                        disabled={isDirector || isSaving}
+                        disabled={!canManageSettings || isSaving}
                         onChange={(event) => setLockConfirmed(event.target.checked)}
                       />{" "}
-                      I confirm no active examinations or attempts are running.
+                      I confirm all examinations and attempts have reached terminal states.
                     </label>
                     <button
                       type="button"
                       className="admin-primary-link"
-                      disabled={isDirector || isSaving || !lockConfirmed}
+                      disabled={!canManageSettings || isSaving || !lockConfirmed}
                       onClick={() => void handleLockYear()}
                     >
                       Lock Academic Year
@@ -896,21 +790,22 @@ function AdminSettingsWorkspace() {
                   <div className="admin-settings-year-action">
                     <strong>Request archive</strong>
                     <p>
-                      This creates a review request only. It does not delete or immediately archive
-                      institute data.
+                      This irreversible command exports terminal session summaries, creates the
+                      final governance snapshot, seals the year as archived, and records immutable
+                      audit authority. Existing retained records remain read-only.
                     </p>
                     <label>
                       <input
                         type="checkbox"
                         checked={archiveConfirmed}
-                        disabled={isDirector || isSaving}
+                        disabled={!canManageSettings || isSaving}
                         onChange={(event) => setArchiveConfirmed(event.target.checked)}
                       />{" "}
-                      I understand this request requires platform review.
+                      I understand this immediately starts the irreversible archive workflow.
                     </label>
                     <input
                       value={archiveTypedLabel}
-                      disabled={isDirector || isSaving}
+                      disabled={!canManageSettings || isSaving}
                       placeholder={`Type ${selectedYear.academicYearLabel}`}
                       onChange={(event) => setArchiveTypedLabel(event.target.value)}
                     />
@@ -918,25 +813,17 @@ function AdminSettingsWorkspace() {
                       type="button"
                       className="admin-primary-link"
                       disabled={
-                        isDirector ||
+                        !canManageSettings ||
                         isSaving ||
                         !archiveConfirmed ||
                         archiveTypedLabel !== selectedYear.academicYearLabel
                       }
                       onClick={() => void requestArchive()}
                     >
-                      Submit Archive Request
+                      Archive Academic Year
                     </button>
                   </div>
                 ) : null}
-                {archiveRequests
-                  .filter((request) => request.yearId === selectedYear.yearId)
-                  .map((request) => (
-                    <div key={request.id} className="admin-settings-pending-request">
-                      <strong>Archive request pending</strong>
-                      <span>Submitted {formatTimestamp(request.requestedAt)}</span>
-                    </div>
-                  ))}
               </section>
             ) : null}
           </div>
@@ -986,7 +873,7 @@ function AdminSettingsWorkspace() {
                   <p className="admin-content-eyebrow">Selected user</p>
                   <h3>{selectedUser?.displayName ?? "No user selected"}</h3>
                 </div>
-                {selectedUser?.userId === primaryAdmin?.userId ? (
+                {selectedUser?.isPrimaryAdministrator ? (
                   <span className="admin-settings-status-pill">Primary admin</span>
                 ) : null}
               </header>
@@ -1016,11 +903,11 @@ function AdminSettingsWorkspace() {
                         id="settings-user-role"
                         value={selectedUser.role}
                         disabled={
-                          isDirector || isSaving || selectedUser.userId === primaryAdmin?.userId
+                          !canManageSettings || isSaving || selectedUser.isPrimaryAdministrator || selectedUser.userId === session.user?.uid
                         }
                         onChange={(event) =>
                           void updateSelectedUser({
-                            role: event.target.value as Exclude<StaffRole, "support">,
+                            role: event.target.value as StaffRole,
                           })
                         }
                       >
@@ -1037,15 +924,15 @@ function AdminSettingsWorkspace() {
                         })
                       }
                       disabled={
-                        isDirector || isSaving || selectedUser.userId === primaryAdmin?.userId
+                        !canManageSettings || isSaving || selectedUser.isPrimaryAdministrator || selectedUser.userId === session.user?.uid
                       }
                     >
-                      {selectedUser.status === "active" ? "Suspend Access" : "Restore Access"}
+                      {selectedUser.status === "active" ? "Suspend Access" : "Activate Access"}
                     </button>
                     <button
                       type="button"
-                      onClick={() => void sendResetEmail()}
-                      disabled={isDirector || isSaving}
+                      onClick={() => void sendPasswordReset()}
+                      disabled={!canManageSettings || isSaving}
                     >
                       Send Reset Email
                     </button>
@@ -1054,13 +941,13 @@ function AdminSettingsWorkspace() {
                       className="admin-settings-danger-button"
                       onClick={() => void removeSelectedUser()}
                       disabled={
-                        isDirector || isSaving || selectedUser.userId === primaryAdmin?.userId
+                        !canManageSettings || isSaving || selectedUser.isPrimaryAdministrator || selectedUser.userId === session.user?.uid
                       }
                     >
                       Remove User
                     </button>
                   </div>
-                  {selectedUser.userId === primaryAdmin?.userId ? (
+                  {selectedUser.isPrimaryAdministrator ? (
                     <p className="admin-settings-primary-note">
                       Primary administrator replacement must be requested through the vendor.
                     </p>
@@ -1080,7 +967,7 @@ function AdminSettingsWorkspace() {
                   <input
                     id="settings-invite-name"
                     value={userDraft.displayName}
-                    disabled={isDirector || isSaving}
+                    disabled={!canManageSettings || isSaving}
                     onChange={(event) =>
                       setUserDraft((current) => ({ ...current, displayName: event.target.value }))
                     }
@@ -1092,7 +979,7 @@ function AdminSettingsWorkspace() {
                     id="settings-invite-email"
                     type="email"
                     value={userDraft.email}
-                    disabled={isDirector || isSaving}
+                    disabled={!canManageSettings || isSaving}
                     onChange={(event) =>
                       setUserDraft((current) => ({ ...current, email: event.target.value }))
                     }
@@ -1103,7 +990,7 @@ function AdminSettingsWorkspace() {
                   <select
                     id="settings-invite-role"
                     value={userDraft.role}
-                    disabled={isDirector || isSaving}
+                    disabled={!canManageSettings || isSaving}
                     onChange={(event) =>
                       setUserDraft((current) => ({
                         ...current,
@@ -1121,9 +1008,9 @@ function AdminSettingsWorkspace() {
                 <button
                   type="submit"
                   className="admin-primary-link"
-                  disabled={isDirector || isSaving}
+                  disabled={!canManageSettings || isSaving}
                 >
-                  Send Invitation
+                  Create Invitation
                 </button>
               </footer>
             </form>
@@ -1148,22 +1035,19 @@ function AdminSettingsWorkspace() {
                     max={720}
                     step={1}
                     value={sessionTimeoutDraft}
-                    disabled={isDirector || isSaving}
+                    disabled={!canManageSettings || isSaving}
                     onChange={(event) => setSessionTimeoutDraft(event.target.value)}
                   />
                 </UiFormField>
                 <label className="admin-settings-session-toggle">
                   <input
                     type="checkbox"
-                    checked={snapshot.security.allowMultipleAdminSessions}
-                    disabled={isDirector || isSaving}
+                    checked={sessionPolicyDraft.allowMultipleAdminSessions}
+                    disabled={!canManageSettings || isSaving}
                     onChange={(event) =>
-                      setSnapshot((current) => ({
-                        ...current,
-                        security: {
-                          ...current.security,
+                      setSessionPolicyDraft((current) => ({
+                          ...current,
                           allowMultipleAdminSessions: event.target.checked,
-                        },
                       }))
                     }
                   />{" "}
@@ -1172,15 +1056,12 @@ function AdminSettingsWorkspace() {
                 <label className="admin-settings-session-toggle">
                   <input
                     type="checkbox"
-                    checked={snapshot.security.forceLogoutOnPasswordChange}
-                    disabled={isDirector || isSaving}
+                    checked={sessionPolicyDraft.forceLogoutOnPasswordChange}
+                    disabled={!canManageSettings || isSaving}
                     onChange={(event) =>
-                      setSnapshot((current) => ({
-                        ...current,
-                        security: {
-                          ...current.security,
+                      setSessionPolicyDraft((current) => ({
+                          ...current,
                           forceLogoutOnPasswordChange: event.target.checked,
-                        },
                       }))
                     }
                   />{" "}
@@ -1191,7 +1072,7 @@ function AdminSettingsWorkspace() {
                 <button
                   type="submit"
                   className="admin-primary-link"
-                  disabled={isDirector || isSaving}
+                  disabled={!canManageSettings || isSaving}
                 >
                   Save Session Policy
                 </button>
@@ -1255,12 +1136,12 @@ function AdminSettingsWorkspace() {
                   <div>
                     <span>
                       <small>{entry.area}</small>
-                      <time>{formatTimestamp(entry.timestamp)}</time>
+                      <time>{formatTimestamp(entry.occurredAt)}</time>
                     </span>
                     <strong>{humanize(entry.actionType)}</strong>
                     <p>{entry.summary}</p>
                     <small>
-                      {entry.actor} · {entry.target}
+                      {entry.actorUserId} · {entry.targetId} · revision {entry.revision}
                     </small>
                   </div>
                 </article>
@@ -1269,6 +1150,51 @@ function AdminSettingsWorkspace() {
                 <p className="admin-settings-empty">No activity matches the current filters.</p>
               ) : null}
             </div>
+            <p className="admin-settings-empty">
+              Showing the latest {snapshot.audit.items.length} authoritative changes
+              {snapshot.audit.nextCursor
+                ? "; additional history exists outside this bounded settings snapshot."
+                : "."}
+            </p>
+          </section>
+        </div>
+      ) : null}
+
+      {activeView === "unavailable" ? (
+        <div className="admin-settings-view">
+          <section className="admin-settings-view-heading">
+            <div>
+              <h3>Settings action unavailable</h3>
+              <p>This legacy URL does not expose a supported institute settings command.</p>
+            </div>
+            <span className="admin-settings-status-pill">No mutation available</span>
+          </section>
+          <section className="admin-settings-form-panel" aria-label="Unavailable settings actions">
+            <header>
+              <h3>Explicit ownership boundaries</h3>
+              <p>No local or pending success is created for these removed actions.</p>
+            </header>
+            <dl className="admin-settings-summary">
+              <div>
+                <dt>Execution policy</dt>
+                <dd>Configure supported execution behavior on each test or assignment.</dd>
+              </div>
+              <div>
+                <dt>Data retention</dt>
+                <dd>Platform retention infrastructure remains vendor-controlled.</dd>
+              </div>
+              <div>
+                <dt>Feature and system controls</dt>
+                <dd>License features, calibration, and SMTP infrastructure remain vendor-controlled.</dd>
+              </div>
+              <div>
+                <dt>Governance snapshots</dt>
+                <dd>Use the authorized Governance workspace; Settings has no snapshot command.</dd>
+              </div>
+            </dl>
+            <footer>
+              <button type="button" onClick={() => navigate("/admin/settings/profile")}>Return to General</button>
+            </footer>
           </section>
         </div>
       ) : null}
@@ -1281,7 +1207,7 @@ function AdminSettingsWorkspace() {
             and primary administrator replacement remain vendor-controlled.
           </span>
         </div>
-        <code>institutes/{instituteId}/settings</code>
+        <code>Tenant derived from authenticated server identity</code>
       </footer>
     </section>
   );

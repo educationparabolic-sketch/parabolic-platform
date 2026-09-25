@@ -126,6 +126,20 @@ test("Admin teacher route and handler role sets match the canonical capability m
     false,
   );
   assert.doesNotMatch(adminRoutesSource, /allowedRoles:\s*\[[^\]]*"teacher"/u);
+
+  const settingsRoute = adminRoutesModule.matchAdminRoute("/admin/settings/profile");
+  assert.deepEqual(
+    adminRoutesModule.evaluateAdminRoutePermissions(settingsRoute, "director", "L2"),
+    {allowed: false, redirectTo: "/unauthorized", reason: "license_restricted"},
+  );
+  assert.deepEqual(
+    adminRoutesModule.evaluateAdminRoutePermissions(settingsRoute, "director", "L3"),
+    {allowed: true, redirectTo: null, reason: null},
+  );
+  assert.deepEqual(
+    adminRoutesModule.evaluateAdminRoutePermissions(settingsRoute, "admin", "L0"),
+    {allowed: true, redirectTo: null, reason: null},
+  );
 });
 
 test("every affected Admin handler consumes the drift-checked backend role policy", async () => {

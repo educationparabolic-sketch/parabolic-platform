@@ -168,7 +168,7 @@ export const API_ROUTE_MANIFEST: readonly ApiRouteManifestEntry[] = [
     "admin",
     "POST",
     "/admin/settings",
-    "incompatible",
+    "implemented",
     "adminSettings",
   ),
   defineRoute(

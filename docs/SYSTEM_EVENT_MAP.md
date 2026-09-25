@@ -2,7 +2,7 @@
 
 This document defines the event-driven topology of the platform.
 
-Last reconciled: 2026-09-14 (`BWM-027` Question Bank lifecycle closeout)
+Last reconciled: 2026-09-25 (`BWM-030` settings, staff Auth, and academic-year operations closeout)
 
 Each event represents a state transition or trigger that initiates downstream processing.
 
@@ -166,6 +166,20 @@ an assignment, notification, email, queue, or trigger event. Existing governance
 snapshot scheduling is unchanged. Legacy ADM-13, ADM-17, and the unmapped
 report preview export are retired from gateway/direct HTTP dispatch.
 
+BWM-030 settings/profile/session-policy, staff access, academic-year lock, and
+archive requests are synchronous idempotent commands rather than inferred
+Firestore events. Each accepted mutation commits one deterministic command and
+settings audit with its revisioned state; staff Auth/claim/disable/revocation
+reconciliation resumes from that authority on exact retry. Invitation and
+password-reset commands atomically enqueue one redacted deterministic
+`emailQueue` job. The scheduled `processEmailQueue` worker is the only link
+generation/delivery edge for those jobs: it leases due work, revalidates
+current institute/Auth ownership, generates links in memory, and records only
+safe terminal/retry metadata. Academic-year archive reserves one durable leased
+command and advances explicit export and snapshot checkpoints before atomic
+year sealing plus settings/administrative audits. It does not add a Firestore
+trigger or repeat the existing yearly archive owner.
+
 ---
 
 # FIRESTORE TRIGGERS
@@ -189,6 +203,7 @@ UsageReconciliation | Daily | Correct usage metrics
 VendorAggregateUpdate | Daily | Compute vendor analytics
 GovernanceSnapshot | Monthly | Institutional governance metrics
 ArchiveJob | Yearly | Academic year archival
+AdminSettingsCommunicationDispatch | Every minute | Lease and deliver due staff invitation/password-reset email jobs with bounded retries
 
 ---
 

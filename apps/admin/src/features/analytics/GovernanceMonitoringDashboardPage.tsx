@@ -128,8 +128,7 @@ async function resolveGovernanceRequestContext(
     throw new Error("Verified institute authority is unavailable for governance reads.");
   }
 
-  const instituteId = claims.instituteId.trim();
-  const settingsSnapshot = await fetchSettingsSnapshot(instituteId);
+  const settingsSnapshot = await fetchSettingsSnapshot();
   const activeAcademicYear = settingsSnapshot.academicYears.find(
     (entry) => entry.status === "Active",
   );

@@ -185,7 +185,7 @@ if (fullServicesResult.status !== 0) {
 
 const firestoreResult = await runEmulatorPhase(
   "Firestore/Storage-backed Functions integration suites",
-  ["firestore", "storage"],
+  ["auth", "firestore", "storage"],
   "node scripts/firebase-emulator-integration-suite.mjs --firestore-only",
   {QUESTION_ASSETS_BUCKET: `${projectId}.appspot.com`},
 );

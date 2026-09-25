@@ -37,6 +37,7 @@ const selectedSourceSuites = [
   "examSessionActivateApi.test",
   "examSessionEntryApi.test",
   "examStartApi.test",
+  "emailDeliveryProvider.test",
   "firestoreIndexes.test",
   "firestoreQueryGovernance.test",
   "governanceAccessMiddleware.test",

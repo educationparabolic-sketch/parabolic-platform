@@ -1228,24 +1228,13 @@ test(
   async () => {
     const handler = createAdminAcademicYearArchiveHandler({
       archiveAcademicYear: async (input) => ({
-        academicYearPath:
-          `institutes/${input.instituteId}/academicYears/${input.yearId}`,
-        archived: true,
-        archivedAt: "2026-04-07T00:00:00.000Z",
-        bigQuery: {
-          datasetId: `institute_${input.instituteId}_archive`,
-          projectId: "parabolic-platform-build-101-tests",
-          rowsExported: 12,
-          sessionsTableId: `sessions_${input.yearId}`,
-          skipped: false,
-        },
-        idempotent: false,
-        instituteId: input.instituteId,
-        snapshotPath:
-          `institutes/${input.instituteId}/academicYears/${input.yearId}/` +
-          `governanceSnapshots/${input.yearId}`,
-        status: "archived",
-        yearId: input.yearId,
+        academicYearId: input.academicYearId,
+        auditEventId: "settings_audit_build_101",
+        commandId: input.commandId,
+        completedAt: "2026-04-07T00:00:00.000Z",
+        replayed: false,
+        revision: 3,
+        stage: "archived",
       }),
       verifyIdToken: async () => createVendorToken() as never,
     });
@@ -1254,9 +1243,11 @@ test(
     await handler(
       createMockRequest({
         body: {
-          doubleConfirm: true,
-          instituteId: "inst_build_101",
-          yearId: "2026",
+          academicYearId: "2026",
+          commandId: "5a04c719-aa31-4abe-a3ab-e4be6a0ddac3",
+          confirmIrreversibleArchive: true,
+          expectedRevision: 2,
+          targetInstituteId: "inst_build_101",
         },
         headers: {
           "authorization": "Bearer build_101_vendor",
@@ -1269,16 +1260,13 @@ test(
 
     assert.equal(response.statusCode, 200);
     assert.equal((response.body as {code: string}).code, "OK");
-    assert.equal(
-      (response.body as {data: {bigQuery: {rowsExported: number}}})
-        .data.bigQuery.rowsExported,
-      12,
-    );
+    assert.equal((response.body as {data: {stage: string}}).data.stage, "archived");
+    assert.equal((response.body as {data: {revision: number}}).data.revision, 3);
   },
 );
 
 test(
-  "admin academic year archive handler requires double confirmation",
+  "admin academic year archive handler requires irreversible confirmation",
   async () => {
     const handler = createAdminAcademicYearArchiveHandler({
       archiveAcademicYear: async () => {
@@ -1291,9 +1279,11 @@ test(
     await handler(
       createMockRequest({
         body: {
-          doubleConfirm: false,
-          instituteId: "inst_build_101",
-          yearId: "2026",
+          academicYearId: "2026",
+          commandId: "5a04c719-aa31-4abe-a3ab-e4be6a0ddac3",
+          confirmIrreversibleArchive: false,
+          expectedRevision: 2,
+          targetInstituteId: "inst_build_101",
         },
         headers: {
           authorization: "Bearer build_101_vendor",
@@ -1307,7 +1297,7 @@ test(
     assertStructuredError(
       response.body,
       "VALIDATION_ERROR",
-      "Field \"doubleConfirm\" must be true to confirm archive execution.",
+      "Field \"confirmIrreversibleArchive\" must be true to confirm archive execution.",
     );
   },
 );
@@ -1329,9 +1319,11 @@ test(
     await handler(
       createMockRequest({
         body: {
-          doubleConfirm: true,
-          instituteId: "inst_build_101",
-          yearId: "2026",
+          academicYearId: "2026",
+          commandId: "5a04c719-aa31-4abe-a3ab-e4be6a0ddac3",
+          confirmIrreversibleArchive: true,
+          expectedRevision: 2,
+          targetInstituteId: "inst_build_101",
         },
         headers: {
           authorization: "Bearer build_101_vendor",

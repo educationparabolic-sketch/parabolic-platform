@@ -75,7 +75,7 @@ test(
     const implementedRoutes = API_ROUTE_MANIFEST.filter(
       (route) => route.status === "implemented",
     );
-    assert.equal(implementedRoutes.length, 60);
+    assert.equal(implementedRoutes.length, 61);
 
     for (const route of implementedRoutes) {
       const requestPath = materializePath(route.canonicalPath, route.id);

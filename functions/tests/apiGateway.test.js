@@ -50,7 +50,7 @@ test("implemented routes have one registered existing handler", () => {
   const implementedRoutes = API_ROUTE_MANIFEST.filter(
     (route) => route.status === "implemented",
   );
-  assert.equal(implementedRoutes.length, 60);
+  assert.equal(implementedRoutes.length, 61);
 
   for (const route of implementedRoutes) {
     assert.equal(typeof API_GATEWAY_HANDLERS[route.functionExport], "function");

@@ -4,6 +4,8 @@ This document explains the canonical role, license-layer, and institute feature-
 
 The code-level `CAPABILITY_MATRIX` is authoritative. Admin teacher-visible route definitions and Student/Vendor protected-route admission now consume its role sets directly. The corresponding deployable Admin Functions handlers consume a small dependency-free role-policy mirror that a permanent contract test requires to match the matrix exactly. Permanent BWM-008 source, middleware, real-token emulator, and browser suites cover tenant targeting and negative enforcement boundaries.
 
+Last reconciled: 2026-09-25 (`BWM-030`). Settings snapshot routes and ADM-14 enforce `admin.settings.read` (Admin L0, Director L3); mounted mutation controls and ADM-14 writes require `admin.settings.manage` (Admin L0). ADM-15 requires Admin L0 while retaining its separately reviewed Vendor archive bypass. Suspended, unlicensed, tenant-missing, wrong-role, and cross-tenant identities fail closed; Director controls remain read-only.
+
 ## Decision Rules
 
 Access to a capability requires every declared axis to pass:

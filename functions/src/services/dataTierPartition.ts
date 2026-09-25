@@ -123,7 +123,7 @@ export class DataTierPartitionService {
       return "WARM";
     }
 
-    return "HOT";
+    return status === "active" ? "HOT" : "WARM";
   }
 
   /**

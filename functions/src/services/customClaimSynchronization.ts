@@ -26,7 +26,11 @@ const STAFF_ROLES = new Set<CustomClaimRole>([
   "director",
   "teacher",
 ]);
-const STAFF_STATUSES = new Set(["active", "suspended"]);
+const STAFF_STATUSES = new Set([
+  "active",
+  "invitation_pending",
+  "suspended",
+]);
 const STUDENT_STATUSES = new Set([
   "active",
   "archived",

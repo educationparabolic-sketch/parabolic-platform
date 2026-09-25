@@ -2,7 +2,7 @@
 
 This document provides a simplified reference of the Firestore data hierarchy.
 
-Last reconciled: 2026-09-14 (`BWM-027` Question Bank lifecycle closeout)
+Last reconciled: 2026-09-25 (`BWM-030` settings, staff Auth, and academic-year operations closeout)
 
 The authoritative schema definition exists in:
 
@@ -60,6 +60,48 @@ institutes/{instituteId}
 Subcollections:
 
 license/main
+
+BWM-030 adds institute-root settings authority. `settingsRevision` is the
+optimistic concurrency counter; `primaryAdminUserId` is server-owned; and
+`settingsUsers` is a bounded map of at most 100 canonical
+`admin|teacher|director` staff records with authoritative email, display name,
+role, status, and update time. Institute-owned profile writes exclude the
+Vendor-owned registered name and logo. `securitySettings` authority is limited
+to the mounted session-policy fields. The settings snapshot lists at most 25
+academic years, 100 staff records, and the newest 50 settings audits plus an
+opaque cursor sentinel; it does not scan Students or runs to invent aggregates.
+
+`institutes/{instituteId}/settingsCommands/{hashedCommandId}` is server-only
+idempotency and recovery authority. Records keep a SHA-256 command-key hash,
+normalized intent fingerprint, action, revision, timestamps, exact public
+receipt, and only hashed request context. Staff communication commands retain
+only their safe queue receipt. Archive commands additionally retain leased
+attempt state and `accepted|exported|snapshot_created|archived` checkpoints so
+post-export recovery does not repeat the BigQuery insert or final snapshot.
+Raw command UUIDs, credentials, reset/invitation links, provider bodies, and
+unhashed network context are never stored.
+
+`institutes/{instituteId}/settingsAudit/{eventId}` contains immutable,
+deterministic revisioned events for supported profile, session-policy, staff,
+lock, and archive actions. Each event records action, actor, role, area, target,
+summary, revision, and occurrence time, plus optional request-context hashes;
+it never stores complete mutable payloads. The final archive also creates the
+matching immutable administrative audit atomically with the archived year.
+
+Academic-year documents use canonical operational status and may carry a
+server-owned `archiveOperation` with only hashed command, stage, and update
+authority. Lock is transactional and rejects non-terminal canonical runs or
+sessions. Archive requires `locked`, reserves one durable command, and reaches
+`archived` only after export and immutable final-snapshot checkpoints complete.
+
+Admin staff invitation and password-reset commands create deterministic root
+`emailQueue/{jobId}` records with kind, target UID, institute, recipient email,
+retry state, and safe timestamps. The one-minute worker revalidates current
+institute/Auth email ownership, generates the Firebase action link only in
+memory, and dispatches through the configured provider. Links, `oobCode`, raw
+provider identifiers, credentials, secrets, and provider bodies are not
+persisted; terminal delivery is deduplicated and transient retries use the
+bounded five-attempt schedule.
 
 students/{studentId}
 

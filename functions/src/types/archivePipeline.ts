@@ -1,20 +1,27 @@
 import {StandardApiErrorCode} from "./apiResponse";
+import type {
+  AdminAcademicYearArchiveReceipt,
+} from "../../../shared/contracts/adminSettings";
 
 export interface AcademicYearArchiveRequest {
-  doubleConfirm: boolean;
-  instituteId: string;
-  yearId: string;
+  academicYearId?: string;
+  commandId?: string;
+  confirmIrreversibleArchive?: boolean;
+  expectedRevision?: number;
+  targetInstituteId?: string;
 }
 
 export interface AcademicYearArchiveValidatedRequest {
+  academicYearId: string;
   actorId: string;
   actorRole: string;
-  doubleConfirm: true;
+  commandId: string;
+  confirmIrreversibleArchive: true;
+  expectedRevision: number;
   instituteId: string;
   ipAddress?: string;
   isVendor: boolean;
   userAgent?: string;
-  yearId: string;
 }
 
 export interface ArchiveBigQuerySessionRow {
@@ -53,24 +60,7 @@ export interface ArchiveBigQuerySessionRow {
   wrong_streak_signal: boolean | null;
 }
 
-export interface AcademicYearArchiveResult {
-  academicYearPath: string;
-  archived: boolean;
-  archivedAt?: string;
-  auditLogPath?: string;
-  bigQuery: {
-    datasetId: string;
-    projectId: string;
-    rowsExported: number;
-    sessionsTableId: string;
-    skipped: boolean;
-  };
-  idempotent: boolean;
-  instituteId: string;
-  snapshotPath?: string;
-  status: "archived" | "locked";
-  yearId: string;
-}
+export type AcademicYearArchiveResult = AdminAcademicYearArchiveReceipt;
 
 export interface AcademicYearArchiveSuccessResponse {
   code: "OK";

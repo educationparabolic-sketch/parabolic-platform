@@ -13,7 +13,7 @@ const LICENSE_ORDER: Readonly<Record<LicenseLayer, number>> = {
 
 export interface CapabilityAuthorizationOptions {
   minimumLicenseLayer: LicenseLayer;
-  requiredFeatureFlag: string;
+  requiredFeatureFlag?: string;
   roleMinimumLicenseLayers?: Readonly<Record<string, LicenseLayer>>;
   vendorBypass?: boolean;
 }
@@ -46,7 +46,10 @@ export const createCapabilityAuthorizationMiddleware = (
       `Capability requires license layer ${requiredLayer}.`,
     );
   }
-  if (identity.featureFlags?.[options.requiredFeatureFlag] !== true) {
+  if (
+    options.requiredFeatureFlag &&
+    identity.featureFlags?.[options.requiredFeatureFlag] !== true
+  ) {
     throw new MiddlewareRejectionError(
       "FORBIDDEN",
       `Capability ${options.requiredFeatureFlag} is disabled.`,

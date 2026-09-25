@@ -3,6 +3,7 @@ import { CAPABILITY_MATRIX } from "../../../../shared/contracts/capabilityPolicy
 
 const ADMIN_TEACHER_ROLES = CAPABILITY_MATRIX["admin.students.read"].allowedRoles;
 const ADMIN_TEACHER_DIRECTOR_ROLES = CAPABILITY_MATRIX["admin.overview.read"].allowedRoles;
+const ADMIN_SETTINGS_READ_POLICY = CAPABILITY_MATRIX["admin.settings.read"];
 
 export interface AdminRouteDefinition {
   path: string;
@@ -12,6 +13,7 @@ export interface AdminRouteDefinition {
   mountedPath?: string;
   allowedRoles: readonly PortalRole[];
   minimumLicenseLayer?: LicenseLayer;
+  roleMinimumLicenseLayers?: Readonly<Partial<Record<PortalRole, LicenseLayer>>>;
   redirectOnDenied?: string;
   readOnlyRoles?: PortalRole[];
 }
@@ -383,14 +385,18 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Settings",
     description: "Institute profile, academic year, staff access, and settings activity.",
     mountedPath: "/admin/settings/profile",
-    allowedRoles: ["admin", "director"],
+    allowedRoles: ADMIN_SETTINGS_READ_POLICY.allowedRoles,
+    minimumLicenseLayer: ADMIN_SETTINGS_READ_POLICY.minimumLicenseLayer ?? undefined,
+    roleMinimumLicenseLayers: ADMIN_SETTINGS_READ_POLICY.roleMinimumLicenseLayers,
   },
   {
     path: "/admin/settings/profile",
     title: "General",
     section: "Settings",
     description: "Institute contact details and operating defaults within vendor-managed identity boundaries.",
-    allowedRoles: ["admin", "director"],
+    allowedRoles: ADMIN_SETTINGS_READ_POLICY.allowedRoles,
+    minimumLicenseLayer: ADMIN_SETTINGS_READ_POLICY.minimumLicenseLayer ?? undefined,
+    roleMinimumLicenseLayers: ADMIN_SETTINGS_READ_POLICY.roleMinimumLicenseLayers,
     readOnlyRoles: ["director"],
   },
   {
@@ -398,7 +404,9 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Academic Years",
     section: "Settings",
     description: "Academic year configuration and lifecycle controls.",
-    allowedRoles: ["admin", "director"],
+    allowedRoles: ADMIN_SETTINGS_READ_POLICY.allowedRoles,
+    minimumLicenseLayer: ADMIN_SETTINGS_READ_POLICY.minimumLicenseLayer ?? undefined,
+    roleMinimumLicenseLayers: ADMIN_SETTINGS_READ_POLICY.roleMinimumLicenseLayers,
     readOnlyRoles: ["director"],
   },
   {
@@ -406,7 +414,9 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Users & Access",
     section: "Settings",
     description: "Institute staff accounts, role assignment, access status, and session controls.",
-    allowedRoles: ["admin", "director"],
+    allowedRoles: ADMIN_SETTINGS_READ_POLICY.allowedRoles,
+    minimumLicenseLayer: ADMIN_SETTINGS_READ_POLICY.minimumLicenseLayer ?? undefined,
+    roleMinimumLicenseLayers: ADMIN_SETTINGS_READ_POLICY.roleMinimumLicenseLayers,
     readOnlyRoles: ["director"],
   },
   {
@@ -414,9 +424,21 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Activity",
     section: "Settings",
     description: "Read-only timeline of institute settings and access changes.",
-    allowedRoles: ["admin", "director"],
+    allowedRoles: ADMIN_SETTINGS_READ_POLICY.allowedRoles,
+    minimumLicenseLayer: ADMIN_SETTINGS_READ_POLICY.minimumLicenseLayer ?? undefined,
+    roleMinimumLicenseLayers: ADMIN_SETTINGS_READ_POLICY.roleMinimumLicenseLayers,
     readOnlyRoles: ["director"],
   },
+  ...["execution-policy", "data", "system"].map((path): AdminRouteDefinition => ({
+    path: `/admin/settings/${path}`,
+    title: "Unavailable Settings Action",
+    section: "Settings",
+    description: "Explicit ownership boundary for removed or vendor-controlled settings actions.",
+    allowedRoles: ADMIN_SETTINGS_READ_POLICY.allowedRoles,
+    minimumLicenseLayer: ADMIN_SETTINGS_READ_POLICY.minimumLicenseLayer ?? undefined,
+    roleMinimumLicenseLayers: ADMIN_SETTINGS_READ_POLICY.roleMinimumLicenseLayers,
+    readOnlyRoles: ["director"],
+  })),
   {
     path: "/admin/help",
     title: "Help / Support",
@@ -544,10 +566,13 @@ export function evaluateAdminRoutePermissions(
     };
   }
 
+  const requiredLicenseLayer = role
+    ? route.definition.roleMinimumLicenseLayers?.[role] ?? route.definition.minimumLicenseLayer
+    : route.definition.minimumLicenseLayer;
   if (
-    route.definition.minimumLicenseLayer &&
+    requiredLicenseLayer &&
     (!licenseLayer ||
-      LICENSE_LAYER_ORDER[licenseLayer] < LICENSE_LAYER_ORDER[route.definition.minimumLicenseLayer])
+      LICENSE_LAYER_ORDER[licenseLayer] < LICENSE_LAYER_ORDER[requiredLicenseLayer])
   ) {
     return {
       allowed: false,
@@ -572,10 +597,12 @@ export function getVisibleAdminRoutes(
       return false;
     }
 
+    const requiredLicenseLayer = definition.roleMinimumLicenseLayers?.[role] ??
+      definition.minimumLicenseLayer;
     if (
-      definition.minimumLicenseLayer &&
+      requiredLicenseLayer &&
       (!licenseLayer ||
-        LICENSE_LAYER_ORDER[licenseLayer] < LICENSE_LAYER_ORDER[definition.minimumLicenseLayer])
+        LICENSE_LAYER_ORDER[licenseLayer] < LICENSE_LAYER_ORDER[requiredLicenseLayer])
     ) {
       return false;
     }

@@ -875,9 +875,18 @@ function App() {
         />
         <Route path="settings/users" element={<Navigate to="/admin/settings/access" replace />} />
         <Route path="settings/security" element={<Navigate to="/admin/settings/access" replace />} />
-        <Route path="settings/execution-policy" element={<Navigate to="/admin/settings/profile" replace />} />
-        <Route path="settings/data" element={<Navigate to="/admin/settings/profile" replace />} />
-        <Route path="settings/system" element={<Navigate to="/admin/settings/profile" replace />} />
+        <Route
+          path="settings/execution-policy"
+          element={<AdminRouteBoundary label="Loading settings boundary"><AdminSettingsWorkspace /></AdminRouteBoundary>}
+        />
+        <Route
+          path="settings/data"
+          element={<AdminRouteBoundary label="Loading settings boundary"><AdminSettingsWorkspace /></AdminRouteBoundary>}
+        />
+        <Route
+          path="settings/system"
+          element={<AdminRouteBoundary label="Loading settings boundary"><AdminSettingsWorkspace /></AdminRouteBoundary>}
+        />
         <Route path="settings/*" element={<AdminRouteResolutionPage />} />
         <Route
           path="help"

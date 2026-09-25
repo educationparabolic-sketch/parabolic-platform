@@ -3,6 +3,7 @@ import {DecodedIdToken} from "firebase-admin/auth";
 import {sendErrorResponse} from "../services/apiResponse";
 import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
 import {createAuthenticationMiddleware} from "../middleware/auth";
+import {createCapabilityAuthorizationMiddleware} from "../middleware/capability";
 import {
   createMethodMiddleware,
   createMiddlewareHandler,
@@ -61,17 +62,16 @@ export const createAdminSettingsHandler = (
     createMethodMiddleware("POST"),
     createAuthenticationMiddleware(dependencies),
     createTenantGuardMiddleware({
-      resolveRequestInstituteId: (request): string | null => {
-        const body = (request.body ?? {}) as AdminSettingsRequest;
-
-        return typeof body.instituteId === "string" ?
-          body.instituteId :
-          null;
-      },
+      resolveRequestInstituteId: (request): string | null =>
+        request.context.identity?.instituteId ?? null,
     }),
     createRoleAuthorizationMiddleware({
       allowedRoles: ["admin", "director"],
       forbiddenMessage: "Only admin and director roles can access settings configuration.",
+    }),
+    createCapabilityAuthorizationMiddleware({
+      minimumLicenseLayer: "L0",
+      roleMinimumLicenseLayers: {director: "L3"},
     }),
     createRequestValidationMiddleware({
       validator: (request: MiddlewareRequest): void => {
@@ -83,16 +83,16 @@ export const createAdminSettingsHandler = (
           actorId: identity?.uid,
           actorLicenseLayer: identity?.licenseLayer,
           actorRole: identity?.role,
-          academicYear: body.academicYear,
-          executionPolicy: body.executionPolicy,
-          featureFlags: body.featureFlags,
-          governanceSnapshotRequest: body.governanceSnapshotRequest,
-          dataRetentionPolicy: body.dataRetentionPolicy,
-          instituteId: identity?.instituteId ?? body.instituteId,
+          academicYearId: body.academicYearId,
+          commandId: body.commandId,
+          expectedRevision: body.expectedRevision,
+          instituteId: identity?.instituteId,
+          invitation: body.invitation,
           ipAddress: request.ip,
           profile: body.profile,
-          security: body.security,
-          userAccess: body.userAccess,
+          sessionPolicy: body.sessionPolicy,
+          staffUpdate: body.staffUpdate,
+          targetUserId: body.targetUserId,
           userAgent: request.header("user-agent"),
         });
 

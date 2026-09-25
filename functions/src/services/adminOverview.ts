@@ -713,7 +713,10 @@ export class AdminOverviewService {
       latestGovernance,
       combinedRuns,
     );
-    const storageSummary = settingsSnapshot.dataArchiveControls.storageSummary;
+    const activeConcurrentSessions = runsSnapshot.docs.filter((document) => {
+      const status = toNonEmptyString(document.data().status, "").toLowerCase();
+      return status === "active" || status === "started" || status === "scheduled";
+    }).length;
     const governanceValues = governanceSnapshots
       .map((snapshot) => snapshot.stabilityIndex)
       .reverse();
@@ -815,7 +818,7 @@ export class AdminOverviewService {
             "Stable",
       },
       operationalSnapshot: {
-        activeConcurrentSessions: storageSummary.activeSessionCount,
+        activeConcurrentSessions,
         activeStudents: students.length,
         billingCount: licensingResult.snapshot.currentPlan.activeStudentCount,
         lastTestCompletionRatePercent: Math.round(
@@ -888,8 +891,7 @@ export class AdminOverviewService {
         lastArchiveDate: resolveLastArchiveDate(settingsSnapshot.academicYears),
         peakConcurrencyThisMonth:
           licensingResult.snapshot.usageAndBilling.peakConcurrency,
-        storageUsageSummary:
-          `HOT ${storageSummary.firestoreHotUsage}; archive ${storageSummary.bigQueryArchiveSize}`,
+        storageUsageSummary: "Storage usage is not exposed by institute settings.",
         upgradeAwarenessCard: formatUpgradeAwareness(
           currentLayer,
           eligibilityL1Percentage,

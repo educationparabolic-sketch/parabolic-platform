@@ -1,175 +1,82 @@
 import { ApiClientError } from "../../../../../shared/services/apiClient";
 import { shouldUseFixtureData } from "../../../../../shared/services/frontendEnvironment";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
+import type {
+  AdminAcademicYearStatus,
+  AdminAcademicYearArchiveReceipt,
+  AdminAcademicYearSummary,
+  AdminInstituteProfileSnapshot,
+  AdminInstituteProfileUpdate,
+  AdminSessionPolicyUpdate,
+  AdminSettingsActionType,
+  AdminSettingsAuditActionType,
+  AdminSettingsAuditArea,
+  AdminSettingsAuditEntryContract,
+  AdminSettingsCommandReceipt,
+  AdminSettingsCommunicationReceipt,
+  AdminSettingsSnapshot as SharedAdminSettingsSnapshot,
+  AdminStaffAccessRecord,
+  AdminStaffLifecycleStatus,
+  AdminStaffRole,
+  AdminStaffStatus,
+} from "../../../../../shared/contracts/adminSettings";
 
 const apiClient = getPortalApiClient("admin");
 const DEFAULT_SETTINGS_INSTITUTE_ID =
   import.meta.env.VITE_ADMIN_SETTINGS_INSTITUTE_ID ?? "inst-build-125";
+const MUTATION_ACTIONS = new Set<AdminSettingsAuditActionType>([
+  "ARCHIVE_ACADEMIC_YEAR",
+  "UPDATE_INSTITUTE_PROFILE",
+  "LOCK_ACADEMIC_YEAR",
+  "UPSERT_USER_ACCESS",
+  "REMOVE_USER_ACCESS",
+  "RESET_USER_PASSWORD",
+  "UPDATE_SECURITY_SETTINGS",
+]);
+const STAFF_ROLES = new Set<AdminStaffRole>(["admin", "teacher", "director"]);
+const STAFF_LIFECYCLE_STATUSES = new Set<Exclude<AdminStaffLifecycleStatus, "removed">>([
+  "invitation_pending",
+  "active",
+  "suspended",
+]);
+const YEAR_STATUSES = new Set<AdminAcademicYearStatus>(["Active", "Locked", "Archived"]);
+const AUDIT_AREAS = new Set<AdminSettingsAuditArea>([
+  "academic_year",
+  "institute_profile",
+  "session_policy",
+  "staff_access",
+]);
 
-export type SettingsActionType =
-  | "REQUEST_ACADEMIC_YEAR_ARCHIVE"
-  | "GET_SETTINGS_SNAPSHOT"
-  | "UPDATE_INSTITUTE_PROFILE"
-  | "LOCK_ACADEMIC_YEAR"
-  | "UPDATE_EXECUTION_POLICY"
-  | "UPDATE_DATA_RETENTION_POLICY"
-  | "UPSERT_USER_ACCESS"
-  | "REMOVE_USER_ACCESS"
-  | "RESET_USER_PASSWORD"
-  | "UPDATE_SECURITY_SETTINGS"
-  | "UPDATE_FEATURE_FLAGS"
-  | "REQUEST_GOVERNANCE_SNAPSHOT";
-
-export type AcademicYearStatus = "Active" | "Locked" | "Archived";
-export type StaffRole = "admin" | "teacher" | "director" | "support";
-export type StaffStatus = "active" | "suspended";
-
-export interface InstituteProfileSettings {
-  instituteName: string;
-  logoReference: string;
-  contactEmail: string;
-  contactPhone: string;
-  timeZone: string;
-  defaultExamType: string;
-  academicYearFormat: string;
-}
-
-export interface AcademicYearSummary {
-  yearId: string;
-  academicYearLabel: string;
-  status: AcademicYearStatus;
-  studentCount: number;
-  runCount: number;
-  snapshotStatus: string;
-  snapshotId?: string;
-  startDate?: string;
-  endDate?: string;
-  archivedAt?: string;
-}
-
-export interface ExecutionPolicySettings {
-  phaseSplit: {
-    phase1Percent: number;
-    phase2Percent: number;
-    phase3Percent: number;
-  };
-  advancedControls: {
-    adaptivePhaseEnabled: boolean;
-    manualOverrideAllowed: boolean;
-    hardModeAvailable: boolean;
-  };
-  timingPresets: Record<
-    string,
-    {
-      easy: { min: number; max: number };
-      medium: { min: number; max: number };
-      hard: { min: number; max: number };
-    }
-  >;
-  alertFrequencyPolicy: {
-    alertCooldownInterval: number;
-    maxAlertsPerSection: number;
-    escalationThreshold: number;
-  };
-}
-
-export interface StaffAccessRecord {
-  userId: string;
-  displayName: string;
-  email: string;
-  role: StaffRole;
-  status: StaffStatus;
-  updatedAt: string;
-}
-
-export interface SecuritySettings {
-  allowMultipleAdminSessions: boolean;
-  sessionTimeoutDuration: number;
-  forceLogoutOnPasswordChange: boolean;
-  examControls: {
-    enforceFullscreen: boolean;
-    blockRightClick: boolean;
-    tabSwitchWarning: boolean;
-    tamperDetectionAlerts: boolean;
-  };
-  emailConfiguration: {
-    senderName: string;
-    smtpHost?: string;
-    smtpPort?: number;
-    notificationToggles: boolean;
-  };
-}
-
-export interface LayerConfiguration {
-  currentLayer: string;
-  eligibilityStatus: string;
-  featureFlags: Record<string, boolean>;
-}
-
-export interface FeatureFlagsSettings {
-  enableExperimentalAnalytics: boolean;
-  enableBetaUi: boolean;
-  toggleAdvancedPhaseVisualization: boolean;
-  enableLlmMonthlySummary: boolean;
-}
-
-export interface DataRetentionPolicySettings {
-  rawSessionRetentionYears: number;
-  autoExportThreshold: number;
-  autoArchiveSchedule: string;
-}
-
-export interface GovernanceSnapshotRequestSettings {
-  academicYear: string;
-  snapshotMonth: string;
-  reason: string;
-}
-
-export interface SettingsAuditEntry {
-  eventId: string;
-  timestamp: string;
-  actor: string;
-  actorRole: StaffRole;
-  actionType: SettingsActionType;
-  area: string;
-  summary: string;
-  target: string;
-  sourcePath: string;
-}
-
-export interface AdminSettingsSnapshot {
-  profile: InstituteProfileSettings;
-  academicYears: AcademicYearSummary[];
-  executionPolicy: ExecutionPolicySettings;
-  users: StaffAccessRecord[];
-  security: SecuritySettings;
-  layerConfiguration: LayerConfiguration;
-  featureFlags: FeatureFlagsSettings;
-  dataArchiveControls: {
-    storageSummary: {
-      firestoreHotUsage: string;
-      bigQueryArchiveSize: string;
-      activeSessionCount: number;
-      archivedAcademicYears: number;
-    };
-    dataRetentionPolicy: DataRetentionPolicySettings;
-  };
-  settingsAudit: SettingsAuditEntry[];
-}
+export type SettingsActionType = AdminSettingsActionType;
+export type AcademicYearStatus = AdminAcademicYearStatus;
+export type AcademicYearSummary = AdminAcademicYearSummary;
+export type InstituteProfileSettings = AdminInstituteProfileSnapshot;
+export type SecuritySettings = AdminSessionPolicyUpdate;
+export type StaffAccessRecord = AdminStaffAccessRecord;
+export type StaffRole = AdminStaffRole;
+export type StaffStatus = AdminStaffStatus;
+export type SettingsAuditEntry = AdminSettingsAuditEntryContract;
+export type AdminSettingsSnapshot = SharedAdminSettingsSnapshot;
 
 interface AdminSettingsApiResponse {
   actionType?: SettingsActionType;
-  mutationAuditId?: string;
-  snapshot?: AdminSettingsSnapshot;
+  communication?: unknown;
+  receipt?: unknown;
+  snapshot?: unknown;
 }
 
-const FALLBACK_SNAPSHOT: AdminSettingsSnapshot = {
+export interface AdminSettingsActionResult {
+  communication?: AdminSettingsCommunicationReceipt;
+  receipt?: AdminSettingsCommandReceipt;
+  snapshot: AdminSettingsSnapshot;
+}
+
+export const FALLBACK_SNAPSHOT: AdminSettingsSnapshot = {
   academicYears: [
     {
       academicYearLabel: "2026-27",
       endDate: "2027-03-31T00:00:00.000Z",
       runCount: 19,
-      snapshotId: "pending-final-governance-snapshot",
       snapshotStatus: "Pending",
       startDate: "2026-04-01T00:00:00.000Z",
       status: "Active",
@@ -189,105 +96,20 @@ const FALLBACK_SNAPSHOT: AdminSettingsSnapshot = {
       yearId: "2025",
     },
   ],
-  executionPolicy: {
-    advancedControls: {
-      adaptivePhaseEnabled: true,
-      hardModeAvailable: true,
-      manualOverrideAllowed: false,
-    },
-    alertFrequencyPolicy: {
-      alertCooldownInterval: 15,
-      escalationThreshold: 3,
-      maxAlertsPerSection: 2,
-    },
-    phaseSplit: {
-      phase1Percent: 30,
-      phase2Percent: 40,
-      phase3Percent: 30,
-    },
-    timingPresets: {
-      JEE_MAIN: {
-        easy: { max: 120, min: 30 },
-        hard: { max: 240, min: 90 },
-        medium: { max: 180, min: 60 },
+  audit: {
+    items: [
+      {
+        actionType: "UPDATE_SECURITY_SETTINGS",
+        actorUserId: "admin_001",
+        area: "session_policy",
+        eventId: "settings_audit_20260410_0815",
+        occurredAt: "2026-04-10T08:15:00.000Z",
+        revision: 4,
+        summary: "Administrator session policy updated.",
+        targetId: "inst-build-125",
       },
-    },
-  },
-  dataArchiveControls: {
-    dataRetentionPolicy: {
-      autoArchiveSchedule: "monthly",
-      autoExportThreshold: 1000,
-      rawSessionRetentionYears: 2,
-    },
-    storageSummary: {
-      activeSessionCount: 12,
-      archivedAcademicYears: 1,
-      bigQueryArchiveSize: "34.2 GB",
-      firestoreHotUsage: "6.8 GB",
-    },
-  },
-  settingsAudit: [
-    {
-      actionType: "UPDATE_SECURITY_SETTINGS",
-      actor: "admin_001",
-      actorRole: "admin",
-      area: "Security & Access",
-      eventId: "settings_audit_20260410_0815",
-      sourcePath: "institutes/inst-build-125/settingsAudit/settings_audit_20260410_0815",
-      summary:
-        "Force logout on password change remained enabled and session timeout set to 30 minutes.",
-      target: "security.sessionControls",
-      timestamp: "2026-04-10T08:15:00.000Z",
-    },
-    {
-      actionType: "UPSERT_USER_ACCESS",
-      actor: "admin_001",
-      actorRole: "admin",
-      area: "User & Role Management",
-      eventId: "settings_audit_20260409_1125",
-      sourcePath: "institutes/inst-build-125/settingsAudit/settings_audit_20260409_1125",
-      summary: "Teacher access record updated for Aman Verma.",
-      target: "users/teacher_014",
-      timestamp: "2026-04-09T11:25:00.000Z",
-    },
-    {
-      actionType: "UPDATE_EXECUTION_POLICY",
-      actor: "admin_001",
-      actorRole: "admin",
-      area: "Default Execution Policies",
-      eventId: "settings_audit_20260408_1420",
-      sourcePath: "institutes/inst-build-125/settingsAudit/settings_audit_20260408_1420",
-      summary: "Phase split confirmed at 30/40/30 with manual override disabled.",
-      target: "executionDefaults.phaseSplit",
-      timestamp: "2026-04-08T14:20:00.000Z",
-    },
-    {
-      actionType: "LOCK_ACADEMIC_YEAR",
-      actor: "admin_001",
-      actorRole: "admin",
-      area: "Academic Year Management",
-      eventId: "settings_audit_20260331_1830",
-      sourcePath: "institutes/inst-build-125/settingsAudit/settings_audit_20260331_1830",
-      summary: "Academic year 2025-26 locked before archive workflow.",
-      target: "academicYears/2025",
-      timestamp: "2026-03-31T18:30:00.000Z",
-    },
-  ],
-  featureFlags: {
-    enableBetaUi: false,
-    enableExperimentalAnalytics: true,
-    enableLlmMonthlySummary: false,
-    toggleAdvancedPhaseVisualization: true,
-  },
-  layerConfiguration: {
-    currentLayer: "L3",
-    eligibilityStatus: "Eligible",
-    featureFlags: {
-      adaptivePhase: true,
-      controlledMode: true,
-      governanceAccess: true,
-      hardMode: true,
-    },
+    ],
+    nextCursor: null,
   },
   profile: {
     academicYearFormat: "YYYY-YY",
@@ -298,20 +120,9 @@ const FALLBACK_SNAPSHOT: AdminSettingsSnapshot = {
     logoReference: "logos/parabolic-institute.png",
     timeZone: "Asia/Kolkata",
   },
-  security: {
+  revision: 4,
+  sessionPolicy: {
     allowMultipleAdminSessions: false,
-    emailConfiguration: {
-      notificationToggles: true,
-      senderName: "Parabolic Admin",
-      smtpHost: "smtp.example.org",
-      smtpPort: 587,
-    },
-    examControls: {
-      blockRightClick: true,
-      enforceFullscreen: true,
-      tabSwitchWarning: true,
-      tamperDetectionAlerts: false,
-    },
     forceLogoutOnPasswordChange: true,
     sessionTimeoutDuration: 30,
   },
@@ -319,6 +130,7 @@ const FALLBACK_SNAPSHOT: AdminSettingsSnapshot = {
     {
       displayName: "Maya Reddy",
       email: "maya.reddy@parabolic.edu",
+      isPrimaryAdministrator: true,
       role: "admin",
       status: "active",
       updatedAt: "2026-04-10T08:15:00.000Z",
@@ -327,6 +139,7 @@ const FALLBACK_SNAPSHOT: AdminSettingsSnapshot = {
     {
       displayName: "Aman Verma",
       email: "aman.verma@parabolic.edu",
+      isPrimaryAdministrator: false,
       role: "teacher",
       status: "active",
       updatedAt: "2026-04-09T11:25:00.000Z",
@@ -335,323 +148,264 @@ const FALLBACK_SNAPSHOT: AdminSettingsSnapshot = {
   ],
 };
 
-function toNonEmptyString(value: unknown, fallback = ""): string {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback;
-}
-
-function toNumberOrZero(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-
-  return 0;
-}
-
-function toBoolean(value: unknown, fallback: boolean): boolean {
-  return typeof value === "boolean" ? value : fallback;
-}
-
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function requiredObject(value: unknown, field: string): Record<string, unknown> {
+  if (!isPlainObject(value)) throw new Error(`Settings response field "${field}" is invalid.`);
+  return value;
+}
+
+function requiredString(value: unknown, field: string): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`Settings response field "${field}" is invalid.`);
+  }
+  return value.trim();
+}
+
+function optionalIso(value: unknown, field: string): string | undefined {
+  if (value === undefined) return undefined;
+  const normalized = requiredString(value, field);
+  if (Number.isNaN(Date.parse(normalized))) throw new Error(`Settings response field "${field}" is invalid.`);
+  return normalized;
+}
+
+function requiredIso(value: unknown, field: string): string {
+  const normalized = requiredString(value, field);
+  if (Number.isNaN(Date.parse(normalized))) throw new Error(`Settings response field "${field}" is invalid.`);
+  return normalized;
+}
+
+function requiredBoolean(value: unknown, field: string): boolean {
+  if (typeof value !== "boolean") throw new Error(`Settings response field "${field}" is invalid.`);
+  return value;
+}
+
+function requiredInteger(value: unknown, field: string, min = 0): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < min) {
+    throw new Error(`Settings response field "${field}" is invalid.`);
+  }
+  return value;
+}
+
+function optionalCount(value: unknown, field: string): number | null {
+  return value === null ? null : requiredInteger(value, field);
+}
+
+function strictArray(value: unknown, field: string, maximum: number): unknown[] {
+  if (!Array.isArray(value) || value.length > maximum) {
+    throw new Error(`Settings response field "${field}" is invalid or exceeds ${maximum} items.`);
+  }
+  return value;
+}
+
 function decodeIdTokenClaims(idToken: string | null): Record<string, unknown> | null {
-  if (!idToken) {
-    return null;
-  }
-
+  if (!idToken) return null;
   const segments = idToken.split(".");
-  if (segments.length !== 3) {
-    return null;
-  }
-
+  if (segments.length !== 3) return null;
   try {
     const payloadSegment = segments[1].replace(/-/g, "+").replace(/_/g, "/");
-    const paddedPayload = payloadSegment.padEnd(Math.ceil(payloadSegment.length / 4) * 4, "=");
-    const payload = atob(paddedPayload);
+    const payload = atob(payloadSegment.padEnd(Math.ceil(payloadSegment.length / 4) * 4, "="));
     const claims = JSON.parse(payload);
-    return claims && typeof claims === "object" ? (claims as Record<string, unknown>) : null;
+    return isPlainObject(claims) ? claims : null;
   } catch {
     return null;
   }
 }
 
-function normalizeSnapshot(value: unknown): AdminSettingsSnapshot | null {
-  if (!isPlainObject(value)) {
-    return null;
-  }
-
-  const profileSource = isPlainObject(value.profile) ? value.profile : {};
-  const executionSource = isPlainObject(value.executionPolicy) ? value.executionPolicy : {};
-  const phaseSplitSource = isPlainObject(executionSource.phaseSplit)
-    ? executionSource.phaseSplit
-    : {};
-  const advancedSource = isPlainObject(executionSource.advancedControls)
-    ? executionSource.advancedControls
-    : {};
-  const alertSource = isPlainObject(executionSource.alertFrequencyPolicy)
-    ? executionSource.alertFrequencyPolicy
-    : {};
-  const securitySource = isPlainObject(value.security) ? value.security : {};
-  const examSource = isPlainObject(securitySource.examControls) ? securitySource.examControls : {};
-  const emailSource = isPlainObject(securitySource.emailConfiguration)
-    ? securitySource.emailConfiguration
-    : {};
-  const layerSource = isPlainObject(value.layerConfiguration) ? value.layerConfiguration : {};
-  const flagsSource = isPlainObject(value.featureFlags) ? value.featureFlags : {};
-  const archiveControlsSource = isPlainObject(value.dataArchiveControls)
-    ? value.dataArchiveControls
-    : {};
-  const storageSummarySource = isPlainObject(archiveControlsSource.storageSummary)
-    ? archiveControlsSource.storageSummary
-    : {};
-  const retentionSource = isPlainObject(archiveControlsSource.dataRetentionPolicy)
-    ? archiveControlsSource.dataRetentionPolicy
-    : {};
-
-  const years = Array.isArray(value.academicYears) ? value.academicYears : [];
-  const users = Array.isArray(value.users) ? value.users : [];
-  const settingsAudit = Array.isArray(value.settingsAudit) ? value.settingsAudit : [];
+function normalizeSnapshot(value: unknown): AdminSettingsSnapshot {
+  const source = requiredObject(value, "snapshot");
+  const profile = requiredObject(source.profile, "profile");
+  const sessionPolicy = requiredObject(source.sessionPolicy, "sessionPolicy");
+  const audit = requiredObject(source.audit, "audit");
+  const academicYears = strictArray(source.academicYears, "academicYears", 25).map((entry, index) => {
+    const year = requiredObject(entry, `academicYears[${index}]`);
+    const status = requiredString(year.status, `academicYears[${index}].status`) as AcademicYearStatus;
+    const snapshotStatus = requiredString(year.snapshotStatus, `academicYears[${index}].snapshotStatus`);
+    if (!YEAR_STATUSES.has(status) || (snapshotStatus !== "Pending" && snapshotStatus !== "Ready")) {
+      throw new Error(`Settings response academic year ${index} has unsupported status.`);
+    }
+    return {
+      academicYearLabel: requiredString(year.academicYearLabel, `academicYears[${index}].academicYearLabel`),
+      archivedAt: optionalIso(year.archivedAt, `academicYears[${index}].archivedAt`),
+      endDate: optionalIso(year.endDate, `academicYears[${index}].endDate`),
+      runCount: optionalCount(year.runCount, `academicYears[${index}].runCount`),
+      snapshotId: year.snapshotId === undefined ? undefined : requiredString(year.snapshotId, `academicYears[${index}].snapshotId`),
+      snapshotStatus,
+      startDate: optionalIso(year.startDate, `academicYears[${index}].startDate`),
+      status,
+      studentCount: optionalCount(year.studentCount, `academicYears[${index}].studentCount`),
+      yearId: requiredString(year.yearId, `academicYears[${index}].yearId`),
+    } as AcademicYearSummary;
+  });
+  const users = strictArray(source.users, "users", 100).map((entry, index) => {
+    const user = requiredObject(entry, `users[${index}]`);
+    const role = requiredString(user.role, `users[${index}].role`) as StaffRole;
+    const status = requiredString(user.status, `users[${index}].status`) as Exclude<AdminStaffLifecycleStatus, "removed">;
+    if (!STAFF_ROLES.has(role) || !STAFF_LIFECYCLE_STATUSES.has(status)) {
+      throw new Error(`Settings response user ${index} has unsupported access values.`);
+    }
+    return {
+      displayName: requiredString(user.displayName, `users[${index}].displayName`),
+      email: requiredString(user.email, `users[${index}].email`),
+      isPrimaryAdministrator: requiredBoolean(user.isPrimaryAdministrator, `users[${index}].isPrimaryAdministrator`),
+      role,
+      status,
+      updatedAt: requiredIso(user.updatedAt, `users[${index}].updatedAt`),
+      userId: requiredString(user.userId, `users[${index}].userId`),
+    };
+  });
+  const auditItems = strictArray(audit.items, "audit.items", 50).map((entry, index) => {
+    const item = requiredObject(entry, `audit.items[${index}]`);
+    const actionType = requiredString(item.actionType, `audit.items[${index}].actionType`) as AdminSettingsAuditActionType;
+    const area = requiredString(item.area, `audit.items[${index}].area`) as AdminSettingsAuditArea;
+    if (!MUTATION_ACTIONS.has(actionType) || !AUDIT_AREAS.has(area)) {
+      throw new Error(`Settings response audit item ${index} has unsupported values.`);
+    }
+    return {
+      actionType,
+      actorUserId: requiredString(item.actorUserId, `audit.items[${index}].actorUserId`),
+      area,
+      eventId: requiredString(item.eventId, `audit.items[${index}].eventId`),
+      occurredAt: requiredIso(item.occurredAt, `audit.items[${index}].occurredAt`),
+      revision: requiredInteger(item.revision, `audit.items[${index}].revision`, 1),
+      summary: requiredString(item.summary, `audit.items[${index}].summary`),
+      targetId: requiredString(item.targetId, `audit.items[${index}].targetId`),
+    };
+  });
 
   return {
-    academicYears: years.reduce<AcademicYearSummary[]>((result, entry) => {
-      if (!isPlainObject(entry)) {
-        return result;
-      }
-
-      const status = toNonEmptyString(entry.status, "Active") as AcademicYearStatus;
-
-      result.push({
-        academicYearLabel: toNonEmptyString(entry.academicYearLabel, "Academic Year"),
-        archivedAt: typeof entry.archivedAt === "string" ? entry.archivedAt : undefined,
-        endDate: typeof entry.endDate === "string" ? entry.endDate : undefined,
-        runCount: Math.max(0, Math.round(toNumberOrZero(entry.runCount))),
-        snapshotId: typeof entry.snapshotId === "string" ? entry.snapshotId : undefined,
-        snapshotStatus: toNonEmptyString(entry.snapshotStatus, "Pending"),
-        startDate: typeof entry.startDate === "string" ? entry.startDate : undefined,
-        status: status === "Locked" || status === "Archived" ? status : "Active",
-        studentCount: Math.max(0, Math.round(toNumberOrZero(entry.studentCount))),
-        yearId: toNonEmptyString(entry.yearId, "year"),
-      });
-
-      return result;
-    }, []),
-    executionPolicy: {
-      advancedControls: {
-        adaptivePhaseEnabled: toBoolean(advancedSource.adaptivePhaseEnabled, true),
-        hardModeAvailable: toBoolean(advancedSource.hardModeAvailable, false),
-        manualOverrideAllowed: toBoolean(advancedSource.manualOverrideAllowed, false),
-      },
-      alertFrequencyPolicy: {
-        alertCooldownInterval: Math.max(
-          1,
-          Math.round(toNumberOrZero(alertSource.alertCooldownInterval) || 10),
-        ),
-        escalationThreshold: Math.max(
-          1,
-          Math.round(toNumberOrZero(alertSource.escalationThreshold) || 3),
-        ),
-        maxAlertsPerSection: Math.max(
-          1,
-          Math.round(toNumberOrZero(alertSource.maxAlertsPerSection) || 2),
-        ),
-      },
-      phaseSplit: {
-        phase1Percent: Math.round(toNumberOrZero(phaseSplitSource.phase1Percent) || 30),
-        phase2Percent: Math.round(toNumberOrZero(phaseSplitSource.phase2Percent) || 40),
-        phase3Percent: Math.round(toNumberOrZero(phaseSplitSource.phase3Percent) || 30),
-      },
-      timingPresets:
-        isPlainObject(executionSource.timingPresets) &&
-        Object.keys(executionSource.timingPresets).length > 0
-          ? (executionSource.timingPresets as ExecutionPolicySettings["timingPresets"])
-          : FALLBACK_SNAPSHOT.executionPolicy.timingPresets,
-    },
-    dataArchiveControls: {
-      dataRetentionPolicy: {
-        autoArchiveSchedule: toNonEmptyString(
-          retentionSource.autoArchiveSchedule,
-          FALLBACK_SNAPSHOT.dataArchiveControls.dataRetentionPolicy.autoArchiveSchedule,
-        ),
-        autoExportThreshold: Math.max(
-          1,
-          Math.round(
-            toNumberOrZero(retentionSource.autoExportThreshold) ||
-              FALLBACK_SNAPSHOT.dataArchiveControls.dataRetentionPolicy.autoExportThreshold,
-          ),
-        ),
-        rawSessionRetentionYears: Math.max(
-          1,
-          Math.round(
-            toNumberOrZero(retentionSource.rawSessionRetentionYears) ||
-              FALLBACK_SNAPSHOT.dataArchiveControls.dataRetentionPolicy.rawSessionRetentionYears,
-          ),
-        ),
-      },
-      storageSummary: {
-        activeSessionCount: Math.max(
-          0,
-          Math.round(toNumberOrZero(storageSummarySource.activeSessionCount)),
-        ),
-        archivedAcademicYears: Math.max(
-          0,
-          Math.round(toNumberOrZero(storageSummarySource.archivedAcademicYears)),
-        ),
-        bigQueryArchiveSize: toNonEmptyString(
-          storageSummarySource.bigQueryArchiveSize,
-          FALLBACK_SNAPSHOT.dataArchiveControls.storageSummary.bigQueryArchiveSize,
-        ),
-        firestoreHotUsage: toNonEmptyString(
-          storageSummarySource.firestoreHotUsage,
-          FALLBACK_SNAPSHOT.dataArchiveControls.storageSummary.firestoreHotUsage,
-        ),
-      },
-    },
-    featureFlags: {
-      enableBetaUi: toBoolean(flagsSource.enableBetaUi, false),
-      enableExperimentalAnalytics: toBoolean(flagsSource.enableExperimentalAnalytics, false),
-      enableLlmMonthlySummary: toBoolean(flagsSource.enableLlmMonthlySummary, false),
-      toggleAdvancedPhaseVisualization: toBoolean(
-        flagsSource.toggleAdvancedPhaseVisualization,
-        false,
-      ),
-    },
-    layerConfiguration: {
-      currentLayer: toNonEmptyString(layerSource.currentLayer, "L0"),
-      eligibilityStatus: toNonEmptyString(layerSource.eligibilityStatus, "Eligible"),
-      featureFlags: isPlainObject(layerSource.featureFlags)
-        ? Object.fromEntries(
-            Object.entries(layerSource.featureFlags).map(([key, flagValue]) => [
-              key,
-              Boolean(flagValue),
-            ]),
-          )
-        : {},
+    academicYears,
+    audit: {
+      items: auditItems,
+      nextCursor: audit.nextCursor === null ? null : requiredString(audit.nextCursor, "audit.nextCursor"),
     },
     profile: {
-      academicYearFormat: toNonEmptyString(profileSource.academicYearFormat, "YYYY-YY"),
-      contactEmail: toNonEmptyString(profileSource.contactEmail),
-      contactPhone: toNonEmptyString(profileSource.contactPhone),
-      defaultExamType: toNonEmptyString(profileSource.defaultExamType, "JEE_MAIN"),
-      instituteName: toNonEmptyString(profileSource.instituteName, "Institute"),
-      logoReference: toNonEmptyString(profileSource.logoReference),
-      timeZone: toNonEmptyString(profileSource.timeZone, "UTC"),
+      academicYearFormat: requiredString(profile.academicYearFormat, "profile.academicYearFormat"),
+      contactEmail: requiredString(profile.contactEmail, "profile.contactEmail"),
+      contactPhone: requiredString(profile.contactPhone, "profile.contactPhone"),
+      defaultExamType: requiredString(profile.defaultExamType, "profile.defaultExamType"),
+      instituteName: requiredString(profile.instituteName, "profile.instituteName"),
+      logoReference: requiredString(profile.logoReference, "profile.logoReference"),
+      timeZone: requiredString(profile.timeZone, "profile.timeZone"),
     },
-    security: {
-      allowMultipleAdminSessions: toBoolean(securitySource.allowMultipleAdminSessions, false),
-      emailConfiguration: {
-        notificationToggles: toBoolean(emailSource.notificationToggles, true),
-        senderName: toNonEmptyString(emailSource.senderName, "Institute Admin"),
-        smtpHost: toNonEmptyString(emailSource.smtpHost) || undefined,
-        smtpPort:
-          typeof emailSource.smtpPort === "number" ? Math.round(emailSource.smtpPort) : undefined,
-      },
-      examControls: {
-        blockRightClick: toBoolean(examSource.blockRightClick, true),
-        enforceFullscreen: toBoolean(examSource.enforceFullscreen, true),
-        tabSwitchWarning: toBoolean(examSource.tabSwitchWarning, true),
-        tamperDetectionAlerts: toBoolean(examSource.tamperDetectionAlerts, false),
-      },
-      forceLogoutOnPasswordChange: toBoolean(securitySource.forceLogoutOnPasswordChange, true),
-      sessionTimeoutDuration: Math.max(
-        5,
-        Math.round(toNumberOrZero(securitySource.sessionTimeoutDuration) || 30),
-      ),
+    revision: requiredInteger(source.revision, "revision"),
+    sessionPolicy: {
+      allowMultipleAdminSessions: requiredBoolean(sessionPolicy.allowMultipleAdminSessions, "sessionPolicy.allowMultipleAdminSessions"),
+      forceLogoutOnPasswordChange: requiredBoolean(sessionPolicy.forceLogoutOnPasswordChange, "sessionPolicy.forceLogoutOnPasswordChange"),
+      sessionTimeoutDuration: requiredInteger(sessionPolicy.sessionTimeoutDuration, "sessionPolicy.sessionTimeoutDuration", 5),
     },
-    settingsAudit: settingsAudit
-      .map((entry) => {
-        if (!isPlainObject(entry)) {
-          return null;
-        }
+    users,
+  };
+}
 
-        const actorRole = toNonEmptyString(entry.actorRole, "admin").toLowerCase() as StaffRole;
-        const actionType = toNonEmptyString(
-          entry.actionType,
-          "GET_SETTINGS_SNAPSHOT",
-        ) as SettingsActionType;
+function normalizeCommunication(value: unknown): AdminSettingsCommunicationReceipt | undefined {
+  if (value === undefined) return undefined;
+  const communication = requiredObject(value, "communication");
+  const kind = requiredString(communication.kind, "communication.kind");
+  const status = requiredString(communication.status, "communication.status");
+  if (kind !== "staff_invitation" && kind !== "staff_password_reset") {
+    throw new Error("Settings response communication kind is unsupported.");
+  }
+  if (status !== "queued" && status !== "delivered" && status !== "failed") {
+    throw new Error("Settings response communication status is unsupported.");
+  }
+  return {
+    communicationId: requiredString(communication.communicationId, "communication.communicationId"),
+    kind,
+    status,
+  };
+}
 
-        return {
-          actionType,
-          actor: toNonEmptyString(entry.actor, "system"),
-          actorRole:
-            actorRole === "admin" ||
-            actorRole === "teacher" ||
-            actorRole === "director" ||
-            actorRole === "support"
-              ? actorRole
-              : "admin",
-          area: toNonEmptyString(entry.area, "Settings"),
-          eventId: toNonEmptyString(entry.eventId, "settings_audit_event"),
-          sourcePath: toNonEmptyString(entry.sourcePath, "institutes/{id}/settingsAudit/{eventId}"),
-          summary: toNonEmptyString(entry.summary, "Settings change recorded."),
-          target: toNonEmptyString(entry.target, "settings"),
-          timestamp: toNonEmptyString(entry.timestamp, new Date(0).toISOString()),
-        } as SettingsAuditEntry;
-      })
-      .filter((entry): entry is SettingsAuditEntry => Boolean(entry))
-      .sort((left, right) => right.timestamp.localeCompare(left.timestamp)),
-    users: users
-      .map((entry) => {
-        if (!isPlainObject(entry)) {
-          return null;
-        }
-
-        const role = toNonEmptyString(entry.role, "teacher").toLowerCase() as StaffRole;
-        const status = toNonEmptyString(entry.status, "active").toLowerCase() as StaffStatus;
-
-        return {
-          displayName: toNonEmptyString(entry.displayName, "Unknown User"),
-          email: toNonEmptyString(entry.email),
-          role:
-            role === "admin" || role === "teacher" || role === "director" || role === "support"
-              ? role
-              : "teacher",
-          status: status === "active" || status === "suspended" ? status : "active",
-          updatedAt: toNonEmptyString(entry.updatedAt, new Date(0).toISOString()),
-          userId: toNonEmptyString(entry.userId, "user"),
-        };
-      })
-      .filter((entry): entry is StaffAccessRecord => Boolean(entry)),
+function normalizeCommandReceipt(value: unknown): AdminSettingsCommandReceipt | undefined {
+  if (value === undefined) return undefined;
+  const receipt = requiredObject(value, "receipt");
+  return {
+    auditEventId: requiredString(receipt.auditEventId, "receipt.auditEventId"),
+    commandId: requiredString(receipt.commandId, "receipt.commandId"),
+    completedAt: requiredIso(receipt.completedAt, "receipt.completedAt"),
+    replayed: requiredBoolean(receipt.replayed, "receipt.replayed"),
+    revision: requiredInteger(receipt.revision, "receipt.revision", 1),
+    targetUserId: receipt.targetUserId === undefined
+      ? undefined
+      : requiredString(receipt.targetUserId, "receipt.targetUserId"),
   };
 }
 
 async function settingsAction(payload: {
-  instituteId: string;
   actionType: SettingsActionType;
-  profile?: Partial<InstituteProfileSettings>;
-  academicYear?: { yearId?: string };
-  executionPolicy?: Partial<ExecutionPolicySettings>;
-  userAccess?: {
-    userId?: string;
+  academicYearId?: string;
+  commandId?: string;
+  expectedRevision?: number;
+  profile?: AdminInstituteProfileUpdate;
+  sessionPolicy?: AdminSessionPolicyUpdate;
+  invitation?: {
     displayName?: string;
     email?: string;
     role?: StaffRole;
+  };
+  staffUpdate?: {
+    targetUserId?: string;
+    role?: StaffRole;
     status?: StaffStatus;
   };
-  security?: Partial<SecuritySettings>;
-  featureFlags?: Partial<FeatureFlagsSettings>;
-  dataRetentionPolicy?: Partial<DataRetentionPolicySettings>;
-  governanceSnapshotRequest?: Partial<GovernanceSnapshotRequestSettings>;
-}): Promise<AdminSettingsSnapshot> {
+  targetUserId?: string;
+}): Promise<AdminSettingsActionResult> {
   const result = await apiClient.post<AdminSettingsApiResponse, Record<string, unknown>>(
     "/admin/settings",
-    {
-      body: payload,
-    },
+    { body: payload },
   );
-
-  const snapshot = normalizeSnapshot(result.snapshot);
-
-  if (!snapshot) {
-    throw new Error("POST /admin/settings did not return a valid settings snapshot.");
+  if (result.actionType !== payload.actionType) {
+    throw new Error("Settings response action does not match the requested operation.");
   }
+  return {
+    communication: normalizeCommunication(result.communication),
+    receipt: normalizeCommandReceipt(result.receipt),
+    snapshot: normalizeSnapshot(result.snapshot),
+  };
+}
 
-  return snapshot;
+function requireMutationReceipt(
+  result: AdminSettingsActionResult,
+  commandId: string,
+  expectedRevision: number,
+): AdminSettingsCommandReceipt {
+  const receipt = result.receipt;
+  if (
+    !receipt ||
+    receipt.commandId !== commandId ||
+    receipt.revision !== expectedRevision + 1 ||
+    result.snapshot.revision < receipt.revision ||
+    !result.snapshot.audit.items.some((entry) => entry.eventId === receipt.auditEventId)
+  ) {
+    throw new Error("Settings mutation response does not contain matching command authority.");
+  }
+  return receipt;
+}
+
+async function reconcileMutation(
+  result: AdminSettingsActionResult,
+  commandId: string,
+  expectedRevision: number,
+  verify: (snapshot: AdminSettingsSnapshot, receipt: AdminSettingsCommandReceipt) => boolean,
+): Promise<{ receipt: AdminSettingsCommandReceipt; snapshot: AdminSettingsSnapshot }> {
+  const receipt = requireMutationReceipt(result, commandId, expectedRevision);
+  const snapshot = await fetchSettingsSnapshot();
+  if (
+    snapshot.revision < receipt.revision ||
+    !snapshot.audit.items.some((entry) => entry.eventId === receipt.auditEventId) ||
+    !verify(snapshot, receipt)
+  ) {
+    throw new Error("Settings mutation was not confirmed by authoritative settings reload.");
+  }
+  return { receipt, snapshot };
+}
+
+function requireLiveMutation(): void {
+  if (isLocalSettingsReadMode()) {
+    throw new Error("Settings mutations are unavailable while fixture data is active.");
+  }
 }
 
 export function isLocalSettingsReadMode(): boolean {
@@ -661,157 +415,209 @@ export function isLocalSettingsReadMode(): boolean {
 export function resolveAdminInstituteId(idToken: string | null): string {
   const claims = decodeIdTokenClaims(idToken);
   const instituteId = claims?.instituteId;
-  return typeof instituteId === "string" && instituteId.trim().length > 0
+  return typeof instituteId === "string" && instituteId.trim()
     ? instituteId.trim()
     : DEFAULT_SETTINGS_INSTITUTE_ID;
 }
 
-export async function fetchSettingsSnapshot(instituteId: string): Promise<AdminSettingsSnapshot> {
-  if (isLocalSettingsReadMode()) {
-    return FALLBACK_SNAPSHOT;
-  }
-
-  return settingsAction({
-    actionType: "GET_SETTINGS_SNAPSHOT",
-    instituteId,
-  });
+export async function fetchSettingsSnapshot(): Promise<AdminSettingsSnapshot> {
+  if (isLocalSettingsReadMode()) return FALLBACK_SNAPSHOT;
+  return (await settingsAction({ actionType: "GET_SETTINGS_SNAPSHOT" })).snapshot;
 }
 
 export async function updateInstituteProfile(
-  instituteId: string,
-  profile: InstituteProfileSettings,
+  profile: AdminInstituteProfileUpdate,
+  expectedRevision: number,
+  commandId: string,
 ): Promise<AdminSettingsSnapshot> {
-  return settingsAction({
+  requireLiveMutation();
+  const normalizedProfile = {
+    academicYearFormat: profile.academicYearFormat.trim(),
+    contactEmail: profile.contactEmail.trim(),
+    contactPhone: profile.contactPhone.trim(),
+    defaultExamType: profile.defaultExamType.trim(),
+    timeZone: profile.timeZone.trim(),
+  };
+  const result = await settingsAction({
     actionType: "UPDATE_INSTITUTE_PROFILE",
-    instituteId,
-    profile,
+    commandId,
+    expectedRevision,
+    profile: normalizedProfile,
   });
-}
-
-export async function updateExecutionPolicy(
-  instituteId: string,
-  executionPolicy: ExecutionPolicySettings,
-): Promise<AdminSettingsSnapshot> {
-  return settingsAction({
-    actionType: "UPDATE_EXECUTION_POLICY",
-    executionPolicy,
-    instituteId,
-  });
-}
-
-export async function lockAcademicYear(
-  instituteId: string,
-  yearId: string,
-): Promise<AdminSettingsSnapshot> {
-  return settingsAction({
-    academicYear: { yearId },
-    actionType: "LOCK_ACADEMIC_YEAR",
-    instituteId,
-  });
-}
-
-export async function requestAcademicYearArchive(
-  instituteId: string,
-  yearId: string,
-): Promise<AdminSettingsSnapshot> {
-  return settingsAction({
-    academicYear: { yearId },
-    actionType: "REQUEST_ACADEMIC_YEAR_ARCHIVE",
-    instituteId,
-  });
-}
-
-export async function upsertUserAccess(
-  instituteId: string,
-  userAccess: {
-    userId: string;
-    displayName: string;
-    email: string;
-    role: StaffRole;
-    status: StaffStatus;
-  },
-): Promise<AdminSettingsSnapshot> {
-  return settingsAction({
-    actionType: "UPSERT_USER_ACCESS",
-    instituteId,
-    userAccess,
-  });
-}
-
-export async function removeUserAccess(
-  instituteId: string,
-  userId: string,
-): Promise<AdminSettingsSnapshot> {
-  return settingsAction({
-    actionType: "REMOVE_USER_ACCESS",
-    instituteId,
-    userAccess: { userId },
-  });
-}
-
-export async function resetUserPassword(
-  instituteId: string,
-  userId: string,
-): Promise<AdminSettingsSnapshot> {
-  return settingsAction({
-    actionType: "RESET_USER_PASSWORD",
-    instituteId,
-    userAccess: { userId },
-  });
+  return (await reconcileMutation(result, commandId, expectedRevision, (snapshot) =>
+    snapshot.profile.academicYearFormat === normalizedProfile.academicYearFormat &&
+    snapshot.profile.contactEmail === normalizedProfile.contactEmail &&
+    snapshot.profile.contactPhone === normalizedProfile.contactPhone &&
+    snapshot.profile.defaultExamType === normalizedProfile.defaultExamType &&
+    snapshot.profile.timeZone === normalizedProfile.timeZone
+  )).snapshot;
 }
 
 export async function updateSecuritySettings(
-  instituteId: string,
-  security: SecuritySettings,
+  sessionPolicy: AdminSessionPolicyUpdate,
+  expectedRevision: number,
+  commandId: string,
 ): Promise<AdminSettingsSnapshot> {
-  return settingsAction({
+  requireLiveMutation();
+  const result = await settingsAction({
     actionType: "UPDATE_SECURITY_SETTINGS",
-    instituteId,
-    security,
+    commandId,
+    expectedRevision,
+    sessionPolicy,
   });
+  return (await reconcileMutation(result, commandId, expectedRevision, (snapshot) =>
+    snapshot.sessionPolicy.allowMultipleAdminSessions === sessionPolicy.allowMultipleAdminSessions &&
+    snapshot.sessionPolicy.forceLogoutOnPasswordChange === sessionPolicy.forceLogoutOnPasswordChange &&
+    snapshot.sessionPolicy.sessionTimeoutDuration === sessionPolicy.sessionTimeoutDuration
+  )).snapshot;
 }
 
-export async function updateFeatureFlags(
-  instituteId: string,
-  featureFlags: FeatureFlagsSettings,
+export async function lockAcademicYear(
+  academicYearId: string,
+  expectedRevision: number,
+  commandId: string,
 ): Promise<AdminSettingsSnapshot> {
-  return settingsAction({
-    actionType: "UPDATE_FEATURE_FLAGS",
-    featureFlags,
-    instituteId,
+  requireLiveMutation();
+  const result = await settingsAction({
+    academicYearId,
+    actionType: "LOCK_ACADEMIC_YEAR",
+    commandId,
+    expectedRevision,
   });
+  return (await reconcileMutation(result, commandId, expectedRevision, (snapshot) =>
+    snapshot.academicYears.some((year) =>
+      year.yearId === academicYearId && year.status === "Locked")
+  )).snapshot;
 }
 
-export async function updateDataRetentionPolicy(
-  instituteId: string,
-  dataRetentionPolicy: DataRetentionPolicySettings,
-): Promise<AdminSettingsSnapshot> {
-  return settingsAction({
-    actionType: "UPDATE_DATA_RETENTION_POLICY",
-    dataRetentionPolicy,
-    instituteId,
-  });
+function normalizeArchiveReceipt(value: unknown): AdminAcademicYearArchiveReceipt {
+  const receipt = requiredObject(value, "archiveReceipt");
+  const stage = requiredString(receipt.stage, "archiveReceipt.stage");
+  if (!["accepted", "locked", "exported", "snapshot_created", "archived", "failed"].includes(stage)) {
+    throw new Error("Archive response stage is unsupported.");
+  }
+  return {
+    academicYearId: requiredString(receipt.academicYearId, "archiveReceipt.academicYearId"),
+    auditEventId: requiredString(receipt.auditEventId, "archiveReceipt.auditEventId"),
+    commandId: requiredString(receipt.commandId, "archiveReceipt.commandId"),
+    completedAt: requiredIso(receipt.completedAt, "archiveReceipt.completedAt"),
+    replayed: requiredBoolean(receipt.replayed, "archiveReceipt.replayed"),
+    revision: requiredInteger(receipt.revision, "archiveReceipt.revision", 1),
+    stage: stage as AdminAcademicYearArchiveReceipt["stage"],
+  };
 }
 
-export async function requestGovernanceSnapshot(
-  instituteId: string,
-  governanceSnapshotRequest: GovernanceSnapshotRequestSettings,
-): Promise<AdminSettingsSnapshot> {
-  return settingsAction({
-    actionType: "REQUEST_GOVERNANCE_SNAPSHOT",
-    governanceSnapshotRequest,
-    instituteId,
-  });
-}
-
-export async function archiveAcademicYear(instituteId: string, yearId: string): Promise<void> {
-  await apiClient.post<unknown, Record<string, unknown>>("/admin/academicYear/archive", {
-    body: {
-      doubleConfirm: true,
-      instituteId,
-      yearId,
+export async function archiveAcademicYear(
+  academicYearId: string,
+  expectedRevision: number,
+  commandId: string,
+): Promise<{ receipt: AdminAcademicYearArchiveReceipt; snapshot: AdminSettingsSnapshot }> {
+  requireLiveMutation();
+  const receipt = normalizeArchiveReceipt(await apiClient.post<unknown, Record<string, unknown>>(
+    "/admin/academicYear/archive",
+    {
+      body: {
+        academicYearId,
+        commandId,
+        confirmIrreversibleArchive: true,
+        expectedRevision,
+      },
     },
-  });
+  ));
+  if (receipt.academicYearId !== academicYearId || receipt.commandId !== commandId || receipt.stage !== "archived") {
+    throw new Error("Archive response does not match the requested completed command.");
+  }
+  const snapshot = await fetchSettingsSnapshot();
+  const archivedYear = snapshot.academicYears.find((year) => year.yearId === academicYearId);
+  if (
+    !archivedYear ||
+    archivedYear.status !== "Archived" ||
+    snapshot.revision < receipt.revision ||
+    !snapshot.audit.items.some((entry) => entry.eventId === receipt.auditEventId)
+  ) {
+    throw new Error("Archived academic year was not confirmed by authoritative settings reload.");
+  }
+  return { receipt, snapshot };
 }
 
-export { ApiClientError, FALLBACK_SNAPSHOT };
+export async function inviteStaff(invitation: {
+  displayName: string;
+  email: string;
+  role: StaffRole;
+}, expectedRevision: number, commandId: string): Promise<AdminSettingsActionResult> {
+  requireLiveMutation();
+  const normalizedInvitation = {
+    displayName: invitation.displayName.trim(),
+    email: invitation.email.trim().toLowerCase(),
+    role: invitation.role,
+  };
+  const result = await settingsAction({
+    actionType: "UPSERT_USER_ACCESS",
+    commandId,
+    expectedRevision,
+    invitation: normalizedInvitation,
+  });
+  const reconciled = await reconcileMutation(result, commandId, expectedRevision, (snapshot, receipt) =>
+    receipt.targetUserId !== undefined && snapshot.users.some((user) =>
+      user.userId === receipt.targetUserId &&
+      user.displayName === normalizedInvitation.displayName &&
+      user.email === normalizedInvitation.email &&
+      user.role === normalizedInvitation.role &&
+      user.status === "invitation_pending"
+    )
+  );
+  if (result.communication?.kind !== "staff_invitation") {
+    throw new Error("Staff invitation response is missing communication authority.");
+  }
+  return { communication: result.communication, receipt: reconciled.receipt, snapshot: reconciled.snapshot };
+}
+
+export async function updateUserAccess(
+  staffUpdate: { targetUserId: string; role?: StaffRole; status?: StaffStatus },
+  expectedRevision: number,
+  commandId: string,
+): Promise<AdminSettingsSnapshot> {
+  requireLiveMutation();
+  const result = await settingsAction({ actionType: "UPSERT_USER_ACCESS", commandId, expectedRevision, staffUpdate });
+  return (await reconcileMutation(result, commandId, expectedRevision, (snapshot, receipt) => {
+    if (receipt.targetUserId !== staffUpdate.targetUserId) return false;
+    const user = snapshot.users.find((candidate) => candidate.userId === staffUpdate.targetUserId);
+    return Boolean(
+      user &&
+      (staffUpdate.role === undefined || user.role === staffUpdate.role) &&
+      (staffUpdate.status === undefined || user.status === staffUpdate.status)
+    );
+  })).snapshot;
+}
+
+export async function removeUserAccess(
+  targetUserId: string,
+  expectedRevision: number,
+  commandId: string,
+): Promise<AdminSettingsSnapshot> {
+  requireLiveMutation();
+  const result = await settingsAction({ actionType: "REMOVE_USER_ACCESS", commandId, expectedRevision, targetUserId });
+  return (await reconcileMutation(result, commandId, expectedRevision, (snapshot, receipt) =>
+    receipt.targetUserId === targetUserId &&
+    !snapshot.users.some((user) => user.userId === targetUserId)
+  )).snapshot;
+}
+
+export async function resetUserPassword(
+  targetUserId: string,
+  expectedRevision: number,
+  commandId: string,
+): Promise<AdminSettingsActionResult> {
+  requireLiveMutation();
+  const result = await settingsAction({ actionType: "RESET_USER_PASSWORD", commandId, expectedRevision, targetUserId });
+  const reconciled = await reconcileMutation(result, commandId, expectedRevision, (snapshot, receipt) =>
+    receipt.targetUserId === targetUserId &&
+    snapshot.users.some((user) => user.userId === targetUserId)
+  );
+  if (result.communication?.kind !== "staff_password_reset") {
+    throw new Error("Password-reset response is missing communication authority.");
+  }
+  return { communication: result.communication, receipt: reconciled.receipt, snapshot: reconciled.snapshot };
+}
+
+export { ApiClientError };

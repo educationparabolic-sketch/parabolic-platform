@@ -156,6 +156,7 @@ import {testTemplateOnCreate} from "./triggers/templateCreation";
 import {governanceSnapshotMonthly} from "./triggers/governanceSnapshot";
 import {billingSnapshotMonthly} from "./triggers/billingSnapshot";
 import {dataRetentionPolicyDaily} from "./triggers/dataRetentionPolicy";
+import {processEmailQueue} from "./triggers/emailQueue";
 import {
   failureRecoveryDispatch,
   failureRecoveryRetrySweep,
@@ -179,6 +180,7 @@ export {testTemplateOnCreate};
 export {governanceSnapshotMonthly};
 export {billingSnapshotMonthly};
 export {dataRetentionPolicyDaily};
+export {processEmailQueue};
 export {failureRecoveryDispatch};
 export {failureRecoveryRetrySweep};
 export const apiV1 = functions.https.onRequest(handleApiV1Request);

@@ -53,6 +53,10 @@ test(
       partitionService.resolveAcademicYearTier({status: "archived"}),
       "COLD",
     );
+    assert.equal(
+      partitionService.resolveAcademicYearTier({status: "unexpected"}),
+      "WARM",
+    );
 
     assert.equal(
       partitionService.resolveRunTier({

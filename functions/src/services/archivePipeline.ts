@@ -1,9 +1,7 @@
+import {createHash} from "node:crypto";
 import {Timestamp} from "firebase-admin/firestore";
 import {GoogleAuth} from "google-auth-library";
 import {createLogger} from "./logging";
-import {
-  administrativeActionLoggingService,
-} from "./administrativeActionLogging";
 import {
   governanceSnapshotAggregationService,
 } from "./governanceSnapshotAggregation";
@@ -20,17 +18,31 @@ const STUDENTS_COLLECTION = "students";
 const ACADEMIC_YEARS_COLLECTION = "academicYears";
 const RUNS_COLLECTION = "runs";
 const SESSIONS_COLLECTION = "sessions";
-const ACTIVE_SESSION_STATUSES = new Set([
-  "created",
-  "started",
-  "active",
-]);
+const SETTINGS_COMMANDS_COLLECTION = "settingsCommands";
+const SETTINGS_AUDIT_COLLECTION = "settingsAudit";
+const AUDIT_LOGS_COLLECTION = "auditLogs";
+const MAX_ARCHIVE_RUNS = 100;
+const MAX_ARCHIVE_SESSIONS = 400;
+const ARCHIVE_LEASE_MS = 5 * 60_000;
 const TERMINAL_RUN_STATUSES = new Set([
   "archived",
   "cancelled",
   "completed",
   "terminated",
 ]);
+const TERMINAL_SESSION_STATUSES = new Set([
+  "expired",
+  "submitted",
+  "terminated",
+]);
+const ARCHIVE_STAGES = [
+  "accepted",
+  "locked",
+  "exported",
+  "snapshot_created",
+  "archived",
+] as const;
+type ArchiveCheckpointStage = typeof ARCHIVE_STAGES[number];
 const BIGQUERY_SCOPE = "https://www.googleapis.com/auth/bigquery";
 
 interface ArchiveRunRecord {
@@ -66,11 +78,41 @@ interface ArchiveExecutionContext {
   academicYearPath: string;
   academicYearReference: FirebaseFirestore.DocumentReference;
   archiveDatasetId: string;
-  currentStatus: string;
   runs: ArchiveRunRecord[];
   sessions: ArchiveSessionRecord[];
   sessionsTableId: string;
   studentsById: Map<string, ArchiveStudentRecord>;
+}
+
+interface ArchiveCommandState {
+  academicYearId: string;
+  acceptedAt: Timestamp;
+  activeAttempt?: number;
+  actorRole: string;
+  actorUserId: string;
+  attemptCount: number;
+  auditEventId: string;
+  checkpointStage: ArchiveCheckpointStage;
+  commandIdHash: string;
+  completedAt?: Timestamp;
+  fingerprint: string;
+  ipAddressHash?: string;
+  leaseUntil?: Timestamp;
+  revision: number;
+  snapshotPath?: string;
+  state: "pending" | "processing" | "failed" | "complete";
+  userAgentHash?: string;
+}
+
+interface ArchiveCommandAuthority {
+  auditEventId: string;
+  auditLogReference: FirebaseFirestore.DocumentReference;
+  commandIdHash: string;
+  commandReference: FirebaseFirestore.DocumentReference;
+  fingerprint: string;
+  instituteReference: FirebaseFirestore.DocumentReference;
+  settingsAuditReference: FirebaseFirestore.DocumentReference;
+  yearReference: FirebaseFirestore.DocumentReference;
 }
 
 interface BigQueryTableField {
@@ -105,8 +147,6 @@ interface BigQueryRestClient {
 
 interface ArchivePipelineDependencies {
   bigQueryClient: BigQueryRestClient;
-  createArchiveAuditLog:
-    typeof administrativeActionLoggingService.logAcademicYearArchive;
   firestore: FirebaseFirestore.Firestore;
   generateGovernanceSnapshot:
     typeof governanceSnapshotAggregationService.generateSnapshotForAcademicYear;
@@ -152,6 +192,80 @@ const normalizeBoolean = (value: unknown, fieldName: string): true => {
   }
 
   return true;
+};
+
+const normalizeCommandId = (value: unknown): string => {
+  const commandId = normalizeRequiredString(value, "commandId").toLowerCase();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(commandId)) {
+    throw new AcademicYearArchiveValidationError(
+      "VALIDATION_ERROR",
+      "Field \"commandId\" must be a UUID.",
+    );
+  }
+  return commandId;
+};
+
+const normalizeRevision = (value: unknown): number => {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    throw new AcademicYearArchiveValidationError(
+      "VALIDATION_ERROR",
+      "Field \"expectedRevision\" must be a non-negative integer.",
+    );
+  }
+  return value;
+};
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const sha256 = (value: string): string =>
+  createHash("sha256").update(value).digest("hex");
+
+const stableSerialize = (value: unknown): string => {
+  if (Array.isArray(value)) return `[${value.map(stableSerialize).join(",")}]`;
+  if (isPlainObject(value)) {
+    return `{${Object.keys(value).sort().map((key) =>
+      `${JSON.stringify(key)}:${stableSerialize(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+};
+
+const stageIndex = (stage: ArchiveCheckpointStage): number =>
+  ARCHIVE_STAGES.indexOf(stage);
+
+const hasReachedStage = (
+  current: ArchiveCheckpointStage,
+  target: ArchiveCheckpointStage,
+): boolean => stageIndex(current) >= stageIndex(target);
+
+const toArchiveCommand = (value: unknown): ArchiveCommandState | null => {
+  if (!isPlainObject(value)) return null;
+  const checkpointStage = normalizeOptionalString(value.checkpointStage);
+  const state = normalizeOptionalString(value.state);
+  if (!checkpointStage || !ARCHIVE_STAGES.includes(checkpointStage as ArchiveCheckpointStage) ||
+    !state || !["pending", "processing", "failed", "complete"].includes(state) ||
+    !(value.acceptedAt instanceof Timestamp) ||
+    typeof value.attemptCount !== "number" || !Number.isInteger(value.attemptCount) ||
+    typeof value.revision !== "number" || !Number.isInteger(value.revision)) return null;
+  return {
+    academicYearId: normalizeRequiredString(value.academicYearId, "academicYearId"),
+    acceptedAt: value.acceptedAt,
+    activeAttempt: typeof value.activeAttempt === "number" ? value.activeAttempt : undefined,
+    actorRole: normalizeRequiredString(value.actorRole, "actorRole"),
+    actorUserId: normalizeRequiredString(value.actorUserId, "actorUserId"),
+    attemptCount: value.attemptCount,
+    auditEventId: normalizeRequiredString(value.auditEventId, "auditEventId"),
+    checkpointStage: checkpointStage as ArchiveCheckpointStage,
+    commandIdHash: normalizeRequiredString(value.commandIdHash, "commandIdHash"),
+    completedAt: value.completedAt instanceof Timestamp ? value.completedAt : undefined,
+    fingerprint: normalizeRequiredString(value.fingerprint, "fingerprint"),
+    ipAddressHash: normalizeOptionalString(value.ipAddressHash) ?? undefined,
+    leaseUntil: value.leaseUntil instanceof Timestamp ? value.leaseUntil : undefined,
+    revision: value.revision,
+    snapshotPath: normalizeOptionalString(value.snapshotPath) ?? undefined,
+    state: state as ArchiveCommandState["state"],
+    userAgentHash: normalizeOptionalString(value.userAgentHash) ?? undefined,
+  };
 };
 
 const normalizeTimestamp = (
@@ -654,15 +768,23 @@ export class ArchivePipelineService {
     value: Partial<AcademicYearArchiveValidatedRequest>,
   ): AcademicYearArchiveValidatedRequest {
     return {
+      academicYearId: normalizeRequiredString(
+        value.academicYearId,
+        "academicYearId",
+      ),
       actorId: normalizeRequiredString(value.actorId, "actorId"),
       actorRole: normalizeRequiredString(value.actorRole, "actorRole")
         .toLowerCase(),
-      doubleConfirm: normalizeBoolean(value.doubleConfirm, "doubleConfirm"),
+      commandId: normalizeCommandId(value.commandId),
+      confirmIrreversibleArchive: normalizeBoolean(
+        value.confirmIrreversibleArchive,
+        "confirmIrreversibleArchive",
+      ),
+      expectedRevision: normalizeRevision(value.expectedRevision),
       instituteId: normalizeRequiredString(value.instituteId, "instituteId"),
       ipAddress: normalizeOptionalString(value.ipAddress) ?? undefined,
       isVendor: value.isVendor === true,
       userAgent: normalizeOptionalString(value.userAgent) ?? undefined,
-      yearId: normalizeRequiredString(value.yearId, "yearId"),
     };
   }
 
@@ -675,172 +797,146 @@ export class ArchivePipelineService {
     input: AcademicYearArchiveValidatedRequest,
   ): Promise<AcademicYearArchiveResult> {
     const request = this.normalizeRequest(input);
-    const projectId = this.dependencies.projectIdResolver();
-    const executionContext = await this.prepareExecutionContext(request);
+    const authority = this.buildCommandAuthority(request);
+    const reserved = await this.reserveArchiveCommand(request, authority);
+    if (reserved.state === "complete") {
+      return this.toReceipt(request.commandId, reserved, true);
+    }
+    const claimed = await this.claimArchiveCommand(authority.commandReference);
+    if (claimed.state === "complete") {
+      return this.toReceipt(request.commandId, claimed, true);
+    }
 
-    if (executionContext.currentStatus === "archived") {
-      return {
-        academicYearPath: executionContext.academicYearPath,
-        archived: true,
-        bigQuery: {
+    try {
+      const projectId = this.dependencies.projectIdResolver();
+      const executionContext = await this.prepareExecutionContext(request);
+      this.validateArchivePreconditions(
+        executionContext.runs,
+        executionContext.sessions,
+      );
+      let command = claimed;
+      if (!hasReachedStage(command.checkpointStage, "locked")) {
+        command = await this.updateCheckpoint(
+          authority,
+          claimed.activeAttempt as number,
+          "locked",
+          {},
+        );
+      }
+
+      const exportRows = executionContext.sessions
+        .filter((session) => session.status === "submitted")
+        .map((session) => buildSessionRow({
+          instituteId: request.instituteId,
+          runRecord: executionContext.runs.find(
+            (run) => run.runId === session.runId,
+          ),
+          sessionRecord: session,
+          studentRecord: executionContext.studentsById.get(session.studentId),
+          yearId: request.academicYearId,
+        }));
+
+      if (!hasReachedStage(command.checkpointStage, "exported")) {
+        await this.dependencies.bigQueryClient.ensureArchiveTables({
           datasetId: executionContext.archiveDatasetId,
           projectId,
-          rowsExported: 0,
           sessionsTableId: executionContext.sessionsTableId,
-          skipped: true,
-        },
-        idempotent: true,
+        });
+        const existingRowCount = await this.dependencies.bigQueryClient
+          .getExistingRowCount({
+            datasetId: executionContext.archiveDatasetId,
+            projectId,
+            sessionsTableId: executionContext.sessionsTableId,
+          });
+        if (existingRowCount === 0 && exportRows.length > 0) {
+          await this.dependencies.bigQueryClient.insertSessionRows({
+            datasetId: executionContext.archiveDatasetId,
+            projectId,
+            rows: exportRows,
+            sessionsTableId: executionContext.sessionsTableId,
+          });
+        } else if (existingRowCount !== exportRows.length) {
+          throw new AcademicYearArchiveValidationError(
+            "INTERNAL_ERROR",
+            "Archive export row count conflicts with durable academic-year authority.",
+          );
+        }
+        command = await this.updateCheckpoint(
+          authority,
+          claimed.activeAttempt as number,
+          "exported",
+          {exportedSessionCount: exportRows.length},
+        );
+      }
+
+      if (!hasReachedStage(command.checkpointStage, "snapshot_created")) {
+        const snapshotResult = await this.dependencies.generateGovernanceSnapshot({
+          academicYear: request.academicYearId,
+          instituteId: request.instituteId,
+          snapshotId: request.academicYearId,
+          snapshotMonth: buildSnapshotMonth(this.dependencies.now()),
+          versionMetadata: {
+            calibrationVersionUsed: buildJoinedVersion(
+              executionContext.runs.map((run) => run.calibrationVersion)
+                .filter((value): value is string => Boolean(value)),
+            ),
+            riskModelVersionUsed: buildJoinedVersion(
+              executionContext.runs.map((run) => run.riskModelVersion)
+                .filter((value): value is string => Boolean(value)),
+            ),
+            templateVersionRangeUsed: buildTemplateVersionRange(
+              executionContext.runs.map((run) => run.templateVersion)
+                .filter((value): value is string => Boolean(value)),
+            ),
+          },
+        });
+        if (!snapshotResult.documentPath) {
+          throw new AcademicYearArchiveValidationError(
+            "INTERNAL_ERROR",
+            "Archive snapshot generation did not return durable authority.",
+          );
+        }
+        const snapshotAuthority = await this.dependencies.firestore
+          .doc(snapshotResult.documentPath).get();
+        if (!snapshotAuthority.exists) {
+          throw new AcademicYearArchiveValidationError(
+            "INTERNAL_ERROR",
+            "Archive snapshot generation did not persist durable authority.",
+          );
+        }
+        command = await this.updateCheckpoint(
+          authority,
+          claimed.activeAttempt as number,
+          "snapshot_created",
+          {snapshotPath: snapshotResult.documentPath},
+        );
+      }
+
+      const completed = await this.finalizeArchive(
+        request,
+        authority,
+        claimed.activeAttempt as number,
+        command,
+      );
+      this.logger.info("Academic year archive completed.", {
+        academicYearId: request.academicYearId,
+        auditEventId: completed.auditEventId,
         instituteId: request.instituteId,
-        status: "archived",
-        yearId: request.yearId,
-      };
-    }
-
-    this.validateArchivePreconditions(
-      executionContext.runs,
-      executionContext.sessions,
-    );
-    await this.lockAcademicYear(executionContext.academicYearReference);
-
-    const exportedSessions = executionContext.sessions
-      .filter((session) => session.status === "submitted");
-    const exportRows = exportedSessions.map((session) =>
-      buildSessionRow({
-        instituteId: request.instituteId,
-        runRecord: executionContext.runs.find(
-          (run) => run.runId === session.runId,
-        ),
-        sessionRecord: session,
-        studentRecord: executionContext.studentsById.get(session.studentId),
-        yearId: request.yearId,
-      }),
-    );
-
-    await this.dependencies.bigQueryClient.ensureArchiveTables({
-      datasetId: executionContext.archiveDatasetId,
-      projectId,
-      sessionsTableId: executionContext.sessionsTableId,
-    });
-
-    const existingRowCount = await this.dependencies.bigQueryClient
-      .getExistingRowCount({
-        datasetId: executionContext.archiveDatasetId,
-        projectId,
-        sessionsTableId: executionContext.sessionsTableId,
+        revision: completed.revision,
       });
-
-    let skippedExport = false;
-    if (existingRowCount === exportRows.length) {
-      skippedExport = true;
-    } else if (existingRowCount === 0) {
-      await this.dependencies.bigQueryClient.insertSessionRows({
-        datasetId: executionContext.archiveDatasetId,
-        projectId,
-        rows: exportRows,
-        sessionsTableId: executionContext.sessionsTableId,
-      });
-    } else {
+      return this.toReceipt(request.commandId, completed, false);
+    } catch (error) {
+      await this.recordFailure(
+        authority.commandReference,
+        claimed.activeAttempt as number,
+        error,
+      );
+      if (error instanceof AcademicYearArchiveValidationError) throw error;
       throw new AcademicYearArchiveValidationError(
         "INTERNAL_ERROR",
-        "Existing archive table row count does not match the academic year " +
-        "session count. Manual reconciliation is required before retrying.",
+        "Academic-year archive was interrupted and can be retried with the same command.",
       );
     }
-
-    const snapshotMonth = buildSnapshotMonth(this.dependencies.now());
-    const snapshotResult = await this.dependencies.generateGovernanceSnapshot({
-      academicYear: request.yearId,
-      instituteId: request.instituteId,
-      snapshotId: request.yearId,
-      snapshotMonth,
-      versionMetadata: {
-        calibrationVersionUsed: buildJoinedVersion(
-          executionContext.runs
-            .map((run) => run.calibrationVersion)
-            .filter((value): value is string => Boolean(value)),
-        ),
-        riskModelVersionUsed: buildJoinedVersion(
-          executionContext.runs
-            .map((run) => run.riskModelVersion)
-            .filter((value): value is string => Boolean(value)),
-        ),
-        templateVersionRangeUsed: buildTemplateVersionRange(
-          executionContext.runs
-            .map((run) => run.templateVersion)
-            .filter((value): value is string => Boolean(value)),
-        ),
-      },
-    });
-
-    if (!snapshotResult.documentPath) {
-      throw new AcademicYearArchiveValidationError(
-        "INTERNAL_ERROR",
-        "Archive snapshot generation did not return a snapshot " +
-        "document path.",
-      );
-    }
-
-    const archivedAt = Timestamp.now();
-    await executionContext.academicYearReference.set({
-      archivedAt,
-      snapshotGenerated: true,
-      snapshotId: request.yearId,
-      status: "archived",
-    }, {merge: true});
-
-    const auditResult = await this.dependencies.createArchiveAuditLog({
-      actorId: request.actorId,
-      actorRole: request.actorRole,
-      afterState: {
-        archivedAt: archivedAt.toDate().toISOString(),
-        snapshotGenerated: true,
-        snapshotId: request.yearId,
-        status: "archived",
-      },
-      beforeState: {
-        status: executionContext.currentStatus || "active",
-      },
-      entityId: request.yearId,
-      instituteId: request.instituteId,
-      ipAddress: request.ipAddress,
-      metadata: {
-        archiveDatasetId: executionContext.archiveDatasetId,
-        archivedSessionCount: exportRows.length,
-        sessionsTableId: executionContext.sessionsTableId,
-        snapshotPath: snapshotResult.documentPath,
-        vendorAuthorized: request.isVendor,
-      },
-      userAgent: request.userAgent,
-    });
-
-    this.logger.info("Academic year archive completed.", {
-      archivedSessionCount: exportRows.length,
-      auditLogPath: auditResult.path,
-      datasetId: executionContext.archiveDatasetId,
-      instituteId: request.instituteId,
-      skippedExport,
-      snapshotPath: snapshotResult.documentPath,
-      yearId: request.yearId,
-    });
-
-    return {
-      academicYearPath: executionContext.academicYearPath,
-      archived: true,
-      archivedAt: archivedAt.toDate().toISOString(),
-      auditLogPath: auditResult.path,
-      bigQuery: {
-        datasetId: executionContext.archiveDatasetId,
-        projectId,
-        rowsExported: exportRows.length,
-        sessionsTableId: executionContext.sessionsTableId,
-        skipped: skippedExport,
-      },
-      idempotent: false,
-      instituteId: request.instituteId,
-      snapshotPath: snapshotResult.documentPath,
-      status: "archived",
-      yearId: request.yearId,
-    };
   }
 
   /**
@@ -856,7 +952,7 @@ export class ArchivePipelineService {
       .collection(INSTITUTES_COLLECTION)
       .doc(input.instituteId)
       .collection(ACADEMIC_YEARS_COLLECTION)
-      .doc(input.yearId);
+      .doc(input.academicYearId);
     const academicYearSnapshot = await academicYearReference.get();
 
     if (!academicYearSnapshot.exists) {
@@ -868,9 +964,22 @@ export class ArchivePipelineService {
 
     const academicYearData = academicYearSnapshot.data();
     const currentStatus = toNormalizedStatus(academicYearData?.status);
+    if (currentStatus !== "locked") {
+      throw new AcademicYearArchiveValidationError(
+        "CONFLICT",
+        "Academic year must remain locked while archive recovery runs.",
+      );
+    }
     const runsSnapshot = await academicYearReference
       .collection(RUNS_COLLECTION)
+      .limit(MAX_ARCHIVE_RUNS + 1)
       .get();
+    if (runsSnapshot.size > MAX_ARCHIVE_RUNS) {
+      throw new AcademicYearArchiveValidationError(
+        "CONFLICT",
+        `Academic-year archive exceeds the ${MAX_ARCHIVE_RUNS}-run bound.`,
+      );
+    }
     const runs: ArchiveRunRecord[] = runsSnapshot.docs.map((document) => {
       const runData = document.data();
 
@@ -892,8 +1001,19 @@ export class ArchivePipelineService {
     });
     const sessionSnapshots = await Promise.all(
       runsSnapshot.docs.map((runDocument) =>
-        runDocument.ref.collection(SESSIONS_COLLECTION).get()),
+        runDocument.ref.collection(SESSIONS_COLLECTION)
+          .limit(MAX_ARCHIVE_SESSIONS + 1).get()),
     );
+    const sessionCount = sessionSnapshots.reduce(
+      (total, snapshot) => total + snapshot.size,
+      0,
+    );
+    if (sessionCount > MAX_ARCHIVE_SESSIONS) {
+      throw new AcademicYearArchiveValidationError(
+        "CONFLICT",
+        `Academic-year archive exceeds the ${MAX_ARCHIVE_SESSIONS}-session bound.`,
+      );
+    }
     const sessions: ArchiveSessionRecord[] = sessionSnapshots
       .flatMap((snapshot) => snapshot.docs)
       .map((document) => {
@@ -953,10 +1073,9 @@ export class ArchivePipelineService {
       academicYearPath: academicYearReference.path,
       academicYearReference,
       archiveDatasetId: buildArchiveDatasetId(input.instituteId),
-      currentStatus,
       runs,
       sessions,
-      sessionsTableId: buildSessionsTableId(input.yearId),
+      sessionsTableId: buildSessionsTableId(input.academicYearId),
       studentsById,
     };
   }
@@ -983,47 +1102,378 @@ export class ArchivePipelineService {
       );
     }
 
-    const activeSession = sessions.find((session) =>
-      ACTIVE_SESSION_STATUSES.has(session.status),
+    const nonTerminalSession = sessions.find(
+      (session) => !TERMINAL_SESSION_STATUSES.has(session.status),
     );
 
-    if (activeSession) {
+    if (nonTerminalSession) {
       throw new AcademicYearArchiveValidationError(
         "VALIDATION_ERROR",
-        "Archive requires all active sessions to be closed before execution.",
+        "Archive requires every session to have a canonical terminal status.",
       );
     }
   }
 
-  /**
-   * Transitions the academic year into the locked state before export.
-   * @param {FirebaseFirestore.DocumentReference} academicYearReference Target
-   * academic-year document reference.
-   * @return {Promise<void>} Resolves after the lock transaction completes.
-   */
-  private async lockAcademicYear(
-    academicYearReference: FirebaseFirestore.DocumentReference,
-  ): Promise<void> {
-    await this.dependencies.firestore.runTransaction(async (transaction) => {
-      const snapshot = await transaction.get(academicYearReference);
+  private buildCommandAuthority(
+    request: AcademicYearArchiveValidatedRequest,
+  ): ArchiveCommandAuthority {
+    const commandIdHash = sha256(`${request.instituteId}:${request.commandId}`);
+    const commandDocumentId = `settings_${commandIdHash.slice(0, 40)}`;
+    const auditEventId = `settings_audit_${commandIdHash.slice(0, 40)}`;
+    const instituteReference = this.dependencies.firestore
+      .collection(INSTITUTES_COLLECTION).doc(request.instituteId);
+    return {
+      auditEventId,
+      auditLogReference: instituteReference.collection(AUDIT_LOGS_COLLECTION)
+        .doc(auditEventId),
+      commandIdHash,
+      commandReference: instituteReference
+        .collection(SETTINGS_COMMANDS_COLLECTION).doc(commandDocumentId),
+      fingerprint: sha256(stableSerialize({
+        academicYearId: request.academicYearId,
+        actionType: "ARCHIVE_ACADEMIC_YEAR",
+        confirmIrreversibleArchive: true,
+      })),
+      instituteReference,
+      settingsAuditReference: instituteReference
+        .collection(SETTINGS_AUDIT_COLLECTION).doc(auditEventId),
+      yearReference: instituteReference.collection(ACADEMIC_YEARS_COLLECTION)
+        .doc(request.academicYearId),
+    };
+  }
 
-      if (!snapshot.exists) {
+  private async reserveArchiveCommand(
+    request: AcademicYearArchiveValidatedRequest,
+    authority: ArchiveCommandAuthority,
+  ): Promise<ArchiveCommandState> {
+    return this.dependencies.firestore.runTransaction(async (transaction) => {
+      const [instituteSnapshot, yearSnapshot, commandSnapshot] = await Promise.all([
+        transaction.get(authority.instituteReference),
+        transaction.get(authority.yearReference),
+        transaction.get(authority.commandReference),
+      ]);
+      if (commandSnapshot.exists) {
+        const command = toArchiveCommand(commandSnapshot.data());
+        if (!command || command.commandIdHash !== authority.commandIdHash ||
+          command.fingerprint !== authority.fingerprint ||
+          command.academicYearId !== request.academicYearId) {
+          throw new AcademicYearArchiveValidationError(
+            "CONFLICT",
+            "Command ID was already used for different archive intent.",
+          );
+        }
+        return command;
+      }
+      if (!instituteSnapshot.exists) {
+        throw new AcademicYearArchiveValidationError(
+          "NOT_FOUND",
+          "Institute settings were not found.",
+        );
+      }
+      if (!yearSnapshot.exists) {
         throw new AcademicYearArchiveValidationError(
           "NOT_FOUND",
           "Academic year was not found.",
         );
       }
-
-      const currentStatus = toNormalizedStatus(snapshot.data()?.status);
-
-      if (currentStatus === "archived" || currentStatus === "locked") {
-        return;
+      const instituteData = instituteSnapshot.data() ?? {};
+      const revision = instituteData.settingsRevision === undefined ? 0 :
+        normalizeRevision(instituteData.settingsRevision);
+      if (revision !== request.expectedRevision) {
+        throw new AcademicYearArchiveValidationError(
+          "CONFLICT",
+          `Settings revision conflict: expected ${request.expectedRevision}, current ${revision}.`,
+        );
       }
-
-      transaction.set(academicYearReference, {
-        status: "locked",
-      }, {merge: true});
+      if (toNormalizedStatus(yearSnapshot.get("status")) !== "locked") {
+        throw new AcademicYearArchiveValidationError(
+          "CONFLICT",
+          "Only a locked academic year can be archived.",
+        );
+      }
+      const archiveOperation = yearSnapshot.get("archiveOperation");
+      if (isPlainObject(archiveOperation) &&
+        normalizeOptionalString(archiveOperation.commandIdHash) !== authority.commandIdHash) {
+        throw new AcademicYearArchiveValidationError(
+          "CONFLICT",
+          "Academic year already has a different archive command.",
+        );
+      }
+      const acceptedAt = this.nowTimestamp();
+      const nextRevision = revision + 1;
+      const command: ArchiveCommandState = {
+        academicYearId: request.academicYearId,
+        acceptedAt,
+        actorRole: request.actorRole,
+        actorUserId: request.actorId,
+        attemptCount: 0,
+        auditEventId: authority.auditEventId,
+        checkpointStage: "accepted",
+        commandIdHash: authority.commandIdHash,
+        fingerprint: authority.fingerprint,
+        ...(request.ipAddress ? {ipAddressHash: sha256(request.ipAddress)} : {}),
+        revision: nextRevision,
+        state: "pending",
+        ...(request.userAgent ? {userAgentHash: sha256(request.userAgent)} : {}),
+      };
+      transaction.update(authority.instituteReference, {
+        settingsRevision: nextRevision,
+        updatedAt: acceptedAt,
+      });
+      transaction.update(authority.yearReference, {
+        archiveOperation: {
+          commandIdHash: authority.commandIdHash,
+          stage: "accepted",
+          updatedAt: acceptedAt,
+        },
+      });
+      transaction.create(authority.commandReference, {
+        ...command,
+        actionType: "ARCHIVE_ACADEMIC_YEAR",
+        activeAttempt: null,
+        completedAt: null,
+        lastErrorCode: null,
+        leaseUntil: null,
+        snapshotPath: null,
+        updatedAt: acceptedAt,
+      });
+      return command;
     });
+  }
+
+  private async claimArchiveCommand(
+    reference: FirebaseFirestore.DocumentReference,
+  ): Promise<ArchiveCommandState> {
+    return this.dependencies.firestore.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(reference);
+      const command = snapshot.exists ? toArchiveCommand(snapshot.data()) : null;
+      if (!command) {
+        throw new AcademicYearArchiveValidationError(
+          "INTERNAL_ERROR",
+          "Archive command authority is missing or invalid.",
+        );
+      }
+      if (command.state === "complete") return command;
+      const now = this.nowTimestamp();
+      if (command.state === "processing" && command.leaseUntil &&
+        command.leaseUntil.toMillis() > now.toMillis()) {
+        throw new AcademicYearArchiveValidationError(
+          "CONFLICT",
+          "Academic-year archive is already in progress.",
+        );
+      }
+      const activeAttempt = command.attemptCount + 1;
+      const claimed: ArchiveCommandState = {
+        ...command,
+        activeAttempt,
+        attemptCount: activeAttempt,
+        leaseUntil: Timestamp.fromMillis(now.toMillis() + ARCHIVE_LEASE_MS),
+        state: "processing",
+      };
+      transaction.update(reference, {
+        activeAttempt,
+        attemptCount: activeAttempt,
+        lastAttemptAt: now,
+        lastErrorCode: null,
+        leaseUntil: claimed.leaseUntil,
+        state: "processing",
+        updatedAt: now,
+      });
+      return claimed;
+    });
+  }
+
+  private async updateCheckpoint(
+    authority: ArchiveCommandAuthority,
+    activeAttempt: number,
+    checkpointStage: ArchiveCheckpointStage,
+    fields: Record<string, unknown>,
+  ): Promise<ArchiveCommandState> {
+    return this.dependencies.firestore.runTransaction(async (transaction) => {
+      const [commandSnapshot, yearSnapshot] = await Promise.all([
+        transaction.get(authority.commandReference),
+        transaction.get(authority.yearReference),
+      ]);
+      const command = commandSnapshot.exists ?
+        toArchiveCommand(commandSnapshot.data()) : null;
+      if (!command || command.state !== "processing" ||
+        command.activeAttempt !== activeAttempt || !yearSnapshot.exists) {
+        throw new AcademicYearArchiveValidationError(
+          "CONFLICT",
+          "Archive attempt lost its durable processing authority.",
+        );
+      }
+      if (hasReachedStage(command.checkpointStage, checkpointStage)) return command;
+      const now = this.nowTimestamp();
+      const next = {...command, ...fields, checkpointStage};
+      transaction.update(authority.commandReference, {
+        ...fields,
+        checkpointStage,
+        leaseUntil: Timestamp.fromMillis(now.toMillis() + ARCHIVE_LEASE_MS),
+        updatedAt: now,
+      });
+      transaction.update(authority.yearReference, {
+        "archiveOperation.stage": checkpointStage,
+        "archiveOperation.updatedAt": now,
+      });
+      return next;
+    });
+  }
+
+  private async finalizeArchive(
+    request: AcademicYearArchiveValidatedRequest,
+    authority: ArchiveCommandAuthority,
+    activeAttempt: number,
+    command: ArchiveCommandState,
+  ): Promise<ArchiveCommandState> {
+    return this.dependencies.firestore.runTransaction(async (transaction) => {
+      const [commandSnapshot, yearSnapshot, settingsAuditSnapshot, auditLogSnapshot] =
+        await Promise.all([
+          transaction.get(authority.commandReference),
+          transaction.get(authority.yearReference),
+          transaction.get(authority.settingsAuditReference),
+          transaction.get(authority.auditLogReference),
+        ]);
+      const current = commandSnapshot.exists ?
+        toArchiveCommand(commandSnapshot.data()) : null;
+      if (!current || !yearSnapshot.exists) {
+        throw new AcademicYearArchiveValidationError(
+          "INTERNAL_ERROR",
+          "Archive finalization authority is missing.",
+        );
+      }
+      if (current.state === "complete") return current;
+      if (current.state !== "processing" || current.activeAttempt !== activeAttempt ||
+        current.checkpointStage !== "snapshot_created" || !command.snapshotPath) {
+        throw new AcademicYearArchiveValidationError(
+          "CONFLICT",
+          "Archive finalization checkpoint is incomplete.",
+        );
+      }
+      if (toNormalizedStatus(yearSnapshot.get("status")) !== "locked") {
+        throw new AcademicYearArchiveValidationError(
+          "CONFLICT",
+          "Academic year changed after archive reservation.",
+        );
+      }
+      if (settingsAuditSnapshot.exists || auditLogSnapshot.exists) {
+        throw new AcademicYearArchiveValidationError(
+          "CONFLICT",
+          "Archive audit authority already exists without completion.",
+        );
+      }
+      const completedAt = this.nowTimestamp();
+      const contextHashes = {
+        ipAddressHash: current.ipAddressHash ?? null,
+        userAgentHash: current.userAgentHash ?? null,
+      };
+      transaction.update(authority.yearReference, {
+        archivedAt: completedAt,
+        archiveOperation: {
+          commandIdHash: authority.commandIdHash,
+          stage: "archived",
+          updatedAt: completedAt,
+        },
+        snapshotGenerated: true,
+        snapshotId: request.academicYearId,
+        status: "archived",
+      });
+      transaction.create(authority.settingsAuditReference, {
+        actionType: "ARCHIVE_ACADEMIC_YEAR",
+        actorRole: current.actorRole,
+        actorUserId: current.actorUserId,
+        area: "academic_year",
+        createdAt: completedAt,
+        eventId: authority.auditEventId,
+        ...contextHashes,
+        occurredAt: completedAt,
+        revision: current.revision,
+        summary: "Academic year archived after export and snapshot completion.",
+        targetId: request.academicYearId,
+      });
+      transaction.create(authority.auditLogReference, {
+        actionType: "ARCHIVE_ACADEMIC_YEAR",
+        actorId: current.actorUserId,
+        actorRole: current.actorRole,
+        actorUid: current.actorUserId,
+        after: {snapshotGenerated: true, status: "archived"},
+        auditId: authority.auditEventId,
+        before: {status: "locked"},
+        entityId: request.academicYearId,
+        entityType: "academicYear",
+        instituteId: request.instituteId,
+        layer: current.actorRole === "vendor" ? "L2" : "L1",
+        metadata: {
+          snapshotPathHash: sha256(command.snapshotPath),
+        },
+        targetCollection: "academicYears",
+        targetId: request.academicYearId,
+        tenantId: request.instituteId,
+        timestamp: completedAt,
+        ...contextHashes,
+      });
+      const completed: ArchiveCommandState = {
+        ...current,
+        activeAttempt: undefined,
+        checkpointStage: "archived",
+        completedAt,
+        leaseUntil: undefined,
+        snapshotPath: command.snapshotPath,
+        state: "complete",
+      };
+      transaction.update(authority.commandReference, {
+        activeAttempt: null,
+        checkpointStage: "archived",
+        completedAt,
+        lastErrorCode: null,
+        leaseUntil: null,
+        state: "complete",
+        updatedAt: completedAt,
+      });
+      return completed;
+    });
+  }
+
+  private async recordFailure(
+    reference: FirebaseFirestore.DocumentReference,
+    activeAttempt: number,
+    error: unknown,
+  ): Promise<void> {
+    const errorCode = error instanceof AcademicYearArchiveValidationError ?
+      error.code.toLowerCase() : "archive_processing_error";
+    await this.dependencies.firestore.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(reference);
+      if (!snapshot.exists || snapshot.get("state") !== "processing" ||
+        snapshot.get("activeAttempt") !== activeAttempt) return;
+      transaction.update(reference, {
+        activeAttempt: null,
+        lastErrorCode: errorCode,
+        leaseUntil: null,
+        state: "failed",
+        updatedAt: this.nowTimestamp(),
+      });
+    });
+  }
+
+  private toReceipt(
+    commandId: string,
+    command: ArchiveCommandState,
+    replayed: boolean,
+  ): AcademicYearArchiveResult {
+    const completedAt = command.completedAt ?? command.acceptedAt;
+    return {
+      academicYearId: command.academicYearId,
+      auditEventId: command.auditEventId,
+      commandId,
+      completedAt: completedAt.toDate().toISOString(),
+      replayed,
+      revision: command.revision,
+      stage: command.state === "failed" ? "failed" : command.checkpointStage,
+    };
+  }
+
+  private nowTimestamp(): Timestamp {
+    return Timestamp.fromDate(this.dependencies.now());
   }
 }
 
@@ -1049,10 +1499,6 @@ const resolveProjectId = (): string => {
 
 export const archivePipelineService = new ArchivePipelineService({
   bigQueryClient: new BigQueryRestArchiveClient(),
-  createArchiveAuditLog:
-    administrativeActionLoggingService.logAcademicYearArchive.bind(
-      administrativeActionLoggingService,
-    ),
   firestore: getFirestore(),
   generateGovernanceSnapshot:
     governanceSnapshotAggregationService.generateSnapshotForAcademicYear.bind(
