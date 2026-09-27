@@ -2,7 +2,7 @@
 
 This document defines the event-driven topology of the platform.
 
-Last reconciled: 2026-09-25 (`BWM-030` settings, staff Auth, and academic-year operations closeout)
+Last reconciled: 2026-09-27 (`BWM-031` verified licensing closeout)
 
 Each event represents a state transition or trigger that initiates downstream processing.
 
@@ -179,6 +179,25 @@ safe terminal/retry metadata. Academic-year archive reserves one durable leased
 command and advances explicit export and snapshot checkpoints before atomic
 year sealing plus settings/administrative audits. It does not add a Firestore
 trigger or repeat the existing yearly archive owner.
+
+BWM-031 Admin upgrade/evaluation submission is a synchronous idempotent ADM-16
+command, not a Firestore trigger or entitlement event. One transaction reads
+current license/version and the bounded published-plan catalog, serializes the
+one-open-request sentinel, and creates the pending request, hashed replay
+authority, and immutable submission audit. Exact retry rereads the request;
+different-key races converge to one open record. The command never writes
+license, claim, invoice, payment, or Vendor decision authority and emits no
+downstream license-change event. BWM-035 later owns terminal Vendor decisions,
+and only its actual entitlement mutation may invoke BWM-036 propagation.
+
+BWM-031 entitlement alignment adds no trigger or fan-out event. Current-only
+claim synchronization now projects layer, canonical feature flags, history
+version, effective state, expiry, and grace deadline as one tuple. Privileged
+license/capability middleware rejects incomplete, grace, or expired authority;
+when elapsed/expired authority initiates such a request, only that identity is
+revoked synchronously. Existing Vendor/Stripe mutation propagation remains in
+place, while BWM-036 retains fleet scheduling, retry/dead-letter, propagation
+window, and stale-session acceptance across all portals.
 
 ---
 

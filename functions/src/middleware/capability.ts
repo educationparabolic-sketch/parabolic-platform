@@ -3,6 +3,10 @@ import {
   Middleware,
   MiddlewareRejectionError,
 } from "../types/middleware";
+import {
+  enforceActiveLicenseEntitlement,
+  LicenseEntitlementEnforcementDependencies,
+} from "./licenseEntitlement";
 
 const LICENSE_ORDER: Readonly<Record<LicenseLayer, number>> = {
   L0: 0,
@@ -12,6 +16,7 @@ const LICENSE_ORDER: Readonly<Record<LicenseLayer, number>> = {
 };
 
 export interface CapabilityAuthorizationOptions {
+  enforcementDependencies?: LicenseEntitlementEnforcementDependencies;
   minimumLicenseLayer: LicenseLayer;
   requiredFeatureFlag?: string;
   roleMinimumLicenseLayers?: Readonly<Record<string, LicenseLayer>>;
@@ -37,6 +42,10 @@ export const createCapabilityAuthorizationMiddleware = (
     await next();
     return;
   }
+  await enforceActiveLicenseEntitlement(
+    identity,
+    options.enforcementDependencies,
+  );
   const requiredLayer = options.roleMinimumLicenseLayers?.[identity.role] ??
     options.minimumLicenseLayer;
   if (!identity.licenseLayer ||

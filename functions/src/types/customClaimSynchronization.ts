@@ -1,12 +1,20 @@
+import type {
+  AdminLicenseFeatureFlags,
+  AdminLicenseState,
+} from "../../../shared/contracts/adminLicensing";
 import {LicenseLayer} from "./middleware";
 
 export type CustomClaimAuthoritySource = "staff" | "student";
 export type CustomClaimRole = "admin" | "director" | "student" | "teacher";
 
 export interface CustomClaimAuthority {
+  expiryDate: string | null;
+  featureFlags: AdminLicenseFeatureFlags;
+  gracePeriodEndsAt: string | null;
   instituteId: string;
   isSuspended: boolean;
   licenseLayer: LicenseLayer;
+  licenseState: AdminLicenseState;
   licenseVersion: string;
   role: CustomClaimRole;
   source: CustomClaimAuthoritySource;

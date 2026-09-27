@@ -15,9 +15,13 @@ import {
 const headers = {authorization: "Bearer bwm-029-governance-interventions"};
 
 const token = (overrides: Record<string, unknown> = {}) => ({
+  expiryDate: "2099-09-26T00:00:00.000Z",
   featureFlags: {governanceAccess: true, riskOverview: true},
+  gracePeriodEndsAt: null,
   instituteId: "inst_authoritative",
   licenseLayer: "L3",
+  licenseState: "active",
+  licenseVersion: "license-governance-v3",
   role: "director",
   uid: "actor_authoritative",
   ...overrides,

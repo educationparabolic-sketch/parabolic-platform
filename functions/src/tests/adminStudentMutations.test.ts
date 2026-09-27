@@ -199,6 +199,7 @@ test(
       instituteReference.collection("license").doc("current").set({
         currentLayer: "L0",
         featureFlags: {},
+        licenseState: "active",
       }),
       instituteReference.collection("license").doc("main").set({
         currentLayer: "L0",

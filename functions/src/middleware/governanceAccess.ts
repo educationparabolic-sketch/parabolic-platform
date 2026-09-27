@@ -2,11 +2,17 @@ import {
   Middleware,
   MiddlewareRejectionError,
 } from "../types/middleware";
+import {
+  enforceActiveLicenseEntitlement,
+  LicenseEntitlementEnforcementDependencies,
+} from "./licenseEntitlement";
 
 export const DEFAULT_GOVERNANCE_LICENSE_MESSAGE =
   "Governance access requires license layer L3.";
 
-export const createGovernanceAccessMiddleware = (): Middleware =>
+export const createGovernanceAccessMiddleware = (
+  enforcementDependencies?: LicenseEntitlementEnforcementDependencies,
+): Middleware =>
   async (request, _response, next): Promise<void> => {
     const identity = request.context?.identity;
 
@@ -21,6 +27,8 @@ export const createGovernanceAccessMiddleware = (): Middleware =>
       await next();
       return;
     }
+
+    await enforceActiveLicenseEntitlement(identity, enforcementDependencies);
 
     if (identity.licenseLayer !== "L3") {
       throw new MiddlewareRejectionError(

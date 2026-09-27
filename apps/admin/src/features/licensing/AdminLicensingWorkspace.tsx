@@ -1,30 +1,47 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { CAPABILITY_MATRIX } from "../../../../../shared/contracts/capabilityPolicy";
+import type {
+  AdminLicenseExternalAction,
+  AdminLicenseLayer,
+} from "../../../../../shared/contracts/adminLicensing";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
+import { LICENSE_LAYER_ORDER } from "../../../../../shared/types/portalRouting";
 import { UiFormField, UiStatCard } from "../../../../../shared/ui/components";
-import { resolveAdminInstituteId } from "../settings/settingsDataset";
+import { resolveAdminAccessContext } from "../../portals/adminAccess";
 import {
   ApiClientError,
-  FALLBACK_SNAPSHOT,
+  createLicenseRequestIdempotencyKey,
   fetchLicensingSnapshot,
-  getPlanRank,
+  getLayerRank,
   isLocalLicensingReadMode,
-  levelIncludes,
   submitLicenseUpgradeRequest,
   type AdminLicensePlan,
-  type AdminLicensePlanId,
-  type AdminLicenseInvoice,
   type AdminLicensingSnapshot,
 } from "./licensingDataset";
 
 type LicensingView = "current" | "usage" | "plans" | "history";
 
-const LICENSING_VIEWS: Array<{ id: LicensingView; label: string; path: string }> = [
-  { id: "current", label: "Current License", path: "/admin/licensing/current" },
-  { id: "usage", label: "Usage & Billing", path: "/admin/licensing/usage" },
-  { id: "plans", label: "Plans & Upgrade", path: "/admin/licensing/plans" },
-  { id: "history", label: "History", path: "/admin/licensing/history" },
+interface PendingLicenseCommand {
+  fingerprint: string;
+  idempotencyKey: string;
+}
+
+const LICENSING_VIEWS: Array<{id: LicensingView; label: string; path: string}> = [
+  {id: "current", label: "Current License", path: "/admin/licensing/current"},
+  {id: "usage", label: "Usage & Billing", path: "/admin/licensing/usage"},
+  {id: "plans", label: "Plans & Upgrade", path: "/admin/licensing/plans"},
+  {id: "history", label: "History", path: "/admin/licensing/history"},
 ];
+
+const LICENSE_LAYERS: readonly AdminLicenseLayer[] = ["L0", "L1", "L2", "L3"];
 
 function resolveView(pathname: string): LicensingView {
   if (pathname.endsWith("/usage")) return "usage";
@@ -33,13 +50,15 @@ function resolveView(pathname: string): LicensingView {
   return "current";
 }
 
-function formatCurrency(value: number): string {
-  return `INR ${value.toLocaleString("en-IN")}`;
+function formatCurrency(value: number | null, currency: string | null): string {
+  if (value === null || currency === null) return "Unavailable";
+  return `${currency.toUpperCase()} ${value.toLocaleString("en-IN")}`;
 }
 
-function formatDate(value: string): string {
+function formatDate(value: string | null): string {
+  if (value === null) return "Unavailable";
   const parsed = Date.parse(value);
-  if (Number.isNaN(parsed)) return value;
+  if (Number.isNaN(parsed)) return "Unavailable";
   return new Intl.DateTimeFormat("en-IN", {
     day: "2-digit",
     month: "short",
@@ -50,7 +69,7 @@ function formatDate(value: string): string {
 
 function formatTimestamp(value: string): string {
   const parsed = Date.parse(value);
-  if (Number.isNaN(parsed)) return value;
+  if (Number.isNaN(parsed)) return "Unavailable";
   return new Intl.DateTimeFormat("en-IN", {
     day: "2-digit",
     month: "short",
@@ -61,248 +80,199 @@ function formatTimestamp(value: string): string {
   }).format(new Date(parsed));
 }
 
+function displayCount(value: number | null): string {
+  return value === null ? "Unavailable" : value.toLocaleString("en-IN");
+}
+
 function humanize(value: string): string {
   return value.replaceAll("_", " ").replace(/^./, (character) => character.toUpperCase());
 }
 
-function utilization(value: number, limit: number): number {
-  if (limit <= 0) return 0;
+function utilization(value: number, limit: number | null): number | null {
+  if (limit === null || limit <= 0) return null;
   return Math.min(100, Math.round((value / limit) * 100));
 }
 
 function planLabel(plan: AdminLicensePlan): string {
-  return plan.id === "TRIAL" ? "Trial" : `${plan.level} ${plan.tier}`;
+  return plan.name ?? `${plan.layer} plan ${plan.planId}`;
 }
 
-function escapeInvoiceValue(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+function capabilityLockLabel(lockReason: string | null): string {
+  if (lockReason === null) return "Enabled";
+  return humanize(lockReason);
 }
 
-function buildInvoiceDocument(
-  invoice: AdminLicenseInvoice,
-  snapshot: AdminLicensingSnapshot,
-): string {
-  const current = snapshot.currentLicense;
-  const studentCharge = snapshot.usage.activeStudents * current.perStudentFeeInr;
-  const status = humanize(invoice.status);
-
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${escapeInvoiceValue(invoice.invoiceNumber)}</title>
-  <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; background: #f3f6f9; color: #203b5c; font: 14px Arial, sans-serif; }
-    main { width: min(820px, calc(100% - 32px)); margin: 32px auto; background: #fff; border: 1px solid #d7e0ea; padding: 36px; }
-    header { display: flex; justify-content: space-between; gap: 24px; border-bottom: 2px solid #1b5fc2; padding-bottom: 22px; }
-    h1 { margin: 0; color: #143764; font-size: 28px; }
-    h2 { margin: 4px 0 0; color: #143764; font-size: 18px; }
-    p { margin: 5px 0; color: #587093; }
-    .meta { text-align: right; }
-    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin: 26px 0; }
-    .panel { border: 1px solid #d7e0ea; padding: 15px; }
-    .panel strong { display: block; margin-bottom: 8px; color: #143764; }
-    table { width: 100%; border-collapse: collapse; margin-top: 24px; }
-    th, td { border-bottom: 1px solid #d7e0ea; padding: 12px 8px; text-align: left; }
-    th:last-child, td:last-child { text-align: right; }
-    tfoot td { border-bottom: 0; color: #143764; font-size: 17px; font-weight: 700; }
-    .status { display: inline-block; margin-top: 12px; border: 1px solid #d7e0ea; padding: 6px 9px; font-weight: 700; }
-    footer { margin-top: 30px; border-top: 1px solid #d7e0ea; padding-top: 16px; color: #6a7f99; font-size: 12px; }
-    button { border: 0; background: #184b90; color: #fff; cursor: pointer; padding: 9px 13px; font: inherit; font-weight: 700; }
-    @media print { body { background: #fff; } main { width: 100%; margin: 0; border: 0; padding: 20px; } button { display: none; } }
-    @media (max-width: 600px) { header { flex-direction: column; } .meta { text-align: left; } .grid { grid-template-columns: 1fr; } main { padding: 22px; } }
-  </style>
-</head>
-<body>
-  <main>
-    <header>
-      <div><h1>Parabolic Platform</h1><p>Institute subscription invoice</p></div>
-      <div class="meta"><h2>${escapeInvoiceValue(invoice.invoiceNumber)}</h2><p>${escapeInvoiceValue(invoice.billingPeriod)}</p><button type="button" onclick="window.print()">Print / Save as PDF</button></div>
-    </header>
-    <section class="grid">
-      <div class="panel"><strong>Billed to</strong><p>${escapeInvoiceValue(current.instituteName)}</p><p>${escapeInvoiceValue(current.instituteId)}</p></div>
-      <div class="panel"><strong>Invoice details</strong><p>Issued: ${escapeInvoiceValue(formatDate(invoice.issuedAt))}</p><p>Due: ${escapeInvoiceValue(formatDate(invoice.dueAt))}</p><p>Plan: ${escapeInvoiceValue(current.planId)} (${escapeInvoiceValue(current.billingCycle)})</p><span class="status">${escapeInvoiceValue(status)}</span></div>
-    </section>
-    <table>
-      <thead><tr><th>Description</th><th>Calculation</th><th>Amount</th></tr></thead>
-      <tbody>
-        <tr><td>License base fee</td><td>${escapeInvoiceValue(current.planId)}</td><td>${escapeInvoiceValue(formatCurrency(current.baseFeeInr))}</td></tr>
-        <tr><td>Active student charge</td><td>${snapshot.usage.activeStudents} x ${escapeInvoiceValue(formatCurrency(current.perStudentFeeInr))}</td><td>${escapeInvoiceValue(formatCurrency(studentCharge))}</td></tr>
-      </tbody>
-      <tfoot><tr><td colspan="2">Invoice total</td><td>${escapeInvoiceValue(formatCurrency(invoice.amountInr))}</td></tr></tfoot>
-    </table>
-    <footer>This invoice is supplied from the vendor-authoritative billing record. Contact vendor billing for payment reconciliation or corrections.</footer>
-  </main>
-</body>
-</html>`;
+function actionLabel(action: AdminLicenseExternalAction["action"]): string {
+  return {
+    billing_history: "Open Billing History",
+    contact_support: "Contact Vendor Support",
+    invoice_download: "Open Provider Invoices",
+    payment_method: "Manage Payment Method",
+  }[action];
 }
 
 function AdminLicensingWorkspace() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { session } = useAuthProvider();
-  const instituteId = useMemo(() => resolveAdminInstituteId(session.idToken), [session.idToken]);
-  const [snapshot, setSnapshot] = useState<AdminLicensingSnapshot>(FALLBACK_SNAPSHOT);
+  const {session} = useAuthProvider();
+  const accessContext = resolveAdminAccessContext(session);
+  const fixtureMode = isLocalLicensingReadMode();
+  const [snapshot, setSnapshot] = useState<AdminLicensingSnapshot | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [loadMessage, setLoadMessage] = useState("");
-  const [selectedPlanId, setSelectedPlanId] = useState<AdminLicensePlanId>("L2-T3");
+  const [selectedPlanId, setSelectedPlanId] = useState("");
   const [requestReason, setRequestReason] = useState("");
   const [requestMessage, setRequestMessage] = useState("");
-  const [invoiceActionMessage, setInvoiceActionMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const pendingCommand = useRef<PendingLicenseCommand | null>(null);
   const activeView = resolveView(location.pathname);
 
-  useEffect(() => {
-    let mounted = true;
-    async function hydrate() {
-      setIsLoading(true);
-      try {
-        const nextSnapshot = await fetchLicensingSnapshot(instituteId);
-        if (!mounted) return;
-        setSnapshot(nextSnapshot);
-        const upgradePlan = nextSnapshot.plans
-          .filter(
-            (plan) =>
-              plan.availability === "available" &&
-              getPlanRank(plan) >
-                getPlanRank(
-                  nextSnapshot.plans.find(
-                    (entry) => entry.id === nextSnapshot.currentLicense.planId,
-                  ) ?? nextSnapshot.plans[1],
-                ),
-          )
-          .at(0);
-        if (upgradePlan) setSelectedPlanId(upgradePlan.id);
-        setLoadMessage(
-          isLocalLicensingReadMode()
-            ? "Local vendor-aligned license snapshot loaded."
-            : "License state loaded from the secured vendor-authoritative API.",
-        );
-      } catch (error) {
-        if (!mounted) return;
-        setLoadMessage(
-          error instanceof ApiClientError ? error.message : "Unable to load license state.",
-        );
-      } finally {
-        if (mounted) setIsLoading(false);
-      }
+  const reloadSnapshot = useCallback(async (): Promise<void> => {
+    setIsLoading(true);
+    setLoadError("");
+    setLoadMessage("");
+    setSnapshot(null);
+    try {
+      const nextSnapshot = await fetchLicensingSnapshot();
+      setSnapshot(nextSnapshot);
+      const firstUpgrade = nextSnapshot.plans.find(
+        (plan) => getLayerRank(plan.layer) > getLayerRank(nextSnapshot.currentLicense.layer),
+      );
+      setSelectedPlanId((currentSelection) =>
+        nextSnapshot.plans.some((plan) => plan.planId === currentSelection) ?
+          currentSelection : firstUpgrade?.planId ?? nextSnapshot.currentLicense.planId,
+      );
+      setLoadMessage(`Authoritative license loaded as of ${formatTimestamp(nextSnapshot.asOf)}.`);
+    } catch (error) {
+      setLoadError(
+        error instanceof ApiClientError || error instanceof Error ?
+          error.message : "Unable to load authoritative license data.",
+      );
+    } finally {
+      setIsLoading(false);
     }
-    void hydrate();
-    return () => {
-      mounted = false;
-    };
-  }, [instituteId]);
+  }, []);
 
-  const current = snapshot.currentLicense;
-  const usage = snapshot.usage;
-  const currentPlan =
-    snapshot.plans.find((plan) => plan.id === current.planId) ?? snapshot.plans[0];
-  const selectedPlan = snapshot.plans.find((plan) => plan.id === selectedPlanId) ?? currentPlan;
-  const upgradePlans = snapshot.plans.filter(
-    (plan) =>
-      plan.availability === "available" &&
-      currentPlan &&
-      getPlanRank(plan) > getPlanRank(currentPlan),
-  );
-  const openRequest = snapshot.upgradeRequests.find((request) =>
-    ["pending", "payment_required"].includes(request.status),
-  );
-  const concurrencyPercent = utilization(
-    usage.peakConcurrentStudents,
-    current.maxConcurrentStudents,
-  );
-  const sessionPercent = utilization(usage.examSessionsThisMonth, current.maxExamSessionsPerMonth);
+  useEffect(() => {
+    void reloadSnapshot();
+  }, [reloadSnapshot]);
 
-  async function submitRequest(event: FormEvent<HTMLFormElement>) {
+  const current = snapshot?.currentLicense ?? null;
+  const usage = snapshot?.usage ?? null;
+  const currentPlan = snapshot?.plans.find((plan) => plan.planId === current?.planId) ?? null;
+  const selectedPlan = snapshot?.plans.find((plan) => plan.planId === selectedPlanId) ??
+    currentPlan;
+  const upgradePlans = useMemo(() => {
+    if (!snapshot) return [];
+    return snapshot.plans.filter(
+      (plan) => getLayerRank(plan.layer) > getLayerRank(snapshot.currentLicense.layer),
+    );
+  }, [snapshot]);
+  const openRequest = snapshot?.requests.openRequestId ?
+    snapshot.requests.items.find(
+      (request) => request.requestId === snapshot.requests.openRequestId,
+    ) ?? null : null;
+  const upgradePolicy = CAPABILITY_MATRIX["admin.license.upgrade_request"];
+  const requiredUpgradeLayer = upgradePolicy.minimumLicenseLayer;
+  const hasUpgradeCapability =
+    accessContext.role !== null &&
+    upgradePolicy.allowedRoles.some((allowedRole) => allowedRole === accessContext.role) &&
+    accessContext.licenseLayer !== null &&
+    requiredUpgradeLayer !== null &&
+    LICENSE_LAYER_ORDER[accessContext.licenseLayer] >= LICENSE_LAYER_ORDER[requiredUpgradeLayer];
+  const canSubmitUpgrade = !fixtureMode && hasUpgradeCapability && current?.state === "active";
+  const studentUtilization = usage ?
+    utilization(usage.activeStudentCount, usage.activeStudentLimit) : null;
+
+  function updateSelectedPlan(planId: string): void {
+    pendingCommand.current = null;
+    setSelectedPlanId(planId);
+    setRequestMessage("");
+  }
+
+  function updateRequestReason(reason: string): void {
+    pendingCommand.current = null;
+    setRequestReason(reason);
+    setRequestMessage("");
+  }
+
+  async function submitRequest(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    if (!selectedPlan || selectedPlan.id === "TRIAL") return;
-    if (requestReason.trim().length < 15) {
-      setRequestMessage("Describe the operational reason in at least 15 characters.");
+    if (!snapshot || !selectedPlan || !canSubmitUpgrade) return;
+    const normalizedReason = requestReason.trim();
+    if (normalizedReason.length < 15 || normalizedReason.length > 1000) {
+      setRequestMessage("Describe the operational reason in 15 to 1000 characters.");
       return;
+    }
+    if (!upgradePlans.some((plan) => plan.planId === selectedPlan.planId)) {
+      setRequestMessage("Select a published plan above the current license layer.");
+      return;
+    }
+    const requestKind = selectedPlan.layer === "L3" ? "evaluation" : "upgrade";
+    const fingerprint = JSON.stringify({
+      expectedLicenseVersion: snapshot.currentLicense.licenseVersion,
+      reason: normalizedReason,
+      requestKind,
+      requestedPlanId: selectedPlan.planId,
+    });
+    if (pendingCommand.current?.fingerprint !== fingerprint) {
+      pendingCommand.current = {
+        fingerprint,
+        idempotencyKey: createLicenseRequestIdempotencyKey(),
+      };
     }
     setIsSubmitting(true);
     setRequestMessage("");
     try {
-      const request = await submitLicenseUpgradeRequest({
-        instituteId: current.instituteId,
-        currentPlanId: current.planId,
-        requestedPlanId: selectedPlan.id,
-        requestedBy: session.user?.email ?? "institute.admin",
-        reason: requestReason.trim(),
+      const result = await submitLicenseUpgradeRequest({
+        expectedLicenseVersion: snapshot.currentLicense.licenseVersion,
+        idempotencyKey: pendingCommand.current.idempotencyKey,
+        reason: normalizedReason,
+        requestKind,
+        requestedPlanId: selectedPlan.planId,
       });
-      setSnapshot((previous) => ({
-        ...previous,
-        upgradeRequests: [request, ...previous.upgradeRequests],
-      }));
+      setSnapshot(result.snapshot);
       setRequestReason("");
-      setRequestMessage("Upgrade request submitted for vendor review.");
+      pendingCommand.current = null;
+      setRequestMessage(
+        result.receipt.disposition === "replayed" ?
+          "The existing request was confirmed by authoritative reload." :
+          "The request was submitted and confirmed by authoritative reload.",
+      );
     } catch (error) {
       setRequestMessage(
-        error instanceof Error ? error.message : "Unable to submit upgrade request.",
+        error instanceof ApiClientError || error instanceof Error ?
+          error.message : "Unable to submit the licensing request.",
       );
     } finally {
       setIsSubmitting(false);
     }
   }
 
-  function viewInvoice(invoice: AdminLicenseInvoice) {
-    const documentBlob = new Blob([buildInvoiceDocument(invoice, snapshot)], {
-      type: "text/html;charset=utf-8",
-    });
-    const documentUrl = URL.createObjectURL(documentBlob);
-    const invoiceWindow = window.open(documentUrl, "_blank");
-    if (!invoiceWindow) {
-      URL.revokeObjectURL(documentUrl);
-      setInvoiceActionMessage("The invoice view was blocked. Allow pop-ups and try again.");
-      return;
-    }
-    invoiceWindow.opener = null;
-    setInvoiceActionMessage(`${invoice.invoiceNumber} opened in a new tab.`);
-    window.setTimeout(() => URL.revokeObjectURL(documentUrl), 60_000);
-  }
-
-  function downloadInvoice(invoice: AdminLicenseInvoice) {
-    const documentBlob = new Blob([buildInvoiceDocument(invoice, snapshot)], {
-      type: "text/html;charset=utf-8",
-    });
-    const documentUrl = URL.createObjectURL(documentBlob);
-    const downloadLink = document.createElement("a");
-    downloadLink.href = documentUrl;
-    downloadLink.download = `${invoice.invoiceNumber}.html`;
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    downloadLink.remove();
-    URL.revokeObjectURL(documentUrl);
-    setInvoiceActionMessage(`${invoice.invoiceNumber} downloaded.`);
-  }
-
   return (
-    <section
-      className="admin-content-card admin-license-page"
-      aria-labelledby="admin-license-title"
-    >
+    <section className="admin-content-card admin-license-page" aria-labelledby="admin-license-title">
       <header className="admin-license-heading">
         <div>
           <p className="admin-content-eyebrow">Institute subscription</p>
           <h2 id="admin-license-title">License</h2>
-          <p>Review the vendor-assigned plan, monitor usage, and request a plan change.</p>
+          <p>Review server-authoritative entitlement, usage, billing, requests, and history.</p>
         </div>
-        <div
-          className={`admin-license-posture admin-license-posture-${current.subscriptionStatus}`}
-        >
-          <span>Subscription status</span>
-          <strong>{humanize(current.subscriptionStatus)}</strong>
-          <small>
-            {current.planId} expires {formatDate(current.expiryDate)}
-          </small>
-        </div>
+        {current ? (
+          <div className={`admin-license-posture admin-license-posture-${current.state}`}>
+            <span>License state</span>
+            <strong>{humanize(current.state)}</strong>
+            <small>
+              {current.planId} · expiry {formatDate(current.expiryDate)}
+            </small>
+          </div>
+        ) : (
+          <div className="admin-license-posture">
+            <span>License state</span>
+            <strong>Unavailable</strong>
+            <small>No local license authority is displayed.</small>
+          </div>
+        )}
       </header>
 
       <nav className="admin-license-tabs" aria-label="License workspaces">
@@ -319,519 +289,292 @@ function AdminLicensingWorkspace() {
         ))}
       </nav>
 
-      <p className="admin-license-load-state">
-        {isLoading ? "Loading license state..." : loadMessage}
+      <p className="admin-license-load-state" aria-live="polite">
+        {isLoading ? "Loading authoritative license state..." : loadMessage || loadError}
       </p>
 
-      {activeView === "current" ? (
-        <div className="admin-license-view">
-          <section className="admin-license-section-heading">
-            <div>
-              <h3>Current license</h3>
-              <p>{current.instituteName} · Vendor-assigned and read-only</p>
-            </div>
-            <span className="admin-license-plan-badge">{current.planId}</span>
-          </section>
-
-          <div className="admin-license-summary">
-            <UiStatCard title="License Layer" value={current.level} helper={current.tier} />
-            <UiStatCard
-              title="Active Students"
-              value={usage.activeStudents.toLocaleString("en-IN")}
-              helper={`${formatCurrency(current.perStudentFeeInr)} per active student`}
-            />
-            <UiStatCard
-              title="Concurrent Limit"
-              value={current.maxConcurrentStudents.toLocaleString("en-IN")}
-              helper={`Peak this month ${usage.peakConcurrentStudents}`}
-            />
-            <UiStatCard
-              title="Exam Sessions"
-              value={String(current.maxExamSessionsPerMonth)}
-              helper={`${usage.examSessionsThisMonth} used this month`}
-            />
-          </div>
-
-          <div className="admin-license-current-grid">
-            <section
-              className="admin-license-parameters"
-              aria-labelledby="license-parameters-title"
-            >
-              <header>
-                <h3 id="license-parameters-title">Vendor-controlled parameters</h3>
-                <p>These values cannot be edited from the institute portal.</p>
-              </header>
-              <dl>
-                <div>
-                  <dt>Base fee</dt>
-                  <dd>{formatCurrency(current.baseFeeInr)}</dd>
-                </div>
-                <div>
-                  <dt>Per student fee</dt>
-                  <dd>{formatCurrency(current.perStudentFeeInr)}</dd>
-                </div>
-                <div>
-                  <dt>Maximum concurrent students</dt>
-                  <dd>{current.maxConcurrentStudents}</dd>
-                </div>
-                <div>
-                  <dt>Maximum exam sessions per month</dt>
-                  <dd>{current.maxExamSessionsPerMonth}</dd>
-                </div>
-              </dl>
-            </section>
-
-            <section className="admin-license-contract" aria-labelledby="license-contract-title">
-              <header>
-                <h3 id="license-contract-title">Subscription term</h3>
-                <p>Current validity and billing arrangement.</p>
-              </header>
-              <dl>
-                <div>
-                  <dt>Plan</dt>
-                  <dd>{current.planId}</dd>
-                </div>
-                <div>
-                  <dt>Billing cycle</dt>
-                  <dd>{current.billingCycle}</dd>
-                </div>
-                <div>
-                  <dt>Start date</dt>
-                  <dd>{formatDate(current.licenseStartDate)}</dd>
-                </div>
-                <div>
-                  <dt>Expiry date</dt>
-                  <dd>{formatDate(current.expiryDate)}</dd>
-                </div>
-              </dl>
-              <button
-                type="button"
-                className="admin-primary-link"
-                onClick={() => navigate("/admin/licensing/plans")}
-              >
-                Review Upgrade Options
-              </button>
-            </section>
-          </div>
-
-          <section className="admin-license-authority-note">
-            <strong>Vendor authority</strong>
-            <p>
-              Plan fees, capacity limits, session limits, license dates, and final plan changes are
-              controlled by the vendor. Institute admins may submit a request but cannot activate a
-              plan themselves.
-            </p>
-          </section>
-        </div>
+      {isLoading ? (
+        <section className="admin-license-authority-note">
+          <strong>Loading</strong>
+          <p>No cached or fixture licensing values are shown while authority is loading.</p>
+        </section>
       ) : null}
 
-      {activeView === "usage" ? (
-        <div className="admin-license-view">
-          <section className="admin-license-section-heading">
-            <div>
-              <h3>Usage &amp; billing</h3>
-              <p>Current-cycle usage against the limits assigned to {current.planId}.</p>
-            </div>
-            <span className="admin-license-plan-badge">{current.billingCycle}</span>
-          </section>
-
-          <div className="admin-license-summary">
-            <UiStatCard
-              title="Active Students"
-              value={String(usage.activeStudents)}
-              helper="Billable this cycle"
-            />
-            <UiStatCard
-              title="Peak Concurrent"
-              value={String(usage.peakConcurrentStudents)}
-              helper={`of ${current.maxConcurrentStudents}`}
-            />
-            <UiStatCard
-              title="Exam Sessions"
-              value={String(usage.examSessionsThisMonth)}
-              helper={`of ${current.maxExamSessionsPerMonth}`}
-            />
-            <UiStatCard
-              title="Monthly Test Runs"
-              value={usage.monthlyTestRuns.toLocaleString("en-IN")}
-              helper="Operational usage"
-            />
-          </div>
-
-          <div className="admin-license-usage-grid">
-            <section
-              className="admin-license-utilization"
-              aria-labelledby="license-utilization-title"
-            >
-              <header>
-                <h3 id="license-utilization-title">Capacity utilization</h3>
-                <p>Monthly peak and session consumption.</p>
-              </header>
-              <div>
-                <div className="admin-license-meter">
-                  <span>
-                    <strong>Concurrent students</strong>
-                    <small>
-                      {usage.peakConcurrentStudents} / {current.maxConcurrentStudents}
-                    </small>
-                  </span>
-                  <div>
-                    <i style={{ width: `${concurrencyPercent}%` }} />
-                  </div>
-                  <small>{concurrencyPercent}% utilized</small>
-                </div>
-                <div className="admin-license-meter">
-                  <span>
-                    <strong>Exam sessions</strong>
-                    <small>
-                      {usage.examSessionsThisMonth} / {current.maxExamSessionsPerMonth}
-                    </small>
-                  </span>
-                  <div>
-                    <i style={{ width: `${sessionPercent}%` }} />
-                  </div>
-                  <small>{sessionPercent}% utilized</small>
-                </div>
-              </div>
-            </section>
-
-            <section
-              className="admin-license-billing-summary"
-              aria-labelledby="billing-summary-title"
-            >
-              <header>
-                <h3 id="billing-summary-title">Current billing estimate</h3>
-                <p>Vendor-calculated from the active student count.</p>
-              </header>
-              <strong>{formatCurrency(usage.estimatedCurrentChargeInr)}</strong>
-              <dl>
-                <div>
-                  <dt>Base fee</dt>
-                  <dd>{formatCurrency(current.baseFeeInr)}</dd>
-                </div>
-                <div>
-                  <dt>Student charge</dt>
-                  <dd>{formatCurrency(usage.activeStudents * current.perStudentFeeInr)}</dd>
-                </div>
-              </dl>
-              <small>Final invoice and payment status remain vendor-authoritative.</small>
-            </section>
-          </div>
-
-          <section className="admin-license-invoices" aria-labelledby="license-invoices-title">
-            <header>
-              <div>
-                <h3 id="license-invoices-title">Invoices</h3>
-                <p>Read-only billing records supplied by the vendor.</p>
-              </div>
-              <button
-                type="button"
-                className="admin-primary-link"
-                onClick={() => navigate("/admin/help")}
-              >
-                Contact Vendor Billing
-              </button>
-            </header>
-            <div className="admin-license-table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Invoice</th>
-                    <th>Period</th>
-                    <th>Issued</th>
-                    <th>Due</th>
-                    <th>Amount</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {snapshot.invoices.map((invoice) => (
-                    <tr key={invoice.id}>
-                      <td>
-                        <code>{invoice.invoiceNumber}</code>
-                      </td>
-                      <td>{invoice.billingPeriod}</td>
-                      <td>{formatDate(invoice.issuedAt)}</td>
-                      <td>{formatDate(invoice.dueAt)}</td>
-                      <td>{formatCurrency(invoice.amountInr)}</td>
-                      <td>
-                        <span
-                          className={`admin-license-status admin-license-status-${invoice.status}`}
-                        >
-                          {humanize(invoice.status)}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="admin-license-invoice-actions">
-                          <button type="button" onClick={() => viewInvoice(invoice)}>
-                            View
-                          </button>
-                          <button type="button" onClick={() => downloadInvoice(invoice)}>
-                            Download
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {invoiceActionMessage ? (
-              <p className="admin-license-invoice-message" role="status">
-                {invoiceActionMessage}
-              </p>
-            ) : null}
-          </section>
-        </div>
+      {!isLoading && (!snapshot || loadError) ? (
+        <section className="admin-license-authority-note" role="alert">
+          <strong>Authoritative licensing data unavailable</strong>
+          <p>{loadError || "The licensing snapshot could not be validated."}</p>
+          <button type="button" className="admin-primary-link" onClick={() => void reloadSnapshot()}>
+            Retry Authoritative Load
+          </button>
+        </section>
       ) : null}
 
-      {activeView === "plans" ? (
-        <div className="admin-license-view">
-          <section className="admin-license-section-heading">
-            <div>
-              <h3>Plans &amp; upgrade request</h3>
-              <p>Compare published vendor plans and request a change for review.</p>
-            </div>
-            {openRequest ? (
-              <span className="admin-license-status admin-license-status-pending">
-                Request pending
-              </span>
-            ) : null}
-          </section>
-
-          <section className="admin-license-trial-note">
-            <strong>Trial plan</strong>
-            <span>
-              Trial is available only during onboarding, lasts exactly one calendar month, and uses
-              L0 Tier 1 limits. Existing institutes cannot switch back to Trial.
-            </span>
-          </section>
-
-          <div className="admin-license-plan-layout">
-            <section className="admin-license-plan-selector" aria-labelledby="plan-selector-title">
-              <header>
-                <h3 id="plan-selector-title">Published plans</h3>
-                <p>Fees and limits are read-only.</p>
-              </header>
-              <div>
-                {snapshot.plans
-                  .filter((plan) => plan.id !== "TRIAL")
-                  .map((plan) => (
-                    <button
-                      key={plan.id}
-                      type="button"
-                      className={selectedPlan?.id === plan.id ? "admin-license-plan-selected" : ""}
-                      onClick={() => setSelectedPlanId(plan.id)}
-                    >
-                      <span>
-                        <strong>{planLabel(plan)}</strong>
-                        <small>
-                          {plan.id === current.planId
-                            ? "Current plan"
-                            : formatCurrency(plan.baseFeeInr)}
-                        </small>
-                      </span>
-                      <span>{plan.maxConcurrentStudents} concurrent</span>
-                    </button>
-                  ))}
-              </div>
-            </section>
-
-            {selectedPlan ? (
-              <section className="admin-license-plan-detail" aria-labelledby="plan-detail-title">
-                <header>
-                  <div>
-                    <p className="admin-content-eyebrow">Selected plan</p>
-                    <h3 id="plan-detail-title">{planLabel(selectedPlan)}</h3>
-                  </div>
-                  <span className="admin-license-plan-badge">{selectedPlan.id}</span>
-                </header>
-                <dl>
-                  <div>
-                    <dt>Base fee</dt>
-                    <dd>{formatCurrency(selectedPlan.baseFeeInr)}</dd>
-                  </div>
-                  <div>
-                    <dt>Per student fee</dt>
-                    <dd>{formatCurrency(selectedPlan.perStudentFeeInr)}</dd>
-                  </div>
-                  <div>
-                    <dt>Concurrent students</dt>
-                    <dd>{selectedPlan.maxConcurrentStudents}</dd>
-                  </div>
-                  <div>
-                    <dt>Exam sessions / month</dt>
-                    <dd>{selectedPlan.maxExamSessionsPerMonth}</dd>
-                  </div>
-                </dl>
-                {selectedPlan.id === current.planId ? (
-                  <p className="admin-license-plan-message">
-                    This is the institute’s current plan.
-                  </p>
-                ) : getPlanRank(selectedPlan) <= getPlanRank(currentPlan) ? (
-                  <p className="admin-license-plan-message">
-                    Downgrades require a direct vendor discussion and cannot be requested here.
-                  </p>
-                ) : openRequest ? (
-                  <div className="admin-license-open-request">
-                    <strong>Request already under review</strong>
-                    <p>
-                      {openRequest.requestedPlanId} · {humanize(openRequest.status)}
-                    </p>
-                    <small>{openRequest.vendorNote}</small>
-                  </div>
-                ) : (
-                  <form className="admin-license-request-form" onSubmit={submitRequest}>
-                    <UiFormField
-                      label="Reason for upgrade"
-                      htmlFor="admin-license-request-reason"
-                      helper="Explain the expected concurrency, exam-session, or capability requirement."
-                    >
-                      <textarea
-                        id="admin-license-request-reason"
-                        rows={4}
-                        value={requestReason}
-                        onChange={(event) => setRequestReason(event.target.value)}
-                      />
-                    </UiFormField>
-                    <button
-                      type="submit"
-                      className="admin-primary-link"
-                      disabled={
-                        isSubmitting || !upgradePlans.some((plan) => plan.id === selectedPlan.id)
-                      }
-                    >
-                      {isSubmitting ? "Submitting..." : "Submit Upgrade Request"}
-                    </button>
-                  </form>
-                )}
-                {requestMessage ? (
-                  <p className="admin-license-request-message" role="status">
-                    {requestMessage}
-                  </p>
-                ) : null}
+      {snapshot && current && !isLoading && !loadError ? (
+        <>
+          {activeView === "current" ? (
+            <div className="admin-license-view">
+              <section className="admin-license-section-heading">
+                <div>
+                  <h3>Current license</h3>
+                  <p>{current.instituteName} · Vendor-assigned and read-only</p>
+                </div>
+                <span className="admin-license-plan-badge">{current.planId}</span>
               </section>
-            ) : null}
-          </div>
 
-          <section
-            className="admin-license-capabilities"
-            aria-labelledby="license-capabilities-title"
-          >
-            <header>
-              <h3 id="license-capabilities-title">Capability comparison</h3>
-              <p>Capability visibility follows the assigned license layer.</p>
-            </header>
-            <div className="admin-license-table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Capability</th>
-                    <th>L0</th>
-                    <th>L1</th>
-                    <th>L2</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {snapshot.capabilities.map((capability) => (
-                    <tr key={capability.id}>
-                      <td>
-                        <strong>{capability.label}</strong>
-                        <small>{capability.description}</small>
-                      </td>
-                      {(["L0", "L1", "L2"] as const).map((level) => (
-                        <td key={level}>
-                          {levelIncludes(level, capability.minimumLevel) ? "Included" : "Locked"}
-                        </td>
+              <div className="admin-license-summary">
+                <UiStatCard title="License Layer" value={current.layer} helper={current.planName ?? current.planId} />
+                <UiStatCard title="License State" value={humanize(current.state)} helper={`Version ${current.licenseVersion}`} />
+                <UiStatCard title="Active Students" value={usage ? displayCount(usage.activeStudentCount) : "Unavailable"} helper={usage ? `Cycle ${usage.cycleId}` : "No authoritative usage cycle"} />
+                <UiStatCard title="Expiry" value={formatDate(current.expiryDate)} helper={current.renewalDate ? `Renewal ${formatDate(current.renewalDate)}` : "Renewal unavailable"} />
+              </div>
+
+              <div className="admin-license-current-grid">
+                <section className="admin-license-parameters" aria-labelledby="license-parameters-title">
+                  <header>
+                    <h3 id="license-parameters-title">Vendor-controlled parameters</h3>
+                    <p>Missing source values remain unavailable.</p>
+                  </header>
+                  <dl>
+                    <div><dt>Active student limit</dt><dd>{displayCount(current.activeStudentLimit)}</dd></div>
+                    <div><dt>Concurrency limit</dt><dd>{displayCount(current.concurrencyLimit)}</dd></div>
+                    <div><dt>Billing cycle</dt><dd>{humanize(current.billingCycle)}</dd></div>
+                    <div><dt>Grace deadline</dt><dd>{formatDate(current.gracePeriodEndsAt)}</dd></div>
+                  </dl>
+                </section>
+
+                <section className="admin-license-contract" aria-labelledby="license-contract-title">
+                  <header>
+                    <h3 id="license-contract-title">Subscription term</h3>
+                    <p>Current validity from the authoritative license document.</p>
+                  </header>
+                  <dl>
+                    <div><dt>Plan</dt><dd>{current.planName ?? current.planId}</dd></div>
+                    <div><dt>Layer</dt><dd>{current.layer}</dd></div>
+                    <div><dt>Start date</dt><dd>{formatDate(current.startDate)}</dd></div>
+                    <div><dt>Expiry date</dt><dd>{formatDate(current.expiryDate)}</dd></div>
+                  </dl>
+                  <button type="button" className="admin-primary-link" onClick={() => navigate("/admin/licensing/plans")}>
+                    Review Published Plans
+                  </button>
+                </section>
+              </div>
+
+              <section className="admin-license-authority-note">
+                <strong>Vendor authority</strong>
+                <p>Institute users can inspect persisted authority. Only the Vendor workflow may change entitlements, pricing, payment, or request decisions.</p>
+              </section>
+            </div>
+          ) : null}
+
+          {activeView === "usage" ? (
+            <div className="admin-license-view">
+              <section className="admin-license-section-heading">
+                <div>
+                  <h3>Usage &amp; billing</h3>
+                  <p>Persisted current-cycle usage and billing records for {current.planId}.</p>
+                </div>
+                <span className="admin-license-plan-badge">{humanize(current.billingCycle)}</span>
+              </section>
+
+              {usage ? (
+                <>
+                  <div className="admin-license-summary">
+                    <UiStatCard title="Active Students" value={displayCount(usage.activeStudentCount)} helper={`Limit ${displayCount(usage.activeStudentLimit)}`} />
+                    <UiStatCard title="Assigned Students" value={displayCount(usage.assignedStudentCount)} helper={`Peak ${displayCount(usage.peakStudentUsage)}`} />
+                    <UiStatCard title="Session Executions" value={displayCount(usage.sessionExecutionVolume)} helper={`Cycle ${usage.cycleId}`} />
+                    <UiStatCard title="Assignments Created" value={displayCount(usage.assignmentsCreated)} helper={`Updated ${formatTimestamp(usage.updatedAt)}`} />
+                  </div>
+
+                  <div className="admin-license-usage-grid">
+                    <section className="admin-license-utilization" aria-labelledby="license-utilization-title">
+                      <header><h3 id="license-utilization-title">Student utilization</h3><p>Persisted usage against the recorded student limit.</p></header>
+                      {studentUtilization === null ? (
+                        <p className="admin-license-empty">Student utilization is unavailable because no authoritative limit is present.</p>
+                      ) : (
+                        <div className="admin-license-meter">
+                          <span><strong>Active students</strong><small>{usage.activeStudentCount} / {usage.activeStudentLimit}</small></span>
+                          <div><i style={{width: `${studentUtilization}%`}} /></div>
+                          <small>{studentUtilization}% utilized</small>
+                        </div>
+                      )}
+                    </section>
+
+                    <section className="admin-license-billing-summary" aria-labelledby="billing-summary-title">
+                      <header><h3 id="billing-summary-title">Persisted billing projection</h3><p>No browser calculation is applied.</p></header>
+                      <strong>{formatCurrency(usage.projectedInvoiceAmount, usage.projectedInvoiceCurrency)}</strong>
+                      <dl>
+                        <div><dt>Pricing plan</dt><dd>{usage.pricingPlanId ?? "Unavailable"}</dd></div>
+                        <div><dt>Tier compliant</dt><dd>{usage.billingTierCompliant ? "Yes" : "No"}</dd></div>
+                        <div><dt>Approaching limit</dt><dd>{usage.approachingLimit ? "Yes" : "No"}</dd></div>
+                        <div><dt>Over limit</dt><dd>{usage.overLimit ? "Yes" : "No"}</dd></div>
+                      </dl>
+                    </section>
+                  </div>
+                </>
+              ) : (
+                <section className="admin-license-authority-note">
+                  <strong>Usage unavailable</strong>
+                  <p>No authoritative usage cycle exists for this institute.</p>
+                </section>
+              )}
+
+              <section className="admin-license-invoices" aria-labelledby="license-invoices-title">
+                <header>
+                  <div><h3 id="license-invoices-title">Billing records</h3><p>Read-only provider-backed records. The browser does not generate invoices.</p></div>
+                  <div className="admin-license-invoice-actions">
+                    {snapshot.externalActions.map((action) => (
+                      <a key={action.action} className="admin-primary-link" href={action.url} target="_blank" rel="noreferrer">
+                        {actionLabel(action.action)}
+                      </a>
+                    ))}
+                  </div>
+                </header>
+                {snapshot.billing.items.length === 0 ? (
+                  <p className="admin-license-empty">No billing records are available.</p>
+                ) : (
+                  <div className="admin-license-table-scroll">
+                    <table>
+                      <thead><tr><th>Invoice</th><th>Period</th><th>Recorded</th><th>Amount paid</th><th>Status</th></tr></thead>
+                      <tbody>
+                        {snapshot.billing.items.map((invoice) => (
+                          <tr key={invoice.invoiceId}>
+                            <td><code>{invoice.invoiceId}</code></td>
+                            <td>{formatDate(invoice.billingPeriodStart)} – {formatDate(invoice.billingPeriodEnd)}</td>
+                            <td>{formatTimestamp(invoice.createdAt)}</td>
+                            <td>{formatCurrency(invoice.amountPaid, invoice.currency)}</td>
+                            <td><span className={`admin-license-status admin-license-status-${invoice.status}`}>{humanize(invoice.status)}</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {snapshot.billing.nextCursor ? <p className="admin-license-empty">Additional billing records exist; this bounded view shows the newest 25.</p> : null}
+              </section>
+            </div>
+          ) : null}
+
+          {activeView === "plans" ? (
+            <div className="admin-license-view">
+              <section className="admin-license-section-heading">
+                <div><h3>Published plans &amp; request</h3><p>Compare the bounded Vendor-published catalog and submit higher-layer intent.</p></div>
+                {openRequest ? <span className="admin-license-status admin-license-status-pending">Request pending</span> : null}
+              </section>
+
+              {snapshot.plans.length === 0 ? (
+                <section className="admin-license-authority-note"><strong>Plan catalog unavailable</strong><p>No published plans were returned.</p></section>
+              ) : (
+                <div className="admin-license-plan-layout">
+                  <section className="admin-license-plan-selector" aria-labelledby="plan-selector-title">
+                    <header><h3 id="plan-selector-title">Published plans</h3><p>Prices and limits are read-only.</p></header>
+                    <div>
+                      {snapshot.plans.map((plan) => (
+                        <button key={plan.planId} type="button" className={selectedPlan?.planId === plan.planId ? "admin-license-plan-selected" : ""} onClick={() => updateSelectedPlan(plan.planId)}>
+                          <span><strong>{planLabel(plan)}</strong><small>{plan.planId === current.planId ? "Current plan" : formatCurrency(plan.basePriceMonthly, plan.currency)}</small></span>
+                          <span>{plan.layer} · {displayCount(plan.concurrencyLimit)} concurrent</span>
+                        </button>
                       ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </div>
-      ) : null}
-
-      {activeView === "history" ? (
-        <div className="admin-license-view">
-          <section className="admin-license-section-heading">
-            <div>
-              <h3>License history</h3>
-              <p>Vendor decisions and institute requests retained as read-only records.</p>
-            </div>
-            <span className="admin-license-plan-badge">
-              {snapshot.licenseHistory.length + snapshot.upgradeRequests.length} events
-            </span>
-          </section>
-
-          <div className="admin-license-history-grid">
-            <section className="admin-license-history-panel" aria-labelledby="plan-history-title">
-              <header>
-                <h3 id="plan-history-title">Plan changes</h3>
-                <p>Changes applied by the vendor.</p>
-              </header>
-              <div>
-                {snapshot.licenseHistory.map((entry) => (
-                  <article key={entry.id}>
-                    <span className="admin-license-history-marker" />
-                    <div>
-                      <time>{formatTimestamp(entry.timestamp)}</time>
-                      <strong>
-                        {entry.previousPlanId} to {entry.newPlanId}
-                      </strong>
-                      <p>{entry.reason}</p>
-                      <small>
-                        {entry.actor} · {entry.billingCycle}
-                      </small>
                     </div>
-                  </article>
-                ))}
-              </div>
-            </section>
+                  </section>
 
-            <section
-              className="admin-license-history-panel"
-              aria-labelledby="request-history-title"
-            >
-              <header>
-                <h3 id="request-history-title">Upgrade requests</h3>
-                <p>Requests submitted by institute administrators.</p>
-              </header>
-              <div>
-                {snapshot.upgradeRequests.map((request) => (
-                  <article key={request.id}>
-                    <span className="admin-license-history-marker" />
-                    <div>
-                      <time>{formatTimestamp(request.submittedAt)}</time>
-                      <strong>Requested {request.requestedPlanId}</strong>
-                      <p>{request.reason}</p>
-                      <small>
-                        {humanize(request.status)} · {request.vendorNote}
-                      </small>
-                    </div>
-                  </article>
-                ))}
-                {snapshot.upgradeRequests.length === 0 ? (
-                  <p className="admin-license-empty">No upgrade requests have been submitted.</p>
-                ) : null}
+                  {selectedPlan ? (
+                    <section className="admin-license-plan-detail" aria-labelledby="plan-detail-title">
+                      <header><div><p className="admin-content-eyebrow">Selected plan</p><h3 id="plan-detail-title">{planLabel(selectedPlan)}</h3></div><span className="admin-license-plan-badge">{selectedPlan.layer}</span></header>
+                      <dl>
+                        <div><dt>Monthly base price</dt><dd>{formatCurrency(selectedPlan.basePriceMonthly, selectedPlan.currency)}</dd></div>
+                        <div><dt>Per student</dt><dd>{formatCurrency(selectedPlan.pricePerStudent, selectedPlan.currency)}</dd></div>
+                        <div><dt>Student limit</dt><dd>{displayCount(selectedPlan.activeStudentLimit)}</dd></div>
+                        <div><dt>Concurrency limit</dt><dd>{displayCount(selectedPlan.concurrencyLimit)}</dd></div>
+                        <div><dt>Monthly sessions</dt><dd>{displayCount(selectedPlan.monthlySessionExecutionLimit)}</dd></div>
+                      </dl>
+                      {selectedPlan.planId === current.planId ? (
+                        <p className="admin-license-plan-message">This is the institute’s current plan.</p>
+                      ) : getLayerRank(selectedPlan.layer) <= getLayerRank(current.layer) ? (
+                        <p className="admin-license-plan-message">Only a published plan above the current license layer can be requested here.</p>
+                      ) : openRequest ? (
+                        <div className="admin-license-open-request">
+                          <strong>Request already under review</strong>
+                          <p>{openRequest.requestedPlanId} · {humanize(openRequest.status)}</p>
+                          <small>{openRequest.decisionNote ?? "No Vendor decision note is available."}</small>
+                        </div>
+                      ) : !canSubmitUpgrade ? (
+                        <p className="admin-license-plan-message">
+                          {accessContext.role === "director" ? "Directors have read-only licensing access." : current.state !== "active" ? "Requests are unavailable unless the current license is active." : fixtureMode ? "Requests are unavailable while fixture mode is active." : "Your current role and license do not grant upgrade-request capability."}
+                        </p>
+                      ) : (
+                        <form className="admin-license-request-form" onSubmit={submitRequest}>
+                          <UiFormField label={selectedPlan.layer === "L3" ? "Reason for evaluation" : "Reason for upgrade"} htmlFor="admin-license-request-reason" helper="Provide 15 to 1000 characters. L3 plans are submitted as evaluations.">
+                            <textarea id="admin-license-request-reason" rows={4} minLength={15} maxLength={1000} value={requestReason} onChange={(event) => updateRequestReason(event.target.value)} />
+                          </UiFormField>
+                          <button type="submit" className="admin-primary-link" disabled={isSubmitting || !upgradePlans.some((plan) => plan.planId === selectedPlan.planId)}>
+                            {isSubmitting ? "Submitting..." : selectedPlan.layer === "L3" ? "Submit Evaluation Request" : "Submit Upgrade Request"}
+                          </button>
+                        </form>
+                      )}
+                      {requestMessage ? <p className="admin-license-request-message" role="status">{requestMessage}</p> : null}
+                    </section>
+                  ) : null}
+                </div>
+              )}
+
+              <section className="admin-license-capabilities" aria-labelledby="license-capabilities-title">
+                <header><h3 id="license-capabilities-title">L0–L3 capability authority</h3><p>Cells are projected by the backend from layer and feature policy.</p></header>
+                <div className="admin-license-table-scroll">
+                  <table>
+                    <thead><tr><th>Capability</th>{LICENSE_LAYERS.map((layer) => <th key={layer}>{layer}</th>)}<th>Current</th></tr></thead>
+                    <tbody>
+                      {snapshot.capabilities.map((capability) => (
+                        <tr key={capability.capabilityId}>
+                          <td><strong>{capability.label}</strong><small>{capability.description}</small></td>
+                          {LICENSE_LAYERS.map((layer) => <td key={layer}>{humanize(capability.layers[layer])}</td>)}
+                          <td>{capabilityLockLabel(capability.lockReason)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </div>
+          ) : null}
+
+          {activeView === "history" ? (
+            <div className="admin-license-view">
+              <section className="admin-license-section-heading">
+                <div><h3>License history</h3><p>Bounded Vendor decisions and institute requests.</p></div>
+                <span className="admin-license-plan-badge">{snapshot.history.items.length + snapshot.requests.items.length} records</span>
+              </section>
+              <div className="admin-license-history-grid">
+                <section className="admin-license-history-panel" aria-labelledby="plan-history-title">
+                  <header><h3 id="plan-history-title">License changes</h3><p>Immutable changes applied by the Vendor authority.</p></header>
+                  <div>
+                    {snapshot.history.items.map((entry) => (
+                      <article key={entry.entryId}><span className="admin-license-history-marker" /><div><time>{formatTimestamp(entry.timestamp)}</time><strong>{entry.previousLayer} to {entry.newLayer}</strong><p>{entry.reason}</p><small>{entry.changedBy} · {entry.billingPlan}</small></div></article>
+                    ))}
+                    {snapshot.history.items.length === 0 ? <p className="admin-license-empty">No license history records are available.</p> : null}
+                    {snapshot.history.nextCursor ? <p className="admin-license-empty">Additional history exists; this bounded view shows the newest 25.</p> : null}
+                  </div>
+                </section>
+                <section className="admin-license-history-panel" aria-labelledby="request-history-title">
+                  <header><h3 id="request-history-title">Licensing requests</h3><p>Requests submitted by institute administrators.</p></header>
+                  <div>
+                    {snapshot.requests.items.map((request) => (
+                      <article key={request.requestId}><span className="admin-license-history-marker" /><div><time>{formatTimestamp(request.submittedAt)}</time><strong>{humanize(request.requestKind)} · {request.requestedPlanId}</strong><p>{request.reason}</p><small>{humanize(request.status)}{request.decisionNote ? ` · ${request.decisionNote}` : ""}</small></div></article>
+                    ))}
+                    {snapshot.requests.items.length === 0 ? <p className="admin-license-empty">No licensing requests are available.</p> : null}
+                    {snapshot.requests.nextCursor ? <p className="admin-license-empty">Additional requests exist; this bounded view shows the newest 25.</p> : null}
+                  </div>
+                </section>
               </div>
-            </section>
-          </div>
-        </div>
+            </div>
+          ) : null}
+
+          <footer className="admin-license-boundary">
+            <div><strong>Institute visibility, Vendor authority</strong><span>Identity is derived by the server. Admins may submit higher-layer intent; Directors remain read-only.</span></div>
+            <code>{current.instituteId} · {current.licenseVersion}</code>
+          </footer>
+        </>
       ) : null}
-
-      <footer className="admin-license-boundary">
-        <div>
-          <strong>Institute visibility, vendor authority</strong>
-          <span>
-            Admins can review usage and submit requests. Only the vendor can publish parameters,
-            approve changes, extend dates, or alter subscription status.
-          </span>
-        </div>
-        <code>institutes/{current.instituteId}/license</code>
-      </footer>
     </section>
   );
 }

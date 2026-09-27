@@ -204,7 +204,17 @@ test(
       assert.equal(currentLicense.get("licenseVersion"), licenseVersion);
       assert.equal(mainLicense.get("licenseVersion"), licenseVersion);
       for (const user of [admin, student]) {
+        assert.equal(user.customClaims?.expiryDate, null);
+        assert.deepEqual(user.customClaims?.featureFlags, {
+          adaptivePhase: false,
+          controlledMode: false,
+          governanceAccess: false,
+          hardMode: false,
+          riskOverview: false,
+        });
+        assert.equal(user.customClaims?.gracePeriodEndsAt, null);
         assert.equal(user.customClaims?.licenseLayer, "L1");
+        assert.equal(user.customClaims?.licenseState, "active");
         assert.equal(user.customClaims?.licenseVersion, licenseVersion);
         assert.equal(typeof user.tokensValidAfterTime, "string");
       }
@@ -220,6 +230,7 @@ test(
       const freshAdminToken = await signInWithPassword(adminEmail, password);
       const decodedFreshToken = await auth.verifyIdToken(freshAdminToken, true);
       assert.equal(decodedFreshToken.licenseLayer, "L1");
+      assert.equal(decodedFreshToken.licenseState, "active");
       assert.equal(decodedFreshToken.licenseVersion, licenseVersion);
     } finally {
       await Promise.allSettled(

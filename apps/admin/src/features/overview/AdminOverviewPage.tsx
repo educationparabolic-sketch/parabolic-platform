@@ -7,6 +7,7 @@ import { resolveAdminAccessContext } from "../../portals/adminAccess";
 import {
   fetchOverviewSnapshot,
   formatIsoDate,
+  formatOptionalPercent,
   formatPercent,
   getFallbackOverviewSnapshot,
   hasLayer,
@@ -232,19 +233,21 @@ function AdminOverviewPage() {
       ),
       metricCard(
         "Eligibility for L1",
-        formatPercent(snapshot.systemHealthAndLicensing.eligibilityL1Percentage),
+        formatOptionalPercent(snapshot.systemHealthAndLicensing.eligibilityL1Percentage),
         "Progress toward full L1 readiness",
         "Higher is better. 100% means L1 readiness is complete.",
       ),
       metricCard(
         "Eligibility for L2",
-        formatPercent(snapshot.systemHealthAndLicensing.eligibilityL2Percentage),
+        formatOptionalPercent(snapshot.systemHealthAndLicensing.eligibilityL2Percentage),
         "Progress toward full L2 readiness",
         "Higher is better. 100% means L2 readiness is complete.",
       ),
       metricCard(
         "Peak Concurrency",
-        String(snapshot.systemHealthAndLicensing.peakConcurrencyThisMonth),
+        snapshot.systemHealthAndLicensing.peakConcurrencyThisMonth === null ?
+          "Unavailable" :
+          String(snapshot.systemHealthAndLicensing.peakConcurrencyThisMonth),
         "Highest simultaneous live student sessions reached this month",
         "Higher means heavier maximum live exam load this month.",
       ),

@@ -3,6 +3,7 @@ import {
   Middleware,
   MiddlewareExamSessionClaims,
   MiddlewareIdentityContext,
+  LicenseState,
   MiddlewareRejectionError,
 } from "../types/middleware";
 import {
@@ -71,10 +72,50 @@ const resolveFeatureFlags = (
   if (typeof source !== "object" || source === null || Array.isArray(source)) {
     return {};
   }
-  return Object.fromEntries(
-    Object.entries(source as Record<string, unknown>)
-      .map(([key, value]) => [key, value === true]),
-  );
+  const flags = source as Record<string, unknown>;
+  return {
+    adaptivePhase: flags.adaptivePhase === true,
+    controlledMode: flags.controlledMode === true,
+    governanceAccess: flags.governanceAccess === true,
+    hardMode: flags.hardMode === true,
+    riskOverview: flags.riskOverview === true,
+  };
+};
+
+const resolveLicenseState = (
+  decodedToken: Record<string, unknown>,
+): LicenseState | null => {
+  const normalized = normalizeNonEmptyString(
+    decodedToken.licenseState ?? decodedToken.licenseStatus,
+  )?.toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  if (normalized !== "active" && normalized !== "grace" && normalized !== "expired") {
+    throw new MiddlewareRejectionError(
+      "UNAUTHORIZED",
+      "Authentication token has malformed license entitlement claims.",
+    );
+  }
+
+  return normalized;
+};
+
+const resolveOptionalTimestampClaim = (
+  value: unknown,
+): string | null => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const normalized = normalizeNonEmptyString(value);
+  if (!normalized || Number.isNaN(new Date(normalized).getTime())) {
+    throw new MiddlewareRejectionError(
+      "UNAUTHORIZED",
+      "Authentication token has malformed license entitlement claims.",
+    );
+  }
+
+  return normalized;
 };
 
 const resolveExamSessionClaims = (
@@ -145,11 +186,17 @@ const buildIdentityContext = (
 
   return {
     examSession: resolveExamSessionClaims(decodedToken),
+    expiryDate: resolveOptionalTimestampClaim(decodedToken.expiryDate),
     featureFlags: resolveFeatureFlags(decodedToken),
+    gracePeriodEndsAt: resolveOptionalTimestampClaim(
+      decodedToken.gracePeriodEndsAt,
+    ),
     instituteId: resolveInstituteClaim(decodedToken),
     isSuspended: Boolean(decodedToken.isSuspended),
     isVendor: role === "vendor" || Boolean(decodedToken.isVendor),
     licenseLayer,
+    licenseState: resolveLicenseState(decodedToken),
+    licenseVersion: normalizeNonEmptyString(decodedToken.licenseVersion),
     role,
     studentId: role === "student" ? resolveStudentId(decodedToken, uid) : null,
     uid,
@@ -217,5 +264,6 @@ export {
   resolveInstituteClaim,
   resolveExamSessionClaims,
   resolveFeatureFlags,
+  resolveLicenseState,
   resolveStudentId,
 };

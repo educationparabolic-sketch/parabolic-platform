@@ -3,10 +3,15 @@ import {
   Middleware,
   MiddlewareRejectionError,
 } from "../types/middleware";
+import {
+  enforceActiveLicenseEntitlement,
+  LicenseEntitlementEnforcementDependencies,
+} from "./licenseEntitlement";
 
 export interface LicenseEnforcementMiddlewareOptions {
   requiredLayer: LicenseLayer;
   restrictionMessage?: string;
+  enforcementDependencies?: LicenseEntitlementEnforcementDependencies;
 }
 
 const LAYER_ORDER: Record<LicenseLayer, number> = {
@@ -35,6 +40,11 @@ export const createLicenseEnforcementMiddleware = (
       "Authenticated request context is required.",
     );
   }
+
+  await enforceActiveLicenseEntitlement(
+    identity,
+    options.enforcementDependencies,
+  );
 
   if (
     !isLicenseLayerSufficient(identity.licenseLayer, options.requiredLayer)

@@ -2,7 +2,7 @@
 
 This document provides a simplified reference of the Firestore data hierarchy.
 
-Last reconciled: 2026-09-25 (`BWM-030` settings, staff Auth, and academic-year operations closeout)
+Last reconciled: 2026-09-27 (`BWM-031` verified licensing closeout)
 
 The authoritative schema definition exists in:
 
@@ -60,6 +60,38 @@ institutes/{instituteId}
 Subcollections:
 
 license/main
+
+`license/current` is the only Admin licensing read and request authority;
+`license/main` remains a Vendor/Stripe compatibility mirror and is never an
+ADM-16 fallback.
+
+`institutes/{instituteId}/licenseRequests/{requestId}` stores an institute
+administrator's immutable submission authority plus Vendor-owned decision
+fields. Creation captures the current plan/layer/version, requested published
+plan/layer, `upgrade|evaluation` kind, reason, submitter, server time, and
+initial `pending` status. Admin never writes an approval, payment state, plan,
+license, invoice, or entitlement through this record; BWM-035 owns Vendor
+decisions over the same document.
+
+`institutes/{instituteId}/licenseRequestState/current` is the transactional
+one-open-request sentinel. Its `openRequestId` serializes `pending` and
+`payment_required` authority. A new Admin command also queries at most two open
+records and fails closed if the sentinel and request records disagree. BWM-035
+must clear or replace the sentinel atomically with a terminal Vendor decision.
+
+`institutes/{instituteId}/licenseRequestCommands/{hashedCommandId}` is
+server-only deterministic replay authority. It stores the institute-scoped
+SHA-256 idempotency-key hash, normalized intent fingerprint, request/audit IDs,
+license version, action, and completion time. It never stores the raw key or a
+mutable entitlement payload. Exact replay rereads the authoritative request;
+changed-key semantics conflict.
+
+`institutes/{instituteId}/licenseRequestAudit/{auditEventId}` is the immutable
+Admin submission audit. It records server-derived actor/institute/current
+authority, requested plan/layer/kind, hashes for the command fingerprint and
+optional request context, and a fixed summary. The full reason remains only on
+the request record. Request, sentinel, command, and audit are committed in one
+transaction without writing `license/current` or `license/main`.
 
 BWM-030 adds institute-root settings authority. `settingsRevision` is the
 optimistic concurrency counter; `primaryAdminUserId` is server-owned; and

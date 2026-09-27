@@ -12,8 +12,13 @@ import {
 } from "./helpers/http";
 
 const createTeacherToken = (overrides: Record<string, unknown> = {}) => ({
+  expiryDate: "2099-09-26T00:00:00.000Z",
+  featureFlags: {riskOverview: true},
+  gracePeriodEndsAt: null,
   instituteId: "inst_build_124",
   licenseLayer: "L1",
+  licenseState: "active",
+  licenseVersion: "license-build-124",
   role: "teacher",
   uid: "teacher_build_124",
   ...overrides,

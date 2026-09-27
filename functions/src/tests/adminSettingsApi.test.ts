@@ -5,8 +5,13 @@ import {AdminSettingsValidationError, AdminSettingsValidatedRequest} from "../ty
 import {createMockRequest, createMockResponse} from "./helpers/http";
 
 const createAdminToken = (overrides: Record<string, unknown> = {}) => ({
+  expiryDate: "2099-09-26T00:00:00.000Z",
+  featureFlags: {},
+  gracePeriodEndsAt: null,
   instituteId: "inst_build_125",
   licenseLayer: "L3",
+  licenseState: "active",
+  licenseVersion: "license-build-125",
   role: "admin",
   uid: "admin_build_125",
   ...overrides,

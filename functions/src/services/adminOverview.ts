@@ -365,9 +365,15 @@ function resolveLastArchiveDate(
 
 function formatUpgradeAwareness(
   currentLayer: AdminOverviewLicenseLayer,
-  eligibilityL1: number,
-  eligibilityL2: number,
+  eligibilityL1: number | null,
+  eligibilityL2: number | null,
 ): string {
+  if (eligibilityL1 === null || eligibilityL2 === null) {
+    return currentLayer === "L2" ?
+      "L3 governance unlock remains vendor-evaluated." :
+      "Eligibility progress is unavailable from authoritative licensing data.";
+  }
+
   if (currentLayer === "L0" && eligibilityL1 < 100) {
     return `L1 readiness at ${eligibilityL1}%.`;
   }
@@ -595,20 +601,10 @@ export class AdminOverviewService {
     const monthPrefix = now.toISOString().slice(0, 7);
 
     const currentLayer = toLicenseLayer(
-      licensingResult.snapshot.currentPlan.currentLayer,
+      licensingResult.snapshot.currentLicense.layer,
     );
-    const eligibilityL1Stage = licensingResult.snapshot.eligibilityProgress
-      .find((entry) => entry.stage === "L1");
-    const eligibilityL2Stage = licensingResult.snapshot.eligibilityProgress
-      .find((entry) => entry.stage === "L2");
-    const eligibilityL1Percentage = clampPercent(
-      ((eligibilityL1Stage?.progressCurrent ?? 0) /
-        Math.max(1, eligibilityL1Stage?.progressTarget ?? 1)) * 100,
-    );
-    const eligibilityL2Percentage = clampPercent(
-      ((eligibilityL2Stage?.progressCurrent ?? 0) /
-        Math.max(1, eligibilityL2Stage?.progressTarget ?? 1)) * 100,
-    );
+    const eligibilityL1Percentage = null;
+    const eligibilityL2Percentage = null;
 
     const riskCounts: Record<StudentRiskBucket, number> = {
       critical: 0,
@@ -820,7 +816,8 @@ export class AdminOverviewService {
       operationalSnapshot: {
         activeConcurrentSessions,
         activeStudents: students.length,
-        billingCount: licensingResult.snapshot.currentPlan.activeStudentCount,
+        billingCount:
+          licensingResult.snapshot.usage?.activeStudentCount ?? null,
         lastTestCompletionRatePercent: Math.round(
           latestCompletedRun?.completionRatePercent ?? 0,
         ),
@@ -884,13 +881,13 @@ export class AdminOverviewService {
       },
       systemHealthAndLicensing: {
         academicYearLockStatus,
-        activeStudentCount: licensingResult.snapshot.currentPlan.activeStudentCount,
+        activeStudentCount:
+          licensingResult.snapshot.usage?.activeStudentCount ?? null,
         currentLayerBadge: currentLayer,
         eligibilityL1Percentage,
         eligibilityL2Percentage,
         lastArchiveDate: resolveLastArchiveDate(settingsSnapshot.academicYears),
-        peakConcurrencyThisMonth:
-          licensingResult.snapshot.usageAndBilling.peakConcurrency,
+        peakConcurrencyThisMonth: null,
         storageUsageSummary: "Storage usage is not exposed by institute settings.",
         upgradeAwarenessCard: formatUpgradeAwareness(
           currentLayer,

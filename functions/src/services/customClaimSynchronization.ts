@@ -9,12 +9,21 @@ import {
   SynchronizeCustomClaimsResult,
 } from "../types/customClaimSynchronization";
 import {LicenseLayer} from "../types/middleware";
+import type {
+  AdminLicenseFeatureFlags,
+  AdminLicenseState,
+} from "../../../shared/contracts/adminLicensing";
 
 const MANAGED_CLAIM_KEYS = new Set([
   "instituteId",
+  "expiryDate",
+  "featureFlags",
+  "gracePeriodEndsAt",
   "isSuspended",
   "isVendor",
   "licenseLayer",
+  "licenseState",
+  "licenseStatus",
   "licenseVersion",
   "role",
   "studentId",
@@ -125,6 +134,79 @@ const normalizeLicenseLayer = (value: unknown): LicenseLayer => {
   return layer;
 };
 
+const normalizeLicenseState = (value: unknown): AdminLicenseState => {
+  const state = normalizeAuthorityString(
+    value,
+    "license.licenseState",
+  ).toLowerCase();
+
+  if (state !== "active" && state !== "grace" && state !== "expired") {
+    throw new CustomClaimSynchronizationError(
+      "INVALID_AUTHORITY",
+      "Authoritative license state must be active, grace, or expired.",
+    );
+  }
+
+  return state;
+};
+
+const normalizeFeatureFlags = (value: unknown): AdminLicenseFeatureFlags => {
+  const flags = isRecord(value) ? value : {};
+
+  return {
+    adaptivePhase: flags.adaptivePhase === true,
+    controlledMode: flags.controlledMode === true,
+    governanceAccess: flags.governanceAccess === true,
+    hardMode: flags.hardMode === true,
+    riskOverview: flags.riskOverview === true,
+  };
+};
+
+const normalizeOptionalTimestamp = (
+  value: unknown,
+  fieldName: string,
+): string | null => {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const candidate = typeof value === "string" ?
+    new Date(value) :
+    value instanceof Date ? value :
+      isRecord(value) && typeof value.toDate === "function" ?
+        (value.toDate as () => unknown)() :
+        null;
+  if (!(candidate instanceof Date) || Number.isNaN(candidate.getTime())) {
+    throw new CustomClaimSynchronizationError(
+      "INVALID_AUTHORITY",
+      `Authoritative field "${fieldName}" must be a valid timestamp or null.`,
+    );
+  }
+
+  return candidate.toISOString();
+};
+
+const resolveEffectiveLicenseState = (
+  state: AdminLicenseState,
+  expiryDate: string | null,
+  gracePeriodEndsAt: string | null,
+  now: Date,
+): AdminLicenseState => {
+  if (state === "expired") {
+    return "expired";
+  }
+  if (state === "grace") {
+    return gracePeriodEndsAt &&
+      new Date(gracePeriodEndsAt).getTime() > now.getTime() ?
+      "grace" :
+      "expired";
+  }
+  if (expiryDate && new Date(expiryDate).getTime() <= now.getTime()) {
+    return "expired";
+  }
+
+  return "active";
+};
+
 const resolveLicenseVersion = (
   licenseData: Record<string, unknown>,
   instituteData: Record<string, unknown>,
@@ -212,23 +294,47 @@ implements AuthorityRepository {
       );
     }
 
-    let licenseSnapshot = currentLicenseSnapshot;
-    if (!licenseSnapshot.exists) {
-      licenseSnapshot = await instituteReference.collection("license").doc("main").get();
-    }
-    if (!licenseSnapshot.exists) {
+    if (!currentLicenseSnapshot.exists) {
       throw new CustomClaimSynchronizationError(
         "AUTHORITY_NOT_FOUND",
-        `Institute "${instituteId}" has no authoritative license document.`,
+        `Institute "${instituteId}" has no authoritative current license document.`,
       );
     }
-    const licenseData = licenseSnapshot.data() ?? {};
-    const licenseLayer = normalizeLicenseLayer(licenseData.currentLayer);
+    const licenseData = currentLicenseSnapshot.data() ?? {};
+    const storedLicenseLayer = normalizeLicenseLayer(licenseData.currentLayer);
     const licenseVersion = resolveLicenseVersion(
       licenseData,
       instituteData,
       instituteId,
     );
+    if (
+      typeof instituteData.licenseVersion === "string" &&
+      instituteData.licenseVersion.trim() &&
+      instituteData.licenseVersion.trim() !== licenseVersion
+    ) {
+      throw new CustomClaimSynchronizationError(
+        "INVALID_AUTHORITY",
+        "Institute and current-license versions do not match.",
+      );
+    }
+    const expiryDate = normalizeOptionalTimestamp(
+      licenseData.expiryDate,
+      "license.expiryDate",
+    );
+    const gracePeriodEndsAt = normalizeOptionalTimestamp(
+      licenseData.gracePeriodEndsAt,
+      "license.gracePeriodEndsAt",
+    );
+    const licenseState = resolveEffectiveLicenseState(
+      normalizeLicenseState(licenseData.licenseState),
+      expiryDate,
+      gracePeriodEndsAt,
+      new Date(),
+    );
+    const licenseLayer = licenseState === "active" ? storedLicenseLayer : "L0";
+    const featureFlags = licenseState === "active" ?
+      normalizeFeatureFlags(licenseData.featureFlags) :
+      normalizeFeatureFlags(null);
     const instituteSuspended = instituteStatus === "suspended";
 
     if (staffData) {
@@ -249,9 +355,13 @@ implements AuthorityRepository {
       );
 
       return {
+        expiryDate,
+        featureFlags,
+        gracePeriodEndsAt,
         instituteId,
         isSuspended: instituteSuspended || status === "suspended",
         licenseLayer,
+        licenseState,
         licenseVersion,
         role,
         source: "staff",
@@ -276,9 +386,13 @@ implements AuthorityRepository {
     );
 
     return {
+      expiryDate,
+      featureFlags,
+      gracePeriodEndsAt,
       instituteId,
       isSuspended: instituteSuspended || status === "suspended",
       licenseLayer,
+      licenseState,
       licenseVersion,
       role: "student",
       source: "student",
@@ -350,10 +464,14 @@ export class CustomClaimSynchronizationService {
 
     const claims: Record<string, unknown> = {
       ...omitManagedClaims(user.customClaims),
+      expiryDate: authority.expiryDate,
+      featureFlags: authority.featureFlags,
+      gracePeriodEndsAt: authority.gracePeriodEndsAt,
       instituteId: authority.instituteId,
       isSuspended: authority.isSuspended || user.disabled,
       isVendor: false,
       licenseLayer: authority.licenseLayer,
+      licenseState: authority.licenseState,
       licenseVersion: authority.licenseVersion,
       role: authority.role,
     };

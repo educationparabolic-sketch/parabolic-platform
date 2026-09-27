@@ -17,6 +17,8 @@ export interface LicenseFeatureFlags {
   hardMode: boolean;
 }
 
+export type LicenseState = "active" | "grace" | "expired";
+
 export interface GlobalRolloutFeatureFlags {
   enableBetaFeatures: boolean;
   enableExperimentalRiskEngine: boolean;
@@ -30,11 +32,13 @@ export interface LicenseObjectModel {
   billingCycle: string | null;
   startDate: string | null;
   expiryDate: string | null;
+  gracePeriodEndsAt: string | null;
   maxStudents: number | null;
   maxConcurrent: number | null;
   eligibilityFlags: LicenseEligibilityFlags;
   featureFlags: LicenseFeatureFlags;
-  status: string | null;
+  licenseVersion: string | null;
+  status: LicenseState | null;
 }
 
 export type BackendLicensedCapability =

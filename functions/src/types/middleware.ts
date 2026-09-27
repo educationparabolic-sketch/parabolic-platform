@@ -3,6 +3,7 @@ import {StructuredLogger} from "../services/logging";
 import {StandardApiErrorCode} from "./apiResponse";
 
 export type LicenseLayer = "L0" | "L1" | "L2" | "L3";
+export type LicenseState = "active" | "grace" | "expired";
 
 export interface MiddlewareExamSessionClaims {
   launchNonce: string;
@@ -13,12 +14,16 @@ export interface MiddlewareExamSessionClaims {
 }
 
 export interface MiddlewareIdentityContext {
+  expiryDate?: string | null;
   featureFlags?: Readonly<Record<string, boolean>>;
+  gracePeriodEndsAt?: string | null;
   uid: string;
   role: string;
   instituteId: string | null;
   studentId: string | null;
   licenseLayer: LicenseLayer | null;
+  licenseState?: LicenseState | null;
+  licenseVersion?: string | null;
   isVendor: boolean;
   isSuspended: boolean;
   examSession?: MiddlewareExamSessionClaims | null;

@@ -40,10 +40,21 @@ test(
     let nextCalled = false;
 
     setRequestIdentity(request as never, {
+      expiryDate: "2099-09-26T12:00:00.000Z",
+      featureFlags: {
+        adaptivePhase: true,
+        controlledMode: true,
+        governanceAccess: true,
+        hardMode: true,
+        riskOverview: true,
+      },
+      gracePeriodEndsAt: null,
       instituteId: "inst_build_89",
       isSuspended: false,
       isVendor: false,
       licenseLayer: "L3",
+      licenseState: "active",
+      licenseVersion: "license_version_build_89",
       role: "director",
       studentId: null,
       uid: "uid_build_89_director",
@@ -97,10 +108,21 @@ test(
     const request = createMockRequest();
 
     setRequestIdentity(request as never, {
+      expiryDate: "2099-09-26T12:00:00.000Z",
+      featureFlags: {
+        adaptivePhase: true,
+        controlledMode: true,
+        governanceAccess: false,
+        hardMode: true,
+        riskOverview: true,
+      },
+      gracePeriodEndsAt: null,
       instituteId: "inst_build_89",
       isSuspended: false,
       isVendor: false,
       licenseLayer: "L2",
+      licenseState: "active",
+      licenseVersion: "license_version_build_89",
       role: "director",
       studentId: null,
       uid: "uid_build_89_director",

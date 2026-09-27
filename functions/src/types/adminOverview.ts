@@ -34,7 +34,7 @@ export interface AdminOverviewSnapshot {
     testsConducted: number;
     testsScheduled: number;
     lastTestCompletionRatePercent: number;
-    billingCount: number;
+    billingCount: number | null;
     activeConcurrentSessions: number;
   };
   currentActivity: {
@@ -92,10 +92,10 @@ export interface AdminOverviewSnapshot {
   };
   systemHealthAndLicensing: {
     currentLayerBadge: AdminOverviewLicenseLayer;
-    eligibilityL1Percentage: number;
-    eligibilityL2Percentage: number;
-    activeStudentCount: number;
-    peakConcurrencyThisMonth: number;
+    eligibilityL1Percentage: number | null;
+    eligibilityL2Percentage: number | null;
+    activeStudentCount: number | null;
+    peakConcurrencyThisMonth: number | null;
     storageUsageSummary: string;
     lastArchiveDate: string;
     academicYearLockStatus: string;

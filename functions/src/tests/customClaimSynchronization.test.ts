@@ -7,6 +7,14 @@ import {
   CustomClaimSynchronizationError,
 } from "../types/customClaimSynchronization";
 
+const ACTIVE_FEATURE_FLAGS = {
+  adaptivePhase: true,
+  controlledMode: true,
+  governanceAccess: false,
+  hardMode: true,
+  riskOverview: true,
+};
+
 const createHarness = (input: {
   authority?: CustomClaimAuthority;
   customClaims?: Record<string, unknown>;
@@ -15,9 +23,13 @@ const createHarness = (input: {
 }) => {
   const writes: Array<{claims: Record<string, unknown>; uid: string}> = [];
   const authority: CustomClaimAuthority = input.authority ?? {
+    expiryDate: "2099-09-26T00:00:00.000Z",
+    featureFlags: ACTIVE_FEATURE_FLAGS,
+    gracePeriodEndsAt: null,
     instituteId: "inst_claims",
     isSuspended: false,
     licenseLayer: "L2",
+    licenseState: "active",
     licenseVersion: "license-v2",
     role: "teacher",
     source: "staff",
@@ -63,10 +75,14 @@ test("synchronizer replaces managed claims from staff authority", async () => {
   assert.equal(result.authoritySource, "staff");
   assert.deepEqual(result.claims, {
     analyticsScope: "retained",
+    expiryDate: "2099-09-26T00:00:00.000Z",
+    featureFlags: ACTIVE_FEATURE_FLAGS,
+    gracePeriodEndsAt: null,
     instituteId: "inst_claims",
     isSuspended: false,
     isVendor: false,
     licenseLayer: "L2",
+    licenseState: "active",
     licenseVersion: "license-v2",
     role: "teacher",
   });
@@ -76,9 +92,13 @@ test("synchronizer replaces managed claims from staff authority", async () => {
 test("synchronizer emits student identity and disabled suspension", async () => {
   const {service, writes} = createHarness({
     authority: {
+      expiryDate: null,
+      featureFlags: ACTIVE_FEATURE_FLAGS,
+      gracePeriodEndsAt: null,
       instituteId: "inst_claims",
       isSuspended: false,
       licenseLayer: "L1",
+      licenseState: "active",
       licenseVersion: "license-v1",
       role: "student",
       source: "student",
@@ -100,10 +120,14 @@ test("synchronizer emits student identity and disabled suspension", async () => 
 
 test("synchronizer skips an identical claim projection", async () => {
   const customClaims = {
+    expiryDate: "2099-09-26T00:00:00.000Z",
+    featureFlags: ACTIVE_FEATURE_FLAGS,
+    gracePeriodEndsAt: null,
     instituteId: "inst_claims",
     isSuspended: false,
     isVendor: false,
     licenseLayer: "L2",
+    licenseState: "active",
     licenseVersion: "license-v2",
     role: "teacher",
   };
@@ -138,9 +162,13 @@ test("synchronizer rejects a mismatched Auth user", async () => {
 test("synchronizer rejects authority from another institute", async () => {
   const {service, writes} = createHarness({
     authority: {
+      expiryDate: null,
+      featureFlags: ACTIVE_FEATURE_FLAGS,
+      gracePeriodEndsAt: null,
       instituteId: "other_institute",
       isSuspended: false,
       licenseLayer: "L3",
+      licenseState: "active",
       licenseVersion: "license-v3",
       role: "admin",
       source: "staff",
@@ -166,10 +194,14 @@ test("managed-claim clearing retains only external claims", async () => {
   const {service, writes} = createHarness({
     customClaims: {
       externalEntitlement: "retained",
+      expiryDate: "2099-09-26T00:00:00.000Z",
+      featureFlags: ACTIVE_FEATURE_FLAGS,
+      gracePeriodEndsAt: null,
       instituteId: "inst_claims",
       isSuspended: true,
       isVendor: false,
       licenseLayer: "L2",
+      licenseState: "active",
       licenseVersion: "license-v2",
       role: "teacher",
       tenantId: "legacy",

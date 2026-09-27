@@ -1,8 +1,8 @@
 # Frontend API Call Inventory
 
-Status: current frontend inventory and canonical-route authority through `BWM-030`
+Status: current frontend inventory and canonical-route authority through verified BWM-031
 
-Inventory date: 2026-09-25
+Inventory date: 2026-09-27
 
 Scope: executable HTTP calls in `apps/admin/src`, `apps/student/src`, `apps/exam/src`, and `apps/vendor/src`
 
@@ -55,7 +55,7 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 | ADM-13 | `POST` | Retired (no frontend call) | `/api/v1/admin/governance/snapshots` | `intentionally_retired` | Superseded by ADM-49. |
 | ADM-14 | `POST` | `/admin/settings` | `/api/v1/admin/settings` | `implemented` | Shared strict snapshot/action DTOs align. Supported mutations carry UUID command and observed revision authority, use server-derived identity, and report success only after a fresh snapshot verifies the exact receipt, audit, revision, and persisted effect. |
 | ADM-15 | `POST` | `/admin/academicYear/archive` | `/api/v1/admin/academicYear/archive` | `implemented` | Shared irreversible archive intent/receipt aligns exact-label confirmation, expected revision, durable staged replay/recovery, Admin/Vendor authorization, and post-command snapshot reconciliation. |
-| ADM-16 | `POST` | `/admin/licensing` | `/api/v1/admin/licensing` | `incompatible` | Frontend sends `REQUEST_LICENSE_UPGRADE` and expects `data.request`; handler supports only `GET_LICENSE_SNAPSHOT` and returns snapshot data. |
+| ADM-16 | `POST` | `/admin/licensing` | `/api/v1/admin/licensing` | `implemented` | Shared strict snapshot/request DTOs align; the mounted caller sends no identity authority, validates bounded current-only data, retains UUID replay authority, and accepts mutation success only after a fresh authoritative snapshot confirms the request. |
 | ADM-17 | `POST` | Retired (no frontend call) | `/api/v1/admin/interventions` | `intentionally_retired` | Superseded by ADM-53..ADM-55. |
 | ADM-18 | `POST` | Retired (no frontend call) | `/api/v1/admin/questions/assets` | `intentionally retired` | ADM-38 coordinates package assets and ADM-31/ADM-32 coordinate revisioned edit replacements; standalone browser asset upload is no longer authoritative. |
 | ADM-19 | `PATCH` | `/admin/tests/{testId}` | `/api/v1/admin/tests/{testId}` | `implemented` | Edit sends the backend ID and expected numeric version, consumes the strict incremented record, reloads ADM-10, reconciles ID/canonical ID/version, and replaces state only from the reload; stale writes fail with HTTP 409. |
@@ -109,7 +109,7 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 | VEN-01 | `POST` | `/vendor/calibration/simulate` | `/api/v1/vendor/calibration/simulate` | `incompatible` | Frontend sends `strategyProfileParameters`; handler requires `weights`, so the simulation request fails validation/service normalization. |
 | VEN-02 | `POST` | `/vendor/calibration/push` | `/api/v1/vendor/calibration/push` | `implemented` | Vendor auth, target/version request, and consumed deployment response align. |
 
-Canonical classification totals are `implemented` 60, `incompatible` 3,
+Canonical classification totals are `implemented` 62, `incompatible` 1,
 `missing` 0, and `intentionally retired` 5. ADM-30..ADM-55 have strict Admin
 callers and secured gateway handlers. ADM-09, ADM-13, ADM-17, ADM-18, and
 EXM-03 retain explicit retired route keys but no browser caller.
@@ -205,7 +205,7 @@ the mounted interventions destination with authoritative reloads.
 | ADM-13 | Retired (no frontend call) | None | Canonical 404 | Superseded by ADM-49 | None in gateway | No frontend caller |
 | ADM-14 | `POST /admin/settings` | Shared action-discriminated settings intent; mutations require `commandId` and `expectedRevision` and carry no actor/institute authority | Shared strict snapshot or mutation result with exact receipt, audit, optional redacted communication receipt, and authoritative state | Firebase ID; identity tenant; `admin.settings.read` admits Admin L0 or Director L3, while mutation requires Admin L0 `admin.settings.manage`; suspended/unlicensed/tenant-missing identities fail closed | `adminSettings` (`api/adminSettings.ts`) | Mounted settings workspace through `features/settings/settingsDataset.ts`; every mutation requires a fresh ADM-14 snapshot reconciliation |
 | ADM-15 | `POST /admin/academicYear/archive` | Shared archive intent with `academicYearId`, exact `confirmationLabel`, `confirmed`, UUID `commandId`, and `expectedRevision` | Shared staged archive receipt with replay, revision, audit, and recovery checkpoints | Firebase ID; Admin L0 in identity tenant or separately authorized Vendor target; locked year and terminal run/session guards | `adminAcademicYearArchive` (`api/adminAcademicYearArchive.ts`) | Mounted academic-year settings flow through `features/settings/settingsDataset.ts`; success requires a fresh ADM-14 snapshot proving archived state and audit |
-| ADM-16 | `POST /admin/licensing` | `AdminLicensingRequest` actions `GET_LICENSE_SNAPSHOT` or `REQUEST_LICENSE_UPGRADE` | `AdminLicensingApiResponse` | Firebase ID; `admin` or `director`; identity/body tenant, no vendor bypass; no license middleware | `adminLicensing` (`api/adminLicensing.ts`) | `features/licensing/licensingDataset.ts` |
+| ADM-16 | `POST /admin/licensing` | Shared `AdminLicensingPublicRequest`: snapshot intent has no payload; upgrade/evaluation intent carries only expected license version, UUID idempotency key, request kind, requested plan, and 15-1000-character reason | Shared strict snapshot or applied/replayed request receipt plus authoritative snapshot; request creation atomically persists one pending request, one-open sentinel, hashed command, and immutable audit without mutating entitlement | Firebase ID; complete active entitlement; server-derived identity tenant with no body override or vendor bypass; `admin.license.read` admits Admin L0 or Director L3; request is Admin-only via `admin.license.upgrade_request`, expected-version and published-higher-plan guarded; L3 requires evaluation | `adminLicensing` (`api/adminLicensing.ts`) | Mounted `AdminLicensingWorkspace.tsx` through strict `features/licensing/licensingDataset.ts`; request success requires a fresh ADM-16 snapshot proving the same request/version, fixture mode is unavailable, and provider actions are used instead of browser-generated invoices |
 | ADM-17 | Retired (no frontend call) | None | Canonical 404 | Superseded by ADM-53..ADM-55 | None in gateway | No frontend caller |
 | ADM-18 | Retired (no frontend call) | None | Canonical 404 | Legacy direct export is internal-only | None in gateway | Superseded by ADM-31/ADM-32 and ADM-38 |
 | ADM-19 | `PATCH /admin/tests/{testId}` | Shared `AdminTestTemplateUpdateRequest` with path ID and positive `expectedVersion` | Shared `AdminTestTemplateUpdateResult`, strictly adapted with the same ID and exactly incremented numeric version | Firebase ID; `teacher` or `admin`; identity tenant; stale/locked writes return `CONFLICT` | `adminTests` (`api/adminTests.ts`) | `features/tests/TestTemplateManagementPage.tsx` |
@@ -268,8 +268,8 @@ the mounted interventions destination with authoritative reloads.
 
 ## Classification summary for the current tree
 
-- The 60 `implemented` entries are handler-compatible through the common gateway and same-origin Hosting rewrite; each owning flow retains its task-specific verification ownership.
-- The 3 `incompatible` entries require contract repair by their remaining owning tasks before those affected flows can be considered wired.
+- The 62 `implemented` entries are handler-compatible through the common gateway and same-origin Hosting rewrite; each owning flow retains its task-specific verification ownership.
+- The one `incompatible` entry, VEN-01 calibration simulation, requires contract repair by its remaining owning task before that flow can be considered wired.
 - No canonical route is currently `missing`; ADM-24 through ADM-29 are implemented and consumed with permanent BWM-026 emulator/browser proof.
 - ADM-09, ADM-13, ADM-17, ADM-18, and EXM-03 are intentionally retired; their superseding canonical flows own browser dispatch and the gateway serves no handler for them.
 

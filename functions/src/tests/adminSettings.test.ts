@@ -261,6 +261,8 @@ test("staff lifecycle is revisioned around deterministic Auth identities and exa
   });
   await firestore.doc(`${institutePath}/license/current`).set({
     currentLayer: "L3",
+    featureFlags: {},
+    licenseState: "active",
     licenseVersion: "license-v1",
   });
   const service = new AdminSettingsService({firestore, now: () => FIXED_TIME});

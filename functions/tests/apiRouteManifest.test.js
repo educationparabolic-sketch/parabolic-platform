@@ -352,6 +352,29 @@ test(
   },
 );
 
+test("canonical route status accounting is exact", () => {
+  const statusCounts = API_ROUTE_MANIFEST.reduce((counts, route) => {
+    counts[route.status] += 1;
+    return counts;
+  }, {
+    implemented: 0,
+    incompatible: 0,
+    intentionally_retired: 0,
+    missing: 0,
+  });
+
+  assert.deepEqual(statusCounts, {
+    implemented: 62,
+    incompatible: 1,
+    intentionally_retired: 5,
+    missing: 0,
+  });
+  assert.equal(
+    API_ROUTE_MANIFEST.find((route) => route.id === "ADM-16")?.status,
+    "implemented",
+  );
+});
+
 test("every HTTP Functions export has one manifest disposition", () => {
   const indexSource = readFileSync(
     path.join(WORKSPACE_ROOT, "functions/src/index.ts"),

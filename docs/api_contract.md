@@ -2,7 +2,7 @@
 
 Status: canonical route and response-envelope contract
 
-Last reconciled: 2026-09-25 (`BWM-030` settings, staff Auth, and academic-year operations closeout)
+Last reconciled: 2026-09-27 (`BWM-031` verified licensing closeout)
 
 ## Sources of truth
 
@@ -40,7 +40,7 @@ If prose and the typed manifest disagree about a route key or status, the typed 
 - `missing`: no current Functions handler/export implements the canonical contract.
 - `intentionally_retired`: explicit product/architecture evidence says the route must not be served.
 
-Current totals: 61 implemented, 2 incompatible, 0 missing, 5 intentionally retired.
+Current totals: 62 implemented, 1 incompatible, 0 missing, 5 intentionally retired.
 
 Routes marked `planned` in the code manifest are canonical contracts reserved by
 the active owning task and do not count as executable frontend tuples. They stay
@@ -67,7 +67,7 @@ frontend caller. Frontend-declared routes retain bidirectional source coverage.
 | ADM-13 | `POST /api/v1/admin/governance/snapshots` | `intentionally_retired` | None | Superseded by query-canonical ADM-49; no canonical browser dispatch |
 | ADM-14 | `POST /api/v1/admin/settings` | `implemented` | `adminSettings` | Firebase ID; admin/director; identity tenant; Admin L0 mutation, Director L3 read-only; strict revision/idempotency authority |
 | ADM-15 | `POST /api/v1/admin/academicYear/archive` | `implemented` | `adminAcademicYearArchive` | Firebase ID; admin L0 or separately authorized vendor target; irreversible confirmation; durable replay/recovery authority |
-| ADM-16 | `POST /api/v1/admin/licensing` | `incompatible` | `adminLicensing` | Firebase ID; admin/director; guarded tenant |
+| ADM-16 | `POST /api/v1/admin/licensing` | `implemented` | `adminLicensing` | Firebase ID; complete active entitlement; identity tenant; Admin L0 or Director L3 strict snapshot; Admin-only replay-safe higher-plan request; mounted strict caller with authoritative reload reconciliation |
 | ADM-17 | `POST /api/v1/admin/interventions` | `intentionally_retired` | None | Superseded by advisory ADM-53..ADM-55; no canonical browser dispatch |
 | ADM-18 | `POST /api/v1/admin/questions/assets` | `intentionally_retired` | None | Superseded by package-coordinated assets and revisioned ADM-31/ADM-32 replacements; no canonical browser dispatch |
 | ADM-19 | `PATCH /api/v1/admin/tests/{testId}` | `implemented` | `adminTests` | Firebase ID; teacher/admin; identity tenant; expected version |
@@ -344,6 +344,8 @@ Unmapped exports remain directly exported legacy Functions until an owning task 
 Normal portal calls require a verified Firebase ID token. Server middleware derives actor, role, tenant, license, suspension, and Student identity context from verified claims rather than editable request fields. Tenant-bound identities without a non-empty institute claim receive `403 TENANT_MISMATCH`; a supplied request institute must match the claim. Exam start/entry/activation/answer/submit use the verified Student identity, while staff-selected Student IDs are verified under the authenticated institute subtree before data access or mutation.
 
 Immediately after successful token verification, a truthy `isSuspended` claim terminates the request with canonical `403 FORBIDDEN` and message `Account access is suspended.` Identity context, student activation, role/license/tenant middleware, and business handlers do not run for that request. Claim synchronization, token refresh, and revocation latency remain governed by BWM-009 and BWM-036.
+
+Institute license-aware authorization uses one complete verified-claim tuple: `licenseLayer`, the five canonical `featureFlags`, `licenseVersion`, `licenseState`, nullable `expiryDate`, and nullable `gracePeriodEndsAt`. Claim synchronization reads only `institutes/{instituteId}/license/current`, normalizes elapsed active expiry or elapsed/missing grace deadlines to expired, and emits L0 with disabled licensed features for non-active authority. Privileged license/capability middleware rejects missing tuple fields, grace, elapsed deadlines, and expired state before layer/feature evaluation; an expired initiating identity has its refresh tokens revoked. Reviewed Vendor bypass remains outside institute entitlement. Browser global state applies the same time-aware fail-closed L0/disabled-feature projection for route and control evaluation. BWM-036 retains fleet-wide Vendor-mutation propagation, retry/latency guarantees, and complete stale-session proof.
 
 Exam entry is a credential-exchange boundary. The Exam app exchanges the short-lived launch credential through Firebase Auth, removes it from URL/history before runtime entry, atomically consumes it through EXM-01, and uses refreshed session-bound Firebase ID tokens for EXM-01, EXM-02, EXM-04, and EXM-05. The raw launch credential is never used as bearer authorization and cannot be replayed at entry.
 

@@ -27,10 +27,15 @@ test("middleware framework executes middleware in order", async () => {
       async (request, _response, next) => {
         executionOrder.push("first");
         setRequestIdentity(request, {
+          expiryDate: null,
+          featureFlags: {},
+          gracePeriodEndsAt: null,
           instituteId: "inst_build_61",
           isSuspended: false,
           isVendor: false,
           licenseLayer: "L1",
+          licenseState: "active",
+          licenseVersion: "license-framework-v1",
           role: "teacher",
           studentId: null,
           uid: "uid_build_61",
@@ -132,10 +137,15 @@ test("middleware framework returns standardized license errors", async () => {
     middlewares: [
       async (request, _response, next) => {
         setRequestIdentity(request, {
+          expiryDate: null,
+          featureFlags: {},
+          gracePeriodEndsAt: null,
           instituteId: "inst_build_65",
           isSuspended: false,
           isVendor: false,
           licenseLayer: "L1",
+          licenseState: "active",
+          licenseVersion: "license-framework-v1",
           role: "teacher",
           studentId: null,
           uid: "uid_build_65",

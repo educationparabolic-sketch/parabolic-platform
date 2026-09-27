@@ -114,9 +114,14 @@ test(
           activationCalls.push(input);
         },
         verifyIdToken: async () => ({
+          expiryDate: "2099-09-26T00:00:00.000Z",
+          featureFlags: {riskOverview: true},
+          gracePeriodEndsAt: null,
           instituteId: "inst_build_62",
           isSuspended: false,
           licenseLayer: "l2",
+          licenseState: "active",
+          licenseVersion: "license-auth-v2",
           role: "Student",
           studentId: "student_build_62",
           uid: "uid_build_62",
@@ -148,11 +153,21 @@ test(
       (request as {context: {identity: unknown}}).context.identity,
       {
         examSession: null,
-        featureFlags: {},
+        expiryDate: "2099-09-26T00:00:00.000Z",
+        featureFlags: {
+          adaptivePhase: false,
+          controlledMode: false,
+          governanceAccess: false,
+          hardMode: false,
+          riskOverview: true,
+        },
+        gracePeriodEndsAt: null,
         instituteId: "inst_build_62",
         isSuspended: false,
         isVendor: false,
         licenseLayer: "L2",
+        licenseState: "active",
+        licenseVersion: "license-auth-v2",
         role: "student",
         studentId: "student_build_62",
         uid: "uid_build_62",
@@ -208,6 +223,24 @@ test("buildIdentityContext rejects partial exam session claims", () => {
       error instanceof MiddlewareRejectionError &&
       error.code === "UNAUTHORIZED" &&
       error.message === "Authentication token has incomplete exam session claims.",
+  );
+});
+
+test("buildIdentityContext rejects malformed entitlement timestamps", () => {
+  assert.throws(
+    () => buildIdentityContext({
+      expiryDate: "not-a-date",
+      instituteId: "inst_auth",
+      licenseLayer: "L1",
+      licenseState: "active",
+      licenseVersion: "license-auth-v1",
+      role: "admin",
+      uid: "admin_auth",
+    } as never),
+    (error: unknown) =>
+      error instanceof MiddlewareRejectionError &&
+      error.code === "UNAUTHORIZED" &&
+      /malformed license entitlement/.test(error.message),
   );
 });
 

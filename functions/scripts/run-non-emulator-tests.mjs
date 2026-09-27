@@ -29,6 +29,7 @@ const selectedSourceSuites = [
   "adminTestsApi.test",
   "apiErrorHandling.test",
   "authMiddleware.test",
+  "capabilityMiddleware.test",
   "cdnArchitecture.test",
   "cdnCachePolicy.test",
   "cdnMonitoring.test",

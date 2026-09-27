@@ -40,7 +40,7 @@ export interface AdminOverviewSnapshot {
     testsConducted: number;
     testsScheduled: number;
     lastTestCompletionRatePercent: number;
-    billingCount: number;
+    billingCount: number | null;
     activeConcurrentSessions: number;
   };
   currentActivity: {
@@ -98,10 +98,10 @@ export interface AdminOverviewSnapshot {
   };
   systemHealthAndLicensing: {
     currentLayerBadge: LicenseLayer;
-    eligibilityL1Percentage: number;
-    eligibilityL2Percentage: number;
-    activeStudentCount: number;
-    peakConcurrencyThisMonth: number;
+    eligibilityL1Percentage: number | null;
+    eligibilityL2Percentage: number | null;
+    activeStudentCount: number | null;
+    peakConcurrencyThisMonth: number | null;
     storageUsageSummary: string;
     lastArchiveDate: string;
     academicYearLockStatus: string;
@@ -262,6 +262,10 @@ function toNumberOrZero(value: unknown): number {
   }
 
   return 0;
+}
+
+function toOptionalNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function toNonEmptyString(value: unknown, fallback: string): string {
@@ -443,7 +447,7 @@ function normalizeOverviewSnapshot(payload: unknown): AdminOverviewSnapshot {
       testsConducted: toNumberOrZero(operationalSource?.testsConducted),
       testsScheduled: toNumberOrZero(operationalSource?.testsScheduled),
       lastTestCompletionRatePercent: toNumberOrZero(operationalSource?.lastTestCompletionRatePercent),
-      billingCount: toNumberOrZero(operationalSource?.billingCount),
+      billingCount: toOptionalNumber(operationalSource?.billingCount),
       activeConcurrentSessions: toNumberOrZero(operationalSource?.activeConcurrentSessions),
     },
     currentActivity: {
@@ -509,10 +513,10 @@ function normalizeOverviewSnapshot(payload: unknown): AdminOverviewSnapshot {
     },
     systemHealthAndLicensing: {
       currentLayerBadge: toLayer(systemSource?.currentLayerBadge, fallback.systemHealthAndLicensing.currentLayerBadge),
-      eligibilityL1Percentage: toNumberOrZero(systemSource?.eligibilityL1Percentage),
-      eligibilityL2Percentage: toNumberOrZero(systemSource?.eligibilityL2Percentage),
-      activeStudentCount: toNumberOrZero(systemSource?.activeStudentCount),
-      peakConcurrencyThisMonth: toNumberOrZero(systemSource?.peakConcurrencyThisMonth),
+      eligibilityL1Percentage: toOptionalNumber(systemSource?.eligibilityL1Percentage),
+      eligibilityL2Percentage: toOptionalNumber(systemSource?.eligibilityL2Percentage),
+      activeStudentCount: toOptionalNumber(systemSource?.activeStudentCount),
+      peakConcurrencyThisMonth: toOptionalNumber(systemSource?.peakConcurrencyThisMonth),
       storageUsageSummary: toNonEmptyString(systemSource?.storageUsageSummary, fallback.systemHealthAndLicensing.storageUsageSummary),
       lastArchiveDate: toNonEmptyString(systemSource?.lastArchiveDate, fallback.systemHealthAndLicensing.lastArchiveDate),
       academicYearLockStatus: toNonEmptyString(systemSource?.academicYearLockStatus, fallback.systemHealthAndLicensing.academicYearLockStatus),
@@ -527,6 +531,10 @@ export function shouldUseLiveApi(): boolean {
 
 export function formatPercent(value: number): string {
   return `${Math.round(value)}%`;
+}
+
+export function formatOptionalPercent(value: number | null): string {
+  return value === null ? "Unavailable" : formatPercent(value);
 }
 
 export function formatIsoDate(value: string): string {

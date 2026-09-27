@@ -9,6 +9,7 @@ import type {
   LicenseEligibilityFlags,
   LicenseFeatureFlags,
   LicenseObjectModel,
+  LicenseState,
 } from "../types/globalPortalState";
 import type { LicenseLayer, PortalRole } from "../types/portalRouting";
 import type { PortalKey } from "./portalManifest";
@@ -106,6 +107,11 @@ function readString(value: unknown): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
+function readTimestamp(value: unknown): string | null {
+  const normalized = readString(value);
+  return normalized && !Number.isNaN(new Date(normalized).getTime()) ? normalized : null;
+}
+
 function readRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
 }
@@ -144,25 +150,61 @@ function resolveLicenseEligibilityFlags(claims: Record<string, unknown> | null):
   };
 }
 
-function resolveLicenseObjectModel(claims: Record<string, unknown> | null): LicenseObjectModel {
+function resolveLicenseState(value: unknown): LicenseState | null {
+  const normalized = readString(value)?.toLowerCase();
+  return normalized === "active" || normalized === "grace" || normalized === "expired"
+    ? normalized
+    : null;
+}
+
+function resolveLicenseObjectModel(
+  claims: Record<string, unknown> | null,
+  now: Date,
+): LicenseObjectModel {
   const licenseClaims = readRecord(claims?.license);
-  const featureFlags = resolveLicenseFeatureFlags(claims);
+  const claimedFeatureFlags = resolveLicenseFeatureFlags(claims);
   const eligibilityFlags = resolveLicenseEligibilityFlags(claims);
+  const claimedLayer =
+    normalizeLicenseLayer(claims?.licenseLayer) ??
+    normalizeLicenseLayer(licenseClaims?.currentLayer) ??
+    null;
+  const licenseVersion = readString(
+    claims?.licenseVersion ?? licenseClaims?.licenseVersion,
+  );
+  const expiryDate = readTimestamp(
+    claims?.expiryDate ?? licenseClaims?.expiryDate,
+  );
+  const gracePeriodEndsAt = readTimestamp(
+    claims?.gracePeriodEndsAt ?? licenseClaims?.gracePeriodEndsAt,
+  );
+  let status = resolveLicenseState(
+    claims?.licenseState ?? claims?.licenseStatus ?? licenseClaims?.licenseState ?? licenseClaims?.status,
+  );
+  if (!claimedLayer || !licenseVersion || !status) {
+    status = null;
+  } else if (status === "active" && expiryDate && new Date(expiryDate).getTime() <= now.getTime()) {
+    status = "expired";
+  } else if (
+    status === "grace" &&
+    (!gracePeriodEndsAt || new Date(gracePeriodEndsAt).getTime() <= now.getTime())
+  ) {
+    status = "expired";
+  }
+  const entitlementActive = status === "active";
 
   return {
-    currentLayer:
-      normalizeLicenseLayer(claims?.licenseLayer) ??
-      normalizeLicenseLayer(licenseClaims?.currentLayer) ??
-      null,
+    currentLayer: entitlementActive ? claimedLayer : status ? "L0" : null,
     planName: readString(licenseClaims?.planName ?? claims?.planName),
     billingCycle: readString(licenseClaims?.billingCycle ?? claims?.billingCycle),
     startDate: readString(licenseClaims?.startDate ?? claims?.startDate),
-    expiryDate: readString(licenseClaims?.expiryDate ?? claims?.expiryDate),
+    expiryDate,
+    gracePeriodEndsAt,
     maxStudents: readNumber(licenseClaims?.maxStudents ?? claims?.maxStudents),
     maxConcurrent: readNumber(licenseClaims?.maxConcurrent ?? claims?.maxConcurrent),
     eligibilityFlags,
-    featureFlags,
-    status: readString(licenseClaims?.status ?? claims?.licenseStatus),
+    featureFlags: entitlementActive ? claimedFeatureFlags : EMPTY_LICENSE_FEATURE_FLAGS,
+    licenseVersion,
+    status,
   };
 }
 
@@ -212,13 +254,14 @@ function isCapabilityLicensed(capability: BackendLicensedCapability, flags: Lice
 }
 
 export function resolveGlobalPortalState(input: {
+  now?: Date;
   portal: PortalKey;
   session: AuthSession;
 }): GlobalPortalState {
   const { portal, session } = input;
   const claims = decodeIdTokenClaims(session.idToken);
   const role = normalizePortalRole(claims?.role ?? claims?.userRole);
-  const license = resolveLicenseObjectModel(claims);
+  const license = resolveLicenseObjectModel(claims, input.now ?? new Date());
   const globalFeatureFlags = resolveGlobalFeatureFlags(claims);
   const licenseLayer = license.currentLayer;
 

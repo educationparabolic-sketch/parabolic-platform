@@ -3,6 +3,7 @@ import {DecodedIdToken} from "firebase-admin/auth";
 import {sendErrorResponse} from "../services/apiResponse";
 import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
 import {createAuthenticationMiddleware} from "../middleware/auth";
+import {createCapabilityAuthorizationMiddleware} from "../middleware/capability";
 import {
   createMethodMiddleware,
   createMiddlewareHandler,
@@ -13,7 +14,6 @@ import {createRoleAuthorizationMiddleware} from "../middleware/role";
 import {createTenantGuardMiddleware} from "../middleware/tenant";
 import {adminLicensingService} from "../services/adminLicensing";
 import {
-  AdminLicensingRequest,
   AdminLicensingSuccessResponse,
   AdminLicensingValidatedRequest,
   AdminLicensingValidationError,
@@ -32,7 +32,9 @@ const buildSuccessResponse = (
 ): AdminLicensingSuccessResponse => ({
   code: "OK",
   data: result,
-  message: "Licensing snapshot loaded.",
+  message: result.actionType === "REQUEST_LICENSE_UPGRADE" ?
+    "Licensing request submitted for vendor review." :
+    "Licensing snapshot loaded.",
   requestId,
   success: true,
   timestamp,
@@ -62,28 +64,33 @@ export const createAdminLicensingHandler = (
     createAuthenticationMiddleware(dependencies),
     createTenantGuardMiddleware({
       allowVendorBypass: false,
-      resolveRequestInstituteId: (request): string | null => {
-        const body = (request.body ?? {}) as Partial<AdminLicensingRequest>;
-        return typeof body.instituteId === "string" ?
-          body.instituteId :
-          request.context.identity?.instituteId ?? null;
-      },
+      resolveRequestInstituteId: (request): string | null =>
+        request.context.identity?.instituteId ?? null,
     }),
     createRoleAuthorizationMiddleware({
       allowedRoles: ["admin", "director"],
       forbiddenMessage:
         "Only admin and director roles can access licensing configuration.",
     }),
+    createCapabilityAuthorizationMiddleware({
+      minimumLicenseLayer: "L0",
+      roleMinimumLicenseLayers: {director: "L3"},
+    }),
     createRequestValidationMiddleware({
       validator: (request: MiddlewareRequest): void => {
-        const body = (request.body ?? {}) as Partial<AdminLicensingRequest>;
+        const body = (request.body ?? {}) as Record<string, unknown>;
         const identity = request.context.identity;
         const validatedRequest = adminLicensingService.normalizeRequest({
           actionType: body.actionType,
           actorId: identity?.uid,
           actorRole: identity?.role,
-          instituteId: identity?.instituteId ?? body.instituteId,
+          expectedLicenseVersion: body.expectedLicenseVersion,
+          idempotencyKey: body.idempotencyKey,
+          instituteId: identity?.instituteId ?? undefined,
           ipAddress: request.ip,
+          reason: body.reason,
+          requestedPlanId: body.requestedPlanId,
+          requestKind: body.requestKind,
           userAgent: request.header("user-agent"),
         });
 

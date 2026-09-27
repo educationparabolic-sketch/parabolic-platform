@@ -1,107 +1,42 @@
 /* eslint-disable require-jsdoc */
 import {StandardApiErrorCode} from "./apiResponse";
+import type {
+  AdminLicensingResult as SharedAdminLicensingResult,
+  AdminLicensingPublicRequest,
+  AdminLicenseLayer,
+  AdminLicenseSnapshotRequest,
+  AdminLicenseUpgradeRequestIntent,
+} from "../../../shared/contracts/adminLicensing";
 
-export type AdminLicensingActionType = "GET_LICENSE_SNAPSHOT";
-export type LicenseLayer = "L0" | "L1" | "L2" | "L3";
-export type LicensingCapabilityState = "enabled" | "locked";
-export type LicensingEligibilityStatus = "eligible" | "in_progress" | "locked";
+export type {
+  AdminLicensingActionType,
+  AdminLicensingPublicRequest,
+  AdminLicensingResolvedAuthority,
+  AdminLicenseLayer,
+  AdminLicenseSnapshot,
+  AdminLicenseUpgradeRequestIntent,
+  AdminLicenseUpgradeRequestReceipt,
+  LicenseEntitlementClaimContract,
+} from "../../../shared/contracts/adminLicensing";
 
-export interface LicensingCurrentPlanSnapshot {
-  currentLayer: LicenseLayer;
-  planName: string;
-  licenseStartDate: string;
-  expiryDate: string;
-  renewalDate: string;
-  billingCycle: string;
-  activeStudentCount: number;
-  maxStudentLimit: number;
-  concurrencyLimit: number;
-  attemptsUsedThisMonth: number;
-  attemptsQuotaThisMonth: number;
-}
+export type LicenseLayer = AdminLicenseLayer;
 
-export interface LicensingFeatureMatrixRow {
-  feature: string;
-  description: string;
-  layers: Record<LicenseLayer, LicensingCapabilityState>;
-}
+export type AdminLicensingRequest = AdminLicensingPublicRequest;
 
-export interface LicensingEligibilityChecklistItem {
-  id: string;
-  label: string;
-  met: boolean;
-}
-
-export interface LicensingEligibilityStageSnapshot {
-  stage: string;
-  label: string;
-  status: LicensingEligibilityStatus;
-  summary: string;
-  checklist: LicensingEligibilityChecklistItem[];
-  progressCurrent: number;
-  progressTarget: number;
-}
-
-export interface LicensingUsageAndBillingSnapshot {
-  activeStudents: number;
-  maxStudentsAllowed: number;
-  remainingStudentSlots: number;
-  attemptsUsed: number;
-  attemptsRemaining: number;
-  peakConcurrency: number;
-  maxConcurrentAllowed: number;
-  estimatedCurrentBill: string;
-  nextBillingDate: string;
-  actions: {
-    downloadInvoiceUrl: string;
-    viewBillingHistoryUrl: string;
-    updatePaymentMethodUrl: string;
-    contactSupportUrl: string;
-  };
-}
-
-export interface LicensingUpgradePreviewSnapshot {
-  currentLayer: LicenseLayer;
-  previewCards: string[];
-  requestUpgradeUrl: string;
-  scheduleEvaluationUrl: string;
-}
-
-export interface LicensingHistoryEntrySnapshot {
-  eventId: string;
-  timestamp: string;
-  previousLayer: LicenseLayer;
-  newLayer: LicenseLayer;
-  billingChange: string;
-  reason: string;
-  actor: string;
-}
-
-export interface AdminLicensingSnapshot {
-  currentPlan: LicensingCurrentPlanSnapshot;
-  featureMatrix: LicensingFeatureMatrixRow[];
-  eligibilityProgress: LicensingEligibilityStageSnapshot[];
-  usageAndBilling: LicensingUsageAndBillingSnapshot;
-  upgradePreview: LicensingUpgradePreviewSnapshot;
-  licenseHistory: LicensingHistoryEntrySnapshot[];
-}
-
-export interface AdminLicensingRequest {
-  instituteId: string;
-  actionType: AdminLicensingActionType;
-}
-
-export interface AdminLicensingValidatedRequest extends AdminLicensingRequest {
+interface AdminLicensingResolvedRequestAuthority {
   actorId: string;
   actorRole: string;
+  instituteId: string;
   ipAddress?: string;
   userAgent?: string;
 }
 
-export interface AdminLicensingResult {
-  actionType: AdminLicensingActionType;
-  snapshot: AdminLicensingSnapshot;
-}
+export type AdminLicensingValidatedRequest = (
+  | AdminLicenseSnapshotRequest
+  | AdminLicenseUpgradeRequestIntent
+) & AdminLicensingResolvedRequestAuthority;
+
+export type AdminLicensingResult = SharedAdminLicensingResult;
 
 export interface AdminLicensingSuccessResponse {
   success: true;

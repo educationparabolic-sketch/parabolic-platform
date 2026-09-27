@@ -4,6 +4,7 @@ import { CAPABILITY_MATRIX } from "../../../../shared/contracts/capabilityPolicy
 const ADMIN_TEACHER_ROLES = CAPABILITY_MATRIX["admin.students.read"].allowedRoles;
 const ADMIN_TEACHER_DIRECTOR_ROLES = CAPABILITY_MATRIX["admin.overview.read"].allowedRoles;
 const ADMIN_SETTINGS_READ_POLICY = CAPABILITY_MATRIX["admin.settings.read"];
+const ADMIN_LICENSE_READ_POLICY = CAPABILITY_MATRIX["admin.license.read"];
 
 export interface AdminRouteDefinition {
   path: string;
@@ -452,7 +453,9 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     section: "Licensing",
     description: "Institute license overview with vendor-controlled parameters, usage, billing, upgrade requests, and history.",
     mountedPath: "/admin/licensing/current",
-    allowedRoles: ["admin", "director"],
+    allowedRoles: ADMIN_LICENSE_READ_POLICY.allowedRoles,
+    minimumLicenseLayer: ADMIN_LICENSE_READ_POLICY.minimumLicenseLayer ?? undefined,
+    roleMinimumLicenseLayers: ADMIN_LICENSE_READ_POLICY.roleMinimumLicenseLayers,
     readOnlyRoles: ["director"],
   },
   {
@@ -460,7 +463,9 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Current License",
     section: "Licensing",
     description: "Read-only vendor-assigned plan, subscription term, fees, and operating limits.",
-    allowedRoles: ["admin", "director"],
+    allowedRoles: ADMIN_LICENSE_READ_POLICY.allowedRoles,
+    minimumLicenseLayer: ADMIN_LICENSE_READ_POLICY.minimumLicenseLayer ?? undefined,
+    roleMinimumLicenseLayers: ADMIN_LICENSE_READ_POLICY.roleMinimumLicenseLayers,
     readOnlyRoles: ["director"],
   },
   {
@@ -468,15 +473,19 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Usage & Billing",
     section: "Licensing",
     description: "Current-cycle usage, vendor-calculated charges, and read-only invoice status.",
-    allowedRoles: ["admin", "director"],
+    allowedRoles: ADMIN_LICENSE_READ_POLICY.allowedRoles,
+    minimumLicenseLayer: ADMIN_LICENSE_READ_POLICY.minimumLicenseLayer ?? undefined,
+    roleMinimumLicenseLayers: ADMIN_LICENSE_READ_POLICY.roleMinimumLicenseLayers,
     readOnlyRoles: ["director"],
   },
   {
     path: "/admin/licensing/plans",
     title: "Plans & Upgrade",
     section: "Licensing",
-    description: "Published Trial and L0-L2 plans with an institute-to-vendor upgrade request workflow.",
-    allowedRoles: ["admin", "director"],
+    description: "Published L0-L3 plans with a capability-aligned institute-to-vendor request workflow.",
+    allowedRoles: ADMIN_LICENSE_READ_POLICY.allowedRoles,
+    minimumLicenseLayer: ADMIN_LICENSE_READ_POLICY.minimumLicenseLayer ?? undefined,
+    roleMinimumLicenseLayers: ADMIN_LICENSE_READ_POLICY.roleMinimumLicenseLayers,
     readOnlyRoles: ["director"],
   },
   {
@@ -484,7 +493,9 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "License History",
     section: "Licensing",
     description: "Historical visibility into institute licensing changes without vendor mutation controls.",
-    allowedRoles: ["admin", "director"],
+    allowedRoles: ADMIN_LICENSE_READ_POLICY.allowedRoles,
+    minimumLicenseLayer: ADMIN_LICENSE_READ_POLICY.minimumLicenseLayer ?? undefined,
+    roleMinimumLicenseLayers: ADMIN_LICENSE_READ_POLICY.roleMinimumLicenseLayers,
     readOnlyRoles: ["director"],
   },
 ];

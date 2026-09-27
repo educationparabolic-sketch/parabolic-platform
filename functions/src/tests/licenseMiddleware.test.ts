@@ -12,6 +12,14 @@ import {
   createMockResponse,
 } from "./helpers/http";
 
+const ACTIVE_ENTITLEMENT = {
+  expiryDate: "2099-09-26T00:00:00.000Z",
+  featureFlags: {},
+  gracePeriodEndsAt: null,
+  licenseState: "active" as const,
+  licenseVersion: "license-middleware-v1",
+};
+
 test(
   "license middleware rejects requests without identity context",
   async () => {
@@ -45,6 +53,7 @@ test(
     let nextCalled = false;
 
     setRequestIdentity(request as never, {
+      ...ACTIVE_ENTITLEMENT,
       instituteId: "inst_build_65",
       isSuspended: false,
       isVendor: false,
@@ -74,6 +83,7 @@ test("license middleware rejects insufficient license layers", async () => {
   const request = createMockRequest();
 
   setRequestIdentity(request as never, {
+    ...ACTIVE_ENTITLEMENT,
     instituteId: "inst_build_65",
     isSuspended: false,
     isVendor: false,
@@ -107,6 +117,7 @@ test(
     const request = createMockRequest();
 
     setRequestIdentity(request as never, {
+      ...ACTIVE_ENTITLEMENT,
       instituteId: "inst_build_65",
       isSuspended: false,
       isVendor: false,
@@ -136,4 +147,81 @@ test("isLicenseLayerSufficient follows the architecture layer order", () => {
   assert.equal(isLicenseLayerSufficient("L0", "L0"), true);
   assert.equal(isLicenseLayerSufficient("L2", "L1"), true);
   assert.equal(isLicenseLayerSufficient("L1", "L2"), false);
+});
+
+test("license middleware rejects grace without revoking the identity", async () => {
+  const revoked: string[] = [];
+  const middleware = createLicenseEnforcementMiddleware({
+    enforcementDependencies: {
+      now: () => new Date("2026-09-26T00:00:00.000Z"),
+      revokeRefreshTokens: async (uid) => {
+        revoked.push(uid);
+      },
+    },
+    requiredLayer: "L1",
+  });
+  const request = createMockRequest();
+  setRequestIdentity(request as never, {
+    ...ACTIVE_ENTITLEMENT,
+    gracePeriodEndsAt: "2026-10-03T00:00:00.000Z",
+    instituteId: "inst_grace",
+    isSuspended: false,
+    isVendor: false,
+    licenseLayer: "L3",
+    licenseState: "grace",
+    role: "admin",
+    studentId: null,
+    uid: "admin_grace",
+  });
+
+  await assert.rejects(
+    async () => middleware(
+      request as never,
+      createMockResponse() as never,
+      async (): Promise<void> => undefined,
+    ),
+    (error: unknown) =>
+      error instanceof MiddlewareRejectionError &&
+      error.code === "LICENSE_RESTRICTED" &&
+      /grace state/.test(error.message),
+  );
+  assert.deepEqual(revoked, []);
+});
+
+test("license middleware revokes an initiating identity with elapsed expiry", async () => {
+  const revoked: string[] = [];
+  const middleware = createLicenseEnforcementMiddleware({
+    enforcementDependencies: {
+      now: () => new Date("2026-09-26T00:00:00.000Z"),
+      revokeRefreshTokens: async (uid) => {
+        revoked.push(uid);
+      },
+    },
+    requiredLayer: "L1",
+  });
+  const request = createMockRequest();
+  setRequestIdentity(request as never, {
+    ...ACTIVE_ENTITLEMENT,
+    expiryDate: "2026-09-25T23:59:59.000Z",
+    instituteId: "inst_expired",
+    isSuspended: false,
+    isVendor: false,
+    licenseLayer: "L3",
+    role: "admin",
+    studentId: null,
+    uid: "admin_expired",
+  });
+
+  await assert.rejects(
+    async () => middleware(
+      request as never,
+      createMockResponse() as never,
+      async (): Promise<void> => undefined,
+    ),
+    (error: unknown) =>
+      error instanceof MiddlewareRejectionError &&
+      error.code === "LICENSE_RESTRICTED" &&
+      /expired/.test(error.message),
+  );
+  assert.deepEqual(revoked, ["admin_expired"]);
 });
