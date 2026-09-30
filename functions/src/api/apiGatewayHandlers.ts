@@ -27,6 +27,7 @@ import {
 } from "./adminQuestionUploadLogs";
 import {handleAdminRunsRequest} from "./adminRuns";
 import {handleAdminSettingsRequest} from "./adminSettings";
+import {handleAdminSupportRequest} from "./adminSupport";
 import {
   handleAdminStudentOnboardingResendRequest,
 } from "./adminStudentOnboardingResend";
@@ -58,6 +59,7 @@ import {
 import {
   handleVendorCalibrationSimulationRequest,
 } from "./vendorCalibrationSimulation";
+import {handleVendorSupportRequest} from "./vendorSupport";
 
 export type ApiGatewayHandler = (
   request: functions.https.Request,
@@ -83,6 +85,7 @@ Record<string, ApiGatewayHandler>
   adminQuestionUploadLogs: handleAdminQuestionUploadLogsRequest,
   adminRuns: handleAdminRunsRequest,
   adminSettings: handleAdminSettingsRequest,
+  adminSupport: handleAdminSupportRequest,
   adminStudentDataExport: handleAdminStudentDataExportRequest,
   adminStudentMutations: handleAdminStudentMutationsRequest,
   adminStudentOnboardingResend: handleAdminStudentOnboardingResendRequest,
@@ -102,4 +105,5 @@ Record<string, ApiGatewayHandler>
   studentTests: handleStudentTestsRequest,
   vendorCalibrationPush: handleVendorCalibrationPushRequest,
   vendorCalibrationSimulation: handleVendorCalibrationSimulationRequest,
+  vendorSupport: handleVendorSupportRequest,
 });

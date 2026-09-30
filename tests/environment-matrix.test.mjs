@@ -45,6 +45,8 @@ const functionsApplicationKeys = [
   "CDN_BASE_URL",
   "CDN_SIGNED_URL_KEY_NAME",
   "CDN_SIGNED_URL_KEY_VALUE",
+  "EMAIL_FROM_ADDRESS",
+  "EMAIL_FROM_NAME",
   "EMAIL_PROVIDER_KEY",
   "EMAIL_PROVIDER_KEY_SECRET_NAME",
   "EXAM_BASE_URL",
@@ -66,6 +68,8 @@ const functionsApplicationKeys = [
   "STRIPE_SECRET_KEY_SECRET_NAME",
   "STRIPE_WEBHOOK_SECRET",
   "STRIPE_WEBHOOK_SECRET_NAME",
+  "SUPPORT_ATTACHMENTS_BUCKET",
+  "SUPPORT_NOTIFICATION_EMAIL",
   "VENDOR_BASE_URL",
 ];
 
@@ -158,7 +162,7 @@ function extractFunctionsKeys(source) {
   const keys = [];
   const patterns = [
     /process\.env\.([A-Z][A-Z0-9_]*)/gu,
-    /(?:getOptionalEnv|getRequiredEnv|parsePositiveIntegerEnv)\(\s*["']([A-Z][A-Z0-9_]*)["']/gu,
+    /(?:getOptionalEnv|getRequiredEnv|parsePositiveIntegerEnv|requiredEnvironmentValue)\(\s*["']([A-Z][A-Z0-9_]*)["']/gu,
     /(?:envVar|secretNameEnvVar):\s*["']([A-Z][A-Z0-9_]*)["']/gu,
   ];
 

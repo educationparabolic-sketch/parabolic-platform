@@ -104,16 +104,14 @@ test("portal catches do not substitute fixtures or fabricated successes in live 
   }
 });
 
-test("local support and Vendor calibration fallbacks are explicit fixture-mode only", async () => {
+test("support is API-only while Vendor calibration fallbacks remain fixture-mode only", async () => {
   const [supportSource, vendorSource] = await Promise.all([
     readFile(supportDatasetPath, "utf8"),
     readFile(vendorCalibrationPath, "utf8"),
   ]);
 
-  assert.match(
-    supportSource,
-    /const fallbackTickets = shouldUseFixtureData\(\) \? FALLBACK_TICKETS : \[\]/u,
-  );
+  assert.doesNotMatch(supportSource, /localStorage|FALLBACK_TICKETS|shouldUseFixtureData/u);
+  assert.match(supportSource, /getPortalApiClient\("admin"\)/u);
   assert.equal(
     vendorSource.match(/if \(!shouldUseFixtureData\(\)\) \{\s*throw error;\s*\}/gu)?.length,
     2,

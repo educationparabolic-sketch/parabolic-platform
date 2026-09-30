@@ -1,8 +1,8 @@
 # Frontend API Call Inventory
 
-Status: current frontend inventory and canonical-route authority through verified BWM-031
+Status: current frontend inventory and canonical-route authority through BWM-032 support operator and notifications
 
-Inventory date: 2026-09-27
+Inventory date: 2026-09-30
 
 Scope: executable HTTP calls in `apps/admin/src`, `apps/student/src`, `apps/exam/src`, and `apps/vendor/src`
 
@@ -36,7 +36,7 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 - `intentionally retired`: explicit product or architecture evidence says the contract must not be served. The removed EXM-03 custom refresh call is retained as an explicit retired route key because Firebase Auth SDK refresh is authoritative.
 - Gateway and Hosting reachability are excluded from per-route classification because they are common dependencies owned by BWM-003 and BWM-004.
 
-## Canonical route assignments and status — 68 contracts
+## Canonical route assignments and status — 77 contracts
 
 | ID | Method | Current frontend path | Canonical route | Status | Classification basis |
 | --- | --- | --- | --- | --- | --- |
@@ -95,6 +95,11 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 | ADM-53 | `GET` | `/admin/interventions` | `/api/v1/admin/interventions` | `implemented` | Mounted default-25/max-50 timeline for teacher/admin and read-only L3 Director; no Vendor access. |
 | ADM-54 | `POST` | `/admin/interventions/recommendations` | `/api/v1/admin/interventions/recommendations` | `implemented` | Source-bound advisory creation only; it neither assigns a run nor delivers a message and reloads the timeline. |
 | ADM-55 | `PATCH` | `/admin/interventions/{interventionId}/outcome` | `/api/v1/admin/interventions/{interventionId}/outcome` | `implemented` | Expected-revision outcome command followed by authoritative timeline reload. |
+| ADM-56 | `GET` | `/admin/help` | `/api/v1/admin/support/tickets` | `implemented` | Mounted strict API-only list consumes authoritative counts and bounded filter-bound cursor pages; localStorage and fixture fallback are absent. |
+| ADM-57 | `POST` | `/admin/help` | `/api/v1/admin/support/tickets` | `implemented` | Mounted create sends only user intent plus validated bounded attachments and a retry-stable UUID, then reloads authoritative list/detail state. Actor, tenant, routing, status, IDs, and time remain server-derived. |
+| ADM-58 | `GET` | `/admin/help` | `/api/v1/admin/support/tickets/{ticketId}` | `implemented` | Mounted detail strictly validates each bounded ascending message page and exposes independent previous/next controls. |
+| ADM-59 | `POST` | `/admin/help` | `/api/v1/admin/support/tickets/{ticketId}/commands` | `implemented` | Mounted reply and legal resolve/close/reopen controls retain the exact idempotency key on retry and reconcile through authoritative list/detail reads. The browser cannot author support/system messages or assignment. |
+| ADM-60 | `GET` | `/admin/help` | `/api/v1/admin/support/tickets/{ticketId}/attachments/{attachmentId}/download` | `implemented` | Mounted download shows unavailable/authorizing states and opens only a freshly authorized short-lived URL; no Storage coordinate or direct browser Storage access is used. |
 | STU-01 | `GET` | `/student/dashboard` | `/api/v1/student/dashboard` | `implemented` | Strict shared dashboard DTO; handler derives tenant, Student, current year, and license from verified identity and returns only that active Student's yearly summary, Student-owned propagated recent results, and assigned/licensed scheduled runs. |
 | STU-02 | `GET` | `/student/tests` | `/api/v1/student/tests` | `implemented` | Strict shared paginated tests DTO; bounded status/page queries return only current-year assigned/licensed runs and fill completed result fields from Student-owned `results/{runId}` summaries. |
 | STU-03 | `GET` | `/student/performance` | `/api/v1/student/performance` | `implemented` | Strict shared performance DTO reads the bounded Student-owned propagated result timeline plus current-year summary metrics and redacts L1/L2 fields by identity license. |
@@ -108,11 +113,20 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 | EXM-05 | `POST` | `/exam/session/{sessionId}/activate` | `/api/v1/exam/session/{sessionId}/activate` | `implemented` | Runtime requests activation only after entry checks/declaration; the secured idempotent handler persists `active`, `startedAt`, and the immutable scheduled `deadlineAt`, returns `serverTime`, and deterministically reconciles expiry. |
 | VEN-01 | `POST` | `/vendor/calibration/simulate` | `/api/v1/vendor/calibration/simulate` | `incompatible` | Frontend sends `strategyProfileParameters`; handler requires `weights`, so the simulation request fails validation/service normalization. |
 | VEN-02 | `POST` | `/vendor/calibration/push` | `/api/v1/vendor/calibration/push` | `implemented` | Vendor auth, target/version request, and consumed deployment response align. |
+| VEN-03 | `GET` | No frontend call yet | `/api/v1/vendor/support/tickets` | `implemented` | Secured `vendorSupport` provides the active-Vendor global queue with bounded institute/team/assignment/category/priority/status cursor filters and counts. |
+| VEN-04 | `GET` | No frontend call yet | `/api/v1/vendor/support/tickets/{ticketId}` | `implemented` | Secured `vendorSupport` uniquely resolves the institute ticket and returns bounded message history with opaque attachment availability. |
+| VEN-05 | `POST` | No frontend call yet | `/api/v1/vendor/support/tickets/{ticketId}/commands` | `implemented` | Secured `vendorSupport` applies revisioned/idempotent reply, active-Vendor assignment, and legal workflow commands with dual audit and redacted queued notifications. |
+| VEN-06 | `GET` | No frontend call yet | `/api/v1/vendor/support/tickets/{ticketId}/attachments/{attachmentId}/download` | `implemented` | Secured `vendorSupport` freshly verifies current Vendor identity plus ticket/message/attachment/object integrity before issuing a five-minute HTTPS download. |
 
-Canonical classification totals are `implemented` 62, `incompatible` 1,
-`missing` 0, and `intentionally retired` 5. ADM-30..ADM-55 have strict Admin
-callers and secured gateway handlers. ADM-09, ADM-13, ADM-17, ADM-18, and
-EXM-03 retain explicit retired route keys but no browser caller.
+Canonical classification totals are `implemented` 71, `incompatible` 1,
+`missing` 0, and `intentionally retired` 5. ADM-30..ADM-60 have strict Admin
+callers and secured gateway handlers. ADM-56..ADM-60 are mounted at
+`/admin/help` with strict response validation, bounded ticket/message cursors,
+retry-stable commands, and authoritative post-mutation reconciliation; no
+localStorage or fixture-backed success path remains. VEN-03..VEN-06 have the secured
+`vendorSupport` handler but no mounted Vendor caller. ADM-09, ADM-13,
+ADM-17, ADM-18, and EXM-03 retain explicit retired route keys but no browser
+caller.
 
 ## Question Bank lifecycle routes — live frontend callers
 
@@ -268,9 +282,9 @@ the mounted interventions destination with authoritative reloads.
 
 ## Classification summary for the current tree
 
-- The 62 `implemented` entries are handler-compatible through the common gateway and same-origin Hosting rewrite; each owning flow retains its task-specific verification ownership.
+- The 71 `implemented` entries are handler-compatible through the common gateway and same-origin Hosting rewrite. ADM-56..ADM-60 now have the strict mounted Admin caller; VEN-03..VEN-06 intentionally await a mounted Vendor caller while that owning flow retains its task-specific verification ownership.
 - The one `incompatible` entry, VEN-01 calibration simulation, requires contract repair by its remaining owning task before that flow can be considered wired.
-- No canonical route is currently `missing`; ADM-24 through ADM-29 are implemented and consumed with permanent BWM-026 emulator/browser proof.
+- No canonical route remains `missing`. ADM-24 through ADM-29 remain implemented and consumed with permanent BWM-026 emulator/browser proof.
 - ADM-09, ADM-13, ADM-17, ADM-18, and EXM-03 are intentionally retired; their superseding canonical flows own browser dispatch and the gateway serves no handler for them.
 
 ## Audit anchors

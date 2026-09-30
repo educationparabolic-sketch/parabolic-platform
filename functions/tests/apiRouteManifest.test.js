@@ -80,6 +80,14 @@ function parameterName(expression, sourceFile) {
     return "{uploadLogId}";
   }
 
+  if (/ticketId/i.test(expressionText)) {
+    return "{ticketId}";
+  }
+
+  if (/attachmentId/i.test(expressionText)) {
+    return "{attachmentId}";
+  }
+
   throw new Error(
     `Unsupported API path parameter in ${sourceFile.fileName}: ` +
       expressionText,
@@ -343,6 +351,15 @@ test(
         "ADM-53",
         "ADM-54",
         "ADM-55",
+        "ADM-56",
+        "ADM-57",
+        "ADM-58",
+        "ADM-59",
+        "ADM-60",
+        "VEN-03",
+        "VEN-04",
+        "VEN-05",
+        "VEN-06",
       ],
     );
     plannedRoutes.forEach((route) => {
@@ -364,7 +381,7 @@ test("canonical route status accounting is exact", () => {
   });
 
   assert.deepEqual(statusCounts, {
-    implemented: 62,
+    implemented: 71,
     incompatible: 1,
     intentionally_retired: 5,
     missing: 0,

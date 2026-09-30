@@ -2,12 +2,16 @@ import * as functions from "firebase-functions";
 import {
   adminSettingsCommunicationService,
 } from "../services/adminSettingsCommunication";
+import {supportNotificationService} from "../services/supportNotifications";
 
 export const handleEmailQueueSchedule = async (): Promise<void> => {
-  const processedCount = await adminSettingsCommunicationService
-    .processDueCommunications(50);
-  functions.logger.info("Processed due Admin settings communications.", {
-    processedCount,
+  const [adminSettingsProcessed, supportProcessed] = await Promise.all([
+    adminSettingsCommunicationService.processDueCommunications(50),
+    supportNotificationService.processDueNotifications(50),
+  ]);
+  functions.logger.info("Processed due asynchronous email communications.", {
+    adminSettingsProcessed,
+    supportProcessed,
   });
 };
 

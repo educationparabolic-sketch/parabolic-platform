@@ -24,6 +24,7 @@ const selectedSourceSuites = [
   "adminQuestionsBulkApi.test",
   "adminRunsApi.test",
   "adminSettingsApi.test",
+  "adminSupportApi.test",
   "adminStudentMutationsApi.test",
   "adminStudentsBulkApi.test",
   "adminTestsApi.test",
@@ -59,6 +60,7 @@ const selectedSourceSuites = [
   "submissionResponseContract.test",
   "systemEventTopology.test",
   "tenantMiddleware.test",
+  "vendorSupportApi.test",
 ];
 
 const baselineExclusions = new Map([

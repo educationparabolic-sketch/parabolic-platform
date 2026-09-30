@@ -45,7 +45,7 @@ test("shared capability matrix is complete and internally safe", async () => {
   );
   const entries = Object.entries(CAPABILITY_MATRIX);
 
-  assert.equal(entries.length, 50);
+  assert.equal(entries.length, 51);
   assert.deepEqual(new Set(LICENSE_FEATURE_FLAG_NAMES), new Set(Object.keys(featureMinimumLayers)));
 
   for (const [capability, policy] of entries) {

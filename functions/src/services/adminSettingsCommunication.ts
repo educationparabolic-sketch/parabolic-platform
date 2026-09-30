@@ -182,6 +182,7 @@ export class AdminSettingsCommunicationService {
     const boundedLimit = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 50) : 50;
     const now = this.now();
     const snapshot = await this.dependencies.firestore.collection(EMAIL_QUEUE_COLLECTION)
+      .where("source", "==", ADMIN_SETTINGS_SOURCE)
       .where("nextAttemptAt", "<=", now)
       .limit(boundedLimit)
       .get();

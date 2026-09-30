@@ -2,7 +2,7 @@
 
 This document provides a simplified reference of the Firestore data hierarchy.
 
-Last reconciled: 2026-09-27 (`BWM-031` verified licensing closeout)
+Last reconciled: 2026-09-30 (`BWM-032` support operator and notifications)
 
 The authoritative schema definition exists in:
 
@@ -134,6 +134,63 @@ memory, and dispatches through the configured provider. Links, `oobCode`, raw
 provider identifiers, credentials, secrets, and provider bodies are not
 persisted; terminal delivery is deduplicated and transient retries use the
 bounded five-attempt schedule.
+
+BWM-032 uses an internal Firebase support workflow because no external support
+system is approved or configured. ADM-56..ADM-60 and VEN-03..VEN-06 now
+create/read the institute ticket, message, command, audit, counter, attachment,
+Vendor-audit, and redacted notification authority below:
+
+- `institutes/{instituteId}/supportTickets/{ticketId}` stores the bounded ticket
+  header: backend display ID, category, priority, server-routed team, workflow
+  status, optimistic revision, creator identity, optional assigned Vendor
+  operator, message count, server creation/update/last-message times, and
+  precomputed institute/Vendor filter keys. It never embeds an unbounded
+  conversation.
+- `institutes/{instituteId}/supportTickets/{ticketId}/messages/{messageId}`
+  stores immutable ordered institute/support/system messages with server-owned
+  author type/display authority and opaque attachment IDs. Message bodies do
+  not enter audit or notification documents.
+- `institutes/{instituteId}/supportCommands/{hashedCommandId}` is server-only
+  deterministic create/reply/lifecycle/assignment replay authority. It stores
+  only the institute-scoped SHA-256 key hash, normalized fingerprint, action,
+  ticket/message/audit/notification IDs, disposition result, and completion
+  time; raw keys, bodies, attachment bytes, and Storage coordinates are absent.
+- `institutes/{instituteId}/supportTicketStats/current` stores schema-versioned
+  exact `open`, `inProgress`, `awaitingInstitute`, `resolved`, `closed`, and
+  `urgentNotClosed` counters updated in the same transaction as create and
+  lifecycle changes. Missing stats fail closed when any ticket exists.
+- `institutes/{instituteId}/supportAttachments/{attachmentId}` stores verified
+  public metadata plus internal create-only object authority. `staging` records
+  contain the bucket/object coordinate, command hash, attachment fingerprint,
+  SHA-256, message/ticket linkage, and `cleanupAfter`; a successful support
+  transaction changes them to `committed`, clears `cleanupAfter`, and sets
+  `deleteAfter`. Abandoned staging is deleted after 24 hours. Committed objects
+  are deleted after 365 days and the record becomes a `deleted` tombstone with
+  bucket/object coordinates removed. Public DTOs expose only attachment ID,
+  filename, media type, size, and current download availability. Objects use an
+  institute-hash-prefixed support path in a private backend-IAM-only bucket,
+  are never served directly, and require a fresh staff, tenant, ticket, message,
+  attachment, and object-integrity check before a five-minute HTTPS download.
+  BWM-052 owns production bucket/IAM provisioning.
+
+Every implemented institute mutation atomically creates an immutable institute
+`auditLogs` event that excludes message bodies and file names/bytes. Vendor support-operator mutations
+also create the matching immutable root `vendorAuditLogs` event and require an
+explicit verified Vendor boundary; institute users cannot author support/system
+messages, assignment, or support-owned states. Root `emailQueue` support jobs
+use `source: admin_support`, deterministic IDs, safe ticket/event/target fields,
+and no conversation body, attachment metadata/bytes/file name, credential,
+provider secret, or raw provider ID. The shared one-minute worker isolates
+`admin_settings` and `admin_support` queries, generates provider content only in
+memory, stores a provider-ID hash on success, and uses bounded leases plus five
+attempts for retryable failures. The deployed composite-index manifest now includes
+`supportTickets(filterKeys ARRAY_CONTAINS, updatedAt DESC, __name__ DESC)`,
+`supportTickets(vendorFilterKeys ARRAY_CONTAINS, updatedAt DESC, ticketId DESC)`,
+`emailQueue(source ASC, nextAttemptAt ASC)`,
+`messages(createdAt ASC, __name__ ASC)`, and collection-group cleanup indexes
+for `supportAttachments(state ASC, cleanupAfter ASC)` and
+`supportAttachments(state ASC, deleteAfter ASC)`; BWM-053 retains deployed
+index rollout.
 
 students/{studentId}
 

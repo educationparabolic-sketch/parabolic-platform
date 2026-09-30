@@ -23,6 +23,11 @@ function materializePath(canonicalPath, routeId) {
     .replace("{packageId}", encodeURIComponent(`package ${routeId} Ω`))
     .replace("{uploadLogId}", encodeURIComponent(`upload ${routeId} Ω`))
     .replace("{reportId}", encodeURIComponent(`report ${routeId} Ω`))
+    .replace("{ticketId}", encodeURIComponent(`ticket ${routeId} Ω`))
+    .replace(
+      "{attachmentId}",
+      encodeURIComponent(`attachment ${routeId} Ω`),
+    )
     .replace(
       "{interventionId}",
       encodeURIComponent(`intervention ${routeId} Ω`),
@@ -50,7 +55,7 @@ test("implemented routes have one registered existing handler", () => {
   const implementedRoutes = API_ROUTE_MANIFEST.filter(
     (route) => route.status === "implemented",
   );
-  assert.equal(implementedRoutes.length, 62);
+  assert.equal(implementedRoutes.length, 71);
 
   for (const route of implementedRoutes) {
     assert.equal(typeof API_GATEWAY_HANDLERS[route.functionExport], "function");
@@ -98,6 +103,25 @@ test(
     });
   },
 );
+
+test("BWM-032 support declarations preserve their ordered boundary", () => {
+  const supportRoutes = API_ROUTE_MANIFEST.filter((route) =>
+    (route.id.startsWith("ADM-") &&
+      Number(route.id.replace("ADM-", "")) >= 56) ||
+    (route.id.startsWith("VEN-") &&
+      Number(route.id.replace("VEN-", "")) >= 3),
+  );
+
+  assert.equal(supportRoutes.length, 9);
+  supportRoutes.forEach((route) => {
+    assert.equal(route.declaration, "planned");
+    assert.equal(route.status, "implemented");
+    assert.equal(
+      route.functionExport,
+      route.id.startsWith("ADM-") ? "adminSupport" : "vendorSupport",
+    );
+  });
+});
 
 test(
   "BWM-029 governance and intervention routes reach secured handlers",

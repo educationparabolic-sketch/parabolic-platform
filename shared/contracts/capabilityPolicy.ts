@@ -278,6 +278,11 @@ export const CAPABILITY_MATRIX = {
     minimumLicenseLayer: null,
     requiredFeatureFlags: [],
   },
+  "vendor.support.manage": {
+    allowedRoles: ["vendor"],
+    minimumLicenseLayer: null,
+    requiredFeatureFlags: [],
+  },
 } as const satisfies Record<string, CapabilityPolicyDefinition>;
 
 export type PortalCapability = keyof typeof CAPABILITY_MATRIX;

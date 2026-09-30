@@ -130,6 +130,8 @@ import {
 import {
   handleAdminLicensingRequest,
 } from "./api/adminLicensing";
+import {handleAdminSupportRequest} from "./api/adminSupport";
+import {handleVendorSupportRequest} from "./api/vendorSupport";
 import {
   handleAdminAnalyticsRequest,
 } from "./api/adminAnalytics";
@@ -156,6 +158,9 @@ import {testTemplateOnCreate} from "./triggers/templateCreation";
 import {governanceSnapshotMonthly} from "./triggers/governanceSnapshot";
 import {billingSnapshotMonthly} from "./triggers/billingSnapshot";
 import {dataRetentionPolicyDaily} from "./triggers/dataRetentionPolicy";
+import {
+  supportAttachmentCleanupDaily,
+} from "./triggers/supportAttachmentCleanup";
 import {processEmailQueue} from "./triggers/emailQueue";
 import {
   failureRecoveryDispatch,
@@ -180,6 +185,7 @@ export {testTemplateOnCreate};
 export {governanceSnapshotMonthly};
 export {billingSnapshotMonthly};
 export {dataRetentionPolicyDaily};
+export {supportAttachmentCleanupDaily};
 export {processEmailQueue};
 export {failureRecoveryDispatch};
 export {failureRecoveryRetrySweep};
@@ -325,6 +331,12 @@ export const adminSettings = functions.https.onRequest(
 );
 export const adminLicensing = functions.https.onRequest(
   handleAdminLicensingRequest,
+);
+export const adminSupport = functions.https.onRequest(
+  handleAdminSupportRequest,
+);
+export const vendorSupport = functions.https.onRequest(
+  handleVendorSupportRequest,
 );
 export const adminOverview = functions.https.onRequest(
   handleAdminOverviewRequest,

@@ -2,7 +2,7 @@
 
 Status: canonical route and response-envelope contract
 
-Last reconciled: 2026-09-27 (`BWM-031` verified licensing closeout)
+Last reconciled: 2026-09-30 (`BWM-032` support operator and notifications)
 
 ## Sources of truth
 
@@ -40,7 +40,7 @@ If prose and the typed manifest disagree about a route key or status, the typed 
 - `missing`: no current Functions handler/export implements the canonical contract.
 - `intentionally_retired`: explicit product/architecture evidence says the route must not be served.
 
-Current totals: 62 implemented, 1 incompatible, 0 missing, 5 intentionally retired.
+Current totals: 71 implemented, 1 incompatible, 0 missing, 5 intentionally retired.
 
 Routes marked `planned` in the code manifest are canonical contracts reserved by
 the active owning task and do not count as executable frontend tuples. They stay
@@ -107,6 +107,11 @@ frontend caller. Frontend-declared routes retain bidirectional source coverage.
 | ADM-53 | `GET /api/v1/admin/interventions` | `implemented` | `adminInterventionTimeline` | Firebase ID; teacher/admin L1 or Director L3; `riskOverview`; identity tenant; bounded cursor timeline; no Vendor access |
 | ADM-54 | `POST /api/v1/admin/interventions/recommendations` | `implemented` | `adminInterventionMutation` | Firebase ID; teacher/admin L1 plus `riskOverview`; identity tenant; advisory-only recommendation; idempotency key |
 | ADM-55 | `PATCH /api/v1/admin/interventions/{interventionId}/outcome` | `implemented` | `adminInterventionMutation` | Same mutation boundary; expected revision; idempotency key; advisory outcome only |
+| ADM-56 | `GET /api/v1/admin/support/tickets` | `implemented` | `adminSupport` | Identity-tenant list; teacher/Admin L0 or Director L3 with active entitlement; bounded filter-bound cursor page and transactional authoritative counts |
+| ADM-57 | `POST /api/v1/admin/support/tickets` | `implemented` | `adminSupport` | Same institute capability; server-derived actor/routing/time; hashed idempotency; atomic ticket/message/count/audit/command plus verified private attachment authority |
+| ADM-58 | `GET /api/v1/admin/support/tickets/{ticketId}` | `implemented` | `adminSupport` | Tenant-owned ticket detail with bounded ascending filter-bound message cursor and opaque attachment metadata |
+| ADM-59 | `POST /api/v1/admin/support/tickets/{ticketId}/commands` | `implemented` | `adminSupport` | Expected-revision institute reply or legal resolve/close/reopen command; exact replay; immutable audit; no browser support/system authorship |
+| ADM-60 | `GET /api/v1/admin/support/tickets/{ticketId}/attachments/{attachmentId}/download` | `implemented` | `adminSupport` | Fresh staff/tenant/ticket/message/attachment/object-integrity authorization; five-minute signed HTTPS URL; immutable redacted audit; no public Storage coordinates |
 | STU-01 | `GET /api/v1/student/dashboard` | `implemented` | `studentDashboard` | Firebase ID; student; identity tenant/student/license; active Student; current academic year |
 | STU-02 | `GET /api/v1/student/tests` | `implemented` | `studentTests` | Firebase ID; student; identity tenant/student/license; active Student; current academic year; bounded status/page query |
 | STU-03 | `GET /api/v1/student/performance` | `implemented` | `studentPerformance` | Firebase ID; student; identity tenant/Student/license; active Student; current year; bounded `lastN`; L0/L1/L2 redaction |
@@ -120,8 +125,70 @@ frontend caller. Frontend-declared routes retain bidirectional source coverage.
 | EXM-05 | `POST /api/v1/exam/session/{sessionId}/activate` | `implemented` | `examSessionActivate` | Firebase ID; student; exact persisted session identity; secured idempotent activation with server clock and immutable scheduled deadline |
 | VEN-01 | `POST /api/v1/vendor/calibration/simulate` | `incompatible` | `vendorCalibrationSimulation` | Firebase ID; vendor; aggregate-only global scope |
 | VEN-02 | `POST /api/v1/vendor/calibration/push` | `implemented` | `vendorCalibrationPush` | Firebase ID; vendor; global scope |
+| VEN-03 | `GET /api/v1/vendor/support/tickets` | `implemented` | `vendorSupport` | Verified active Vendor identity; global bounded institute/team/assignment/category/priority/status cursor queue plus authoritative global counts |
+| VEN-04 | `GET /api/v1/vendor/support/tickets/{ticketId}` | `implemented` | `vendorSupport` | Same Vendor boundary; unique ticket/institute resolution and bounded ascending message history with opaque attachment availability |
+| VEN-05 | `POST /api/v1/vendor/support/tickets/{ticketId}/commands` | `implemented` | `vendorSupport` | Vendor-only reply, active-Vendor assignment/unassignment, and legal workflow command with expected revision, hashed idempotency, dual audit, and redacted queued notification |
+| VEN-06 | `GET /api/v1/vendor/support/tickets/{ticketId}/attachments/{attachmentId}/download` | `implemented` | `vendorSupport` | Same Vendor boundary; fresh ticket/message/attachment/object-integrity authorization and five-minute signed HTTPS download |
 
 The detailed request/response mismatch for each incompatible entry is recorded under the same ID in `docs/FRONTEND_API_CALL_INVENTORY.md`.
+
+## BWM-032 support contract and institute authority
+
+`shared/contracts/adminSupport.d.ts` is the dependency-free authority for the
+ADM-56..ADM-60 and VEN-03..VEN-06 payloads. Admin public intent omits
+institute, actor, author type, assigned team/operator, status, timestamp,
+revision result, audit, notification, and Storage authority. Vendor list and
+command targets are accepted only behind the explicit global
+`vendor.support.manage` boundary and must be verified server-side.
+
+Ticket lists order by `updatedAt DESC, ticketId DESC`; message pages order by
+`createdAt ASC, messageId ASC`. Every opaque cursor is bound to the normalized
+filters. Mutations use a UUID idempotency key plus expected revision where a
+ticket already exists, persist only the key hash/fingerprint, and return
+`applied|replayed`. Institute actors may add institute replies and request
+resolve/close/reopen transitions but cannot author support/system messages,
+assign routing, or set support-owned workflow states.
+
+Attachments travel only with create/reply intents and are limited to five
+verified PNG, JPEG, WebP, or PDF files, 1 MiB each and 5 MiB total. Public
+records omit bucket/object coordinates; downloads require a fresh authorization
+check and return a short-lived HTTPS URL. Notification jobs contain safe IDs,
+event kind, and routing target only—never conversation bodies, file bytes/names,
+credentials, or secrets. Support mutations create immutable institute audits;
+Vendor operator mutations also create the matching immutable Vendor audit.
+ADM-56..ADM-60 are now served by the secured `adminSupport` handler. Ticket
+creation atomically persists the header, initial immutable institute message,
+hashed command authority, immutable audit, and status counters; reply and legal
+resolve/close/reopen commands use the same transaction boundary. Create/reply
+attachments are signature/hash/size/type checked, stored as private create-only
+objects, committed transactionally as opaque metadata, and retained for 365
+days; abandoned staging is cleaned after 24 hours. Every download rechecks
+authority and object integrity before returning a five-minute signed URL.
+Every institute create/reply/lifecycle command now atomically creates a
+deterministic redacted `admin_support` email job for the configured operational
+support inbox. VEN-03..VEN-06 are served by the secured `vendorSupport` handler:
+the global queue/detail/download paths require a current non-disabled Vendor
+Auth identity, while commands add support replies, active-Vendor assignments,
+and legal workflow changes with expected revisions, exact replay, immutable
+institute plus Vendor audits, and institute-recipient notification jobs. Jobs
+persist safe ticket/template/routing/status fields only; message bodies,
+attachment metadata/bytes/file names, credentials, provider secrets, and raw
+provider identifiers are excluded. The shared scheduled worker independently
+leases `admin_settings` and `admin_support` sources, hashes provider IDs, and
+uses the bounded five-attempt retry schedule.
+
+The mounted `/admin/help` workspace consumes ADM-56..ADM-60 exclusively through
+the shared authenticated Admin API client. It strictly validates list, detail,
+command, notification, attachment, and download results; uses separate bounded
+opaque-cursor controls for ticket and message pages; retains prepared attachment
+bytes plus the UUID across exact retries; and accepts a mutation as complete only
+after authoritative list/detail reconciliation. Institute, actor, author type,
+routing, workflow state, IDs, revision, and timestamps are never browser-authored.
+Only legal institute lifecycle actions are rendered, downloads require a fresh
+authorization result, and loading, empty, permission/license, unavailable,
+conflict, validation, and retry states are explicit. There is no localStorage,
+fixture-backed live success, direct Storage access, or browser-fabricated support
+or system message path.
 
 ADM-30 through ADM-40 are live canonical transport declarations with strict
 Admin callers and secured handlers. Their shared public DTOs keep institute and actor authority out of
@@ -328,10 +395,10 @@ supported browser transport.
 
 ## Backend HTTP export accounting
 
-`functions/src/apiRouteManifest.ts` accounts for all 52 current `functions.https.onRequest` exports:
+`functions/src/apiRouteManifest.ts` accounts for all 54 current `functions.https.onRequest` exports:
 
 - `apiV1` is the single versioned `gateway` export; it resolves exact manifest method/path pairs, preserves decoded route parameters, and dispatches non-null `functionExport` mappings through the existing raw request handlers;
-- 35 exports are referenced by one or more canonical frontend routes;
+- 37 exports are referenced by one or more canonical routes;
 - 11 portal-oriented Vendor exports currently have no executable frontend caller and remain `unmapped_portal` rather than receiving an invented public route;
 - `internalEmailQueue`, `adminQuestionsBulk`, and `adminQuestionAssets` are `internal_only`;
 - `stripeWebhook` is a `webhook` boundary;

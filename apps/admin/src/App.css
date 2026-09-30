@@ -6012,6 +6012,14 @@
   color: #ffffff;
 }
 
+.admin-support-page button:disabled,
+.admin-support-page input:disabled,
+.admin-support-page select:disabled,
+.admin-support-page textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
 .admin-support-tabs {
   display: flex;
   gap: 4px;
@@ -6087,12 +6095,49 @@
 
 .admin-support-filters {
   display: grid;
-  grid-template-columns: minmax(220px, 1.4fr) repeat(2, minmax(170px, 0.8fr)) auto;
+  grid-template-columns: minmax(210px, 1.2fr) repeat(3, minmax(145px, 0.75fr)) auto;
   align-items: end;
   gap: 12px;
   padding: 14px 18px;
   border-bottom: 1px solid #e1e7ef;
   background: #f8fafc;
+}
+
+.admin-support-filter-actions,
+.admin-support-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.admin-support-filter-actions {
+  align-self: end;
+}
+
+.admin-support-pagination {
+  padding: 12px 18px;
+  color: #63758a;
+}
+
+.admin-support-state {
+  margin: 0;
+  padding: 14px 18px;
+  color: #526985;
+}
+
+.admin-support-state-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-left: 3px solid #b23b3b;
+  background: #fff3f3;
+  color: #842f2f;
+}
+
+.admin-support-state-error p {
+  margin: 0;
 }
 
 .admin-support-page input,
@@ -6324,7 +6369,7 @@
 }
 
 .admin-support-attachment-list > span,
-.admin-support-message-attachments > span {
+.admin-support-message-attachments > button {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -6338,8 +6383,13 @@
 }
 
 .admin-support-attachment-list span small,
-.admin-support-message-attachments span small {
+.admin-support-message-attachments button small {
   color: #718197;
+}
+
+.admin-support-message-attachments > button {
+  min-height: 0;
+  font-weight: 700;
 }
 
 .admin-support-attachment-list span button {

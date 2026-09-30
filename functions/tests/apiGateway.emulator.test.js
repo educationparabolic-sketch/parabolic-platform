@@ -32,6 +32,11 @@ function materializePath(canonicalPath, routeId) {
     .replace("{packageId}", encodeURIComponent(`package ${routeId} Ω`))
     .replace("{uploadLogId}", encodeURIComponent(`upload ${routeId} Ω`))
     .replace("{reportId}", encodeURIComponent(`report ${routeId} Ω`))
+    .replace("{ticketId}", encodeURIComponent(`ticket ${routeId} Ω`))
+    .replace(
+      "{attachmentId}",
+      encodeURIComponent(`attachment ${routeId} Ω`),
+    )
     .replace(
       "{interventionId}",
       encodeURIComponent(`intervention ${routeId} Ω`),
@@ -75,7 +80,7 @@ test(
     const implementedRoutes = API_ROUTE_MANIFEST.filter(
       (route) => route.status === "implemented",
     );
-    assert.equal(implementedRoutes.length, 62);
+    assert.equal(implementedRoutes.length, 71);
 
     for (const route of implementedRoutes) {
       const requestPath = materializePath(route.canonicalPath, route.id);

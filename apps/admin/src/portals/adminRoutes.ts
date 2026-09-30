@@ -5,6 +5,7 @@ const ADMIN_TEACHER_ROLES = CAPABILITY_MATRIX["admin.students.read"].allowedRole
 const ADMIN_TEACHER_DIRECTOR_ROLES = CAPABILITY_MATRIX["admin.overview.read"].allowedRoles;
 const ADMIN_SETTINGS_READ_POLICY = CAPABILITY_MATRIX["admin.settings.read"];
 const ADMIN_LICENSE_READ_POLICY = CAPABILITY_MATRIX["admin.license.read"];
+const ADMIN_SUPPORT_POLICY = CAPABILITY_MATRIX["admin.support.manage"];
 
 export interface AdminRouteDefinition {
   path: string;
@@ -445,7 +446,9 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     title: "Help / Support",
     section: "Help / Support",
     description: "Institute support request creation, status tracking, conversation history, and escalation context.",
-    allowedRoles: ADMIN_TEACHER_DIRECTOR_ROLES,
+    allowedRoles: ADMIN_SUPPORT_POLICY.allowedRoles,
+    minimumLicenseLayer: ADMIN_SUPPORT_POLICY.minimumLicenseLayer ?? undefined,
+    roleMinimumLicenseLayers: ADMIN_SUPPORT_POLICY.roleMinimumLicenseLayers,
   },
   {
     path: "/admin/licensing",

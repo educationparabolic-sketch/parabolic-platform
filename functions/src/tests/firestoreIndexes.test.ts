@@ -28,10 +28,11 @@ const hasIndex = (
   indexes: FirestoreIndexDefinition[],
   collectionGroup: string,
   fields: FirestoreIndexField[],
+  queryScope = "COLLECTION",
 ): boolean =>
   indexes.some((indexDefinition) =>
     indexDefinition.collectionGroup === collectionGroup &&
-    indexDefinition.queryScope === "COLLECTION" &&
+    indexDefinition.queryScope === queryScope &&
     JSON.stringify(indexDefinition.fields) === JSON.stringify(fields),
   );
 
@@ -147,3 +148,52 @@ test(
     );
   },
 );
+
+test("firestore index manifest includes support pagination", () => {
+  const manifest = readManifest();
+
+  assert.equal(
+    hasIndex(manifest.indexes, "supportTickets", [
+      {fieldPath: "filterKeys", arrayConfig: "CONTAINS"},
+      {fieldPath: "updatedAt", order: "DESCENDING"},
+      {fieldPath: "__name__", order: "DESCENDING"},
+    ]),
+    true,
+  );
+  assert.equal(
+    hasIndex(manifest.indexes, "messages", [
+      {fieldPath: "createdAt", order: "ASCENDING"},
+      {fieldPath: "__name__", order: "ASCENDING"},
+    ]),
+    true,
+  );
+  assert.equal(
+    hasIndex(manifest.indexes, "supportTickets", [
+      {fieldPath: "vendorFilterKeys", arrayConfig: "CONTAINS"},
+      {fieldPath: "updatedAt", order: "DESCENDING"},
+      {fieldPath: "ticketId", order: "DESCENDING"},
+    ], "COLLECTION_GROUP"),
+    true,
+  );
+  assert.equal(
+    hasIndex(manifest.indexes, "emailQueue", [
+      {fieldPath: "source", order: "ASCENDING"},
+      {fieldPath: "nextAttemptAt", order: "ASCENDING"},
+    ]),
+    true,
+  );
+  assert.equal(
+    hasIndex(manifest.indexes, "supportAttachments", [
+      {fieldPath: "state", order: "ASCENDING"},
+      {fieldPath: "cleanupAfter", order: "ASCENDING"},
+    ], "COLLECTION_GROUP"),
+    true,
+  );
+  assert.equal(
+    hasIndex(manifest.indexes, "supportAttachments", [
+      {fieldPath: "state", order: "ASCENDING"},
+      {fieldPath: "deleteAfter", order: "ASCENDING"},
+    ], "COLLECTION_GROUP"),
+    true,
+  );
+});

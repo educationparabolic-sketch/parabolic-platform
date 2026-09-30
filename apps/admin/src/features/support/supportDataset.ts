@@ -1,269 +1,410 @@
-export type SupportCategory =
-  | "Account & access"
-  | "Students & batches"
-  | "Question bank or upload"
-  | "Tests & assignments"
-  | "Analytics or reports"
-  | "Licensing or billing"
-  | "Technical issue"
-  | "Other";
+import type {
+  AdminSupportLifecycleAction,
+  AdminSupportTicketCommandRequest,
+  AdminSupportTicketCommandResult,
+  AdminSupportTicketCreateRequest,
+  AdminSupportTicketDetailResult,
+  AdminSupportTicketListQuery,
+  AdminSupportTicketListResult,
+  SupportAssignedTeam,
+  SupportAttachmentDownloadResult,
+  SupportAttachmentMediaType,
+  SupportAttachmentRecord,
+  SupportAttachmentUploadIntent,
+  SupportCategory,
+  SupportMessageRecord,
+  SupportNotificationReceipt,
+  SupportPriority,
+  SupportTicketCounts,
+  SupportTicketRecord,
+  SupportTicketStatus,
+} from "../../../../../shared/contracts/adminSupport";
+import { ApiClientError } from "../../../../../shared/services/apiClient";
+import { PortalResponseValidationError } from "../../../../../shared/services/portalResponseAdapters";
+import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 
-export type SupportPriority = "Normal" | "High" | "Urgent";
-export type SupportStatus = "Open" | "In progress" | "Awaiting institute" | "Resolved" | "Closed";
+const apiClient = getPortalApiClient("admin");
+const MAX_PAGE_SIZE = 50;
+const MAX_ATTACHMENT_COUNT = 5;
+const MAX_ATTACHMENT_SIZE_BYTES = 1_048_576;
+const MAX_TOTAL_ATTACHMENT_BYTES = 5_242_880;
 
-export interface SupportAttachment {
-  id: string;
-  name: string;
-  size: number;
-  type: string;
+export const SUPPORT_CATEGORIES = [
+  "account_access",
+  "students_batches",
+  "question_bank_upload",
+  "tests_assignments",
+  "analytics_reports",
+  "licensing_billing",
+  "technical_issue",
+  "other",
+] as const satisfies readonly SupportCategory[];
+export const SUPPORT_PRIORITIES = ["normal", "high", "urgent"] as const satisfies readonly SupportPriority[];
+export const SUPPORT_STATUSES = [
+  "open",
+  "in_progress",
+  "awaiting_institute",
+  "resolved",
+  "closed",
+] as const satisfies readonly SupportTicketStatus[];
+const SUPPORT_TEAMS = [
+  "institute_operations",
+  "platform_support",
+  "vendor_billing",
+] as const satisfies readonly SupportAssignedTeam[];
+const AUTHOR_TYPES = ["institute", "support", "system"] as const;
+const MEDIA_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/pdf",
+] as const satisfies readonly SupportAttachmentMediaType[];
+const NOTIFICATION_KINDS = [
+  "assignment_changed",
+  "institute_replied",
+  "status_changed",
+  "support_replied",
+  "ticket_created",
+] as const;
+
+export const SUPPORT_CATEGORY_LABELS: Record<SupportCategory, string> = {
+  account_access: "Account & access",
+  students_batches: "Students & batches",
+  question_bank_upload: "Question bank or upload",
+  tests_assignments: "Tests & assignments",
+  analytics_reports: "Analytics or reports",
+  licensing_billing: "Licensing or billing",
+  technical_issue: "Technical issue",
+  other: "Other",
+};
+export const SUPPORT_PRIORITY_LABELS: Record<SupportPriority, string> = {
+  normal: "Normal",
+  high: "High",
+  urgent: "Urgent",
+};
+export const SUPPORT_STATUS_LABELS: Record<SupportTicketStatus, string> = {
+  open: "Open",
+  in_progress: "In progress",
+  awaiting_institute: "Awaiting institute",
+  resolved: "Resolved",
+  closed: "Closed",
+};
+export const SUPPORT_TEAM_LABELS: Record<SupportAssignedTeam, string> = {
+  institute_operations: "Institute operations support",
+  platform_support: "Platform support",
+  vendor_billing: "Vendor billing support",
+};
+
+function invalid(route: string, field: string, expectation: string): never {
+  throw new PortalResponseValidationError(route, `returned invalid field "${field}"; expected ${expectation}.`);
 }
 
-export interface SupportMessage {
-  id: string;
-  author: string;
-  authorType: "institute" | "support" | "system";
-  body: string;
-  createdAt: string;
-  attachments: SupportAttachment[];
+function record(value: unknown, route: string, field = "data"): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return invalid(route, field, "an object");
+  return value as Record<string, unknown>;
 }
 
-export interface SupportDiagnosticContext {
-  instituteId: string;
-  submittedBy: string;
-  sourceRoute: string;
-  browser: string;
-  capturedAt: string;
-  affectedEntityId?: string;
+function string(value: unknown, route: string, field: string): string {
+  if (typeof value !== "string" || !value.trim()) return invalid(route, field, "a non-empty string");
+  return value.trim();
 }
 
-export interface SupportTicket {
-  id: string;
-  subject: string;
-  category: SupportCategory;
-  priority: SupportPriority;
-  status: SupportStatus;
-  assignedTeam: string;
-  createdAt: string;
-  updatedAt: string;
-  context: SupportDiagnosticContext;
-  messages: SupportMessage[];
+function nullableString(value: unknown, route: string, field: string): string | null {
+  return value === null ? null : string(value, route, field);
 }
 
-export interface CreateSupportTicketInput {
-  subject: string;
-  description: string;
-  category: SupportCategory;
-  priority: SupportPriority;
-  affectedEntityId?: string;
-  attachments: SupportAttachment[];
-  context: Omit<SupportDiagnosticContext, "affectedEntityId">;
-}
-
-export const SUPPORT_CATEGORIES: SupportCategory[] = [
-  "Account & access",
-  "Students & batches",
-  "Question bank or upload",
-  "Tests & assignments",
-  "Analytics or reports",
-  "Licensing or billing",
-  "Technical issue",
-  "Other",
-];
-
-export const SUPPORT_PRIORITIES: SupportPriority[] = ["Normal", "High", "Urgent"];
-export const SUPPORT_STATUSES: SupportStatus[] = [
-  "Open",
-  "In progress",
-  "Awaiting institute",
-  "Resolved",
-  "Closed",
-];
-
-const STORAGE_KEY = "parabolic.admin.support-tickets.v1";
-
-const FALLBACK_TICKETS: SupportTicket[] = [
-  {
-    id: "SUP-1042",
-    subject: "Student bulk upload validation mismatch",
-    category: "Students & batches",
-    priority: "High",
-    status: "In progress",
-    assignedTeam: "Institute operations support",
-    createdAt: "2026-07-15T06:20:00.000Z",
-    updatedAt: "2026-07-16T09:10:00.000Z",
-    context: {
-      instituteId: "inst-build-125",
-      submittedBy: "admin.test@parabolic.local",
-      sourceRoute: "/admin/students/bulk-upload",
-      browser: "Chrome on Linux",
-      capturedAt: "2026-07-15T06:20:00.000Z",
-      affectedEntityId: "upload-2026-0715-04",
-    },
-    messages: [
-      {
-        id: "msg-1042-1",
-        author: "Institute administrator",
-        authorType: "institute",
-        body: "The workbook passes the required-column check, but 18 valid batch names are reported as unknown.",
-        createdAt: "2026-07-15T06:20:00.000Z",
-        attachments: [
-          { id: "att-1042-1", name: "validation-summary.png", size: 184320, type: "image/png" },
-        ],
-      },
-      {
-        id: "msg-1042-2",
-        author: "Operations support",
-        authorType: "support",
-        body: "We are comparing the uploaded batch labels with the current academic-year registry.",
-        createdAt: "2026-07-16T09:10:00.000Z",
-        attachments: [],
-      },
-    ],
-  },
-  {
-    id: "SUP-1038",
-    subject: "June invoice student count clarification",
-    category: "Licensing or billing",
-    priority: "Normal",
-    status: "Awaiting institute",
-    assignedTeam: "Vendor billing support",
-    createdAt: "2026-07-12T10:30:00.000Z",
-    updatedAt: "2026-07-14T08:45:00.000Z",
-    context: {
-      instituteId: "inst-build-125",
-      submittedBy: "admin.test@parabolic.local",
-      sourceRoute: "/admin/licensing/usage",
-      browser: "Chrome on Linux",
-      capturedAt: "2026-07-12T10:30:00.000Z",
-    },
-    messages: [
-      {
-        id: "msg-1038-1",
-        author: "Institute administrator",
-        authorType: "institute",
-        body: "Please clarify which student population was used for the June usage calculation.",
-        createdAt: "2026-07-12T10:30:00.000Z",
-        attachments: [],
-      },
-      {
-        id: "msg-1038-2",
-        author: "Vendor billing support",
-        authorType: "support",
-        body: "Please confirm whether the archived 2025-26 cohort should be excluded from your query.",
-        createdAt: "2026-07-14T08:45:00.000Z",
-        attachments: [],
-      },
-    ],
-  },
-  {
-    id: "SUP-1029",
-    subject: "Analytics report export completed",
-    category: "Analytics or reports",
-    priority: "Normal",
-    status: "Resolved",
-    assignedTeam: "Platform support",
-    createdAt: "2026-07-05T05:40:00.000Z",
-    updatedAt: "2026-07-06T07:15:00.000Z",
-    context: {
-      instituteId: "inst-build-125",
-      submittedBy: "director.test@parabolic.local",
-      sourceRoute: "/admin/analytics",
-      browser: "Chrome on Linux",
-      capturedAt: "2026-07-05T05:40:00.000Z",
-    },
-    messages: [
-      {
-        id: "msg-1029-1",
-        author: "Institute director",
-        authorType: "institute",
-        body: "The batch comparison PDF remained in preparing state after the report completed.",
-        createdAt: "2026-07-05T05:40:00.000Z",
-        attachments: [],
-      },
-      {
-        id: "msg-1029-2",
-        author: "Platform support",
-        authorType: "support",
-        body: "The export status has been reconciled and the report is available in the original analytics view.",
-        createdAt: "2026-07-06T07:15:00.000Z",
-        attachments: [],
-      },
-    ],
-  },
-];
-
-function makeId(prefix: string): string {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-}
-
-function resolveAssignedTeam(category: SupportCategory): string {
-  if (category === "Licensing or billing") return "Vendor billing support";
-  if (category === "Students & batches" || category === "Tests & assignments") {
-    return "Institute operations support";
+function integer(value: unknown, route: string, field: string, minimum = 0): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < minimum) {
+    return invalid(route, field, `an integer >= ${minimum}`);
   }
-  return "Platform support";
+  return value;
 }
 
-export function loadSupportTickets(): SupportTicket[] {
-  const fallbackTickets = shouldUseFixtureData() ? FALLBACK_TICKETS : [];
+function boolean(value: unknown, route: string, field: string): boolean {
+  if (typeof value !== "boolean") return invalid(route, field, "a boolean");
+  return value;
+}
 
-  try {
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    if (!stored) return fallbackTickets;
-    const parsed = JSON.parse(stored) as unknown;
-    return Array.isArray(parsed) ? (parsed as SupportTicket[]) : fallbackTickets;
-  } catch {
-    return fallbackTickets;
+function iso(value: unknown, route: string, field: string): string {
+  const normalized = string(value, route, field);
+  if (Number.isNaN(Date.parse(normalized))) return invalid(route, field, "an ISO timestamp");
+  return normalized;
+}
+
+function enumeration<T extends string>(value: unknown, values: readonly T[], route: string, field: string): T {
+  if (typeof value !== "string" || !values.includes(value as T)) {
+    return invalid(route, field, values.map((item) => `"${item}"`).join(" or "));
   }
+  return value as T;
 }
 
-export function persistSupportTickets(tickets: SupportTicket[]): void {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(tickets));
+function array(value: unknown, route: string, field: string, maximum: number): unknown[] {
+  if (!Array.isArray(value) || value.length > maximum) {
+    return invalid(route, field, `an array of at most ${maximum} items`);
+  }
+  return value;
 }
 
-export function createSupportTicket(input: CreateSupportTicketInput): SupportTicket {
-  const createdAt = new Date().toISOString();
-  const sequence = String(Date.now()).slice(-6);
+function attachment(value: unknown, route: string, field: string): SupportAttachmentRecord {
+  const source = record(value, route, field);
   return {
-    id: `SUP-${sequence}`,
-    subject: input.subject.trim(),
-    category: input.category,
-    priority: input.priority,
-    status: "Open",
-    assignedTeam: resolveAssignedTeam(input.category),
-    createdAt,
-    updatedAt: createdAt,
-    context: {
-      ...input.context,
-      affectedEntityId: input.affectedEntityId?.trim() || undefined,
-    },
-    messages: [
-      {
-        id: makeId("message"),
-        author: input.context.submittedBy,
-        authorType: "institute",
-        body: input.description.trim(),
-        createdAt,
-        attachments: input.attachments,
-      },
-      {
-        id: makeId("message"),
-        author: "Support routing",
-        authorType: "system",
-        body: `Request routed to ${resolveAssignedTeam(input.category)}.`,
-        createdAt,
-        attachments: [],
-      },
-    ],
+    attachmentId: string(source.attachmentId, route, `${field}.attachmentId`),
+    downloadAvailable: boolean(source.downloadAvailable, route, `${field}.downloadAvailable`),
+    fileName: string(source.fileName, route, `${field}.fileName`),
+    mediaType: enumeration(source.mediaType, MEDIA_TYPES, route, `${field}.mediaType`),
+    sizeBytes: integer(source.sizeBytes, route, `${field}.sizeBytes`, 1),
   };
 }
 
-export function toSupportAttachments(files: File[]): SupportAttachment[] {
-  return files.map((file) => ({
-    id: makeId("attachment"),
-    name: file.name,
-    size: file.size,
-    type: file.type || "application/octet-stream",
+function message(value: unknown, route: string, field: string): SupportMessageRecord {
+  const source = record(value, route, field);
+  return {
+    attachments: array(source.attachments, route, `${field}.attachments`, MAX_ATTACHMENT_COUNT)
+      .map((item, index) => attachment(item, route, `${field}.attachments[${index}]`)),
+    authorDisplayName: string(source.authorDisplayName, route, `${field}.authorDisplayName`),
+    authorType: enumeration(source.authorType, AUTHOR_TYPES, route, `${field}.authorType`),
+    body: string(source.body, route, `${field}.body`),
+    createdAt: iso(source.createdAt, route, `${field}.createdAt`),
+    messageId: string(source.messageId, route, `${field}.messageId`),
+    ticketId: string(source.ticketId, route, `${field}.ticketId`),
+  };
+}
+
+function ticket(value: unknown, route: string, field: string): SupportTicketRecord {
+  const source = record(value, route, field);
+  return {
+    assignedTeam: enumeration(source.assignedTeam, SUPPORT_TEAMS, route, `${field}.assignedTeam`),
+    category: enumeration(source.category, SUPPORT_CATEGORIES, route, `${field}.category`),
+    createdAt: iso(source.createdAt, route, `${field}.createdAt`),
+    displayId: string(source.displayId, route, `${field}.displayId`),
+    lastMessageAt: iso(source.lastMessageAt, route, `${field}.lastMessageAt`),
+    messageCount: integer(source.messageCount, route, `${field}.messageCount`, 1),
+    priority: enumeration(source.priority, SUPPORT_PRIORITIES, route, `${field}.priority`),
+    revision: integer(source.revision, route, `${field}.revision`, 1),
+    status: enumeration(source.status, SUPPORT_STATUSES, route, `${field}.status`),
+    subject: string(source.subject, route, `${field}.subject`),
+    ticketId: string(source.ticketId, route, `${field}.ticketId`),
+    updatedAt: iso(source.updatedAt, route, `${field}.updatedAt`),
+  };
+}
+
+function counts(value: unknown, route: string): SupportTicketCounts {
+  const source = record(value, route, "counts");
+  return {
+    awaitingInstitute: integer(source.awaitingInstitute, route, "counts.awaitingInstitute"),
+    closed: integer(source.closed, route, "counts.closed"),
+    inProgress: integer(source.inProgress, route, "counts.inProgress"),
+    open: integer(source.open, route, "counts.open"),
+    resolved: integer(source.resolved, route, "counts.resolved"),
+    urgentNotClosed: integer(source.urgentNotClosed, route, "counts.urgentNotClosed"),
+  };
+}
+
+function notification(value: unknown, route: string): SupportNotificationReceipt {
+  const source = record(value, route, "notification");
+  const status = enumeration(source.status, ["not_required", "queued"] as const, route, "notification.status");
+  const notificationId = nullableString(source.notificationId, route, "notification.notificationId");
+  if ((status === "queued") !== Boolean(notificationId)) {
+    return invalid(route, "notification.notificationId", "an ID only for queued delivery");
+  }
+  return {
+    kind: enumeration(source.kind, NOTIFICATION_KINDS, route, "notification.kind"),
+    notificationId,
+    status,
+  };
+}
+
+function commandResult(value: unknown, route: string): AdminSupportTicketCommandResult {
+  const source = record(value, route);
+  const parsedMessage = source.message === null ? null : message(source.message, route, "message");
+  const parsedTicket = ticket(source.ticket, route, "ticket");
+  if (parsedMessage && parsedMessage.ticketId !== parsedTicket.ticketId) {
+    return invalid(route, "message.ticketId", "the returned ticket ID");
+  }
+  return {
+    auditEventId: string(source.auditEventId, route, "auditEventId"),
+    disposition: enumeration(source.disposition, ["applied", "replayed"] as const, route, "disposition"),
+    message: parsedMessage,
+    notification: notification(source.notification, route),
+    ticket: parsedTicket,
+  };
+}
+
+function listResult(value: unknown, route: string): AdminSupportTicketListResult {
+  const source = record(value, route);
+  const items = array(source.items, route, "items", MAX_PAGE_SIZE)
+    .map((item, index) => ticket(item, route, `items[${index}]`));
+  if (new Set(items.map((item) => item.ticketId)).size !== items.length) {
+    return invalid(route, "items", "unique ticket IDs");
+  }
+  return {
+    counts: counts(source.counts, route),
+    items,
+    nextCursor: nullableString(source.nextCursor, route, "nextCursor"),
+  };
+}
+
+function detailResult(value: unknown, route: string): AdminSupportTicketDetailResult {
+  const source = record(value, route);
+  const messages = record(source.messages, route, "messages");
+  const parsedTicket = ticket(source.ticket, route, "ticket");
+  const items = array(messages.items, route, "messages.items", MAX_PAGE_SIZE)
+    .map((item, index) => message(item, route, `messages.items[${index}]`));
+  if (items.some((item) => item.ticketId !== parsedTicket.ticketId) ||
+    new Set(items.map((item) => item.messageId)).size !== items.length) {
+    return invalid(route, "messages.items", "unique messages for the returned ticket");
+  }
+  return {
+    messages: {
+      items,
+      nextCursor: nullableString(messages.nextCursor, route, "messages.nextCursor"),
+    },
+    ticket: parsedTicket,
+  };
+}
+
+function toQuery(query: AdminSupportTicketListQuery): Record<string, string | number | undefined> {
+  return {
+    category: query.category,
+    cursor: query.cursor,
+    limit: query.limit,
+    priority: query.priority,
+    status: query.status,
+    ticketReference: query.ticketReference,
+  };
+}
+
+export async function fetchSupportTickets(query: AdminSupportTicketListQuery): Promise<AdminSupportTicketListResult> {
+  const listRoute = "/admin/support/tickets";
+  return listResult(await apiClient.get<unknown>(listRoute, {query: toQuery(query)}), listRoute);
+}
+
+export async function fetchSupportTicketDetail(
+  ticketId: string,
+  query: {messageCursor?: string; messageLimit?: number} = {},
+): Promise<AdminSupportTicketDetailResult> {
+  const detailRoute = `/admin/support/tickets/${encodeURIComponent(ticketId)}`;
+  return detailResult(await apiClient.get<unknown>(detailRoute, {query}), detailRoute);
+}
+
+export async function createSupportTicket(request: AdminSupportTicketCreateRequest): Promise<AdminSupportTicketCommandResult> {
+  const createRoute = "/admin/support/tickets";
+  return commandResult(await apiClient.post<unknown, AdminSupportTicketCreateRequest>(createRoute, {body: request}), createRoute);
+}
+
+export async function executeSupportCommand(
+  ticketId: string,
+  request: AdminSupportTicketCommandRequest,
+): Promise<AdminSupportTicketCommandResult> {
+  const commandRoute = `/admin/support/tickets/${encodeURIComponent(ticketId)}/commands`;
+  return commandResult(await apiClient.post<unknown, AdminSupportTicketCommandRequest>(commandRoute, {body: request}), commandRoute);
+}
+
+export async function fetchSupportAttachmentDownload(
+  ticketId: string,
+  attachmentId: string,
+): Promise<SupportAttachmentDownloadResult> {
+  const downloadRoute = `/admin/support/tickets/${encodeURIComponent(ticketId)}/attachments/${encodeURIComponent(attachmentId)}/download`;
+  const source = record(await apiClient.get<unknown>(downloadRoute), downloadRoute);
+  const url = string(source.url, downloadRoute, "url");
+  if (!url.startsWith("https://")) return invalid(downloadRoute, "url", "an HTTPS URL");
+  return {
+    attachmentId: string(source.attachmentId, downloadRoute, "attachmentId"),
+    expiresAt: iso(source.expiresAt, downloadRoute, "expiresAt"),
+    fileName: string(source.fileName, downloadRoute, "fileName"),
+    mediaType: enumeration(source.mediaType, MEDIA_TYPES, downloadRoute, "mediaType"),
+    url,
+  };
+}
+
+export function createSupportIdempotencyKey(): string {
+  if (!globalThis.crypto?.randomUUID) throw new Error("Secure support request identity is unavailable in this browser.");
+  return globalThis.crypto.randomUUID();
+}
+
+function extensionMatches(file: File, mediaType: SupportAttachmentMediaType): boolean {
+  const name = file.name.toLowerCase();
+  if (mediaType === "image/jpeg") return name.endsWith(".jpg") || name.endsWith(".jpeg");
+  if (mediaType === "image/png") return name.endsWith(".png");
+  if (mediaType === "image/webp") return name.endsWith(".webp");
+  return name.endsWith(".pdf");
+}
+
+function base64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 32_768) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 32_768));
+  }
+  return btoa(binary);
+}
+
+export function validateSupportFiles(files: readonly File[]): void {
+  if (files.length > MAX_ATTACHMENT_COUNT) throw new Error("Attach at most five files to one message.");
+  if (files.reduce((sum, file) => sum + file.size, 0) > MAX_TOTAL_ATTACHMENT_BYTES) {
+    throw new Error("Attachments exceed the 5 MiB total limit.");
+  }
+  for (const file of files) {
+    if (file.size < 1 || file.size > MAX_ATTACHMENT_SIZE_BYTES) {
+      throw new Error(`${file.name} must be between 1 byte and 1 MiB.`);
+    }
+    if (!MEDIA_TYPES.includes(file.type as SupportAttachmentMediaType) ||
+      !extensionMatches(file, file.type as SupportAttachmentMediaType)) {
+      throw new Error(`${file.name} must be a JPEG, PNG, WebP, or PDF with a matching extension.`);
+    }
+  }
+}
+
+export async function prepareSupportAttachments(files: readonly File[]): Promise<SupportAttachmentUploadIntent[]> {
+  validateSupportFiles(files);
+  return Promise.all(files.map(async (file) => {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+    return {
+      clientAttachmentId: createSupportIdempotencyKey(),
+      contentBase64: base64(bytes),
+      contentSha256: [...digest].map((value) => value.toString(16).padStart(2, "0")).join(""),
+      fileName: file.name,
+      mediaType: file.type as SupportAttachmentMediaType,
+      sizeBytes: file.size,
+    };
   }));
 }
-import { shouldUseFixtureData } from "../../../../../shared/services/frontendEnvironment";
+
+export async function reconcileSupportMutation(
+  result: AdminSupportTicketCommandResult,
+): Promise<AdminSupportTicketDetailResult> {
+  const [detail, list] = await Promise.all([
+    fetchSupportTicketDetail(result.ticket.ticketId, {messageLimit: 25}),
+    fetchSupportTickets({limit: 1, ticketReference: result.ticket.ticketId}),
+  ]);
+  const reloadedTicket = list.items[0];
+  if (detail.ticket.revision !== result.ticket.revision || detail.ticket.status !== result.ticket.status ||
+    !reloadedTicket || reloadedTicket.revision !== result.ticket.revision ||
+    reloadedTicket.status !== result.ticket.status ||
+    (result.message && !detail.messages.nextCursor &&
+      !detail.messages.items.some((item) => item.messageId === result.message?.messageId))) {
+    throw new Error("Support command was not confirmed by an authoritative ticket reload.");
+  }
+  return detail;
+}
+
+export function lifecycleRequest(
+  action: AdminSupportLifecycleAction,
+  expectedRevision: number,
+  idempotencyKey: string,
+): AdminSupportTicketCommandRequest {
+  return {action: "CHANGE_INSTITUTE_LIFECYCLE", expectedRevision, idempotencyKey, lifecycleAction: action};
+}
+
+export { ApiClientError };
+export type {
+  AdminSupportLifecycleAction,
+  AdminSupportTicketDetailResult,
+  AdminSupportTicketListResult,
+  SupportAttachmentRecord,
+  SupportCategory,
+  SupportMessageRecord,
+  SupportPriority,
+  SupportTicketRecord,
+  SupportTicketStatus,
+};

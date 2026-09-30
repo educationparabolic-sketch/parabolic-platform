@@ -204,6 +204,12 @@ fail before compilation.
 its caller does not provide an explicit override. Explicit initializer values
 take precedence for isolated tests; built-in defaults are local/test fallbacks
 and are never a substitute for the required staging or production values below.
+The BWM-032 support attachment service separately requires
+`SUPPORT_ATTACHMENTS_BUCKET`; emulator commands inject the disposable demo
+bucket explicitly, and missing runtime configuration fails closed.
+Support ticket creation and institute-side commands require the non-secret
+operational mailbox `SUPPORT_NOTIFICATION_EMAIL`; missing configuration fails
+closed before a notification-authoritative command commits.
 
 | Variable | Development | Test | Staging | Production | Value contract |
 |---|---:|---:|---:|---:|---|
@@ -215,6 +221,7 @@ and are never a substitute for the required staging or production values below.
 | `CDN_BASE_URL` | `R` | `R` | `R` | `R` | Absolute HTTPS CDN base URL for the selected environment; an environment-owned bucket path is allowed, while credentials, query, and fragment remain forbidden. The current example-domain fallback is never a release value. |
 | `QUESTION_ASSETS_BUCKET` | `R` | `R` | `R` | `R` | Bare environment-specific bucket name; must not contain `/` and must match `PROJECT_ID` ownership policy. |
 | `REPORTS_BUCKET` | `R` | `R` | `R` | `R` | Bare environment-specific reports bucket name; must not cross environment boundaries. |
+| `SUPPORT_ATTACHMENTS_BUCKET` | `R` | `R` | `R` | `R` | Bare private backend-IAM-only support bucket. Public DTOs never expose this value; local emulator tests use the disposable demo-project bucket. |
 | `RELEASE_ID` | `O` | `R` | `R` | `R` | Same immutable release identifier injected into the frontend artifacts. |
 | `RELEASE_COMMIT_SHA` | `O` | `R` | `R` | `R` | Full source commit SHA. |
 | `RELEASE_BUILT_AT` | `O` | `R` | `R` | `R` | UTC ISO-8601 build timestamp. |
@@ -228,6 +235,9 @@ and are never a substitute for the required staging or production values below.
 | `RETENTION_SESSION_ARCHIVE_DAYS` | `O` | `O` | `O` | `O` | Non-negative integer; default 1825 days. |
 | `CDN_SIGNED_URL_KEY_NAME` | `C` | `C` | `C` | `C` | Required before signed CDN URLs are enabled; must name the key configured at the CDN edge. |
 | `CDN_SIGNED_URL_KEY_VALUE` | `C` | `C` | `C` | `C` | Secret base64url signing key. Local/test may use an ephemeral environment value; staging/production must receive it from an authorized runtime secret binding. |
+| `EMAIL_FROM_ADDRESS` | `C` | `C` | `C` | `C` | Required provider-verified sender address when transactional email delivery is enabled. |
+| `EMAIL_FROM_NAME` | `O` | `O` | `O` | `O` | Non-secret sender display name; defaults to `Parabolic Platform`. |
+| `SUPPORT_NOTIFICATION_EMAIL` | `R` | `R` | `R` | `R` | Provider-deliverable operational inbox for new institute tickets and institute replies/status changes. Persisted support jobs contain this address plus safe routing/template IDs, never message bodies or attachment content. |
 
 ## Functions managed secrets
 

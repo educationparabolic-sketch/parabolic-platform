@@ -2,7 +2,7 @@
 
 This document defines the event-driven topology of the platform.
 
-Last reconciled: 2026-09-27 (`BWM-031` verified licensing closeout)
+Last reconciled: 2026-10-01 (`BWM-032` verified)
 
 Each event represents a state transition or trigger that initiates downstream processing.
 
@@ -198,6 +198,36 @@ when elapsed/expired authority initiates such a request, only that identity is
 revoked synchronously. Existing Vendor/Stripe mutation propagation remains in
 place, while BWM-036 retains fleet scheduling, retry/dead-letter, propagation
 window, and stale-session acceptance across all portals.
+
+BWM-032 defines ticket creation, institute/support replies, assignment, and
+legal workflow transitions as synchronous revisioned/idempotent HTTP commands,
+not inferred Firestore triggers. ADM-57/ADM-59 and VEN-05 atomically own the
+ticket header, immutable message where applicable, hashed replay authority,
+immutable institute audit, transactional status counters, committed attachment
+metadata, and deterministic notification job. Vendor mutations also create the
+matching immutable root Vendor audit. The attachment service validates the
+complete command-bound payload before staging a private create-only object,
+compensates objects when the command fails, and publishes only opaque metadata
+after commit. ADM-60/VEN-06 perform a fresh identity/ticket/message/object check,
+emit the appropriate redacted audit, and return a five-minute signed URL.
+`supportAttachmentCleanupDaily` deletes abandoned staging objects/documents
+after 24 hours and committed objects after 365 days while preserving an opaque
+deletion tombstone. Direct browser Storage access remains denied.
+
+`processEmailQueue` is the single asynchronous delivery edge for both isolated
+`admin_settings` and `admin_support` sources. It leases each source separately,
+builds support content only in provider memory, hashes returned provider IDs,
+and uses bounded five-attempt retry/failure authority. Persisted support jobs
+contain ticket IDs/status plus template/routing fields only—never conversation
+bodies, attachment metadata/bytes/file names, credentials, provider secrets, or
+raw provider identifiers. ADM-56..ADM-60 are executable through `adminSupport`;
+VEN-03..VEN-06 are executable through `vendorSupport`. The mounted `/admin/help`
+caller invokes only these synchronous Admin commands, retains exact retry
+identity, and reloads authoritative list/detail state after mutation; it adds no
+new browser-owned event, Firestore trigger, or direct Storage edge. Permanent
+support-specific emulator and no-mock browser proof now covers notification
+retry, command races/replay, private attachments, cursor pagination, fresh-device
+persistence, and the complete fail-closed Admin boundary.
 
 ---
 
