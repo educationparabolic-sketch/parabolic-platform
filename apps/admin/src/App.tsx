@@ -26,7 +26,11 @@ import {
   matchAdminRoute,
   resolveAdminRouteMountPath,
 } from "./portals/adminRoutes";
-import { resolveAdminAccessContext } from "./portals/adminAccess";
+import {
+  evaluateAdminCapability,
+  resolveAdminAccessContext,
+} from "./portals/adminAccess";
+import { matchAdminCompatibilityRoute } from "./portals/adminActionLedger";
 import "./App.css";
 
 function resolveAdminRedirectTarget(locationState: unknown, fallbackPath: string): string {
@@ -313,8 +317,12 @@ function AdminLayout() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [pageScrolled, setPageScrolled] = useState(false);
   const visibleRoutes = useMemo(() => {
-    return getVisibleAdminRoutes(accessContext.role, accessContext.licenseLayer);
-  }, [accessContext.licenseLayer, accessContext.role]);
+    return getVisibleAdminRoutes(
+      accessContext.role,
+      accessContext.licenseLayer,
+      accessContext.featureFlags,
+    );
+  }, [accessContext.featureFlags, accessContext.licenseLayer, accessContext.role]);
   const matchedRoute = useMemo(() => matchAdminRoute(location.pathname), [location.pathname]);
   const visibleNavItems = useMemo(() => {
     return ADMIN_PRIMARY_NAVIGATION.filter((item) =>
@@ -560,16 +568,31 @@ function AdminRouteAccessGuard(props: { children: ReactElement }) {
   const { session } = useAuthProvider();
   const accessContext = resolveAdminAccessContext(session);
   const matchedRoute = matchAdminRoute(location.pathname);
+  const compatibilityRoute = matchAdminCompatibilityRoute(location.pathname);
 
   if (matchedRoute) {
     const accessDecision = evaluateAdminRoutePermissions(
       matchedRoute,
       accessContext.role,
       accessContext.licenseLayer,
+      accessContext.featureFlags,
     );
 
     if (!accessDecision.allowed) {
       return <Navigate replace to={accessDecision.redirectTo ?? "/unauthorized"} />;
+    }
+  } else if (compatibilityRoute) {
+    const accessDecision = evaluateAdminCapability(
+      compatibilityRoute.capability,
+      accessContext,
+    );
+    if (!accessDecision.allowed) {
+      return (
+        <Navigate
+          replace
+          to={accessDecision.reason === "license_restricted" ? "/admin/overview" : "/unauthorized"}
+        />
+      );
     }
   }
 

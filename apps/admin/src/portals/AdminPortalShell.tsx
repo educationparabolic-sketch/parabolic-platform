@@ -1,3 +1,4 @@
+import type { LicenseFeatureFlags } from "../../../../shared/types/globalPortalState";
 import type { LicenseLayer, PortalDomainKey, PortalRole } from "../../../../shared/types/portalRouting";
 import { getVisibleAdminRoutes, matchAdminRoute } from "./adminRoutes";
 
@@ -7,14 +8,15 @@ interface AdminPortalShellProps {
   canonicalDomain: PortalDomainKey;
   canonicalHostname: string;
   licenseLayer: LicenseLayer | null;
+  featureFlags: LicenseFeatureFlags;
   role: PortalRole | null;
   onNavigate: (pathname: string) => void;
 }
 
 function AdminPortalShell(props: AdminPortalShellProps) {
-  const { pathname, activeDomain, canonicalDomain, canonicalHostname, licenseLayer, role, onNavigate } = props;
+  const { pathname, activeDomain, canonicalDomain, canonicalHostname, licenseLayer, featureFlags, role, onNavigate } = props;
   const activeRoute = matchAdminRoute(pathname);
-  const visibleRoutes = getVisibleAdminRoutes(role, licenseLayer);
+  const visibleRoutes = getVisibleAdminRoutes(role, licenseLayer, featureFlags);
   const featuredRoutes = visibleRoutes.filter((definition) => {
     const parts = definition.path.split("/").filter(Boolean);
     return parts.length === 2 || definition.path === "/admin/licensing/current";

@@ -434,7 +434,7 @@ export async function getQuestionUploadLogDetail(uploadLogId: string): Promise<A
 export async function getQuestionDistribution(examType?: string): Promise<QuestionDistributionResult> {
   const route = "GET /admin/questions/distribution";
   const payload = record(await apiClient.get<unknown>("/admin/questions/distribution", {
-    query: { limit: "100", ...(examType ? { examType } : {}) },
+    query: { limit: "20", ...(examType ? { examType } : {}) },
   }), route);
   const raw = record(payload.summary, route, "summary");
   return {

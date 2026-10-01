@@ -1,5 +1,11 @@
-import { LICENSE_LAYER_ORDER, type LicenseLayer, type PortalRole, type RouteAccessDecision } from "../../../../shared/types/portalRouting";
-import { CAPABILITY_MATRIX } from "../../../../shared/contracts/capabilityPolicy";
+import type { LicenseFeatureFlags } from "../../../../shared/types/globalPortalState";
+import type { LicenseLayer, PortalRole, RouteAccessDecision } from "../../../../shared/types/portalRouting";
+import {
+  CAPABILITY_MATRIX,
+  type LicenseFeatureFlagName,
+  type PortalCapability,
+} from "../../../../shared/contracts/capabilityPolicy";
+import { evaluateAdminCapability } from "./adminAccess";
 
 const ADMIN_TEACHER_ROLES = CAPABILITY_MATRIX["admin.students.read"].allowedRoles;
 const ADMIN_TEACHER_DIRECTOR_ROLES = CAPABILITY_MATRIX["admin.overview.read"].allowedRoles;
@@ -8,6 +14,7 @@ const ADMIN_LICENSE_READ_POLICY = CAPABILITY_MATRIX["admin.license.read"];
 const ADMIN_SUPPORT_POLICY = CAPABILITY_MATRIX["admin.support.manage"];
 
 export interface AdminRouteDefinition {
+  capability: PortalCapability;
   path: string;
   title: string;
   section: string;
@@ -16,10 +23,14 @@ export interface AdminRouteDefinition {
   allowedRoles: readonly PortalRole[];
   minimumLicenseLayer?: LicenseLayer;
   roleMinimumLicenseLayers?: Readonly<Partial<Record<PortalRole, LicenseLayer>>>;
+  requiredFeatureFlags: readonly LicenseFeatureFlagName[];
   redirectOnDenied?: string;
   readOnlyRoles?: PortalRole[];
 }
-export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
+
+type AdminRouteSeed = Omit<AdminRouteDefinition, "capability" | "requiredFeatureFlags">;
+
+const ADMIN_ROUTE_SEEDS: AdminRouteSeed[] = [
   {
     path: "/admin/overview",
     title: "Overview",
@@ -295,7 +306,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     path: "/admin/insights/risk",
     title: "Risk Overview",
     section: "Insights",
-    description: "Institute-wide L2+ risk command center with prioritization, driver explanation, and next-step routing.",
+    description: "Institute-wide L1+ risk command center, enabled by riskOverview, with prioritization, driver explanation, and next-step routing.",
     allowedRoles: ADMIN_TEACHER_DIRECTOR_ROLES,
     minimumLicenseLayer: "L2",
     redirectOnDenied: "/admin/overview",
@@ -431,7 +442,7 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
     roleMinimumLicenseLayers: ADMIN_SETTINGS_READ_POLICY.roleMinimumLicenseLayers,
     readOnlyRoles: ["director"],
   },
-  ...["execution-policy", "data", "system"].map((path): AdminRouteDefinition => ({
+  ...["execution-policy", "data", "system"].map((path): AdminRouteSeed => ({
     path: `/admin/settings/${path}`,
     title: "Unavailable Settings Action",
     section: "Settings",
@@ -503,6 +514,37 @@ export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = [
   },
 ];
 
+function capabilityForAdminRoute(path: string): PortalCapability {
+  if (path === "/admin/overview") return "admin.overview.read";
+  if (path.startsWith("/admin/students")) return "admin.students.read";
+  if (path.startsWith("/admin/question-bank")) return "admin.question_bank.read";
+  if (path.startsWith("/admin/tests")) return "admin.tests.read";
+  if (path.startsWith("/admin/assignments")) return "admin.assignments.read";
+  if (path.startsWith("/admin/analytics")) return "admin.analytics.read";
+  if (path === "/admin/insights/interventions") return "admin.interventions.read";
+  if (path.startsWith("/admin/insights")) return "admin.insights.read";
+  if (path.startsWith("/admin/governance")) return "admin.governance.read";
+  if (path.startsWith("/admin/settings")) return "admin.settings.read";
+  if (path === "/admin/help") return "admin.support.manage";
+  if (path.startsWith("/admin/licensing")) return "admin.license.read";
+  throw new Error(`Admin route ${path} does not have a capability policy.`);
+}
+
+export const ADMIN_ROUTE_DEFINITIONS: AdminRouteDefinition[] = ADMIN_ROUTE_SEEDS.map((seed) => {
+  const capability = capabilityForAdminRoute(seed.path);
+  const policy = CAPABILITY_MATRIX[capability];
+  const roleMinimumLicenseLayers: Readonly<Partial<Record<PortalRole, LicenseLayer>>> | undefined =
+    "roleMinimumLicenseLayers" in policy ? policy.roleMinimumLicenseLayers : undefined;
+  return {
+    ...seed,
+    capability,
+    allowedRoles: policy.allowedRoles,
+    minimumLicenseLayer: policy.minimumLicenseLayer ?? undefined,
+    roleMinimumLicenseLayers,
+    requiredFeatureFlags: policy.requiredFeatureFlags,
+  };
+});
+
 export interface ResolvedAdminRoute {
   definition: AdminRouteDefinition;
   params: Record<string, string>;
@@ -563,6 +605,7 @@ export function evaluateAdminRoutePermissions(
   route: ResolvedAdminRoute | null,
   role: PortalRole | null,
   licenseLayer: LicenseLayer | null,
+  featureFlags: LicenseFeatureFlags,
 ): RouteAccessDecision {
   if (!route) {
     return {
@@ -572,26 +615,16 @@ export function evaluateAdminRoutePermissions(
     };
   }
 
-  if (!role || !route.definition.allowedRoles.includes(role)) {
+  const capabilityDecision = evaluateAdminCapability(route.definition.capability, {
+    role,
+    licenseLayer,
+    featureFlags,
+  });
+  if (!capabilityDecision.allowed) {
     return {
       allowed: false,
       redirectTo: route.definition.redirectOnDenied ?? "/unauthorized",
-      reason: "unauthorized",
-    };
-  }
-
-  const requiredLicenseLayer = role
-    ? route.definition.roleMinimumLicenseLayers?.[role] ?? route.definition.minimumLicenseLayer
-    : route.definition.minimumLicenseLayer;
-  if (
-    requiredLicenseLayer &&
-    (!licenseLayer ||
-      LICENSE_LAYER_ORDER[licenseLayer] < LICENSE_LAYER_ORDER[requiredLicenseLayer])
-  ) {
-    return {
-      allowed: false,
-      redirectTo: route.definition.redirectOnDenied ?? "/unauthorized",
-      reason: "license_restricted",
+      reason: capabilityDecision.reason,
     };
   }
 
@@ -605,22 +638,12 @@ export function evaluateAdminRoutePermissions(
 export function getVisibleAdminRoutes(
   role: PortalRole | null,
   licenseLayer: LicenseLayer | null,
+  featureFlags: LicenseFeatureFlags,
 ): AdminRouteDefinition[] {
   return ADMIN_ROUTE_DEFINITIONS.filter((definition) => {
-    if (!role || !definition.allowedRoles.includes(role)) {
-      return false;
-    }
-
-    const requiredLicenseLayer = definition.roleMinimumLicenseLayers?.[role] ??
-      definition.minimumLicenseLayer;
-    if (
-      requiredLicenseLayer &&
-      (!licenseLayer ||
-        LICENSE_LAYER_ORDER[licenseLayer] < LICENSE_LAYER_ORDER[requiredLicenseLayer])
-    ) {
-      return false;
-    }
-
-    return !definition.path.includes("/:");
+    return !definition.path.includes("/:") && evaluateAdminCapability(
+      definition.capability,
+      { role, licenseLayer, featureFlags },
+    ).allowed;
   });
 }

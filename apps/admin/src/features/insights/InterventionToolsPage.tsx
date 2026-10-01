@@ -1,7 +1,7 @@
 import {useCallback, useEffect, useMemo, useState} from "react";
 import {useAuthProvider} from "../../../../../shared/services/authProvider";
-import {resolveGlobalPortalState} from "../../../../../shared/services/globalPortalState";
 import {UiTable, type UiTableColumn} from "../../../../../shared/ui/components";
+import {hasAdminCapability, resolveAdminAccessContext} from "../../portals/adminAccess";
 import {
   ApiClientError,
   buildHighRiskCandidates,
@@ -37,10 +37,9 @@ const formatTimestamp = (value: string): string => {
 
 function InterventionToolsPage() {
   const {session} = useAuthProvider();
-  const portalState = resolveGlobalPortalState({portal: "admin", session});
-  const canRead = portalState.license.featureFlags.riskOverview;
-  const canMutate = canRead &&
-    (portalState.role === "teacher" || portalState.role === "admin");
+  const accessContext = resolveAdminAccessContext(session);
+  const canRead = hasAdminCapability("admin.interventions.read", accessContext);
+  const canMutate = hasAdminCapability("admin.interventions.manage", accessContext);
   const [yearId, setYearId] = useState("");
   const [candidates, setCandidates] = useState<HighRiskInterventionCandidate[]>([]);
   const [timeline, setTimeline] = useState<AdminInterventionRecommendationRecord[]>([]);
@@ -258,7 +257,7 @@ function InterventionToolsPage() {
       {!canRead ? (
         <p role="alert">Intervention access is disabled because riskOverview is not enabled.</p>
       ) : null}
-      {portalState.role === "director" && canRead ? (
+      {accessContext.role === "director" && canRead ? (
         <p role="status">Director access is read-only.</p>
       ) : null}
       {isLoading ? <p role="status">Loading authoritative intervention data…</p> : null}

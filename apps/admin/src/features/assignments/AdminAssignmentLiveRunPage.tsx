@@ -8,7 +8,7 @@ import type {
 import { ApiClientError } from "../../../../../shared/services/apiClient";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
-import { resolveAdminAccessContext } from "../../portals/adminAccess";
+import { hasAdminCapability, resolveAdminAccessContext } from "../../portals/adminAccess";
 import { shouldUseLiveApi } from "../analytics/analyticsDataset";
 import AssignmentsWorkspaceNav from "./AssignmentsWorkspaceNav";
 import {
@@ -68,8 +68,9 @@ function AdminAssignmentLiveRunPage() {
   const { runId } = useParams<{ runId: string }>();
   const navigate = useNavigate();
   const { session } = useAuthProvider();
-  const role = resolveAdminAccessContext(session).role;
-  const canManage = shouldUseLiveApi() && (role === "teacher" || role === "admin");
+  const accessContext = resolveAdminAccessContext(session);
+  const canManage = shouldUseLiveApi() &&
+    hasAdminCapability("admin.assignments.manage", accessContext);
   const retryKeys = useRef(new Map<string, string>());
   const [detail, setDetail] = useState<AdminRunLiveDetailResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);

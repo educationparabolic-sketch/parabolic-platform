@@ -202,10 +202,11 @@ test("license claims and privileged enforcement share complete fail-closed autho
 });
 
 test("mounted Admin licensing consumes strict authority without fallback or local success", async () => {
-  const [dataset, workspace, routes] = await Promise.all([
+  const [dataset, workspace, routes, adminAccess] = await Promise.all([
     read("apps/admin/src/features/licensing/licensingDataset.ts"),
     read("apps/admin/src/features/licensing/AdminLicensingWorkspace.tsx"),
     read("apps/admin/src/portals/adminRoutes.ts"),
+    read("apps/admin/src/portals/adminAccess.ts"),
   ]);
 
   assert.match(dataset, /shared\/contracts\/adminLicensing/);
@@ -228,7 +229,8 @@ test("mounted Admin licensing consumes strict authority without fallback or loca
     assert.doesNotMatch(submitImplementation, new RegExp(forbiddenBrowserAuthority));
   }
 
-  assert.match(workspace, /CAPABILITY_MATRIX\["admin\.license\.upgrade_request"\]/);
+  assert.match(workspace, /hasAdminCapability\(\s*"admin\.license\.upgrade_request"/);
+  assert.match(adminAccess, /const policy = CAPABILITY_MATRIX\[capability\]/);
   assert.match(workspace, /const LICENSE_LAYERS[^;]+\["L0", "L1", "L2", "L3"\]/s);
   assert.match(workspace, /Authoritative licensing data unavailable/);
   assert.match(workspace, /No cached or fixture licensing values are shown/);

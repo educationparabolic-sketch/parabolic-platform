@@ -12,7 +12,7 @@ import type {
 } from "../../../../../shared/contracts/apiDtos";
 import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
 import { UiChartContainer, UiStatCard, UiTable, type UiChartPoint, type UiTableColumn } from "../../../../../shared/ui/components";
-import { resolveAdminAccessContext } from "../../portals/adminAccess";
+import { hasAdminCapability, resolveAdminAccessContext } from "../../portals/adminAccess";
 
 const apiClient = getPortalApiClient("admin");
 const STUDENT_STATUSES = ["invited", "active", "inactive", "archived", "suspended"] as const;
@@ -633,7 +633,7 @@ function StudentProfilePage() {
   const currentLayer = effectiveLayer(accessContext.licenseLayer);
   const hasL1Insights = hasLayer(currentLayer, "L1");
   const hasL2Insights = hasLayer(currentLayer, "L2");
-  const isAdmin = accessContext.role === "admin";
+  const isAdmin = hasAdminCapability("admin.students.manage", accessContext);
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadMessage, setLoadMessage] = useState<string | null>(null);

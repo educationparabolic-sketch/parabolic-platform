@@ -21,7 +21,7 @@ import {
   type ExamType,
 } from "./testTemplateFixtures";
 import QuestionBankWorkspaceNav from "./QuestionBankWorkspaceNav";
-import { resolveAdminAccessContext } from "../../portals/adminAccess";
+import { hasAdminCapability, resolveAdminAccessContext } from "../../portals/adminAccess";
 import {
   commitQuestionPackage,
   createQuestionBankIdempotencyKey,
@@ -1038,8 +1038,9 @@ async function validateQuestionPackage(
 
 function QuestionBankManagementPage() {
   const { session } = useAuthProvider();
-  const role = resolveAdminAccessContext(session).role;
-  const canManagePackages = shouldUseLiveApi() && (role === "teacher" || role === "admin");
+  const accessContext = resolveAdminAccessContext(session);
+  const canManagePackages = shouldUseLiveApi() &&
+    hasAdminCapability("admin.question_bank.manage", accessContext);
   const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null);
   const [uploadExamType, setUploadExamType] = useState<UploadExamOption>("JEEMains");
   const [customExamName, setCustomExamName] = useState("");

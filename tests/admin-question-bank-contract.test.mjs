@@ -222,6 +222,8 @@ test("live Question Bank consumers use strict APIs and reconcile mutations", asy
   assert.match(logs, /await getQuestionUploadLogDetail/);
   assert.match(detail, /getQuestionDetail\(questionId\)/);
   assert.match(distribution, /getQuestionDistribution\(/);
+  assert.match(api, /\/admin\/questions\/distribution"[\s\S]*query: \{ limit: "20"/);
+  assert.doesNotMatch(api, /\/admin\/questions\/distribution"[\s\S]*query: \{ limit: "100"/);
   assert.match(packages, /await validateQuestionPackageWithApi/);
   assert.match(packages, /await commitQuestionPackage/);
   assert.doesNotMatch(packages, /uploadQuestionAsset|commitQuestionsBulk/);

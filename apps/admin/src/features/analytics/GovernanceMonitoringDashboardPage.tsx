@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
-import { resolveGlobalPortalState } from "../../../../../shared/services/globalPortalState";
 import {
   UiChartContainer,
   UiTable,
@@ -9,6 +8,7 @@ import {
   type UiTableColumn,
 } from "../../../../../shared/ui/components";
 import { fetchSettingsSnapshot } from "../settings/settingsDataset";
+import { hasAdminCapability, resolveAdminAccessContext } from "../../portals/adminAccess";
 import {
   ApiClientError,
   EMPTY_LIVE_GOVERNANCE_DATASET,
@@ -194,7 +194,7 @@ function GovernanceWorkspaceNav() {
 
 function GovernanceMonitoringDashboardPage() {
   const {session} = useAuthProvider();
-  const portalState = resolveGlobalPortalState({portal: "admin", session});
+  const accessContext = resolveAdminAccessContext(session);
   const location = useLocation();
   const liveMode = shouldUseLiveApi();
   const [dataset, setDataset] = useState<GovernanceDashboardDataset>(
@@ -206,7 +206,8 @@ function GovernanceMonitoringDashboardPage() {
   const [reports, setReports] = useState<GovernanceReportRecord[]>([]);
   const [pendingReportId, setPendingReportId] = useState<string | null>(null);
   const [reportMessage, setReportMessage] = useState<string | null>(null);
-  const governanceEnabled = portalState.license.featureFlags.governanceAccess;
+  const governanceEnabled = hasAdminCapability("admin.governance.read", accessContext);
+  const canExportGovernance = hasAdminCapability("admin.governance.export", accessContext);
 
   useEffect(() => {
     let mounted = true;
@@ -271,7 +272,7 @@ function GovernanceMonitoringDashboardPage() {
   const generateReport = useCallback(async (
     snapshot: GovernanceSnapshotRecord,
   ): Promise<void> => {
-    if (!requestContext || !governanceEnabled) {
+    if (!requestContext || !canExportGovernance) {
       return;
     }
     setPendingReportId(snapshot.documentId);
@@ -291,9 +292,12 @@ function GovernanceMonitoringDashboardPage() {
     } finally {
       setPendingReportId(null);
     }
-  }, [governanceEnabled, reloadReports, requestContext]);
+  }, [canExportGovernance, reloadReports, requestContext]);
 
   const downloadReport = useCallback(async (reportId: string): Promise<void> => {
+    if (!canExportGovernance) {
+      return;
+    }
     setPendingReportId(reportId);
     setReportMessage(null);
     try {
@@ -309,7 +313,7 @@ function GovernanceMonitoringDashboardPage() {
     } finally {
       setPendingReportId(null);
     }
-  }, []);
+  }, [canExportGovernance]);
 
   const currentSection = GOVERNANCE_SECTIONS.find((section) =>
     location.pathname.startsWith(section.to),
@@ -369,7 +373,7 @@ function GovernanceMonitoringDashboardPage() {
           <button
             type="button"
             className="admin-compact-button"
-            disabled={!liveMode || !governanceEnabled || pendingReportId !== null}
+            disabled={!liveMode || !canExportGovernance || pendingReportId !== null}
             onClick={() => void generateReport(row)}
           >
             {pendingReportId === row.documentId ? "Generating…" : "Generate PDF"}
@@ -377,7 +381,7 @@ function GovernanceMonitoringDashboardPage() {
         ),
       },
     ],
-    [generateReport, governanceEnabled, liveMode, pendingReportId],
+    [canExportGovernance, generateReport, liveMode, pendingReportId],
   );
   const reportColumns = useMemo<UiTableColumn<GovernanceReportRecord>[]>(
     () => [
@@ -392,7 +396,7 @@ function GovernanceMonitoringDashboardPage() {
           <button
             type="button"
             className="admin-compact-button"
-            disabled={!governanceEnabled || pendingReportId !== null}
+            disabled={!canExportGovernance || pendingReportId !== null}
             onClick={() => void downloadReport(row.reportId)}
           >
             {pendingReportId === row.reportId ? "Authorizing…" : "Download PDF"}
@@ -400,7 +404,7 @@ function GovernanceMonitoringDashboardPage() {
         ),
       },
     ],
-    [downloadReport, governanceEnabled, pendingReportId],
+    [canExportGovernance, downloadReport, pendingReportId],
   );
 
   const isReports = currentSection.id === "reports";

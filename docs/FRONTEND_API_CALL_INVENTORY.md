@@ -1,8 +1,8 @@
 # Frontend API Call Inventory
 
-Status: current frontend inventory and canonical-route authority through BWM-032 support operator and notifications
+Status: current frontend inventory and canonical-route authority through BWM-033 Admin acceptance verification
 
-Inventory date: 2026-09-30
+Inventory date: 2026-10-01
 
 Scope: executable HTTP calls in `apps/admin/src`, `apps/student/src`, `apps/exam/src`, and `apps/vendor/src`
 
@@ -46,7 +46,7 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 | ADM-04 | `POST` | `/admin/students/onboarding-resend` | `/api/v1/admin/students/onboarding-resend` | `implemented` | Shared idempotent request/result, Firebase ID auth, identity tenant, deterministic audit/job authority, and ADM-03 reload consumer align. |
 | ADM-05 | `POST` | `/admin/students/bulk` | `/api/v1/admin/students/bulk` | `implemented` | Shared idempotent preview/commit request and replay result, identity tenant, recoverable Auth reconciliation, and ADM-03 reload consumer align. |
 | ADM-06 | `GET` | `/admin/questions/library` | `/api/v1/admin/questions/library` | `implemented` | The `limit` query and shared, strictly adapted `data.questions` result align; canonical relative asset paths are paired with fresh dashboard-signed CDN previews and bucket/object internals are excluded. |
-| ADM-07 | `GET` | `/admin/questions/distribution` | `/api/v1/admin/questions/distribution` | `implemented` | The `limit`/`examType` query and consumed `data.summary` result align. |
+| ADM-07 | `GET` | `/admin/questions/distribution` | `/api/v1/admin/questions/distribution` | `implemented` | The caller uses the backend-bounded maximum `limit=20`; optional `examType` and the consumed `data.summary` result align, while a missing governed projection remains a visible unavailable response rather than fixture authority. |
 | ADM-08 | `GET` | `/admin/questions/upload-logs` | `/api/v1/admin/questions/upload-logs` | `implemented` | Method, identity scope, and consumed `data.logs` result align. |
 | ADM-09 | `POST` | Retired (no frontend call) | `/api/v1/admin/questions/bulk` | `intentionally retired` | ADM-37/ADM-38 package authority replaces the legacy tenant-authored bulk boundary. |
 | ADM-10 | `GET` | `/admin/tests` | `/api/v1/admin/tests` | `implemented` | Standard `data` contains the shared, strictly adapted template array with backend IDs and positive-integer versions. |
@@ -210,7 +210,7 @@ the mounted interventions destination with authoritative reloads.
 | ADM-04 | `POST /admin/students/onboarding-resend` | Shared `{ idempotencyKey, studentId }` | Shared replayable result with audit/job authority | Firebase ID; `admin`; identity tenant; no license middleware | `adminStudentOnboardingResend` (`api/adminStudentOnboardingResend.ts`) | Student management and profile screens; success requires ADM-03 reload reconciliation |
 | ADM-05 | `POST /admin/students/bulk` | Shared `{ commit?, csvContent?, deactivateMissing?, idempotencyKey, students? }` | Shared preview or replayable committed result with audit authority | Firebase ID; `admin`; identity tenant; no license middleware | `adminStudentsBulk` (`api/adminStudentsBulk.ts`) | `features/students/StudentManagementPage.tsx`; commit success requires ADM-03 reload reconciliation |
 | ADM-06 | `GET /admin/questions/library` | Indexed query fields with bounded `limit` and opaque `cursor` | Strict `AdminQuestionLibraryPageResult` with authoritative revisions/lifecycle and signed canonical asset previews | Firebase ID; `teacher` or `admin`; identity tenant; no license middleware; no bucket/object exposure | `adminQuestionLibrary` (`api/adminQuestionLibrary.ts`) | Question Bank landing/library/archive and package reloads through `features/tests/questionBankApi.ts` |
-| ADM-07 | `GET /admin/questions/distribution` | Query `{ limit, examType? }` | Strict projection-only `QuestionDistributionResult` | Firebase ID; `teacher` or `admin`; identity tenant; projection completion required | `adminQuestionDistribution` (`api/adminQuestionDistribution.ts`) | Question Bank landing and distribution screens through `features/tests/questionBankApi.ts` |
+| ADM-07 | `GET /admin/questions/distribution` | Query `{ limit: 20, examType? }`; backend bound is `1..20` | Strict projection-only `QuestionDistributionResult`; missing governed projection is exposed as an unavailable response | Firebase ID; `teacher` or `admin`; identity tenant; projection completion required | `adminQuestionDistribution` (`api/adminQuestionDistribution.ts`) | Question Bank landing and distribution screens through `features/tests/questionBankApi.ts`; BWM-033 contract/browser proof prevents an out-of-range request or fixture substitution |
 | ADM-08 | `GET /admin/questions/upload-logs` | No body | Strict upload-log summaries; a valid empty list is a ready empty state | Firebase ID; `teacher` or `admin`; identity tenant; no license middleware | `adminQuestionUploadLogs` (`api/adminQuestionUploadLogs.ts`) | Question Bank management, landing, and validation screens through `features/tests/questionBankApi.ts` |
 | ADM-09 | Retired (no frontend call) | None | Canonical 404 | Legacy direct export is internal-only | None in gateway | Superseded by ADM-37/ADM-38 |
 | ADM-10 | `GET /admin/tests` | No body or query | Shared `AdminTestTemplateListResult`, strictly adapted with backend ID, numeric version, and complete configuration | Firebase ID; `teacher` or `admin`; identity tenant; no license middleware | `adminTests` (`api/adminTests.ts`) | Test landing/detail/analytics, assignment, and template screens |

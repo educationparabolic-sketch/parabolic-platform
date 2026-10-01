@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
 import {
@@ -128,12 +128,6 @@ interface ExamStrategyPreset {
   phaseStrategy: PhaseStrategyPercentages;
   targetExam: string;
   timingProfile: TimingProfile;
-}
-
-interface CustomStrategyRequestDraft {
-  reason: string;
-  strategyName: string;
-  targetExam: string;
 }
 
 interface UploadedSetOption {
@@ -475,12 +469,6 @@ const FALLBACK_QUESTION_UPLOAD_LOGS: QuestionUploadLogRecord[] = [
     totalRows: 52,
   },
 ];
-
-const INITIAL_CUSTOM_STRATEGY_REQUEST: CustomStrategyRequestDraft = {
-  reason: "",
-  strategyName: "",
-  targetExam: "",
-};
 
 function getDefaultStrategyIdForExamType(examType: string): string {
   return examType === "NEET" ? "neet_standard" : "jee_main_standard";
@@ -1137,11 +1125,6 @@ function TestTemplateManagementPage() {
     recovery: 20,
     verification: 30,
   });
-  const [isCustomStrategyRequestOpen, setIsCustomStrategyRequestOpen] = useState(false);
-  const [customStrategyRequest, setCustomStrategyRequest] = useState<CustomStrategyRequestDraft>(
-    INITIAL_CUSTOM_STRATEGY_REQUEST,
-  );
-  const [strategyRequestMessage, setStrategyRequestMessage] = useState<string | null>(null);
   const [questionPreviewId, setQuestionPreviewId] = useState<string | null>(null);
   const [questionPreviewImageFailed, setQuestionPreviewImageFailed] = useState(false);
   const [inlineMessage, setInlineMessage] = useState<string>(
@@ -1594,15 +1577,6 @@ function TestTemplateManagementPage() {
     }));
   }
 
-  function submitCustomStrategyRequest(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setStrategyRequestMessage(
-      `Request submitted for ${customStrategyRequest.strategyName.trim() || "custom strategy"}. Vendor review is now required before it becomes selectable.`,
-    );
-    setIsCustomStrategyRequestOpen(false);
-    setCustomStrategyRequest(INITIAL_CUSTOM_STRATEGY_REQUEST);
-  }
-
   function toggleQuestionSelection(questionId: string) {
     if (draft.selectionMethod !== "manual" && draft.selectionMethod !== "upload_set") {
       setErrorMessage("Use auto-select for the current selection method, or switch to manual picking.");
@@ -1731,9 +1705,6 @@ function TestTemplateManagementPage() {
     setDifficultyTimingMode("default");
     setPhaseStrategyMode("default");
     setCustomPhaseStrategy({ acquisition: 50, recovery: 20, verification: 30 });
-    setIsCustomStrategyRequestOpen(false);
-    setCustomStrategyRequest(INITIAL_CUSTOM_STRATEGY_REQUEST);
-    setStrategyRequestMessage(null);
     setDuplicateTemplate(null);
     setPendingDuplicateRecord(null);
     setErrorMessage(null);
@@ -2552,25 +2523,13 @@ function TestTemplateManagementPage() {
                     </div>
                     <div className="admin-tests-strategy-request">
                       <h4>Need a Custom Strategy?</h4>
-                      <button type="button" onClick={() => { setIsCustomStrategyRequestOpen((current) => !current); setStrategyRequestMessage(null); }}>
+                      <button type="button" disabled aria-describedby="admin-tests-custom-strategy-unavailable">
                         Request Custom Strategy
                       </button>
-                      {strategyRequestMessage ? <p className="admin-tests-form-footnote">{strategyRequestMessage}</p> : null}
+                      <p id="admin-tests-custom-strategy-unavailable" className="admin-tests-form-footnote">
+                        Custom strategy requests are unavailable. No request is created or sent from this workspace.
+                      </p>
                     </div>
-                    {isCustomStrategyRequestOpen ? (
-                      <form className="admin-tests-inline-form" onSubmit={submitCustomStrategyRequest}>
-                        <UiFormField label="Strategy Name" htmlFor="admin-tests-custom-strategy-name">
-                          <input id="admin-tests-custom-strategy-name" type="text" value={customStrategyRequest.strategyName} onChange={(event) => setCustomStrategyRequest((current) => ({ ...current, strategyName: event.target.value }))} required />
-                        </UiFormField>
-                        <UiFormField label="Target Exam" htmlFor="admin-tests-custom-strategy-exam">
-                          <input id="admin-tests-custom-strategy-exam" type="text" value={customStrategyRequest.targetExam} onChange={(event) => setCustomStrategyRequest((current) => ({ ...current, targetExam: event.target.value }))} required />
-                        </UiFormField>
-                        <UiFormField label="Reason" htmlFor="admin-tests-custom-strategy-reason">
-                          <textarea id="admin-tests-custom-strategy-reason" value={customStrategyRequest.reason} onChange={(event) => setCustomStrategyRequest((current) => ({ ...current, reason: event.target.value }))} rows={3} required />
-                        </UiFormField>
-                        <button type="submit">Submit Request</button>
-                      </form>
-                    ) : null}
                   </>
                 ) : null}
                 {hasL1Controls ? (

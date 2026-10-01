@@ -7,7 +7,7 @@ import {
 import { UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
 import QuestionBankWorkspaceNav from "./QuestionBankWorkspaceNav";
 import { QUESTION_BANK, type QuestionBankRecord } from "./testTemplateFixtures";
-import { resolveAdminAccessContext } from "../../portals/adminAccess";
+import { hasAdminCapability, resolveAdminAccessContext } from "../../portals/adminAccess";
 import { createQuestionBankIdempotencyKey, createQuestionVersion, getQuestionLibrary } from "./questionBankApi";
 
 interface ArchiveLifecycleRecord {
@@ -196,8 +196,9 @@ async function fetchArchiveLifecycleFromApi(): Promise<ArchiveLifecycleRecord[]>
 
 function AdminQuestionBankArchiveVersionsPage() {
   const { session } = useAuthProvider();
-  const role = resolveAdminAccessContext(session).role;
-  const canManage = shouldUseLiveApi() && (role === "teacher" || role === "admin");
+  const accessContext = resolveAdminAccessContext(session);
+  const canManage = shouldUseLiveApi() &&
+    hasAdminCapability("admin.question_bank.manage", accessContext);
   const [records, setRecords] = useState<ArchiveLifecycleRecord[]>(() =>
     shouldUseLiveApi() ? [] : ARCHIVE_LIFECYCLE_FIXTURES);
   const [inlineMessage, setInlineMessage] = useState(

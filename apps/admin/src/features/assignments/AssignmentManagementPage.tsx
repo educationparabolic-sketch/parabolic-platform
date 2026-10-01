@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
+import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import {
   shouldUseLiveApi as shouldUseConfiguredLiveApi,
 } from "../../../../../shared/services/frontendEnvironment";
@@ -20,6 +21,11 @@ import {
 import AssignmentsWorkspaceNav from "./AssignmentsWorkspaceNav";
 import { reconcileCreatedRun } from "./assignmentAuthority";
 import { fetchAdminRuns } from "./assignmentRunsApi";
+import {
+  hasAdminCapability,
+  resolveAdminAccessContext,
+  type AdminAccessContext,
+} from "../../portals/adminAccess";
 
 const apiClient = getPortalApiClient("admin");
 
@@ -27,7 +33,6 @@ const EXECUTION_MODES = ["Operational", "Controlled", "Diagnostic", "Hard"] as c
 const LICENSE_ORDER = ["L0", "L1", "L2", "L3"] as const;
 const RUN_STATUSES = ["Upcoming", "Live", "Completed", "Stopped", "Cancelled"] as const;
 
-const CURRENT_LICENSE_LAYER: LicenseLayer = "L2";
 const CURRENT_ACADEMIC_YEAR = "2026";
 const CURRENT_INSTITUTE_TIMEZONE = "Asia/Kolkata";
 
@@ -881,20 +886,26 @@ function deriveDifficultyDistributionLabel(distribution: AdminTestTemplateRecord
   ].join(" / ");
 }
 
-function allowedModesForLayer(layer: LicenseLayer): ExecutionMode[] {
-  if (layer === "L0") {
-    return ["Operational"];
+function allowedModesForAccess(context: AdminAccessContext): ExecutionMode[] {
+  if (!hasAdminCapability("admin.assignments.manage", context)) {
+    return [];
   }
 
-  if (layer === "L1") {
-    return ["Operational", "Diagnostic"];
+  const modes: ExecutionMode[] = ["Operational"];
+  if (context.licenseLayer && hasLicenseAccess(context.licenseLayer, "L1")) {
+    modes.push("Diagnostic");
   }
-
-  return ["Operational", "Controlled", "Diagnostic", "Hard"];
+  if (hasAdminCapability("admin.mode.controlled.configure", context)) {
+    modes.push("Controlled");
+  }
+  if (hasAdminCapability("admin.mode.hard.configure", context)) {
+    modes.push("Hard");
+  }
+  return modes;
 }
 
-function formatLayerAwareModes(layer: LicenseLayer): string {
-  return allowedModesForLayer(layer).join(", ");
+function formatLayerAwareModes(modes: ExecutionMode[]): string {
+  return modes.length > 0 ? modes.join(", ") : "None";
 }
 
 function formatExecutionModeHelper(mode: ExecutionMode): string {
@@ -910,10 +921,6 @@ function formatExecutionModeHelper(mode: ExecutionMode): string {
     default:
       return "";
   }
-}
-
-function deriveAllowedModes(): ExecutionMode[] {
-  return allowedModesForLayer(CURRENT_LICENSE_LAYER);
 }
 
 function derivePhaseSnapshot(distribution: AdminTestTemplateRecord["difficultyDistribution"]): string {
@@ -944,7 +951,7 @@ function toTemplateOption(record: AdminTestTemplateRecord): TemplateOption {
     examType: record.examType === "NEET" ? "NEET" : "JEEMains",
     status: record.status,
     difficultyDistribution: deriveDifficultyDistributionLabel(record.difficultyDistribution),
-    allowedModes: deriveAllowedModes(),
+    allowedModes: [...EXECUTION_MODES],
     totalDurationMinutes: record.totalDurationMinutes,
     createdAtIso: record.createdAt,
     lastUsedIso: record.updatedAt,
@@ -1258,7 +1265,12 @@ function recipientIdsFromMode(draft: AssignmentDraft, students: StudentOption[])
     .map((student) => student.id);
 }
 
-function validateDraft(draft: AssignmentDraft, templates: TemplateOption[], students: StudentOption[]): string | null {
+function validateDraft(
+  draft: AssignmentDraft,
+  templates: TemplateOption[],
+  students: StudentOption[],
+  allowedModes: ExecutionMode[],
+): string | null {
   if (draft.templateId.trim().length === 0) {
     return "Select a test template before scheduling the run.";
   }
@@ -1272,9 +1284,8 @@ function validateDraft(draft: AssignmentDraft, templates: TemplateOption[], stud
     return "Only templates with status ready or assigned can be used for assignment.";
   }
 
-  const requiredLayer = MODE_REQUIRED_LAYER[draft.executionMode];
-  if (!hasLicenseAccess(CURRENT_LICENSE_LAYER, requiredLayer)) {
-    return `Execution mode ${draft.executionMode} requires license layer ${requiredLayer}.`;
+  if (!allowedModes.includes(draft.executionMode)) {
+    return `Execution mode ${draft.executionMode} is not enabled by the current role, license layer, and feature policy.`;
   }
 
   if (
@@ -1439,6 +1450,38 @@ function AssignmentManagementPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const params = useParams<{ runId?: string }>();
+  const { session } = useAuthProvider();
+  const accessContext = resolveAdminAccessContext(session);
+  const currentLicenseLayer = accessContext.licenseLayer ?? "L0";
+  const {
+    adaptivePhase,
+    controlledMode,
+    governanceAccess,
+    hardMode,
+    riskOverview,
+  } = accessContext.featureFlags;
+  const allowedExecutionModes = useMemo(
+    () => allowedModesForAccess({
+      role: accessContext.role,
+      licenseLayer: accessContext.licenseLayer,
+      featureFlags: {
+        adaptivePhase,
+        controlledMode,
+        governanceAccess,
+        hardMode,
+        riskOverview,
+      },
+    }),
+    [
+      accessContext.licenseLayer,
+      accessContext.role,
+      adaptivePhase,
+      controlledMode,
+      governanceAccess,
+      hardMode,
+      riskOverview,
+    ],
+  );
   const [templateOptions, setTemplateOptions] = useState<TemplateOption[]>(TEMPLATE_OPTIONS);
   const [studentOptions, setStudentOptions] = useState<StudentOption[]>(STUDENT_OPTIONS);
   const [draft, setDraft] = useState<AssignmentDraft>(() => {
@@ -1446,7 +1489,7 @@ function AssignmentManagementPage() {
     return {
       ...INITIAL_DRAFT,
       templateId: firstReadyTemplate?.id ?? "",
-      executionMode: allowedModesForLayer(CURRENT_LICENSE_LAYER)[0] ?? "Operational",
+      executionMode: allowedExecutionModes[0] ?? "Operational",
     };
   });
   const [appliedMetricsFilter, setAppliedMetricsFilter] = useState<MetricsFilter>(INITIAL_DRAFT.metricsFilter);
@@ -1469,10 +1512,7 @@ function AssignmentManagementPage() {
       null,
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const layerVisibleModes = useMemo(
-    () => allowedModesForLayer(CURRENT_LICENSE_LAYER),
-    [],
-  );
+  const layerVisibleModes = allowedExecutionModes;
   const activeSection = useMemo(() => resolveAssignmentSection(location.pathname), [location.pathname]);
   const workspaceHeader = useMemo(() => {
     if (activeSection === "create") {
@@ -1487,6 +1527,13 @@ function AssignmentManagementPage() {
       copy: "Track upcoming, live, completed, stopped, and cancelled assignments in one clean view.",
     };
   }, [activeSection]);
+
+  useEffect(() => {
+    setDraft((current) => layerVisibleModes.includes(current.executionMode) ? current : {
+      ...current,
+      executionMode: layerVisibleModes[0] ?? "Operational",
+    });
+  }, [layerVisibleModes]);
 
   useEffect(() => {
     let isMounted = true;
@@ -1773,16 +1820,16 @@ function AssignmentManagementPage() {
     [appliedMetricsFilter],
   );
   const visibleMetricControls = useMemo<MetricControl[]>(() => {
-    if (CURRENT_LICENSE_LAYER === "L0") {
+    if (currentLicenseLayer === "L0") {
       return ["raw", "accuracy"];
     }
 
-    if (CURRENT_LICENSE_LAYER === "L1") {
+    if (currentLicenseLayer === "L1") {
       return ["raw", "accuracy"];
     }
 
     return ["risk", "discipline", "raw", "accuracy"];
-  }, []);
+  }, [currentLicenseLayer]);
   const matchesMetricFilters = useCallback((values: Pick<StudentSelectionRow, "raw" | "accuracy" | "risk" | "discipline" | "topicWeaknesses">): boolean => {
     if (visibleMetricControls.includes("risk") && appliedMetricsFilter.riskState !== "all" && values.risk !== appliedMetricsFilter.riskState) {
       return false;
@@ -2047,8 +2094,8 @@ function AssignmentManagementPage() {
   }, [batchOptions, filters, runs]);
 
   const assignmentColumns: UiTableColumn<RunStatusRecord>[] = (() => {
-    const showL1 = hasLicenseAccess(CURRENT_LICENSE_LAYER, "L1");
-    const showL2 = hasLicenseAccess(CURRENT_LICENSE_LAYER, "L2");
+    const showL1 = hasLicenseAccess(currentLicenseLayer, "L1");
+    const showL2 = hasLicenseAccess(currentLicenseLayer, "L2");
 
     return [
       {
@@ -2277,7 +2324,7 @@ function AssignmentManagementPage() {
       },
     ];
 
-    if (hasLicenseAccess(CURRENT_LICENSE_LAYER, "L1")) {
+    if (hasLicenseAccess(currentLicenseLayer, "L1")) {
       columns.push(
         {
           id: "currentPhase",
@@ -2299,7 +2346,7 @@ function AssignmentManagementPage() {
       );
     }
 
-    if (hasLicenseAccess(CURRENT_LICENSE_LAYER, "L2")) {
+    if (hasLicenseAccess(currentLicenseLayer, "L2")) {
       columns.push(
         {
           id: "l2ExecutionCounters",
@@ -2331,7 +2378,7 @@ function AssignmentManagementPage() {
     });
 
     return columns;
-  }, []);
+  }, [currentLicenseLayer]);
 
   function formatLiveFlag(isActive: boolean): string {
     return isActive ? "Flagged" : "Clear";
@@ -2414,7 +2461,12 @@ function AssignmentManagementPage() {
     setErrorMessage(null);
     setInlineMessage(null);
 
-    const validationError = validateDraft(draft, templateOptions, studentOptions);
+    const validationError = validateDraft(
+      draft,
+      templateOptions,
+      studentOptions,
+      layerVisibleModes,
+    );
     if (validationError) {
       setErrorMessage(validationError);
       return;
@@ -2673,8 +2725,8 @@ function AssignmentManagementPage() {
                       </p>
 
                       <div className="admin-assignments-layer-note">
-                        <strong>Current Layer: {CURRENT_LICENSE_LAYER}</strong>
-                        <span>Available modes in this layer: {formatLayerAwareModes(CURRENT_LICENSE_LAYER)}</span>
+                        <strong>Current Layer: {currentLicenseLayer}</strong>
+                        <span>Available modes under current policy: {formatLayerAwareModes(layerVisibleModes)}</span>
                       </div>
 
                       <div className="admin-assignments-mode-grid" role="radiogroup" aria-label="Assignment mode selection">
@@ -2817,7 +2869,7 @@ function AssignmentManagementPage() {
                                 { id: "active", header: "Active", render: (row) => row.activeStudents },
                                 { id: "raw", header: "Avg Raw %", render: (row) => row.raw },
                                 { id: "accuracy", header: "Avg Accuracy %", render: (row) => row.accuracy },
-                                ...(CURRENT_LICENSE_LAYER === "L2" || CURRENT_LICENSE_LAYER === "L3" ? [
+                                ...(currentLicenseLayer === "L2" || currentLicenseLayer === "L3" ? [
                                   { id: "risk", header: "Risk", render: (row: BatchSelectionRow) => row.risk },
                                   { id: "discipline", header: "Discipline", render: (row: BatchSelectionRow) => row.discipline },
                                 ] : []),
@@ -2965,7 +3017,7 @@ function AssignmentManagementPage() {
                                 { id: "batch", header: "Batch", render: (row) => row.batch },
                                 { id: "raw", header: "Avg Raw %", render: (row) => row.raw },
                                 { id: "accuracy", header: "Avg Accuracy %", render: (row) => row.accuracy },
-                                ...(CURRENT_LICENSE_LAYER === "L2" || CURRENT_LICENSE_LAYER === "L3" ? [
+                                ...(currentLicenseLayer === "L2" || currentLicenseLayer === "L3" ? [
                                   { id: "risk", header: "Risk", render: (row: StudentSelectionRow) => row.risk },
                                   { id: "discipline", header: "Discipline", render: (row: StudentSelectionRow) => row.discipline },
                                 ] : []),
@@ -3007,7 +3059,7 @@ function AssignmentManagementPage() {
                             { id: "batch", header: "Batch", render: (row) => row.batch },
                             { id: "raw", header: "Avg Raw %", render: (row) => row.raw },
                             { id: "accuracy", header: "Avg Accuracy %", render: (row) => row.accuracy },
-                            ...(CURRENT_LICENSE_LAYER === "L2" || CURRENT_LICENSE_LAYER === "L3" ? [
+                            ...(currentLicenseLayer === "L2" || currentLicenseLayer === "L3" ? [
                               { id: "risk", header: "Risk", render: (row: RecipientPreviewRow) => row.risk },
                               { id: "discipline", header: "Discipline", render: (row: RecipientPreviewRow) => row.discipline },
                             ] : []),

@@ -20,7 +20,7 @@ import {
   type QuestionBankRecord,
 } from "./testTemplateFixtures";
 import QuestionBankWorkspaceNav from "./QuestionBankWorkspaceNav";
-import { resolveAdminAccessContext } from "../../portals/adminAccess";
+import { hasAdminCapability, resolveAdminAccessContext } from "../../portals/adminAccess";
 import {
   createQuestionBankIdempotencyKey,
   createQuestionVersion as createQuestionVersionWithApi,
@@ -138,7 +138,7 @@ function AdminQuestionBankLibraryPage() {
   const { session } = useAuthProvider();
   const accessContext = resolveAdminAccessContext(session);
   const canManageQuestionBank = shouldUseLiveApi() &&
-    (accessContext.role === "teacher" || accessContext.role === "admin");
+    hasAdminCapability("admin.question_bank.manage", accessContext);
   const [questions, setQuestions] = useState<QuestionBankRecord[]>(QUESTION_BANK);
   const [filters, setFilters] = useState<QuestionFilterDraft>(INITIAL_FILTERS);
   const [page, setPage] = useState(1);

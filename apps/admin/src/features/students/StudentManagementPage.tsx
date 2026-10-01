@@ -35,7 +35,7 @@ import {
   type UiChartPoint,
   type UiTableColumn,
 } from "../../../../../shared/ui/components";
-import { resolveAdminAccessContext } from "../../portals/adminAccess";
+import { hasAdminCapability, resolveAdminAccessContext } from "../../portals/adminAccess";
 import StudentWorkspaceNav from "./StudentWorkspaceNav";
 
 const apiClient = getPortalApiClient("admin");
@@ -1514,7 +1514,7 @@ function StudentManagementPage() {
   const currentLayer = effectiveLayer(accessContext.licenseLayer);
   const hasL1Signals = hasLayer(currentLayer, "L1");
   const canUseL2Filters = hasLayer(currentLayer, "L2");
-  const isBulkUploadAdmin = accessContext.role === "admin";
+  const isBulkUploadAdmin = hasAdminCapability("admin.students.manage", accessContext);
   const location = useLocation();
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);

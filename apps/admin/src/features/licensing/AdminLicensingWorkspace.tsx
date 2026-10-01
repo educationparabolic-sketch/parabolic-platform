@@ -7,15 +7,13 @@ import {
   type FormEvent,
 } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { CAPABILITY_MATRIX } from "../../../../../shared/contracts/capabilityPolicy";
 import type {
   AdminLicenseExternalAction,
   AdminLicenseLayer,
 } from "../../../../../shared/contracts/adminLicensing";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
-import { LICENSE_LAYER_ORDER } from "../../../../../shared/types/portalRouting";
 import { UiFormField, UiStatCard } from "../../../../../shared/ui/components";
-import { resolveAdminAccessContext } from "../../portals/adminAccess";
+import { hasAdminCapability, resolveAdminAccessContext } from "../../portals/adminAccess";
 import {
   ApiClientError,
   createLicenseRequestIdempotencyKey,
@@ -173,14 +171,10 @@ function AdminLicensingWorkspace() {
     snapshot.requests.items.find(
       (request) => request.requestId === snapshot.requests.openRequestId,
     ) ?? null : null;
-  const upgradePolicy = CAPABILITY_MATRIX["admin.license.upgrade_request"];
-  const requiredUpgradeLayer = upgradePolicy.minimumLicenseLayer;
-  const hasUpgradeCapability =
-    accessContext.role !== null &&
-    upgradePolicy.allowedRoles.some((allowedRole) => allowedRole === accessContext.role) &&
-    accessContext.licenseLayer !== null &&
-    requiredUpgradeLayer !== null &&
-    LICENSE_LAYER_ORDER[accessContext.licenseLayer] >= LICENSE_LAYER_ORDER[requiredUpgradeLayer];
+  const hasUpgradeCapability = hasAdminCapability(
+    "admin.license.upgrade_request",
+    accessContext,
+  );
   const canSubmitUpgrade = !fixtureMode && hasUpgradeCapability && current?.state === "active";
   const studentUtilization = usage ?
     utilization(usage.activeStudentCount, usage.activeStudentLimit) : null;

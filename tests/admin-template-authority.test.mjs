@@ -169,3 +169,13 @@ test("Admin lifecycle uses distinct static routes and authoritative reloads", ()
   assert.doesNotMatch(pageSource, /updateTemplateLifecycle/);
   assert.doesNotMatch(pageSource, />\s*Deprecate\s*</);
 });
+
+test("custom-strategy requests are truthfully unavailable without fabricated submission", () => {
+  assert.match(
+    pageSource,
+    /<button type="button" disabled aria-describedby="admin-tests-custom-strategy-unavailable">\s*Request Custom Strategy/u,
+  );
+  assert.match(pageSource, /Custom strategy requests are unavailable\./u);
+  assert.match(pageSource, /No request is created or sent from this workspace\./u);
+  assert.doesNotMatch(pageSource, /submitCustomStrategyRequest|Submit Request|Vendor review is now required/u);
+});

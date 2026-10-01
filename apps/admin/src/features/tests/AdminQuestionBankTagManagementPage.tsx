@@ -4,7 +4,7 @@ import { ApiClientError } from "../../../../../shared/services/apiClient";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { shouldUseLiveApi } from "../../../../../shared/services/frontendEnvironment";
 import { UiForm, UiFormField, UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
-import { resolveAdminAccessContext } from "../../portals/adminAccess";
+import { hasAdminCapability, resolveAdminAccessContext } from "../../portals/adminAccess";
 import QuestionBankWorkspaceNav from "./QuestionBankWorkspaceNav";
 import { createQuestionBankIdempotencyKey, getQuestionTags, mutateQuestionTags } from "./questionBankApi";
 import { QUESTION_BANK } from "./testTemplateFixtures";
@@ -32,8 +32,9 @@ function fixtureTags(field: AdminQuestionTagField): AdminQuestionTagAuthorityRec
 
 function AdminQuestionBankTagManagementPage() {
   const {session} = useAuthProvider();
-  const role = resolveAdminAccessContext(session).role;
-  const canManage = shouldUseLiveApi() && (role === "teacher" || role === "admin");
+  const accessContext = resolveAdminAccessContext(session);
+  const canManage = shouldUseLiveApi() &&
+    hasAdminCapability("admin.question_bank.manage", accessContext);
   const [tagFieldScope, setTagFieldScope] = useState<AdminQuestionTagField>("primaryTag");
   const [tagOperation, setTagOperation] = useState<TagOperation>("create");
   const [firstEntryValue, setFirstEntryValue] = useState("");

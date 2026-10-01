@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { CAPABILITY_MATRIX } from "../../../../../shared/contracts/capabilityPolicy";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
-import { LICENSE_LAYER_ORDER } from "../../../../../shared/types/portalRouting";
 import { UiFormField, UiStatCard } from "../../../../../shared/ui/components";
-import { resolveAdminAccessContext } from "../../portals/adminAccess";
+import { hasAdminCapability, resolveAdminAccessContext } from "../../portals/adminAccess";
 import {
   ApiClientError,
   FALLBACK_SNAPSHOT,
@@ -114,13 +112,7 @@ function AdminSettingsWorkspace() {
   const accessContext = resolveAdminAccessContext(session);
   const activeView = resolveView(location.pathname);
   const fixtureMode = isLocalSettingsReadMode();
-  const managePolicy = CAPABILITY_MATRIX["admin.settings.manage"];
-  const minimumManageLayer = managePolicy.minimumLicenseLayer;
-  const hasManageCapability = accessContext.role !== null &&
-    managePolicy.allowedRoles.some((allowedRole) => allowedRole === accessContext.role) &&
-    accessContext.licenseLayer !== null &&
-    minimumManageLayer !== null &&
-    LICENSE_LAYER_ORDER[accessContext.licenseLayer] >= LICENSE_LAYER_ORDER[minimumManageLayer];
+  const hasManageCapability = hasAdminCapability("admin.settings.manage", accessContext);
   const canManageSettings = !fixtureMode && hasManageCapability;
   const [snapshot, setSnapshot] = useState<AdminSettingsSnapshot>(FALLBACK_SNAPSHOT);
   const [profileDraft, setProfileDraft] = useState<InstituteProfileSettings>(

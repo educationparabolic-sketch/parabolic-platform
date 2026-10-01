@@ -64,13 +64,24 @@ test("Admin teacher route and handler role sets match the canonical capability m
   const matrixPath = join(rootDirectory, "shared/contracts/capabilityPolicy.ts");
   const backendPolicyPath = join(rootDirectory, "functions/src/policy/adminRolePolicy.ts");
   const adminRoutesPath = join(rootDirectory, "apps/admin/src/portals/adminRoutes.ts");
-  const [matrixSource, backendPolicySource, adminRoutesSource] = await Promise.all([
+  const adminAccessPath = join(rootDirectory, "apps/admin/src/portals/adminAccess.ts");
+  const [matrixSource, backendPolicySource, adminRoutesSource, adminAccessSource] = await Promise.all([
     readFile(matrixPath, "utf8"),
     readFile(backendPolicyPath, "utf8"),
     readFile(adminRoutesPath, "utf8"),
+    readFile(adminAccessPath, "utf8"),
   ]);
   const matrixModule = loadTypeScriptModule(matrixSource, matrixPath);
   const backendPolicy = loadTypeScriptModule(backendPolicySource, backendPolicyPath);
+  const portalRoutingModule = { LICENSE_LAYER_ORDER: { L0: 0, L1: 1, L2: 2, L3: 3 } };
+  const adminAccessModule = loadTypeScriptModule(adminAccessSource, adminAccessPath, (specifier) => {
+    if (specifier.endsWith("shared/contracts/capabilityPolicy")) return matrixModule;
+    if (specifier.endsWith("shared/types/portalRouting")) return portalRoutingModule;
+    if (specifier.endsWith("shared/services/globalPortalState")) {
+      return { resolveGlobalPortalState: () => { throw new Error("Session resolution is not used here"); } };
+    }
+    throw new Error(`Unexpected Admin access dependency: ${specifier}`);
+  });
 
   for (const capability of teacherAdminCapabilities) {
     assert.deepEqual(
@@ -91,8 +102,8 @@ test("Admin teacher route and handler role sets match the canonical capability m
     if (specifier.endsWith("shared/contracts/capabilityPolicy")) {
       return matrixModule;
     }
-    if (specifier.endsWith("shared/types/portalRouting")) {
-      return { LICENSE_LAYER_ORDER: { L0: 0, L1: 1, L2: 2, L3: 3 } };
+    if (specifier.endsWith("./adminAccess")) {
+      return adminAccessModule;
     }
     throw new Error(`Unexpected Admin route dependency: ${specifier}`);
   });
@@ -127,18 +138,49 @@ test("Admin teacher route and handler role sets match the canonical capability m
   );
   assert.doesNotMatch(adminRoutesSource, /allowedRoles:\s*\[[^\]]*"teacher"/u);
 
+  const noFeatures = {
+    adaptivePhase: false,
+    controlledMode: false,
+    governanceAccess: false,
+    hardMode: false,
+    riskOverview: false,
+  };
+  const allFeatures = Object.fromEntries(
+    Object.keys(noFeatures).map((featureName) => [featureName, true]),
+  );
+
   const settingsRoute = adminRoutesModule.matchAdminRoute("/admin/settings/profile");
   assert.deepEqual(
-    adminRoutesModule.evaluateAdminRoutePermissions(settingsRoute, "director", "L2"),
+    adminRoutesModule.evaluateAdminRoutePermissions(settingsRoute, "director", "L2", noFeatures),
     {allowed: false, redirectTo: "/unauthorized", reason: "license_restricted"},
   );
   assert.deepEqual(
-    adminRoutesModule.evaluateAdminRoutePermissions(settingsRoute, "director", "L3"),
+    adminRoutesModule.evaluateAdminRoutePermissions(settingsRoute, "director", "L3", noFeatures),
     {allowed: true, redirectTo: null, reason: null},
   );
   assert.deepEqual(
-    adminRoutesModule.evaluateAdminRoutePermissions(settingsRoute, "admin", "L0"),
+    adminRoutesModule.evaluateAdminRoutePermissions(settingsRoute, "admin", "L0", noFeatures),
     {allowed: true, redirectTo: null, reason: null},
+  );
+
+  const insightsRoute = adminRoutesModule.matchAdminRoute("/admin/insights/risk");
+  assert.deepEqual(
+    adminRoutesModule.evaluateAdminRoutePermissions(insightsRoute, "teacher", "L1", noFeatures),
+    {allowed: false, redirectTo: "/admin/overview", reason: "license_restricted"},
+  );
+  assert.deepEqual(
+    adminRoutesModule.evaluateAdminRoutePermissions(insightsRoute, "teacher", "L1", allFeatures),
+    {allowed: true, redirectTo: null, reason: null},
+  );
+  assert.equal(
+    adminRoutesModule.getVisibleAdminRoutes("director", "L3", noFeatures)
+      .some((route) => route.path === "/admin/governance"),
+    false,
+  );
+  assert.equal(
+    adminRoutesModule.getVisibleAdminRoutes("director", "L3", allFeatures)
+      .some((route) => route.path === "/admin/governance"),
+    true,
   );
 });
 

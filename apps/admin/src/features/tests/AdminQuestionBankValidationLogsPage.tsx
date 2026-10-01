@@ -4,7 +4,7 @@ import { ApiClientError } from "../../../../../shared/services/apiClient";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { shouldUseLiveApi } from "../../../../../shared/services/frontendEnvironment";
 import { UiTable, type UiTableColumn } from "../../../../../shared/ui/components";
-import { resolveAdminAccessContext } from "../../portals/adminAccess";
+import { hasAdminCapability, resolveAdminAccessContext } from "../../portals/adminAccess";
 import QuestionBankWorkspaceNav from "./QuestionBankWorkspaceNav";
 import {
   createQuestionBankIdempotencyKey,
@@ -20,8 +20,9 @@ function formatIsoDate(value: string): string {
 
 function AdminQuestionBankValidationLogsPage() {
   const {session} = useAuthProvider();
-  const role = resolveAdminAccessContext(session).role;
-  const canManage = shouldUseLiveApi() && (role === "teacher" || role === "admin");
+  const accessContext = resolveAdminAccessContext(session);
+  const canManage = shouldUseLiveApi() &&
+    hasAdminCapability("admin.question_bank.manage", accessContext);
   const [logs, setLogs] = useState<AdminQuestionUploadLogDetailResult[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [pendingLogId, setPendingLogId] = useState<string | null>(null);

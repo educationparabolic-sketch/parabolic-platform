@@ -2,13 +2,15 @@
 
 Status: canonical route and response-envelope contract
 
-Last reconciled: 2026-09-30 (`BWM-032` support operator and notifications)
+Last reconciled: 2026-10-01 (`BWM-033` Admin acceptance verified; no route/export/handler change)
 
 ## Sources of truth
 
 - Machine-readable route and Functions-export inventory: `functions/src/apiRouteManifest.ts`
 - Frontend request/response and current-handler evidence: `docs/FRONTEND_API_CALL_INVENTORY.md`
 - Module ownership and implementation history: `docs/MODULE_REGISTRY.md`
+
+The BWM-033 Admin acceptance closeout reconfirmed this API surface through the executable Admin action ledger, focused source contracts, all 57 non-emulator Functions test files, the 8-case gateway emulator suite, and the authenticated no-mock Admin browser matrix. It corrected the ADM-07 caller to the documented maximum `limit=20` and permanently verifies the truthful governed-backfill unavailable response. Canonical accounting remains 77 routes, 54 HTTP exports, and 37 gateway handlers.
 
 If prose and the typed manifest disagree about a route key or status, the typed manifest must be corrected and the documentation reconciled in the same change.
 
