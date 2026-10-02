@@ -775,11 +775,11 @@ function App() {
           />
           <Route
             path="institutes/:instituteId"
-            element={renderVendorPlaceholder(
-              "Institute Detail",
-              "Institute-specific drill-in route for tenant health, licensing posture, and operational review.",
-              "Route shell is now mounted for planned route-map parity. Detailed institute-level workflow panels can be layered in without changing the route contract.",
-            )}
+            element={
+              <VendorRouteBoundary label="Loading institute detail">
+                <VendorInstituteManagementPage />
+              </VendorRouteBoundary>
+            }
           />
           <Route
             path="licensing"

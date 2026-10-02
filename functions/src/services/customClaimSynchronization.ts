@@ -359,7 +359,8 @@ implements AuthorityRepository {
         featureFlags,
         gracePeriodEndsAt,
         instituteId,
-        isSuspended: instituteSuspended || status === "suspended",
+        isSuspended: instituteSuspended || status === "suspended" ||
+          staffData.claimsWithheld === true,
         licenseLayer,
         licenseState,
         licenseVersion,

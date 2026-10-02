@@ -23,6 +23,8 @@ function materializePath(canonicalPath, routeId) {
     .replace("{packageId}", encodeURIComponent(`package ${routeId} Ω`))
     .replace("{uploadLogId}", encodeURIComponent(`upload ${routeId} Ω`))
     .replace("{reportId}", encodeURIComponent(`report ${routeId} Ω`))
+    .replace("{instituteId}", encodeURIComponent(`institute ${routeId} Ω`))
+    .replace("{onboardingId}", encodeURIComponent(`onboarding ${routeId} Ω`))
     .replace("{ticketId}", encodeURIComponent(`ticket ${routeId} Ω`))
     .replace(
       "{attachmentId}",
@@ -55,7 +57,7 @@ test("implemented routes have one registered existing handler", () => {
   const implementedRoutes = API_ROUTE_MANIFEST.filter(
     (route) => route.status === "implemented",
   );
-  assert.equal(implementedRoutes.length, 71);
+  assert.equal(implementedRoutes.length, 81);
 
   for (const route of implementedRoutes) {
     assert.equal(typeof API_GATEWAY_HANDLERS[route.functionExport], "function");
@@ -109,7 +111,8 @@ test("BWM-032 support declarations preserve their ordered boundary", () => {
     (route.id.startsWith("ADM-") &&
       Number(route.id.replace("ADM-", "")) >= 56) ||
     (route.id.startsWith("VEN-") &&
-      Number(route.id.replace("VEN-", "")) >= 3),
+      Number(route.id.replace("VEN-", "")) >= 3 &&
+      Number(route.id.replace("VEN-", "")) <= 6),
   );
 
   assert.equal(supportRoutes.length, 9);
@@ -119,6 +122,29 @@ test("BWM-032 support declarations preserve their ordered boundary", () => {
     assert.equal(
       route.functionExport,
       route.id.startsWith("ADM-") ? "adminSupport" : "vendorSupport",
+    );
+  });
+});
+
+test("BWM-034 institute declarations reach the secured handler", () => {
+  const instituteRoutes = API_ROUTE_MANIFEST.filter((route) =>
+    route.id.startsWith("VEN-") &&
+    Number(route.id.replace("VEN-", "")) >= 7 &&
+    Number(route.id.replace("VEN-", "")) <= 16,
+  );
+
+  assert.equal(instituteRoutes.length, 10);
+  instituteRoutes.forEach((route) => {
+    assert.equal(route.declaration, "planned");
+    assert.equal(route.status, "implemented");
+    assert.equal(route.functionExport, "vendorInstitutes");
+    assert.equal(typeof API_GATEWAY_HANDLERS[route.functionExport], "function");
+    assert.equal(
+      resolveApiRoute(
+        route.method,
+        materializePath(route.canonicalPath, route.id),
+      )?.route.id,
+      route.id,
     );
   });
 });

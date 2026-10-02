@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
+import { shouldUseFixtureData } from "../../../../../shared/services/frontendEnvironment";
 import {
   UiForm,
   UiFormField,
@@ -31,6 +32,7 @@ import {
   type VendorLicenseRequestStatus,
 } from "./vendorLicenseRequestsStore";
 import VendorInstituteOnboardingWorkspace from "./VendorInstituteOnboardingWorkspace";
+import VendorInstituteAuthorityPage from "./VendorInstituteAuthorityPage";
 
 interface InstituteFilters {
   query: string;
@@ -195,8 +197,9 @@ function getEffectivePaymentStatus(
   return invoiceRows.length > 0 ? "Paid" : fallback;
 }
 
-function VendorInstituteManagementPage() {
+function FixtureVendorInstituteManagementPage() {
   const dataset = useMemo(() => getVendorInstitutesDataset(), []);
+  const { instituteId: routeInstituteId } = useParams<{ instituteId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const {
     requests: licenseRequests,
@@ -257,7 +260,9 @@ function VendorInstituteManagementPage() {
     requestedPageView === "requests" || requestedPageView === "onboarding"
       ? requestedPageView
       : "directory";
-  const linkedInstituteId = searchParams.get("institute");
+  const linkedInstituteId = routeInstituteId
+    ? decodeURIComponent(routeInstituteId)
+    : searchParams.get("institute");
   const linkedTab = searchParams.get("tab");
   const resolvedActiveTab: InstituteWorkspaceTab =
     linkedTab === "license" || linkedTab === "activity" || linkedTab === "administration"
@@ -2506,4 +2511,10 @@ function VendorInstituteManagementPage() {
   );
 }
 
-export default VendorInstituteManagementPage;
+export default function VendorInstituteManagementPage() {
+  return shouldUseFixtureData() ? (
+    <FixtureVendorInstituteManagementPage />
+  ) : (
+    <VendorInstituteAuthorityPage />
+  );
+}

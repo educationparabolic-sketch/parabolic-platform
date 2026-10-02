@@ -2,7 +2,7 @@
 
 This document defines the event-driven topology of the platform.
 
-Last reconciled: 2026-10-01 (`BWM-032` verified)
+Last reconciled: 2026-10-01 (`BWM-034` onboarding authority)
 
 Each event represents a state transition or trigger that initiates downstream processing.
 
@@ -228,6 +228,51 @@ new browser-owned event, Firestore trigger, or direct Storage edge. Permanent
 support-specific emulator and no-mock browser proof now covers notification
 retry, command races/replay, private attachments, cursor pagination, fresh-device
 persistence, and the complete fail-closed Admin boundary.
+
+BWM-034 VEN-07..VEN-16 are synchronous HTTP edges registered through the shared
+`vendorInstitutes` Function/gateway handler. Revocation-checked Auth plus a fresh
+current Vendor user read precedes service dispatch. Institute and onboarding
+reads are bounded cursor operations over metadata/projections and the
+pre-tenant onboarding namespace; none scans raw Student, run, or session
+collections or emits domain events.
+
+The implemented BWM-034 institute create/profile/lifecycle and non-commercial
+onboarding writes are
+synchronous optimistic and idempotent commands. Each accepted transition
+persists its normalized hashed command result and immutable Vendor audit, plus
+a matching institute audit after the institute exists. Onboarding create/review
+commands append immutable bounded events; institute creation also
+advances approved onboarding and appends its immutable `institute_created`
+event in the same transaction. Prerequisite reconciliation is an explicit
+synchronous command that reads current commercial, primary-administrator,
+settings, and active-academic-year authority without emitting a commercial or
+identity event. Activation atomically advances the linked institute. Exact
+replay is read-only and no Firestore trigger is added. Later administrator
+commands follow the same boundary through registered VEN-16.
+Primary-administrator invitation/reset work enqueues one redacted deterministic
+`emailQueue` job and uses the existing scheduled delivery edge; verification,
+password-link creation, and provider content remain memory-only. Delivery
+revalidates current pending/current staff and Auth email authority. Invitation
+acceptance is derived from verified-email plus completed-sign-in Auth authority,
+not a browser-authored event. After every durable command, the service reconciles
+the latest desired Auth disabled state, managed claims, and refresh tokens;
+transient failure remains retryable on exact replay and missing entitlement is
+explicitly blocked rather than reported complete.
+
+Deletion scheduling is synchronous, but purge execution is a durable staged
+operation with a minimum 30-day/legal-hold gate and resumable checkpoints. The
+later bounded background worker must preserve a
+tombstone/audit/recovery record; an HTTP request may reserve or resume the
+operation but may not recursively delete an institute tree or report completion
+early. The implemented command service stops at a durable `reserved` quiescing
+checkpoint and adds no scheduler or trigger.
+
+Institute suspension updates the persisted BWM-034 access/lifecycle authority
+but may truthfully report `pending_bwm_036`. BWM-036 exclusively owns
+production-scale identity fan-out, retries/dead letters, propagation timing,
+and stale-session proof. Likewise, BWM-035 owns commercial decisions and only
+its actual entitlement mutation may initiate the BWM-036 license propagation
+flow. No BWM-034 transition may synthesize either outcome.
 
 ---
 

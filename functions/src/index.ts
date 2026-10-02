@@ -132,6 +132,7 @@ import {
 } from "./api/adminLicensing";
 import {handleAdminSupportRequest} from "./api/adminSupport";
 import {handleVendorSupportRequest} from "./api/vendorSupport";
+import {handleVendorInstitutesRequest} from "./api/vendorInstitutes";
 import {
   handleAdminAnalyticsRequest,
 } from "./api/adminAnalytics";
@@ -337,6 +338,9 @@ export const adminSupport = functions.https.onRequest(
 );
 export const vendorSupport = functions.https.onRequest(
   handleVendorSupportRequest,
+);
+export const vendorInstitutes = functions.https.onRequest(
+  handleVendorInstitutesRequest,
 );
 export const adminOverview = functions.https.onRequest(
   handleAdminOverviewRequest,

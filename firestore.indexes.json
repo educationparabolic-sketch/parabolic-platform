@@ -763,6 +763,110 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "institutes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "vendorLifecycleState", "order": "ASCENDING"},
+        {"fieldPath": "updatedAt", "order": "DESCENDING"},
+        {"fieldPath": "__name__", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "institutes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "vendorLicenseLayer", "order": "ASCENDING"},
+        {"fieldPath": "updatedAt", "order": "DESCENDING"},
+        {"fieldPath": "__name__", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "institutes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "vendorLifecycleState", "order": "ASCENDING"},
+        {"fieldPath": "vendorLicenseLayer", "order": "ASCENDING"},
+        {"fieldPath": "updatedAt", "order": "DESCENDING"},
+        {"fieldPath": "__name__", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "institutes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "vendorFilterKeys", "arrayConfig": "CONTAINS"},
+        {"fieldPath": "updatedAt", "order": "DESCENDING"},
+        {"fieldPath": "__name__", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "institutes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "vendorFilterKeys", "arrayConfig": "CONTAINS"},
+        {"fieldPath": "vendorLifecycleState", "order": "ASCENDING"},
+        {"fieldPath": "updatedAt", "order": "DESCENDING"},
+        {"fieldPath": "__name__", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "institutes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "vendorFilterKeys", "arrayConfig": "CONTAINS"},
+        {"fieldPath": "vendorLicenseLayer", "order": "ASCENDING"},
+        {"fieldPath": "updatedAt", "order": "DESCENDING"},
+        {"fieldPath": "__name__", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "institutes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "vendorFilterKeys", "arrayConfig": "CONTAINS"},
+        {"fieldPath": "vendorLifecycleState", "order": "ASCENDING"},
+        {"fieldPath": "vendorLicenseLayer", "order": "ASCENDING"},
+        {"fieldPath": "updatedAt", "order": "DESCENDING"},
+        {"fieldPath": "__name__", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "vendorOnboarding",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "status", "order": "ASCENDING"},
+        {"fieldPath": "updatedAt", "order": "DESCENDING"},
+        {"fieldPath": "__name__", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "vendorOnboarding",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "onboardingFilterKeys", "arrayConfig": "CONTAINS"},
+        {"fieldPath": "updatedAt", "order": "DESCENDING"},
+        {"fieldPath": "__name__", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "vendorOnboarding",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "onboardingFilterKeys", "arrayConfig": "CONTAINS"},
+        {"fieldPath": "status", "order": "ASCENDING"},
+        {"fieldPath": "updatedAt", "order": "DESCENDING"},
+        {"fieldPath": "__name__", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "occurredAt", "order": "DESCENDING"},
+        {"fieldPath": "__name__", "order": "DESCENDING"}
+      ]
     }
   ],
   "fieldOverrides": []

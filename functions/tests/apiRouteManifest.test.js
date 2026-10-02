@@ -88,6 +88,14 @@ function parameterName(expression, sourceFile) {
     return "{attachmentId}";
   }
 
+  if (/instituteId/i.test(expressionText)) {
+    return "{instituteId}";
+  }
+
+  if (/onboardingId/i.test(expressionText)) {
+    return "{onboardingId}";
+  }
+
   throw new Error(
     `Unsupported API path parameter in ${sourceFile.fileName}: ` +
       expressionText,
@@ -360,10 +368,20 @@ test(
         "VEN-04",
         "VEN-05",
         "VEN-06",
+        "VEN-07",
+        "VEN-08",
+        "VEN-09",
+        "VEN-10",
+        "VEN-11",
+        "VEN-12",
+        "VEN-13",
+        "VEN-14",
+        "VEN-15",
+        "VEN-16",
       ],
     );
     plannedRoutes.forEach((route) => {
-      assert.equal(route.status, "implemented");
+      assert.equal(route.status, "implemented", `${route.id} status`);
       assert.equal(typeof route.functionExport, "string");
     });
   },
@@ -381,7 +399,7 @@ test("canonical route status accounting is exact", () => {
   });
 
   assert.deepEqual(statusCounts, {
-    implemented: 71,
+    implemented: 81,
     incompatible: 1,
     intentionally_retired: 5,
     missing: 0,

@@ -2,7 +2,7 @@
 
 Status: canonical route and response-envelope contract
 
-Last reconciled: 2026-10-01 (`BWM-033` Admin acceptance verified; no route/export/handler change)
+Last reconciled: 2026-10-02 (`BWM-034` verified Vendor institute browser acceptance)
 
 ## Sources of truth
 
@@ -10,7 +10,9 @@ Last reconciled: 2026-10-01 (`BWM-033` Admin acceptance verified; no route/expor
 - Frontend request/response and current-handler evidence: `docs/FRONTEND_API_CALL_INVENTORY.md`
 - Module ownership and implementation history: `docs/MODULE_REGISTRY.md`
 
-The BWM-033 Admin acceptance closeout reconfirmed this API surface through the executable Admin action ledger, focused source contracts, all 57 non-emulator Functions test files, the 8-case gateway emulator suite, and the authenticated no-mock Admin browser matrix. It corrected the ADM-07 caller to the documented maximum `limit=20` and permanently verifies the truthful governed-backfill unavailable response. Canonical accounting remains 77 routes, 54 HTTP exports, and 37 gateway handlers.
+VEN-07..VEN-16 are registered through the shared secured `vendorInstitutes`
+transport for Vendor institute, onboarding, and primary-administrator authority.
+Canonical accounting is 87 routes, 55 HTTP exports, and 38 gateway handlers.
 
 If prose and the typed manifest disagree about a route key or status, the typed manifest must be corrected and the documentation reconciled in the same change.
 
@@ -42,7 +44,7 @@ If prose and the typed manifest disagree about a route key or status, the typed 
 - `missing`: no current Functions handler/export implements the canonical contract.
 - `intentionally_retired`: explicit product/architecture evidence says the route must not be served.
 
-Current totals: 71 implemented, 1 incompatible, 0 missing, 5 intentionally retired.
+Current totals: 81 implemented, 1 incompatible, 0 missing, 5 intentionally retired.
 
 Routes marked `planned` in the code manifest are canonical contracts reserved by
 the active owning task and do not count as executable frontend tuples. They stay
@@ -131,8 +133,158 @@ frontend caller. Frontend-declared routes retain bidirectional source coverage.
 | VEN-04 | `GET /api/v1/vendor/support/tickets/{ticketId}` | `implemented` | `vendorSupport` | Same Vendor boundary; unique ticket/institute resolution and bounded ascending message history with opaque attachment availability |
 | VEN-05 | `POST /api/v1/vendor/support/tickets/{ticketId}/commands` | `implemented` | `vendorSupport` | Vendor-only reply, active-Vendor assignment/unassignment, and legal workflow command with expected revision, hashed idempotency, dual audit, and redacted queued notification |
 | VEN-06 | `GET /api/v1/vendor/support/tickets/{ticketId}/attachments/{attachmentId}/download` | `implemented` | `vendorSupport` | Same Vendor boundary; fresh ticket/message/attachment/object-integrity authorization and five-minute signed HTTPS download |
+| VEN-07 | `GET /api/v1/vendor/institutes` | `implemented` | `vendorInstitutes` | Current non-disabled Vendor Auth; bounded filter/cursor directory over institute metadata and precomputed summaries; no raw Student/session scan |
+| VEN-08 | `POST /api/v1/vendor/institutes` | `implemented` | `vendorInstitutes` | Current non-disabled Vendor Auth; onboarding-bound creation with expected onboarding revision, hashed idempotency, and immutable audit |
+| VEN-09 | `GET /api/v1/vendor/institutes/{instituteId}` | `implemented` | `vendorInstitutes` | Current non-disabled Vendor Auth; strict target detail with bounded staff, deletion, aggregate, and read-only commercial authority |
+| VEN-10 | `PATCH /api/v1/vendor/institutes/{instituteId}` | `implemented` | `vendorInstitutes` | Current non-disabled Vendor Auth; path-targeted expected-revision/idempotent Vendor-owned profile update |
+| VEN-11 | `POST /api/v1/vendor/institutes/{instituteId}/lifecycle` | `implemented` | `vendorInstitutes` | Current non-disabled Vendor Auth; legal lifecycle and recoverable retention-gated deletion commands; BWM-036 owns fleet propagation |
+| VEN-12 | `GET /api/v1/vendor/onboarding` | `implemented` | `vendorInstitutes` | Current non-disabled Vendor Auth; default-25/max-50 filter-bound onboarding cursor page |
+| VEN-13 | `POST /api/v1/vendor/onboarding` | `implemented` | `vendorInstitutes` | Current non-disabled Vendor Auth; idempotent draft/submission creation with server-owned identity, state, actor, and time |
+| VEN-14 | `GET /api/v1/vendor/onboarding/{onboardingId}` | `implemented` | `vendorInstitutes` | Current non-disabled Vendor Auth; strict detail with bounded immutable events and authoritative activation blockers |
+| VEN-15 | `POST /api/v1/vendor/onboarding/{onboardingId}/commands` | `implemented` | `vendorInstitutes` | Current non-disabled Vendor Auth; legal non-commercial transitions with expected revision, exact replay, and immutable audit |
+| VEN-16 | `POST /api/v1/vendor/institutes/{instituteId}/administrators/commands` | `implemented` | `vendorInstitutes` | Current non-disabled Vendor Auth; path-targeted administrator commands with Auth recovery, redacted communication, and dual audit |
 
 The detailed request/response mismatch for each incompatible entry is recorded under the same ID in `docs/FRONTEND_API_CALL_INVENTORY.md`.
+
+## BWM-034 institute, onboarding, and administrator contract
+
+`shared/contracts/vendorInstitutes.d.ts` is the dependency-free public boundary
+for VEN-07..VEN-16. Public intent never supplies Vendor actor identity, durable
+status, revision result, audit IDs, server time, claim-propagation success, or
+commercial decisions. The path supplies an explicit target where applicable;
+the backend must resolve a current non-disabled `vendor` identity and separately
+authorize `vendor.institutes.read` or `vendor.institutes.manage_lifecycle`.
+
+Institute and onboarding lists default to 25 and cap at 50. Opaque cursors are
+bound to normalized filters and deterministic ordering. Institute activity
+figures are nullable precomputed summaries; absence is not rendered as zero,
+and Vendor reads may not scan raw Student, run, or session collections. License
+layer/state/version/plan fields are a read-only reference to `license/current`.
+BWM-035 exclusively owns catalog, request decisions, proposal, subscription,
+invoice, billing communication, payment, and offline-payment mutation.
+
+Every mutation carries a UUID idempotency key; changes to existing authority
+also carry its observed revision. Only a scoped SHA-256 key hash plus normalized
+fingerprint is persisted. Exact replay returns the same result; changed intent,
+stale revisions, illegal state transitions, target drift, or incomplete
+authority fail closed. Cross-institute mutations create an immutable root
+Vendor audit and, after an institute exists, the matching immutable institute
+audit in the authoritative transaction.
+
+Root `status` remains the existing claim-compatible `active|suspended` access
+guard. The separate Vendor lifecycle has `onboarding`, `active`, `suspended`,
+`archived`, `deletion_scheduled`, `purging`, `purged`, and `recovery_required`
+states. Suspension persistence may
+return `pending_bwm_036`; BWM-034 must not claim fleet-wide token/session
+propagation. Deletion is a minimum-30-day, legal-hold-aware, durable recovery
+operation. It never performs an untracked recursive delete in an HTTP request;
+bounded checkpoints preserve a root tombstone plus required audit, commercial,
+and compliance authority, and the UI may report purge only after the persisted
+operation reaches `purged`.
+
+The institute graph is forward-only except explicit restore/cancel/retry:
+`onboarding -> active`, `active -> suspended -> active`, any non-deleting live
+state to `archived`, `archived -> deletion_scheduled -> purging -> purged`, with
+cancel returning scheduled deletion to archived and purge failure/retry moving
+through `recovery_required`. Onboarding permits draft/information-required
+submission to review, review to information-required/approved/rejected/expired,
+then provisioned, commercial-ready, administrator-ready, setup, activation-ready,
+and active in order. Rejected, expired, and purged states are terminal.
+
+Pre-tenant applications live under the Vendor-only `vendorOnboarding`
+namespace with immutable events and hashed command authority. The BWM-034
+workflow contains application review, institute provisioning, profile/setup
+verification, and activation readiness only. Commercial readiness is derived
+from BWM-035-owned authority, and invitation acceptance is derived from current
+Auth state rather than a browser `mark accepted` control.
+
+`primaryAdminUserId` and bounded `settingsUsers` remain the one staff authority.
+Primary replacement is a recoverable two-stage operation: the current active
+primary remains authoritative while the deterministic replacement identity and
+redacted invitation job are reconciled; activation succeeds only after the
+backend verifies current Auth readiness. Admin-owned settings commands continue
+to forbid changing/removing the primary. BWM-034 Vendor commands may invite,
+resend, reset, suspend, restore, revoke, or activate a replacement with exact
+replay, current-authority revalidation, session revocation where applicable,
+and immutable dual audit.
+
+`functions/src/services/vendorInstituteReadModels.ts` implements the
+VEN-07/VEN-09 read authority. It performs a bounded `limit + 1`
+root-institute query plus aggregate count, batches at most one `license/current`
+read per returned institute, validates the indexed license projection against
+that current document, and strictly validates lifecycle/access, staff/primary,
+aggregate, revision, timestamp, and deletion alignment. Detail reads only the
+target institute and its current license. `functions/src/api/vendorInstitutes.ts`
+registers both routes behind revocation-checked Firebase Auth plus a fresh
+non-disabled/current-role Vendor user check.
+
+The permanent BWM-034 browser proof runs the production Vendor build against
+same-origin Hosting rewrites and disposable Auth, Firestore, and Functions
+emulators. It uses real ID tokens and backend responses for pagination,
+directory/detail hydration, profile conflict recovery, lifecycle,
+administrator Auth acceptance and redacted notification persistence, empty
+onboarding creation/provisioning, and a fresh browser context. Validation,
+suspended/wrong-role denial, and an aborted list transport render local failure
+states; no successful API response is fulfilled or mocked, no business state is
+stored in localStorage, and no external browser request is permitted.
+
+`functions/src/services/vendorInstituteCommands.ts` implements
+VEN-08/VEN-10/VEN-11 command authority through the same secured transport.
+Approved onboarding creation, Vendor-owned profile changes, and every legal
+lifecycle change transact the target state, scoped hashed replay receipt, root
+Vendor audit, and matching institute audit together. Concurrent stale revisions
+admit only one winner. Suspension/restoration and access-changing archive return
+`pending_bwm_036`, never propagation success. `execute_purge` and `retry_purge`
+only reserve a durable `quiescing` operation after retention and legal-hold
+checks; they neither delete an institute tree nor report `purged`. A later
+bounded worker must advance that reservation to terminal authority.
+
+`functions/src/services/vendorOnboarding.ts` implements VEN-12..VEN-15
+authority through the secured shared transport. List and event
+pages default to 25, cap at 50, and use deterministic filter-bound cursors plus
+aggregate count. Create uses a server-derived deterministic identity and rejects
+duplicate registered-name or primary-contact authority. Review, application,
+profile verification, prerequisite reconciliation, settings verification, and
+activation commands require expected revision plus scoped hashed idempotency,
+persist immutable events and audits atomically, and admit one concurrent winner.
+`reconcile_prerequisites` accepts no readiness booleans: it reads BWM-035-owned
+`license/current`, server-owned primary-administrator authority, BWM-030 settings,
+and one active academic year. Activation revalidates every prerequisite and
+atomically advances both onboarding and the linked institute from suspended
+`onboarding` to active. No commercial decision, Auth identity, notification,
+payment, invoice, proposal, or subscription mutation exists in this service.
+
+`functions/src/services/vendorAdministrators.ts` and
+`vendorAdministratorCommunication.ts` implement VEN-16 authority through the
+secured shared transport. Initial invitation and
+replacement proposal derive `staff_<sha256(instituteId:normalizedEmail)>`, keep
+the current primary authoritative, place the candidate in bounded
+`settingsUsers`, and persist one `pendingPrimaryAdministrator` operation.
+Activation accepts no browser acceptance flag: current Firebase Auth must match
+the deterministic UID/email, be enabled, have verified email authority, and
+show a completed sign-in. It then atomically switches `primaryAdminUserId`,
+suspends the prior primary, increments `settingsRevision`, and writes matching
+Vendor/institute audits. Pending candidates remain claimless; suspension,
+restoration, revocation, reset, and exact replay reconcile the latest persisted
+state through deterministic Auth, managed-claim, and refresh-token operations.
+Transient failures remain `pending`; absent current entitlement is explicit
+`blocked_missing_entitlement`, and replay retries reconciliation without
+duplicating the command or audits. Invitation and reset jobs retain no action
+links or provider payloads; the worker revalidates current staff/Auth authority,
+creates verification/password links only in memory, and uses bounded retry.
+
+The Vendor portal consumes all ten routes through
+`apps/vendor/src/features/institutes/vendorInstitutesApi.ts`. That adapter
+runtime-validates every directory, detail, onboarding, mutation, and
+administrator response before UI state can use it. The mounted
+`/vendor/institutes/:instituteId` route is a real authoritative detail view.
+Successful profile, lifecycle, onboarding, and administrator commands trigger
+a fresh server read rather than a local merge; stale revisions render an
+explicit conflict/reload state. Live mode exposes bounded cursors and distinct
+loading, empty, permission, unavailable, validation, conflict, and retry states,
+never substitutes the Build 137 fixture dataset, and labels BWM-035 commercial
+mutation unavailable plus BWM-036 propagation pending. The legacy showcase
+workspace remains reachable only under explicit `VITE_DATA_MODE=fixture`.
 
 ## BWM-032 support contract and institute authority
 
@@ -397,10 +549,10 @@ supported browser transport.
 
 ## Backend HTTP export accounting
 
-`functions/src/apiRouteManifest.ts` accounts for all 54 current `functions.https.onRequest` exports:
+`functions/src/apiRouteManifest.ts` accounts for all 55 current `functions.https.onRequest` exports:
 
 - `apiV1` is the single versioned `gateway` export; it resolves exact manifest method/path pairs, preserves decoded route parameters, and dispatches non-null `functionExport` mappings through the existing raw request handlers;
-- 37 exports are referenced by one or more canonical routes;
+- 38 exports are referenced by one or more canonical routes;
 - 11 portal-oriented Vendor exports currently have no executable frontend caller and remain `unmapped_portal` rather than receiving an invented public route;
 - `internalEmailQueue`, `adminQuestionsBulk`, and `adminQuestionAssets` are `internal_only`;
 - `stripeWebhook` is a `webhook` boundary;

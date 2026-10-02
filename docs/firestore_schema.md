@@ -2,7 +2,7 @@
 
 This document provides a simplified reference of the Firestore data hierarchy.
 
-Last reconciled: 2026-09-30 (`BWM-032` support operator and notifications)
+Last reconciled: 2026-10-01 (`BWM-034` onboarding authority)
 
 The authoritative schema definition exists in:
 
@@ -31,7 +31,16 @@ auditLogs/{logId}
 
 systemFlags/{flagId}
 
+vendorOnboarding/{onboardingId}
+
+vendorInstituteCommands/{hashedCommandId}
+
 These collections support vendor infrastructure and system services.
+
+`vendorOnboarding` is pre-tenant Vendor control-plane authority, not institute
+operational data. Its records may become linked to an institute only after
+provisioning. License, proposal, subscription, invoice, and payment mutation
+authority never lives in this namespace.
 
 ---
 
@@ -135,6 +144,127 @@ provider identifiers, credentials, secrets, and provider bodies are not
 persisted; terminal delivery is deduplicated and transient retries use the
 bounded five-attempt schedule.
 
+BWM-034 reserves a separate Vendor control-plane lifecycle without changing
+the existing claim-compatible institute-root `status: active|suspended` field.
+Each institute gains an optimistic `instituteRevision`, a
+`vendorLifecycleState` of `onboarding`, `active`, `suspended`, `archived`,
+`deletion_scheduled`, `purging`, `purged`, or `recovery_required`, and a bounded
+`vendorSummary` projection containing only nullable aggregate counts and their
+source time. Missing aggregate authority remains null and is never synthesized
+by scanning Student, run, or session collections. Directory ordering is
+deterministic by `updatedAt` and institute ID, with a normalized bounded
+`vendorFilterKeys` field for approved exact/prefix search tokens and a
+`vendorLicenseLayer` query projection. Every returned record rereads
+`license/current` and fails closed if that projection disagrees with current
+commercial authority. BWM-034 read services must not perform an unbounded root
+collection or collection-group scan.
+
+The lifecycle graph permits onboarding activation; active suspension and
+suspended restoration; archive from onboarding/active/suspended; deletion
+scheduling only from archived; cancellation only back to archived; and
+retention-gated purge through purging to purged or recovery-required/retry.
+Purged is terminal.
+
+`vendorOnboarding/{onboardingId}` stores the non-commercial application and
+workflow revision before a tenant exists. Its legal states are `draft`,
+`pending_review`, `information_required`, `approved`, `institute_provisioned`,
+`awaiting_commercial_authority`, `ready_for_administrator`,
+`setup_in_progress`, `ready_for_activation`, `active`, `rejected`, and
+`expired`. `events/{eventId}` is immutable transition history and
+`commands/{hashedCommandId}` is server-only normalized-fingerprint replay
+authority. Both list and event reads use filter-bound opaque cursors with a
+default page of 25 and maximum of 50. Activation blockers are derived from
+persisted institute, Auth, settings, and commercial authority; browser booleans
+cannot satisfy them.
+
+Implemented records also carry bounded `onboardingFilterKeys`, normalized
+registered-name/contact-email duplicate guards, server-owned profile/settings
+verification markers, and optimistic `revision`. Application creation derives
+its stable onboarding ID from normalized identity authority. Every accepted
+create/command atomically appends one immutable event, hashed exact replay
+record, and root Vendor audit; linked-institute commands also append the matching
+institute audit. `reconcile_prerequisites` stores no browser readiness flags: it
+reads `license/current`, the root primary administrator/settings authority, and
+at most two active academic-year matches to fail closed on duplicate active
+years. Activation updates the linked institute lifecycle/revision in the same
+transaction. BWM-035 remains the commercial owner; the implemented
+administrator service below is the sole BWM-034 identity writer.
+
+The onboarding graph permits draft/information-required submission to review;
+review to information-required, approved, rejected, or expired; then approved
+to institute-provisioned, awaiting-commercial, administrator-ready,
+setup-in-progress, activation-ready, and active in order. Rejected, expired,
+and active are terminal onboarding states.
+
+`vendorInstituteCommands/{hashedCommandId}` holds only the actor/onboarding
+scoped hash, normalized fingerprint, resulting institute/audit IDs, revision,
+and exact public receipt needed to replay institute creation before an
+institute command namespace exists. After creation,
+`institutes/{instituteId}/vendorCommands/{hashedCommandId}` holds equivalent
+server-only replay authority for profile, lifecycle, deletion, and primary
+administrator commands. Raw UUIDs, credentials, links, provider bodies, and
+unhashed request context are never stored. Accepted cross-institute mutations
+atomically create immutable `vendorAuditLogs/{auditEventId}` plus the matching
+`institutes/{instituteId}/auditLogs/{auditEventId}` when an institute exists.
+
+Deletion is a server-owned `deletionOperation` on the institute root. Scheduling
+sets a minimum 30-day `eligibleAt`; a legal/compliance hold blocks execution.
+Execution advances durable bounded stages, records attempt/error/checkpoint
+state, and uses retryable background work rather than an untracked recursive
+HTTP delete. The institute tombstone, immutable audits, commercial/compliance
+records, and the minimum metadata required for recovery remain retained.
+`purged` may be returned only after the durable operation completes; partial
+failure moves to `recovery_required` with exact retry authority.
+
+The implemented institute command service initializes approved onboarding
+provisioning at lifecycle `onboarding`, access `suspended`, institute revision
+1, settings revision 0, and empty primary/staff authority. Profile/lifecycle
+commands serialize on `instituteRevision`. Deletion scheduling records a
+deterministic operation ID, retention timestamps, preservation classes,
+checkpoint, attempt, and worker state. The HTTP-shaped purge intent advances
+only to `purging` plus a `quiescing`/`reserved` checkpoint; no recursive delete
+exists in this service. Cancellation removes only the scheduled operation.
+Retry accepts only `recovery_required` plus a failed operation and preserves its
+operation identity while incrementing the attempt.
+
+`primaryAdminUserId`, `settingsRevision`, and bounded `settingsUsers` remain the
+single administrator authority. Vendor replacement is two-stage: a pending
+replacement and redacted deterministic communication job may be reconciled,
+but the current primary remains authoritative until current Firebase Auth
+readiness is verified and activation atomically updates the institute fields,
+command result, and dual audits. `pendingPrimaryAdministrator` stores only the
+candidate UID, initial/replacement kind, previous primary UID, and proposal
+time. Candidate UIDs derive from institute plus normalized email; candidates
+remain enabled but claimless with `claimsWithheld: true` so they can complete
+the memory-only verification and password links without receiving portal
+authority even if generic claim synchronization is requested. Activation requires
+matching enabled Auth, verified email, a completed sign-in, and current active
+entitlement, then marks the candidate accepted/active and the previous primary
+suspended. Suspend/revoke disables Auth and clears managed claims; restore and
+activation synchronize current claims; every affected identity has refresh
+tokens revoked. The hashed command retains target UIDs, reconciliation attempt,
+safe error/state, exact receipt, and receipt hash so exact replay retries the
+latest desired state after transient Auth/session failure. BWM-036 still owns
+institute-wide claim/session fan-out and its delivery state. BWM-035 remains
+the sole owner of license decisions,
+catalog/proposals, subscriptions, invoices, billing communication, payments,
+and offline-payment mutations.
+
+Vendor primary invitations and resets create deterministic root
+`emailQueue/{jobId}` documents with source `vendor_primary_administrator`, safe
+recipient/target metadata, bounded retry/lease state, and no action link,
+credential, provider body, or raw provider identifier. Before delivery the
+worker re-reads the current pending/current primary and Auth email. Invitation
+messages generate both email-verification and password-setup links only in
+memory; reset messages generate only the password-reset link. Revoked or
+superseded authority fails closed before provider dispatch.
+
+The implementation substep must add the exact composite indexes required for
+the chosen cursor encoding. The reserved shapes are institute lifecycle/filter
+keys plus `updatedAt`/document ID ordering and onboarding status plus
+`updatedAt`/document ID ordering; these contract declarations do not imply that
+an index, handler, or query is executable yet.
+
 BWM-032 uses an internal Firebase support workflow because no external support
 system is approved or configured. ADM-56..ADM-60 and VEN-03..VEN-06 now
 create/read the institute ticket, message, command, audit, counter, attachment,
@@ -190,7 +320,12 @@ attempts for retryable failures. The deployed composite-index manifest now inclu
 `messages(createdAt ASC, __name__ ASC)`, and collection-group cleanup indexes
 for `supportAttachments(state ASC, cleanupAfter ASC)` and
 `supportAttachments(state ASC, deleteAfter ASC)`; BWM-053 retains deployed
-index rollout.
+index rollout. BWM-034 additionally registers every supported Vendor directory
+combination over `institutes` lifecycle/license/search equality plus
+`updatedAt DESC, __name__ DESC`, every `vendorOnboarding` status/search
+combination with the same deterministic ordering, and
+`events(occurredAt DESC, __name__ DESC)`. These definitions are executable in
+`firestore.indexes.json`; BWM-053 retains remote deployment/backfill rollout.
 
 students/{studentId}
 

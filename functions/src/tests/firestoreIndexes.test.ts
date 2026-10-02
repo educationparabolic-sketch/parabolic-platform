@@ -197,3 +197,66 @@ test("firestore index manifest includes support pagination", () => {
     true,
   );
 });
+
+test("firestore index manifest includes Vendor institute pagination", () => {
+  const manifest = readManifest();
+  const instituteSuffix = [
+    {fieldPath: "updatedAt", order: "DESCENDING"},
+    {fieldPath: "__name__", order: "DESCENDING"},
+  ];
+  const institutePrefixes: FirestoreIndexField[][] = [
+    [{fieldPath: "vendorLifecycleState", order: "ASCENDING"}],
+    [{fieldPath: "vendorLicenseLayer", order: "ASCENDING"}],
+    [
+      {fieldPath: "vendorLifecycleState", order: "ASCENDING"},
+      {fieldPath: "vendorLicenseLayer", order: "ASCENDING"},
+    ],
+    [{fieldPath: "vendorFilterKeys", arrayConfig: "CONTAINS"}],
+    [
+      {fieldPath: "vendorFilterKeys", arrayConfig: "CONTAINS"},
+      {fieldPath: "vendorLifecycleState", order: "ASCENDING"},
+    ],
+    [
+      {fieldPath: "vendorFilterKeys", arrayConfig: "CONTAINS"},
+      {fieldPath: "vendorLicenseLayer", order: "ASCENDING"},
+    ],
+    [
+      {fieldPath: "vendorFilterKeys", arrayConfig: "CONTAINS"},
+      {fieldPath: "vendorLifecycleState", order: "ASCENDING"},
+      {fieldPath: "vendorLicenseLayer", order: "ASCENDING"},
+    ],
+  ];
+  institutePrefixes.forEach((prefix) => {
+    assert.equal(
+      hasIndex(manifest.indexes, "institutes", [...prefix, ...instituteSuffix]),
+      true,
+      JSON.stringify(prefix),
+    );
+  });
+
+  const onboardingSuffix = [
+    {fieldPath: "updatedAt", order: "DESCENDING"},
+    {fieldPath: "__name__", order: "DESCENDING"},
+  ];
+  for (const prefix of [
+    [{fieldPath: "status", order: "ASCENDING"}],
+    [{fieldPath: "onboardingFilterKeys", arrayConfig: "CONTAINS"}],
+    [
+      {fieldPath: "onboardingFilterKeys", arrayConfig: "CONTAINS"},
+      {fieldPath: "status", order: "ASCENDING"},
+    ],
+  ] as FirestoreIndexField[][]) {
+    assert.equal(
+      hasIndex(manifest.indexes, "vendorOnboarding", [...prefix, ...onboardingSuffix]),
+      true,
+      JSON.stringify(prefix),
+    );
+  }
+  assert.equal(
+    hasIndex(manifest.indexes, "events", [
+      {fieldPath: "occurredAt", order: "DESCENDING"},
+      {fieldPath: "__name__", order: "DESCENDING"},
+    ]),
+    true,
+  );
+});

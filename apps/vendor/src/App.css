@@ -15,6 +15,234 @@
   overflow: hidden;
 }
 
+/* BWM-034 authoritative institute workspace */
+.vendor-authority-stack {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.vendor-authority-boundary,
+.vendor-authority-state,
+.vendor-authority-success {
+  border: 1px solid #cbd5e1;
+  border-radius: 0.75rem;
+  padding: 0.9rem 1rem;
+  background: #f8fafc;
+}
+
+.vendor-authority-boundary {
+  display: grid;
+  gap: 0.25rem;
+  border-color: #f59e0b;
+  background: #fffbeb;
+  color: #78350f;
+}
+
+.vendor-authority-success {
+  border-color: #22c55e;
+  background: #f0fdf4;
+  color: #14532d;
+}
+
+.vendor-authority-state h3,
+.vendor-authority-state p,
+.vendor-authority-success {
+  margin: 0;
+}
+
+.vendor-authority-state p {
+  margin-top: 0.35rem;
+}
+
+.vendor-authority-state button {
+  margin-top: 0.75rem;
+}
+
+.vendor-authority-state-permission {
+  border-color: #dc2626;
+  background: #fef2f2;
+}
+
+.vendor-authority-state-conflict {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.vendor-authority-filters,
+.vendor-authority-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.8rem;
+  align-items: end;
+  padding: 1rem;
+  border: 1px solid #dbe4ee;
+  border-radius: 0.75rem;
+  background: #fff;
+}
+
+.vendor-authority-form h3,
+.vendor-authority-form p {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.vendor-authority-filters label,
+.vendor-authority-form label,
+.vendor-authority-onboarding-detail label {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 650;
+}
+
+.vendor-authority-filters input,
+.vendor-authority-filters select,
+.vendor-authority-form input,
+.vendor-authority-form select,
+.vendor-authority-onboarding-detail textarea {
+  min-height: 2.6rem;
+  border: 1px solid #94a3b8;
+  border-radius: 0.5rem;
+  padding: 0.55rem 0.65rem;
+  font: inherit;
+  background: #fff;
+}
+
+.vendor-authority-summary,
+.vendor-authority-pagination,
+.vendor-authority-toolbar,
+.vendor-authority-actions,
+.vendor-authority-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.vendor-authority-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #dbe4ee;
+  border-radius: 0.75rem;
+}
+
+.vendor-authority-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+}
+
+.vendor-authority-table caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.vendor-authority-table th,
+.vendor-authority-table td {
+  padding: 0.8rem;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+  vertical-align: top;
+}
+
+.vendor-authority-table td small {
+  display: block;
+  margin-top: 0.2rem;
+  color: #64748b;
+}
+
+.vendor-authority-grid,
+.vendor-authority-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.vendor-authority-grid article,
+.vendor-authority-onboarding-detail,
+.vendor-authority-split > section {
+  border: 1px solid #dbe4ee;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  background: #fff;
+}
+
+.vendor-authority-grid h3,
+.vendor-authority-onboarding-detail h3,
+.vendor-authority-split h3,
+.vendor-authority-detail-header h2,
+.vendor-authority-detail-header p {
+  margin: 0;
+}
+
+.vendor-authority-grid dl,
+.vendor-authority-onboarding-detail dl {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.vendor-authority-grid dl div,
+.vendor-authority-onboarding-detail dl div {
+  display: grid;
+  grid-template-columns: minmax(7rem, 0.7fr) minmax(0, 1.3fr);
+  gap: 0.5rem;
+}
+
+.vendor-authority-grid dt,
+.vendor-authority-onboarding-detail dt {
+  color: #64748b;
+}
+
+.vendor-authority-grid dd,
+.vendor-authority-onboarding-detail dd {
+  margin: 0;
+}
+
+.vendor-authority-list,
+.vendor-authority-events {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vendor-authority-list li,
+.vendor-authority-events li {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.55rem;
+}
+
+.vendor-authority-list button {
+  display: grid;
+  gap: 0.25rem;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.vendor-authority-list button.vendor-authority-selected {
+  color: #1d4ed8;
+}
+
+.vendor-authority-events time {
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 820px) {
+  .vendor-authority-grid,
+  .vendor-authority-split {
+    grid-template-columns: 1fr;
+  }
+}
+
 .vendor-content-card::after {
   content: "";
   position: absolute;
