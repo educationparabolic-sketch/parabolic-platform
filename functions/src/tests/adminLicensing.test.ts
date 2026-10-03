@@ -689,6 +689,14 @@ test("upgrade request persists one replay-safe command, request, state, and audi
     firestore.doc(`${institutePath}/license/current`).get(),
   ]);
   assert.equal(requests.size, 1);
+  assert.equal(requests.docs[0]?.get("revision"), 1);
+  assert.equal(requests.docs[0]?.get("decisionState"), "undecided");
+  assert.deepEqual(requests.docs[0]?.get("decisionAuditEventIds"), []);
+  assert.equal(
+    requests.docs[0]?.get("submissionAuditEventId"),
+    applied.receipt.auditEventId,
+  );
+  assert.equal(typeof requests.docs[0]?.get("updatedAt")?.toDate, "function");
   assert.equal(commands.size, 1);
   assert.equal(audits.size, 1);
   assert.equal(state.get("openRequestId"), applied.receipt.request.requestId);

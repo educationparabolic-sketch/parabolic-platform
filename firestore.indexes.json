@@ -867,6 +867,200 @@
         {"fieldPath": "occurredAt", "order": "DESCENDING"},
         {"fieldPath": "__name__", "order": "DESCENDING"}
       ]
+    },
+    {
+      "collectionGroup": "licenseRequests",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {"fieldPath": "submittedAt", "order": "DESCENDING"},
+        {"fieldPath": "instituteId", "order": "ASCENDING"},
+        {"fieldPath": "requestId", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "licenseRequests",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {"fieldPath": "instituteId", "order": "ASCENDING"},
+        {"fieldPath": "submittedAt", "order": "DESCENDING"},
+        {"fieldPath": "requestId", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "licenseRequests",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {"fieldPath": "requestedLayer", "order": "ASCENDING"},
+        {"fieldPath": "submittedAt", "order": "DESCENDING"},
+        {"fieldPath": "instituteId", "order": "ASCENDING"},
+        {"fieldPath": "requestId", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "licenseRequests",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {"fieldPath": "status", "order": "ASCENDING"},
+        {"fieldPath": "submittedAt", "order": "DESCENDING"},
+        {"fieldPath": "instituteId", "order": "ASCENDING"},
+        {"fieldPath": "requestId", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "licenseRequests",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {"fieldPath": "instituteId", "order": "ASCENDING"},
+        {"fieldPath": "requestedLayer", "order": "ASCENDING"},
+        {"fieldPath": "submittedAt", "order": "DESCENDING"},
+        {"fieldPath": "requestId", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "licenseRequests",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {"fieldPath": "instituteId", "order": "ASCENDING"},
+        {"fieldPath": "status", "order": "ASCENDING"},
+        {"fieldPath": "submittedAt", "order": "DESCENDING"},
+        {"fieldPath": "requestId", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "licenseRequests",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {"fieldPath": "requestedLayer", "order": "ASCENDING"},
+        {"fieldPath": "status", "order": "ASCENDING"},
+        {"fieldPath": "submittedAt", "order": "DESCENDING"},
+        {"fieldPath": "instituteId", "order": "ASCENDING"},
+        {"fieldPath": "requestId", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "licenseRequests",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {"fieldPath": "instituteId", "order": "ASCENDING"},
+        {"fieldPath": "requestedLayer", "order": "ASCENDING"},
+        {"fieldPath": "status", "order": "ASCENDING"},
+        {"fieldPath": "submittedAt", "order": "DESCENDING"},
+        {"fieldPath": "requestId", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "billingRecords",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {"fieldPath": "updatedAt", "order": "DESCENDING"},
+        {"fieldPath": "instituteId", "order": "ASCENDING"},
+        {"fieldPath": "invoiceId", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "billingRecords",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {"fieldPath": "instituteId", "order": "ASCENDING"},
+        {"fieldPath": "updatedAt", "order": "DESCENDING"},
+        {"fieldPath": "invoiceId", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "billingRecords",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {"fieldPath": "commercialStatus", "order": "ASCENDING"},
+        {"fieldPath": "updatedAt", "order": "DESCENDING"},
+        {"fieldPath": "instituteId", "order": "ASCENDING"},
+        {"fieldPath": "invoiceId", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "billingRecords",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {"fieldPath": "instituteId", "order": "ASCENDING"},
+        {"fieldPath": "commercialStatus", "order": "ASCENDING"},
+        {"fieldPath": "updatedAt", "order": "DESCENDING"},
+        {"fieldPath": "invoiceId", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "updatedAt", "order": "DESCENDING"},
+        {"fieldPath": "eventId", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "instituteId", "order": "ASCENDING"},
+        {"fieldPath": "updatedAt", "order": "DESCENDING"},
+        {"fieldPath": "eventId", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "processingState", "order": "ASCENDING"},
+        {"fieldPath": "updatedAt", "order": "DESCENDING"},
+        {"fieldPath": "eventId", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "reconciliationState", "order": "ASCENDING"},
+        {"fieldPath": "updatedAt", "order": "DESCENDING"},
+        {"fieldPath": "eventId", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "instituteId", "order": "ASCENDING"},
+        {"fieldPath": "processingState", "order": "ASCENDING"},
+        {"fieldPath": "updatedAt", "order": "DESCENDING"},
+        {"fieldPath": "eventId", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "instituteId", "order": "ASCENDING"},
+        {"fieldPath": "reconciliationState", "order": "ASCENDING"},
+        {"fieldPath": "updatedAt", "order": "DESCENDING"},
+        {"fieldPath": "eventId", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "processingState", "order": "ASCENDING"},
+        {"fieldPath": "reconciliationState", "order": "ASCENDING"},
+        {"fieldPath": "updatedAt", "order": "DESCENDING"},
+        {"fieldPath": "eventId", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "instituteId", "order": "ASCENDING"},
+        {"fieldPath": "processingState", "order": "ASCENDING"},
+        {"fieldPath": "reconciliationState", "order": "ASCENDING"},
+        {"fieldPath": "updatedAt", "order": "DESCENDING"},
+        {"fieldPath": "eventId", "order": "ASCENDING"}
+      ]
     }
   ],
   "fieldOverrides": []

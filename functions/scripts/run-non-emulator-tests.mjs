@@ -61,6 +61,8 @@ const selectedSourceSuites = [
   "systemEventTopology.test",
   "tenantMiddleware.test",
   "vendorSupportApi.test",
+  "vendorInstitutesApi.test",
+  "vendorCommercialApi.test",
 ];
 
 const baselineExclusions = new Map([

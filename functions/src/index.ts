@@ -133,6 +133,7 @@ import {
 import {handleAdminSupportRequest} from "./api/adminSupport";
 import {handleVendorSupportRequest} from "./api/vendorSupport";
 import {handleVendorInstitutesRequest} from "./api/vendorInstitutes";
+import {handleVendorCommercialRequest} from "./api/vendorCommercial";
 import {
   handleAdminAnalyticsRequest,
 } from "./api/adminAnalytics";
@@ -341,6 +342,9 @@ export const vendorSupport = functions.https.onRequest(
 );
 export const vendorInstitutes = functions.https.onRequest(
   handleVendorInstitutesRequest,
+);
+export const vendorCommercial = functions.https.onRequest(
+  handleVendorCommercialRequest,
 );
 export const adminOverview = functions.https.onRequest(
   handleAdminOverviewRequest,

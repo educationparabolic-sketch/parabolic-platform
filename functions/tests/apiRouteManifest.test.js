@@ -96,6 +96,18 @@ function parameterName(expression, sourceFile) {
     return "{onboardingId}";
   }
 
+  if (/requestId/i.test(expressionText)) {
+    return "{requestId}";
+  }
+
+  if (/invoiceId/i.test(expressionText)) {
+    return "{invoiceId}";
+  }
+
+  if (/eventId/i.test(expressionText)) {
+    return "{eventId}";
+  }
+
   throw new Error(
     `Unsupported API path parameter in ${sourceFile.fileName}: ` +
       expressionText,
@@ -378,6 +390,20 @@ test(
         "VEN-14",
         "VEN-15",
         "VEN-16",
+        "VEN-17",
+        "VEN-18",
+        "VEN-19",
+        "VEN-20",
+        "VEN-21",
+        "VEN-22",
+        "VEN-23",
+        "VEN-24",
+        "VEN-25",
+        "VEN-26",
+        "VEN-27",
+        "VEN-28",
+        "VEN-29",
+        "VEN-30",
       ],
     );
     plannedRoutes.forEach((route) => {
@@ -399,7 +425,7 @@ test("canonical route status accounting is exact", () => {
   });
 
   assert.deepEqual(statusCounts, {
-    implemented: 81,
+    implemented: 95,
     incompatible: 1,
     intentionally_retired: 5,
     missing: 0,

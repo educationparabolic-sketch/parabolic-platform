@@ -50,7 +50,7 @@ test("live institute workspace reloads server authority and exposes required sta
     "Previous page",
     "Next page",
     "No fixture detail is substituted",
-    "Commercial controls are unavailable",
+    "Commercial controls use the registered licensing workspace",
     "pending BWM-036",
     "await load()",
     "await loadDetail(selectedId)",

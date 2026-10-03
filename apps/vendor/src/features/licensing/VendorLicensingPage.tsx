@@ -1,4 +1,5 @@
 import { useMemo, useState, type FormEvent } from "react";
+import { shouldUseFixtureData } from "../../../../../shared/services/frontendEnvironment";
 import { UiFormField, UiStatCard, UiTable } from "../../../../../shared/ui/components";
 import {
   getVendorInstitutesDataset,
@@ -7,6 +8,7 @@ import {
   type VendorLicensePlanId,
 } from "../institutes/vendorInstitutesDataset";
 import { useVendorLicenseRequests } from "../institutes/vendorLicenseRequestsStore";
+import VendorCommercialAuthorityPage from "./VendorCommercialAuthorityPage";
 
 interface LicenseParameterDraft {
   baseFeeInr: string;
@@ -159,7 +161,7 @@ function validateDraft(
   return errors;
 }
 
-function VendorLicensingPage() {
+function FixtureVendorLicensingPage() {
   const dataset = useMemo(() => getVendorInstitutesDataset(), []);
   const { licensePlans, publishLicensePlan } = useVendorLicenseRequests();
   const [drafts, setDrafts] = useState<Record<VendorLicensePlanId, LicenseParameterDraft>>(
@@ -699,4 +701,10 @@ function VendorLicensingPage() {
   );
 }
 
-export default VendorLicensingPage;
+export default function VendorLicensingPage() {
+  return shouldUseFixtureData() ? (
+    <FixtureVendorLicensingPage />
+  ) : (
+    <VendorCommercialAuthorityPage />
+  );
+}

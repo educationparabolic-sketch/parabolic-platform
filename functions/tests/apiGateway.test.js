@@ -25,6 +25,9 @@ function materializePath(canonicalPath, routeId) {
     .replace("{reportId}", encodeURIComponent(`report ${routeId} Ω`))
     .replace("{instituteId}", encodeURIComponent(`institute ${routeId} Ω`))
     .replace("{onboardingId}", encodeURIComponent(`onboarding ${routeId} Ω`))
+    .replace("{requestId}", encodeURIComponent(`request ${routeId} Ω`))
+    .replace("{invoiceId}", encodeURIComponent(`invoice ${routeId} Ω`))
+    .replace("{eventId}", encodeURIComponent(`event ${routeId} Ω`))
     .replace("{ticketId}", encodeURIComponent(`ticket ${routeId} Ω`))
     .replace(
       "{attachmentId}",
@@ -57,7 +60,7 @@ test("implemented routes have one registered existing handler", () => {
   const implementedRoutes = API_ROUTE_MANIFEST.filter(
     (route) => route.status === "implemented",
   );
-  assert.equal(implementedRoutes.length, 81);
+  assert.equal(implementedRoutes.length, 95);
 
   for (const route of implementedRoutes) {
     assert.equal(typeof API_GATEWAY_HANDLERS[route.functionExport], "function");
@@ -138,6 +141,29 @@ test("BWM-034 institute declarations reach the secured handler", () => {
     assert.equal(route.declaration, "planned");
     assert.equal(route.status, "implemented");
     assert.equal(route.functionExport, "vendorInstitutes");
+    assert.equal(typeof API_GATEWAY_HANDLERS[route.functionExport], "function");
+    assert.equal(
+      resolveApiRoute(
+        route.method,
+        materializePath(route.canonicalPath, route.id),
+      )?.route.id,
+      route.id,
+    );
+  });
+});
+
+test("BWM-035 commercial declarations reach the secured handler", () => {
+  const commercialRoutes = API_ROUTE_MANIFEST.filter((route) =>
+    route.id.startsWith("VEN-") &&
+    Number(route.id.replace("VEN-", "")) >= 17 &&
+    Number(route.id.replace("VEN-", "")) <= 30,
+  );
+
+  assert.equal(commercialRoutes.length, 14);
+  commercialRoutes.forEach((route) => {
+    assert.equal(route.declaration, "planned");
+    assert.equal(route.status, "implemented");
+    assert.equal(route.functionExport, "vendorCommercial");
     assert.equal(typeof API_GATEWAY_HANDLERS[route.functionExport], "function");
     assert.equal(
       resolveApiRoute(

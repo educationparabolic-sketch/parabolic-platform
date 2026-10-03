@@ -1,8 +1,8 @@
 # Frontend API Call Inventory
 
-Status: current frontend inventory and canonical-route authority through the verified BWM-034 Vendor institute browser checkpoint
+Status: current frontend inventory and canonical-route authority through BWM-035 authenticated commercial browser acceptance
 
-Inventory date: 2026-10-02
+Inventory date: 2026-10-03
 
 Scope: executable HTTP calls in `apps/admin/src`, `apps/student/src`, `apps/exam/src`, and `apps/vendor/src`
 
@@ -36,7 +36,7 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 - `intentionally retired`: explicit product or architecture evidence says the contract must not be served. The removed EXM-03 custom refresh call is retained as an explicit retired route key because Firebase Auth SDK refresh is authoritative.
 - Gateway and Hosting reachability are excluded from per-route classification because they are common dependencies owned by BWM-003 and BWM-004.
 
-## Canonical route assignments and status — 87 contracts
+## Canonical route assignments and status — 101 contracts
 
 | ID | Method | Current frontend path | Canonical route | Status | Classification basis |
 | --- | --- | --- | --- | --- | --- |
@@ -127,8 +127,22 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 | VEN-14 | `GET` | `/vendor/institutes?view=onboarding&onboarding={onboardingId}` | `/api/v1/vendor/onboarding/{onboardingId}` | `implemented` | Selected onboarding detail strictly validates server-derived blockers, prerequisites, primary authority, and bounded immutable events. |
 | VEN-15 | `POST` | `/vendor/institutes?view=onboarding&onboarding={onboardingId}` | `/api/v1/vendor/onboarding/{onboardingId}/commands` | `implemented` | Only legal non-commercial transitions are offered; commands use the observed revision plus UUID and reconcile through an authoritative reload. |
 | VEN-16 | `POST` | `/vendor/institutes/:instituteId` | `/api/v1/vendor/institutes/{instituteId}/administrators/commands` | `implemented` | Administrator actions send shared intent only, expose Auth/notification reconciliation truthfully, and reload current institute authority after every receipt. |
+| VEN-17 | `GET` | `/vendor/licensing` | `/api/v1/vendor/license-requests` | `implemented` | The strict commercial adapter validates the bounded request queue and exposes independent previous/next cursor controls. |
+| VEN-18 | `GET` | `/vendor/licensing` | `/api/v1/vendor/institutes/{instituteId}/license-requests/{requestId}` | `implemented` | Selected BWM-031-backed request/audit detail is runtime-validated and never replaced with session state. |
+| VEN-19 | `POST` | `/vendor/licensing` | `/api/v1/vendor/institutes/{instituteId}/license-requests/{requestId}/decision` | `implemented` | Revisioned approve/payment-required/reject decisions retain retry identity and reload list/detail authority; approval remains decision-only. |
+| VEN-20 | `GET` | `/vendor/licensing` | `/api/v1/vendor/license-catalog` | `implemented` | Mounted live mode consumes the bounded immutable-version catalog and never installs a browser-published version. |
+| VEN-21 | `POST` | `/vendor/licensing` | `/api/v1/vendor/license-catalog/commands` | `implemented` | Publish/retire sends revisioned intent, preserves the UUID through provider failure, and reports success only after authoritative reload. |
+| VEN-22 | `GET` | `/vendor/licensing` | `/api/v1/vendor/institutes/{instituteId}/subscription` | `implemented` | Institute lookup renders only the runtime-validated provider-reconciled subscription projection. |
+| VEN-23 | `POST` | `/vendor/licensing` | `/api/v1/vendor/institutes/{instituteId}/subscription/commands` | `implemented` | Sync/change-plan/trial/cancel/resume commands carry observed revision and retry-stable UUID, then reload current subscription authority. |
+| VEN-24 | `GET` | `/vendor/licensing` | `/api/v1/vendor/invoices` | `implemented` | The strict adapter validates the bounded invoice queue and exposes independent previous/next cursor controls. |
+| VEN-25 | `GET` | `/vendor/licensing` | `/api/v1/vendor/institutes/{instituteId}/invoices/{invoiceId}` | `implemented` | Invoice detail validates backend/provider state, payment attempts, communications, and offline records without browser-generated invoice data. |
+| VEN-26 | `POST` | `/vendor/licensing` | `/api/v1/vendor/institutes/{instituteId}/invoices/{invoiceId}/commands` | `implemented` | Sync/finalize/retry/void uses observed revision plus retry-stable UUID and reloads list/detail authority before success. |
+| VEN-27 | `POST` | `/vendor/licensing` | `/api/v1/vendor/institutes/{instituteId}/invoices/{invoiceId}/communications` | `implemented` | The browser selects only the allowed resend/reminder intent; backend-derived deterministic redacted delivery authority is reloaded. |
+| VEN-28 | `POST` | `/vendor/licensing` | `/api/v1/vendor/institutes/{instituteId}/invoices/{invoiceId}/offline-payments` | `implemented` | Recording is explicitly pending-only; verify/reject/void reloads two-actor backend authority and never marks an invoice paid locally. |
+| VEN-29 | `GET` | `/vendor/licensing` | `/api/v1/vendor/payment-events` | `implemented` | Mounted live mode validates the bounded redacted event queue, provides cursor navigation, and never exposes raw payloads. |
+| VEN-30 | `POST` | `/vendor/licensing` | `/api/v1/vendor/payment-events/{eventId}/commands` | `implemented` | Reconciliation retry preserves the exact UUID through failure and reloads redacted provider-event authority. |
 
-Canonical classification totals are `implemented` 81, `incompatible` 1,
+Canonical classification totals are `implemented` 95, `incompatible` 1,
 `missing` 0, and `intentionally retired` 5. ADM-30..ADM-60 have strict Admin
 callers and secured gateway handlers. ADM-56..ADM-60 are mounted at
 `/admin/help` with strict response validation, bounded ticket/message cursors,
@@ -142,7 +156,10 @@ primary-administrator Auth and redacted notification authority, empty onboarding
 creation/provisioning, fresh-context persistence, validation, denial, and transport
 failure without fixture or fulfilled-route success. ADM-09, ADM-13,
 ADM-17, ADM-18, and EXM-03 retain explicit retired route keys but no browser
-caller.
+caller. VEN-17..VEN-30 are consumed at `/vendor/licensing` through one strict
+runtime-validating adapter. Live commands retain retry identity, reconcile from
+authoritative reads, expose provider failure explicitly, and create no
+browser-only invoice, payment, catalog, or settlement success.
 
 ## Question Bank lifecycle routes — live frontend callers
 
@@ -289,18 +306,26 @@ the mounted interventions destination with authoritative reloads.
 | EXM-04 | `POST /exam/session/{sessionId}/submit` | Exact shared `ExamSubmitRequestBody`: `{ instituteId, reason, runId, yearId }` | Strict shared result with `submitted` status, server reason/time, `alreadySubmitted`, raw/accuracy/discipline/guess/phase/min/max/risk metrics, and operational access policy | Firebase ID from shared client; `student`; exact body/route/session claims; active manual or reached-deadline expiry authority; no launch credential | `examSessionSubmit` (`api/examSessionSubmit.ts`) plus transactional `SubmissionService` | `apps/exam/src/ExamRuntimeApp.tsx` |
 | EXM-05 | `POST /exam/session/{sessionId}/activate` | Empty body; all authority comes from the refreshed session-bound Firebase ID token | Strict shared `ExamSessionActivationResult` with `active|expired`, `startedAt`, `deadlineAt`, `serverTime`, and replay disposition | Firebase ID from shared client; `student`; complete exact institute/year/run/session/Student claims; persisted identity agreement | `examSessionActivate` (`api/examSessionActivate.ts`) plus transactional `SessionService` | `apps/exam/src/ExamRuntimeApp.tsx` |
 
-## Vendor portal — 2 executable frontend contracts
+## Vendor portal — executable frontend contracts
 
 | ID | Method and current path | Frontend request | Frontend response | Auth / role / tenant / license | Current Functions handler | Frontend source |
 | --- | --- | --- | --- | --- | --- | --- |
 | VEN-01 | `POST /vendor/calibration/simulate` | `{ institutes, strategyProfileParameters }` | `CalibrationSimulationApiResponse` | Firebase ID; `vendor`; global scope/no tenant guard; no license middleware | `vendorCalibrationSimulation` (`api/vendorCalibrationSimulation.ts`), but backend expects `{ institutes, weights }` | `features/calibration/vendorCalibrationDataset.ts` |
 | VEN-02 | `POST /vendor/calibration/push` | `{ targetInstitutes, versionId }` | `CalibrationPushApiResponse` | Firebase ID; `vendor`; global scope/no tenant guard; no license middleware | `vendorCalibrationPush` (`api/vendorCalibrationPush.ts`) | `features/calibration/vendorCalibrationDataset.ts` |
 
+VEN-17..VEN-30 share `features/licensing/vendorCommercialApi.ts` as their one
+strict request/response boundary and mount through
+`features/licensing/VendorCommercialAuthorityPage.tsx` at `/vendor/licensing`.
+The shared client supplies Firebase ID-token authentication; the backend
+requires current non-disabled Vendor authority plus `vendor.licenses.manage`.
+The adapter validates every DTO, URL-encodes path parameters, and sends only
+public intent plus observed revision and UUID command identity.
+
 ## Classification summary for the current tree
 
-- The 81 `implemented` entries are handler-compatible through the common gateway and same-origin Hosting rewrite. ADM-56..ADM-60 have the strict mounted Admin caller; VEN-03..VEN-16 intentionally await their separately owned Vendor caller adoption.
+- The 95 `implemented` entries are handler-compatible through the common gateway and same-origin Hosting rewrite. ADM-56..ADM-60 have the strict mounted Admin caller; VEN-03..VEN-06 await their separately owned Vendor caller adoption; VEN-07..VEN-16 use the mounted strict institute adapter; and VEN-17..VEN-30 use the mounted strict commercial adapter.
 - The one `incompatible` entry, VEN-01 calibration simulation, requires contract repair by its remaining owning task before that flow can be considered wired.
-- No canonical route is `missing`. VEN-07..VEN-16 are secured by `vendorInstitutes` but intentionally have no frontend caller until the next BWM-034 substep. ADM-24 through ADM-29 remain implemented and consumed with permanent BWM-026 emulator/browser proof.
+- No canonical route is `missing`. VEN-17..VEN-30 are secured by `vendorCommercial`, consumed by the strict live `/vendor/licensing` workspace, and covered by permanent authenticated no-mock Auth/Firestore/Functions/Hosting browser acceptance. ADM-24 through ADM-29 remain implemented and consumed with permanent BWM-026 emulator/browser proof.
 - ADM-09, ADM-13, ADM-17, ADM-18, and EXM-03 are intentionally retired; their superseding canonical flows own browser dispatch and the gateway serves no handler for them.
 
 ## Audit anchors

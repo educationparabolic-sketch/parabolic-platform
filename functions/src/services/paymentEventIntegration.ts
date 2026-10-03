@@ -1,5 +1,5 @@
 import {createHmac, timingSafeEqual} from "crypto";
-import {FieldValue} from "firebase-admin/firestore";
+import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import {auditLogStorageService} from "./auditLogStorage";
 import {billingSnapshotService} from "./billingSnapshot";
 import {createLogger} from "./logging";
@@ -72,7 +72,9 @@ interface ParsedStripeEvent {
 
 interface NormalizedStripeEventContext {
   activeStudentLimit: number | null;
+  amountDueMinor: number | null;
   amountPaid: number | null;
+  amountPaidMinor: number | null;
   billingCycle: "annual" | "monthly";
   billingPeriodEnd: string | null;
   billingPeriodStart: string | null;
@@ -139,6 +141,14 @@ const normalizeCurrencyAmount = (
   }
 
   return Number((normalizedValue / 100).toFixed(2));
+};
+
+const normalizeMinorCurrencyAmount = (
+  value: unknown,
+): number | null => {
+  const normalizedValue = normalizeOptionalNumber(value);
+  return normalizedValue !== null && Number.isSafeInteger(normalizedValue) &&
+    normalizedValue >= 0 ? normalizedValue : null;
 };
 
 const toIsoStringFromUnixSeconds = (
@@ -539,10 +549,14 @@ const resolveEventContext = (
     activeStudentLimit: normalizeOptionalNumber(
       resolveMetadata(object).studentLimit,
     ),
+    amountDueMinor:
+      normalizeMinorCurrencyAmount(object.amount_due) ??
+      normalizeMinorCurrencyAmount(object.amount_total),
     amountPaid:
       normalizeCurrencyAmount(object.amount_paid) ??
       normalizeCurrencyAmount(object.amount_due) ??
       normalizeCurrencyAmount(object.amount_total),
+    amountPaidMinor: normalizeMinorCurrencyAmount(object.amount_paid),
     billingCycle: resolveBillingCycle(object),
     billingPeriodEnd,
     billingPeriodStart,
@@ -775,16 +789,28 @@ const buildBillingRecordDocument = (
   }
 
   return {
+    amountDueMinor: eventContext.amountDueMinor ??
+      eventContext.amountPaidMinor ?? 0,
     amountPaid: eventContext.amountPaid ?? 0,
+    amountPaidMinor: eventContext.amountPaidMinor ?? 0,
     billingPeriodEnd: eventContext.billingPeriodEnd,
     billingPeriodStart: eventContext.billingPeriodStart,
     createdAt: FieldValue.serverTimestamp(),
-    currency: eventContext.currency ?? "usd",
+    currency: (eventContext.currency ?? "usd").toUpperCase(),
+    commercialStatus:
+      eventContext.eventType === "invoice.payment_failed" ?
+        "past_due" :
+        "paid",
+    instituteId: eventContext.instituteId,
+    invoiceId: eventContext.invoiceId,
+    provider: "stripe",
+    revision: 1,
     status:
       eventContext.eventType === "invoice.payment_failed" ?
         "failed" :
         "paid",
     stripeInvoiceId: eventContext.invoiceId,
+    updatedAt: FieldValue.serverTimestamp(),
   };
 };
 
@@ -831,6 +857,7 @@ export class PaymentEventIntegrationService {
         "Stripe webhook institute could not be resolved.",
       );
     }
+    eventContext.instituteId = instituteId;
 
     const eventLogPath = buildStripeEventPath(event.id);
     const eventLogReference = this.firestore.doc(eventLogPath);
@@ -1019,10 +1046,16 @@ export class PaymentEventIntegrationService {
         licenseHistoryPath: licenseHistoryWrite.path,
         licensePath: currentLicensePath,
         licenseVersion: licenseHistoryWrite.entryId,
+        occurredAt: Timestamp.fromDate(new Date(eventContext.effectiveDate)),
+        processingState: "applied",
+        provider: "stripe",
+        reconciliationState: "pending",
+        revision: 1,
         status: "processed",
         stripeCustomerId: eventContext.customerId,
         stripeSubscriptionId: eventContext.subscriptionId,
         stripeWebhookStatus: eventContext.webhookStatus,
+        updatedAt: FieldValue.serverTimestamp(),
       });
 
       return {
@@ -1054,6 +1087,7 @@ export class PaymentEventIntegrationService {
       });
       await eventLogReference.set({
         claimFreshnessSynchronizedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       }, {merge: true});
       finalResult = {
         ...finalResult,
@@ -1091,6 +1125,10 @@ export class PaymentEventIntegrationService {
           `${INSTITUTES_COLLECTION}/${finalResult.instituteId}/license`,
         targetId: LICENSE_CURRENT_DOCUMENT_ID,
       });
+      await eventLogReference.set({
+        reconciliationState: "reconciled",
+        updatedAt: FieldValue.serverTimestamp(),
+      }, {merge: true});
     }
 
     this.logger.info("Stripe webhook processed.", {

@@ -61,6 +61,7 @@ import {
 } from "./vendorCalibrationSimulation";
 import {handleVendorSupportRequest} from "./vendorSupport";
 import {handleVendorInstitutesRequest} from "./vendorInstitutes";
+import {handleVendorCommercialRequest} from "./vendorCommercial";
 
 export type ApiGatewayHandler = (
   request: functions.https.Request,
@@ -106,6 +107,7 @@ Record<string, ApiGatewayHandler>
   studentTests: handleStudentTestsRequest,
   vendorCalibrationPush: handleVendorCalibrationPushRequest,
   vendorCalibrationSimulation: handleVendorCalibrationSimulationRequest,
+  vendorCommercial: handleVendorCommercialRequest,
   vendorInstitutes: handleVendorInstitutesRequest,
   vendorSupport: handleVendorSupportRequest,
 });

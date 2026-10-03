@@ -993,8 +993,13 @@ export class AdminLicensingService {
 
         transaction.create(requestReference, {
           ...requestSnapshot,
+          decisionAuditEventIds: [],
+          decisionState: "undecided",
           instituteId: request.instituteId,
+          revision: 1,
+          submissionAuditEventId: authority.auditEventId,
           submittedAt,
+          updatedAt: submittedAt,
         });
         transaction.set(requestStateReference, {
           openRequestId: authority.requestId,

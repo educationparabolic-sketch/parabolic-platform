@@ -206,11 +206,23 @@ test(
     assert.equal(mainLicense?.stripeWebhookStatus, "succeeded");
     assert.equal(mainLicense?.licenseVersion, currentLicense?.licenseVersion);
     assert.equal(billingRecord?.status, "paid");
+    assert.equal(billingRecord?.commercialStatus, "paid");
     assert.equal(billingRecord?.amountPaid, 896);
+    assert.equal(billingRecord?.amountDueMinor, 89600);
+    assert.equal(billingRecord?.amountPaidMinor, 89600);
+    assert.equal(billingRecord?.currency, "USD");
+    assert.equal(billingRecord?.instituteId, instituteId);
+    assert.equal(billingRecord?.invoiceId, "in_build_95_ok");
+    assert.equal(billingRecord?.provider, "stripe");
+    assert.equal(billingRecord?.revision, 1);
     assert.equal(billingRecord?.stripeInvoiceId, "in_build_95_ok");
     assert.equal(billingSnapshotData?.stripeWebhookStatus, "succeeded");
     assert.equal(billingSnapshotData?.licenseTier, "L2");
     assert.equal(stripeEvent?.status, "processed");
+    assert.equal(stripeEvent?.processingState, "applied");
+    assert.equal(stripeEvent?.provider, "stripe");
+    assert.equal(stripeEvent?.reconciliationState, "reconciled");
+    assert.equal(stripeEvent?.revision, 1);
     assert.equal(
       typeof stripeEvent?.claimFreshnessSynchronizedAt?.toDate,
       "function",
@@ -416,9 +428,15 @@ test(
     );
     assert.equal(typeof currentLicense?.gracePeriodEndsAt, "string");
     assert.equal(billingRecord?.status, "failed");
+    assert.equal(billingRecord?.commercialStatus, "past_due");
     assert.equal(billingRecord?.amountPaid, 472);
+    assert.equal(billingRecord?.amountDueMinor, 47200);
+    assert.equal(billingRecord?.amountPaidMinor, 0);
+    assert.equal(billingRecord?.currency, "USD");
     assert.equal(billingSnapshotData?.stripeWebhookStatus, "failed");
     assert.equal(stripeEvent?.eventType, "invoice.payment_failed");
+    assert.equal(stripeEvent?.processingState, "applied");
+    assert.equal(stripeEvent?.reconciliationState, "reconciled");
     assert.equal(licenseHistorySnapshot.size, 1);
   },
 );

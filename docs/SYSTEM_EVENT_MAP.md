@@ -2,7 +2,7 @@
 
 This document defines the event-driven topology of the platform.
 
-Last reconciled: 2026-10-01 (`BWM-034` onboarding authority)
+Last reconciled: 2026-10-03 (`BWM-035` authenticated commercial browser acceptance and closeout)
 
 Each event represents a state transition or trigger that initiates downstream processing.
 
@@ -273,6 +273,46 @@ production-scale identity fan-out, retries/dead letters, propagation timing,
 and stale-session proof. Likewise, BWM-035 owns commercial decisions and only
 its actual entitlement mutation may initiate the BWM-036 license propagation
 flow. No BWM-034 transition may synthesize either outcome.
+
+BWM-035 VEN-17..VEN-30 are synchronous HTTP edges registered through the shared
+`vendorCommercial` Function/gateway handler. Revocation-checked Auth, a fresh
+current enabled Vendor read, and `vendor.licenses.manage` enforcement precede
+service dispatch. A decision transaction updates the shared BWM-031 request,
+sentinel, deterministic replay command, and matching Vendor/institute audits.
+It emits no asynchronous event, provider call, entitlement/history mutation,
+claim update, or propagation result; approval is request-decision authority
+only. Catalog, subscription, invoice, offline-payment, and
+payment-event commands reserve a durable provider operation before the injected
+provider call; a signed webhook or explicit provider reconciliation applies a
+validated provider outcome to the Firestore read model. The default provider
+fails retryably when unconfigured and cannot fabricate success. The browser cannot emit a Stripe
+event or author processing, settlement, invoice, subscription, audit, actor, or
+server-time state. Distinct provider events require an ordering guard, and exact
+delivery replay resumes incomplete post-commit reconciliation instead of
+duplicating effects. Commercial communication derives its recipient and creates
+a deterministic redacted `emailQueue` job; offline recording emits no settlement
+event, and verification requires a different Vendor actor plus provider
+reconciliation where applicable. Registration adds no asynchronous trigger.
+The mounted `/vendor/licensing` workspace invokes these synchronous edges
+through one strict adapter, reloads their Firestore/provider read models before
+success, and never synthesizes an event, provider outcome, settlement, or
+propagation result in the browser. Permanent production-build browser proof
+exercises deterministic communication-job creation, distinct-actor offline
+verification, redacted provider-event retry, exact provider-unavailable replay,
+and fresh-context persistence without fulfilled API mocks or external traffic;
+signed-webhook integration separately proves valid success/failure processing
+and invalid-signature rejection.
+
+License-request decisions transact BWM-031's existing request and one-open
+sentinel. Only a reconciled entitlement change updates `license/current` and
+immutable history, then records `pending_bwm_036`; BWM-036 alone owns fleet
+claim/session fan-out, retries/dead letters, latency, and stale-session proof.
+Recording an offline payment creates pending-verification authority only. A
+different current Vendor actor must verify it, and provider-backed invoices
+still require provider reconciliation before paid status. Billing communication
+creates a redacted deterministic outbox job from the authoritative billing
+contact/template rather than accepting recipient or body authority from the
+browser.
 
 ---
 

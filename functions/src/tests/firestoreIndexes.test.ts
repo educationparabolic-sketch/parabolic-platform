@@ -260,3 +260,82 @@ test("firestore index manifest includes Vendor institute pagination", () => {
     true,
   );
 });
+
+test("firestore index manifest includes Vendor commercial pagination", () => {
+  const manifest = readManifest();
+  const requestOrder = [
+    {fieldPath: "submittedAt", order: "DESCENDING"},
+    {fieldPath: "instituteId", order: "ASCENDING"},
+    {fieldPath: "requestId", order: "ASCENDING"},
+  ];
+  const requestIndexes: FirestoreIndexField[][] = [
+    requestOrder,
+    [requestOrder[1], requestOrder[0], requestOrder[2]],
+    [{fieldPath: "requestedLayer", order: "ASCENDING"}, ...requestOrder],
+    [{fieldPath: "status", order: "ASCENDING"}, ...requestOrder],
+    [requestOrder[1], {fieldPath: "requestedLayer", order: "ASCENDING"},
+      requestOrder[0], requestOrder[2]],
+    [requestOrder[1], {fieldPath: "status", order: "ASCENDING"},
+      requestOrder[0], requestOrder[2]],
+    [{fieldPath: "requestedLayer", order: "ASCENDING"},
+      {fieldPath: "status", order: "ASCENDING"}, ...requestOrder],
+    [requestOrder[1], {fieldPath: "requestedLayer", order: "ASCENDING"},
+      {fieldPath: "status", order: "ASCENDING"}, requestOrder[0], requestOrder[2]],
+  ];
+  requestIndexes.forEach((fields) => assert.equal(
+    hasIndex(manifest.indexes, "licenseRequests", fields, "COLLECTION_GROUP"),
+    true,
+    `licenseRequests ${JSON.stringify(fields)}`,
+  ));
+
+  const invoiceOrder = [
+    {fieldPath: "updatedAt", order: "DESCENDING"},
+    {fieldPath: "instituteId", order: "ASCENDING"},
+    {fieldPath: "invoiceId", order: "ASCENDING"},
+  ];
+  const invoiceIndexes: FirestoreIndexField[][] = [
+    invoiceOrder,
+    [invoiceOrder[1], invoiceOrder[0], invoiceOrder[2]],
+    [{fieldPath: "commercialStatus", order: "ASCENDING"}, ...invoiceOrder],
+    [invoiceOrder[1], {fieldPath: "commercialStatus", order: "ASCENDING"},
+      invoiceOrder[0], invoiceOrder[2]],
+  ];
+  invoiceIndexes.forEach((fields) => assert.equal(
+    hasIndex(manifest.indexes, "billingRecords", fields, "COLLECTION_GROUP"),
+    true,
+    `billingRecords ${JSON.stringify(fields)}`,
+  ));
+
+  const eventOrder = [
+    {fieldPath: "updatedAt", order: "DESCENDING"},
+    {fieldPath: "eventId", order: "ASCENDING"},
+  ];
+  const eventFilters = [
+    [],
+    [{fieldPath: "instituteId", order: "ASCENDING"}],
+    [{fieldPath: "processingState", order: "ASCENDING"}],
+    [{fieldPath: "reconciliationState", order: "ASCENDING"}],
+    [
+      {fieldPath: "instituteId", order: "ASCENDING"},
+      {fieldPath: "processingState", order: "ASCENDING"},
+    ],
+    [
+      {fieldPath: "instituteId", order: "ASCENDING"},
+      {fieldPath: "reconciliationState", order: "ASCENDING"},
+    ],
+    [
+      {fieldPath: "processingState", order: "ASCENDING"},
+      {fieldPath: "reconciliationState", order: "ASCENDING"},
+    ],
+    [
+      {fieldPath: "instituteId", order: "ASCENDING"},
+      {fieldPath: "processingState", order: "ASCENDING"},
+      {fieldPath: "reconciliationState", order: "ASCENDING"},
+    ],
+  ] as FirestoreIndexField[][];
+  eventFilters.forEach((filters) => assert.equal(
+    hasIndex(manifest.indexes, "events", [...filters, ...eventOrder]),
+    true,
+    `events ${JSON.stringify(filters)}`,
+  ));
+});

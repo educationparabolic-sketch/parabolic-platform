@@ -2,7 +2,7 @@
 
 Status: canonical route and response-envelope contract
 
-Last reconciled: 2026-10-02 (`BWM-034` verified Vendor institute browser acceptance)
+Last reconciled: 2026-10-03 (`BWM-035` authenticated commercial browser acceptance and closeout)
 
 ## Sources of truth
 
@@ -12,7 +12,12 @@ Last reconciled: 2026-10-02 (`BWM-034` verified Vendor institute browser accepta
 
 VEN-07..VEN-16 are registered through the shared secured `vendorInstitutes`
 transport for Vendor institute, onboarding, and primary-administrator authority.
-Canonical accounting is 87 routes, 55 HTTP exports, and 38 gateway handlers.
+VEN-17..VEN-30 are registered through the shared secured `vendorCommercial`
+transport for request, catalog, subscription, invoice, communication,
+offline-payment, and payment-event authority. The strict mounted
+`/vendor/licensing` caller consumes all fourteen routes. Canonical accounting is 101 routes: 95 implemented, one
+incompatible, zero missing, and five retired; 56 HTTP exports map through 39
+gateway handlers.
 
 If prose and the typed manifest disagree about a route key or status, the typed manifest must be corrected and the documentation reconciled in the same change.
 
@@ -44,7 +49,7 @@ If prose and the typed manifest disagree about a route key or status, the typed 
 - `missing`: no current Functions handler/export implements the canonical contract.
 - `intentionally_retired`: explicit product/architecture evidence says the route must not be served.
 
-Current totals: 81 implemented, 1 incompatible, 0 missing, 5 intentionally retired.
+Current totals: 95 implemented, 1 incompatible, 0 missing, 5 intentionally retired.
 
 Routes marked `planned` in the code manifest are canonical contracts reserved by
 the active owning task and do not count as executable frontend tuples. They stay
@@ -143,6 +148,20 @@ frontend caller. Frontend-declared routes retain bidirectional source coverage.
 | VEN-14 | `GET /api/v1/vendor/onboarding/{onboardingId}` | `implemented` | `vendorInstitutes` | Current non-disabled Vendor Auth; strict detail with bounded immutable events and authoritative activation blockers |
 | VEN-15 | `POST /api/v1/vendor/onboarding/{onboardingId}/commands` | `implemented` | `vendorInstitutes` | Current non-disabled Vendor Auth; legal non-commercial transitions with expected revision, exact replay, and immutable audit |
 | VEN-16 | `POST /api/v1/vendor/institutes/{instituteId}/administrators/commands` | `implemented` | `vendorInstitutes` | Current non-disabled Vendor Auth; path-targeted administrator commands with Auth recovery, redacted communication, and dual audit |
+| VEN-17 | `GET /api/v1/vendor/license-requests` | `implemented` | `vendorCommercial` | Current non-disabled Vendor Auth; default-25/max-50 filter-bound request queue |
+| VEN-18 | `GET /api/v1/vendor/institutes/{instituteId}/license-requests/{requestId}` | `implemented` | `vendorCommercial` | Current Vendor Auth; path-targeted bounded request/audit detail over BWM-031 authority |
+| VEN-19 | `POST /api/v1/vendor/institutes/{instituteId}/license-requests/{requestId}/decision` | `implemented` | `vendorCommercial` | Current Vendor Auth; revisioned decision, sentinel, replay, dual-audit, and BWM-036-pending boundary |
+| VEN-20 | `GET /api/v1/vendor/license-catalog` | `implemented` | `vendorCommercial` | Current Vendor Auth; bounded immutable-version catalog read |
+| VEN-21 | `POST /api/v1/vendor/license-catalog/commands` | `implemented` | `vendorCommercial` | Current Vendor Auth; revisioned provider-backed publish/retire command with truthful provider failure |
+| VEN-22 | `GET /api/v1/vendor/institutes/{instituteId}/subscription` | `implemented` | `vendorCommercial` | Current Vendor Auth; path-targeted provider-reconciled subscription read |
+| VEN-23 | `POST /api/v1/vendor/institutes/{instituteId}/subscription/commands` | `implemented` | `vendorCommercial` | Current Vendor Auth; path-targeted replayable provider command |
+| VEN-24 | `GET /api/v1/vendor/invoices` | `implemented` | `vendorCommercial` | Current Vendor Auth; default-25/max-50 filter-bound invoice queue |
+| VEN-25 | `GET /api/v1/vendor/institutes/{instituteId}/invoices/{invoiceId}` | `implemented` | `vendorCommercial` | Current Vendor Auth; path-targeted bounded provider/backend invoice detail |
+| VEN-26 | `POST /api/v1/vendor/institutes/{instituteId}/invoices/{invoiceId}/commands` | `implemented` | `vendorCommercial` | Current Vendor Auth; revisioned finalize/void/retry/reconcile provider command |
+| VEN-27 | `POST /api/v1/vendor/institutes/{instituteId}/invoices/{invoiceId}/communications` | `implemented` | `vendorCommercial` | Current Vendor Auth; backend-derived contact/content and redacted delivery command |
+| VEN-28 | `POST /api/v1/vendor/institutes/{instituteId}/invoices/{invoiceId}/offline-payments` | `implemented` | `vendorCommercial` | Current Vendor Auth; two-actor record/verify/reject/void workflow; record alone never marks paid |
+| VEN-29 | `GET /api/v1/vendor/payment-events` | `implemented` | `vendorCommercial` | Current Vendor Auth; redacted bounded reconciliation-event queue with no raw provider payload |
+| VEN-30 | `POST /api/v1/vendor/payment-events/{eventId}/commands` | `implemented` | `vendorCommercial` | Current Vendor Auth; path-targeted replayable reconciliation retry |
 
 The detailed request/response mismatch for each incompatible entry is recorded under the same ID in `docs/FRONTEND_API_CALL_INVENTORY.md`.
 
@@ -285,6 +304,83 @@ loading, empty, permission, unavailable, validation, conflict, and retry states,
 never substitutes the Build 137 fixture dataset, and labels BWM-035 commercial
 mutation unavailable plus BWM-036 propagation pending. The legacy showcase
 workspace remains reachable only under explicit `VITE_DATA_MODE=fixture`.
+
+## BWM-035 commercial contract and registered services
+
+`shared/contracts/vendorCommercial.d.ts` is the dependency-free public DTO and
+state boundary for registered VEN-17..VEN-30. Paginated reads default to 25 and cap
+at 50. Every monetary value is an integer ISO-4217 minor-unit amount paired with
+its uppercase currency; browser floating-point or locale-formatted amounts are
+not authority. Mutation intents carry a UUID idempotency key and, for existing
+state, its observed revision. They exclude actor, durable status, audit/time,
+provider outcome, and propagation-success authority.
+
+BWM-031's existing `licenseRequests`, one-open request sentinel, and
+`license/current` remain the only request and entitlement sources. A Vendor
+decision changes those records through a legal transactional workflow; the
+browser cannot directly author entitlement. Firestore owns durable commands and
+read models, while Stripe owns provider-backed subscription, invoice, and
+payment outcomes. Signed webhooks or explicit reconciliation apply provider
+truth. Raw webhook payloads, secrets, and fabricated settlement never cross the
+browser boundary. Provider price references are immutable; a price change
+publishes a new plan version.
+
+Billing communications derive the current billing contact and content on the
+backend and expose only a redacted delivery receipt. Recording an offline
+payment creates `pending_verification` authority and never marks an invoice
+paid. Verification requires a different current Vendor actor, immutable dual
+audit, and provider reconciliation when the invoice is provider-backed.
+Entitlement-changing receipts can report only
+`not_required|pending_bwm_036`; BWM-036 exclusively owns fleet claim/session
+fan-out, retry/dead-letter behavior, propagation latency, and stale-session
+proof. The mounted live caller validates every response, retains exact command
+identity through retry, and reloads authoritative reads before reporting success.
+
+The shared VEN-17..VEN-30 transport verifies a revocation-aware, current,
+enabled Vendor
+identity and `vendor.licenses.manage`, then derives actor and path targets on
+the server and allowlists public intent fields so browser actor, target, status,
+provider outcome, audit, and time fields cannot become authority. The request
+service provides filter-bound default-25/max-50 cursor reads,
+bounded request detail/audit projection, revisioned legal
+`require_payment|approve|reject` transitions, scoped hashed UUID replay,
+one-winner concurrency, dual immutable audit, and atomic one-open-sentinel
+maintenance. Legacy BWM-031 requests without a stored revision enter at
+revision 1. Approval is a terminal request decision only: it clears the open
+sentinel but does not update `license/current`, license history, claims, or a
+provider read model. Commercial application stays within the separately
+reconciled subscription/invoice/provider authorities, and fleet propagation
+belongs to BWM-036.
+
+VEN-20..VEN-30 use the same registered transport and Firestore services. Catalog versions are
+immutable once created; subscription and invoice commands reserve a durable
+operation before calling an injected provider and install only validated
+provider projections. The default provider reports retryable
+`provider_not_configured`, so local or unprovisioned runtime never fabricates a
+Stripe success. Exact replay returns terminal receipts and resumes retryable
+operations. Invoice/event lists are filter-bound and capped at 50; detail caps
+payment attempts, communications, and offline records at 50 each. Commercial
+mail derives the current institute contact and creates a deterministic redacted
+outbox record. Offline evidence/external references are stored only as hashes,
+verification requires a different Vendor actor, and a Stripe invoice still
+requires provider reconciliation. Payment-event reads exclude raw payloads and
+retries write matching root/institute audit when an institute is known.
+
+The signed Stripe webhook enriches the same invoice/event read models with
+minor-unit amounts, currency, institute/invoice identity, revision, processing,
+and reconciliation metadata. `commercialStatus` carries the full invoice state;
+the existing `status` field remains a `paid|failed` compatibility projection for
+the older Admin billing reader. All fourteen routes are registered through
+`vendorCommercial`. One strict live adapter consumes them at
+`/vendor/licensing`, exposes loading/empty/permission/validation/conflict/
+provider-unavailable/retry states and bounded cursor navigation, and never
+creates browser invoice, catalog, payment, provider, or settlement authority.
+Only explicit fixture mode retains the legacy commercial showcase. Permanent
+production-build browser acceptance now proves real Auth/Firestore/Functions/
+Hosting pagination, conflict reload/retry, provider-unavailable exact replay,
+communication and two-actor offline-payment governance, redacted event
+reconciliation, fresh-context persistence, negative/failure states, public-only
+intent, and zero fulfilled API mocks or browser-local financial success.
 
 ## BWM-032 support contract and institute authority
 

@@ -249,7 +249,9 @@ test("Vendor institute authority persists through real Auth, Firestore, Function
   await expect(page).toHaveURL(new RegExp(`/vendor/institutes/${mainInstituteId}$`, "u"));
   await expect(page.getByRole("heading", { name: mainInstituteName, exact: true })).toBeVisible();
   await expect(page.getByText("120", { exact: true })).toBeVisible();
-  await expect(page.getByText(/Commercial controls are unavailable/u)).toBeVisible();
+  await expect(
+    page.getByText(/Commercial controls use the registered licensing workspace/u),
+  ).toBeVisible();
   await expect(page.getByText(/pending BWM-036/u)).toBeVisible();
 
   await db.doc(`institutes/${mainInstituteId}`).update({

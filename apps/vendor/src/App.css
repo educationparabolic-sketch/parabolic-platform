@@ -69,6 +69,71 @@
   background: #fffbeb;
 }
 
+.vendor-authority-state-provider_unavailable {
+  border-color: #ea580c;
+  background: #fff7ed;
+}
+
+/* BWM-035 authoritative commercial workspace */
+.vendor-commercial-page,
+.vendor-commercial-section,
+.vendor-commercial-detail {
+  display: grid;
+  gap: 1rem;
+}
+
+.vendor-commercial-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  border-bottom: 1px solid rgba(15, 43, 85, 0.14);
+  padding-bottom: 0.75rem;
+}
+
+.vendor-commercial-tabs button {
+  border: 1px solid #94a3b8;
+  border-radius: 999px;
+  background: #fff;
+  color: #244568;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 0.55rem 0.9rem;
+}
+
+.vendor-commercial-tabs button[aria-current="page"] {
+  border-color: #1a65b8;
+  background: #eaf3ff;
+  color: #174f92;
+}
+
+.vendor-commercial-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(18rem, 0.8fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.vendor-commercial-detail {
+  border: 1px solid #dbe4ee;
+  border-radius: 0.75rem;
+  background: #fff;
+  padding: 1rem;
+}
+
+.vendor-commercial-detail h4,
+.vendor-commercial-section h3,
+.vendor-commercial-section h4,
+.vendor-commercial-detail p {
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .vendor-commercial-split {
+    grid-template-columns: 1fr;
+  }
+}
+
 .vendor-authority-filters,
 .vendor-authority-form {
   display: grid;

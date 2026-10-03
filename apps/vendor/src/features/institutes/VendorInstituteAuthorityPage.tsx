@@ -86,10 +86,11 @@ function FailurePanel(props: { failure: VendorInstituteFailure; onRetry: () => v
 function CommercialBoundary() {
   return (
     <aside className="vendor-authority-boundary" aria-label="Commercial authority status">
-      <strong>Commercial controls are unavailable.</strong>
+      <strong>Commercial controls use the registered licensing workspace.</strong>
       <span>
-        License decisions, plans, proposals, invoices, payment confirmation, and subscription
-        changes remain read-only until BWM-035.
+        This institute view keeps its bounded commercial summary read-only. License decisions,
+        catalog, subscriptions, invoices, payment confirmation, and provider reconciliation use
+        the strict <Link to="/vendor/licensing">licensing and billing workspace</Link>.
       </span>
     </aside>
   );

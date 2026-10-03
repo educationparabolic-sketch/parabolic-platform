@@ -2,7 +2,7 @@
 
 This document provides a simplified reference of the Firestore data hierarchy.
 
-Last reconciled: 2026-10-01 (`BWM-034` onboarding authority)
+Last reconciled: 2026-10-03 (`BWM-035` authenticated commercial browser acceptance and closeout)
 
 The authoritative schema definition exists in:
 
@@ -82,6 +82,14 @@ initial `pending` status. Admin never writes an approval, payment state, plan,
 license, invoice, or entitlement through this record; BWM-035 owns Vendor
 decisions over the same document.
 
+New submissions also store `revision: 1`, `decisionState: "undecided"`, an
+empty bounded `decisionAuditEventIds`, the immutable
+`submissionAuditEventId`, and `updatedAt`. Existing BWM-031 requests lacking a
+revision enter Vendor decision authority at revision 1 rather than being
+silently migrated. A decision increments the revision, writes server-owned
+decision actor/time/action/note/status fields, and appends one deterministic
+audit ID. At most 50 decision-audit references are accepted on one request.
+
 `institutes/{instituteId}/licenseRequestState/current` is the transactional
 one-open-request sentinel. Its `openRequestId` serializes `pending` and
 `payment_required` authority. A new Admin command also queries at most two open
@@ -101,6 +109,71 @@ authority, requested plan/layer/kind, hashes for the command fingerprint and
 optional request context, and a fixed summary. The full reason remains only on
 the request record. Request, sentinel, command, and audit are committed in one
 transaction without writing `license/current` or `license/main`.
+
+BWM-035 uses the following server-only commercial authority:
+
+- the same `licenseRequests/{requestId}` plus
+  `licenseRequestState/current` remain request/decision authority; decision
+  commands and matching Vendor/institute audits must transact with terminal
+  sentinel maintenance;
+- `institutes/{instituteId}/commercialCommands/{hashedCommandId}` stores the
+  deterministic request/subscription/invoice/communication/offline-payment
+  fingerprint, institute-scoped hashed UUID, action/revision, operation state,
+  and immutable receipt. The reserving transaction
+  creates matching deterministic records in root `vendorAuditLogs` and
+  institute `auditLogs`. Exact replay requires the command and both audits to
+  match before returning the original receipt;
+- `vendorConfig/pricingPlans` stores `catalogRevision`, while
+  `vendorConfig/pricingPlans/pricingPlans/{versionId}` stores immutable logical
+  plan versions and `vendorConfig/pricingPlans/commands/{hashedCommandId}` stores
+  scoped replay receipts; published price changes create a new version instead
+  of overwriting a provider price;
+- `institutes/{instituteId}/commercial/subscription` is the provider-backed
+  subscription read model, distinct from the sole entitlement source at
+  `license/current`; `commercialCommands/{hashedCommandId}` owns subscription
+  command replay/recovery;
+- existing `billingRecords/{invoiceId}` remains invoice authority, with canonical
+  `commercialStatus`, minor-unit/currency fields, revision and provider-operation
+  recovery. Legacy `status` remains only the `paid|failed` compatibility
+  projection consumed by BWM-031. Invoice detail has bounded
+  `paymentAttempts`, `communications`, and `offlinePayments` subcollections plus
+  scoped replay/recovery records; an offline-payment record starts pending and
+  cannot mark an invoice paid;
+- existing `vendor/stripeEvents/events/{eventId}` remains redacted provider-event
+  authority, with reconciliation attempt/ordering state; retry authority uses
+  `vendor/stripeEvents/commands/{hashedCommandId}`.
+
+For implemented request decisions, `require_payment` preserves the sentinel's
+request ID; `approve` and `reject` atomically set `openRequestId` to null. All
+three require the sentinel to identify the same request and require the current
+`license/current.licenseVersion` to match the submitted request version.
+Approval does not write `license/current`, `license/main`, `licenseHistory`,
+claims, subscription, invoice, or provider state. The separate commercial
+services apply only reconciled commercial projections; BWM-036 owns fleet
+propagation.
+
+All money uses an integer `amountMinor` paired with an uppercase ISO-4217
+`currency`. Provider-backed status becomes durable only through a verified
+webhook or explicit provider reconciliation, never a browser field. Public
+intent omits actor, status, audit/time, provider result, and BWM-036 completion.
+Every accepted mutation owns immutable root Vendor and institute audit evidence;
+offline verification requires an actor different from the recorder. BWM-036,
+not these commercial records, owns claim/session fan-out and may initially be
+represented only as `pending_bwm_036`.
+
+The implemented provider boundary is injected into catalog, subscription,
+invoice, offline-payment, and payment-event services. A command first reserves
+its revision and provider operation transactionally, then records a validated
+provider projection or a truthful retryable/terminal failure. The default
+unprovisioned provider returns `provider_not_configured` and cannot create
+financial success. Catalog price versions are immutable. Communication jobs
+derive the institute billing email and use deterministic root `emailQueue`
+records. Offline evidence/external references persist only as SHA-256 hashes;
+recording stays `pending_verification`, distinct-actor verification is required,
+and provider-backed invoices reconcile before settlement. The signed Stripe
+webhook writes the same canonical minor-unit invoice fields and redacted event
+processing/reconciliation metadata; no raw provider payload is projected by the
+Vendor read service.
 
 BWM-030 adds institute-root settings authority. `settingsRevision` is the
 optimistic concurrency counter; `primaryAdminUserId` is server-owned; and
@@ -326,6 +399,16 @@ combination over `institutes` lifecycle/license/search equality plus
 combination with the same deterministic ordering, and
 `events(occurredAt DESC, __name__ DESC)`. These definitions are executable in
 `firestore.indexes.json`; BWM-053 retains remote deployment/backfill rollout.
+BWM-035 adds 20 executable commercial index definitions: all supported
+`licenseRequests` collection-group combinations of `instituteId`,
+`requestedLayer`, and `status` ordered by `submittedAt DESC`, `instituteId ASC`,
+and `requestId ASC`; all supported `billingRecords` collection-group
+combinations of `instituteId` and `commercialStatus` ordered by `updatedAt DESC`,
+`instituteId ASC`, and `invoiceId ASC`; and all supported root Stripe `events`
+collection combinations of `instituteId`, `processingState`, and
+`reconciliationState` ordered by `updatedAt DESC` and `eventId ASC`. The local
+manifest and permanent index contract are complete; BWM-053 retains remote
+deployment and production query qualification.
 
 students/{studentId}
 
@@ -889,35 +972,45 @@ These documents contain global metrics without exposing raw institute data.
 
 Pricing plans are defined as vendor-controlled configuration.
 
-Location:
+Legacy documentation used `vendorConfig/pricingPlans/{planId}`. The canonical
+existing collection path is:
 
-vendorConfig/pricingPlans/{planId}
+vendorConfig/pricingPlans/pricingPlans/{versionId}
 
 Example documents:
 
-vendorConfig/pricingPlans/L0
-vendorConfig/pricingPlans/L1
-vendorConfig/pricingPlans/L2
-vendorConfig/pricingPlans/L3
+vendorConfig/pricingPlans/pricingPlans/L0
+vendorConfig/pricingPlans/pricingPlans/L1
+vendorConfig/pricingPlans/pricingPlans/L2
+vendorConfig/pricingPlans/pricingPlans/L3
 
 Fields:
 
 {
   planId: string,
   name: string,
-  basePriceMonthly: number,
-  pricePerStudent: number,
-  studentLimit: number,
+  versionId: string,
+  revision: number,
+  status: "draft" | "published" | "retired",
+  billingInterval: "month" | "year",
+  amountMinor: integer,
+  currency: uppercase ISO-4217 string,
+  providerPriceReference: string | null,
+  limits: object,
   featureFlags: {
     adaptivePhase: boolean,
     controlledMode: boolean,
     hardMode: boolean,
     governanceAccess: boolean
   },
-  createdAt: timestamp
+  createdAt: timestamp,
+  updatedAt: timestamp
 }
 
-Billing engines must read pricing configuration from this collection.
+Existing compatibility fields may remain while migration is governed, but new
+BWM-035 command/read authority uses the versioned minor-unit fields above.
+Billing engines must read pricing configuration from this collection and only
+one published version may be active for a logical plan at a time.
 
 Pricing must never be hardcoded inside backend logic.
 
