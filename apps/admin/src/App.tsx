@@ -11,6 +11,7 @@ import {
 } from "react-router-dom";
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { useAuthProvider } from "../../../shared/services/authProvider";
+import { useGlobalPortalState } from "../../../shared/services/globalPortalState";
 import {
   getPortalDefaultAuthenticatedPath,
   getPortalLoginPath,
@@ -535,7 +536,8 @@ function AdminLoginPage(props: { loginPath: string; protectedPath: string }) {
 function AdminProtectedRoute(props: { loginPath: string; children: ReactElement }) {
   const { loginPath, children } = props;
   const location = useLocation();
-  const { session } = useAuthProvider();
+  const { session, signOut } = useAuthProvider();
+  const globalState = useGlobalPortalState();
 
   if (session.status === "loading") {
     return (
@@ -556,6 +558,36 @@ function AdminProtectedRoute(props: { loginPath: string; children: ReactElement 
         to={loginPath}
         state={{ from: `${location.pathname}${location.search}${location.hash}` }}
       />
+    );
+  }
+
+  const suspended =
+    globalState.isSuspended || globalState.authorityIssue === "institute_suspended";
+  const licenseRestricted =
+    globalState.authorityIssue === "license_restricted" ||
+    globalState.license.status === "grace" ||
+    globalState.license.status === "expired";
+  if (suspended || licenseRestricted) {
+    return (
+      <main className="admin-page-shell admin-page-shell-login">
+        <section className="admin-content-card admin-login-card" aria-labelledby="admin-authority-title">
+          <p className="admin-content-eyebrow">Access Update</p>
+          <h1 id="admin-authority-title">
+            {suspended ? "Institute access suspended" : "Institute license access unavailable"}
+          </h1>
+          <p className="admin-content-copy">
+            {suspended
+              ? "Your institute has suspended portal access. Protected routes and actions are unavailable."
+              : "The current institute license no longer permits this admin session. Protected actions remain blocked until authority is restored."}
+          </p>
+          <p className="admin-content-copy">
+            Authority changes are checked automatically. You can also sign out and contact your institute administrator.
+          </p>
+          <button type="button" className="admin-primary-link" onClick={() => void signOut()}>
+            Sign out
+          </button>
+        </section>
+      </main>
     );
   }
 

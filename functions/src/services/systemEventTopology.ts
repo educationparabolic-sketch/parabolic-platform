@@ -162,6 +162,18 @@ const SYSTEM_EVENT_DEFINITIONS: readonly SystemEventDefinition[] = [
   },
   {
     description:
+      "Institute authorization operations and elapsed license deadlines are " +
+      "drained on a bounded one-minute schedule.",
+    domain: "identityAuthority",
+    downstreamEvents: [],
+    executionMode: "scheduled",
+    name: "ClaimPropagationSweepScheduled",
+    primaryHandler: "claimPropagationSweepEveryMinute",
+    source: "Every 1 minute schedule",
+    sourceKind: "scheduled",
+  },
+  {
+    description:
       "Monthly governance snapshots summarize academic-year analytics on a " +
       "scheduled cadence.",
     domain: "archiveLifecycle",

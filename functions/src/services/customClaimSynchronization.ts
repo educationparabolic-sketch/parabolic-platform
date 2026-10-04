@@ -15,6 +15,7 @@ import type {
 } from "../../../shared/contracts/adminLicensing";
 
 const MANAGED_CLAIM_KEYS = new Set([
+  "authorizationVersion",
   "instituteId",
   "expiryDate",
   "featureFlags",
@@ -99,6 +100,32 @@ const normalizeAuthorityString = (
   }
 
   return value.trim();
+};
+
+const normalizeOptionalAuthorizationVersion = (
+  value: unknown,
+): number | undefined => {
+  if (value === undefined || value === null) return undefined;
+  if (!Number.isInteger(value) || Number(value) <= 0) {
+    throw new CustomClaimSynchronizationError(
+      "INVALID_AUTHORITY",
+      "Authoritative field \"institute.authorizationVersion\" must be a positive integer.",
+    );
+  }
+  return Number(value);
+};
+
+const normalizeRequestedAuthorizationVersion = (
+  value: unknown,
+): number | undefined => {
+  if (value === undefined || value === null) return undefined;
+  if (!Number.isInteger(value) || Number(value) <= 0) {
+    throw new CustomClaimSynchronizationError(
+      "VALIDATION_ERROR",
+      "Field \"authorizationVersion\" must be a positive integer.",
+    );
+  }
+  return Number(value);
 };
 
 const normalizeStatus = (
@@ -269,6 +296,9 @@ implements AuthorityRepository {
     }
 
     const instituteData = instituteSnapshot.data() ?? {};
+    const authorizationVersion = normalizeOptionalAuthorizationVersion(
+      instituteData.authorizationVersion,
+    );
     const instituteStatus = normalizeStatus(
       instituteData.status,
       "institute.status",
@@ -355,6 +385,7 @@ implements AuthorityRepository {
       );
 
       return {
+        authorizationVersion,
         expiryDate,
         featureFlags,
         gracePeriodEndsAt,
@@ -387,6 +418,7 @@ implements AuthorityRepository {
     );
 
     return {
+      authorizationVersion,
       expiryDate,
       featureFlags,
       gracePeriodEndsAt,
@@ -440,6 +472,9 @@ export class CustomClaimSynchronizationService {
     input: SynchronizeCustomClaimsInput,
   ): Promise<SynchronizeCustomClaimsResult> {
     const normalizedInput = {
+      authorizationVersion: normalizeRequestedAuthorizationVersion(
+        input.authorizationVersion,
+      ),
       instituteId: normalizeRequiredString(input.instituteId, "instituteId"),
       uid: normalizeRequiredString(input.uid, "uid"),
     };
@@ -462,6 +497,15 @@ export class CustomClaimSynchronizationService {
         "Resolved identity authority does not match the requested institute.",
       );
     }
+    if (
+      normalizedInput.authorizationVersion !== undefined &&
+      authority.authorizationVersion !== normalizedInput.authorizationVersion
+    ) {
+      throw new CustomClaimSynchronizationError(
+        "INVALID_AUTHORITY",
+        "Resolved authorization version does not match the propagation operation.",
+      );
+    }
 
     const claims: Record<string, unknown> = {
       ...omitManagedClaims(user.customClaims),
@@ -476,6 +520,9 @@ export class CustomClaimSynchronizationService {
       licenseVersion: authority.licenseVersion,
       role: authority.role,
     };
+    if (authority.authorizationVersion !== undefined) {
+      claims.authorizationVersion = authority.authorizationVersion;
+    }
     if (authority.studentId) {
       claims.studentId = authority.studentId;
     }

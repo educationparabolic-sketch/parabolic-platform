@@ -70,6 +70,7 @@ const seedInstitute = async (input: {
   revision: number;
 }): Promise<void> => {
   await firestore.doc(`institutes/${input.id}`).set({
+    authorizationVersion: 1,
     createdAt: Timestamp.fromDate(new Date("2026-01-01T00:00:00.000Z")),
     ...(input.deletionOperation ? {deletionOperation: input.deletionOperation} : {}),
     ...(input.legalHold !== undefined ? {deletionLegalHold: input.legalHold} : {}),
@@ -84,6 +85,20 @@ const seedInstitute = async (input: {
     vendorAccountReference: null,
     vendorFilterKeys: [`query=institute ${input.id}`],
     vendorLifecycleState: input.lifecycleState,
+  });
+  await firestore.doc(`institutes/${input.id}/license/current`).set({
+    activeStudentLimit: 500,
+    concurrentSessionLimit: 100,
+    currentLayer: "L3",
+    featureFlags: {
+      adaptivePhase: true,
+      controlledMode: true,
+      governanceAccess: true,
+      hardMode: true,
+      riskOverview: true,
+    },
+    licenseState: "active",
+    licenseVersion: `license_${input.id}`,
   });
 };
 
@@ -253,7 +268,7 @@ test("profile updates replay exactly and concurrent stale revisions admit only o
   assert.equal((await firestore.collection(`institutes/${instituteId}/auditLogs`).get()).size, 2);
 });
 
-test("lifecycle graph persists access intent and reports BWM-036 propagation honestly", async () => {
+test("lifecycle graph stages durable claim propagation operations transactionally", async () => {
   const instituteId = `${TEST_PREFIX}lifecycle`;
   await seedInstitute({id: instituteId, lifecycleState: "active", revision: 2});
   const suspendedRequest = lifecycleRequest({
@@ -265,7 +280,8 @@ test("lifecycle graph persists access intent and reports BWM-036 propagation hon
   });
   const suspended = await service.transitionLifecycle(suspendedRequest);
   assert.equal(suspended.lifecycleState, "suspended");
-  assert.equal(suspended.propagationState, "pending_bwm_036");
+  assert.equal(suspended.propagationState, "pending");
+  assert.equal(suspended.propagation.operationId, "v2");
   assert.equal((await firestore.doc(`institutes/${instituteId}`).get()).get("status"), "suspended");
   assert.equal((await service.transitionLifecycle(suspendedRequest)).replayed, true);
   await expectCode(service.transitionLifecycle(lifecycleRequest({
@@ -284,7 +300,8 @@ test("lifecycle graph persists access intent and reports BWM-036 propagation hon
     reason: "Review complete",
   }));
   assert.equal(restored.lifecycleState, "active");
-  assert.equal(restored.propagationState, "pending_bwm_036");
+  assert.equal(restored.propagationState, "pending");
+  assert.equal(restored.propagation.operationId, "v3");
   const archived = await service.transitionLifecycle(lifecycleRequest({
     action: "archive",
     expectedRevision: 4,
@@ -293,12 +310,16 @@ test("lifecycle graph persists access intent and reports BWM-036 propagation hon
     reason: "Contract ended",
   }));
   assert.equal(archived.lifecycleState, "archived");
-  assert.equal(archived.propagationState, "pending_bwm_036");
+  assert.equal(archived.propagationState, "pending");
+  assert.equal(archived.propagation.operationId, "v4");
   const audit = await firestore.doc(
     `vendorAuditLogs/${archived.auditEventId}`,
   ).get();
   assert.equal(audit.get("reason"), undefined);
   assert.equal(typeof audit.get("reasonHash"), "string");
+  assert.equal((await firestore.doc(
+    `institutes/${instituteId}/claimPropagationOperations/v4`,
+  ).get()).get("source"), "institute_archived");
 });
 
 test("deletion is cancellable, retention/legal-hold gated, and only reserves resumable purge", async () => {

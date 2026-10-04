@@ -2,7 +2,7 @@ import * as functions from "firebase-functions";
 import {DecodedIdToken} from "firebase-admin/auth";
 import {sendErrorResponse} from "../services/apiResponse";
 import {sessionService, SessionStartValidationError} from "../services/session";
-import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
+import {verifyCurrentAuthorityIdToken} from "../services/instituteAuthorityEnforcement";
 import {
   createMethodMiddleware,
   createMiddlewareHandler,
@@ -216,6 +216,5 @@ export const handleExamSessionEntryRequest = createExamSessionEntryHandler({
     sessionService.resumeSessionEntry.bind(sessionService),
   validateSessionEntry:
     sessionService.validateSessionEntry.bind(sessionService),
-  verifyIdToken: (idToken: string) =>
-    getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
+  verifyIdToken: verifyCurrentAuthorityIdToken,
 });

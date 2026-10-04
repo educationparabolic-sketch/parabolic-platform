@@ -89,6 +89,34 @@ const seedAcademicYear = async (
   });
 };
 
+const seedInstituteAuthority = async (
+  instituteId: string,
+  licenseOverrides: Record<string, unknown> = {},
+): Promise<void> => {
+  const licenseVersion = `license_${instituteId}_v1`;
+  const license = {
+    activeStudentLimit: 100,
+    concurrentSessionLimit: 20,
+    currentLayer: "L1",
+    expiryDate: "2099-12-31T23:59:59.000Z",
+    featureFlags: {},
+    gracePeriodEndsAt: null,
+    licenseState: "active",
+    licenseVersion,
+    ...licenseOverrides,
+  };
+  await Promise.all([
+    firestore.doc(`institutes/${instituteId}`).set({
+      authorizationVersion: 1,
+      instituteId,
+      licenseVersion,
+      status: "active",
+    }),
+    firestore.doc(`institutes/${instituteId}/license/current`).set(license),
+    firestore.doc(`institutes/${instituteId}/license/main`).set(license),
+  ]);
+};
+
 test.after(async () => {
   await getFirebaseAdminApp().delete();
 });
@@ -119,11 +147,7 @@ test(
     await deleteDocumentIfPresent(questionMediumPath);
     await deleteDocumentIfPresent(runPath);
 
-    await firestore.doc(institutePath).set({instituteId});
-    await seedAcademicYear(instituteId, yearId);
-    await firestore.doc(studentPath).set({status: "active", studentId});
-    await firestore.doc(licensePath).set({
-      currentLayer: "L1",
+    await seedInstituteAuthority(instituteId, {
       eligibilityFlags: {
         l1Eligible: true,
       },
@@ -132,6 +156,8 @@ test(
         hardMode: false,
       },
     });
+    await seedAcademicYear(instituteId, yearId);
+    await firestore.doc(studentPath).set({status: "active", studentId});
     await firestore.doc(questionEasyPath).set({difficulty: "Easy"});
     await firestore.doc(questionHardPath).set({difficulty: "Hard"});
     await firestore.doc(questionMediumPath).set({difficulty: "Medium"});
@@ -346,6 +372,7 @@ test(
     };
     const launchCredential = buildCustomLaunchToken(claims);
     const launchCredentialHash = createHashForTest(launchCredential);
+    await seedInstituteAuthority(context.instituteId);
     await firestore.doc(sessionPath).set({
       consumedLaunchCredentialHashes: [],
       instituteId: context.instituteId,
@@ -497,14 +524,12 @@ test(
     const runPaths = runIds.map((runId) =>
       `${institutePath}/academicYears/${yearId}/runs/${runId}`);
 
-    await firestore.doc(institutePath).set({instituteId});
-    await seedAcademicYear(instituteId, yearId);
-    await firestore.doc(studentPath).set({status: "active", studentId});
-    await firestore.doc(licensePath).set({
-      currentLayer: "L1",
+    await seedInstituteAuthority(instituteId, {
       eligibilityFlags: {diagnosticEligible: true},
       featureFlags: {browserRuntime: true},
     });
+    await seedAcademicYear(instituteId, yearId);
+    await firestore.doc(studentPath).set({status: "active", studentId});
     await Promise.all(questionPaths.map((questionPath, index) =>
       firestore.doc(questionPath).set({
         correctAnswer: index === 0 ? "A" : "B",
@@ -633,10 +658,9 @@ test(
     await deleteDocumentIfPresent(licensePath);
     await deleteDocumentIfPresent(runPath);
 
-    await firestore.doc(institutePath).set({instituteId});
+    await seedInstituteAuthority(instituteId);
     await seedAcademicYear(instituteId, yearId);
     await firestore.doc(studentPath).set({status: "active", studentId});
-    await firestore.doc(licensePath).set({currentLayer: "L1"});
     await firestore.doc(runPath).set({
       calibrationVersion: "cal_v2026_04",
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
@@ -691,10 +715,9 @@ test(
     await deleteDocumentIfPresent(licensePath);
     await deleteDocumentIfPresent(runPath);
 
-    await firestore.doc(institutePath).set({instituteId});
+    await seedInstituteAuthority(instituteId);
     await seedAcademicYear(instituteId, yearId);
     await firestore.doc(studentPath).set({status: "active", studentId});
-    await firestore.doc(licensePath).set({currentLayer: "L1"});
     await firestore.doc(runPath).set({
       calibrationVersion: "cal_v2026_04",
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
@@ -751,10 +774,9 @@ test(
     await deleteDocumentIfPresent(licensePath);
     await deleteDocumentIfPresent(runPath);
 
-    await firestore.doc(institutePath).set({instituteId});
+    await seedInstituteAuthority(instituteId);
     await seedAcademicYear(instituteId, yearId);
     await firestore.doc(studentPath).set({status: "active", studentId});
-    await firestore.doc(licensePath).set({currentLayer: "L1"});
     await firestore.doc(runPath).set({
       calibrationVersion: "cal_v2026_04",
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
@@ -812,10 +834,9 @@ test(
     await deleteDocumentIfPresent(licensePath);
     await deleteDocumentIfPresent(runPath);
 
-    await firestore.doc(institutePath).set({instituteId});
+    await seedInstituteAuthority(instituteId);
     await seedAcademicYear(instituteId, yearId);
     await firestore.doc(studentPath).set({status: "active", studentId});
-    await firestore.doc(licensePath).set({currentLayer: "L1"});
     await firestore.doc(runPath).set({
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
       mode: "Diagnostic",
@@ -871,10 +892,9 @@ test(
     await deleteDocumentIfPresent(conflictingSessionPath);
     await deleteDocumentIfPresent(runPath);
 
-    await firestore.doc(institutePath).set({instituteId});
+    await seedInstituteAuthority(instituteId);
     await seedAcademicYear(instituteId, yearId);
     await firestore.doc(studentPath).set({status: "active", studentId});
-    await firestore.doc(licensePath).set({currentLayer: "L1"});
     await firestore.doc(runPath).set({
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
       mode: "Diagnostic",
@@ -938,10 +958,9 @@ test(
     await deleteDocumentIfPresent(licensePath);
     await deleteDocumentIfPresent(runPath);
 
-    await firestore.doc(institutePath).set({instituteId});
+    await seedInstituteAuthority(instituteId);
     await seedAcademicYear(instituteId, yearId, "archived");
     await firestore.doc(studentPath).set({status: "active", studentId});
-    await firestore.doc(licensePath).set({currentLayer: "L1"});
     await firestore.doc(runPath).set({
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
       mode: "Diagnostic",
@@ -977,3 +996,145 @@ test(
     await deleteDocumentIfPresent(institutePath);
   },
 );
+
+test("startSession enforces current feature and concurrent-session authority", async () => {
+  const service = createSessionServiceForTests();
+  const instituteId = "inst_bwm_036_session_limits";
+  const yearId = "2026";
+  const studentId = "student_bwm_036_session_limits";
+  const runId = "run_bwm_036_session_limits";
+  const institutePath = `institutes/${instituteId}`;
+  const runPath = `${institutePath}/academicYears/${yearId}/runs/${runId}`;
+  const blockingSessionPath =
+    `${institutePath}/academicYears/${yearId}/runs/other/sessions/blocking`;
+  await seedInstituteAuthority(instituteId, {
+    concurrentSessionLimit: 1,
+    currentLayer: "L2",
+    featureFlags: {controlledMode: false},
+  });
+  await seedAcademicYear(instituteId, yearId);
+  await firestore.doc(`${institutePath}/students/${studentId}`).set({
+    status: "active",
+    studentId,
+  });
+  await firestore.doc(runPath).set({
+    endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
+    mode: "Controlled",
+    recipientStudentIds: [studentId],
+    runId,
+    startWindow: Timestamp.fromMillis(Date.now() - 60 * 1000),
+    status: "scheduled",
+  });
+  const context = {
+    instituteId,
+    intent: "start" as const,
+    licenseLayer: "L2" as const,
+    runId,
+    studentId,
+    studentUid: `uid_${studentId}`,
+  };
+
+  await assert.rejects(
+    service.startSession(context),
+    (error: unknown) =>
+      error instanceof SessionStartValidationError &&
+      error.code === "LICENSE_RESTRICTED" &&
+      /feature flags/i.test(error.message),
+  );
+
+  await firestore.doc(`${institutePath}/license/current`).update({
+    featureFlags: {controlledMode: true},
+  });
+  await firestore.doc(`${institutePath}/license/main`).update({
+    featureFlags: {controlledMode: true},
+  });
+  await firestore.doc(blockingSessionPath).set({
+    instituteId,
+    sessionId: "blocking",
+    status: "active",
+    studentId: "other-student",
+  });
+  await assert.rejects(
+    service.startSession(context),
+    (error: unknown) =>
+      error instanceof SessionStartValidationError &&
+      error.code === "LICENSE_RESTRICTED" &&
+      /concurrent/i.test(error.message),
+  );
+  assert.equal(
+    (await firestore.collection(`${runPath}/sessions`).get()).size,
+    0,
+  );
+
+  await deleteDocumentIfPresent(blockingSessionPath);
+  await deleteDocumentIfPresent(runPath);
+  await deleteDocumentIfPresent(`${institutePath}/students/${studentId}`);
+  await deleteDocumentIfPresent(institutePath);
+});
+
+test("active Exam entry is recoverably blocked by an invalidating downgrade", async () => {
+  const service = createSessionServiceForTests();
+  const instituteId = "inst_bwm_036_active_downgrade";
+  const yearId = "2026";
+  const runId = "run_bwm_036_active_downgrade";
+  const sessionId = "session_bwm_036_active_downgrade";
+  const studentId = "student_bwm_036_active_downgrade";
+  const launchNonce = "nonce_bwm_036_active_downgrade";
+  const institutePath = `institutes/${instituteId}`;
+  const sessionPath = `${institutePath}/academicYears/${yearId}/` +
+    `runs/${runId}/sessions/${sessionId}`;
+  await seedInstituteAuthority(instituteId, {
+    currentLayer: "L1",
+    featureFlags: {controlledMode: false},
+  });
+  const claims = {
+    instituteId,
+    launchNonce,
+    licenseLayer: "L2",
+    role: "student",
+    runId,
+    sessionId,
+    studentId,
+    yearId,
+  };
+  const token = buildCustomLaunchToken(claims);
+  const tokenHash = createHashForTest(token);
+  await firestore.doc(sessionPath).set({
+    consumedLaunchCredentialHashes: [],
+    instituteId,
+    launchCredentialHashes: [tokenHash],
+    licenseSnapshot: {currentLayer: "L2"},
+    mode: "Controlled",
+    runId,
+    sessionId,
+    sessionTokenHash: tokenHash,
+    status: "created",
+    studentId,
+    studentUid: `uid_${studentId}`,
+    yearId,
+  });
+
+  await assert.rejects(
+    service.validateSessionEntry({
+      instituteId,
+      launchNonce,
+      licenseLayer: "L2",
+      runId,
+      sessionId,
+      sessionToken: token,
+      studentId,
+      studentUid: `uid_${studentId}`,
+      yearId,
+    }),
+    (error: unknown) =>
+      error instanceof SessionStartValidationError &&
+      error.code === "LICENSE_RESTRICTED",
+  );
+  const preserved = await firestore.doc(sessionPath).get();
+  assert.equal(preserved.get("status"), "created");
+  assert.deepEqual(preserved.get("consumedLaunchCredentialHashes"), []);
+  assert.deepEqual(preserved.get("launchCredentialHashes"), [tokenHash]);
+
+  await deleteDocumentIfPresent(sessionPath);
+  await deleteDocumentIfPresent(institutePath);
+});

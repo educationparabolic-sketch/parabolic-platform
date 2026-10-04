@@ -1,8 +1,12 @@
 import {FieldValue} from "firebase-admin/firestore";
 import {createLogger} from "./logging";
 import {getFirestore} from "../utils/firebaseAdmin";
+import {
+  buildClaimPropagationDesiredAuthority,
+  claimPropagationCoordinator,
+  nextClaimAuthorizationVersion,
+} from "./claimPropagation";
 import {licenseHistoryService} from "./licenseHistory";
-import {licenseClaimFreshnessService} from "./licenseClaimFreshness";
 import {
   LicenseManagementFeatureFlags,
   LicenseManagementValidationError,
@@ -20,7 +24,8 @@ const PRICING_PLANS_DOCUMENT_ID = "pricingPlans";
 const PRICING_PLANS_COLLECTION = "pricingPlans";
 
 interface PricingPlanResolutionResult {
-  activeStudentLimit: number | null;
+  activeStudentLimit: number;
+  concurrentSessionLimit: number;
   featureFlags: LicenseManagementFeatureFlags;
   path: string;
   planId: string;
@@ -124,6 +129,20 @@ const normalizeOptionalNumber = (
   return Math.floor(value);
 };
 
+const normalizePositivePlanLimit = (
+  value: unknown,
+  fieldName: string,
+): number => {
+  const normalized = normalizeOptionalNumber(value);
+  if (normalized === null || normalized < 1) {
+    throw new LicenseManagementValidationError(
+      "VALIDATION_ERROR",
+      `Pricing plan field "${fieldName}" must be a positive integer.`,
+    );
+  }
+  return normalized;
+};
+
 const normalizeFeatureFlag = (
   value: unknown,
 ): boolean => value === true;
@@ -174,16 +193,27 @@ const resolveLayerFromPricingPlan = (
 const buildPricingPlanResult = (
   planId: string,
   pricingPlanData: Record<string, unknown>,
-): PricingPlanResolutionResult => ({
-  activeStudentLimit: normalizeOptionalNumber(pricingPlanData.studentLimit),
-  featureFlags: normalizeFeatureFlags(pricingPlanData.featureFlags),
-  path: buildPricingPlanPath(planId),
-  planId,
-  planName:
-    normalizeOptionalString(pricingPlanData.name) ??
-    normalizeOptionalString(pricingPlanData.planName),
-  resolvedLayer: resolveLayerFromPricingPlan(planId, pricingPlanData),
-});
+): PricingPlanResolutionResult => {
+  const limits = isRecord(pricingPlanData.limits) ? pricingPlanData.limits : {};
+  return {
+    activeStudentLimit: normalizePositivePlanLimit(
+      pricingPlanData.studentLimit ?? limits.maxStudents,
+      "studentLimit",
+    ),
+    concurrentSessionLimit: normalizePositivePlanLimit(
+      pricingPlanData.concurrentSessionLimit ?? pricingPlanData.concurrencyLimit ??
+        pricingPlanData.maxConcurrentStudents ?? limits.maxConcurrentSessions,
+      "concurrencyLimit",
+    ),
+    featureFlags: normalizeFeatureFlags(pricingPlanData.featureFlags),
+    path: buildPricingPlanPath(planId),
+    planId,
+    planName:
+      normalizeOptionalString(pricingPlanData.name) ??
+      normalizeOptionalString(pricingPlanData.planName),
+    resolvedLayer: resolveLayerFromPricingPlan(planId, pricingPlanData),
+  };
+};
 
 /**
  * Vendor license management service for the authoritative institute license.
@@ -321,6 +351,7 @@ export class LicenseManagementService {
       }
 
       const currentLicenseSnapshotData = currentLicenseSnapshot.data();
+      const instituteData = instituteSnapshot.data() ?? {};
       const compatibilityLicenseSnapshotData =
         compatibilityLicenseSnapshot.data();
       const currentLicenseData: Record<string, unknown> =
@@ -344,6 +375,7 @@ export class LicenseManagementService {
       const nextLicenseDocument: Record<string, unknown> = {
         ...baseLicenseData,
         activeStudentLimit: pricingPlan.activeStudentLimit,
+        concurrentSessionLimit: pricingPlan.concurrentSessionLimit,
         currentLayer: newLayer,
         featureFlags: pricingPlan.featureFlags,
         licenseState:
@@ -367,6 +399,22 @@ export class LicenseManagementService {
           reason: mutationReason,
         });
       nextLicenseDocument.licenseVersion = licenseHistoryWrite.entryId;
+      const authorizationVersion = nextClaimAuthorizationVersion(
+        instituteData.authorizationVersion,
+      );
+      const instituteRevision = Number.isSafeInteger(instituteData.instituteRevision) &&
+        Number(instituteData.instituteRevision) > 0 ?
+        Number(instituteData.instituteRevision) : 1;
+      const desiredAuthority = buildClaimPropagationDesiredAuthority(
+        instituteId,
+        {
+          ...instituteData,
+          authorizationVersion,
+          instituteRevision,
+          licenseVersion: licenseHistoryWrite.entryId,
+        },
+        nextLicenseDocument,
+      );
 
       transaction.set(
         currentLicenseReference,
@@ -384,14 +432,24 @@ export class LicenseManagementService {
       );
       transaction.set(
         instituteReference,
-        {licenseVersion: licenseHistoryWrite.entryId},
+        {
+          authorizationVersion,
+          instituteRevision,
+          licenseVersion: licenseHistoryWrite.entryId,
+        },
         {merge: true},
+      );
+      const propagation = claimPropagationCoordinator.stageOperation(
+        transaction,
+        {desiredAuthority, source: "license_changed"},
+        new Date(effectiveDate),
       );
 
       return {
         activeStudentLimit: pricingPlan.activeStudentLimit,
         billingPlan,
         compatibilityLicensePath,
+        concurrentSessionLimit: pricingPlan.concurrentSessionLimit,
         instituteId,
         licenseHistoryEntryId: licenseHistoryWrite.entryId,
         licenseHistoryPath: licenseHistoryWrite.path,
@@ -401,20 +459,16 @@ export class LicenseManagementService {
         planId: pricingPlan.planId,
         planName: pricingPlan.planName ?? billingPlan,
         previousLayer,
+        propagation,
       };
     });
-
-    const freshnessResult = await licenseClaimFreshnessService
-      .propagateInstituteLicenseChange({
-        instituteId: result.instituteId,
-        licenseVersion: result.licenseVersion,
-      });
 
     this.logger.info("Institute license updated by vendor API.", {
       activeStudentLimit: result.activeStudentLimit,
       billingPlan: result.billingPlan,
       changedBy,
       compatibilityLicensePath: result.compatibilityLicensePath,
+      concurrentSessionLimit: result.concurrentSessionLimit,
       instituteId: result.instituteId,
       licenseHistoryEntryId: result.licenseHistoryEntryId,
       licenseHistoryPath: result.licenseHistoryPath,
@@ -425,8 +479,8 @@ export class LicenseManagementService {
       planName: result.planName,
       previousLayer: result.previousLayer,
       pricingPlanPath: pricingPlan.path,
-      synchronizedUserCount: freshnessResult.userCount,
-      versionSuperseded: freshnessResult.superseded,
+      propagationOperationId: result.propagation.operationId,
+      propagationState: result.propagation.state,
     });
 
     return result;

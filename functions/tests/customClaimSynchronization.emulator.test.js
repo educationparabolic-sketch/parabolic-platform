@@ -88,6 +88,7 @@ test(
         studentId: "stale-student",
       });
       await instituteReference.set({
+        authorizationVersion: 1,
         instituteId,
         licenseVersion: "license-v3",
         settingsUsers: {
@@ -131,6 +132,7 @@ test(
       assert.equal(staffResult.changed, true);
       assert.equal(staffResult.authoritySource, "staff");
       assert.deepEqual(staffUser.customClaims, {
+        authorizationVersion: 1,
         expiryDate: "2099-09-26T00:00:00.000Z",
         externalEntitlement: "preserve-me",
         featureFlags: {
@@ -151,6 +153,7 @@ test(
       });
       assert.equal(studentResult.authoritySource, "student");
       assert.deepEqual(studentUser.customClaims, {
+        authorizationVersion: 1,
         expiryDate: "2099-09-26T00:00:00.000Z",
         featureFlags: {
           adaptivePhase: true,

@@ -9,6 +9,10 @@ import {
   identitySessionSecurityService,
 } from "./identitySessionSecurity";
 import {
+  InstituteAuthorityEnforcementError,
+  InstituteAuthorityEnforcementService,
+} from "./instituteAuthorityEnforcement";
+import {
   StudentBulkIngestionResult,
   StudentBulkIngestionRowAction,
   StudentBulkIngestionRowResult,
@@ -57,6 +61,10 @@ interface StudentBulkIngestionAuthDependencies {
 }
 
 interface StudentBulkIngestionDependencies {
+  authority?: Pick<
+    InstituteAuthorityEnforcementService,
+    "assertOperational" | "readCurrentAuthority"
+  >;
   auth: StudentBulkIngestionAuthDependencies;
   firestore: FirebaseFirestore.Firestore;
   getCurrentTimestamp: () => Date;
@@ -64,7 +72,7 @@ interface StudentBulkIngestionDependencies {
     typeof administrativeActionLoggingService.logStudentImport;
   sessionSecurity?: Pick<
     typeof identitySessionSecurityService,
-    "clearClaimsAndRevokeSessions"
+    "clearClaimsAndRevokeSessions" | "synchronizeClaimsAndRevokeSessions"
   >;
 }
 
@@ -315,6 +323,10 @@ const sha256 = (value: string): string =>
  */
 export class StudentBulkIngestionService {
   private readonly logger = createLogger("StudentBulkIngestionService");
+  private readonly authority: Pick<
+    InstituteAuthorityEnforcementService,
+    "assertOperational" | "readCurrentAuthority"
+  >;
 
   /**
    * @param {StudentBulkIngestionDependencies} dependencies Runtime collaborators.
@@ -340,7 +352,13 @@ export class StudentBulkIngestionService {
         ),
       sessionSecurity: identitySessionSecurityService,
     },
-  ) {}
+  ) {
+    this.authority = dependencies.authority ??
+      new InstituteAuthorityEnforcementService({
+        firestore: dependencies.firestore,
+        now: dependencies.getCurrentTimestamp,
+      });
+  }
 
   /**
    * Normalizes request payloads into a validated ingestion request.
@@ -762,13 +780,6 @@ export class StudentBulkIngestionService {
     row: StudentBulkIngestionValidatedRow,
   ): Promise<void> {
     const displayName = row.fullName;
-    const claims = {
-      instituteId: request.instituteId,
-      licenseLayer: request.actorLicenseLayer,
-      role: "student",
-      studentId: row.studentId,
-    };
-
     try {
       const existingAuthUser = await this.dependencies.auth.getUser(
         row.studentId,
@@ -809,8 +820,6 @@ export class StudentBulkIngestionService {
         throw error;
       }
     }
-
-    await this.dependencies.auth.setCustomUserClaims(row.studentId, claims);
   }
 
   private async reconcileAuth(
@@ -857,6 +866,10 @@ export class StudentBulkIngestionService {
         phone: current.phone,
         rowNumber: 0,
         studentId,
+      });
+      await sessionSecurity.synchronizeClaimsAndRevokeSessions({
+        instituteId: request.instituteId,
+        uid: studentId,
       });
     }));
   }
@@ -913,6 +926,23 @@ export class StudentBulkIngestionService {
           );
         }
         return {...stored, disposition: "replayed"};
+      }
+
+      try {
+        const currentAuthority = await this.authority.readCurrentAuthority(
+          transaction,
+          request.instituteId,
+        );
+        this.authority.assertOperational(currentAuthority);
+      } catch (error) {
+        if (error instanceof InstituteAuthorityEnforcementError) {
+          throw new StudentBulkIngestionValidationError(
+            error.reason === "institute_suspended" ?
+              "FORBIDDEN" : "LICENSE_RESTRICTED",
+            error.message,
+          );
+        }
+        throw error;
       }
 
       const targetSnapshots = await Promise.all([

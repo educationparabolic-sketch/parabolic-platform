@@ -140,7 +140,8 @@ function StudentProtectedRoute(props: { loginPath: string; children: ReactElemen
   const { loginPath, children } = props;
   const debugMode = isStudentDebugMode();
   const location = useLocation();
-  const { session } = useAuthProvider();
+  const { session, signOut } = useAuthProvider();
+  const globalState = useGlobalPortalState();
 
   if (session.status === "loading") {
     return (
@@ -156,6 +157,34 @@ function StudentProtectedRoute(props: { loginPath: string; children: ReactElemen
 
   if (session.status !== "authenticated") {
     return <Navigate replace to={loginPath} state={{ from: location.pathname }} />;
+  }
+
+  const suspended =
+    globalState.isSuspended || globalState.authorityIssue === "institute_suspended";
+  const licenseRestricted =
+    globalState.authorityIssue === "license_restricted" ||
+    globalState.license.status === "grace" ||
+    globalState.license.status === "expired";
+  if (suspended || licenseRestricted) {
+    return (
+      <main className="student-page-shell student-page-shell-login">
+        <section className="student-login-card" aria-labelledby="student-authority-title">
+          <p className="student-content-eyebrow">Access Update</p>
+          <h1 id="student-authority-title">
+            {suspended ? "Institute access suspended" : "Institute license access unavailable"}
+          </h1>
+          <p className="student-content-copy">
+            {suspended
+              ? "Your institute has suspended portal access. Student routes and actions are unavailable."
+              : "The current institute license no longer permits this student session. Your workspace remains blocked until authority is restored."}
+          </p>
+          <p className="student-content-copy">
+            Authority changes are checked automatically. You can also sign out and contact your institute administrator.
+          </p>
+          <button type="button" onClick={() => void signOut()}>Sign out</button>
+        </section>
+      </main>
+    );
   }
 
   const accessContext = resolveStudentAccessContext(session);

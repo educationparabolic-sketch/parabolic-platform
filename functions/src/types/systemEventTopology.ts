@@ -4,6 +4,7 @@ export type SystemEventDomain =
   | "assignment"
   | "sessionExecution"
   | "postSubmission"
+  | "identityAuthority"
   | "vendorIntelligence"
   | "archiveLifecycle";
 
@@ -34,6 +35,7 @@ export type SystemEventName =
   | "BillingWebhookReceived"
   | "UsageUpdated"
   | "GovernanceSnapshotScheduled"
+  | "ClaimPropagationSweepScheduled"
   | "ArchiveTriggered";
 
 export interface SystemEventDefinition {

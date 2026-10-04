@@ -12,6 +12,9 @@ import {
   setRequestIdentity,
 } from "./framework";
 import {studentOnboardingActivationService} from "../services/studentOnboardingActivation";
+import {
+  InstituteAuthorityEnforcementError,
+} from "../services/instituteAuthorityEnforcement";
 
 export interface AuthenticationMiddlewareDependencies {
   verifyIdToken: (idToken: string) => Promise<DecodedIdToken>;
@@ -26,6 +29,19 @@ export interface AuthenticationMiddlewareOptions {
 }
 
 const SUSPENDED_ACCOUNT_MESSAGE = "Account access is suspended.";
+
+const mapInstituteAuthorityRejection = (
+  error: InstituteAuthorityEnforcementError,
+): MiddlewareRejectionError => {
+  if (error.reason === "stale_authorization_version") {
+    return new MiddlewareRejectionError("UNAUTHORIZED", error.message);
+  }
+  return new MiddlewareRejectionError(
+    error.reason === "institute_suspended" ?
+      "FORBIDDEN" : "LICENSE_RESTRICTED",
+    error.message,
+  );
+};
 
 const normalizeNonEmptyString = (
   value: unknown,
@@ -118,6 +134,17 @@ const resolveOptionalTimestampClaim = (
   return normalized;
 };
 
+const resolveAuthorizationVersion = (value: unknown): number | null => {
+  if (value === null || value === undefined) return null;
+  if (!Number.isSafeInteger(value) || Number(value) < 1) {
+    throw new MiddlewareRejectionError(
+      "UNAUTHORIZED",
+      "Authentication token has malformed authorization authority.",
+    );
+  }
+  return Number(value);
+};
+
 const resolveExamSessionClaims = (
   decodedToken: Record<string, unknown>,
 ): MiddlewareExamSessionClaims | null => {
@@ -185,6 +212,9 @@ const buildIdentityContext = (
   }
 
   return {
+    authorizationVersion: resolveAuthorizationVersion(
+      decodedToken.authorizationVersion,
+    ),
     examSession: resolveExamSessionClaims(decodedToken),
     expiryDate: resolveOptionalTimestampClaim(decodedToken.expiryDate),
     featureFlags: resolveFeatureFlags(decodedToken),
@@ -213,7 +243,10 @@ export const createAuthenticationMiddleware = (
 
   try {
     decodedToken = await dependencies.verifyIdToken(idToken);
-  } catch {
+  } catch (error) {
+    if (error instanceof InstituteAuthorityEnforcementError) {
+      throw mapInstituteAuthorityRejection(error);
+    }
     throw new MiddlewareRejectionError(
       "UNAUTHORIZED",
       "Invalid or expired authentication token.",
@@ -247,10 +280,17 @@ export const createAuthenticationMiddleware = (
         studentOnboardingActivationService,
       );
 
-    await activateInvitedStudentOnFirstLogin({
-      instituteId: identity.instituteId,
-      studentId: identity.studentId ?? identity.uid,
-    });
+    try {
+      await activateInvitedStudentOnFirstLogin({
+        instituteId: identity.instituteId,
+        studentId: identity.studentId ?? identity.uid,
+      });
+    } catch (error) {
+      if (error instanceof InstituteAuthorityEnforcementError) {
+        throw mapInstituteAuthorityRejection(error);
+      }
+      throw error;
+    }
   }
 
   await next();

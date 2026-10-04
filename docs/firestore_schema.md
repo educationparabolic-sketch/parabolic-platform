@@ -2,7 +2,7 @@
 
 This document provides a simplified reference of the Firestore data hierarchy.
 
-Last reconciled: 2026-10-03 (`BWM-035` authenticated commercial browser acceptance and closeout)
+Last reconciled: 2026-10-04 (`BWM-036` current institute authority, limit, and active-Exam enforcement)
 
 The authoritative schema definition exists in:
 
@@ -158,8 +158,11 @@ webhook or explicit provider reconciliation, never a browser field. Public
 intent omits actor, status, audit/time, provider result, and BWM-036 completion.
 Every accepted mutation owns immutable root Vendor and institute audit evidence;
 offline verification requires an actor different from the recorder. BWM-036,
-not these commercial records, owns claim/session fan-out and may initially be
-represented only as `pending_bwm_036`.
+not these commercial records, owns claim/session fan-out. Current request
+decisions, subscription/provider commands, invoices, and offline-payment records
+are non-events because they do not mutate `license/current`; signed Stripe
+entitlement reconciliation creates a versioned propagation operation only when
+it applies the authoritative license/history mutation.
 
 The implemented provider boundary is injected into catalog, subscription,
 invoice, offline-payment, and payment-event services. A command first reserves
@@ -174,6 +177,66 @@ and provider-backed invoices reconcile before settlement. The signed Stripe
 webhook writes the same canonical minor-unit invoice fields and redacted event
 processing/reconciliation metadata; no raw provider payload is projected by the
 Vendor read service.
+
+BWM-036 reserves one monotonic positive `authorizationVersion` on
+`institutes/{instituteId}`. Every committed institute-access or entitlement
+change increments it in the same transaction that creates the deterministic
+`institutes/{instituteId}/claimPropagationOperations/{operationId}` record and
+its immutable audit. Within that institute scope, the operation ID is exactly
+`v{authorizationVersion}`, so retries converge on one desired-authority snapshot.
+The snapshot contains current institute access/revision, the complete
+`license/current` tuple, positive active-Student and concurrency limits, source,
+four-minute server deadline, five-minute browser deadline, bounded enumeration
+checkpoint, counters, lease, retry, supersession, terminal error, and completion
+metadata. Raw tokens, credentials, provider payloads, and claim payloads are
+never stored.
+
+Each operation enumerates the bounded staff map once and Students in ordered
+pages of 100. Per-user reconciliation lives at
+`claimPropagationOperations/{operationId}/deliveries/{uid}` with identity kind,
+authorization version, state, attempt count, lease/retry timing, safe error code,
+claim-change/revocation result, and completion time. Operations and deliveries
+use `pending|processing|retrying|succeeded/synchronized|superseded|dead_lettered`
+as applicable, 60-second leases, five attempts, and 5/15/30/60-second retry
+delays. A newer authorization version supersedes older incomplete work, while
+the worker always reconciles a user to latest authority. Missing Auth identities
+are safe terminal delivery evidence, not active sessions. Mutable usage counts
+remain server-side and never enter custom claims.
+
+Elapsed active expiry and grace deadlines are authority-changing scheduled
+sources, as are institute suspend/restore/archive and actual reconciled license,
+Stripe, or commercial entitlement changes. Request approval, invoice payment
+recording, and provider-command reservation alone are not propagation events.
+The internal coordinator and explicitly addressed worker now implement this
+schema, deterministic replay, bounded enumeration/delivery, lease recovery,
+retry/dead-letter accounting, safe missing identities, and pre/mid-delivery
+latest-version supersession. BWM-034 suspend/restore/archive, the history-versioned
+Vendor license writer, and signed Stripe entitlement reconciliation increment
+root authority and stage the operation atomically. A bounded internal deadline
+sweep queries elapsed active/grace authority, persists `expired` to current and
+compatibility license documents, creates immutable history, and stages one
+operation transactionally. The exported UTC one-minute propagation schedule first
+processes at most 100 elapsed deadline transitions and then drains at most 100
+due operation slices. Local deploy input registers collection-group composites
+for operation `state + nextAttemptAt` and current-license
+`licenseState + expiryDate|gracePeriodEndsAt`; BWM-053 retains remote deployment
+and production query qualification.
+The custom-claim synchronizer conditionally projects `authorizationVersion`
+when root authority has adopted it. A shared current-authority service now
+strictly reads root plus `license/current`; the affected Student activation and
+Exam APIs compare exact token authority and use transactional active-Student or
+created/started/active session queries before admitting new capacity. Invited
+Students consume no active seat. Active Exam documents retain their immutable
+license/runtime snapshot across upgrades and remain unchanged when suspension,
+expiry, or an invalidating downgrade blocks later entry, answers, transitions,
+or submission. Mutable counts and limits are never copied into claims. The
+schedule/index registration and comprehensive Auth/Firestore/Functions emulator
+proof are complete; final simultaneous Admin/Student/Exam browser acceptance
+remains the last BWM-036 substep. BWM-040 later
+projects broader health/read models,
+BWM-052 owns production IAM/provider configuration, and BWM-053 owns deployed
+indexes, schedules, and authorization-version/limit backfills without replacing
+operation truth.
 
 BWM-030 adds institute-root settings authority. `settingsRevision` is the
 optimistic concurrency counter; `primaryAdminUserId` is server-owned; and

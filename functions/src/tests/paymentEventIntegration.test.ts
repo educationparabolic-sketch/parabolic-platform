@@ -88,8 +88,10 @@ test(
     ));
 
     await firestore.doc(institutePath).set({
+      instituteRevision: 1,
       instituteId,
       name: "Build 95 Success Institute",
+      status: "active",
     });
     await firestore.doc(usageMeterPath).set({
       activeStudentCount: 24,
@@ -103,6 +105,7 @@ test(
       name: "Controlled",
       planId: "L2",
       pricePerStudent: 4,
+      concurrencyLimit: 50,
       studentLimit: 250,
     });
 
@@ -223,10 +226,8 @@ test(
     assert.equal(stripeEvent?.provider, "stripe");
     assert.equal(stripeEvent?.reconciliationState, "reconciled");
     assert.equal(stripeEvent?.revision, 1);
-    assert.equal(
-      typeof stripeEvent?.claimFreshnessSynchronizedAt?.toDate,
-      "function",
-    );
+    assert.equal(stripeEvent?.claimPropagation?.operationId, "v1");
+    assert.equal(stripeEvent?.claimPropagation?.state, "pending");
     assert.equal(stripeEvent?.licenseVersion, currentLicense?.licenseVersion);
     assert.equal(stripeEvent?.eventType, "invoice.payment_succeeded");
     assert.equal(stripeEvent?.billingRecordPath, billingRecordPath);
@@ -301,8 +302,10 @@ test(
     ));
 
     await firestore.doc(institutePath).set({
+      instituteRevision: 1,
       instituteId,
       name: "Build 95 Failure Institute",
+      status: "active",
     });
     await firestore.doc(usageMeterPath).set({
       activeStudentCount: 18,
@@ -316,6 +319,7 @@ test(
       name: "Diagnostic",
       planId: "L1",
       pricePerStudent: 4,
+      concurrencyLimit: 25,
       studentLimit: 120,
     });
     await firestore.doc(currentLicensePath).set({

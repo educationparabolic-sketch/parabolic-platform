@@ -2502,6 +2502,7 @@ test(
         activeStudentLimit: 250,
         billingPlan: request.billingPlan,
         compatibilityLicensePath: "institutes/inst_build_93/license/main",
+        concurrentSessionLimit: 50,
         instituteId: request.instituteId,
         licenseHistoryEntryId: "history_build_94",
         licenseHistoryPath:
@@ -2512,6 +2513,13 @@ test(
         planId: "L2",
         planName: "Controlled",
         previousLayer: "L1",
+        propagation: {
+          authorizationVersion: 2,
+          browserDeadlineAt: "2026-01-01T00:05:00.000Z",
+          operationId: "v2",
+          serverDeadlineAt: "2026-01-01T00:04:00.000Z",
+          state: "pending",
+        },
       }),
       verifyIdToken: async () => createVendorToken({
         uid: "vendor_build_93",

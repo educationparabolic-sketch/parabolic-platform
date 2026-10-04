@@ -8,6 +8,9 @@ import {
 } from "../middleware/auth";
 import {MiddlewareRejectionError} from "../types/middleware";
 import {
+  InstituteAuthorityEnforcementError,
+} from "../services/instituteAuthorityEnforcement";
+import {
   createMockRequest,
   createMockResponse,
 } from "./helpers/http";
@@ -152,6 +155,7 @@ test(
     assert.deepEqual(
       (request as {context: {identity: unknown}}).context.identity,
       {
+        authorizationVersion: null,
         examSession: null,
         expiryDate: "2099-09-26T00:00:00.000Z",
         featureFlags: {
@@ -184,6 +188,48 @@ test(
         studentId: "student_build_62",
       },
     ]);
+  },
+);
+
+test(
+  "authentication middleware maps invited-Student authority denial safely",
+  async () => {
+    const middleware = createAuthenticationMiddleware(
+      {
+        activateInvitedStudentOnFirstLogin: async () => {
+          throw new InstituteAuthorityEnforcementError(
+            "active_student_limit",
+            "Active Student capacity has been reached.",
+          );
+        },
+        verifyIdToken: async () => ({
+          instituteId: "inst_auth_capacity",
+          isSuspended: false,
+          licenseLayer: "L1",
+          role: "student",
+          studentId: "student_auth_capacity",
+          uid: "student_auth_capacity",
+        }) as never,
+      },
+      {promoteInvitedStudentOnAuthenticate: true},
+    );
+    const request = createMockRequest({
+      headers: {authorization: "Bearer capacity_token"},
+    });
+
+    await assert.rejects(
+      async () => {
+        await middleware(
+          request as never,
+          createMockResponse() as never,
+          async (): Promise<void> => undefined,
+        );
+      },
+      (error: unknown) =>
+        error instanceof MiddlewareRejectionError &&
+        error.code === "LICENSE_RESTRICTED" &&
+        /capacity/.test(error.message),
+    );
   },
 );
 
@@ -317,3 +363,37 @@ test(
     );
   },
 );
+
+test("authentication middleware preserves current-authority rejection semantics", async () => {
+  const cases = [
+    {code: "UNAUTHORIZED", reason: "stale_authorization_version"},
+    {code: "FORBIDDEN", reason: "institute_suspended"},
+    {code: "LICENSE_RESTRICTED", reason: "license_expired"},
+  ] as const;
+
+  for (const testCase of cases) {
+    const middleware = createAuthenticationMiddleware({
+      verifyIdToken: async () => {
+        throw new InstituteAuthorityEnforcementError(
+          testCase.reason,
+          `Rejected: ${testCase.reason}`,
+        );
+      },
+    });
+    await assert.rejects(
+      async () => {
+        await middleware(
+          createMockRequest({
+            headers: {authorization: "Bearer current_authority_token"},
+          }) as never,
+          createMockResponse() as never,
+          async (): Promise<void> => undefined,
+        );
+      },
+      (error: unknown) =>
+        error instanceof MiddlewareRejectionError &&
+        error.code === testCase.code &&
+        error.message === `Rejected: ${testCase.reason}`,
+    );
+  }
+});

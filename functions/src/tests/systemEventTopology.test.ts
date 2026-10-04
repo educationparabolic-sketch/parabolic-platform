@@ -16,12 +16,13 @@ test(
   () => {
     const summary = systemEventTopologyService.getTopologySummary();
 
-    assert.equal(summary.eventCount, 15);
+    assert.equal(summary.eventCount, 16);
     assert.equal(summary.engineCount, 12);
     assert.deepEqual(summary.domains, [
       "archiveLifecycle",
       "assignment",
       "content",
+      "identityAuthority",
       "postSubmission",
       "sessionExecution",
       "template",
@@ -44,7 +45,26 @@ test(
     assert.deepEqual(summary.rootEvents, [
       "QuestionCreated",
       "BillingWebhookReceived",
+      "ClaimPropagationSweepScheduled",
     ]);
+
+    assert.deepEqual(
+      systemEventTopologyService.getEventDefinition(
+        "ClaimPropagationSweepScheduled",
+      ),
+      {
+        description:
+          "Institute authorization operations and elapsed license deadlines are " +
+          "drained on a bounded one-minute schedule.",
+        domain: "identityAuthority",
+        downstreamEvents: [],
+        executionMode: "scheduled",
+        name: "ClaimPropagationSweepScheduled",
+        primaryHandler: "claimPropagationSweepEveryMinute",
+        source: "Every 1 minute schedule",
+        sourceKind: "scheduled",
+      },
+    );
   },
 );
 

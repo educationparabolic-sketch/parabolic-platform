@@ -371,6 +371,12 @@ export function parseVendorOnboardingDetail(value: unknown): VendorOnboardingDet
 function parseMutationReceipt(value: unknown): VendorInstituteMutationReceipt {
   const item = record(value, "instituteMutation");
   const deletion = record(item.deletion, "instituteMutation.deletion");
+  const propagation = record(item.propagation, "instituteMutation.propagation");
+  const propagationState = oneOf(
+    propagation.state,
+    ["not_required", "pending", "processing", "retrying", "succeeded", "superseded", "failed"] as const,
+    "instituteMutation.propagation.state",
+  );
   return {
     auditEventId: text(item.auditEventId, "instituteMutation.auditEventId"),
     commandId: text(item.commandId, "instituteMutation.commandId"),
@@ -395,11 +401,26 @@ function parseMutationReceipt(value: unknown): VendorInstituteMutationReceipt {
       LIFECYCLE_STATES,
       "instituteMutation.lifecycleState",
     ),
-    propagationState: oneOf(
-      item.propagationState,
-      ["not_required", "pending_bwm_036"] as const,
-      "instituteMutation.propagationState",
-    ),
+    propagation: {
+      authorizationVersion: integer(
+        propagation.authorizationVersion,
+        "instituteMutation.propagation.authorizationVersion",
+      ),
+      browserDeadlineAt: nullableText(
+        propagation.browserDeadlineAt,
+        "instituteMutation.propagation.browserDeadlineAt",
+      ),
+      operationId: nullableText(
+        propagation.operationId,
+        "instituteMutation.propagation.operationId",
+      ),
+      serverDeadlineAt: nullableText(
+        propagation.serverDeadlineAt,
+        "instituteMutation.propagation.serverDeadlineAt",
+      ),
+      state: propagationState,
+    },
+    propagationState,
     replayed: booleanValue(item.replayed, "instituteMutation.replayed"),
     revision: integer(item.revision, "instituteMutation.revision"),
   };

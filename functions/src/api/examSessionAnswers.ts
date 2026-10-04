@@ -3,7 +3,7 @@ import {DecodedIdToken} from "firebase-admin/auth";
 import {answerBatchService} from "../services/answerBatch";
 import {sendErrorResponse} from "../services/apiResponse";
 import {SessionStartValidationError} from "../services/session";
-import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
+import {verifyCurrentAuthorityIdToken} from "../services/instituteAuthorityEnforcement";
 import {AnswerBatchErrorCode} from "../types/sessionAnswerBatch";
 import {
   createMethodMiddleware,
@@ -326,6 +326,5 @@ export const createExamSessionAnswersHandler = (
 export const handleExamSessionAnswersRequest = createExamSessionAnswersHandler({
   persistIncrementalAnswers:
     answerBatchService.persistIncrementalAnswers.bind(answerBatchService),
-  verifyIdToken: (idToken: string) =>
-    getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
+  verifyIdToken: verifyCurrentAuthorityIdToken,
 });

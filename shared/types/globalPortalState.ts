@@ -1,4 +1,4 @@
-import type { AuthStatus } from "./authProvider";
+import type { AuthAuthorityIssue, AuthStatus } from "./authProvider";
 import type { FrontendEnvironment } from "./frontendEnvironment";
 import type { LicenseLayer, PortalRole } from "./portalRouting";
 import type { PortalKey } from "../services/portalManifest";
@@ -62,6 +62,9 @@ export interface GlobalPortalState {
   portal: PortalKey;
   authStatus: AuthStatus;
   isAuthenticated: boolean;
+  isSuspended: boolean;
+  authorizationVersion: number | null;
+  authorityIssue: AuthAuthorityIssue | null;
   role: PortalRole | null;
   licenseLayer: LicenseLayer | null;
   license: LicenseObjectModel;

@@ -41,8 +41,10 @@ test(
     ]);
 
     await firestore.doc(institutePath).set({
+      instituteRevision: 1,
       instituteId,
       name: "Build 93 Institute",
+      status: "active",
     });
     await firestore.doc(currentLicensePath).set({
       billingCycle: "monthly",
@@ -60,6 +62,7 @@ test(
       },
       name: "Controlled",
       planId: "L2",
+      concurrencyLimit: 50,
       studentLimit: 250,
     });
 
@@ -76,6 +79,9 @@ test(
     assert.equal(result.planId, "L2");
     assert.equal(result.planName, "Controlled");
     assert.equal(result.activeStudentLimit, 250);
+    assert.equal(result.concurrentSessionLimit, 50);
+    assert.equal(result.propagation.operationId, "v1");
+    assert.equal(result.propagation.state, "pending");
     assert.equal(result.licensePath, currentLicensePath);
     assert.equal(result.compatibilityLicensePath, mainLicensePath);
     assert.equal(result.licenseVersion, result.licenseHistoryEntryId);
@@ -93,11 +99,13 @@ test(
       mainLicenseSnapshot,
       licenseHistorySnapshot,
       instituteSnapshot,
+      propagationSnapshot,
     ] = await Promise.all([
       firestore.doc(currentLicensePath).get(),
       firestore.doc(mainLicensePath).get(),
       firestore.doc(result.licenseHistoryPath).get(),
       firestore.doc(institutePath).get(),
+      firestore.doc(`${institutePath}/claimPropagationOperations/v1`).get(),
     ]);
 
     const currentLicense = currentLicenseSnapshot.data();
@@ -129,6 +137,8 @@ test(
     assert.equal(mainLicense?.currentLayer, "L2");
     assert.equal(mainLicense?.licenseVersion, result.licenseVersion);
     assert.equal(institute?.licenseVersion, result.licenseVersion);
+    assert.equal(institute?.authorizationVersion, 1);
+    assert.equal(propagationSnapshot.get("source"), "license_changed");
     assert.equal(mainLicense?.planId, "L2");
     assert.equal(mainLicense?.activeStudentLimit, 250);
     assert.deepEqual(mainLicense?.featureFlags, currentLicense?.featureFlags);
@@ -182,6 +192,7 @@ test(
       },
       name: "Controlled",
       planId: "L2",
+      concurrencyLimit: 50,
       studentLimit: 250,
     });
 
@@ -221,6 +232,7 @@ test("updateInstituteLicense rejects unknown institutes", async () => {
     },
     name: "Diagnostic",
     planId: "L1",
+    concurrencyLimit: 25,
     studentLimit: 100,
   });
 

@@ -98,6 +98,10 @@ function readNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function readPositiveInteger(value: unknown): number | null {
+  return Number.isSafeInteger(value) && Number(value) > 0 ? Number(value) : null;
+}
+
 function readString(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
@@ -264,11 +268,23 @@ export function resolveGlobalPortalState(input: {
   const license = resolveLicenseObjectModel(claims, input.now ?? new Date());
   const globalFeatureFlags = resolveGlobalFeatureFlags(claims);
   const licenseLayer = license.currentLayer;
+  const instituteBoundPortal = portal !== "vendor";
+  const isSuspended = instituteBoundPortal && readBoolean(claims?.isSuspended ?? claims?.suspended);
+  const sessionAuthorityIssue = session.authorityIssue ?? null;
+  const authorityIssue =
+    portal === "vendor" && sessionAuthorityIssue !== "session_revoked"
+      ? null
+      : sessionAuthorityIssue;
 
   return {
     portal,
     authStatus: session.status,
     isAuthenticated: session.status === "authenticated",
+    isSuspended,
+    authorizationVersion: instituteBoundPortal
+      ? readPositiveInteger(claims?.authorizationVersion)
+      : null,
+    authorityIssue,
     role,
     licenseLayer,
     license,

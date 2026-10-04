@@ -2,6 +2,11 @@ import { getIdToken, type User } from "firebase/auth";
 import { getFrontendEnvironment } from "./frontendEnvironment";
 import { getFirebaseAuth } from "./firebaseClient";
 import {
+  buildFirebaseRefreshAuthoritySignal,
+  classifyApiAuthorityFailure,
+  publishAuthAuthoritySignal,
+} from "./authSessionConvergence";
+import {
   beginFrontendDataRequest,
   completeFrontendDataRequest,
   failFrontendDataRequest,
@@ -257,7 +262,15 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
         }
 
         if (!response.ok && response.status === 401 && !options.skipAuth && currentUser) {
-          token = await refreshToken(currentUser);
+          try {
+            token = await refreshToken(currentUser);
+          } catch (error) {
+            const signal = buildFirebaseRefreshAuthoritySignal(error, token);
+            if (signal) {
+              publishAuthAuthoritySignal(signal);
+            }
+            throw error;
+          }
           if (token) {
             requestHeaders.set("Authorization", `Bearer ${token}`);
             response = await fetch(requestUrl, {
@@ -337,6 +350,18 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
             message: error.message,
           });
           throw new ApiClientError(error.message, response.status, "INVALID_RESPONSE", payload);
+        }
+
+        if (!options.skipAuth) {
+          const signal = classifyApiAuthorityFailure({
+            code: errorEnvelope.error.code,
+            idToken: token,
+            message: errorEnvelope.error.message,
+            status: response.status,
+          });
+          if (signal) {
+            publishAuthAuthoritySignal(signal);
+          }
         }
 
         const retryable = isRetryableRequest(method, policy, response.status, false);

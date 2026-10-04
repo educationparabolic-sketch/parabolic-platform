@@ -10,7 +10,7 @@ import {
 } from "react";
 import {
   getIdToken,
-  onAuthStateChanged,
+  onIdTokenChanged,
   setPersistence,
   browserLocalPersistence,
   signInWithEmailAndPassword,
@@ -19,10 +19,18 @@ import {
 import { isLoopbackHostname } from "./browserRuntimeEnvironment";
 import { getFirebaseAuth } from "./firebaseClient";
 import { clearLegacyBrowserTokenCopies } from "./legacyBrowserTokenStorage";
+import {
+  buildFirebaseRefreshAuthoritySignal,
+  hasAuthorizationAdvanced,
+  publishAuthAuthoritySignal,
+  subscribeToAuthAuthoritySignals,
+  type AuthAuthoritySignal,
+} from "./authSessionConvergence";
 import type { PortalKey } from "./portalManifest";
 import type { AuthContextValue, AuthSession, SignInInput } from "../types/authProvider";
 
-const TOKEN_REFRESH_INTERVAL_MS = 14 * 60 * 1000;
+const INSTITUTE_TOKEN_REFRESH_INTERVAL_MS = 60 * 1000;
+const GLOBAL_IDENTITY_TOKEN_REFRESH_INTERVAL_MS = 14 * 60 * 1000;
 const LOCAL_TEST_PASSWORDS = new Set(["Parabolic#Test115", "demo-password"]);
 
 const AUTH_SESSION_INITIAL_STATE: AuthSession = {
@@ -31,6 +39,8 @@ const AUTH_SESSION_INITIAL_STATE: AuthSession = {
   idToken: null,
   lastTokenRefreshAt: null,
   error: null,
+  authorityIssue: null,
+  authorityIssueObservedVersion: null,
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -103,13 +113,35 @@ const tryLocalFallbackSignIn: (
 
 interface AuthProviderProps {
   children: ReactNode;
-  portalKey?: PortalKey;
+  portalKey: PortalKey;
 }
 
-export function AuthProvider({ children }: AuthProviderProps) {
+export function AuthProvider({ children, portalKey }: AuthProviderProps) {
   const [session, setSession] = useState<AuthSession>(AUTH_SESSION_INITIAL_STATE);
   const authRef = useRef<ReturnType<typeof getFirebaseAuth> | null>(null);
   const localFallbackActiveRef = useRef(false);
+  const terminalSignalRef = useRef<AuthAuthoritySignal | null>(null);
+
+  const applyAuthenticatedToken = useCallback((user: NonNullable<AuthSession["user"]>, token: string) => {
+    if (authRef.current && authRef.current.currentUser?.uid !== user.uid) {
+      return;
+    }
+    setSession((current) => {
+      const authorityAdvanced = hasAuthorizationAdvanced(
+        current.authorityIssueObservedVersion,
+        token,
+      );
+      return {
+        status: "authenticated",
+        user,
+        idToken: token,
+        lastTokenRefreshAt: Date.now(),
+        error: current.authorityIssue && !authorityAdvanced ? current.error : null,
+        authorityIssue: authorityAdvanced ? null : current.authorityIssue,
+        authorityIssueObservedVersion: authorityAdvanced ? null : current.authorityIssueObservedVersion,
+      };
+    });
+  }, []);
 
   const syncUserSession = useCallback(async (user: AuthSession["user"], status: AuthSession["status"]) => {
     if (localFallbackActiveRef.current && !user) {
@@ -117,12 +149,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     if (!user) {
+      const terminalSignal = terminalSignalRef.current;
       setSession({
         status,
         user: null,
         idToken: null,
         lastTokenRefreshAt: null,
-        error: null,
+        error: terminalSignal?.message ?? null,
+        authorityIssue: terminalSignal?.issue ?? null,
+        authorityIssueObservedVersion: terminalSignal?.observedAuthorizationVersion ?? null,
       });
       return;
     }
@@ -130,13 +165,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       localFallbackActiveRef.current = false;
       const token = await getIdToken(user, false);
-      setSession({
-        status,
-        user,
-        idToken: token,
-        lastTokenRefreshAt: Date.now(),
-        error: null,
-      });
+      applyAuthenticatedToken(user, token);
     } catch (error) {
       setSession({
         status: "unauthenticated",
@@ -144,9 +173,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
         idToken: null,
         lastTokenRefreshAt: null,
         error: normalizeErrorMessage(error),
+        authorityIssue: null,
+        authorityIssueObservedVersion: null,
       });
     }
-  }, []);
+  }, [applyAuthenticatedToken]);
 
   useEffect(() => {
     let unsubscribe: (() => void) | null = null;
@@ -160,7 +191,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         // Ignore persistence failures and keep default behavior.
       });
 
-      unsubscribe = onAuthStateChanged(auth, (user) => {
+      unsubscribe = onIdTokenChanged(auth, (user) => {
         void syncUserSession(user, user ? "authenticated" : "unauthenticated");
       });
     } catch (error) {
@@ -170,6 +201,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         idToken: null,
         lastTokenRefreshAt: null,
         error: normalizeErrorMessage(error),
+        authorityIssue: null,
+        authorityIssueObservedVersion: null,
       });
     }
 
@@ -180,6 +213,51 @@ export function AuthProvider({ children }: AuthProviderProps) {
     };
   }, [syncUserSession]);
 
+  useEffect(() => subscribeToAuthAuthoritySignals((signal) => {
+    const instituteSignal = signal.issue === "institute_suspended" || signal.issue === "license_restricted";
+    if (portalKey === "vendor" && instituteSignal) {
+      return;
+    }
+
+    if (signal.issue === "session_revoked") {
+      terminalSignalRef.current = signal;
+      localFallbackActiveRef.current = false;
+      setSession({
+        status: "unauthenticated",
+        user: null,
+        idToken: null,
+        lastTokenRefreshAt: null,
+        error: signal.message,
+        authorityIssue: signal.issue,
+        authorityIssueObservedVersion: signal.observedAuthorizationVersion,
+      });
+      if (authRef.current) {
+        void firebaseSignOut(authRef.current).catch(() => {
+          // The local session is already closed; a later Auth observer will converge.
+        });
+      }
+      return;
+    }
+
+    setSession((current) => ({
+      ...current,
+      authorityIssue: signal.issue,
+      authorityIssueObservedVersion: signal.observedAuthorizationVersion,
+    }));
+
+    const currentUser = authRef.current?.currentUser;
+    if (currentUser) {
+      void getIdToken(currentUser, true)
+        .then((token) => applyAuthenticatedToken(currentUser, token))
+        .catch((error) => {
+          const terminalSignal = buildFirebaseRefreshAuthoritySignal(error, null);
+          if (terminalSignal) {
+            publishAuthAuthoritySignal(terminalSignal);
+          }
+        });
+    }
+  }), [applyAuthenticatedToken, portalKey]);
+
   useEffect(() => {
     if (session.status !== "authenticated" || !session.user) {
       return;
@@ -187,33 +265,36 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     const authenticatedUser = session.user;
 
+    const refreshIntervalMs = portalKey === "vendor"
+      ? GLOBAL_IDENTITY_TOKEN_REFRESH_INTERVAL_MS
+      : INSTITUTE_TOKEN_REFRESH_INTERVAL_MS;
     const refreshTimer = window.setInterval(() => {
       void getIdToken(authenticatedUser, true)
-        .then((token) => {
-          setSession((current) => {
-            if (!current.user) {
-              return current;
-            }
-
-            return {
-              ...current,
-              idToken: token,
-              lastTokenRefreshAt: Date.now(),
-            };
-          });
-        })
+        .then((token) => applyAuthenticatedToken(authenticatedUser, token))
         .catch((error) => {
+          const terminalSignal = buildFirebaseRefreshAuthoritySignal(error, session.idToken);
+          if (terminalSignal) {
+            publishAuthAuthoritySignal(terminalSignal);
+            return;
+          }
           setSession((current) => ({
             ...current,
             error: normalizeErrorMessage(error),
           }));
         });
-    }, TOKEN_REFRESH_INTERVAL_MS);
+    }, refreshIntervalMs);
 
     return () => window.clearInterval(refreshTimer);
-  }, [session.status, session.user]);
+  }, [applyAuthenticatedToken, portalKey, session.idToken, session.status, session.user]);
 
   const signIn = useCallback(async ({ email, password }: SignInInput): Promise<boolean> => {
+    terminalSignalRef.current = null;
+    setSession((current) => ({
+      ...current,
+      error: null,
+      authorityIssue: null,
+      authorityIssueObservedVersion: null,
+    }));
     const immediateFallback = tryLocalFallbackSignIn(email, password);
     if (immediateFallback) {
       localFallbackActiveRef.current = true;
@@ -223,6 +304,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         idToken: immediateFallback.token,
         lastTokenRefreshAt: Date.now(),
         error: null,
+        authorityIssue: null,
+        authorityIssueObservedVersion: null,
       });
       return true;
     }
@@ -237,6 +320,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
           idToken: fallback.token,
           lastTokenRefreshAt: Date.now(),
           error: null,
+          authorityIssue: null,
+          authorityIssueObservedVersion: null,
         });
         return true;
       }
@@ -245,6 +330,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         ...current,
         status: "unauthenticated",
         error: "Firebase Authentication is not configured for this environment.",
+        authorityIssue: null,
+        authorityIssueObservedVersion: null,
       }));
       return false;
     }
@@ -260,6 +347,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         idToken: token,
         lastTokenRefreshAt: Date.now(),
         error: null,
+        authorityIssue: null,
+        authorityIssueObservedVersion: null,
       });
 
       return true;
@@ -273,6 +362,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
           idToken: fallback.token,
           lastTokenRefreshAt: Date.now(),
           error: null,
+          authorityIssue: null,
+          authorityIssueObservedVersion: null,
         });
         return true;
       }
@@ -281,12 +372,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
         ...current,
         status: "unauthenticated",
         error: normalizeErrorMessage(error),
+        authorityIssue: null,
+        authorityIssueObservedVersion: null,
       }));
       return false;
     }
   }, []);
 
   const signOut = useCallback(async () => {
+    terminalSignalRef.current = null;
     if (!authRef.current) {
       localFallbackActiveRef.current = false;
       clearLegacyBrowserTokenCopies();
@@ -296,6 +390,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         idToken: null,
         lastTokenRefreshAt: null,
         error: null,
+        authorityIssue: null,
+        authorityIssueObservedVersion: null,
       });
       return;
     }
@@ -309,6 +405,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       idToken: null,
       lastTokenRefreshAt: null,
       error: null,
+      authorityIssue: null,
+      authorityIssueObservedVersion: null,
     });
   }, []);
 
@@ -323,21 +421,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     try {
       const token = await getIdToken(session.user, true);
-      setSession((current) => ({
-        ...current,
-        idToken: token,
-        lastTokenRefreshAt: Date.now(),
-        error: null,
-      }));
+      applyAuthenticatedToken(session.user, token);
       return token;
     } catch (error) {
+      const terminalSignal = buildFirebaseRefreshAuthoritySignal(error, session.idToken);
+      if (terminalSignal) {
+        publishAuthAuthoritySignal(terminalSignal);
+        return null;
+      }
       setSession((current) => ({
         ...current,
         error: normalizeErrorMessage(error),
       }));
       return null;
     }
-  }, [session.idToken, session.status, session.user]);
+  }, [applyAuthenticatedToken, session.idToken, session.status, session.user]);
 
   const clearError = useCallback(() => {
     setSession((current) => ({

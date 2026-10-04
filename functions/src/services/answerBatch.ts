@@ -4,6 +4,10 @@ import {SessionStartValidationError, sessionService} from "./session";
 import {dataTierPartitionService} from "./dataTierPartition";
 import {getFirestore} from "../utils/firebaseAdmin";
 import {
+  InstituteAuthorityEnforcementError,
+  InstituteAuthorityEnforcementService,
+} from "./instituteAuthorityEnforcement";
+import {
   AdaptivePhaseSessionSnapshot,
   MaxTimeEnforcementLevel,
   MaxTimeViolation,
@@ -970,6 +974,10 @@ const buildTimingMetricsExport = (
  */
 export class AnswerBatchService {
   private readonly firestore = getFirestore();
+  private readonly authority = new InstituteAuthorityEnforcementService({
+    firestore: this.firestore,
+    now: () => new Date(),
+  });
   private readonly logger = createLogger("AnswerBatchService");
 
   /**
@@ -1051,6 +1059,26 @@ export class AnswerBatchService {
           "NOT_FOUND",
           `Session "${sessionId}" does not exist.`,
         );
+      }
+
+      try {
+        const currentAuthority = await this.authority.readCurrentAuthority(
+          transaction,
+          instituteId,
+        );
+        this.authority.assertActiveSessionAllowed(
+          currentAuthority,
+          sessionData,
+        );
+      } catch (error) {
+        if (error instanceof InstituteAuthorityEnforcementError) {
+          throw new SessionStartValidationError(
+            error.reason === "institute_suspended" ?
+              "FORBIDDEN" : "LICENSE_RESTRICTED",
+            error.message,
+          );
+        }
+        throw error;
       }
 
       const storedStudentId = normalizeRequiredString(

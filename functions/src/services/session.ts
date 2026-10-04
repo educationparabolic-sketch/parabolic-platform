@@ -7,6 +7,11 @@ import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
 import {createLogger} from "./logging";
 import {dataTierPartitionService} from "./dataTierPartition";
 import {
+  CurrentInstituteAuthority,
+  InstituteAuthorityEnforcementError,
+  InstituteAuthorityEnforcementService,
+} from "./instituteAuthorityEnforcement";
+import {
   buildQuestionPhaseTimingRuleSet,
   normalizeDifficultyTimingProfile,
 } from "./questionPhaseTiming";
@@ -1108,6 +1113,10 @@ export class SessionStartValidationError extends Error {
  */
 export class SessionService {
   private readonly firestore = getFirestore();
+  private readonly authority = new InstituteAuthorityEnforcementService({
+    firestore: this.firestore,
+    now: () => new Date(),
+  });
   private readonly logger = createLogger("SessionService");
   private readonly signSessionToken: SessionTokenSigner;
 
@@ -1116,6 +1125,50 @@ export class SessionService {
    */
   constructor(tokenSigner: SessionTokenSigner = defaultSessionTokenSigner) {
     this.signSessionToken = tokenSigner;
+  }
+
+  private rethrowAuthorityError(error: unknown): never {
+    if (error instanceof InstituteAuthorityEnforcementError) {
+      throw new SessionStartValidationError(
+        error.reason === "institute_suspended" ?
+          "FORBIDDEN" : "LICENSE_RESTRICTED",
+        error.message,
+      );
+    }
+    throw error;
+  }
+
+  private async readCurrentAuthority(
+    transaction: FirebaseFirestore.Transaction,
+    instituteId: string,
+  ): Promise<CurrentInstituteAuthority> {
+    try {
+      return await this.authority.readCurrentAuthority(transaction, instituteId);
+    } catch (error) {
+      return this.rethrowAuthorityError(error);
+    }
+  }
+
+  private assertModeAllowed(
+    authority: CurrentInstituteAuthority,
+    mode: SessionExecutionMode,
+  ): void {
+    try {
+      this.authority.assertModeAllowed(authority, mode);
+    } catch (error) {
+      this.rethrowAuthorityError(error);
+    }
+  }
+
+  private assertActiveSessionAllowed(
+    authority: CurrentInstituteAuthority,
+    sessionData: Record<string, unknown>,
+  ): void {
+    try {
+      this.authority.assertActiveSessionAllowed(authority, sessionData);
+    } catch (error) {
+      this.rethrowAuthorityError(error);
+    }
   }
 
   /**
@@ -1175,10 +1228,30 @@ export class SessionService {
     const sessionReference = sessionsCollection.doc(sessionId);
     const sessionPath = sessionReference.path;
     const launchNonce = randomUUID();
+    const launchAuthority = await this.firestore.runTransaction(
+      async (transaction) => this.readCurrentAuthority(transaction, instituteId),
+    );
+    try {
+      this.authority.assertOperational(launchAuthority);
+    } catch (error) {
+      this.rethrowAuthorityError(error);
+    }
+    if (launchAuthority.licenseLayer !== licenseLayer) {
+      throw new SessionStartValidationError(
+        "LICENSE_RESTRICTED",
+        "Authenticated license layer is not current for session launch.",
+      );
+    }
     const launchCredential = await this.signSessionToken(studentUid, {
+      authorizationVersion: launchAuthority.authorizationVersion,
+      expiryDate: launchAuthority.expiryDate,
+      featureFlags: launchAuthority.featureFlags,
+      gracePeriodEndsAt: launchAuthority.gracePeriodEndsAt,
       instituteId,
       launchNonce,
       licenseLayer,
+      licenseState: launchAuthority.licenseState,
+      licenseVersion: launchAuthority.licenseVersion,
       role: "student",
       runId,
       sessionId,
@@ -1220,6 +1293,20 @@ export class SessionService {
       ]);
       const academicYearData = academicYearSnapshot.data();
       const runData = runSnapshot.data();
+
+      const currentAuthority = await this.readCurrentAuthority(
+        transaction,
+        instituteId,
+      );
+      if (
+        currentAuthority.authorizationVersion !==
+        launchAuthority.authorizationVersion
+      ) {
+        throw new SessionStartValidationError(
+          "CONFLICT",
+          "Institute authority changed during session launch; retry safely.",
+        );
+      }
 
       if (!academicYearSnapshot.exists || !isPlainObject(academicYearData)) {
         throw new SessionStartValidationError(
@@ -1401,6 +1488,7 @@ export class SessionService {
       }
 
       const mode = normalizeSessionExecutionMode(runData.mode, "run.mode");
+      this.assertModeAllowed(currentAuthority, mode);
       if (!ALLOWED_MODES_BY_LAYER[licenseLayer].includes(mode)) {
         throw new SessionStartValidationError(
           "LICENSE_RESTRICTED",
@@ -1429,6 +1517,13 @@ export class SessionService {
 
       if (candidateSessionSnapshot.exists) {
         const sessionData = candidateSessionSnapshot.data();
+        if (!isPlainObject(sessionData)) {
+          throw new SessionStartValidationError(
+            "VALIDATION_ERROR",
+            "Existing session authority is malformed.",
+          );
+        }
+        this.assertActiveSessionAllowed(currentAuthority, sessionData);
         const persistedSessionId = normalizeRequiredString(
           sessionData?.sessionId,
           "session.sessionId",
@@ -1498,6 +1593,15 @@ export class SessionService {
           "NOT_FOUND",
           "No active session exists to resume for this Student and run.",
         );
+      }
+
+      try {
+        await this.authority.assertConcurrentSessionCapacity(
+          transaction,
+          currentAuthority,
+        );
+      } catch (error) {
+        this.rethrowAuthorityError(error);
       }
 
       const timingProfileSnapshot = normalizeTimingProfileSnapshot(
@@ -1707,6 +1811,11 @@ export class SessionService {
           `Session "${routeSessionId}" does not exist.`,
         );
       }
+      const currentAuthority = await this.readCurrentAuthority(
+        transaction,
+        instituteId,
+      );
+      this.assertActiveSessionAllowed(currentAuthority, sessionData);
       let status = normalizeSessionStatus(sessionData.status, "session.status");
       if (!ACTIVE_SESSION_STATUSES.includes(status)) {
         throw new SessionStartValidationError(
@@ -1902,6 +2011,11 @@ export class SessionService {
           `Session "${routeSessionId}" does not exist.`,
         );
       }
+      const currentAuthority = await this.readCurrentAuthority(
+        transaction,
+        instituteId,
+      );
+      this.assertActiveSessionAllowed(currentAuthority, sessionData);
       let status = normalizeSessionStatus(sessionData.status, "session.status");
       if (status !== "started" && status !== "active" && status !== "expired") {
         throw new SessionStartValidationError(
@@ -2039,6 +2153,12 @@ export class SessionService {
           `Session "${sessionId}" does not exist.`,
         );
       }
+
+      const currentAuthority = await this.readCurrentAuthority(
+        transaction,
+        instituteId,
+      );
+      this.assertActiveSessionAllowed(currentAuthority, sessionData);
 
       const persistedIdentity = {
         instituteId: normalizeRequiredString(sessionData.instituteId, "session.instituteId"),
@@ -2202,6 +2322,14 @@ export class SessionService {
         sessionData.status,
         "session.status",
       );
+
+      if (actorType !== "system") {
+        const currentAuthority = await this.readCurrentAuthority(
+          transaction,
+          instituteId,
+        );
+        this.assertActiveSessionAllowed(currentAuthority, sessionData);
+      }
 
       this.assertTransitionIsAllowed(
         actorType,

@@ -118,6 +118,44 @@ test("synchronizer emits student identity and disabled suspension", async () => 
   assert.equal(writes.length, 1);
 });
 
+test("synchronizer projects and verifies monotonic authorization version", async () => {
+  const {service, writes} = createHarness({
+    authority: {
+      authorizationVersion: 7,
+      expiryDate: null,
+      featureFlags: ACTIVE_FEATURE_FLAGS,
+      gracePeriodEndsAt: null,
+      instituteId: "inst_claims",
+      isSuspended: false,
+      licenseLayer: "L2",
+      licenseState: "active",
+      licenseVersion: "license-v7",
+      role: "teacher",
+      source: "staff",
+      studentId: null,
+    },
+  });
+
+  const result = await service.synchronizeInstituteUserClaims({
+    authorizationVersion: 7,
+    instituteId: "inst_claims",
+    uid: "staff_1",
+  });
+
+  assert.equal(result.claims.authorizationVersion, 7);
+  assert.equal(writes[0]?.claims.authorizationVersion, 7);
+  await assert.rejects(
+    service.synchronizeInstituteUserClaims({
+      authorizationVersion: 6,
+      instituteId: "inst_claims",
+      uid: "staff_1",
+    }),
+    (error: unknown) =>
+      error instanceof CustomClaimSynchronizationError &&
+      error.code === "INVALID_AUTHORITY",
+  );
+});
+
 test("synchronizer skips an identical claim projection", async () => {
   const customClaims = {
     expiryDate: "2099-09-26T00:00:00.000Z",

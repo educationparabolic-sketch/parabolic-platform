@@ -91,7 +91,27 @@ async function prepareInstitute(
   await deleteCollection(`${institutePath}/auditLogs`);
   await deleteCollection(`${institutePath}/students`);
   await firestore.doc(institutePath).delete().catch(() => undefined);
-  await firestore.doc(institutePath).set({instituteId, status: "active"});
+  const licenseVersion = `license_${instituteId}_v1`;
+  const license = {
+    activeStudentLimit: 100,
+    concurrentSessionLimit: 20,
+    currentLayer: "L1",
+    expiryDate: "2099-12-31T23:59:59.000Z",
+    featureFlags: {},
+    gracePeriodEndsAt: null,
+    licenseState: "active",
+    licenseVersion,
+  };
+  await Promise.all([
+    firestore.doc(institutePath).set({
+      authorizationVersion: 1,
+      instituteId,
+      licenseVersion,
+      status: "active",
+    }),
+    firestore.doc(`${institutePath}/license/current`).set(license),
+    firestore.doc(`${institutePath}/license/main`).set(license),
+  ]);
   await Promise.all(students.map((student) =>
     firestore.doc(`${institutePath}/students/${student.studentId}`).set({
       batch: "Batch A",
@@ -200,11 +220,11 @@ test(
         currentLayer: "L0",
         featureFlags: {},
         licenseState: "active",
-      }),
+      }, {merge: true}),
       instituteReference.collection("license").doc("main").set({
         currentLayer: "L0",
         featureFlags: {},
-      }),
+      }, {merge: true}),
       auth.createUser({
         displayName: "Original Auth Student",
         email: originalEmail,
@@ -534,6 +554,60 @@ test("lifecycle service enforces legal transitions and Auth/session authority", 
   } finally {
     await cleanupInstitute(instituteId);
   }
+});
+
+test("Student reactivation enforces current institute access and active capacity", async () => {
+  const instituteId = "inst-bwm-036-student-capacity";
+  const activeStudentId = "student-bwm-036-active";
+  const inactiveStudentId = "student-bwm-036-inactive";
+  await prepareInstitute(instituteId, [
+    {studentId: activeStudentId},
+    {status: "inactive", studentId: inactiveStudentId},
+  ]);
+  const licenseReference = firestore.doc(
+    `institutes/${instituteId}/license/current`,
+  );
+  const instituteReference = firestore.doc(`institutes/${instituteId}`);
+  await licenseReference.update({activeStudentLimit: 1});
+  const {service} = createService();
+  const request = service.normalizeLifecycleUpdateRequest({
+    ...authorityInput(instituteId),
+    body: {
+      expectedVersion: 1,
+      idempotencyKey: "reactivate-bwm-036-capacity",
+      reason: "Enrollment restored",
+      status: "active",
+    },
+    studentId: inactiveStudentId,
+  });
+
+  await assert.rejects(
+    service.updateLifecycle(request),
+    (error: unknown) =>
+      error instanceof AdminStudentMutationValidationError &&
+      error.code === "LICENSE_RESTRICTED" &&
+      /capacity/i.test(error.message),
+  );
+  assert.equal(
+    (await firestore.doc(
+      `institutes/${instituteId}/students/${inactiveStudentId}`,
+    ).get()).get("status"),
+    "inactive",
+  );
+
+  await instituteReference.update({status: "suspended"});
+  await licenseReference.update({activeStudentLimit: 2});
+  await assert.rejects(
+    service.updateLifecycle(request),
+    (error: unknown) =>
+      error instanceof AdminStudentMutationValidationError &&
+      error.code === "FORBIDDEN",
+  );
+
+  await instituteReference.update({status: "active"});
+  const result = await service.updateLifecycle(request);
+  assert.equal(result.status, "active");
+  await cleanupInstitute(instituteId);
 });
 
 test("photo review binds decision to the captured identity-photo version", async () => {

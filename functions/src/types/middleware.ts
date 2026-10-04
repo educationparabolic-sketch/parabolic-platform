@@ -14,6 +14,7 @@ export interface MiddlewareExamSessionClaims {
 }
 
 export interface MiddlewareIdentityContext {
+  authorizationVersion?: number | null;
   expiryDate?: string | null;
   featureFlags?: Readonly<Record<string, boolean>>;
   gracePeriodEndsAt?: string | null;

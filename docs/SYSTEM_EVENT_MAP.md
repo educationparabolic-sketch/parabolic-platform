@@ -2,7 +2,7 @@
 
 This document defines the event-driven topology of the platform.
 
-Last reconciled: 2026-10-03 (`BWM-035` authenticated commercial browser acceptance and closeout)
+Last reconciled: 2026-10-04 (`BWM-036` current institute authority, limit, and active-Exam enforcement)
 
 Each event represents a state transition or trigger that initiates downstream processing.
 
@@ -199,6 +199,40 @@ revoked synchronously. Existing Vendor/Stripe mutation propagation remains in
 place, while BWM-036 retains fleet scheduling, retry/dead-letter, propagation
 window, and stale-session acceptance across all portals.
 
+BWM-036 implements the durable coordinator and explicitly addressed operation
+worker. `ClaimPropagationSweepScheduled` is registered to the exported
+`claimPropagationSweepEveryMinute` UTC schedule; it evaluates bounded elapsed
+deadlines first and then drains at most 100 due operation slices per invocation.
+It is an internal scheduled event with no public transport.
+An actual institute-access or entitlement
+mutation atomically increments root `authorizationVersion`, creates the
+deterministic pending propagation operation plus immutable audit, and returns a
+safe receipt. A leased worker then enumerates staff and ordered 100-Student
+pages, persists per-user delivery state, synchronizes latest managed claims,
+revokes prior refresh-token sessions, and completes, retries, supersedes, or
+dead-letters with bounded evidence. Expired leases are recoverable; a newer
+authorization version supersedes old work but never permits it to overwrite
+newer authority. Scheduled deadline evaluation turns elapsed active expiry or
+grace into the same versioned event path. Server convergence is due within four
+minutes and browser/session convergence within five minutes.
+
+License-request decisions, invoice/offline-payment recording, and provider
+command reservation are non-events until they actually reconcile a changed
+entitlement. Backend requests compare the token's authorization version with
+current institute authority, so delayed Auth delivery cannot authorize stale
+work at the affected Student creation/reactivation and Exam runtime boundaries.
+Those boundaries also transact current active-Student and institute-wide
+created/started/active session counts. Over-limit downgrades deny new work;
+suspension, expiry, or invalidating downgrade blocks later active-Exam writes
+without emitting submission/completion events or changing the recoverable
+session document. The worker rereads authority before and after each Auth delivery and
+reprojects a newer generation before superseding old work, preventing an older
+operation from landing last. Schedule/export/event/index registration and
+comprehensive fleet proof are complete; simultaneous Admin/Student/Exam browser
+timing acceptance remains the final BWM-036 substep. BWM-040 consumes redacted health
+projections, BWM-052 owns production IAM/provider setup, and BWM-053 owns
+deployed indexes/schedules/backfills.
+
 BWM-032 defines ticket creation, institute/support replies, assignment, and
 legal workflow transitions as synchronous revisioned/idempotent HTTP commands,
 not inferred Firestore triggers. ADM-57/ADM-59 and VEN-05 atomically own the
@@ -267,8 +301,10 @@ operation but may not recursively delete an institute tree or report completion
 early. The implemented command service stops at a durable `reserved` quiescing
 checkpoint and adds no scheduler or trigger.
 
-Institute suspension updates the persisted BWM-034 access/lifecycle authority
-but may truthfully report `pending_bwm_036`. BWM-036 exclusively owns
+Institute suspend/restore/archive updates the persisted BWM-034 access/lifecycle
+authority, increments `authorizationVersion`, and creates the deterministic
+BWM-036 operation plus immutable audit in the same transaction. Its receipt
+reports durable operation state, not fleet completion. BWM-036 exclusively owns
 production-scale identity fan-out, retries/dead letters, propagation timing,
 and stale-session proof. Likewise, BWM-035 owns commercial decisions and only
 its actual entitlement mutation may initiate the BWM-036 license propagation
@@ -305,7 +341,9 @@ and invalid-signature rejection.
 
 License-request decisions transact BWM-031's existing request and one-open
 sentinel. Only a reconciled entitlement change updates `license/current` and
-immutable history, then records `pending_bwm_036`; BWM-036 alone owns fleet
+immutable history. The signed Stripe path now increments root authority and
+creates the matching propagation operation atomically; request/provider
+reservations remain non-events. BWM-036 alone owns fleet
 claim/session fan-out, retries/dead letters, latency, and stale-session proof.
 Recording an offline payment creates pending-verification authority only. A
 different current Vendor actor must verify it, and provider-backed invoices

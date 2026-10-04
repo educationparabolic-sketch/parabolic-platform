@@ -4,6 +4,10 @@ import {Timestamp} from "firebase-admin/firestore";
 import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
 import {identitySessionSecurityService} from "./identitySessionSecurity";
 import {
+  InstituteAuthorityEnforcementError,
+  InstituteAuthorityEnforcementService,
+} from "./instituteAuthorityEnforcement";
+import {
   AdminStudentBatchAssignmentRecord,
   AdminStudentBatchAssignmentServiceResult,
   AdminStudentBatchAssignmentValidatedRequest,
@@ -52,6 +56,10 @@ type PhotoTransactionResult = Omit<
 >;
 
 interface AdminStudentMutationDependencies {
+  authority?: Pick<
+    InstituteAuthorityEnforcementService,
+    "assertStudentActivationCapacity" | "readCurrentAuthority"
+  >;
   firestore: FirebaseFirestore.Firestore;
   now: () => Timestamp;
   sessionSecurity: Pick<
@@ -393,6 +401,11 @@ function isAuthUserNotFound(error: unknown): boolean {
 }
 
 export class AdminStudentMutationsService {
+  private readonly authority: Pick<
+    InstituteAuthorityEnforcementService,
+    "assertStudentActivationCapacity" | "readCurrentAuthority"
+  >;
+
   constructor(
     private readonly dependencies: AdminStudentMutationDependencies = {
       firestore: getFirestore(),
@@ -402,7 +415,13 @@ export class AdminStudentMutationsService {
         await getFirebaseAdminApp().auth().updateUser(uid, input);
       },
     },
-  ) {}
+  ) {
+    this.authority = dependencies.authority ??
+      new InstituteAuthorityEnforcementService({
+        firestore: dependencies.firestore,
+        now: () => dependencies.now().toDate(),
+      });
+  }
 
   public normalizeProfileUpdateRequest(input: {
     actorId?: unknown;
@@ -779,6 +798,27 @@ export class AdminStudentMutationsService {
             `Cannot transition Student "${request.studentId}" from ` +
               `${previousStatus} to ${request.status}.`,
           );
+        }
+        if (request.status === "active" && previousStatus !== "active") {
+          try {
+            const authority = await this.authority.readCurrentAuthority(
+              transaction,
+              request.instituteId,
+            );
+            await this.authority.assertStudentActivationCapacity(
+              transaction,
+              authority,
+            );
+          } catch (error) {
+            if (error instanceof InstituteAuthorityEnforcementError) {
+              throw new AdminStudentMutationValidationError(
+                error.reason === "institute_suspended" ?
+                  "FORBIDDEN" : "LICENSE_RESTRICTED",
+                error.message,
+              );
+            }
+            throw error;
+          }
         }
         const timestamp = this.dependencies.now();
         const result: LifecycleTransactionResult = {

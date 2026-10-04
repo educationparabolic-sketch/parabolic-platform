@@ -1,5 +1,6 @@
 import {StandardApiErrorCode} from "./apiResponse";
 import {LicenseLayer} from "./middleware";
+import type {ClaimPropagationPublicReceipt} from "../../../shared/contracts/claimPropagation";
 
 export interface LicenseManagementFeatureFlags {
   adaptivePhase: boolean;
@@ -19,6 +20,7 @@ export interface UpdateInstituteLicenseResult {
   activeStudentLimit: number | null;
   billingPlan: string;
   compatibilityLicensePath: string;
+  concurrentSessionLimit: number;
   instituteId: string;
   licenseHistoryEntryId: string;
   licenseHistoryPath: string;
@@ -28,6 +30,7 @@ export interface UpdateInstituteLicenseResult {
   planId: string;
   planName: string | null;
   previousLayer: LicenseLayer | null;
+  propagation: ClaimPropagationPublicReceipt;
 }
 
 export interface UpdateInstituteLicenseSuccessResponse {

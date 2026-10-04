@@ -48,6 +48,7 @@ const source = await readFile(sourcePath, "utf8");
 const { resolveGlobalPortalState } = loadModule(source);
 const now = new Date("2026-09-26T00:00:00.000Z");
 const baseClaims = {
+  authorizationVersion: 3,
   expiryDate: "2099-09-26T00:00:00.000Z",
   featureFlags: {
     adaptivePhase: true,
@@ -78,6 +79,24 @@ test("complete active claims retain their layer and feature authority", () => {
   assert.equal(state.license.status, "active");
   assert.equal(state.license.licenseVersion, "license-projection-v3");
   assert.equal(state.permissions.canAccessGovernanceDashboard, true);
+  assert.equal(state.authorizationVersion, 3);
+  assert.equal(state.isSuspended, false);
+});
+
+test("institute suspension and an API authority issue are projected for institute portals", () => {
+  const state = resolveGlobalPortalState({
+    now,
+    portal: "student",
+    session: {
+      authorityIssue: "institute_suspended",
+      idToken: token({ ...baseClaims, isSuspended: true, role: "student" }),
+      status: "authenticated",
+    },
+  });
+
+  assert.equal(state.isSuspended, true);
+  assert.equal(state.authorityIssue, "institute_suspended");
+  assert.equal(state.authorizationVersion, 3);
 });
 
 test("missing claim version fails closed", () => {
@@ -117,4 +136,25 @@ test("elapsed expiry and grace reduce browser authority to L0", () => {
     assert.equal(state.permissions.canUseControlledMode, false);
     assert.equal(state.permissions.canAccessGovernanceDashboard, false);
   }
+});
+
+test("Vendor remains a global identity boundary outside institute suspension and license signals", () => {
+  const state = resolveGlobalPortalState({
+    now,
+    portal: "vendor",
+    session: {
+      authorityIssue: "institute_suspended",
+      idToken: token({
+        ...baseClaims,
+        isSuspended: true,
+        role: "vendor",
+      }),
+      status: "authenticated",
+    },
+  });
+
+  assert.equal(state.permissions.canAccessVendorPortal, true);
+  assert.equal(state.isSuspended, false);
+  assert.equal(state.authorityIssue, null);
+  assert.equal(state.authorizationVersion, null);
 });

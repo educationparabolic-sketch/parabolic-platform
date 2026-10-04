@@ -1,5 +1,8 @@
 import {ExamOperationalDataAccessPolicy} from "./dataTierPartition";
 import type {
+  ClaimPropagationFeatureFlags,
+} from "../../../shared/contracts/claimPropagation";
+import type {
   ExamRuntimeSnapshot,
   StudentExamLaunchDisposition,
   StudentExamLaunchIntent,
@@ -41,9 +44,15 @@ export interface SessionStartContext {
 }
 
 export interface SessionTokenClaims {
+  authorizationVersion: number;
+  expiryDate: string | null;
+  featureFlags: ClaimPropagationFeatureFlags;
+  gracePeriodEndsAt: string | null;
   instituteId: string;
   launchNonce: string;
   licenseLayer: "L0" | "L1" | "L2" | "L3";
+  licenseState: "active" | "grace" | "expired";
+  licenseVersion: string;
   role: "student";
   runId: string;
   sessionId: string;

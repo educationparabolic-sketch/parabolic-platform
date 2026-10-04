@@ -339,3 +339,29 @@ test("firestore index manifest includes Vendor commercial pagination", () => {
     `events ${JSON.stringify(filters)}`,
   ));
 });
+
+test("firestore index manifest includes claim propagation schedules", () => {
+  const manifest = readManifest();
+
+  assert.equal(
+    hasIndex(manifest.indexes, "claimPropagationOperations", [
+      {fieldPath: "state", order: "ASCENDING"},
+      {fieldPath: "nextAttemptAt", order: "ASCENDING"},
+    ], "COLLECTION_GROUP"),
+    true,
+  );
+  assert.equal(
+    hasIndex(manifest.indexes, "license", [
+      {fieldPath: "licenseState", order: "ASCENDING"},
+      {fieldPath: "expiryDate", order: "ASCENDING"},
+    ], "COLLECTION_GROUP"),
+    true,
+  );
+  assert.equal(
+    hasIndex(manifest.indexes, "license", [
+      {fieldPath: "licenseState", order: "ASCENDING"},
+      {fieldPath: "gracePeriodEndsAt", order: "ASCENDING"},
+    ], "COLLECTION_GROUP"),
+    true,
+  );
+});

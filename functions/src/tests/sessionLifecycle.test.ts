@@ -27,16 +27,43 @@ const deleteDocumentIfPresent = async (path: string): Promise<void> => {
   }
 };
 
+const seedInstituteAuthority = async (instituteId: string): Promise<void> => {
+  const licenseVersion = `license_${instituteId}_v1`;
+  const license = {
+    activeStudentLimit: 100,
+    concurrentSessionLimit: 20,
+    currentLayer: "L1",
+    expiryDate: "2099-12-31T23:59:59.000Z",
+    featureFlags: {},
+    gracePeriodEndsAt: null,
+    licenseState: "active",
+    licenseVersion,
+  };
+  await Promise.all([
+    firestore.doc(`institutes/${instituteId}`).set({
+      authorizationVersion: 1,
+      licenseVersion,
+      status: "active",
+    }),
+    firestore.doc(`institutes/${instituteId}/license/current`).set(license),
+    firestore.doc(`institutes/${instituteId}/license/main`).set(license),
+  ]);
+};
+
 const seedSessionDocument = async (
   path: string,
   status: string,
 ): Promise<void> => {
   const pathSegments = path.split("/");
   const sessionId = pathSegments[pathSegments.length - 1];
+  const instituteId = pathSegments[1];
 
+  await seedInstituteAuthority(instituteId);
   await firestore.doc(path).set({
     answerMap: {},
-    instituteId: "inst_build_27",
+    instituteId,
+    licenseSnapshot: {currentLayer: "L1"},
+    mode: "Diagnostic",
     runId: "run_build_27",
     sessionId,
     startedAt: null,
@@ -61,10 +88,13 @@ const seedActivationSession = async (
   const yearId = pathSegments[pathSegments.length - 5];
   const instituteId = pathSegments[1];
   const questionId = "question_lifecycle_authority";
+  await seedInstituteAuthority(instituteId);
   await firestore.doc(path).set({
     answerMap: {},
     deadlineAt: status === "active" ? Timestamp.fromMillis(endsAtMs) : null,
     instituteId,
+    licenseSnapshot: {currentLayer: "L1"},
+    mode: "Diagnostic",
     questionTimeMap: {
       [questionId]: {
         cumulativeTimeSpent: 0,

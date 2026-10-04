@@ -1,4 +1,7 @@
 import {getFirestore} from "../utils/firebaseAdmin";
+import {
+  InstituteAuthorityEnforcementService,
+} from "./instituteAuthorityEnforcement";
 
 const INSTITUTES_COLLECTION = "institutes";
 const STUDENTS_COLLECTION = "students";
@@ -9,15 +12,30 @@ export interface StudentOnboardingActivationRequest {
 }
 
 export class StudentOnboardingActivationService {
+  private readonly authority: Pick<
+    InstituteAuthorityEnforcementService,
+    "assertStudentActivationCapacity" | "readCurrentAuthority"
+  >;
+
   constructor(
     private readonly dependencies: {
+      authority?: Pick<
+        InstituteAuthorityEnforcementService,
+        "assertStudentActivationCapacity" | "readCurrentAuthority"
+      >;
       firestore: FirebaseFirestore.Firestore;
       getCurrentTimestamp: () => Date;
     } = {
       firestore: getFirestore(),
       getCurrentTimestamp: () => new Date(),
     },
-  ) {}
+  ) {
+    this.authority = dependencies.authority ??
+      new InstituteAuthorityEnforcementService({
+        firestore: dependencies.firestore,
+        now: dependencies.getCurrentTimestamp,
+      });
+  }
 
   public async activateInvitedStudentOnFirstLogin(
     request: StudentOnboardingActivationRequest,
@@ -50,6 +68,15 @@ export class StudentOnboardingActivationService {
       if (currentStatus !== "invited") {
         return;
       }
+
+      const authority = await this.authority.readCurrentAuthority(
+        transaction,
+        instituteId,
+      );
+      await this.authority.assertStudentActivationCapacity(
+        transaction,
+        authority,
+      );
 
       const transitionTimestamp = this.dependencies.getCurrentTimestamp();
       transaction.update(studentRef, {

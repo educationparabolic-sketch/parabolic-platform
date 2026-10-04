@@ -8,6 +8,7 @@ export type CustomClaimAuthoritySource = "staff" | "student";
 export type CustomClaimRole = "admin" | "director" | "student" | "teacher";
 
 export interface CustomClaimAuthority {
+  authorizationVersion?: number;
   expiryDate: string | null;
   featureFlags: AdminLicenseFeatureFlags;
   gracePeriodEndsAt: string | null;
@@ -22,6 +23,7 @@ export interface CustomClaimAuthority {
 }
 
 export interface SynchronizeCustomClaimsInput {
+  authorizationVersion?: number;
   instituteId: string;
   uid: string;
 }

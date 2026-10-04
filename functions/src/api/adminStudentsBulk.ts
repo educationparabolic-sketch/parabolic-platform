@@ -1,7 +1,7 @@
 import * as functions from "firebase-functions";
 import {DecodedIdToken} from "firebase-admin/auth";
 import {sendErrorResponse} from "../services/apiResponse";
-import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
+import {verifyCurrentAuthorityIdToken} from "../services/instituteAuthorityEnforcement";
 import {createAuthenticationMiddleware} from "../middleware/auth";
 import {
   createMethodMiddleware,
@@ -125,8 +125,7 @@ export const handleAdminStudentsBulkRequest =
     ingestStudents: studentBulkIngestionService.ingestStudents.bind(
       studentBulkIngestionService,
     ),
-    verifyIdToken: (idToken: string) =>
-      getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
+    verifyIdToken: verifyCurrentAuthorityIdToken,
   });
 
 export {buildSuccessResponse};

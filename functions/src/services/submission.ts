@@ -3,6 +3,10 @@ import {createLogger} from "./logging";
 import {dataTierPartitionService} from "./dataTierPartition";
 import {getFirestore} from "../utils/firebaseAdmin";
 import {
+  InstituteAuthorityEnforcementError,
+  InstituteAuthorityEnforcementService,
+} from "./instituteAuthorityEnforcement";
+import {
   SubmissionContext,
   SubmissionErrorCode,
   SubmissionExecutionOptions,
@@ -1009,6 +1013,7 @@ export class SubmissionValidationError extends Error {
  */
 export class SubmissionService {
   private readonly firestore = getFirestore();
+  private readonly authority: InstituteAuthorityEnforcementService;
   private readonly logger = createLogger("SubmissionService");
   private readonly options: SubmissionServiceOptions;
 
@@ -1017,6 +1022,37 @@ export class SubmissionService {
    */
   constructor(options: SubmissionServiceOptions = {}) {
     this.options = options;
+    this.authority = new InstituteAuthorityEnforcementService({
+      firestore: this.firestore,
+      now: () => new Date(this.options.nowMillis?.() ?? Date.now()),
+    });
+  }
+
+  private rethrowAuthorityError(error: unknown): never {
+    if (error instanceof InstituteAuthorityEnforcementError) {
+      throw new SubmissionValidationError(
+        error.reason === "institute_suspended" ?
+          "FORBIDDEN" : "LICENSE_RESTRICTED",
+        error.message,
+      );
+    }
+    throw error;
+  }
+
+  private async assertCurrentSessionAuthority(
+    transaction: FirebaseFirestore.Transaction,
+    instituteId: string,
+    sessionData: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      const authority = await this.authority.readCurrentAuthority(
+        transaction,
+        instituteId,
+      );
+      this.authority.assertActiveSessionAllowed(authority, sessionData);
+    } catch (error) {
+      this.rethrowAuthorityError(error);
+    }
   }
 
   /**
@@ -1134,6 +1170,22 @@ export class SubmissionService {
         "Session must be active or server-expired before submission.",
       );
     }
+
+    await this.firestore.runTransaction(async (transaction) => {
+      const currentSessionSnapshot = await transaction.get(sessionReference);
+      const currentSessionData = currentSessionSnapshot.data();
+      if (!currentSessionSnapshot.exists || !isPlainObject(currentSessionData)) {
+        throw new SubmissionValidationError(
+          "NOT_FOUND",
+          `Session "${context.sessionId}" does not exist.`,
+        );
+      }
+      await this.assertCurrentSessionAuthority(
+        transaction,
+        context.instituteId,
+        currentSessionData,
+      );
+    });
 
     try {
       await sessionReference.update({
@@ -1369,6 +1421,12 @@ export class SubmissionService {
               `Session "${sessionId}" does not exist.`,
             );
           }
+
+          await this.assertCurrentSessionAuthority(
+            transaction,
+            instituteId,
+            sessionData,
+          );
 
           const validatedSession = this.validateSessionIdentity(sessionData, {
             instituteId,

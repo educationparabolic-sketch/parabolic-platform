@@ -1061,6 +1061,30 @@
         {"fieldPath": "updatedAt", "order": "DESCENDING"},
         {"fieldPath": "eventId", "order": "ASCENDING"}
       ]
+    },
+    {
+      "collectionGroup": "claimPropagationOperations",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {"fieldPath": "state", "order": "ASCENDING"},
+        {"fieldPath": "nextAttemptAt", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "license",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {"fieldPath": "licenseState", "order": "ASCENDING"},
+        {"fieldPath": "expiryDate", "order": "ASCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "license",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {"fieldPath": "licenseState", "order": "ASCENDING"},
+        {"fieldPath": "gracePeriodEndsAt", "order": "ASCENDING"}
+      ]
     }
   ],
   "fieldOverrides": []

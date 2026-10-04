@@ -30,6 +30,29 @@ const SESSION_ROOT_PATH =
   `institutes/${INSTITUTE_ID}/academicYears/${YEAR_ID}/` +
   `runs/${RUN_ID}/sessions`;
 
+const seedInstituteAuthority = async (): Promise<void> => {
+  const licenseVersion = "license_inst_build_36_v1";
+  const license = {
+    activeStudentLimit: 100,
+    concurrentSessionLimit: 20,
+    currentLayer: "L2",
+    expiryDate: "2099-12-31T23:59:59.000Z",
+    featureFlags: {controlledMode: true, hardMode: true},
+    gracePeriodEndsAt: null,
+    licenseState: "active",
+    licenseVersion,
+  };
+  await Promise.all([
+    firestore.doc(`institutes/${INSTITUTE_ID}`).set({
+      authorizationVersion: 1,
+      licenseVersion,
+      status: "active",
+    }),
+    firestore.doc(`institutes/${INSTITUTE_ID}/license/current`).set(license),
+    firestore.doc(`institutes/${INSTITUTE_ID}/license/main`).set(license),
+  ]);
+};
+
 test("computeSubmissionMetrics treats an explicit clear as unanswered", () => {
   const metrics = computeSubmissionMetrics({
     answerMap: {
@@ -206,6 +229,7 @@ const seedSession = async (
     createdAt: Timestamp.fromMillis(nowMillis - 120_000),
     deadlineAt: Timestamp.fromMillis(nowMillis + deadlineOffsetMs),
     instituteId: INSTITUTE_ID,
+    licenseSnapshot: {currentLayer: "L2"},
     mode,
     questionTimeMap: {
       q36_1: {
@@ -267,6 +291,7 @@ const seedSession = async (
 };
 
 test.before(async () => {
+  await seedInstituteAuthority();
   await seedQuestion("q36_1", "Easy", 4, 1, "A");
   await seedQuestion("q36_2", "Hard", 4, 1, "C");
   await seedQuestion("q36_3", "Easy", 4, 1, "B");
@@ -286,6 +311,7 @@ test.after(async () => {
     "session_build_36_not_active",
     "session_build_36_expiry",
     "session_build_36_expiry_too_early",
+    "session_build_36_suspended_submission",
   ];
 
   await Promise.all(sessionIds.map((sessionId) =>
@@ -383,6 +409,37 @@ test("submitSession finalizes active session atomically", async () => {
   assert.deepEqual(afterWriteAttempt.data()?.answerMap, answerMapAtSubmission);
 
   await deleteIfPresent(sessionPath);
+});
+
+test("submitSession preserves an active session while institute is suspended", async () => {
+  const sessionId = "session_build_36_suspended_submission";
+  const sessionPath = `${SESSION_ROOT_PATH}/${sessionId}`;
+  await deleteIfPresent(sessionPath);
+  await seedSession(sessionId, "active", false);
+  await firestore.doc(`institutes/${INSTITUTE_ID}`).update({status: "suspended"});
+
+  try {
+    await assert.rejects(
+      submissionService.submitSession({
+        instituteId: INSTITUTE_ID,
+        reason: "manual",
+        runId: RUN_ID,
+        sessionId,
+        studentId: STUDENT_ID,
+        yearId: YEAR_ID,
+      }),
+      (error: unknown) =>
+        error instanceof SubmissionValidationError &&
+        error.code === "FORBIDDEN",
+    );
+    const preserved = await firestore.doc(sessionPath).get();
+    assert.equal(preserved.get("status"), "active");
+    assert.equal(preserved.get("submissionLock"), false);
+    assert.equal(preserved.get("submittedAt"), null);
+  } finally {
+    await firestore.doc(`institutes/${INSTITUTE_ID}`).update({status: "active"});
+    await deleteIfPresent(sessionPath);
+  }
 });
 
 test(

@@ -2,7 +2,7 @@
 
 Status: canonical route and response-envelope contract
 
-Last reconciled: 2026-10-03 (`BWM-035` authenticated commercial browser acceptance and closeout)
+Last reconciled: 2026-10-04 (`BWM-036` current institute authority, limit, and active-Exam enforcement)
 
 ## Sources of truth
 
@@ -191,11 +191,13 @@ Vendor audit and, after an institute exists, the matching immutable institute
 audit in the authoritative transaction.
 
 Root `status` remains the existing claim-compatible `active|suspended` access
-guard. The separate Vendor lifecycle has `onboarding`, `active`, `suspended`,
+guard. Suspend, restore, and archive increment root `authorizationVersion` and
+atomically create the matching durable propagation operation. Their safe
+receipt exposes operation ID, authorization version, server/browser deadlines,
+and current operation state. The separate Vendor lifecycle has `onboarding`, `active`, `suspended`,
 `archived`, `deletion_scheduled`, `purging`, `purged`, and `recovery_required`
-states. Suspension persistence may
-return `pending_bwm_036`; BWM-034 must not claim fleet-wide token/session
-propagation. Deletion is a minimum-30-day, legal-hold-aware, durable recovery
+states. A `pending` receipt means durable work exists, not fleet completion.
+Deletion is a minimum-30-day, legal-hold-aware, durable recovery
 operation. It never performs an untracked recursive delete in an HTTP request;
 bounded checkpoints preserve a root tombstone plus required audit, commercial,
 and compliance authority, and the UI may report purge only after the persisted
@@ -252,8 +254,9 @@ VEN-08/VEN-10/VEN-11 command authority through the same secured transport.
 Approved onboarding creation, Vendor-owned profile changes, and every legal
 lifecycle change transact the target state, scoped hashed replay receipt, root
 Vendor audit, and matching institute audit together. Concurrent stale revisions
-admit only one winner. Suspension/restoration and access-changing archive return
-`pending_bwm_036`, never propagation success. `execute_purge` and `retry_purge`
+admit only one winner. Suspension/restoration and archive return the durable
+BWM-036 operation receipt in the same transaction; profile and deletion-only
+commands return `not_required`. `execute_purge` and `retry_purge`
 only reserve a durable `quiescing` operation after retention and legal-hold
 checks; they neither delete an institute tree nor report `purged`. A later
 bounded worker must advance that reservation to terminal authority.
@@ -663,6 +666,45 @@ Normal portal calls require a verified Firebase ID token. Server middleware deri
 Immediately after successful token verification, a truthy `isSuspended` claim terminates the request with canonical `403 FORBIDDEN` and message `Account access is suspended.` Identity context, student activation, role/license/tenant middleware, and business handlers do not run for that request. Claim synchronization, token refresh, and revocation latency remain governed by BWM-009 and BWM-036.
 
 Institute license-aware authorization uses one complete verified-claim tuple: `licenseLayer`, the five canonical `featureFlags`, `licenseVersion`, `licenseState`, nullable `expiryDate`, and nullable `gracePeriodEndsAt`. Claim synchronization reads only `institutes/{instituteId}/license/current`, normalizes elapsed active expiry or elapsed/missing grace deadlines to expired, and emits L0 with disabled licensed features for non-active authority. Privileged license/capability middleware rejects missing tuple fields, grace, elapsed deadlines, and expired state before layer/feature evaluation; an expired initiating identity has its refresh tokens revoked. Reviewed Vendor bypass remains outside institute entitlement. Browser global state applies the same time-aware fail-closed L0/disabled-feature projection for route and control evaluation. BWM-036 retains fleet-wide Vendor-mutation propagation, retry/latency guarantees, and complete stale-session proof.
+
+BWM-036's propagation implementation conditionally adds a positive monotonic
+`authorizationVersion` to managed institute claims. Access-changing lifecycle,
+history-versioned Vendor license, and signed Stripe entitlement transactions now
+advance root authority and create the matching durable operation atomically.
+The durable worker always reprojects newest authority
+when the version changes during delivery. Student creation/reactivation and Exam
+start/entry/activation/answer/submission now use a current-authority verifier:
+after revocation-aware Firebase verification it rereads the root and
+`license/current`, requires the exact authorization version, layer, five feature
+flags, license version, and effective state, and rejects suspension or elapsed
+authority before work. Other institute APIs retain their existing entitlement
+middleware until their applicable BWM-036 coverage. The internal bounded
+deadline sweep persists elapsed active/grace expiry, immutable history, and its
+operation once. The registered `claimPropagationSweepEveryMinute` schedule
+processes bounded deadline candidates before draining bounded due operations;
+three collection-group composites support those exact queries. Remote schedule
+and index deployment/qualification remains BWM-053-owned. This work
+adds no public route. Mutation responses may expose only the
+safe operation receipt (operation/version/state/server and browser deadlines),
+never per-user identity, tokens, credentials, or raw claims. Server claim and
+revocation delivery has a four-minute SLA; browser/session convergence has a
+five-minute SLA with a 60-second refresh cadence and deterministic terminal-401
+sign-out.
+
+Active-Student and concurrency limits are positive server authority and are
+enforced against current transactional usage; they and mutable usage counts do
+not enter claims. Bulk-created invited Students do not consume a seat, while
+first-login activation and explicit reactivation are serialized against current
+active capacity. New Exam starts are serialized against current created,
+started, and active institute sessions. Over-limit downgrades deny new work and
+do not delete or terminate existing records. An active Exam keeps its immutable
+launch snapshot on upgrades, but suspension, expiry, or downgrade below its
+mode's current layer/feature requirement blocks entry/resume/activation,
+answers, non-system transitions, and submission while preserving recoverable
+session state without automatic submission or invented completion. Admin,
+Student, and Exam browser convergence is implemented; simultaneous no-mock
+multi-origin timing acceptance remains the final BWM-036 substep. Vendor remains
+a separate global identity boundary.
 
 Exam entry is a credential-exchange boundary. The Exam app exchanges the short-lived launch credential through Firebase Auth, removes it from URL/history before runtime entry, atomically consumes it through EXM-01, and uses refreshed session-bound Firebase ID tokens for EXM-01, EXM-02, EXM-04, and EXM-05. The raw launch credential is never used as bearer authorization and cannot be replayed at entry.
 

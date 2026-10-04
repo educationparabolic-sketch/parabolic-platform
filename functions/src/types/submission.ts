@@ -9,6 +9,7 @@ import type {
 export type SubmissionErrorCode =
   "FORBIDDEN" |
   "INTERNAL_ERROR" |
+  "LICENSE_RESTRICTED" |
   "NOT_FOUND" |
   "SESSION_NOT_ACTIVE" |
   "SUBMISSION_LOCKED" |

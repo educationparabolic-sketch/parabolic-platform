@@ -39,8 +39,8 @@ test("every production Firebase ID-token verifier checks revocation", async () =
   assert.deepEqual(unreviewedSites, []);
   assert.equal(
     verificationSites.length,
-    38,
-    `Expected 38 revocation-aware production verifiers, found ` +
+    55,
+    `Expected 55 revocation-aware production verifiers, found ` +
       `${verificationSites.length}.`,
   );
 });

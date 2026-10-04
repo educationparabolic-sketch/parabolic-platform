@@ -12,7 +12,13 @@ import type {
   VendorInstituteMutationReceipt,
   VendorInstituteProfileUpdateIntent,
 } from "../../../shared/contracts/vendorInstitutes";
+import type {ClaimPropagationPublicReceipt} from "../../../shared/contracts/claimPropagation";
 import {getFirestore} from "../utils/firebaseAdmin";
+import {
+  buildClaimPropagationDesiredAuthority,
+  ClaimPropagationCoordinator,
+  nextClaimAuthorizationVersion,
+} from "./claimPropagation";
 import {
   VendorInstituteCreateValidatedRequest,
   VendorInstituteLifecycleValidatedRequest,
@@ -442,7 +448,7 @@ const mutationReceipt = (
   lifecycleState: VendorInstituteLifecycleState,
   revision: number,
   deletion: StoredDeletionAuthority | null,
-  propagationState: VendorInstituteMutationReceipt["propagationState"],
+  propagation: ClaimPropagationPublicReceipt,
 ): VendorInstituteMutationReceipt => ({
   auditEventId: authority.auditEventId,
   commandId: authority.commandId,
@@ -450,7 +456,8 @@ const mutationReceipt = (
   deletion: deletionSummary(deletion),
   instituteId,
   lifecycleState,
-  propagationState,
+  propagation,
+  propagationState: propagation.state,
   replayed: false,
   revision,
 });
@@ -488,12 +495,16 @@ const instituteDetailAtCreation = (
 });
 
 export class VendorInstituteCommandsService {
+  private readonly propagationCoordinator: ClaimPropagationCoordinator;
+
   constructor(
     private readonly dependencies: VendorInstituteCommandDependencies = {
       firestore: getFirestore(),
       now: () => new Date(),
     },
-  ) {}
+  ) {
+    this.propagationCoordinator = new ClaimPropagationCoordinator(dependencies);
+  }
 
   public normalizeCreateRequest(
     input: VendorInstituteCreateInput,
@@ -835,7 +846,13 @@ export class VendorInstituteCommandsService {
         current.lifecycleState,
         nextRevision,
         current.deletion,
-        "not_required",
+        {
+          authorizationVersion: 0,
+          browserDeadlineAt: null,
+          operationId: null,
+          serverDeadlineAt: null,
+          state: "not_required",
+        },
       );
       const audit = {
         ...commonAudit(
@@ -889,6 +906,7 @@ export class VendorInstituteCommandsService {
     const {date: completedAt, timestamp} = serverTimestamp(this.dependencies.now);
     const instituteReference = this.dependencies.firestore
       .collection(INSTITUTES_COLLECTION).doc(request.instituteId);
+    const licenseReference = instituteReference.collection("license").doc("current");
     const commandReference = instituteReference.collection(INSTITUTE_COMMANDS_COLLECTION)
       .doc(authority.commandId);
     const rootAuditReference = this.dependencies.firestore
@@ -924,8 +942,15 @@ export class VendorInstituteCommandsService {
       let nextAccess: VendorInstituteAccessStatus;
       let nextDeletion = current.deletion;
       let deletionWrite: unknown = current.deletion;
-      let propagationState: VendorInstituteMutationReceipt["propagationState"] =
-        "not_required";
+      let propagation: ClaimPropagationPublicReceipt = {
+        authorizationVersion: 0,
+        browserDeadlineAt: null,
+        operationId: null,
+        serverDeadlineAt: null,
+        state: "not_required",
+      };
+      let propagationSource: "institute_archived" | "institute_restored" |
+        "institute_suspended" | null = null;
 
       if (action === "suspend") {
         if (current.lifecycleState !== "active") {
@@ -933,22 +958,21 @@ export class VendorInstituteCommandsService {
         }
         nextLifecycle = "suspended";
         nextAccess = "suspended";
-        propagationState = "pending_bwm_036";
+        propagationSource = "institute_suspended";
       } else if (action === "restore") {
         if (current.lifecycleState !== "suspended") {
           return conflictError("Only a suspended institute can be restored.");
         }
         nextLifecycle = "active";
         nextAccess = "active";
-        propagationState = "pending_bwm_036";
+        propagationSource = "institute_restored";
       } else if (action === "archive") {
         if (!["onboarding", "active", "suspended"].includes(current.lifecycleState)) {
           return conflictError("Institute lifecycle cannot transition to archived.");
         }
         nextLifecycle = "archived";
         nextAccess = "suspended";
-        propagationState = current.accessStatus === "active" ?
-          "pending_bwm_036" : "not_required";
+        propagationSource = "institute_archived";
       } else if (action === "schedule_deletion") {
         if (current.lifecycleState !== "archived") {
           return conflictError("Only an archived institute can schedule deletion.");
@@ -1048,6 +1072,30 @@ export class VendorInstituteCommandsService {
       }
 
       const nextRevision = current.revision + 1;
+      const authorizationVersion = propagationSource ?
+        nextClaimAuthorizationVersion(instituteData.authorizationVersion) :
+        instituteData.authorizationVersion;
+      if (propagationSource) {
+        const licenseSnapshot = await transaction.get(licenseReference);
+        if (!licenseSnapshot.exists) {
+          return authorityError("Institute lifecycle propagation requires license/current authority.");
+        }
+        const desiredAuthority = buildClaimPropagationDesiredAuthority(
+          request.instituteId,
+          {
+            ...instituteData,
+            authorizationVersion,
+            instituteRevision: nextRevision,
+            status: nextAccess,
+          },
+          licenseSnapshot.data() ?? {},
+        );
+        propagation = this.propagationCoordinator.stageOperation(
+          transaction,
+          {desiredAuthority, source: propagationSource},
+          completedAt,
+        );
+      }
       const receipt = mutationReceipt(
         authority,
         completedAt,
@@ -1055,7 +1103,7 @@ export class VendorInstituteCommandsService {
         nextLifecycle,
         nextRevision,
         nextDeletion,
-        propagationState,
+        propagation,
       );
       const auditAction = action.toUpperCase();
       const reason = "reason" in request.command ? request.command.reason : null;
@@ -1070,17 +1118,20 @@ export class VendorInstituteCommandsService {
         ),
         expectedRevision: current.revision,
         fromLifecycleState: current.lifecycleState,
-        propagationState,
+        propagationOperationId: propagation.operationId,
+        propagationState: propagation.state,
         reasonHash: reason ? sha256(reason) : null,
         resultingRevision: nextRevision,
         toLifecycleState: nextLifecycle,
       };
       transaction.update(instituteReference, {
         deletionOperation: deletionWrite,
+        ...(propagationSource ? {authorizationVersion} : {}),
         instituteRevision: nextRevision,
         status: nextAccess,
         updatedAt: timestamp,
-        vendorLifecyclePropagationState: propagationState,
+        vendorLifecyclePropagationOperationId: propagation.operationId,
+        vendorLifecyclePropagationState: propagation.state,
         vendorLifecycleState: nextLifecycle,
       });
       transaction.create(rootAuditReference, audit);

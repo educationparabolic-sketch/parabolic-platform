@@ -31,6 +31,7 @@ const selectedSourceSuites = [
   "apiErrorHandling.test",
   "authMiddleware.test",
   "capabilityMiddleware.test",
+  "claimPropagation.test",
   "cdnArchitecture.test",
   "cdnCachePolicy.test",
   "cdnMonitoring.test",

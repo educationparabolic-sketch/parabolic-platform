@@ -16,7 +16,7 @@ export interface IdentitySessionSecurityDependencies {
   ) => Promise<{changed: boolean}>;
   revokeRefreshTokens: (uid: string) => Promise<void>;
   synchronizeInstituteUserClaims: (
-    input: {instituteId: string; uid: string},
+    input: {authorizationVersion?: number; instituteId: string; uid: string},
   ) => Promise<{changed: boolean}>;
 }
 
@@ -49,9 +49,12 @@ export class IdentitySessionSecurityService {
   ) {}
 
   async synchronizeClaimsAndRevokeSessions(
-    input: {instituteId: string; uid: string},
+    input: {authorizationVersion?: number; instituteId: string; uid: string},
   ): Promise<IdentitySessionSecurityResult> {
     const normalizedInput = {
+      ...(input.authorizationVersion === undefined ? {} : {
+        authorizationVersion: input.authorizationVersion,
+      }),
       instituteId: normalizeRequiredString(input.instituteId, "instituteId"),
       uid: normalizeRequiredString(input.uid, "uid"),
     };

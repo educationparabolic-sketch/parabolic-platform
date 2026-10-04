@@ -168,6 +168,9 @@ import {
   failureRecoveryDispatch,
   failureRecoveryRetrySweep,
 } from "./triggers/failureRecovery";
+import {
+  claimPropagationSweepEveryMinute,
+} from "./triggers/claimPropagation";
 import {systemEventTopologyService} from "./services/systemEventTopology";
 import {loadEnvironmentConfig} from "./utils/environment";
 
@@ -191,6 +194,7 @@ export {supportAttachmentCleanupDaily};
 export {processEmailQueue};
 export {failureRecoveryDispatch};
 export {failureRecoveryRetrySweep};
+export {claimPropagationSweepEveryMinute};
 export const apiV1 = functions.https.onRequest(handleApiV1Request);
 export const examStart = functions.https.onRequest(handleExamStartRequest);
 export const examSessionActivate = functions.https.onRequest(

@@ -22,6 +22,8 @@ import type {
 import { usePortalTitle } from "../../../shared/hooks/usePortalTitle";
 import { toCdnAssetUrl } from "../../../shared/services/cdnAssetDelivery";
 import { ApiClientError } from "../../../shared/services/apiClient";
+import { useAuthProvider } from "../../../shared/services/authProvider";
+import { useGlobalPortalState } from "../../../shared/services/globalPortalState";
 import {
   adaptExamSessionActivationResult,
   adaptExamSessionEntryResult,
@@ -38,6 +40,7 @@ type QuestionSection = string;
 type PhaseId = "phase1" | "phase2" | "phase3" | "buffer";
 type SubmissionReason = ExamSubmissionReason;
 type SessionLifecycleState = "created" | "started" | "active" | "submitted" | "expired" | "terminated";
+type ExamAuthorityInterruption = "session_revoked" | "institute_suspended" | "license_restricted";
 type ExamEntryStage = "entry_not_open" | "pre_exam_lobby" | "instructions_waiting" | "entry_closed" | "exam_active";
 type PreExamCheckState = "pending" | "passed" | "failed" | "skipped";
 type BrowserIntegritySeverity = "info" | "warning" | "blocking";
@@ -1023,6 +1026,46 @@ function ExamServerEntryValidationLoading() {
   );
 }
 
+function ExamAuthorityInterruptionPage(props: {
+  interruption: ExamAuthorityInterruption;
+  pendingAnswerCount: number;
+}) {
+  const { interruption, pendingAnswerCount } = props;
+  const heading = interruption === "institute_suspended"
+    ? "Institute access suspended"
+    : interruption === "license_restricted"
+      ? "Exam paused after a license change"
+      : "Exam session authorization ended";
+  const detail = interruption === "institute_suspended"
+    ? "Your institute has suspended access. The exam cannot continue until authority is restored."
+    : interruption === "license_restricted"
+      ? "The current institute license no longer permits this exam session."
+      : "This Firebase session is no longer authorized. Return to the Student Portal to recover access.";
+
+  return (
+    <main className="exam-access-shell" aria-live="assertive">
+      <section className="exam-access-card">
+        <p className="exam-access-eyebrow">Recoverable Session Interruption</p>
+        <h1>{heading}</h1>
+        <p>{detail}</p>
+        <p>
+          The exam was not auto-submitted. Responses already accepted by the server remain saved
+          {pendingAnswerCount > 0
+            ? `, and ${pendingAnswerCount} pending response update(s) remain in this browser for recovery.`
+            : "."}
+        </p>
+        <button
+          type="button"
+          className="exam-start-button"
+          onClick={() => window.location.assign(STUDENT_PORTAL_FALLBACK_PATH)}
+        >
+          Return to Student Portal
+        </button>
+      </section>
+    </main>
+  );
+}
+
 function ScientificCalculatorModal(props: { open: boolean; onClose: () => void }) {
   const { open, onClose } = props;
   const [displayValue, setDisplayValue] = useState("");
@@ -1179,6 +1222,8 @@ function ExamInsightsModal(props: {
 function ExamSessionPage() {
   const { sessionId = "" } = useParams<{ sessionId: string }>();
   const location = useLocation();
+  const { session: authSession } = useAuthProvider();
+  const globalState = useGlobalPortalState();
   const tokenFromQuery = useMemo(() => new URLSearchParams(location.search).get("token"), [location.search]);
   const modeFromQuery = useMemo(() => new URLSearchParams(location.search).get("mode"), [location.search]);
   const [launchCredential] = useState<string | null>(() => tokenFromQuery);
@@ -1291,6 +1336,17 @@ function ExamSessionPage() {
   const phaseVisibilityEnforced = isDiagnosticMode || isHardMode;
   const questionTimingEnforced = isHardMode;
   const isSubmitted = sessionLifecycleState === "submitted";
+  const authorityInterruption: ExamAuthorityInterruption | null =
+    authSession.authorityIssue === "session_revoked"
+      ? "session_revoked"
+      : globalState.isSuspended || authSession.authorityIssue === "institute_suspended"
+        ? "institute_suspended"
+        : authSession.authorityIssue === "license_restricted" ||
+            (globalState.isAuthenticated &&
+              (globalState.license.status === "grace" || globalState.license.status === "expired"))
+          ? "license_restricted"
+          : null;
+  const authorityInterrupted = authorityInterruption !== null;
   const instituteId = entryAuthority?.instituteId ?? entryValidation.claims.instituteId ?? "";
   const yearId = entryAuthority?.yearId ?? entryValidation.claims.yearId ?? "";
   const runId = entryAuthority?.runId ?? entryValidation.claims.runId ?? "";
@@ -1342,7 +1398,7 @@ function ExamSessionPage() {
   const requestServerActivation = useCallback(async (): Promise<
   ExamSessionActivationResult | null
   > => {
-    if (activationInFlightRef.current || !entryValidation.allowed) {
+    if (activationInFlightRef.current || !entryValidation.allowed || authorityInterrupted) {
       return null;
     }
     activationInFlightRef.current = true;
@@ -1360,7 +1416,7 @@ function ExamSessionPage() {
     } finally {
       activationInFlightRef.current = false;
     }
-  }, [applyServerLifecycleAuthority, effectiveSessionId, entryValidation.allowed, examApiClient]);
+  }, [applyServerLifecycleAuthority, authorityInterrupted, effectiveSessionId, entryValidation.allowed, examApiClient]);
 
   useLayoutEffect(() => {
     if (!tokenFromQuery) {
@@ -1533,7 +1589,7 @@ function ExamSessionPage() {
   ]);
 
   useEffect(() => {
-    if (!instructionConfirmed || isSubmitted) {
+    if (!instructionConfirmed || isSubmitted || authorityInterrupted) {
       return;
     }
 
@@ -1564,10 +1620,10 @@ function ExamSessionPage() {
     }, TICK_INTERVAL_MS);
 
     return () => window.clearInterval(tickInterval);
-  }, [instructionConfirmed, isSubmitted, isHardMode, selectedQuestionId]);
+  }, [authorityInterrupted, instructionConfirmed, isSubmitted, isHardMode, selectedQuestionId]);
 
   useEffect(() => {
-    if (!instructionConfirmed || isSubmitted || !deadlineEpochMs) {
+    if (!instructionConfirmed || isSubmitted || authorityInterrupted || !deadlineEpochMs) {
       return;
     }
 
@@ -1579,12 +1635,13 @@ function ExamSessionPage() {
     }, sessionSnapshot.timingProfile.syncEveryMs);
 
     return () => window.clearInterval(syncInterval);
-  }, [deadlineEpochMs, instructionConfirmed, isSubmitted, sessionSnapshot.timingProfile.syncEveryMs]);
+  }, [authorityInterrupted, deadlineEpochMs, instructionConfirmed, isSubmitted, sessionSnapshot.timingProfile.syncEveryMs]);
 
   useEffect(() => {
     if (
       !instructionConfirmed ||
       isSubmitted ||
+      authorityInterrupted ||
       remainingMs > 0 ||
       sessionLifecycleState !== "active"
     ) {
@@ -1598,7 +1655,7 @@ function ExamSessionPage() {
     }, 0);
 
     return () => window.clearTimeout(reconcileTimeout);
-  }, [instructionConfirmed, isSubmitted, remainingMs, requestServerActivation, sessionLifecycleState]);
+  }, [authorityInterrupted, instructionConfirmed, isSubmitted, remainingMs, requestServerActivation, sessionLifecycleState]);
 
   const navigateToQuestion = (questionId: string) => {
     setVisitedQuestionIds((current) => {
@@ -1622,7 +1679,7 @@ function ExamSessionPage() {
   }, []);
 
   const queueAnswerWrite = useCallback((questionId: string, nextResponseState: QuestionResponseState): void => {
-    if (!entryValidation.allowed) {
+    if (!entryValidation.allowed || authorityInterrupted) {
       return;
     }
 
@@ -1652,7 +1709,7 @@ function ExamSessionPage() {
     replacePendingAnswerMap(nextPendingMap);
     setSyncState((current) => navigator.onLine ? current === "syncing" ? current : "idle" : "offline");
     setSyncMessage(`Pending answer updates: ${Object.keys(nextPendingMap).length}`);
-  }, [entryValidation.allowed, questionTimingById, replacePendingAnswerMap, sessionSnapshot.questions]);
+  }, [authorityInterrupted, entryValidation.allowed, questionTimingById, replacePendingAnswerMap, sessionSnapshot.questions]);
 
   const updateQuestionResponseState = useCallback((
     questionId: string,
@@ -1675,7 +1732,12 @@ function ExamSessionPage() {
   }, [queueAnswerWrite]);
 
   const executeAnswerFlush = useCallback(async (reason: ExamAnswerFlushReason): Promise<boolean> => {
-    if (!entryValidation.allowed || !instructionConfirmed || isSubmitted && reason !== "submission") {
+    if (
+      !entryValidation.allowed ||
+      !instructionConfirmed ||
+      authorityInterrupted ||
+      isSubmitted && reason !== "submission"
+    ) {
       return false;
     }
     if (serverEntryValidationStatus !== "valid") {
@@ -1734,7 +1796,7 @@ function ExamSessionPage() {
         setSyncMessage(`Syncing ${answersToPersist.length} answer update(s)...`);
         const responseBody = await examApiClient.post<ExamAnswerBatchResult, ExamAnswerBatchRequestBody>(
           endpointPath,
-          {body: requestBody},
+          {body: requestBody, handledFailureIsReady: true},
         );
         if (responseBody.batchId !== batchId || responseBody.batchSequence !== batchSequence) {
           throw new Error("Answer sync acknowledgement did not match the active batch.");
@@ -1796,6 +1858,7 @@ function ExamSessionPage() {
     }
   }, [
     examApiClient,
+    authorityInterrupted,
     effectiveSessionId,
     entryValidation.allowed,
     instituteId,
@@ -1825,7 +1888,7 @@ function ExamSessionPage() {
   }, [executeAnswerFlush]);
 
   useEffect(() => {
-    if (!instructionConfirmed || isSubmitted) {
+    if (!instructionConfirmed || isSubmitted || authorityInterrupted) {
       return;
     }
 
@@ -1834,18 +1897,23 @@ function ExamSessionPage() {
     }, ANSWER_BATCH_INTERVAL_MS);
 
     return () => window.clearInterval(batchInterval);
-  }, [flushAnswerBatch, instructionConfirmed, isSubmitted]);
+  }, [authorityInterrupted, flushAnswerBatch, instructionConfirmed, isSubmitted]);
 
   useEffect(() => {
-    if (!instructionConfirmed || isSubmitted || pendingAnswers.length < ANSWER_BATCH_MAX_SIZE) {
+    if (
+      !instructionConfirmed ||
+      isSubmitted ||
+      authorityInterrupted ||
+      pendingAnswers.length < ANSWER_BATCH_MAX_SIZE
+    ) {
       return;
     }
 
     void flushAnswerBatch("scheduled");
-  }, [flushAnswerBatch, instructionConfirmed, isSubmitted, pendingAnswers.length]);
+  }, [authorityInterrupted, flushAnswerBatch, instructionConfirmed, isSubmitted, pendingAnswers.length]);
 
   useEffect(() => {
-    if (!instructionConfirmed || isSubmitted) {
+    if (!instructionConfirmed || isSubmitted || authorityInterrupted) {
       return;
     }
 
@@ -1855,7 +1923,7 @@ function ExamSessionPage() {
     }, HEARTBEAT_INTERVAL_MS);
 
     return () => window.clearInterval(heartbeatInterval);
-  }, [flushAnswerBatch, instructionConfirmed, isSubmitted]);
+  }, [authorityInterrupted, flushAnswerBatch, instructionConfirmed, isSubmitted]);
 
   useEffect(() => {
     if (sessionLifecycleState === "active") {
@@ -1933,6 +2001,7 @@ function ExamSessionPage() {
     };
     void saveRecoverySnapshot(snapshot);
   }, [
+    authorityInterruption,
     deadlineEpochMs,
     effectiveSessionId,
     hardModeLockedQuestionIds,
@@ -1951,7 +2020,15 @@ function ExamSessionPage() {
   ]);
 
   useEffect(() => {
-    if (!instructionConfirmed || isSubmitted) {
+    if (!authorityInterrupted) {
+      return;
+    }
+    cameraStream?.getTracks().forEach((track) => track.stop());
+    setCameraStream(null);
+  }, [authorityInterrupted, cameraStream]);
+
+  useEffect(() => {
+    if (!instructionConfirmed || isSubmitted || authorityInterrupted) {
       return;
     }
 
@@ -1970,7 +2047,7 @@ function ExamSessionPage() {
       window.removeEventListener("offline", handleOffline);
       window.removeEventListener("online", handleOnline);
     };
-  }, [flushAnswerBatch, instructionConfirmed, isSubmitted]);
+  }, [authorityInterrupted, flushAnswerBatch, instructionConfirmed, isSubmitted]);
 
   useEffect(() => {
     if (!isSubmitted) {
@@ -1982,7 +2059,7 @@ function ExamSessionPage() {
   }, [effectiveSessionId, isSubmitted]);
 
   const submitSession = useCallback(async (reason: SubmissionReason): Promise<void> => {
-    if (!entryValidation.allowed || serverEntryValidationStatus !== "valid") {
+    if (!entryValidation.allowed || serverEntryValidationStatus !== "valid" || authorityInterrupted) {
       throw new Error("Missing valid Firebase exam identity for submission.");
     }
 
@@ -2036,6 +2113,7 @@ function ExamSessionPage() {
     }
   }, [
     examApiClient,
+    authorityInterrupted,
     effectiveSessionId,
     entryValidation.allowed,
     flushAnswerBatch,
@@ -2050,6 +2128,7 @@ function ExamSessionPage() {
     if (
       sessionLifecycleState !== "expired" ||
       isSubmitted ||
+      authorityInterrupted ||
       submitInFlight ||
       expirySubmitAttemptedRef.current
     ) {
@@ -2061,7 +2140,7 @@ function ExamSessionPage() {
       .catch((error) => {
         setSubmitError(error instanceof Error ? error.message : "Auto-submit failed.");
       });
-  }, [isSubmitted, sessionLifecycleState, submitInFlight, submitSession]);
+  }, [authorityInterrupted, isSubmitted, sessionLifecycleState, submitInFlight, submitSession]);
 
   const palette = useMemo<PaletteTile[]>(
     () =>
@@ -2202,6 +2281,9 @@ function ExamSessionPage() {
     });
   }, [faceIdentityGazeGuardEnabled, faceVerificationState]);
   const beginExamSession = useCallback(async (): Promise<boolean> => {
+    if (authorityInterrupted) {
+      return false;
+    }
     const activeSessionId = window.sessionStorage.getItem(activeSessionGuardKey);
     if (activeSessionId && activeSessionId !== effectiveSessionId) {
       setSessionConflictMessage(
@@ -2235,6 +2317,7 @@ function ExamSessionPage() {
     return true;
   }, [
     activeSessionGuardKey,
+    authorityInterrupted,
     effectiveSessionId,
     recordLastAnswerWriteAt,
     replacePendingAnswerMap,
@@ -3020,6 +3103,15 @@ function ExamSessionPage() {
 
   if (!entryValidation.allowed) {
     return <ExamAccessRedirect reason={entryValidation.reason} />;
+  }
+
+  if (authorityInterruption) {
+    return (
+      <ExamAuthorityInterruptionPage
+        interruption={authorityInterruption}
+        pendingAnswerCount={pendingAnswers.length}
+      />
+    );
   }
 
   if (serverEntryValidationStatus === "pending") {

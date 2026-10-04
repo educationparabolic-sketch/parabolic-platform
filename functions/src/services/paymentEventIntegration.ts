@@ -2,9 +2,13 @@ import {createHmac, timingSafeEqual} from "crypto";
 import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import {auditLogStorageService} from "./auditLogStorage";
 import {billingSnapshotService} from "./billingSnapshot";
+import {
+  buildClaimPropagationDesiredAuthority,
+  claimPropagationCoordinator,
+  nextClaimAuthorizationVersion,
+} from "./claimPropagation";
 import {createLogger} from "./logging";
 import {licenseHistoryService} from "./licenseHistory";
-import {licenseClaimFreshnessService} from "./licenseClaimFreshness";
 import {LicenseLayer} from "../types/middleware";
 import {
   PaymentEventIntegrationValidationError,
@@ -98,7 +102,8 @@ interface SignatureHeaderParts {
 }
 
 interface PricingPlanResolution {
-  activeStudentLimit: number | null;
+  activeStudentLimit: number;
+  concurrentSessionLimit: number;
   layer: LicenseLayer;
   planId: string;
   planName: string | null;
@@ -129,6 +134,20 @@ const normalizeOptionalNumber = (
   }
 
   return value;
+};
+
+const normalizePositivePlanLimit = (
+  value: unknown,
+  fieldName: string,
+): number => {
+  const normalizedValue = normalizeOptionalNumber(value);
+  if (!Number.isSafeInteger(normalizedValue) || Number(normalizedValue) < 1) {
+    throw new PaymentEventIntegrationValidationError(
+      "VALIDATION_ERROR",
+      `Pricing plan field "${fieldName}" must be a positive integer.`,
+    );
+  }
+  return Number(normalizedValue);
 };
 
 const normalizeCurrencyAmount = (
@@ -644,10 +663,18 @@ const resolvePricingPlan = async (
   }
 
   const pricingPlanData = pricingPlanSnapshot.data() as Record<string, unknown>;
+  const limits = isRecord(pricingPlanData.limits) ? pricingPlanData.limits : {};
 
   return {
-    activeStudentLimit:
-      normalizeOptionalNumber(pricingPlanData.studentLimit),
+    activeStudentLimit: normalizePositivePlanLimit(
+      pricingPlanData.studentLimit ?? limits.maxStudents,
+      "studentLimit",
+    ),
+    concurrentSessionLimit: normalizePositivePlanLimit(
+      pricingPlanData.concurrentSessionLimit ?? pricingPlanData.concurrencyLimit ??
+        pricingPlanData.maxConcurrentStudents ?? limits.maxConcurrentSessions,
+      "concurrencyLimit",
+    ),
     layer,
     planId: normalizeOptionalString(pricingPlanData.planId) ?? layer,
     planName:
@@ -875,12 +902,16 @@ export class PaymentEventIntegrationService {
       const eventLogSnapshot = await transaction.get(eventLogReference);
 
       if (eventLogSnapshot.exists) {
+        const storedPropagation = eventLogSnapshot.get("claimPropagation");
+        if (!isRecord(storedPropagation)) {
+          throw new PaymentEventIntegrationValidationError(
+            "INTERNAL_ERROR",
+            "Stored Stripe event lacks durable claim propagation authority.",
+          );
+        }
         return {
           billingRecordPath:
             normalizeOptionalString(eventLogSnapshot.get("billingRecordPath")),
-          claimFreshnessSynchronized:
-            eventLogSnapshot.get("claimFreshnessSynchronizedAt") !== undefined &&
-            eventLogSnapshot.get("claimFreshnessSynchronizedAt") !== null,
           duplicate: true,
           eventId: event.id,
           eventLogPath,
@@ -894,6 +925,8 @@ export class PaymentEventIntegrationService {
             normalizeOptionalString(eventLogSnapshot.get("licensePath")),
           licenseVersion:
             normalizeOptionalString(eventLogSnapshot.get("licenseVersion")),
+          propagation: storedPropagation as unknown as
+            StripeWebhookProcessingResult["propagation"],
           status:
             normalizeOptionalString(
               eventLogSnapshot.get("status"),
@@ -976,6 +1009,10 @@ export class PaymentEventIntegrationService {
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: mutationContext.changedBy,
       };
+      if (pricingPlan) {
+        nextLicenseDocument.concurrentSessionLimit =
+          pricingPlan.concurrentSessionLimit;
+      }
 
       const licenseHistoryWrite =
         licenseHistoryService.prepareLicenseHistoryEntry({
@@ -1001,6 +1038,28 @@ export class PaymentEventIntegrationService {
           stripeInvoiceId: mutationContext.stripeInvoiceId ?? undefined,
         });
       nextLicenseDocument.licenseVersion = licenseHistoryWrite.entryId;
+      const instituteData = instituteSnapshot.data() ?? {};
+      const authorizationVersion = nextClaimAuthorizationVersion(
+        instituteData.authorizationVersion,
+      );
+      const instituteRevision = Number.isSafeInteger(instituteData.instituteRevision) &&
+        Number(instituteData.instituteRevision) > 0 ?
+        Number(instituteData.instituteRevision) : 1;
+      const desiredAuthority = buildClaimPropagationDesiredAuthority(
+        instituteId,
+        {
+          ...instituteData,
+          authorizationVersion,
+          instituteRevision,
+          licenseVersion: licenseHistoryWrite.entryId,
+        },
+        nextLicenseDocument,
+      );
+      const propagation = claimPropagationCoordinator.stageOperation(
+        transaction,
+        {desiredAuthority, source: "stripe_entitlement_reconciled"},
+        new Date(eventContext.effectiveDate),
+      );
       const billingRecordDocument = buildBillingRecordDocument(eventContext);
       const billingRecordPath =
         eventContext.invoiceId ?
@@ -1023,7 +1082,11 @@ export class PaymentEventIntegrationService {
       );
       transaction.set(
         instituteReference,
-        {licenseVersion: licenseHistoryWrite.entryId},
+        {
+          authorizationVersion,
+          instituteRevision,
+          licenseVersion: licenseHistoryWrite.entryId,
+        },
         {merge: true},
       );
 
@@ -1037,7 +1100,7 @@ export class PaymentEventIntegrationService {
 
       transaction.create(eventLogReference, {
         billingRecordPath,
-        claimFreshnessSynchronizedAt: null,
+        claimPropagation: propagation,
         createdAt: FieldValue.serverTimestamp(),
         eventId: event.id,
         eventType: event.type,
@@ -1060,7 +1123,6 @@ export class PaymentEventIntegrationService {
 
       return {
         billingRecordPath,
-        claimFreshnessSynchronized: false,
         duplicate: false,
         eventId: event.id,
         eventLogPath,
@@ -1069,31 +1131,13 @@ export class PaymentEventIntegrationService {
         licenseHistoryPath: licenseHistoryWrite.path,
         licensePath: currentLicensePath,
         licenseVersion: licenseHistoryWrite.entryId,
+        propagation,
         status: "processed",
         stripeWebhookStatus: eventContext.webhookStatus,
       } satisfies StripeWebhookProcessingResult;
     });
 
-    let finalResult: StripeWebhookProcessingResult = result;
-
-    if (
-      finalResult.status === "processed" &&
-      !finalResult.claimFreshnessSynchronized &&
-      finalResult.licenseVersion
-    ) {
-      await licenseClaimFreshnessService.propagateInstituteLicenseChange({
-        instituteId,
-        licenseVersion: finalResult.licenseVersion,
-      });
-      await eventLogReference.set({
-        claimFreshnessSynchronizedAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      }, {merge: true});
-      finalResult = {
-        ...finalResult,
-        claimFreshnessSynchronized: true,
-      };
-    }
+    const finalResult: StripeWebhookProcessingResult = result;
 
     if (
       !finalResult.duplicate &&

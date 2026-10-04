@@ -11,7 +11,7 @@ import {
   SubmissionValidationError,
 } from "../services/submission";
 import {dataTierPartitionService} from "../services/dataTierPartition";
-import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
+import {verifyCurrentAuthorityIdToken} from "../services/instituteAuthorityEnforcement";
 import {
   createMethodMiddleware,
   createMiddlewareHandler,
@@ -254,6 +254,5 @@ export const createExamSessionSubmitHandler = (
 
 export const handleExamSessionSubmitRequest = createExamSessionSubmitHandler({
   submitSession: submissionService.submitSession.bind(submissionService),
-  verifyIdToken: (idToken: string) =>
-    getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
+  verifyIdToken: verifyCurrentAuthorityIdToken,
 });

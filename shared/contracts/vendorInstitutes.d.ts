@@ -2,6 +2,23 @@
 
 export type VendorInstituteAccessStatus = "active" | "suspended";
 
+export type VendorInstituteClaimPropagationState =
+  | "not_required"
+  | "pending"
+  | "processing"
+  | "retrying"
+  | "succeeded"
+  | "superseded"
+  | "failed";
+
+export interface VendorInstituteClaimPropagationReceipt {
+  authorizationVersion: number;
+  browserDeadlineAt: string | null;
+  operationId: string | null;
+  serverDeadlineAt: string | null;
+  state: VendorInstituteClaimPropagationState;
+}
+
 export type VendorInstituteLifecycleState =
   | "onboarding"
   | "active"
@@ -172,8 +189,9 @@ export interface VendorInstituteMutationReceipt {
   deletion: VendorInstituteDeletionSummary;
   instituteId: string;
   lifecycleState: VendorInstituteLifecycleState;
-  /** BWM-036 owns institute-wide claim fan-out and the propagation SLO. */
-  propagationState: "not_required" | "pending_bwm_036";
+  /** Durable BWM-036 operation receipt; no per-user details are exposed. */
+  propagation: VendorInstituteClaimPropagationReceipt;
+  propagationState: VendorInstituteClaimPropagationState;
   replayed: boolean;
   revision: number;
 }

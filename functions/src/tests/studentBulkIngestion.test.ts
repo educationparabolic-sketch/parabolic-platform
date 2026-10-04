@@ -112,6 +112,31 @@ const createAuthStub = () => {
   };
 };
 
+const seedInstituteAuthority = async (instituteId: string): Promise<void> => {
+  const licenseVersion = `license_${instituteId}_v1`;
+  const license = {
+    activeStudentLimit: 100,
+    concurrentSessionLimit: 20,
+    currentLayer: "L2",
+    expiryDate: "2099-12-31T23:59:59.000Z",
+    featureFlags: {},
+    gracePeriodEndsAt: null,
+    licenseState: "active",
+    licenseVersion,
+  };
+  await Promise.all([
+    firestore.doc(`institutes/${instituteId}`).set({
+      authorizationVersion: 1,
+      instituteId,
+      licenseVersion,
+      name: "Bulk Ingestion Institute",
+      status: "active",
+    }),
+    firestore.doc(`institutes/${instituteId}/license/current`).set(license),
+    firestore.doc(`institutes/${instituteId}/license/main`).set(license),
+  ]);
+};
+
 test.after(async () => {
   await getFirebaseAdminApp().delete();
 });
@@ -146,6 +171,31 @@ test(
             userMissing: false,
           };
         },
+        synchronizeClaimsAndRevokeSessions: async ({uid}) => {
+          await authStub.setCustomUserClaims(uid, {
+            authorizationVersion: 1,
+            featureFlags: {
+              adaptivePhase: false,
+              controlledMode: false,
+              governanceAccess: false,
+              hardMode: false,
+              riskOverview: false,
+            },
+            instituteId,
+            isSuspended: false,
+            licenseLayer: "L2",
+            licenseState: "active",
+            licenseVersion: `license_${instituteId}_v1`,
+            role: "student",
+            studentId: uid,
+          });
+          return {
+            claimsChanged: true,
+            refreshTokensRevoked: true,
+            uid,
+            userMissing: false,
+          };
+        },
       },
     });
 
@@ -154,10 +204,7 @@ test(
     await deleteCollectionDocuments(studentsPath);
     await deleteDocumentIfPresent(`institutes/${instituteId}`);
 
-    await firestore.doc(`institutes/${instituteId}`).set({
-      instituteId,
-      name: "Build M2 Institute",
-    });
+    await seedInstituteAuthority(instituteId);
     await firestore.doc(existingStudentPath).set({
       batch: "Batch-B",
       batchId: "Batch-B",
@@ -226,8 +273,19 @@ test(
     assert.equal(emailQueueSnapshot.docs[0]?.get("payload")?.studentId, "STU-001");
     assert.equal(authStub.users.get("STU-001")?.email, "new.student@example.com");
     assert.deepEqual(authStub.users.get("STU-001")?.claims, {
+      authorizationVersion: 1,
+      featureFlags: {
+        adaptivePhase: false,
+        controlledMode: false,
+        governanceAccess: false,
+        hardMode: false,
+        riskOverview: false,
+      },
       instituteId,
+      isSuspended: false,
       licenseLayer: "L2",
+      licenseState: "active",
+      licenseVersion: `license_${instituteId}_v1`,
       role: "student",
       studentId: "STU-001",
     });
@@ -270,7 +328,7 @@ test(
     await deleteCollectionDocuments(studentsPath);
     await deleteDocumentIfPresent(`institutes/${instituteId}`);
 
-    await firestore.doc(`institutes/${instituteId}`).set({instituteId});
+    await seedInstituteAuthority(instituteId);
     await firestore.doc(`${studentsPath}/STU-900`).set({
       batch: "Batch-A",
       batchId: "Batch-A",
@@ -332,15 +390,8 @@ test(
     const instituteId = "inst_build_m2_reconcile";
     const studentsPath = `institutes/${instituteId}/students`;
     const authStub = createAuthStub();
-    const setClaims = authStub.setCustomUserClaims;
-    let failClaimsOnce = true;
-    authStub.setCustomUserClaims = async (uid, claims) => {
-      if (failClaimsOnce) {
-        failClaimsOnce = false;
-        throw new Error("injected post-commit Auth failure");
-      }
-      await setClaims(uid, claims);
-    };
+    let failSynchronizationOnce = true;
+    let synchronizationCount = 0;
     const service = new StudentBulkIngestionService({
       auth: authStub,
       firestore,
@@ -349,10 +400,31 @@ test(
         administrativeActionLoggingService.logStudentImport.bind(
           administrativeActionLoggingService,
         ),
+      sessionSecurity: {
+        clearClaimsAndRevokeSessions: async (uid) => ({
+          claimsChanged: true,
+          refreshTokensRevoked: true,
+          uid,
+          userMissing: false,
+        }),
+        synchronizeClaimsAndRevokeSessions: async ({uid}) => {
+          synchronizationCount += 1;
+          if (failSynchronizationOnce) {
+            failSynchronizationOnce = false;
+            throw new Error("injected post-commit Auth failure");
+          }
+          return {
+            claimsChanged: true,
+            refreshTokensRevoked: true,
+            uid,
+            userMissing: false,
+          };
+        },
+      },
     });
     await deleteCollectionDocuments(`institutes/${instituteId}/auditLogs`);
     await deleteCollectionDocuments(studentsPath);
-    await firestore.doc(`institutes/${instituteId}`).set({instituteId});
+    await seedInstituteAuthority(instituteId);
     const request = service.normalizeRequest({
       actorId: "admin_build_m2_reconcile",
       actorLicenseLayer: "L2",
@@ -382,12 +454,7 @@ test(
     assert.equal(replay.disposition, "replayed");
     assert.equal(audits.size, 1);
     assert.equal(jobs.size, 1);
-    assert.deepEqual(authStub.users.get("STU-RECONCILE")?.claims, {
-      instituteId,
-      licenseLayer: "L2",
-      role: "student",
-      studentId: "STU-RECONCILE",
-    });
+    assert.equal(synchronizationCount, 2);
 
     await Promise.all([
       ...audits.docs.map((document) => document.ref.delete()),

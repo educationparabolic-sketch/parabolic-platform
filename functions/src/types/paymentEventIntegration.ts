@@ -1,6 +1,7 @@
 import {StandardApiErrorCode} from "./apiResponse";
 import {BillingSnapshotWebhookStatus} from "./billingSnapshot";
 import {LicenseLayer} from "./middleware";
+import type {ClaimPropagationPublicReceipt} from "../../../shared/contracts/claimPropagation";
 
 export type StripeWebhookEventType =
   | "checkout.session.completed"
@@ -12,7 +13,6 @@ export type StripeWebhookEventType =
 
 export interface StripeWebhookProcessingResult {
   billingRecordPath: string | null;
-  claimFreshnessSynchronized: boolean;
   duplicate: boolean;
   eventId: string;
   eventLogPath: string;
@@ -21,6 +21,7 @@ export interface StripeWebhookProcessingResult {
   licenseHistoryPath: string | null;
   licensePath: string | null;
   licenseVersion: string | null;
+  propagation: ClaimPropagationPublicReceipt;
   status: "ignored" | "processed";
   stripeWebhookStatus: BillingSnapshotWebhookStatus | null;
 }

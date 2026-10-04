@@ -15,6 +15,29 @@ gcpMetadata.setGCPResidency(false);
 
 const firestore = getFirestore();
 
+const seedInstituteAuthority = async (): Promise<void> => {
+  const licenseVersion = "license_inst_build_30_v1";
+  const license = {
+    activeStudentLimit: 100,
+    concurrentSessionLimit: 20,
+    currentLayer: "L2",
+    expiryDate: "2099-12-31T23:59:59.000Z",
+    featureFlags: {controlledMode: true, hardMode: true},
+    gracePeriodEndsAt: null,
+    licenseState: "active",
+    licenseVersion,
+  };
+  await Promise.all([
+    firestore.doc("institutes/inst_build_30").set({
+      authorizationVersion: 1,
+      licenseVersion,
+      status: "active",
+    }),
+    firestore.doc("institutes/inst_build_30/license/current").set(license),
+    firestore.doc("institutes/inst_build_30/license/main").set(license),
+  ]);
+};
+
 const seedSession = async (
   sessionPath: string,
   status = "active",
@@ -25,6 +48,7 @@ const seedSession = async (
   const pathSegments = sessionPath.split("/");
   const sessionId = pathSegments[pathSegments.length - 1] ?? "session_build_30";
 
+  await seedInstituteAuthority();
   await firestore.doc(sessionPath).set({
     answerMap: {
       q01: {
@@ -36,6 +60,7 @@ const seedSession = async (
     },
     createdAt: Timestamp.fromMillis(sessionStartMillis),
     instituteId: "inst_build_30",
+    licenseSnapshot: {currentLayer: "L2"},
     mode,
     questionTimeMap: {
       q01: {
@@ -1145,5 +1170,43 @@ test(
     assert.equal(answerMap.q02?.timeSpentSeconds, 60);
 
     await deleteIfPresent(sessionPath);
+  },
+);
+
+test(
+  "persistIncrementalAnswers preserves recoverable state while institute is suspended",
+  async () => {
+    const sessionPath =
+      "institutes/inst_build_30/academicYears/2026/" +
+      "runs/run_build_30/sessions/session_build_36_suspended_write";
+    await deleteIfPresent(sessionPath);
+    await seedSession(sessionPath, "active", "Controlled");
+    const before = await firestore.doc(sessionPath).get();
+    await firestore.doc("institutes/inst_build_30").update({status: "suspended"});
+
+    try {
+      await assert.rejects(
+        answerBatchService.persistIncrementalAnswers({
+          answers: [mcqAnswer("q02", "B", Date.now(), 20)],
+          context: {
+            instituteId: "inst_build_30",
+            runId: "run_build_30",
+            sessionId: "session_build_36_suspended_write",
+            studentId: "student_build_30",
+            yearId: "2026",
+          },
+          millisecondsSinceLastWrite: 5000,
+        }),
+        (error: unknown) =>
+          error instanceof SessionStartValidationError &&
+          error.code === "FORBIDDEN",
+      );
+      const preserved = await firestore.doc(sessionPath).get();
+      assert.equal(preserved.get("status"), "active");
+      assert.deepEqual(preserved.get("answerMap"), before.get("answerMap"));
+    } finally {
+      await firestore.doc("institutes/inst_build_30").update({status: "active"});
+      await deleteIfPresent(sessionPath);
+    }
   },
 );
