@@ -64,6 +64,7 @@ const selectedSourceSuites = [
   "vendorSupportApi.test",
   "vendorInstitutesApi.test",
   "vendorCommercialApi.test",
+  "vendorIntelligenceApi.test",
 ];
 
 const baselineExclusions = new Map([

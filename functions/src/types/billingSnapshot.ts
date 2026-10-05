@@ -30,6 +30,7 @@ export interface BillingSnapshotDocument {
   activeStudentCount: number;
   billingCycle: "monthly";
   createdAt: Timestamp | FirebaseFirestore.FieldValue;
+  currency: string | null;
   cycleEnd: string;
   cycleId: string;
   cycleStart: string;
@@ -42,6 +43,7 @@ export interface BillingSnapshotDocument {
   licenseLayer: string;
   licenseTier: string;
   monthlyRevenue: number | null;
+  monthlyRevenueMinor: number | null;
   peakActiveStudents: number;
   peakUsage: number;
   schemaVersion: 1;

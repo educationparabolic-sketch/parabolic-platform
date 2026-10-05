@@ -174,11 +174,13 @@ const resolvePricingPlanMetrics = (
   pricingPlanData: unknown,
 ): {
   basePriceMonthly: number | null;
+  currency: string | null;
   pricePerStudent: number | null;
 } => {
   if (!isRecord(pricingPlanData)) {
     return {
       basePriceMonthly: null,
+      currency: null,
       pricePerStudent: null,
     };
   }
@@ -189,9 +191,16 @@ const resolvePricingPlanMetrics = (
   const pricePerStudent = normalizeOptionalNumber(
     pricingPlanData.pricePerStudent,
   );
+  const price = isRecord(pricingPlanData.price) ? pricingPlanData.price : {};
+  const currencyValue = (
+    normalizeOptionalString(pricingPlanData.currency) ??
+    normalizeOptionalString(price.currency)
+  )?.toUpperCase() ?? null;
 
   return {
     basePriceMonthly,
+    currency: currencyValue && /^[A-Z]{3}$/u.test(currencyValue) ?
+      currencyValue : null,
     pricePerStudent,
   };
 };
@@ -299,6 +308,7 @@ const buildUsageMeterDocument = (
     activeStudentLimit: number | null;
     assignedStudentsCount: number;
     assignmentsCreated: number;
+    currency: string | null;
     cycleId: string;
     lastAssignmentRunId?: string;
     overLimitTimestamp: Timestamp | FirebaseFirestore.FieldValue | null;
@@ -330,6 +340,7 @@ const buildUsageMeterDocument = (
     assignmentsCreated: input.assignmentsCreated,
     basePriceMonthly: input.basePriceMonthly,
     billingTierCompliance: !overLimit,
+    currency: input.currency,
     cycleId: input.cycleId,
     lastAssignmentRunId:
       input.lastAssignmentRunId ??
@@ -446,9 +457,11 @@ export class UsageMeteringService {
             .collection(PRICING_PLANS_COLLECTION)
             .doc(pricingPlanId))).data() :
           undefined;
-        const {basePriceMonthly, pricePerStudent} = resolvePricingPlanMetrics(
-          pricingPlanData,
-        );
+        const {
+          basePriceMonthly,
+          currency,
+          pricePerStudent,
+        } = resolvePricingPlanMetrics(pricingPlanData);
         const activeStudentLimit = resolveActiveStudentLimit(
           licenseSnapshot.data(),
           pricingPlanData,
@@ -461,6 +474,7 @@ export class UsageMeteringService {
             currentAssignedStudentsCount + recipientStudentIds.length,
           assignmentsCreated: currentAssignmentsCreated + 1,
           basePriceMonthly,
+          currency,
           cycleId,
           lastAssignmentRunId: runId,
           overLimitTimestamp:
@@ -572,9 +586,11 @@ export class UsageMeteringService {
             .collection(PRICING_PLANS_COLLECTION)
             .doc(pricingPlanId))).data() :
           undefined;
-        const {basePriceMonthly, pricePerStudent} = resolvePricingPlanMetrics(
-          pricingPlanData,
-        );
+        const {
+          basePriceMonthly,
+          currency,
+          pricePerStudent,
+        } = resolvePricingPlanMetrics(pricingPlanData);
         const activeStudentLimit = resolveActiveStudentLimit(
           licenseSnapshot.data(),
           pricingPlanData,
@@ -603,6 +619,7 @@ export class UsageMeteringService {
             currentData?.assignmentsCreated,
           ),
           basePriceMonthly,
+          currency,
           cycleId,
           overLimitTimestamp:
             currentData?.overLimit === true ?
@@ -722,9 +739,11 @@ export class UsageMeteringService {
             .collection(PRICING_PLANS_COLLECTION)
             .doc(pricingPlanId))).data() :
           undefined;
-        const {basePriceMonthly, pricePerStudent} = resolvePricingPlanMetrics(
-          pricingPlanData,
-        );
+        const {
+          basePriceMonthly,
+          currency,
+          pricePerStudent,
+        } = resolvePricingPlanMetrics(pricingPlanData);
         const activeStudentLimit = resolveActiveStudentLimit(
           licenseSnapshot.data(),
           pricingPlanData,
@@ -745,6 +764,7 @@ export class UsageMeteringService {
             currentData?.assignmentsCreated,
           ),
           basePriceMonthly,
+          currency,
           cycleId,
           lastAssignmentRunId: normalizeOptionalString(
             currentData?.lastAssignmentRunId,

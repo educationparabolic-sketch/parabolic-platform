@@ -1,26 +1,27 @@
+import {
+  intelligenceReadMiddlewares,
+  parseVendorIntelligenceQuery,
+  VendorIntelligenceIdentityDependencies,
+} from "./vendorIntelligenceReadBoundary";
 import * as functions from "firebase-functions";
-import {DecodedIdToken} from "firebase-admin/auth";
 import {
   ComputeVendorLayerDistributionSuccessResponse,
 } from "../types/vendorLayerDistribution";
 import {sendErrorResponse} from "../services/apiResponse";
 import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
-import {createAuthenticationMiddleware} from "../middleware/auth";
 import {
-  createMethodMiddleware,
   createMiddlewareHandler,
 } from "../middleware/framework";
-import {createRoleAuthorizationMiddleware} from "../middleware/role";
 import {MiddlewareRequest} from "../types/middleware";
 import {
   vendorLayerDistributionService,
   VendorLayerDistributionError,
 } from "../services/vendorLayerDistribution";
 
-interface VendorLayerDistributionDependencies {
+interface VendorLayerDistributionDependencies
+  extends VendorIntelligenceIdentityDependencies {
   computeLayerDistribution:
     typeof vendorLayerDistributionService.computeLayerDistribution;
-  verifyIdToken: (idToken: string) => Promise<DecodedIdToken>;
 }
 
 const buildSuccessResponse = (
@@ -45,7 +46,9 @@ export const createVendorLayerDistributionHandler = (
     request: MiddlewareRequest,
     response: functions.Response,
   ): Promise<void> => {
-    const result = await dependencies.computeLayerDistribution();
+    const result = await dependencies.computeLayerDistribution(
+      parseVendorIntelligenceQuery(request),
+    );
 
     response.status(200).json(
       buildSuccessResponse(
@@ -55,15 +58,7 @@ export const createVendorLayerDistributionHandler = (
       ),
     );
   },
-  middlewares: [
-    createMethodMiddleware("POST"),
-    createAuthenticationMiddleware(dependencies),
-    createRoleAuthorizationMiddleware({
-      allowedRoles: ["vendor"],
-      forbiddenMessage:
-        "Only vendor roles can access vendor layer distribution analytics.",
-    }),
-  ],
+  middlewares: intelligenceReadMiddlewares(dependencies),
   onError: (error, context): boolean => {
     if (error instanceof VendorLayerDistributionError) {
       context.logger.warn("Vendor layer distribution request rejected.", {
@@ -74,7 +69,8 @@ export const createVendorLayerDistributionHandler = (
         context.response,
         context.requestId,
         error.code,
-        error.message,
+        error.code === "INTERNAL_ERROR" ?
+          "Vendor intelligence authority is unavailable." : error.message,
       );
       return true;
     }
@@ -90,6 +86,7 @@ export const handleVendorLayerDistributionRequest =
       vendorLayerDistributionService.computeLayerDistribution.bind(
         vendorLayerDistributionService,
       ),
+    getUser: (uid) => getFirebaseAdminApp().auth().getUser(uid),
     verifyIdToken: (idToken: string) =>
       getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
   });

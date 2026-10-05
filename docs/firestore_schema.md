@@ -2,7 +2,7 @@
 
 This document provides a simplified reference of the Firestore data hierarchy.
 
-Last reconciled: 2026-10-04 (`BWM-036` current institute authority, limit, and active-Exam enforcement)
+Last reconciled: 2026-10-05 (`BWM-037` secured intelligence route registration)
 
 The authoritative schema definition exists in:
 
@@ -21,7 +21,11 @@ The following collections exist at the Firestore root.
 
 vendorConfig/{docId}
 
-vendorAggregates/{aggregateId}
+vendorAggregates/{instituteId}
+
+vendorIntelligenceSnapshots/{monthId}
+
+vendorIntelligenceRollups/{monthId}
 
 globalCalibration/{versionId}
 
@@ -1021,13 +1025,91 @@ Calibration versions influence risk scoring and behavioral analysis.
 
 ---
 
-# Vendor Aggregates
+# Vendor Intelligence Aggregate Authority
 
-Vendor analytics operate on cross-institute summary data.
+BWM-037 separates mutable current institute projections, immutable complete
+portfolio snapshots, and resumable rollup operations:
 
-vendorAggregates/monthly/{monthId}
+```text
+vendorAggregates/{instituteId}
+vendorIntelligenceSnapshots/{monthId}
+vendorIntelligenceRollups/{monthId}
+vendorIntelligenceRollups/{monthId}/items/{instituteId}
+```
 
-These documents contain global metrics without exposing raw institute data.
+`vendorAggregates/{instituteId}` is the current normalized projection for one
+institute. It is mutable only by the authoritative rollup and contains strict
+schema/version/source metadata plus normalized license layer L0-L3, lifecycle,
+integer minor-unit ISO-currency revenue, billed Student counts, engagement,
+and source freshness. A missing source value remains null; it is never coerced
+to zero, assigned to L0, or replaced by static data.
+
+`vendorIntelligenceSnapshots/{monthId}` is the immutable portfolio snapshot
+for strict `YYYY-MM` month identity. It records `schemaVersion`,
+`sourceFingerprint`, `monthId`, `generatedAt`, `status`, source cutoff/freshness,
+currency, and the bounded revenue, layer, churn, forecast, and readiness
+aggregates declared in `shared/contracts/vendorIntelligence.d.ts`. Only a
+strictly valid `complete` snapshot may be served. Reads consume at most 12
+complete monthly snapshots, and at least 24 complete months are retained.
+
+`vendorIntelligenceRollups/{monthId}` is the durable resumable operation for
+the month, including state, lease/checkpoint, source fingerprint, attempt/error
+metadata, and the last installed complete snapshot. Failed or incomplete work
+never replaces the latest complete snapshot. A request for a month with no
+values reports explicit `empty`; fallback to a prior complete month reports
+`stale` plus the actual source month; a malformed supposedly complete snapshot
+fails closed.
+
+Permitted rollup inputs are normalized aggregate authorities only: current
+institute metadata and license state, root monthly `billingSnapshots`,
+immutable institute `licenseHistory`, completed governance snapshots, and
+monthly `usageMeter` documents. The rollup and read APIs consume aggregate-only
+inputs—never raw Students or sessions, answers, run contents, or operational
+cross-institute scans.
+
+`VendorIntelligenceRollupService` is the executable writer. Its operation uses
+`collecting -> installing -> complete` phases and stages deterministic records
+under `vendorIntelligenceRollups/{monthId}/items/{instituteId}`. Collection and
+installation use 50-document pages (hard cap 100) with at most 20 pages per
+invocation, a five-minute lease, durable document-ID cursors, five retryable
+source/write attempts, safe error codes, and a rolling SHA-256 source
+fingerprint. A bounded continuation returns to `pending`; a source/write error
+enters `failed_retryable` without creating or replacing a complete snapshot.
+The snapshot is created atomically with the operation's final `complete` state
+only after every staged item has been installed into `vendorAggregates`.
+
+The five intelligence readers query only `vendorIntelligenceSnapshots` and the
+`items` subcollection below the matching completed rollup. Snapshot selection
+uses an ascending document-ID range capped at 12 and then selects the latest
+eligible complete month in memory, avoiding unsupported descending key scans.
+Revenue detail orders staged items by `monthlyRecurringRevenue.amountMinor` and
+limits the result to 50. Inactivity detail uses the single-field
+`lastActivityAt` range/order and reads at most 51 items: 50 public details plus
+one sentinel. If the sentinel exists, `inactiveInstituteCount` is `null`
+instead of a misleading truncated total. Readers do not access root billing,
+institute, license-history, usage, Student, session, answer, or run collections.
+
+The existing monthly topology is ordered governance -> billing -> Vendor
+rollup. `billingSnapshotMonthly` invokes the rollup after producing the same
+strict month, so no new schedule export exists. Billing snapshots carry paired
+nullable `currency` and `monthlyRevenueMinor`; available money requires an
+uppercase three-letter currency and a non-negative safe integer. Mixed
+currencies fail the rollup rather than being added.
+
+Retention counts portfolio documents, keeps at least the newest 24 complete
+months, and deletes at most 12 oldest documents per successful run. Rollup
+queries require only automatic single-field indexes: institute and staged-item
+document IDs, license-history `effectiveDate`, academic-year `status`, and
+portfolio document ID. No new composite index is required locally; BWM-053
+owns remote index/schedule deployment and backfill qualification. The legacy
+ambiguous `vendorAggregates/monthly/{monthId}` path is not canonical. The five
+read routes VEN-31..VEN-35 are registered behind revocation-checked current
+Vendor authority and `vendor.intelligence.read`. Firestore client rules remain
+deny-by-default. Their snapshot document-ID range, staged-item revenue order,
+and inactivity range/order require only automatic single-field indexes;
+`monthlyRecurringRevenue.amountMinor` and `lastActivityAt` must not be exempted
+from item indexing. No composite index is added; BWM-053 owns remote index
+qualification. Browser adoption remains a later BWM-037 substep.
 
 ---
 

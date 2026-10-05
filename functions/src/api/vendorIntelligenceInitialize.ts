@@ -1,23 +1,26 @@
+import {
+  intelligenceReadMiddlewares,
+  parseVendorIntelligenceQuery,
+  VendorIntelligenceIdentityDependencies,
+} from "./vendorIntelligenceReadBoundary";
 import * as functions from "firebase-functions";
-import {DecodedIdToken} from "firebase-admin/auth";
 import {
   InitializeVendorIntelligenceSuccessResponse,
 } from "../types/vendorIntelligence";
 import {
   vendorIntelligenceService,
 } from "../services/vendorIntelligence";
+import {VendorIntelligenceReadError} from "../services/vendorIntelligenceReadModel";
+import {sendErrorResponse} from "../services/apiResponse";
 import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
-import {createAuthenticationMiddleware} from "../middleware/auth";
 import {
-  createMethodMiddleware,
   createMiddlewareHandler,
 } from "../middleware/framework";
-import {createRoleAuthorizationMiddleware} from "../middleware/role";
 import {MiddlewareRequest} from "../types/middleware";
 
-interface VendorIntelligenceInitializeDependencies {
+interface VendorIntelligenceInitializeDependencies
+  extends VendorIntelligenceIdentityDependencies {
   initializePlatform: typeof vendorIntelligenceService.initializePlatform;
-  verifyIdToken: (idToken: string) => Promise<DecodedIdToken>;
 }
 
 const buildSuccessResponse = (
@@ -29,7 +32,7 @@ const buildSuccessResponse = (
 ): InitializeVendorIntelligenceSuccessResponse => ({
   code: "OK",
   data: result,
-  message: "Vendor intelligence platform initialized.",
+  message: "Vendor intelligence readiness loaded.",
   requestId,
   success: true,
   timestamp,
@@ -42,7 +45,9 @@ export const createVendorIntelligenceInitializeHandler = (
     request: MiddlewareRequest,
     response: functions.Response,
   ): Promise<void> => {
-    const result = await dependencies.initializePlatform();
+    const result = await dependencies.initializePlatform(
+      parseVendorIntelligenceQuery(request),
+    );
 
     response.status(200).json(
       buildSuccessResponse(
@@ -52,15 +57,18 @@ export const createVendorIntelligenceInitializeHandler = (
       ),
     );
   },
-  middlewares: [
-    createMethodMiddleware("POST"),
-    createAuthenticationMiddleware(dependencies),
-    createRoleAuthorizationMiddleware({
-      allowedRoles: ["vendor"],
-      forbiddenMessage:
-        "Only vendor roles can initialize the vendor intelligence platform.",
-    }),
-  ],
+  middlewares: intelligenceReadMiddlewares(dependencies),
+  onError: (error, context): boolean => {
+    if (!(error instanceof VendorIntelligenceReadError)) return false;
+    sendErrorResponse(
+      context.response,
+      context.requestId,
+      error.code,
+      error.code === "INTERNAL_ERROR" ?
+        "Vendor intelligence authority is unavailable." : error.message,
+    );
+    return true;
+  },
   service: "VendorIntelligenceInitializeApi",
 });
 
@@ -69,6 +77,7 @@ export const handleVendorIntelligenceInitializeRequest =
     initializePlatform: vendorIntelligenceService.initializePlatform.bind(
       vendorIntelligenceService,
     ),
+    getUser: (uid) => getFirebaseAdminApp().auth().getUser(uid),
     verifyIdToken: (idToken: string) =>
       getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
   });

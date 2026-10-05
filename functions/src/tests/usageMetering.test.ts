@@ -90,6 +90,7 @@ test(
     });
     await firestore.doc(pricingPlanPath).set({
       basePriceMonthly: 100,
+      currency: "INR",
       name: "Growth",
       planId: "L1",
       pricePerStudent: 5,
@@ -141,6 +142,7 @@ test(
     assert.equal(usageMeterData?.activeStudentLimit, 2);
     assert.equal(usageMeterData?.billingTierCompliance, true);
     assert.equal(usageMeterData?.basePriceMonthly, 100);
+    assert.equal(usageMeterData?.currency, "INR");
     assert.equal(usageMeterData?.cycleId, cycleId);
     assert.equal(usageMeterData?.lastAssignmentRunId, runId);
     assert.equal(usageMeterData?.pricePerStudent, 5);
@@ -223,6 +225,7 @@ test(
     });
     await firestore.doc(pricingPlanPath).set({
       basePriceMonthly: 200,
+      currency: "INR",
       name: "Advanced",
       planId: "L2",
       pricePerStudent: 10,
@@ -372,6 +375,7 @@ test(
     });
     await firestore.doc(pricingPlanPath).set({
       basePriceMonthly: 100,
+      currency: "INR",
       name: "Growth",
       planId: "L1",
       pricePerStudent: 5,
@@ -459,6 +463,7 @@ test(
     });
     await firestore.doc(pricingPlanPath).set({
       basePriceMonthly: 300,
+      currency: "INR",
       name: "Enterprise",
       planId: "L3",
       pricePerStudent: 20,

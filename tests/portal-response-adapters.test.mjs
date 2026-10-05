@@ -1106,7 +1106,7 @@ test("representative production callers invoke their portal adapters", async () 
     readFile(
       join(
         rootDirectory,
-        "apps/admin/src/features/tests/AdminQuestionBankLibraryPage.tsx",
+        "apps/admin/src/features/tests/questionBankApi.ts",
       ),
       "utf8",
     ),
@@ -1173,11 +1173,18 @@ test("representative production callers invoke their portal adapters", async () 
     ),
   ]);
 
+  const libraryPage = await readFile(
+    join(rootDirectory, "apps/admin/src/features/tests/AdminQuestionBankLibraryPage.tsx"),
+    "utf8",
+  );
+  assert.match(libraryPage, /from ["']\.\/questionBankApi["']/u);
+  assert.match(libraryPage, /getQuestionLibrary\(/u);
+
   for (const [index, adapterName] of [
     "adaptAdminOverviewResult",
     "adaptAdminAnalyticsResult",
     "adaptAdminQuestionLibraryResult",
-    "adaptAdminQuestionBulkResult",
+    null, // BWM-027 replaced direct bulk upload with validated package commands.
     "adaptAdminTestTemplateListResult",
     "adaptAdminTestTemplateCreateResult",
     "adaptAdminRunCreateResult",
@@ -1188,6 +1195,16 @@ test("representative production callers invoke their portal adapters", async () 
     "adaptExamSubmitResult",
     "adaptVendorCalibrationPushResult",
   ].entries()) {
+    if (adapterName === null) {
+      assert.match(sources[index], /await validateQuestionPackageWithApi\(/u);
+      assert.match(sources[index], /await commitQuestionPackage\(/u);
+      assert.match(sources[index], /from ["']\.\/questionBankApi["']/u);
+      assert.match(sources[2], /export async function validateQuestionPackage\(/u);
+      assert.match(sources[2], /export async function commitQuestionPackage\(/u);
+      assert.match(sources[2], /rows: array\(raw.rows, route, "rows"\)\.map/u);
+      assert.match(sources[2], /packageRevision: positiveInteger\(raw.packageRevision/u);
+      continue;
+    }
     assert.match(sources[index], new RegExp(`${adapterName}(?:<[^>]+>)?\\(`));
   }
 });

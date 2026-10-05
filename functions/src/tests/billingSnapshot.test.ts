@@ -72,6 +72,7 @@ test(
     });
     await firestore.doc(usageMeterPath).set({
       activeStudentCount: 118,
+      currency: "INR",
       cycleId,
       peakActiveStudents: 126,
       peakStudentUsage: 126,
@@ -95,6 +96,7 @@ test(
     assert.equal(snapshotData?.cycleId, cycleId);
     assert.equal(snapshotData?.cycleStart, "2026-04-01T00:00:00.000Z");
     assert.equal(snapshotData?.cycleEnd, "2026-04-30T23:59:59.999Z");
+    assert.equal(snapshotData?.currency, "INR");
     assert.equal(snapshotData?.immutable, true);
     assert.equal(snapshotData?.instituteId, instituteId);
     assert.equal(snapshotData?.instituteName, "Build 92 Institute");
@@ -103,6 +105,7 @@ test(
     assert.equal(snapshotData?.licenseLayer, "L2");
     assert.equal(snapshotData?.licenseTier, "L2");
     assert.equal(snapshotData?.monthlyRevenue, 1820);
+    assert.equal(snapshotData?.monthlyRevenueMinor, 182000);
     assert.equal(snapshotData?.peakActiveStudents, 126);
     assert.equal(snapshotData?.peakUsage, 126);
     assert.equal(snapshotData?.schemaVersion, 1);
@@ -154,6 +157,7 @@ test(
     });
     await firestore.doc(usageMeterPath).set({
       activeStudentCount: 42,
+      currency: "INR",
       cycleId,
       peakActiveStudents: 45,
       projectedInvoiceAmount: 620,
@@ -170,6 +174,8 @@ test(
     assert.equal(result.createdCount, 1);
     assert.equal(snapshotData?.licenseTier, "L1");
     assert.equal(snapshotData?.licenseLayer, "L1");
+    assert.equal(snapshotData?.currency, "INR");
+    assert.equal(snapshotData?.monthlyRevenueMinor, 62000);
     assert.equal(snapshotData?.stripeWebhookStatus, "succeeded");
 
     await Promise.all([

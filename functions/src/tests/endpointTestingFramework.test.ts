@@ -108,6 +108,19 @@ import {
 import {PersistAnswerBatchResult} from "../types/sessionAnswerBatch";
 import {SubmissionResult} from "../types/submission";
 import {EnvironmentConfig} from "../types/environment";
+import {InitializeVendorIntelligenceResult} from "../types/vendorIntelligence";
+import {
+  ComputeVendorRevenueAnalyticsResult,
+} from "../types/vendorRevenueAnalytics";
+import {
+  ComputeVendorLayerDistributionResult,
+} from "../types/vendorLayerDistribution";
+import {
+  ComputeVendorChurnTrackingResult,
+} from "../types/vendorChurnTracking";
+import {
+  ComputeVendorRevenueForecastingResult,
+} from "../types/vendorRevenueForecasting";
 
 const createStudentToken = (overrides: Record<string, unknown> = {}) => ({
   instituteId: "inst_build_50",
@@ -141,6 +154,135 @@ const createVendorToken = (overrides: Record<string, unknown> = {}) => ({
   uid: "vendor_build_76",
   ...overrides,
 });
+
+const intelligenceMetadata = {
+  availability: "available" as const,
+  dataAsOfMonth: "2026-04",
+  generatedAt: "2026-05-01T02:00:00.000Z",
+  requestedAsOfMonth: "2026-04",
+  schemaVersion: 1 as const,
+  sources: [],
+  windowEndMonth: "2026-04",
+  windowMonths: 3 as const,
+  windowStartMonth: "2026-02",
+};
+
+const intelligenceReadinessResult: InitializeVendorIntelligenceResult = {
+  metadata: intelligenceMetadata,
+  modules: {
+    aggregateRollup: "ready",
+    churnTracking: "unavailable",
+    layerDistribution: "ready",
+    revenueForecasting: "ready",
+    revenueIntelligence: "ready",
+  },
+  unavailablePanels: {
+    calibrationImpact: {
+      owner: "BWM-038",
+      reason: "owned_by_bwm_038",
+      status: "unavailable",
+    },
+    studentBehaviorSignals: {
+      owner: "BWM-037",
+      reason: "no_authoritative_aggregate",
+      status: "unavailable",
+    },
+    topicWeaknessClusters: {
+      owner: "BWM-037",
+      reason: "no_authoritative_aggregate",
+      status: "unavailable",
+    },
+  },
+};
+
+const money = (amountMinor: number) => ({amountMinor, currency: "INR"});
+
+const revenueAnalyticsResult: ComputeVendorRevenueAnalyticsResult = {
+  current: {
+    activePayingInstitutes: 2,
+    averageRevenuePerInstitute: money(300000),
+    averageRevenuePerStudent: money(2000),
+    month: "2026-04",
+    monthOverMonthGrowthPercent: 20,
+    revenueByLayer: {
+      L0: money(0),
+      L1: money(240000),
+      L2: money(360000),
+      L3: money(0),
+    },
+    revenueVolatilityIndex: 0.09,
+    totalARR: money(7200000),
+    totalMRR: money(600000),
+    totalStudents: 300,
+  },
+  instituteRevenue: [],
+  metadata: intelligenceMetadata,
+  monthlySnapshots: [],
+};
+
+const layerDistributionResult: ComputeVendorLayerDistributionResult = {
+  averageTimeInLayerDays: [],
+  currentLayerPercentages: {L0: 0, L1: 33.33, L2: 33.33, L3: 33.33},
+  instituteCountByLayer: {L0: 0, L1: 1, L2: 1, L3: 1},
+  metadata: intelligenceMetadata,
+  migrationVelocity: [],
+  totalInstitutes: 3,
+  upgradeFrequencyByInstituteSize: [],
+};
+
+const churnTrackingResult: ComputeVendorChurnTrackingResult = {
+  churnByInstituteSize: [],
+  churnByLayer: [],
+  currentMonthDowngrades: [],
+  engagementDeclines: [],
+  inactiveInstituteCount: 1,
+  inactiveInstitutes: [],
+  metadata: intelligenceMetadata,
+  monthlyChurn: null,
+};
+
+const revenueForecastingResult: ComputeVendorRevenueForecastingResult = {
+  infrastructureCostRevenueRatio: {
+    costModelVersion: null,
+    currentCostToRevenueRatioPercent: null,
+    currentEstimatedMonthlyCost: null,
+    projectedCostToRevenueRatioPercent3Months: null,
+    projectedCostToRevenueRatioPercent6Months: null,
+    projectedEstimatedMonthlyCost3Months: null,
+    projectedEstimatedMonthlyCost6Months: null,
+  },
+  instituteAcquisitionProjection: {
+    averageNetNewInstitutesPerMonth: 1,
+    currentInstituteCount: 5,
+    projectedAcquisitionRatePerMonth: 1,
+    projectedInstituteCount3Months: 8,
+    projectedInstituteCount6Months: 11,
+  },
+  metadata: intelligenceMetadata,
+  observedMonthCount: 4,
+  revenueGrowthProjection: {
+    averageMonthlyGrowthRatePercent: 14.29,
+    averageMonthlyRevenueDelta: money(1000000),
+    currentMRR: money(7000000),
+    projectedARR6Months: money(156000000),
+    projectedMRR3Months: money(10000000),
+    projectedMRR6Months: money(13000000),
+  },
+  studentVolumeTrend: {
+    averageMonthlyGrowthRatePercent: 20,
+    averageMonthlyStudentDelta: 100,
+    currentActiveStudents: 500,
+    projectedActiveStudents3Months: 800,
+    projectedActiveStudents6Months: 1100,
+    source: "vendorIntelligenceSnapshots",
+  },
+  upgradeProbability: {
+    currentUpgradeableInstituteCount: null,
+    observedUpgradeCountTrailing6Months: null,
+    projectedUpgradeCountNext6Months: null,
+    trailing6MonthUpgradeProbabilityPercent: null,
+  },
+};
 
 const createDirectorToken = (overrides: Record<string, unknown> = {}) => ({
   instituteId: "inst_build_89",
@@ -2670,55 +2812,15 @@ test(
   "vendor intelligence initialization handler accepts a valid vendor request",
   async () => {
     const handler = createVendorIntelligenceInitializeHandler({
-      initializePlatform: async () => ({
-        moduleStatus: {
-          adoptionMeasurement: "pending",
-          calibrationImpact: "pending",
-          churnTracking: "pending",
-          growthForecasting: "pending",
-          layerDistribution: "pending",
-          revenueIntelligence: "pending",
-          upgradeConversion: "pending",
-        },
-        readySourceCount: 2,
-        snapshotMonth: "2026-04",
-        sourceReadiness: {
-          billingSnapshots: {
-            accessPattern: "collection",
-            collectionPath: "billingSnapshots",
-            isAvailable: false,
-          },
-          governanceSnapshots: {
-            accessPattern: "collectionGroup",
-            collectionPath:
-              "institutes/{instituteId}/academicYears/{yearId}/" +
-              "governanceSnapshots",
-            isAvailable: true,
-          },
-          licenseHistory: {
-            accessPattern: "collectionGroup",
-            collectionPath: "institutes/{instituteId}/licenseHistory",
-            isAvailable: false,
-          },
-          usageMeter: {
-            accessPattern: "collectionGroup",
-            collectionPath: "institutes/{instituteId}/usageMeter",
-            isAvailable: true,
-          },
-          vendorAggregates: {
-            accessPattern: "collection",
-            collectionPath: "vendorAggregates",
-            isAvailable: false,
-          },
-        },
-        totalSourceCount: 5,
-      }),
+      getUser: async () => ({disabled: false, customClaims: {role: "vendor"}}) as never,
+      initializePlatform: async () => intelligenceReadinessResult,
       verifyIdToken: async () => createVendorToken() as never,
     });
     const response = createMockResponse();
 
     await handler(
       createMockRequest({
+        method: "GET",
         headers: {
           authorization: "Bearer build_81_vendor",
         },
@@ -2730,9 +2832,9 @@ test(
     assert.equal(response.statusCode, 200);
     assert.equal((response.body as {code: string}).code, "OK");
     assert.equal(
-      (response.body as {data: {readySourceCount: number}}).data
-        .readySourceCount,
-      2,
+      (response.body as {data: {metadata: {dataAsOfMonth: string}}})
+        .data.metadata.dataAsOfMonth,
+      "2026-04",
     );
   },
 );
@@ -3087,6 +3189,7 @@ test(
   "vendor intelligence initialization handler rejects role violations",
   async () => {
     const handler = createVendorIntelligenceInitializeHandler({
+      getUser: async () => ({disabled: false, customClaims: {role: "vendor"}}) as never,
       initializePlatform: async () => {
         throw new Error("initializePlatform should not be called");
       },
@@ -3096,6 +3199,7 @@ test(
 
     await handler(
       createMockRequest({
+        method: "GET",
         headers: {
           authorization: "Bearer build_81_student",
         },
@@ -3108,7 +3212,7 @@ test(
     assertStructuredError(
       response.body,
       "FORBIDDEN",
-      "Only vendor roles can initialize the vendor intelligence platform.",
+      "Capability vendor.intelligence.read requires Vendor authority.",
     );
   },
 );
@@ -3117,59 +3221,15 @@ test(
   "vendor revenue analytics handler accepts a valid vendor request",
   async () => {
     const handler = createVendorRevenueAnalyticsHandler({
-      computeRevenueAnalytics: async () => ({
-        activePayingInstitutes: 2,
-        averageRevenuePerInstitute: 3000,
-        averageRevenuePerStudent: 20,
-        currentCycleId: "2026-04",
-        instituteRevenue: [
-          {
-            activeStudentCount: 120,
-            annualRecurringRevenue: 43200,
-            averageRevenuePerStudent: 20,
-            currentLayer: "L2",
-            cycleId: "2026-04",
-            instituteId: "inst_build_82_a",
-            instituteName: "Build 82 Institute A",
-            monthlyRecurringRevenue: 3600,
-          },
-        ],
-        monthlySnapshots: [
-          {
-            activePayingInstitutes: 2,
-            averageRevenuePerInstitute: 3000,
-            averageRevenuePerStudent: 20,
-            cycleId: "2026-04",
-            monthOverMonthGrowthPercent: 20,
-            revenueByLayer: {
-              L0: 0,
-              L1: 2400,
-              L2: 3600,
-              L3: 0,
-            },
-            revenueVolatilityIndex: 0.09,
-            totalARR: 72000,
-            totalMRR: 6000,
-            totalStudents: 300,
-          },
-        ],
-        revenueByLayer: {
-          L0: 0,
-          L1: 2400,
-          L2: 3600,
-          L3: 0,
-        },
-        revenueVolatilityIndex: 0.09,
-        snapshotMonth: "2026-04",
-        totalARR: 72000,
-        totalMRR: 6000,
-      }),
+      getUser: async () => ({disabled: false, customClaims: {role: "vendor"}}) as never,
+      computeRevenueAnalytics: async () => revenueAnalyticsResult,
       verifyIdToken: async () => createVendorToken() as never,
     });
     const response = createMockResponse();
 
     await handler(
       createMockRequest({
+        method: "GET",
         headers: {
           authorization: "Bearer build_82_vendor",
         },
@@ -3181,8 +3241,12 @@ test(
     assert.equal(response.statusCode, 200);
     assert.equal((response.body as {code: string}).code, "OK");
     assert.equal(
-      (response.body as {data: {totalMRR: number}}).data.totalMRR,
-      6000,
+      (
+        response.body as {
+          data: {current: {totalMRR: {amountMinor: number}}};
+        }
+      ).data.current.totalMRR.amountMinor,
+      600000,
     );
   },
 );
@@ -3191,6 +3255,7 @@ test(
   "vendor revenue analytics handler rejects role violations",
   async () => {
     const handler = createVendorRevenueAnalyticsHandler({
+      getUser: async () => ({disabled: false, customClaims: {role: "vendor"}}) as never,
       computeRevenueAnalytics: async () => {
         throw new Error("computeRevenueAnalytics should not be called");
       },
@@ -3200,6 +3265,7 @@ test(
 
     await handler(
       createMockRequest({
+        method: "GET",
         headers: {
           authorization: "Bearer build_82_student",
         },
@@ -3212,7 +3278,7 @@ test(
     assertStructuredError(
       response.body,
       "FORBIDDEN",
-      "Only vendor roles can access vendor revenue analytics.",
+      "Capability vendor.intelligence.read requires Vendor authority.",
     );
   },
 );
@@ -3221,71 +3287,15 @@ test(
   "vendor layer distribution handler accepts a valid vendor request",
   async () => {
     const handler = createVendorLayerDistributionHandler({
-      computeLayerDistribution: async () => ({
-        averageTimeInLayerDays: [
-          {
-            averageDays: null,
-            instituteCount: 0,
-            layer: "L0",
-          },
-          {
-            averageDays: 49,
-            instituteCount: 2,
-            layer: "L1",
-          },
-          {
-            averageDays: 36.5,
-            instituteCount: 2,
-            layer: "L2",
-          },
-          {
-            averageDays: 15,
-            instituteCount: 1,
-            layer: "L3",
-          },
-        ],
-        currentLayerPercentages: {
-          L0: 0,
-          L1: 33.33,
-          L2: 33.33,
-          L3: 33.33,
-        },
-        instituteCountByLayer: {
-          L0: 0,
-          L1: 1,
-          L2: 1,
-          L3: 1,
-        },
-        migrationVelocity: [
-          {
-            conversionRatePercent: 100,
-            fromLayer: "L0",
-            migrationsPerMonth: 0.75,
-            observedMonthCount: 4,
-            targetLayerInstituteCount: 3,
-            toLayer: "L1",
-            transitionedInstituteCount: 3,
-          },
-        ],
-        snapshotMonth: "2026-04",
-        totalInstitutes: 3,
-        upgradeFrequencyByInstituteSize: [
-          {
-            averageUpgradesPerInstitute: 2,
-            bucket: "small",
-            instituteCount: 1,
-            institutesWithUpgradeCount: 1,
-            upgradeFrequencyPercent: 100,
-            upgradeTransitionCount: 2,
-          },
-        ],
-      }),
+      getUser: async () => ({disabled: false, customClaims: {role: "vendor"}}) as never,
+      computeLayerDistribution: async () => layerDistributionResult,
       verifyIdToken: async () => createVendorToken() as never,
     });
     const response = createMockResponse();
 
     await handler(
       createMockRequest({
+        method: "GET",
         headers: {
           authorization: "Bearer build_83_vendor",
         },
@@ -3311,6 +3321,7 @@ test(
   "vendor layer distribution handler rejects role violations",
   async () => {
     const handler = createVendorLayerDistributionHandler({
+      getUser: async () => ({disabled: false, customClaims: {role: "vendor"}}) as never,
       computeLayerDistribution: async () => {
         throw new Error("computeLayerDistribution should not be called");
       },
@@ -3320,6 +3331,7 @@ test(
 
     await handler(
       createMockRequest({
+        method: "GET",
         headers: {
           authorization: "Bearer build_83_student",
         },
@@ -3332,7 +3344,7 @@ test(
     assertStructuredError(
       response.body,
       "FORBIDDEN",
-      "Only vendor roles can access vendor layer distribution analytics.",
+      "Capability vendor.intelligence.read requires Vendor authority.",
     );
   },
 );
@@ -3341,70 +3353,15 @@ test(
   "vendor churn tracking handler accepts a valid vendor request",
   async () => {
     const handler = createVendorChurnTrackingHandler({
-      computeChurnTracking: async () => ({
-        churnByInstituteSize: [
-          {
-            baselineInstituteCount: 2,
-            bucket: "medium",
-            churnRate: 0.5,
-            lostInstituteCount: 1,
-          },
-        ],
-        churnByLayer: [
-          {
-            baselineInstituteCount: 2,
-            churnRate: 0.5,
-            layer: "L2",
-            lostInstituteCount: 1,
-          },
-        ],
-        currentCycleDowngrades: [
-          {
-            effectiveDate: "2026-04-05T00:00:00.000Z",
-            fromLayer: "L2",
-            instituteId: "inst_build_84_c",
-            instituteName: "Build 84 Institute C",
-            toLayer: "L1",
-          },
-        ],
-        engagementDeclines: [
-          {
-            currentActiveStudents: 180,
-            currentLayer: "L1",
-            declineCount: 40,
-            dropOffRate: 0.1818,
-            instituteId: "inst_build_84_c",
-            instituteName: "Build 84 Institute C",
-            previousActiveStudents: 220,
-            sizeBucket: "medium",
-          },
-        ],
-        inactiveInstituteCount: 1,
-        inactiveInstitutes: [
-          {
-            currentLayer: "L2",
-            inactiveDays: 31,
-            instituteId: "inst_build_84_b",
-            instituteName: "Build 84 Institute B",
-            lastActivityAt: "2026-03-20T00:00:00.000Z",
-          },
-        ],
-        monthlyChurn: {
-          baselineInstituteCount: 4,
-          churnRate: 0.25,
-          currentCycleId: "2026-04",
-          lostInstituteCount: 1,
-          previousCycleId: "2026-03",
-          retainedInstituteCount: 3,
-        },
-        snapshotMonth: "2026-04",
-      }),
+      getUser: async () => ({disabled: false, customClaims: {role: "vendor"}}) as never,
+      computeChurnTracking: async () => churnTrackingResult,
       verifyIdToken: async () => createVendorToken() as never,
     });
     const response = createMockResponse();
 
     await handler(
       createMockRequest({
+        method: "GET",
         headers: {
           authorization: "Bearer build_84_vendor",
         },
@@ -3418,9 +3375,9 @@ test(
     assert.equal(
       (
         response.body as {
-          data: {monthlyChurn: {lostInstituteCount: number}};
+          data: {inactiveInstituteCount: number};
         }
-      ).data.monthlyChurn.lostInstituteCount,
+      ).data.inactiveInstituteCount,
       1,
     );
   },
@@ -3430,6 +3387,7 @@ test(
   "vendor churn tracking handler rejects role violations",
   async () => {
     const handler = createVendorChurnTrackingHandler({
+      getUser: async () => ({disabled: false, customClaims: {role: "vendor"}}) as never,
       computeChurnTracking: async () => {
         throw new Error("computeChurnTracking should not be called");
       },
@@ -3439,6 +3397,7 @@ test(
 
     await handler(
       createMockRequest({
+        method: "GET",
         headers: {
           authorization: "Bearer build_84_student",
         },
@@ -3451,7 +3410,7 @@ test(
     assertStructuredError(
       response.body,
       "FORBIDDEN",
-      "Only vendor roles can access vendor churn tracking analytics.",
+      "Capability vendor.intelligence.read requires Vendor authority.",
     );
   },
 );
@@ -3460,53 +3419,15 @@ test(
   "vendor revenue forecasting handler accepts a valid vendor request",
   async () => {
     const handler = createVendorRevenueForecastingHandler({
-      computeRevenueForecast: async () => ({
-        infrastructureCostRevenueRatio: {
-          currentCostToRevenueRatioPercent: 1.79,
-          currentEstimatedMonthlyCostInr: 1250,
-          projectedCostToRevenueRatioPercent3Months: 2,
-          projectedCostToRevenueRatioPercent6Months: 1.99,
-          projectedEstimatedMonthlyCostInr3Months: 2000,
-          projectedEstimatedMonthlyCostInr6Months: 2587.5,
-        },
-        instituteAcquisitionProjection: {
-          averageNetNewInstitutesPerMonth: 1,
-          currentInstituteCount: 5,
-          projectedAcquisitionRatePerMonth: 1,
-          projectedInstituteCount3Months: 8,
-          projectedInstituteCount6Months: 11,
-        },
-        observedCycleCount: 4,
-        revenueGrowthProjection: {
-          averageMonthlyGrowthRatePercent: 14.29,
-          averageMonthlyRevenueDelta: 10000,
-          currentMRR: 70000,
-          projectedARR6Months: 1560000,
-          projectedMRR3Months: 100000,
-          projectedMRR6Months: 130000,
-        },
-        snapshotMonth: "2026-04",
-        studentVolumeTrend: {
-          averageMonthlyGrowthRatePercent: 20,
-          averageMonthlyStudentDelta: 100,
-          currentActiveStudents: 500,
-          projectedActiveStudents3Months: 800,
-          projectedActiveStudents6Months: 1100,
-          source: "usageMeter",
-        },
-        upgradeProbability: {
-          currentUpgradeableInstituteCount: 4,
-          observedUpgradeCountTrailing6Months: 2,
-          projectedUpgradeCountNext6Months: 2,
-          trailing6MonthUpgradeProbabilityPercent: 50,
-        },
-      }),
+      getUser: async () => ({disabled: false, customClaims: {role: "vendor"}}) as never,
+      computeRevenueForecast: async () => revenueForecastingResult,
       verifyIdToken: async () => createVendorToken() as never,
     });
     const response = createMockResponse();
 
     await handler(
       createMockRequest({
+        method: "GET",
         headers: {
           authorization: "Bearer build_85_vendor",
         },
@@ -3520,10 +3441,14 @@ test(
     assert.equal(
       (
         response.body as {
-          data: {revenueGrowthProjection: {projectedMRR6Months: number}};
+          data: {
+            revenueGrowthProjection: {
+              projectedMRR6Months: {amountMinor: number};
+            };
+          };
         }
-      ).data.revenueGrowthProjection.projectedMRR6Months,
-      130000,
+      ).data.revenueGrowthProjection.projectedMRR6Months.amountMinor,
+      13000000,
     );
   },
 );
@@ -3532,6 +3457,7 @@ test(
   "vendor revenue forecasting handler rejects role violations",
   async () => {
     const handler = createVendorRevenueForecastingHandler({
+      getUser: async () => ({disabled: false, customClaims: {role: "vendor"}}) as never,
       computeRevenueForecast: async () => {
         throw new Error("computeRevenueForecast should not be called");
       },
@@ -3541,6 +3467,7 @@ test(
 
     await handler(
       createMockRequest({
+        method: "GET",
         headers: {
           authorization: "Bearer build_85_student",
         },
@@ -3553,7 +3480,7 @@ test(
     assertStructuredError(
       response.body,
       "FORBIDDEN",
-      "Only vendor roles can access vendor revenue forecasting.",
+      "Capability vendor.intelligence.read requires Vendor authority.",
     );
   },
 );

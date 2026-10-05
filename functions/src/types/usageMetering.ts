@@ -35,6 +35,7 @@ export interface UsageMeterDocument {
   assignmentsCreated: number;
   basePriceMonthly?: number | null;
   billingTierCompliance: boolean;
+  currency?: string | null;
   cycleId: string;
   overLimit: boolean;
   overLimitSince: Timestamp | FirebaseFirestore.FieldValue | null;

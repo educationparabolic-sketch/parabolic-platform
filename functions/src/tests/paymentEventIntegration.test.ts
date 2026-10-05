@@ -95,6 +95,7 @@ test(
     });
     await firestore.doc(usageMeterPath).set({
       activeStudentCount: 24,
+      currency: "USD",
       cycleId,
       peakActiveStudents: 30,
       projectedInvoiceAmount: 896,
@@ -102,6 +103,7 @@ test(
     });
     await firestore.doc(pricingPlanPath).set({
       basePriceMonthly: 800,
+      currency: "USD",
       name: "Controlled",
       planId: "L2",
       pricePerStudent: 4,
@@ -309,6 +311,7 @@ test(
     });
     await firestore.doc(usageMeterPath).set({
       activeStudentCount: 18,
+      currency: "USD",
       cycleId,
       peakActiveStudents: 21,
       projectedInvoiceAmount: 472,
@@ -316,6 +319,7 @@ test(
     });
     await firestore.doc(pricingPlanPath).set({
       basePriceMonthly: 400,
+      currency: "USD",
       name: "Diagnostic",
       planId: "L1",
       pricePerStudent: 4,

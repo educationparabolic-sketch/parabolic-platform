@@ -1,6 +1,9 @@
 import * as functions from "firebase-functions";
 import {billingSnapshotService} from "../services/billingSnapshot";
 import {systemEventTopologyService} from "../services/systemEventTopology";
+import {
+  vendorIntelligenceRollupService,
+} from "../services/vendorIntelligenceRollup";
 
 export const handleBillingSnapshotSchedule = async (
   context: functions.EventContext,
@@ -11,7 +14,30 @@ export const handleBillingSnapshotSchedule = async (
     {
       eventId: context.eventId,
     },
-    async () => billingSnapshotService.generateBillingSnapshots(),
+    async () => {
+      const billingResult =
+        await billingSnapshotService.generateBillingSnapshots();
+      return systemEventTopologyService.executeEventHandler(
+        "VendorAggregatesUpdated",
+        "billingSnapshotMonthly",
+        {
+          eventId: context.eventId,
+        },
+        async () => {
+          const rollupResult =
+            await vendorIntelligenceRollupService.generateMonthlyRollup({
+              monthId: billingResult.cycleId,
+              workerId: context.eventId,
+            });
+          if (rollupResult.state !== "complete") {
+            throw new Error(
+              "Vendor intelligence rollup requires another bounded retry.",
+            );
+          }
+          return rollupResult;
+        },
+      );
+    },
   );
 };
 

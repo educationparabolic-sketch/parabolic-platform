@@ -74,6 +74,28 @@ const normalizeRequiredCycleId = (
   return normalizedValue;
 };
 
+const normalizeCurrency = (
+  value: unknown,
+): string | null => {
+  const normalizedValue = normalizeOptionalString(value)?.toUpperCase();
+  return normalizedValue && /^[A-Z]{3}$/u.test(normalizedValue) ?
+    normalizedValue : null;
+};
+
+const convertMajorToMinor = (
+  value: number | null,
+): number | null => {
+  if (value === null) return null;
+  const amountMinor = Math.round(value * 100);
+  if (!Number.isSafeInteger(amountMinor) ||
+    Math.abs((amountMinor / 100) - value) > 0.000000001) {
+    throw new BillingSnapshotValidationError(
+      "Billing snapshot revenue must have at most two decimal places.",
+    );
+  }
+  return amountMinor;
+};
+
 const buildDefaultCycleId = (date: Date): string => {
   const previousMonthDate = new Date(Date.UTC(
     date.getUTCFullYear(),
@@ -202,6 +224,13 @@ const buildSnapshotDocument = (
   }
 
   const invoiceAmount = resolveInvoiceAmount(usageMeterData);
+  const resolvedCurrency = normalizeCurrency(usageMeterData.currency) ??
+    normalizeCurrency(licenseData.currency);
+  if (invoiceAmount !== null && resolvedCurrency === null) {
+    throw new BillingSnapshotValidationError(
+      `Billing snapshot requires currency for ${instituteId}.`,
+    );
+  }
   const snapshotId = resolveBillingSnapshotId(instituteId, cycleId);
   const {cycleEnd, cycleStart} = buildCycleBoundary(cycleId);
 
@@ -209,6 +238,7 @@ const buildSnapshotDocument = (
     activeStudentCount,
     billingCycle: "monthly",
     createdAt: FieldValue.serverTimestamp(),
+    currency: resolvedCurrency,
     cycleEnd,
     cycleId,
     cycleStart,
@@ -221,6 +251,7 @@ const buildSnapshotDocument = (
     licenseLayer: licenseTier,
     licenseTier,
     monthlyRevenue: invoiceAmount,
+    monthlyRevenueMinor: convertMajorToMinor(invoiceAmount),
     peakActiveStudents: peakUsage,
     peakUsage,
     schemaVersion: SCHEMA_VERSION,

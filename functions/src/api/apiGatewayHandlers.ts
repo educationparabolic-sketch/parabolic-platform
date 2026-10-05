@@ -62,6 +62,11 @@ import {
 import {handleVendorSupportRequest} from "./vendorSupport";
 import {handleVendorInstitutesRequest} from "./vendorInstitutes";
 import {handleVendorCommercialRequest} from "./vendorCommercial";
+import {handleVendorIntelligenceInitializeRequest} from "./vendorIntelligenceInitialize";
+import {handleVendorRevenueAnalyticsRequest} from "./vendorRevenueAnalytics";
+import {handleVendorLayerDistributionRequest} from "./vendorLayerDistribution";
+import {handleVendorChurnTrackingRequest} from "./vendorChurnTracking";
+import {handleVendorRevenueForecastingRequest} from "./vendorRevenueForecasting";
 
 export type ApiGatewayHandler = (
   request: functions.https.Request,
@@ -110,4 +115,9 @@ Record<string, ApiGatewayHandler>
   vendorCommercial: handleVendorCommercialRequest,
   vendorInstitutes: handleVendorInstitutesRequest,
   vendorSupport: handleVendorSupportRequest,
+  vendorIntelligenceInitialize: handleVendorIntelligenceInitializeRequest,
+  vendorRevenueAnalytics: handleVendorRevenueAnalyticsRequest,
+  vendorLayerDistribution: handleVendorLayerDistributionRequest,
+  vendorChurnTracking: handleVendorChurnTrackingRequest,
+  vendorRevenueForecasting: handleVendorRevenueForecastingRequest,
 });

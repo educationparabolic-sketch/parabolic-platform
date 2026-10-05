@@ -404,6 +404,11 @@ test(
         "VEN-28",
         "VEN-29",
         "VEN-30",
+        "VEN-31",
+        "VEN-32",
+        "VEN-33",
+        "VEN-34",
+        "VEN-35",
       ],
     );
     plannedRoutes.forEach((route) => {
@@ -425,7 +430,7 @@ test("canonical route status accounting is exact", () => {
   });
 
   assert.deepEqual(statusCounts, {
-    implemented: 95,
+    implemented: 100,
     incompatible: 1,
     intentionally_retired: 5,
     missing: 0,

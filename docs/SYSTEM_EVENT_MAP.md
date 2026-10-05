@@ -2,7 +2,7 @@
 
 This document defines the event-driven topology of the platform.
 
-Last reconciled: 2026-10-04 (`BWM-036` current institute authority, limit, and active-Exam enforcement)
+Last reconciled: 2026-10-05 (`BWM-037` secured intelligence route registration)
 
 Each event represents a state transition or trigger that initiates downstream processing.
 
@@ -47,6 +47,10 @@ InsightsGenerated | Analytics engine | Insight snapshots
 BillingWebhookReceived | Stripe webhook | License synchronization
 UsageUpdated | Student activation trigger | Usage metering engine
 ArchiveTriggered | Academic year closure | Archive pipeline
+
+`VendorAggregatesUpdated` now executes the bounded
+`VendorIntelligenceRollupService` from `billingSnapshotMonthly` after that
+schedule has produced the same month's billing snapshots.
 
 BWM-020 separates the persisted runtime lifecycle from the historical `SessionStarted` event label: EXM-01 records `created -> started`, EXM-05 records `started -> active` and deadline expiry, and only the existing `/exam/start` topology emits `SessionStarted`. No additional trigger is introduced.
 
@@ -338,6 +342,27 @@ verification, redacted provider-event retry, exact provider-unavailable replay,
 and fresh-context persistence without fulfilled API mocks or external traffic;
 signed-webhook integration separately proves valid success/failure processing
 and invalid-signature rejection.
+
+BWM-037 VEN-31..VEN-35 are registered synchronous GET aggregate read edges
+through the five existing intelligence exports, current revocation-checked
+Vendor Auth, and `vendor.intelligence.read`. They emit no mutation event and
+consume only immutable complete snapshots plus matching completed-rollup items.
+`VendorIntelligenceRollupService` is the executable
+producer behind `VendorAggregatesUpdated`: the monthly order is governance -> billing -> Vendor rollup, and `billingSnapshotMonthly` invokes it only after
+the matching billing snapshot run completes. This reuses the existing billing
+schedule, so there is no new schedule export. The former nested governance
+no-op is removed. Bounded collection/install pages, durable leases/cursors,
+strict aggregate-only validation, capped retry, immutable complete publication,
+and retention are Firestore authority. The GET handlers and gateway mappings
+add no schedule export or frontend event. BWM-053 retains remote schedule/index deployment and
+backfill qualification. BWM-037 closeout reconciles the executable topology to
+eight domains, 16 events, and 12 engines. Seven existing scheduled exports remain:
+`processEmailQueue`, `dataRetentionPolicyDaily`, `governanceSnapshotMonthly`,
+`billingSnapshotMonthly`, `failureRecoveryRetrySweep`,
+`claimPropagationSweepEveryMinute`, and `supportAttachmentCleanupDaily`.
+Four scheduled event edges in the topology map to three distinct handlers;
+this is not the total scheduled-export inventory. Local emulator verification
+does not claim remote schedule deployment or production qualification.
 
 License-request decisions transact BWM-031's existing request and one-open
 sentinel. Only a reconciled entitlement change updates `license/current` and

@@ -2,7 +2,7 @@
 
 Status: canonical route and response-envelope contract
 
-Last reconciled: 2026-10-04 (`BWM-036` current institute authority, limit, and active-Exam enforcement)
+Last reconciled: 2026-10-05 (`BWM-037` aggregate verification and closeout)
 
 ## Sources of truth
 
@@ -15,8 +15,11 @@ transport for Vendor institute, onboarding, and primary-administrator authority.
 VEN-17..VEN-30 are registered through the shared secured `vendorCommercial`
 transport for request, catalog, subscription, invoice, communication,
 offline-payment, and payment-event authority. The strict mounted
-`/vendor/licensing` caller consumes all fourteen routes. Canonical accounting is 101 routes: 95 implemented, one
-incompatible, zero missing, and five retired; 56 HTTP exports map through 39
+`/vendor/licensing` caller consumes all fourteen routes. VEN-31..VEN-35 are
+registered aggregate-intelligence GET reads requiring current Vendor Auth and
+`vendor.intelligence.read`; mounted intelligence and Overview now consume one strict live adapter.
+Canonical accounting is 106 routes: 100 implemented, one incompatible, zero
+missing, and five retired; 56 HTTP exports map through 44
 gateway handlers.
 
 If prose and the typed manifest disagree about a route key or status, the typed manifest must be corrected and the documentation reconciled in the same change.
@@ -49,13 +52,15 @@ If prose and the typed manifest disagree about a route key or status, the typed 
 - `missing`: no current Functions handler/export implements the canonical contract.
 - `intentionally_retired`: explicit product/architecture evidence says the route must not be served.
 
-Current totals: 95 implemented, 1 incompatible, 0 missing, 5 intentionally retired.
+Current totals: 100 implemented, 1 incompatible, 0 missing, 5 intentionally retired.
 
-Routes marked `planned` in the code manifest are canonical contracts reserved by
-the active owning task and do not count as executable frontend tuples. They stay
-`missing` until an owning implementation substep deliberately registers a
-handler; they may then be backend-ready while a later substep still owns the
-frontend caller. Frontend-declared routes retain bidirectional source coverage.
+Routes marked `planned` in the code manifest retain their original task-reserved
+declaration provenance. They stay `missing` until an owning substep registers a
+handler and may initially be backend-ready before caller adoption. The caller
+inventory records subsequent mounted adoption, including wired reserved routes;
+the historical declaration marker does not disable an implemented route or
+erase an executable caller. Every frontend call must match a manifest key, and
+`frontend` declarations additionally retain reverse source coverage.
 
 ## Canonical route manifest
 
@@ -162,6 +167,11 @@ frontend caller. Frontend-declared routes retain bidirectional source coverage.
 | VEN-28 | `POST /api/v1/vendor/institutes/{instituteId}/invoices/{invoiceId}/offline-payments` | `implemented` | `vendorCommercial` | Current Vendor Auth; two-actor record/verify/reject/void workflow; record alone never marks paid |
 | VEN-29 | `GET /api/v1/vendor/payment-events` | `implemented` | `vendorCommercial` | Current Vendor Auth; redacted bounded reconciliation-event queue with no raw provider payload |
 | VEN-30 | `POST /api/v1/vendor/payment-events/{eventId}/commands` | `implemented` | `vendorCommercial` | Current Vendor Auth; path-targeted replayable reconciliation retry |
+| VEN-31 | `GET /api/v1/vendor/intelligence/readiness` | `implemented` | `vendorIntelligenceInitialize` | Current Vendor Auth plus `vendor.intelligence.read`; bounded aggregate readiness |
+| VEN-32 | `GET /api/v1/vendor/intelligence/revenue` | `implemented` | `vendorRevenueAnalytics` | Current Vendor Auth plus `vendor.intelligence.read`; strict month and 3/6/12-month window |
+| VEN-33 | `GET /api/v1/vendor/intelligence/layer-distribution` | `implemented` | `vendorLayerDistribution` | Current Vendor Auth plus `vendor.intelligence.read`; exact L0-L3 aggregate authority |
+| VEN-34 | `GET /api/v1/vendor/intelligence/churn` | `implemented` | `vendorChurnTracking` | Current Vendor Auth plus `vendor.intelligence.read`; bounded inactivity and explicit unavailable cohort authority |
+| VEN-35 | `GET /api/v1/vendor/intelligence/revenue-forecasting` | `implemented` | `vendorRevenueForecasting` | Current Vendor Auth plus `vendor.intelligence.read`; bounded aggregate forecast authority |
 
 The detailed request/response mismatch for each incompatible entry is recorded under the same ID in `docs/FRONTEND_API_CALL_INVENTORY.md`.
 
@@ -378,7 +388,103 @@ the older Admin billing reader. All fourteen routes are registered through
 `/vendor/licensing`, exposes loading/empty/permission/validation/conflict/
 provider-unavailable/retry states and bounded cursor navigation, and never
 creates browser invoice, catalog, payment, provider, or settlement authority.
-Only explicit fixture mode retains the legacy commercial showcase. Permanent
+
+## BWM-037 Vendor intelligence contract, readers, and registered routes
+
+`shared/contracts/vendorIntelligence.d.ts` is the dependency-free public DTO,
+filter, freshness, and source-authority boundary for registered VEN-31..VEN-35.
+Each route is a read-only `GET` with optional `asOfMonth` in strict `YYYY-MM`
+form and an optional 3, 6, or 12-month window (default 6). Money is represented
+only as integer minor units paired with uppercase ISO currency, and layer data
+uses exactly L0, L1, L2, and L3. Detail arrays are capped by the contract and
+may not be expanded into raw Student, run, answer, or session data.
+
+The persistence authority separates the mutable current institute projection
+at `vendorAggregates/{instituteId}`, immutable complete monthly portfolio
+snapshots at `vendorIntelligenceSnapshots/{monthId}`, and resumable rollup
+operations at `vendorIntelligenceRollups/{monthId}`. Reads may consume at most
+12 complete portfolio snapshots, and at least 24 complete months must be
+retained. A failed or incomplete rollup never replaces the latest complete
+snapshot. Missing values remain explicit nullable fields, genuinely empty
+results use the declared `empty` availability, a prior complete month is
+labelled `stale` with its actual month, and a malformed supposedly complete
+snapshot fails closed rather than coercing values, defaulting a layer to L0,
+or substituting zero/static data.
+
+`VendorIntelligenceReadModel` now implements that boundary for all five legacy
+services. It selects no more than 12 snapshot document IDs inside the requested
+complete-month horizon, validates every selected schema-v1 complete document,
+and derives revenue, layer, and forecast values only from those immutable
+snapshots. Revenue and inactivity detail comes only from the matching completed
+rollup's staged items and is capped at 50. A 51st inactive item makes the exact
+inactive count unavailable (`null`) while retaining the capped detail page; the
+reader never performs an unbounded count or silently reports a truncated count.
+Migration, layer-duration, downgrade/cohort, upgrade-probability, and
+infrastructure-cost fields remain empty or nullable because the present
+snapshot schema cannot establish them exactly.
+
+The only permitted intelligence inputs are normalized aggregate authorities:
+current institute metadata and license state, monthly root `billingSnapshots`,
+immutable institute `licenseHistory`, completed governance snapshots, and
+monthly `usageMeter` records. Raw Students, sessions, answers, and operational
+collection scans are forbidden. Student behavior and topic-weakness panels are
+declared unavailable because no aggregate authority exists. Calibration impact
+belongs to BWM-038, unified system-health/cost telemetry belongs to BWM-040,
+and remote schedules, index deployment, and backfill qualification belong to
+BWM-053.
+
+`VendorIntelligenceRollupService` now executes after the existing monthly
+billing snapshot inside `billingSnapshotMonthly`, which itself follows the
+monthly governance producer. It enumerates root institutes in 50-document
+pages, stages strict aggregate-only operation items, installs current
+projections in bounded pages, and publishes the immutable portfolio document
+as `complete` only after installation finishes. Five-minute leases, durable
+cursors, capped retries, a rolling SHA-256 source fingerprint, and the prior
+complete snapshot make interruption and malformed-source failure recoverable.
+Snapshot retention keeps at least the newest 24 complete months through capped
+oldest-first cleanup. Billing snapshots now pair nullable monthly revenue with
+uppercase currency and integer minor units before rollup arithmetic.
+
+All five routes invoke the existing five exports through the gateway. Their
+handlers now accept GET only; old direct POST calls return structured 405 with
+`Allow: GET`. They verify Firebase ID tokens with revocation checks, admit only
+Vendor token roles, and reread the current Auth user before any aggregate read.
+Disabled, suspended, removed, or demoted users and contradictory Vendor markers
+are denied. `vendor.intelligence.read` is a global Vendor capability with no
+institute-license minimum. The parser rejects duplicate/nested/unknown filters,
+noncanonical month/window strings, nonempty GET bodies, and actor/institute/
+Student scope input. Malformed aggregate authority returns redacted 500 JSON.
+The historically reserved declaration remains `planned`, consistent with other
+wired reserved routes; both mounted surfaces now call the implemented/canonical
+paths through the strict adapter. Reader and producer
+queries use document-key and automatic single-field indexes only, so no
+composite index is required locally; remote schedule/index/backfill
+qualification remains BWM-053-owned.
+
+Mounted `/vendor/intelligence` and intelligence-owned `/vendor/overview`
+projections use one `vendorIntelligenceApi.ts` adapter plus complete runtime
+DTO validation. The shared client supplies same-origin `/api/v1`, verified-ID-token
+headers, and strict canonical envelope validation. The adapter validates every
+nested field, 12/50 bounds, L0-L3 taxonomy, integer minor-unit currency, source
+and snapshot/freshness invariants, and cross-request selection coherence. Empty
+metrics remain unavailable, not invented zero values; stale results retain their
+actual month. Filter/retry/failure clears old authority, aborted/superseded loads
+cannot overwrite a newer selection, and failures show permission/validation/
+unavailable states with retry. Prior showcase pages are development plus explicit
+fixture-mode only. Unsupported Student/risk/discipline/topic-weakness, cohort/
+downgrade/upgrade and BWM-040 cost analytics are labelled unavailable. Full
+no-mock browser acceptance now proves exact values, 3/6/12 filters, full reload
+and fresh-session persistence, current-role/suspension/disabled/revoked denial,
+validation and real source/operation failures with retry, empty/stale truth,
+raw Student/session Firestore denial, and no external browser origin. The proof
+is `tests/e2e/vendor-intelligence-acceptance.spec.mjs`. BWM-037 aggregate
+verification passes the workspace, classified backend, affected contracts,
+isolated Firestore regressions, secured API integration, and browser acceptance
+gates. Accounting is 106 routes (100 implemented, one incompatible, zero missing,
+five retired), 56 HTTP exports, and 44 gateway handlers. Existing backend
+baseline exclusions remain BWM-049-owned; remote qualification remains BWM-053-owned.
+For the separately owned commercial workspace, only explicit fixture mode
+retains the legacy commercial showcase. Permanent
 production-build browser acceptance now proves real Auth/Firestore/Functions/
 Hosting pagination, conflict reload/retry, provider-unavailable exact replay,
 communication and two-actor offline-payment governance, redacted event
@@ -648,11 +754,11 @@ supported browser transport.
 
 ## Backend HTTP export accounting
 
-`functions/src/apiRouteManifest.ts` accounts for all 55 current `functions.https.onRequest` exports:
+`functions/src/apiRouteManifest.ts` accounts for all 56 current `functions.https.onRequest` exports:
 
 - `apiV1` is the single versioned `gateway` export; it resolves exact manifest method/path pairs, preserves decoded route parameters, and dispatches non-null `functionExport` mappings through the existing raw request handlers;
-- 38 exports are referenced by one or more canonical routes;
-- 11 portal-oriented Vendor exports currently have no executable frontend caller and remain `unmapped_portal` rather than receiving an invented public route;
+- 44 exports are referenced by one or more canonical routes;
+- 6 portal-oriented Vendor exports remain `unmapped_portal`; the five intelligence exports now map canonically to VEN-31..VEN-35 and both mounted surfaces now consume the strict adapter;
 - `internalEmailQueue`, `adminQuestionsBulk`, and `adminQuestionAssets` are `internal_only`;
 - `stripeWebhook` is a `webhook` boundary;
 - `helloWorld` is a `healthcheck` boundary.

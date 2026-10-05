@@ -918,6 +918,51 @@ export const API_ROUTE_MANIFEST: readonly ApiRouteManifestEntry[] = [
     "vendorCommercial",
     "planned",
   ),
+  defineRoute(
+    "VEN-31",
+    "vendor",
+    "GET",
+    "/vendor/intelligence/readiness",
+    "implemented",
+    "vendorIntelligenceInitialize",
+    "planned",
+  ),
+  defineRoute(
+    "VEN-32",
+    "vendor",
+    "GET",
+    "/vendor/intelligence/revenue",
+    "implemented",
+    "vendorRevenueAnalytics",
+    "planned",
+  ),
+  defineRoute(
+    "VEN-33",
+    "vendor",
+    "GET",
+    "/vendor/intelligence/layer-distribution",
+    "implemented",
+    "vendorLayerDistribution",
+    "planned",
+  ),
+  defineRoute(
+    "VEN-34",
+    "vendor",
+    "GET",
+    "/vendor/intelligence/churn",
+    "implemented",
+    "vendorChurnTracking",
+    "planned",
+  ),
+  defineRoute(
+    "VEN-35",
+    "vendor",
+    "GET",
+    "/vendor/intelligence/revenue-forecasting",
+    "implemented",
+    "vendorRevenueForecasting",
+    "planned",
+  ),
 ];
 
 const UNROUTED_BACKEND_HTTP_EXPORTS: readonly
@@ -965,31 +1010,6 @@ BackendHttpExportManifestEntry[] = [
   {
     disposition: "unmapped_portal",
     functionExport: "vendorSimulationValidation",
-    routeIds: [],
-  },
-  {
-    disposition: "unmapped_portal",
-    functionExport: "vendorIntelligenceInitialize",
-    routeIds: [],
-  },
-  {
-    disposition: "unmapped_portal",
-    functionExport: "vendorRevenueAnalytics",
-    routeIds: [],
-  },
-  {
-    disposition: "unmapped_portal",
-    functionExport: "vendorLayerDistribution",
-    routeIds: [],
-  },
-  {
-    disposition: "unmapped_portal",
-    functionExport: "vendorChurnTracking",
-    routeIds: [],
-  },
-  {
-    disposition: "unmapped_portal",
-    functionExport: "vendorRevenueForecasting",
     routeIds: [],
   },
   {

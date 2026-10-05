@@ -38,8 +38,8 @@ test(
       "AnalyticsGenerated",
       "InsightsGenerated",
       "GovernanceSnapshotScheduled",
-      "VendorAggregatesUpdated",
       "BillingMeterUpdated",
+      "VendorAggregatesUpdated",
       "ArchiveTriggered",
     ]);
     assert.deepEqual(summary.rootEvents, [
@@ -86,7 +86,7 @@ test(
     );
     assert.deepEqual(
       dependencyMap.get("ArchiveEngine"),
-      ["BillingMeterEngine"],
+      ["VendorAggregationEngine"],
     );
   },
 );

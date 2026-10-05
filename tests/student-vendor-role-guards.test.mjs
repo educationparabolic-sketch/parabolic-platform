@@ -161,7 +161,10 @@ test("protected routes deny authenticated wrong-role sessions and server role mi
     "vendorSimulationValidation.ts",
   ];
   for (const fileName of vendorHandlerFiles) {
-    const source = await readFile(join(apiDirectory, fileName), "utf8");
+    let source = await readFile(join(apiDirectory, fileName), "utf8");
+    if (source.includes("intelligenceReadMiddlewares(dependencies)")) {
+      source += await readFile(join(apiDirectory, "vendorIntelligenceReadBoundary.ts"), "utf8");
+    }
     assert.match(source, /createAuthenticationMiddleware\(/u);
     assert.match(source, /allowedRoles:\s*\["vendor"\]/u);
   }

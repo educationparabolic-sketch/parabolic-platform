@@ -13,18 +13,7 @@ export const handleGovernanceSnapshotSchedule = async (
     {
       eventId: context.eventId,
     },
-    async () => {
-      await governanceSnapshotAggregationService.generateMonthlySnapshots();
-
-      await systemEventTopologyService.executeEventHandler(
-        "VendorAggregatesUpdated",
-        "governanceSnapshotMonthly",
-        {
-          eventId: context.eventId,
-        },
-        async () => undefined,
-      );
-    },
+    async () => governanceSnapshotAggregationService.generateMonthlySnapshots(),
   );
 };
 

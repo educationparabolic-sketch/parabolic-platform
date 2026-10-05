@@ -177,7 +177,7 @@ const SYSTEM_EVENT_DEFINITIONS: readonly SystemEventDefinition[] = [
       "Monthly governance snapshots summarize academic-year analytics on a " +
       "scheduled cadence.",
     domain: "archiveLifecycle",
-    downstreamEvents: ["VendorAggregatesUpdated"],
+    downstreamEvents: ["BillingMeterUpdated"],
     executionMode: "scheduled",
     name: "GovernanceSnapshotScheduled",
     primaryHandler: "governanceSnapshotMonthly",
@@ -186,14 +186,14 @@ const SYSTEM_EVENT_DEFINITIONS: readonly SystemEventDefinition[] = [
   },
   {
     description:
-      "Vendor aggregate rollups are produced from monthly governance summary " +
-      "boundaries.",
+      "Vendor aggregate rollups are produced after monthly governance and " +
+      "billing summaries are complete.",
     domain: "vendorIntelligence",
-    downstreamEvents: ["BillingMeterUpdated"],
+    downstreamEvents: ["ArchiveTriggered"],
     executionMode: "scheduled",
     name: "VendorAggregatesUpdated",
-    primaryHandler: "governanceSnapshotMonthly",
-    source: "Monthly governance aggregation rollup",
+    primaryHandler: "billingSnapshotMonthly",
+    source: "Monthly post-billing aggregate rollup",
     sourceKind: "scheduled",
   },
   {
@@ -201,7 +201,7 @@ const SYSTEM_EVENT_DEFINITIONS: readonly SystemEventDefinition[] = [
       "Billing meter snapshots are generated from deterministic lifecycle " +
       "events and monthly billing rollups.",
     domain: "vendorIntelligence",
-    downstreamEvents: ["ArchiveTriggered"],
+    downstreamEvents: ["VendorAggregatesUpdated"],
     executionMode: "scheduled",
     name: "BillingMeterUpdated",
     primaryHandler: "billingSnapshotMonthly",
@@ -232,8 +232,8 @@ const MASTER_LIFECYCLE_SEQUENCE: readonly SystemEventName[] = [
   "AnalyticsGenerated",
   "InsightsGenerated",
   "GovernanceSnapshotScheduled",
-  "VendorAggregatesUpdated",
   "BillingMeterUpdated",
+  "VendorAggregatesUpdated",
   "ArchiveTriggered",
 ] as const;
 
@@ -285,16 +285,16 @@ const TOPOLOGY_ENGINE_DEFINITIONS: readonly TopologyEngineDefinition[] = [
   },
   {
     dependsOn: ["GovernanceSnapshotEngine"],
-    drivenByEvents: ["VendorAggregatesUpdated"],
-    engine: "VendorAggregationEngine",
-  },
-  {
-    dependsOn: ["VendorAggregationEngine"],
     drivenByEvents: ["BillingMeterUpdated", "BillingWebhookReceived"],
     engine: "BillingMeterEngine",
   },
   {
     dependsOn: ["BillingMeterEngine"],
+    drivenByEvents: ["VendorAggregatesUpdated"],
+    engine: "VendorAggregationEngine",
+  },
+  {
+    dependsOn: ["VendorAggregationEngine"],
     drivenByEvents: ["ArchiveTriggered"],
     engine: "ArchiveEngine",
   },

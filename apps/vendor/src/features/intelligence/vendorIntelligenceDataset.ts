@@ -11,7 +11,7 @@ export interface VendorIntelligenceKpi {
 }
 
 export interface VendorLayerDistributionPoint {
-  layer: "TRIAL" | "L0" | "L1" | "L2";
+  layer: "L0" | "L1" | "L2" | "L3";
   instituteCount: number;
   percentage: number;
 }
@@ -69,7 +69,7 @@ export function getVendorIntelligenceDataset(): VendorIntelligenceDataset {
       {
         id: "LicenseLayerDistribution",
         label: "Subscription Mix",
-        value: "Trial: 31 | L0: 14 | L1: 42 | L2: 56",
+        value: "L0: 45 | L1: 42 | L2: 56 | L3: 0",
         helper: "Current institutes across trial and license layers.",
       },
       {
@@ -100,10 +100,10 @@ export function getVendorIntelligenceDataset(): VendorIntelligenceDataset {
       { month: "2026-04", activeInstitutes: 143, activeStudents: 45120, churnRatePercent: 2.9 },
     ],
     layerDistribution: [
-      { layer: "TRIAL", instituteCount: 31, percentage: 21.7 },
-      { layer: "L0", instituteCount: 14, percentage: 9.8 },
+      { layer: "L0", instituteCount: 45, percentage: 31.5 },
       { layer: "L1", instituteCount: 42, percentage: 29.4 },
       { layer: "L2", instituteCount: 56, percentage: 39.2 },
+      { layer: "L3", instituteCount: 0, percentage: 0 },
     ],
     disciplineIndexByExamType: [
       { examType: "JEE Main", disciplineIndex: 76.3 },

@@ -1,121 +1,69 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {Timestamp} from "firebase-admin/firestore";
 import * as gcpMetadata from "gcp-metadata";
 import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
 import {
-  InitializeVendorIntelligenceResult,
-} from "../types/vendorIntelligence";
+  seedVendorIntelligenceReadFixtures,
+  resetVendorIntelligenceReadFixtures,
+  VENDOR_INTELLIGENCE_TEST_QUERY,
+} from "./vendorIntelligenceReadFixtures";
 
 process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8080";
-process.env.GCLOUD_PROJECT ??= "parabolic-platform-build-81-tests";
+process.env.GCLOUD_PROJECT ??= "parabolic-platform-bwm-037-readiness";
 process.env.GOOGLE_CLOUD_PROJECT ??= process.env.GCLOUD_PROJECT;
 process.env.NO_GCE_CHECK ??= "true";
 process.env.METADATA_SERVER_DETECTION ??= "none";
 gcpMetadata.setGCPResidency(false);
 
-const firestore = getFirestore();
-
-interface VendorIntelligenceServiceContract {
-  initializePlatform: () => Promise<InitializeVendorIntelligenceResult>;
-}
-
-let vendorIntelligenceService: VendorIntelligenceServiceContract;
-
-test.before(async () => {
-  const module = await import("../services/vendorIntelligence.js");
-  vendorIntelligenceService = module.vendorIntelligenceService;
-});
-
+test.beforeEach(resetVendorIntelligenceReadFixtures);
 test.after(async () => {
+  await resetVendorIntelligenceReadFixtures();
   await getFirebaseAdminApp().delete();
 });
 
-const deleteDocumentIfPresent = async (path: string): Promise<void> => {
-  const documentReference = firestore.doc(path);
-  const snapshot = await documentReference.get();
+test("readiness uses complete snapshots and preserves stale fallback", async () => {
+  const {vendorIntelligenceService} =
+    await import("../services/vendorIntelligence.js");
+  const empty = await vendorIntelligenceService.initializePlatform(
+    VENDOR_INTELLIGENCE_TEST_QUERY,
+  );
+  assert.equal(empty.metadata.availability, "empty");
+  assert.equal(empty.metadata.dataAsOfMonth, null);
+  assert.equal(empty.modules.aggregateRollup, "empty");
 
-  if (snapshot.exists) {
-    await documentReference.delete();
-  }
-};
+  await seedVendorIntelligenceReadFixtures();
+  const ready = await vendorIntelligenceService.initializePlatform(
+    VENDOR_INTELLIGENCE_TEST_QUERY,
+  );
+  assert.equal(ready.metadata.availability, "available");
+  assert.equal(ready.metadata.dataAsOfMonth, "2026-08");
+  assert.equal(ready.metadata.windowStartMonth, "2026-06");
+  assert.equal(ready.metadata.windowEndMonth, "2026-08");
+  assert.equal(ready.modules.aggregateRollup, "ready");
+  assert.equal(ready.modules.revenueIntelligence, "ready");
+  assert.equal(ready.modules.layerDistribution, "ready");
+  assert.equal(ready.modules.churnTracking, "unavailable");
+  assert.equal(
+    ready.unavailablePanels.studentBehaviorSignals.reason,
+    "no_authoritative_aggregate",
+  );
 
-test(
-  "initializePlatform reports bounded readiness across aggregate BI inputs",
-  async () => {
-    const vendorAggregatePath = "vendorAggregates/build_81_vendor_aggregate";
-    const billingSnapshotPath = "billingSnapshots/build_81_billing_snapshot";
-    const licenseHistoryPath =
-      "institutes/inst_build_81/licenseHistory/license_build_81";
-    const governanceSnapshotPath =
-      "institutes/inst_build_81/academicYears/2026/" +
-      "governanceSnapshots/2026-04";
-    const usageMeterPath =
-      "institutes/inst_build_81/usageMeter/2026-04";
+  await getFirestore().doc("vendorIntelligenceRollups/2026-09").set({
+    monthId: "2026-09",
+    phase: "collecting",
+    schemaVersion: 1,
+    state: "failed_retryable",
+  });
+  const stale = await vendorIntelligenceService.initializePlatform({
+    asOfMonth: "2026-09",
+    windowMonths: 3,
+  });
+  assert.equal(stale.metadata.availability, "stale");
+  assert.equal(stale.metadata.dataAsOfMonth, "2026-08");
+  assert.equal(stale.modules.aggregateRollup, "stale");
 
-    await Promise.all([
-      deleteDocumentIfPresent(vendorAggregatePath),
-      deleteDocumentIfPresent(billingSnapshotPath),
-      deleteDocumentIfPresent(licenseHistoryPath),
-      deleteDocumentIfPresent(governanceSnapshotPath),
-      deleteDocumentIfPresent(usageMeterPath),
-    ]);
-
-    await firestore.doc(vendorAggregatePath).set({
-      generatedAt: Timestamp.now(),
-    });
-    await firestore.doc(licenseHistoryPath).set({
-      changedBy: "vendor_build_81",
-      effectiveDate: "2026-04-01T00:00:00.000Z",
-      newLayer: "L2",
-      previousLayer: "L1",
-      reason: "Build 81 readiness seed",
-      timestamp: Timestamp.now(),
-    });
-    await firestore.doc(governanceSnapshotPath).set({
-      createdAt: Timestamp.now(),
-      disciplineTrend: 0.58,
-      overrideFrequency: 0.04,
-      phaseCompliancePercent: 0.77,
-      riskClusterDistribution: {
-        medium: 1,
-      },
-      stabilityIndex: 0.81,
-    });
-    await firestore.doc(usageMeterPath).set({
-      assignmentsCreated: 2,
-      createdAt: Timestamp.now(),
-      peakStudentUsage: 120,
-    });
-
-    const result = await vendorIntelligenceService.initializePlatform();
-
-    assert.equal(result.totalSourceCount, 5);
-    assert.equal(result.readySourceCount, 4);
-    assert.match(result.snapshotMonth, /^\d{4}-\d{2}$/);
-    assert.equal(result.sourceReadiness.vendorAggregates.isAvailable, true);
-    assert.equal(result.sourceReadiness.billingSnapshots.isAvailable, false);
-    assert.equal(result.sourceReadiness.licenseHistory.isAvailable, true);
-    assert.equal(result.sourceReadiness.governanceSnapshots.isAvailable, true);
-    assert.equal(result.sourceReadiness.usageMeter.isAvailable, true);
-    assert.equal(
-      result.sourceReadiness.governanceSnapshots.collectionPath,
-      "institutes/{instituteId}/academicYears/{yearId}/governanceSnapshots",
-    );
-    assert.equal(result.moduleStatus.revenueIntelligence, "pending");
-    assert.equal(result.moduleStatus.layerDistribution, "pending");
-    assert.equal(result.moduleStatus.upgradeConversion, "pending");
-    assert.equal(result.moduleStatus.churnTracking, "pending");
-    assert.equal(result.moduleStatus.adoptionMeasurement, "pending");
-    assert.equal(result.moduleStatus.calibrationImpact, "pending");
-    assert.equal(result.moduleStatus.growthForecasting, "pending");
-
-    await Promise.all([
-      deleteDocumentIfPresent(vendorAggregatePath),
-      deleteDocumentIfPresent(billingSnapshotPath),
-      deleteDocumentIfPresent(licenseHistoryPath),
-      deleteDocumentIfPresent(governanceSnapshotPath),
-      deleteDocumentIfPresent(usageMeterPath),
-    ]);
-  },
-);
+  await assert.rejects(
+    vendorIntelligenceService.initializePlatform({windowMonths: 4 as 3}),
+    /windowMonths must be 3, 6, or 12/u,
+  );
+});

@@ -60,7 +60,7 @@ test("implemented routes have one registered existing handler", () => {
   const implementedRoutes = API_ROUTE_MANIFEST.filter(
     (route) => route.status === "implemented",
   );
-  assert.equal(implementedRoutes.length, 95);
+  assert.equal(implementedRoutes.length, 100);
 
   for (const route of implementedRoutes) {
     assert.equal(typeof API_GATEWAY_HANDLERS[route.functionExport], "function");
@@ -174,6 +174,34 @@ test("BWM-035 commercial declarations reach the secured handler", () => {
     );
   });
 });
+
+test(
+  "BWM-037 intelligence routes reach exactly five secured GET handlers",
+  () => {
+    const intelligenceRoutes = API_ROUTE_MANIFEST.filter((route) =>
+      route.id.startsWith("VEN-") &&
+      Number(route.id.replace("VEN-", "")) >= 31 &&
+      Number(route.id.replace("VEN-", "")) <= 35,
+    );
+
+    assert.equal(intelligenceRoutes.length, 5);
+    intelligenceRoutes.forEach((route) => {
+      assert.equal(route.declaration, "planned");
+      assert.equal(route.status, "implemented");
+      assert.equal(route.method, "GET");
+      assert.equal(
+        typeof API_GATEWAY_HANDLERS[route.functionExport], "function",
+      );
+      assert.equal(
+        resolveApiRoute(
+          route.method,
+          materializePath(route.canonicalPath, route.id),
+        )?.route.id,
+        route.id,
+      );
+    });
+  },
+);
 
 test(
   "BWM-029 governance and intervention routes reach secured handlers",
