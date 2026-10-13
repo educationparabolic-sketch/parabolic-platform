@@ -5679,6 +5679,29 @@ All license modifications must be vendor-authoritative.
 
 ## 1.5.5 Global Calibration Control (Core Moat)
 
+Implementation boundary (BWM-038, 2026-10-06): the mounted workspace implements
+only strict `risk_projection_v1` on one explicit year of bounded selected
+`studentYearMetrics`, using the section-4.15 five weights/five risk states.
+Thresholds are read-only metadata. The richer editor, all-institute expansion,
+discipline/cluster/batch/stability/alert outputs and lifecycle options below are
+design requirements, not implemented capabilities. Creation/publishing/draft/
+scheduling/rollback remain unavailable pending BWM-039 consumer and recoverable
+activation qualification. BWM-040 owns unified audit. The canonical implemented
+contract is `shared/contracts/vendorCalibration.d.ts` and `docs/api_contract.md`;
+local browser acceptance does not establish production risk-engine equivalence.
+
+BWM-039 transport checkpoint (2026-10-10): frozen new assignment/session source
+consumption and internal atomic apply/inverse are locally qualified. VEN-02 now
+requires explicit UUID/version/optimistic targets; VEN-38/VEN-39 share a secured
+same-Vendor operation-status/inverse export. Closed results and redacted errors
+are enforced. BWM-039 mounted adoption now captures VEN-09 pointer preconditions,
+requires confirmation and retains only UID-scoped exact retry intent. Immediate
+publish/status/inverse controls use server-reloaded closed receipts; creation,
+global activation, scheduling and BWM-040 unified audit remain unavailable.
+Failure/concurrency/uncertainty acceptance and BWM-039 aggregate closeout pass locally.
+Version availability is `immediate_selected_targets`, never authorization or release readiness.
+Historical run/session/receipt/history authority is preserved.
+
 Structure:
 
 Calibration
@@ -5860,7 +5883,20 @@ All derived from aggregated vendorMetrics.
 
 ## 1.5.8 System Health & Cost Monitoring
 
-Displays:
+Local implementation boundary (BWM-040, 2026-10-13): the mounted health page
+and Overview read secured VEN-41 through the shared strict authenticated
+adapter. Runtime release identity comes only from validated server release
+environment variables. Failure recovery, email delivery, Stripe reconciliation
+and calibration rollout journals expose exact source-specific counts and ages,
+with a 1,000-document cap; malformed/unreadable/overflow sources are independently
+unavailable. Empty sources are empty evidence, not a healthy-platform verdict.
+Cloud Monitoring, Error Reporting, cost/usage/latency, frontend telemetry and
+deployment history remain unavailable: BWM-051 owns reviewed observability,
+BWM-052 provisioning and BWM-053 deployed qualification. No browser telemetry,
+fixed infrastructure number, alert severity, global verdict or SLA is live
+authority. The metrics below remain design targets, not implemented values.
+
+Displays (design targets):
 
 - FirestoreReadCount
 - FirestoreWriteCount
@@ -5900,7 +5936,37 @@ Flags enforced via backend middleware.
 
 ## 1.5.10 Audit & Activity Logs
 
-Tracks:
+Local implementation boundary (BWM-040, 2026-10-13): mounted Audit and Overview
+recent activity consume secured VEN-40, not a browser-built stream. The sole
+closed DTO/metadata owner is `shared/contracts/vendorAuditHealth.d.ts`.
+
+| Public source | Existing stored authority | Displayed fact/metadata origin |
+| --- | --- | --- |
+| vendor_command_audit | root vendorAuditLogs with occurredAt | Validated command family/action/summary/actor/target; request/invoice/revision fields only |
+| vendor_system_audit | root vendorAuditLogs with timestamp | Validated payment or calibration system fact; safe event type/state/version, keyed payment target |
+| calibration_terminal | vendorCalibrationLogs | Validated immutable terminal receipt; kind/state/completion, operation/version/revision/affected-target count |
+| stripe_event | vendor/stripeEvents/events | Validated event type/time/processing/reconciliation/revision; provider identity is a keyed pseudonym |
+| billing_snapshot | billingSnapshots | Immutable schema-v1 invoice/cycle/generatedAt; exact minor-unit amount/currency and webhook status |
+| license_history | institutes/{id}/licenseHistory | Validated stored timestamp/changedBy and prior/next layer; confidential reason and provider invoice omitted |
+
+Common event IDs are keyed pseudonyms; source precedence and private document-ID
+descending ties follow Firestore continuation order, never public-ID sorting.
+Canonical time, category/status, safe actor/institute/target and non-null closed
+metadata are the only displayed fields. Institute names remain null unless
+supplied by the validated projection. `generatedAt` is the server read clock,
+not a persisted event time. Default-25/max-50 exact category/institute/status/
+inclusive-time filters and encrypted filter-bound cursors are server authority;
+page count, selected detail and labelled text search describe only loaded items.
+Previous navigation retains at most 50 visited cursors in memory, not a global
+total or durable audit cache. Malformed selected authority fails the whole read;
+empty filtered pages may truthfully have a next cursor. No writer, backfill,
+materialized audit store, raw payload/path/hash/session/answer projection or
+editable business history is introduced. Original showcases remain DEV plus
+explicit fixture only. BWM-053 owns remote index/history qualification.
+The generic storage/tracking requirements below are design intent, not a new
+parallel store or a claim that every future feature already emits an event.
+
+Tracks (design targets):
 
 - LicenseChanges
 - CalibrationPushes

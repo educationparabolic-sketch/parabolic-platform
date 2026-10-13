@@ -67,6 +67,21 @@ async function requestGateway(requestPath, method, body) {
   };
 }
 
+test("secured recovery routes deny missing authentication", async () => {
+  for (const [method, suffix] of [["GET", ""], ["POST", "/rollback"]]) {
+    const requestPath =
+      `/api/v1/vendor/calibration/operations/cal_probe${suffix}`;
+    const result = await requestGateway(requestPath, method,
+      method === "POST" ? {} : undefined);
+    assert.equal(result.status, 401);
+    assertCanonicalErrorEnvelope(result.body);
+    assert.equal(result.body.error.code, "UNAUTHORIZED");
+    const wrongMethod = await requestGateway(requestPath, "PATCH", {});
+    assert.equal(wrongMethod.status, 405);
+    assert.equal(wrongMethod.headers.get("allow"), method);
+  }
+});
+
 function assertCanonicalErrorEnvelope(body) {
   assert.equal(body.success, false);
   assert.equal(typeof body.error?.code, "string");
@@ -82,7 +97,7 @@ test(
     const implementedRoutes = API_ROUTE_MANIFEST.filter(
       (route) => route.status === "implemented",
     );
-    assert.equal(implementedRoutes.length, 81);
+    assert.equal(implementedRoutes.length, 107);
 
     for (const route of implementedRoutes) {
       const requestPath = materializePath(route.canonicalPath, route.id);
@@ -250,6 +265,40 @@ test(
     assert.equal(unknown.body.error?.message, "API route not found.");
   },
 );
+
+test("calibration version routes require authentication", async () => {
+  for (const path of [
+    "/api/v1/vendor/calibration/versions",
+    "/api/v1/vendor/calibration/versions/cal%20id%20%CE%A9",
+  ]) {
+    const result = await requestGateway(path, "GET");
+    assert.equal(result.status, 401);
+    assertCanonicalErrorEnvelope(result.body);
+    assert.equal(result.body.error.code, "UNAUTHORIZED");
+
+    const wrongMethod = await requestGateway(path, "POST", {});
+    assert.equal(wrongMethod.status, 405);
+    assertCanonicalErrorEnvelope(wrongMethod.body);
+    assert.equal(wrongMethod.headers.get("allow"), "GET");
+  }
+});
+
+test("audit and health routes require authentication", async () => {
+  for (const path of [
+    "/api/v1/vendor/audit-events",
+    "/api/v1/vendor/system-health",
+  ]) {
+    const result = await requestGateway(path, "GET");
+    assert.equal(result.status, 401);
+    assertCanonicalErrorEnvelope(result.body);
+    assert.equal(result.body.error.code, "UNAUTHORIZED");
+
+    const wrongMethod = await requestGateway(path, "POST", {});
+    assert.equal(wrongMethod.status, 405);
+    assertCanonicalErrorEnvelope(wrongMethod.body);
+    assert.equal(wrongMethod.headers.get("allow"), "GET");
+  }
+});
 
 test(
   "cross-origin browser requests receive no CORS grant",

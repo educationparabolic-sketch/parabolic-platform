@@ -2,7 +2,7 @@
 
 This document defines the event-driven topology of the platform.
 
-Last reconciled: 2026-10-05 (`BWM-037` secured intelligence route registration)
+Last reconciled: 2026-10-14 (`BWM-040` verified synchronous audit/health reads; no event/topology change)
 
 Each event represents a state transition or trigger that initiates downstream processing.
 
@@ -363,6 +363,48 @@ eight domains, 16 events, and 12 engines. Seven existing scheduled exports remai
 Four scheduled event edges in the topology map to three distinct handlers;
 this is not the total scheduled-export inventory. Local emulator verification
 does not claim remote schedule deployment or production qualification.
+
+BWM-038 transport/version-read alignment adds no executable event, trigger, schedule or
+activation authority. VEN-36/VEN-37 are implemented bounded read edges sharing one
+current-Vendor export/handler; `risk_projection_v1` simulation is read-only against selected stored
+Student-year summaries. Draft, scheduling, rollback and production publishing
+remain unavailable pending BWM-039 activation/recovery/consumer qualification.
+Seven existing scheduled exports remain unchanged; conceptual calibration
+scheduler descriptions are not proof of a deployed or implemented scheduler.
+
+BWM-039's internal atomic apply/inverse service writes the reserved rollout journal and
+create-only root/institute terminal facts directly in bounded transactions.
+It adds no trigger, event or schedule. VEN-02 now calls the atomic writer;
+VEN-38/VEN-39 share one new vendorCalibrationOperations HTTP export/handler for
+same-Vendor recovery/inverse commands. No legacy writer is called by these routes;
+mounted publishing remains later ordered work. The inverse transaction restores
+all prior pointer fields, completes its journal/facts and links/advances the original
+journal atomically without mutating its original receipt or immutable history.
+Failed terminalization preserves
+pending uncertainty, not an invented success/failure event. BWM-040 retains
+unified audit/health read ownership.
+
+BWM-039 consumer alignment adds no event/export/schedule. Existing assignment
+creation (including derived runs) freezes validated calibration authority;
+session creation and submission preserve it. Existing submitted-session
+aggregation propagates that snapshot into Student-year/results and computes the
+canonical rolling wrong-streak signal before the existing risk/pattern event
+handler runs. Risk uses current committed upstream markers and the shared
+five-signal risk_projection_v1 formula; pattern processing preserves that signal
+rather than overwriting it from an older event. Deleted summary documents are
+not recreated by stale risk/pattern delivery. This qualifies consumer semantics,
+not rollout transactions, unified audit reads, global activation or scheduling.
+
+BWM-040 registers VEN-40 and VEN-41 as synchronous read edges only. The secured
+audit service fans in existing immutable/source audit documents at read time;
+the secured health service aggregates existing release and operational queue
+state with independently bounded, fail-closed source validation. Neither read emits an event, adds a
+trigger or schedule, ingests browser
+telemetry, creates a projection writer, or backfills history. Both routes are
+registered with distinct capabilities and HTTP exports; the mounted audit,
+health and Overview pages share strict authenticated adapters, retaining only
+component-local filters/cursor navigation and no event writer. Cloud observability remains
+BWM-051/BWM-052-owned and unavailable in this contract.
 
 License-request decisions transact BWM-031's existing request and one-open
 sentinel. Only a reconciled entitlement change updates `license/current` and

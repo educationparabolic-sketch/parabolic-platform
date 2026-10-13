@@ -521,6 +521,16 @@ const instituteProjection = (
   };
   const detail: VendorInstituteDetail = {
     ...summary,
+    calibrationPointer: Object.prototype.hasOwnProperty.call(institute, "calibrationVersion") ? {
+      present: true,
+      value: institute.calibrationVersion === null ? null : (() => {
+        const value = institute.calibrationVersion;
+        if (typeof value !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(value)) {
+          return authorityError("Persisted calibration pointer is invalid.");
+        }
+        return value;
+      })(),
+    } : {present: false},
     administrators: administration.administrators,
     deletion,
     profile: {

@@ -48,6 +48,10 @@ import {
 import {
   handleVendorCalibrationPushRequest,
 } from "./api/vendorCalibrationPush";
+import {handleVendorCalibrationVersionsRequest} from "./api/vendorCalibrationVersions";
+import {handleVendorCalibrationOperationsRequest} from "./api/vendorCalibrationOperations";
+import {handleVendorAuditEventsRequest} from "./api/vendorAuditEvents";
+import {handleVendorSystemHealthRequest} from "./api/vendorSystemHealth";
 import {
   handleVendorCalibrationSimulationRequest,
 } from "./api/vendorCalibrationSimulation";
@@ -248,6 +252,14 @@ export const vendorLicenseUpdate = functions.https.onRequest(
 export const vendorCalibrationPush = functions.https.onRequest(
   handleVendorCalibrationPushRequest,
 );
+export const vendorCalibrationVersions = functions.https.onRequest(
+  handleVendorCalibrationVersionsRequest,
+);
+export const vendorCalibrationOperations = functions.https.onRequest(
+  handleVendorCalibrationOperationsRequest,
+);
+export const vendorAuditEvents = functions.https.onRequest(handleVendorAuditEventsRequest);
+export const vendorSystemHealth = functions.https.onRequest(handleVendorSystemHealthRequest);
 export const vendorCalibrationSimulation = functions.https.onRequest(
   handleVendorCalibrationSimulationRequest,
 );

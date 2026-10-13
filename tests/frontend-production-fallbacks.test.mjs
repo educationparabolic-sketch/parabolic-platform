@@ -104,7 +104,7 @@ test("portal catches do not substitute fixtures or fabricated successes in live 
   }
 });
 
-test("support is API-only while Vendor calibration fallbacks remain fixture-mode only", async () => {
+test("support is API-only and legacy calibration is a dev-only non-publishing showcase", async () => {
   const [supportSource, vendorSource] = await Promise.all([
     readFile(supportDatasetPath, "utf8"),
     readFile(vendorCalibrationPath, "utf8"),
@@ -112,15 +112,14 @@ test("support is API-only while Vendor calibration fallbacks remain fixture-mode
 
   assert.doesNotMatch(supportSource, /localStorage|FALLBACK_TICKETS|shouldUseFixtureData/u);
   assert.match(supportSource, /getPortalApiClient\("admin"\)/u);
-  assert.equal(
-    vendorSource.match(/if \(!shouldUseFixtureData\(\)\) \{\s*throw error;\s*\}/gu)?.length,
-    2,
-  );
+  assert.match(vendorSource, /!import\.meta\.env\.DEV \|\| !shouldUseFixtureData\(\)/u);
   const vendorFallbackCatches = collectCatchBlocks(vendorSource, vendorCalibrationPath).filter(
     (catchBlock) =>
       /computeLocalSimulation\(|engineSource:\s*"local-fallback"/u.test(catchBlock.source),
   );
-  assert.equal(vendorFallbackCatches.length, 2);
+  assert.equal(vendorFallbackCatches.length, 0);
+  assert.doesNotMatch(vendorSource, /apiClient\.post/u);
+  assert.match(vendorSource, /publishing is unavailable pending BWM-039/u);
   for (const catchBlock of vendorFallbackCatches) {
     assert.match(
       catchBlock.source,

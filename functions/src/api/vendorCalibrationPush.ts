@@ -1,162 +1,46 @@
-import * as functions from "firebase-functions";
-import {DecodedIdToken} from "firebase-admin/auth";
-import {sendErrorResponse} from "../services/apiResponse";
-import {calibrationDeploymentService} from "../services/calibrationDeployment";
+import {createMiddlewareHandler} from "../middleware/framework";
+import {buildSuccessResponse} from "../services/apiResponse";
+import {calibrationRolloutService, calibrationRolloutIdentity,
+  parseCalibrationRollout} from "../services/calibrationRollout";
+import {validateCalibrationOperationResult} from "../services/calibrationOperationResult";
 import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
-import {createAuthenticationMiddleware} from "../middleware/auth";
-import {
-  createMethodMiddleware,
-  createMiddlewareHandler,
-  createRequestValidationMiddleware,
-  setRequestData,
-} from "../middleware/framework";
-import {createRoleAuthorizationMiddleware} from "../middleware/role";
-import {MiddlewareRequest} from "../types/middleware";
-import {
-  CalibrationDeploymentError,
-  DeployCalibrationVersionInput,
-  DeployCalibrationVersionSuccessResponse,
-} from "../types/calibrationDeployment";
+import {calibrationMiddlewares, invalidCalibrationIntent,
+  VendorCalibrationIdentityDependencies} from "./vendorCalibrationBoundary";
+import {handleCalibrationOperationError} from "./vendorCalibrationOperations";
 
-interface VendorCalibrationPushRequestBody {
-  targetInstitutes?: unknown;
-  versionId?: unknown;
+interface Dependencies extends VendorCalibrationIdentityDependencies {
+  apply: typeof calibrationRolloutService.apply;
 }
 
-interface VendorCalibrationPushDependencies {
-  deployCalibrationVersion:
-    typeof calibrationDeploymentService.deployCalibrationVersion;
-  verifyIdToken: (idToken: string) => Promise<DecodedIdToken>;
-}
-
-const normalizeRequiredString = (
-  value: unknown,
-  fieldName: string,
-): string => {
-  if (typeof value !== "string") {
-    throw new CalibrationDeploymentError(
-      "VALIDATION_ERROR",
-      `Calibration field "${fieldName}" must be a string.`,
-    );
-  }
-
-  const normalizedValue = value.trim();
-
-  if (!normalizedValue) {
-    throw new CalibrationDeploymentError(
-      "VALIDATION_ERROR",
-      `Calibration field "${fieldName}" must be a non-empty string.`,
-    );
-  }
-
-  return normalizedValue;
-};
-
-const normalizeTargetInstitutes = (value: unknown): string[] => {
-  if (!Array.isArray(value)) {
-    throw new CalibrationDeploymentError(
-      "VALIDATION_ERROR",
-      "Calibration field \"targetInstitutes\" must be an array.",
-    );
-  }
-
-  const targetInstitutes = value.map((entry, index) =>
-    normalizeRequiredString(entry, `targetInstitutes[${index}]`));
-
-  if (targetInstitutes.length === 0) {
-    throw new CalibrationDeploymentError(
-      "VALIDATION_ERROR",
-      "Calibration field \"targetInstitutes\" must contain at least one " +
-        "institute.",
-    );
-  }
-
-  return targetInstitutes;
-};
-
-const buildSuccessResponse = (
-  result: Awaited<
-    ReturnType<typeof calibrationDeploymentService.deployCalibrationVersion>
-  >,
-  requestId: string,
-  timestamp: string,
-): DeployCalibrationVersionSuccessResponse => ({
-  code: "OK",
-  data: result,
-  message: "Calibration version deployed.",
-  requestId,
-  success: true,
-  timestamp,
-});
-
-export const createVendorCalibrationPushHandler = (
-  dependencies: VendorCalibrationPushDependencies,
-) => createMiddlewareHandler({
-  controller: async (
-    request: MiddlewareRequest,
-    response: functions.Response,
-  ): Promise<void> => {
-    const requestData = request.context
-      .requestData as unknown as DeployCalibrationVersionInput;
-    const result = await dependencies.deployCalibrationVersion(requestData);
-
-    response.status(200).json(
-      buildSuccessResponse(
-        result,
-        request.context.requestId,
-        new Date().toISOString(),
-      ),
-    );
-  },
-  middlewares: [
-    createMethodMiddleware("POST"),
-    createAuthenticationMiddleware(dependencies),
-    createRoleAuthorizationMiddleware({
-      allowedRoles: ["vendor"],
-      forbiddenMessage:
-        "Only vendor roles can deploy calibration models.",
-    }),
-    createRequestValidationMiddleware({
-      validator: (request: MiddlewareRequest): void => {
-        const body = (request.body ?? {}) as VendorCalibrationPushRequestBody;
-        const changedBy = request.context.identity?.uid;
-
-        setRequestData(request, {
-          changedBy: normalizeRequiredString(changedBy, "changedBy"),
-          targetInstitutes: normalizeTargetInstitutes(body.targetInstitutes),
-          versionId: normalizeRequiredString(body.versionId, "versionId"),
-        });
-      },
-    }),
-  ],
-  onError: (error, context): boolean => {
-    if (error instanceof CalibrationDeploymentError) {
-      context.logger.warn("Vendor calibration push request rejected.", {
-        code: error.code,
-        error,
-      });
-      sendErrorResponse(
-        context.response,
-        context.requestId,
-        error.code,
-        error.message,
-      );
-      return true;
+// VEN-02 accepts only the frozen rollout DTO, never legacy defaults or dual intent.
+export const createVendorCalibrationPushHandler = (dependencies: Dependencies) => createMiddlewareHandler({
+  controller: async (request, response): Promise<void> => {
+    if (Object.keys(request.query).length > 0) {
+      throw invalidCalibrationIntent("Calibration rollout does not accept query parameters.");
     }
-
-    return false;
+    const uid = request.context.identity?.uid;
+    if (!uid) throw invalidCalibrationIntent("Current identity is required.");
+    const input = parseCalibrationRollout(request.body);
+    const identity = calibrationRolloutIdentity(uid, input);
+    const result = validateCalibrationOperationResult(await dependencies.apply(uid, input), identity.operationId);
+    if (result.receipt && (result.receipt.kind !== "rollout" || result.receipt.versionId !== input.versionId ||
+      (result.receipt.state === "applied" && result.receipt.targets.some((target, index) =>
+        target.instituteId !== input.targets[index]?.instituteId ||
+        (target.before.institutePointer.present ? target.before.institutePointer.value : null) !==
+          input.targets[index]?.expectedCalibrationVersion)) ||
+      (result.receipt.state === "applied" && result.receipt.targets.length !== input.targets.length))) {
+      throw new Error("Inconsistent rollout result.");
+    }
+    response.status(200).json(buildSuccessResponse(result, "Calibration operation loaded.",
+      request.context.requestId, new Date().toISOString()));
   },
+  middlewares: calibrationMiddlewares("POST", dependencies),
+  onError: handleCalibrationOperationError,
   service: "VendorCalibrationPushApi",
 });
 
-export const handleVendorCalibrationPushRequest =
-  createVendorCalibrationPushHandler({
-    deployCalibrationVersion:
-      calibrationDeploymentService.deployCalibrationVersion.bind(
-        calibrationDeploymentService,
-      ),
-    verifyIdToken: (idToken: string) =>
-      getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
-  });
-
-export {buildSuccessResponse};
+export const handleVendorCalibrationPushRequest = createVendorCalibrationPushHandler({
+  apply: calibrationRolloutService.apply.bind(calibrationRolloutService),
+  getUser: (uid) => getFirebaseAdminApp().auth().getUser(uid),
+  verifyIdToken: (token) => getFirebaseAdminApp().auth().verifyIdToken(token, true),
+});

@@ -62,6 +62,8 @@ export interface SessionTokenClaims {
 
 export interface SessionDocumentInitializationContext {
   calibrationVersion: string;
+  calibrationSnapshot?: import("../../../shared/contracts/calibrationConsumer")
+    .FrozenCalibrationSource;
   consumedLaunchCredentialHashes: string[];
   instituteId: string;
   licenseSnapshot: Record<string, unknown>;
@@ -123,8 +125,11 @@ export interface SessionQuestionTimeRecord {
 export type SessionQuestionTimeMap = Record<string, SessionQuestionTimeRecord>;
 
 export interface SessionDocumentInitializationRecord {
+  calibrationModel?: "risk_projection_v1";
   answerMap: Record<string, unknown>;
   calibrationVersion: string;
+  calibrationSnapshot?: import("../../../shared/contracts/calibrationConsumer")
+    .FrozenCalibrationSource;
   consumedLaunchCredentialHashes: string[];
   createdAt: FirebaseFirestore.FieldValue;
   deadlineAt: null;

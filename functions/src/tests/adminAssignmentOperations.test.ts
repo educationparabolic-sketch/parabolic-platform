@@ -5,6 +5,7 @@ import * as gcpMetadata from "gcp-metadata";
 import type {AdminAssignmentOperationsService} from
   "../services/adminAssignmentOperations";
 import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
+import {seedConsumerVersion} from "./calibrationConsumerFixture";
 
 process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8080";
 process.env.GCLOUD_PROJECT ??= "parabolic-platform-build-128-tests";
@@ -78,6 +79,10 @@ async function seedRun(
   revision: number,
   overrides: Record<string, unknown> = {},
 ): Promise<void> {
+  await seedConsumerVersion(instituteId, "calibration-v1");
+  await firestore.doc(institutePath).set({
+    calibrationVersion: "calibration-v1",
+  }, {merge: true});
   await firestore.doc(runPath(runId)).set(
     runFixture(runId, status, revision, overrides),
   );
@@ -568,6 +573,15 @@ test("force-submit composes the authoritative scoring submission engine", async 
   const runId = "run-force-real";
   const sessionId = "session-force-real";
   const questionId = "question-force-real";
+  const licenseVersion = "license_consumer_regression_v1";
+  await firestore.doc(institutePath).set({status: "active",
+    authorizationVersion: 1, licenseVersion}, {merge: true});
+  const license = {licenseVersion, licenseState: "active", currentLayer: "L3",
+    featureFlags: {controlledMode: true, hardMode: true},
+    expiryDate: "2099-12-31T23:59:59.000Z", gracePeriodEndsAt: null,
+    activeStudentLimit: 100, concurrentSessionLimit: 20};
+  await Promise.all(["main", "current"].map((id) =>
+    firestore.doc(`${institutePath}/license/${id}`).set(license)));
   await Promise.all([
     seedRun(runId, "active", 1, {
       mode: "Hard",
@@ -593,6 +607,7 @@ test("force-submit composes the authoritative scoring submission engine", async 
     },
     calibrationVersion: "calibration-v1",
     createdAt: now,
+    licenseSnapshot: license,
     deadlineAt: Timestamp.fromMillis(Date.now() + 60_000),
     instituteId,
     mode: "Hard",

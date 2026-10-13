@@ -419,6 +419,10 @@ export class PatternEngineService {
       const studentMetricsSnapshot = await transaction.get(
         studentMetricsReference,
       );
+      if (!studentMetricsSnapshot.exists) {
+        return {idempotent: false, reason: "deleted" as const,
+          studentYearMetricsPath, triggered: false};
+      }
       const currentData = isPlainObject(studentMetricsSnapshot.data()) ?
         studentMetricsSnapshot.data() :
         afterData;
@@ -450,6 +454,28 @@ export class PatternEngineService {
         latestSessionSummary,
       );
       const evaluation = evaluatePatterns(rollingWindow);
+      if (currentData?.calibrationSnapshot !== undefined) {
+        if (typeof currentData.wrongStreakActive !== "boolean") {
+          throw new Error("Calibrated wrong-streak authority is missing.");
+        }
+        // The aggregation transaction already computed the canonical rolling
+        // signal. Never overwrite it with an older trigger's local window.
+        evaluation.wrongStreak.active = currentData.wrongStreakActive;
+        const upstream = isPlainObject(
+          currentProcessingMarkers?.studentMetricsEngine,
+        ) ? currentProcessingMarkers.studentMetricsEngine : undefined;
+        const points = Array.isArray(upstream?.recentGovernanceMetrics) ?
+          upstream.recentGovernanceMetrics : [];
+        const newest = points[points.length - 1]?.submittedAt;
+        const window = points.filter((point) =>
+          point.submittedAt instanceof Timestamp && newest instanceof Timestamp &&
+          newest.toMillis() - point.submittedAt.toMillis() <= THIRTY_DAYS_IN_MILLIS);
+        evaluation.wrongStreak.frequency = window.filter((point) =>
+          point.consecutiveWrongStreakMax >= 4).length;
+        evaluation.wrongStreak.severity = currentData.wrongStreakActive ?
+          (window.some((point) => point.consecutiveWrongStreakMax >= 5) ?
+            "Critical" : "Moderate") : undefined;
+      }
       const latestSubmittedAt = rollingWindow[rollingWindow.length - 1]
         ?.submittedAt ?? latestSessionSummary.submittedAt;
 

@@ -5134,3 +5134,34 @@
     grid-template-columns: 1fr;
   }
 }
+
+.vendor-authority-filters,
+.vendor-authority-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  gap: 1rem;
+  margin-block: 1rem;
+}
+.vendor-authority-filters label,
+.vendor-authority-page-search {
+  display: grid;
+  gap: .4rem;
+}
+.vendor-authority-filters input,
+.vendor-authority-filters select,
+.vendor-authority-page-search input {
+  padding: .65rem;
+  border: 1px solid #cbd5e1;
+  border-radius: .5rem;
+  background: white;
+  color: #172033;
+  min-width: 0;
+}
+.vendor-authority-actions { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; margin-block: 1rem; }
+.vendor-authority-evidence { border: 1px solid #cbd5e1; border-radius: .75rem; padding: 1rem; overflow-wrap: anywhere; }
+.vendor-authority-table { overflow-x: auto; }
+.vendor-authority-table table { width: 100%; border-collapse: collapse; }
+.vendor-authority-table th,
+.vendor-authority-table td { text-align: left; padding: .75rem; border-bottom: 1px solid #cbd5e1; }
+.vendor-authority-detail { padding: 1rem; border: 1px solid #cbd5e1; border-radius: .75rem; overflow-wrap: anywhere; }
+.vendor-authority-evidence dd { margin: 0 0 .7rem; }

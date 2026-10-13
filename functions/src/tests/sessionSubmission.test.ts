@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {Timestamp} from "firebase-admin/firestore";
+import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import * as gcpMetadata from "gcp-metadata";
 import {
   computeSubmissionMetrics,
@@ -10,6 +10,8 @@ import {
 } from "../services/submission";
 import {answerBatchService} from "../services/answerBatch";
 import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
+import {freezeCalibration} from "../services/calibrationConsumer";
+import {consumerVersion} from "./calibrationConsumerFixture";
 
 process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8080";
 process.env.GCLOUD_PROJECT ??= "parabolic-platform-build-36-tests";
@@ -338,6 +340,12 @@ test("submitSession finalizes active session atomically", async () => {
   await deleteIfPresent(sessionPath);
   await seedSession(sessionId, "active", false);
 
+  const frozen = freezeCalibration(consumerVersion("cal_v2026_04"),
+    INSTITUTE_ID, "cal_v2026_04");
+  await firestore.doc(`${ACADEMIC_YEAR_PATH}/runs/${RUN_ID}`)
+    .update({calibrationSnapshot: frozen});
+  await firestore.doc(sessionPath).update({calibrationSnapshot: frozen});
+
   const result = await submissionService.submitSession({
     instituteId: INSTITUTE_ID,
     reason: "manual",
@@ -357,6 +365,10 @@ test("submitSession finalizes active session atomically", async () => {
 
   const snapshot = await firestore.doc(sessionPath).get();
   const data = snapshot.data();
+  assert.deepEqual(data?.calibrationSnapshot, frozen);
+  // Restore the shared legacy-run fixture for the remaining historical cases.
+  await firestore.doc(`${ACADEMIC_YEAR_PATH}/runs/${RUN_ID}`)
+    .update({calibrationSnapshot: FieldValue.delete()});
   assert.equal(data?.status, "submitted");
   assert.equal(data?.submissionLock, false);
   assert.ok(data?.submittedAt instanceof Timestamp);

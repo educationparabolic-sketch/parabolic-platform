@@ -44,6 +44,14 @@ function collectTypeScriptFiles(directory) {
 function parameterName(expression, sourceFile) {
   const expressionText = expression.getText(sourceFile);
 
+  if (/operationId/i.test(expressionText)) {
+    return "{operationId}";
+  }
+
+  if (/versionId/i.test(expressionText)) {
+    return "{versionId}";
+  }
+
   if (/testId/i.test(expressionText)) {
     return "{testId}";
   }
@@ -376,6 +384,7 @@ test(
         "ADM-58",
         "ADM-59",
         "ADM-60",
+        "VEN-02",
         "VEN-03",
         "VEN-04",
         "VEN-05",
@@ -409,6 +418,12 @@ test(
         "VEN-33",
         "VEN-34",
         "VEN-35",
+        "VEN-36",
+        "VEN-37",
+        "VEN-38",
+        "VEN-39",
+        "VEN-40",
+        "VEN-41",
       ],
     );
     plannedRoutes.forEach((route) => {
@@ -430,8 +445,8 @@ test("canonical route status accounting is exact", () => {
   });
 
   assert.deepEqual(statusCounts, {
-    implemented: 100,
-    incompatible: 1,
+    implemented: 107,
+    incompatible: 0,
     intentionally_retired: 5,
     missing: 0,
   });

@@ -70,11 +70,14 @@ const functionsApplicationKeys = [
   "STRIPE_WEBHOOK_SECRET_NAME",
   "SUPPORT_ATTACHMENTS_BUCKET",
   "SUPPORT_NOTIFICATION_EMAIL",
+  "VENDOR_AUDIT_CURSOR_KEY",
+  "VENDOR_AUDIT_CURSOR_KEY_SECRET_VERSION",
   "VENDOR_BASE_URL",
 ];
 
 const functionsPlatformKeys = [
   "FIREBASE_CONFIG",
+  "FIRESTORE_EMULATOR_HOST",
   "FUNCTIONS_VERSION",
   "FUNCTION_TARGET",
   "GCLOUD_PROJECT",
@@ -261,6 +264,8 @@ test("tracked environment examples match the documented variable surface", async
     "EMAIL_PROVIDER_KEY",
     "STRIPE_SECRET_KEY",
     "STRIPE_WEBHOOK_SECRET",
+    "VENDOR_AUDIT_CURSOR_KEY",
+    "VENDOR_AUDIT_CURSOR_KEY_SECRET_VERSION",
   ]) {
     assert.match(functionsExample, new RegExp(`^${secretKey}=$`, "mu"));
   }

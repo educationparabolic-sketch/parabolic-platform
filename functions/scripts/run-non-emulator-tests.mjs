@@ -81,6 +81,7 @@ const baselineExclusions = new Map([
 const selectedExternalSuites = [
   "apiGateway.test.js",
   "apiRouteManifest.test.js",
+  "vendorAuditHealth.test.js",
 ];
 
 const emulatorMarkers = [

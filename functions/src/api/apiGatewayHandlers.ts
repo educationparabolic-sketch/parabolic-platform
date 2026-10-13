@@ -60,6 +60,10 @@ import {
   handleVendorCalibrationSimulationRequest,
 } from "./vendorCalibrationSimulation";
 import {handleVendorSupportRequest} from "./vendorSupport";
+import {handleVendorCalibrationVersionsRequest} from "./vendorCalibrationVersions";
+import {handleVendorCalibrationOperationsRequest} from "./vendorCalibrationOperations";
+import {handleVendorAuditEventsRequest} from "./vendorAuditEvents";
+import {handleVendorSystemHealthRequest} from "./vendorSystemHealth";
 import {handleVendorInstitutesRequest} from "./vendorInstitutes";
 import {handleVendorCommercialRequest} from "./vendorCommercial";
 import {handleVendorIntelligenceInitializeRequest} from "./vendorIntelligenceInitialize";
@@ -110,6 +114,10 @@ Record<string, ApiGatewayHandler>
   studentPerformance: handleStudentPerformanceRequest,
   studentSolutions: handleStudentSolutionsRequest,
   studentTests: handleStudentTestsRequest,
+  vendorCalibrationVersions: handleVendorCalibrationVersionsRequest,
+  vendorCalibrationOperations: handleVendorCalibrationOperationsRequest,
+  vendorAuditEvents: handleVendorAuditEventsRequest,
+  vendorSystemHealth: handleVendorSystemHealthRequest,
   vendorCalibrationPush: handleVendorCalibrationPushRequest,
   vendorCalibrationSimulation: handleVendorCalibrationSimulationRequest,
   vendorCommercial: handleVendorCommercialRequest,

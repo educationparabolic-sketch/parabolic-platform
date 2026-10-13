@@ -1,5 +1,6 @@
 import {createRequire} from "node:module";
 import {expect, test} from "playwright/test";
+import {calibrationConsumerFixture} from "./calibration-consumer-fixture.mjs";
 
 const require = createRequire(import.meta.url);
 const {
@@ -107,6 +108,9 @@ test.beforeAll(async () => {
   });
   teacherUid = teacher.uid;
   await auth.setCustomUserClaims(teacherUid, {
+    authVersion: 1,
+    licenseVersion: "license-bwm-014", licenseState: "active",
+    featureFlags: {controlledMode: true, hardMode: true},
     instituteId,
     licenseLayer: "L2",
     role: "teacher",
@@ -180,21 +184,40 @@ test.beforeAll(async () => {
 
   const institute = firestore.collection("institutes").doc(instituteId);
   const year = institute.collection("academicYears").doc(yearId);
+  await institute.collection("license").doc("current").set({
+    licenseVersion: "license-bwm-014", licenseState: "active", currentLayer: "L2",
+    expiryDate: "2099-12-31T23:59:59.000Z", gracePeriodEndsAt: null,
+    featureFlags: {controlledMode: true, hardMode: true},
+    activeStudentLimit: 100, concurrentSessionLimit: 20,
+  });
+  await institute.collection("calibration").doc("cal-bwm-014")
+    .set(calibrationConsumerFixture("cal-bwm-014"));
   const otherInstitute = firestore
     .collection("institutes")
     .doc(otherInstituteId);
   await Promise.all([
     institute.set({
       calibrationVersion: "cal-bwm-014",
-      profile: {instituteName: "BWM-014 Assignment Institute"},
+      authorizationVersion: 1, status: "active", licenseVersion: "license-bwm-014",
+      profile: {instituteName: "BWM-014 Assignment Institute",
+        academicYearFormat: "YYYY", contactEmail: "ops@example.test",
+        contactPhone: "+1-555-0130", defaultExamType: "JEE_MAIN",
+        logoReference: "logos/vendor-owned.png", timeZone: "UTC"},
+      securitySettings: {allowMultipleAdminSessions: false,
+        forceLogoutOnPasswordChange: true, sessionTimeoutDuration: 30},
     }),
-    year.set({label: yearId, locked: false, status: "Active"}),
+    year.set({label: yearId, academicYearLabel: yearId, runCount: 1,
+      studentCount: 1, locked: false, status: "Active"}),
     institute.collection("academicYears").doc("2025").set({
       label: "2025",
+      academicYearLabel: "2025", runCount: 1, studentCount: 1,
       locked: true,
       status: "Locked",
     }),
     institute.collection("license").doc("main").set({
+      licenseVersion: "license-bwm-014", licenseState: "active",
+      expiryDate: "2099-12-31T23:59:59.000Z", gracePeriodEndsAt: null,
+      activeStudentLimit: 100, concurrentSessionLimit: 20,
       currentLayer: "L2",
       featureFlags: {controlledMode: true, hardMode: true},
     }),
@@ -247,10 +270,16 @@ test.beforeAll(async () => {
     }),
     otherInstitute.set({
       calibrationVersion: "cal-bwm-014-other",
-      profile: {instituteName: "BWM-014 Other Institute"},
+      profile: {instituteName: "BWM-014 Other Institute",
+        academicYearFormat: "YYYY", contactEmail: "other-ops@example.test",
+        contactPhone: "+1-555-0131", defaultExamType: "JEE_MAIN",
+        logoReference: "logos/vendor-owned.png", timeZone: "UTC"},
+      securitySettings: {allowMultipleAdminSessions: false,
+        forceLogoutOnPasswordChange: true, sessionTimeoutDuration: 30},
     }),
     otherInstitute.collection("academicYears").doc(yearId).set({
       label: yearId,
+      academicYearLabel: yearId, runCount: 0, studentCount: 0,
       locked: false,
       status: "Active",
     }),
@@ -355,7 +384,8 @@ test.beforeAll(async () => {
       skipBurst: false,
       status: "active",
       studentId,
-      submissionLock: false,
+    submissionLock: false,
+    licenseSnapshot: {currentLayer: "L2"},
       updatedAt: Timestamp.fromMillis(now - 300_000),
       version: 1,
       yearId,
@@ -699,6 +729,9 @@ test(
 
     const persistedRun = await firestore.doc(createdRun.runPath).get();
     expect(persistedRun.exists).toBe(true);
+    expect(persistedRun.get("calibrationSnapshot.model")).toBe("risk_projection_v1");
+    expect(persistedRun.get("calibrationSnapshot.sourcePath"))
+      .toBe(`institutes/${instituteId}/calibration/cal-bwm-014`);
     expect(persistedRun.data().recipientStudentIds).toEqual([studentId]);
     expect(persistedRun.data().recipientCount).toBe(1);
     expect(persistedRun.data().canonicalId).toBe(canonicalId);

@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { createConnection } from "node:net";
 import { fileURLToPath } from "node:url";
 
@@ -42,6 +43,8 @@ function phaseEnvironment(extraEnvironment = {}) {
     GOOGLE_CLOUD_PROJECT: projectId,
     NO_GCE_CHECK: "true",
     METADATA_SERVER_DETECTION: "none",
+    // Explicit disposable test key shared by Functions workers in this phase.
+    VENDOR_AUDIT_CURSOR_KEY: randomBytes(32).toString("base64url"),
     ...extraEnvironment,
   };
   if (!("FUNCTIONS_EMULATOR_HOST" in extraEnvironment)) {

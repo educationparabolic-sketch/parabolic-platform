@@ -13,6 +13,7 @@ import {
 } from "../types/assignmentCreation";
 import {DEFAULT_RISK_MODEL_VERSION} from "../types/riskEngine";
 import {dataTierPartitionService} from "./dataTierPartition";
+import {freezeCalibration} from "./calibrationConsumer";
 import {
   TemplateDifficultyDistribution,
   TemplatePhaseConfigSnapshot,
@@ -795,7 +796,7 @@ export class AssignmentCreationService {
     }
 
     const instituteData = instituteSnapshot.data();
-    const calibrationVersion = normalizeCalibrationVersion(
+    let calibrationVersion = normalizeCalibrationVersion(
       instituteData?.calibrationVersion,
     );
     const templateVersion = normalizeTemplateVersion(templateData);
@@ -808,7 +809,9 @@ export class AssignmentCreationService {
         `${expectedTemplateVersion} to ${templateVersion}.`,
       );
     }
-    const riskModelVersion = normalizeRiskModelVersion(data.riskModelVersion);
+    // This label still describes legacy per-session submission scoring; the
+    // frozen snapshot independently identifies the Student-year projection.
+    let riskModelVersion = normalizeRiskModelVersion(data.riskModelVersion);
     const canonicalId = normalizeRequiredString(
       templateData?.canonicalId ?? testId,
       "template.canonicalId",
@@ -838,6 +841,12 @@ export class AssignmentCreationService {
             existingRunData.requestFingerprint === requestFingerprint &&
             existingRunData.idempotencyKeyHash === idempotencyKeyHash
           ) {
+            calibrationVersion = normalizeCalibrationVersion(
+              existingRunData.calibrationVersion,
+            );
+            riskModelVersion = normalizeRiskModelVersion(
+              existingRunData.riskModelVersion,
+            );
             return "replayed";
           }
 
@@ -880,10 +889,24 @@ export class AssignmentCreationService {
           );
         }
 
+        const currentInstitute = await transaction.get(instituteReference);
+        calibrationVersion = normalizeCalibrationVersion(
+          currentInstitute.data()?.calibrationVersion,
+        );
+        const calibrationReference = this.firestore.doc(
+          `${institutePath}/calibration/${calibrationVersion}`,
+        );
+        const calibrationSource = await transaction.get(calibrationReference);
+        const calibrationSnapshot = freezeCalibration(
+          calibrationSource.data(), instituteId, calibrationVersion,
+        );
+
         transaction.set(runReference, {
           academicYear: yearId,
           attemptLimit,
           calibrationVersion,
+          calibrationSnapshot,
+          calibrationModel: "risk_projection_v1",
           canonicalId,
           createdAt,
           difficultyDistribution:

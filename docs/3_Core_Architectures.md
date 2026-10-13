@@ -1931,6 +1931,15 @@ legacy ADM-17 is retired from public dispatch.
 
 ## 4.15 Calibration Collections
 
+BWM-038 implementation boundary (2026-10-06): this section's five weights/four
+thresholds are the current stored schema, with strict sum/range/date validation,
+required creation time and schema-v1 new writes. `calibrationVersions` is only
+the existing compatibility mirror. The public DTO and exact read-only projection
+are defined by `shared/contracts/vendorCalibration.d.ts`; thresholds do not
+affect that projection. Sections 17/18's alternate parameters and lifecycle
+designs are not competing runtime authority. BWM-039 must qualify production
+consumers and recoverable activation before publishing is enabled.
+
 Global calibration versions:
 
     globalCalibration/{versionId}
@@ -7101,6 +7110,14 @@ Dashboard always reads cached Firestore data.
 
 # 17. Calibration Simulation Engine
 
+BWM-038 status (2026-10-06): this richer module design is not the implemented
+wire schema. The live read-only model is `risk_projection_v1`, using section
+4.15's five weights, five risk states, one explicit year and bounded selected
+Student summaries. No `vendor/calibration` authority, threshold effects, raw
+recomputation or discipline/cluster/batch/stability outputs are implemented by
+this task. Follow the shared calibration contract/API boundary; production
+consumer applicability and safe publishing remain BWM-039-owned.
+
 ## 17.1 Overview
 The Calibration Simulation Engine is the vendor-level intelligence system used to adjust behavioral model parameters and simulate their impact across the platform. It enables safe tuning of risk evaluation logic without modifying historical session data.
 
@@ -7474,6 +7491,26 @@ Audit records cannot be edited or deleted.
 
 
 # 18. Global Calibration Versioning Strategy
+
+BWM-038 status (2026-10-06): the lifecycle below is target architecture, not
+implemented scheduling/rollback/audit or production-consumer qualification.
+Current immutable storage and read-only simulation follow section 4.15 and the
+shared calibration contract. Mounted publishing is disabled; BWM-039 owns
+atomic/idempotent/recoverable rollout and consumer applicability, while BWM-040
+owns unified audit. No live pointer or new collection is introduced by BWM-038.
+
+BWM-039 transport checkpoint (2026-10-10): qualified frozen-source consumer and
+atomic apply/inverse runtime now have secured VEN-02/VEN-38/VEN-39 transport.
+The new shared rollout contract replaces legacy push intent without defaults or
+dual parsing. One scoped operation read returns closed lifecycle/immutable receipt
+authority, not journal internals or an audit list. Same current Vendor capability
+and revocation checks protect direct and gateway exports. Mounted adoption now
+supports only confirmed immediate selected-version publication, scoped status
+reload/exact retry and explicit inverse. VEN-09 supplies validated pointer presence
+and value; sessionStorage holds retry intent, never authoritative success or audit.
+Full-service failure/browser recovery acceptance and BWM-039 aggregate closeout pass locally.
+Version availability is `immediate_selected_targets`, not permission or guaranteed success. No global activation,
+historical rewrite, scheduling or BWM-040 unified audit is added.
 
 ## 18.1 Overview
 The Global Calibration Versioning Strategy governs how behavioral model parameters are versioned, deployed, and applied across the system. It ensures safe production updates while preserving historical determinism.
@@ -13804,6 +13841,22 @@ These safeguards ensure stable continuous deployment without impacting productio
 
 
 # 33. Monitoring & Logging Architecture
+
+Current read boundary (BWM-040, 2026-10-13): secured VEN-40/VEN-41 and mounted
+Audit/Health/Overview are read-only projections of existing server authority,
+not evidence that all monitoring adapters below are implemented. Audit fans in
+six independently validated stored families without a writer/backfill. Its
+encrypted filter-bound continuation follows event time descending, source
+precedence and private document-ID descending; opaque public HMAC IDs are not
+tie keys. Health reports validated runtime release identity and four exact
+bounded queue/operation sources, independently unavailable on corruption/read
+failure/overflow. Cloud monitoring/error detail, infrastructure usage/cost,
+latency, frontend telemetry and deployment history remain explicitly unavailable
+under BWM-051/BWM-052/BWM-053 ownership. No global verdict/SLA, browser telemetry
+authority, new event/trigger/schedule/store or monitoring-provider integration
+is implied. `shared/contracts/vendorAuditHealth.d.ts`, `docs/api_contract.md`
+and section 1.5.8/1.5.10 of `docs/2_Portals_Architecture.md` are the current
+field/source/redaction boundary; remote qualification and production remain open.
 
 ## 33.1 Overview
 The Monitoring & Logging Architecture provides operational visibility, debugging capability, cost protection, and audit traceability across the platform. It functions as the operational nervous system of the SaaS infrastructure.

@@ -4,6 +4,7 @@ import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import {adminSettingsService} from "./adminSettings";
 import {submissionService} from "./submission";
 import {getFirestore} from "../utils/firebaseAdmin";
+import {freezeCalibration} from "./calibrationConsumer";
 import {
   AdminAssignmentOperationContext,
   AdminAssignmentOperationValidationError,
@@ -1770,6 +1771,19 @@ export class AdminAssignmentOperationsService {
         timezone: request.timezone,
         yearId,
       });
+      // Derived runs are new assignments, not historical clones of calibration.
+      const currentInstitute = await transaction.get(institute);
+      const calibrationVersion = requiredString(
+        currentInstitute.get("calibrationVersion"), "institute.calibrationVersion",
+      );
+      const calibrationSource = await transaction.get(
+        institute.collection("calibration").doc(calibrationVersion),
+      );
+      newRunData.calibrationSnapshot = freezeCalibration(
+        calibrationSource.data(), request.instituteId, calibrationVersion,
+      );
+      newRunData.calibrationVersion = calibrationVersion;
+      newRunData.calibrationModel = "risk_projection_v1";
       const result: AdminRunDerivedCreateServiceResult = {
         auditId: authority.auditId,
         disposition: "applied",

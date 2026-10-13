@@ -224,6 +224,7 @@ test(
     await firestore.doc(calibrationSourcePath).set({
       activationDate: "2026-04-05T12:00:00.000Z",
       createdBy: "vendor_build_96",
+      createdAt: new Date("2026-04-05T11:00:00.000Z"),
       isActive: true,
       thresholds: {
         guessFactorEasy: 1.2,

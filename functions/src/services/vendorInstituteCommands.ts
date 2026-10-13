@@ -468,6 +468,7 @@ const instituteDetailAtCreation = (
   createdAt: Date,
 ): VendorInstituteDetail => ({
   accessStatus: "suspended",
+  calibrationPointer: {present: false},
   administrators: [],
   aggregate: {
     activeStudentCount: null,

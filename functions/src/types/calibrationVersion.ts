@@ -1,19 +1,11 @@
 import {StandardApiErrorCode} from "./apiResponse";
+import type {
+  VendorCalibrationThresholds,
+  VendorCalibrationWeights,
+} from "../../../shared/contracts/vendorCalibration";
 
-export interface CalibrationWeights {
-  easyNeglectWeight: number;
-  guessWeight: number;
-  hardBiasWeight: number;
-  phaseWeight: number;
-  wrongStreakWeight: number;
-}
-
-export interface CalibrationThresholds {
-  guessFactorEasy: number;
-  guessFactorHard: number;
-  guessFactorMedium: number;
-  phaseDeviationThreshold: number;
-}
+export type CalibrationWeights = VendorCalibrationWeights;
+export type CalibrationThresholds = VendorCalibrationThresholds;
 
 export interface CreateCalibrationVersionInput {
   activationDate?: Date | string | null;
@@ -29,6 +21,7 @@ export interface StoredCalibrationVersion {
   createdAt: FirebaseFirestore.FieldValue;
   createdBy: string;
   isActive: boolean;
+  schemaVersion: 1;
   thresholds: CalibrationThresholds;
   versionId: string;
   weights: CalibrationWeights;

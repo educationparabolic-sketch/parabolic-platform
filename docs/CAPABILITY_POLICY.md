@@ -4,7 +4,7 @@ This document explains the canonical role, license-layer, and institute feature-
 
 The code-level `CAPABILITY_MATRIX` is authoritative. Every canonical Admin route, compatibility redirect, sidebar entry, and capability-sensitive in-page mutation now resolves through the shared Admin evaluator against its exact matrix capability; Student/Vendor protected-route admission consumes the same canonical role sets. The corresponding deployable Admin Functions handlers consume a small dependency-free role-policy mirror that permanent contract tests require to match the matrix exactly. Permanent BWM-008 and BWM-033 source, middleware, real-token emulator, and browser suites cover tenant targeting, route/mount parity, feature/layer decisions, and negative enforcement boundaries.
 
-Last reconciled: 2026-10-05 (`BWM-037` secured Vendor intelligence registration). The executable Admin route/action ledger retains its exact role/layer/feature policy. VEN-03..VEN-06 enforce `vendor.support.manage` through revocation-aware, current non-disabled Vendor Auth. VEN-07/VEN-09/VEN-12/VEN-14 execute under `vendor.institutes.read`; VEN-08/VEN-10/VEN-11/VEN-13/VEN-15/VEN-16 execute under `vendor.institutes.manage_lifecycle`. Their shared transport rejects wrong-role and suspended tokens, freshly rereads current enabled Vendor Auth claims, ignores browser actor/status/audit/time authority, and derives resource targets from canonical path parameters. VEN-17..VEN-30 execute under `vendor.licenses.manage` through the same revocation-aware current-Vendor checks. Their shared transport allowlists public intent fields and derives actor, network context, institute/request/invoice/event targets, provider outcome, audit, and server time rather than trusting browser authority. Vendor capabilities intentionally have no institute-license minimum; their authority is the current global Vendor identity. The mounted Vendor institute adapter consumes VEN-07..VEN-16 and the mounted `/vendor/licensing` adapter consumes VEN-17..VEN-30; broad route admission never replaces the backend's exact command capability check. Permanent real-token proof covers commercial unauthenticated `401`, wrong-role `403`, suspended-Vendor browser denial, and public-intent-only mutations. VEN-31..VEN-35 are registered GET reads requiring `vendor.intelligence.read`, revocation-checked tokens, and a fresh enabled, non-suspended current Vendor Auth record; demoted identities, contradictory Vendor markers, and browser identity/scope overrides are denied before aggregate reads. Browser route admission alone is not sufficient authority.
+Last reconciled: 2026-10-13 (`BWM-040` secured audit/health transport). The executable Admin route/action ledger retains its exact role/layer/feature policy. VEN-03..VEN-06 enforce `vendor.support.manage` through revocation-aware, current non-disabled Vendor Auth. VEN-07/VEN-09/VEN-12/VEN-14 execute under `vendor.institutes.read`; VEN-08/VEN-10/VEN-11/VEN-13/VEN-15/VEN-16 execute under `vendor.institutes.manage_lifecycle`. Their shared transport rejects wrong-role and suspended tokens, freshly rereads current enabled Vendor Auth claims, ignores browser actor/status/audit/time authority, and derives resource targets from canonical path parameters. VEN-17..VEN-30 execute under `vendor.licenses.manage` through the same revocation-aware current-Vendor checks. Their shared transport allowlists public intent fields and derives actor, network context, institute/request/invoice/event targets, provider outcome, audit, and server time rather than trusting browser authority. Vendor capabilities intentionally have no institute-license minimum; their authority is the current global Vendor identity. The mounted Vendor institute adapter consumes VEN-07..VEN-16 and the mounted `/vendor/licensing` adapter consumes VEN-17..VEN-30; broad route admission never replaces the backend's exact command capability check. Permanent real-token proof covers commercial unauthenticated `401`, wrong-role `403`, suspended-Vendor browser denial, and public-intent-only mutations. VEN-31..VEN-35 are registered GET reads requiring `vendor.intelligence.read`, revocation-checked tokens, and a fresh enabled, non-suspended current Vendor Auth record; demoted identities, contradictory Vendor markers, and browser identity/scope overrides are denied before aggregate reads. VEN-40/VEN-41 now execute through distinct secured exports/handlers whose transports independently require the same fresh identity plus `vendor.audit.read` and `vendor.system_health.read` respectively. Route admission or either capability never grants the other read. Browser route admission alone is not sufficient authority.
 
 Mounted intelligence and intelligence-owned Overview now consume VEN-31..VEN-35
 through one authenticated strict adapter. Runtime response/filter validation,
@@ -13,7 +13,28 @@ prevent browser fixture or stale local authority from being substituted. The
 backend's revocation-checked current Vendor capability remains the authority;
 rendering a permitted route or an unavailable-panel label is not authorization.
 
+Mounted audit, system-health and Overview now consume VEN-40/VEN-41 through
+`vendorAuditHealthApi`. Every nested response and selected audit filter is
+validated before display; superseded requests abort and identity/token changes
+hide prior authority. Permission failures retain their explicit state and never
+show a fixture or zero/global-health fallback. The source-based queue evidence
+does not grant a mutation or bypass either server capability.
+
 ## Decision Rules
+
+BWM-038's `shared/contracts/vendorCalibration.d.ts` is enforced by the shared
+`vendorCalibrationBoundary.ts`: simulation, strict atomic push, VEN-36/VEN-37
+version reads and VEN-38/VEN-39 operation-status/inverse
+verify ID tokens with revocation and reread current enabled/non-suspended Vendor
+identity for `vendor.calibration.manage`. This capability has only Vendor roles,
+no institute-license minimum and no feature-flag requirement. Stale demotion,
+disabled/suspended/revoked/missing identity and explicit isVendor=false fail
+closed. Unknown actor/scope/mode intent is rejected. Publishing remains
+unavailable pending mounted BWM-039 adoption/acceptance. Status reads only one
+same-Vendor journal (cross-Vendor and missing both 404); no list/query/raw journal
+is exposed. Rollout has explicit UUID/optimistic targets; inverse requires a
+distinct UUID/completed revision and unchanged pointers. No legacy body/defaults,
+create/draft/schedule/all-institute modes or BWM-040 audit reader are added.
 
 Access to a capability requires every declared axis to pass:
 

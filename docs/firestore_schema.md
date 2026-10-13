@@ -2,7 +2,7 @@
 
 This document provides a simplified reference of the Firestore data hierarchy.
 
-Last reconciled: 2026-10-05 (`BWM-037` secured intelligence route registration)
+Last reconciled: 2026-10-14 (`BWM-040` verified local read-only audit/health; unchanged local license-history index)
 
 The authoritative schema definition exists in:
 
@@ -1021,7 +1021,36 @@ Institute calibration overrides:
 
 institutes/{instituteId}/calibration/{versionId}
 
-Calibration versions influence risk scoring and behavioral analysis.
+Calibration versions parameterize the read-only `risk_projection_v1` stored-summary
+simulation. BWM-039's consumer substep adds the frozen-source Student-year
+`risk_projection_v1` consumer described below; this does not implement threshold
+effects or qualify atomic rollout. BWM-039 must qualify rollout/recovery before
+publishing can become available.
+
+BWM-038 contract alignment (`shared/contracts/vendorCalibration.d.ts`) makes
+strict service/runtime changes but adds no new collection. Canonical immutable versions stay
+`globalCalibration/{versionId}`; `calibrationVersions/{versionId}` is only the
+existing compatibility mirror. New internal writes carry schema version 1 and
+reject invalid numeric shapes or a second active global authority. The five weights are guess, phase,
+easy-neglect, hard-bias and wrong-streak, finite [0,1] and sum-one within 0.000001;
+stored guess factors are (0,10] multipliers and phase deviation [0,100] percentage
+points. Complete legacy records project public schema-v1 only after strict field/
+date validation; missing timestamps or invalid/ambiguous authority cannot be
+manufactured. Active global resolution probes two records, rejects ambiguity/
+future activation, and does not implement scheduling.
+
+`risk_projection_v1` consumes only one explicit academic year per institute under
+`institutes/{instituteId}/academicYears/{academicYearId}/studentYearMetrics`.
+No raw sessions/answers are read or historical metrics rewritten. Reads cap at
+20 institutes, 1,000 summaries each and 5,000 total; overflow fails rather than
+sampling. Canonical percent fields and validated legacy aliases must agree when
+both exist; wrong-streak must be boolean. The read-only simulation service now
+enforces these rules and never rewrites the source summaries. Implemented version list/detail reads use only
+document-ID/automatic single-field queries; no new composite index is required
+here. List reads default to 25/max 50 with a limit-plus-one probe and bounded
+schema/query/last-ID cursor; every selected record validates before projection.
+Current Vendor capability gates both reads. BWM-039 owns recoverable activation, BWM-040 unified audit projection, and
+BWM-053 remote index/backfill qualification.
 
 ---
 
@@ -1162,6 +1191,150 @@ Pricing must never be hardcoded inside backend logic.
 
 
 # Schema Rules
+
+## BWM-039 reserved calibration operation persistence (not implemented)
+
+### BWM-039 frozen consumer authority
+
+`shared/contracts/calibrationConsumer.d.ts` defines `FrozenCalibrationSource`.
+New runs capture a validated active non-future institute calibration source in
+the same transaction that reads the institute pointer and creates the assignment.
+Duplicate/reassign commands also capture current institute authority, not the
+source run's historic calibration. Runs and new sessions carry server-only
+`calibrationModel: risk_projection_v1` and `calibrationSnapshot` with schema,
+model, institute/version/path, complete normalized weights/threshold metadata,
+creator/dates/active flag and canonical SHA-256 fingerprint. A model marker without
+its snapshot is invalid, never a legacy fallback. Session creation validates the
+immutable copy still exists and agrees with the run snapshot; resume/submission
+retain frozen authority and reject run/session identity or fingerprint mismatch.
+
+Historical runs/sessions are not rewritten. A new session on a legacy run must
+freeze the validated source of that run's version; an existing legacy session
+without either model marker or snapshot retains the legacy submission behavior.
+Source changes after capture never alter submitted/frozen weights. No historical
+recomputation/backfill occurs. Session `riskModelVersion` continues to label
+legacy submission scoring; snapshot `model` labels the Student-year projection.
+
+Submitted summaries and existing per-run Student result documents retain the
+snapshot. Student-year model selection uses the latest calibrated submission by
+`(submittedAt, sessionId)` with deterministic ID tie-breaking, independently of
+delivery order; old/legacy arrivals cannot replace newer calibrated authority.
+It projects cumulative guess, phase-deviation, easy-neglect and hard-bias means
+plus the canonical boolean wrong-streak signal (last five submissions within
+30 days; any max streak >=5 or three >=4), using the exact shared simulation
+normalization/rounding and inclusive 20/40/60/80 cutoffs. It does not average
+legacy session risk scores, map overstay to wrong-streak, apply legacy behavioral
+floors or implement threshold effects. Risk/pattern triggers read current
+committed markers and preserve the aggregation transaction's canonical signal;
+stale events cannot recreate a deleted Student-year document.
+
+Cumulative sums may exceed 100; they remain finite nonnegative sums, not bounded
+percentage fields. Calibrated processing rejects missing/invalid input signals,
+cumulative authority and rolling streak history instead of inserting defaults.
+Legacy data missing that authority requires BWM-053 migration qualification;
+no in-task repair/backfill or rollout availability is implied. Existing result,
+Student-year and processing-marker paths are reused; no collection/index/event,
+schedule, browser permission or unified-audit read model is added.
+
+`shared/contracts/vendorCalibrationRollout.d.ts` owns the DEC-071 journal shape.
+`vendorCalibrationRollouts/{operationId}` is server-only mutable recovery truth:
+schema, scoped Vendor UID, kind, hashed UUID identity, exact request/source
+fingerprints, sorted optimistic targets, captured before/after pointer values,
+revision, timestamps, state, stored terminal receipt and inverse-operation ID.
+Never persist raw idempotency keys. Missing pointer fields and explicit null are
+distinct. Both existing valid license mirrors are required; unrelated fields
+must be preserved, not copied from one mirror over the other.
+
+Reservation creates only a pending revision-1 journal. A single transaction
+reads source/journal/all targets, checks expected pointers, creates or verifies
+immutable `institutes/{id}/calibration/{versionId}` copies, updates institute and
+both license pointers, and creates terminal `vendorCalibrationLogs/{operationId}`
+plus `institutes/{id}/calibrationHistory/{operationId}` facts together with the
+revision-2 receipt. Logs carry operation/kind/source/fingerprint/server actor,
+before/after snapshots, per-target outcome and safe failure code. They are
+create-only, never mutable recovery state. Invalid preflight may lack complete
+snapshots; journal retains the exact requested IDs and failure log must not
+invent captured values or successful histories. A failed terminalization leaves
+pending uncertainty. Commit-response loss is resolved by authoritative reread.
+
+Rollback is a separate keyed operation: all current pointers must equal original
+after values and the original completed revision must match. One transaction
+restores exact prior presence/value, appends inverse terminal facts, completes
+the rollback journal and links/advances the original to rolled_back. It never
+deletes version copies or rewrites runs, sessions, summaries or old logs.
+Direct browser access is not authorized; no rule/index/schedule is added.
+BWM-039's internal `calibrationRolloutService.apply` and `.rollback` implement pending
+reservation, atomic apply/inverse and exact stored replay using these reserved stores;
+VEN-02 now calls the strict atomic writer with server-derived current Vendor UID.
+VEN-38/VEN-39 share a secured same-Vendor status/inverse handler. The legacy
+deployment service is not called by the transport and its DTO is rejected.
+Status gets exactly one journal, validates closed authority and projects only
+operation state/receipt/inverse ID; another Vendor's record is indistinguishable
+from missing. Mounted immediate publication/status/inverse now retains only scoped
+retry intent in sessionStorage; server reads remain receipt/pointer authority.
+The existing institute-detail read projects exact calibration pointer presence/null/value
+without changing persisted institute schema or rewriting historical creation receipts.
+The new writer requires both structurally valid existing license mirrors and
+preserves their unrelated fields individually. An inactive non-future source
+copy becomes active; null activation uses the source's non-future creation time
+so later identical copies can be reused without changing their immutable identity.
+Failures without a complete authoritative capture retain requested IDs with
+empty outcomes, not invented pointer snapshots. A failed terminal-log write
+leaves revision-1 pending; an ambiguous apply outcome is reread before failure
+terminalization. Internal rollback requires the original same-Vendor completed
+apply revision and a distinct UUID, verified against its stored scoped hash.
+One inverse transaction binds captured authority to the immutable original root
+fact, verifies all three current pointers, restores exact prior presence/value,
+appends inverse facts and links both journals. The inverse completes at revision 2;
+the original advances to rolled_back revision 3 but retains its original revision-2
+receipt/completion time unchanged. Apply replay after rollback exposes that lifecycle
+and unchanged receipt. No global/source/copy/history/run/session rewrite or deletion;
+unrelated licensing changes survive. Transport is implemented; mounted publishing
+remains unavailable, with no list scan or browser journal rule.
+BWM-040 implements read-only audit/health projections over existing authority;
+BWM-053 owns deployed-data migration. No new parallel audit collection.
+
+## BWM-040 audit and system-health read authority
+
+`shared/contracts/vendorAuditHealth.d.ts` adds no stored document or browser
+rule. `functions/src/services/vendorAuditReadModel.ts` now read-time fans in the
+two independently validated root
+`vendorAuditLogs` timestamp families, terminal `vendorCalibrationLogs`, redacted
+`vendor/stripeEvents/events`, root `billingSnapshots`, and immutable institute
+`licenseHistory`. Each source query is bounded to the requested limit plus one;
+the globally merged cursor is AES-256-GCM protected, filter-bound, and carries a
+continuation per source. The service requires an injected 32-byte key and adds
+no collection, materialized projection, writer, backfill, rule or index. It is
+registered through secured VEN-40. `firestore.indexes.json` declares the required
+descending collection-group `licenseHistory.timestamp` index (document-ID
+tiebreak order is implicit), preserving existing ascending/descending ordinary
+collection indexes. Other audit time/document-ID queries use automatic
+collection indexes. BWM-053 owns deployed index qualification; emulator success
+does not prove a remote index is ready.
+`functions/src/services/vendorSystemHealthReadModel.ts` now reads only current
+runtime release identity plus projected aggregate state/age fields from existing
+`systemFlags/failureRecoveryRetryQueue/jobs`, `emailQueue`,
+`vendor/stripeEvents/events` and `vendorCalibrationRollouts`. Every source read
+is independently validated and capped at exactly 1,000 documents; overflow is
+reported unavailable instead of truncating counts. Cloud metrics/errors,
+cost/usage/latency, frontend telemetry and deployment history have no approved
+durable reader and remain explicitly unavailable. The service adds no document,
+field, collection, source writer, history backfill, rule, index, event, trigger
+or schedule; direct browser access remains denied. VEN-40/VEN-41 now expose the
+strict reads only through revocation-checked current enabled Vendor transport;
+mounted audit, health and Overview now consume the same strict authenticated
+read adapters. Pagination history and page-local search stay in component memory;
+they never become stored event/queue authority. This frontend adoption adds no
+schema, rule, index, writer, backfill, event or schedule.
+
+Equal-time/equal-family audit ties follow private document-ID descending order
+to match Firestore's consumed continuation prefix (DEC-083); public HMAC IDs
+are never sort keys. The collection-group timestamp index and its implicit
+document-ID direction are unchanged. Health's observed/generated times are
+server read clocks; oldest-outstanding/newest-activity use validated stored
+source times, never a browser timestamp. Permanent source/cursor/no-write and
+real secured API/browser proofs qualify only local behavior, not deployed
+indexes, secrets/IAM, cloud telemetry or historical-data migration.
 
 All generated code must follow these rules:
 

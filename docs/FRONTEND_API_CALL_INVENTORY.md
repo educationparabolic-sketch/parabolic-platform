@@ -1,8 +1,8 @@
 # Frontend API Call Inventory
 
-Status: current frontend inventory and canonical-route authority through BWM-037 verified closeout
+Status: current frontend inventory and canonical-route authority through BWM-040 verified local audit/health closeout; production NO_GO
 
-Inventory date: 2026-10-05
+Inventory date: 2026-10-14
 
 Scope: executable HTTP calls in `apps/admin/src`, `apps/student/src`, `apps/exam/src`, and `apps/vendor/src`
 
@@ -36,7 +36,7 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 - `intentionally retired`: explicit product or architecture evidence says the contract must not be served. The removed EXM-03 custom refresh call is retained as an explicit retired route key because Firebase Auth SDK refresh is authoritative.
 - Gateway and Hosting reachability are excluded from per-route classification because they are common dependencies owned by BWM-003 and BWM-004.
 
-## Canonical route assignments and status — 106 contracts
+## Canonical route assignments and status — 112 contracts
 
 | ID | Method | Current frontend path | Canonical route | Status | Classification basis |
 | --- | --- | --- | --- | --- | --- |
@@ -111,8 +111,8 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 | EXM-03 | `POST` | Retired (no frontend call) | `/api/v1/exam/session/{sessionId}/token/refresh` | `intentionally retired` | Firebase Auth SDK refreshes the current Exam-origin ID token; the nonexistent custom refresh request and credential fields were removed. |
 | EXM-04 | `POST` | `/exam/session/{sessionId}/submit` | `/api/v1/exam/session/{sessionId}/submit` | `implemented` | Runtime sends the exact four-field shared request after the final drain, then strictly consumes server-owned status, reason, time, replay disposition, and metrics; parallel/repeated and reached-deadline expiry submits converge on one stored result. |
 | EXM-05 | `POST` | `/exam/session/{sessionId}/activate` | `/api/v1/exam/session/{sessionId}/activate` | `implemented` | Runtime requests activation only after entry checks/declaration; the secured idempotent handler persists `active`, `startedAt`, and the immutable scheduled `deadlineAt`, returns `serverTime`, and deterministically reconciles expiry. |
-| VEN-01 | `POST` | `/vendor/calibration/simulate` | `/api/v1/vendor/calibration/simulate` | `incompatible` | Frontend sends `strategyProfileParameters`; handler requires `weights`, so the simulation request fails validation/service normalization. |
-| VEN-02 | `POST` | `/vendor/calibration/push` | `/api/v1/vendor/calibration/push` | `implemented` | Vendor auth, target/version request, and consumed deployment response align. |
+| VEN-01 | `POST` | `/vendor/calibration/simulate` | `/api/v1/vendor/calibration/simulate` | `implemented` | Mounted strict adapter sends explicit year/targets/five weights and validates selection-bound exact five-state results; no fabricated metrics. |
+| VEN-02 | `POST` | mounted immediate selected-version publisher | `/api/v1/vendor/calibration/push` | `implemented` | Strict atomic UUID/version/server-read optimistic targets; confirmation and exact same-key retry, no legacy body. |
 | VEN-03 | `GET` | No frontend call yet | `/api/v1/vendor/support/tickets` | `implemented` | Secured `vendorSupport` provides the active-Vendor global queue with bounded institute/team/assignment/category/priority/status cursor filters and counts. |
 | VEN-04 | `GET` | No frontend call yet | `/api/v1/vendor/support/tickets/{ticketId}` | `implemented` | Secured `vendorSupport` uniquely resolves the institute ticket and returns bounded message history with opaque attachment availability. |
 | VEN-05 | `POST` | No frontend call yet | `/api/v1/vendor/support/tickets/{ticketId}/commands` | `implemented` | Secured `vendorSupport` applies revisioned/idempotent reply, active-Vendor assignment, and legal workflow commands with dual audit and redacted queued notifications. |
@@ -146,8 +146,14 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 | VEN-33 | `GET` | `/vendor/intelligence` and `/vendor/overview` | `/api/v1/vendor/intelligence/layer-distribution` | `implemented` | `vendorLayerDistribution`; exact L0-L3 aggregate GET; mounted strict adapter; authoritative state with no live fixture fallback. |
 | VEN-34 | `GET` | `/vendor/intelligence` and `/vendor/overview` | `/api/v1/vendor/intelligence/churn` | `implemented` | `vendorChurnTracking`; bounded aggregate GET; mounted strict adapter; authoritative state with no live fixture fallback. |
 | VEN-35 | `GET` | `/vendor/intelligence` and `/vendor/overview` | `/api/v1/vendor/intelligence/revenue-forecasting` | `implemented` | `vendorRevenueForecasting`; bounded aggregate GET; mounted strict adapter; authoritative state with no live fixture fallback. |
+| VEN-36 | `GET` | mounted calibration version list | `/api/v1/vendor/calibration/versions` | `implemented` | Bounded current-Vendor authority via vendorCalibrationVersions; mounted strict adapter. |
+| VEN-37 | `GET` | mounted selected version detail | `/api/v1/vendor/calibration/versions/{versionId}` | `implemented` | Validated current-Vendor detail via vendorCalibrationVersions; mounted strict adapter. |
+| VEN-38 | `GET` | mounted operation/reload recovery | `/api/v1/vendor/calibration/operations/{operationId}` | `implemented` | Same-Vendor closed single-operation status; strict receipt adapter; no query/list/local success. |
+| VEN-39 | `POST` | mounted confirmed inverse | `/api/v1/vendor/calibration/operations/{operationId}/rollback` | `implemented` | New retained UUID/expected completed revision; exact replay and atomic captured-pointer inverse. |
+| VEN-40 | `GET` | `/vendor/audit` and bounded Overview recent activity | `/api/v1/vendor/audit-events` | `implemented` | `vendorAuditHealthApi.audit`; strict closed authenticated adapter, exact server filters, encrypted cursor, max-50 in-memory previous history, explicitly page-local text search. |
+| VEN-41 | `GET` | `/vendor/system-health` and Overview operational attention | `/api/v1/vendor/system-health` | `implemented` | `vendorAuditHealthApi.health`; strict closed authenticated adapter, no query/body, exact source counts/ages or explicit unavailability, no SLA/global posture. |
 
-Canonical classification totals are `implemented` 100, `incompatible` 1,
+Canonical classification totals are `implemented` 107, `incompatible` 0,
 `missing` 0, and `intentionally retired` 5. ADM-30..ADM-60 have strict Admin
 callers and secured gateway handlers. ADM-56..ADM-60 are mounted at
 `/admin/help` with strict response validation, bounded ticket/message cursors,
@@ -168,7 +174,25 @@ browser-only invoice, payment, catalog, or settlement success.
 VEN-31..VEN-35 have registered GET handlers requiring revocation-checked current
 Vendor authority and `vendor.intelligence.read`. The five existing exports are
 canonical route exports and reject legacy POST with 405. Their declarations
-retain their historical `planned` reservation provenance, like other wired reserved routes; both mounted surfaces now call the strict adapter. Full browser acceptance remains the next BWM-037 substep.
+retain their historical `planned` reservation provenance, like other wired reserved routes; both mounted surfaces call the strict adapter and BWM-037 is verified.
+
+BWM-038 freezes `shared/contracts/vendorCalibration.d.ts`; internal version
+storage, read-only simulation, transport and mounted strict adapter now adopt it.
+VEN-01 sends exact explicit year/targets/five weights. Simulation requires
+explicit academicYearId, at most 20 selected institutes,
+five sum-one weights, five named risk states and exact bounded Student-year
+projection authority. Required version reads VEN-36/VEN-37 now share the implemented bounded
+current-Vendor vendorCalibrationVersions export/handler. Target selection can reuse the bounded VEN-07 directory; no static
+institute IDs or unbounded all-institute expansion establish authority. Draft,
+scheduled and global activation remain unavailable; BWM-039 mounted immediate
+publication/status/inverse use strict operation adapters and VEN-09 pointer preconditions. Unsupported
+comparison outputs cannot be invented. Live calibration has no fixture/audit fallback,
+clears stale results on edits/retry, and exposes explicit loading/empty/permission/
+validation/unavailable states. The separate permanent real local browser suite
+`test:vendor-calibration-acceptance:e2e` now proves exact projections, paging,
+selection/reload authority, malformed/empty/failure recovery, current Vendor denial,
+raw-data rejection and unchanged hostile local audit state. BWM-038 aggregate
+closeout is locally verified; no production-safe rollout or remote qualification is claimed.
 
 ## Question Bank lifecycle routes — live frontend callers
 
@@ -319,8 +343,12 @@ the mounted interventions destination with authoritative reloads.
 
 | ID | Method and current path | Frontend request | Frontend response | Auth / role / tenant / license | Current Functions handler | Frontend source |
 | --- | --- | --- | --- | --- | --- | --- |
-| VEN-01 | `POST /vendor/calibration/simulate` | `{ institutes, strategyProfileParameters }` | `CalibrationSimulationApiResponse` | Firebase ID; `vendor`; global scope/no tenant guard; no license middleware | `vendorCalibrationSimulation` (`api/vendorCalibrationSimulation.ts`), but backend expects `{ institutes, weights }` | `features/calibration/vendorCalibrationDataset.ts` |
-| VEN-02 | `POST /vendor/calibration/push` | `{ targetInstitutes, versionId }` | `CalibrationPushApiResponse` | Firebase ID; `vendor`; global scope/no tenant guard; no license middleware | `vendorCalibrationPush` (`api/vendorCalibrationPush.ts`) | `features/calibration/vendorCalibrationDataset.ts` |
+| VEN-01 | `POST /vendor/calibration/simulate` | `{ academicYearId, institutes, weights }` | Shared exact five-state VendorCalibrationSimulationResult | Revocation-checked current Vendor; vendor.calibration.manage | vendorCalibrationSimulation; strict source-bounded projection | features/calibration/vendorCalibrationApi.ts |
+| VEN-02 | `POST /vendor/calibration/push` | `{ idempotencyKey, versionId, targets: [{ instituteId, expectedCalibrationVersion }] }`; legacy rejected | Closed VendorCalibrationOperationResult/immutable receipt | Current enabled/non-suspended Vendor; vendor.calibration.manage | vendorCalibrationPush; atomic service | vendorCalibrationApi.publish; confirmed strict mounted workflow |
+| VEN-38 | `GET /vendor/calibration/operations/{operationId}` | No query/body | Same closed operation state, no journal internals | Same capability/current Vendor scope | vendorCalibrationOperations | vendorCalibrationApi.operation; authoritative reload |
+| VEN-39 | `POST /vendor/calibration/operations/{operationId}/rollback` | `{ idempotencyKey, expectedOperationRevision }` | Same closed inverse operation state/receipt | Same capability/scope; completed revision/new key/drift | vendorCalibrationOperations | vendorCalibrationApi.rollback; separate confirmed exact-retry inverse |
+| VEN-40 | `GET /vendor/audit-events` | Exact optional category/instituteId/status/from/to/limit/cursor query | Closed `VendorAuditEventsResult`; source-specific safe event metadata and next cursor | Current enabled/non-suspended Vendor; `vendor.audit.read` | vendorAuditEvents; strict read service, pinned secret key | vendorAuditHealthApi.audit; mounted audit and six-event Overview page |
+| VEN-41 | `GET /vendor/system-health` | No query/body | Closed `VendorSystemHealthResult`; per-source available/unavailable evidence, no global verdict | Current enabled/non-suspended Vendor; `vendor.system_health.read` | vendorSystemHealth; strict read service | vendorAuditHealthApi.health; mounted health and Overview source evidence |
 
 VEN-17..VEN-30 share `features/licensing/vendorCommercialApi.ts` as their one
 strict request/response boundary and mount through
@@ -349,9 +377,9 @@ are complete; remote index/schedule qualification remains BWM-053-owned.
 
 ## Classification summary for the current tree
 
-- The 100 `implemented` entries are handler-compatible through the common gateway and same-origin Hosting rewrite. ADM-56..ADM-60 have the strict mounted Admin caller; VEN-03..VEN-06 await their separately owned Vendor caller adoption; VEN-07..VEN-16 use the mounted strict institute adapter; VEN-17..VEN-30 use the mounted strict commercial adapter; VEN-31..VEN-35 use the mounted strict intelligence adapter.
-- The one `incompatible` entry, VEN-01 calibration simulation, requires contract repair by its remaining owning task before that flow can be considered wired.
-- Zero canonical routes are `missing`. VEN-31..VEN-35 are registered aggregate reads with integrated Auth/Firestore/Functions proof, mounted strict frontend adoption, full local no-mock browser acceptance, and verified BWM-037 aggregate closeout. VEN-17..VEN-30 remain secured by `vendorCommercial`, consumed by the strict live `/vendor/licensing` workspace, and covered by permanent authenticated browser acceptance. ADM-24 through ADM-29 retain BWM-026 emulator/browser proof.
+- The 107 `implemented` entries are handler-compatible through the common gateway and same-origin Hosting rewrite. ADM-56..ADM-60 have the strict mounted Admin caller; VEN-03..VEN-06 await their separately owned Vendor caller adoption; VEN-07..VEN-16 use the mounted strict institute adapter; VEN-17..VEN-30 use the mounted strict commercial adapter; VEN-31..VEN-35 use the mounted strict intelligence adapter.
+- Zero entries are `incompatible`: VEN-01 has the strict mounted calibration adapter and permanent real local browser acceptance; BWM-038 aggregate closeout is locally verified.
+- Zero canonical routes are `missing`: VEN-40 audit and VEN-41 system health have distinct secured exports/handlers and strict read services. Both have strict authenticated mounted callers shared with Overview; synthesized audit/health showcases are DEV fixture-only. BWM-040 permanent local acceptance is qualified; local aggregate closeout is verified; remote qualification remains separate. VEN-38 operation-status and VEN-39 rollback remain implemented through vendorCalibrationOperations; existing intelligence/commercial/Admin acceptance is unchanged.
 - ADM-09, ADM-13, ADM-17, ADM-18, and EXM-03 are intentionally retired; their superseding canonical flows own browser dispatch and the gateway serves no handler for them.
 
 ## Audit anchors

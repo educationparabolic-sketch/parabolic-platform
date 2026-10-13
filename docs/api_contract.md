@@ -2,7 +2,7 @@
 
 Status: canonical route and response-envelope contract
 
-Last reconciled: 2026-10-05 (`BWM-037` aggregate verification and closeout)
+Last reconciled: 2026-10-14 (`BWM-040` verified local audit/health closeout; production NO_GO)
 
 ## Sources of truth
 
@@ -18,8 +18,8 @@ offline-payment, and payment-event authority. The strict mounted
 `/vendor/licensing` caller consumes all fourteen routes. VEN-31..VEN-35 are
 registered aggregate-intelligence GET reads requiring current Vendor Auth and
 `vendor.intelligence.read`; mounted intelligence and Overview now consume one strict live adapter.
-Canonical accounting is 106 routes: 100 implemented, one incompatible, zero
-missing, and five retired; 56 HTTP exports map through 44
+Canonical accounting is 112 routes: 107 implemented, zero incompatible, zero
+missing routes, and five retired; 60 HTTP exports map through 48
 gateway handlers.
 
 If prose and the typed manifest disagree about a route key or status, the typed manifest must be corrected and the documentation reconciled in the same change.
@@ -52,7 +52,7 @@ If prose and the typed manifest disagree about a route key or status, the typed 
 - `missing`: no current Functions handler/export implements the canonical contract.
 - `intentionally_retired`: explicit product/architecture evidence says the route must not be served.
 
-Current totals: 100 implemented, 1 incompatible, 0 missing, 5 intentionally retired.
+Current totals: 107 implemented, 0 incompatible, 0 missing, 5 intentionally retired.
 
 Routes marked `planned` in the code manifest retain their original task-reserved
 declaration provenance. They stay `missing` until an owning substep registers a
@@ -137,8 +137,8 @@ erase an executable caller. Every frontend call must match a manifest key, and
 | EXM-03 | `POST /api/v1/exam/session/{sessionId}/token/refresh` | `intentionally_retired` | None | Firebase Auth SDK refreshes the per-origin ID token; no custom refresh API is served |
 | EXM-04 | `POST /api/v1/exam/session/{sessionId}/submit` | `implemented` | `examSessionSubmit` | Firebase ID; student; exact session claims; active manual or reached-deadline expiry authority; atomic idempotent finalization and replay |
 | EXM-05 | `POST /api/v1/exam/session/{sessionId}/activate` | `implemented` | `examSessionActivate` | Firebase ID; student; exact persisted session identity; secured idempotent activation with server clock and immutable scheduled deadline |
-| VEN-01 | `POST /api/v1/vendor/calibration/simulate` | `incompatible` | `vendorCalibrationSimulation` | Firebase ID; vendor; aggregate-only global scope |
-| VEN-02 | `POST /api/v1/vendor/calibration/push` | `implemented` | `vendorCalibrationPush` | Firebase ID; vendor; global scope |
+| VEN-01 | `POST /api/v1/vendor/calibration/simulate` | `implemented` | `vendorCalibrationSimulation` | Revocation-checked/current enabled Vendor; vendor.calibration.manage; exact year/weights; mounted strict authenticated adapter |
+| VEN-02 | `POST /api/v1/vendor/calibration/push` | `implemented` | `vendorCalibrationPush` | Revocation-checked current Vendor, vendor.calibration.manage; exact UUID/version/optimistic-target atomic operation; no legacy body or mounted publisher |
 | VEN-03 | `GET /api/v1/vendor/support/tickets` | `implemented` | `vendorSupport` | Verified active Vendor identity; global bounded institute/team/assignment/category/priority/status cursor queue plus authoritative global counts |
 | VEN-04 | `GET /api/v1/vendor/support/tickets/{ticketId}` | `implemented` | `vendorSupport` | Same Vendor boundary; unique ticket/institute resolution and bounded ascending message history with opaque attachment availability |
 | VEN-05 | `POST /api/v1/vendor/support/tickets/{ticketId}/commands` | `implemented` | `vendorSupport` | Vendor-only reply, active-Vendor assignment/unassignment, and legal workflow command with expected revision, hashed idempotency, dual audit, and redacted queued notification |
@@ -172,8 +172,275 @@ erase an executable caller. Every frontend call must match a manifest key, and
 | VEN-33 | `GET /api/v1/vendor/intelligence/layer-distribution` | `implemented` | `vendorLayerDistribution` | Current Vendor Auth plus `vendor.intelligence.read`; exact L0-L3 aggregate authority |
 | VEN-34 | `GET /api/v1/vendor/intelligence/churn` | `implemented` | `vendorChurnTracking` | Current Vendor Auth plus `vendor.intelligence.read`; bounded inactivity and explicit unavailable cohort authority |
 | VEN-35 | `GET /api/v1/vendor/intelligence/revenue-forecasting` | `implemented` | `vendorRevenueForecasting` | Current Vendor Auth plus `vendor.intelligence.read`; bounded aggregate forecast authority |
+| VEN-36 | `GET /api/v1/vendor/calibration/versions` | `implemented` | `vendorCalibrationVersions` | Current Vendor; default 25/max 50 validated versions |
+| VEN-37 | `GET /api/v1/vendor/calibration/versions/{versionId}` | `implemented` | `vendorCalibrationVersions` | Current Vendor; strict canonical version detail |
+| VEN-38 | `GET /api/v1/vendor/calibration/operations/{operationId}` | `implemented` | `vendorCalibrationOperations` | Same current Vendor capability; one same-Vendor recovery read, no body/query/list/private journal fields |
+| VEN-39 | `POST /api/v1/vendor/calibration/operations/{operationId}/rollback` | `implemented` | `vendorCalibrationOperations` | Same current Vendor capability; distinct UUID and expected completed revision; atomic drift-guarded inverse |
+| VEN-40 | `GET /api/v1/vendor/audit-events` | `implemented` | `vendorAuditEvents` | Revocation-checked current enabled/non-suspended Vendor; `vendor.audit.read`; exact-filter/max-50 encrypted-cursor audit page |
+| VEN-41 | `GET /api/v1/vendor/system-health` | `implemented` | `vendorSystemHealth` | Same current Vendor authority; distinct `vendor.system_health.read`; no query/body; per-source operational evidence |
 
 The detailed request/response mismatch for each incompatible entry is recorded under the same ID in `docs/FRONTEND_API_CALL_INVENTORY.md`.
+
+### BWM-040 audit and system-health declaration (DEC-078)
+
+`shared/contracts/vendorAuditHealth.d.ts` is the sole dependency-free wire
+declaration for VEN-40 and VEN-41. VEN-40 accepts only optional exact
+`category`, `instituteId`, `status`, inclusive ISO `from`/`to`, `limit`, and
+`cursor` query keys. Its default page is 25 and maximum is 50. The bounded
+base64url cursor is authenticated-encrypted, versioned, bound to the normalized
+filters and limit, and carries one continuation anchor per source family. Its
+public representation does not disclose internal paths or provider identifiers;
+payloads, hashes, PII, session data and answers are never cursor inputs.
+The result has no global total and projects only the closed event and metadata
+allowlists. A malformed selected source fails the request; it is never skipped
+to manufacture a partial page.
+
+Ordering is event time descending, declared source precedence, then private
+source document ID descending, matching each Firestore continuation. Public
+HMAC event IDs are opaque identifiers, not sortable tie-break keys. Clients
+validate time/source ordering and uniqueness without receiving private paths.
+
+VEN-41 accepts no query or body. It reports point-in-time release identity and
+available/unavailable evidence for failure recovery, email delivery, Stripe
+reconciliation and calibration operations. Cloud Monitoring, Error Reporting,
+cost/usage, latency/error metrics, frontend telemetry and deployment history
+are required explicit `unavailable` sources until their owning tasks provide
+reviewed authority. The DTO has no global healthy/degraded value or SLA.
+
+Displayed health field/source reconciliation:
+
+| Field group | Authority and exact interpretation |
+| --- | --- |
+| generatedAt / source observedAt | Server read clock only; not event time or a browser observation |
+| releaseId / commitSha / builtAt / environment / functionsRevision | Validated RELEASE_ID / RELEASE_COMMIT_SHA / RELEASE_BUILT_AT / NODE_ENV / K_REVISION or FUNCTIONS_VERSION; missing individual values are null, all absent is not_configured, malformed is source_unavailable |
+| failureRecovery | systemFlags/failureRecoveryRetryQueue/jobs status: pending/processing/retrying outstanding; completed succeeded; failed failed; Timestamp createdAt and updatedAt-or-createdAt |
+| emailDelivery | emailQueue status: pending/processing/retrying outstanding; sent succeeded; failed failed; Timestamp createdAt and updatedAt-or-sentAt-or-createdAt |
+| stripeReconciliation | vendor/stripeEvents/events reconciliationState: pending processing/outstanding, mismatch failed/outstanding, manual_review outstanding, reconciled succeeded; missing state means manual_review; Timestamp createdAt-or-occurredAt and updatedAt-or-createdAt |
+| calibrationOperations | vendorCalibrationRollouts state: pending processing/outstanding, not_applied failed, applied/rolled_back succeeded; canonical ISO createdAt and updatedAt |
+| cloudMonitoring / errorReporting | Explicit adapter_not_implemented; reviewed observability BWM-051, provider/IAM provisioning BWM-052 |
+| costAndUsage / latencyAndErrorMetrics / frontendTelemetry / deploymentHistory | Explicit no_durable_source; reviewed source/telemetry BWM-051, provisioning BWM-052, deployed qualification BWM-053; browser storage never supplies authority |
+
+Each available durable source exposes only totalCount, outstandingCount,
+processingCount, retryingCount, succeededCount, failedCount, oldestOutstandingAt
+and newestActivityAt. Counts are exact validated-document state buckets;
+oldestOutstandingAt is the minimum stored creation time of outstanding records,
+newestActivityAt the maximum stored activity time of all records. Empty sources
+have zero counts and null ages, without implying overall health. Reads select
+only state/time fields and cap at 1,000 plus an overflow check; malformed/read
+failure and overflow replace that source with source_unavailable or
+source_limit_exceeded, never partial/truncated data. The health page shows all
+these fields; Overview uses the same outstanding/failed/observed evidence in
+compact form. Its other portfolio/layer values remain BWM-037 intelligence
+authority; global risk/calibration posture and cloud alerts remain unavailable.
+Audit displayed-field/source reconciliation is section 1.5.10 in
+`docs/2_Portals_Architecture.md`; non-null closed metadata is shown only for
+selected loaded events, not fetched or fabricated separately.
+
+Both reads are registered through the gateway and separate HTTP exports. They
+require revocation-checked tokens plus a fresh enabled, non-suspended current
+Vendor Auth record and their distinct capabilities. Unknown/duplicate/nested
+filters, caller-owned identity/scope and all GET body bytes are rejected as
+400 `VALIDATION_ERROR`; unsupported methods return 405 with `Allow: GET`.
+Dedicated exports accept their root or their own canonical path (with optional
+`/api/v1` prefix) and reject the other read's path. Responses use canonical
+envelopes and `Cache-Control: private, no-store`. Malformed audit authority,
+read failures and missing key configuration produce fixed redacted 500 errors;
+invalid audit filters/cursors produce fixed 400 errors. No source writer,
+projection, browser telemetry ingestion, history backfill or schedule is added.
+
+`functions/src/services/vendorAuditReadModel.ts` now implements the internal
+VEN-40 read model over the six declared source families. It independently
+validates the two root audit schemas, strictly validates every selected stored
+record, projects only the closed DTO, pseudonymizes public event/provider IDs,
+and merges deterministic descending pages with an AES-256-GCM continuation
+vector bound to the exact normalized query. Construction requires an injected
+32-byte cursor key; there is no environment or development fallback. The
+service performs reads only and is registered through `vendorAuditEvents`.
+Local/test construction requires an explicit canonical base64url 32-byte
+`VENDOR_AUDIT_CURSOR_KEY`. Staging/production instead require the pinned
+same-project `VENDOR_AUDIT_CURSOR_KEY_SECRET_VERSION` and Secret Manager access;
+there is no default or raw release-environment fallback. BWM-052 retains actual
+key/IAM provisioning. The local manifest adds only the descending
+collection-group `licenseHistory.timestamp` index, preserving both ordinary
+collection directions; BWM-053 retains deployed index qualification.
+
+`functions/src/services/vendorSystemHealthReadModel.ts` now implements the
+internal VEN-41 point-in-time service. It strictly projects runtime release
+identity plus aggregate state and timestamps from failure-recovery jobs,
+`emailQueue`, redacted Stripe reconciliation events and calibration rollout
+journals. Each durable source is independently validated and read through an
+exact 1,000-document cap; a 1,001st document returns that source as unavailable
+with `source_limit_exceeded` rather than publishing a truncated count. Malformed
+or unreadable authority makes only its source unavailable. Cloud Monitoring,
+Error Reporting, cost/usage/latency metrics, frontend telemetry and deployment
+history remain explicit unavailable sources. The result contains no SLA or
+overall-health verdict and the service performs no writes. VEN-41 is registered
+through `vendorSystemHealth`. `features/audit/vendorAuditHealthApi.ts` is now the
+strict authenticated adapter for both mounted pages and Overview. Nested DTOs,
+source availability, exact query selection, page bounds/order/duplicates and
+cursor coherence are validated before display. Reads are abortable and clear
+prior authority on filter, retry or session/token change. Audit URL filters
+apply server-side, while text search is labelled page-local; previous navigation
+retains only the last 50 visited cursors in memory. Overview requests a bounded
+six-event page and source-specific operational counts; it has no combined
+"all clear" posture or static calibration activation claim. Unsupported
+monitoring stays explicitly unavailable. Old audit/health screens are retained
+only behind DEV plus explicit fixture mode. Permanent local acceptance covers
+security, stale-query/session completion, filter/cursor/tie ordering, all six
+audit/all four health source corruption, exact cap/empty states, no writes,
+reload/fresh sessions and hostile storage. Local aggregate closeout is verified;
+no remote secret/IAM/index/monitoring or production qualification is implied.
+
+## BWM-038 calibration contract — service/transport/mounted caller adopted
+
+### BWM-039 secured atomic rollout/status/inverse transport (DEC-071)
+
+`shared/contracts/vendorCalibrationRollout.d.ts` is the single rollout,
+rollback, operation-state and journal contract. VEN-02 requires exactly
+`{idempotencyKey, versionId, targets:[{instituteId, expectedCalibrationVersion}]}`
+instead of the legacy `{targetInstitutes, versionId}` shape. This is a deliberate
+breaking change, not a dual parser: the runtime rejects the legacy DTO in
+`apiDtos.d.ts`, whose declaration-only aliases remain for historical ownership.
+Mounted publishing remains disabled. VEN-38/VEN-39 share one new
+`vendorCalibrationOperations` gateway handler/direct HTTP export.
+Rollback body is exactly `{idempotencyKey, expectedOperationRevision}`;
+the original operation ID comes from the route. Operation reads accept no query,
+enumeration or client actor fields. All require current revocation-checked Vendor
+and `vendor.calibration.manage`, including reads restricted to that Vendor scope.
+
+Command/read data is the closed `VendorCalibrationOperationResult`, validated
+including every receipt/outcome/pointer/path before response. HTTP 200 means the
+operation was loaded, not that targets changed: inspect `pending` (revision 1,
+null receipt), `applied`/`not_applied` (revision 2) or original `rolled_back`
+(revision 3, immutable revision-2 apply receipt plus inverse ID). Exact replay
+preserves the stored data/receipt; standard envelope request/time are per request.
+Terminal failures expose enum-only failureCode, never exception text. Invalid
+intent is 400 VALIDATION_ERROR; key/revision/authority conflicts 409 CONFLICT;
+missing or another Vendor's status is the same 404 NOT_FOUND; malformed journal,
+receipt or unknown service failures are redacted 500 INTERNAL_ERROR. No scans,
+actor/hash/fingerprint/private journal data or client fault controls are exposed.
+Direct operations export accepts the same `/vendor/calibration/operations/...`
+path (optionally `/api/v1` prefixed) and enforces the same fresh capability.
+
+The contract freezes UUID v4 hashing, canonical sorted-target fingerprint,
+optimistic pointers, pending/terminal recovery, exact stored replay, failure
+uncertainty and atomic inverse revision rules. Each operation is at most 20
+targets. Inactive validated non-future global candidates are allowed only for
+targeted institute copies; global activation is unchanged. Publish qualification
+still requires immutable source snapshots on new assignments/sessions and the
+same five-signal `risk_projection_v1` authoritative Student-year projection.
+Submission-level legacy scores and historical records are not retroactively
+recalculated; thresholds remain metadata. BWM-040 owns unified audit/health reads,
+not these operation-specific terminal writes and recovery reads. Create, draft,
+schedule and all-institute commands remain unsupported.
+
+`shared/contracts/vendorCalibration.d.ts` defines the dependency-free DTO and
+strict validation requirements. The internal immutable-version storage and
+read-only simulation services now enforce its numeric, active-authority,
+single-year stored-summary and compute bounds. VEN-01 now has a matching mounted
+strict authenticated request/result adapter; VEN-02 now accepts only the keyed
+atomic rollout shape. Mounted BWM-039 immediate publish/status/inverse adapters
+capture explicit server-read preconditions and retain exact scoped retry intent.
+VEN-02/VEN-38/VEN-39 retain planned declaration provenance, as do mounted version reads.
+VEN-36/VEN-37 retain planned declaration provenance but now dispatch to the shared
+`vendorCalibrationVersions` export/handler. They return validated canonical
+projections; malformed selected authority (including lookahead) fails redacted.
+No public version creation, approval, scheduling or additional publish route is
+added. Only bounded operation recovery and atomic inverse routes are added.
+
+Weights are exactly `guessWeight`, `phaseWeight`, `easyNeglectWeight`,
+`hardBiasWeight`, `wrongStreakWeight`: finite [0,1], sum-one within 0.000001
+before rounding. Never map overstay to wrong-streak or silently drop strategy
+fields. Risk states are Stable, Drift-Prone, Impulsive, Overextended, Volatile,
+with inclusive ceilings 20/40/60/80/100. Stored guess-factor thresholds are (0,10]
+multipliers; phase deviation is [0,100] percentage points. Thresholds are read-only
+metadata, not simulation inputs. This adopts the existing section-4.15 model;
+conceptual timing/lifecycle schemas do not become competing authorities.
+
+The simulation service input is exactly `{ academicYearId, institutes, weights }`:
+an explicit year and 1..20 distinct IDs matching `[A-Za-z0-9_-]{1,128}`. Unknown
+fields, coercion, duplicates and missing years fail. Read only selected
+institute/year Student summaries, at most 1,000 each and 5,000 total; limit-plus-one
+detects overflow, which fails rather than sampling/truncating. Canonical percent
+fields are `avgPhaseAdherencePercent`, `avgGuessRatePercent`,
+`easyNeglectRatePercent`, `hardBiasRatePercent`. Validated legacy aliases are
+allowed only when canonical fields are absent; present pairs must agree.
+Percent signals must be finite [0,100], `wrongStreakActive` boolean. Missing or
+malformed signals never default benignly. Raw sessions/answers/attempts are forbidden.
+
+Require one eligible active global calibration (probe two); zero is unavailable,
+multiple ambiguous, and a future active record invalid. Dangling institute
+overrides fail instead of silently falling back. Storage remains immutable
+`globalCalibration/{versionId}` with `calibrationVersions/{versionId}` as
+compatibility mirror. Complete legacy records can project schema-v1 only after
+all required identity/weight/threshold/date/active fields validate; missing creation
+time is not fabricated. Version list uses ascending document IDs, default 25/max
+50, limit-plus-one and a max-512-character opaque base64url cursor bound to
+schema/query/last ID. No status/date filter or implicit unbounded page drain.
+
+Results identify `risk_projection_v1`, `student_year_summaries`, explicit year,
+server evaluation time (not source freshness), source selection and counts.
+Score is the weighted normalized guess/phase-deviation/neglect/bias/boolean
+wrong-streak sum divided by validated weight sum, times 100. Round each Student
+score to two decimals before buckets, aggregate full scores before final
+two-decimal means/percentages/signed deltas; do not average rounded institute
+means. Before/after populations match, buckets sum to population, percentages
+equal count/total*100, and deltas equal after minus before. Entirely empty
+populations return null summaries; mixed empty/nonempty targets fail rather
+than yielding partial success. No Student IDs/names/emails or raw session details
+leave APIs. Discipline, cluster movement, batch delta, alerts, stability and
+actual production outcomes are explicitly unavailable, never derived formulas.
+Editing weights/targets/year, retry or failure clears previous UI authority.
+
+Legacy push declarations alias the sole BWM-006 `apiDtos.d.ts` definitions;
+live VEN-02 intent/results use only `vendorCalibrationRollout.d.ts`. The closed
+version DTO reports `deploymentAvailability: "immediate_selected_targets"`:
+the bounded workflow is available, not authorization or guaranteed success.
+Current Vendor capability, explicit immutable version, max-20 targets, stable
+UUID and optimistic preconditions remain mandatory. Explicit inverse rollback
+uses a separate key and expected completed revision. Draft, scheduled,
+dry-run-deployment and all-institute modes remain unavailable. Consumer, atomic
+apply/inverse, transport and mounted failure/recovery acceptance are locally
+qualified; BWM-038 projection alone never qualifies activation or release.
+No browser-local version, audit or activation authority is allowed. All
+calibration handlers require revocation-checked, fresh enabled/non-suspended
+current Vendor identity and `vendor.calibration.manage`, without institute-license
+minimums. BWM-040 owns unified audit; BWM-053 remote indexes/backfill qualification.
+Mounted calibration now consumes strict version/target reads and five-state
+projection responses, with no local business/audit success. Permanent no-mock local
+browser acceptance now passes via `test:vendor-calibration-acceptance:e2e`;
+BWM-038 aggregate closeout is locally verified. This does not qualify CSP, remote
+deployment or production-safe rollout. BWM-040 now replaces the live legacy
+audit reader with secured VEN-40; the old showcase is DEV fixture-only. The current
+route inventory is 112: 107 implemented, zero incompatible, zero missing,
+five retired; 60 HTTP exports, 48 gateway handlers and seven unchanged schedules.
+
+BWM-039 mounted adoption uses VEN-09 institute detail's closed `calibrationPointer`
+(`{present:false}` or `{present:true,value:null|string}`) for expected institute
+versions. Missing/malformed current-read authority fails closed; historical immutable
+creation receipts may omit the new field and are never used as publish preconditions.
+Only Vendor-UID-scoped retry intent (not credentials, receipts or business success) is
+retained in sessionStorage. Reload validates identity and fetches VEN-38; an unknown
+or pending outcome blocks a fresh key. Separate confirmed inverse intent retains
+its own UUID and expected applied revision. No automatic unsafe-method retry,
+public journal reads, operation list, creation or scheduling. BWM-040's separate
+read-only history UI consumes terminal facts, not mutable journal internals.
+
+BWM-039 aggregate closeout is locally verified: 57 test-only SDK transaction fault
+points with actual scoped HTTP recovery (25 Auth/Firestore/Functions cases),
+94 affected service/producer regressions and three sequential real Chromium
+smoke/projection/recovery cases pass against final live bytes. Instrumentation is
+guarded to the disposable demo test process, not a public request flag/API;
+browser interception forwards actual mutations and aborts delivery, never
+fabricates success. Availability metadata now reports `immediate_selected_targets`;
+writers/security/routes/counts are unchanged. Remote/CSP/release qualification
+remains separate; BWM-040 provides the locally qualified unified read boundary.
+The existing full endpoint-harness
+baseline is 56/71 passing, 15 unrelated Exam/governance failures owned by BWM-049;
+neither excluded suite nor the full backend is claimed green.
+BWM-038 introduced no new store or composite index. Its legacy immediate push
+receipt validation was not multi-target atomicity or replay/recovery proof;
+BWM-039's separate qualified atomic writer and operation transport replace it.
 
 ## BWM-034 institute, onboarding, and administrator contract
 
@@ -480,8 +747,8 @@ raw Student/session Firestore denial, and no external browser origin. The proof
 is `tests/e2e/vendor-intelligence-acceptance.spec.mjs`. BWM-037 aggregate
 verification passes the workspace, classified backend, affected contracts,
 isolated Firestore regressions, secured API integration, and browser acceptance
-gates. Accounting is 106 routes (100 implemented, one incompatible, zero missing,
-five retired), 56 HTTP exports, and 44 gateway handlers. Existing backend
+gates. Current accounting is 112 routes (107 implemented, zero incompatible, zero missing,
+five retired), 60 HTTP exports, and 48 gateway handlers. Existing backend
 baseline exclusions remain BWM-049-owned; remote qualification remains BWM-053-owned.
 For the separately owned commercial workspace, only explicit fixture mode
 retains the legacy commercial showcase. Permanent
@@ -754,10 +1021,10 @@ supported browser transport.
 
 ## Backend HTTP export accounting
 
-`functions/src/apiRouteManifest.ts` accounts for all 56 current `functions.https.onRequest` exports:
+`functions/src/apiRouteManifest.ts` accounts for all 60 current `functions.https.onRequest` exports:
 
 - `apiV1` is the single versioned `gateway` export; it resolves exact manifest method/path pairs, preserves decoded route parameters, and dispatches non-null `functionExport` mappings through the existing raw request handlers;
-- 44 exports are referenced by one or more canonical routes;
+- 48 exports are referenced by one or more canonical routes;
 - 6 portal-oriented Vendor exports remain `unmapped_portal`; the five intelligence exports now map canonically to VEN-31..VEN-35 and both mounted surfaces now consume the strict adapter;
 - `internalEmailQueue`, `adminQuestionsBulk`, and `adminQuestionAssets` are `internal_only`;
 - `stripeWebhook` is a `webhook` boundary;

@@ -15,6 +15,7 @@ import {
   SubmissionRiskState,
 } from "../types/submission";
 import {DEFAULT_RISK_MODEL_VERSION} from "../types/riskEngine";
+import {assertSameFrozenCalibration} from "./calibrationConsumer";
 
 const INSTITUTES_COLLECTION = "institutes";
 const ACADEMIC_YEARS_COLLECTION = "academicYears";
@@ -1575,6 +1576,9 @@ export class SubmissionService {
           const questionTimeMap = isPlainObject(sessionData.questionTimeMap) ?
             sessionData.questionTimeMap :
             {};
+          const calibrationSnapshot = assertSameFrozenCalibration(
+            runData, sessionData, instituteId,
+          );
           const calibrationVersion =
             typeof sessionData.calibrationVersion === "string" &&
             sessionData.calibrationVersion.trim() ?
@@ -1608,6 +1612,7 @@ export class SubmissionService {
           transaction.update(sessionReference, {
             accuracyPercent: metrics.accuracyPercent,
             calibrationVersion,
+            ...(calibrationSnapshot ? {calibrationSnapshot} : {}),
             consecutiveWrongStreakMax: metrics.consecutiveWrongStreakMax,
             disciplineIndex: metrics.disciplineIndex,
             easyAttemptRatePercent: metrics.easyAttemptRatePercent,

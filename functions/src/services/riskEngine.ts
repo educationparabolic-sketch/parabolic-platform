@@ -1,6 +1,9 @@
 import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import {createLogger} from "./logging";
 import {getFirestore} from "../utils/firebaseAdmin";
+import {validateFrozenCalibration} from "./calibrationConsumer";
+import {computeProjectedRiskScore, toStudentMetricSignal} from
+  "./calibrationSimulation";
 import {
   DEFAULT_RISK_MODEL_VERSION,
   RiskEngineContext,
@@ -14,6 +17,9 @@ const STUDENT_YEAR_METRICS_COLLECTION = "studentYearMetrics";
 const ROLLING_WINDOW_SIZE = 5;
 
 interface StudentYearMetricsSnapshot {
+  calibrationSnapshot?: unknown;
+  calibrationVersion?: unknown;
+  wrongStreakActive?: unknown;
   avgAccuracyPercent?: unknown;
   avgPhaseAdherence?: unknown;
   avgPhaseAdherencePercent?: unknown;
@@ -185,7 +191,28 @@ const readRiskEngineState = (
 const computeRiskMetrics = (
   studentMetricsData: Record<string, unknown>,
   previousState: RiskEngineComputationState,
+  instituteId: string,
 ): RiskComputationOutput => {
+  if (studentMetricsData.calibrationSnapshot !== undefined ||
+    studentMetricsData.riskModelVersion === "risk_projection_v1") {
+    const snapshot = validateFrozenCalibration(
+      studentMetricsData.calibrationSnapshot, instituteId,
+      studentMetricsData.calibrationVersion,
+    );
+    const signal = toStudentMetricSignal(studentMetricsData, "studentYearMetrics");
+    const riskScore = computeProjectedRiskScore(signal, snapshot.weights);
+    const recentRiskScores = [...previousState.recentRiskScores, riskScore]
+      .slice(-ROLLING_WINDOW_SIZE);
+    const rollingRiskScore = roundToTwoDecimals(
+      recentRiskScores.reduce((sum, value) => sum + value, 0) /
+      recentRiskScores.length,
+    );
+    return {riskScore, riskState: toRiskState(riskScore), recentRiskScores,
+      rollingRiskScore, rollingRiskCluster: toRiskState(rollingRiskScore),
+      riskModelVersion: "risk_projection_v1",
+      disciplineIndex: toPercent(studentMetricsData.avgDisciplineIndex,
+        "avgDisciplineIndex")};
+  }
   const avgAccuracyPercent = toPercent(
     studentMetricsData.avgAccuracyPercent,
     "avgAccuracyPercent",
@@ -362,6 +389,10 @@ export class RiskEngineService {
       const studentMetricsSnapshot = await transaction.get(
         studentMetricsReference,
       );
+      if (!studentMetricsSnapshot.exists) {
+        return {idempotent: false, reason: "deleted" as const,
+          studentYearMetricsPath, triggered: false};
+      }
       const currentData = isPlainObject(studentMetricsSnapshot.data()) ?
         studentMetricsSnapshot.data() :
         afterData;
@@ -378,8 +409,15 @@ export class RiskEngineService {
       const lastProcessedUpstreamSessionId = toNonEmptyString(
         currentRiskEngineState?.lastProcessedStudentMetricsSessionId,
       );
+      const currentStudentMetricsState = isPlainObject(
+        currentProcessingMarkers?.studentMetricsEngine,
+      ) ? currentProcessingMarkers.studentMetricsEngine : undefined;
+      const currentUpstreamSessionId = toRequiredString(
+        currentStudentMetricsState?.lastProcessedSessionId,
+        "current upstream session",
+      );
 
-      if (lastProcessedUpstreamSessionId === upstreamSessionId) {
+      if (lastProcessedUpstreamSessionId === currentUpstreamSessionId) {
         return {
           idempotent: true,
           reason: "already_processed" as const,
@@ -391,6 +429,7 @@ export class RiskEngineService {
       const computation = computeRiskMetrics(
         currentData ?? afterData,
         readRiskEngineState(currentData ?? afterData),
+        instituteId,
       );
 
       transaction.set(
@@ -409,7 +448,7 @@ export class RiskEngineService {
           processingMarkers: {
             riskEngine: {
               eventId: context.eventId ?? null,
-              lastProcessedStudentMetricsSessionId: upstreamSessionId,
+              lastProcessedStudentMetricsSessionId: currentUpstreamSessionId,
               recentRiskScores: computation.recentRiskScores,
               riskModelVersion: computation.riskModelVersion,
               updatedAt: FieldValue.serverTimestamp(),

@@ -1,18 +1,23 @@
-import {Timestamp} from "firebase-admin/firestore";
+import {FieldPath} from "firebase-admin/firestore";
 import {getFirestore} from "../utils/firebaseAdmin";
 import {createLogger} from "./logging";
 import {CalibrationWeights} from "../types/calibrationVersion";
 import {
-  CalibrationSimulationDelta,
-  CalibrationSimulationDistributionEntry,
   CalibrationSimulationError,
-  CalibrationSimulationInstituteSummary,
-  CalibrationSimulationRiskDistribution,
-  CalibrationSimulationSummary,
   SimulateCalibrationImpactInput,
   SimulateCalibrationImpactResult,
 } from "../types/calibrationSimulation";
 import {StudentRiskState} from "../types/riskEngine";
+import {
+  assertExactCalibrationKeys,
+  isPlainCalibrationObject,
+  MAX_CALIBRATION_INSTITUTES,
+  MAX_CALIBRATION_SUMMARIES_PER_INSTITUTE,
+  MAX_CALIBRATION_SUMMARIES_TOTAL,
+  normalizeCalibrationDocumentId,
+  normalizeCalibrationWeights,
+  validateStoredCalibrationVersion,
+} from "./calibrationContract";
 
 const INSTITUTES_COLLECTION = "institutes";
 const ACADEMIC_YEARS_COLLECTION = "academicYears";
@@ -26,176 +31,204 @@ const RISK_STATES: StudentRiskState[] = [
   "Overextended",
   "Volatile",
 ];
+const UNSUPPORTED_OUTPUTS = {
+  batchDelta: "unavailable",
+  clusterMovement: "unavailable",
+  disciplineDelta: "unavailable",
+  estimatedAlertDelta: "unavailable",
+  productionRiskOutcome: "unavailable",
+  stabilityImpact: "unavailable",
+} as const;
 
 interface StudentMetricSignalSnapshot {
-  avgPhaseAdherence: number;
-  easyNeglectRate: number;
-  guessRate: number;
-  hardBiasRate: number;
+  avgPhaseAdherencePercent: number;
+  avgGuessRatePercent: number;
+  easyNeglectRatePercent: number;
+  hardBiasRatePercent: number;
   wrongStreakActive: boolean;
-}
-
-interface CalibrationDocumentSnapshot {
-  activationDate?: unknown;
-  createdAt?: unknown;
-  weights?: unknown;
 }
 
 interface ResolvedInstituteCalibration {
   sourcePath: string;
-  versionId: string | null;
+  versionId: string;
   weights: CalibrationWeights;
 }
 
-interface InstituteSimulationComputation {
-  afterAverageProjectedRiskScore: number;
-  afterDistribution: CalibrationSimulationRiskDistribution;
-  beforeAverageProjectedRiskScore: number;
-  beforeDistribution: CalibrationSimulationRiskDistribution;
-  currentCalibrationSourcePath: string;
-  currentCalibrationVersion: string | null;
-  instituteId: string;
-  studentCount: number;
+interface DistributionEntry {
+  count: number;
+  percent: number;
 }
 
-const isPlainObject = (
-  value: unknown,
-): value is Record<string, unknown> =>
-  typeof value === "object" &&
-  value !== null &&
-  !Array.isArray(value) &&
-  !(value instanceof Timestamp);
+type RiskDistribution = Record<StudentRiskState, DistributionEntry>;
 
-const normalizeRequiredString = (
-  value: unknown,
-  fieldName: string,
-): string => {
-  if (typeof value !== "string") {
-    throw new CalibrationSimulationError(
-      "VALIDATION_ERROR",
-      `Calibration field "${fieldName}" must be a string.`,
-    );
-  }
+interface InstituteSimulationComputation {
+  afterScores: number[];
+  beforeScores: number[];
+  calibration: ResolvedInstituteCalibration;
+  instituteId: string;
+}
 
-  const normalizedValue = value.trim();
+const createInputError = (message: string): Error =>
+  new CalibrationSimulationError("VALIDATION_ERROR", message);
 
-  if (!normalizedValue) {
-    throw new CalibrationSimulationError(
-      "VALIDATION_ERROR",
-      `Calibration field "${fieldName}" must be a non-empty string.`,
-    );
-  }
-
-  return normalizedValue;
-};
-
-const normalizeNonNegativeNumber = (
-  value: unknown,
-  fieldName: string,
-): number => {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-    throw new CalibrationSimulationError(
-      "VALIDATION_ERROR",
-      `Calibration field "${fieldName}" must be a non-negative number.`,
-    );
-  }
-
-  return Math.round(value * 1000) / 1000;
-};
-
-const normalizePercent = (
-  value: unknown,
-  fallback = 0,
-): number => {
-  if (
-    typeof value !== "number" ||
-    !Number.isFinite(value) ||
-    value < 0 ||
-    value > 100
-  ) {
-    return fallback;
-  }
-
-  return Math.round(value * 100) / 100;
-};
-
-const normalizeWeights = (
-  value: unknown,
-  fieldName: string,
-): CalibrationWeights => {
-  if (!isPlainObject(value)) {
-    throw new CalibrationSimulationError(
-      "VALIDATION_ERROR",
-      `Calibration field "${fieldName}" must be an object.`,
-    );
-  }
-
-  const weights: CalibrationWeights = {
-    easyNeglectWeight: normalizeNonNegativeNumber(
-      value.easyNeglectWeight,
-      `${fieldName}.easyNeglectWeight`,
-    ),
-    guessWeight: normalizeNonNegativeNumber(
-      value.guessWeight,
-      `${fieldName}.guessWeight`,
-    ),
-    hardBiasWeight: normalizeNonNegativeNumber(
-      value.hardBiasWeight,
-      `${fieldName}.hardBiasWeight`,
-    ),
-    phaseWeight: normalizeNonNegativeNumber(
-      value.phaseWeight,
-      `${fieldName}.phaseWeight`,
-    ),
-    wrongStreakWeight: normalizeNonNegativeNumber(
-      value.wrongStreakWeight,
-      `${fieldName}.wrongStreakWeight`,
-    ),
-  };
-  const weightSum =
-    weights.easyNeglectWeight +
-    weights.guessWeight +
-    weights.hardBiasWeight +
-    weights.phaseWeight +
-    weights.wrongStreakWeight;
-
-  if (weightSum <= 0) {
-    throw new CalibrationSimulationError(
-      "VALIDATION_ERROR",
-      `Calibration field "${fieldName}" must contain at least ` +
-        "one positive weight.",
-    );
-  }
-
-  return weights;
-};
-
-const normalizeInstituteIds = (value: unknown): string[] => {
-  if (!Array.isArray(value)) {
-    throw new CalibrationSimulationError(
-      "VALIDATION_ERROR",
-      "Calibration field \"institutes\" must be an array.",
-    );
-  }
-
-  const institutes = value.map((entry, index) =>
-    normalizeRequiredString(entry, `institutes[${index}]`));
-  const deduplicatedInstitutes = Array.from(new Set(institutes));
-
-  if (deduplicatedInstitutes.length === 0) {
-    throw new CalibrationSimulationError(
-      "VALIDATION_ERROR",
-      "Calibration field \"institutes\" must contain at least one institute.",
-    );
-  }
-
-  return deduplicatedInstitutes;
-};
+const createSourceError = (message: string): Error =>
+  new CalibrationSimulationError("INTERNAL_ERROR", message);
 
 const roundToTwoDecimals = (value: number): number =>
   Math.round(value * 100) / 100;
 
-const createEmptyDistribution = (): CalibrationSimulationRiskDistribution => ({
+export const normalizeInput = (
+  input: SimulateCalibrationImpactInput,
+): SimulateCalibrationImpactInput => {
+  if (!isPlainCalibrationObject(input)) {
+    throw createInputError("Calibration simulation input must be an object.");
+  }
+
+  assertExactCalibrationKeys(
+    input,
+    ["academicYearId", "institutes", "weights"],
+    "simulation",
+    createInputError,
+  );
+
+  if (!Array.isArray(input.institutes)) {
+    throw createInputError(
+      "Calibration field \"institutes\" must be an array.",
+    );
+  }
+
+  if (
+    input.institutes.length === 0 ||
+    input.institutes.length > MAX_CALIBRATION_INSTITUTES
+  ) {
+    throw createInputError(
+      "Calibration field \"institutes\" must contain " +
+        `1-${MAX_CALIBRATION_INSTITUTES} entries.`,
+    );
+  }
+
+  const institutes = input.institutes.map((instituteId, index) =>
+    normalizeCalibrationDocumentId(
+      instituteId,
+      `institutes[${index}]`,
+      createInputError,
+    ));
+
+  if (new Set(institutes).size !== institutes.length) {
+    throw createInputError(
+      "Calibration field \"institutes\" must contain unique IDs.",
+    );
+  }
+
+  return {
+    academicYearId: normalizeCalibrationDocumentId(
+      input.academicYearId,
+      "academicYearId",
+      createInputError,
+    ),
+    institutes,
+    weights: normalizeCalibrationWeights(
+      input.weights,
+      "weights",
+      createInputError,
+    ),
+  };
+};
+
+const normalizePercentSignal = (
+  value: Record<string, unknown>,
+  canonicalField: string,
+  legacyField: string,
+  sourcePath: string,
+): number => {
+  const canonicalValue = value[canonicalField];
+  const legacyValue = value[legacyField];
+  const hasCanonical = canonicalValue !== undefined;
+  const hasLegacy = legacyValue !== undefined;
+
+  if (!hasCanonical && !hasLegacy) {
+    throw createSourceError(
+      `Calibration source "${sourcePath}" is missing ${canonicalField}.`,
+    );
+  }
+
+  for (const [fieldName, fieldValue] of [
+    [canonicalField, canonicalValue],
+    [legacyField, legacyValue],
+  ] as const) {
+    if (
+      fieldValue !== undefined &&
+      (
+        typeof fieldValue !== "number" ||
+        !Number.isFinite(fieldValue) ||
+        fieldValue < 0 ||
+        fieldValue > 100
+      )
+    ) {
+      throw createSourceError(
+        `Calibration source "${sourcePath}" field ` +
+          `"${fieldName}" must be finite and in [0,100].`,
+      );
+    }
+  }
+
+  if (hasCanonical && hasLegacy && canonicalValue !== legacyValue) {
+    throw createSourceError(
+      `Calibration source "${sourcePath}" has conflicting ` +
+        `${canonicalField}/${legacyField} values.`,
+    );
+  }
+
+  return (hasCanonical ? canonicalValue : legacyValue) as number;
+};
+
+export const toStudentMetricSignal = (
+  value: unknown,
+  sourcePath: string,
+): StudentMetricSignalSnapshot => {
+  if (!isPlainCalibrationObject(value)) {
+    throw createSourceError(
+      `Calibration source "${sourcePath}" must be an object.`,
+    );
+  }
+
+  if (typeof value.wrongStreakActive !== "boolean") {
+    throw createSourceError(
+      `Calibration source "${sourcePath}" field ` +
+        "\"wrongStreakActive\" must be a boolean.",
+    );
+  }
+
+  return {
+    avgGuessRatePercent: normalizePercentSignal(
+      value,
+      "avgGuessRatePercent",
+      "guessRate",
+      sourcePath,
+    ),
+    avgPhaseAdherencePercent: normalizePercentSignal(
+      value,
+      "avgPhaseAdherencePercent",
+      "avgPhaseAdherence",
+      sourcePath,
+    ),
+    easyNeglectRatePercent: normalizePercentSignal(
+      value,
+      "easyNeglectRatePercent",
+      "easyNeglectRate",
+      sourcePath,
+    ),
+    hardBiasRatePercent: normalizePercentSignal(
+      value,
+      "hardBiasRatePercent",
+      "hardBiasRate",
+      sourcePath,
+    ),
+    wrongStreakActive: value.wrongStreakActive,
+  };
+};
+
+const createEmptyDistribution = (): RiskDistribution => ({
   "Drift-Prone": {count: 0, percent: 0},
   "Impulsive": {count: 0, percent: 0},
   "Overextended": {count: 0, percent: 0},
@@ -203,74 +236,43 @@ const createEmptyDistribution = (): CalibrationSimulationRiskDistribution => ({
   "Volatile": {count: 0, percent: 0},
 });
 
-const createEmptyDeltaDistribution = (): Record<
-  StudentRiskState,
-  {count: number; percent: number}
-> => ({
-  "Drift-Prone": {count: 0, percent: 0},
-  "Impulsive": {count: 0, percent: 0},
-  "Overextended": {count: 0, percent: 0},
-  "Stable": {count: 0, percent: 0},
-  "Volatile": {count: 0, percent: 0},
-});
-
-const toRiskState = (riskScore: number): StudentRiskState => {
-  if (riskScore <= 20) {
-    return "Stable";
-  }
-
-  if (riskScore <= 40) {
-    return "Drift-Prone";
-  }
-
-  if (riskScore <= 60) {
-    return "Impulsive";
-  }
-
-  if (riskScore <= 80) {
-    return "Overextended";
-  }
-
+export const toRiskState = (riskScore: number): StudentRiskState => {
+  if (riskScore <= 20) return "Stable";
+  if (riskScore <= 40) return "Drift-Prone";
+  if (riskScore <= 60) return "Impulsive";
+  if (riskScore <= 80) return "Overextended";
   return "Volatile";
 };
 
-const computeProjectedRiskScore = (
+export const computeProjectedRiskScore = (
   signal: StudentMetricSignalSnapshot,
   weights: CalibrationWeights,
 ): number => {
   const weightedSignalSum =
-    ((signal.guessRate / 100) * weights.guessWeight) +
-    (((100 - signal.avgPhaseAdherence) / 100) * weights.phaseWeight) +
-    ((signal.easyNeglectRate / 100) * weights.easyNeglectWeight) +
-    ((signal.hardBiasRate / 100) * weights.hardBiasWeight) +
+    ((signal.avgGuessRatePercent / 100) * weights.guessWeight) +
+    (((100 - signal.avgPhaseAdherencePercent) / 100) *
+      weights.phaseWeight) +
+    ((signal.easyNeglectRatePercent / 100) * weights.easyNeglectWeight) +
+    ((signal.hardBiasRatePercent / 100) * weights.hardBiasWeight) +
     ((signal.wrongStreakActive ? 1 : 0) * weights.wrongStreakWeight);
-  const weightSum =
-    weights.easyNeglectWeight +
-    weights.guessWeight +
-    weights.hardBiasWeight +
-    weights.phaseWeight +
-    weights.wrongStreakWeight;
 
+  const weightSum = Object.values(weights).reduce((sum, weight) => sum + weight, 0);
   return roundToTwoDecimals((weightedSignalSum / weightSum) * 100);
 };
 
-const buildDistribution = (
-  riskScores: number[],
-): CalibrationSimulationRiskDistribution => {
+const buildDistribution = (riskScores: number[]): RiskDistribution => {
   const distribution = createEmptyDistribution();
 
   for (const riskScore of riskScores) {
     distribution[toRiskState(riskScore)].count += 1;
   }
 
-  const totalStudents = riskScores.length;
-
   for (const riskState of RISK_STATES) {
-    distribution[riskState].percent = totalStudents > 0 ?
+    distribution[riskState].percent = riskScores.length === 0 ?
+      0 :
       roundToTwoDecimals(
-        (distribution[riskState].count / totalStudents) * 100,
-      ) :
-      0;
+        (distribution[riskState].count / riskScores.length) * 100,
+      );
   }
 
   return distribution;
@@ -279,190 +281,67 @@ const buildDistribution = (
 const buildSummary = (
   scores: number[],
   instituteCount: number,
-): CalibrationSimulationSummary => ({
-  averageProjectedRiskScore:
-    scores.length > 0 ?
-      roundToTwoDecimals(
-        scores.reduce((sum, value) => sum + value, 0) / scores.length,
-      ) :
-      0,
+) => ({
+  averageProjectedRiskScore: roundToTwoDecimals(
+    scores.reduce((sum, score) => sum + score, 0) / scores.length,
+  ),
   instituteCount,
   riskDistribution: buildDistribution(scores),
   studentCount: scores.length,
 });
 
-const buildDelta = (
-  before: CalibrationSimulationSummary,
-  after: CalibrationSimulationSummary,
-): CalibrationSimulationDelta => {
-  const riskDistribution = createEmptyDeltaDistribution();
-
-  for (const riskState of RISK_STATES) {
-    riskDistribution[riskState] = {
-      count:
-        after.riskDistribution[riskState].count -
-        before.riskDistribution[riskState].count,
-      percent: roundToTwoDecimals(
-        after.riskDistribution[riskState].percent -
-        before.riskDistribution[riskState].percent,
-      ),
-    };
-  }
-
-  return {
-    averageProjectedRiskScore: roundToTwoDecimals(
-      after.averageProjectedRiskScore - before.averageProjectedRiskScore,
-    ),
-    riskDistribution,
-    studentCount: after.studentCount - before.studentCount,
-  };
-};
-
-const toActivationMillis = (value: unknown): number => {
-  if (typeof value === "string") {
-    const parsedValue = Date.parse(value);
-    return Number.isNaN(parsedValue) ? 0 : parsedValue;
-  }
-
-  if (value instanceof Timestamp) {
-    return value.toMillis();
-  }
-
-  return 0;
-};
-
-const toStudentMetricSignal = (
-  value: unknown,
-): StudentMetricSignalSnapshot | null => {
-  if (!isPlainObject(value)) {
-    return null;
-  }
-
-  return {
-    avgPhaseAdherence: normalizePercent(value.avgPhaseAdherence, 100),
-    easyNeglectRate: normalizePercent(value.easyNeglectRate, 0),
-    guessRate: normalizePercent(value.guessRate, 0),
-    hardBiasRate: normalizePercent(value.hardBiasRate, 0),
-    wrongStreakActive: value.wrongStreakActive === true,
-  };
-};
-
-const combineDistributionEntries = (
-  currentEntry: CalibrationSimulationDistributionEntry,
-  nextEntry: CalibrationSimulationDistributionEntry,
-): CalibrationSimulationDistributionEntry => ({
-  count: currentEntry.count + nextEntry.count,
-  percent: 0,
-});
-
-const toInstituteSummary = (
-  computation: InstituteSimulationComputation,
-): CalibrationSimulationInstituteSummary => ({
-  beforeAverageProjectedRiskScore:
-    computation.beforeAverageProjectedRiskScore,
-  currentCalibrationSourcePath: computation.currentCalibrationSourcePath,
-  currentCalibrationVersion: computation.currentCalibrationVersion,
-  instituteId: computation.instituteId,
-  projectedAverageRiskScore: computation.afterAverageProjectedRiskScore,
-  riskDistributionDelta: {
-    "Drift-Prone":
-      computation.afterDistribution["Drift-Prone"].count -
-      computation.beforeDistribution["Drift-Prone"].count,
-    "Impulsive":
-      computation.afterDistribution.Impulsive.count -
-      computation.beforeDistribution.Impulsive.count,
-    "Overextended":
-      computation.afterDistribution.Overextended.count -
-      computation.beforeDistribution.Overextended.count,
-    "Stable":
-      computation.afterDistribution.Stable.count -
-      computation.beforeDistribution.Stable.count,
-    "Volatile":
-      computation.afterDistribution.Volatile.count -
-      computation.beforeDistribution.Volatile.count,
-  },
-  studentCount: computation.studentCount,
-});
-
-/** Calibration simulation engine for Build 98 vendor previews. */
+/** Read-only stored-summary calibration projection service. */
 export class CalibrationSimulationService {
   private readonly firestore = getFirestore();
   private readonly logger = createLogger("CalibrationSimulationService");
 
-  /**
-   * Validates and normalizes the vendor simulation request.
-   * @param {SimulateCalibrationImpactInput} input Raw request payload.
-   * @return {SimulateCalibrationImpactInput} Normalized request payload.
-   */
-  private normalizeInput(
-    input: SimulateCalibrationImpactInput,
-  ): SimulateCalibrationImpactInput {
-    return {
-      institutes: normalizeInstituteIds(input.institutes),
-      weights: normalizeWeights(input.weights, "weights"),
-    };
-  }
-
-  /**
-   * Resolves the active global calibration fallback used by simulations.
-   * @return {Promise<ResolvedInstituteCalibration>} Active calibration state.
-   */
-  private async resolveActiveGlobalCalibration():
-  Promise<ResolvedInstituteCalibration> {
+  private async resolveActiveGlobalCalibration(
+    evaluatedAt: Date,
+  ): Promise<ResolvedInstituteCalibration> {
     const snapshot = await this.firestore
       .collection(GLOBAL_CALIBRATION_COLLECTION)
       .where("isActive", "==", true)
+      .limit(2)
       .get();
 
     if (snapshot.empty) {
       throw new CalibrationSimulationError(
         "NOT_FOUND",
-        "No active global calibration version is available for " +
-          "simulation.",
+        "No active global calibration version is available for simulation.",
       );
     }
 
-    const activeCalibrations = snapshot.docs
-      .map((documentSnapshot) => ({
-        activationMillis: toActivationMillis(
-          (documentSnapshot.data() as CalibrationDocumentSnapshot)
-            .activationDate ??
-            (documentSnapshot.data() as CalibrationDocumentSnapshot).createdAt,
-        ),
-        path: documentSnapshot.ref.path,
-        versionId: documentSnapshot.id,
-        weights: normalizeWeights(
-          (documentSnapshot.data() as CalibrationDocumentSnapshot).weights,
-          `globalCalibration.${documentSnapshot.id}.weights`,
-        ),
-      }))
-      .sort((left, right) => right.activationMillis - left.activationMillis);
-    const latestCalibration = activeCalibrations[0];
-
-    if (!latestCalibration) {
-      throw new CalibrationSimulationError(
-        "NOT_FOUND",
-        "No active global calibration version is available for " +
-          "simulation.",
+    if (snapshot.size > 1) {
+      throw createSourceError(
+        "Active global calibration authority is ambiguous.",
       );
     }
+
+    const documentSnapshot = snapshot.docs[0];
+
+    if (!documentSnapshot) {
+      throw createSourceError("Active global calibration authority is missing.");
+    }
+
+    const version = validateStoredCalibrationVersion(
+      documentSnapshot.data(),
+      documentSnapshot.id,
+      documentSnapshot.ref.path,
+      evaluatedAt,
+      createSourceError,
+    );
 
     return {
-      sourcePath: latestCalibration.path,
-      versionId: latestCalibration.versionId,
-      weights: latestCalibration.weights,
+      sourcePath: documentSnapshot.ref.path,
+      versionId: version.versionId,
+      weights: version.weights,
     };
   }
 
-  /**
-   * Resolves the current baseline calibration for an institute.
-   * @param {string} instituteId Institute under simulation.
-   * @param {ResolvedInstituteCalibration} activeGlobalCalibration Fallback.
-   * @return {Promise<ResolvedInstituteCalibration>} Resolved calibration.
-   */
   private async resolveInstituteCalibration(
     instituteId: string,
     activeGlobalCalibration: ResolvedInstituteCalibration,
+    evaluatedAt: Date,
   ): Promise<ResolvedInstituteCalibration> {
     const instituteSnapshot = await this.firestore
       .doc(`${INSTITUTES_COLLECTION}/${instituteId}`)
@@ -475,209 +354,227 @@ export class CalibrationSimulationService {
       );
     }
 
-    const instituteData = instituteSnapshot.data();
-    const instituteCalibrationVersion =
-      typeof instituteData?.calibrationVersion === "string" ?
-        instituteData.calibrationVersion.trim() :
-        "";
+    const rawVersionId = instituteSnapshot.data()?.calibrationVersion;
 
-    if (!instituteCalibrationVersion) {
+    if (rawVersionId === undefined || rawVersionId === null) {
       return activeGlobalCalibration;
     }
 
-    const instituteCalibrationPath =
+    const versionId = normalizeCalibrationDocumentId(
+      rawVersionId,
+      `institutes.${instituteId}.calibrationVersion`,
+      createSourceError,
+    );
+    const sourcePath =
       `${INSTITUTES_COLLECTION}/${instituteId}/` +
-      `${CALIBRATION_COLLECTION}/${instituteCalibrationVersion}`;
-    const instituteCalibrationSnapshot = await this.firestore
-      .doc(instituteCalibrationPath)
-      .get();
+      `${CALIBRATION_COLLECTION}/${versionId}`;
+    const calibrationSnapshot = await this.firestore.doc(sourcePath).get();
 
-    if (instituteCalibrationSnapshot.exists) {
-      return {
-        sourcePath: instituteCalibrationSnapshot.ref.path,
-        versionId: instituteCalibrationVersion,
-        weights: normalizeWeights(
-          (instituteCalibrationSnapshot.data() as CalibrationDocumentSnapshot)
-            .weights,
-          "institutes." +
-            `${instituteId}.calibration.` +
-            `${instituteCalibrationVersion}.weights`,
-        ),
-      };
-    }
-
-    const globalCalibrationPath =
-      `${GLOBAL_CALIBRATION_COLLECTION}/${instituteCalibrationVersion}`;
-    const globalCalibrationSnapshot = await this.firestore
-      .doc(globalCalibrationPath)
-      .get();
-
-    if (globalCalibrationSnapshot.exists) {
-      return {
-        sourcePath: globalCalibrationSnapshot.ref.path,
-        versionId: instituteCalibrationVersion,
-        weights: normalizeWeights(
-          (globalCalibrationSnapshot.data() as CalibrationDocumentSnapshot)
-            .weights,
-          `globalCalibration.${instituteCalibrationVersion}.weights`,
-        ),
-      };
-    }
-
-    return activeGlobalCalibration;
-  }
-
-  /**
-   * Loads aggregated student metrics for all academic years in an institute.
-   * @param {string} instituteId Institute under simulation.
-   * @return {Promise<StudentMetricSignalSnapshot[]>} Aggregated signals.
-   */
-  private async loadInstituteStudentMetrics(
-    instituteId: string,
-  ): Promise<StudentMetricSignalSnapshot[]> {
-    const academicYearReferences = await this.firestore
-      .collection(
-        `${INSTITUTES_COLLECTION}/${instituteId}/${ACADEMIC_YEARS_COLLECTION}`,
-      )
-      .listDocuments();
-    const studentSignals: StudentMetricSignalSnapshot[] = [];
-
-    for (const academicYearReference of academicYearReferences) {
-      const metricsSnapshot = await academicYearReference
-        .collection(STUDENT_YEAR_METRICS_COLLECTION)
-        .get();
-
-      for (const documentSnapshot of metricsSnapshot.docs) {
-        const studentSignal = toStudentMetricSignal(documentSnapshot.data());
-
-        if (studentSignal) {
-          studentSignals.push(studentSignal);
-        }
-      }
-    }
-
-    if (studentSignals.length === 0) {
-      throw new CalibrationSimulationError(
-        "NOT_FOUND",
-        `Institute "${instituteId}" does not have aggregated ` +
-          "student metrics available for simulation.",
+    if (!calibrationSnapshot.exists) {
+      throw createSourceError(
+        `Institute "${instituteId}" has a dangling calibration reference.`,
       );
     }
 
-    return studentSignals;
+    const version = validateStoredCalibrationVersion(
+      calibrationSnapshot.data(),
+      versionId,
+      sourcePath,
+      evaluatedAt,
+      createSourceError,
+    );
+
+    if (!version.isActive) {
+      throw createSourceError(
+        `Institute "${instituteId}" references an inactive calibration.`,
+      );
+    }
+
+    return {sourcePath, versionId, weights: version.weights};
   }
 
-  /**
-   * Simulates calibration impact using aggregated student metrics only.
-   * @param {SimulateCalibrationImpactInput} input Vendor simulation request.
-   * @return {Promise<SimulateCalibrationImpactResult>} Projected results.
-   */
+  private async loadInstituteStudentMetrics(
+    instituteId: string,
+    academicYearId: string,
+  ): Promise<StudentMetricSignalSnapshot[]> {
+    const academicYearPath =
+      `${INSTITUTES_COLLECTION}/${instituteId}/` +
+      `${ACADEMIC_YEARS_COLLECTION}/${academicYearId}`;
+    const academicYearReference = this.firestore.doc(academicYearPath);
+    const [academicYearSnapshot, metricsSnapshot] = await Promise.all([
+      academicYearReference.get(),
+      academicYearReference
+        .collection(STUDENT_YEAR_METRICS_COLLECTION)
+        .orderBy(FieldPath.documentId())
+        .limit(MAX_CALIBRATION_SUMMARIES_PER_INSTITUTE + 1)
+        .get(),
+    ]);
+
+    if (!academicYearSnapshot.exists) {
+      throw new CalibrationSimulationError(
+        "NOT_FOUND",
+        `Academic year "${academicYearId}" does not exist for ` +
+          `institute "${instituteId}".`,
+      );
+    }
+
+    if (metricsSnapshot.size > MAX_CALIBRATION_SUMMARIES_PER_INSTITUTE) {
+      throw createInputError(
+        `Institute "${instituteId}" exceeds the ` +
+          `${MAX_CALIBRATION_SUMMARIES_PER_INSTITUTE}-summary limit.`,
+      );
+    }
+
+    return metricsSnapshot.docs.map((documentSnapshot) =>
+      toStudentMetricSignal(
+        documentSnapshot.data(),
+        documentSnapshot.ref.path,
+      ));
+  }
+
   public async simulateCalibrationImpact(
     input: SimulateCalibrationImpactInput,
   ): Promise<SimulateCalibrationImpactResult> {
-    const normalizedInput = this.normalizeInput(input);
+    const normalizedInput = normalizeInput(input);
+    const evaluatedAt = new Date();
     const activeGlobalCalibration =
-      await this.resolveActiveGlobalCalibration();
+      await this.resolveActiveGlobalCalibration(evaluatedAt);
     const computations: InstituteSimulationComputation[] = [];
+    let totalSummaryCount = 0;
 
     for (const instituteId of normalizedInput.institutes) {
-      const [resolvedCalibration, studentSignals] = await Promise.all([
+      const [calibration, signals] = await Promise.all([
         this.resolveInstituteCalibration(
           instituteId,
           activeGlobalCalibration,
+          evaluatedAt,
         ),
-        this.loadInstituteStudentMetrics(instituteId),
+        this.loadInstituteStudentMetrics(
+          instituteId,
+          normalizedInput.academicYearId,
+        ),
       ]);
-      const beforeScores = studentSignals.map((signal) =>
-        computeProjectedRiskScore(signal, resolvedCalibration.weights));
-      const afterScores = studentSignals.map((signal) =>
-        computeProjectedRiskScore(signal, normalizedInput.weights));
-      const beforeSummary = buildSummary(beforeScores, 1);
-      const afterSummary = buildSummary(afterScores, 1);
+      totalSummaryCount += signals.length;
+
+      if (totalSummaryCount > MAX_CALIBRATION_SUMMARIES_TOTAL) {
+        throw createInputError(
+          "Calibration selection exceeds the " +
+            `${MAX_CALIBRATION_SUMMARIES_TOTAL}-summary total limit.`,
+        );
+      }
 
       computations.push({
-        afterAverageProjectedRiskScore:
-          afterSummary.averageProjectedRiskScore,
-        afterDistribution: afterSummary.riskDistribution,
-        beforeAverageProjectedRiskScore:
-          beforeSummary.averageProjectedRiskScore,
-        beforeDistribution: beforeSummary.riskDistribution,
-        currentCalibrationSourcePath: resolvedCalibration.sourcePath,
-        currentCalibrationVersion: resolvedCalibration.versionId,
+        afterScores: signals.map((signal) =>
+          computeProjectedRiskScore(signal, normalizedInput.weights)),
+        beforeScores: signals.map((signal) =>
+          computeProjectedRiskScore(signal, calibration.weights)),
+        calibration,
         instituteId,
-        studentCount: studentSignals.length,
       });
     }
 
-    const beforeDistribution = createEmptyDistribution();
-    const afterDistribution = createEmptyDistribution();
-    let totalBeforeRiskScore = 0;
-    let totalAfterRiskScore = 0;
-    let totalStudents = 0;
+    const emptyCount = computations.filter(
+      (computation) => computation.beforeScores.length === 0,
+    ).length;
 
-    for (const computation of computations) {
-      totalStudents += computation.studentCount;
-      totalBeforeRiskScore +=
-        computation.beforeAverageProjectedRiskScore * computation.studentCount;
-      totalAfterRiskScore +=
-        computation.afterAverageProjectedRiskScore * computation.studentCount;
-
-      for (const riskState of RISK_STATES) {
-        beforeDistribution[riskState] = combineDistributionEntries(
-          beforeDistribution[riskState],
-          computation.beforeDistribution[riskState],
-        );
-        afterDistribution[riskState] = combineDistributionEntries(
-          afterDistribution[riskState],
-          computation.afterDistribution[riskState],
-        );
-      }
+    if (emptyCount > 0 && emptyCount !== computations.length) {
+      throw createSourceError(
+        "Calibration selection mixes empty and non-empty institute sources.",
+      );
     }
 
-    const before: CalibrationSimulationSummary = {
-      averageProjectedRiskScore:
-        totalStudents > 0 ?
-          roundToTwoDecimals(totalBeforeRiskScore / totalStudents) :
-          0,
-      instituteCount: computations.length,
-      riskDistribution: beforeDistribution,
-      studentCount: totalStudents,
-    };
-    const after: CalibrationSimulationSummary = {
-      averageProjectedRiskScore:
-        totalStudents > 0 ?
-          roundToTwoDecimals(totalAfterRiskScore / totalStudents) :
-          0,
-      instituteCount: computations.length,
-      riskDistribution: afterDistribution,
-      studentCount: totalStudents,
+    const metadata = {
+      academicYearId: normalizedInput.academicYearId,
+      evaluatedAt: evaluatedAt.toISOString(),
+      model: "risk_projection_v1" as const,
+      population: "student_year_summaries" as const,
+      schemaVersion: 1 as const,
+      sources: computations.map((computation) => ({
+        academicYearId: normalizedInput.academicYearId,
+        calibrationSourcePath: computation.calibration.sourcePath,
+        calibrationVersion: computation.calibration.versionId,
+        instituteId: computation.instituteId,
+        summaryDocumentCount: computation.beforeScores.length,
+      })),
+      unsupportedOutputs: UNSUPPORTED_OUTPUTS,
     };
 
+    if (totalSummaryCount === 0) {
+      return {
+        after: null,
+        availability: "empty",
+        before: null,
+        delta: null,
+        institutes: [],
+        metadata,
+        proposedWeights: normalizedInput.weights,
+      };
+    }
+
+    const beforeScores = computations.flatMap(
+      (computation) => computation.beforeScores,
+    );
+    const afterScores = computations.flatMap(
+      (computation) => computation.afterScores,
+    );
+    const before = buildSummary(beforeScores, computations.length);
+    const after = buildSummary(afterScores, computations.length);
+    const deltaDistribution = createEmptyDistribution();
+
     for (const riskState of RISK_STATES) {
-      before.riskDistribution[riskState].percent = totalStudents > 0 ?
-        roundToTwoDecimals(
-          (before.riskDistribution[riskState].count / totalStudents) * 100,
-        ) :
-        0;
-      after.riskDistribution[riskState].percent = totalStudents > 0 ?
-        roundToTwoDecimals(
-          (after.riskDistribution[riskState].count / totalStudents) * 100,
-        ) :
-        0;
+      deltaDistribution[riskState] = {
+        count:
+          after.riskDistribution[riskState].count -
+          before.riskDistribution[riskState].count,
+        percent: roundToTwoDecimals(
+          after.riskDistribution[riskState].percent -
+          before.riskDistribution[riskState].percent,
+        ),
+      };
     }
 
     const result: SimulateCalibrationImpactResult = {
       after,
+      availability: "available",
       before,
-      delta: buildDelta(before, after),
-      institutes: computations.map((computation) =>
-        toInstituteSummary(computation)),
+      delta: {
+        averageProjectedRiskScore: roundToTwoDecimals(
+          after.averageProjectedRiskScore -
+            before.averageProjectedRiskScore,
+        ),
+        riskDistribution: deltaDistribution,
+        studentCount: 0,
+      },
+      institutes: computations.map((computation) => {
+        const instituteBefore = buildSummary(computation.beforeScores, 1);
+        const instituteAfter = buildSummary(computation.afterScores, 1);
+
+        return {
+          academicYearId: normalizedInput.academicYearId,
+          beforeAverageProjectedRiskScore:
+            instituteBefore.averageProjectedRiskScore,
+          currentCalibrationSourcePath: computation.calibration.sourcePath,
+          currentCalibrationVersion: computation.calibration.versionId,
+          instituteId: computation.instituteId,
+          projectedAverageRiskScore:
+            instituteAfter.averageProjectedRiskScore,
+          riskDistributionDelta: Object.fromEntries(
+            RISK_STATES.map((riskState) => [
+              riskState,
+              instituteAfter.riskDistribution[riskState].count -
+                instituteBefore.riskDistribution[riskState].count,
+            ]),
+          ) as Record<StudentRiskState, number>,
+          studentCount: computation.beforeScores.length,
+        };
+      }),
+      metadata,
       proposedWeights: normalizedInput.weights,
     };
 
     this.logger.info("Calibration simulation completed.", {
-      instituteCount: result.before.instituteCount,
-      institutes: normalizedInput.institutes,
+      academicYearId: normalizedInput.academicYearId,
+      instituteCount: computations.length,
       projectedAverageRiskScoreDelta:
         result.delta.averageProjectedRiskScore,
       studentCount: result.before.studentCount,

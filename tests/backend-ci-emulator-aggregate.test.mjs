@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -33,8 +34,12 @@ test("backend CI aggregates every emulator-backed Functions suite", async () => 
     (file) => file.endsWith(".emulator.test.js"),
   ).length;
 
-  assert.equal(firestoreSuiteCount, 76);
-  assert.equal(explicitSuiteCount, 10);
+  assert.equal(firestoreSuiteCount, 93);
+  assert.equal(explicitSuiteCount, 17);
+  for (const file of ["vendorAuditReadModel.test.ts", "vendorSystemHealthReadModel.test.ts"]) {
+    assert.ok(sourceFiles.includes(file), file);
+  }
+  assert.ok(externalFiles.includes("vendorAuditHealthApi.emulator.test.js"));
   assert.equal(
     rootPackage.scripts["test:emulators:ci"],
     "node scripts/run-emulator-integration-suite.mjs",
@@ -53,6 +58,7 @@ test("backend CI aggregates every emulator-backed Functions suite", async () => 
   assert.match(outerRunner, /--firestore-only/u);
   assert.match(outerRunner, /\["auth", "firestore", "storage"\]/u);
   assert.match(outerRunner, /QUESTION_ASSETS_BUCKET:/u);
+  assert.match(outerRunner, /VENDOR_AUDIT_CURSOR_KEY: randomBytes\(32\)\.toString\("base64url"\)/u);
   assert.match(innerRunner, /--test-concurrency=1/u);
   assert.match(innerRunner, /selectedSuites\.map\(\(suite\) => \[suite\]\)/u);
   assert.match(innerRunner, /firstFailedResult \?\? result/u);
@@ -61,4 +67,27 @@ test("backend CI aggregates every emulator-backed Functions suite", async () => 
   assert.match(innerRunner, /cleanupMaxAttempts = 3/u);
   assert.match(innerRunner, /transientCleanupCodes/u);
   assert.match(innerRunner, /finally \{\n  await clearEmulatorData\(\);\n\}/u);
+});
+
+test("emulator phases supply explicit scoped per-phase cursor keys without changing process environment", async () => {
+  const source = await readFile(repositoryFile("scripts/run-emulator-integration-suite.mjs"), "utf8");
+  const start = source.indexOf("function phaseEnvironment(");
+  const end = source.indexOf("\nfunction portIsOpen(", start);
+  assert.ok(start >= 0 && end > start);
+  const make = new Function("randomBytes", "projectId", `${source.slice(start, end)}\nreturn phaseEnvironment;`)(randomBytes, "demo-parabolic-test");
+  const originalKey = process.env.VENDOR_AUDIT_CURSOR_KEY;
+  const first = make(), second = make({FUNCTIONS_EMULATOR_HOST: "127.0.0.1:5001"});
+  for (const environment of [first, second]) {
+    assert.equal(environment.NODE_ENV, "test");
+    for (const name of ["PROJECT_ID", "GCLOUD_PROJECT", "GOOGLE_CLOUD_PROJECT"]) {
+      assert.equal(environment[name], "demo-parabolic-test");
+    }
+    const bytes = Buffer.from(environment.VENDOR_AUDIT_CURSOR_KEY, "base64url");
+    assert.equal(bytes.length, 32);
+    assert.equal(bytes.toString("base64url"), environment.VENDOR_AUDIT_CURSOR_KEY);
+  }
+  assert.notEqual(first.VENDOR_AUDIT_CURSOR_KEY, second.VENDOR_AUDIT_CURSOR_KEY);
+  assert.equal(first.FUNCTIONS_EMULATOR_HOST, undefined);
+  assert.equal(second.FUNCTIONS_EMULATOR_HOST, "127.0.0.1:5001");
+  assert.equal(process.env.VENDOR_AUDIT_CURSOR_KEY, originalKey);
 });

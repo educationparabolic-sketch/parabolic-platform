@@ -4,6 +4,7 @@ import {Timestamp} from "firebase-admin/firestore";
 import * as gcpMetadata from "gcp-metadata";
 import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
 import {AssignmentCreationResult} from "../types/assignmentCreation";
+import {seedConsumerVersion} from "./calibrationConsumerFixture";
 
 process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8080";
 process.env.GCLOUD_PROJECT ??= "parabolic-platform-build-23-tests";
@@ -147,6 +148,7 @@ test(
       instituteId,
     });
     await seedAcademicYear(instituteId, yearId);
+    await seedConsumerVersion(instituteId, "cal_build_23_success");
     await firestore.doc(testPath).set({
       allowedModes: ["Operational", "Diagnostic", "Controlled", "Hard"],
       difficultyDistribution: templateSnapshotFixture.difficultyDistribution,
@@ -194,6 +196,13 @@ test(
     });
 
     const createPayload = (await firestore.doc(runPath).get()).data();
+    await firestore.doc(`${institutePath}/calibration/cal_build_23_success`)
+      .delete();
+    await assert.rejects(assignmentCreationService.processAssignmentCreated(
+      {instituteId, runId, yearId}, createPayload,
+    ), /Calibration source/);
+    assert.equal((await firestore.doc(runPath).get()).get("status"), "draft");
+    await seedConsumerVersion(instituteId, "cal_build_23_success");
     const results = await Promise.all([
       assignmentCreationService.processAssignmentCreated(
         {instituteId, runId, yearId},
@@ -230,6 +239,16 @@ test(
     assert.equal(runData?.recipientCount, 2);
     assert.equal(runData?.licenseLayer, "L2");
     assert.equal(runData?.calibrationVersion, "cal_build_23_success");
+    assert.equal(runData?.calibrationSnapshot.model, "risk_projection_v1");
+    assert.equal(runData?.calibrationSnapshot.sourcePath,
+      `${institutePath}/calibration/cal_build_23_success`);
+    await firestore.doc(institutePath).update({calibrationVersion: "later_pointer"});
+    const replayed = await assignmentCreationService.processAssignmentCreated(
+      {instituteId, runId, yearId}, createPayload,
+    );
+    assert.equal(replayed.calibrationVersion, "cal_build_23_success");
+    assert.deepEqual((await firestore.doc(runPath).get()).get("calibrationSnapshot"),
+      runData?.calibrationSnapshot);
     assert.equal(runData?.templateVersion, "3");
     assert.equal(runData?.riskModelVersion, "risk_v1");
     assert.deepEqual(runData?.recipientStudentIds, studentIds);

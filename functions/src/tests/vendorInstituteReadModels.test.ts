@@ -95,6 +95,22 @@ test.before(async () => {
   await cleanup();
 });
 
+test("calibration detail projects absence, null and exact pointer; malformed present authority fails", async () => {
+  const id = `${TEST_PREFIX}calibration`;
+  await seedInstitute({id, registeredName: "Calibration Pointer", updatedAt: "2026-09-29T10:00:00.000Z"});
+  const read = () => service.getInstituteDetail({actorId: "vendor_operator", actorRole: "vendor", instituteId: id});
+  assert.deepEqual((await read()).calibrationPointer, {present: false});
+  await firestore.doc(`institutes/${id}`).update({calibrationVersion: null});
+  assert.deepEqual((await read()).calibrationPointer, {present: true, value: null});
+  await firestore.doc(`institutes/${id}`).update({calibrationVersion: "v1"});
+  assert.deepEqual((await read()).calibrationPointer, {present: true, value: "v1"});
+  for (const value of ["", "bad/path", 1, false]) {
+    await firestore.doc(`institutes/${id}`).update({calibrationVersion: value});
+    await expectCode(read(), "INTERNAL_ERROR");
+  }
+  await firestore.recursiveDelete(firestore.doc(`institutes/${id}`));
+});
+
 test.after(async () => {
   await cleanup();
   await getFirebaseAdminApp().delete();

@@ -154,6 +154,9 @@ export interface VendorInstituteAdministratorRecord
 }
 
 export interface VendorInstituteDetail extends VendorInstituteSummary {
+  /** Required on current GET detail. Historical immutable creation receipts may
+   * omit it; omission is NEVER publish authority. Distinguish absence from null. */
+  calibrationPointer?: import("./vendorCalibrationRollout.js").VendorCalibrationPointer;
   /** Bounded by the existing 100-record settingsUsers limit. */
   administrators: VendorInstituteAdministratorRecord[];
   deletion: VendorInstituteDeletionSummary;

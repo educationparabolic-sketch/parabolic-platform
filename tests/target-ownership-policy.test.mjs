@@ -11,8 +11,7 @@ const explicitVendorTenantBypasses = new Set([
   "adminAcademicYearArchive.ts",
   "adminGovernanceReports.ts",
   "adminGovernanceSnapshots.ts",
-  "adminStudentDataExport.ts",
-  "adminStudentSoftDelete.ts",
+  "adminGovernanceTransport.ts",
 ]);
 
 test("every authenticated institute-scoped API has a fail-closed tenant guard", async () => {
@@ -62,8 +61,16 @@ test("every authenticated institute-scoped API has a fail-closed tenant guard", 
     );
   }
 
-  assert.equal(protectedApiCount, 44);
-  assert.equal(tenantScopedApiCount, 31);
+  assert.equal(protectedApiCount, 51);
+  assert.equal(tenantScopedApiCount, 39);
+  for (const fileName of ["adminStudentDataExport.ts", "adminStudentSoftDelete.ts"]) {
+    const source = await readFile(join(apiDirectory, fileName), "utf8");
+    assert.match(source, /allowVendorBypass:\s*false/u);
+    assert.match(source, /allowedRoles:\s*\["admin"\]/u);
+  }
+  const governance = await readFile(join(apiDirectory, "adminGovernanceTransport.ts"), "utf8");
+  assert.match(governance, /allowedRoles:\s*\["director", "vendor"\]/u);
+  assert.match(governance, /Vendor governance requests require targetInstituteId/u);
 });
 
 test("Student Exam targets come from verified identity and stored ownership checks", async () => {

@@ -13,6 +13,24 @@ process.env.METADATA_SERVER_DETECTION ??= "none";
 
 const firestore = getFirestore();
 
+const resetFirestore = async (): Promise<void> => {
+  const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST;
+  const projectId = process.env.GCLOUD_PROJECT;
+  assert.equal(emulatorHost, "127.0.0.1:8080");
+  assert.equal(projectId, "demo-parabolic-test");
+  assert.equal(process.env.GOOGLE_CLOUD_PROJECT, "demo-parabolic-test");
+  assert.ok(process.env.FIREBASE_EMULATOR_HUB);
+  const response = await fetch(
+    `http://${emulatorHost}/emulator/v1/projects/${projectId}/` +
+      "databases/(default)/documents",
+    {method: "DELETE"},
+  );
+  assert.equal(response.ok, true, await response.text());
+};
+
+test.beforeEach(resetFirestore);
+test.afterEach(resetFirestore);
+
 test.after(async () => {
   await getFirebaseAdminApp().delete();
 });
@@ -74,6 +92,7 @@ test(
     assert.equal(globalSnapshot.get("versionId"), versionId);
     assert.equal(globalSnapshot.get("createdBy"), "vendor_build_96");
     assert.equal(globalSnapshot.get("isActive"), true);
+    assert.equal(globalSnapshot.get("schemaVersion"), 1);
     assert.equal(
       globalSnapshot.get("activationDate"),
       "2026-04-05T10:00:00.000Z",
@@ -101,9 +120,9 @@ test(
 );
 
 test(
-  "createCalibrationVersion allows inactive drafts without activationDate",
+  "createCalibrationVersion allows inactive immutable versions without activationDate",
   async () => {
-    const versionId = "cal_v2026_04_draft";
+    const versionId = "cal_v2026_04_inactive";
     const globalPath = `globalCalibration/${versionId}`;
     const compatibilityPath = `calibrationVersions/${versionId}`;
 
@@ -233,3 +252,106 @@ test("createCalibrationVersion rejects duplicate version ids", async () => {
     deleteDocumentIfPresent(compatibilityPath),
   ]);
 });
+
+test(
+  "createCalibrationVersion rejects invalid schema bounds and fields",
+  async () => {
+    const validInput = {
+      createdBy: "vendor_build_96",
+      isActive: false,
+      thresholds: {
+        guessFactorEasy: 1,
+        guessFactorHard: 1.8,
+        guessFactorMedium: 1.4,
+        phaseDeviationThreshold: 19,
+      },
+      versionId: "cal_v2026_04_validation",
+      weights: {
+        easyNeglectWeight: 0.2,
+        guessWeight: 0.25,
+        hardBiasWeight: 0.2,
+        phaseWeight: 0.25,
+        wrongStreakWeight: 0.1,
+      },
+    };
+
+    await assert.rejects(
+      calibrationVersionStorageService.createCalibrationVersion({
+        ...validInput,
+        weights: {...validInput.weights, guessWeight: 0.3},
+      }),
+      /weights must sum to 1/i,
+    );
+    await assert.rejects(
+      calibrationVersionStorageService.createCalibrationVersion({
+        ...validInput,
+        thresholds: {...validInput.thresholds, guessFactorEasy: 0},
+      }),
+      /thresholds.guessFactorEasy.*\(0,10\]/i,
+    );
+    await assert.rejects(
+      calibrationVersionStorageService.createCalibrationVersion({
+        ...validInput,
+        versionId: "invalid/version",
+      }),
+      /must match \[A-Za-z0-9_-\]/i,
+    );
+    await assert.rejects(
+      calibrationVersionStorageService.createCalibrationVersion({
+        ...validInput,
+        unsupportedMode: "scheduled",
+      } as typeof validInput),
+      /unsupported field/i,
+    );
+  },
+);
+
+test(
+  "createCalibrationVersion rejects a second active global authority",
+  async () => {
+    const firstVersionId = "cal_v2026_04_active_one";
+    const secondVersionId = "cal_v2026_04_active_two";
+    const paths = [
+      `globalCalibration/${firstVersionId}`,
+      `calibrationVersions/${firstVersionId}`,
+      `globalCalibration/${secondVersionId}`,
+      `calibrationVersions/${secondVersionId}`,
+    ];
+
+    await Promise.all(paths.map((path) => deleteDocumentIfPresent(path)));
+    const buildInput = (versionId: string) => ({
+      activationDate: "2026-04-05T10:00:00.000Z",
+      createdBy: "vendor_build_96",
+      isActive: true,
+      thresholds: {
+        guessFactorEasy: 1.2,
+        guessFactorHard: 1.8,
+        guessFactorMedium: 1.5,
+        phaseDeviationThreshold: 22,
+      },
+      versionId,
+      weights: {
+        easyNeglectWeight: 0.2,
+        guessWeight: 0.25,
+        hardBiasWeight: 0.2,
+        phaseWeight: 0.25,
+        wrongStreakWeight: 0.1,
+      },
+    });
+
+    await calibrationVersionStorageService.createCalibrationVersion(
+      buildInput(firstVersionId),
+    );
+    await assert.rejects(
+      calibrationVersionStorageService.createCalibrationVersion(
+        buildInput(secondVersionId),
+      ),
+      /active global calibration version already exists/i,
+    );
+    const secondSnapshot = await firestore
+      .doc(`globalCalibration/${secondVersionId}`)
+      .get();
+    assert.equal(secondSnapshot.exists, false);
+    await Promise.all(paths.map((path) => deleteDocumentIfPresent(path)));
+  },
+);

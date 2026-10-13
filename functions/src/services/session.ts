@@ -39,6 +39,8 @@ import {
   SessionTokenClaims,
 } from "../types/sessionStart";
 import {DEFAULT_RISK_MODEL_VERSION} from "../types/riskEngine";
+import {assertSameFrozenCalibration, freezeCalibration,
+  validateFrozenCalibration} from "./calibrationConsumer";
 import type {
   ExamRuntimeQuestion,
   ExamRuntimeSnapshot,
@@ -1575,6 +1577,7 @@ export class SessionService {
           sessionData?.launchCredentialHashes,
           sessionData?.sessionTokenHash,
         );
+        assertSameFrozenCalibration(runData, sessionData, instituteId);
         credentialHashes.push(launchCredentialHash);
         promoteScheduledRun();
         transaction.update(sessionReference, {
@@ -1612,6 +1615,25 @@ export class SessionService {
         runData.calibrationVersion,
         "run.calibrationVersion",
       );
+      const calibrationSnapshot = runData.calibrationSnapshot !== undefined ||
+        runData.calibrationModel === "risk_projection_v1" ?
+        validateFrozenCalibration(
+          runData.calibrationSnapshot, instituteId, calibrationVersion,
+        ) : freezeCalibration(
+          (await transaction.get(this.firestore.doc(
+            `institutes/${instituteId}/calibration/${calibrationVersion}`,
+          ))).data(), instituteId, calibrationVersion,
+        );
+      const currentCalibrationSource = freezeCalibration(
+        (await transaction.get(this.firestore.doc(
+          calibrationSnapshot.sourcePath,
+        ))).data(), instituteId, calibrationVersion,
+      );
+      if (currentCalibrationSource.fingerprint !== calibrationSnapshot.fingerprint) {
+        throw new SessionStartValidationError(
+          "CONFLICT", "Immutable calibration source changed.",
+        );
+      }
       const riskModelVersion = normalizeRiskModelVersion(
         runData.riskModelVersion,
       );
@@ -1699,6 +1721,7 @@ export class SessionService {
 
       const initializationRecord = this.buildSessionInitializationRecord({
         calibrationVersion,
+        calibrationSnapshot,
         consumedLaunchCredentialHashes: [],
         instituteId,
         licenseSnapshot,
@@ -2515,6 +2538,9 @@ export class SessionService {
     return {
       answerMap: {},
       calibrationVersion: context.calibrationVersion,
+      ...(context.calibrationSnapshot ?
+        {calibrationSnapshot: context.calibrationSnapshot,
+          calibrationModel: "risk_projection_v1"} : {}),
       consumedLaunchCredentialHashes:
         context.consumedLaunchCredentialHashes,
       createdAt: FieldValue.serverTimestamp(),

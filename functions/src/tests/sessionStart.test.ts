@@ -5,6 +5,7 @@ import {Timestamp} from "firebase-admin/firestore";
 import * as gcpMetadata from "gcp-metadata";
 import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
 import {SessionService, SessionStartValidationError} from "../services/session";
+import {seedConsumerVersion} from "./calibrationConsumerFixture";
 
 process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8080";
 process.env.GCLOUD_PROJECT ??= "parabolic-platform-build-26-tests";
@@ -93,6 +94,9 @@ const seedInstituteAuthority = async (
   instituteId: string,
   licenseOverrides: Record<string, unknown> = {},
 ): Promise<void> => {
+  await seedConsumerVersion(instituteId, "cal_v2026_04");
+  await Promise.all([0, 1, 2, 3].map((index) =>
+    seedConsumerVersion(instituteId, `cal_bwm_019_${index}`)));
   const licenseVersion = `license_${instituteId}_v1`;
   const license = {
     activeStudentLimit: 100,
@@ -258,6 +262,9 @@ test(
     assert.equal(sessionData?.status, "created");
     assert.equal(sessionData?.submissionLock, false);
     assert.equal(sessionData?.calibrationVersion, "cal_v2026_04");
+    assert.equal(sessionData?.calibrationSnapshot.model, "risk_projection_v1");
+    assert.equal(sessionData?.calibrationSnapshot.sourcePath,
+      `${institutePath}/calibration/cal_v2026_04`);
     assert.equal(sessionData?.riskModelVersion, "risk_v3");
     assert.equal(sessionData?.templateVersion, "7");
     assert.deepEqual(sessionData?.licenseSnapshot, {

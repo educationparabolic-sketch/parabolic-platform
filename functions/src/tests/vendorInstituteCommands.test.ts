@@ -17,6 +17,8 @@ gcpMetadata.setGCPResidency(false);
 
 const firestore = getFirestore();
 const TEST_PREFIX = "bwm034_command_";
+const createdInstituteIds = new Set<string>();
+const creationAuditIds = new Set<string>();
 let currentTime = new Date("2026-10-01T12:00:00.000Z");
 const service = new VendorInstituteCommandsService({
   firestore,
@@ -42,11 +44,16 @@ const deleteQuery = async (
 };
 
 const cleanup = async (): Promise<void> => {
+  assert.equal(process.env.GCLOUD_PROJECT, "demo-parabolic-test");
+  assert.equal(process.env.GOOGLE_CLOUD_PROJECT, "demo-parabolic-test");
+  assert.match(process.env.FIRESTORE_EMULATOR_HOST ?? "", /^(127\.0\.0\.1|localhost):\d+$/);
   const [institutes, onboardings] = await Promise.all([
     firestore.collection("institutes").get(),
     firestore.collection("vendorOnboarding").get(),
   ]);
   await Promise.all([
+    ...Array.from(createdInstituteIds, (id) => firestore.recursiveDelete(firestore.doc(`institutes/${id}`))),
+    ...Array.from(creationAuditIds, (id) => firestore.doc(`vendorAuditLogs/${id}`).delete()),
     ...institutes.docs.filter((document) => document.id.startsWith(TEST_PREFIX))
       .map((document) => firestore.recursiveDelete(document.ref)),
     ...onboardings.docs.filter((document) => document.id.startsWith(TEST_PREFIX))
@@ -183,6 +190,9 @@ test("approved onboarding creates one deterministic institute with exact replay 
     onboardingId,
   });
   const applied = await service.createInstitute(request);
+  createdInstituteIds.add(applied.institute.instituteId);
+  creationAuditIds.add(applied.auditEventId);
+  assert.deepEqual(applied.institute.calibrationPointer, {present: false});
   assert.equal(applied.replayed, false);
   assert.equal(applied.institute.lifecycleState, "onboarding");
   assert.equal(applied.institute.revision, 1);

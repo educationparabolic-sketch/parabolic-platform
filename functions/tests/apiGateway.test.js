@@ -60,7 +60,7 @@ test("implemented routes have one registered existing handler", () => {
   const implementedRoutes = API_ROUTE_MANIFEST.filter(
     (route) => route.status === "implemented",
   );
-  assert.equal(implementedRoutes.length, 100);
+  assert.equal(implementedRoutes.length, 107);
 
   for (const route of implementedRoutes) {
     assert.equal(typeof API_GATEWAY_HANDLERS[route.functionExport], "function");
@@ -71,6 +71,26 @@ test("implemented routes have one registered existing handler", () => {
       1,
       `${route.id} must map to exactly one handler registry entry`,
     );
+  }
+});
+
+test("BWM-040 audit/health routes have distinct registered handlers", () => {
+  const routes = API_ROUTE_MANIFEST.filter((route) =>
+    ["VEN-40", "VEN-41"].includes(route.id));
+  assert.deepEqual(routes.map((route) => [
+    route.id,
+    route.method,
+    route.canonicalPath,
+    route.status,
+    route.functionExport,
+  ]), [
+    ["VEN-40", "GET", "/api/v1/vendor/audit-events", "implemented",
+      "vendorAuditEvents"],
+    ["VEN-41", "GET", "/api/v1/vendor/system-health", "implemented",
+      "vendorSystemHealth"],
+  ]);
+  for (const route of routes) {
+    assert.equal(typeof API_GATEWAY_HANDLERS[route.functionExport], "function");
   }
 });
 

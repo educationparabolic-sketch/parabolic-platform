@@ -252,6 +252,7 @@ ignored local environment or an approved secret store.
 | `STRIPE_WEBHOOK_SECRET` | `STRIPE_WEBHOOK_SECRET_NAME` | Stripe webhook verification is enabled. | Ephemeral local/test secret value. | Runtime secret binding only. | Value variable forbidden; reference must resolve through Google Secret Manager. |
 | `AI_API_KEY` | `AI_API_KEY_SECRET_NAME` | AI-backed generation or summaries are enabled. | Ephemeral local/test secret value. | Runtime secret binding only. | Value variable forbidden; reference must resolve through Google Secret Manager. |
 | `EMAIL_PROVIDER_KEY` | `EMAIL_PROVIDER_KEY_SECRET_NAME` | External email delivery is enabled. | Ephemeral local/test secret value. | Runtime secret binding only. | Value variable forbidden; reference must resolve through Google Secret Manager. |
+| `VENDOR_AUDIT_CURSOR_KEY` | `VENDOR_AUDIT_CURSOR_KEY_SECRET_VERSION` | VEN-40 audit reads are enabled. | Explicit ephemeral canonical base64url 32-byte value; no fallback. The isolated emulator runner generates it without logging or persisting it. | Explicit pinned same-project Secret Manager version only. | Explicit pinned same-project Secret Manager version only; BWM-052 provisions key/IAM. |
 | `EMAIL_FROM_ADDRESS` | N/A | Transactional email delivery is enabled. | Verified development sender address. | Verified provider sender address. | Non-secret sender identity; provider verification remains an operations responsibility under BWM-052. |
 | `EMAIL_FROM_NAME` | N/A | Optional. | `Parabolic Platform` | Approved transactional sender name. | Defaults to `Parabolic Platform` when omitted. |
 
@@ -259,6 +260,14 @@ Secret reference values may be a secret ID in the selected project or a full
 `projects/<project>/secrets/<secret>/versions/<version>` resource name. A
 cross-project reference is forbidden unless a later security task explicitly
 documents and approves it.
+
+The audit cursor reference is stricter: it must be the complete
+`projects/<current-project>/secrets/<secret>/versions/<positive-integer>` name,
+never `latest`. Staging/production ignore raw cursor-key values and fail closed
+when the reference, IAM access or 32-byte payload is missing or malformed. The
+key keeps cursor continuation and keyed public IDs stable across workers; an
+explicit future key rotation invalidates prior cursors. This declaration does
+not provision a secret or authorize a cloud mutation.
 
 ## Platform- and harness-managed variables
 

@@ -86,9 +86,8 @@ import {SubmissionValidationError} from "../services/submission";
 import {
   LicenseManagementValidationError,
 } from "../types/licenseManagement";
-import {
-  CalibrationDeploymentError,
-} from "../types/calibrationDeployment";
+import {CalibrationRolloutError, calibrationRolloutIdentity,
+  parseCalibrationRollout} from "../services/calibrationRollout";
 import {
   CalibrationSimulationError,
 } from "../types/calibrationSimulation";
@@ -2843,7 +2842,9 @@ test(
   "vendor calibration simulation handler accepts a valid vendor request",
   async () => {
     const handler = createVendorCalibrationSimulationHandler({
+      getUser: async () => ({disabled: false, customClaims: {role: "vendor"}}) as never,
       simulateCalibrationImpact: async (request) => ({
+        availability: "available",
         after: {
           averageProjectedRiskScore: 32.5,
           instituteCount: request.institutes.length,
@@ -2881,6 +2882,7 @@ test(
         },
         institutes: [
           {
+            academicYearId: "2026",
             beforeAverageProjectedRiskScore: 25,
             currentCalibrationSourcePath:
               "globalCalibration/cal_v2026_04",
@@ -2897,6 +2899,31 @@ test(
             studentCount: 2,
           },
         ],
+        metadata: {
+          academicYearId: "2026",
+          evaluatedAt: "2026-04-05T12:00:00.000Z",
+          model: "risk_projection_v1",
+          population: "student_year_summaries",
+          schemaVersion: 1,
+          sources: [
+            {
+              academicYearId: "2026",
+              calibrationSourcePath:
+                "globalCalibration/cal_v2026_04",
+              calibrationVersion: "cal_v2026_04",
+              instituteId: request.institutes[0] ?? "inst_build_98_a",
+              summaryDocumentCount: 2,
+            },
+          ],
+          unsupportedOutputs: {
+            batchDelta: "unavailable",
+            clusterMovement: "unavailable",
+            disciplineDelta: "unavailable",
+            estimatedAlertDelta: "unavailable",
+            productionRiskOutcome: "unavailable",
+            stabilityImpact: "unavailable",
+          },
+        },
         proposedWeights: request.weights,
       }),
       verifyIdToken: async () => createVendorToken({
@@ -2908,6 +2935,7 @@ test(
     await handler(
       createMockRequest({
         body: {
+          academicYearId: "2026",
           institutes: ["inst_build_98_a"],
           weights: {
             easyNeglectWeight: 0.15,
@@ -2942,6 +2970,7 @@ test(
   "vendor calibration simulation handler rejects invalid request payloads",
   async () => {
     const handler = createVendorCalibrationSimulationHandler({
+      getUser: async () => ({disabled: false, customClaims: {role: "vendor"}}) as never,
       simulateCalibrationImpact: async () => {
         throw new Error("simulateCalibrationImpact should not be called");
       },
@@ -2977,6 +3006,7 @@ test(
   "vendor calibration simulation handler maps service validation errors",
   async () => {
     const handler = createVendorCalibrationSimulationHandler({
+      getUser: async () => ({disabled: false, customClaims: {role: "vendor"}}) as never,
       simulateCalibrationImpact: async () => {
         throw new CalibrationSimulationError(
           "NOT_FOUND",
@@ -2991,6 +3021,7 @@ test(
     await handler(
       createMockRequest({
         body: {
+          academicYearId: "2026",
           institutes: ["inst_build_98_missing"],
           weights: {
             easyNeglectWeight: 0.15,
@@ -3018,172 +3049,86 @@ test(
   },
 );
 
-test(
-  "vendor calibration push handler accepts a valid vendor request",
-  async () => {
-    const handler = createVendorCalibrationPushHandler({
-      deployCalibrationVersion: async (request) => ({
-        calibrationSourcePath: "globalCalibration/cal_v2026_04",
-        deployedInstituteCount: request.targetInstitutes.length,
-        deploymentLogId: "build_99_handler_log",
-        deployedInstitutes: request.targetInstitutes.map((instituteId) => ({
-          calibrationPath:
-            `institutes/${instituteId}/calibration/${request.versionId}`,
-          calibrationHistoryPath:
-            `institutes/${instituteId}/calibrationHistory/` +
-            "build_99_handler_log",
-          compatibilityLicensePath: `institutes/${instituteId}/license/main`,
-          instituteId,
-          licensePath: `institutes/${instituteId}/license/current`,
-        })),
-        vendorCalibrationLogPath:
-          "vendorCalibrationLogs/build_99_handler_log",
-        versionId: request.versionId,
-      }),
-      verifyIdToken: async () => createVendorToken({
-        uid: "vendor_build_97",
-      }) as never,
-    });
-    const response = createMockResponse();
+const rolloutIntent = {idempotencyKey: "abcdefab-1234-4123-8123-abcdefabcdef",
+  versionId: "cal_v2026_04", targets: [{instituteId: "inst_build_97_a", expectedCalibrationVersion: null}]};
+const invokeRollout = async (handler: ReturnType<typeof createVendorCalibrationPushHandler>, body = rolloutIntent) => {
+  const response = createMockResponse();
+  await handler(createMockRequest({body, headers: {authorization: "Bearer vendor"},
+    path: "/vendor/calibration/push"}) as never, response as never);
+  return response;
+};
+const rolloutAuth = {
+  getUser: async () => ({disabled: false, customClaims: {role: "vendor"}}) as never,
+  verifyIdToken: async () => createVendorToken() as never,
+};
 
-    await handler(
-      createMockRequest({
-        body: {
-          targetInstitutes: ["inst_build_97_a", "inst_build_97_b"],
-          versionId: "cal_v2026_04",
-        },
-        headers: {
-          authorization: "Bearer build_97_vendor",
-        },
-        path: "/vendor/calibration/push",
-      }) as never,
-      response as never,
-    );
+test("vendor calibration push handler accepts explicit atomic pending intent", async () => {
+  let called = false;
+  const response = await invokeRollout(createVendorCalibrationPushHandler({...rolloutAuth,
+    apply: async (uid, value) => {
+      called = true;
+      const {operationId} = calibrationRolloutIdentity(uid, parseCalibrationRollout(value));
+      return {operationId, revision: 1, state: "pending", receipt: null, rollbackOperationId: null};
+    },
+  }));
+  assert.equal(response.statusCode, 200);
+  assert.equal(called, true);
+  assert.equal((response.body as {data: {state: string}}).data.state, "pending");
+});
 
-    assert.equal(response.statusCode, 200);
-    assert.equal((response.body as {code: string}).code, "OK");
-    assert.equal(
-      (
-        response.body as {
-          data: {deployedInstituteCount: number};
-        }
-      ).data.deployedInstituteCount,
-      2,
-    );
-    assert.equal(
-      (
-        response.body as {
-          data: {versionId: string};
-        }
-      ).data.versionId,
-      "cal_v2026_04",
-    );
-  },
-);
+test("vendor calibration push handler rejects legacy payloads", async () => {
+  const response = await invokeRollout(createVendorCalibrationPushHandler({...rolloutAuth,
+    apply: async () => {
+      throw new Error("Must not apply");
+    },
+  }), {targetInstitutes: ["inst_a"], versionId: "v1"} as never);
+  assert.equal(response.statusCode, 400);
+  assertStructuredError(response.body, "VALIDATION_ERROR", "Invalid calibration operation intent.");
+});
 
-test(
-  "vendor calibration push handler rejects invalid request payloads",
-  async () => {
-    const handler = createVendorCalibrationPushHandler({
-      deployCalibrationVersion: async () => {
-        throw new Error("deployCalibrationVersion should not be called");
-      },
-      verifyIdToken: async () => createVendorToken() as never,
-    });
-    const response = createMockResponse();
+test("vendor calibration push handler rejects role violations", async () => {
+  const response = await invokeRollout(createVendorCalibrationPushHandler({...rolloutAuth,
+    verifyIdToken: async () => createStudentToken() as never,
+    apply: async () => {
+      throw new Error("Must not apply");
+    },
+  }));
+  assert.equal(response.statusCode, 403);
+  assertStructuredError(response.body, "FORBIDDEN", "Capability vendor.calibration.manage requires Vendor authority.");
+});
 
-    await handler(
-      createMockRequest({
-        body: {
-          versionId: "cal_v2026_04",
-        },
-        headers: {
-          authorization: "Bearer build_97_vendor",
-        },
-        path: "/vendor/calibration/push",
-      }) as never,
-      response as never,
-    );
+test("vendor calibration push returns terminal not_applied as operation truth", async () => {
+  const response = await invokeRollout(createVendorCalibrationPushHandler({...rolloutAuth,
+    apply: async (uid, value) => {
+      const {operationId} = calibrationRolloutIdentity(uid, parseCalibrationRollout(value));
+      return {operationId, revision: 2, state: "not_applied", rollbackOperationId: null,
+        receipt: {schemaVersion: 1, operationId, revision: 2, kind: "rollout", originalOperationId: null,
+          state: "not_applied", failureCode: "INVALID_SOURCE", targets: [], versionId: rolloutIntent.versionId,
+          completedAt: "2026-01-01T00:00:00.000Z", vendorCalibrationLogPath: `vendorCalibrationLogs/${operationId}`}};
+    },
+  }));
+  assert.equal(response.statusCode, 200);
+  assert.equal((response.body as {data: {state: string}}).data.state, "not_applied");
+});
 
-    assert.equal(response.statusCode, 400);
-    assertStructuredError(
-      response.body,
-      "VALIDATION_ERROR",
-      "Calibration field \"targetInstitutes\" must be an array.",
-    );
-  },
-);
+test("vendor calibration push handler redacts conflicting service authority", async () => {
+  const response = await invokeRollout(createVendorCalibrationPushHandler({...rolloutAuth,
+    apply: async () => {
+      throw new CalibrationRolloutError("OPERATION_CONFLICT", "SECRET");
+    },
+  }));
+  assert.equal(response.statusCode, 409);
+  assertStructuredError(response.body, "CONFLICT", "Calibration operation conflicts with current authority or intent.");
+});
 
-test(
-  "vendor calibration push handler rejects role violations",
-  async () => {
-    const handler = createVendorCalibrationPushHandler({
-      deployCalibrationVersion: async () => {
-        throw new Error("deployCalibrationVersion should not be called");
-      },
-      verifyIdToken: async () => createStudentToken() as never,
-    });
-    const response = createMockResponse();
-
-    await handler(
-      createMockRequest({
-        body: {
-          targetInstitutes: ["inst_build_97_a"],
-          versionId: "cal_v2026_04",
-        },
-        headers: {
-          authorization: "Bearer build_97_student",
-        },
-        path: "/vendor/calibration/push",
-      }) as never,
-      response as never,
-    );
-
-    assert.equal(response.statusCode, 403);
-    assertStructuredError(
-      response.body,
-      "FORBIDDEN",
-      "Only vendor roles can deploy calibration models.",
-    );
-  },
-);
-
-test(
-  "vendor calibration push handler maps service validation errors",
-  async () => {
-    const handler = createVendorCalibrationPushHandler({
-      deployCalibrationVersion: async () => {
-        throw new CalibrationDeploymentError(
-          "NOT_FOUND",
-          "Calibration version \"cal_v2026_04\" does not exist.",
-        );
-      },
-      verifyIdToken: async () => createVendorToken() as never,
-    });
-    const response = createMockResponse();
-
-    await handler(
-      createMockRequest({
-        body: {
-          targetInstitutes: ["inst_build_97_a"],
-          versionId: "cal_v2026_04",
-        },
-        headers: {
-          authorization: "Bearer build_97_vendor",
-        },
-        path: "/vendor/calibration/push",
-      }) as never,
-      response as never,
-    );
-
-    assert.equal(response.statusCode, 404);
-    assertStructuredError(
-      response.body,
-      "NOT_FOUND",
-      "Calibration version \"cal_v2026_04\" does not exist.",
-    );
-  },
-);
+test("vendor calibration push handler rejects inconsistent receipts", async () => {
+  const response = await invokeRollout(createVendorCalibrationPushHandler({...rolloutAuth,
+    apply: async () => ({operationId: "wrong", revision: 1, state: "pending",
+      receipt: null, rollbackOperationId: null}),
+  }));
+  assert.equal(response.statusCode, 500);
+  assertStructuredError(response.body, "INTERNAL_ERROR", "Calibration authority is unavailable.");
+});
 
 test(
   "vendor intelligence initialization handler rejects role violations",

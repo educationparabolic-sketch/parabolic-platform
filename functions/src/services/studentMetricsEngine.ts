@@ -1,6 +1,7 @@
 import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import {createLogger} from "./logging";
 import {getFirestore} from "../utils/firebaseAdmin";
+import {assertSameFrozenCalibration} from "./calibrationConsumer";
 import {
   StudentMetricsEngineContext,
   StudentMetricsEngineResult,
@@ -16,6 +17,8 @@ const RESULTS_COLLECTION = "results";
 const GOVERNANCE_TREND_WINDOW_SIZE = 5;
 
 interface SubmittedSessionSnapshot {
+  calibrationSnapshot?: unknown;
+  calibrationVersion?: unknown;
   accuracyPercent?: unknown;
   answerMap?: unknown;
   behaviourTagSummary?: unknown;
@@ -61,6 +64,7 @@ interface StudentMetricsComputationState {
 }
 
 interface GovernanceMetricPoint {
+  consecutiveWrongStreakMax?: number;
   disciplineIndex: number;
   guessRate: number;
   phaseAdherencePercent: number;
@@ -191,6 +195,10 @@ const toGovernanceMetricPoint = (
 
   try {
     return {
+      ...(Number.isSafeInteger(value.consecutiveWrongStreakMax) &&
+        Number(value.consecutiveWrongStreakMax) >= 0 ? {
+          consecutiveWrongStreakMax: Number(value.consecutiveWrongStreakMax),
+        } : {}),
       disciplineIndex: toPercent(value.disciplineIndex, "disciplineIndex"),
       guessRate: toPercent(value.guessRate, "guessRate"),
       phaseAdherencePercent: toPercent(
@@ -245,29 +253,22 @@ const readComputationState = (
   ) ?
     processingMarkers.studentMetricsEngine :
     {};
+  const sum = (value: unknown): number =>
+    typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
 
   return {
-    sumAvgNormalizedRiskScore: toPercentOrDefault(
-      engineState.sumAvgNormalizedRiskScore,
-      0,
-    ),
+    sumAvgNormalizedRiskScore: sum(engineState.sumAvgNormalizedRiskScore),
     recentGovernanceMetrics: toGovernanceMetricPoints(
       engineState?.recentGovernanceMetrics,
     ),
-    sumAccuracyPercent: toPercentOrDefault(engineState.sumAccuracyPercent, 0),
-    sumDisciplineIndex: toPercentOrDefault(engineState.sumDisciplineIndex, 0),
-    sumEasyNeglectRate: toPercentOrDefault(engineState.sumEasyNeglectRate, 0),
-    sumGuessRate: toPercentOrDefault(engineState.sumGuessRate, 0),
-    sumHardBiasRate: toPercentOrDefault(engineState.sumHardBiasRate, 0),
-    sumOverstayQuestionsPercent: toPercentOrDefault(
-      engineState.sumOverstayQuestionsPercent,
-      0,
-    ),
-    sumPhaseAdherencePercent: toPercentOrDefault(
-      engineState.sumPhaseAdherencePercent,
-      0,
-    ),
-    sumRawScorePercent: toPercentOrDefault(engineState.sumRawScorePercent, 0),
+    sumAccuracyPercent: sum(engineState.sumAccuracyPercent),
+    sumDisciplineIndex: sum(engineState.sumDisciplineIndex),
+    sumEasyNeglectRate: sum(engineState.sumEasyNeglectRate),
+    sumGuessRate: sum(engineState.sumGuessRate),
+    sumHardBiasRate: sum(engineState.sumHardBiasRate),
+    sumOverstayQuestionsPercent: sum(engineState.sumOverstayQuestionsPercent),
+    sumPhaseAdherencePercent: sum(engineState.sumPhaseAdherencePercent),
+    sumRawScorePercent: sum(engineState.sumRawScorePercent),
     totalTests: toNonNegativeInteger(engineState.totalTests),
   };
 };
@@ -481,7 +482,33 @@ export class StudentMetricsEngineService {
         };
       }
 
+      const calibrationSnapshot = assertSameFrozenCalibration(
+        runData, afterData as Record<string, unknown>, instituteId,
+      );
+      const calibrated = !!(calibrationSnapshot ||
+        studentMetricsData?.calibrationSnapshot);
+      if (calibrated) {
+        // Calibrated production signals never inherit fabricated legacy defaults.
+        for (const field of ["phaseAdherencePercent", "easyNeglectRatePercent",
+          "hardBiasRatePercent"] as const) toPercent(afterData?.[field], field);
+        if (!Number.isSafeInteger(afterData?.consecutiveWrongStreakMax) ||
+          consecutiveWrongStreakMax !== afterData?.consecutiveWrongStreakMax) {
+          throw new StudentMetricsEngineValidationError("Invalid wrong-streak signal.");
+        }
+      }
+
       const computationState = readComputationState(studentMetricsData);
+      if (calibrated && Number(studentMetricsData?.totalTests) > 0) {
+        for (const key of ["sumGuessRate", "sumPhaseAdherencePercent",
+          "sumEasyNeglectRate", "sumHardBiasRate"] as const) {
+          if (typeof engineState?.[key] !== "number" ||
+            !Number.isFinite(engineState[key]) || Number(engineState[key]) < 0) {
+            throw new StudentMetricsEngineValidationError(
+              "Missing/invalid cumulative calibration signal authority.",
+            );
+          }
+        }
+      }
       const totalTests = computationState.totalTests + 1;
       const sumRawScorePercent =
         computationState.sumRawScorePercent + rawScorePercent;
@@ -503,6 +530,7 @@ export class StudentMetricsEngineService {
       const recentGovernanceMetrics = [
         ...computationState.recentGovernanceMetrics,
         {
+          consecutiveWrongStreakMax,
           disciplineIndex,
           guessRate,
           phaseAdherencePercent,
@@ -513,6 +541,17 @@ export class StudentMetricsEngineService {
         left.submittedAt.toMillis() - right.submittedAt.toMillis() ||
         left.sessionId.localeCompare(right.sessionId)
       ).slice(-GOVERNANCE_TREND_WINDOW_SIZE);
+      const newestTime = recentGovernanceMetrics[recentGovernanceMetrics.length - 1]
+        ?.submittedAt.toMillis() ??
+        submittedAt.toMillis();
+      const wrongStreakWindow = recentGovernanceMetrics.filter((point) =>
+        newestTime - point.submittedAt.toMillis() <= 30 * 24 * 60 * 60 * 1000);
+      if (calibrated && wrongStreakWindow.some((point) =>
+        point.consecutiveWrongStreakMax === undefined)) {
+        throw new StudentMetricsEngineValidationError(
+          "Missing rolling wrong-streak source authority; migration required.",
+        );
+      }
       const disciplineIndexTrend = computeMetricTrend(
         recentGovernanceMetrics,
         (point) => point.disciplineIndex,
@@ -525,7 +564,18 @@ export class StudentMetricsEngineService {
         studentMetricsData?.lastSubmissionAt,
       );
       const isLatestResult = !existingLastSubmissionAt ||
-        submittedAt.toMillis() >= existingLastSubmissionAt.toMillis();
+        submittedAt.toMillis() > existingLastSubmissionAt.toMillis() ||
+        (submittedAt.toMillis() === existingLastSubmissionAt.toMillis() &&
+          sessionId > String(isPlainObject(engineState?.latestSessionSummary) ?
+            engineState.latestSessionSummary.sessionId : ""));
+      const lastCalibrationSubmittedAt = toTimestampOrUndefined(
+        engineState?.lastCalibrationSubmittedAt,
+      );
+      const selectCalibration = !!calibrationSnapshot &&
+        (!lastCalibrationSubmittedAt ||
+          submittedAt.toMillis() > lastCalibrationSubmittedAt.toMillis() ||
+          (submittedAt.toMillis() === lastCalibrationSubmittedAt.toMillis() &&
+            sessionId > String(engineState?.lastCalibrationSessionId ?? "")));
       const runName = toNonEmptyString(runData.runName) ??
         toNonEmptyString(runData.testName) ?? context.runId;
       const testId = toNonEmptyString(runData.testId) ?? context.runId;
@@ -533,6 +583,8 @@ export class StudentMetricsEngineService {
         toNonEmptyString(studentData.fullName) ??
         toNonEmptyString(studentMetricsData?.studentName) ?? studentId;
       const latestSessionSummary = {
+        ...(calibrationSnapshot ? {calibrationSnapshot,
+          calibrationVersion: calibrationSnapshot.versionId} : {}),
         accuracyPercent,
         behaviourTagSummary: typeof afterData?.behaviourTagSummary === "string" ?
           afterData.behaviourTagSummary : null,
@@ -581,6 +633,17 @@ export class StudentMetricsEngineService {
       transaction.set(
         studentMetricsReference,
         {
+          ...(calibrationSnapshot && selectCalibration ? {
+            calibrationSnapshot,
+            calibrationVersion: calibrationSnapshot.versionId,
+            riskModelVersion: "risk_projection_v1",
+          } : {}),
+          ...(calibrated ? {
+            wrongStreakActive: wrongStreakWindow.some((point) =>
+              Number(point.consecutiveWrongStreakMax) >= 5) ||
+              wrongStreakWindow.filter((point) =>
+                Number(point.consecutiveWrongStreakMax) >= 4).length >= 3,
+          } : {}),
           avgAccuracyPercent: roundToTwoDecimals(
             sumAccuracyPercent / totalTests,
           ),
@@ -629,6 +692,10 @@ export class StudentMetricsEngineService {
           ),
           processingMarkers: {
             studentMetricsEngine: {
+              ...(selectCalibration ? {
+                lastCalibrationSubmittedAt: submittedAt,
+                lastCalibrationSessionId: sessionId,
+              } : {}),
               eventId: context.eventId ?? null,
               lastProcessedSessionId: sessionId,
               lastProcessedSubmittedAt: submittedAt,
@@ -657,6 +724,8 @@ export class StudentMetricsEngineService {
       );
 
       transaction.set(resultReference, {
+        ...(calibrationSnapshot ? {calibrationSnapshot,
+          calibrationVersion: calibrationSnapshot.versionId} : {}),
         accuracyPercent,
         attemptedQuestions,
         completedAt: submittedAt,

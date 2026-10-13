@@ -148,6 +148,7 @@ test("protected routes deny authenticated wrong-role sessions and server role mi
   const vendorHandlerFiles = [
     "vendorCalibrationPush.ts",
     "vendorCalibrationSimulation.ts",
+    "vendorCalibrationVersions.ts",
     "vendorChurnTracking.ts",
     "vendorIntelligenceInitialize.ts",
     "vendorLayerDistribution.ts",
@@ -164,6 +165,9 @@ test("protected routes deny authenticated wrong-role sessions and server role mi
     let source = await readFile(join(apiDirectory, fileName), "utf8");
     if (source.includes("intelligenceReadMiddlewares(dependencies)")) {
       source += await readFile(join(apiDirectory, "vendorIntelligenceReadBoundary.ts"), "utf8");
+    }
+    if (source.includes("calibrationMiddlewares(")) {
+      source += await readFile(join(apiDirectory, "vendorCalibrationBoundary.ts"), "utf8");
     }
     assert.match(source, /createAuthenticationMiddleware\(/u);
     assert.match(source, /allowedRoles:\s*\["vendor"\]/u);

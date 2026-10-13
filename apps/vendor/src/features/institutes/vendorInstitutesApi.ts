@@ -212,11 +212,19 @@ export function parseVendorInstituteList(value: unknown): VendorInstituteListRes
 
 export function parseVendorInstituteDetail(value: unknown): VendorInstituteDetail {
   const item = record(value, "institute");
+  const pointer = Object.hasOwn(item, "calibrationPointer") ? record(item.calibrationPointer, "institute.calibrationPointer") : null;
+  const present = pointer ? booleanValue(pointer.present, "institute.calibrationPointer.present") : false;
+  if (pointer && (Object.keys(pointer).sort().join(",") !== (present ? "present,value" : "present") ||
+    (present && pointer.value !== null &&
+      (typeof pointer.value !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(pointer.value))))) {
+    return invalidResponse("institute.calibrationPointer", "invalid pointer authority");
+  }
   const summary = parseInstituteSummary(item, "institute");
   const deletion = record(item.deletion, "institute.deletion");
   const profile = record(item.profile, "institute.profile");
   return {
     ...summary,
+    ...(pointer ? { calibrationPointer: present ? { present: true as const, value: pointer.value as string | null } : { present: false as const } } : {}),
     administrators: list(item.administrators, "institute.administrators", (administrator, path) => {
       const parsed = record(administrator, path);
       const primary = parsePrimaryAdministrator(parsed, path);
@@ -535,7 +543,11 @@ export const vendorInstitutesApi = {
       emptyResultIsReady: true,
       handledFailureIsReady: true,
       signal,
-      responseAdapter: parseVendorInstituteDetail,
+      responseAdapter: value => {
+        const detail = parseVendorInstituteDetail(value);
+        if (!detail.calibrationPointer) return invalidResponse("institute.calibrationPointer", "current detail requires pointer authority");
+        return detail;
+      },
     }),
   updateInstitute: (instituteId: string, intent: VendorInstituteProfileUpdateIntent) =>
     apiClient.patch<VendorInstituteMutationReceipt, VendorInstituteProfileUpdateIntent>(

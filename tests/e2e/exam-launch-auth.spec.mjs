@@ -1,5 +1,6 @@
 import {createRequire} from "node:module";
 import {expect, test} from "playwright/test";
+import {calibrationConsumerFixture} from "./calibration-consumer-fixture.mjs";
 
 const require = createRequire(import.meta.url);
 const {
@@ -61,6 +62,8 @@ test.beforeAll(async () => {
   });
   studentUid = user.uid;
   await auth.setCustomUserClaims(user.uid, {
+    authorizationVersion: 1, licenseVersion: "license-consumer-exam",
+    licenseState: "active", featureFlags: {controlledMode: true, hardMode: false},
     instituteId,
     licenseLayer: "L1",
     role: "student",
@@ -71,14 +74,24 @@ test.beforeAll(async () => {
   const year = institute.collection("academicYears").doc(yearId);
   const run = year.collection("runs").doc(runId);
   await Promise.all([
-    institute.set({instituteId}),
+    institute.set({instituteId, status: "active", authorizationVersion: 1,
+      licenseVersion: "license-consumer-exam"}),
     institute.collection("students").doc(studentId).set({
       status: "active",
       studentId,
     }),
     institute.collection("license").doc("main").set({
+      licenseVersion: "license-consumer-exam", licenseState: "active",
+      expiryDate: "2099-12-31T23:59:59.000Z", gracePeriodEndsAt: null,
+      activeStudentLimit: 100, concurrentSessionLimit: 20,
       currentLayer: "L1",
       eligibilityFlags: {l1Eligible: true},
+      featureFlags: {controlledMode: true, hardMode: false},
+    }),
+    institute.collection("license").doc("current").set({
+      licenseVersion: "license-consumer-exam", licenseState: "active",
+      expiryDate: "2099-12-31T23:59:59.000Z", gracePeriodEndsAt: null,
+      activeStudentLimit: 100, concurrentSessionLimit: 20, currentLayer: "L1",
       featureFlags: {controlledMode: true, hardMode: false},
     }),
     ...questionIds.map((currentQuestionId, index) =>
@@ -112,6 +125,8 @@ test.beforeAll(async () => {
         version: 1,
       })),
     year.set({locked: false, status: "Active"}),
+    firestore.doc(`institutes/${instituteId}/calibration/cal_bwm_018`)
+      .set(calibrationConsumerFixture("cal_bwm_018")),
     run.set({
       calibrationVersion: "cal_bwm_018",
       endWindow: Timestamp.fromMillis(Date.now() + (60 * 60_000)),
@@ -279,6 +294,7 @@ test("Student start authenticates Exam entry once and removes the credential", a
   expect(consumedSession.data().launchCredentialHashes).toHaveLength(0);
   expect(consumedSession.data().consumedLaunchCredentialHashes).toHaveLength(1);
   expect(consumedSession.data().status).toBe("active");
+  expect(consumedSession.get("calibrationSnapshot.model")).toBe("risk_projection_v1");
   expect(consumedSession.data().startedAt).toBeTruthy();
   expect(consumedSession.data().deadlineAt).toBeTruthy();
   expect(consumedSession.data().answerMap[questionId]).toMatchObject({
@@ -450,6 +466,25 @@ test("Student start authenticates Exam entry once and removes the credential", a
   await expect(authoritativeMetrics).toContainText("Server Disposition: Finalized now");
   const submittedSession = await firestore.doc(sessionPath).get();
   expect(submittedSession.data().status).toBe("submitted");
+  expect(submittedSession.get("calibrationSnapshot"))
+    .toEqual(consumedSession.get("calibrationSnapshot"));
+  const yearMetrics = firestore.doc(
+    `institutes/${instituteId}/academicYears/${yearId}/studentYearMetrics/${studentId}`,
+  );
+  await expect.poll(async () => (await yearMetrics.get()).get(
+    "processingMarkers.riskEngine.lastProcessedStudentMetricsSessionId",
+  ), {timeout: 30_000}).toBe(sessionId);
+  const projection = (await yearMetrics.get()).data();
+  const weights = projection.calibrationSnapshot.weights;
+  const expectedProjection = Math.round(100 * (
+    projection.avgGuessRatePercent * weights.guessWeight +
+    (100 - projection.avgPhaseAdherencePercent) * weights.phaseWeight +
+    projection.easyNeglectRatePercent * weights.easyNeglectWeight +
+    projection.hardBiasRatePercent * weights.hardBiasWeight +
+    (projection.wrongStreakActive ? 100 : 0) * weights.wrongStreakWeight
+  ) / Object.values(weights).reduce((sum, weight) => sum + weight, 0)) / 100;
+  expect(projection.riskModelVersion).toBe("risk_projection_v1");
+  expect(projection.riskScore).toBe(expectedProjection);
   expect(Object.keys(submittedSession.data().answerMap)).toHaveLength(12);
   expect(submittedSession.data().answerMap[questionIds[5]].response)
     .toEqual({kind: "unanswered"});

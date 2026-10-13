@@ -9,52 +9,21 @@ import {
   CreateCalibrationVersionResult,
   StoredCalibrationVersion,
 } from "../types/calibrationVersion";
+import {
+  assertExactCalibrationKeys,
+  isPlainCalibrationObject,
+  normalizeCalibrationDate,
+  normalizeCalibrationDocumentId,
+  normalizeCalibrationRequiredString,
+  normalizeCalibrationThresholds,
+  normalizeCalibrationWeights,
+} from "./calibrationContract";
 
 const GLOBAL_CALIBRATION_COLLECTION = "globalCalibration";
 const CALIBRATION_VERSION_COLLECTION = "calibrationVersions";
 
-const isPlainObject = (
-  value: unknown,
-): value is Record<string, unknown> => typeof value === "object" &&
-  value !== null &&
-  !Array.isArray(value);
-
-const normalizeRequiredString = (
-  value: unknown,
-  fieldName: string,
-): string => {
-  if (typeof value !== "string") {
-    throw new CalibrationVersionValidationError(
-      "VALIDATION_ERROR",
-      `Calibration field "${fieldName}" must be a string.`,
-    );
-  }
-
-  const normalizedValue = value.trim();
-
-  if (!normalizedValue) {
-    throw new CalibrationVersionValidationError(
-      "VALIDATION_ERROR",
-      `Calibration field "${fieldName}" must be a non-empty string.`,
-    );
-  }
-
-  return normalizedValue;
-};
-
-const normalizeNonNegativeNumber = (
-  value: unknown,
-  fieldName: string,
-): number => {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-    throw new CalibrationVersionValidationError(
-      "VALIDATION_ERROR",
-      `Calibration field "${fieldName}" must be a non-negative number.`,
-    );
-  }
-
-  return Math.round(value * 1000) / 1000;
-};
+const createValidationError = (message: string): Error =>
+  new CalibrationVersionValidationError("VALIDATION_ERROR", message);
 
 const normalizeActivationDate = (
   value: Date | string | null | undefined,
@@ -71,88 +40,32 @@ const normalizeActivationDate = (
     return null;
   }
 
-  if (value instanceof Date) {
-    if (Number.isNaN(value.getTime())) {
-      throw new CalibrationVersionValidationError(
-        "VALIDATION_ERROR",
-        "Calibration field \"activationDate\" must be a valid date.",
-      );
-    }
+  const activationDate = normalizeCalibrationDate(
+    value,
+    "activationDate",
+    createValidationError,
+  );
 
-    return value.toISOString();
-  }
-
-  const normalizedValue = normalizeRequiredString(value, "activationDate");
-  const parsedDate = new Date(normalizedValue);
-
-  if (Number.isNaN(parsedDate.getTime())) {
+  if (isActive && Date.parse(activationDate) > Date.now()) {
     throw new CalibrationVersionValidationError(
       "VALIDATION_ERROR",
-      "Calibration field \"activationDate\" must be a valid ISO date string.",
+      "Active calibration versions cannot have a future activationDate.",
     );
   }
 
-  return parsedDate.toISOString();
+  return activationDate;
 };
 
 const normalizeWeights = (value: unknown): CalibrationWeights => {
-  if (!isPlainObject(value)) {
-    throw new CalibrationVersionValidationError(
-      "VALIDATION_ERROR",
-      "Calibration field \"weights\" must be an object.",
-    );
-  }
-
-  return {
-    easyNeglectWeight: normalizeNonNegativeNumber(
-      value.easyNeglectWeight,
-      "weights.easyNeglectWeight",
-    ),
-    guessWeight: normalizeNonNegativeNumber(
-      value.guessWeight,
-      "weights.guessWeight",
-    ),
-    hardBiasWeight: normalizeNonNegativeNumber(
-      value.hardBiasWeight,
-      "weights.hardBiasWeight",
-    ),
-    phaseWeight: normalizeNonNegativeNumber(
-      value.phaseWeight,
-      "weights.phaseWeight",
-    ),
-    wrongStreakWeight: normalizeNonNegativeNumber(
-      value.wrongStreakWeight,
-      "weights.wrongStreakWeight",
-    ),
-  };
+  return normalizeCalibrationWeights(value, "weights", createValidationError);
 };
 
 const normalizeThresholds = (value: unknown): CalibrationThresholds => {
-  if (!isPlainObject(value)) {
-    throw new CalibrationVersionValidationError(
-      "VALIDATION_ERROR",
-      "Calibration field \"thresholds\" must be an object.",
-    );
-  }
-
-  return {
-    guessFactorEasy: normalizeNonNegativeNumber(
-      value.guessFactorEasy,
-      "thresholds.guessFactorEasy",
-    ),
-    guessFactorHard: normalizeNonNegativeNumber(
-      value.guessFactorHard,
-      "thresholds.guessFactorHard",
-    ),
-    guessFactorMedium: normalizeNonNegativeNumber(
-      value.guessFactorMedium,
-      "thresholds.guessFactorMedium",
-    ),
-    phaseDeviationThreshold: normalizeNonNegativeNumber(
-      value.phaseDeviationThreshold,
-      "thresholds.phaseDeviationThreshold",
-    ),
-  };
+  return normalizeCalibrationThresholds(
+    value,
+    "thresholds",
+    createValidationError,
+  );
 };
 
 const buildCalibrationVersionPath = (versionId: string): string =>
@@ -164,15 +77,49 @@ const buildCompatibilityPath = (versionId: string): string =>
 const buildStoredCalibrationVersion = (
   input: CreateCalibrationVersionInput,
 ): StoredCalibrationVersion => {
-  const isActive = input.isActive === true;
+  if (!isPlainCalibrationObject(input)) {
+    throw createValidationError("Calibration version input must be an object.");
+  }
+
+  assertExactCalibrationKeys(
+    input,
+    [
+      "activationDate",
+      "createdBy",
+      "isActive",
+      "thresholds",
+      "versionId",
+      "weights",
+    ],
+    "version",
+    createValidationError,
+  );
+
+  if (typeof input.isActive !== "boolean") {
+    throw createValidationError(
+      "Calibration field \"isActive\" must be a boolean.",
+    );
+  }
 
   return {
-    activationDate: normalizeActivationDate(input.activationDate, isActive),
+    activationDate: normalizeActivationDate(
+      input.activationDate,
+      input.isActive,
+    ),
     createdAt: FieldValue.serverTimestamp(),
-    createdBy: normalizeRequiredString(input.createdBy, "createdBy"),
-    isActive,
+    createdBy: normalizeCalibrationRequiredString(
+      input.createdBy,
+      "createdBy",
+      createValidationError,
+    ),
+    isActive: input.isActive,
+    schemaVersion: 1,
     thresholds: normalizeThresholds(input.thresholds),
-    versionId: normalizeRequiredString(input.versionId, "versionId"),
+    versionId: normalizeCalibrationDocumentId(
+      input.versionId,
+      "versionId",
+      createValidationError,
+    ),
     weights: normalizeWeights(input.weights),
   };
 };
@@ -199,15 +146,28 @@ export class CalibrationVersionStorageService {
     const compatibilityPath = buildCompatibilityPath(version.versionId);
 
     await this.firestore.runTransaction(async (transaction) => {
-      const [primarySnapshot, compatibilitySnapshot] = await Promise.all([
-        transaction.get(this.firestore.doc(path)),
-        transaction.get(this.firestore.doc(compatibilityPath)),
-      ]);
+      const activeQuery = this.firestore
+        .collection(GLOBAL_CALIBRATION_COLLECTION)
+        .where("isActive", "==", true)
+        .limit(1);
+      const [primarySnapshot, compatibilitySnapshot, activeSnapshot] =
+        await Promise.all([
+          transaction.get(this.firestore.doc(path)),
+          transaction.get(this.firestore.doc(compatibilityPath)),
+          ...(version.isActive ? [transaction.get(activeQuery)] : []),
+        ]);
 
       if (primarySnapshot.exists || compatibilitySnapshot.exists) {
         throw new CalibrationVersionValidationError(
           "VALIDATION_ERROR",
           `Calibration version "${version.versionId}" already exists.`,
+        );
+      }
+
+      if (version.isActive && activeSnapshot && !activeSnapshot.empty) {
+        throw new CalibrationVersionValidationError(
+          "VALIDATION_ERROR",
+          "An active global calibration version already exists.",
         );
       }
 

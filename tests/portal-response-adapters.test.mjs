@@ -35,8 +35,8 @@ const { buildSuccessResponse: buildAdminAnalyticsSuccessResponse } = require(
 const { buildSubmissionSuccessResponse } = require(
   join(rootDirectory, "functions/lib/api/examSessionSubmit.js"),
 );
-const { buildSuccessResponse: buildVendorCalibrationPushSuccessResponse } = require(
-  join(rootDirectory, "functions/lib/api/vendorCalibrationPush.js"),
+const { buildSuccessResponse: buildCalibrationEnvelope } = require(
+  join(rootDirectory, "functions/lib/services/apiResponse.js"),
 );
 
 function loadTypeScriptModule(source, sourcePath) {
@@ -1044,7 +1044,7 @@ test("Admin run read adapters preserve pagination and lifecycle status", () => {
   );
 });
 
-test("Vendor adapter accepts calibration deployment data and rejects the legacy subset", () => {
+test("isolated legacy deployment adapter retains its complete declaration, not the mounted rollout contract", () => {
   const backendData = {
     calibrationSourcePath: "calibrationVersions/cal-v2",
     deployedInstituteCount: 1,
@@ -1062,8 +1062,9 @@ test("Vendor adapter accepts calibration deployment data and rejects the legacy 
     versionId: "cal-v2",
   };
   const unwrapped = unwrapApiSuccessData(
-    buildVendorCalibrationPushSuccessResponse(
+    buildCalibrationEnvelope(
       backendData,
+      "Legacy declaration fixture only.",
       "req-vendor-001",
       "2026-08-08T15:30:00.000Z",
     ),
@@ -1167,7 +1168,7 @@ test("representative production callers invoke their portal adapters", async () 
     readFile(
       join(
         rootDirectory,
-        "apps/vendor/src/features/calibration/vendorCalibrationDataset.ts",
+        "apps/vendor/src/features/calibration/vendorCalibrationApi.ts",
       ),
       "utf8",
     ),
@@ -1193,7 +1194,7 @@ test("representative production callers invoke their portal adapters", async () 
     "adaptStudentSummaryResult",
     "adaptExamSessionEntryResult",
     "adaptExamSubmitResult",
-    "adaptVendorCalibrationPushResult",
+    "parseCalibrationSimulation",
   ].entries()) {
     if (adapterName === null) {
       assert.match(sources[index], /await validateQuestionPackageWithApi\(/u);

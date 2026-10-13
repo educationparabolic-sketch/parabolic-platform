@@ -1,52 +1,13 @@
-import {CalibrationWeights} from "./calibrationVersion";
 import {StandardApiErrorCode} from "./apiResponse";
-import {StudentRiskState} from "./riskEngine";
+import type {
+  VendorCalibrationSimulationRequest,
+  VendorCalibrationSimulationResult,
+} from "../../../shared/contracts/vendorCalibration";
 
-export interface SimulateCalibrationImpactInput {
-  institutes: string[];
-  weights: CalibrationWeights;
-}
-
-export interface CalibrationSimulationDistributionEntry {
-  count: number;
-  percent: number;
-}
-
-export type CalibrationSimulationRiskDistribution = Record<
-  StudentRiskState,
-  CalibrationSimulationDistributionEntry
->;
-
-export interface CalibrationSimulationSummary {
-  averageProjectedRiskScore: number;
-  instituteCount: number;
-  riskDistribution: CalibrationSimulationRiskDistribution;
-  studentCount: number;
-}
-
-export interface CalibrationSimulationDelta {
-  averageProjectedRiskScore: number;
-  riskDistribution: Record<StudentRiskState, {count: number; percent: number}>;
-  studentCount: number;
-}
-
-export interface CalibrationSimulationInstituteSummary {
-  beforeAverageProjectedRiskScore: number;
-  currentCalibrationSourcePath: string;
-  currentCalibrationVersion: string | null;
-  instituteId: string;
-  projectedAverageRiskScore: number;
-  riskDistributionDelta: Record<StudentRiskState, number>;
-  studentCount: number;
-}
-
-export interface SimulateCalibrationImpactResult {
-  after: CalibrationSimulationSummary;
-  before: CalibrationSimulationSummary;
-  delta: CalibrationSimulationDelta;
-  institutes: CalibrationSimulationInstituteSummary[];
-  proposedWeights: CalibrationWeights;
-}
+export type SimulateCalibrationImpactInput =
+  VendorCalibrationSimulationRequest;
+export type SimulateCalibrationImpactResult =
+  VendorCalibrationSimulationResult;
 
 export interface SimulateCalibrationImpactSuccessResponse {
   code: "OK";

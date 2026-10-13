@@ -302,8 +302,9 @@ const dtoFamilies = [
   {
     backend: "functions/src/types/calibrationDeployment.ts",
     frontend: [
-      "apps/vendor/src/features/calibration/vendorCalibrationDataset.ts",
+      "shared/contracts/vendorCalibration.d.ts",
     ],
+    sharedImportPattern: /import\("\.\/apiDtos\.js"\)/,
     names: [
       "VendorCalibrationPushRequest",
       "DeployedInstituteCalibrationResult",
@@ -339,7 +340,7 @@ test("aligned frontend and Functions DTOs have one shared source", async () => {
 
     assert.match(backendSource, /shared\/contracts\/apiDtos/);
     for (const frontendSource of frontendSources) {
-      assert.match(frontendSource, /shared\/contracts\/apiDtos/);
+      assert.match(frontendSource, family.sharedImportPattern ?? /shared\/contracts\/apiDtos/);
     }
 
     for (const name of family.names) {
@@ -412,9 +413,17 @@ test("portal requests use shared request DTO generics", async () => {
   const calibration = await readFile(
     join(
       rootDirectory,
-      "apps/vendor/src/features/calibration/vendorCalibrationDataset.ts",
+      "apps/vendor/src/features/calibration/vendorCalibrationApi.ts",
     ),
     "utf8",
   );
-  assert.match(calibration, /VendorCalibrationPushRequest/);
+  assert.match(calibration, /shared\/contracts\/vendorCalibration/);
+  assert.match(calibration, /post<VendorCalibrationSimulationResult,\s*VendorCalibrationSimulationRequest>/);
+  assert.match(calibration, /post<VendorCalibrationOperationResult, VendorCalibrationRolloutRequest>/);
+  assert.match(calibration, /post<VendorCalibrationOperationResult, VendorCalibrationRollbackRequest>/);
+  const sharedCalibration = await readFile(join(rootDirectory, "shared/contracts/vendorCalibration.d.ts"), "utf8");
+  assert.match(sharedCalibration, /type VendorCalibrationDeploymentRequest\s*=\s*import\("\.\/apiDtos\.js"\)\.VendorCalibrationPushRequest/);
+  assert.match(sharedCalibration, /type VendorCalibrationDeploymentResult\s*=\s*import\("\.\/apiDtos\.js"\)\.DeployCalibrationVersionResult/);
+  const workspace = await readFile(join(rootDirectory, "apps/vendor/src/features/calibration/VendorCalibrationWorkspace.tsx"), "utf8");
+  assert.match(workspace, /<VendorCalibrationPublish/);
 });

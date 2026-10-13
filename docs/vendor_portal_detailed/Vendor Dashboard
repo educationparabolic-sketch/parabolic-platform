@@ -36,6 +36,19 @@ Vendor Dashboard
 └── Data Export & Backups
 Now we define each one clearly.
 
+BWM-040 local implementation boundary (2026-10-13): Audit, System Health and
+Overview recent activity/operational attention now use strict authenticated
+VEN-40/VEN-41 server reads. Audit merges six validated existing histories with
+exact filters and encrypted cursors; text search/counts are explicitly page-local.
+Health exposes server release identity and four bounded source-specific queue/
+operation counts and ages, or explicit unavailability. No fixed infrastructure
+number, cloud alert, cost, browser telemetry, deployment history, SLA or overall
+healthy posture below is implemented authority. Those remain BWM-051/BWM-052/
+BWM-053-owned design targets. Static showcases are DEV plus explicit fixture
+only; no business data is written by these pages. Local acceptance is not remote
+or production qualification. The current closed wire/source contract is
+shared/contracts/vendorAuditHealth.d.ts and docs/api_contract.md.
+
 1️⃣ PLATFORM OVERVIEW (Executive Snapshot)
 Purpose:
 Immediate view of platform health.
@@ -89,6 +102,19 @@ Must include:
     • License change history
 
 4️⃣ GLOBAL CALIBRATION CONTROL (CORE FEATURE)
+
+BWM-038/BWM-039 local implementation boundary (2026-10-13): strict five-weight/five-state
+`risk_projection_v1` on explicitly selected institute/year stored Student
+summaries is live. Version/target reads and responses are authoritative and
+bounded; thresholds are read-only metadata. The richer inputs/comparisons and
+all-institute/lifecycle controls below remain design intent, not live authority.
+Immediate selected-target publishing, scoped status/exact retry and explicit
+inverse are locally qualified by BWM-039, including frozen consumer and recovery
+acceptance. Version-read availability is immediate_selected_targets, not permission
+or guaranteed success. Creation/draft/global activation/scheduling remain disabled.
+BWM-040 owns unified audit; remote and production qualification remain separate.
+See `shared/contracts/vendorCalibration.d.ts` and `docs/api_contract.md`; local
+browser acceptance does not qualify remote runtime or production release.
 This is your moat.
 Structure:
 Calibration
@@ -287,5 +313,4 @@ The simulation engine makes your SaaS:
     • Hard to copy
     • Hard to replace
 This is your moat.
-
 

@@ -1,13 +1,5 @@
 import { ApiClientError } from "../../../../../shared/services/apiClient";
 import { shouldUseFixtureData } from "../../../../../shared/services/frontendEnvironment";
-import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
-import { adaptVendorCalibrationPushResult } from "../../../../../shared/services/portalResponseAdapters";
-import type {
-  DeployCalibrationVersionResult,
-  VendorCalibrationPushRequest,
-} from "../../../../../shared/contracts/apiDtos";
-
-const apiClient = getPortalApiClient("vendor");
 
 const LOCAL_AUDIT_STORAGE_KEY = "vendor-build-138-calibration-audit";
 
@@ -118,20 +110,6 @@ export interface CalibrationPushResult {
   engineSource: "api" | "local-fallback";
 }
 
-interface CalibrationSimulationApiResponse {
-  after: {
-    averageProjectedRiskScore: number;
-    riskDistribution: Record<"low" | "medium" | "high", CalibrationDistributionEntry>;
-  };
-  before: {
-    averageProjectedRiskScore: number;
-    riskDistribution: Record<"low" | "medium" | "high", CalibrationDistributionEntry>;
-  };
-  delta: {
-    averageProjectedRiskScore: number;
-    riskDistribution: Record<"low" | "medium" | "high", CalibrationDistributionEntry>;
-  };
-}
 
 const INSTITUTES: CalibrationInstituteSummary[] = [
   {
@@ -533,6 +511,7 @@ function toLocalAuditRecord(line: unknown): VendorCalibrationAuditRecord | null 
 }
 
 function readLocalAuditRecords(): VendorCalibrationAuditRecord[] {
+  if (!import.meta.env.DEV || !shouldUseFixtureData()) return [];
   if (typeof window === "undefined") {
     return [];
   }
@@ -557,6 +536,7 @@ function readLocalAuditRecords(): VendorCalibrationAuditRecord[] {
 }
 
 function writeLocalAuditRecords(records: VendorCalibrationAuditRecord[]): void {
+  if (!import.meta.env.DEV || !shouldUseFixtureData()) throw new Error("Fixture audit writes are unavailable in live mode.");
   if (typeof window === "undefined") {
     return;
   }
@@ -583,129 +563,15 @@ export async function runCalibrationSimulation(options: {
   selectedInstituteIds: string[];
   parameters: StrategyProfileParameters;
 }): Promise<CalibrationSimulationResult> {
-  const { dataset, mode, selectedInstituteIds, parameters } = options;
-  const instituteIds = resolveSelectedInstituteIds(dataset, mode, selectedInstituteIds);
-
-  if (instituteIds.length === 0) {
-    throw new Error("Select at least one institute before simulation.");
-  }
-
-  try {
-    const response = await apiClient.post<
-      CalibrationSimulationApiResponse,
-      {
-        institutes: string[];
-        strategyProfileParameters: StrategyProfileParameters;
-      }
-    >("/vendor/calibration/simulate", {
-      body: {
-        institutes: instituteIds,
-        strategyProfileParameters: parameters,
-      },
-      retry: {
-        retryUnsafeMethods: false,
-      },
-    });
-
-    return {
-      mode,
-      instituteIds,
-      summarySources: [
-        "studentYearMetrics",
-        "runAnalytics",
-        "riskComponents",
-        "disciplineComponents",
-      ],
-      comparison: {
-        beforeAverageRiskScore: response.before.averageProjectedRiskScore,
-        afterAverageRiskScore: response.after.averageProjectedRiskScore,
-        beforeDisciplineIndex: 0,
-        afterDisciplineIndex: 0,
-        riskDistributionShift: response.delta.riskDistribution,
-        clusterMovementPercent: Math.abs(response.delta.averageProjectedRiskScore),
-        batchLevelDeltaPercent: response.delta.averageProjectedRiskScore,
-        stabilityImpact:
-          response.delta.averageProjectedRiskScore <= -0.2
-            ? "improved"
-            : response.delta.averageProjectedRiskScore >= 0.2
-              ? "degraded"
-              : "neutral",
-        estimatedAlertDelta: Math.round(response.delta.averageProjectedRiskScore * 5),
-      },
-      generatedAt: new Date().toISOString(),
-      engineSource: "api",
-    };
-  } catch (error) {
-    if (!shouldUseFixtureData()) {
-      throw error;
-    }
-
-    const fallback = computeLocalSimulation(dataset, mode, instituteIds, parameters);
-
-    if (error instanceof ApiClientError) {
-      return {
-        ...fallback,
-        comparison: {
-          ...fallback.comparison,
-          estimatedAlertDelta: fallback.comparison.estimatedAlertDelta,
-        },
-      };
-    }
-
-    return fallback;
-  }
+  if (!import.meta.env.DEV || !shouldUseFixtureData()) throw new Error("Legacy calibration showcase is development-fixture-only.");
+  const institutes = resolveSelectedInstituteIds(options.dataset, options.mode, options.selectedInstituteIds);
+  return computeLocalSimulation(options.dataset, options.mode, institutes, options.parameters);
 }
 
 export async function pushCalibrationVersion(options: {
-  dataset: VendorCalibrationDataset;
-  versionId: string;
-  pushScope: CalibrationPushScope;
-  selectedInstituteIds: string[];
+  dataset: VendorCalibrationDataset; versionId: string; pushScope: CalibrationPushScope; selectedInstituteIds: string[];
 }): Promise<CalibrationPushResult> {
-  const { dataset, versionId, pushScope, selectedInstituteIds } = options;
-
-  const targetInstitutes =
-    pushScope === "ApplyGlobally"
-      ? dataset.institutes.map((entry) => entry.instituteId)
-      : selectedInstituteIds;
-
-  if (targetInstitutes.length === 0) {
-    throw new Error("Select at least one institute before pushing calibration.");
-  }
-
-  try {
-    const response: DeployCalibrationVersionResult = adaptVendorCalibrationPushResult(
-      await apiClient.post<unknown, VendorCalibrationPushRequest>("/vendor/calibration/push", {
-        body: {
-          targetInstitutes,
-          versionId,
-        },
-        retry: {
-          retryUnsafeMethods: false,
-        },
-      }),
-    );
-
-    return {
-      deployedInstituteCount: response.deployedInstituteCount,
-      deploymentLogId: response.deploymentLogId,
-      versionId: response.versionId,
-      vendorCalibrationLogPath: response.vendorCalibrationLogPath,
-      engineSource: "api",
-    };
-  } catch (error) {
-    if (!shouldUseFixtureData()) {
-      throw error;
-    }
-
-    return {
-      deployedInstituteCount: targetInstitutes.length,
-      deploymentLogId: `local_${Date.now()}`,
-      versionId,
-      vendorCalibrationLogPath: `auditLogs/local_${Date.now()}`,
-      engineSource: "local-fallback",
-    };
-  }
+  void options;
+  throw new Error("Calibration publishing is unavailable pending BWM-039.");
 }
-
 export { ApiClientError };

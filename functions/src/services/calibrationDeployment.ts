@@ -2,6 +2,9 @@ import {FieldValue} from "firebase-admin/firestore";
 import {createLogger} from "./logging";
 import {calibrationHistoryService} from "./calibrationHistory";
 import {getFirestore} from "../utils/firebaseAdmin";
+import {validateStoredCalibrationVersion} from "./calibrationContract";
+// Strict atomic replacement; legacy transport migration remains the later BWM-039 substep.
+export {calibrationRolloutService, CalibrationRolloutService} from "./calibrationRollout";
 import {
   CalibrationDeploymentError,
   DeployCalibrationVersionInput,
@@ -190,12 +193,23 @@ export class CalibrationDeploymentService {
       );
     }
 
+    validateStoredCalibrationVersion(
+      calibrationData, normalizedInput.versionId, "deployment version", new Date(),
+      (message) => new CalibrationDeploymentError("INTERNAL_ERROR", message),
+    );
+
     if (calibrationData.isActive !== true) {
       throw new CalibrationDeploymentError(
         "VALIDATION_ERROR",
         `Calibration version "${normalizedInput.versionId}" must be active ` +
           "before deployment.",
       );
+    }
+
+    const activeVersions = await this.firestore.collection(GLOBAL_CALIBRATION_COLLECTION)
+      .where("isActive", "==", true).limit(2).get();
+    if (activeVersions.size !== 1 || activeVersions.docs[0].id !== normalizedInput.versionId) {
+      throw new CalibrationDeploymentError("INTERNAL_ERROR", "Active calibration authority is ambiguous.");
     }
 
     const deployedInstitutes: DeployedInstituteCalibrationResult[] = [];

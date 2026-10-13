@@ -20,7 +20,11 @@ test("Vendor institute live adapter owns every BWM-034 route with runtime respon
     assert.ok(source.includes(route), route);
   }
   assert.match(source, /responseAdapter:\s*parseVendorInstituteList/u);
-  assert.match(source, /responseAdapter:\s*parseVendorInstituteDetail/u);
+  const detailAdapter = source.slice(source.indexOf("getInstitute:"), source.indexOf("updateInstitute:"));
+  assert.match(detailAdapter, /responseAdapter:\s*value\s*=>/u);
+  assert.match(detailAdapter, /const detail = parseVendorInstituteDetail\(value\)/u);
+  assert.match(detailAdapter, /if \(!detail\.calibrationPointer\) return invalidResponse/u);
+  assert.match(detailAdapter, /return detail/u);
   assert.match(source, /responseAdapter:\s*parseVendorOnboardingList/u);
   assert.match(source, /responseAdapter:\s*parseVendorOnboardingDetail/u);
   assert.match(source, /Invalid Vendor API response/u);
