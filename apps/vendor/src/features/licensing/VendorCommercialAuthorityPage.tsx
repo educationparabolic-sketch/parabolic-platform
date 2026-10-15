@@ -1,3 +1,5 @@
+import { useVendorReadScope } from "../shared/useVendorReadScope";
+import { useVendorCapability } from "../../portals/vendorAccess";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import type {
   VendorBillingCommunicationIntent,
@@ -89,6 +91,9 @@ function ProviderState({ state, error }: { state: string; error: string | null }
 }
 
 export default function VendorCommercialAuthorityPage() {
+  const readScope = useVendorReadScope();
+  const mutationLock = useRef(false);
+  const canManage = useVendorCapability("vendor.licenses.manage");
   const [view, setView] = useState<WorkspaceView>("requests");
   const [requests, setRequests] = useState<VendorLicenseRequestListResult | null>(null);
   const [catalog, setCatalog] = useState<VendorLicenseCatalogResult | null>(null);
@@ -125,27 +130,28 @@ export default function VendorCommercialAuthorityPage() {
   const [offlineReference, setOfflineReference] = useState("");
   const [offlineEvidence, setOfflineEvidence] = useState("");
   const [offlineAmountMinor, setOfflineAmountMinor] = useState("0");
-  const commandIntents = useRef(new Map<string, unknown>());
-
+  const authorityReady = Boolean(requests && catalog && invoices && events);
+  const presentationAllowed = !failure || ["conflict", "validation", "provider_unavailable"].includes(failure.kind);
   const intentFor = <Intent,>(scope: string, create: () => Intent): Intent => {
-    const current = commandIntents.current.get(scope);
-    if (current) return current as Intent;
-    const created = create();
-    commandIntents.current.set(scope, created);
-    return created;
+    if (!scope) throw new Error("Command scope is required.");
+    return create(); // The transport journal owns the first complete intent and exact replay.
   };
-  const clearIntent = (scope: string) => commandIntents.current.delete(scope);
 
-  const loadAll = useCallback(async () => {
+  const loadAll = useCallback(async (reconcile = false) => {
+    const ticket = readScope.begin("commercial");
     setLoading(true);
+    setMessage("");
+    setRequests(null); setCatalog(null); setInvoices(null); setEvents(null);
+    setSelectedRequest(null); setSelectedInvoice(null); setSubscription(null);
     setFailure(null);
     try {
       const [nextRequests, nextCatalog, nextInvoices, nextEvents] = await Promise.all([
-        vendorCommercialApi.listLicenseRequests({ limit: 25 }),
-        vendorCommercialApi.getLicenseCatalog(),
-        vendorCommercialApi.listInvoices({ limit: 25 }),
-        vendorCommercialApi.listPaymentEvents({ limit: 25 }),
+        vendorCommercialApi.listLicenseRequests({ limit: 25 }, ticket.signal),
+        vendorCommercialApi.getLicenseCatalog(ticket.signal),
+        vendorCommercialApi.listInvoices({ limit: 25 }, ticket.signal),
+        vendorCommercialApi.listPaymentEvents({ limit: 25 }, ticket.signal),
       ]);
+      if (!ticket.current()) return;
       setRequests(nextRequests);
       setCatalog(nextCatalog);
       setInvoices(nextInvoices);
@@ -154,77 +160,121 @@ export default function VendorCommercialAuthorityPage() {
       setInvoiceCursorTrail([null]);
       setEventCursorTrail([null]);
     } catch (error) {
+      if (!ticket.current()) return;
       setFailure(classifyVendorCommercialFailure(error));
+      if (reconcile) throw error;
     } finally {
-      setLoading(false);
+      if (ticket.current()) setLoading(false);
     }
-  }, []);
+  }, [readScope]);
 
   useEffect(() => {
     void loadAll();
   }, [loadAll]);
 
-  async function loadRequest(instituteId: string, requestId: string) {
+  async function loadRequest(instituteId: string, requestId: string, reconcile = false) {
+    const ticket = readScope.begin("commercial");
+    setLoading(true);
+    setMessage("");
+    setSelectedRequest(null);
     setFailure(null);
     try {
-      setSelectedRequest(await vendorCommercialApi.getLicenseRequest(instituteId, requestId));
+      const detail = await vendorCommercialApi.getLicenseRequest(instituteId, requestId, ticket.signal);
+      if (ticket.current()) setSelectedRequest(detail);
     } catch (error) {
+      if (!ticket.current()) return;
       setFailure(classifyVendorCommercialFailure(error));
+      if (reconcile) throw error;
+    } finally {
+      if (ticket.current()) setLoading(false);
     }
   }
 
   async function loadRequestPage(nextTrail: Array<string | null>) {
+    const ticket = readScope.begin("commercial");
+    setLoading(true);
+    setMessage("");
     setFailure(null);
     try {
       const cursor = nextTrail.at(-1);
-      setRequests(await vendorCommercialApi.listLicenseRequests({
+      const next = await vendorCommercialApi.listLicenseRequests({
         ...(cursor ? { cursor } : {}),
         limit: 25,
-      }));
+      }, ticket.signal);
+      if (!ticket.current()) return;
+      setRequests(next);
       setRequestCursorTrail(nextTrail);
       setSelectedRequest(null);
     } catch (error) {
+      if (!ticket.current()) return;
       setFailure(classifyVendorCommercialFailure(error));
+    } finally {
+      if (ticket.current()) setLoading(false);
     }
   }
 
-  async function loadInvoice(instituteId: string, invoiceId: string) {
+  async function loadInvoice(instituteId: string, invoiceId: string, reconcile = false) {
+    const ticket = readScope.begin("commercial");
+    setLoading(true);
+    setMessage("");
+    setSelectedInvoice(null);
     setFailure(null);
     try {
-      const detail = await vendorCommercialApi.getInvoice(instituteId, invoiceId);
+      const detail = await vendorCommercialApi.getInvoice(instituteId, invoiceId, ticket.signal);
+      if (!ticket.current()) return;
       setSelectedInvoice(detail);
       setOfflineAmountMinor(String(detail.amountDue.amountMinor));
     } catch (error) {
+      if (!ticket.current()) return;
       setFailure(classifyVendorCommercialFailure(error));
+      if (reconcile) throw error;
+    } finally {
+      if (ticket.current()) setLoading(false);
     }
   }
 
   async function loadInvoicePage(nextTrail: Array<string | null>) {
+    const ticket = readScope.begin("commercial");
+    setLoading(true);
+    setMessage("");
     setFailure(null);
     try {
       const cursor = nextTrail.at(-1);
-      setInvoices(await vendorCommercialApi.listInvoices({
+      const next = await vendorCommercialApi.listInvoices({
         ...(cursor ? { cursor } : {}),
         limit: 25,
-      }));
+      }, ticket.signal);
+      if (!ticket.current()) return;
+      setInvoices(next);
       setInvoiceCursorTrail(nextTrail);
       setSelectedInvoice(null);
     } catch (error) {
+      if (!ticket.current()) return;
       setFailure(classifyVendorCommercialFailure(error));
+    } finally {
+      if (ticket.current()) setLoading(false);
     }
   }
 
   async function loadEventPage(nextTrail: Array<string | null>) {
+    const ticket = readScope.begin("commercial");
+    setLoading(true);
+    setMessage("");
     setFailure(null);
     try {
       const cursor = nextTrail.at(-1);
-      setEvents(await vendorCommercialApi.listPaymentEvents({
+      const next = await vendorCommercialApi.listPaymentEvents({
         ...(cursor ? { cursor } : {}),
         limit: 25,
-      }));
+      }, ticket.signal);
+      if (!ticket.current()) return;
+      setEvents(next);
       setEventCursorTrail(nextTrail);
     } catch (error) {
+      if (!ticket.current()) return;
       setFailure(classifyVendorCommercialFailure(error));
+    } finally {
+      if (ticket.current()) setLoading(false);
     }
   }
 
@@ -237,6 +287,8 @@ export default function VendorCommercialAuthorityPage() {
     success: string,
     reload?: () => Promise<void>,
   ) {
+    if (!canManage || mutationLock.current || !scope) return;
+    mutationLock.current = true;
     setMutating(true);
     setFailure(null);
     setMessage("");
@@ -245,18 +297,14 @@ export default function VendorCommercialAuthorityPage() {
       const providerUnavailable = receipt.reportedFailure ??
         providerFailure(receipt.providerOperation ?? null);
       if (reload) await reload();
-      else await loadAll();
+      else await loadAll(true);
       if (providerUnavailable) {
         setFailure(providerUnavailable);
       } else {
-        clearIntent(scope);
         setMessage(success);
       }
     } catch (error) {
       const classified = classifyVendorCommercialFailure(error);
-      if (classified.kind === "conflict" || classified.kind === "validation") {
-        clearIntent(scope);
-      }
       if (classified.kind === "conflict" && reload) {
         try {
           await reload();
@@ -266,6 +314,7 @@ export default function VendorCommercialAuthorityPage() {
       }
       setFailure(classified);
     } finally {
+      mutationLock.current = false;
       setMutating(false);
     }
   }
@@ -273,7 +322,7 @@ export default function VendorCommercialAuthorityPage() {
   function decideRequest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedRequest) return;
-    const scope = `request:${selectedRequest.requestId}:${decisionAction}`;
+    const scope = `request:${selectedRequest.instituteId}:${selectedRequest.requestId}:${decisionAction}`;
     const intent = intentFor<VendorLicenseRequestDecisionIntent>(scope, () => {
       const metadata = {
         expectedRevision: selectedRequest.revision,
@@ -294,8 +343,8 @@ export default function VendorCommercialAuthorityPage() {
       ),
       "Decision persisted; authoritative request state reloaded.",
       async () => {
-        await loadAll();
-        await loadRequest(selectedRequest.instituteId, selectedRequest.requestId);
+        await loadAll(true);
+        await loadRequest(selectedRequest.instituteId, selectedRequest.requestId, true);
       },
     );
   }
@@ -349,17 +398,23 @@ export default function VendorCommercialAuthorityPage() {
   }
 
   async function loadSubscription(event: FormEvent<HTMLFormElement>) {
+    const ticket = readScope.begin("commercial");
+    setLoading(true);
+    setMessage("");
+    setSubscription(null);
     event.preventDefault();
     if (!subscriptionInstituteId.trim()) return;
     setLoading(true);
     setFailure(null);
     try {
-      setSubscription(await vendorCommercialApi.getSubscription(subscriptionInstituteId.trim()));
+      const next = await vendorCommercialApi.getSubscription(subscriptionInstituteId.trim(), ticket.signal);
+      if (ticket.current()) setSubscription(next);
     } catch (error) {
+      if (!ticket.current()) return;
       setSubscription(null);
       setFailure(classifyVendorCommercialFailure(error));
     } finally {
-      setLoading(false);
+      if (ticket.current()) setLoading(false);
     }
   }
 
@@ -411,7 +466,7 @@ export default function VendorCommercialAuthorityPage() {
   function commandInvoice(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedInvoice) return;
-    const scope = `invoice:${selectedInvoice.invoiceId}:${invoiceAction}`;
+    const scope = `invoice:${selectedInvoice.instituteId}:${selectedInvoice.invoiceId}:${invoiceAction}`;
     const intent = intentFor<VendorInvoiceCommandIntent>(scope, () => ({
       action: invoiceAction,
       expectedRevision: selectedInvoice.revision,
@@ -427,15 +482,15 @@ export default function VendorCommercialAuthorityPage() {
       ),
       "Invoice command reconciled and authoritative state reloaded.",
       async () => {
-        await loadAll();
-        await loadInvoice(selectedInvoice.instituteId, selectedInvoice.invoiceId);
+        await loadAll(true);
+        await loadInvoice(selectedInvoice.instituteId, selectedInvoice.invoiceId, true);
       },
     );
   }
 
   function communicateInvoice(action: "resend_invoice" | "send_payment_reminder") {
     if (!selectedInvoice) return;
-    const scope = `invoice:${selectedInvoice.invoiceId}:${action}`;
+    const scope = `invoice:${selectedInvoice.instituteId}:${selectedInvoice.invoiceId}:${action}`;
     const intent = intentFor<VendorBillingCommunicationIntent>(scope, () => ({
       action,
       expectedRevision: selectedInvoice.revision,
@@ -460,15 +515,15 @@ export default function VendorCommercialAuthorityPage() {
           } : {}),
         };
       },
-      "Backend-derived billing communication queued and invoice reloaded.",
-      () => loadInvoice(selectedInvoice.instituteId, selectedInvoice.invoiceId),
+      "Billing communication persisted; the server receipt reports its authoritative delivery state.",
+      () => loadInvoice(selectedInvoice.instituteId, selectedInvoice.invoiceId, true),
     );
   }
 
   function recordOfflinePayment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedInvoice || !offlineReference.trim() || !offlineEvidence.trim()) return;
-    const scope = `invoice:${selectedInvoice.invoiceId}:offline:record`;
+    const scope = `invoice:${selectedInvoice.instituteId}:${selectedInvoice.invoiceId}:offline:record`;
     const intent = intentFor<VendorOfflinePaymentCommandIntent>(scope, () => ({
       action: "record",
       amount: {
@@ -492,8 +547,8 @@ export default function VendorCommercialAuthorityPage() {
       ),
       "Offline payment recorded as pending verification; invoice was not marked paid.",
       async () => {
-        await loadAll();
-        await loadInvoice(selectedInvoice.instituteId, selectedInvoice.invoiceId);
+        await loadAll(true);
+        await loadInvoice(selectedInvoice.instituteId, selectedInvoice.invoiceId, true);
       },
     );
   }
@@ -503,7 +558,7 @@ export default function VendorCommercialAuthorityPage() {
     action: "verify" | "reject" | "void",
   ) {
     if (!selectedInvoice) return;
-    const scope = `invoice:${selectedInvoice.invoiceId}:offline:${payment.offlinePaymentId}:${action}`;
+    const scope = `invoice:${selectedInvoice.instituteId}:${selectedInvoice.invoiceId}:offline:${payment.offlinePaymentId}:${action}`;
     const intent = intentFor<VendorOfflinePaymentCommandIntent>(scope, () => ({
       action,
       expectedOfflinePaymentRevision: payment.revision,
@@ -521,8 +576,8 @@ export default function VendorCommercialAuthorityPage() {
       ),
       `Offline payment ${action} state persisted and invoice reloaded.`,
       async () => {
-        await loadAll();
-        await loadInvoice(selectedInvoice.instituteId, selectedInvoice.invoiceId);
+        await loadAll(true);
+        await loadInvoice(selectedInvoice.instituteId, selectedInvoice.invoiceId, true);
       },
     );
   }
@@ -538,12 +593,12 @@ export default function VendorCommercialAuthorityPage() {
     void reconcileCommand(
       scope,
       () => vendorCommercialApi.retryPaymentEvent(eventId, intent),
-      "Payment-event reconciliation result reloaded.",
+      "Reconciliation command persisted. Its server receipt reports the result; the refreshed queue is a bounded page.",
     );
   }
 
   return (
-    <section className="vendor-content-card admin-content-card vendor-commercial-page">
+    <fieldset disabled={mutating} className="vendor-content-card admin-content-card vendor-commercial-page">
       <header className="vendor-licensing-heading">
         <div>
           <p className="vendor-content-eyebrow">Backend-authoritative commercial control</p>
@@ -558,7 +613,7 @@ export default function VendorCommercialAuthorityPage() {
       </header>
 
       <p className="vendor-authority-boundary">
-        Claim and session propagation remains <strong>pending BWM-036</strong>. Provider-backed
+        Claim propagation is asynchronous; the server receipt reports its current contract state. Provider-backed
         operations display their persisted provider state and never become browser-authored success.
       </p>
 
@@ -585,7 +640,7 @@ export default function VendorCommercialAuthorityPage() {
       {failure ? <CommercialFailurePanel failure={failure} onRetry={() => void loadAll()} /> : null}
       {message ? <p className="vendor-authority-success" role="status">{message}</p> : null}
 
-      {!loading && view === "requests" ? (
+      {!loading && authorityReady && presentationAllowed && view === "requests" ? (
         <section className="vendor-commercial-section">
           <h3>License requests</h3>
           {!requests || requests.items.length === 0 ? <EmptyPanel label="license requests" /> : (
@@ -635,7 +690,7 @@ export default function VendorCommercialAuthorityPage() {
                   <label>Decision note or rejection reason
                     <input value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} />
                   </label>
-                  <button type="submit" disabled={mutating || selectedRequest.status === "approved" || selectedRequest.status === "rejected"}>Persist decision and reload</button>
+                  <button type="submit" disabled={mutating || !canManage || selectedRequest.status === "approved" || selectedRequest.status === "rejected"}>Persist decision and reload</button>
                 </form>
               ) : <p>Select a request to load bounded detail and immutable audit references.</p>}
             </div>
@@ -643,7 +698,7 @@ export default function VendorCommercialAuthorityPage() {
         </section>
       ) : null}
 
-      {!loading && view === "catalog" ? (
+      {!loading && authorityReady && presentationAllowed && view === "catalog" ? (
         <section className="vendor-commercial-section">
           <h3>Immutable license catalog</h3>
           {!catalog || catalog.plans.length === 0 ? <EmptyPanel label="catalog versions" /> : (
@@ -657,7 +712,7 @@ export default function VendorCommercialAuthorityPage() {
                     <td>{plan.layer}</td>
                     <td>{money(plan.price.amountMinor, plan.price.currency)} / {plan.billingInterval}</td>
                     <td>{title(plan.status)}</td>
-                    <td><button type="button" disabled={mutating || plan.status === "retired"} onClick={() => retirePlan(plan)}>Retire version</button></td>
+                    <td><button type="button" disabled={mutating || !canManage || plan.status === "retired"} onClick={() => retirePlan(plan)}>Retire version</button></td>
                   </tr>
                 ))}</tbody>
               </table>
@@ -665,16 +720,17 @@ export default function VendorCommercialAuthorityPage() {
           )}
           <form className="vendor-authority-form" onSubmit={publishPlan}>
             <h4>Publish new immutable version</h4>
+            <p>This publishes monthly billing with limits of 1,000 students, 100 teachers and 10 administrators. All optional plan features are disabled. Review these terms before publishing.</p>
             <label>Plan ID<input required value={publishPlanId} onChange={(event) => setPublishPlanId(event.target.value)} /></label>
             <label>Layer<select value={publishLayer} onChange={(event) => setPublishLayer(event.target.value as typeof publishLayer)}>{["L0", "L1", "L2", "L3"].map((layer) => <option key={layer}>{layer}</option>)}</select></label>
             <label>Amount in minor units<input inputMode="numeric" value={publishAmountMinor} onChange={(event) => setPublishAmountMinor(event.target.value)} /></label>
             <label>ISO currency<input maxLength={3} value={publishCurrency} onChange={(event) => setPublishCurrency(event.target.value)} /></label>
-            <button type="submit" disabled={mutating || !catalog || Number(publishAmountMinor) < 0}>Publish through provider and reload</button>
+            <button type="submit" disabled={mutating || !canManage || !catalog || Number(publishAmountMinor) < 0}>Publish through provider and reload</button>
           </form>
         </section>
       ) : null}
 
-      {!loading && view === "subscriptions" ? (
+      {!loading && authorityReady && presentationAllowed && view === "subscriptions" ? (
         <section className="vendor-commercial-section">
           <h3>Institute subscription</h3>
           <form className="vendor-authority-form" onSubmit={loadSubscription}>
@@ -708,14 +764,14 @@ export default function VendorCommercialAuthorityPage() {
                   <label>Extension days<input inputMode="numeric" value={subscriptionExtensionDays} onChange={(event) => setSubscriptionExtensionDays(event.target.value)} /></label>
                 ) : null}
                 <label>Reason<input value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} /></label>
-                <button type="submit" disabled={mutating || (subscriptionAction === "extend_trial" && Number(subscriptionExtensionDays) < 1)}>Run command and reload</button>
+                <button type="submit" disabled={mutating || !canManage || (subscriptionAction === "extend_trial" && Number(subscriptionExtensionDays) < 1)}>Run command and reload</button>
               </form>
             </article>
           ) : <EmptyPanel label="selected subscription" />}
         </section>
       ) : null}
 
-      {!loading && view === "invoices" ? (
+      {!loading && authorityReady && presentationAllowed && view === "invoices" ? (
         <section className="vendor-commercial-section">
           <h3>Invoices and governed payments</h3>
           {!invoices || invoices.items.length === 0 ? <EmptyPanel label="invoices" /> : (
@@ -765,11 +821,11 @@ export default function VendorCommercialAuthorityPage() {
                   </select>
                 </label>
                 <label>Reason<input value={reason} onChange={(event) => setReason(event.target.value)} maxLength={500} /></label>
-                <button type="submit" disabled={mutating}>Run invoice command and reload</button>
+                <button type="submit" disabled={mutating || !canManage}>Run invoice command and reload</button>
               </form>
               <div className="vendor-authority-actions">
-                <button type="button" disabled={mutating} onClick={() => communicateInvoice("resend_invoice")}>Resend invoice</button>
-                <button type="button" disabled={mutating} onClick={() => communicateInvoice("send_payment_reminder")}>Send payment reminder</button>
+                <button type="button" disabled={mutating || !canManage} onClick={() => communicateInvoice("resend_invoice")}>Resend invoice</button>
+                <button type="button" disabled={mutating || !canManage} onClick={() => communicateInvoice("send_payment_reminder")}>Send payment reminder</button>
                 {selectedInvoice.externalActions.downloadUrl ? <a href={selectedInvoice.externalActions.downloadUrl}>Authorized invoice download</a> : null}
                 {selectedInvoice.externalActions.hostedPaymentUrl ? <a href={selectedInvoice.externalActions.hostedPaymentUrl}>Provider payment page</a> : null}
               </div>
@@ -779,7 +835,7 @@ export default function VendorCommercialAuthorityPage() {
                 <label>Amount in minor units<input inputMode="numeric" value={offlineAmountMinor} onChange={(event) => setOfflineAmountMinor(event.target.value)} /></label>
                 <label>External reference<input required value={offlineReference} onChange={(event) => setOfflineReference(event.target.value)} /></label>
                 <label>Evidence reference<input required value={offlineEvidence} onChange={(event) => setOfflineEvidence(event.target.value)} /></label>
-                <button type="submit" disabled={mutating || Number(offlineAmountMinor) < 1}>Record pending verification and reload</button>
+                <button type="submit" disabled={mutating || !canManage || Number(offlineAmountMinor) < 1}>Record pending verification and reload</button>
               </form>
               <h4>Offline-payment reviews</h4>
               {selectedInvoice.offlinePayments.length === 0 ? <EmptyPanel label="offline payments" /> : (
@@ -788,7 +844,7 @@ export default function VendorCommercialAuthorityPage() {
                     <strong>{payment.offlinePaymentId} · {title(payment.status)}</strong>
                     <span>{money(payment.amount.amountMinor, payment.amount.currency)} · revision {payment.revision}</span>
                     <div className="vendor-authority-actions">
-                      {(["verify", "reject", "void"] as const).map((action) => <button key={action} type="button" disabled={mutating || payment.status !== "pending_verification"} onClick={() => reviewOfflinePayment(payment, action)}>{title(action)}</button>)}
+                      {(["verify", "reject", "void"] as const).map((action) => <button key={action} type="button" disabled={mutating || !canManage || payment.status !== "pending_verification"} onClick={() => reviewOfflinePayment(payment, action)}>{title(action)}</button>)}
                     </div>
                   </li>
                 ))}</ul>
@@ -798,7 +854,7 @@ export default function VendorCommercialAuthorityPage() {
         </section>
       ) : null}
 
-      {!loading && view === "events" ? (
+      {!loading && authorityReady && presentationAllowed && view === "events" ? (
         <section className="vendor-commercial-section">
           <h3>Redacted payment events</h3>
           {!events || events.items.length === 0 ? <EmptyPanel label="payment events" /> : (
@@ -812,7 +868,7 @@ export default function VendorCommercialAuthorityPage() {
                     <td>{item.instituteId ?? "Unresolved"}</td>
                     <td>{title(item.processingState)}</td>
                     <td>{title(item.reconciliationState)}</td>
-                    <td><button type="button" disabled={mutating} onClick={() => retryEvent(item.eventId, item.revision)}>Retry reconciliation</button></td>
+                    <td><button type="button" disabled={mutating || !canManage} onClick={() => retryEvent(item.eventId, item.revision)}>Retry reconciliation</button></td>
                   </tr>
                 ))}</tbody>
               </table>
@@ -836,6 +892,6 @@ export default function VendorCommercialAuthorityPage() {
           )}
         </section>
       ) : null}
-    </section>
+    </fieldset>
   );
 }

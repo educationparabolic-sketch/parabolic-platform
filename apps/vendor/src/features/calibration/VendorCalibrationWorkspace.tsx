@@ -1,3 +1,4 @@
+import { useVendorCapability } from "../../portals/vendorAccess";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { VendorCalibrationSimulationResult, VendorCalibrationWeights } from "../../../../../shared/contracts/vendorCalibration";
 import { vendorInstitutesApi } from "../institutes/vendorInstitutesApi";
@@ -35,6 +36,7 @@ function Failure({ failure, retry }: { failure: ReturnType<typeof calibrationFai
 }
 
 export default function VendorCalibrationWorkspace() {
+  const canManage = useVendorCapability("vendor.calibration.manage");
   const [versionCursors, setVersionCursors] = useState<Array<string | undefined>>([undefined]);
   const [targetCursors, setTargetCursors] = useState<Array<string | undefined>>([undefined]);
   const [versionId, setVersionId] = useState("");
@@ -59,6 +61,7 @@ export default function VendorCalibrationWorkspace() {
   const ready = Boolean(detail.data && versions.data && directory.data);
   const visible = ready && simulation.key === selectionKey ? simulation : null;
   async function simulate() {
+    if (!canManage) return;
     abort.current?.abort();
     const controller = new AbortController(); abort.current = controller;
     setSimulation({ key: selectionKey, data: null, failure: null, loading: true });
@@ -114,7 +117,7 @@ export default function VendorCalibrationWorkspace() {
       <label style={{ display: "block" }}>Academic year ID<input aria-label="Academic year ID" value={year} onChange={event => { invalidate(); setYear(event.target.value); }} /></label>
       <p>Choose 1–20 targets and one explicit existing year. No all-institute expansion.</p>
       {!valid && <p role="status">Validation: enter a year, select targets, and use five finite sum-one weights.</p>}
-      <button disabled={!ready || !valid || visible?.loading} onClick={() => void simulate()}>Run simulation</button>
+      <button disabled={!canManage || !ready || !valid || visible?.loading} onClick={() => void simulate()}>Run simulation</button>
     </section>
     {visible?.loading && <p role="status">Running read-only simulation</p>}
     <Failure failure={visible?.failure ?? null} retry={() => void simulate()} />
@@ -135,7 +138,7 @@ export default function VendorCalibrationWorkspace() {
     <VendorCalibrationPublish versionId={versionId} targets={targets} ready={ready} onComplete={() => { invalidate(); detail.retry(); directory.retry(); }} />
     <section aria-label="Unavailable calibration capabilities"><h3>Unavailable capabilities</h3>
       <p>Discipline, cluster movement, batch delta, alerts, stability and production risk outcomes have no authoritative output.</p>
-      <p>Creation, draft, scheduled activation and dry-run deployment remain unavailable. BWM-039 supports only immediate selected-version publishing and explicit inverse restoration. Server audit history is available in the Audit workspace (BWM-040).</p>
+      <p>Creation, draft, scheduled activation and dry-run deployment remain unavailable. Publishing supports only immediate selected-version publishing and explicit inverse restoration. Server audit history is available in the Audit workspace.</p>
       <button disabled>Create version</button><button disabled>Schedule activation</button>
     </section>
   </section>;

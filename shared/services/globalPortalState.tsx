@@ -13,6 +13,7 @@ import type {
 } from "../types/globalPortalState";
 import type { LicenseLayer, PortalRole } from "../types/portalRouting";
 import type { PortalKey } from "./portalManifest";
+import { hasConsistentVendorClaims } from "../contracts/capabilityPolicy";
 
 const GlobalPortalStateContext = createContext<GlobalPortalState | null>(null);
 
@@ -269,7 +270,7 @@ export function resolveGlobalPortalState(input: {
   const globalFeatureFlags = resolveGlobalFeatureFlags(claims);
   const licenseLayer = license.currentLayer;
   const instituteBoundPortal = portal !== "vendor";
-  const isSuspended = instituteBoundPortal && readBoolean(claims?.isSuspended ?? claims?.suspended);
+  const isSuspended = readBoolean(claims?.isSuspended ?? claims?.suspended);
   const sessionAuthorityIssue = session.authorityIssue ?? null;
   const authorityIssue =
     portal === "vendor" && sessionAuthorityIssue !== "session_revoked"
@@ -292,7 +293,8 @@ export function resolveGlobalPortalState(input: {
     permissions: {
       canAccessAdminPortal: role === "teacher" || role === "admin" || role === "director",
       canAccessStudentPortal: role === "student",
-      canAccessVendorPortal: role === "vendor",
+      canAccessVendorPortal: session.status === "authenticated" && authorityIssue !== "session_revoked" &&
+        hasConsistentVendorClaims(claims ?? {}),
       canAccessExamPortal: role === "student",
       canUseControlledMode: isCapabilityLicensed("ControlledMode", license.featureFlags),
       canAccessGovernanceDashboard: isCapabilityLicensed("GovernanceDashboard", license.featureFlags),

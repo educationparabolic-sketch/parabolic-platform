@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useVendorReadScope } from "../shared/useVendorReadScope";
+import { useVendorCapability } from "../../portals/vendorAccess";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import type {
   VendorAdministratorCommandIntent,
@@ -48,6 +50,9 @@ const ONBOARDING_FILTERS: Array<VendorOnboardingStatus | ""> = [
 ];
 
 function title(value: string): string {
+  if (value === "execute_purge") return "Reserve purge";
+  if (value === "retry_purge") return "Retry purge reservation";
+  if (value === "purging") return "Purge reserved; completion unavailable";
   return value
     .split("_")
     .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
@@ -99,8 +104,9 @@ function CommercialBoundary() {
 function PropagationBoundary() {
   return (
     <p className="vendor-authority-boundary">
-      Institute-wide claim and session propagation is pending BWM-036. This workspace reports only
-      the persisted command result.
+      Access-changing commands enqueue durable claim propagation. The server receipt above reports its state;
+      queued or retrying work is not proof that every session has refreshed. Administrator invitation and
+      recovery status come from the server. Purge commands reserve quiescing work; no purge worker completion is promised.
     </p>
   );
 }
@@ -166,6 +172,10 @@ function InstituteDirectory() {
   const [reloadKey, setReloadKey] = useState(0);
   const cursor = cursorTrail[cursorTrail.length - 1] ?? undefined;
 
+  const readKey = JSON.stringify([cursor, lifecycleState, licenseLayer, query, reloadKey]);
+  const [completedKey, setCompletedKey] = useState("");
+  const waiting = loading || completedKey !== readKey;
+
   useEffect(() => {
     let active = true;
     const loadDirectory = async () => {
@@ -186,14 +196,14 @@ function InstituteDirectory() {
           setFailure(classifyVendorInstituteFailure(error));
         }
       } finally {
-        if (active) setLoading(false);
+        if (active) { setCompletedKey(readKey); setLoading(false); }
       }
     };
     void loadDirectory();
     return () => {
       active = false;
     };
-  }, [cursor, lifecycleState, licenseLayer, query, reloadKey]);
+  }, [cursor, lifecycleState, licenseLayer, query, reloadKey, readKey]);
 
   function applyFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -261,16 +271,16 @@ function InstituteDirectory() {
         </div>
       </form>
 
-      {loading ? (
+      {waiting ? (
         <section className="vendor-authority-state" role="status">
           <h3>Loading institutes</h3>
           <p>No cached or fixture institute values are shown while authority is loading.</p>
         </section>
       ) : null}
-      {!loading && failure ? (
+      {!waiting && failure ? (
         <FailurePanel failure={failure} onRetry={() => setReloadKey((value) => value + 1)} />
       ) : null}
-      {!loading && !failure && result?.items.length === 0 ? (
+      {!waiting && !failure && result?.items.length === 0 ? (
         <section className="vendor-authority-state">
           <h3>No institutes match</h3>
           <p>
@@ -278,7 +288,7 @@ function InstituteDirectory() {
           </p>
         </section>
       ) : null}
-      {!loading && !failure && result && result.items.length > 0 ? (
+      {!waiting && !failure && result && result.items.length > 0 ? (
         <>
           <div className="vendor-authority-summary">
             <strong>{result.totalMatching.toLocaleString("en-IN")} matching institutes</strong>
@@ -323,6 +333,9 @@ function availableLifecycleActions(
 }
 
 function InstituteDetailView({ instituteId }: { instituteId: string }) {
+  const readScope = useVendorReadScope();
+  const mutationLock = useRef(false);
+  const canManage = useVendorCapability("vendor.institutes.manage_lifecycle");
   const [detail, setDetail] = useState<VendorInstituteDetail | null>(null);
   const [failure, setFailure] = useState<VendorInstituteFailure | null>(null);
   const [loading, setLoading] = useState(true);
@@ -338,45 +351,54 @@ function InstituteDetailView({ instituteId }: { instituteId: string }) {
   const [administratorName, setAdministratorName] = useState("");
   const [administratorEmail, setAdministratorEmail] = useState("");
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (reconcile = false) => {
+    const ticket = readScope.begin("detail");
+    setDetail(null);
     setLoading(true);
     setFailure(null);
     try {
-      const nextDetail = await vendorInstitutesApi.getInstitute(instituteId);
+      const nextDetail = await vendorInstitutesApi.getInstitute(instituteId, ticket.signal);
+      if (!ticket.current()) return;
       setDetail(nextDetail);
       setRegisteredName(nextDetail.profile.registeredName);
       setVendorAccountReference(nextDetail.profile.vendorAccountReference ?? "");
       setLifecycleAction(availableLifecycleActions(nextDetail)[0] ?? "");
     } catch (error) {
+      if (!ticket.current()) return;
       setDetail(null);
       setFailure(classifyVendorInstituteFailure(error));
+      if (reconcile) throw error;
     } finally {
-      setLoading(false);
+      if (ticket.current()) setLoading(false);
     }
-  }, [instituteId]);
+  }, [instituteId, readScope]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   async function reconcileMutation(run: () => Promise<unknown>, successMessage: string) {
+    if (mutationLock.current) return;
+    mutationLock.current = true;
     setMutating(true);
     setFailure(null);
     setMessage("");
     try {
       await run();
-      await load();
+      await load(true);
       setMessage(successMessage);
     } catch (error) {
+      setDetail(null);
       setFailure(classifyVendorInstituteFailure(error));
     } finally {
+      mutationLock.current = false;
       setMutating(false);
     }
   }
 
   function updateProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!detail || !registeredName.trim()) return;
+    if (!canManage || !detail || !registeredName.trim()) return;
     void reconcileMutation(
       () =>
         vendorInstitutesApi.updateInstitute(instituteId, {
@@ -393,7 +415,7 @@ function InstituteDetailView({ instituteId }: { instituteId: string }) {
 
   function transitionLifecycle(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!detail || !lifecycleAction) return;
+    if (!canManage || !detail || !lifecycleAction) return;
     const metadata = {
       expectedRevision: detail.revision,
       idempotencyKey: createVendorIdempotencyKey(),
@@ -427,7 +449,7 @@ function InstituteDetailView({ instituteId }: { instituteId: string }) {
     action: VendorAdministratorCommandIntent["action"],
     targetUserIdOverride?: string,
   ) {
-    if (!detail) return;
+    if (!canManage || !detail) return;
     const metadata = {
       expectedRevision: detail.settingsRevision,
       idempotencyKey: createVendorIdempotencyKey(),
@@ -487,7 +509,7 @@ function InstituteDetailView({ instituteId }: { instituteId: string }) {
       : [];
 
   return (
-    <div className="vendor-authority-stack">
+    <fieldset disabled={mutating} className="vendor-authority-stack">
       <div className="vendor-authority-back">
         <Link to="/vendor/institutes">← Institute directory</Link>
       </div>
@@ -576,7 +598,7 @@ function InstituteDetailView({ instituteId }: { instituteId: string }) {
             onChange={(event) => setVendorAccountReference(event.target.value)}
           />
         </label>
-        <button type="submit" disabled={mutating}>
+        <button type="submit" disabled={mutating || !canManage}>
           Save and reload
         </button>
       </form>
@@ -622,7 +644,7 @@ function InstituteDetailView({ instituteId }: { instituteId: string }) {
                 />
               </label>
             ) : null}
-            <button type="submit" disabled={mutating}>
+            <button type="submit" disabled={mutating || !canManage}>
               Run command and reload
             </button>
           </>
@@ -646,7 +668,7 @@ function InstituteDetailView({ instituteId }: { instituteId: string }) {
                 <button
                   key={action}
                   type="button"
-                  disabled={mutating}
+                  disabled={mutating || !canManage}
                   onClick={() => administratorCommand(action)}
                 >
                   {title(action)}
@@ -671,7 +693,7 @@ function InstituteDetailView({ instituteId }: { instituteId: string }) {
                 <button
                   key={action}
                   type="button"
-                  disabled={mutating}
+                  disabled={mutating || !canManage}
                   onClick={() => administratorCommand(action, pendingAdministrator.userId)}
                 >
                   {title(action)}
@@ -699,6 +721,7 @@ function InstituteDetailView({ instituteId }: { instituteId: string }) {
           type="button"
           disabled={
             mutating ||
+            !canManage ||
             Boolean(pendingAdministrator) ||
             !administratorName.trim() ||
             !administratorEmail.trim()
@@ -733,7 +756,7 @@ function InstituteDetailView({ instituteId }: { instituteId: string }) {
           </ul>
         )}
       </section>
-    </div>
+    </fieldset>
   );
 }
 
@@ -752,6 +775,9 @@ function onboardingActions(
 }
 
 function OnboardingWorkspace() {
+  const readScope = useVendorReadScope();
+  const mutationLock = useRef(false);
+  const canManage = useVendorCapability("vendor.institutes.manage_lifecycle");
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedId = searchParams.get("onboarding");
@@ -783,69 +809,75 @@ function OnboardingWorkspace() {
     expectedExamSessionsPerMonth: "",
   });
 
-  const loadDetail = useCallback(async (onboardingId: string) => {
+  const loadDetail = useCallback(async (onboardingId: string, reconcile = false) => {
+    const ticket = readScope.begin("onboarding-detail");
+    setDetail(null);
     setDetailLoading(true);
     setFailure(null);
     try {
-      setDetail(await vendorInstitutesApi.getOnboarding(onboardingId, { eventsLimit: 25 }));
+      const nextDetail = await vendorInstitutesApi.getOnboarding(onboardingId, { eventsLimit: 25 }, ticket.signal);
+      if (ticket.current()) setDetail(nextDetail);
     } catch (error) {
+      if (!ticket.current()) return;
       setDetail(null);
       setFailure(classifyVendorInstituteFailure(error));
+      if (reconcile) throw error;
     } finally {
-      setDetailLoading(false);
+      if (ticket.current()) setDetailLoading(false);
     }
-  }, []);
+  }, [readScope]);
 
-  useEffect(() => {
-    let active = true;
-    const loadOnboarding = async () => {
-      setListLoading(true);
-      setFailure(null);
-      try {
-        const result = await vendorInstitutesApi.listOnboarding({
-          ...(cursor ? { cursor } : {}),
-          ...(query ? { query } : {}),
-          ...(status ? { status } : {}),
-          limit: 20,
-        });
-        if (active) setListResult(result);
-      } catch (error) {
-        if (active) {
-          setListResult(null);
-          setFailure(classifyVendorInstituteFailure(error));
-        }
-      } finally {
-        if (active) setListLoading(false);
-      }
-    };
-    void loadOnboarding();
-    return () => {
-      active = false;
-    };
-  }, [cursor, query, reloadKey, status]);
+  const readKey = JSON.stringify([cursor, query, status, reloadKey]);
+  const [completedKey, setCompletedKey] = useState("");
+  const waiting = listLoading || completedKey !== readKey;
+
+  const loadList = useCallback(async (reconcile = false) => {
+    const ticket = readScope.begin("onboarding-list");
+    setListLoading(true);
+    setListResult(null);
+    setFailure(null);
+    try {
+      const next = await vendorInstitutesApi.listOnboarding({
+        ...(cursor ? { cursor } : {}), ...(query ? { query } : {}), ...(status ? { status } : {}), limit: 20,
+      }, ticket.signal);
+      if (ticket.current()) setListResult(next);
+    } catch (error) {
+      if (!ticket.current()) return;
+      setFailure(classifyVendorInstituteFailure(error));
+      if (reconcile) throw error;
+    } finally {
+      if (ticket.current()) { setCompletedKey(readKey); setListLoading(false); }
+    }
+  }, [cursor, query, status, readKey, readScope]);
+  useEffect(() => { void loadList(); }, [loadList]);
 
   useEffect(() => {
     if (selectedId) void loadDetail(selectedId);
     else setDetail(null);
-  }, [loadDetail, reloadKey, selectedId]);
+  }, [loadDetail, selectedId]);
 
   async function reconcile(run: () => Promise<unknown>, success: string) {
+    if (mutationLock.current) return;
+    mutationLock.current = true;
     setMutating(true);
     setFailure(null);
     setMessage("");
     try {
       await run();
-      setReloadKey((value) => value + 1);
-      if (selectedId) await loadDetail(selectedId);
+      await loadList(true);
+      if (selectedId) await loadDetail(selectedId, true);
       setMessage(success);
     } catch (error) {
+      setDetail(null);
       setFailure(classifyVendorInstituteFailure(error));
     } finally {
+      mutationLock.current = false;
       setMutating(false);
     }
   }
 
   function createOnboarding(saveAs: "draft" | "pending_review") {
+    if (!canManage) return;
     const numeric = [
       application.expectedStudents,
       application.expectedConcurrentStudents,
@@ -856,6 +888,8 @@ function OnboardingWorkspace() {
       numeric.some((value) => !Number.isFinite(value) || value < 0)
     )
       return;
+    if (mutationLock.current) return;
+    mutationLock.current = true;
     setMutating(true);
     setFailure(null);
     setMessage("");
@@ -880,15 +914,15 @@ function OnboardingWorkspace() {
         setSearchParams({ view: "onboarding", onboarding: receipt.onboarding.onboardingId });
         setShowCreate(false);
         setReloadKey((value) => value + 1);
-        await loadDetail(receipt.onboarding.onboardingId);
+        await loadDetail(receipt.onboarding.onboardingId, true);
         setMessage("Onboarding created and reloaded from authoritative state.");
       })
       .catch((error: unknown) => setFailure(classifyVendorInstituteFailure(error)))
-      .finally(() => setMutating(false));
+      .finally(() => { mutationLock.current = false; setMutating(false); });
   }
 
   function runOnboardingCommand(action: VendorOnboardingCommandIntent["action"]) {
-    if (!detail) return;
+    if (!canManage || !detail) return;
     const metadata = {
       expectedRevision: detail.revision,
       idempotencyKey: createVendorIdempotencyKey(),
@@ -921,7 +955,9 @@ function OnboardingWorkspace() {
   }
 
   function provisionInstitute() {
-    if (!detail || detail.status !== "approved") return;
+    if (!canManage || !detail || detail.status !== "approved") return;
+    if (mutationLock.current) return;
+    mutationLock.current = true;
     setMutating(true);
     setFailure(null);
     setMessage("");
@@ -935,13 +971,13 @@ function OnboardingWorkspace() {
         navigate(`/vendor/institutes/${encodeURIComponent(receipt.institute.instituteId)}`);
       })
       .catch((error: unknown) => setFailure(classifyVendorInstituteFailure(error)))
-      .finally(() => setMutating(false));
+      .finally(() => { mutationLock.current = false; setMutating(false); });
   }
 
   const actions = detail ? onboardingActions(detail.status) : [];
 
   return (
-    <div className="vendor-authority-stack">
+    <fieldset disabled={mutating} className="vendor-authority-stack">
       <CommercialBoundary />
       <div className="vendor-authority-toolbar">
         <button type="button" onClick={() => setShowCreate((value) => !value)}>
@@ -1080,10 +1116,10 @@ function OnboardingWorkspace() {
             />
           </label>
           <div>
-            <button type="button" disabled={mutating} onClick={() => createOnboarding("draft")}>
+            <button type="button" disabled={mutating || !canManage} onClick={() => createOnboarding("draft")}>
               Save draft
             </button>
-            <button type="submit" disabled={mutating}>
+            <button type="submit" disabled={mutating || !canManage}>
               Submit for review
             </button>
           </div>
@@ -1121,27 +1157,27 @@ function OnboardingWorkspace() {
         </label>
         <button type="submit">Apply filters</button>
       </form>
-      {failure ? (
-        <FailurePanel failure={failure} onRetry={() => setReloadKey((value) => value + 1)} />
+      {!waiting && failure ? (
+        <FailurePanel failure={failure} onRetry={() => { setReloadKey((value) => value + 1); if (selectedId) void loadDetail(selectedId); }} />
       ) : null}
-      {message ? (
+      {!waiting && message ? (
         <p className="vendor-authority-success" role="status">
           {message}
         </p>
       ) : null}
-      {listLoading ? (
+      {waiting ? (
         <section className="vendor-authority-state" role="status">
           <h3>Loading onboarding</h3>
           <p>No fixture applications are substituted.</p>
         </section>
       ) : null}
-      {!listLoading && !failure && listResult?.items.length === 0 ? (
+      {!waiting && !failure && listResult?.items.length === 0 ? (
         <section className="vendor-authority-state">
           <h3>No onboarding records match</h3>
           <p>Create an application or change the bounded filters.</p>
         </section>
       ) : null}
-      {!listLoading && listResult && listResult.items.length > 0 ? (
+      {!waiting && listResult && listResult.items.length > 0 ? (
         <div className="vendor-authority-split">
           <section>
             <h3>{listResult.totalMatching} onboarding records</h3>
@@ -1242,14 +1278,14 @@ function OnboardingWorkspace() {
                     <button
                       type="button"
                       key={action}
-                      disabled={mutating}
+                      disabled={mutating || !canManage}
                       onClick={() => runOnboardingCommand(action)}
                     >
                       {title(action)}
                     </button>
                   ))}
                   {detail.status === "approved" ? (
-                    <button type="button" disabled={mutating} onClick={provisionInstitute}>
+                    <button type="button" disabled={mutating || !canManage} onClick={provisionInstitute}>
                       Create institute
                     </button>
                   ) : null}
@@ -1276,7 +1312,7 @@ function OnboardingWorkspace() {
           </section>
         </div>
       ) : null}
-    </div>
+    </fieldset>
   );
 }
 
@@ -1286,7 +1322,7 @@ export default function VendorInstituteAuthorityPage() {
   const requestedView = searchParams.get("view");
   const view: View = requestedView === "onboarding" ? "onboarding" : "directory";
   const decodedInstituteId = useMemo(
-    () => (instituteId ? decodeURIComponent(instituteId) : null),
+    () => instituteId ?? null,
     [instituteId],
   );
 
@@ -1325,14 +1361,14 @@ export default function VendorInstituteAuthorityPage() {
             >
               Onboarding
             </button>
-            <button type="button" disabled title="BWM-035 owns commercial license requests">
-              License requests unavailable
+            <button type="button" disabled title="License requests are available in Licensing and billing">
+              License requests: use Licensing and billing
             </button>
           </div>
         ) : null}
       </header>
       {decodedInstituteId ? (
-        <InstituteDetailView instituteId={decodedInstituteId} />
+        <InstituteDetailView key={decodedInstituteId} instituteId={decodedInstituteId} />
       ) : view === "onboarding" ? (
         <OnboardingWorkspace />
       ) : (

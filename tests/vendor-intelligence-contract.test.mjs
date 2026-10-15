@@ -98,9 +98,9 @@ test("all intelligence handlers enforce the canonical global capability before a
   });
   const boundary = await read("functions/src/api/vendorIntelligenceReadBoundary.ts");
   assert.match(boundary, /VENDOR_INTELLIGENCE_CAPABILITY = "vendor\.intelligence\.read"/u);
-  assert.match(boundary, /allowedRoles: \["vendor"\]/u);
-  assert.match(boundary, /dependencies\.getUser\(identity\.uid\)/u);
-  assert.match(boundary, /user\.disabled \|\| claims\.isSuspended === true \|\| claims\.role !== "vendor"/u);
+  assert.match(boundary, /allowedRoles: VENDOR_CAPABILITY_ROLES\[VENDOR_INTELLIGENCE_CAPABILITY\]/u);
+  assert.match(boundary, /assertCurrentVendorIdentity\(request, dependencies, VENDOR_INTELLIGENCE_CAPABILITY\)/u);
+  assert.match(await read("functions/src/middleware/currentVendor.ts"), /user\.disabled \|\| !hasConsistentVendorClaims/u);
   for (const file of ["vendorIntelligenceInitialize", "vendorRevenueAnalytics", "vendorLayerDistribution", "vendorChurnTracking", "vendorRevenueForecasting"]) {
     const handler = await read(`functions/src/api/${file}.ts`);
     assert.match(handler, /intelligenceReadMiddlewares\(dependencies\)/u);

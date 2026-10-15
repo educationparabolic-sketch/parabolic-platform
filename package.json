@@ -3,6 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:vendor-action-ledger": "node --test tests/vendor-action-ledger.test.mjs",
+    "test:vendor-capability-alignment": "node --test tests/vendor-capability-alignment.test.mjs",
+    "test:vendor-capability-alignment:emulator": "node scripts/run-vendor-audit-health-api-emulator.mjs --capability-alignment",
+    "test:vendor-capability-alignment:e2e": "node scripts/run-vendor-audit-health-smoke-e2e.mjs --capability-alignment",
+    "test:e2e:vendor-capability-alignment": "playwright test tests/e2e/vendor-capability-alignment.spec.mjs --project=chromium",
     "playwright:install": "playwright install chromium",
     "prepare:bwm-004-staging": "node scripts/prepare-bwm-004-staging-verification.mjs",
     "prepare:bwm-007-failures": "node scripts/prepare-bwm-007-failure-verification.mjs",
@@ -173,7 +178,15 @@
     "test:e2e:browser-token-storage": "playwright test tests/e2e/browser-token-storage.spec.mjs",
     "test:e2e:production-auth-hardening": "playwright test tests/e2e/production-auth-hardening.spec.mjs",
     "test:e2e:hosting": "playwright test tests/e2e/portal-hosting.smoke.spec.mjs",
-    "test:e2e:staging-verification": "playwright test tests/e2e/staging-verification.spec.mjs"
+    "test:e2e:staging-verification": "playwright test tests/e2e/staging-verification.spec.mjs",
+    "test:vendor-command-recovery": "node --test tests/vendor-command-recovery.test.mjs",
+    "test:vendor-truthfulness:e2e": "node scripts/run-vendor-audit-health-smoke-e2e.mjs --truthfulness-repair",
+    "test:e2e:vendor-truthfulness": "playwright test tests/e2e/vendor-truthfulness-repair.spec.mjs --project=chromium",
+    "test:vendor-acceptance-regressions": "node --test --test-concurrency=2 tests/vendor-action-ledger.test.mjs tests/vendor-capability-alignment.test.mjs tests/student-vendor-role-guards.test.mjs tests/api-auth-scope.test.mjs tests/vendor-command-recovery.test.mjs tests/vendor-authority-regressions.test.mjs tests/vendor-fixture-artifacts.test.mjs tests/vendor-institutes-frontend-contract.test.mjs tests/vendor-commercial-frontend-contract.test.mjs tests/vendor-calibration-frontend-contract.test.mjs tests/vendor-calibration-acceptance-contract.test.mjs tests/vendor-intelligence-frontend-contract.test.mjs tests/vendor-intelligence-acceptance-contract.test.mjs tests/vendor-audit-health-frontend-contract.test.mjs tests/vendor-acceptance-coverage.test.mjs",
+    "test:vendor-acceptance:e2e": "node scripts/run-vendor-acceptance-e2e.mjs",
+    "test:e2e:vendor-acceptance-shells": "playwright test tests/e2e/vendor-acceptance-shells.spec.mjs --project=chromium",
+    "test:vendor-browser-acceptance-contract": "node --test tests/vendor-browser-acceptance-contract.test.mjs",
+    "test:vendor-acceptance:contracts": "node --test --test-concurrency=2 tests/vendor-audit-health-contract.test.mjs tests/vendor-audit-health-frontend-contract.test.mjs tests/vendor-calibration-contract.test.mjs tests/vendor-calibration-frontend-contract.test.mjs tests/vendor-calibration-acceptance-contract.test.mjs tests/vendor-intelligence-acceptance-contract.test.mjs tests/vendor-intelligence-frontend-contract.test.mjs tests/vendor-intelligence-contract.test.mjs tests/vendor-intelligence-readers-contract.test.mjs tests/vendor-intelligence-rollup-contract.test.mjs tests/portal-response-adapters.test.mjs tests/admin-question-bank-contract.test.mjs tests/frontend-api-routing.test.mjs tests/frontend-production-fallbacks.test.mjs tests/capability-policy.test.mjs tests/student-vendor-role-guards.test.mjs tests/vendor-commercial-frontend-contract.test.mjs tests/vendor-institutes-frontend-contract.test.mjs tests/frontend-data-states.test.mjs tests/frontend-data-mode.test.mjs tests/claim-propagation-contract.test.mjs tests/claim-propagation-browser-contract.test.mjs tests/api-dto-contract.test.mjs tests/api-envelope-contract.test.mjs tests/build-environment-validation.test.mjs tests/backend-ci-validation.test.mjs tests/backend-ci-trigger-coverage.test.mjs tests/calibration-rollout-runtime-contract.test.mjs tests/vendor-calibration-rollout-contract.test.mjs tests/vendor-calibration-operation-transport.test.mjs tests/environment-matrix.test.mjs tests/frontend-fixture-bundling.test.mjs tests/backend-ci-emulator-aggregate.test.mjs tests/backend-ci-emulator-harness.test.mjs tests/target-ownership-policy.test.mjs tests/admin-assignment-operations-contract.test.mjs tests/admin-assignment-run-consumption.test.mjs tests/api-auth-scope.test.mjs tests/vendor-action-ledger.test.mjs tests/vendor-capability-alignment.test.mjs tests/vendor-command-recovery.test.mjs tests/vendor-authority-regressions.test.mjs tests/vendor-fixture-artifacts.test.mjs tests/vendor-acceptance-coverage.test.mjs tests/vendor-browser-acceptance-contract.test.mjs tests/license-entitlement-projection.test.mjs tests/browser-authority-convergence.test.mjs tests/per-origin-firebase-auth.test.mjs tests/production-auth-hardening.test.mjs tests/browser-token-storage.test.mjs functions/tests/apiRouteManifest.test.js functions/tests/apiGateway.test.js"
   },
   "devDependencies": {
     "playwright": "1.59.1"

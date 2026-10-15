@@ -1,3 +1,6 @@
+import { vendorWorkspaceSearchScope } from "./features/shared/vendorWorkspaceScope";
+import VendorCommandRecoveryPanel from "./features/shared/VendorCommandRecoveryPanel";
+import { shouldUseFixtureData } from "../../../shared/services/frontendEnvironment";
 import {
   Suspense,
   lazy,
@@ -28,11 +31,11 @@ import {
   findActivePortalNavigationItem,
 } from "../../../shared/ui/portalConsistency";
 import { UiDataStateBoundary, UiRouteLoading } from "../../../shared/ui/components";
-import { getVisibleVendorRoutes, matchVendorRoute } from "../../admin/src/portals/vendorRoutes";
+import { evaluateVendorRoutePermissions, getVisibleVendorRoutes, matchVendorRoute } from "../../admin/src/portals/vendorRoutes";
 import { resolveVendorAccessContext } from "./portals/vendorAccess";
 import VendorPlaceholderPage from "./features/shared/VendorPlaceholderPage";
 import { VendorLicenseRequestsProvider } from "./features/institutes/VendorLicenseRequestsContext";
-import { useVendorLicenseRequests } from "./features/institutes/vendorLicenseRequestsStore";
+import { useVendorLicenseRequests } from "./features/institutes/vendorLicenseRequestsContextCore";
 import "./App.css";
 
 const VendorAuditActivityLogsPage = lazy(
@@ -398,10 +401,15 @@ function VendorProtectedRoute(props: { loginPath: string; children: ReactElement
     return <Navigate replace to="/unauthorized" />;
   }
 
+  const route = matchVendorRoute(location.pathname);
+  if (route && !evaluateVendorRoutePermissions(route, accessContext).allowed) {
+    return <Navigate replace to="/unauthorized" />;
+  }
   return children;
 }
 
 function VendorLayout() {
+  const fixtureMode = import.meta.env.DEV && shouldUseFixtureData();
   const location = useLocation();
   const navigate = useNavigate();
   const { session, signOut } = useAuthProvider();
@@ -451,8 +459,8 @@ function VendorLayout() {
   const [notificationPanelOpen, setNotificationPanelOpen] = useState(false);
   const [pageScrolled, setPageScrolled] = useState(false);
   const visibleRoutes = useMemo(
-    () => getVisibleVendorRoutes(accessContext.role),
-    [accessContext.role],
+    () => getVisibleVendorRoutes(accessContext),
+    [accessContext],
   );
   const matchedRoute = useMemo(() => matchVendorRoute(location.pathname), [location.pathname]);
 
@@ -597,14 +605,15 @@ function VendorLayout() {
                 onClick={() => setNotificationPanelOpen((current) => !current)}
               >
                 Notifications
-                {unreadNotificationCount > 0 ? (
+                {fixtureMode && unreadNotificationCount > 0 ? (
                   <span aria-label={`${unreadNotificationCount} unread notifications`}>
                     {unreadNotificationCount}
                   </span>
                 ) : null}
               </button>
 
-              {notificationPanelOpen ? (
+              {notificationPanelOpen && !fixtureMode ? <aside role="status" aria-label="Notification authority unavailable"><p>Notifications are unavailable: no live notification or unread-count source is registered.</p><p>Review requests and invoices in Licensing and billing, and applications in Institutes.</p></aside> : null}
+              {notificationPanelOpen && fixtureMode ? (
                 <section
                   id="vendor-notification-panel"
                   className="vendor-notification-panel"
@@ -719,7 +728,8 @@ function VendorLayout() {
           </header>
 
           <section className="admin-content-container" aria-label="Vendor main content container">
-            <Outlet />
+            <VendorCommandRecoveryPanel key={session.idToken ?? session.status} />
+            <Outlet key={`${session.idToken ?? session.status}|${location.pathname}|${vendorWorkspaceSearchScope(location.pathname, location.search)}`} />
           </section>
         </div>
       </div>
@@ -801,16 +811,16 @@ function App() {
             path="calibration/simulate"
             element={renderVendorPlaceholder(
               "Calibration Simulation",
-              "Dedicated simulation route for testing calibration changes against summary-only historical vendor datasets before rollout.",
-              "This mounted shell preserves the simulation route contract while the deeper scenario workspace continues to live in the main calibration surface.",
+              "Read-only simulation is available in the Calibration workspace using selected versions, targets and one academic year.",
+              "Open Calibration to run the existing five-state risk projection. No simulation is performed on this compatibility page.",
             )}
           />
           <Route
             path="calibration/history"
             element={renderVendorPlaceholder(
               "Calibration History",
-              "Historical calibration timeline route for reviewing prior versions, activation dates, and rollback posture.",
-              "This route is mounted so the vendor route registry matches the planned map, while detailed history tooling can be expanded in a later vendor build.",
+              "A complete operation timeline is unavailable. Existing versions and captured-operation recovery are available in Calibration; server audit events are available in Audit.",
+              "No operation-list or scheduled-activation history API is registered. This page does not claim to load history.",
             )}
           />
           <Route

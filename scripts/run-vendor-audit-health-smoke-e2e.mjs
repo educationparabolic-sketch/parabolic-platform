@@ -58,7 +58,7 @@ function run(command, args) {
 
 try {
   run("npm", ["--prefix", "apps/vendor", "run", "build", "--", "--outDir", hostingRoot]);
-  if (readdirSync(join(hostingRoot, "assets")).some((name) => /FixtureVendor(UnifiedAudit|SystemHealth|Overview)|vendorSystemHealthDataset/u.test(name))) {
+  if (readdirSync(join(hostingRoot, "assets")).some((name) => /FixtureVendor|vendorSystemHealthDataset|vendorInstitutesDataset/u.test(name))) {
     throw new Error("Production audit/health build contains a fixture showcase chunk.");
   }
   if (!process.argv.includes("--skip-functions-build")) {
@@ -73,7 +73,7 @@ try {
   projectId,
   "--only",
   "auth,firestore,functions:apiV1,hosting:vendor",
-  "npm run test:e2e:vendor-audit-health-smoke",
+  process.argv.includes("--acceptance-shells") ? "npm run test:e2e:vendor-acceptance-shells" : process.argv.includes("--acceptance-matrix") ? "node scripts/run-vendor-acceptance-browser-matrix.mjs" : process.argv.includes("--capability-alignment") ? "npm run test:e2e:vendor-capability-alignment" : process.argv.includes("--truthfulness-repair") ? "npm run test:e2e:vendor-truthfulness" : "npm run test:e2e:vendor-audit-health-smoke",
   ]);
 } finally {
   rmSync(configPath, { force: true });

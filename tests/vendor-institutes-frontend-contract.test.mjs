@@ -55,9 +55,9 @@ test("live institute workspace reloads server authority and exposes required sta
     "Next page",
     "No fixture detail is substituted",
     "Commercial controls use the registered licensing workspace",
-    "pending BWM-036",
-    "await load()",
-    "await loadDetail(selectedId)",
+    "enqueue durable claim propagation",
+    "await load(true)",
+    "await loadDetail(selectedId, true)",
   ]) {
     assert.ok(source.includes(boundary), boundary);
   }
@@ -84,11 +84,14 @@ test("fixtures and browser-only mutations are isolated to explicit fixture mode"
   );
   assert.match(
     page,
-    /shouldUseFixtureData\(\)[\s\S]*?<FixtureVendorInstituteManagementPage\s*\/>[\s\S]*?<VendorInstituteAuthorityPage\s*\/>/u,
+    /FixturePage && shouldUseFixtureData\(\)[\s\S]*?<FixturePage\s*\/>[\s\S]*?<VendorInstituteAuthorityPage\s*\/>/u,
   );
-  assert.match(provider, /fixtureMode\s*\?\s*INITIAL_LICENSE_REQUESTS\s*:\s*\[\]/u);
-  assert.match(provider, /fixtureMode\s*\?\s*INITIAL_ONBOARDING_RECORDS\s*:\s*\[\]/u);
-  assert.ok((provider.match(/if \(!fixtureMode\) return;/gu) ?? []).length >= 6);
+  assert.match(page, /import\.meta\.env\.DEV \? lazy/u);
+  const fixture = await read("apps/vendor/src/features/institutes/FixtureVendorLicenseRequestsProvider.tsx");
+  assert.match(provider, /import\.meta\.env\.DEV \? lazy/u);
+  assert.match(fixture, /fixtureMode\s*\?\s*INITIAL_LICENSE_REQUESTS\s*:\s*\[\]/u);
+  assert.match(fixture, /fixtureMode\s*\?\s*INITIAL_ONBOARDING_RECORDS\s*:\s*\[\]/u);
+  assert.ok((fixture.match(/if \(!fixtureMode\) return;/gu) ?? []).length >= 6);
 });
 
 test("authenticated Vendor institute browser proof is live, no-mock, and repeatable", async () => {
@@ -108,7 +111,7 @@ test("authenticated Vendor institute browser proof is live, no-mock, and repeata
     "freshContext",
     "Authoritative conflict",
     "Institute authority unavailable",
-    "Permission required",
+    "Vendor role required",
     "Next page",
     "vendor_primary_administrator",
     "primaryContactEmailNormalized",

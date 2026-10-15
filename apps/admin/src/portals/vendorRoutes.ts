@@ -1,13 +1,14 @@
-import { CAPABILITY_MATRIX } from "../../../../shared/contracts/capabilityPolicy";
+import { CAPABILITY_MATRIX, type PortalCapability } from "../../../../shared/contracts/capabilityPolicy";
 import type { PortalRole, RouteAccessDecision } from "../../../../shared/types/portalRouting";
 
-const VENDOR_PORTAL_ALLOWED_ROLES = CAPABILITY_MATRIX["portal.vendor.access"].allowedRoles;
 
 export interface VendorRouteDefinition {
   path: string;
   title: string;
   section: string;
   description: string;
+  capability: PortalCapability;
+  readCapabilities: readonly PortalCapability[];
   allowedRoles: readonly PortalRole[];
   redirectOnDenied?: string;
 }
@@ -18,8 +19,10 @@ export const VENDOR_ROUTE_DEFINITIONS: VendorRouteDefinition[] = [
     title: "Vendor Overview",
     section: "Vendor Overview",
     description:
-      "Global operational metrics, commercial posture, and platform-wide status for vendor administrators.",
-    allowedRoles: VENDOR_PORTAL_ALLOWED_ROLES,
+      "Completed portfolio snapshots and bounded audit/operational source evidence; unsupported cloud and global risk signals are unavailable.",
+    capability: "vendor.overview.read",
+    readCapabilities: ["vendor.intelligence.read", "vendor.audit.read", "vendor.system_health.read"],
+    allowedRoles: CAPABILITY_MATRIX["vendor.overview.read"].allowedRoles,
   },
   {
     path: "/vendor/institutes",
@@ -27,7 +30,9 @@ export const VENDOR_ROUTE_DEFINITIONS: VendorRouteDefinition[] = [
     section: "Institutes",
     description:
       "Cross-institute management surface for tenant discovery, status review, and portfolio navigation.",
-    allowedRoles: VENDOR_PORTAL_ALLOWED_ROLES,
+    capability: "vendor.institutes.read",
+    readCapabilities: ["vendor.institutes.read"],
+    allowedRoles: CAPABILITY_MATRIX["vendor.institutes.read"].allowedRoles,
   },
   {
     path: "/vendor/institutes/:instituteId",
@@ -35,7 +40,9 @@ export const VENDOR_ROUTE_DEFINITIONS: VendorRouteDefinition[] = [
     section: "Institutes",
     description:
       "Institute-specific vendor view for tenant health, licensing posture, and operational drill-in.",
-    allowedRoles: VENDOR_PORTAL_ALLOWED_ROLES,
+    capability: "vendor.institutes.read",
+    readCapabilities: ["vendor.institutes.read"],
+    allowedRoles: CAPABILITY_MATRIX["vendor.institutes.read"].allowedRoles,
   },
   {
     path: "/vendor/licensing",
@@ -43,7 +50,9 @@ export const VENDOR_ROUTE_DEFINITIONS: VendorRouteDefinition[] = [
     section: "Licensing Management",
     description:
       "Vendor-controlled catalogue for pricing, capacity parameters, validation, and versioned publication.",
-    allowedRoles: VENDOR_PORTAL_ALLOWED_ROLES,
+    capability: "vendor.licenses.manage",
+    readCapabilities: ["vendor.licenses.manage"],
+    allowedRoles: CAPABILITY_MATRIX["vendor.licenses.manage"].allowedRoles,
   },
   {
     path: "/vendor/calibration",
@@ -51,22 +60,28 @@ export const VENDOR_ROUTE_DEFINITIONS: VendorRouteDefinition[] = [
     section: "Calibration",
     description:
       "Calibration deployment workspace for version review and controlled rollout planning.",
-    allowedRoles: VENDOR_PORTAL_ALLOWED_ROLES,
+    capability: "vendor.calibration.manage",
+    readCapabilities: ["vendor.calibration.manage", "vendor.institutes.read"],
+    allowedRoles: CAPABILITY_MATRIX["vendor.calibration.manage"].allowedRoles,
   },
   {
     path: "/vendor/calibration/simulate",
     title: "Calibration Simulation",
     section: "Calibration",
-    description: "Simulation route for testing future calibration behavior before deployment.",
-    allowedRoles: VENDOR_PORTAL_ALLOWED_ROLES,
+    description: "Compatibility page linking to the existing read-only projection in Calibration.",
+    capability: "vendor.calibration.manage",
+    readCapabilities: [],
+    allowedRoles: CAPABILITY_MATRIX["vendor.calibration.manage"].allowedRoles,
   },
   {
     path: "/vendor/calibration/history",
     title: "Calibration History",
     section: "Calibration",
     description:
-      "Historical calibration timeline for prior deployments, revisions, and vendor review.",
-    allowedRoles: VENDOR_PORTAL_ALLOWED_ROLES,
+      "Compatibility page: a complete operation timeline is unavailable; versions, captured recovery and server audit have existing destinations.",
+    capability: "vendor.calibration.manage",
+    readCapabilities: [],
+    allowedRoles: CAPABILITY_MATRIX["vendor.calibration.manage"].allowedRoles,
   },
   {
     path: "/vendor/intelligence",
@@ -74,23 +89,29 @@ export const VENDOR_ROUTE_DEFINITIONS: VendorRouteDefinition[] = [
     section: "Global Intelligence",
     description:
       "Cross-institute behavioral analytics and platform intelligence summaries at the vendor layer.",
-    allowedRoles: VENDOR_PORTAL_ALLOWED_ROLES,
+    capability: "vendor.intelligence.read",
+    readCapabilities: ["vendor.intelligence.read"],
+    allowedRoles: CAPABILITY_MATRIX["vendor.intelligence.read"].allowedRoles,
   },
   {
     path: "/vendor/system-health",
     title: "System Health",
     section: "System Health",
     description:
-      "Operational monitoring for Firestore usage, Cloud Functions activity, and platform error visibility.",
-    allowedRoles: VENDOR_PORTAL_ALLOWED_ROLES,
+      "Current release identity and bounded persisted queue/recovery evidence; cloud metrics, costs and alert monitoring are unavailable.",
+    capability: "vendor.system_health.read",
+    readCapabilities: ["vendor.system_health.read"],
+    allowedRoles: CAPABILITY_MATRIX["vendor.system_health.read"].allowedRoles,
   },
   {
     path: "/vendor/audit",
     title: "Audit Logs",
     section: "Audit Logs",
     description:
-      "Full system audit viewer for vendor governance, operational review, and immutable event inspection.",
-    allowedRoles: VENDOR_PORTAL_ALLOWED_ROLES,
+      "Bounded, filtered audit reads from six existing server source families; page-local search is not full-system coverage.",
+    capability: "vendor.audit.read",
+    readCapabilities: ["vendor.audit.read"],
+    allowedRoles: CAPABILITY_MATRIX["vendor.audit.read"].allowedRoles,
   },
 ];
 
@@ -140,10 +161,17 @@ export function matchVendorRoute(pathname: string): ResolvedVendorRoute | null {
   return null;
 }
 
+export interface VendorRouteAccessContext {
+  role: PortalRole | null;
+  canAccessVendorPortal: boolean;
+  canUseCapability: (capability: PortalCapability) => boolean;
+}
+
 export function evaluateVendorRoutePermissions(
   route: ResolvedVendorRoute | null,
-  role: PortalRole | null,
+  context: PortalRole | null | VendorRouteAccessContext,
 ): RouteAccessDecision {
+  const role = typeof context === "object" && context !== null ? context.role : context;
   if (!route) {
     return {
       allowed: false,
@@ -152,7 +180,11 @@ export function evaluateVendorRoutePermissions(
     };
   }
 
-  if (!role || !route.definition.allowedRoles.includes(role)) {
+  const capabilities = [route.definition.capability, ...route.definition.readCapabilities];
+  const authorized = typeof context === "object" && context !== null
+    ? context.canAccessVendorPortal && capabilities.every(capability => context.canUseCapability(capability))
+    : Boolean(role) && capabilities.every(capability => CAPABILITY_MATRIX[capability].allowedRoles.some(allowed => allowed === role));
+  if (!role || !route.definition.allowedRoles.includes(role) || !authorized) {
     return {
       allowed: false,
       redirectTo: route.definition.redirectOnDenied ?? "/unauthorized",
@@ -167,9 +199,9 @@ export function evaluateVendorRoutePermissions(
   };
 }
 
-export function getVisibleVendorRoutes(role: PortalRole | null): VendorRouteDefinition[] {
+export function getVisibleVendorRoutes(context: PortalRole | null | VendorRouteAccessContext): VendorRouteDefinition[] {
   return VENDOR_ROUTE_DEFINITIONS.filter((definition) => {
-    if (!role || !definition.allowedRoles.includes(role)) {
+    if (!evaluateVendorRoutePermissions({ definition, params: {} }, context).allowed) {
       return false;
     }
 

@@ -69,10 +69,10 @@ test("live commercial workspace reconciles writes and exposes truthful states", 
     "Commercial authority unavailable",
     "Retry authoritative load",
     "No fixture data is substituted",
-    "pending BWM-036",
+    "Claim propagation is asynchronous",
     "Recording creates pending verification only and never marks the invoice paid",
     "raw provider payload is never exposed",
-    "await loadAll()",
+    "await loadAll(true)",
     "await loadRequest",
     "await loadInvoice",
     'aria-label="License request pages"',
@@ -92,14 +92,13 @@ test("live commercial workspace reconciles writes and exposes truthful states", 
   ]) {
     assert.ok(source.includes(`vendorCommercialApi.${command}`), command);
   }
-  assert.match(source, /commandIntents\.current/u);
+  const transport = await read("apps/vendor/src/features/licensing/vendorCommercialApi.ts");
+  assert.match(transport, /withVendorCommandRecovery/u);
+  assert.match(source, /mutationLock\.current/u);
   assert.match(source, /intentFor<VendorSubscriptionCommandIntent>/u);
   assert.match(source, /intentFor<VendorInvoiceCommandIntent>/u);
   assert.match(source, /intentFor<VendorPaymentEventCommandIntent>/u);
-  assert.match(
-    source,
-    /classified\.kind === "conflict" \|\| classified\.kind === "validation"[\s\S]*?clearIntent\(scope\)/u,
-  );
+  assert.match(source, /if \(reconcile\) throw error/u);
   assert.match(source, /classified\.kind === "conflict" && reload[\s\S]*?await reload\(\)/u);
   assert.match(source, /providerFailure\(receipt\.providerOperation/u);
   assert.match(source, /receipt\.reportedFailure \?\?/u);
@@ -125,8 +124,9 @@ test("mounted licensing route selects fixtures only by explicit data mode", asyn
   ]);
   assert.match(
     page,
-    /shouldUseFixtureData\(\)[\s\S]*?<FixtureVendorLicensingPage\s*\/>[\s\S]*?<VendorCommercialAuthorityPage\s*\/>/u,
+    /FixturePage && shouldUseFixtureData\(\)[\s\S]*?<FixturePage\s*\/>[\s\S]*?<VendorCommercialAuthorityPage\s*\/>/u,
   );
+  assert.match(page, /import\.meta\.env\.DEV \? lazy/u);
   const route = app.slice(app.indexOf('path="licensing"'), app.indexOf('path="calibration"'));
   assert.match(route, /<VendorLicensingPage\s*\/>/u);
   assert.match(institutePage, /to="\/vendor\/licensing"/u);
@@ -146,7 +146,7 @@ test("commercial browser proof uses live Firebase authority without fulfilled AP
     "Payment provider unavailable",
     "Commercial authority unavailable",
     "No license requests available",
-    "Permission required",
+    "Vendor role required",
     "pending_verification",
     "Verified",
     "attemptCount",

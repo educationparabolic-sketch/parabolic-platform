@@ -16,6 +16,8 @@ import {
   setRequestData,
 } from "../middleware/framework";
 import {createRoleAuthorizationMiddleware} from "../middleware/role";
+import {assertCurrentVendorIdentity} from "../middleware/currentVendor";
+import {VENDOR_CAPABILITY_ROLES} from "../policy/vendorRolePolicy";
 import {buildSuccessResponse, sendErrorResponse} from "../services/apiResponse";
 import {vendorAdministratorService} from "../services/vendorAdministrators";
 import {vendorInstituteCommandsService} from "../services/vendorInstituteCommands";
@@ -41,12 +43,6 @@ type VendorInstituteCapability =
   | "vendor.institutes.read"
   | "vendor.institutes.manage_lifecycle";
 
-const VENDOR_CAPABILITY_ALLOWED_ROLES: Readonly<
-Record<VendorInstituteCapability, readonly string[]>
-> = {
-  "vendor.institutes.manage_lifecycle": ["vendor"],
-  "vendor.institutes.read": ["vendor"],
-};
 
 type VendorInstituteValidatedOperation =
   | {capability: "vendor.institutes.read"; operation: "list_institutes"; request: VendorInstituteListValidatedRequest}
@@ -93,27 +89,6 @@ const commandContext = (request: MiddlewareRequest) => ({
   userAgent: request.get("user-agent"),
 });
 
-const assertCurrentVendor = async (
-  request: MiddlewareRequest,
-  dependencies: VendorInstitutesDependencies,
-): Promise<void> => {
-  const identity = request.context.identity;
-  if (!identity || identity.role !== "vendor" || !identity.isVendor) {
-    throw new VendorInstituteValidationError(
-      "FORBIDDEN",
-      "Vendor institute authority is required.",
-    );
-  }
-  const user = await dependencies.getUser(identity.uid);
-  const claims = user.customClaims ?? {};
-  if (user.disabled || claims.isSuspended === true ||
-    (claims.role !== "vendor" && claims.isVendor !== true)) {
-    throw new VendorInstituteValidationError(
-      "FORBIDDEN",
-      "Current Vendor identity cannot administer institutes.",
-    );
-  }
-};
 
 const bodyRecord = (request: MiddlewareRequest): Record<string, unknown> => {
   if (typeof request.body !== "object" || request.body === null ||
@@ -146,24 +121,11 @@ const capabilityFor = (
   return null;
 };
 
-const assertVendorCapability = (
-  request: MiddlewareRequest,
-  capability: VendorInstituteCapability,
-): void => {
-  const role = request.context.identity?.role;
-  if (!role || !VENDOR_CAPABILITY_ALLOWED_ROLES[capability].includes(role)) {
-    throw new VendorInstituteValidationError(
-      "FORBIDDEN",
-      `Current identity cannot use capability ${capability}.`,
-    );
-  }
-};
 
 const validateOperation = async (
   request: MiddlewareRequest,
   dependencies: VendorInstitutesDependencies,
 ): Promise<VendorInstituteValidatedOperation> => {
-  await assertCurrentVendor(request, dependencies);
   const path = relativePath(request);
   const capability = capabilityFor(request.method, path);
   if (!capability) {
@@ -172,7 +134,7 @@ const validateOperation = async (
       "Request does not match a supported Vendor institute route.",
     );
   }
-  assertVendorCapability(request, capability);
+  await assertCurrentVendorIdentity(request, dependencies, capability);
   const context = commandContext(request);
   const instituteId = queryString(request.params.instituteId);
   const onboardingId = queryString(request.params.onboardingId);
@@ -360,7 +322,7 @@ export const createVendorInstitutesHandler = (
   middlewares: [
     createAuthenticationMiddleware(dependencies),
     createRoleAuthorizationMiddleware({
-      allowedRoles: ["vendor"],
+      allowedRoles: VENDOR_CAPABILITY_ROLES["vendor.institutes.read"],
       forbiddenMessage: "Only Vendor operators can administer institutes.",
     }),
     createRequestValidationMiddleware({

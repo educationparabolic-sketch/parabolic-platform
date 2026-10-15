@@ -20,6 +20,8 @@ import {
   setRequestData,
 } from "../middleware/framework";
 import {createRoleAuthorizationMiddleware} from "../middleware/role";
+import {assertCurrentVendorIdentity} from "../middleware/currentVendor";
+import {VENDOR_CAPABILITY_ROLES} from "../policy/vendorRolePolicy";
 import {buildSuccessResponse, sendErrorResponse} from "../services/apiResponse";
 import {vendorInvoicesService} from "../services/vendorInvoices";
 import {vendorLicenseCatalogService} from "../services/vendorLicenseCatalog";
@@ -34,7 +36,6 @@ import {
 import {MiddlewareRequest} from "../types/middleware";
 import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
 
-type VendorCommercialCapability = "vendor.licenses.manage";
 
 interface VendorCommercialDependencies {
   commandCatalog: typeof vendorLicenseCatalogService.commandCatalog;
@@ -116,46 +117,12 @@ const publicCommand = <T>(
     .map((field) => [field, body[field]])) as T;
 };
 
-const assertCurrentVendor = async (
-  request: MiddlewareRequest,
-  dependencies: VendorCommercialDependencies,
-): Promise<void> => {
-  const identity = request.context.identity;
-  if (!identity || identity.role !== "vendor" || !identity.isVendor) {
-    throw new VendorCommercialValidationError(
-      "FORBIDDEN",
-      "Vendor commercial authority is required.",
-    );
-  }
-  const user = await dependencies.getUser(identity.uid);
-  const claims = user.customClaims ?? {};
-  if (user.disabled || claims.isSuspended === true ||
-    (claims.role !== "vendor" && claims.isVendor !== true)) {
-    throw new VendorCommercialValidationError(
-      "FORBIDDEN",
-      "Current Vendor identity cannot manage commercial authority.",
-    );
-  }
-};
-
-const assertVendorCapability = (
-  request: MiddlewareRequest,
-  capability: VendorCommercialCapability,
-): void => {
-  if (request.context.identity?.role !== "vendor") {
-    throw new VendorCommercialValidationError(
-      "FORBIDDEN",
-      `Current identity cannot use capability ${capability}.`,
-    );
-  }
-};
 
 const validateOperation = async (
   request: MiddlewareRequest,
   dependencies: VendorCommercialDependencies,
 ): Promise<VendorCommercialValidatedOperation> => {
-  await assertCurrentVendor(request, dependencies);
-  assertVendorCapability(request, "vendor.licenses.manage");
+  await assertCurrentVendorIdentity(request, dependencies, "vendor.licenses.manage");
   const path = relativePath(request);
   const context = commandContext(request);
   const instituteId = queryString(request.params.instituteId);
@@ -386,7 +353,7 @@ export const createVendorCommercialHandler = (
   middlewares: [
     createAuthenticationMiddleware(dependencies),
     createRoleAuthorizationMiddleware({
-      allowedRoles: ["vendor"],
+      allowedRoles: VENDOR_CAPABILITY_ROLES["vendor.licenses.manage"],
       forbiddenMessage: "Only Vendor operators can manage licensing authority.",
     }),
     createRequestValidationMiddleware({

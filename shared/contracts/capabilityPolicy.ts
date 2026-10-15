@@ -286,3 +286,12 @@ export const CAPABILITY_MATRIX = {
 } as const satisfies Record<string, CapabilityPolicyDefinition>;
 
 export type PortalCapability = keyof typeof CAPABILITY_MATRIX;
+
+// Role alone grants no Vendor authority when a marker/alias contradicts it or access is suspended.
+export function hasConsistentVendorClaims(claims: Record<string, unknown>): boolean {
+  return claims.role === "vendor" &&
+    (claims.userRole === undefined || claims.userRole === "vendor") &&
+    (claims.isVendor === undefined || claims.isVendor === true) &&
+    (claims.isSuspended === undefined || claims.isSuspended === false) &&
+    (claims.suspended === undefined || claims.suspended === false);
+}

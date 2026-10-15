@@ -35,11 +35,12 @@ test("backend CI aggregates every emulator-backed Functions suite", async () => 
   ).length;
 
   assert.equal(firestoreSuiteCount, 93);
-  assert.equal(explicitSuiteCount, 17);
+  assert.equal(explicitSuiteCount, 18);
   for (const file of ["vendorAuditReadModel.test.ts", "vendorSystemHealthReadModel.test.ts"]) {
     assert.ok(sourceFiles.includes(file), file);
   }
   assert.ok(externalFiles.includes("vendorAuditHealthApi.emulator.test.js"));
+  assert.ok(externalFiles.includes("vendorCapabilityAlignment.emulator.test.js"));
   assert.equal(
     rootPackage.scripts["test:emulators:ci"],
     "node scripts/run-emulator-integration-suite.mjs",

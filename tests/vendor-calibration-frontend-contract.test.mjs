@@ -85,7 +85,7 @@ test("mounted calibration clears stale authority and exposes no local audit or u
   const source = await read("apps/vendor/src/features/calibration/VendorCalibrationWorkspace.tsx");
   assert.doesNotMatch(source, /vendorCalibrationDataset|localStorage|appendCalibrationAudit|pushCalibrationVersion|strategyProfileParameters/);
   for (const requirement of ["invalidate(); setYear", "invalidate(); setTargets", "invalidate(); setDraft", "AbortController", "simulation.key === selectionKey",
-    "empty", "permission", "BWM-039", "BWM-040"]) {
+    "empty", "permission", "immediate selected-version publishing", "Audit workspace"]) {
     assert.ok((source + await read("apps/vendor/src/features/calibration/vendorCalibrationApi.ts")).includes(requirement), requirement);
   }
   assert.match(source, /<VendorCalibrationPublish/);
@@ -120,6 +120,7 @@ test("publish detail adapter requires exact pointer authority without rewriting 
   let options;
   class ApiClientError extends Error {}
   const api = load(await read("apps/vendor/src/features/institutes/vendorInstitutesApi.ts"), {
+    "../shared/vendorCommandRecovery": {withVendorCommandRecovery: (_family, transport) => transport},
     "../../../../../shared/services/apiClient": {ApiClientError},
     "../../../../../shared/services/portalIntegration": {getPortalApiClient: () => ({get: (_path, value) => {options = value;}})},
   });

@@ -1,6 +1,8 @@
 import {DecodedIdToken, UserRecord} from "firebase-admin/auth";
 import {createAuthenticationMiddleware} from "../middleware/auth";
 import {createRoleAuthorizationMiddleware} from "../middleware/role";
+import {assertCurrentVendorIdentity} from "../middleware/currentVendor";
+import {VENDOR_CAPABILITY_ROLES} from "../policy/vendorRolePolicy";
 import {Middleware, MiddlewareRejectionError, MiddlewareRequest} from "../types/middleware";
 import type {VendorAuditEventsQuery} from "../../../shared/contracts/vendorAuditHealth";
 
@@ -29,28 +31,11 @@ export const vendorAuditHealthMiddlewares = (
   },
   createAuthenticationMiddleware(dependencies),
   createRoleAuthorizationMiddleware({
-    allowedRoles: ["vendor"],
+    allowedRoles: VENDOR_CAPABILITY_ROLES[capability],
     forbiddenMessage: `Capability ${capability} requires Vendor authority.`,
   }),
   async (request, _response, next): Promise<void> => {
-    const identity = request.context.identity;
-    if (!identity || identity.role !== "vendor" || !identity.isVendor) {
-      throw new MiddlewareRejectionError("FORBIDDEN", "Vendor authority is required.");
-    }
-    let user: UserRecord;
-    try {
-      user = await dependencies.getUser(identity.uid);
-    } catch (error) {
-      if ((error as {code?: string}).code === "auth/user-not-found") {
-        throw new MiddlewareRejectionError("UNAUTHORIZED", "Current identity is unavailable.");
-      }
-      throw error;
-    }
-    const claims = user.customClaims ?? {};
-    if (user.disabled || claims.isSuspended || claims.role !== "vendor" ||
-      claims.isVendor === false) {
-      throw new MiddlewareRejectionError("FORBIDDEN", `Current identity cannot use capability ${capability}.`);
-    }
+    await assertCurrentVendorIdentity(request, dependencies, capability);
     await next();
   },
 ];

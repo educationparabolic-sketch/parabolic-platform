@@ -257,8 +257,8 @@ test("calibration permanent real authority, selection, recovery, denial and isol
       expect((await db.doc(privateStudent).get()).data()).toEqual({name: "DO_NOT_EXPOSE_CAL_STUDENT", answerMap: "SECRET_CAL_ANSWER"});
       expect((await db.doc(privateSession).get()).data()).toEqual({answerMap: "SECRET_CAL_SESSION"});
       for (const name of ["Create version", "Publish calibration", "Schedule activation", "Rollback"]) await expect(workspace.getByRole("button", {name, exact: true})).toBeDisabled();
-      await expect(workspace.getByLabel("Unavailable calibration capabilities")).toContainText("BWM-039");
-      await expect(workspace.getByLabel("Unavailable calibration capabilities")).toContainText("BWM-040");
+      await expect(workspace.getByLabel("Unavailable calibration capabilities")).toContainText("Publishing supports only immediate selected-version publishing and explicit inverse restoration.");
+      await expect(workspace.getByLabel("Unavailable calibration capabilities")).toContainText("Server audit history is available in the Audit workspace.");
       await expect(workspace).not.toContainText(/FORGED_LOCAL|North Star Academy|Riverdale Test Hub|SECRET_CAL/u);
       const storage = await page.evaluate(key => ({audit: localStorage.getItem(key), keys: [...Object.keys(localStorage), ...Object.keys(sessionStorage)].filter(k => /calibration|simulation|weights|targets/iu.test(k))}), auditKey);
       expect(storage.audit).toBe(initialAudit); expect(storage.keys).toEqual([auditKey]);

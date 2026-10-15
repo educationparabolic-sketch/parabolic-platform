@@ -81,7 +81,7 @@ function VendorIntelligenceAuthorityPage() {
           <UiStatCard title="Projected Institutes (6 months)" value={formatIntelligenceNumber(data.forecast.instituteAcquisitionProjection.projectedInstituteCount6Months)} />
           <UiStatCard title="Projected Active Students (6 months)" value={formatIntelligenceNumber(data.forecast.studentVolumeTrend.projectedActiveStudents6Months)} />
         </div>
-        <p>Upgrade probability unavailable. Infrastructure cost telemetry unavailable (BWM-040). Calibration impact remains BWM-038-owned.</p>
+        <p>Upgrade probability unavailable. Infrastructure cost telemetry unavailable. Selected-target calibration projection is available in Calibration; portfolio calibration impact is unavailable.</p>
       </section>
     </> : null}
     <footer className="vendor-intelligence-boundary"><strong>Aggregate-only data boundary</strong><span>Only complete snapshots and completed rollup-item summaries are read.</span></footer>

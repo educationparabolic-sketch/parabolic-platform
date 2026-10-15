@@ -1,3 +1,4 @@
+import { resolveVendorAccessContext } from "../../portals/vendorAccess";
 import { useEffect, useRef, useState } from "react";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import type { VendorCalibrationOperationResult, VendorCalibrationRolloutRequest, VendorCalibrationRollbackRequest, VendorCalibrationRolloutTarget } from "../../../../../shared/contracts/vendorCalibrationRollout";
@@ -26,7 +27,7 @@ export default function VendorCalibrationPublish(props: { versionId: string; tar
   const { session } = useAuthProvider();
   const uid = session.user?.uid;
   // Keying the inner component discards in-memory authority on an identity change.
-  return uid ? <Publish key={uid} uid={uid} {...props} /> : null;
+  return uid && resolveVendorAccessContext(session).canUseCapability("vendor.calibration.manage") ? <Publish key={uid} uid={uid} {...props} /> : null;
 }
 function Publish({ uid, versionId, targets, ready, onComplete }: { uid: string; versionId: string; targets: string[]; ready: boolean; onComplete: () => void }) {
   const storageKey = `vendor-calibration-command-v1:${uid}`;
@@ -141,6 +142,6 @@ function Publish({ uid, versionId, targets, ready, onComplete }: { uid: string; 
       {result.rollbackOperationId && <p>Inverse operation: {result.rollbackOperationId}</p>}
     </div>}
     <button disabled={busy || !terminal} onClick={() => { sessionStorage.removeItem(storageKey); setCommand(null); setResult(null); setFailure(null); setConfirmed(false); setAttempt(value => value + 1); }}>Start a new command after terminal status</button>
-    <p>Recovery storage contains only this Vendor's retry intent; receipts and business success are server authority. Unified audit remains BWM-040.</p>
+    <p>Recovery storage contains only this Vendor's retry intent; receipts and business success are server authority. Server audit events are available in the Audit workspace.</p>
   </section>;
 }

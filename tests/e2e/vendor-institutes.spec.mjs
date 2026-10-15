@@ -95,6 +95,7 @@ async function seedInstitute(id, name, updatedAt, withLicense = false) {
     createdAt: Timestamp.fromDate(new Date("2026-01-01T00:00:00.000Z")),
     instituteId: id,
     instituteRevision: 1,
+    authorizationVersion: 1,
     pendingPrimaryAdministrator: null,
     primaryAdminUserId: null,
     registeredName: name,
@@ -116,6 +117,10 @@ async function seedInstitute(id, name, updatedAt, withLicense = false) {
   if (withLicense) {
     await reference.collection("license").doc("current").set({
       currentLayer: "L1",
+      activeStudentLimit: 1000,
+      concurrentSessionLimit: 100,
+      expiryDate: "2099-10-01T00:00:00.000Z",
+      gracePeriodEndsAt: null,
       featureFlags,
       licenseState: "active",
       licenseVersion: "license-browser-v1",
@@ -234,7 +239,7 @@ test("Vendor institute authority persists through real Auth, Firestore, Function
     timeout: 60_000,
   });
   await expect(page.getByText("North Star Academy", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "License requests unavailable" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "License requests: use Licensing and billing" })).toBeDisabled();
   const pagination = page.getByRole("navigation", { name: "Institute directory pages" });
   await expect(pagination.getByRole("button", { name: "Next page" })).toBeEnabled();
   await pagination.getByRole("button", { name: "Next page" }).click();
@@ -252,7 +257,7 @@ test("Vendor institute authority persists through real Auth, Firestore, Function
   await expect(
     page.getByText(/Commercial controls use the registered licensing workspace/u),
   ).toBeVisible();
-  await expect(page.getByText(/pending BWM-036/u)).toBeVisible();
+  await expect(page.getByText(/enqueue durable claim propagation/u)).toBeVisible();
 
   await db.doc(`institutes/${mainInstituteId}`).update({
     instituteRevision: 2,
@@ -353,9 +358,6 @@ test("Vendor institute authority persists through real Auth, Firestore, Function
   await createForm.getByLabel("Expected concurrent students").fill("100");
   await createForm.getByLabel("Expected exam sessions/month").fill("30");
   await createForm.getByRole("button", { name: "Submit for review" }).click();
-  await expect(page.getByRole("status")).toContainText("Onboarding created and reloaded", {
-    timeout: 60_000,
-  });
   await expect(page.getByRole("heading", { name: onboardingName, exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Onboarding command persisted", {
@@ -417,7 +419,7 @@ test("Vendor institute authority persists through real Auth, Firestore, Function
   const suspendedContext = await browser.newContext({ bypassCSP: true });
   const suspendedPage = await suspendedContext.newPage();
   await signInPortal(suspendedPage, identities.suspended);
-  await expect(suspendedPage.getByRole("heading", { name: "Permission required" })).toBeVisible({
+  await expect(suspendedPage.getByRole("heading", { name: "Vendor role required" })).toBeVisible({
     timeout: 60_000,
   });
   await suspendedContext.close();

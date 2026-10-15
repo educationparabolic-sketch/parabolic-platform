@@ -9,6 +9,8 @@ import {
   setRequestData,
 } from "../middleware/framework";
 import {createRoleAuthorizationMiddleware} from "../middleware/role";
+import {assertCurrentVendorIdentity} from "../middleware/currentVendor";
+import {VENDOR_CAPABILITY_ROLES} from "../policy/vendorRolePolicy";
 import {buildSuccessResponse, sendErrorResponse} from "../services/apiResponse";
 import {adminSupportService} from "../services/adminSupport";
 import {
@@ -43,18 +45,10 @@ const operatorContext = async (
   request: MiddlewareRequest,
   dependencies: VendorSupportDependencies,
 ): Promise<VendorSupportResolvedContext> => {
-  const identity = request.context.identity;
-  if (!identity || identity.role !== "vendor" || !identity.isVendor) {
-    throw new AdminSupportValidationError("FORBIDDEN", "Vendor support authority is required.");
-  }
-  const user = await dependencies.getUser(identity.uid);
-  const claims = user.customClaims ?? {};
-  if (user.disabled || (claims.role !== "vendor" && claims.isVendor !== true)) {
-    throw new AdminSupportValidationError("FORBIDDEN", "Current Vendor identity cannot operate support tickets.");
-  }
+  const {user, actorId} = await assertCurrentVendorIdentity(request, dependencies, "vendor.support.manage");
   return {
     actorDisplayName: user.displayName?.trim() || user.email?.trim() || "Vendor Support",
-    actorId: identity.uid,
+    actorId,
     actorRole: "vendor",
     ipAddress: request.ip,
     userAgent: request.get("user-agent"),
@@ -88,7 +82,7 @@ export const createVendorSupportHandler = (
   middlewares: [
     createAuthenticationMiddleware(dependencies),
     createRoleAuthorizationMiddleware({
-      allowedRoles: ["vendor"],
+      allowedRoles: VENDOR_CAPABILITY_ROLES["vendor.support.manage"],
       forbiddenMessage: "Only Vendor support operators can access the support queue.",
     }),
     createRequestValidationMiddleware({

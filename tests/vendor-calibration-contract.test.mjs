@@ -21,10 +21,9 @@ test("calibration transport enforces current Vendor and safe disposable emulator
   assert.deepEqual(policyModule.exports.CAPABILITY_MATRIX["vendor.calibration.manage"], {
     allowedRoles: ["vendor"], minimumLicenseLayer: null, requiredFeatureFlags: [],
   });
-  assert.match(boundary, /allowedRoles:\s*\["vendor"\]/u);
-  for (const requirement of ["vendor.calibration.manage", "dependencies.getUser(identity.uid)",
-    "user.disabled", "claims.isSuspended", 'claims.role !== "vendor"', "claims.isVendor === false",
-    "assertExactCalibrationKeys", "MAX_CALIBRATION_INSTITUTES"]) assert.ok(boundary.includes(requirement), requirement);
+  assert.match(boundary, /allowedRoles:\s*VENDOR_CAPABILITY_ROLES\[VENDOR_CALIBRATION_CAPABILITY\]/u);
+  assert.match(boundary, /assertCurrentVendorIdentity\(request, dependencies, VENDOR_CALIBRATION_CAPABILITY\)/u);
+  for (const requirement of ["vendor.calibration.manage", "assertExactCalibrationKeys", "MAX_CALIBRATION_INSTITUTES"]) assert.ok(boundary.includes(requirement), requirement);
   for (const file of ["vendorCalibrationPush", "vendorCalibrationSimulation", "vendorCalibrationVersions", "vendorCalibrationOperations"]) {
     const source = await read(`functions/src/api/${file}.ts`);
     assert.ok(source.includes("calibrationMiddlewares("));

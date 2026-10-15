@@ -1,3 +1,4 @@
+import { withVendorCommandRecovery } from "../shared/vendorCommandRecovery";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import type {
@@ -519,7 +520,7 @@ function encodePathSegment(value: string): string {
   return encodeURIComponent(value);
 }
 
-export const vendorInstitutesApi = {
+const instituteTransport = {
   listInstitutes: (query: VendorInstituteListQuery, signal?: AbortSignal) =>
     apiClient.get<VendorInstituteListResult>("/vendor/institutes", {
       emptyResultIsReady: true,
@@ -620,6 +621,15 @@ export const vendorInstitutesApi = {
       },
     ),
 };
+
+export const vendorInstitutesApi = withVendorCommandRecovery("institutes", instituteTransport,
+  ["createInstitute", "updateInstitute", "transitionInstitute", "createOnboarding", "commandOnboarding", "commandAdministrator"],
+  async (call, receipt) => {
+    if (call.method === "createInstitute") return instituteTransport.getInstitute((receipt as VendorInstituteCreateReceipt).institute.instituteId);
+    if (call.method === "createOnboarding") return instituteTransport.getOnboarding((receipt as VendorOnboardingCreateReceipt).onboarding.onboardingId);
+    if (call.method === "commandOnboarding") return instituteTransport.getOnboarding(call.args[0] as string);
+    return instituteTransport.getInstitute(call.args[0] as string);
+  });
 
 export function classifyVendorInstituteFailure(error: unknown): VendorInstituteFailure {
   if (error instanceof ApiClientError) {

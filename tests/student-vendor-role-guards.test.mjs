@@ -56,7 +56,7 @@ test("Student and Vendor portal role checks derive from the canonical capability
     ]);
   const matrixModule = loadTypeScriptModule(matrixSource, matrixPath);
   const roleStateModule = {
-    resolveGlobalPortalState: ({ session }) => ({ role: session.idToken }),
+    resolveGlobalPortalState: ({ session }) => ({ role: session.idToken, permissions: {canAccessVendorPortal: session.idToken === "vendor"} }),
   };
   const resolveAccessDependency = (specifier) => {
     if (specifier.endsWith("shared/contracts/capabilityPolicy")) {
@@ -65,6 +65,7 @@ test("Student and Vendor portal role checks derive from the canonical capability
     if (specifier.endsWith("shared/services/globalPortalState")) {
       return roleStateModule;
     }
+    if (specifier.endsWith("shared/services/authProvider")) return {useAuthProvider: () => { throw new Error("Hook not called"); }};
     throw new Error(`Unexpected portal access dependency: ${specifier}`);
   };
   const studentAccess = loadTypeScriptModule(
@@ -170,6 +171,9 @@ test("protected routes deny authenticated wrong-role sessions and server role mi
       source += await readFile(join(apiDirectory, "vendorCalibrationBoundary.ts"), "utf8");
     }
     assert.match(source, /createAuthenticationMiddleware\(/u);
-    assert.match(source, /allowedRoles:\s*\["vendor"\]/u);
+    if (source.includes("VENDOR_CAPABILITY_ROLES")) {
+      assert.match(source, /allowedRoles:\s*VENDOR_CAPABILITY_ROLES\[/u);
+      assert.match(source, /assertCurrentVendorIdentity/u);
+    } else assert.match(source, /allowedRoles:\s*\["vendor"\]/u);
   }
 });

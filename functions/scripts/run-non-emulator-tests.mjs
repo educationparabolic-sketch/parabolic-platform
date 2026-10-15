@@ -36,6 +36,7 @@ const selectedSourceSuites = [
   "cdnCachePolicy.test",
   "cdnMonitoring.test",
   "cursorPagination.test",
+  "currentVendor.test",
   "customClaimSynchronization.test",
   "examSessionActivateApi.test",
   "examSessionEntryApi.test",

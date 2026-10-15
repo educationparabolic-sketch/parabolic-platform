@@ -15,6 +15,7 @@ import {studentOnboardingActivationService} from "../services/studentOnboardingA
 import {
   InstituteAuthorityEnforcementError,
 } from "../services/instituteAuthorityEnforcement";
+import {hasConsistentVendorClaims} from "../policy/vendorRolePolicy";
 
 export interface AuthenticationMiddlewareDependencies {
   verifyIdToken: (idToken: string) => Promise<DecodedIdToken>;
@@ -223,7 +224,7 @@ const buildIdentityContext = (
     ),
     instituteId: resolveInstituteClaim(decodedToken),
     isSuspended: Boolean(decodedToken.isSuspended),
-    isVendor: role === "vendor" || Boolean(decodedToken.isVendor),
+    isVendor: hasConsistentVendorClaims(decodedToken),
     licenseLayer,
     licenseState: resolveLicenseState(decodedToken),
     licenseVersion: normalizeNonEmptyString(decodedToken.licenseVersion),
@@ -258,6 +259,10 @@ export const createAuthenticationMiddleware = (
       "FORBIDDEN",
       SUSPENDED_ACCOUNT_MESSAGE,
     );
+  }
+  if ((decodedToken.isVendor === true && normalizeRole(decodedToken) !== "vendor") ||
+    (normalizeRole(decodedToken) === "vendor" && !hasConsistentVendorClaims(decodedToken))) {
+    throw new MiddlewareRejectionError("FORBIDDEN", "Vendor role claims are inconsistent.");
   }
 
   const identity = buildIdentityContext(decodedToken);

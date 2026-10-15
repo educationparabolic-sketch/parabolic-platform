@@ -34,6 +34,13 @@ function loadModule(source) {
     if (specifier.endsWith("frontendEnvironment")) {
       return { getFrontendEnvironment: () => "development" };
     }
+    if (specifier.endsWith("capabilityPolicy")) {
+      const policySource = require("node:fs").readFileSync(join(rootDirectory, "shared/contracts/capabilityPolicy.ts"), "utf8");
+      const policyOutput = typescript.transpileModule(policySource, {compilerOptions: {module: typescript.ModuleKind.CommonJS}}).outputText;
+      const policy = {exports: {}};
+      new Function("exports", "module", policyOutput)(policy.exports, policy);
+      return policy.exports;
+    }
     throw new Error(`Unexpected dependency: ${specifier}`);
   });
   return loaded.exports;
@@ -138,7 +145,7 @@ test("elapsed expiry and grace reduce browser authority to L0", () => {
   }
 });
 
-test("Vendor remains a global identity boundary outside institute suspension and license signals", () => {
+test("active Vendor remains outside institute suspension and license signals", () => {
   const state = resolveGlobalPortalState({
     now,
     portal: "vendor",
@@ -146,7 +153,7 @@ test("Vendor remains a global identity boundary outside institute suspension and
       authorityIssue: "institute_suspended",
       idToken: token({
         ...baseClaims,
-        isSuspended: true,
+        isSuspended: false,
         role: "vendor",
       }),
       status: "authenticated",
@@ -157,4 +164,12 @@ test("Vendor remains a global identity boundary outside institute suspension and
   assert.equal(state.isSuspended, false);
   assert.equal(state.authorityIssue, null);
   assert.equal(state.authorizationVersion, null);
+});
+
+test("a Vendor account's own suspension blocks global portal authority", () => {
+  const state = resolveGlobalPortalState({
+    now, portal: "vendor", session: {status: "authenticated", idToken: token({role: "vendor", isSuspended: true})},
+  });
+  assert.equal(state.isSuspended, true);
+  assert.equal(state.permissions.canAccessVendorPortal, false);
 });

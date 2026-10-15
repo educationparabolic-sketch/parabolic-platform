@@ -1,8 +1,8 @@
 # Frontend API Call Inventory
 
-Status: current frontend inventory and canonical-route authority through BWM-040 verified local audit/health closeout; production NO_GO
+Status: current frontend inventory and canonical-route authority through BWM-041 verified local Vendor acceptance; production NO_GO
 
-Inventory date: 2026-10-14
+Inventory date: 2026-10-15
 
 Scope: executable HTTP calls in `apps/admin/src`, `apps/student/src`, `apps/exam/src`, and `apps/vendor/src`
 
@@ -25,8 +25,10 @@ An inventory entry is a unique portal, HTTP method, and normalized path tuple. R
 - HTTP method and path together identify a route. This permits `GET` and `POST` to share `/api/v1/admin/tests` while dispatching to different operations.
 - Parameter names use braces in documentation. Clients must URL-encode actual `testId` and `sessionId` path segments.
 - Query parameters remain query parameters and are not repeated in the route template.
-- Tenant identifiers remain in the authenticated request contract rather than the public path. No canonical route exposes an institute ID solely for dispatch.
+- Institute-portal tenant authority comes from verified identity and stored ownership. Reviewed global Vendor control-plane routes use explicit institute/resource path targets, authorized by the current Vendor identity and exact capability; browser tenant, actor or role fields never replace that authority or retarget the path. Those existing targets are not institute-role tenant-bypass grants.
 - Canonical routes have no trailing slash. The BWM-003 gateway dispatches exact manifest entries, and the BWM-004 Hosting configuration routes `/api/v1/**` to that gateway before SPA fallback.
+
+BWM-041 reconciles all ten canonical Vendor frontend routes and seven shell registrations to 55 action families/319 controls. Existing live adapters remain the sole business transports; no canonical API tuple is added. Complete original institute/commercial intents support reviewed exact replay through those same adapters, with owning reloads and UID-bound shared authentication. Unsupported notifications/compatibility/history/monitoring modes remain explicit and fixture showcases are DEV-only lazy branches; production fixture-mode builds exclude their payloads. `vendorActionLedger.ts`, `vendorControlLedger.ts`, `tests/vendor-acceptance-coverage.test.mjs` and the guarded local acceptance matrix supply permanent proof ownership. Legacy unmapped/direct cross-portal review remains BWM-047-owned.
 
 ## Classification policy
 

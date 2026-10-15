@@ -16,7 +16,7 @@ test("permanent calibration acceptance is an isolated real production-build emul
 
 test("acceptance asserts exact model/selection/distribution/schema and all disabled lifecycle modes", async () => {
   const source = await read("tests/e2e/vendor-calibration-acceptance.spec.mjs");
-  for (const value of ["50.00", "40.00", "64.29", "28.57", "100.00", "25.00", "20.00", "-1 / -20", "summaryDocumentCount: 5", "student_year_summaries", "phaseWeights", "toHaveCount(25)", "toHaveCount(2)", "missing_year", "actorId: \"forged\"", "strategyProfileParameters", "[200, 400, 401, 403, 500]", "Create version", "Publish calibration", "Schedule activation", "Rollback", "BWM-039", "BWM-040"]) assert.ok(source.includes(value), value);
+  for (const value of ["50.00", "40.00", "64.29", "28.57", "100.00", "25.00", "20.00", "-1 / -20", "summaryDocumentCount: 5", "student_year_summaries", "phaseWeights", "toHaveCount(25)", "toHaveCount(2)", "missing_year", "actorId: \"forged\"", "strategyProfileParameters", "[200, 400, 401, 403, 500]", "Create version", "Publish calibration", "Schedule activation", "Rollback", "Publishing supports only immediate selected-version publishing and explicit inverse restoration.", "Server audit history is available in the Audit workspace."]) assert.ok(source.includes(value), value);
 });
 
 test("rollout acceptance uses guarded real SDK boundaries and drops only actual committed HTTP responses", async () => {

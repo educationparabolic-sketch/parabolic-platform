@@ -84,12 +84,24 @@ async function signInPortal(page, identity, targetPath = "/vendor/licensing") {
   await page.getByRole("button", { name: "Login", exact: true }).click();
 }
 
+async function replayCapturedCommercial(page, method, targets = []) {
+  const panel = page.getByRole("alert", { name: "Captured Vendor command recovery" });
+  const selector = panel.getByLabel("Stored retry intent");
+  if (await selector.count()) {
+    const captured = await selector.locator("option").evaluateAll((options, expected) => options.map(option => JSON.parse(option.value)).find(call => call.method === expected.method && JSON.stringify(call.args.slice(0, -1)) === JSON.stringify(expected.targets)), {method, targets});
+    expect(captured, "reviewed retry must match the exact intended method and tenant/resource targets").toBeTruthy();
+    await selector.selectOption(JSON.stringify(captured));
+  }
+  await panel.getByRole("checkbox").check();
+  await panel.getByRole("button", { name: "Retry captured commercial command", exact: true }).click();
+}
+
 async function loginCommercial(page, identity = identities.vendor) {
   await signInPortal(page, identity);
   await expect(page.getByRole("heading", { name: "Licensing and billing" })).toBeVisible({
     timeout: 60_000,
   });
-  await expect(page.getByText(/pending BWM-036/u)).toBeVisible();
+  await expect(page.getByText(/Claim propagation is asynchronous/u)).toBeVisible();
 }
 
 function timestampAt(offsetMinutes) {
@@ -385,7 +397,7 @@ test("Vendor commercial authority persists through real Auth, Firestore, Functio
     timeout: 60_000,
   });
   await expect(page.getByText("browser-proof-plan-v2", { exact: true })).toBeVisible();
-  await catalogForm.getByRole("button", { name: "Publish through provider and reload" }).click();
+  await replayCapturedCommercial(page, "commandLicenseCatalog");
   await expect(page.getByRole("heading", { name: "Payment provider unavailable" })).toBeVisible({
     timeout: 60_000,
   });
@@ -412,7 +424,7 @@ test("Vendor commercial authority persists through real Auth, Firestore, Functio
   await expect(page.getByRole("heading", { name: "Payment provider unavailable" })).toBeVisible({
     timeout: 60_000,
   });
-  await subscriptionForm.getByRole("button", { name: "Run command and reload" }).click();
+  await replayCapturedCommercial(page, "commandSubscription", [mainInstituteId]);
   await expect(page.getByRole("heading", { name: "Payment provider unavailable" })).toBeVisible({
     timeout: 60_000,
   });
@@ -435,7 +447,7 @@ test("Vendor commercial authority persists through real Auth, Firestore, Functio
   await page.getByRole("button", { name: manualInvoiceId, exact: true }).click();
   await page.getByRole("button", { name: "Resend invoice" }).click();
   await expect(page.getByRole("status")).toContainText(
-    "Backend-derived billing communication queued and invoice reloaded",
+    "Billing communication persisted; the server receipt reports its authoritative delivery state",
     { timeout: 60_000 },
   );
   const queuedCommunication = await db
@@ -517,7 +529,7 @@ test("Vendor commercial authority persists through real Auth, Firestore, Functio
   await expect(page.getByRole("heading", { name: "Payment provider unavailable" })).toBeVisible({
     timeout: 60_000,
   });
-  await invoiceCommandForm.getByRole("button", { name: "Run invoice command and reload" }).click();
+  await replayCapturedCommercial(page, "commandInvoice", [mainInstituteId, stripeInvoiceId]);
   const stripeCommandQuery = db
     .collection(`institutes/${mainInstituteId}/commercialCommands`)
     .where("invoiceId", "==", stripeInvoiceId);
@@ -541,8 +553,7 @@ test("Vendor commercial authority persists through real Auth, Firestore, Functio
   await expect(page.getByRole("heading", { name: "Payment provider unavailable" })).toBeVisible({
     timeout: 60_000,
   });
-  await page.getByRole("row").filter({ hasText: retryEventId })
-    .getByRole("button", { name: "Retry reconciliation" }).click();
+  await replayCapturedCommercial(page, "retryPaymentEvent", [retryEventId]);
   await expect.poll(async () => {
     const snapshot = await db.collection("vendor/stripeEvents/commands").get();
     return snapshot.docs[0]?.get("attemptCount");
@@ -584,7 +595,7 @@ test("Vendor commercial authority persists through real Auth, Firestore, Functio
   const suspendedPage = await suspendedContext.newPage();
   suspendedPage.setDefaultTimeout(60_000);
   await signInPortal(suspendedPage, identities.suspended);
-  await expect(suspendedPage.getByRole("heading", { name: "Permission required" })).toBeVisible({
+  await expect(suspendedPage.getByRole("heading", { name: "Vendor role required" })).toBeVisible({
     timeout: 60_000,
   });
   await suspendedContext.close();

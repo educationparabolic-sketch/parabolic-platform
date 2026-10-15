@@ -1,3 +1,4 @@
+import { withVendorCommandRecovery } from "../shared/vendorCommandRecovery";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 import type {
@@ -547,7 +548,7 @@ function encode(value: string): string {
 
 const readyOptions = { emptyResultIsReady: true, handledFailureIsReady: true } as const;
 
-export const vendorCommercialApi = {
+const commercialTransport = {
   listLicenseRequests: (query: VendorLicenseRequestListQuery, signal?: AbortSignal) =>
     apiClient.get<VendorLicenseRequestListResult>("/vendor/license-requests", {
       ...readyOptions,
@@ -635,6 +636,16 @@ export const vendorCommercialApi = {
       { ...readyOptions, body: intent, responseAdapter: parsePaymentEventReceipt },
     ),
 };
+
+export const vendorCommercialApi = withVendorCommandRecovery("commercial", commercialTransport,
+  ["decideLicenseRequest", "commandLicenseCatalog", "commandSubscription", "commandInvoice", "communicateInvoice", "commandOfflinePayment", "retryPaymentEvent"],
+  async (call) => {
+    if (call.method === "commandLicenseCatalog") return commercialTransport.getLicenseCatalog();
+    if (call.method === "decideLicenseRequest") return commercialTransport.getLicenseRequest(call.args[0] as string, call.args[1] as string);
+    if (call.method === "commandSubscription") return commercialTransport.getSubscription(call.args[0] as string);
+    if (call.method === "retryPaymentEvent") return commercialTransport.listPaymentEvents({ limit: 25 });
+    return commercialTransport.getInvoice(call.args[0] as string, call.args[1] as string);
+  });
 
 export function createCommercialIdempotencyKey(): string {
   return crypto.randomUUID();

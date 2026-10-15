@@ -92,7 +92,7 @@ export const VENDOR_PRIMARY_NAVIGATION: PortalNavigationItem[] = [
   {
     path: "/vendor/overview",
     label: "Overview",
-    summary: "Executive platform snapshot using aggregated vendor metrics.",
+    summary: "Completed portfolio snapshots and bounded server source evidence.",
   },
   {
     path: "/vendor/institutes",
@@ -107,22 +107,22 @@ export const VENDOR_PRIMARY_NAVIGATION: PortalNavigationItem[] = [
   {
     path: "/vendor/calibration",
     label: "Calibration",
-    summary: "Global calibration parameters, simulation, and rollout controls.",
+    summary: "Version review, read-only projection and selected-target publishing.",
   },
   {
     path: "/vendor/intelligence",
     label: "Intelligence",
-    summary: "Cross-institute intelligence and macro behavioral trends.",
+    summary: "Completed monthly portfolio intelligence; unsupported behavior signals unavailable.",
   },
   {
     path: "/vendor/system-health",
     label: "System Health",
-    summary: "Platform runtime status, cost monitoring, and operational checks.",
+    summary: "Release identity and persisted queue evidence; cloud costs and monitoring unavailable.",
   },
   {
     path: "/vendor/audit",
     label: "Audit",
-    summary: "Immutable vendor activity and governance events.",
+    summary: "Filtered server audit sources with page-local search.",
   },
 ];
 

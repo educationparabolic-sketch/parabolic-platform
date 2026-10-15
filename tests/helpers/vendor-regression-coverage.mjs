@@ -1,0 +1,25 @@
+// Reviewed acceptance partitions. New actions require a deliberate proof decision.
+// These are unit/contracts, not claims of executing the later combined browser matrix.
+export const groups = [
+  {actions: ["shell.login", "shell.signout", "shell.presentation"], suites: ["student-vendor-role-guards", "vendor-capability-alignment", "api-auth-scope"]},
+  {actions: ["shell.notifications", "shell.notification_navigation", "compatibility.calibration", "fixture.notifications", "unsupported.capabilities"], suites: ["vendor-action-ledger", "vendor-fixture-artifacts"]},
+  {actions: ["institutes.read", "institutes.local", "institutes.requests_unavailable", "institutes.profile", "institutes.lifecycle", "institutes.administrator", "onboarding.create", "onboarding.command", "onboarding.provision", "institutes.recovery"], suites: ["vendor-institutes-frontend-contract", "vendor-authority-regressions", "vendor-command-recovery", "api-auth-scope"]},
+  {actions: ["commercial.read", "commercial.local", "commercial.decision", "commercial.catalog_publish", "commercial.catalog_retire", "commercial.subscription", "commercial.invoice", "commercial.communication", "commercial.offline_record", "commercial.offline_review", "commercial.event_retry", "commercial.external", "commercial.recovery"], suites: ["vendor-commercial-frontend-contract", "vendor-authority-regressions", "vendor-command-recovery", "api-auth-scope"]},
+  {actions: ["calibration.read", "calibration.local", "calibration.simulate", "calibration.preconditions", "calibration.confirm", "calibration.publish", "calibration.rollback", "calibration.status", "calibration.replay", "calibration.reset"], suites: ["vendor-calibration-frontend-contract", "vendor-calibration-acceptance-contract"]},
+  {actions: ["intelligence.read", "intelligence.local"], suites: ["vendor-intelligence-frontend-contract", "vendor-intelligence-acceptance-contract"]},
+  {actions: ["audit.read", "audit.local", "health.read", "overview.navigation", "overview.read", "audit_health.retry"], suites: ["vendor-audit-health-frontend-contract"]},
+  {actions: ["fixture.institutes", "fixture.licensing", "fixture.overview", "fixture.intelligence", "fixture.audit", "fixture.health"], suites: ["vendor-action-ledger", "vendor-fixture-artifacts"]},
+];
+export const suites = ["vendor-action-ledger", "vendor-capability-alignment", "student-vendor-role-guards", "api-auth-scope",
+  "vendor-command-recovery", "vendor-authority-regressions", "vendor-fixture-artifacts", "vendor-institutes-frontend-contract",
+  "vendor-commercial-frontend-contract", "vendor-calibration-frontend-contract", "vendor-calibration-acceptance-contract",
+  "vendor-intelligence-frontend-contract", "vendor-intelligence-acceptance-contract", "vendor-audit-health-frontend-contract"];
+export const obligations = {
+  "vendor-action-ledger": ["every canonical Vendor route and all seventeen router registrations have explicit ownership", "drift gate rejects new, removed, renamed and reassigned actions, controls and routes", "fixture-only bindings retain explicit selectors and supported live mounts"],
+  "vendor-capability-alignment": ["canonical metadata, navigation and admission enforce each owning capability including composed reads", "browser authority fails closed for token contradictions, suspension, wrong roles and revoked sessions"],
+  "api-auth-scope": ["401 cannot refresh another user's credentials and resend an earlier mutation", "identity changes while resolving a token stop dispatch, and late success cannot supply new-user authority"],
+  "vendor-command-recovery": ["uncertain completion freezes complete tenant-qualified intent and survives reload without automatic replay", "hostile recovery, storage failure and actor changes cannot silently dispatch or replace reviewed intent", "identical resource IDs in different institutes cannot collide in exact commercial recovery", "denial of a later retry cannot prove that an earlier uncertain command never committed"],
+  "vendor-authority-regressions": ["directory distinguishes loading, verified empty and failure; superseded filters cannot restore old rows", "detail aborts superseded targets and ignores late success, late rejection and unmounted completions", "committed profile plus failed reconciliation never reports success; synchronous handler exclusion survives render delay", "onboarding selection ignores old detail responses and failed selected loads cannot fabricate an empty application", "commercial distinguishes failed partial snapshots from verified empty across all five workspace views", "commercial same resource ID in two institutes retains latest selected authority and suppresses late tenant errors", "Audit cursor navigation retains Previous history while query-keyed reads replace the page"],
+  "vendor-fixture-artifacts": ["production Vendor artifacts exclude fixture authority even when fixture mode is requested"],
+  "vendor-audit-health-frontend-contract": ["authority hooks hide old query/session data and ignore late success or failure after abort"],
+};

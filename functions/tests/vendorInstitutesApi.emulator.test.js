@@ -66,12 +66,22 @@ test("Vendor routes enforce Auth and execute pagination, replay, race, lifecycle
       createdAt: Timestamp.fromDate(new Date("2026-09-01T00:00:00.000Z")),
       instituteId,
       instituteRevision: 1,
+      authorizationVersion: 1,
+      licenseVersion: "vendor-api-fixture-v1",
       registeredName: name,
       settingsRevision: 0,
       status: "active",
       updatedAt: Timestamp.fromDate(new Date(updatedAt)),
       vendorFilterKeys: [`query=${name.toLowerCase()}`],
       vendorLifecycleState: "active",
+      vendorLicenseLayer: "L0",
+    });
+    await firestore.doc(`institutes/${instituteId}/license/current`).set({
+      currentLayer: "L0", licenseState: "active", licenseVersion: "vendor-api-fixture-v1",
+      planId: "diagnostic-monthly",
+      expiryDate: "2099-10-01T00:00:00.000Z", gracePeriodEndsAt: null,
+      activeStudentLimit: 100, concurrentSessionLimit: 20,
+      featureFlags: {adaptivePhase: false, controlledMode: false, governanceAccess: false, hardMode: false, riskOverview: false},
     });
   };
 

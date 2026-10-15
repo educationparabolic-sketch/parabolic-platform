@@ -2,7 +2,7 @@
 
 Status: canonical route and response-envelope contract
 
-Last reconciled: 2026-10-14 (`BWM-040` verified local audit/health closeout; production NO_GO)
+Last reconciled: 2026-10-15 (`BWM-041` verified local Vendor acceptance; production NO_GO)
 
 ## Sources of truth
 
@@ -21,6 +21,17 @@ registered aggregate-intelligence GET reads requiring current Vendor Auth and
 Canonical accounting is 112 routes: 107 implemented, zero incompatible, zero
 missing routes, and five retired; 60 HTTP exports map through 48
 gateway handlers.
+
+BWM-041's current-identity alignment uses one shared fresh-Auth guard across
+the six existing Vendor boundary families (all 41 implemented Vendor routes).
+Verified role and current role must be Vendor; disabled, demoted, contradictory
+marker/alias or either own suspension claim fails closed. Capability ownership
+is mirrored from the canonical policy and contract-tested. Verified UID owns
+the actor and explicit server path parameters own cross-institute targets;
+browser authority fields do not override either. No route or payload schema
+changes, new roles or support workspace are introduced.
+
+BWM-041 adds no public route, request/response schema, writer, collection, index or schedule. The 41 implemented Vendor routes and 14 existing direct exports retain their boundaries. Mounted actions consume those APIs or explicitly report unsupported authority; no Vendor support UI or new internal-team role is implied. Institute/commercial command recovery retains a bounded UID/tab-local complete original intent for reviewed replay through the existing strict adapters, including targets, UUID and optimistic preconditions. This local intent is not a receipt, paid state, role grant or server persistence schema. Only a validated server receipt and successful owning read can reconcile completion; queued delivery, propagation, provider failure and purge reservation do not imply completed effects. The shared authenticated client binds the starting SDK UID across token lookup, 401 refresh/retry and response acceptance. The typed ledgers, module registry and permanent local matrix name exact proof ownership; deployed/provider/security-header qualification remains separate.
 
 If prose and the typed manifest disagree about a route key or status, the typed manifest must be corrected and the documentation reconciled in the same change.
 

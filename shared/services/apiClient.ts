@@ -160,6 +160,11 @@ async function resolveToken(skipAuth?: boolean): Promise<string | null> {
   return getIdToken(currentUser, false);
 }
 
+function currentAuthUid(): string | null {
+  try { return getFirebaseAuth().currentUser?.uid ?? null; }
+  catch { return null; }
+}
+
 async function refreshToken(user: User | null): Promise<string | null> {
   if (!user) {
     return null;
@@ -220,6 +225,12 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
     const policy = toRetryPolicy(config, options.retry);
     const requestPath = ensureLeadingSlash(path);
     const requestUrl = resolveUrl(baseUrl, requestPath, options.query);
+    const requestAuthUid = currentAuthUid();
+    const assertAuthScope = () => {
+      if (!options.skipAuth && currentAuthUid() !== requestAuthUid) {
+        throw new ApiClientError("Authentication changed during the request. Reload current authority.", 0, "AUTH_SCOPE_CHANGED", null);
+      }
+    };
 
     for (let attempt = 1; attempt <= policy.maxAttempts; attempt += 1) {
       const context: ApiRequestContext = {
@@ -232,7 +243,9 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
       let payload: unknown = null;
 
       try {
+        assertAuthScope();
         let token = await resolveToken(options.skipAuth);
+        assertAuthScope();
 
         const requestHeaders = new Headers({
           "Content-Type": "application/json",
@@ -253,6 +266,7 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
         });
 
         payload = await readResponseBody(response);
+        assertAuthScope();
 
         let currentUser: User | null = null;
         try {
@@ -265,6 +279,7 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
           try {
             token = await refreshToken(currentUser);
           } catch (error) {
+            assertAuthScope();
             const signal = buildFirebaseRefreshAuthoritySignal(error, token);
             if (signal) {
               publishAuthAuthoritySignal(signal);
@@ -272,6 +287,7 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
             throw error;
           }
           if (token) {
+            assertAuthScope();
             requestHeaders.set("Authorization", `Bearer ${token}`);
             response = await fetch(requestUrl, {
               method,
@@ -280,6 +296,7 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
               body: options.body === undefined ? undefined : JSON.stringify(options.body),
             });
             payload = await readResponseBody(response);
+            assertAuthScope();
           }
         }
 

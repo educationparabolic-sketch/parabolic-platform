@@ -14,10 +14,25 @@ const explicitVendorTenantBypasses = new Set([
   "adminGovernanceTransport.ts",
 ]);
 
+const sharedVendorBoundaries = new Set([
+  "vendorAuditHealthBoundary.ts", "vendorCalibrationBoundary.ts", "vendorIntelligenceReadBoundary.ts",
+  "vendorInstitutes.ts", "vendorCommercial.ts", "vendorSupport.ts",
+]);
+function isReviewedSharedVendorBoundary(fileName, source) {
+  if (!/allowedRoles:\s*VENDOR_CAPABILITY_ROLES\[/u.test(source)) return false;
+  assert.ok(sharedVendorBoundaries.has(fileName), `${fileName} needs explicit global-boundary review`);
+  assert.match(source, /from "\.\.\/policy\/vendorRolePolicy"/u);
+  assert.match(source, /from "\.\.\/middleware\/currentVendor"/u);
+  assert.match(source, /await assertCurrentVendorIdentity\(request, dependencies,/u);
+  assert.doesNotMatch(source, /allowVendorBypass:\s*true/u);
+  return true;
+}
+
 test("every authenticated institute-scoped API has a fail-closed tenant guard", async () => {
   const fileNames = (await readdir(apiDirectory)).filter((fileName) => fileName.endsWith(".ts"));
   let protectedApiCount = 0;
   let tenantScopedApiCount = 0;
+  const seenSharedVendorBoundaries = new Set();
 
   for (const fileName of fileNames) {
     const source = await readFile(join(apiDirectory, fileName), "utf8");
@@ -26,7 +41,9 @@ test("every authenticated institute-scoped API has a fail-closed tenant guard", 
     }
 
     protectedApiCount += 1;
-    const isVendorOnly = /allowedRoles:\s*\["vendor"\]/u.test(source);
+    const isSharedVendor = isReviewedSharedVendorBoundary(fileName, source);
+    if (isSharedVendor) seenSharedVendorBoundaries.add(fileName);
+    const isVendorOnly = /allowedRoles:\s*\["vendor"\]/u.test(source) || isSharedVendor;
     if (isVendorOnly) {
       assert.doesNotMatch(
         source,
@@ -61,6 +78,7 @@ test("every authenticated institute-scoped API has a fail-closed tenant guard", 
     );
   }
 
+  assert.deepEqual([...seenSharedVendorBoundaries].sort(), [...sharedVendorBoundaries].sort());
   assert.equal(protectedApiCount, 51);
   assert.equal(tenantScopedApiCount, 39);
   for (const fileName of ["adminStudentDataExport.ts", "adminStudentSoftDelete.ts"]) {
@@ -131,4 +149,13 @@ test("staff-selected student IDs are verified inside the authenticated institute
     assert.match(source, /STUDENTS_COLLECTION/u, `${fileName} must scope through students`);
     assert.match(source, existenceCheck, `${fileName} must reject an unknown target student`);
   }
+});
+
+
+test("shared global Vendor classification rejects removed fresh guards and unreviewed boundaries", async () => {
+  const source = await readFile(join(apiDirectory, "vendorAuditHealthBoundary.ts"), "utf8");
+  assert.equal(isReviewedSharedVendorBoundary("vendorAuditHealthBoundary.ts", source), true);
+  assert.throws(() => isReviewedSharedVendorBoundary("newUnreviewedBoundary.ts", source));
+  assert.throws(() => isReviewedSharedVendorBoundary("vendorAuditHealthBoundary.ts", source.replace("await assertCurrentVendorIdentity(", "await removedFreshGuard(")));
+  assert.throws(() => isReviewedSharedVendorBoundary("vendorAuditHealthBoundary.ts", source.replace("../policy/vendorRolePolicy", "../policy/unreviewedRoles")));
 });
