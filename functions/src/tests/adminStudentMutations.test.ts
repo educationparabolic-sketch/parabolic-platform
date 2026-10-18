@@ -614,11 +614,24 @@ test("photo review binds decision to the captured identity-photo version", async
   const instituteId = "inst-bwm-026-photo";
   const studentId = "student-bwm-026-photo";
   const capturedAt = Timestamp.fromDate(new Date("2026-08-31T09:15:00.000Z"));
+  const photoId = "photo_" + "a".repeat(40);
+  const expiresAt = Timestamp.fromMillis(capturedAt.toMillis() + 90 * 86400000);
   await prepareInstitute(instituteId, [{
+    identityPhotoId: photoId,
+    identityPhotoConsentState: "granted",
+    identityPhotoConsentPolicyVersion: "student-identity-photo-v1",
+    identityPhotoConsentedAt: capturedAt,
+    identityPhotoExpiresAt: expiresAt,
     identityPhotoCapturedAt: capturedAt,
     identityPhotoVerified: false,
     studentId,
   }]);
+  await firestore.doc(`institutes/${instituteId}/identityPhotos/${photoId}`).set({
+    schemaVersion: 1, photoId, studentId, studentUid: studentId,
+    idempotencyKeyHash: "a".repeat(64), requestFingerprint: "b".repeat(64),
+    state: "active", consentPolicyVersion: "student-identity-photo-v1",
+    committedAt: capturedAt, consentedAt: capturedAt, expiresAt,
+  });
   const {calls, service} = createService();
 
   try {
@@ -626,9 +639,10 @@ test("photo review binds decision to the captured identity-photo version", async
       ...authorityInput(instituteId),
       body: {
         decision: "verified",
+        expectedPhotoId: photoId,
         expectedPhotoCapturedAt: "2026-08-30T09:15:00.000Z",
         expectedVersion: 1,
-        idempotencyKey: "photo-stale-bwm-026",
+        idempotencyKey: "00000000-0000-4000-8000-000000000025",
       },
       studentId,
     });
@@ -638,9 +652,10 @@ test("photo review binds decision to the captured identity-photo version", async
       ...authorityInput(instituteId),
       body: {
         decision: "verified",
+        expectedPhotoId: photoId,
         expectedPhotoCapturedAt: capturedAt.toDate().toISOString(),
         expectedVersion: 1,
-        idempotencyKey: "photo-verified-bwm-026",
+        idempotencyKey: "00000000-0000-4000-8000-000000000026",
         reason: "Identity matched enrollment record",
       },
       studentId,

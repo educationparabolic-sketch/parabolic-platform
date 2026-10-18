@@ -61,6 +61,7 @@ export interface SessionTokenClaims {
 }
 
 export interface SessionDocumentInitializationContext {
+  solutionSnapshot: import("../services/studentSolutionSnapshot").StudentSolutionSnapshot;
   calibrationVersion: string;
   calibrationSnapshot?: import("../../../shared/contracts/calibrationConsumer")
     .FrozenCalibrationSource;
@@ -125,6 +126,7 @@ export interface SessionQuestionTimeRecord {
 export type SessionQuestionTimeMap = Record<string, SessionQuestionTimeRecord>;
 
 export interface SessionDocumentInitializationRecord {
+  solutionSnapshot: import("../services/studentSolutionSnapshot").StudentSolutionSnapshot;
   calibrationModel?: "risk_projection_v1";
   answerMap: Record<string, unknown>;
   calibrationVersion: string;

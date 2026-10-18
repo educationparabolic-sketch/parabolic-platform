@@ -562,6 +562,12 @@ export const API_ROUTE_MANIFEST: readonly ApiRouteManifestEntry[] = [
     "adminSupport",
     "planned",
   ),
+  // BWM-042 secured transport; mounted callers are adopted in the next substep.
+  defineRoute(
+    "ADM-61", "admin", "GET",
+    "/admin/students/{studentId}/identity-photo/{photoId}/media",
+    "implemented", "adminStudentIdentityPhotoMedia", "planned",
+  ),
   defineRoute(
     "STU-01",
     "student",
@@ -611,6 +617,36 @@ export const API_ROUTE_MANIFEST: readonly ApiRouteManifestEntry[] = [
     "examStart",
   ),
   defineRoute(
+    "STU-07", "student", "GET",
+    "/student/profile",
+    "implemented", "studentProfile", "planned",
+  ),
+  defineRoute(
+    "STU-08", "student", "PATCH",
+    "/student/profile/preferences",
+    "implemented", "studentProfile", "planned",
+  ),
+  defineRoute(
+    "STU-09", "student", "POST",
+    "/student/profile/identity-photo",
+    "implemented", "studentProfile", "planned",
+  ),
+  defineRoute(
+    "STU-10", "student", "POST",
+    "/student/profile/identity-photo/withdrawal",
+    "implemented", "studentProfile", "planned",
+  ),
+  defineRoute(
+    "STU-11", "student", "GET",
+    "/student/profile/identity-photo/{photoId}/media",
+    "implemented", "studentProfile", "planned",
+  ),
+  defineRoute(
+    "STU-12", "student", "GET",
+    "/student/profile/identity-photo/{photoId}/status",
+    "implemented", "studentProfile", "planned",
+  ),
+  defineRoute(
     "EXM-01",
     "exam",
     "POST",
@@ -649,6 +685,11 @@ export const API_ROUTE_MANIFEST: readonly ApiRouteManifestEntry[] = [
     "/exam/session/{sessionId}/activate",
     "implemented",
     "examSessionActivate",
+  ),
+  defineRoute(
+    "EXM-06", "exam", "GET",
+    "/exam/session/{sessionId}/identity-status",
+    "implemented", "examSessionIdentityStatus", "planned",
   ),
   defineRoute(
     "VEN-01",

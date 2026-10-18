@@ -1,3 +1,4 @@
+import type {StudentIdentityPhotoState} from "../../../shared/contracts/studentProfile";
 /* eslint-disable require-jsdoc */
 import {StandardApiErrorCode} from "./apiResponse";
 
@@ -41,6 +42,8 @@ export interface AdminStudentRecord {
   hardBiasRate: number;
   id: string;
   lastActive: string | null;
+  identityPhoto?: StudentIdentityPhotoState | null;
+  identityPhotoMediaAllowed?: boolean;
   livePhotoCapturedAt: string | null;
   livePhotoUrl: string | null;
   livePhotoVerified: boolean;

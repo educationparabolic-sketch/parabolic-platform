@@ -18,6 +18,7 @@ function materializePath(canonicalPath, routeId) {
     .replace("{sessionId}", encodeURIComponent(`session ${routeId} Ω`))
     .replace("{testId}", encodeURIComponent(`test ${routeId} Ω`))
     .replace("{runId}", encodeURIComponent(`run ${routeId} Ω`))
+    .replace("{photoId}", encodeURIComponent(`photo ${routeId} Ω`))
     .replace("{studentId}", encodeURIComponent(`student ${routeId} Ω`))
     .replace("{questionId}", encodeURIComponent(`question ${routeId} Ω`))
     .replace("{packageId}", encodeURIComponent(`package ${routeId} Ω`))
@@ -60,7 +61,7 @@ test("implemented routes have one registered existing handler", () => {
   const implementedRoutes = API_ROUTE_MANIFEST.filter(
     (route) => route.status === "implemented",
   );
-  assert.equal(implementedRoutes.length, 107);
+  assert.equal(implementedRoutes.length, 115);
 
   for (const route of implementedRoutes) {
     assert.equal(typeof API_GATEWAY_HANDLERS[route.functionExport], "function");
@@ -132,7 +133,8 @@ test(
 test("BWM-032 support declarations preserve their ordered boundary", () => {
   const supportRoutes = API_ROUTE_MANIFEST.filter((route) =>
     (route.id.startsWith("ADM-") &&
-      Number(route.id.replace("ADM-", "")) >= 56) ||
+      Number(route.id.replace("ADM-", "")) >= 56 &&
+      Number(route.id.replace("ADM-", "")) <= 60) ||
     (route.id.startsWith("VEN-") &&
       Number(route.id.replace("VEN-", "")) >= 3 &&
       Number(route.id.replace("VEN-", "")) <= 6),

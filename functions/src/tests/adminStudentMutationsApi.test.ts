@@ -45,6 +45,7 @@ test("Admin Student mutation handler dispatches all four route contracts", async
       operations.push(`photo:${request.instituteId}:${request.studentId}`);
       return {
         auditId: "audit_photo",
+        expectedPhotoId: "photo_" + "a".repeat(40),
         decision: "verified",
         disposition: "applied",
         photoCapturedAt: "2026-09-01T00:00:00.000Z",
@@ -125,10 +126,11 @@ test("Admin Student mutation handler dispatches all four route contracts", async
     },
     {
       body: {
+        expectedPhotoId: "photo_" + "a".repeat(40),
         decision: "verified",
         expectedPhotoCapturedAt: "2026-09-01T00:00:00.000Z",
         expectedVersion: 3,
-        idempotencyKey: "photo-key",
+        idempotencyKey: "00000000-0000-4000-8000-000000000026",
       },
       method: "POST",
       path: "/api/v1/admin/students/student_1/photo-review",

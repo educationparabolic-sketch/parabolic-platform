@@ -89,6 +89,8 @@ test(
         isSuspended: false,
         isVendor: false,
         licenseLayer: "L0",
+        licenseState: "active", licenseVersion: "bwm009-session-v1",
+        authorizationVersion: 1,
         role: "admin",
       });
       await auth.setCustomUserClaims(teacherUid, {
@@ -96,27 +98,47 @@ test(
         isSuspended: false,
         isVendor: false,
         licenseLayer: "L0",
+        licenseState: "active", licenseVersion: "bwm009-session-v1",
+        authorizationVersion: 1,
         role: "teacher",
       });
       await instituteReference.set({
         instituteId,
+        primaryAdminUserId: adminUid,
+        authorizationVersion: 1, licenseVersion: "bwm009-session-v1",
+        profile: {
+          academicYearFormat: "YYYY-YY", contactEmail: "test@example.test",
+          contactPhone: "0000000000", defaultExamType: "Synthetic",
+          instituteName: "Synthetic Security", logoReference: "none",
+          timeZone: "Asia/Kolkata",
+        },
+        securitySettings: {
+          allowMultipleAdminSessions: false,
+          forceLogoutOnPasswordChange: true, sessionTimeoutDuration: 30,
+        },
         settingsUsers: {
           [adminUid]: {
             displayName: "Session Admin",
             email: adminEmail,
             role: "admin",
             status: "active",
+            updatedAt: new Date().toISOString(),
           },
           [teacherUid]: {
             displayName: "Session Teacher",
             email: teacherEmail,
             role: "teacher",
             status: "active",
+            updatedAt: new Date().toISOString(),
           },
         },
         status: "active",
       });
-      const license = {currentLayer: "L0", featureFlags: {}};
+      const license = {
+        currentLayer: "L0", featureFlags: {}, licenseState: "active",
+        licenseVersion: "bwm009-session-v1", activeStudentLimit: 100,
+        concurrentSessionLimit: 10,
+      };
       await Promise.all([
         instituteReference.collection("license").doc("current").set(license),
         instituteReference.collection("license").doc("main").set(license),
@@ -136,12 +158,10 @@ test(
           body: JSON.stringify({
             actionType: "UPSERT_USER_ACCESS",
             instituteId,
-            userAccess: {
-              displayName: "Session Teacher",
-              email: teacherEmail,
-              role: "teacher",
-              status: "suspended",
-              userId: teacherUid,
+            commandId: "b0a9c94e-ed3a-4e74-8bf9-9e6f11f56fd1",
+            expectedRevision: 0,
+            staffUpdate: {
+              targetUserId: teacherUid, status: "suspended",
             },
           }),
           method: "POST",
@@ -166,21 +186,22 @@ test(
       assert.equal(staleSession.response.status, 401);
       assert.equal(staleSession.body.error?.code, "UNAUTHORIZED");
 
-      const freshTeacherToken = await signInWithPassword(
-        teacherEmail,
-        password,
+      // Current staff suspension disables Auth as well as revoking sessions.
+      assert.equal(updatedTeacher.disabled, true);
+      const freshSession = await fetch(
+        `http://${authHost}/identitytoolkit.googleapis.com/v1/` +
+          "accounts:signInWithPassword?key=demo-key",
+        {
+          method: "POST", headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({
+            email: teacherEmail, password, returnSecureToken: true,
+          }),
+          signal: AbortSignal.timeout(15_000),
+        },
       );
-      const freshSession = await requestGateway(
-        "/api/v1/admin/overview",
-        freshTeacherToken,
-        {method: "GET"},
-      );
-      assert.equal(freshSession.response.status, 403);
-      assert.equal(freshSession.body.error?.code, "FORBIDDEN");
-      assert.equal(
-        freshSession.body.error?.message,
-        "Account access is suspended.",
-      );
+      assert.equal(freshSession.status, 400);
+      const rejectedSignIn = await freshSession.json();
+      assert.match(rejectedSignIn.error?.message, /^USER_DISABLED\b/u);
     } finally {
       await Promise.allSettled(
         createdUserIds.map((uid) => auth.deleteUser(uid)),

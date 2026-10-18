@@ -4,7 +4,7 @@ This document explains the canonical role, license-layer, and institute feature-
 
 The code-level `CAPABILITY_MATRIX` is authoritative. Every canonical Admin route, compatibility redirect, sidebar entry, and capability-sensitive in-page mutation now resolves through the shared Admin evaluator against its exact matrix capability; Student/Vendor protected-route admission consumes the same canonical role sets. The corresponding deployable Admin Functions handlers consume a small dependency-free role-policy mirror that permanent contract tests require to match the matrix exactly. Permanent BWM-008 and BWM-033 source, middleware, real-token emulator, and browser suites cover tenant targeting, route/mount parity, feature/layer decisions, and negative enforcement boundaries.
 
-Last reconciled: 2026-10-15 (`BWM-041` verified local Vendor acceptance). The executable Admin route/action ledger retains its exact role/layer/feature policy. VEN-03..VEN-06 enforce `vendor.support.manage` through revocation-aware, current non-disabled Vendor Auth. VEN-07/VEN-09/VEN-12/VEN-14 execute under `vendor.institutes.read`; VEN-08/VEN-10/VEN-11/VEN-13/VEN-15/VEN-16 execute under `vendor.institutes.manage_lifecycle`. Their shared transport rejects wrong-role and suspended tokens, freshly rereads current enabled Vendor Auth claims, ignores browser actor/status/audit/time authority, and derives resource targets from canonical path parameters. VEN-17..VEN-30 execute under `vendor.licenses.manage` through the same revocation-aware current-Vendor checks. Their shared transport allowlists public intent fields and derives actor, network context, institute/request/invoice/event targets, provider outcome, audit, and server time rather than trusting browser authority. Vendor capabilities intentionally have no institute-license minimum; their authority is the current global Vendor identity. The mounted Vendor institute adapter consumes VEN-07..VEN-16 and the mounted `/vendor/licensing` adapter consumes VEN-17..VEN-30; broad route admission never replaces the backend's exact command capability check. Permanent real-token proof covers commercial unauthenticated `401`, wrong-role `403`, suspended-Vendor browser denial, and public-intent-only mutations. VEN-31..VEN-35 are registered GET reads requiring `vendor.intelligence.read`, revocation-checked tokens, and a fresh enabled, non-suspended current Vendor Auth record; demoted identities, contradictory Vendor markers, and browser identity/scope overrides are denied before aggregate reads. VEN-40/VEN-41 now execute through distinct secured exports/handlers whose transports independently require the same fresh identity plus `vendor.audit.read` and `vendor.system_health.read` respectively. Route admission or either capability never grants the other read. Browser route admission alone is not sufficient authority.
+Last reconciled: 2026-10-18 (`BWM-043` fresh Student reader authority and mounted nullable v2; `BWM-042` Student/L0 own-profile and exact privacy-exception transport, with mounted local acceptance; existing Vendor/Admin policy retained). The executable Admin route/action ledger retains its exact role/layer/feature policy. VEN-03..VEN-06 enforce `vendor.support.manage` through revocation-aware, current non-disabled Vendor Auth. VEN-07/VEN-09/VEN-12/VEN-14 execute under `vendor.institutes.read`; VEN-08/VEN-10/VEN-11/VEN-13/VEN-15/VEN-16 execute under `vendor.institutes.manage_lifecycle`. Their shared transport rejects wrong-role and suspended tokens, freshly rereads current enabled Vendor Auth claims, ignores browser actor/status/audit/time authority, and derives resource targets from canonical path parameters. VEN-17..VEN-30 execute under `vendor.licenses.manage` through the same revocation-aware current-Vendor checks. Their shared transport allowlists public intent fields and derives actor, network context, institute/request/invoice/event targets, provider outcome, audit, and server time rather than trusting browser authority. Vendor capabilities intentionally have no institute-license minimum; their authority is the current global Vendor identity. The mounted Vendor institute adapter consumes VEN-07..VEN-16 and the mounted `/vendor/licensing` adapter consumes VEN-17..VEN-30; broad route admission never replaces the backend's exact command capability check. Permanent real-token proof covers commercial unauthenticated `401`, wrong-role `403`, suspended-Vendor browser denial, and public-intent-only mutations. VEN-31..VEN-35 are registered GET reads requiring `vendor.intelligence.read`, revocation-checked tokens, and a fresh enabled, non-suspended current Vendor Auth record; demoted identities, contradictory Vendor markers, and browser identity/scope overrides are denied before aggregate reads. VEN-40/VEN-41 now execute through distinct secured exports/handlers whose transports independently require the same fresh identity plus `vendor.audit.read` and `vendor.system_health.read` respectively. Route admission or either capability never grants the other read. Browser route admission alone is not sufficient authority.
 
 Mounted intelligence and intelligence-owned Overview now consume VEN-31..VEN-35
 through one authenticated strict adapter. Runtime response/filter validation,
@@ -102,6 +102,24 @@ Read and manage capabilities are deliberately separate. Director may read only t
 
 ## Student and Exam Capabilities
 
+BWM-043 substep 2 reserves the exact Student field groups and current feature
+checks in [Student entitlement contract](STUDENT_ENTITLEMENT_CONTRACT.md).
+The matrix below is unchanged. L1 reflective insights require riskOverview;
+numeric guess-rate aliases and discipline suggestions remain L2. Mode flags
+cannot be inferred from layer. These requirements are implemented by the v2 readers at substeps 4/5; mounted
+consumers now use strict v2 server access; local permanent acceptance is recorded in BWM-043.
+
+BWM-043 substep 3 introduced these grants in the summary-authority
+boundary. It independently checks fresh own-Student/current institute/license
+authority, computes metric groups, denies feature-disabled insights/modes and
+keeps archived eligibility basic-only. The profile's exact claim predicate is
+shared without changing its capability or narrow privacy exception. Public
+STU-01..04 now use this boundary (substep 5), with nullable recursive field gates,
+strict own-summary scope and basic-only archived history. Substep 4 wires STU-05 to this boundary
+and rechecks exact assigned run mode/adaptive flags, current non-archived tier,
+owned submitted attempt and reached release before any answer or URL issuance.
+No matrix grant or new exception is added.
+
 | Capability | Allowed roles | Minimum layer | Required feature flags |
 |---|---|---|---|
 | `student.dashboard.read` | student | L0 | - |
@@ -158,3 +176,50 @@ Local BWM-041 acceptance preserves these capability values and the single Vendor
 | `governanceAccess` | L3 | Director governance read/export |
 
 These are minimum eligibility floors, not automatic grants. The corresponding flag must also be enabled by the authoritative license object.
+
+
+BWM-042 contract-only reservation (2026-10-16, DEC-089): reuse
+`student.profile.manage_own` for active own profile/preferences/enrollment/media,
+`admin.students.manage` for narrow Admin review media, and the existing exact
+session authorization for minimal Exam identity status. No matrix row, role or
+runtime guard changes here. The normative photo contract reserves two own
+withdrawal/deletion-status routes with current Auth and persisted UID ownership
+but no active institute/license prerequisite; they expose neither profile nor
+media and never extend that exception to enrollment/Exam. These routes are
+missing; implementation and negative emulator proof remain later substeps.
+
+
+BWM-042 substep 3: internal `StudentProfileService` enforces current Student/L0
+profile authority. `functions/src/policy/studentRolePolicy.ts` is a deployable
+mirror, parity-checked by `tests/student-profile-contract.test.mjs`; the shared
+matrix is unchanged. Current SDK Auth role/tenant/Student/UID and suspension
+must agree with the verified token, while current institute/license authority
+is validated inside the profile/preference transaction. No active privacy
+exception or public profile route is implemented yet.
+
+BWM-042 substep 4 / DEC-091: internal enrollment reuses `StudentProfileService.withOwnStudent` and unchanged Student/L0 `student.profile.manage_own` authority for reserve/commit/replay. No new capability, role or entitlement exception is granted. Storage clients remain denied; private upload metadata is never a media access grant. Withdrawal's narrow privacy exception remains substep 5; public routes remain missing.
+
+BWM-042 substep 5 / DEC-092 implements the reserved narrow privacy exception only through internal withdrawal/exact media-free lifecycle status: revocation-verified ID token, fresh enabled/non-suspended current Student Auth and exact UID/tenant/Student binding remain mandatory; active Student/institute/license eligibility is bypassed only there. Normal profile/preferences/enrollment remain active-entitlement checked. Disabled/revoked/changed-role/tenant Auth is denied. Cleanup is an operational server owner with validated private generation authority; zero-byte upload fences grant no media access or new role/capability. Public route adoption remains substep 6.
+
+### BWM-042 secured transport — DEC-093 (2026-10-17)
+
+Substep 6 registers STU-07..12 (`studentProfile`), ADM-61
+(`adminStudentIdentityPhotoMedia`) and EXM-06 (`examSessionIdentityStatus`).
+Current accounting: 120 routes = 115 implemented + zero incompatible + zero
+missing + five retired; 63 HTTP exports, 51 gateway handlers, eight schedules.
+Route declarations retain planned provenance; Student/Admin callers are mounted.
+The optional EXM-06 UI consumer remains owned by BWM-045. Existing ADM-27 uses
+the canonical photo-ID/UUID contract and existing review/audit writer. Roster
+URLs are null and legacy booleans confer no photo authority. Media is one
+bounded authenticated base64 JPEG with fresh post-fetch authorization and
+immutable media-free access audit, private/no-store on success and failure.
+Exam gets only optional minimal current status and no image or biometric claim.
+The existing consumed-entry transaction alone adds bounded private
+`identityStatusEntryBindings` hashes; historical sessions without it fail closed
+for this status read. No new topology event/client grant/header/cloud change.
+`IDENTITY_PHOTOS_BUCKET` remains explicit and dedicated; no fallback or real
+resource injection. See `STUDENT_PROFILE_IDENTITY_PHOTO_CONTRACT.md` for exact
+privacy exceptions, current authority, transport and remote qualification.
+Mounted Student/Admin adoption and substep-8 local acceptance are qualified;
+remote GCS/IAM/index/retention validation remains BWM-052/053, production NO_GO. Source integration inventory 96/19; classified
+non-emulator suite and historical BWM-049 exclusions unchanged.

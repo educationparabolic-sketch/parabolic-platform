@@ -67,6 +67,24 @@
               "value": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(self)"
             }
           ]
+        },
+        {
+          "source": "/student",
+          "headers": [
+            {
+              "key": "Permissions-Policy",
+              "value": "camera=(self), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(self)"
+            }
+          ]
+        },
+        {
+          "source": "/student/**",
+          "headers": [
+            {
+              "key": "Permissions-Policy",
+              "value": "camera=(self), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(self)"
+            }
+          ]
         }
       ],
       "rewrites": [

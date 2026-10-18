@@ -116,8 +116,8 @@ async function clearEmulatorData() {
 const firestoreSuites = await discoverCompiledFirestoreSuites();
 const explicitSuites = await discoverExplicitEmulatorSuites();
 
-assert.equal(firestoreSuites.length, 93, "Firestore suite inventory changed");
-assert.equal(explicitSuites.length, 18, "explicit emulator suite inventory changed");
+assert.equal(firestoreSuites.length, 98, "Firestore suite inventory changed");
+assert.equal(explicitSuites.length, 20, "explicit emulator suite inventory changed");
 
 const selectedSuites = fullServicesPhase ? explicitSuites : firestoreSuites;
 const phaseLabel = fullServicesPhase ?

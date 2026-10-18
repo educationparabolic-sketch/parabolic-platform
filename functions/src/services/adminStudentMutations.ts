@@ -1,4 +1,5 @@
 /* eslint-disable require-jsdoc */
+import {validPhotoId, managedPhotoReviewEligible} from "./studentIdentityPhotoLifecycleAuthority";
 import {createHash} from "node:crypto";
 import {Timestamp} from "firebase-admin/firestore";
 import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
@@ -538,8 +539,20 @@ export class AdminStudentMutationsService {
     userAgent?: unknown;
   }): AdminStudentPhotoReviewValidatedRequest {
     const body = isRecord(input.body) ? input.body : {};
+    const required = ["decision", "expectedPhotoCapturedAt", "expectedPhotoId", "expectedVersion", "idempotencyKey"];
+    if (required.some((key) => !(key in body)) ||
+        Object.keys(body).some((key) => ![...required, "reason"].includes(key)) ||
+        !validPhotoId(body.expectedPhotoId) ||
+        !Number.isSafeInteger(body.expectedVersion) || Number(body.expectedVersion) < 1 ||
+        Number(body.expectedVersion) >= Number.MAX_SAFE_INTEGER ||
+        (body.decision !== "verified" && body.decision !== "unverified") ||
+        typeof body.idempotencyKey !== "string" ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(body.idempotencyKey)) {
+      throw new AdminStudentMutationValidationError("VALIDATION_ERROR", "Managed photo review intent is invalid.");
+    }
     return {
       ...normalizeContext(input),
+      expectedPhotoId: body.expectedPhotoId as string,
       decision: normalizePhotoDecision(body.decision),
       expectedPhotoCapturedAt: normalizeIsoTimestamp(
         body.expectedPhotoCapturedAt,
@@ -863,6 +876,7 @@ export class AdminStudentMutationsService {
 
   public async reviewPhoto(
     request: AdminStudentPhotoReviewValidatedRequest,
+    authorize?: (transaction: FirebaseFirestore.Transaction) => Promise<void>,
   ): Promise<AdminStudentPhotoReviewServiceResult> {
     const command = "photo-review";
     const authority = buildCommandAuthority({
@@ -872,6 +886,7 @@ export class AdminStudentMutationsService {
       semantics: {
         actorId: request.actorId,
         decision: request.decision,
+        expectedPhotoId: request.expectedPhotoId,
         expectedPhotoCapturedAt: request.expectedPhotoCapturedAt,
         expectedVersion: request.expectedVersion,
         reason: request.reason ?? null,
@@ -888,6 +903,7 @@ export class AdminStudentMutationsService {
     );
     const transactionResult = await this.dependencies.firestore.runTransaction(
       async (transaction): Promise<TransactionResult<PhotoTransactionResult>> => {
+        if (authorize) await authorize(transaction);
         const [studentSnapshot, auditSnapshot] = await Promise.all([
           transaction.get(studentReference),
           transaction.get(auditReference),
@@ -907,7 +923,7 @@ export class AdminStudentMutationsService {
           request.studentId,
         );
         const photoCapturedAt = toIsoTimestamp(
-          data.identityPhotoCapturedAt ?? data.livePhotoCapturedAt,
+          data.identityPhotoCapturedAt,
         );
         if (!photoCapturedAt) {
           throw new AdminStudentMutationValidationError(
@@ -922,6 +938,10 @@ export class AdminStudentMutationsService {
           );
         }
         const timestamp = this.dependencies.now();
+        if (data.status !== "active" || data.identityPhotoId !== request.expectedPhotoId ||
+            !await managedPhotoReviewEligible(transaction, studentSnapshot, timestamp)) {
+          throw new AdminStudentMutationValidationError("CONFLICT", "Managed photo is no longer reviewable.");
+        }
         const result: PhotoTransactionResult = {
           auditId: authority.auditId,
           decision: request.decision,

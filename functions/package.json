@@ -1,6 +1,9 @@
 {
   "name": "functions",
   "scripts": {
+    "test:student-solutions": "npm run build && DEBUG= CI=true firebase emulators:exec --project demo-parabolic-test --only auth,firestore \"env GCLOUD_PROJECT=demo-parabolic-test GOOGLE_CLOUD_PROJECT=demo-parabolic-test NODE_ENV=test NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none node --test --test-concurrency=1 lib/tests/studentSolutions.test.js lib/tests/sessionStart.test.js lib/tests/studentSummaryAuthority.test.js lib/tests/studentSummaryService.test.js\"",
+    "test:student-summary-authority": "npm run build && DEBUG= CI=true firebase emulators:exec --project demo-parabolic-test --only auth,firestore \"env GCLOUD_PROJECT=demo-parabolic-test GOOGLE_CLOUD_PROJECT=demo-parabolic-test NODE_ENV=test NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none node --test --test-concurrency=1 lib/tests/studentSummaryAuthority.test.js lib/tests/studentProfile.test.js lib/tests/instituteAuthorityEnforcement.test.js\"",
+    "test:student-profile": "npm run build && firebase emulators:exec --project demo-parabolic-test --only auth,firestore \"env GCLOUD_PROJECT=demo-parabolic-test GOOGLE_CLOUD_PROJECT=demo-parabolic-test NODE_ENV=test NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none node --test lib/tests/studentProfile.test.js\"",
     "lint": "eslint --ext .js,.ts .",
     "build": "tsc",
     "build:watch": "tsc --watch",
@@ -128,7 +131,11 @@
     "shell": "npm run build && firebase functions:shell",
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log"
+    "logs": "firebase functions:log",
+    "test:student-identity-photo": "npm run build && firebase emulators:exec --project demo-parabolic-test --only auth,firestore,storage \"env GCLOUD_PROJECT=demo-parabolic-test GOOGLE_CLOUD_PROJECT=demo-parabolic-test NODE_ENV=test NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none node --test lib/tests/studentIdentityPhoto.test.js\"",
+    "test:student-identity-photo-lifecycle": "npm run build && firebase emulators:exec --project demo-parabolic-test --only auth,firestore,storage \"env GCLOUD_PROJECT=demo-parabolic-test GOOGLE_CLOUD_PROJECT=demo-parabolic-test NODE_ENV=test NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none node --test lib/tests/studentIdentityPhotoLifecycle.test.js\"",
+    "test:student-profile-api": "npm run build && FUNCTIONS_DISCOVERY_TIMEOUT=120 IDENTITY_PHOTOS_BUCKET=demo-parabolic-test-identity-photos firebase emulators:exec --project demo-parabolic-test --only auth,firestore,storage,functions \"env GCLOUD_PROJECT=demo-parabolic-test GOOGLE_CLOUD_PROJECT=demo-parabolic-test PROJECT_ID=demo-parabolic-test NODE_ENV=test NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none node --test --test-concurrency=1 tests/studentProfileApi.emulator.test.js tests/apiGateway.emulator.test.js\"",
+    "test:student-summaries": "npm run build && DEBUG= CI=true firebase emulators:exec --project demo-parabolic-test --only auth,firestore \"env GCLOUD_PROJECT=demo-parabolic-test GOOGLE_CLOUD_PROJECT=demo-parabolic-test NODE_ENV=test NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none node --test --test-concurrency=1 lib/tests/studentSummaryService.test.js lib/tests/studentSummaryAuthority.test.js lib/tests/studentSolutions.test.js\""
   },
   "engines": {
     "node": "20"
@@ -136,7 +143,8 @@
   "main": "lib/index.js",
   "dependencies": {
     "firebase-admin": "11.10.1",
-    "firebase-functions": "4.4.1"
+    "firebase-functions": "4.4.1",
+    "sharp": "0.35.5"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^5.12.0",

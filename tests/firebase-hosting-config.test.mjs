@@ -68,7 +68,10 @@ test("the dedicated non-production project has explicit Hosting target mappings"
 
 test("every Hosting target applies the baseline security headers and least-privilege camera policy", () => {
   for (const hosting of firebaseConfig.hosting) {
-    assert.equal(hosting.headers?.length, 1, `${hosting.target} must define one header rule`);
+    assert.equal(hosting.headers?.length, hosting.target === "portal" ? 3 : 1);
+    if (hosting.target === "portal") {
+      assert.deepEqual(hosting.headers.slice(1), ["/student", "/student/**"].map((source) => ({source, headers: [{key: "Permissions-Policy", value: permissionsPolicyByTarget.exam}]})));
+    }
     assert.equal(hosting.headers[0].source, "**");
     const configuredHeaders = Object.fromEntries(
       hosting.headers[0].headers.map(({ key, value }) => [key, value]),

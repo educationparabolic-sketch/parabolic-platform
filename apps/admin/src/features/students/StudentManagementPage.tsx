@@ -1,3 +1,6 @@
+import ManagedIdentityPhoto from "./ManagedIdentityPhoto";
+import {parseIdentityPhotoState, identityTenantScope, identityKeys} from "../../../../../shared/services/studentProfileContract";
+import type {StudentIdentityPhotoState, ManagedStudentIdentityPhotoReviewRequest} from "../../../../../shared/contracts/studentProfile";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
@@ -15,7 +18,6 @@ import type {
   AdminStudentLifecycleUpdateResult,
   AdminStudentOnboardingResendRequest,
   AdminStudentOnboardingResendResult as StudentOnboardingResendResult,
-  AdminStudentPhotoReviewRequest,
   AdminStudentPhotoReviewResult,
   AdminStudentProfileUpdateRequest,
   AdminStudentProfileUpdateResult,
@@ -197,6 +199,8 @@ interface StudentRecord {
   studentId: string;
   fullName: string;
   email: string;
+  identityPhoto?: StudentIdentityPhotoState | null;
+  identityPhotoMediaAllowed?: boolean;
   livePhotoUrl: string | null;
   livePhotoVerified: boolean;
   livePhotoCapturedAt: string | null;
@@ -531,6 +535,10 @@ function normalizeStudentRecord(value: unknown, index: number): StudentRecord | 
   }
 
   const record = value as Record<string, unknown>;
+  if (record.livePhotoUrl !== null || "livePhotoDataUrl" in record || "identityPhotoUrl" in record ||
+      typeof record.identityPhotoMediaAllowed !== "boolean") throw new Error("Roster identity metadata is incompatible.");
+  const identityPhoto = record.identityPhoto === null ? null : parseIdentityPhotoState(record.identityPhoto);
+
   const studentId =
     toNonEmptyString(record.studentId) ?? toNonEmptyString(record.id) ?? toNonEmptyString(record.uid) ?? `student-${index + 1}`;
 
@@ -548,9 +556,11 @@ function normalizeStudentRecord(value: unknown, index: number): StudentRecord | 
     studentId,
     fullName,
     email,
-    livePhotoUrl: toNonEmptyString(record.livePhotoUrl ?? record.livePhotoDataUrl ?? record.identityPhotoUrl),
-    livePhotoVerified: Boolean(record.livePhotoVerified ?? record.identityPhotoVerified),
-    livePhotoCapturedAt: toNonEmptyString(record.livePhotoCapturedAt ?? record.identityPhotoCapturedAt),
+    identityPhoto,
+    identityPhotoMediaAllowed: record.identityPhotoMediaAllowed,
+    livePhotoUrl: null,
+    livePhotoVerified: identityPhoto?.status === "verified",
+    livePhotoCapturedAt: identityPhoto?.photo?.capturedAt ?? null,
     batch,
     status: toStudentStatus(record.status),
     academicYear: toNonEmptyString(record.academicYear) ?? toNonEmptyString(record.year) ?? "2025-26",
@@ -2225,39 +2235,42 @@ function StudentManagementPage() {
       setLoadMessage("Student photo review is available only to admins in live mode.");
       return;
     }
-    if (!student.livePhotoUrl || !student.livePhotoCapturedAt) {
+    const photo = student.identityPhoto;
+    if (!photo?.mediaAvailable || !student.identityPhotoMediaAllowed) {
       setLoadMessage("A captured live photo is required before review.");
       return;
     }
 
     const decision = verified ? "verified" : "unverified";
-    const keyName = `photo:${student.id}:${decision}`;
+    const keyName = `photo:${student.id}:${photo.photo.photoId}:${student.version}:${decision}`;
     const idempotencyKey = actionIdempotencyKeysRef.current[keyName] ??
-      createStudentActionIdempotencyKey("student-photo-review", student.id);
+      crypto.randomUUID();
     actionIdempotencyKeysRef.current[keyName] = idempotencyKey;
     setStudentMutationPendingKey(keyName);
     setLoadMessage(null);
 
     try {
       const studentId = encodeURIComponent(student.id);
-      const result = await apiClient.post<AdminStudentPhotoReviewResult, AdminStudentPhotoReviewRequest>(
+      const result = await apiClient.post<AdminStudentPhotoReviewResult, ManagedStudentIdentityPhotoReviewRequest>(
         `/admin/students/${studentId}/photo-review`,
         {
           handledFailureIsReady: true,
           body: {
             decision,
-            expectedPhotoCapturedAt: student.livePhotoCapturedAt,
+            expectedPhotoId: photo.photo.photoId,
+            expectedPhotoCapturedAt: photo.photo.capturedAt,
             expectedVersion: student.version,
             idempotencyKey,
             reason: "Admin identity photo review.",
           },
         },
       );
+      identityKeys(result, ["auditId", "disposition", "decision", "photoCapturedAt", "reviewedAt", "studentId", "version"]);
       if (
         !result.auditId || result.disposition !== "applied" && result.disposition !== "replayed" ||
         Number.isNaN(Date.parse(result.reviewedAt)) || result.studentId !== student.id ||
         result.decision !== decision || result.version !== student.version + 1 ||
-        result.photoCapturedAt !== new Date(student.livePhotoCapturedAt).toISOString()
+        result.photoCapturedAt !== photo.photo.capturedAt
       ) {
         throw new Error("Student photo review returned an incompatible authority result.");
       }
@@ -2854,37 +2867,13 @@ function StudentManagementPage() {
       id: "livePhoto",
       header: "Live Photo",
       render: (student) => (
-        <div className="admin-student-live-photo-cell">
-          <div className="admin-student-live-photo-preview">
-            {student.livePhotoUrl ? (
-              <img src={student.livePhotoUrl} alt={`${student.fullName} live identity capture`} />
-            ) : (
-              <span>No photo</span>
-            )}
-          </div>
-          <span className={`admin-student-photo-status admin-student-photo-status-${student.livePhotoVerified ? "verified" : "unverified"}`}>
-            {student.livePhotoVerified ? "Verified" : "Unverified"}
-          </span>
-          <small>{student.livePhotoCapturedAt ? formatDateTimeLabel(student.livePhotoCapturedAt) : "Not captured"}</small>
-          {student.livePhotoUrl && isBulkUploadAdmin ? (
-            <div className="admin-student-inline-actions">
-              <button
-                type="button"
-                onClick={() => {
-                  void setLivePhotoVerification(student, !student.livePhotoVerified);
-                }}
-                disabled={
-                  !canMutateStudentRecords || !student.livePhotoCapturedAt ||
-                  Boolean(studentMutationPendingKey)
-                }
-              >
-                {studentMutationPendingKey === `photo:${student.id}:${student.livePhotoVerified ? "unverified" : "verified"}` ?
-                  "Saving review..." :
-                  student.livePhotoVerified ? "Mark unverified" : "Verify photo"}
-              </button>
-            </div>
-          ) : null}
-        </div>
+        <ManagedIdentityPhoto
+          key={`${student.id}:${student.identityPhoto?.photo?.photoId ?? "none"}:${student.version}:${canMutateStudentRecords}:${Boolean(studentMutationPendingKey)}`}
+          studentId={student.id} state={student.identityPhoto ?? null}
+          allowed={canMutateStudentRecords && student.identityPhotoMediaAllowed === true}
+          pending={Boolean(studentMutationPendingKey)}
+          onReview={(verified) => void setLivePhotoVerification(student, verified)}
+        />
       ),
     },
     {
@@ -4536,4 +4525,9 @@ function StudentManagementPage() {
   );
 }
 
-export default StudentManagementPage;
+export default function ScopedStudentManagementPage() {
+  const {session} = useAuthProvider();
+  const role = resolveAdminAccessContext(session).role;
+  const scope = JSON.stringify([session.status, session.user?.uid, identityTenantScope(session.idToken), role]);
+  return <StudentManagementPage key={scope} />;
+}

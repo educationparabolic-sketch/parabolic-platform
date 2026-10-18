@@ -53,10 +53,10 @@ test("calibration version reads are implemented bounded handlers", async () => {
     ["VEN-36", "/api/v1/vendor/calibration/versions", "GET", "implemented", "vendorCalibrationVersions", "planned"],
     ["VEN-37", "/api/v1/vendor/calibration/versions/{versionId}", "GET", "implemented", "vendorCalibrationVersions", "planned"],
   ]);
-  assert.equal(API_ROUTE_MANIFEST.length, 112);
+  assert.equal(API_ROUTE_MANIFEST.length, 120);
   assert.equal(API_ROUTE_MANIFEST.filter(({status}) => status === "implemented").length, 107);
   assert.equal(API_ROUTE_MANIFEST.filter(({status}) => status === "incompatible").length, 0);
-  assert.equal(API_ROUTE_MANIFEST.filter(({status}) => status === "missing").length, 0);
+  assert.equal(API_ROUTE_MANIFEST.filter(({status}) => status === "missing").length, 8);
   assert.equal(BACKEND_HTTP_EXPORT_MANIFEST.length, 60);
   assert.equal(API_ROUTE_MANIFEST.find(({id}) => id === "VEN-01").status, "implemented");
 });

@@ -1,3 +1,4 @@
+import {StudentProfileService} from "./studentProfile";
 /* eslint-disable require-jsdoc */
 import {Timestamp} from "firebase-admin/firestore";
 import {adminSettingsService} from "./adminSettings";
@@ -617,17 +618,10 @@ function normalizeStudentRecord(input: {
     ),
     id: input.studentDocumentId,
     lastActive,
-    livePhotoCapturedAt: toIsoString(
-      input.studentData.identityPhotoCapturedAt ??
-        input.studentData.livePhotoCapturedAt,
-    ),
-    livePhotoUrl: toNonEmptyString(
-      input.studentData.identityPhotoUrl ?? input.studentData.livePhotoUrl,
-      "",
-    ) || null,
-    livePhotoVerified:
-      input.studentData.identityPhotoVerified === true ||
-      input.studentData.livePhotoVerified === true,
+    // Compatibility fields contain no raw URL or legacy verification authority.
+    livePhotoCapturedAt: null,
+    livePhotoUrl: null,
+    livePhotoVerified: false,
     maxTimeViolationPercent: toNumberOrZero(
       input.metricsData.maxTimeViolationPercent ??
         input.metricsData.maxTimeViolationsPercent,
@@ -830,10 +824,24 @@ export class AdminStudentsService {
         left.studentId.localeCompare(right.studentId),
       );
 
+    const profiles = new StudentProfileService({firestore: this.firestore});
+    const projected = await Promise.all(students.map(async (row) => {
+      const identityPhoto = await this.firestore.runTransaction(async (transaction) => {
+        const current = await transaction.get(instituteRef.collection(STUDENTS_COLLECTION).doc(row.id));
+        if (!current.exists || current.get("deleted") === true || current.get("status") !== "active") return null;
+        return profiles.projectPhoto(
+          transaction, {instituteId: request.instituteId, studentId: current.id}, current.data() ?? {},
+        );
+      });
+      return {...row, identityPhoto,
+        identityPhotoMediaAllowed: request.actorRole === "admin" && identityPhoto?.mediaAvailable === true,
+        livePhotoCapturedAt: identityPhoto?.photo?.capturedAt ?? null,
+        livePhotoVerified: identityPhoto?.status === "verified"};
+    }));
     return {
       academicYear: currentYearId,
       computedAt: new Date().toISOString(),
-      students,
+      students: projected,
     };
   }
 }

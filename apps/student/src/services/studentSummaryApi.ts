@@ -1,5 +1,6 @@
 import { getPortalApiClient } from "../../../../shared/services/portalIntegration";
-import { adaptStudentSummaryResult } from "../../../../shared/services/portalResponseAdapters";
+import { adaptStudentSummaryResult } from "../../../../shared/services/studentSummaryResponseAdapters";
+import type { StudentSummaryResults } from "../../../../shared/services/studentSummaryResponseAdapters";
 import { assertStudentSummaryPayload } from "./studentSummaryDataPolicy";
 
 const apiClient = getPortalApiClient("student");
@@ -21,34 +22,40 @@ function assertSummaryRoute(path: string): asserts path is StudentSummaryRoute {
   }
 }
 
-export async function getStudentSummaryResource(
+export async function getStudentSummaryResource<K extends Exclude<keyof StudentSummaryResults, "solutions">>(
   path: StudentSummaryRoute,
-  resource: "dashboard" | "tests" | "performance" | "insights",
+  resource: K,
   query?: Record<string, string | number>,
-): Promise<unknown> {
+): Promise<StudentSummaryResults[K]> {
   assertSummaryRoute(path);
-  const payload = adaptStudentSummaryResult(
-    await apiClient.get<unknown>(path, query ? { query } : undefined),
-    resource,
-  );
-  assertStudentSummaryPayload(payload, resource);
-  return payload;
+  if (path !== `/student/${resource}`) throw new Error("Student summary resource does not match the route.");
+  return apiClient.get<StudentSummaryResults[K]>(path, {
+    query, handledFailureIsReady: true,
+    responseAdapter: (value) => {
+      const payload = adaptStudentSummaryResult(value, resource);
+      assertStudentSummaryPayload(payload, resource);
+      return payload;
+    },
+  });
 }
 
 export async function getStudentSolutionSummary(
   testId: string,
-  page: number,
-  pageSize: number,
-): Promise<unknown> {
-  const payload = adaptStudentSummaryResult(
-    await apiClient.get<unknown>(
-      `/student/tests/${encodeURIComponent(testId)}/solutions`,
-      { query: { page, pageSize } },
-    ),
-    "solutions",
+  runId: string,
+  cursor?: string,
+  pageSize = 10,
+): Promise<StudentSummaryResults["solutions"]> {
+  return apiClient.get<StudentSummaryResults["solutions"]>(
+    `/student/tests/${encodeURIComponent(testId)}/solutions`, {
+      query: {runId, pageSize, ...(cursor ? {cursor} : {})}, handledFailureIsReady: true,
+      responseAdapter: (value) => {
+        const payload = adaptStudentSummaryResult(value, "solutions");
+        assertStudentSummaryPayload(payload, "solutions");
+        if (payload.testId !== testId || payload.runId !== runId) throw new Error("Solution scope does not match the selected test.");
+        return payload;
+      },
+    },
   );
-  assertStudentSummaryPayload(payload, "solutions");
-  return payload;
 }
 
 export { apiClient as studentPortalApiClient };

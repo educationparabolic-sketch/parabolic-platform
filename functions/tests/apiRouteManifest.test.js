@@ -384,6 +384,14 @@ test(
         "ADM-58",
         "ADM-59",
         "ADM-60",
+        "ADM-61",
+        "STU-07",
+        "STU-08",
+        "STU-09",
+        "STU-10",
+        "STU-11",
+        "STU-12",
+        "EXM-06",
         "VEN-02",
         "VEN-03",
         "VEN-04",
@@ -445,7 +453,7 @@ test("canonical route status accounting is exact", () => {
   });
 
   assert.deepEqual(statusCounts, {
-    implemented: 107,
+    implemented: 115,
     incompatible: 0,
     intentionally_retired: 5,
     missing: 0,

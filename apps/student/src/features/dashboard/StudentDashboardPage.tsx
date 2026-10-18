@@ -1,22 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
-import { useGlobalPortalState } from "../../../../../shared/services/globalPortalState";
-import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
+import { useMemo } from "react";
+import StudentSummaryRead from "../../services/StudentSummaryRead";
 import {
   UiStatCard,
   UiTable,
   type UiTableColumn,
 } from "../../../../../shared/ui/components";
 import {
-  ApiClientError,
-  STUDENT_DASHBOARD_FALLBACK_DATASET,
   fetchStudentDashboardDataset,
-  shouldUseLiveApi,
   type RecentResultRecord,
   type StudentDashboardDataset,
   type StudentRiskState,
   type UpcomingTestRecord,
 } from "./studentDashboardDataset";
-import { isStudentDebugMode } from "../../services/studentDebugMode";
 
 interface DashboardCard {
   label: string;
@@ -24,14 +19,8 @@ interface DashboardCard {
   helper: string;
 }
 
-const LICENSE_LAYER_ORDER: Record<LicenseLayer, number> = {
-  L0: 0,
-  L1: 1,
-  L2: 2,
-  L3: 3,
-};
-
-function formatPercent(value: number): string {
+function formatPercent(value: number | null): string {
+  if (value === null) return "Unavailable";
   return `${Math.round(value)}%`;
 }
 
@@ -39,7 +28,8 @@ function formatRank(value: number): string {
   return `#${Math.round(value)}`;
 }
 
-function formatSignedPercent(value: number): string {
+function formatSignedPercent(value: number | null): string {
+  if (value === null) return "Unavailable";
   const rounded = Math.round(value);
   return `${rounded >= 0 ? "+" : ""}${rounded}%`;
 }
@@ -81,57 +71,11 @@ function getNextUpcomingTest(dataset: StudentDashboardDataset): UpcomingTestReco
 }
 
 function StudentDashboardPage() {
-  const globalState = useGlobalPortalState();
-  const debugMode = isStudentDebugMode();
-  const [dataset, setDataset] = useState<StudentDashboardDataset>(STUDENT_DASHBOARD_FALLBACK_DATASET);
-  const [isLoading, setIsLoading] = useState(true);
-  const [inlineMessage, setInlineMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadDashboard() {
-      setIsLoading(true);
-      setInlineMessage(null);
-
-      if (!shouldUseLiveApi()) {
-        setDataset(STUDENT_DASHBOARD_FALLBACK_DATASET);
-        setInlineMessage(
-          "Showing a practice dashboard so you can explore the student experience.",
-        );
-        setIsLoading(false);
-        return;
-      }
-
-      try {
-        const apiDataset = await fetchStudentDashboardDataset();
-        if (!isMounted) {
-          return;
-        }
-
-        setDataset(apiDataset);
-        setInlineMessage("Your dashboard is up to date.");
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-
-        const reason = error instanceof ApiClientError ? error.message : "Failed to load student dashboard data.";
-        setInlineMessage(reason);
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    void loadDashboard();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
+  return <StudentSummaryRead load={fetchStudentDashboardDataset} label="dashboard">
+    {(dataset) => <DashboardContent dataset={dataset} />}
+  </StudentSummaryRead>;
+}
+function DashboardContent({dataset}: {dataset: StudentDashboardDataset}) {
   const l0MetricCards = useMemo<DashboardCard[]>(() => {
     return [
       {
@@ -185,7 +129,7 @@ function StudentDashboardPage() {
       },
       {
         label: "Behavior",
-        value: dataset.behaviorSummaryTag,
+        value: dataset.behaviorSummaryTag ?? "Unavailable",
         helper: "L1 summary tag",
       },
     ],
@@ -196,12 +140,12 @@ function StudentDashboardPage() {
     () => [
       {
         label: "Risk",
-        value: dataset.riskState,
+        value: dataset.riskState ?? "Unavailable",
         helper: "L2 execution risk",
       },
       {
         label: "Discipline Index",
-        value: String(Math.round(dataset.disciplineIndex)),
+        value: dataset.disciplineIndex === null ? "Unavailable" : String(Math.round(dataset.disciplineIndex ?? 0)),
         helper: "L2 consistency score",
       },
       {
@@ -216,20 +160,15 @@ function StudentDashboardPage() {
       },
       {
         label: "Stability",
-        value: dataset.executionStabilityFlag,
+        value: dataset.executionStabilityFlag ?? "Unavailable",
         helper: "L2 execution stability",
       },
     ],
     [dataset],
   );
 
-  const activeLicenseLayer = useMemo<LicenseLayer>(() => {
-    const resolvedLayer = globalState.licenseLayer ?? dataset.licenseLayer;
-    return LICENSE_LAYER_ORDER[resolvedLayer] > LICENSE_LAYER_ORDER.L2 ? "L2" : resolvedLayer;
-  }, [dataset.licenseLayer, globalState.licenseLayer]);
-
-  const isL1Plus = LICENSE_LAYER_ORDER[activeLicenseLayer] >= LICENSE_LAYER_ORDER.L1;
-  const isL2Plus = LICENSE_LAYER_ORDER[activeLicenseLayer] >= LICENSE_LAYER_ORDER.L2;
+  const isL1Plus = dataset.access.metrics.execution;
+  const isL2Plus = dataset.access.metrics.advanced;
   const nextUpcoming = getNextUpcomingTest(dataset);
   const latestResult = dataset.recentResults[0] ?? null;
 
@@ -237,7 +176,7 @@ function StudentDashboardPage() {
     const latest = latestResult;
     const previous = dataset.recentResults[1];
 
-    let headline = "Consistency is your strength this month.";
+    let headline = "Complete a test to build your progress history.";
     if (latest && previous) {
       const delta = Math.round(latest.rawScorePercent - previous.rawScorePercent);
       if (delta > 0) {
@@ -325,9 +264,8 @@ function StudentDashboardPage() {
       <p className="student-content-copy">
         See your next test, recent progress, and one clear area to keep building.
       </p>
-      {isLoading ? <p className="student-learning-state" role="status">Getting your latest progress...</p> : null}
 
-      {debugMode && inlineMessage ? <p className="student-dashboard-inline-note">{inlineMessage}</p> : null}
+      <p>Academic year: {dataset.scope.yearId}</p>
 
       <section className="student-dashboard-layer-section" aria-labelledby="student-dashboard-l0-title">
         <div className="student-section-heading">
@@ -340,7 +278,7 @@ function StudentDashboardPage() {
             <UiStatCard
               key={card.label}
               title={card.label}
-              value={isLoading ? "..." : card.value}
+              value={card.value}
               helper={card.helper}
             />
           ))}
@@ -419,14 +357,14 @@ function StudentDashboardPage() {
               <UiStatCard
                 key={card.label}
                 title={card.label}
-                value={card.label === "Risk" ? (
+                value={card.label === "Risk" && dataset.riskState !== null ? (
                   <span className={`student-dashboard-risk-pill ${riskToneClass(dataset.riskState)}`}>{card.value}</span>
                 ) : card.value}
                 helper={card.helper}
               >
-                {card.label === "Discipline Index" ? (
+                {card.label === "Discipline Index" && dataset.disciplineIndex !== null ? (
                   <div className="student-dashboard-discipline-track" aria-hidden="true">
-                    <span style={{ width: `${Math.max(0, Math.min(100, Math.round(dataset.disciplineIndex)))}%` }} />
+                    <span style={{ width: `${Math.max(0, Math.min(100, Math.round(dataset.disciplineIndex ?? 0)))}%` }} />
                   </div>
                 ) : null}
               </UiStatCard>

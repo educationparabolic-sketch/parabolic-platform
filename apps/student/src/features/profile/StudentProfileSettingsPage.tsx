@@ -1,364 +1,150 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { sendPasswordResetEmail } from "firebase/auth";
-import { useAuthProvider } from "../../../../../shared/services/authProvider";
-import { getFirebaseAuth } from "../../../../../shared/services/firebaseClient";
-import { isStudentDebugMode } from "../../services/studentDebugMode";
+import {useLayoutEffect, useRef, useState, type FormEvent} from "react";
+import {sendPasswordResetEmail} from "firebase/auth";
+import {useAuthProvider} from "../../../../../shared/services/authProvider";
+import {getFirebaseAuth} from "../../../../../shared/services/firebaseClient";
+import {identityMediaUrl} from "../../../../../shared/services/studentProfileContract";
+import {studentProfileApi} from "../../services/studentProfileApi";
+import {useStudentProfile} from "../../services/studentProfileContext";
 
-interface StudentProfileSettings {
-  name: string;
-  email: string;
-  batch: string;
-  academicYear: string;
-}
-
-interface StudentLivePhotoRecord {
-  photoDataUrl: string;
-  capturedAtIso: string;
-  verificationStatus: "unverified" | "verified";
-}
-
-interface JwtLikePayload {
-  name?: string;
-  email?: string;
-  sub?: string;
-  batch?: string;
-  academicYear?: string;
-}
-
-function initialsForName(name: string): string {
-  const initials = name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("");
-
-  return initials || "SP";
-}
-
-function decodePayload(idToken: string | null): JwtLikePayload {
-  if (!idToken) {
-    return {};
-  }
-
-  const parts = idToken.split(".");
-  if (parts.length < 2) {
-    return {};
-  }
-
-  try {
-    const encoded = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const padding = encoded.length % 4 === 0 ? "" : "=".repeat(4 - (encoded.length % 4));
-    const decoded = atob(encoded + padding);
-    return JSON.parse(decoded) as JwtLikePayload;
-  } catch {
-    return {};
-  }
-}
-
-function livePhotoStorageKey(email: string): string {
-  return `student-live-photo:${email.toLowerCase()}`;
-}
-
-function readLivePhoto(email: string): StudentLivePhotoRecord | null {
-  try {
-    const rawRecord = window.localStorage.getItem(livePhotoStorageKey(email));
-    if (!rawRecord) {
-      return null;
-    }
-
-    const parsed = JSON.parse(rawRecord) as Partial<StudentLivePhotoRecord>;
-    if (typeof parsed.photoDataUrl !== "string" || !parsed.photoDataUrl.startsWith("data:image/")) {
-      return null;
-    }
-
-    return {
-      photoDataUrl: parsed.photoDataUrl,
-      capturedAtIso: typeof parsed.capturedAtIso === "string" ? parsed.capturedAtIso : new Date().toISOString(),
-      verificationStatus: parsed.verificationStatus === "verified" ? "verified" : "unverified",
-    };
-  } catch {
-    return null;
-  }
-}
-
-function writeLivePhoto(email: string, record: StudentLivePhotoRecord): void {
-  try {
-    window.localStorage.setItem(livePhotoStorageKey(email), JSON.stringify(record));
-  } catch {
-    // Local preview persistence can fail in private browsing or storage-restricted contexts.
-  }
-}
-
-function StudentProfileSettingsPage() {
-  const { session, signOut } = useAuthProvider();
-  const debugMode = isStudentDebugMode();
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+export default function StudentProfileSettingsPage() {
+  const {session, signOut} = useAuthProvider();
+  const state = useStudentProfile();
+  const {profile, busy, pending, restricted} = state;
+  const [consent, setConsent] = useState(false);
+  const [cameraStarting, setCameraStarting] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [draft, setDraft] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{photoId: string; url: string} | null>(null);
+  const [mediaError, setMediaError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [isSendingReset, setIsSendingReset] = useState(false);
-  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
-  const [isCameraStarting, setIsCameraStarting] = useState(false);
-  const [livePhoto, setLivePhoto] = useState<StudentLivePhotoRecord | null>(null);
-
-  const profile = useMemo<StudentProfileSettings>(() => {
-    const tokenPayload = decodePayload(session.idToken);
-    const email = session.user?.email ?? tokenPayload.email ?? tokenPayload.sub ?? "student@parabolic.local";
-    const name = session.user?.displayName ?? tokenPayload.name ?? "Student";
-
-    return {
-      name,
-      email,
-      batch: tokenPayload.batch ?? "Batch A",
-      academicYear: tokenPayload.academicYear ?? "2026",
-    };
-  }, [session.idToken, session.user?.displayName, session.user?.email]);
-
-  const profileInitials = useMemo(() => initialsForName(profile.name), [profile.name]);
-  const livePhotoStatus = livePhoto?.verificationStatus === "verified" ? "verified" : "unverified";
-
-  useEffect(() => {
-    setLivePhoto(readLivePhoto(profile.email));
-  }, [profile.email]);
-
-  useEffect(() => {
-    const videoElement = videoRef.current;
-    if (videoElement) {
-      videoElement.srcObject = cameraStream;
-    }
-
+  const [resetting, setResetting] = useState(false);
+  const video = useRef<HTMLVideoElement>(null);
+  const stream = useRef<MediaStream | null>(null);
+  const generation = useRef(Symbol());
+  const photoId = profile?.identityPhoto.mediaAvailable ? profile.identityPhoto.photo.photoId : null;
+  const canCapture = Boolean(profile && !busy && !pending && !restricted);
+  function stopCamera() {
+    generation.current = Symbol();
+    stream.current?.getTracks().forEach((track) => track.stop());
+    stream.current = null;
+    if (video.current) video.current.srcObject = null;
+    setCameraReady(false); setCameraStarting(false);
+  }
+  useLayoutEffect(() => {
     return () => {
-      if (videoElement) {
-        videoElement.srcObject = null;
-      }
+      stopCamera(); setDraft(null); setConsent(false);
     };
-  }, [cameraStream]);
-
-  useEffect(() => {
-    return () => {
-      cameraStream?.getTracks().forEach((track) => track.stop());
-    };
-  }, [cameraStream]);
-
-  async function handlePasswordReset(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setNotice(null);
-
-    if (!profile.email) {
-      setNotice("Unable to send reset link because no student email was found in the session.");
-      return;
+  }, []);
+  useLayoutEffect(() => {
+    if (!canCapture || !consent) {
+      stopCamera(); setDraft(null);
     }
-
-    setIsSendingReset(true);
-    try {
-      await sendPasswordResetEmail(getFirebaseAuth(), profile.email);
-      setNotice(`Password reset link sent to ${profile.email}.`);
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : "Password reset failed.";
-      setNotice(reason);
-    } finally {
-      setIsSendingReset(false);
-    }
-  }
-
-  async function startLiveCamera() {
-    setNotice(null);
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setNotice("Camera capture is not available in this browser.");
-      return;
-    }
-
-    setIsCameraStarting(true);
-    try {
-      const nextStream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: "user",
-          width: { ideal: 960 },
-          height: { ideal: 720 },
-        },
-      });
-      setCameraStream((currentStream) => {
-        currentStream?.getTracks().forEach((track) => track.stop());
-        return nextStream;
-      });
-      setNotice("Camera ready. Capture your live identity photo when your face is centered.");
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : "Camera permission was denied.";
-      setNotice(reason);
-    } finally {
-      setIsCameraStarting(false);
-    }
-  }
-
-  function captureLivePhoto() {
-    const videoElement = videoRef.current;
-    const canvasElement = canvasRef.current;
-    if (!videoElement || !canvasElement || !cameraStream) {
-      setNotice("Start the camera before capturing your live photo.");
-      return;
-    }
-
-    const width = videoElement.videoWidth || 960;
-    const height = videoElement.videoHeight || 720;
-    canvasElement.width = width;
-    canvasElement.height = height;
-
-    const context = canvasElement.getContext("2d");
-    if (!context) {
-      setNotice("Unable to prepare the live photo capture canvas.");
-      return;
-    }
-
-    context.drawImage(videoElement, 0, 0, width, height);
-    const nextRecord: StudentLivePhotoRecord = {
-      photoDataUrl: canvasElement.toDataURL("image/jpeg", 0.88),
-      capturedAtIso: new Date().toISOString(),
-      verificationStatus: "unverified",
-    };
-    writeLivePhoto(profile.email, nextRecord);
-    setLivePhoto(nextRecord);
-    setNotice("Live photo captured. It will show as unverified until an admin verifies it.");
-  }
-
-  function stopLiveCamera() {
-    setCameraStream((currentStream) => {
-      currentStream?.getTracks().forEach((track) => track.stop());
-      return null;
+  }, [canCapture, consent]);
+  useLayoutEffect(() => {
+    setPreview(null); setMediaError(null);
+    if (!photoId) return;
+    const controller = new AbortController();
+    let objectUrl: string | null = null;
+    void studentProfileApi.media(photoId, controller.signal).then((result) => {
+      if (controller.signal.aborted) return;
+      objectUrl = identityMediaUrl(result);
+      setPreview({photoId, url: objectUrl}); setMediaError(null);
+    }).catch(() => {
+      if (!controller.signal.aborted) { setPreview(null); setMediaError("The current photo cannot be displayed. Reload current status to retry."); }
     });
+    return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [photoId]);
+  async function startCamera() {
+    if (!canCapture || !consent) return;
+    stopCamera(); const stamp = generation.current;
+    setDraft(null); setCameraStarting(true); setNotice(null);
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error("unavailable");
+      const next = await navigator.mediaDevices.getUserMedia({audio: false, video: {facingMode: "user", width: {ideal: 960}, height: {ideal: 720}}});
+      if (generation.current !== stamp) { next.getTracks().forEach((track) => track.stop()); return; }
+      stream.current = next;
+      if (video.current) { video.current.srcObject = next; await video.current.play(); }
+      if (generation.current === stamp) { setCameraReady(true); setCameraStarting(false); }
+    } catch {
+      if (generation.current === stamp) { stopCamera(); setNotice("Camera unavailable or permission denied. Check browser and site permissions, then retry. No photo has been enrolled by opening the camera."); }
+    }
   }
-
-  return (
-    <section className="student-content-card student-profile-page" aria-labelledby="student-profile-title">
-      {debugMode ? <p className="student-content-eyebrow">Build 128</p> : null}
-      <div className="student-profile-hero">
-        <div className="student-profile-avatar" aria-hidden="true">
-          {profileInitials}
+  function capture() {
+    const source = video.current;
+    if (!source || !stream.current || !source.videoWidth || !source.videoHeight || !profile) return;
+    const scale = Math.min(1, 1280 / source.videoWidth, 1280 / source.videoHeight);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.floor(source.videoWidth * scale); canvas.height = Math.floor(source.videoHeight * scale);
+    if (Math.min(canvas.width, canvas.height) < profile.photoPolicy.minimumImageDimension) { setNotice("The camera image is too small. Try another camera."); return; }
+    const context = canvas.getContext("2d");
+    if (!context) { setNotice("Unable to capture an image."); return; }
+    context.drawImage(source, 0, 0, canvas.width, canvas.height);
+    const base64 = canvas.toDataURL("image/jpeg", 0.88).split(",")[1];
+    canvas.width = 0; canvas.height = 0; stopCamera();
+    if (!base64 || base64.length > profile.photoPolicy.maxEncodedCharacters) { setNotice("The captured image is too large. Try again."); return; }
+    setDraft(base64); setNotice("Captured in memory only. Enroll the photo to request administrative review.");
+  }
+  async function passwordReset(event: FormEvent) {
+    event.preventDefault();
+    if (!profile || resetting) return;
+    setResetting(true);
+    try { await sendPasswordResetEmail(getFirebaseAuth(), profile.email); setNotice("Password reset email requested."); }
+    catch { setNotice("Password reset could not be requested. Retry later."); }
+    finally { setResetting(false); }
+  }
+  const status = profile?.identityPhoto.status;
+  return <section className="student-content-card student-profile-page" aria-labelledby="student-profile-title">
+    <h2 id="student-profile-title">Profile</h2>
+    <div role="status" aria-live="polite">
+      {state.loading ? <p>Loading your profile…</p> : null}
+      {state.error ? <p role="alert">{state.error}</p> : null}
+      {state.notice ? <p>{state.notice}</p> : null}
+      {notice ? <p>{notice}</p> : null}
+    </div>
+    <button type="button" onClick={() => void state.reload()} disabled={busy || restricted}>Reload current status</button>
+    {pending ? <button type="button" disabled={busy || (restricted && pending !== "withdraw")} onClick={() => void state.retry()}>
+      {busy ? "Submitting…" : `Retry original ${pending} request`}
+    </button> : null}
+    {profile ? <>
+      <section className="student-profile-section" aria-labelledby="student-profile-account-info">
+        <h3 id="student-profile-account-info">Student Details</h3>
+        <dl className="student-profile-grid">
+          <div><dt>Name</dt><dd>{profile.fullName}</dd></div>
+          <div><dt>Email</dt><dd>{profile.email}</dd></div>
+          <div><dt>Batch</dt><dd>{profile.batch?.name ?? "No batch assigned"}</dd></div>
+          <div><dt>Academic year</dt><dd>{profile.academicYear?.name ?? "No operational academic year"}</dd></div>
+        </dl>
+      </section>
+      <section className="student-profile-section" aria-labelledby="student-profile-photo">
+        <h3 id="student-profile-photo">Identity photo</h3>
+        <p>Current server status: <strong>{status?.replaceAll("_", " ")}</strong></p>
+        <p>An Admin reviews this enrollment. Automated face matching and liveness verification are unavailable.</p>
+        {photoId && preview?.photoId === photoId ? <img src={preview.url} alt="Current enrolled identity photo" width={160} /> : <p>No authorized preview loaded.</p>}
+        {photoId && mediaError ? <p role="alert">{mediaError}</p> : null}
+        {profile.identityPhoto.photo ? <p>Captured {new Date(profile.identityPhoto.photo.capturedAt).toLocaleString()}. Retention ends {new Date(profile.identityPhoto.photo.expiresAt).toLocaleString()}.</p> : null}
+        <p>With consent, your institute retains this photo for {profile.photoPolicy.retentionDays} days for human identity-photo review. Only you and authorized institute Admins can request media. Replacement resets review and revokes the old image. Withdrawal revokes access immediately; physical deletion may remain pending and targets {profile.photoPolicy.deletionTargetHours} hours. Operational audit records remain.</p>
+        <label><input type="checkbox" checked={consent} disabled={busy || Boolean(pending)} onChange={(event) => { setConsent(event.target.checked); setDraft(null); }} />
+          I consent to identity-photo enrollment under policy {profile.photoPolicy.policyVersion}.
+        </label>
+        <div className="student-live-photo-camera"><video ref={video} autoPlay muted playsInline aria-label="Identity camera preview" /></div>
+        <div className="student-profile-actions">
+          <button type="button" disabled={!canCapture || !consent || cameraStarting} onClick={() => void startCamera()}>{cameraStarting ? "Starting camera…" : "Open camera"}</button>
+          <button type="button" disabled={!cameraReady || !canCapture} onClick={capture}>Capture photo</button>
+          <button type="button" onClick={stopCamera} disabled={!cameraReady && !cameraStarting}>Stop camera</button>
+          <button type="button" disabled={!draft || !consent || !canCapture} onClick={() => {
+            if (!draft) return; const bytes = draft; setDraft(null); setConsent(false); stopCamera(); void state.enroll(bytes);
+          }}>{profile.identityPhoto.photo ? "Enroll replacement" : "Enroll photo"}</button>
         </div>
-        <div className="student-profile-title-block">
-          <h2 id="student-profile-title">Profile</h2>
-          <p>{profile.name}</p>
-        </div>
-        <span className={`student-live-photo-status student-live-photo-status-${livePhotoStatus}`}>
-          {livePhotoStatus === "verified" ? "Live photo verified" : "Live photo unverified"}
-        </span>
-      </div>
-
-      <div className="student-profile-panel">
-        <section className="student-profile-section" aria-labelledby="student-profile-account-info">
-          <div className="student-section-heading">
-            <h3 id="student-profile-account-info">Student Details</h3>
-          </div>
-          <div className="student-profile-grid" role="list" aria-label="Student profile attributes">
-            <article className="student-profile-field" role="listitem">
-              <h3>Name</h3>
-              <p>{profile.name}</p>
-            </article>
-            <article className="student-profile-field" role="listitem">
-              <h3>Email</h3>
-              <p>{profile.email}</p>
-            </article>
-            <article className="student-profile-field" role="listitem">
-              <h3>Batch</h3>
-              <p>{profile.batch}</p>
-            </article>
-            <article className="student-profile-field" role="listitem">
-              <h3>Academic Year</h3>
-              <p>{profile.academicYear}</p>
-            </article>
-          </div>
-        </section>
-
-        <section className="student-profile-section" aria-labelledby="student-profile-live-photo">
-          <div className="student-section-heading">
-            <h3 id="student-profile-live-photo">Live Identity Photo</h3>
-            <p>Used for exam identity checks when verification guard is enabled.</p>
-          </div>
-          <div className="student-live-photo-panel">
-            <div className="student-live-photo-identity-card">
-              <div className="student-live-photo-preview">
-                {livePhoto ? (
-                  <img src={livePhoto.photoDataUrl} alt="Student live identity capture" />
-                ) : (
-                  <span>No photo</span>
-                )}
-              </div>
-              <div className="student-live-photo-summary">
-                <span className={`student-live-photo-status student-live-photo-status-${livePhotoStatus}`}>
-                  {livePhotoStatus === "verified" ? "Verified" : "Unverified"}
-                </span>
-                <small>
-                  {livePhoto ? new Date(livePhoto.capturedAtIso).toLocaleString() : "Capture pending"}
-                </small>
-              </div>
-            </div>
-            <div className="student-live-photo-details">
-              <div className="student-live-photo-camera">
-                {cameraStream ? (
-                  <video ref={videoRef} autoPlay muted playsInline />
-                ) : (
-                  <div className="student-live-photo-camera-placeholder">
-                    <strong>Camera off</strong>
-                    <span>Open camera to update your live photo.</span>
-                  </div>
-                )}
-                <canvas ref={canvasRef} aria-hidden="true" />
-              </div>
-              <div className="student-profile-actions">
-                <button type="button" onClick={startLiveCamera} disabled={isCameraStarting}>
-                  {isCameraStarting ? "Starting Camera..." : cameraStream ? "Restart Camera" : "Open Camera"}
-                </button>
-                <button type="button" onClick={captureLivePhoto} disabled={!cameraStream}>
-                  Capture Live Photo
-                </button>
-                {cameraStream ? (
-                  <button type="button" onClick={stopLiveCamera}>
-                    Stop Camera
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="student-profile-section" aria-labelledby="student-profile-password">
-          <div className="student-section-heading">
-            <h3 id="student-profile-password">Account Access</h3>
-            <p>Password reset and sign-out controls.</p>
-          </div>
-          <div className="student-profile-access-grid">
-            <form className="student-profile-access-card" onSubmit={handlePasswordReset}>
-              <div>
-                <strong>Password</strong>
-                <span>{profile.email}</span>
-              </div>
-              <button type="submit" disabled={isSendingReset || session.status !== "authenticated"}>
-                {isSendingReset ? "Sending..." : "Reset Password"}
-              </button>
-            </form>
-            <div className="student-profile-access-card">
-              <div>
-                <strong>Current Session</strong>
-                <span>{session.status === "authenticated" ? "Signed in" : "Not authenticated"}</span>
-              </div>
-              <button
-                type="button"
-                className="student-profile-logout-button"
-                disabled={session.status !== "authenticated"}
-                onClick={() => {
-                  void signOut();
-                }}
-              >
-                Sign Out
-              </button>
-            </div>
-          </div>
-        </section>
-      </div>
-
-      {notice ? <p className="student-profile-notice">{notice}</p> : null}
+        {draft ? <p>One captured image is ready in memory. It is not enrolled or verified.</p> : null}
+      </section>
+      <form onSubmit={passwordReset}><h3>Account access</h3><button type="submit" disabled={resetting || busy}>Reset password</button></form>
+    </> : !state.loading ? <p>Profile and media are unavailable. No identity status can be inferred from this browser. Contact your institute Admin if you cannot retrieve the version needed to withdraw an existing enrollment.</p> : null}
+    <section className="student-profile-section" aria-labelledby="student-photo-privacy">
+      <h3 id="student-photo-privacy">Photo privacy</h3>
+      <button type="button" disabled={!state.privacyAvailable || busy || Boolean(pending)} onClick={() => { stopCamera(); setDraft(null); setConsent(false); void state.withdraw(); }}>Withdraw consent and request deletion</button>
+      <button type="button" disabled={busy || !state.canCheckDeletion} onClick={() => void state.checkDeletion()}>Check deletion status</button>
+      {state.lifecycle ? <p role="status">Last withdrawn photo physical deletion: {state.lifecycle.state.replaceAll("_", " ")}{state.lifecycle.state === "deleted" ? ` at ${state.lifecycle.deletedAt}` : ". Not yet confirmed complete."}</p> : null}
     </section>
-  );
+    <button type="button" onClick={() => { stopCamera(); setDraft(null); void signOut(); }} disabled={session.status !== "authenticated"}>Sign out</button>
+  </section>;
 }
-
-export default StudentProfileSettingsPage;

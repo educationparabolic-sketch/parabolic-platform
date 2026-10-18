@@ -11,6 +11,8 @@ import {
   StudentSoftDeleteValidationError,
 } from "../types/studentSoftDelete";
 
+import {revokePhotoForStudentDeletion} from "./studentIdentityPhotoLifecycleAuthority";
+
 const INSTITUTES_COLLECTION = "institutes";
 const STUDENTS_COLLECTION = "students";
 const SESSIONS_COLLECTION = "sessions";
@@ -248,7 +250,8 @@ export class StudentSoftDeleteService {
         const deletedAt = alreadyDeleted ?
           toIsoString(studentData.deletedAt) ?? new Date().toISOString() :
           new Date().toISOString();
-        const nextVersion = alreadyDeleted ? currentVersion : currentVersion + 1;
+        const hasManagedPhoto = studentData.identityPhotoId != null;
+        const nextVersion = alreadyDeleted && !hasManagedPhoto ? currentVersion : currentVersion + 1;
         const appliedResult: StudentSoftDeleteResult = {
           alreadyDeleted,
           analyticsPreserved: true,
@@ -260,6 +263,13 @@ export class StudentSoftDeleteService {
           version: nextVersion,
         };
         const timestamp = Timestamp.fromDate(new Date(deletedAt));
+
+        if (!alreadyDeleted || hasManagedPhoto) {
+          await revokePhotoForStudentDeletion(transaction, studentSnapshot, timestamp);
+        }
+        if (alreadyDeleted && hasManagedPhoto) {
+          transaction.update(studentReference, {version: nextVersion, updatedAt: Timestamp.now()});
+        }
 
         if (!alreadyDeleted) {
           transaction.set(studentReference, {

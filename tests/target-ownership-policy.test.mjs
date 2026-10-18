@@ -28,14 +28,45 @@ function isReviewedSharedVendorBoundary(fileName, source) {
   return true;
 }
 
+const studentDelegates = new Map([
+  ["studentDashboard.ts", ["dashboard", "getDashboard"]],
+  ["studentTests.ts", ["tests", "listTests"]],
+  ["studentPerformance.ts", ["performance", "getPerformance"]],
+  ["studentInsights.ts", ["insights", "getInsights"]],
+]);
+function assertStudentBoundary(source) {
+  assert.match(source, /createAuthenticationMiddleware\(/u);
+  assert.match(source, /attachStudentId:\s*true/u);
+  assert.match(source, /createTenantGuardMiddleware\(/u);
+  assert.match(source, /allowVendorBypass:\s*false/u);
+  assert.match(source, /allowedRoles:\s*\["student"\]/u);
+  assert.match(source, /normalizeStudentSummaryQuery\(resource, request\.query\)/u);
+  assert.match(source, /read\(getBearerToken\(request\.headers\.authorization\), request\.query\)/u);
+}
+
 test("every authenticated institute-scoped API has a fail-closed tenant guard", async () => {
   const fileNames = (await readdir(apiDirectory)).filter((fileName) => fileName.endsWith(".ts"));
   let protectedApiCount = 0;
   let tenantScopedApiCount = 0;
   const seenSharedVendorBoundaries = new Set();
+  const seenStudentDelegates = new Set();
 
   for (const fileName of fileNames) {
     const source = await readFile(join(apiDirectory, fileName), "utf8");
+    if (fileName === "studentSummaryHandler.ts") {
+      assertStudentBoundary(source);
+      continue; // Shared implementation; the four reviewed delegates count as endpoints.
+    }
+    if (studentDelegates.has(fileName)) {
+      const [resource, method] = studentDelegates.get(fileName);
+      assert.ok(source.includes(`createStudentSummaryHandler("${resource}", dependencies.${method}, dependencies.verifyIdToken)`));
+      assert.match(source, /from "\.\/studentSummaryHandler"/u);
+      assert.ok(source.includes(`studentSummaryService.${method}.bind(studentSummaryService)`));
+      seenStudentDelegates.add(fileName);
+      protectedApiCount++;
+      tenantScopedApiCount++;
+      continue;
+    }
     if (!source.includes("createAuthenticationMiddleware(")) {
       continue;
     }
@@ -79,6 +110,7 @@ test("every authenticated institute-scoped API has a fail-closed tenant guard", 
   }
 
   assert.deepEqual([...seenSharedVendorBoundaries].sort(), [...sharedVendorBoundaries].sort());
+  assert.deepEqual([...seenStudentDelegates].sort(), [...studentDelegates.keys()].sort());
   assert.equal(protectedApiCount, 51);
   assert.equal(tenantScopedApiCount, 39);
   for (const fileName of ["adminStudentDataExport.ts", "adminStudentSoftDelete.ts"]) {
@@ -158,4 +190,14 @@ test("shared global Vendor classification rejects removed fresh guards and unrev
   assert.throws(() => isReviewedSharedVendorBoundary("newUnreviewedBoundary.ts", source));
   assert.throws(() => isReviewedSharedVendorBoundary("vendorAuditHealthBoundary.ts", source.replace("await assertCurrentVendorIdentity(", "await removedFreshGuard(")));
   assert.throws(() => isReviewedSharedVendorBoundary("vendorAuditHealthBoundary.ts", source.replace("../policy/vendorRolePolicy", "../policy/unreviewedRoles")));
+});
+
+
+test("reviewed shared Student transport rejects missing tenant, role and closed-query guards", async () => {
+  const source = await readFile(join(apiDirectory, "studentSummaryHandler.ts"), "utf8");
+  assertStudentBoundary(source);
+  for (const guard of ["createTenantGuardMiddleware(", "normalizeStudentSummaryQuery(resource, request.query)",
+    "attachStudentId: true", 'allowedRoles: ["student"]']) {
+    assert.throws(() => assertStudentBoundary(source.replace(guard, "removedGuard")));
+  }
 });

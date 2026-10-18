@@ -1,6 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
-import { useGlobalPortalState } from "../../../../../shared/services/globalPortalState";
-import type { LicenseLayer } from "../../../../../shared/types/portalRouting";
+import { useMemo, useState } from "react";
 import {
   UiChartContainer,
   UiStatCard,
@@ -9,36 +7,25 @@ import {
   type UiTableColumn,
 } from "../../../../../shared/ui/components";
 import {
-  ApiClientError,
-  EMPTY_STUDENT_PERFORMANCE_DATASET,
-  STUDENT_PERFORMANCE_FALLBACK_DATASET,
   fetchStudentPerformanceDataset,
-  shouldUseLiveApi,
   type ControlledModeComparison,
-  type StudentPerformanceDataset,
   type StudentPerformancePoint,
 } from "./studentPerformanceDataset";
 import {
-  STUDENT_INSIGHTS_FALLBACK_DATASET,
   fetchStudentInsightsDataset,
   type TopicWeaknessInsight,
 } from "../insights/studentInsightsDataset";
-import { isStudentDebugMode } from "../../services/studentDebugMode";
-
-const LICENSE_LAYER_ORDER: Record<LicenseLayer, number> = {
-  L0: 0,
-  L1: 1,
-  L2: 2,
-  L3: 3,
-};
+import StudentSummaryRead from "../../services/StudentSummaryRead";
 
 const RECENT_HISTORY_PAGE_SIZE = 5;
 
-function formatPercent(value: number): string {
+function formatPercent(value: number | null): string {
+  if (value === null) return "Unavailable";
   return `${Math.round(value)}%`;
 }
 
-function formatDelta(value: number, invert = false): string {
+function formatDelta(value: number | null, invert = false): string {
+  if (value === null) return "Unavailable";
   const rounded = Math.round(value);
   const effective = invert ? -rounded : rounded;
   const prefix = rounded > 0 ? "+" : "";
@@ -59,15 +46,16 @@ function formatDate(value: string): string {
 
 function toTrendPoints(
   timeline: StudentPerformancePoint[],
-  selector: (entry: StudentPerformancePoint) => number,
+  selector: (entry: StudentPerformancePoint) => number | null,
 ): UiChartPoint[] {
-  return timeline.map((entry) => ({
-    label: formatDate(entry.completedAt),
-    value: Math.round(selector(entry)),
-  }));
+  return timeline.flatMap((entry) => {
+    const value = selector(entry);
+    return value === null ? [] : [{label: formatDate(entry.completedAt), value: Math.round(value)}];
+  });
 }
 
-function controlledComparisonTone(value: number, invert = false): string {
+function controlledComparisonTone(value: number | null, invert = false): string {
+  if (value === null) return "student-performance-controlled-value";
   const effective = invert ? -value : value;
   if (effective > 0) {
     return "student-performance-controlled-value student-performance-controlled-value-positive";
@@ -85,19 +73,19 @@ function formatWeaknessPercent(value: number): string {
 }
 
 function behaviorLabelForRun(entry: StudentPerformancePoint): string {
-  if (entry.phaseAdherencePercent < 65) {
+  if (entry.phaseAdherencePercent !== null && entry.phaseAdherencePercent < 65) {
     return "Late-phase drift";
   }
 
-  if (entry.guessRatePercent >= 25) {
+  if (entry.guessRatePercent !== null && entry.guessRatePercent >= 25) {
     return "Rushed pattern";
   }
 
-  if (entry.timeAllocationBalancePercent < 65) {
+  if (entry.timeAllocationBalancePercent !== null && entry.timeAllocationBalancePercent < 65) {
     return "Pacing imbalance";
   }
 
-  return "Stable pacing";
+  return "Review your permitted pacing metrics";
 }
 
 function toDateInputEpoch(value: string, endOfDay = false): number | null {
@@ -109,84 +97,31 @@ function toDateInputEpoch(value: string, endOfDay = false): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+async function loadPerformance() {
+  const dataset = await fetchStudentPerformanceDataset(10);
+  let insights: Awaited<ReturnType<typeof fetchStudentInsightsDataset>> | null = null;
+  let topicWeaknessRows: TopicWeaknessInsight[] = [];
+  let insightError: string | null = null;
+  if (dataset.access.metrics.insights) {
+    try { insights = await fetchStudentInsightsDataset(6);
+      topicWeaknessRows = insights.topicWeaknessSummary; }
+    catch { insightError = "Reflective insights are unavailable. Refresh to retry."; }
+  }
+  return {dataset, topicWeaknessRows, insights, insightError};
+}
 function StudentPerformancePage() {
-  const globalState = useGlobalPortalState();
-  const debugMode = isStudentDebugMode();
-  const [dataset, setDataset] = useState<StudentPerformanceDataset>(
-    shouldUseLiveApi() ?
-      EMPTY_STUDENT_PERFORMANCE_DATASET :
-      STUDENT_PERFORMANCE_FALLBACK_DATASET,
-  );
-  const [topicWeaknessRows, setTopicWeaknessRows] = useState<TopicWeaknessInsight[]>(
-    shouldUseLiveApi() ? [] : STUDENT_INSIGHTS_FALLBACK_DATASET.topicWeaknessSummary,
-  );
-  const [isLoading, setIsLoading] = useState(true);
-  const [inlineMessage, setInlineMessage] = useState<string | null>(null);
+  return <StudentSummaryRead load={loadPerformance} label="analytics">
+    {(data) => <PerformanceContent {...data} />}
+  </StudentSummaryRead>;
+}
+function PerformanceContent({dataset, topicWeaknessRows, insights, insightError}: Awaited<ReturnType<typeof loadPerformance>>) {
   const [historyQuery, setHistoryQuery] = useState("");
   const [historyFromDate, setHistoryFromDate] = useState("");
   const [historyToDate, setHistoryToDate] = useState("");
   const [historyPage, setHistoryPage] = useState(1);
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadPerformance() {
-      setIsLoading(true);
-      setInlineMessage(null);
-
-      if (!shouldUseLiveApi()) {
-        setDataset(STUDENT_PERFORMANCE_FALLBACK_DATASET);
-        setTopicWeaknessRows(STUDENT_INSIGHTS_FALLBACK_DATASET.topicWeaknessSummary);
-        setInlineMessage(
-          "Showing practice performance trends so you can explore this page.",
-        );
-        setIsLoading(false);
-        return;
-      }
-
-      try {
-        const apiDataset = await fetchStudentPerformanceDataset(10);
-        const canReadInsights = LICENSE_LAYER_ORDER[
-          globalState.licenseLayer ?? apiDataset.licenseLayer
-        ] >= LICENSE_LAYER_ORDER.L1;
-        const apiInsightsDataset = canReadInsights ?
-          await fetchStudentInsightsDataset(6) :
-          null;
-        if (!isMounted) {
-          return;
-        }
-
-        setDataset(apiDataset);
-        setTopicWeaknessRows(apiInsightsDataset?.topicWeaknessSummary ?? []);
-        setInlineMessage("Your performance trends are up to date.");
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-
-        const reason = error instanceof ApiClientError ? error.message : "Failed to load student performance analytics.";
-        setInlineMessage(reason);
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    void loadPerformance();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [globalState.licenseLayer]);
-
-  const activeLicenseLayer = useMemo<LicenseLayer>(() => {
-    const resolvedLayer = globalState.licenseLayer ?? dataset.licenseLayer;
-    return LICENSE_LAYER_ORDER[resolvedLayer] > LICENSE_LAYER_ORDER.L2 ? "L2" : resolvedLayer;
-  }, [dataset.licenseLayer, globalState.licenseLayer]);
-
-  const isL1Plus = LICENSE_LAYER_ORDER[activeLicenseLayer] >= LICENSE_LAYER_ORDER.L1;
-  const isL2Plus = LICENSE_LAYER_ORDER[activeLicenseLayer] >= LICENSE_LAYER_ORDER.L2;
+  const isL1Plus = dataset.access.metrics.execution;
+  const isL2Plus = dataset.access.metrics.advanced;
 
   const timeline = dataset.timeline;
   const latestSnapshot = timeline[timeline.length - 1];
@@ -280,12 +215,13 @@ function StudentPerformancePage() {
       {
         label: "Guess Rate",
         value: formatPercent(dataset.guessProbabilityPercent),
-        helper: `${dataset.guessProbabilityCluster} cluster`,
+        helper: dataset.guessProbabilityCluster === null ? "Unavailable" : `${dataset.guessProbabilityCluster} cluster`,
       },
     ];
   }, [dataset]);
 
   const controlledComparisonRows = useMemo(() => {
+    if (!controlledComparison) return [];
     const comparison: ControlledModeComparison = controlledComparison;
     return [
       {
@@ -369,10 +305,6 @@ function StudentPerformancePage() {
     });
   }, [historyFromDate, historyQuery, historyToDate, timeline]);
 
-  useEffect(() => {
-    setHistoryPage(1);
-  }, [historyFromDate, historyQuery, historyToDate]);
-
   const historyPageCount = Math.max(1, Math.ceil(filteredTimeline.length / RECENT_HISTORY_PAGE_SIZE));
   const normalizedHistoryPage = Math.min(historyPage, historyPageCount);
   const pagedTimeline = useMemo(() => {
@@ -438,7 +370,7 @@ function StudentPerformancePage() {
           <div className="student-performance-table-signals student-performance-table-signals-l2">
             <strong>L2</strong>
             <span>Risk: {entry.riskState}</span>
-            <span>Discipline: {Math.round(entry.disciplineIndex)}</span>
+            <span>Discipline: {entry.disciplineIndex === null ? "Unavailable" : Math.round(entry.disciplineIndex)}</span>
             <span>Guess: {formatPercent(entry.guessRatePercent)}</span>
           </div>
         ),
@@ -451,9 +383,9 @@ function StudentPerformancePage() {
   return (
     <section className="student-content-card student-performance-page" aria-labelledby="student-performance-title">
       <h2 id="student-performance-title">Analytics</h2>
-      {isLoading ? <p className="student-learning-state" role="status">Preparing your analytics...</p> : null}
 
-      {debugMode && inlineMessage ? <p className="student-performance-inline-note">{inlineMessage}</p> : null}
+      <p>Academic year: {dataset.scope.yearId}</p>
+      {insightError ? <p role="alert">{insightError}</p> : null}
 
       <section className="student-performance-layer-section" aria-labelledby="student-performance-l0-title">
         <div className="student-section-heading">
@@ -466,7 +398,7 @@ function StudentPerformancePage() {
             <UiStatCard
               key={card.label}
               title={card.label}
-              value={isLoading ? "..." : card.value}
+              value={card.value}
               helper={card.helper}
             />
           ))}
@@ -516,7 +448,7 @@ function StudentPerformancePage() {
               <input
                 type="search"
                 value={historyQuery}
-                onChange={(event) => setHistoryQuery(event.target.value)}
+                onChange={(event) => { setHistoryQuery(event.target.value); setHistoryPage(1); }}
                 placeholder="Search test history"
               />
             </label>
@@ -525,7 +457,7 @@ function StudentPerformancePage() {
               <input
                 type="date"
                 value={historyFromDate}
-                onChange={(event) => setHistoryFromDate(event.target.value)}
+                onChange={(event) => { setHistoryFromDate(event.target.value); setHistoryPage(1); }}
               />
             </label>
             <label>
@@ -533,7 +465,7 @@ function StudentPerformancePage() {
               <input
                 type="date"
                 value={historyToDate}
-                onChange={(event) => setHistoryToDate(event.target.value)}
+                onChange={(event) => { setHistoryToDate(event.target.value); setHistoryPage(1); }}
               />
             </label>
             <button
@@ -611,6 +543,16 @@ function StudentPerformancePage() {
         </section>
       ) : null}
 
+      {insights ? <section aria-label="Reflective insights">
+        <h3>Reflective Insights</h3>
+        <p>Pattern: {insights.mostFrequentBehaviorPattern}</p>
+        <p>{insights.phaseAdherenceFeedback}</p>
+        {insights.guessDetectionAlertPercent !== null ? <p>Guess detection: {formatPercent(insights.guessDetectionAlertPercent)}</p> : null}
+        {insights.disciplineImprovementSuggestions?.map((suggestion) => <p key={suggestion}>{suggestion}</p>)}
+        <UiTable caption="Weak Topic Guidance" columns={topicWeaknessColumns} rows={orderedTopicWeaknessRows}
+          rowKey={(row) => row.topic} emptyStateText="No reflective guidance available yet." />
+      </section> : null}
+
       {isL2Plus ? (
         <section className="student-performance-layer-section" aria-labelledby="student-performance-l2-title">
           <div className="student-section-heading">
@@ -647,24 +589,18 @@ function StudentPerformancePage() {
               data={minViolationTrend}
               maxValue={100}
             />
-            <UiChartContainer
+            {dataset.access.metrics.hardTiming ? <UiChartContainer
               title="MaxTime Violation % Trend"
               subtitle="Late timing checks"
               variant="line"
               data={maxViolationTrend}
               maxValue={100}
-            />
+            /> : <p>Maximum-time metrics unavailable.</p>}
           </div>
 
-          <UiTable
-            caption="Weak Topic Guidance"
-            columns={topicWeaknessColumns}
-            rows={orderedTopicWeaknessRows}
-            rowKey={(row) => row.topic}
-            emptyStateText="No weak-topic guidance is available yet."
-          />
 
-          <section className="student-performance-controlled-section" aria-label="Controlled mode comparison">
+
+          {controlledComparison ? <section className="student-performance-controlled-section" aria-label="Controlled mode comparison">
             <div className="student-performance-controlled-header">
               <div>
                 <p className="student-content-eyebrow">Controlled Mode Comparison</p>
@@ -683,7 +619,7 @@ function StudentPerformancePage() {
                 </article>
               ))}
             </div>
-          </section>
+          </section> : <p>Controlled comparison unavailable.</p>}
         </section>
       ) : null}
     </section>

@@ -41,7 +41,7 @@ test("public preview routes refresh with the reviewed target-specific headers", 
   requireStagingUrls();
   const routes = [
     [new URL("/admin/deep-link", stagingUrls.portal).href, "portal-admin", commonPermissionsPolicy],
-    [new URL("/student/deep-link", stagingUrls.portal).href, "portal-student", commonPermissionsPolicy],
+    [new URL("/student/deep-link", stagingUrls.portal).href, "portal-student", examPermissionsPolicy],
     [new URL("/deep-link", stagingUrls.exam).href, "exam", examPermissionsPolicy],
     [new URL("/deep-link", stagingUrls.vendor).href, "vendor", commonPermissionsPolicy],
   ];

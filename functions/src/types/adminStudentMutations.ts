@@ -1,3 +1,6 @@
+import type {
+  ManagedStudentIdentityPhotoReviewRequest as WirePhotoReviewRequest,
+} from "../../../shared/contracts/studentProfile";
 /* eslint-disable require-jsdoc */
 import {StandardApiErrorCode} from "./apiResponse";
 import type {
@@ -7,7 +10,7 @@ import type {
   AdminStudentDataExportResult,
   AdminStudentLifecycleUpdateRequest as WireLifecycleUpdateRequest,
   AdminStudentLifecycleUpdateResult,
-  AdminStudentPhotoReviewRequest as WirePhotoReviewRequest,
+
   AdminStudentPhotoReviewResult,
   AdminStudentProfileUpdateRequest as WireProfileUpdateRequest,
   AdminStudentProfileUpdateResult,

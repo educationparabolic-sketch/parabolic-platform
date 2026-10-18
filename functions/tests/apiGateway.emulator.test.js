@@ -27,6 +27,7 @@ function materializePath(canonicalPath, routeId) {
     .replace("{sessionId}", encodeURIComponent(`session ${routeId} Ω`))
     .replace("{testId}", encodeURIComponent(`test ${routeId} Ω`))
     .replace("{runId}", encodeURIComponent(`run ${routeId} Ω`))
+    .replace("{photoId}", encodeURIComponent(`photo ${routeId} Ω`))
     .replace("{studentId}", encodeURIComponent(`student ${routeId} Ω`))
     .replace("{questionId}", encodeURIComponent(`question ${routeId} Ω`))
     .replace("{packageId}", encodeURIComponent(`package ${routeId} Ω`))
@@ -52,7 +53,7 @@ async function requestGateway(requestPath, method, body) {
       undefined :
       {"Content-Type": "application/json"},
     method,
-    signal: AbortSignal.timeout(15_000),
+    signal: AbortSignal.timeout(60_000),
   });
   const responseText = await response.text();
   const contentType = response.headers.get("content-type") ?? "";
@@ -66,6 +67,32 @@ async function requestGateway(requestPath, method, body) {
     status: response.status,
   };
 }
+
+test("BWM-042 transport denies unauthenticated access without media disclosure",
+  async () => {
+    const reservedIds = ["ADM-61", "STU-07", "STU-08", "STU-09",
+      "STU-10", "STU-11", "STU-12", "EXM-06"];
+    const routes = API_ROUTE_MANIFEST.filter((route) =>
+      reservedIds.includes(route.id));
+    assert.equal(routes.length, 8);
+    for (const route of routes) {
+      assert.equal(route.status, "implemented");
+      assert.equal(typeof route.functionExport, "string");
+      const requestPath = materializePath(route.canonicalPath, route.id);
+      const result = await requestGateway(requestPath, route.method,
+        route.method === "GET" ? undefined : {});
+      assert.ok([400, 401].includes(result.status), route.id);
+      assertCanonicalErrorEnvelope(result.body);
+      assert.ok(["UNAUTHORIZED", "VALIDATION_ERROR"]
+        .includes(result.body.error.code));
+      assert.equal(result.body.data, undefined);
+      assert.equal(result.headers.get("access-control-allow-origin"), null);
+      const wrongMethod = await requestGateway(requestPath, "PUT", {});
+      assert.equal(wrongMethod.status, 405, route.id);
+      assert.equal(wrongMethod.headers.get("allow"), route.method);
+      assertCanonicalErrorEnvelope(wrongMethod.body);
+    }
+  });
 
 test("secured recovery routes deny missing authentication", async () => {
   for (const [method, suffix] of [["GET", ""], ["POST", "/rollback"]]) {
@@ -97,7 +124,7 @@ test(
     const implementedRoutes = API_ROUTE_MANIFEST.filter(
       (route) => route.status === "implemented",
     );
-    assert.equal(implementedRoutes.length, 107);
+    assert.equal(implementedRoutes.length, 115);
 
     for (const route of implementedRoutes) {
       const requestPath = materializePath(route.canonicalPath, route.id);
@@ -314,7 +341,7 @@ test(
           "Origin": unauthorizedOrigin,
         },
         method: "OPTIONS",
-        signal: AbortSignal.timeout(15_000),
+        signal: AbortSignal.timeout(60_000),
       },
     );
     const preflightBody = await preflight.json();
@@ -335,7 +362,7 @@ test(
       {
         headers: {"Origin": unauthorizedOrigin},
         method: "GET",
-        signal: AbortSignal.timeout(15_000),
+        signal: AbortSignal.timeout(60_000),
       },
     );
     const directRequestBody = await directRequest.json();

@@ -365,3 +365,19 @@ test("firestore index manifest includes claim propagation schedules", () => {
     true,
   );
 });
+
+
+test("BWM-043 current Student cursor and upcoming queries have exact mode-independent composites", () => {
+  const manifest = readManifest();
+  assert.ok(hasIndex(manifest.indexes, "runs", [
+    {fieldPath: "recipientStudentIds", arrayConfig: "CONTAINS"},
+    {fieldPath: "startWindow", order: "DESCENDING"},
+    {fieldPath: "__name__", order: "DESCENDING"},
+  ]));
+  assert.ok(hasIndex(manifest.indexes, "runs", [
+    {fieldPath: "recipientStudentIds", arrayConfig: "CONTAINS"},
+    {fieldPath: "status", order: "ASCENDING"},
+    {fieldPath: "startWindow", order: "ASCENDING"},
+    {fieldPath: "__name__", order: "ASCENDING"},
+  ]));
+});

@@ -768,322 +768,716 @@
       "collectionGroup": "institutes",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "vendorLifecycleState", "order": "ASCENDING"},
-        {"fieldPath": "updatedAt", "order": "DESCENDING"},
-        {"fieldPath": "__name__", "order": "DESCENDING"}
+        {
+          "fieldPath": "vendorLifecycleState",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "institutes",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "vendorLicenseLayer", "order": "ASCENDING"},
-        {"fieldPath": "updatedAt", "order": "DESCENDING"},
-        {"fieldPath": "__name__", "order": "DESCENDING"}
+        {
+          "fieldPath": "vendorLicenseLayer",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "institutes",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "vendorLifecycleState", "order": "ASCENDING"},
-        {"fieldPath": "vendorLicenseLayer", "order": "ASCENDING"},
-        {"fieldPath": "updatedAt", "order": "DESCENDING"},
-        {"fieldPath": "__name__", "order": "DESCENDING"}
+        {
+          "fieldPath": "vendorLifecycleState",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "vendorLicenseLayer",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "institutes",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "vendorFilterKeys", "arrayConfig": "CONTAINS"},
-        {"fieldPath": "updatedAt", "order": "DESCENDING"},
-        {"fieldPath": "__name__", "order": "DESCENDING"}
+        {
+          "fieldPath": "vendorFilterKeys",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "institutes",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "vendorFilterKeys", "arrayConfig": "CONTAINS"},
-        {"fieldPath": "vendorLifecycleState", "order": "ASCENDING"},
-        {"fieldPath": "updatedAt", "order": "DESCENDING"},
-        {"fieldPath": "__name__", "order": "DESCENDING"}
+        {
+          "fieldPath": "vendorFilterKeys",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "vendorLifecycleState",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "institutes",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "vendorFilterKeys", "arrayConfig": "CONTAINS"},
-        {"fieldPath": "vendorLicenseLayer", "order": "ASCENDING"},
-        {"fieldPath": "updatedAt", "order": "DESCENDING"},
-        {"fieldPath": "__name__", "order": "DESCENDING"}
+        {
+          "fieldPath": "vendorFilterKeys",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "vendorLicenseLayer",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "institutes",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "vendorFilterKeys", "arrayConfig": "CONTAINS"},
-        {"fieldPath": "vendorLifecycleState", "order": "ASCENDING"},
-        {"fieldPath": "vendorLicenseLayer", "order": "ASCENDING"},
-        {"fieldPath": "updatedAt", "order": "DESCENDING"},
-        {"fieldPath": "__name__", "order": "DESCENDING"}
+        {
+          "fieldPath": "vendorFilterKeys",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "vendorLifecycleState",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "vendorLicenseLayer",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "vendorOnboarding",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "status", "order": "ASCENDING"},
-        {"fieldPath": "updatedAt", "order": "DESCENDING"},
-        {"fieldPath": "__name__", "order": "DESCENDING"}
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "vendorOnboarding",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "onboardingFilterKeys", "arrayConfig": "CONTAINS"},
-        {"fieldPath": "updatedAt", "order": "DESCENDING"},
-        {"fieldPath": "__name__", "order": "DESCENDING"}
+        {
+          "fieldPath": "onboardingFilterKeys",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "vendorOnboarding",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "onboardingFilterKeys", "arrayConfig": "CONTAINS"},
-        {"fieldPath": "status", "order": "ASCENDING"},
-        {"fieldPath": "updatedAt", "order": "DESCENDING"},
-        {"fieldPath": "__name__", "order": "DESCENDING"}
+        {
+          "fieldPath": "onboardingFilterKeys",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "events",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "occurredAt", "order": "DESCENDING"},
-        {"fieldPath": "__name__", "order": "DESCENDING"}
+        {
+          "fieldPath": "occurredAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "licenseRequests",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
-        {"fieldPath": "submittedAt", "order": "DESCENDING"},
-        {"fieldPath": "instituteId", "order": "ASCENDING"},
-        {"fieldPath": "requestId", "order": "ASCENDING"}
+        {
+          "fieldPath": "submittedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "instituteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "requestId",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "licenseRequests",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
-        {"fieldPath": "instituteId", "order": "ASCENDING"},
-        {"fieldPath": "submittedAt", "order": "DESCENDING"},
-        {"fieldPath": "requestId", "order": "ASCENDING"}
+        {
+          "fieldPath": "instituteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "submittedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "requestId",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "licenseRequests",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
-        {"fieldPath": "requestedLayer", "order": "ASCENDING"},
-        {"fieldPath": "submittedAt", "order": "DESCENDING"},
-        {"fieldPath": "instituteId", "order": "ASCENDING"},
-        {"fieldPath": "requestId", "order": "ASCENDING"}
+        {
+          "fieldPath": "requestedLayer",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "submittedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "instituteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "requestId",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "licenseRequests",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
-        {"fieldPath": "status", "order": "ASCENDING"},
-        {"fieldPath": "submittedAt", "order": "DESCENDING"},
-        {"fieldPath": "instituteId", "order": "ASCENDING"},
-        {"fieldPath": "requestId", "order": "ASCENDING"}
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "submittedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "instituteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "requestId",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "licenseRequests",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
-        {"fieldPath": "instituteId", "order": "ASCENDING"},
-        {"fieldPath": "requestedLayer", "order": "ASCENDING"},
-        {"fieldPath": "submittedAt", "order": "DESCENDING"},
-        {"fieldPath": "requestId", "order": "ASCENDING"}
+        {
+          "fieldPath": "instituteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "requestedLayer",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "submittedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "requestId",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "licenseRequests",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
-        {"fieldPath": "instituteId", "order": "ASCENDING"},
-        {"fieldPath": "status", "order": "ASCENDING"},
-        {"fieldPath": "submittedAt", "order": "DESCENDING"},
-        {"fieldPath": "requestId", "order": "ASCENDING"}
+        {
+          "fieldPath": "instituteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "submittedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "requestId",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "licenseRequests",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
-        {"fieldPath": "requestedLayer", "order": "ASCENDING"},
-        {"fieldPath": "status", "order": "ASCENDING"},
-        {"fieldPath": "submittedAt", "order": "DESCENDING"},
-        {"fieldPath": "instituteId", "order": "ASCENDING"},
-        {"fieldPath": "requestId", "order": "ASCENDING"}
+        {
+          "fieldPath": "requestedLayer",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "submittedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "instituteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "requestId",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "licenseRequests",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
-        {"fieldPath": "instituteId", "order": "ASCENDING"},
-        {"fieldPath": "requestedLayer", "order": "ASCENDING"},
-        {"fieldPath": "status", "order": "ASCENDING"},
-        {"fieldPath": "submittedAt", "order": "DESCENDING"},
-        {"fieldPath": "requestId", "order": "ASCENDING"}
+        {
+          "fieldPath": "instituteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "requestedLayer",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "submittedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "requestId",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "billingRecords",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
-        {"fieldPath": "updatedAt", "order": "DESCENDING"},
-        {"fieldPath": "instituteId", "order": "ASCENDING"},
-        {"fieldPath": "invoiceId", "order": "ASCENDING"}
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "instituteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "invoiceId",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "billingRecords",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
-        {"fieldPath": "instituteId", "order": "ASCENDING"},
-        {"fieldPath": "updatedAt", "order": "DESCENDING"},
-        {"fieldPath": "invoiceId", "order": "ASCENDING"}
+        {
+          "fieldPath": "instituteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "invoiceId",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "billingRecords",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
-        {"fieldPath": "commercialStatus", "order": "ASCENDING"},
-        {"fieldPath": "updatedAt", "order": "DESCENDING"},
-        {"fieldPath": "instituteId", "order": "ASCENDING"},
-        {"fieldPath": "invoiceId", "order": "ASCENDING"}
+        {
+          "fieldPath": "commercialStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "instituteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "invoiceId",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "billingRecords",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
-        {"fieldPath": "instituteId", "order": "ASCENDING"},
-        {"fieldPath": "commercialStatus", "order": "ASCENDING"},
-        {"fieldPath": "updatedAt", "order": "DESCENDING"},
-        {"fieldPath": "invoiceId", "order": "ASCENDING"}
+        {
+          "fieldPath": "instituteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "commercialStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "invoiceId",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "events",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "updatedAt", "order": "DESCENDING"},
-        {"fieldPath": "eventId", "order": "ASCENDING"}
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "eventId",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "events",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "instituteId", "order": "ASCENDING"},
-        {"fieldPath": "updatedAt", "order": "DESCENDING"},
-        {"fieldPath": "eventId", "order": "ASCENDING"}
+        {
+          "fieldPath": "instituteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "eventId",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "events",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "processingState", "order": "ASCENDING"},
-        {"fieldPath": "updatedAt", "order": "DESCENDING"},
-        {"fieldPath": "eventId", "order": "ASCENDING"}
+        {
+          "fieldPath": "processingState",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "eventId",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "events",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "reconciliationState", "order": "ASCENDING"},
-        {"fieldPath": "updatedAt", "order": "DESCENDING"},
-        {"fieldPath": "eventId", "order": "ASCENDING"}
+        {
+          "fieldPath": "reconciliationState",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "eventId",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "events",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "instituteId", "order": "ASCENDING"},
-        {"fieldPath": "processingState", "order": "ASCENDING"},
-        {"fieldPath": "updatedAt", "order": "DESCENDING"},
-        {"fieldPath": "eventId", "order": "ASCENDING"}
+        {
+          "fieldPath": "instituteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "processingState",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "eventId",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "events",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "instituteId", "order": "ASCENDING"},
-        {"fieldPath": "reconciliationState", "order": "ASCENDING"},
-        {"fieldPath": "updatedAt", "order": "DESCENDING"},
-        {"fieldPath": "eventId", "order": "ASCENDING"}
+        {
+          "fieldPath": "instituteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "reconciliationState",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "eventId",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "events",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "processingState", "order": "ASCENDING"},
-        {"fieldPath": "reconciliationState", "order": "ASCENDING"},
-        {"fieldPath": "updatedAt", "order": "DESCENDING"},
-        {"fieldPath": "eventId", "order": "ASCENDING"}
+        {
+          "fieldPath": "processingState",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "reconciliationState",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "eventId",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "events",
       "queryScope": "COLLECTION",
       "fields": [
-        {"fieldPath": "instituteId", "order": "ASCENDING"},
-        {"fieldPath": "processingState", "order": "ASCENDING"},
-        {"fieldPath": "reconciliationState", "order": "ASCENDING"},
-        {"fieldPath": "updatedAt", "order": "DESCENDING"},
-        {"fieldPath": "eventId", "order": "ASCENDING"}
+        {
+          "fieldPath": "instituteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "processingState",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "reconciliationState",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "eventId",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "claimPropagationOperations",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
-        {"fieldPath": "state", "order": "ASCENDING"},
-        {"fieldPath": "nextAttemptAt", "order": "ASCENDING"}
+        {
+          "fieldPath": "state",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "nextAttemptAt",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "license",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
-        {"fieldPath": "licenseState", "order": "ASCENDING"},
-        {"fieldPath": "expiryDate", "order": "ASCENDING"}
+        {
+          "fieldPath": "licenseState",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "expiryDate",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "license",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
-        {"fieldPath": "licenseState", "order": "ASCENDING"},
-        {"fieldPath": "gracePeriodEndsAt", "order": "ASCENDING"}
+        {
+          "fieldPath": "licenseState",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "gracePeriodEndsAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "runs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "recipientStudentIds",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "startWindow",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "runs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "recipientStudentIds",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "startWindow",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
       ]
     }
   ],
@@ -1092,9 +1486,28 @@
       "collectionGroup": "licenseHistory",
       "fieldPath": "timestamp",
       "indexes": [
-        {"order": "ASCENDING", "queryScope": "COLLECTION"},
-        {"order": "DESCENDING", "queryScope": "COLLECTION"},
-        {"order": "DESCENDING", "queryScope": "COLLECTION_GROUP"}
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "identityPhotos",
+      "fieldPath": "nextCleanupAt",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
       ]
     }
   ]

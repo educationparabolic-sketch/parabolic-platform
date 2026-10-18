@@ -185,6 +185,7 @@ export class InstituteAuthorityEnforcementService {
   public async readCurrentAuthority(
     transaction: FirebaseFirestore.Transaction,
     instituteId: string,
+    options: {requireCompleteEntitlement?: boolean} = {},
   ): Promise<CurrentInstituteAuthority> {
     const normalizedInstituteId = requiredString(instituteId, "instituteId");
     const instituteReference = this.dependencies.firestore
@@ -202,6 +203,20 @@ export class InstituteAuthorityEnforcementService {
     }
     const instituteData = instituteSnapshot.data() ?? {};
     const licenseData = licenseSnapshot.data() ?? {};
+    // Opt-in summary hardening; existing session/profile callers retain their
+    // existing compatibility policy until their own migration is authorized.
+    if (options.requireCompleteEntitlement) {
+      const flags = licenseData.featureFlags;
+      if (!isRecord(flags) ||
+          ["adaptivePhase", "controlledMode", "governanceAccess", "hardMode", "riskOverview"]
+            .some((key) => typeof flags[key] !== "boolean") ||
+          licenseData.expiryDate === undefined || licenseData.gracePeriodEndsAt === undefined) {
+        throw new InstituteAuthorityEnforcementError("malformed_authority", "Current entitlement is incomplete.");
+      }
+      if (typeof instituteData.status === "string" && instituteData.status.trim().toLowerCase() === "locked") {
+        throw new InstituteAuthorityEnforcementError("institute_suspended", "Institute access is locked.");
+      }
+    }
     const expiryDate = optionalDate(licenseData.expiryDate, "license.expiryDate");
     const gracePeriodEndsAt = optionalDate(
       licenseData.gracePeriodEndsAt,
@@ -291,32 +306,39 @@ export class InstituteAuthorityEnforcementService {
     );
     await this.dependencies.firestore.runTransaction(async (transaction) => {
       const authority = await this.readCurrentAuthority(transaction, instituteId);
-      this.assertPresentedAuthorizationVersion(
-        authority,
-        optionalPositiveInteger(decodedToken.authorizationVersion),
-      );
-      this.assertOperational(authority);
-      const tokenLayer = normalizeLayer(decodedToken.licenseLayer);
-      const tokenVersion = requiredString(
-        decodedToken.licenseVersion,
-        "token.licenseVersion",
-      );
-      const tokenState = typeof decodedToken.licenseState === "string" ?
-        decodedToken.licenseState.trim().toLowerCase() : "";
-      const tokenFlags = decodedFeatureFlags(decodedToken.featureFlags);
-      if (
-        tokenLayer !== authority.licenseLayer ||
-        tokenVersion !== authority.licenseVersion ||
-        tokenState !== authority.licenseState ||
-        !tokenFlags ||
-        JSON.stringify(tokenFlags) !== JSON.stringify(authority.featureFlags)
-      ) {
-        throw new InstituteAuthorityEnforcementError(
-          "stale_authorization_version",
-          "Authentication entitlement authority is stale; refresh the session.",
-        );
-      }
+      this.assertTokenAuthority(authority, decodedToken);
     });
+  }
+
+  public assertTokenAuthority(
+    authority: CurrentInstituteAuthority,
+    decodedToken: Record<string, unknown>,
+  ): void {
+    this.assertPresentedAuthorizationVersion(
+      authority,
+      optionalPositiveInteger(decodedToken.authorizationVersion),
+    );
+    this.assertOperational(authority);
+    const tokenLayer = normalizeLayer(decodedToken.licenseLayer);
+    const tokenVersion = requiredString(
+      decodedToken.licenseVersion,
+      "token.licenseVersion",
+    );
+    const tokenState = typeof decodedToken.licenseState === "string" ?
+      decodedToken.licenseState.trim().toLowerCase() : "";
+    const tokenFlags = decodedFeatureFlags(decodedToken.featureFlags);
+    if (
+      tokenLayer !== authority.licenseLayer ||
+      tokenVersion !== authority.licenseVersion ||
+      tokenState !== authority.licenseState ||
+      !tokenFlags ||
+      JSON.stringify(tokenFlags) !== JSON.stringify(authority.featureFlags)
+    ) {
+      throw new InstituteAuthorityEnforcementError(
+        "stale_authorization_version",
+        "Authentication entitlement authority is stale; refresh the session.",
+      );
+    }
   }
 
   public assertModeAllowed(

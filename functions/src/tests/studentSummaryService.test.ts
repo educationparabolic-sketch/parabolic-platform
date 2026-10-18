@@ -1,568 +1,315 @@
+/* eslint-disable require-jsdoc */
 import assert from "node:assert/strict";
 import test from "node:test";
-import {Timestamp} from "firebase-admin/firestore";
-import * as gcpMetadata from "gcp-metadata";
+import {Timestamp, FieldValue} from "firebase-admin/firestore";
 import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
+import {StudentSummaryService} from "../services/studentSummary";
+import {StudentSummaryAuthorityService} from "../services/studentSummaryAuthority";
+import {StudentSolutionsService} from "../services/studentSolutions";
+import {seedStudentSummaryFixture} from "./studentSummaryFixture";
+import {seedStudentSolutionsFixture} from "./studentSolutionsFixture";
+import {StudentSummaryValidationError} from "../types/studentSummary";
+assert.equal(process.env.GCLOUD_PROJECT, "demo-parabolic-test");
+assert.ok(process.env.FIRESTORE_EMULATOR_HOST);
+assert.ok(process.env.FIREBASE_AUTH_EMULATOR_HOST);
+let f: Awaited<ReturnType<typeof seedStudentSummaryFixture>>;
+let service: StudentSummaryService;
+test.beforeEach(async () => {
+  f = await seedStudentSummaryFixture("sdk");
+  service = new StudentSummaryService();
+});
+test.afterEach(async () => f.cleanup());
+test.after(async () => getFirebaseAdminApp().delete());
+const rejected = (code: string) => (error: unknown) => {
+  assert.ok(error instanceof StudentSummaryValidationError);
+  assert.equal(error.code, code);
+  assert.doesNotMatch(error.message, /HIDDEN|password|Signature|answerMap/u);
+  return true;
+};
 
-process.env.FIRESTORE_EMULATOR_HOST ??= "127.0.0.1:8080";
-process.env.GCLOUD_PROJECT ??= "demo-parabolic-test";
-process.env.GOOGLE_CLOUD_PROJECT ??= process.env.GCLOUD_PROJECT;
-process.env.NO_GCE_CHECK ??= "true";
-process.env.METADATA_SERVER_DETECTION ??= "none";
-gcpMetadata.setGCPResidency(false);
-
-const firestore = getFirestore();
-const instituteId = "inst_student_summary_service";
-const otherInstituteId = "inst_student_summary_other";
-const studentId = "student_summary_service";
-const otherStudentId = "student_summary_unassigned";
-const deletedStudentId = "student_summary_deleted";
-const currentYearPath = `institutes/${instituteId}/academicYears/2026`;
-const oldYearPath = `institutes/${instituteId}/academicYears/2025`;
-const otherYearPath =
-  `institutes/${otherInstituteId}/academicYears/2026`;
-
-interface StudentSummaryServiceContract {
-  getDashboard: (request: {
-    instituteId: string;
-    licenseLayer: "L0" | "L1";
-    studentId: string;
-  }) => Promise<{
-    avgRawScorePercent: number;
-    disciplineIndex: number;
-    easyNeglectPercent: number;
-    licenseLayer: string;
-    phaseComplianceMiniTrend: Array<{value: number}>;
-    recentResults: Array<{runId: string}>;
-    testsAttempted: number;
-    upcomingTests: Array<{mode: string; runId: string}>;
-  }>;
-  getInsights: (request: {
-    instituteId: string;
-    licenseLayer: "L0" | "L1";
-    limit: number;
-    studentId: string;
-  }) => Promise<{
-    snapshots: Array<{snapshotId: string}>;
-    topicWeaknessSummary: Array<{topic: string}>;
-  }>;
-  getPerformance: (request: {
-    instituteId: string;
-    lastN: number;
-    licenseLayer: "L1" | "L2";
-    studentId: string;
-  }) => Promise<{
-    disciplineIndex: number;
-    timeline: Array<{
-      disciplineIndex: number;
-      runId: string;
-    }>;
-  }>;
-  getSolutions: (request: {
-    instituteId: string;
-    licenseLayer: "L1";
-    page: number;
-    pageSize: number;
-    studentId: string;
-    testId: string;
-  }) => Promise<{
-    hasMore: boolean;
-    items: Array<{correctAnswer: string; studentAnswer: string}>;
-    total: number;
-  }>;
-  listTests: (request: {
-    instituteId: string;
-    licenseLayer: "L1";
-    page: number;
-    pageSize: number;
-    status: "all" | "archived" | "completed";
-    studentId: string;
-  }) => Promise<{
-    hasMore: boolean;
-    tests: Array<{
-      rawScorePercent: number | null;
-      runId: string;
-      sessionId: string | null;
-      status: string;
-    }>;
-    total: number;
-  }>;
-  normalizeTestsRequest: (request: {
-    instituteId?: unknown;
-    licenseLayer?: unknown;
-    page?: unknown;
-    pageSize?: unknown;
-    status?: unknown;
-    studentId?: unknown;
-  }) => unknown;
-}
-
-let studentSummaryService: StudentSummaryServiceContract;
-
-test.before(async () => {
-  const module = await import("../services/studentSummary.js");
-  studentSummaryService = new module.StudentSummaryService(
-    firestore,
-    () => new Date("2026-08-26T00:00:00.000Z"),
-  );
+test("L0..L3 and independent flags redact every top/nested/legacy group without fabricating zero", async () => {
+  for (const layer of ["L0", "L1", "L2", "L3"] as const) {
+    const token = await f.setEntitlement(layer);
+    const advanced = layer === "L2" || layer === "L3";
+    const execution = layer !== "L0";
+    const d = await service.getDashboard(token);
+    const p = await service.getPerformance(token);
+    assert.equal(d.scope.yearId, f.yearId);
+    assert.equal(d.contractVersion, 2);
+    assert.equal(d.avgRawScorePercent, 73);
+    assert.equal(d.disciplineIndex, advanced ? 91 : null);
+    assert.equal(d.timeMisallocationPercent, advanced ? 94 : null);
+    assert.equal(d.phaseAdherencePercent, execution ? 81 : null);
+    assert.equal(d.phaseComplianceMiniTrend.length, execution ? 1 : 0);
+    assert.equal(d.access.metrics.advanced, advanced);
+    assert.equal(p.timeline[0].guessRatePercent, advanced ? 87 : null);
+    assert.equal(p.timeline[0].phaseAdherencePercent, execution ? 81 : null);
+    assert.equal(p.timeline[0].maxTimeViolationPercent, advanced ? 93 : null);
+    assert.equal(p.topicPerformanceBreakdown.length, execution ? 1 : 0);
+    assert.equal(p.controlledModeComparison?.maxTimeViolationDeltaPercent ?? null, advanced ? 97 : null);
+    if (!execution) await assert.rejects(service.getInsights(token), rejected("LICENSE_RESTRICTED"));
+    else {
+      const insights = await service.getInsights(token);
+      assert.equal(insights.snapshots[0].guessDetectionPercent, advanced ? 87 : null);
+      assert.equal(insights.disciplineImprovementSuggestions === null, !advanced);
+      assert.equal(insights.mostFrequentBehaviorPattern, "Guess Detection");
+      assert.equal(insights.topicWeaknessSummary[0].tutorialVideoLink, null);
+      assert.equal(insights.topicWeaknessSummary[0].simulationLink, null);
+      assert.doesNotMatch(JSON.stringify(insights), /HIDDEN_987|secret\.example/u);
+    }
+    assert.doesNotMatch(JSON.stringify([d, p]), /HIDDEN_987/u);
+  }
+  const noHard = await f.setEntitlement("L2", {hardMode: false});
+  const p = await service.getPerformance(noHard);
+  assert.equal(p.timeline[0].disciplineIndex, 91);
+  assert.equal(p.timeline[0].maxTimeViolationPercent, null);
+  assert.equal(p.controlledModeComparison?.maxTimeViolationDeltaPercent, null);
+  const noControlled = await f.setEntitlement("L2", {controlledMode: false, riskOverview: false});
+  assert.equal((await service.getPerformance(noControlled)).controlledModeComparison, null);
+  assert.equal((await service.getDashboard(noControlled)).disciplineIndex, 91);
+  await assert.rejects(service.getInsights(noControlled), rejected("LICENSE_RESTRICTED"));
 });
 
-test.after(async () => {
-  await getFirebaseAdminApp().delete();
+test("legacy nested summary fallbacks receive identical gates, own binding and safe constructive text", async () => {
+  await f.metrics.collection("results").doc(f.summary.runId).delete();
+  const legacy: Record<string, unknown> = {...f.summary, timeUsedMinutes: 38.6};
+  delete legacy.timeSpentMinutes;
+  await f.metrics.update({phaseComplianceMiniTrend: FieldValue.delete(), performanceTimeline: [legacy],
+    currentBatchRank: 4});
+  const token = await f.setEntitlement("L0");
+  const d = await service.getDashboard(token);
+  const p = await service.getPerformance(token);
+  assert.equal(d.recentResults[0].rawScorePercent, 73);
+  assert.equal(d.batchRank, 4);
+  assert.equal(p.timeline[0].timeSpentMinutes, 39);
+  assert.equal(d.phaseComplianceMiniTrend.length, 0);
+  assert.equal(p.timeline[0].disciplineIndex, null);
+  assert.equal(p.timeline[0].riskState, null);
+  assert.equal(p.timeline[0].phaseAdherencePercent, null);
+  const l1 = await f.setEntitlement("L1");
+  await f.metrics.update({timeMisallocationPercent: 0});
+  assert.equal((await service.getDashboard(l1)).timeMisallocationPercent, 0);
+  await f.metrics.update({performanceTimeline: [{...f.summary, studentId: "other"}]});
+  await assert.rejects(service.getPerformance(l1), rejected("CONFLICT"));
 });
 
-const runFixture = (input: {
-  mode: "Controlled" | "Diagnostic" | "Operational";
-  recipientStudentIds: string[];
-  startWindow: string;
-  status: "completed" | "scheduled" | "stopped";
-  testId: string;
-}) => ({
-  academicYear: "2026",
-  createdAt: Timestamp.fromDate(new Date(input.startWindow)),
-  endWindow: Timestamp.fromDate(
-    new Date(Date.parse(input.startWindow) + (90 * 60_000)),
-  ),
-  mode: input.mode,
-  recipientStudentIds: input.recipientStudentIds,
-  startWindow: Timestamp.fromDate(new Date(input.startWindow)),
-  status: input.status,
-  testId: input.testId,
-  testName: `Name ${input.testId}`,
+test("current Auth, institute/license and year changes are rechecked on all four public readers", async () => {
+  await getFirebaseAdminApp().auth().setCustomUserClaims(f.uid, {...f.claims(), role: "teacher"});
+  const reads: Array<(token: string) => Promise<unknown>> = [service.getDashboard.bind(service),
+    service.getPerformance.bind(service), service.getInsights.bind(service), service.listTests.bind(service)];
+  for (const read of reads) await assert.rejects(read(f.token), rejected("FORBIDDEN"));
+  const token = await f.setEntitlement("L2");
+  await f.institute.update({status: "suspended"});
+  await assert.rejects(service.getDashboard(token), rejected("FORBIDDEN"));
+  await f.institute.update({status: "active"});
+  await f.institute.collection("license").doc("current").update({expiryDate: "2000-01-01T00:00:00.000Z"});
+  await assert.rejects(service.getPerformance(token), rejected("LICENSE_RESTRICTED"));
 });
 
-test(
-  "Student summaries are identity-scoped, current-year, licensed, and paged",
+test("all readers reject actor/year/legacy page and non-scalar query overrides", async () => {
+  const calls = [() => service.getDashboard(f.token, {studentId: "other"}),
+    () => service.getDashboard(f.token, {scope: "history"}),
+    () => service.getPerformance(f.token, {yearId: "z-past-year"}),
+    () => service.getPerformance(f.token, {lastN: [1]}),
+    () => service.getInsights(f.token, {limit: 21}),
+    () => service.listTests(f.token, {page: 1}),
+    () => service.listTests(f.token, {scope: "current", yearId: "z-past-year"}),
+    () => service.listTests(f.token, {scope: "history", status: "completed"}),
+    () => service.listTests(f.token, {scope: "history", yearId: "../other"})];
+  for (const read of calls) await assert.rejects(read(), rejected("VALIDATION_ERROR"));
+});
+
+test("current run filters use actual mode/adaptive flags; completed own basic results survive a downgrade",
   async () => {
-    const documentPaths = [
-      `institutes/${instituteId}/students/${studentId}`,
-      `institutes/${instituteId}/students/${otherStudentId}`,
-      `institutes/${instituteId}/students/${deletedStudentId}`,
-      currentYearPath,
-      oldYearPath,
-      otherYearPath,
-      `${currentYearPath}/studentYearMetrics/${studentId}`,
-      `${currentYearPath}/runs/run-scheduled-operational`,
-      `${currentYearPath}/runs/run-scheduled-diagnostic`,
-      `${currentYearPath}/runs/run-scheduled-controlled`,
-      `${currentYearPath}/runs/run-completed-operational`,
-      `${currentYearPath}/runs/run-completed-diagnostic`,
-      `${currentYearPath}/runs/run-stopped-operational`,
-      `${currentYearPath}/runs/run-unassigned`,
-      `${oldYearPath}/runs/run-old-year`,
-      `${otherYearPath}/runs/run-other-tenant`,
-      `institutes/${instituteId}/questionBank/question-solution`,
-      `${currentYearPath}/runs/run-completed-operational/sessions/` +
-        "session-completed-operational",
-      `${currentYearPath}/insightSnapshots/insight-student-owned`,
-      `${currentYearPath}/studentYearMetrics/${studentId}/results/` +
-        "run-completed-operational",
-      `${currentYearPath}/studentYearMetrics/${studentId}/results/` +
-        "run-completed-diagnostic",
-    ];
+    await f.run.update({mode: "Hard", status: "active"});
+    const token = await f.setEntitlement("L0");
+    const all = await service.listTests(token);
+    assert.equal(all.scope.kind, "current");
+    assert.equal(all.page.items[0].rawScorePercent, 73);
+    assert.equal("solutionAccess" in all.page.items[0] && all.page.items[0].solutionAccess.state, "locked");
+    await f.metrics.collection("results").doc(f.summary.runId).delete();
+    assert.equal((await service.listTests(token, {status: "active"})).page.items.length, 0);
+    await f.run.update({mode: "Operational", adaptivePhase: true});
+    assert.equal((await service.listTests(token, {status: "active"})).page.items.length, 0);
+    await f.run.update({adaptivePhase: false});
+    assert.equal((await service.listTests(token, {status: "active"})).page.items.length, 1);
+    await f.run.update({status: "stopped"});
+    const closed = await service.listTests(token, {status: "archived"});
+    assert.equal(closed.page.items[0].currentAcademicYear, true);
+  });
 
-    await Promise.all([
-      firestore.doc(documentPaths[0]).set({
-        status: "active",
-        studentId,
-      }),
-      firestore.doc(documentPaths[1]).set({
-        status: "active",
-        studentId: otherStudentId,
-      }),
-      firestore.doc(documentPaths[2]).set({
-        deleted: true,
-        status: "active",
-        studentId: deletedStudentId,
-      }),
-      firestore.doc(currentYearPath).set({status: "Active"}),
-      firestore.doc(oldYearPath).set({status: "Archived"}),
-      firestore.doc(otherYearPath).set({status: "Active"}),
-      firestore.doc(documentPaths[6]).set({
-        avgAccuracyPercent: 84,
-        avgDisciplineIndex: 79,
-        avgGuessRatePercent: 13,
-        avgOverstayQuestionsPercent: 17,
-        avgPhaseAdherencePercent: 88,
-        avgRawScorePercent: 76,
-        easyNeglectRatePercent: 12,
-        hardBiasRatePercent: 8,
-        phaseComplianceMiniTrend: [
-          {label: "P1", value: 82},
-          {label: "P2", value: 88},
-        ],
-        recentResults: [{
-          accuracyPercent: 84,
-          completedAt: Timestamp.fromDate(
-            new Date("2026-08-20T10:00:00.000Z"),
-          ),
-          rawScorePercent: 76,
-          runId: "run-completed-operational",
-          testName: "Completed Operational",
-        }],
-        riskState: "high",
-        studentId,
-        totalTests: 6,
-        performanceTimeline: [{
-          accuracyPercent: 84,
-          completedAt: Timestamp.fromDate(
-            new Date("2026-08-20T10:00:00.000Z"),
-          ),
-          disciplineIndex: 79,
-          guessRatePercent: 13,
-          phaseAdherencePercent: 88,
-          rawScorePercent: 76,
-          runId: "run-completed-operational",
-          runLabel: "Completed Operational",
-          timeSpentMinutes: 72,
-        }],
-        topicWeaknessSummary: [{
-          feedback: "Review vectors before the next run.",
-          simulationLink: null,
-          topic: "Vectors",
-          tutorialVideoLink: null,
-          weaknessPercent: 28,
-        }],
-      }),
-      firestore.doc(documentPaths[7]).set(runFixture({
-        mode: "Operational",
-        recipientStudentIds: [studentId],
-        startWindow: "2026-09-01T09:00:00.000Z",
-        status: "scheduled",
-        testId: "test-scheduled-operational",
-      })),
-      firestore.doc(documentPaths[8]).set(runFixture({
-        mode: "Diagnostic",
-        recipientStudentIds: [studentId],
-        startWindow: "2026-09-02T09:00:00.000Z",
-        status: "scheduled",
-        testId: "test-scheduled-diagnostic",
-      })),
-      firestore.doc(documentPaths[9]).set(runFixture({
-        mode: "Controlled",
-        recipientStudentIds: [studentId],
-        startWindow: "2026-09-03T09:00:00.000Z",
-        status: "scheduled",
-        testId: "test-scheduled-controlled",
-      })),
-      firestore.doc(documentPaths[10]).set({
-        ...runFixture({
-          mode: "Operational",
-          recipientStudentIds: [studentId],
-          startWindow: "2026-08-20T09:00:00.000Z",
-          status: "completed",
-          testId: "test-completed-operational",
-        }),
-        questionIds: ["question-solution"],
-        solutionReleaseAt: Timestamp.fromDate(
-          new Date("2026-08-21T00:00:00.000Z"),
-        ),
-      }),
-      firestore.doc(documentPaths[11]).set({
-        ...runFixture({
-          mode: "Diagnostic",
-          recipientStudentIds: [studentId],
-          startWindow: "2026-08-21T09:00:00.000Z",
-          status: "completed",
-          testId: "test-completed-diagnostic",
-        }),
-        questionIds: ["question-solution"],
-        solutionReleaseAt: Timestamp.fromDate(
-          new Date("2026-09-21T00:00:00.000Z"),
-        ),
-      }),
-      firestore.doc(documentPaths[12]).set(runFixture({
-        mode: "Operational",
-        recipientStudentIds: [studentId],
-        startWindow: "2026-08-19T09:00:00.000Z",
-        status: "stopped",
-        testId: "test-stopped-operational",
-      })),
-      firestore.doc(documentPaths[13]).set(runFixture({
-        mode: "Operational",
-        recipientStudentIds: [otherStudentId],
-        startWindow: "2026-09-04T09:00:00.000Z",
-        status: "scheduled",
-        testId: "test-unassigned",
-      })),
-      firestore.doc(documentPaths[14]).set(runFixture({
-        mode: "Operational",
-        recipientStudentIds: [studentId],
-        startWindow: "2026-07-01T09:00:00.000Z",
-        status: "completed",
-        testId: "test-old-year",
-      })),
-      firestore.doc(documentPaths[15]).set(runFixture({
-        mode: "Operational",
-        recipientStudentIds: [studentId],
-        startWindow: "2026-09-05T09:00:00.000Z",
-        status: "scheduled",
-        testId: "test-other-tenant",
-      })),
-      firestore.doc(documentPaths[16]).set({
-        correctAnswer: "B",
-        questionId: "question-solution",
-        questionImageUrl: "questions/question-solution.png",
-        simulationLink: null,
-        solutionImageUrl: "solutions/question-solution.png",
-        tutorialVideoLink: "https://example.test/vector-review",
-      }),
-      firestore.doc(documentPaths[17]).set({
-        answerMap: {"question-solution": {selectedOption: "A"}},
-        sessionId: "session-completed-operational",
-        status: "submitted",
-        studentId,
-        submittedAt: Timestamp.fromDate(
-          new Date("2026-08-20T10:00:00.000Z"),
-        ),
-      }),
-      firestore.doc(documentPaths[18]).set({
-        generatedAt: Timestamp.fromDate(
-          new Date("2026-08-20T10:01:00.000Z"),
-        ),
-        metrics: {
-          sessionAccuracyPercent: 84,
-          sessionRawScorePercent: 76,
-        },
-        snapshotType: "student",
-        sourceSubmittedAt: Timestamp.fromDate(
-          new Date("2026-08-20T10:00:00.000Z"),
-        ),
-        studentId,
-      }),
-      firestore.doc(documentPaths[19]).set({
-        accuracyPercent: 84,
-        attemptedQuestions: 1,
-        completedAt: Timestamp.fromDate(new Date("2026-08-20T10:00:00.000Z")),
-        disciplineIndex: 79,
-        flaggedQuestions: 0,
-        guessRatePercent: 13,
-        phaseAdherencePercent: 88,
-        rawScorePercent: 76,
-        runId: "run-completed-operational",
-        runName: "Completed Operational",
-        sessionId: "session-completed-operational",
-        submittedAt: Timestamp.fromDate(new Date("2026-08-20T10:00:00.000Z")),
-        timeSpentMinutes: 72,
-        totalQuestions: 1,
-      }),
-      firestore.doc(documentPaths[20]).set({
-        accuracyPercent: 70,
-        attemptedQuestions: 1,
-        completedAt: Timestamp.fromDate(new Date("2026-08-21T10:00:00.000Z")),
-        disciplineIndex: 75,
-        flaggedQuestions: 0,
-        guessRatePercent: 15,
-        phaseAdherencePercent: 80,
-        rawScorePercent: 68,
-        runId: "run-completed-diagnostic",
-        runName: "Completed Diagnostic",
-        sessionId: "session-completed-diagnostic",
-        submittedAt: Timestamp.fromDate(new Date("2026-08-21T10:00:00.000Z")),
-        timeSpentMinutes: 70,
-        totalQuestions: 1,
-      }),
-    ]);
+test("completed summaries exclude removed assignment and retain missing-run basic rows", async () => {
+  await f.run.update({recipientStudentIds: ["other"]});
+  assert.equal((await service.listTests(f.token, {status: "completed"})).page.items.length, 0);
+  assert.equal((await service.getDashboard(f.token)).recentResults.length, 0);
+  assert.equal((await service.getPerformance(f.token)).timeline.length, 0);
+  await f.run.delete();
+  const completed = await service.listTests(f.token, {status: "completed"});
+  assert.equal(completed.page.items[0].rawScorePercent, 73);
+  assert.equal("solutionAccess" in completed.page.items[0] && completed.page.items[0].solutionAccess.state, "locked");
+  assert.equal((await service.listTests(f.token)).page.items.length, 0);
+});
 
-    const dashboard = await studentSummaryService.getDashboard({
-      instituteId,
-      licenseLayer: "L1",
-      studentId,
-    });
-    assert.equal(dashboard.avgRawScorePercent, 76);
-    assert.equal(dashboard.testsAttempted, 6);
-    assert.equal(dashboard.easyNeglectPercent, 12);
-    assert.equal(dashboard.disciplineIndex, 0);
-    assert.deepEqual(
-      dashboard.upcomingTests.map((run) => run.runId),
-      ["run-scheduled-operational", "run-scheduled-diagnostic"],
-    );
-    assert.deepEqual(
-      dashboard.upcomingTests.map((run) => run.mode),
-      ["Operational", "Diagnostic"],
-    );
-    assert.deepEqual(dashboard.recentResults.map((run) => run.runId), [
-      "run-completed-diagnostic",
-      "run-completed-operational",
-    ]);
-    assert.deepEqual(
-      dashboard.phaseComplianceMiniTrend.map((point) => point.value),
-      [82, 88],
-    );
-
-    const l1Performance = await studentSummaryService.getPerformance({
-      instituteId,
-      lastN: 10,
-      licenseLayer: "L1",
-      studentId,
-    });
-    assert.equal(l1Performance.timeline.length, 2);
-    assert.equal(l1Performance.timeline[0].disciplineIndex, 0);
-    assert.equal(l1Performance.disciplineIndex, 0);
-    const l2Performance = await studentSummaryService.getPerformance({
-      instituteId,
-      lastN: 10,
-      licenseLayer: "L2",
-      studentId,
-    });
-    assert.equal(l2Performance.timeline[0].disciplineIndex, 79);
-    assert.equal(l2Performance.disciplineIndex, 79);
-
-    const insights = await studentSummaryService.getInsights({
-      instituteId,
-      licenseLayer: "L1",
-      limit: 5,
-      studentId,
-    });
-    assert.deepEqual(insights.snapshots.map((entry) => entry.snapshotId), [
-      "insight-student-owned",
-    ]);
-    assert.deepEqual(
-      insights.topicWeaknessSummary.map((entry) => entry.topic),
-      ["Vectors"],
-    );
-
-    const solutions = await studentSummaryService.getSolutions({
-      instituteId,
-      licenseLayer: "L1",
-      page: 1,
-      pageSize: 1,
-      studentId,
-      testId: "test-completed-operational",
-    });
-    assert.equal(solutions.total, 1);
-    assert.equal(solutions.hasMore, false);
-    assert.equal(solutions.items[0].correctAnswer, "B");
-    assert.equal(solutions.items[0].studentAnswer, "A");
-    await assert.rejects(
-      studentSummaryService.getInsights({
-        instituteId,
-        licenseLayer: "L0",
-        limit: 5,
-        studentId,
+test("archived history has exactly eight basic fields and never reads runs, sessions, questions or assets",
+  async () => {
+    const actual = new StudentSummaryAuthorityService();
+    const paths: string[] = [];
+    const authority: Pick<StudentSummaryAuthorityService, "withRead" | "assertRunAllowed"> = {
+      assertRunAllowed: actual.assertRunAllowed.bind(actual),
+      withRead: (token, intent, work) => actual.withRead(token, intent, async (tx, scope) => {
+        const proxy = new Proxy(tx, {get(target, key) {
+          if (key !== "get") return Reflect.get(target, key, target);
+          return (source: FirebaseFirestore.DocumentReference | FirebaseFirestore.Query) => {
+            const x = source as unknown as {path?: string; _queryOptions?: {collectionId?: string}};
+            paths.push(x.path ?? x._queryOptions?.collectionId ?? "unknown");
+            return tx.get(source as FirebaseFirestore.DocumentReference);
+          };
+        }});
+        return work(proxy, scope);
       }),
-      /require an L1/u,
-    );
-    await assert.rejects(
-      studentSummaryService.getSolutions({
-        instituteId,
-        licenseLayer: "L1",
-        page: 1,
-        pageSize: 10,
-        studentId,
-        testId: "test-completed-diagnostic",
-      }),
-      /not been released/u,
-    );
-    await assert.rejects(
-      studentSummaryService.getSolutions({
-        instituteId,
-        licenseLayer: "L1",
-        page: 1,
-        pageSize: 10,
-        studentId: otherStudentId,
-        testId: "test-completed-operational",
-      }),
-      /completed current-year assigned test was not found/u,
-    );
+    };
+    const reader = new StudentSummaryService({authority});
+    const token = await f.setEntitlement("L0");
+    const first = await reader.listTests(token, {scope: "history", pageSize: 1});
+    assert.equal(first.scope.kind, "history");
+    assert.equal(first.page.items[0].academicYear, "z-past-year");
+    assert.equal(first.page.items[0].currentAcademicYear, false);
+    assert.deepEqual(Object.keys(first.page.items[0]).sort(), ["academicYear", "currentAcademicYear", "runId", "testId",
+      "testName", "completedAt", "rawScorePercent", "accuracyPercent"].sort());
+    assert.ok(first.page.nextCursor);
+    const next = await reader.listTests(token, {scope: "history", pageSize: 1, cursor: first.page.nextCursor});
+    assert.equal(next.page.items[0].academicYear, "a-past-year");
+    assert.equal(next.page.hasMore, false);
+    assert.equal(next.access.metrics.execution, false);
+    assert.equal(next.access.metrics.advanced, false);
+    assert.ok(paths.some((p) => p === "results"));
+    assert.ok(paths.every((p) => !/runs|sessions|questionBank|insightSnapshots/u.test(p)));
+    await f.year.update({status: "archived"});
+    assert.equal((await reader.listTests(token, {scope: "history"})).scope.kind, "history");
+    await assert.rejects(reader.getDashboard(token), rejected("CONFLICT"));
+  });
 
-    const firstPage = await studentSummaryService.listTests({
-      instituteId,
-      licenseLayer: "L1",
-      page: 1,
-      pageSize: 2,
-      status: "all",
-      studentId,
-    });
-    assert.equal(firstPage.total, 5);
-    assert.equal(firstPage.hasMore, true);
-    assert.deepEqual(firstPage.tests.map((run) => run.runId), [
-      "run-scheduled-diagnostic",
-      "run-scheduled-operational",
-    ]);
+test("history rejects locked/cross-scope selectors, wrong ownership aliases and malformed retained fields",
+  async () => {
+    await assert.rejects(service.listTests(f.token, {scope: "history", yearId: f.yearId}), rejected("NOT_FOUND"));
+    const old = f.institute.collection("academicYears").doc("z-past-year");
+    const result = old.collection("studentYearMetrics").doc(f.uid).collection("results").doc("old-z-past-year");
+    await result.update({studentId: "other"});
+    await assert.rejects(service.listTests(f.token, {scope: "history", yearId: old.id}), rejected("CONFLICT"));
+    await result.update({studentId: FieldValue.delete(), testId: FieldValue.delete()});
+    await assert.rejects(service.listTests(f.token, {scope: "history", yearId: old.id}), rejected("CONFLICT"));
+    await result.update({testId: f.summary.testId, submittedAt: FieldValue.delete()});
+    await assert.rejects(service.listTests(f.token, {scope: "history", yearId: old.id}), rejected("CONFLICT"));
+    await old.update({status: "locked"});
+    await assert.rejects(service.listTests(f.token, {scope: "history", yearId: old.id}), rejected("NOT_FOUND"));
+  });
 
-    const secondPage = await studentSummaryService.listTests({
-      instituteId,
-      licenseLayer: "L1",
-      page: 2,
-      pageSize: 2,
-      status: "all",
-      studentId,
-    });
-    assert.deepEqual(secondPage.tests.map((run) => run.runId), [
-      "run-completed-diagnostic",
-      "run-completed-operational",
-    ]);
+test("cursors bind current scope while filtered empty pages make progress", async () => {
+  await f.run.delete();
+  await f.metrics.collection("results").doc(f.summary.runId).delete();
+  const batch = getFirestore().batch();
+  for (let i = 0; i < 50; i++) {
+    const id = `scan-${String(i).padStart(2, "0")}`;
+    batch.set(f.year.collection("runs").doc(id), {...f.summary, runId: id, recipientStudentIds: [f.uid],
+      mode: i === 49 ? "Operational" : "Hard", status: "scheduled",
+      startWindow: Timestamp.fromMillis(Date.now() - i * 1000)});
+  }
+  await batch.commit();
+  const token = await f.setEntitlement("L0");
+  const first = await service.listTests(token, {pageSize: 1, status: "scheduled"});
+  assert.equal(first.page.items.length, 0);
+  assert.ok(first.page.hasMore && first.page.nextCursor);
+  const next = await service.listTests(token, {pageSize: 1, status: "scheduled", cursor: first.page.nextCursor});
+  assert.equal(next.page.items[0].runId, "scan-49");
+  assert.equal(next.page.hasMore, false);
+  for (const query of [{cursor: "bad"}, {cursor: first.page.nextCursor, pageSize: 2, status: "scheduled"},
+    {cursor: first.page.nextCursor, pageSize: 1, status: "active"}]) {
+    await assert.rejects(service.listTests(token, query), rejected("VALIDATION_ERROR"));
+  }
+  const changed = await f.setEntitlement("L0", {hardMode: false});
+  await assert.rejects(service.listTests(changed, {cursor: first.page.nextCursor, pageSize: 1, status: "scheduled"}),
+    rejected("VALIDATION_ERROR"));
+});
 
-    const completed = await studentSummaryService.listTests({
-      instituteId,
-      licenseLayer: "L1",
-      page: 1,
-      pageSize: 10,
-      status: "completed",
-      studentId,
-    });
-    assert.equal(completed.total, 2);
-    assert.ok(completed.tests.every((run) => run.status === "completed"));
-    assert.ok(completed.tests.every((run) => run.sessionId !== null));
-    assert.ok(completed.tests.every((run) => run.rawScorePercent !== null));
+test("solution availability matches exact immutable owned release checks and never signs", async () => {
+  const attempt = await seedStudentSolutionsFixture("summary-availability", false);
+  try {
+    let signs = 0;
+    const reader = new StudentSummaryService({solutions: new StudentSolutionsService({
+      now: () => new Date(attempt.end), sign: () => {
+        signs++; throw new Error("must not sign");
+      },
+    })});
+    const read = () => reader.listTests(attempt.token);
+    let page = await read();
+    assert.equal("solutionAccess" in page.page.items[0] && page.page.items[0].solutionAccess.state, "available");
+    await attempt.run.update({solutionsReleased: false});
+    page = await read();
+    assert.deepEqual("solutionAccess" in page.page.items[0] && page.page.items[0].solutionAccess,
+      {state: "locked", reason: "not_released"});
+    await attempt.run.update({solutionsReleased: true});
+    await attempt.session.update({solutionSnapshot: null});
+    page = await read();
+    assert.deepEqual("solutionAccess" in page.page.items[0] && page.page.items[0].solutionAccess,
+      {state: "locked", reason: "unavailable"});
+    assert.equal(signs, 0);
+  } finally {
+    await attempt.cleanup();
+  }
+});
 
-    const archived = await studentSummaryService.listTests({
-      instituteId,
-      licenseLayer: "L1",
-      page: 1,
-      pageSize: 10,
-      status: "archived",
-      studentId,
-    });
-    assert.equal(archived.total, 1);
-    assert.deepEqual(archived.tests.map((run) => run.runId), [
-      "run-stopped-operational",
-    ]);
-    assert.equal(archived.tests[0].status, "archived");
+test("contradictory metrics/result/snapshot ownership fails instead of returning a fabricated empty view", async () => {
+  await f.metrics.update({instituteId: "other"});
+  await assert.rejects(service.getDashboard(f.token), rejected("CONFLICT"));
+  await f.metrics.update({instituteId: f.instituteId});
+  await f.metrics.collection("results").doc(f.summary.runId).update({runId: "other"});
+  await assert.rejects(service.getPerformance(f.token), rejected("CONFLICT"));
+  await f.year.collection("insightSnapshots").doc("own-snapshot").update({yearId: "other"});
+  await assert.rejects(service.getInsights(f.token), rejected("CONFLICT"));
+});
 
-    const unassigned = await studentSummaryService.listTests({
-      instituteId,
-      licenseLayer: "L1",
-      page: 1,
-      pageSize: 10,
-      status: "all",
-      studentId: otherStudentId,
-    });
-    assert.deepEqual(unassigned.tests.map((run) => run.runId), [
-      "run-unassigned",
-    ]);
-
-    await assert.rejects(
-      studentSummaryService.getDashboard({
-        instituteId,
-        licenseLayer: "L0",
-        studentId: deletedStudentId,
-      }),
-      /Active Student summary authority was not found/u,
-    );
-    await assert.rejects(
-      studentSummaryService.getDashboard({
-        instituteId: otherInstituteId,
-        licenseLayer: "L1",
-        studentId,
-      }),
-      /Active Student summary authority was not found/u,
-    );
-    assert.throws(
-      () => studentSummaryService.normalizeTestsRequest({
-        instituteId,
-        licenseLayer: "L1",
-        page: 1,
-        pageSize: 51,
-        studentId,
-      }),
-      /between 1 and 50/u,
-    );
-
-    await Promise.all(
-      documentPaths.slice().reverse().map((path) =>
-        firestore.doc(path).delete()),
-    );
-  },
-);
+test("paging bounds content reads including joins, attempts and lookahead", async () => {
+  await f.run.delete();
+  await f.metrics.collection("results").doc(f.summary.runId).delete();
+  const batch = getFirestore().batch();
+  for (let i = 0; i < 50; i++) {
+    const id = `bounded-${String(i).padStart(2, "0")}`;
+    const run = f.year.collection("runs").doc(id);
+    batch.set(run, {...f.summary, runId: id, status: "completed", recipientStudentIds: [f.uid],
+      startWindow: Timestamp.fromMillis(Date.now() - i * 1000)});
+    batch.set(f.metrics.collection("results").doc(id), {...f.summary, runId: id});
+    for (const sessionId of ["first", "duplicate"]) {
+      batch.set(run.collection("sessions").doc(sessionId), {status: "submitted", studentId: f.uid});
+    }
+  }
+  await batch.commit();
+  const actual = new StudentSummaryAuthorityService();
+  let reads = 0;
+  const authority: Pick<StudentSummaryAuthorityService, "withRead" | "assertRunAllowed"> = {
+    assertRunAllowed: actual.assertRunAllowed.bind(actual),
+    withRead: (token, intent, work) => actual.withRead(token, intent, async (tx, scope) => {
+      const proxy = new Proxy(tx, {get(target, key) {
+        if (key !== "get") return Reflect.get(target, key, target);
+        return async (source: FirebaseFirestore.DocumentReference | FirebaseFirestore.Query) => {
+          const snapshot = await tx.get(source as FirebaseFirestore.DocumentReference);
+          const summary = snapshot as unknown as {size?: number; exists?: boolean};
+          reads += summary.size ?? (summary.exists ? 1 : 0);
+          return snapshot;
+        };
+      }});
+      return work(proxy, scope);
+    }),
+  };
+  const reader = new StudentSummaryService({authority});
+  const first = await reader.listTests(f.token, {pageSize: 50});
+  assert.equal(first.page.items.length, 49);
+  assert.equal(first.page.hasMore, true);
+  assert.equal(reads, 197);
+  const cursor = first.page.nextCursor;
+  assert.ok(cursor);
+  await f.year.update({status: "archived"});
+  const nextYear = f.institute.collection("academicYears").doc("new-current-year");
+  await nextYear.set({status: "active"});
+  await assert.rejects(reader.listTests(f.token, {pageSize: 50, cursor}), rejected("VALIDATION_ERROR"));
+  assert.equal((await reader.getDashboard(f.token)).scope.yearId, nextYear.id);
+});

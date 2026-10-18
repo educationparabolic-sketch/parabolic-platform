@@ -3,6 +3,7 @@ import {
   Timestamp,
 } from "firebase-admin/firestore";
 import {createHash, randomUUID} from "node:crypto";
+import {captureStudentSolutionSnapshot} from "./studentSolutionSnapshot";
 import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
 import {createLogger} from "./logging";
 import {dataTierPartitionService} from "./dataTierPartition";
@@ -66,6 +67,7 @@ const DEFAULT_RUNTIME_FINAL_WINDOW_MINUTES = 10;
 const DEFAULT_RUNTIME_SYNC_EVERY_MS = 10_000;
 const DEFAULT_RUNTIME_CONTROLLED_SLOWDOWN_SECONDS = 12;
 const CANDIDATE_FORBIDDEN_RUNTIME_FIELDS = new Set([
+  "solutionsnapshot",
   "answer",
   "answerkey",
   "correctanswer",
@@ -1645,6 +1647,9 @@ export class SessionService {
         runData.questionIds,
         "questionIds",
       );
+      if (questionIds.length > 500) {
+        throw new SessionStartValidationError("CONFLICT", "Attempted solution capture exceeds the question bound.");
+      }
       const phaseConfigSnapshot = normalizeRunPhaseConfigSnapshot(
         runData.phaseConfigSnapshot,
       );
@@ -1719,7 +1724,15 @@ export class SessionService {
         };
       });
 
+      let solutionSnapshot;
+      try {
+        solutionSnapshot = captureStudentSolutionSnapshot(instituteId, templateVersion,
+          runtimeSnapshot.questions.map((question) => question.id), questionSnapshots);
+      } catch (error) {
+        throw new SessionStartValidationError("CONFLICT", "Attempted solution capture is unavailable.");
+      }
       const initializationRecord = this.buildSessionInitializationRecord({
+        solutionSnapshot,
         calibrationVersion,
         calibrationSnapshot,
         consumedLaunchCredentialHashes: [],
@@ -1742,6 +1755,10 @@ export class SessionService {
         yearId,
       });
 
+      // Conservative encoding budget leaves room for Firestore wire/field overhead.
+      if (Buffer.byteLength(JSON.stringify(initializationRecord), "utf8") > 524288) {
+        throw new SessionStartValidationError("CONFLICT", "Session snapshot exceeds the supported size.");
+      }
       promoteScheduledRun();
       transaction.create(sessionReference, initializationRecord);
 
@@ -1938,6 +1955,12 @@ export class SessionService {
       ])).slice(-MAX_LAUNCH_CREDENTIAL_HASHES);
       const update: FirebaseFirestore.UpdateData<FirebaseFirestore.DocumentData> = {
         consumedLaunchCredentialHashes: nextConsumedHashes,
+        identityStatusEntryBindings: Array.from(new Set([
+          ...(Array.isArray(sessionData.identityStatusEntryBindings) ? sessionData.identityStatusEntryBindings : []),
+          createHash("sha256").update(JSON.stringify([
+            studentUid, instituteId, yearId, runId, routeSessionId, launchNonce,
+          ])).digest("hex"),
+        ])).slice(-MAX_LAUNCH_CREDENTIAL_HASHES),
         launchCredentialConsumedAt: FieldValue.serverTimestamp(),
         launchCredentialConsumedByUid: studentUid,
         launchCredentialHashes: remainingCredentialHashes,
@@ -2536,6 +2559,7 @@ export class SessionService {
     context: SessionDocumentInitializationContext,
   ): SessionDocumentInitializationRecord {
     return {
+      solutionSnapshot: context.solutionSnapshot,
       answerMap: {},
       calibrationVersion: context.calibrationVersion,
       ...(context.calibrationSnapshot ?

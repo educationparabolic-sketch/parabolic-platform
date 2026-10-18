@@ -3,6 +3,30 @@ Version: 1.0
 Status: Frozen Architecture
 Last Updated: 2026-03-03
 
+BWM-043 closeout reconciliation (2026-10-18): STU-01..05 and mounted readers
+use fresh current authority, nullable v2 field groups, scope-bound cursors and
+exact released own captured solutions. Local reader acceptance does not qualify
+managed publication: the current package writer emits unrevisioned asset paths
+without per-asset revision fields, which private solution capture rejects.
+BWM-053 must align new publication, qualify existing data/assets without guessed
+revisions or reconstructed captures, and prove managed package -> assignment ->
+new session -> released solutions before release. Two local run indexes require
+deployed qualification there. Real CDN bytes/IAM remain BWM-052/054. No frozen
+architecture/topology or deployment approval changes; production remains NO_GO.
+
+Historical BWM-043 substep 5 note (2026-10-17; mounted adoption now recorded below): existing Student summary routes now return
+server current/history scope, entitlement groups and nullable gated fields.
+Current closed assignments remain distinct from retained archived-year summaries.
+Solution availability is checked through exact current attempt/release/capture
+authority without issuing assets. Mounted adapters remain substep 6; legacy page
+and DTO failures remain visible. No portal topology or frozen decision changes.
+
+Historical BWM-043 substep 4 implementation note (2026-10-17): the existing Student
+solution route now uses fresh current authority, exact completed/released owned
+run/attempt and immutable captured answers with private short-lived CDN URLs.
+The mounted v2 consumer remains substep 6; candidate legacy requests fail visibly.
+No domain/topology or frozen architecture decision changes.
+
 
 # 1️⃣ PORTAL ARCHITECTURE
 
@@ -8307,3 +8331,102 @@ These outputs become the timing reference used by:
 ✓ Hard Mode Navigation Locking
 
 ✓ Behaviour Analytics Engine
+
+## BWM-042 Student profile and identity-photo foundation (2026-10-16)
+
+[The profile/photo contract](STUDENT_PROFILE_IDENTITY_PHOTO_CONTRACT.md) and
+`shared/contracts/studentProfile.d.ts` reserve server-issued account metadata,
+one existing sidebar preference, explicit versioned photo consent, private
+own/Admin media access and truthful replacement/withdrawal/deletion states.
+Ninety-day photo expiry and immediate access revocation do not wait for physical
+cleanup. No account/batch/year/performance or human-review field is editable by
+the Student. Camera permission/capture is not verification or automated matching.
+Exam receives minimal session-owned status and matching-unavailable truth only.
+
+This checkpoint adds declarations/eight missing routes, not mounted behavior.
+The current local photo, roster URL and camera restriction findings remain
+unresolved. Future UI must reread authoritative state after immutable receipts,
+ignore/remove legacy photo authority and clear images/stop cameras on identity
+change/navigation, including late permission resolution. BWM-045 retains actual
+proctoring; any Student Hosting policy change requires affected checks and L5
+qualification. No public runtime, header or deployment changes in this substep.
+
+
+BWM-042 internal checkpoint, substep 3 (2026-10-16): `StudentProfileService`
+now implements own-profile reads and optimistic/idempotent sidebar preference
+persistence, without public handlers or mounted UI. Real token/current Auth,
+UID/Student/tenant agreement and transaction-scoped current institute/license
+protect both new writes and receipt replay. Account fields remain Admin-owned;
+reads use bounded persisted year/batch metadata and canonical media-free photo
+status, never legacy URLs/verification OR flags or raw sessions. No photo
+lifecycle/Storage writer or new event/index/rule/schedule is introduced. Eight
+route reservations remain missing. DEC-090 and the controller record fresh
+local verification; photo enrollment/cleanup/transport/UI and release remain
+later ordered work, with production NO_GO.
+
+BWM-042 internal substep 4 / DEC-091: backend-only consent-bound enrollment/replacement now validates and normalizes JPEGs through pinned Sharp, uploads create-only private generations and commits Student/photo/audit authority atomically with exact historical receipt replay. It shares current identity/institute/license checks with profile preferences. No mounted Student/Admin/Exam adoption or public handler exists yet; replacement revokes the old pointer but physical deletion remains pending substep 5. No camera/header policy change.
+
+BWM-042 substep 5 / DEC-092: internal withdrawal and exact deletion status keep current Student identity checks during inactive institute/license/Student eligibility. Pointer/consent/review revocation is atomic; Student soft-delete now queues and revokes managed photos in its existing transaction. Managed review rejects expired/revoked photos. Bounded leased cleanup confirms image removal and closes old upload paths with private zero-byte non-image fences before reporting deleted; errors remain pending. Eight schedules; local deadline index. No mounted UI, public photo/media/Exam transport or camera/header change; those remain later ordered work.
+
+### BWM-042 secured transport — DEC-093 (2026-10-17)
+
+Substep 6 registers STU-07..12 (`studentProfile`), ADM-61
+(`adminStudentIdentityPhotoMedia`) and EXM-06 (`examSessionIdentityStatus`).
+Current accounting: 120 routes = 115 implemented + zero incompatible + zero
+missing + five retired; 63 HTTP exports, 51 gateway handlers, eight schedules.
+Route declarations retain planned provenance; Student/Admin callers are mounted.
+The optional EXM-06 UI consumer remains owned by BWM-045. Existing ADM-27 uses
+the canonical photo-ID/UUID contract and existing review/audit writer. Roster
+URLs are null and legacy booleans confer no photo authority. Media is one
+bounded authenticated base64 JPEG with fresh post-fetch authorization and
+immutable media-free access audit, private/no-store on success and failure.
+Exam gets only optional minimal current status and no image or biometric claim.
+The existing consumed-entry transaction alone adds bounded private
+`identityStatusEntryBindings` hashes; historical sessions without it fail closed
+for this status read. No new topology event/client grant/header/cloud change.
+`IDENTITY_PHOTOS_BUCKET` remains explicit and dedicated; no fallback or real
+resource injection. See `STUDENT_PROFILE_IDENTITY_PHOTO_CONTRACT.md` for exact
+privacy exceptions, current authority, transport and remote qualification.
+Mounted Student/Admin adoption and substep-8 local acceptance are qualified;
+remote GCS/IAM/index/retention validation remains BWM-052/053, production NO_GO. Source integration inventory 96/19; classified
+non-emulator suite and historical BWM-049 exclusions unchanged.
+
+### BWM-042 mounted adoption — DEC-094 (2026-10-17)
+
+Student profile and sidebar now use closed authenticated server reads/commands;
+legacy localStorage photo/status/preferences are purged and never read as
+authority. Read-only account/batch/year values are persisted server fields, with
+explicit unavailable labels. Consent is explicit; captures and command retries
+remain in memory. Identity/tenant/role changes abort scoped work, revoke Blob
+previews and stop camera tracks, including late permission resolution. Receipts
+are historical acknowledgements followed by current profile reads. Withdrawal
+distinguishes access revocation from confirmed physical deletion. Fresh restricted
+clients cannot fabricate a missing version/pointer; they receive Admin-contact
+guidance, while same-identity known privacy intent remains usable.
+Admin preview is an explicit freshly authorized private request before human
+review; canonical UUID/version/photo-ID/capture review retains its existing sole
+writer. No automatic face matching, liveness or new Exam gating is claimed.
+Student-only camera headers passed the approved authenticated public L5
+qualification (DEC-096). Other portal capabilities/CSP and rewrites remain
+unchanged. Substep-8 browser privacy/failure acceptance is qualified locally;
+substep 9 records aggregate closeout. Production remains NO_GO.
+Current counts are unchanged: 120/115/0/0/5 routes, 63 HTTP exports, 51 handlers,
+eight schedules, backend integration source inventory 96/19.
+
+### BWM-043 mounted v2 adoption — substep 6 (2026-10-18)
+
+Student Dashboard/Analytics/Discipline/My Tests now consume STU-01..05 through
+`studentSummaryApi.ts` and the closed shared `studentSummaryResponseAdapters.ts`.
+Nullable metrics and server access/scope survive without inferred year, browser
+layer grants or fixture success; old normalizers/numeric page callers are removed.
+Current closed assignments and retained past-year basic summaries are separate.
+My Tests and exact-run solutions use opaque cursor pages with bounded Previous,
+Next and restart, without totals. Signed solution URLs are never CDN-rewritten;
+null/expired assets have explicit unavailable/refresh states. The token/retry/
+foreground read boundary discards stale data and displays failures/retry using
+the existing handled-failure API option. Design fixtures remain isolated from
+mounted readers. F-043-08 is locally resolved by focused no-mock browser qualification;
+comprehensive acceptance/aggregate remain substeps 7/8 and production NO_GO.
+No route/export/handler/capability/schema/index/rule/schedule/backend authority or
+credential-flow change; 120/115/0/0/5 routes, 63 exports/51 handlers/eight schedules,
+98/20 backend integration inventories remain unchanged.

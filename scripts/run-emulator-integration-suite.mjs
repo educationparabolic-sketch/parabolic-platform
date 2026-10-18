@@ -178,6 +178,8 @@ const fullServicesResult = await runEmulatorPhase(
   firebaseEmulatorHarness.services,
   "node scripts/firebase-emulator-integration-suite.mjs --full-services",
   {
+    FUNCTIONS_DISCOVERY_TIMEOUT: "120",
+    IDENTITY_PHOTOS_BUCKET: `${projectId}-identity-photos`,
     FUNCTIONS_EMULATOR_HOST:
       `127.0.0.1:${firebaseEmulatorHarness.ports.functions}`,
   },

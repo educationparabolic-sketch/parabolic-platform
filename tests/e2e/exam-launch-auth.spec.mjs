@@ -98,6 +98,7 @@ test.beforeAll(async () => {
       institute.collection("questionBank").doc(currentQuestionId).set({
         chapter: "Kinematics",
         correctAnswer: "B",
+          revision: 1, questionImageRevision: 1, solutionImageRevision: 1,
         createdAt: Timestamp.now(),
         difficulty: "Easy",
         examType: "JEEMains",
@@ -113,9 +114,9 @@ test.beforeAll(async () => {
           "Authoritative browser snapshot question" :
           `Offline recovery question ${index + 1}`,
         questionId: currentQuestionId,
-        questionImageUrl: `questions/bwm-022-question-${index + 1}.png`,
+        questionImageUrl: `${instituteId}/questions/${currentQuestionId}/v1/question-r1.png`,
         questionType: "MCQ",
-        solutionImageUrl: `solutions/bwm-022-solution-${index + 1}.png`,
+        solutionImageUrl: `${instituteId}/questions/${currentQuestionId}/v1/solution-r1.png`,
         status: "active",
         subject: "Physics",
         tags: ["motion"],

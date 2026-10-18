@@ -59,6 +59,10 @@ export const createAdminStudentsHandler = (
     );
   },
   middlewares: [
+    async (_request, response, next) => {
+      response.set("Cache-Control", "private, max-age=0, no-store");
+      await next();
+    },
     createMethodMiddleware("GET"),
     createAuthenticationMiddleware(dependencies),
     createTenantGuardMiddleware({

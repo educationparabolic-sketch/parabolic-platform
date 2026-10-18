@@ -1,475 +1,302 @@
 /* eslint-disable require-jsdoc, @typescript-eslint/no-var-requires */
 "use strict";
-
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const {deleteApp, initializeApp} = require("firebase-admin/app");
-const {getAuth} = require("firebase-admin/auth");
-const {getFirestore, Timestamp} = require("firebase-admin/firestore");
-
-const expectedProjectId = "demo-parabolic-test";
-const projectId = process.env.GCLOUD_PROJECT;
-const authHost = process.env.FIREBASE_AUTH_EMULATOR_HOST;
-const functionsHost = process.env.FUNCTIONS_EMULATOR_HOST ??
-  "127.0.0.1:5001";
-const gatewayOrigin =
-  `http://${functionsHost}/${expectedProjectId}/us-central1/apiV1`;
-
-assert.equal(projectId, expectedProjectId);
-assert.ok(authHost, "FIREBASE_AUTH_EMULATOR_HOST is required");
-assert.ok(
-  process.env.FIRESTORE_EMULATOR_HOST,
-  "FIRESTORE_EMULATOR_HOST is required",
-);
-
-async function signInWithPassword(email, password) {
-  const response = await fetch(
-    `http://${authHost}/identitytoolkit.googleapis.com/v1/` +
-      "accounts:signInWithPassword?key=demo-key",
-    {
-      body: JSON.stringify({email, password, returnSecureToken: true}),
-      headers: {"Content-Type": "application/json"},
-      method: "POST",
-      signal: AbortSignal.timeout(15_000),
-    },
-  );
-  const body = await response.json();
-  assert.equal(response.status, 200, JSON.stringify(body));
-  return body.idToken;
-}
-
-async function createIdentity(auth, label, claims) {
-  const email = `${label}-${Date.now()}@example.test`;
-  const password = `bwm-015-${label}-summary`;
-  const user = await auth.createUser({email, password});
-  await auth.setCustomUserClaims(user.uid, claims);
-  return {
-    idToken: await signInWithPassword(email, password),
-    uid: user.uid,
-  };
-}
-
-async function callStudentRoute(idToken, path) {
-  const response = await fetch(`${gatewayOrigin}${path}`, {
-    headers: {Authorization: `Bearer ${idToken}`},
-    method: "GET",
-    signal: AbortSignal.timeout(30_000),
-  });
-  return {body: await response.json(), response};
-}
-
-async function waitForDocumentField(firestore, path, fieldName) {
-  for (let attempt = 0; attempt < 300; attempt += 1) {
-    const snapshot = await firestore.doc(path).get();
-    if (snapshot.exists && snapshot.data()?.[fieldName] !== undefined) {
-      return;
+const {
+  seedStudentSummaryFixture,
+} = require("../lib/tests/studentSummaryFixture");
+const {getFirebaseAdminApp} = require("../lib/utils/firebaseAdmin");
+assert.equal(process.env.GCLOUD_PROJECT, "demo-parabolic-test");
+assert.ok(process.env.FIREBASE_AUTH_EMULATOR_HOST);
+const host = process.env.FUNCTIONS_EMULATOR_HOST ?? "127.0.0.1:5001";
+const base = `http://${host}/demo-parabolic-test/us-central1`;
+test("v2 summaries enforce own scope, null gates and history", async () => {
+  const f = await seedStudentSummaryFixture("http");
+  const other = await seedStudentSummaryFixture("http-other");
+  let token = await f.setEntitlement("L1");
+  const peerUid = `${f.uid}-peer`;
+  let peerCreated = false;
+  async function read(path, bearer = token, direct) {
+    const endpoint = direct ?? "apiV1";
+    const response = await fetch(`${base}/${endpoint}${path}`, {
+      headers: bearer ? {authorization: `Bearer ${bearer}`} : {},
+      signal: AbortSignal.timeout(60000),
+    });
+    assert.equal(
+      response.headers.get("cache-control"),
+      "private, max-age=0, no-store",
+    );
+    assert.equal(response.headers.get("pragma"), "no-cache");
+    const body = await response.json();
+    if (!response.ok) {
+      assert.equal(body.success, false);
+      assert.equal(body.data, undefined);
+      assert.doesNotMatch(
+        JSON.stringify(body),
+        /correctAnswer|questionImageUrl|Signature=|answerMap|solutionSnapshot/u,
+      );
     }
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    return {status: response.status, body};
   }
-
-  assert.fail(`Timed out waiting for ${path}.${fieldName}`);
-}
-
-const runFixture = (input) => ({
-  academicYear: "2026",
-  createdAt: Timestamp.fromDate(new Date(input.startWindow)),
-  endWindow: Timestamp.fromDate(
-    new Date(Date.parse(input.startWindow) + (90 * 60_000)),
-  ),
-  idempotencyKeyHash: "a".repeat(64),
-  mode: input.mode,
-  recipientStudentIds: input.recipientStudentIds,
-  requestFingerprint: "b".repeat(64),
-  runId: input.runId,
-  startWindow: Timestamp.fromDate(new Date(input.startWindow)),
-  status: input.status ?? "scheduled",
-  testId: input.testId,
-  testName: input.testName,
-});
-
-test(
-  "Student summary routes isolate identity, tenant, assignment, and license",
-  async () => {
-    const app = initializeApp({projectId}, `student-summary-${Date.now()}`);
-    const auth = getAuth(app);
-    const firestore = getFirestore(app);
-    const instituteId = "inst_bwm_015_summary";
-    const otherInstituteId = "inst_bwm_015_other";
-    const studentA = "student_bwm_015_a";
-    const studentB = "student_bwm_015_b";
-    const questionId = "question_bwm_015_summary";
-    const testId = "test_bwm_015_summary";
-    const yearPath = `institutes/${instituteId}/academicYears/2026`;
-    const otherYearPath =
-      `institutes/${otherInstituteId}/academicYears/2026`;
-    const userIds = [];
-
-    try {
-      await Promise.all([
-        firestore.doc(`institutes/${instituteId}`).set({
-          calibrationVersion: "cal-bwm-015",
-        }),
-        firestore.doc(`institutes/${instituteId}/students/${studentA}`).set({
-          status: "active",
-          studentId: studentA,
-        }),
-        firestore.doc(`institutes/${instituteId}/students/${studentB}`).set({
-          status: "active",
-          studentId: studentB,
-        }),
-        firestore.doc(yearPath).set({locked: false, status: "Active"}),
-        firestore.doc(
-          `institutes/${instituteId}/license/main`,
-        ).set({
-          currentLayer: "L2",
-          featureFlags: {controlledMode: true, hardMode: true},
-        }),
-        firestore.doc(
-          `institutes/${instituteId}/questionBank/${questionId}`,
-        ).set({
-          chapter: "Kinematics",
-          correctAnswer: "A",
-          createdAt: Timestamp.now(),
-          difficulty: "Easy",
-          examType: "JEEMains",
-          marks: 4,
-          negativeMarks: 1,
-          primaryTag: "motion",
-          questionId,
-          questionImageUrl: "questions/bwm-016-question.png",
-          questionType: "MCQ",
-          simulationLink: "https://example.test/simulation",
-          solutionImageUrl: "solutions/bwm-016-solution.png",
-          status: "active",
-          subject: "Physics",
-          tags: ["motion"],
-          topic: "Motion",
-          tutorialVideoLink: "https://example.test/tutorial",
-          uniqueKey: "bwm-015-summary-question",
-          usedCount: 0,
-          version: 1,
-        }),
-        firestore.doc(`institutes/${otherInstituteId}`).set({
-          calibrationVersion: "cal-bwm-015-other",
-        }),
-        firestore.doc(otherYearPath).set({locked: false, status: "Active"}),
-        firestore.doc(
-          `institutes/${otherInstituteId}/license/main`,
-        ).set({
-          currentLayer: "L1",
-          featureFlags: {controlledMode: true, hardMode: true},
-        }),
-        firestore.doc(
-          `${yearPath}/studentYearMetrics/${studentA}`,
-        ).set({
-          avgAccuracyPercent: 83,
-          avgPhaseAdherencePercent: 87,
-          avgRawScorePercent: 75,
-          easyNeglectRatePercent: 11,
-          hardBiasRatePercent: 7,
-          performanceTimeline: [{
-            accuracyPercent: 83,
-            completedAt: Timestamp.fromDate(
-              new Date("2026-08-20T10:00:00.000Z"),
-            ),
-            disciplineIndex: 78,
-            guessRatePercent: 14,
-            phaseAdherencePercent: 87,
-            rawScorePercent: 75,
-            runId: "run-bwm-016-a-completed",
-            runLabel: "A Completed Operational",
-            timeAllocationBalancePercent: 81,
-            timeSpentMinutes: 72,
-          }],
-          studentId: studentA,
-          topicPerformanceBreakdown: [{
-            accuracyPercent: 83,
-            rawScorePercent: 75,
-            topic: "Motion",
-          }],
-          topicWeaknessSummary: [{
-            feedback: "Review motion graphs before the next run.",
-            simulationLink: "https://example.test/simulation",
-            topic: "Motion Graphs",
-            tutorialVideoLink: "https://example.test/tutorial",
-            weaknessPercent: 24,
-          }],
-          totalTests: 4,
-        }),
-      ]);
-
-      const testPath = `institutes/${instituteId}/tests/${testId}`;
-      await firestore.doc(testPath).set({
-        academicYear: "2026",
-        allowedModes: ["Operational", "Diagnostic", "Controlled", "Hard"],
-        canonicalId: "bwm-015-summary-template",
-        createdAt: Timestamp.now(),
-        difficultyDistribution: {easy: 1, hard: 0, medium: 0},
-        examType: "JEEMains",
-        phaseConfigSnapshot: {
-          phase1Percent: 100,
-          phase2Percent: 0,
-          phase3Percent: 0,
-        },
-        questionIds: [questionId],
-        selectionMethod: "manual",
-        status: "ready",
-        templateName: "BWM-015 Summary Template",
-        testId,
-        timingProfile: {
-          easy: {max: 60, min: 30, recommended: 45},
-          hard: {max: 210, min: 150, recommended: 180},
-          medium: {max: 150, min: 60, recommended: 105},
-        },
-        totalDurationMinutes: 90,
-        totalRuns: 0,
-        updatedAt: Timestamp.now(),
-        version: 1,
-      });
-      await waitForDocumentField(
-        firestore,
-        testPath,
-        "templateFingerprint",
-      );
-
-      const runPaths = [
-        `${yearPath}/runs/run-bwm-015-a-operational`,
-        `${yearPath}/runs/run-bwm-015-a-diagnostic`,
-        `${yearPath}/runs/run-bwm-015-a-controlled`,
-        `${yearPath}/runs/run-bwm-015-b-operational`,
-        `${yearPath}/runs/run-bwm-016-a-completed`,
-      ];
-      await Promise.all([
-        firestore.doc(runPaths[0]).set(
-          runFixture({
-            mode: "Operational",
-            recipientStudentIds: [studentA],
-            runId: "run-bwm-015-a-operational",
-            startWindow: "2026-09-01T09:00:00.000Z",
-            testId,
-            testName: "A Operational",
-          }),
-        ),
-        firestore.doc(runPaths[1]).set(
-          runFixture({
-            mode: "Diagnostic",
-            recipientStudentIds: [studentA],
-            runId: "run-bwm-015-a-diagnostic",
-            startWindow: "2026-09-02T09:00:00.000Z",
-            testId,
-            testName: "A Diagnostic",
-          }),
-        ),
-        firestore.doc(runPaths[2]).set(
-          runFixture({
-            mode: "Controlled",
-            recipientStudentIds: [studentA],
-            runId: "run-bwm-015-a-controlled",
-            startWindow: "2026-09-03T09:00:00.000Z",
-            testId,
-            testName: "A Controlled",
-          }),
-        ),
-        firestore.doc(runPaths[3]).set(
-          runFixture({
-            mode: "Operational",
-            recipientStudentIds: [studentB],
-            runId: "run-bwm-015-b-operational",
-            startWindow: "2026-09-04T09:00:00.000Z",
-            testId,
-            testName: "B Operational",
-          }),
-        ),
-        firestore.doc(runPaths[4]).set({
-          ...runFixture({
-            mode: "Operational",
-            recipientStudentIds: [studentA],
-            runId: "run-bwm-016-a-completed",
-            startWindow: "2026-08-20T09:00:00.000Z",
-            status: "completed",
-            testId,
-            testName: "A Completed Operational",
-          }),
-          questionIds: [questionId],
-          solutionReleaseAt: Timestamp.fromDate(
-            new Date("2026-08-21T00:00:00.000Z"),
-          ),
-        }),
-      ]);
-      await Promise.all([
-        firestore.doc(
-          `${runPaths[4]}/sessions/session-bwm-016-a-completed`,
-        ).set({
-          answerMap: {[questionId]: {selectedOption: "B"}},
-          sessionId: "session-bwm-016-a-completed",
-          status: "submitted",
-          studentId: studentA,
-          submittedAt: Timestamp.fromDate(
-            new Date("2026-08-20T10:00:00.000Z"),
-          ),
-        }),
-        firestore.doc(
-          `${yearPath}/insightSnapshots/insight-bwm-016-a`,
-        ).set({
-          generatedAt: Timestamp.fromDate(
-            new Date("2026-08-20T10:01:00.000Z"),
-          ),
-          metrics: {
-            dominantPattern: "rushed_pattern",
-            sessionAccuracyPercent: 83,
-            sessionRawScorePercent: 75,
-          },
-          snapshotType: "student",
-          sourceSubmittedAt: Timestamp.fromDate(
-            new Date("2026-08-20T10:00:00.000Z"),
-          ),
-          studentId: studentA,
-        }),
-        firestore.doc(
-          `${yearPath}/insightSnapshots/insight-bwm-016-b`,
-        ).set({
-          generatedAt: Timestamp.fromDate(
-            new Date("2026-08-20T10:02:00.000Z"),
-          ),
-          metrics: {sessionAccuracyPercent: 99},
-          snapshotType: "student",
-          sourceSubmittedAt: Timestamp.fromDate(
-            new Date("2026-08-20T10:00:00.000Z"),
-          ),
-          studentId: studentB,
-        }),
-      ]);
-      const identityA = await createIdentity(auth, "student-a", {
-        instituteId,
-        licenseLayer: "L1",
-        role: "student",
-        studentId: studentA,
-      });
-      const identityB = await createIdentity(auth, "student-b", {
-        instituteId,
-        licenseLayer: "L0",
-        role: "student",
-        studentId: studentB,
-      });
-      const crossTenant = await createIdentity(auth, "cross-tenant", {
-        instituteId: otherInstituteId,
-        licenseLayer: "L1",
-        role: "student",
-        studentId: studentA,
-      });
-      const teacher = await createIdentity(auth, "teacher", {
-        instituteId,
-        licenseLayer: "L3",
-        role: "teacher",
-      });
-      userIds.push(
-        identityA.uid,
-        identityB.uid,
-        crossTenant.uid,
-        teacher.uid,
-      );
-
-      const dashboard = await callStudentRoute(
-        identityA.idToken,
-        "/api/v1/student/dashboard?studentId=" +
-          encodeURIComponent(studentB) +
-          "&instituteId=" + encodeURIComponent(otherInstituteId),
-      );
-      assert.equal(dashboard.response.status, 200);
-      assert.equal(dashboard.body.data.avgRawScorePercent, 75);
-      assert.equal(dashboard.body.data.testsAttempted, 4);
-      assert.deepEqual(
-        dashboard.body.data.upcomingTests.map((run) => run.runId),
-        ["run-bwm-015-a-operational", "run-bwm-015-a-diagnostic"],
-      );
-
-      const firstPage = await callStudentRoute(
-        identityA.idToken,
-        "/api/v1/student/tests?status=scheduled&page=1&pageSize=1",
-      );
-      assert.equal(firstPage.response.status, 200);
-      assert.equal(firstPage.body.data.total, 2);
-      assert.equal(firstPage.body.data.hasMore, true);
-      assert.deepEqual(
-        firstPage.body.data.tests.map((run) => run.runId),
-        ["run-bwm-015-a-diagnostic"],
-      );
-
-      const performance = await callStudentRoute(
-        identityA.idToken,
-        "/api/v1/student/performance?lastN=5&studentId=" +
-          encodeURIComponent(studentB),
-      );
-      assert.equal(performance.response.status, 200);
-      assert.deepEqual(
-        performance.body.data.timeline.map((entry) => entry.runId),
-        ["run-bwm-016-a-completed"],
-      );
-      assert.equal(performance.body.data.timeline[0].disciplineIndex, 0);
-      assert.equal(performance.body.data.topicPerformanceBreakdown.length, 1);
-
-      const insights = await callStudentRoute(
-        identityA.idToken,
-        "/api/v1/student/insights?limit=3",
-      );
-      assert.equal(insights.response.status, 200);
-      assert.deepEqual(
-        insights.body.data.snapshots.map((entry) => entry.snapshotId),
-        ["insight-bwm-016-a"],
-      );
-      assert.deepEqual(
-        insights.body.data.topicWeaknessSummary.map((entry) => entry.topic),
-        ["Motion Graphs"],
-      );
-
-      const solutions = await callStudentRoute(
-        identityA.idToken,
-        `/api/v1/student/tests/${testId}/solutions?page=1&pageSize=1`,
-      );
-      assert.equal(solutions.response.status, 200);
-      assert.equal(solutions.body.data.total, 1);
-      assert.equal(solutions.body.data.items[0].questionId, questionId);
-      assert.equal(solutions.body.data.items[0].correctAnswer, "A");
-      assert.equal(solutions.body.data.items[0].studentAnswer, "B");
-
-      const otherStudentSolutions = await callStudentRoute(
-        identityB.idToken,
-        `/api/v1/student/tests/${testId}/solutions`,
-      );
-      assert.equal(otherStudentSolutions.response.status, 404);
-
-      const l0Insights = await callStudentRoute(
-        identityB.idToken,
-        "/api/v1/student/insights",
-      );
-      assert.equal(l0Insights.response.status, 403);
-
-      const secondStudent = await callStudentRoute(
-        identityB.idToken,
-        "/api/v1/student/tests?status=all&page=1&pageSize=10",
-      );
-      assert.equal(secondStudent.response.status, 200);
-      assert.deepEqual(
-        secondStudent.body.data.tests.map((run) => run.runId),
-        ["run-bwm-015-b-operational"],
-      );
-
-      const crossTenantResult = await callStudentRoute(
-        crossTenant.idToken,
-        "/api/v1/student/dashboard",
-      );
-      assert.equal(crossTenantResult.response.status, 404);
-      assert.equal(crossTenantResult.body.error.code, "NOT_FOUND");
-
-      const teacherResult = await callStudentRoute(
-        teacher.idToken,
-        "/api/v1/student/tests",
-      );
-      assert.equal(teacherResult.response.status, 403);
-      assert.equal(teacherResult.body.error.code, "FORBIDDEN");
-    } finally {
-      await Promise.all(userIds.map((uid) => auth.deleteUser(uid)));
-      await deleteApp(app);
+  try {
+    const d = await read("/api/v1/student/dashboard");
+    assert.equal(d.status, 200);
+    assert.equal(d.body.data.contractVersion, 2);
+    assert.equal(d.body.data.scope.yearId, f.yearId);
+    assert.equal(d.body.data.disciplineIndex, null);
+    assert.equal(d.body.data.avgRawScorePercent, 73);
+    const p = await read("/api/v1/student/performance?lastN=1");
+    assert.equal(p.status, 200);
+    assert.equal(p.body.data.timeline[0].guessRatePercent, null);
+    const i = await read("/api/v1/student/insights?limit=1");
+    assert.equal(i.status, 200);
+    assert.equal(i.body.data.snapshots[0].guessDetectionPercent, null);
+    assert.equal(i.body.data.topicWeaknessSummary[0].tutorialVideoLink, null);
+    assert.doesNotMatch(
+      JSON.stringify([d.body, p.body, i.body]),
+      /HIDDEN_987|secret\.example|answerMap|solutionSnapshot/u,
+    );
+    const tests = await read("/api/v1/student/tests?pageSize=1");
+    assert.equal(tests.status, 200);
+    assert.equal(tests.body.data.page.items[0].runId, f.summary.runId);
+    assert.equal(tests.body.data.page.items[0].solutionAccess.state, "locked");
+    const old = await read("/api/v1/student/tests?scope=history&pageSize=1");
+    assert.equal(old.status, 200);
+    assert.equal(old.body.data.page.items[0].academicYear, "z-past-year");
+    assert.equal(Object.keys(old.body.data.page.items[0]).length, 8);
+    const cursor = old.body.data.page.nextCursor;
+    const next = await read(
+      "/api/v1/student/tests?scope=history&pageSize=1" +
+        `&cursor=${encodeURIComponent(cursor)}`,
+    );
+    assert.equal(next.body.data.page.items[0].academicYear, "a-past-year");
+    assert.equal(next.body.data.page.hasMore, false);
+    assert.equal((await read("/api/v1/student/dashboard", "")).status, 401);
+    for (const path of [
+      "/api/v1/student/tests?page=1",
+      "/api/v1/student/tests?pageSize=1&pageSize=2",
+      "/api/v1/student/dashboard?studentId=other",
+      "/api/v1/student/performance?yearId=z-past-year",
+    ]) {
+      assert.equal((await read(path)).status, 400);
     }
-  },
-);
+    for (const [path, direct] of [
+      ["dashboard", "studentDashboard"],
+      ["tests", "studentTests"],
+      ["performance", "studentPerformance"],
+      ["insights", "studentInsights"],
+    ]) {
+      assert.equal(
+        (await read(`/api/v1/student/${path}`, token, direct)).status,
+        200,
+      );
+    }
+    await other.metrics.update({avgRawScorePercent: 41});
+    const otherToken = await other.setEntitlement("L1");
+    const ownOther = await read("/api/v1/student/dashboard", otherToken);
+    assert.equal(ownOther.body.data.avgRawScorePercent, 41);
+    const reused = await read(
+      "/api/v1/student/tests?scope=history" +
+        `&pageSize=1&cursor=${encodeURIComponent(cursor)}`,
+      otherToken,
+    );
+    assert.equal(reused.status, 400);
+    // Fresh real tokens prove independent tier/feature gates.
+    for (const layer of ["L0", "L1", "L2", "L3"]) {
+      token = await f.setEntitlement(layer);
+      const execution = layer !== "L0";
+      const advanced = ["L2", "L3"].includes(layer);
+      const dashboard = await read("/api/v1/student/dashboard");
+      const performance = await read("/api/v1/student/performance?lastN=1");
+      assert.equal(dashboard.status, 200);
+      assert.equal(performance.status, 200);
+      assert.equal(
+        dashboard.body.data.phaseAdherencePercent,
+        execution ? 81 : null,
+      );
+      assert.equal(dashboard.body.data.disciplineIndex, advanced ? 91 : null);
+      assert.equal(
+        performance.body.data.timeline[0].guessRatePercent,
+        advanced ? 87 : null,
+      );
+      assert.equal(
+        performance.body.data.timeline[0].maxTimeViolationPercent,
+        advanced ? 93 : null,
+      );
+      const insights = await read("/api/v1/student/insights");
+      assert.equal(insights.status, execution ? 200 : 403);
+      if (execution) {
+        assert.equal(
+          insights.body.data.snapshots[0].guessDetectionPercent,
+          advanced ? 87 : null,
+        );
+      }
+    }
+    for (const flags of [
+      {hardMode: false},
+      {controlledMode: false},
+      {riskOverview: false},
+    ]) {
+      token = await f.setEntitlement("L2", flags);
+      const result = (await read("/api/v1/student/performance")).body.data;
+      assert.equal(result.disciplineIndex, 91);
+      assert.equal(
+        result.timeline[0].maxTimeViolationPercent,
+        flags.hardMode === false ? null : 93,
+      );
+      assert.equal(
+        result.controlledModeComparison === null,
+        flags.controlledMode === false,
+      );
+      if (flags.hardMode === false) {
+        assert.equal(
+          result.controlledModeComparison.maxTimeViolationDeltaPercent,
+          null,
+        );
+      }
+      assert.equal(
+        (await read("/api/v1/student/insights")).status,
+        flags.riskOverview === false ? 403 : 200,
+      );
+    }
+    token = await f.setEntitlement("L2");
+    const auth = getFirebaseAdminApp().auth();
+    await auth.createUser({
+      uid: peerUid,
+      email: `${peerUid}@emulator.test`,
+      password: f.password,
+    });
+    peerCreated = true;
+    await auth.setCustomUserClaims(peerUid, {
+      ...f.claims(),
+      studentId: peerUid,
+    });
+    await f.institute
+      .collection("students")
+      .doc(peerUid)
+      .set({studentId: peerUid, status: "active", deleted: false});
+    await f.year
+      .collection("studentYearMetrics")
+      .doc(peerUid)
+      .set({studentId: peerUid, avgRawScorePercent: 17});
+    const peerResponse = await fetch(
+      `http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/` +
+        "identitytoolkit.googleapis.com/v1/accounts:" +
+          "signInWithPassword?key=demo",
+      {
+        method: "POST",
+        headers: {"content-type": "application/json"},
+        body: JSON.stringify({
+          email: `${peerUid}@emulator.test`,
+          password: f.password,
+          returnSecureToken: true,
+        }),
+      },
+    );
+    assert.equal(peerResponse.status, 200);
+    const peerToken = (await peerResponse.json()).idToken;
+    assert.equal(
+      (await read("/api/v1/student/dashboard", peerToken)).body.data
+        .avgRawScorePercent,
+      17,
+    );
+    assert.equal(
+      (await read("/api/v1/student/tests", peerToken)).body.data.page.items
+        .length,
+      0,
+    );
+    assert.equal(
+      (
+        await read(
+          "/api/v1/student/tests?scope=history&pageSize=1&cursor=" +
+            encodeURIComponent(cursor),
+          peerToken,
+        )
+      ).status,
+      400,
+    );
+    // Ambiguous year authority cannot become a default-year success.
+    const secondYear = f.institute
+      .collection("academicYears")
+      .doc("new-opaque-year");
+    await secondYear.set({status: "active"});
+    for (const resource of ["dashboard", "tests", "performance", "insights"]) {
+      assert.equal((await read(`/api/v1/student/${resource}`)).status, 409);
+    }
+    await f.year.update({status: "archived"});
+    await secondYear
+      .collection("studentYearMetrics")
+      .doc(f.uid)
+      .set({studentId: f.uid, avgRawScorePercent: 29});
+    const rolled = await read("/api/v1/student/dashboard");
+    assert.equal(rolled.body.data.scope.yearId, secondYear.id);
+    assert.equal(rolled.body.data.avgRawScorePercent, 29);
+    const retained = await read(
+      `/api/v1/student/tests?scope=history&yearId=${f.yearId}`,
+    );
+    assert.equal(retained.body.data.page.items[0].rawScorePercent, 73);
+    assert.equal(Object.keys(retained.body.data.page.items[0]).length, 8);
+    assert.equal(
+      (
+        await read(
+          "/api/v1/student/tests?scope=history&pageSize=1&cursor=" +
+            encodeURIComponent(cursor),
+        )
+      ).status,
+      400,
+    );
+    await f.year.update({status: "locked"});
+    assert.equal(
+      (await read(`/api/v1/student/tests?scope=history&yearId=${f.yearId}`))
+        .status,
+      404,
+    );
+    await f.year.update({status: "active"});
+    await secondYear.update({status: "draft"});
+    for (const status of ["suspended", "archived", "locked"]) {
+      await f.institute.update({status});
+      for (const resource of [
+        "dashboard",
+        "tests",
+        "performance",
+        "insights",
+      ]) {
+        assert.equal((await read(`/api/v1/student/${resource}`)).status, 403);
+      }
+    }
+    await f.institute.update({status: "active"});
+    const expired = {...f.claims(), expiryDate: "2000-01-01T00:00:00.000Z"};
+    await auth.setCustomUserClaims(f.uid, expired);
+    await f.institute
+      .collection("license")
+      .doc("current")
+      .update({expiryDate: expired.expiryDate});
+    // A matching fresh expired token still grants no basic read.
+    token = await f.signIn();
+    for (const resource of ["dashboard", "tests", "performance", "insights"]) {
+      assert.equal((await read(`/api/v1/student/${resource}`)).status, 403);
+    }
+    token = await f.setEntitlement("L2");
+    await auth.updateUser(f.uid, {disabled: true});
+    assert.equal((await read("/api/v1/student/dashboard")).status, 401);
+    await auth.updateUser(f.uid, {disabled: false});
+    token = await f.setEntitlement("L1");
+    await f.run.update({recipientStudentIds: [other.uid]});
+    const removed = await read("/api/v1/student/tests?status=completed");
+    assert.equal(removed.body.data.page.items.length, 0);
+    assert.equal("total" in removed.body.data, false);
+    token = await f.setEntitlement("L0");
+    assert.equal((await read("/api/v1/student/insights")).status, 403);
+    await getFirebaseAdminApp()
+      .auth()
+      .setCustomUserClaims(f.uid, {...f.claims(), role: "teacher"});
+    for (const path of ["dashboard", "tests", "performance", "insights"]) {
+      assert.equal((await read(`/api/v1/student/${path}`)).status, 403);
+    }
+  } finally {
+    if (peerCreated) await getFirebaseAdminApp().auth().deleteUser(peerUid);
+    await f.cleanup();
+    await other.cleanup();
+    await getFirebaseAdminApp().delete();
+  }
+});

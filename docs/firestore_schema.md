@@ -1,8 +1,37 @@
 # Firestore Schema Reference
 
+BWM-043 substep 5 adds no data writer or collection: current/history reads use
+existing own `studentYearMetrics/{studentId}` and `results/{runId}` summaries.
+History never joins runs, sessions, questions or media. Optional stored ownership/
+year aliases must match path authority; absent required retained fields fail
+CONFLICT. Two local `runs` indexes now support mode-independent assigned cursor
+reads and upcoming scheduled reads (recipient array + startWindow DESC/name DESC;
+recipient array + status + startWindow ASC/name ASC). Existing indexes are
+preserved. These declarations are not deployed; BWM-053 owns remote qualification.
+
+BWM-043 release prerequisite (BWM-053, DEC-102): private capture requires explicit
+positive per-asset revision metadata and exact revisioned canonical paths. The
+current managed-package writer emits unrevisioned question/solution paths and no
+per-asset revisions; those present assets fail capture. No new-write alignment,
+legacy revision inference, asset migration or captured-history backfill is
+implemented here. Qualify actual existing data (including missing indexed query
+fields), deployed composites and a real publication-to-session path before release.
+
 This document provides a simplified reference of the Firestore data hierarchy.
 
-Last reconciled: 2026-10-14 (`BWM-040` verified local read-only audit/health; unchanged local license-history index)
+BWM-043 substep 4 persists the server-only session `solutionSnapshot` shape in
+[Student entitlement contract](STUDENT_ENTITLEMENT_CONTRACT.md): immutable ordered
+question version/revision, answer and asset-version authority captured by the
+existing session-create transaction and consumed only by authorized STU-05.
+Limits: 500 questions, 262144-byte snapshot and conservative 524288-byte JSON
+initial-session budget. Capture failure creates no session or partial run promotion.
+Candidate runtime excludes this private field. Capture added no collection, rule
+or index; substep 5 query composites are listed above. No legacy backfill. Archived Student history
+reads only retained own `studentYearMetrics/{studentId}/results/{runId}`
+summaries; no raw-session/BigQuery reconstruction or legacy snapshot backfill is
+authorized here.
+
+Last reconciled: 2026-10-18 (`BWM-043` private immutable capture and local cursor indexes, no legacy backfill; `BWM-042` profile/preferences, managed photo lifecycle, exact review/session-entry binding and local cleanup-deadline index; deployed resource qualification remains BWM-052/053)
 
 The authoritative schema definition exists in:
 
@@ -1351,3 +1380,88 @@ All generated code must follow these rules:
 4. Root-level collections must remain reserved for vendor infrastructure.
 
 5. Firestore collection paths must match the architecture specification.
+
+## BWM-042 profile and private identity-photo reservations (DEC-089)
+
+Internal profile/preferences and enrollment/replacement are implemented in substeps 3/4;
+withdrawal/physical cleanup remain reserved and public routes remain missing. No index/rule changes.
+The normative schema/lifecycle is
+[Student profile and private identity-photo contract](STUDENT_PROFILE_IDENTITY_PHOTO_CONTRACT.md).
+Shared wire DTOs are `shared/contracts/studentProfile.d.ts`.
+
+Reserve `profilePreferences` (only boolean `sidebarCollapsed`) on existing
+`institutes/{instituteId}/students/{studentId}`, sharing its existing numeric
+`version` and immutable command audit. Missing preference defaults server-side
+to false, not account/year/identity authority. Reserve nullable `identityPhotoId`,
+`identityPhotoConsentState` (`never_enrolled|granted|withdrawn`), versioned consent
+and server capture/expiry fields; Admin retains canonical review ownership.
+Replacement/withdrawal clear both legacy and canonical verification. Legacy
+photo URLs/timestamp-only decisions do not authorize new managed media.
+
+Reserve institute-scoped `identityPhotos/{photoId}` records with schema version,
+Student ID/UID, staged/active/deletion_pending/deleting/deleted lifecycle,
+scoped command hashes/fingerprint, expected version/pointer, server consent/
+stage/commit/expiry/delete deadlines, validated normalized JPEG metadata,
+private immutable object generation/integrity and recoverable cleanup lease.
+The photo service and its cleanup implementation are the sole lifecycle owner.
+No image/base64, raw token/key or signed URL is stored in Firestore. Existing
+immutable `auditLogs/{auditId}` supply media-free deterministic receipts/access/
+review/deletion audits; no parallel command/history store is introduced.
+Deleted tombstones remove object coordinates, image metadata/integrity and
+lease/staging details, preserving only owner/terminal/reconciliation identity.
+
+Ninety-day expiry denies access immediately; withdrawal/replacement/Student
+soft deletion also revoke access before physical cleanup. The 24-hour deletion
+target is retryable and cannot be reported complete before confirmed object
+removal/absence. Reads derive expiry/deletion truth even before a sweep.
+Reserve bounded stage/expiry/deletion queries for substep 5; no composite index
+or new schedule is declared until that implementation chooses exact queries.
+Firestore and Storage client rules remain deny-by-default; no migration,
+backfill, deployed resource or legal erasure guarantee is implied.
+
+
+BWM-042 substep 3 local writer: `StudentProfileService.updatePreferences` writes
+only `profilePreferences.sidebarCollapsed`, incremented existing `version`,
+server `updatedAt`/verified UID `updatedBy` and one deterministic immutable
+`auditLogs` receipt in one transaction. The scoped UUID hash and normalized
+fingerprint do not persist the raw token/key. Existing Admin account, batch,
+lifecycle and review fields remain unchanged. Current Auth and active Student
+ownership are rechecked even before exact replay; current institute/license
+and both presented/current Auth authority share the transaction read set.
+Read-only metadata/photo projections expose no object coordinates or image bytes;
+no photo record/lifecycle writer, new collection/index/rule or Auth mutation is
+introduced. Existing Student usage projection treats preference-only writes as
+no delta. The new real-Auth/Firestore test raises inventory to 94 suites; no
+remote migration/deployment or production qualification is claimed.
+
+BWM-042 substep 4 / DEC-091 activates the internal enrollment writer. `StudentIdentityPhotoService` alone creates `identityPhotos` stages, records private `codecVersion` and nullable `recoveryState` (awaiting_upload/upload_unknown/commit_unknown/rejected), then atomically activates the exact generation, updates canonical Student consent/pointer/capture/expiry, increments version, resets review/legacy URLs and creates the media-free immutable enrollment audit. Old active generations become deletion_pending/replaced. Definitively rejected uncommitted stages use private deletion reason enrollment_rejected and a bounded target; they are not public enrollment history. Unknown uploads/commits preserve durable stage authority. No bytes are deleted; physical cleanup, expiry and withdrawal remain substep 5. No index/rule/trigger/schedule change. New source inventory 95, explicit 18.
+
+BWM-042 substep 5 / DEC-092: internal withdrawal atomically clears consent/pointer/review, increments Student version and writes an immutable withdrawal receipt; exact own-photo lifecycle status uses the narrow privacy identity boundary. Shared lifecycle authority integrates the existing Student soft-delete transaction. One at-most-100-record collection-group `identityPhotos.nextCleanupAt` ascending deadline query replaces the split-query sketch; a local ASCENDING/COLLECTION_GROUP field override is declared. Lease ID/until, bounded cleanupAttempts/lastCleanupErrorCode and retry deadlines recover failures. Expiry clears review/advances Student version while retaining expired enrollment metadata. A private closing_upload phase tracks confirmed image removal before a zero-byte Storage upload fence blocks late writes. Only then does an immutable deletion audit and replacement minimal tombstone retain owner/key hashes, terminal reason/time/audit ID and uploadClosed, removing image coordinates/hash/size/dimensions and staging/lease/retry fields. Private staging_expired/enrollment_rejected reasons never enter the public lifecycle DTO. No client rule change or deployed index qualification; eighth schedule is cleanup, not a new domain event.
+
+DEC-092 deadline reconciliation: replacement, withdrawal and rejected uploads
+share the lifecycle queue helper. Already-expired captures/stages keep the
+earlier expiry reason and original expiry-plus-24-hour deletion target, even
+when that target is already missed; a later command never resets the clock.
+
+### BWM-042 secured transport — DEC-093 (2026-10-17)
+
+Substep 6 registers STU-07..12 (`studentProfile`), ADM-61
+(`adminStudentIdentityPhotoMedia`) and EXM-06 (`examSessionIdentityStatus`).
+Current accounting: 120 routes = 115 implemented + zero incompatible + zero
+missing + five retired; 63 HTTP exports, 51 gateway handlers, eight schedules.
+Route declarations retain planned provenance; Student/Admin callers are mounted.
+The optional EXM-06 UI consumer remains owned by BWM-045. Existing ADM-27 uses
+the canonical photo-ID/UUID contract and existing review/audit writer. Roster
+URLs are null and legacy booleans confer no photo authority. Media is one
+bounded authenticated base64 JPEG with fresh post-fetch authorization and
+immutable media-free access audit, private/no-store on success and failure.
+Exam gets only optional minimal current status and no image or biometric claim.
+The existing consumed-entry transaction alone adds bounded private
+`identityStatusEntryBindings` hashes; historical sessions without it fail closed
+for this status read. No new topology event/client grant/header/cloud change.
+`IDENTITY_PHOTOS_BUCKET` remains explicit and dedicated; no fallback or real
+resource injection. See `STUDENT_PROFILE_IDENTITY_PHOTO_CONTRACT.md` for exact
+privacy exceptions, current authority, transport and remote qualification.
+Mounted Student/Admin adoption and substep-8 local acceptance are qualified;
+remote GCS/IAM/index/retention validation remains BWM-052/053, production NO_GO. Source integration inventory 96/19; classified
+non-emulator suite and historical BWM-049 exclusions unchanged.

@@ -1,3 +1,5 @@
+import StudentProfileProvider from "./services/StudentProfileProvider";
+import {useStudentProfile, studentIdentityScope} from "./services/studentProfileContext";
 import {
   Suspense,
   lazy,
@@ -40,12 +42,6 @@ const LICENSE_LAYER_ORDER: Record<LicenseLayer, number> = {
   L2: 2,
   L3: 3,
 };
-
-const STUDENT_SIDEBAR_STORAGE_KEY = "student-sidebar-collapsed";
-
-function studentLivePhotoStorageKey(email: string): string {
-  return `student-live-photo:${email.toLowerCase()}`;
-}
 
 const StudentDashboardPage = lazy(() => import("./features/dashboard/StudentDashboardPage"));
 const StudentMyTestsPage = lazy(() => import("./features/my-tests/StudentMyTestsPage"));
@@ -165,7 +161,7 @@ function StudentProtectedRoute(props: { loginPath: string; children: ReactElemen
     globalState.authorityIssue === "license_restricted" ||
     globalState.license.status === "grace" ||
     globalState.license.status === "expired";
-  if (suspended || licenseRestricted) {
+  if ((suspended || licenseRestricted) && location.pathname !== "/student/profile") {
     return (
       <main className="student-page-shell student-page-shell-login">
         <section className="student-login-card" aria-labelledby="student-authority-title">
@@ -181,6 +177,7 @@ function StudentProtectedRoute(props: { loginPath: string; children: ReactElemen
           <p className="student-content-copy">
             Authority changes are checked automatically. You can also sign out and contact your institute administrator.
           </p>
+          <NavLink to="/student/profile">Manage photo privacy</NavLink>
           <button type="button" onClick={() => void signOut()}>Sign out</button>
         </section>
       </main>
@@ -216,13 +213,8 @@ function StudentLayout() {
   const debugMode = isStudentDebugMode();
   const activeLicenseLayer = globalState.licenseLayer ?? "L0";
   const [pageScrolled, setPageScrolled] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    try {
-      return window.localStorage.getItem(STUDENT_SIDEBAR_STORAGE_KEY) === "true";
-    } catch {
-      return false;
-    }
-  });
+  const profileState = useStudentProfile();
+  const sidebarCollapsed = profileState.profile?.preferences.sidebarCollapsed ?? false;
 
   useEffect(() => {
     function handleScroll() {
@@ -233,27 +225,6 @@ function StudentLayout() {
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(STUDENT_SIDEBAR_STORAGE_KEY, String(sidebarCollapsed));
-    } catch {
-      // Best-effort preference persistence only.
-    }
-  }, [sidebarCollapsed]);
-
-  const hasLivePhoto = (() => {
-    const email = session.user?.email;
-    if (!email) {
-      return true;
-    }
-
-    try {
-      return Boolean(window.localStorage.getItem(studentLivePhotoStorageKey(email)));
-    } catch {
-      return true;
-    }
-  })();
 
   const visibleNavItems = useMemo(() => {
     return STUDENT_PRIMARY_NAVIGATION.filter((item) => {
@@ -317,7 +288,8 @@ function StudentLayout() {
               <button
                 type="button"
                 className="student-sidebar-icon-button"
-                onClick={() => setSidebarCollapsed((currentValue) => !currentValue)}
+                onClick={() => void profileState.preferences(!sidebarCollapsed)}
+                disabled={!profileState.profile || profileState.busy || Boolean(profileState.pending)}
                 aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
                 aria-pressed={sidebarCollapsed}
                 title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -413,16 +385,15 @@ function StudentLayout() {
               {!pageScrolled ? <p>{activeRouteSummary}</p> : null}
             </div>
           </section>
-          {!hasLivePhoto && location.pathname !== "/student/profile" ? (
+          {location.pathname !== "/student/profile" ? (
             <section
               className="student-live-photo-required-banner"
-              aria-label="Live photo required"
+              aria-label="Server identity photo status"
             >
               <div>
-                <strong>Live identity photo needed</strong>
+                <strong>{profileState.profile ? `Identity photo: ${profileState.profile.identityPhoto.status.replaceAll("_", " ")}` : "Identity photo status unavailable"}</strong>
                 <p>
-                  Capture your photo once in profile settings so future exam face verification can
-                  use it.
+                  Manage consent and your institute’s human photo review in Profile. Automated face matching is unavailable.
                 </p>
               </div>
               <NavLink to="/student/profile">Open Profile</NavLink>
@@ -437,12 +408,19 @@ function StudentLayout() {
 
 function App() {
   usePortalTitle("student");
+  const {session} = useAuthProvider();
+  const authority = useGlobalPortalState();
+  const uid = session.status === "authenticated" && authority.role === "student" ? session.user?.uid ?? null : null;
+  const scope = JSON.stringify([uid, studentIdentityScope(session.idToken), authority.role]);
+  const restricted = authority.isSuspended || authority.authorityIssue !== null ||
+    authority.license.status === "grace" || authority.license.status === "expired";
 
   const basePath = getPortalRoutePrefix("student");
   const loginPath = getPortalLoginPath("student");
   const protectedDefaultPath = getPortalDefaultAuthenticatedPath("student");
 
   return (
+    <StudentProfileProvider key={scope} uid={uid} restricted={restricted}>
     <Routes>
       <Route path="/" element={<Navigate to={protectedDefaultPath} replace />} />
       <Route path={basePath} element={<Navigate to={protectedDefaultPath} replace />} />
@@ -490,14 +468,17 @@ function App() {
         <Route
           path="profile"
           element={
-            <StudentRouteBoundary label="Opening your account settings">
+            // Profile owns unavailable/retry/privacy state. A global request gate
+            // would hide withdrawal and retry controls while any request is pending.
+            <Suspense fallback={<UiRouteLoading label="Opening your account settings" />}>
               <StudentProfileSettingsPage />
-            </StudentRouteBoundary>
+            </Suspense>
           }
         />
       </Route>
       <Route path="*" element={<Navigate to={protectedDefaultPath} replace />} />
     </Routes>
+    </StudentProfileProvider>
   );
 }
 

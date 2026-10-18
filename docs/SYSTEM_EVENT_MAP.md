@@ -1,8 +1,18 @@
 # SYSTEM EVENT MAP
 
+BWM-043 substep 5 adds no event, trigger, schedule or summary producer. It reads
+the existing BWM-024 eventual own result authority and never treats partial
+propagation as a released solution. Archived history is summary-only; cursor and
+recursive field gates are synchronous reader concerns, not parallel writers.
+
+BWM-043 substep 4 adds no domain event, trigger, schedule or propagation writer.
+Private solution capture occurs inside the existing session-create transaction;
+STU-05 reads it without mutating propagated result summaries. Existing BWM-024
+completion propagation remains eventual and does not unlock unreleased content.
+
 This document defines the event-driven topology of the platform.
 
-Last reconciled: 2026-10-14 (`BWM-040` verified synchronous audit/health reads; no event/topology change)
+Last reconciled: 2026-10-18 (`BWM-043` synchronous readers/private session capture, no new event or schedule; `BWM-042` synchronous profile/photo commands, media-free audit and eighth bounded cleanup schedule; no new domain event or parallel usage writer)
 
 Each event represents a state transition or trigger that initiates downstream processing.
 
@@ -463,3 +473,56 @@ This event map ensures that:
 - analytics triggers remain consistent
 - AI agents do not create duplicate triggers
 - system workflows remain traceable
+
+## BWM-042 profile/photo foundation (DEC-089)
+
+Only shared contracts and eight missing route reservations are added. Profile
+preferences/enrollment/withdrawal, authenticated media grants and Admin review
+are specified as synchronous commands/reads with immutable institute audits,
+not new topology events. See
+[the private photo contract](STUDENT_PROFILE_IDENTITY_PHOTO_CONTRACT.md) for
+single-writer and atomic metadata/object-reconciliation ownership. Photo-only
+Student writes must remain no-ops for usage counts through the existing
+idempotent Student trigger. No parallel usage/analytics writer is permitted.
+
+A 15-minute, max-100-record retryable retention/orphan sweep is reserved for
+BWM-042 substep 5, sharing photo lifecycle authority and generation-qualified
+object deletion. It is not registered now; current scheduled exports remain
+seven. No new trigger/event, cleanup execution, provider send or cloud
+provisioning occurs in this foundation substep.
+
+
+BWM-042 substep 3 (2026-10-16) implements internal profile reads and one synchronous
+preference/audit transaction through `StudentProfileService`. It creates no
+HTTP/domain event, trigger or schedule. Existing `UsageUpdated` sees unchanged
+active/deleted status, so preference writes produce no usage delta. Media
+access, enrollment/review/withdrawal/cleanup remain their later ordered owners.
+All eight profile/photo/Exam reservations remain missing; seven schedules stay
+unchanged. The authority helper extraction adds no new writer or event.
+
+BWM-042 substep 4 / DEC-091 implements synchronous internal enrollment/replacement and immutable `ENROLL_STUDENT_IDENTITY_PHOTO` audit. Upload reservation and recovery are private photo lifecycle state, not new topology events or a parallel command store. Photo-only Student writes retain existing usage no-delta semantics. Replaced/rejected/unknown stages await substep-5 generation-qualified cleanup; no purge executes or schedule is registered. Seven schedules and all public route statuses remain unchanged.
+
+BWM-042 substep 5 / DEC-092 activates internal synchronous withdrawal and immutable WITHDRAW_STUDENT_IDENTITY_PHOTO / DELETE_STUDENT_IDENTITY_PHOTO audits. Student soft-delete shares its existing transaction with the photo lifecycle helper; no second deletion API or Student trigger. `studentIdentityPhotoCleanupEvery15Minutes` is now the eighth scheduled export, UTC every 15 minutes, maxInstances 1, at most 100 deadline records and five-minute recoverable leases with bounded backoff. Private non-image upload fences prevent late create-only writes after managed image deletion. No new topology event, parallel usage writer or public route; photo-only changes remain usage no-delta.
+
+### BWM-042 secured transport — DEC-093 (2026-10-17)
+
+Substep 6 registers STU-07..12 (`studentProfile`), ADM-61
+(`adminStudentIdentityPhotoMedia`) and EXM-06 (`examSessionIdentityStatus`).
+Current accounting: 120 routes = 115 implemented + zero incompatible + zero
+missing + five retired; 63 HTTP exports, 51 gateway handlers, eight schedules.
+Route declarations retain planned provenance; Student/Admin callers are mounted.
+The optional EXM-06 UI consumer remains owned by BWM-045. Existing ADM-27 uses
+the canonical photo-ID/UUID contract and existing review/audit writer. Roster
+URLs are null and legacy booleans confer no photo authority. Media is one
+bounded authenticated base64 JPEG with fresh post-fetch authorization and
+immutable media-free access audit, private/no-store on success and failure.
+Exam gets only optional minimal current status and no image or biometric claim.
+The existing consumed-entry transaction alone adds bounded private
+`identityStatusEntryBindings` hashes; historical sessions without it fail closed
+for this status read. No new topology event/client grant/header/cloud change.
+`IDENTITY_PHOTOS_BUCKET` remains explicit and dedicated; no fallback or real
+resource injection. See `STUDENT_PROFILE_IDENTITY_PHOTO_CONTRACT.md` for exact
+privacy exceptions, current authority, transport and remote qualification.
+Mounted Student/Admin adoption and substep-8 local acceptance are qualified;
+remote GCS/IAM/index/retention validation remains BWM-052/053, production NO_GO. Source integration inventory 96/19; classified
+non-emulator suite and historical BWM-049 exclusions unchanged.

@@ -6,6 +6,9 @@ const test = require("node:test");
 const {deleteApp, initializeApp} = require("firebase-admin/app");
 const {getAuth} = require("firebase-admin/auth");
 const {getFirestore} = require("firebase-admin/firestore");
+const {
+  handleClaimPropagationSchedule,
+} = require("../lib/triggers/claimPropagation");
 
 const expectedProjectId = "demo-parabolic-test";
 const projectId = process.env.GCLOUD_PROJECT;
@@ -154,6 +157,7 @@ test(
             governanceAccess: false,
             hardMode: false,
           },
+          concurrencyLimit: 10,
           name: "Diagnostic",
           planId: "L1",
           studentLimit: 100,
@@ -190,6 +194,17 @@ test(
         licenseVersion,
         mutation.body.data?.licenseHistoryEntryId,
       );
+
+      // The current mutation reserves durable propagation; execute its real
+      // scheduled owner before asserting fleet convergence and revocation.
+      assert.equal(
+        typeof mutation.body.data?.propagation?.operationId, "string",
+      );
+      await handleClaimPropagationSchedule(`license-fixture-${suffix}`);
+      const propagation = await instituteReference
+        .collection("claimPropagationOperations")
+        .doc(mutation.body.data.propagation.operationId).get();
+      assert.equal(propagation.get("state"), "succeeded");
 
       const [institute, currentLicense, mainLicense, admin, student] =
         await Promise.all([

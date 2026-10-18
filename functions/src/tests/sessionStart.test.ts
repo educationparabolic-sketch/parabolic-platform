@@ -162,9 +162,9 @@ test(
     });
     await seedAcademicYear(instituteId, yearId);
     await firestore.doc(studentPath).set({status: "active", studentId});
-    await firestore.doc(questionEasyPath).set({difficulty: "Easy"});
-    await firestore.doc(questionHardPath).set({difficulty: "Hard"});
-    await firestore.doc(questionMediumPath).set({difficulty: "Medium"});
+    await firestore.doc(questionEasyPath).set({version: 1, revision: 1, correctAnswer: "A", difficulty: "Easy"});
+    await firestore.doc(questionHardPath).set({version: 1, revision: 1, correctAnswer: "A", difficulty: "Hard"});
+    await firestore.doc(questionMediumPath).set({version: 1, revision: 1, correctAnswer: "A", difficulty: "Medium"});
     await firestore.doc(runPath).set({
       calibrationVersion: "cal_v2026_04",
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
@@ -474,6 +474,12 @@ test(
         [launchCredentialHash],
       );
       assert.equal(consumedSnapshot.data()?.sessionTokenHash, undefined);
+      assert.deepEqual(consumedSnapshot.get("identityStatusEntryBindings"), [
+        createHash("sha256").update(JSON.stringify([
+          context.studentUid, context.instituteId, context.yearId,
+          context.runId, context.sessionId, context.launchNonce,
+        ])).digest("hex"),
+      ]);
 
       await assert.rejects(
         sessionService.validateSessionEntry({
@@ -539,6 +545,7 @@ test(
     await firestore.doc(studentPath).set({status: "active", studentId});
     await Promise.all(questionPaths.map((questionPath, index) =>
       firestore.doc(questionPath).set({
+        version: 1, revision: 1, questionImageRevision: 1, solutionImageRevision: 1,
         correctAnswer: index === 0 ? "A" : "B",
         difficulty: index === 0 ? "Easy" : "Hard",
         internalNotes: `private-note-${index}`,
@@ -548,9 +555,9 @@ test(
         ],
         prompt: `Authoritative prompt ${index + 1}`,
         questionId: questionIds[index],
-        questionImageUrl: `questions/${questionIds[index]}/v1/question.png`,
+        questionImageUrl: `${instituteId}/questions/${questionIds[index]}/v1/question-r1.png`,
         questionType: "MCQ",
-        solutionImageUrl: `questions/${questionIds[index]}/v1/solution.png`,
+        solutionImageUrl: `${instituteId}/questions/${questionIds[index]}/v1/solution-r1.png`,
         subject: index === 0 ? "Physics" : "Mathematics",
       })));
     await Promise.all(runPaths.map((runPath, index) =>

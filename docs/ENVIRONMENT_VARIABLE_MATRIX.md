@@ -222,6 +222,7 @@ closed before a notification-authoritative command commits.
 | `QUESTION_ASSETS_BUCKET` | `R` | `R` | `R` | `R` | Bare environment-specific bucket name; must not contain `/` and must match `PROJECT_ID` ownership policy. |
 | `REPORTS_BUCKET` | `R` | `R` | `R` | `R` | Bare environment-specific reports bucket name; must not cross environment boundaries. |
 | `SUPPORT_ATTACHMENTS_BUCKET` | `R` | `R` | `R` | `R` | Bare private backend-IAM-only support bucket. Public DTOs never expose this value; local emulator tests use the disposable demo-project bucket. |
+| `IDENTITY_PHOTOS_BUCKET` | `C` | `C` | `C` | `C` | Dedicated private backend bucket required when enrollment, media or due cleanup is enabled. No fallback and never frontend-visible; actual IAM/conditional-write/retention qualification remains BWM-052/053. |
 | `RELEASE_ID` | `O` | `R` | `R` | `R` | Same immutable release identifier injected into the frontend artifacts. |
 | `RELEASE_COMMIT_SHA` | `O` | `R` | `R` | `R` | Full source commit SHA. |
 | `RELEASE_BUILT_AT` | `O` | `R` | `R` | `R` | UTC ISO-8601 build timestamp. |
@@ -238,6 +239,15 @@ closed before a notification-authoritative command commits.
 | `EMAIL_FROM_ADDRESS` | `C` | `C` | `C` | `C` | Required provider-verified sender address when transactional email delivery is enabled. |
 | `EMAIL_FROM_NAME` | `O` | `O` | `O` | `O` | Non-secret sender display name; defaults to `Parabolic Platform`. |
 | `SUPPORT_NOTIFICATION_EMAIL` | `R` | `R` | `R` | `R` | Provider-deliverable operational inbox for new institute tickets and institute replies/status changes. Persisted support jobs contain this address plus safe routing/template IDs, never message bodies or attachment content. |
+
+BWM-043 substep 4: STU-05 image delivery requires an explicitly configured
+HTTPS `CDN_BASE_URL`, nonempty key name and signing key value. It rejects
+credential/query/fragment/bucket base URLs and never uses a placeholder URL as
+successful delivery. Asset-free solutions may return null media without these
+conditional settings. Local HTTP Hosting tests use asset-free fixtures; SDK
+proof uses an ephemeral synthetic key and HTTPS URL, with no CDN byte fetch.
+Existing real CDN/key/IAM qualification remains BWM-052/054; no runtime secret
+or public environment value is changed here.
 
 ## Functions managed secrets
 
@@ -307,3 +317,46 @@ configuration inputs and must not be copied into frontend artifacts:
 - Firebase/Google metadata: the selected project/runtime, never hand-authored.
 - Examples: the tracked per-portal and Functions `.env.example` files contain
   variable names and safe comments only; they are not deployable values.
+
+### BWM-042 private photo dependency (DEC-091..094)
+
+Backend-only `IDENTITY_PHOTOS_BUCKET` is consumed by registered enrollment,
+authorized media and due cleanup. It is conditionally required for those
+operations, has no fallback, and must be a dedicated private bucket
+separate from configured question/report/support buckets. The tracked Functions
+example uses only `demo-parabolic-local-identity-photos`; no real resource or
+runtime injection is provisioned. Never expose it as a frontend variable.
+Client Storage remains denied; objects have no public/download tokens and use
+immutable generation/integrity checks. BWM-052 must qualify IAM,
+versioning/soft-delete and lifecycle/backups before real enrollment release.
+See [the photo contract](STUDENT_PROFILE_IDENTITY_PHOTO_CONTRACT.md).
+
+DEC-092 / BWM-042 substep 5: the eighth cleanup schedule consumes IDENTITY_PHOTOS_BUCKET only when processing a due private photo. Missing/changed configuration fails closed and retains retryable state; no fallback or real environment injection is added. BWM-052 must preserve private zero-byte non-image upload fences alongside audit/tombstone authority and qualify versioning/soft-delete/backups before real release; a generic lifecycle rule must not reopen fenced create-only upload paths.
+
+The local Storage emulator ignores generation preconditions; its successful
+image-removal/fence-state tests do not qualify GCS conditional writes. DEC-092
+requires actual GCS create/delete and fence-retention qualification with the
+approved BWM-052/053 resource work before enrollment release.
+
+### BWM-042 secured transport — DEC-093 (2026-10-17)
+
+Substep 6 registers STU-07..12 (`studentProfile`), ADM-61
+(`adminStudentIdentityPhotoMedia`) and EXM-06 (`examSessionIdentityStatus`).
+Current accounting: 120 routes = 115 implemented + zero incompatible + zero
+missing + five retired; 63 HTTP exports, 51 gateway handlers, eight schedules.
+Route declarations retain planned provenance; Student/Admin callers are mounted.
+The optional EXM-06 UI consumer remains owned by BWM-045. Existing ADM-27 uses
+the canonical photo-ID/UUID contract and existing review/audit writer. Roster
+URLs are null and legacy booleans confer no photo authority. Media is one
+bounded authenticated base64 JPEG with fresh post-fetch authorization and
+immutable media-free access audit, private/no-store on success and failure.
+Exam gets only optional minimal current status and no image or biometric claim.
+The existing consumed-entry transaction alone adds bounded private
+`identityStatusEntryBindings` hashes; historical sessions without it fail closed
+for this status read. No new topology event/client grant/header/cloud change.
+`IDENTITY_PHOTOS_BUCKET` remains explicit and dedicated; no fallback or real
+resource injection. See `STUDENT_PROFILE_IDENTITY_PHOTO_CONTRACT.md` for exact
+privacy exceptions, current authority, transport and remote qualification.
+Mounted Student/Admin adoption and substep-8 local acceptance are qualified;
+remote GCS/IAM/index/retention validation remains BWM-052/053, production NO_GO. Source integration inventory 96/19; classified
+non-emulator suite and historical BWM-049 exclusions unchanged.

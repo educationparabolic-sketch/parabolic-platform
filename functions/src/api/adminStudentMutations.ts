@@ -1,3 +1,4 @@
+import {handleManagedStudentPhotoReviewRequest} from "./studentProfile";
 import * as functions from "firebase-functions";
 import {DecodedIdToken} from "firebase-admin/auth";
 import {sendErrorResponse} from "../services/apiResponse";
@@ -237,7 +238,7 @@ export const createAdminStudentMutationsHandler = (
   service: "AdminStudentMutationsApi",
 });
 
-export const handleAdminStudentMutationsRequest =
+const handleLegacyStudentMutationsRequest =
   createAdminStudentMutationsHandler({
     assignBatch: adminStudentMutationsService.assignBatch.bind(
       adminStudentMutationsService,
@@ -255,3 +256,8 @@ export const handleAdminStudentMutationsRequest =
   });
 
 export {buildSuccessResponse, resolveOperation};
+
+export const handleAdminStudentMutationsRequest = (
+  request: functions.https.Request, response: functions.Response,
+) => /\/photo-review\/?$/u.test(request.path) ?
+  handleManagedStudentPhotoReviewRequest(request, response) : handleLegacyStudentMutationsRequest(request, response);

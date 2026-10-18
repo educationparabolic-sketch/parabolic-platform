@@ -2,7 +2,35 @@
 
 Status: canonical route and response-envelope contract
 
-Last reconciled: 2026-10-15 (`BWM-041` verified local Vendor acceptance; production NO_GO)
+BWM-043 release boundary (2026-10-18, DEC-102): strict immutable reader fixtures
+do not qualify managed publication. The current package writer lacks revisioned
+asset paths/per-asset metadata required by session capture. BWM-053 must align new
+writes, safely qualify existing data/assets and prove actual publication through
+released solutions. No guessed revisions or weaker legacy fallback is permitted;
+production remains NO_GO. Real CDN/IAM resources remain BWM-052/054.
+
+BWM-043 substeps 4/5 adopt [Student entitlement contract](STUDENT_ENTITLEMENT_CONTRACT.md)
+and `shared/contracts/studentEntitlements.d.ts` on STU-01..05. Existing URLs,
+GET methods, exports and outer envelopes remain. Four summary readers now use
+fresh revocation/current Auth, exact own Student/current institute/license/flag
+and bounded year authority in the same read transaction. V2 data includes
+`contractVersion`, `scope`, `access` and nullable recursive field gates. No v1
+weaker reader remains. All outcomes carry private no-store headers.
+
+STU-01 accepts no query. STU-03/04 accept only bounded `lastN`/`limit`; insights
+require L1+ and riskOverview. STU-02 accepts current/history scope, history-only
+yearId and pageSize/cursor; numeric page and browser authority fields fail 400.
+History emits eight basic retained own-result fields with no run/content join.
+Current candidate pages cap at 49 examined plus lookahead and bounded joins,
+return no unauthorized total, and bind cursors to current scope/authority.
+STU-05 requires exact runId and immutable released owned capture before fresh
+1800-second signed asset issuance. Its query remains runId/pageSize/cursor only.
+Mounted adapters now consume strict nullable v2 responses and cursors (substep 6),
+with visible loading/denied/error/empty states and no fixture success. Numeric
+page requests still fail 400. Permanent local acceptance is recorded in BWM-043 substep 7 and aggregate
+closeout in substep 8; no deployment qualification follows.
+
+Last reconciled: 2026-10-18 (BWM-043 mounted Student v2 adoption; `BWM-042` secured Student profile/photo APIs and mounted Student/Admin local acceptance; 120/115/0/0/5 routes, 63 HTTP exports, 51 handlers, eight schedules; production NO_GO)
 
 ## Sources of truth
 
@@ -18,9 +46,8 @@ offline-payment, and payment-event authority. The strict mounted
 `/vendor/licensing` caller consumes all fourteen routes. VEN-31..VEN-35 are
 registered aggregate-intelligence GET reads requiring current Vendor Auth and
 `vendor.intelligence.read`; mounted intelligence and Overview now consume one strict live adapter.
-Canonical accounting is 112 routes: 107 implemented, zero incompatible, zero
-missing routes, and five retired; 60 HTTP exports map through 48
-gateway handlers.
+Canonical accounting is 120 routes: 115 implemented, zero incompatible, zero
+missing, and five retired; 63 HTTP exports map through 51 gateway handlers.
 
 BWM-041's current-identity alignment uses one shared fresh-Auth guard across
 the six existing Vendor boundary families (all 41 implemented Vendor routes).
@@ -34,6 +61,38 @@ changes, new roles or support workspace are introduced.
 BWM-041 adds no public route, request/response schema, writer, collection, index or schedule. The 41 implemented Vendor routes and 14 existing direct exports retain their boundaries. Mounted actions consume those APIs or explicitly report unsupported authority; no Vendor support UI or new internal-team role is implied. Institute/commercial command recovery retains a bounded UID/tab-local complete original intent for reviewed replay through the existing strict adapters, including targets, UUID and optimistic preconditions. This local intent is not a receipt, paid state, role grant or server persistence schema. Only a validated server receipt and successful owning read can reconcile completion; queued delivery, propagation, provider failure and purge reservation do not imply completed effects. The shared authenticated client binds the starting SDK UID across token lookup, 401 refresh/retry and response acceptance. The typed ledgers, module registry and permanent local matrix name exact proof ownership; deployed/provider/security-header qualification remains separate.
 
 If prose and the typed manifest disagree about a route key or status, the typed manifest must be corrected and the documentation reconciled in the same change.
+
+BWM-042 implements `StudentProfileService` profile reads and versioned/idempotent
+sidebar preferences with actual token/current Auth and transaction-scoped
+institute/license authority. STU-07..12, ADM-61 and EXM-06 are registered through
+three dedicated exports; Student/Admin callers use strict mounted adapters.
+The optional Exam UI consumer and biometric policy remain BWM-045-owned.
+See the normative contract for exact service, review, media and privacy ownership.
+
+## BWM-042 profile and identity-photo foundation (DEC-089)
+
+`shared/contracts/studentProfile.d.ts` owns the closed wire declarations.
+[Student profile and private identity-photo contract](STUDENT_PROFILE_IDENTITY_PHOTO_CONTRACT.md)
+is the normative authority, image limits, consent/retention/review/replacement/
+withdrawal/access/deletion/replay and writer specification. ADM-61, STU-07..STU-12
+and EXM-06 have `planned` declaration provenance and `implemented` status.
+STU-07..12 share `studentProfile`; ADM-61 and EXM-06 use
+`adminStudentIdentityPhotoMedia` and `examSessionIdentityStatus`. Registered
+handlers enforce exact methods, current identity, closed intent and private
+responses through both gateway and direct exports. Current implemented routes,
+HTTP exports, gateway handlers and schedules are 115/63/51/8.
+
+The policy fixes affirmative `student-identity-photo-v1` consent per enrollment,
+1 MiB bounded metadata-stripped JPEG, 90-day expiry, immediate access revocation,
+24-hour staged-object expiry/physical-deletion target and bounded retry cleanup.
+Only fresh authenticated own/Admin per-photo media reads can return image bytes;
+no URL, download token or raw photo is part of the Exam/status/profile DTO.
+Two exact own privacy routes permit withdrawal/deletion status during institute
+suspension or license expiry, with current Auth and persisted UID binding still
+mandatory. This exception grants no profile, enrollment, media or Exam access.
+ADM-27 enforces the canonical managed-photo ID/capture/version/UUID review
+contract through its existing sole writer. Roster raw photo URLs are always
+null; authorized Admin media loads only on explicit request before review.
 
 ## Public API boundary
 
@@ -63,7 +122,7 @@ If prose and the typed manifest disagree about a route key or status, the typed 
 - `missing`: no current Functions handler/export implements the canonical contract.
 - `intentionally_retired`: explicit product/architecture evidence says the route must not be served.
 
-Current totals: 107 implemented, 0 incompatible, 0 missing, 5 intentionally retired.
+Current totals: 115 implemented, 0 incompatible, 0 missing, 5 intentionally retired.
 
 Routes marked `planned` in the code manifest retain their original task-reserved
 declaration provenance. They stay `missing` until an owning substep registers a
@@ -103,7 +162,7 @@ erase an executable caller. Every frontend call must match a manifest key, and
 | ADM-24 | `PATCH /api/v1/admin/students/{studentId}/profile` | `implemented` | `adminStudentMutations` | Firebase ID; admin; identity tenant; institute-scoped target; expected version and idempotency key; Auth/Firestore reconciliation |
 | ADM-25 | `POST /api/v1/admin/students/batch-assignment` | `implemented` | `adminStudentMutations` | Firebase ID; admin; identity tenant; bounded versioned targets; idempotency key |
 | ADM-26 | `POST /api/v1/admin/students/{studentId}/lifecycle` | `implemented` | `adminStudentMutations` | Firebase ID; admin; identity tenant; legal transition and expected version; Auth claims/session reconciliation; idempotency key |
-| ADM-27 | `POST /api/v1/admin/students/{studentId}/photo-review` | `implemented` | `adminStudentMutations` | Firebase ID; admin; identity tenant; expected capture/version; idempotency key |
+| ADM-27 | `POST /api/v1/admin/students/{studentId}/photo-review` | `implemented` | `adminStudentMutations` | Current enabled Admin/Auth/tenant/license; exact active managed photo ID/capture/version; closed UUID intent; immutable existing review audit |
 | ADM-28 | `POST /api/v1/admin/students/{studentId}/data-export` | `implemented` | `adminStudentDataExport` | Firebase ID; admin; identity tenant; idempotency key; public result excludes bucket/object internals |
 | ADM-29 | `POST /api/v1/admin/students/{studentId}/soft-delete` | `implemented` | `adminStudentSoftDelete` | Firebase ID; admin; identity tenant; expected version; zero-run eligibility; Auth claims/session reconciliation; idempotency key |
 | ADM-30 | `GET /api/v1/admin/questions/library/{questionId}` | `implemented` | `adminQuestionLibrary` | Firebase ID; teacher/admin; identity tenant; path-bound question; explicit lineage, actual template usage, and persisted analytics |
@@ -141,8 +200,16 @@ erase an executable caller. Every frontend call must match a manifest key, and
 | STU-02 | `GET /api/v1/student/tests` | `implemented` | `studentTests` | Firebase ID; student; identity tenant/student/license; active Student; current academic year; bounded status/page query |
 | STU-03 | `GET /api/v1/student/performance` | `implemented` | `studentPerformance` | Firebase ID; student; identity tenant/Student/license; active Student; current year; bounded `lastN`; L0/L1/L2 redaction |
 | STU-04 | `GET /api/v1/student/insights` | `implemented` | `studentInsights` | Firebase ID; student; identity tenant/Student/license; active Student; current year; L1+; bounded `limit` |
-| STU-05 | `GET /api/v1/student/tests/{testId}/solutions` | `implemented` | `studentSolutions` | Firebase ID; student; identity tenant/Student/license; active Student; current-year completed assigned licensed run; released owned submission; bounded page |
+| STU-05 | `GET /api/v1/student/tests/{testId}/solutions` | `implemented` | `studentSolutions` | Firebase ID; student; identity tenant/Student/license; active Student; current-year completed assigned licensed run; released owned submission; immutable captured answers; exact run/cursor v2 |
 | STU-06 | `POST /api/v1/exam/start` | `implemented` | `examStart` | Firebase ID; student; identity tenant/Student/license; current-year assigned run; active window; exactly one eligible session |
+| ADM-61 | `GET /api/v1/admin/students/{studentId}/identity-photo/{photoId}/media` | `implemented` | `adminStudentIdentityPhotoMedia` | Secured BWM-042: current Admin/tenant/active entitlement, exact current managed photo; no roster URL |
+| STU-07 | `GET /api/v1/student/profile` | `implemented` | `studentProfile` | Secured own active Student/profile L0/current authority; closed metadata/preferences/photo policy |
+| STU-08 | `PATCH /api/v1/student/profile/preferences` | `implemented` | `studentProfile` | Secured own active Student; expected version/UUID; sidebar preference only |
+| STU-09 | `POST /api/v1/student/profile/identity-photo` | `implemented` | `studentProfile` | Secured own active Student; explicit versioned consent, expected version/current pointer, bounded JPEG; no self-review |
+| STU-10 | `POST /api/v1/student/profile/identity-photo/withdrawal` | `implemented` | `studentProfile` | Secured exact own privacy exception; no media/profile access or license bypass elsewhere |
+| STU-11 | `GET /api/v1/student/profile/identity-photo/{photoId}/media` | `implemented` | `studentProfile` | Secured own active Student/current photo; fresh consent/expiry/object-integrity authorization; no URL |
+| STU-12 | `GET /api/v1/student/profile/identity-photo/{photoId}/status` | `implemented` | `studentProfile` | Secured exact own media-free deletion status; narrow privacy exception |
+| EXM-06 | `GET /api/v1/exam/session/{sessionId}/identity-status` | `implemented` | `examSessionIdentityStatus` | Secured current Student/session-bound persisted authority; minimal status, automated matching unavailable |
 | EXM-01 | `POST /api/v1/exam/session/{sessionId}/entry` | `implemented` | `examSessionEntry` | Firebase ID; student; exact session claims; one-time raw launch consumption or authenticated same-owner recovery; strict candidate-safe runtime snapshot |
 | EXM-02 | `POST /api/v1/exam/session/{sessionId}/answers` | `implemented` | `examSessionAnswers` | Firebase ID; student; exact session claims; active pre-deadline session; sequenced revision acknowledgements; strict runtime-question response and absolute cumulative timing validation |
 | EXM-03 | `POST /api/v1/exam/session/{sessionId}/token/refresh` | `intentionally_retired` | None | Firebase Auth SDK refreshes the per-origin ID token; no custom refresh API is served |
@@ -423,8 +490,8 @@ browser acceptance now passes via `test:vendor-calibration-acceptance:e2e`;
 BWM-038 aggregate closeout is locally verified. This does not qualify CSP, remote
 deployment or production-safe rollout. BWM-040 now replaces the live legacy
 audit reader with secured VEN-40; the old showcase is DEV fixture-only. The current
-route inventory is 112: 107 implemented, zero incompatible, zero missing,
-five retired; 60 HTTP exports, 48 gateway handlers and seven unchanged schedules.
+route inventory is 120: 115 implemented, zero incompatible or missing,
+five retired; 63 HTTP exports, 51 gateway handlers and eight schedules.
 
 BWM-039 mounted adoption uses VEN-09 institute detail's closed `calibrationPointer`
 (`{present:false}` or `{present:true,value:null|string}`) for expected institute
@@ -758,8 +825,8 @@ raw Student/session Firestore denial, and no external browser origin. The proof
 is `tests/e2e/vendor-intelligence-acceptance.spec.mjs`. BWM-037 aggregate
 verification passes the workspace, classified backend, affected contracts,
 isolated Firestore regressions, secured API integration, and browser acceptance
-gates. Current accounting is 112 routes (107 implemented, zero incompatible, zero missing,
-five retired), 60 HTTP exports, and 48 gateway handlers. Existing backend
+gates. Current accounting is 120 routes (115 implemented, zero incompatible or missing,
+five retired), 63 HTTP exports, and 51 gateway handlers. Existing backend
 baseline exclusions remain BWM-049-owned; remote qualification remains BWM-053-owned.
 For the separately owned commercial workspace, only explicit fixture mode
 retains the legacy commercial showcase. Permanent
@@ -1227,3 +1294,79 @@ must not be silently repurposed. Transport-only client failures such as
 - Answer batches contain at most 10 writes and obey the server's minimum five-second write interval.
 - Answer updates merge into the authoritative session answer map.
 - Start, entry, answer, refresh, and submit operations must verify assignment/session ownership and must not trust a body-provided student identity.
+
+BWM-042 substep 4 / DEC-091 adds internal `StudentIdentityPhotoService.enroll`, with strict consent/JPEG normalization, private generation-bound upload, optimistic atomic Student/audit commit and immutable replay/unknown-response recovery. Replacement clears review and queues old bytes; physical cleanup and withdrawal remain substep 5. No public route/export/handler or wire DTO changes; all eight reservations remain missing. See the normative contract's enrollment checkpoint.
+
+BWM-042 substep 5 / DEC-092 implements internal `withdraw` and exact `getLifecycle`, sharing current enabled/revocation-checked Student identity while narrowly bypassing inactive Student/institute/license eligibility for privacy operations only. Withdrawal receipts are historical; pending physical deletion differs from confirmed image removal/upload closure. The cleanup schedule is now the eighth scheduled export; no new HTTP export/handler or route implementation. All eight reserved routes remain missing. Canonical Admin review rejects expired/revoked managed media; complete managed review/media transport remains substep 6.
+
+### BWM-042 secured transport — DEC-093 (2026-10-17)
+
+Substep 6 registers STU-07..12 (`studentProfile`), ADM-61
+(`adminStudentIdentityPhotoMedia`) and EXM-06 (`examSessionIdentityStatus`).
+Current accounting: 120 routes = 115 implemented + zero incompatible + zero
+missing + five retired; 63 HTTP exports, 51 gateway handlers, eight schedules.
+Route declarations retain planned provenance; Student/Admin callers are mounted.
+The optional EXM-06 UI consumer remains owned by BWM-045. Existing ADM-27 uses
+the canonical photo-ID/UUID contract and existing review/audit writer. Roster
+URLs are null and legacy booleans confer no photo authority. Media is one
+bounded authenticated base64 JPEG with fresh post-fetch authorization and
+immutable media-free access audit, private/no-store on success and failure.
+Exam gets only optional minimal current status and no image or biometric claim.
+The existing consumed-entry transaction alone adds bounded private
+`identityStatusEntryBindings` hashes; historical sessions without it fail closed
+for this status read. No new topology event/client grant/header/cloud change.
+`IDENTITY_PHOTOS_BUCKET` remains explicit and dedicated; no fallback or real
+resource injection. See `STUDENT_PROFILE_IDENTITY_PHOTO_CONTRACT.md` for exact
+privacy exceptions, current authority, transport and remote qualification.
+Mounted Student/Admin adoption and substep-8 local acceptance are qualified;
+remote GCS/IAM/index/retention validation remains BWM-052/053, production NO_GO. Source integration inventory 96/19; classified
+non-emulator suite and historical BWM-049 exclusions unchanged.
+
+### BWM-042 mounted adoption — DEC-094 (2026-10-17)
+
+Student profile and sidebar now use closed authenticated server reads/commands;
+legacy localStorage photo/status/preferences are purged and never read as
+authority. Read-only account/batch/year values are persisted server fields, with
+explicit unavailable labels. Consent is explicit; captures and command retries
+remain in memory. Identity/tenant/role changes abort scoped work, revoke Blob
+previews and stop camera tracks, including late permission resolution. Receipts
+are historical acknowledgements followed by current profile reads. Withdrawal
+distinguishes access revocation from confirmed physical deletion. Fresh restricted
+clients cannot fabricate a missing version/pointer; they receive Admin-contact
+guidance, while same-identity known privacy intent remains usable.
+Admin preview is an explicit freshly authorized private request before human
+review; canonical UUID/version/photo-ID/capture review retains its existing sole
+writer. No automatic face matching, liveness or new Exam gating is claimed.
+Student-only camera headers passed the approved authenticated public L5
+qualification (DEC-096). Other portal capabilities/CSP and rewrites remain
+unchanged. Substep-8 browser privacy/failure acceptance is qualified locally;
+substep 9 records aggregate closeout. Production remains NO_GO.
+Current counts are unchanged: 120/115/0/0/5 routes, 63 HTTP exports, 51 handlers,
+eight schedules, backend integration source inventory 96/19.
+
+
+BWM-043 F-043-08 (substep 5 browser observation): the legacy dashboard catches
+nullable-v2 adapter rejection, retains its initial fixture dataset and hides the
+inline error outside debug mode. This is not truthful dashboard cutover and is
+not accepted by these backend checks. Substep 6 must remove that live fixture
+state and surface denied/empty/validation states while adopting v2. The old My
+Tests numeric-page query produces the existing visible global validation alert.
+Production NO_GO and the mounted-migration barrier remain.
+
+### BWM-043 mounted v2 adoption — substep 6 (2026-10-18)
+
+Student Dashboard/Analytics/Discipline/My Tests now consume STU-01..05 through
+`studentSummaryApi.ts` and the closed shared `studentSummaryResponseAdapters.ts`.
+Nullable metrics and server access/scope survive without inferred year, browser
+layer grants or fixture success; old normalizers/numeric page callers are removed.
+Current closed assignments and retained past-year basic summaries are separate.
+My Tests and exact-run solutions use opaque cursor pages with bounded Previous,
+Next and restart, without totals. Signed solution URLs are never CDN-rewritten;
+null/expired assets have explicit unavailable/refresh states. The token/retry/
+foreground read boundary discards stale data and displays failures/retry using
+the existing handled-failure API option. Design fixtures remain isolated from
+mounted readers. F-043-08 is locally resolved by focused no-mock browser qualification;
+comprehensive acceptance/aggregate remain substeps 7/8 and production NO_GO.
+No route/export/handler/capability/schema/index/rule/schedule/backend authority or
+credential-flow change; 120/115/0/0/5 routes, 63 exports/51 handlers/eight schedules,
+98/20 backend integration inventories remain unchanged.

@@ -1,305 +1,105 @@
+/* eslint-disable require-jsdoc */
 import assert from "node:assert/strict";
 import test from "node:test";
 import {createStudentDashboardHandler} from "../api/studentDashboard";
-import {createStudentInsightsHandler} from "../api/studentInsights";
-import {createStudentPerformanceHandler} from "../api/studentPerformance";
-import {createStudentSolutionsHandler} from "../api/studentSolutions";
 import {createStudentTestsHandler} from "../api/studentTests";
-import {StudentSummaryValidationError} from "../types/studentSummary";
+import {createStudentPerformanceHandler} from "../api/studentPerformance";
+import {createStudentInsightsHandler} from "../api/studentInsights";
+import {createStudentSolutionsHandler} from "../api/studentSolutions";
 import {createMockRequest, createMockResponse} from "./helpers/http";
+import {dashboardProjection, performanceProjection, insightProjection} from "../services/studentSummaryProjection";
+import {StudentSummaryValidationError} from "../types/studentSummary";
+const access = {policyVersion: "student-entitlements-v1" as const, licenseLayer: "L1" as const,
+  metrics: {basic: true as const, execution: true, insights: true, advanced: false,
+    hardTiming: false, controlledComparison: false}};
+const head = {contractVersion: 2 as const, scope: {kind: "current" as const, yearId: "opaque",
+  tier: "HOT_WARM" as const},
+access};
+const token = {uid: "own", studentId: "own", instituteId: "tenant", role: "student", licenseLayer: "L1"};
+const verifyIdToken = async () => token as never;
 
-const createStudentToken = (overrides: Record<string, unknown> = {}) => ({
-  instituteId: "inst_student_summary_api",
-  licenseLayer: "L1",
-  role: "student",
-  studentId: "student_summary_api",
-  uid: "auth_student_summary_api",
-  ...overrides,
-});
-
-const dashboardResult = {
-  avgAccuracyPercent: 82,
-  avgRawScorePercent: 76,
-  batchRank: 4,
-  behaviorSummaryTag: "Balanced execution",
-  controlledModeImprovementDeltaPercent: 0,
-  disciplineIndex: 0,
-  easyNeglectPercent: 12,
-  executionStabilityFlag: "Available with L2",
-  guessProbabilityPercent: 0,
-  hardBiasPercent: 8,
-  licenseLayer: "L1" as const,
-  phaseAdherencePercent: 88,
-  phaseComplianceMiniTrend: [{label: "P1", value: 88}],
-  recentResults: [],
-  riskState: "low" as const,
-  testsAttempted: 5,
-  timeMisallocationPercent: 14,
-  upcomingTests: [],
-};
-
-test("Student dashboard derives student, tenant, and license from identity", async () => {
-  const handler = createStudentDashboardHandler({
-    getDashboard: async (request) => {
-      assert.deepEqual(request, {
-        instituteId: "inst_student_summary_api",
-        licenseLayer: "L1",
-        studentId: "student_summary_api",
-      });
-      return dashboardResult;
-    },
-    verifyIdToken: async () => createStudentToken() as never,
-  });
-  const response = createMockResponse();
-
-  await handler(
-    createMockRequest({
-      headers: {authorization: "Bearer student_dashboard"},
-      method: "GET",
-      path: "/student/dashboard",
-      query: {studentId: "other_student"},
-    }) as never,
-    response as never,
-  );
-
-  assert.equal(response.statusCode, 200);
-  assert.deepEqual(
-    (response.body as {data: unknown}).data,
-    dashboardResult,
-  );
-});
-
-test("Student tests normalize bounded status pagination", async () => {
-  const handler = createStudentTestsHandler({
-    listTests: async (request) => {
-      assert.deepEqual(request, {
-        instituteId: "inst_student_summary_api",
-        licenseLayer: "L1",
-        page: 2,
-        pageSize: 5,
-        status: "completed",
-        studentId: "student_summary_api",
-      });
-      return {
-        hasMore: false,
-        page: 2,
-        pageSize: 5,
-        tests: [],
-        total: 5,
-      };
-    },
-    verifyIdToken: async () => createStudentToken() as never,
-  });
-  const response = createMockResponse();
-
-  await handler(
-    createMockRequest({
-      headers: {authorization: "Bearer student_tests"},
-      method: "GET",
-      path: "/student/tests",
-      query: {page: "2", pageSize: "5", status: "completed"},
-    }) as never,
-    response as never,
-  );
-
-  assert.equal(response.statusCode, 200);
-  assert.deepEqual(
-    (response.body as {data: {page: number}}).data.page,
-    2,
-  );
-});
-
-test("Student analytics and solutions derive all authority from identity", async () => {
-  const performance = createStudentPerformanceHandler({
-    getPerformance: async (request) => {
-      assert.deepEqual(request, {
-        instituteId: "inst_student_summary_api",
-        lastN: 7,
-        licenseLayer: "L1",
-        studentId: "student_summary_api",
-      });
-      return {
-        controlledModeComparison: {
-          baselineLabel: "Earlier Runs",
-          currentLabel: "Recent Controlled Runs",
-          disciplineIndexDeltaPercent: 0,
-          guessRateDeltaPercent: 0,
-          maxTimeViolationDeltaPercent: 0,
-          minTimeViolationDeltaPercent: 0,
-          phaseAdherenceDeltaPercent: 0,
-        },
-        controlledModeImprovementPercent: 0,
-        disciplineIndex: 0,
-        easyNeglectFrequencyPercent: 11,
-        guessProbabilityCluster: "Low",
-        guessProbabilityPercent: 0,
-        hardBiasFrequencyPercent: 7,
-        licenseLayer: "L1",
-        overstayFrequencyPercent: 0,
-        phaseCompliancePercent: 87,
-        timeAllocationBalancePercent: 80,
-        timeline: [],
-        topicPerformanceBreakdown: [],
-      };
-    },
-    verifyIdToken: async () => createStudentToken() as never,
-  });
-  const performanceResponse = createMockResponse();
-  await performance(
-    createMockRequest({
-      headers: {authorization: "Bearer student_performance"},
-      method: "GET",
-      path: "/student/performance",
-      query: {instituteId: "other", lastN: "7", studentId: "other"},
-    }) as never,
-    performanceResponse as never,
-  );
-  assert.equal(performanceResponse.statusCode, 200);
-
-  const insights = createStudentInsightsHandler({
-    getInsights: async (request) => {
-      assert.deepEqual(request, {
-        instituteId: "inst_student_summary_api",
-        licenseLayer: "L1",
-        limit: 4,
-        studentId: "student_summary_api",
-      });
-      return {
-        archivedSummaryOnlyCount: 0,
-        currentYearSolutionAccessOnly: true,
-        disciplineImprovementSuggestions: [],
-        guessDetectionAlertPercent: 0,
-        latePhaseDropIndicatorPercent: 0,
-        licenseLayer: "L1",
-        mostFrequentBehaviorPattern: "No Pattern Yet",
-        phaseAdherenceFeedback: "Complete more tests.",
-        rushedPatternFrequencyPercent: 0,
-        skipBurstIndicatorPercent: 0,
-        snapshots: [],
-        topicWeaknessSummary: [],
-      };
-    },
-    verifyIdToken: async () => createStudentToken() as never,
-  });
-  const insightsResponse = createMockResponse();
-  await insights(
-    createMockRequest({
-      headers: {authorization: "Bearer student_insights"},
-      method: "GET",
-      path: "/student/insights",
-      query: {limit: "4"},
-    }) as never,
-    insightsResponse as never,
-  );
-  assert.equal(insightsResponse.statusCode, 200);
-
-  const solutions = createStudentSolutionsHandler({
-    getSolutions: async (request) => {
-      assert.deepEqual(request, {
-        instituteId: "inst_student_summary_api",
-        licenseLayer: "L1",
-        page: 2,
-        pageSize: 5,
-        studentId: "student_summary_api",
-        testId: "test-owned",
-      });
-      return {
-        hasMore: false,
-        items: [],
-        page: 2,
-        pageSize: 5,
-        releasedAt: "2026-08-20T00:00:00.000Z",
-        runId: "run-owned",
-        testId: "test-owned",
-        total: 5,
-      };
-    },
-    verifyIdToken: async () => createStudentToken() as never,
-  });
-  const solutionsResponse = createMockResponse();
-  await solutions(
-    createMockRequest({
-      headers: {authorization: "Bearer student_solutions"},
-      method: "GET",
-      params: {testId: "test-owned"},
-      path: "/student/tests/test-owned/solutions",
-      query: {page: "2", pageSize: "5", studentId: "other"},
-    }) as never,
-    solutionsResponse as never,
-  );
-  assert.equal(solutionsResponse.statusCode, 200);
-});
-
-test("Student summary routes reject non-Student roles and missing tenants", async () => {
-  const unusedDashboard = async (): Promise<never> => {
-    throw new Error("getDashboard should not be called");
+test("four handlers forward raw verified token and closed query with private outcomes", async () => {
+  const check = (raw: string, query: unknown) => {
+    assert.equal(raw, "raw-token");
+    assert.deepEqual(query, {});
   };
-  const teacherHandler = createStudentDashboardHandler({
-    getDashboard: unusedDashboard,
-    verifyIdToken: async () =>
-      createStudentToken({role: "teacher", studentId: undefined}) as never,
-  });
-  const teacherResponse = createMockResponse();
-
-  await teacherHandler(
-    createMockRequest({
-      headers: {authorization: "Bearer teacher_dashboard"},
-      method: "GET",
-      path: "/student/dashboard",
-    }) as never,
-    teacherResponse as never,
-  );
-  assert.equal(teacherResponse.statusCode, 403);
-  assert.equal(
-    (teacherResponse.body as {error: {code: string}}).error.code,
-    "FORBIDDEN",
-  );
-
-  const tenantHandler = createStudentDashboardHandler({
-    getDashboard: unusedDashboard,
-    verifyIdToken: async () =>
-      createStudentToken({instituteId: undefined}) as never,
-  });
-  const tenantResponse = createMockResponse();
-  await tenantHandler(
-    createMockRequest({
-      headers: {authorization: "Bearer missing_tenant"},
-      method: "GET",
-      path: "/student/dashboard",
-    }) as never,
-    tenantResponse as never,
-  );
-  assert.equal(tenantResponse.statusCode, 403);
-  assert.equal(
-    (tenantResponse.body as {error: {code: string}}).error.code,
-    "TENANT_MISMATCH",
-  );
+  const handlers = [createStudentDashboardHandler({verifyIdToken, getDashboard: async (raw, query) => {
+    check(raw, query);
+    return {...head, ...dashboardProjection({}, access), upcomingTests: [], recentResults: []};
+  }}), createStudentTestsHandler({verifyIdToken, listTests: async (raw, query) => {
+    check(raw, query);
+    return {...head, page: {items: [], nextCursor: null, hasMore: false}};
+  }}), createStudentPerformanceHandler({verifyIdToken, getPerformance: async (raw, query) => {
+    check(raw, query);
+    return {...head, ...performanceProjection({}, access, [])};
+  }}), createStudentInsightsHandler({verifyIdToken, getInsights: async (raw, query) => {
+    check(raw, query);
+    return {...head, ...insightProjection({}, access, [])};
+  }})];
+  for (const handler of handlers) {
+    const response = createMockResponse();
+    await handler(createMockRequest({method: "GET", headers: {authorization: "Bearer raw-token"}}) as never,
+      response as never);
+    assert.equal(response.statusCode, 200);
+    assert.equal((response.body as {data: {contractVersion: number}}).data.contractVersion, 2);
+    assert.equal(response.headers["cache-control"], "private, max-age=0, no-store");
+  }
 });
 
-test("Student summary validation errors use the standard envelope", async () => {
-  const handler = createStudentTestsHandler({
-    listTests: async () => {
-      throw new StudentSummaryValidationError(
-        "NOT_FOUND",
-        "Active Student summary authority was not found.",
-      );
-    },
-    verifyIdToken: async () => createStudentToken() as never,
-  });
+test("strict summary queries reject legacy pages and browser authority before service", async () => {
+  let calls = 0;
+  const unused = async (): Promise<never> => {
+    calls++; throw new Error("must not read");
+  };
+  const cases = [
+    [createStudentDashboardHandler({verifyIdToken, getDashboard: unused}), {yearId: "other"}],
+    [createStudentTestsHandler({verifyIdToken, listTests: unused}), {page: "1"}],
+    [createStudentTestsHandler({verifyIdToken, listTests: unused}), {scope: "history", status: "completed"}],
+    [createStudentPerformanceHandler({verifyIdToken, getPerformance: unused}), {studentId: "other"}],
+    [createStudentInsightsHandler({verifyIdToken, getInsights: unused}), {limit: "21"}],
+  ] as const;
+  for (const [handler, query] of cases) {
+    const response = createMockResponse();
+    await handler(createMockRequest({method: "GET", headers: {authorization: "Bearer raw-token"}, query}) as never,
+      response as never);
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.headers.pragma, "no-cache");
+  }
+  assert.equal(calls, 0);
+});
+
+test("role, missing tenant and service validation remain failures with the standard envelope", async () => {
+  for (const [claims, expected] of [[{...token, role: "teacher"}, 403], [{...token, instituteId: ""}, 403]] as const) {
+    const handler = createStudentDashboardHandler({verifyIdToken: async () => claims as never,
+      getDashboard: async (): Promise<never> => {
+        throw new Error("must not read");
+      }});
+    const response = createMockResponse();
+    await handler(createMockRequest({method: "GET", headers: {authorization: "Bearer raw-token"}}) as never,
+      response as never);
+    assert.equal(response.statusCode, expected);
+  }
+  const handler = createStudentDashboardHandler({verifyIdToken, getDashboard: async (): Promise<never> => {
+    throw new StudentSummaryValidationError("NOT_FOUND", "Active Student was not found.");
+  }});
   const response = createMockResponse();
-
-  await handler(
-    createMockRequest({
-      headers: {authorization: "Bearer missing_student"},
-      method: "GET",
-      path: "/student/tests",
-    }) as never,
-    response as never,
-  );
-
+  await handler(createMockRequest({method: "GET", headers: {authorization: "Bearer raw-token"}}) as never,
+    response as never);
   assert.equal(response.statusCode, 404);
-  assert.equal(
-    (response.body as {error: {code: string}}).error.code,
-    "NOT_FOUND",
-  );
+  assert.equal((response.body as {success: boolean}).success, false);
+});
+
+test("solution transport rejects legacy actor input before service work and prevents caching", async () => {
+  let calls = 0;
+  const handler = createStudentSolutionsHandler({verifyIdToken, getSolutions: async (): Promise<never> => {
+    calls++; throw new Error("must not read");
+  }});
+  for (const query of [{page: "1"}, {runId: "run", studentId: "other"}, {}] as Record<string, string>[]) {
+    const response = createMockResponse();
+    await handler(createMockRequest({method: "GET", headers: {authorization: "Bearer raw-token"},
+      params: {testId: "test"}, query}) as never, response as never);
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.headers["cache-control"], "private, max-age=0, no-store");
+  }
+  assert.equal(calls, 0);
 });

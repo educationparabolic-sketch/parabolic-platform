@@ -47,7 +47,9 @@ async function createIdentity(auth, label, claims) {
   const email = `${uniqueLabel}@example.test`;
   const password = `bwm-008-${label}-negative`;
   const user = await auth.createUser({email, password});
-  await auth.setCustomUserClaims(user.uid, claims);
+  await auth.setCustomUserClaims(user.uid, {
+    licenseState: "active", licenseVersion: "bwm008-fixture-v1", ...claims,
+  });
 
   return {
     idToken: await signInWithPassword(email, password),

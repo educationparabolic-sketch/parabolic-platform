@@ -3,11 +3,11 @@ import {expect, test} from "playwright/test";
 const expectedPermissionsPolicy =
   "camera=(), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(self)";
 
-function expectBaselineSecurityHeaders(headers) {
+function expectBaselineSecurityHeaders(headers, student = false) {
   expect(headers["x-content-type-options"]).toBe("nosniff");
   expect(headers["x-frame-options"]).toBe("DENY");
   expect(headers["referrer-policy"]).toBe("no-referrer");
-  expect(headers["permissions-policy"]).toBe(expectedPermissionsPolicy);
+  expect(headers["permissions-policy"]).toBe(student ? expectedPermissionsPolicy.replace("camera=()", "camera=(self)") : expectedPermissionsPolicy);
   expect(headers["content-security-policy"]).toContain("default-src 'self'");
   expect(headers["content-security-policy"]).toContain("object-src 'none'");
   expect(headers["content-security-policy"]).toContain("frame-ancestors 'none'");
@@ -54,7 +54,7 @@ test("portal Hosting serves the Admin and Student entry routes", async ({page}) 
   const studentResponse = await page.goto("/student", {waitUntil: "domcontentloaded"});
   expect(studentResponse?.status()).toBe(200);
   expect(studentResponse?.headers()["content-type"]).toContain("text/html");
-  expectBaselineSecurityHeaders(studentResponse?.headers() ?? {});
+  expectBaselineSecurityHeaders(studentResponse?.headers() ?? {}, true);
   await expect(page.getByRole("heading", {name: "Student Login"})).toBeVisible();
   await expect(page).toHaveURL(/\/student\/login$/);
 

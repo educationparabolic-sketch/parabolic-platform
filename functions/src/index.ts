@@ -1,3 +1,5 @@
+import {handleStudentProfileRequest, handleAdminStudentIdentityPhotoMediaRequest,
+  handleExamSessionIdentityStatusRequest} from "./api/studentProfile";
 import * as functions from "firebase-functions";
 import {handleApiV1Request} from "./api/apiGateway";
 import {
@@ -167,6 +169,7 @@ import {dataRetentionPolicyDaily} from "./triggers/dataRetentionPolicy";
 import {
   supportAttachmentCleanupDaily,
 } from "./triggers/supportAttachmentCleanup";
+import {studentIdentityPhotoCleanupEvery15Minutes} from "./triggers/studentIdentityPhotoCleanup";
 import {processEmailQueue} from "./triggers/emailQueue";
 import {
   failureRecoveryDispatch,
@@ -195,6 +198,7 @@ export {governanceSnapshotMonthly};
 export {billingSnapshotMonthly};
 export {dataRetentionPolicyDaily};
 export {supportAttachmentCleanupDaily};
+export {studentIdentityPhotoCleanupEvery15Minutes};
 export {processEmailQueue};
 export {failureRecoveryDispatch};
 export {failureRecoveryRetrySweep};
@@ -400,3 +404,7 @@ export const helloWorld = functions.https.onRequest(async (
     );
   }
 });
+
+export const studentProfile = functions.https.onRequest(handleStudentProfileRequest);
+export const adminStudentIdentityPhotoMedia = functions.https.onRequest(handleAdminStudentIdentityPhotoMediaRequest);
+export const examSessionIdentityStatus = functions.https.onRequest(handleExamSessionIdentityStatusRequest);

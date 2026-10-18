@@ -63,6 +63,12 @@ run("Build Functions artifact", npmExecutable, [
   "run",
   "build",
 ]);
+run("Verify authority, summary and solution SDK acceptance", firebaseExecutable, [
+  "emulators:exec", "--project", projectId, "--only", "auth,firestore",
+  "node --test --test-concurrency=1 functions/lib/tests/studentSummaryAuthority.test.js functions/lib/tests/studentSummaryService.test.js functions/lib/tests/studentSolutions.test.js",
+], {CI: "true", DEBUG: "", PROJECT_ID: projectId, GCLOUD_PROJECT: projectId,
+  GOOGLE_CLOUD_PROJECT: projectId, NODE_ENV: "test", NO_GCE_CHECK: "true",
+  METADATA_SERVER_DETECTION: "none"});
 run("Prepare combined Portal Hosting artifact", process.execPath, [
   "scripts/frontend-cicd/prepare-portal-hosting.mjs",
 ]);
@@ -73,7 +79,7 @@ const emulatorArgs = [
   projectId,
   "--only",
   "auth,firestore,functions,hosting:portal",
-  "npm run test:e2e:student-summary-contracts",
+  "node --test functions/tests/studentSummary.emulator.test.js && node --test functions/tests/studentSolutions.emulator.test.js && npm run test:e2e:student-summary-contracts && npm run test:e2e:student-solutions",
 ];
 
 console.log(
@@ -87,7 +93,13 @@ run(
   emulatorArgs,
   {
     CI: "true",
-    FUNCTIONS_DISCOVERY_TIMEOUT: "30",
+    FUNCTIONS_DISCOVERY_TIMEOUT: "120",
+    DEBUG: "",
+    FAILURE_RECOVERY_USE_CLOUD_TASKS: "false",
+    GCLOUD_PROJECT: projectId,
+    GOOGLE_CLOUD_PROJECT: projectId,
+    NO_GCE_CHECK: "true",
+    METADATA_SERVER_DETECTION: "none",
     NODE_ENV: "test",
     PARABOLIC_E2E_BASE_URL: "http://127.0.0.1:5000",
     PROJECT_ID: projectId,
@@ -95,7 +107,5 @@ run(
 );
 
 console.log(
-  "\n[student-summary-contract] PASS: identity-scoped dashboard, tests, " +
-    "performance, insights, solutions, and exam launch rendered from " +
-    "real APIs.",
+  "\n[student-summary-contract] PASS: Student ownership/year/entitlement/redaction/release acceptance matrix verified locally.",
 );

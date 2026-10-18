@@ -6,6 +6,9 @@ const test = require("node:test");
 const {deleteApp, initializeApp} = require("firebase-admin/app");
 const {getAuth} = require("firebase-admin/auth");
 const {getFirestore, Timestamp} = require("firebase-admin/firestore");
+const {
+  consumerVersion,
+} = require("../lib/tests/calibrationConsumerFixture");
 
 const projectId = "demo-parabolic-test";
 const authHost = process.env.FIREBASE_AUTH_EMULATOR_HOST;
@@ -83,6 +86,14 @@ async function launch(idToken, intent, runId) {
   return {body: await response.json(), status: response.status};
 }
 
+const featureFlags = {
+  adaptivePhase: false,
+  controlledMode: true,
+  governanceAccess: false,
+  hardMode: false,
+  riskOverview: false,
+};
+
 const timingProfileSnapshot = {
   easy: {max: 60, min: 30, recommended: 45},
   hard: {max: 210, min: 150, recommended: 180},
@@ -111,6 +122,10 @@ test(
       await auth.setCustomUserClaims(uid, {
         instituteId,
         licenseLayer: "L1",
+        authorizationVersion: 1,
+        licenseState: "active",
+        licenseVersion: "bwm017-fixture-v1",
+        featureFlags,
         role: "student",
         studentId,
       });
@@ -120,19 +135,28 @@ test(
       const run = year.collection("runs").doc(runId);
 
       await Promise.all([
-        institute.set({instituteId}),
+        institute.set({
+          instituteId, status: "active", authorizationVersion: 1,
+          licenseVersion: "bwm017-fixture-v1",
+        }),
+        institute.collection("calibration").doc("cal_bwm_017").set(
+          consumerVersion("cal_bwm_017"),
+        ),
         institute.collection("students").doc(studentId).set({
           status: "active",
           studentId,
         }),
-        institute.collection("license").doc("main").set({
+        institute.collection("license").doc("current").set({
           currentLayer: "L1",
+          licenseVersion: "bwm017-fixture-v1", licenseState: "active",
+          activeStudentLimit: 100, concurrentSessionLimit: 10,
           eligibilityFlags: {l1Eligible: true},
-          featureFlags: {controlledMode: true, hardMode: false},
+          featureFlags,
         }),
         institute.collection("questionBank").doc(questionId).set({
           chapter: "Kinematics",
           correctAnswer: "B",
+          revision: 1, questionImageRevision: 1, solutionImageRevision: 1,
           createdAt: Timestamp.now(),
           difficulty: "Easy",
           examType: "JEEMains",
@@ -145,9 +169,11 @@ test(
           primaryTag: "motion",
           prompt: "Which expression gives centripetal acceleration?",
           questionId,
-          questionImageUrl: "questions/bwm-017-question.png",
+          questionImageUrl: `${instituteId}/questions/${questionId}/` +
+            "v1/question-r1.png",
           questionType: "MCQ",
-          solutionImageUrl: "solutions/bwm-017-solution.png",
+          solutionImageUrl: `${instituteId}/questions/${questionId}/` +
+            "v1/solution-r1.png",
           status: "active",
           subject: "Physics",
           tags: ["motion"],

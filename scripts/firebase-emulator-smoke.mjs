@@ -204,7 +204,7 @@ async function verifyHosting() {
     assert.equal(response.headers.get("referrer-policy"), "no-referrer");
     assert.equal(
       response.headers.get("permissions-policy"),
-      expectedPermissionsPolicy,
+      portal === "student" ? expectedPermissionsPolicy.replace("camera=()", "camera=(self)") : expectedPermissionsPolicy,
     );
     const contentSecurityPolicy = response.headers.get("content-security-policy") ?? "";
     assert.match(contentSecurityPolicy, /(?:^|; )default-src 'self'(?:;|$)/);

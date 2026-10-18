@@ -1,3 +1,5 @@
+import {handleStudentProfileRequest, handleAdminStudentIdentityPhotoMediaRequest,
+  handleExamSessionIdentityStatusRequest} from "./studentProfile";
 import * as functions from "firebase-functions";
 import {
   handleAdminAssignmentOperationsRequest,
@@ -80,6 +82,9 @@ export type ApiGatewayHandler = (
 export const API_GATEWAY_HANDLERS: Readonly<
 Record<string, ApiGatewayHandler>
 > = Object.freeze({
+  studentProfile: handleStudentProfileRequest,
+  adminStudentIdentityPhotoMedia: handleAdminStudentIdentityPhotoMediaRequest,
+  examSessionIdentityStatus: handleExamSessionIdentityStatusRequest,
   adminAcademicYearArchive: handleAdminAcademicYearArchiveRequest,
   adminAssignmentOperations: handleAdminAssignmentOperationsRequest,
   adminAnalytics: handleAdminAnalyticsRequest,

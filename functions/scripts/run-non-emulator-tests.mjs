@@ -59,6 +59,7 @@ const selectedSourceSuites = [
   "signedUrl.test",
   "storageBucketArchitecture.test",
   "studentSummaryApi.test",
+  "studentIdentityPhotoImage.test",
   "submissionResponseContract.test",
   "systemEventTopology.test",
   "tenantMiddleware.test",

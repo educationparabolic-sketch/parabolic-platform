@@ -11,6 +11,8 @@ interface MockRequestOverrides {
 }
 
 export interface MockResponse {
+  headers: Record<string, string>;
+  set: (name: string, value: string) => MockResponse;
   body: unknown;
   json: (value: unknown) => MockResponse;
   status: (statusCode: number) => MockResponse;
@@ -19,6 +21,11 @@ export interface MockResponse {
 
 export const createMockResponse = (): MockResponse => {
   const response: MockResponse = {
+    headers: {},
+    set(name, value) {
+      response.headers[name.toLowerCase()] = value;
+      return response;
+    },
     body: undefined,
     json(value: unknown) {
       response.body = value;

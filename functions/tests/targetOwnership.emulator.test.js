@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const {deleteApp, initializeApp} = require("firebase-admin/app");
 const {getAuth} = require("firebase-admin/auth");
+const {getFirestore} = require("firebase-admin/firestore");
 
 const expectedProjectId = "demo-parabolic-test";
 const projectId = process.env.GCLOUD_PROJECT;
@@ -45,6 +46,10 @@ async function createStudentIdentity(auth, label, claims) {
   const user = await auth.createUser({email, password});
   await auth.setCustomUserClaims(user.uid, {
     licenseLayer: "L1",
+    authorizationVersion: 1,
+    featureFlags: {},
+    licenseState: "active",
+    licenseVersion: "bwm008-fixture-v1",
     role: "student",
     studentId: `student_${label}`,
     ...claims,
@@ -79,6 +84,8 @@ test(
   async () => {
     const app = initializeApp({projectId}, `target-ownership-${Date.now()}`);
     const auth = getAuth(app);
+    const firestore = getFirestore(app);
+    const institute = firestore.doc("institutes/inst_bwm_008_claimed");
     const userIds = [];
 
     try {
@@ -94,12 +101,21 @@ test(
       );
       assert.equal(missingResult.response.status, 403);
       assert.equal(missingResult.body.success, false);
-      assert.equal(missingResult.body.error?.code, "TENANT_MISMATCH");
+      // Current authority fails before launch intent can consume browser scope.
+      assert.equal(missingResult.body.error?.code, "LICENSE_RESTRICTED");
       assert.equal(
         missingResult.body.error?.message,
-        "Authenticated Student launch authority is incomplete.",
+        "Current institute authority field \"token.instituteId\" " +
+          "is missing or invalid.",
       );
 
+      await institute.set({status: "active", authorizationVersion: 1,
+        licenseVersion: "bwm008-fixture-v1"});
+      await institute.collection("license").doc("current").set({
+        currentLayer: "L1", licenseState: "active",
+        licenseVersion: "bwm008-fixture-v1", activeStudentLimit: 100,
+        concurrentSessionLimit: 10, featureFlags: {},
+      });
       const conflictingTenant = await createStudentIdentity(
         auth,
         "cross-tenant",
@@ -119,6 +135,7 @@ test(
       );
     } finally {
       await Promise.all(userIds.map((uid) => auth.deleteUser(uid)));
+      await firestore.recursiveDelete(institute);
       await deleteApp(app);
     }
   },

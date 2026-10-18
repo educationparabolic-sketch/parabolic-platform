@@ -34,8 +34,8 @@ test("backend CI aggregates every emulator-backed Functions suite", async () => 
     (file) => file.endsWith(".emulator.test.js"),
   ).length;
 
-  assert.equal(firestoreSuiteCount, 93);
-  assert.equal(explicitSuiteCount, 18);
+  assert.equal(firestoreSuiteCount, 98);
+  assert.equal(explicitSuiteCount, 20);
   for (const file of ["vendorAuditReadModel.test.ts", "vendorSystemHealthReadModel.test.ts"]) {
     assert.ok(sourceFiles.includes(file), file);
   }
@@ -59,6 +59,7 @@ test("backend CI aggregates every emulator-backed Functions suite", async () => 
   assert.match(outerRunner, /--firestore-only/u);
   assert.match(outerRunner, /\["auth", "firestore", "storage"\]/u);
   assert.match(outerRunner, /QUESTION_ASSETS_BUCKET:/u);
+  assert.match(outerRunner, /IDENTITY_PHOTOS_BUCKET: `\$\{projectId\}-identity-photos`/u);
   assert.match(outerRunner, /VENDOR_AUDIT_CURSOR_KEY: randomBytes\(32\)\.toString\("base64url"\)/u);
   assert.match(innerRunner, /--test-concurrency=1/u);
   assert.match(innerRunner, /selectedSuites\.map\(\(suite\) => \[suite\]\)/u);

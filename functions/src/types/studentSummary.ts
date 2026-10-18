@@ -24,12 +24,7 @@ export type {
   StudentTopicWeaknessInsight,
 } from "../../../shared/contracts/apiDtos";
 import type {
-  StudentDashboardResult,
-  StudentInsightsResult,
   StudentLicenseLayer,
-  StudentPerformanceResult,
-  StudentSolutionsResult,
-  StudentTestsResult,
   StudentTestStatus,
 } from "../../../shared/contracts/apiDtos";
 
@@ -61,7 +56,7 @@ export interface StudentSolutionsRequest extends StudentDashboardRequest {
 
 export interface StudentDashboardSuccessResponse {
   code: "OK";
-  data: StudentDashboardResult;
+  data: import("../../../shared/contracts/studentEntitlements").StudentDashboardResultV2;
   message: string;
   requestId: string;
   success: true;
@@ -70,7 +65,7 @@ export interface StudentDashboardSuccessResponse {
 
 export interface StudentTestsSuccessResponse {
   code: "OK";
-  data: StudentTestsResult;
+  data: import("../../../shared/contracts/studentEntitlements").StudentTestsResultV2;
   message: string;
   requestId: string;
   success: true;
@@ -79,7 +74,7 @@ export interface StudentTestsSuccessResponse {
 
 export interface StudentPerformanceSuccessResponse {
   code: "OK";
-  data: StudentPerformanceResult;
+  data: import("../../../shared/contracts/studentEntitlements").StudentPerformanceResultV2;
   message: string;
   requestId: string;
   success: true;
@@ -88,7 +83,7 @@ export interface StudentPerformanceSuccessResponse {
 
 export interface StudentInsightsSuccessResponse {
   code: "OK";
-  data: StudentInsightsResult;
+  data: import("../../../shared/contracts/studentEntitlements").StudentInsightsResultV2;
   message: string;
   requestId: string;
   success: true;
@@ -97,7 +92,7 @@ export interface StudentInsightsSuccessResponse {
 
 export interface StudentSolutionsSuccessResponse {
   code: "OK";
-  data: StudentSolutionsResult;
+  data: import("../../../shared/contracts/studentEntitlements").StudentSolutionsResultV2;
   message: string;
   requestId: string;
   success: true;

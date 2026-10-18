@@ -24,14 +24,18 @@ async function login(email, password) {
   return (await response.json()).idToken;
 }
 async function call(path, token, method = "GET", body) {
-  const response = await fetch(origin + path, {
-    method, headers: {"authorization": `Bearer ${token}`, "content-type": "application/json"},
-    ...(body === undefined ? {} : {body: JSON.stringify(body)}), signal: AbortSignal.timeout(60000),
-  });
-  assert.match(response.headers.get("content-type"), /^application\/json/u);
-  const data = await response.json();
-  assert.equal(typeof data.requestId, "string");
-  return {status: response.status, data};
+  try {
+    const response = await fetch(origin + path, {
+      method, headers: {"authorization": `Bearer ${token}`, "content-type": "application/json"},
+      ...(body === undefined ? {} : {body: JSON.stringify(body)}), signal: AbortSignal.timeout(60000),
+    });
+    assert.match(response.headers.get("content-type"), /^application\/json/u);
+    const data = await response.json();
+    assert.equal(typeof data.requestId, "string");
+    return {status: response.status, data};
+  } catch (error) {
+    throw new Error(`Emulator request failed: ${method} ${path}`, {cause: error});
+  }
 }
 
 test("all 41 live Vendor routes reject stale/contradictory current identity; explicit targets and actor remain server-owned", {timeout: 300000}, async () => {

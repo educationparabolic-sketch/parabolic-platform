@@ -105,6 +105,19 @@ export const handleApiV1Request = (
   request: functions.https.Request,
   response: functions.Response,
 ): Promise<void> | void => {
+  // Privacy applies even when method/path rejection occurs before domain dispatch.
+  const privateIdentityPath = [
+    /^\/api\/v1\/student\/(?:dashboard|tests|performance|insights)(?:\/|$)/u,
+    /^\/api\/v1\/student\/profile(?:\/|$)/u,
+    /^\/api\/v1\/student\/tests\/[^/]+\/solutions(?:\/|$)/u,
+    /^\/api\/v1\/admin\/students\/[^/]+\/(?:identity-photo|photo-review)(?:\/|$)/u,
+    /^\/api\/v1\/exam\/session\/[^/]+\/identity-status(?:\/|$)/u,
+  ].some((pattern) => pattern.test(request.path));
+  if (privateIdentityPath) {
+    response.set("Cache-Control", "private, max-age=0, no-store");
+    response.set("Pragma", "no-cache");
+    response.set("X-Content-Type-Options", "nosniff");
+  }
   const logger = createRequestLogger("ApiV1Gateway", request);
   const routeMatches = resolveApiRoutePath(request.path);
   const routeMatch = routeMatches
