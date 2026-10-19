@@ -1,3 +1,5 @@
+import {assertRuntimeOwner, planRuntimeCommand, parseRuntimeCommand,
+  closeRuntimeOwnership} from "./examRuntimeOwnership";
 import {
   FieldValue,
   Timestamp,
@@ -154,7 +156,7 @@ const decodeSessionTokenClaims = (token: string): Record<string, unknown> => {
   }
 
   if (
-    Number.isFinite(payload.exp) &&
+    !Number.isSafeInteger(payload.exp) ||
     (payload.exp as number) * 1000 <= Date.now()
   ) {
     throw new SessionStartValidationError(
@@ -1804,6 +1806,10 @@ export class SessionService {
     context: SessionEntryValidationContext,
     nowMillis = Date.now(),
   ): Promise<SessionEntryValidationResult> {
+    const runtimeCommand = parseRuntimeCommand(context.runtimeCommand);
+    if (runtimeCommand.operation !== "launch" || runtimeCommand.token !== context.sessionToken) {
+      throw new SessionStartValidationError("VALIDATION_ERROR", "Matching launch operation required.");
+    }
     const instituteId = normalizeRequiredString(context.instituteId, "instituteId");
     const launchNonce = normalizeRequiredString(context.launchNonce, "launchNonce");
     const licenseLayer = normalizeLicenseLayer(context.licenseLayer);
@@ -1857,7 +1863,7 @@ export class SessionService {
       );
       this.assertActiveSessionAllowed(currentAuthority, sessionData);
       let status = normalizeSessionStatus(sessionData.status, "session.status");
-      if (!ACTIVE_SESSION_STATUSES.includes(status)) {
+      if (!ACTIVE_SESSION_STATUSES.includes(status) && status !== "expired") {
         throw new SessionStartValidationError(
           "SESSION_LOCKED",
           "Session is not active for exam runtime entry.",
@@ -1885,6 +1891,10 @@ export class SessionService {
         );
       }
 
+      decodeSessionTokenClaims(token); // Recheck expiry on every transaction attempt.
+      const commandPlan = planRuntimeCommand(sessionData, {instituteId, yearId, runId,
+        sessionId: routeSessionId, studentId, studentUid, launchNonce}, runtimeCommand,
+      context.commandProof ?? {}, Date.now());
       const storedLaunchCredentialHashes = normalizeLaunchCredentialHashes(
         sessionData.launchCredentialHashes,
         sessionData.sessionTokenHash,
@@ -1893,13 +1903,13 @@ export class SessionService {
         sessionData.consumedLaunchCredentialHashes,
         undefined,
       );
-      if (consumedLaunchCredentialHashes.includes(launchCredentialHash)) {
+      if (!commandPlan.replayed && consumedLaunchCredentialHashes.includes(launchCredentialHash)) {
         throw new SessionStartValidationError(
           "UNAUTHORIZED",
           "Launch credential has already been consumed.",
         );
       }
-      if (!storedLaunchCredentialHashes.includes(launchCredentialHash)) {
+      if (!commandPlan.replayed && !storedLaunchCredentialHashes.includes(launchCredentialHash)) {
         throw new SessionStartValidationError(
           "UNAUTHORIZED",
           "Launch credential does not match a backend-issued session credential.",
@@ -1954,6 +1964,7 @@ export class SessionService {
         launchCredentialHash,
       ])).slice(-MAX_LAUNCH_CREDENTIAL_HASHES);
       const update: FirebaseFirestore.UpdateData<FirebaseFirestore.DocumentData> = {
+        runtimeOwnership: commandPlan.owner,
         consumedLaunchCredentialHashes: nextConsumedHashes,
         identityStatusEntryBindings: Array.from(new Set([
           ...(Array.isArray(sessionData.identityStatusEntryBindings) ? sessionData.identityStatusEntryBindings : []),
@@ -1993,6 +2004,7 @@ export class SessionService {
       transaction.update(sessionReference, update);
 
       result = {
+        ownership: commandPlan.receipt,
         deadlineAt,
         instituteId,
         licenseSnapshot,
@@ -2033,6 +2045,12 @@ export class SessionService {
     context: SessionEntryResumeContext,
     nowMillis = Date.now(),
   ): Promise<SessionEntryValidationResult> {
+    const runtimeCommand = parseRuntimeCommand(context.runtimeCommand);
+    if (runtimeCommand.operation !== "recover") {
+      throw new SessionStartValidationError("VALIDATION_ERROR",
+        "Recovery operation required.");
+    }
+    const launchNonce = normalizeRequiredString(context.launchNonce, "launchNonce");
     const instituteId = normalizeRequiredString(context.instituteId, "instituteId");
     const licenseLayer = normalizeLicenseLayer(context.licenseLayer);
     const runId = normalizeRequiredString(context.runId, "runId");
@@ -2091,6 +2109,9 @@ export class SessionService {
         );
       }
 
+      const commandPlan = planRuntimeCommand(sessionData, {instituteId, yearId, runId,
+        sessionId: routeSessionId, studentId, studentUid, launchNonce}, runtimeCommand,
+      context.commandProof ?? {}, Date.now());
       const mode = normalizeSessionExecutionMode(sessionData.mode, "session.mode");
       const timingProfileSnapshot = normalizeTimingProfileSnapshot(
         sessionData.timingProfileSnapshot,
@@ -2136,7 +2157,9 @@ export class SessionService {
         });
       }
 
+      transaction.update(sessionReference, {runtimeOwnership: commandPlan.owner});
       result = {
+        ownership: commandPlan.receipt,
         deadlineAt,
         instituteId,
         licenseSnapshot,
@@ -2165,6 +2188,30 @@ export class SessionService {
       );
     }
     return result;
+  }
+
+  public async manageRuntimeOwnership(context: SessionEntryValidationContext) {
+    const command = parseRuntimeCommand(context.runtimeCommand);
+    if (command.operation !== "renew" &&
+      command.operation !== "release") {
+      throw new SessionStartValidationError("VALIDATION_ERROR",
+        "Lease operation required.");
+    }
+    const {instituteId, yearId, runId, sessionId} = context;
+    const reference = this.firestore.doc(`institutes/${instituteId}/academicYears/${yearId}/runs/${
+      runId}/sessions/${sessionId}`);
+    return this.firestore.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(reference);
+      const data = snapshot.data();
+      if (!data) throw new SessionStartValidationError("NOT_FOUND", "Session unavailable.");
+      this.assertActiveSessionAllowed(await this.readCurrentAuthority(transaction, instituteId), data);
+      const plan = planRuntimeCommand(data, context, command, context.commandProof ?? {}, Date.now());
+      transaction.update(reference, {runtimeOwnership: plan.owner});
+      return command.operation === "renew" ? {operation: "renew" as const, ownership: plan.receipt} : {
+        operation: "release" as const, contractVersion: 2 as const, generation: plan.owner.generation,
+        released: true as const, serverTime: plan.receipt.serverTime,
+      };
+    });
   }
 
   /**
@@ -2242,6 +2289,7 @@ export class SessionService {
         );
       }
 
+      assertRuntimeOwner(sessionData, context, Date.now());
       const runtimeSnapshot = normalizeStoredRuntimeSnapshot(
         sessionData.runtimeSnapshot,
         sessionId,
@@ -2377,6 +2425,9 @@ export class SessionService {
         this.assertActiveSessionAllowed(currentAuthority, sessionData);
       }
 
+      if (actorType === "student") {
+        assertRuntimeOwner(sessionData, {...context, studentId: context.studentId ?? ""}, Date.now());
+      }
       this.assertTransitionIsAllowed(
         actorType,
         currentStatus,
@@ -2384,6 +2435,8 @@ export class SessionService {
       );
 
       transaction.update(sessionReference, {
+        ...(["submitted", "terminated"].includes(normalizedNextStatus) ? closeRuntimeOwnership(sessionData,
+          Date.now()) : {}),
         status: normalizedNextStatus,
         updatedAt: FieldValue.serverTimestamp(),
       });
@@ -2582,6 +2635,7 @@ export class SessionService {
         ),
       phaseConfigSnapshot: context.phaseConfigSnapshot,
       questionTimeMap: context.questionTimeMap,
+      runtimeOwnershipVersion: 2,
       revision: 1,
       riskModelVersion: context.riskModelVersion,
       runtimeSnapshot: context.runtimeSnapshot,

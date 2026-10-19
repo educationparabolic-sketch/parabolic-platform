@@ -1,3 +1,4 @@
+import {RuntimeOwnershipError} from "./examRuntimeOwnership";
 import {assertPhotoStudentBinding} from "./studentIdentityPhotoLifecycleAuthority";
 import {createHash} from "node:crypto";
 import type {Auth, DecodedIdToken} from "firebase-admin/auth";
@@ -203,6 +204,7 @@ export class StudentProfileService {
         return work(transaction, scope, student);
       });
     } catch (error) {
+      if (error instanceof RuntimeOwnershipError) throw error;
       if (error instanceof StudentProfileValidationError) throw error;
       if (error instanceof InstituteAuthorityEnforcementError) {
         return fail(

@@ -1,3 +1,4 @@
+import { redactCredentialText } from "../../services/credentialRedaction";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { isLoopbackHostname } from "../../services/browserRuntimeEnvironment";
 import { captureFrontendClientCrash } from "../../services/frontendMonitoring";
@@ -24,11 +25,11 @@ const INITIAL_STATE: UiErrorBoundaryState = {
 
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message.trim();
+    return redactCredentialText(error.message.trim());
   }
 
   if (typeof error === "string" && error.trim().length > 0) {
-    return error.trim();
+    return redactCredentialText(error.trim());
   }
 
   return "An unexpected error interrupted this page.";

@@ -1,3 +1,4 @@
+import {closeRuntimeOwnership, INTERNAL_SUBMISSION_AUTHORITY} from "./examRuntimeOwnership";
 /* eslint-disable require-jsdoc */
 import {createHash} from "node:crypto";
 import {FieldValue, Timestamp} from "firebase-admin/firestore";
@@ -58,7 +59,7 @@ interface AdminAssignmentOperationsDependencies {
     sessionId: string;
     studentId: string;
     yearId: string;
-  }, options: {lockOwnerId: string}) => Promise<unknown>;
+  }, options: {lockOwnerId: string; internalAuthority?: typeof INTERNAL_SUBMISSION_AUTHORITY}) => Promise<unknown>;
 }
 
 interface CommandAuthority {
@@ -1220,6 +1221,7 @@ export class AdminAssignmentOperationsService {
         if (request.overrideType === "force_submit") {
           sessionUpdate.submissionLock = true;
           sessionUpdate.submissionLockOwnerId = overrideId;
+          sessionUpdate.submissionLockGeneration = FieldValue.delete();
         }
         transaction.update(runReference, {
           lastSessionOverrideAt: now,
@@ -1297,7 +1299,7 @@ export class AdminAssignmentOperationsService {
         sessionId: request.sessionId,
         studentId: accepted.studentId,
         yearId,
-      }, {lockOwnerId: overrideId});
+      }, {lockOwnerId: overrideId, internalAuthority: INTERNAL_SUBMISSION_AUTHORITY});
     } catch (error) {
       await this.dependencies.firestore.runTransaction(async (transaction) => {
         const snapshot = await transaction.get(recoveryReference);
@@ -1592,6 +1594,8 @@ export class AdminAssignmentOperationsService {
         }
         terminatedSessionCount += 1;
         transaction.update(snapshot.ref, {
+          ...closeRuntimeOwnership(sessionData, now.toMillis()),
+          submissionLockGeneration: FieldValue.delete(),
           revision: sessionRevision(sessionData) + 1,
           status: "terminated",
           submissionLock: false,

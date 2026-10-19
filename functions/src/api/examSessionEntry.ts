@@ -1,3 +1,5 @@
+import {assertUniqueCommandJson, parseRuntimeCommand, runtimeHeaders} from "../services/examRuntimeOwnership";
+import type {ExamRuntimeEntryRequestV2} from "../../../shared/contracts/examRuntimeOwnership";
 import * as functions from "firebase-functions";
 import {DecodedIdToken} from "firebase-admin/auth";
 import {sendErrorResponse} from "../services/apiResponse";
@@ -14,12 +16,8 @@ import {createAuthenticationMiddleware} from "../middleware/auth";
 import {createRoleAuthorizationMiddleware} from "../middleware/role";
 import {createTenantGuardMiddleware} from "../middleware/tenant";
 
-interface ExamSessionEntryRequestBody {
-  resume?: unknown;
-  token?: unknown;
-}
-
 interface ExamSessionEntryRequestDependencies {
+  manageRuntimeOwnership?: typeof sessionService.manageRuntimeOwnership;
   resumeSessionEntry: typeof sessionService.resumeSessionEntry;
   validateSessionEntry: typeof sessionService.validateSessionEntry;
   verifyIdToken: (idToken: string) => Promise<DecodedIdToken>;
@@ -33,7 +31,8 @@ interface ExamSessionEntryValidatedRequestData extends Record<string, unknown> {
   sessionId: string;
   studentId: string;
   studentUid: string;
-  token: string | null;
+  command: ExamRuntimeEntryRequestV2;
+  commandProof: {proof?: string; generation?: number};
   yearId: string;
 }
 
@@ -100,46 +99,29 @@ export const createExamSessionEntryHandler = (
     const requestId = request.context.requestId;
     const validatedData = request.context
       .requestData as ExamSessionEntryValidatedRequestData;
-    const result = validatedData.token === null ?
-      await dependencies.resumeSessionEntry({
-        instituteId: validatedData.instituteId,
-        licenseLayer: validatedData.licenseLayer,
-        runId: validatedData.runId,
-        sessionId: validatedData.sessionId,
-        studentId: validatedData.studentId,
-        studentUid: validatedData.studentUid,
-        yearId: validatedData.yearId,
-      }) :
-      await dependencies.validateSessionEntry({
-        instituteId: validatedData.instituteId,
-        launchNonce: validatedData.launchNonce,
-        licenseLayer: validatedData.licenseLayer,
-        runId: validatedData.runId,
-        sessionId: validatedData.sessionId,
-        sessionToken: validatedData.token,
-        studentId: validatedData.studentId,
-        studentUid: validatedData.studentUid,
-        yearId: validatedData.yearId,
-      });
+    const command = validatedData.command;
+    const context = {...validatedData, runtimeCommand: command,
+      sessionToken: command.operation === "launch" ? command.token : ""};
+    let data;
+    if (command.operation === "renew" || command.operation === "release") {
+      if (!dependencies.manageRuntimeOwnership) throw new Error("Lease service unavailable.");
+      data = await dependencies.manageRuntimeOwnership(context);
+    } else {
+      const result = command.operation === "launch" ?
+        await dependencies.validateSessionEntry(context) : await dependencies.resumeSessionEntry(context);
+      if (!result.ownership) throw new Error("Ownership receipt unavailable.");
+      data = {operation: command.operation, ownership: result.ownership, entry: {
+        allowed: true, deadlineAt: result.deadlineAt, instituteId: result.instituteId,
+        runId: result.runId, runtimeSnapshot: result.runtimeSnapshot, serverTime: result.serverTime,
+        sessionId: result.sessionId, startedAt: result.startedAt, status: result.status,
+        studentId: result.studentId, yearId: result.yearId,
+      }};
+    }
 
     response.status(200).json({
       code: "OK",
-      data: {
-        allowed: true,
-        deadlineAt: result.deadlineAt,
-        instituteId: result.instituteId,
-        runId: result.runId,
-        runtimeSnapshot: result.runtimeSnapshot,
-        serverTime: result.serverTime,
-        sessionId: result.sessionId,
-        startedAt: result.startedAt,
-        status: result.status,
-        studentId: result.studentId,
-        yearId: result.yearId,
-      },
-      message: validatedData.token === null ?
-        "Exam session restored from authenticated identity." :
-        "Exam session entry token validated server-side.",
+      data,
+      message: "Exam runtime ownership reconciled.",
       requestId,
       success: true,
       timestamp: new Date().toISOString(),
@@ -157,10 +139,14 @@ export const createExamSessionEntryHandler = (
     }),
     createRequestValidationMiddleware({
       validator: (request: MiddlewareRequest): void => {
-        const body = (request.body ?? {}) as ExamSessionEntryRequestBody;
+        assertUniqueCommandJson(request.rawBody);
+        const command = parseRuntimeCommand(request.body);
+        if (Object.keys(request.query ?? {}).length) {
+          throw new SessionStartValidationError("VALIDATION_ERROR", "Queries are unsupported.");
+        }
+        const commandProof = command.operation === "launch" ? {} : runtimeHeaders(request,
+          command.operation === "recover");
         const sessionId = resolveSessionIdFromRequest(request);
-        const resume = body.resume === true;
-        const token = resume ? null : normalizeRequiredString(body.token, "token");
         const identity = request.context.identity;
         const examSession = identity?.examSession;
         if (
@@ -185,7 +171,8 @@ export const createExamSessionEntryHandler = (
           sessionId,
           studentId: identity.studentId,
           studentUid: identity.uid,
-          token,
+          command,
+          commandProof,
           yearId: examSession.yearId,
         });
       },
@@ -212,6 +199,7 @@ export const createExamSessionEntryHandler = (
 });
 
 export const handleExamSessionEntryRequest = createExamSessionEntryHandler({
+  manageRuntimeOwnership: sessionService.manageRuntimeOwnership.bind(sessionService),
   resumeSessionEntry:
     sessionService.resumeSessionEntry.bind(sessionService),
   validateSessionEntry:

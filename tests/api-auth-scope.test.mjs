@@ -61,3 +61,15 @@ test("same-UID refresh keeps the original request and intentional public request
   const publicClient = client({fetch: current => {current.user = {uid: "actor_b"}; return ok();}});
   assert.deepEqual(await publicClient.api.post("/exam/entry", {skipAuth: true, body: {}}), {confirmed: true});
 });
+
+test("a caller can fence same-UID session replacement before dispatch and 401 refresh replay", async () => {
+  let requests = 0;
+  const env = client({getToken: (_current, _user, force) => force ? "other-session-token" : "owned-session-token",
+    fetch: () => {requests++; return new Response("{}", {status: 401, headers: {"content-type": "application/json"}});}});
+  const validateAuthToken = token => {if (token !== "owned-session-token") throw new Error("Session changed.");};
+  await assert.rejects(env.api.post("/exam/session/id/answers", {body: {}, validateAuthToken}));
+  assert.equal(requests, 1);
+  const first = client({fetch: () => {requests++; return ok();}});
+  await assert.rejects(first.api.post("/exam/session/id/answers", {body: {}, validateAuthToken}));
+  assert.equal(requests, 1);
+});

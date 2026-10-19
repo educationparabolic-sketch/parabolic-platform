@@ -1,6 +1,8 @@
+import {runtimeHeaders, RuntimeOwnershipError} from "../services/examRuntimeOwnership";
+import {buildErrorResponse, STANDARD_API_ERROR_STATUS, buildSuccessResponse,
+  sendErrorResponse} from "../services/apiResponse";
 import {randomUUID} from "node:crypto";
 import * as functions from "firebase-functions";
-import {buildSuccessResponse, sendErrorResponse} from "../services/apiResponse";
 import {StudentProfileValidationError} from "../types/studentProfile";
 import {StudentProfileService} from "../services/studentProfile";
 import {StudentIdentityPhotoService} from "../services/studentIdentityPhoto";
@@ -89,7 +91,7 @@ export function createStudentIdentityBoundary(boundary: Boundary) {
       case "status": result = await lifecycle.getLifecycle(token, photoId); break;
       case "media": result = await access.readMedia(token, photoId); break;
       case "admin-media": result = await access.readMedia(token, photoId, studentId); break;
-      case "exam-status": result = await access.examStatus(token, sessionId); break;
+      case "exam-status": result = await access.examStatus(token, sessionId, runtimeHeaders(request)); break;
       case "review": {
         const identity = await admins.verify(token);
         const command = adminStudentMutationsService.normalizePhotoReviewRequest({
@@ -105,6 +107,11 @@ export function createStudentIdentityBoundary(boundary: Boundary) {
         result, "Operation completed.", requestId, new Date().toISOString(),
       ));
     } catch (error) {
+      if (error instanceof RuntimeOwnershipError) {
+        response.status(STANDARD_API_ERROR_STATUS[error.code]).json(buildErrorResponse(error.code,
+          error.message, requestId, new Date().toISOString(), {reason: error.reason}));
+        return;
+      }
       const code = error instanceof StudentProfileValidationError ||
         error instanceof AdminStudentMutationValidationError ?
         error.code : error instanceof InstituteAuthorityEnforcementError ?

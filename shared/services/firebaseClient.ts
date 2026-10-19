@@ -1,5 +1,5 @@
 import { FirebaseError, initializeApp, type FirebaseApp, getApps } from "firebase/app";
-import { connectAuthEmulator, getAuth, type Auth } from "firebase/auth";
+import { browserLocalPersistence, connectAuthEmulator, getAuth, initializeAuth, type Auth } from "firebase/auth";
 import { isLoopbackHostname } from "./browserRuntimeEnvironment";
 import { getFrontendEnvironment, validateFrontendEnvironment } from "./frontendEnvironment";
 
@@ -64,7 +64,7 @@ function connectConfiguredAuthEmulator(auth: Auth): void {
   connectAuthEmulator(auth, parsedUrl.origin, { disableWarnings: true });
 }
 
-export function ensureFirebaseClient(): FirebaseClient {
+export function ensureFirebaseClient(options: {localPersistence?: boolean} = {}): FirebaseClient {
   if (firebaseClient) {
     return firebaseClient;
   }
@@ -79,7 +79,10 @@ export function ensureFirebaseClient(): FirebaseClient {
 
   const existingApp = getApps()[0];
   const app = existingApp ?? initializeApp(buildFirebaseConfig());
-  const auth = getAuth(app);
+  // Exam must register cross-tab listeners on the persistence it actually uses.
+  // Switching from the default IndexedDB backend later can leave stale listeners.
+  const auth = options.localPersistence ?
+    initializeAuth(app, {persistence: browserLocalPersistence}) : getAuth(app);
   connectConfiguredAuthEmulator(auth);
 
   firebaseClient = {

@@ -1,3 +1,4 @@
+import {ownedSessionFixture, runtimeOwnerForTest} from "./helpers/runtimeOwnership";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {Timestamp} from "firebase-admin/firestore";
@@ -49,7 +50,7 @@ const seedSession = async (
   const sessionId = pathSegments[pathSegments.length - 1] ?? "session_build_30";
 
   await seedInstituteAuthority();
-  await firestore.doc(sessionPath).set({
+  await firestore.doc(sessionPath).set(ownedSessionFixture({
     answerMap: {
       q01: {
         clientTimestamp: sessionStartMillis + 15_000,
@@ -140,7 +141,7 @@ const seedSession = async (
     updatedAt: Timestamp.fromMillis(nowMillis),
     version: 1,
     yearId: "2026",
-  });
+  }));
 };
 
 const mcqAnswer = (
@@ -184,6 +185,7 @@ test(
         mcqAnswer("q02", "C", nowMillis, 20),
       ],
       context: {
+        runtimeOwner: runtimeOwnerForTest("uid_build_30"),
         instituteId: "inst_build_30",
         runId: "run_build_30",
         sessionId: "session_build_30_merge",
@@ -260,6 +262,7 @@ test(
         mcqAnswer("q02", "B", nowMillis, 35),
       ],
       context: {
+        runtimeOwner: runtimeOwnerForTest("uid_build_30"),
         instituteId: "inst_build_30",
         runId: "run_build_30",
         sessionId: "session_build_30_phase_snapshot",
@@ -311,6 +314,7 @@ test(
         mcqAnswer("q01", "D", nowMillis - 180_000, 70),
       ],
       context: {
+        runtimeOwner: runtimeOwnerForTest("uid_build_30"),
         instituteId: "inst_build_30",
         runId: "run_build_30",
         sessionId: "session_build_30_conflict",
@@ -357,6 +361,7 @@ test(
           mcqAnswer("q03", "B", 2000, 30),
         ],
         context: {
+          runtimeOwner: runtimeOwnerForTest("uid_build_30"),
           instituteId: "inst_build_30",
           runId: "run_build_30",
           sessionId: "session_build_30_interval",
@@ -397,6 +402,7 @@ test(
       batchId: "session_build_30_drain:student_build_30:7",
       batchSequence: 7,
       context: {
+        runtimeOwner: runtimeOwnerForTest("uid_build_30"),
         instituteId: "inst_build_30",
         runId: "run_build_30",
         sessionId: "session_build_30_drain",
@@ -420,6 +426,7 @@ test(
       batchId: "session_build_30_drain:student_build_30:8",
       batchSequence: 8,
       context: {
+        runtimeOwner: runtimeOwnerForTest("uid_build_30"),
         instituteId: "inst_build_30",
         runId: "run_build_30",
         sessionId: "session_build_30_drain",
@@ -458,6 +465,7 @@ test(
         mcqAnswer("q03", "A", nowMillis, 15),
       ],
       context: {
+        runtimeOwner: runtimeOwnerForTest("uid_build_30"),
         instituteId: "inst_build_30",
         runId: "run_build_30",
         sessionId: "session_build_30_replay",
@@ -472,6 +480,7 @@ test(
         mcqAnswer("q03", "A", nowMillis, 15),
       ],
       context: {
+        runtimeOwner: runtimeOwnerForTest("uid_build_30"),
         instituteId: "inst_build_30",
         runId: "run_build_30",
         sessionId: "session_build_30_replay",
@@ -518,6 +527,7 @@ test(
     await answerBatchService.persistIncrementalAnswers({
       answers: [mcqAnswer("q03", "A", nowMillis - 1000, 15)],
       context: {
+        runtimeOwner: runtimeOwnerForTest("uid_build_30"),
         instituteId: "inst_build_30",
         runId: "run_build_30",
         sessionId: "session_build_30_absolute_replay",
@@ -530,6 +540,7 @@ test(
     await answerBatchService.persistIncrementalAnswers({
       answers: [mcqAnswer("q03", "B", nowMillis, 15)],
       context: {
+        runtimeOwner: runtimeOwnerForTest("uid_build_30"),
         instituteId: "inst_build_30",
         runId: "run_build_30",
         sessionId: "session_build_30_absolute_replay",
@@ -561,6 +572,7 @@ test(
     await answerBatchService.persistIncrementalAnswers({
       answers: [mcqAnswer("q02", "C", nowMillis - 1000, 30)],
       context: {
+        runtimeOwner: runtimeOwnerForTest("uid_build_30"),
         instituteId: "inst_build_30",
         runId: "run_build_30",
         sessionId: "session_build_30_clear",
@@ -577,6 +589,7 @@ test(
         timeSpentSeconds: 30,
       }],
       context: {
+        runtimeOwner: runtimeOwnerForTest("uid_build_30"),
         instituteId: "inst_build_30",
         runId: "run_build_30",
         sessionId: "session_build_30_clear",
@@ -625,6 +638,7 @@ test(
         timeSpentSeconds: 20,
       }],
       context: {
+        runtimeOwner: runtimeOwnerForTest("uid_build_30"),
         instituteId: "inst_build_30",
         runId: "run_build_30",
         sessionId: "session_build_30_typed_responses",
@@ -662,6 +676,7 @@ test(
     await seedSession(sessionPath);
 
     const context = {
+      runtimeOwner: runtimeOwnerForTest("uid_build_30"),
       instituteId: "inst_build_30",
       runId: "run_build_30",
       sessionId: "session_build_30_invalid_responses",
@@ -737,6 +752,7 @@ test(
           mcqAnswer("q02", "B", nowMillis + 60_000, 20),
         ],
         context: {
+          runtimeOwner: runtimeOwnerForTest("uid_build_30"),
           instituteId: "inst_build_30",
           runId: "run_build_30",
           sessionId: "session_build_38_future_timestamp",
@@ -780,6 +796,7 @@ test(
           mcqAnswer("q02", "C", sessionStartMillis + 20_000, 20),
         ],
         context: {
+          runtimeOwner: runtimeOwnerForTest("uid_build_30"),
           instituteId: "inst_build_30",
           runId: "run_build_30",
           sessionId: "session_build_38_cumulative_tamper",
@@ -824,6 +841,7 @@ test(
         mcqAnswer("q02", "C", nowMillis, 20),
       ],
       context: {
+        runtimeOwner: runtimeOwnerForTest("uid_build_30"),
         instituteId: "inst_build_30",
         runId: "run_build_30",
         sessionId: "session_build_33_min_time_diagnostic",
@@ -870,6 +888,7 @@ test(
         mcqAnswer("q02", "B", nowMillis, 5),
       ],
       context: {
+        runtimeOwner: runtimeOwnerForTest("uid_build_30"),
         instituteId: "inst_build_30",
         runId: "run_build_30",
         sessionId: "session_build_33_min_time_controlled",
@@ -911,6 +930,7 @@ test(
           mcqAnswer("q02", "D", nowMillis, 10),
         ],
         context: {
+          runtimeOwner: runtimeOwnerForTest("uid_build_30"),
           instituteId: "inst_build_30",
           runId: "run_build_30",
           sessionId: "session_build_33_min_time_hard",
@@ -959,6 +979,7 @@ test(
     const result = await answerBatchService.persistIncrementalAnswers({
       answers: [mcqAnswer("q02", "D", nowMillis, 10)],
       context: {
+        runtimeOwner: runtimeOwnerForTest("uid_build_30"),
         instituteId: "inst_build_30",
         runId: "run_build_30",
         sessionId: "session_build_33_min_time_override",
@@ -996,6 +1017,7 @@ test("persistIncrementalAnswers rejects a force-submit-owned session lock", asyn
     answerBatchService.persistIncrementalAnswers({
       answers: [mcqAnswer("q02", "D", nowMillis, 10)],
       context: {
+        runtimeOwner: runtimeOwnerForTest("uid_build_30"),
         instituteId: "inst_build_30",
         runId: "run_build_30",
         sessionId: "session_build_33_force_submit_lock",
@@ -1029,6 +1051,7 @@ test(
         mcqAnswer("q02", "C", nowMillis, 65),
       ],
       context: {
+        runtimeOwner: runtimeOwnerForTest("uid_build_30"),
         instituteId: "inst_build_30",
         runId: "run_build_30",
         sessionId: "session_build_34_max_time_diagnostic",
@@ -1078,6 +1101,7 @@ test(
         mcqAnswer("q02", "B", nowMillis, 70),
       ],
       context: {
+        runtimeOwner: runtimeOwnerForTest("uid_build_30"),
         instituteId: "inst_build_30",
         runId: "run_build_30",
         sessionId: "session_build_34_max_time_controlled",
@@ -1119,6 +1143,7 @@ test(
         mcqAnswer("q02", "A", nowMillis, 60),
       ],
       context: {
+        runtimeOwner: runtimeOwnerForTest("uid_build_30"),
         instituteId: "inst_build_30",
         runId: "run_build_30",
         sessionId: "session_build_34_max_time_hard",
@@ -1141,6 +1166,7 @@ test(
         mcqAnswer("q02", "D", nowMillis + 60_000, 5),
       ],
       context: {
+        runtimeOwner: runtimeOwnerForTest("uid_build_30"),
         instituteId: "inst_build_30",
         runId: "run_build_30",
         sessionId: "session_build_34_max_time_hard",
@@ -1189,6 +1215,7 @@ test(
         answerBatchService.persistIncrementalAnswers({
           answers: [mcqAnswer("q02", "B", Date.now(), 20)],
           context: {
+            runtimeOwner: runtimeOwnerForTest("uid_build_30"),
             instituteId: "inst_build_30",
             runId: "run_build_30",
             sessionId: "session_build_36_suspended_write",

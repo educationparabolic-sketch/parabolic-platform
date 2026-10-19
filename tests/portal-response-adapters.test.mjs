@@ -1158,7 +1158,7 @@ test("representative production callers invoke their portal adapters", async () 
       "utf8",
     ),
     readFile(
-      join(rootDirectory, "apps/exam/src/ExamRuntimeApp.tsx"),
+      join(rootDirectory, "apps/exam/src/launchTransport.ts"),
       "utf8",
     ),
     readFile(

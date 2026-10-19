@@ -97,7 +97,7 @@ const buildExamUrl = (
     `/session/${encodeURIComponent(sessionId)}`,
     `${baseUrl.origin}/`,
   );
-  examUrl.searchParams.set("token", launchCredential);
+  examUrl.hash = `launch=${encodeURIComponent(launchCredential)}`;
   return examUrl.toString();
 };
 

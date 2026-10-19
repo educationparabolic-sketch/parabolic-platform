@@ -101,7 +101,12 @@ function validateOrigin(key, value, environment, errors) {
   }
 
   const loopbackAllowed = environment === "development" || environment === "test";
-  const isLoopback = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+  const hostname = parsed.hostname.replace(/\.+$/u, "");
+  const isLoopback = hostname === "localhost" || hostname.endsWith(".localhost") ||
+    hostname === "[::1]" || /^127\./u.test(hostname) || /^\[::ffff:7f[0-9a-f]{2}:/u.test(hostname);
+  if (!loopbackAllowed && isLoopback && !PATH_CAPABLE_BASE_URL_KEYS.has(key)) {
+    errors.push(`${key} must not use a loopback origin in release builds`);
+  }
 
   if (
     parsed.protocol !== "https:" &&
@@ -116,7 +121,8 @@ function validateOrigin(key, value, environment, errors) {
     parsed.password ||
     (hasPath && !PATH_CAPABLE_BASE_URL_KEYS.has(key)) ||
     parsed.search ||
-    parsed.hash
+    parsed.hash ||
+    (!PATH_CAPABLE_BASE_URL_KEYS.has(key) && value !== parsed.origin && value !== `${parsed.origin}/`)
   ) {
     errors.push(
       PATH_CAPABLE_BASE_URL_KEYS.has(key)
@@ -339,7 +345,9 @@ export function validateBuildEnvironment(input = process.env) {
       environment.VITE_PORTAL_BASE_URL,
       environment.VITE_EXAM_BASE_URL,
       environment.VITE_VENDOR_BASE_URL,
-    ].filter(Boolean),
+    ].filter(Boolean).map((value) => {
+      try { return new URL(value).origin; } catch { return null; }
+    }).filter(Boolean),
   );
   if (portalOrigins.size !== 3) {
     errors.push("Portal, Exam, and Vendor origins must be distinct");

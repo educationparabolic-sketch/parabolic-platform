@@ -1,12 +1,13 @@
 /* eslint-disable max-len, require-jsdoc, @typescript-eslint/no-var-requires */
 "use strict";
 const assert = require("node:assert/strict");
-const {randomUUID, createHash} = require("node:crypto");
+const {randomUUID, randomBytes, createHash} = require("node:crypto");
 const test = require("node:test");
 const http = require("node:http");
 const sharp = require("sharp");
 const {Timestamp} = require("firebase-admin/firestore");
 const {getFirebaseAdminApp, getFirestore} = require("../lib/utils/firebaseAdmin");
+const {planRuntimeCommand} = require("../lib/services/examRuntimeOwnership");
 const {StudentIdentityPhotoAccessService, IdentityPhotoAdminAuthority} = require("../lib/services/studentIdentityPhotoAccess");
 const {PrivateIdentityPhotoMediaStore} = require("../lib/services/studentIdentityPhotoStorage");
 const {StudentIdentityPhotoLifecycleService} = require("../lib/services/studentIdentityPhotoLifecycle");
@@ -44,8 +45,8 @@ async function account(name, claims) {
   assert.equal(response.status, 200);
   return (await response.json()).idToken;
 }
-async function request(path, token, method = "GET", body) {
-  const response = await fetch(origin + path, {method, headers: {"content-type": "application/json", ...(token ? {authorization: `Bearer ${token}`} : {})},
+async function request(path, token, method = "GET", body, extraHeaders = {}) {
+  const response = await fetch(origin + path, {method, headers: {"content-type": "application/json", ...extraHeaders, ...(token ? {authorization: `Bearer ${token}`} : {})},
     ...(body === undefined ? {} : {body: JSON.stringify(body)}), signal: AbortSignal.timeout(60000)});
   assert.match(response.headers.get("content-type"), /^application\/json/);
   const result = await response.json();
@@ -191,20 +192,30 @@ test("Exam requires complete consumed session binding and returns only minimal c
   const ref = institute.collection("academicYears").doc("year").collection("runs").doc("run").collection("sessions").doc(sessionId);
   const binding = createHash("sha256").update(JSON.stringify([uid, inst, "year", "run", sessionId, nonce])).digest("hex");
   const data = {instituteId: inst, studentUid: uid, studentId: uid, yearId: "year", runId: "run", sessionId, status: "active", mode: "Operational", licenseSnapshot: {currentLayer: "L0"}, launchCredentialConsumedByUid: uid, deadlineAt: Timestamp.fromMillis(Date.now() + 600000), identityStatusEntryBindings: []};
+  const proof = randomBytes(32).toString("base64url");
+  const headers = {"X-Parabolic-Exam-Owner": proof, "X-Parabolic-Exam-Generation": "1"};
+  data.runtimeOwnershipVersion = 2;
+  const fixtureToken = "photo-status-issued-fixture";
+  data.launchCredentialHashes = [createHash("sha256").update(fixtureToken).digest("hex")];
+  data.runtimeOwnership = planRuntimeCommand(data, {...data, launchNonce: nonce}, {
+    operation: "launch", commandId: randomUUID(), token: fixtureToken, nextOwnerProof: proof,
+  }, {}, Date.now()).owner;
   await ref.set(data);
   const path = `/exam/session/${sessionId}/identity-status`;
-  assert.equal((await request(gateway(path), tokens.student)).status, 400);
-  assert.equal((await request(gateway(path), token)).status, 404);
+  assert.equal((await request(gateway(path), tokens.student, "GET", undefined, headers)).status, 400);
+  assert.equal((await request(gateway(path), token, "GET", undefined, headers)).status, 404);
   await ref.update({identityStatusEntryBindings: [binding]});
   for (const route of [gateway(path), `examSessionIdentityStatus${path}`]) {
-    const result = await request(route, token);
+    const result = await request(route, token, "GET", undefined, headers);
     assert.equal(result.status, 200, JSON.stringify(result));
     assert.deepEqual(Object.keys(result.data).sort(), ["automatedFaceMatching", "checkedAt", "identityStatus", "sessionId"]);
     assert.equal(result.data.identityStatus, "verified");
     assert.equal(result.data.automatedFaceMatching, "unavailable");
   }
-  await ref.update({status: "expired"});
-  assert.equal((await request(gateway(path), token)).status, 409);
+  await ref.update({runtimeOwnershipVersion: 1});
+  assert.equal((await request(gateway(path), token, "GET", undefined, headers)).status, 409);
+  await ref.update({runtimeOwnershipVersion: 2, status: "expired"});
+  assert.equal((await request(gateway(path), token, "GET", undefined, headers)).status, 409);
 });
 
 test("authority/provider/expiry denials, concurrent withdrawal after bytes, and privacy-only inactive access", async () => {

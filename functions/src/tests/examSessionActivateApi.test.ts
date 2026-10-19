@@ -1,3 +1,5 @@
+import {randomBytes} from "node:crypto";
+const ownerProof = randomBytes(32).toString("base64url");
 import assert from "node:assert/strict";
 import test from "node:test";
 import {createExamSessionActivateHandler} from "../api/examSessionActivate";
@@ -21,6 +23,7 @@ test("exam activation derives the complete lifecycle scope from Firebase identit
     activateSession: async (context) => {
       activationCalls += 1;
       assert.deepEqual(context, {
+        runtimeOwner: {proof: ownerProof, generation: 1, studentUid: identity.uid, launchNonce: identity.launchNonce},
         instituteId: identity.instituteId,
         runId: identity.runId,
         sessionId: identity.sessionId,
@@ -52,7 +55,8 @@ test("exam activation derives the complete lifecycle scope from Firebase identit
       runId: "browser-run-must-not-be-authority",
       yearId: "1999",
     },
-    headers: {authorization: "Bearer firebase-id-token"},
+    headers: {"authorization": "Bearer firebase-id-token", "x-parabolic-exam-owner": ownerProof,
+      "x-parabolic-exam-generation": "1"},
     method: "POST",
     path: `/exam/session/${identity.sessionId}/activate`,
   }) as never, response as never);
@@ -82,7 +86,8 @@ test("exam activation rejects a Firebase identity bound to another session", asy
   const response = createMockResponse();
   await handler(createMockRequest({
     body: {},
-    headers: {authorization: "Bearer firebase-id-token"},
+    headers: {"authorization": "Bearer firebase-id-token", "x-parabolic-exam-owner": ownerProof,
+      "x-parabolic-exam-generation": "1"},
     method: "POST",
     path: `/exam/session/${identity.sessionId}/activate`,
   }) as never, response as never);

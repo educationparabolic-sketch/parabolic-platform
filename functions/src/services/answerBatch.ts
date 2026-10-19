@@ -1,3 +1,4 @@
+import {assertRuntimeOwner} from "./examRuntimeOwnership";
 import {FieldValue} from "firebase-admin/firestore";
 import {createLogger} from "./logging";
 import {SessionStartValidationError, sessionService} from "./session";
@@ -1171,6 +1172,7 @@ export class AnswerBatchService {
         );
       }
 
+      assertRuntimeOwner(sessionData, input.context, Date.now());
       const storedAnswerMap = isPlainObject(sessionData.answerMap) ?
         sessionData.answerMap :
         {};
@@ -1376,6 +1378,7 @@ export class AnswerBatchService {
         validatedAt: FieldValue.serverTimestamp(),
       };
 
+      assertRuntimeOwner(sessionData, input.context, Date.now());
       transaction.update(sessionReference, updatePayload);
 
       return {

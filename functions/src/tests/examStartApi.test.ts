@@ -104,7 +104,7 @@ test("exam start derives authority from identity and returns a strict absolute l
   assert.equal(response.statusCode, 201);
   assert.deepEqual((response.body as {data: unknown}).data, {
     disposition: "created",
-    examUrl: "https://exam.example.test/session/session_owned?token=signed-launch-credential",
+    examUrl: "https://exam.example.test/session/session_owned#launch=signed-launch-credential",
     launchCredential: "signed-launch-credential",
     sessionId: "session_owned",
     status: "created",

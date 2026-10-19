@@ -1,3 +1,4 @@
+import {runtimeHeaders, RuntimeOwnerCredentials} from "../services/examRuntimeOwnership";
 import * as functions from "firebase-functions";
 import {DecodedIdToken} from "firebase-admin/auth";
 import {answerBatchService} from "../services/answerBatch";
@@ -38,6 +39,7 @@ interface ExamSessionAnswersRequestDependencies {
 
 interface ExamSessionAnswersValidatedRequestData
 extends Record<string, unknown> {
+  runtimeOwner: RuntimeOwnerCredentials;
   adaptivePhaseSnapshot?: unknown;
   answers: unknown;
   batchId: string;
@@ -191,6 +193,7 @@ export const createExamSessionAnswersHandler = (
         batchId: validatedData.batchId,
         batchSequence: validatedData.batchSequence,
         context: {
+          runtimeOwner: validatedData.runtimeOwner,
           instituteId: validatedData.instituteId,
           runId: validatedData.runId,
           sessionId: validatedData.sessionId,
@@ -292,6 +295,7 @@ export const createExamSessionAnswersHandler = (
           batchSequence,
           flushReason,
           instituteId: identity.instituteId,
+          runtimeOwner: {...runtimeHeaders(request), studentUid: identity.uid, launchNonce: examSession.launchNonce},
           millisecondsSinceLastWrite,
           runId: examSession.runId,
           sessionId,

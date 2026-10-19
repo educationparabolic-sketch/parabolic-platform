@@ -177,7 +177,7 @@ POST /admin/licensing | BWM-031 | Return the bounded current-only Admin licensin
 POST /admin/governance/reports | Build 90 / BWM-029 | Unmapped compatibility preview: compose one immutable monthly governance snapshot with complete month/cutoff-bound override and audit inputs up to a fail-closed 1,000-event cap, use only snapshot-captured versions, and return no PDF or internal Storage coordinates
 POST /admin/governance/snapshots | Build 89 / BWM-029 | Read strict immutable governance snapshot summaries for one academic year with `director` + `L3` institute access enforcement and `vendor` cross-institute access through month lookup or a default-12/max-36 opaque cursor page ordered by stored month
 POST /exam/start | Build 26 / BWM-017 | Start or resume exactly one eligible session from verified Student tenant/UID/license plus run ID, derive the current operational academic year server-side, converge concurrent/retried starts through a deterministic session ID and transaction, and return a strict created/replayed/resumed absolute Exam launch contract with a distinct nonce-bearing credential
-POST /exam/session/{sessionId}/entry | BWM-018, BWM-019, BWM-022 | Verify the Firebase ID token with Student and complete session-bound claims; atomically consume the matching raw launch credential exactly once on `{ token }`, or recover the same persisted owner/session on authenticated `{ resume: true }`; return the strict immutable candidate-safe runtime snapshot
+POST /exam/session/{sessionId}/entry | BWM-018, BWM-019, BWM-022 | Verify the Firebase ID token with Student and complete session-bound claims; execute closed v2 launch/recover/renew/release commands with atomic consumed identity and hashed proof/generation/lease; rotate proof on each new document; return the strict immutable candidate-safe runtime snapshot only on acquisition
 POST /exam/session/{sessionId}/activate | BWM-020 | Require a refreshed session-bound Student Firebase ID token, derive every identifier from its complete exact claims, idempotently persist `started -> active` with server-owned `startedAt` and immutable scheduled `deadlineAt`, return `serverTime` for skew compensation, and reconcile reached deadlines to `expired`
 POST /exam/session/{sessionId}/answers | Build 30, Build 33, Build 34, Build 35, BWM-018, BWM-021, BWM-022 | Require exact refreshed session-bound identity and active pre-deadline authority; strictly validate max-ten batch identity/sequence/reason and positive client revisions; persist runtime-question-validated responses with idempotent timing; return exact revision dispositions; permit interval bypass only for serialized reconnect/submission drains
 POST /exam/session/{sessionId}/submit | Build 36, Build 37, Build 38, Build 40, BWM-018, BWM-023 | Require a refreshed session-bound Firebase ID token whose institute/year/run/session/Student claims match the route and exact four-field body; finalize active manual or server-confirmed reached-deadline expiry submissions atomically; and return one strict server-owned status/reason/time/metrics result whose parallel and repeated callers replay exactly
@@ -208,11 +208,12 @@ AdminQuestionLibraryService | BWM-012 | Reload institute-scoped question records
 QuestionBulkUploadService | Build 13 / BWM-012 | Validate question batches and select authoritative IDs/versions; on commit fingerprint the normalized tenant payload, atomically persist question documents plus deterministic immutable upload/audit records, replay exact retries without rewriting, and reject structural mutation of used questions
 QuestionAssetUploadService | BWM-012 | Validate PNG/WebP asset payloads against the authoritative institute/question/version tuple, persist SHA-256 metadata at canonical versioned paths with create-only Storage preconditions, replay identical bytes safely, reject conflicting content, and create deterministic retry-recoverable institute audits while exposing only the safe public result
 AdminQuestionMutationsService | BWM-027 | Normalize identity-derived teacher/admin metadata, structure, successor-version, and lifecycle commands; atomically enforce expected record revisions, deterministic replay, immutable audits, bounded authoritative template/run usage locks, unique-key ownership, lineage, and two-year archive safety; coordinate revisioned create-only PNG/WebP edit replacements with transaction-failure cleanup and recoverable cleanup authority
-SessionService | Build 26, Build 27, Build 28, Build 29, Build 31, Build 32, Build 33, Build 100, Build 105, BWM-017, BWM-018, BWM-019, BWM-020, BWM-022 | Manage exam session creation and identity-derived start/resume idempotency; resolve current HOT academic-year authority, assignment, active Student, current license and permitted mode; converge concurrent starts on one deterministic institute/year/run/Student document; locate the same eligible session for replay/resume; store only bounded launch-credential hashes; validate and consume launch credentials while advancing `created -> started`; recover the already-owned session from persisted Firebase identity after consumption; freeze and validate an immutable candidate-safe runtime snapshot; securely activate and reconcile lifecycle/deadline authority; enforce forward-only transitions plus reason-aware answer batching constraints; and block non-HOT years from operational access
-ExamStartApi | Build 26 / BWM-017 | HTTP API handler for `POST /exam/start` that accepts only shared start/resume intent plus run ID, derives Student authority from the verified Firebase identity, and returns the strict shared session/disposition/status plus distinct nonce-bearing credential and matching absolute Exam URL
-ExamRuntimeAuthentication | BWM-018, BWM-019, BWM-020, BWM-022 | Parse nested Firebase claims, remove the launch credential from URL/history, exchange it once through per-origin Firebase Auth, resume token-free reloads from persisted Firebase Auth with `{ resume: true }`, use refreshed ID tokens for all runtime APIs, strictly adapt EXM-01/EXM-05, hydrate only server authority, and derive countdown from server clock/deadline
-AnswerBatchService | Build 30, Build 33, Build 34, Build 35, BWM-020, BWM-021, BWM-022 | Persist max-ten incremental batches only for active pre-deadline sessions; validate strict responses, batch identity/sequence/reason, and positive client revisions; return an exact persisted/ignored/blocked acknowledgement per question/revision; allow minimum-interval bypass only for reconnect/submission drains; retain explicit clears, absolute idempotent timing, stale/conflict rules, enforcement, and typed timing metrics
-SubmissionService | Build 36, Build 37, Build 38, Build 105, BWM-023 | Execute atomic session submission transactions, enforce session ownership and HOT-year constraints, derive manual/expiry reason from the persisted deadline, acquire and release `submissionLock`, make parallel callers wait for and replay the one stored finalization, compute deterministic scoring and behavioral metrics, persist server-owned status/reason/time plus the complete result, and return exact idempotent replays without recomputation
+SessionService | Build 26, Build 27, Build 28, Build 29, Build 31, Build 32, Build 33, Build 100, Build 105, BWM-017, BWM-018, BWM-019, BWM-020, BWM-022 | Manage exam session creation and identity-derived start/resume idempotency; resolve current HOT academic-year authority, assignment, active Student, current license and permitted mode; converge concurrent starts on one deterministic institute/year/run/Student document; locate the same eligible session for replay/resume; store only bounded launch-credential hashes; validate and consume launch credentials while advancing `created -> started`; manage v2 launch/recover/renew/release with consumed identity plus hashed proof/generation and bounded receipts; recover only through the current proof or committed pending command; freeze and validate an immutable candidate-safe runtime snapshot; securely activate and reconcile lifecycle/deadline authority; enforce forward-only transitions plus reason-aware answer batching constraints; and block non-HOT years from operational access
+ExamRuntimeOwnershipPlanner | BWM-044 | Internal `services/examRuntimeOwnership.ts` validates closed commands/headers/duplicate JSON, hashes proof and consumed identity, plans bounded 90-second leases/receipts and enforces transaction-bound current owner; no endpoint/event/index or role grant
+ExamStartApi | Build 26 / BWM-017 | HTTP API handler for `POST /exam/start` that accepts only shared start/resume intent plus run ID, derives Student authority from the verified Firebase identity, and returns the strict shared session/disposition/status plus distinct nonce-bearing credential and matching fragment-only absolute Exam URL
+ExamRuntimeAuthentication | BWM-018, BWM-019, BWM-020, BWM-022 | Capture and scrub fragment launch before Auth/monitoring/router; exchange once through per-origin Firebase Auth; own one mounted controller per document/session, bounded current/pending sessionStorage proofs, rotating reload recovery and lease renewal/release; fence actual outbound ID tokens and stale callbacks; stop content/timers/media on interruption, preserve generation-fenced answer recovery and server deadline, and resolve only validated absolute Student returns
+AnswerBatchService | Build 30, Build 33, Build 34, Build 35, BWM-020, BWM-021, BWM-022 | Persist max-ten incremental batches only for active pre-deadline sessions with current consumed owner proof/generation/lease checked inside the write transaction; validate strict responses, batch identity/sequence/reason, and positive client revisions; return an exact persisted/ignored/blocked acknowledgement per question/revision; allow minimum-interval bypass only for reconnect/submission drains; retain explicit clears, absolute idempotent timing, stale/conflict rules, enforcement, and typed timing metrics
+SubmissionService | Build 36, Build 37, Build 38, Build 105, BWM-023 | Execute atomic session submission transactions, fence consumed owner generation and unique lock identity at lock/final commit, require exact closing-owner replay, retain private internal Admin authority and HOT-year constraints, derive manual/expiry reason from the persisted deadline, acquire and release `submissionLock`, make parallel callers wait for and replay the one stored finalization, compute deterministic scoring and behavioral metrics, persist server-owned status/reason/time plus the complete result, and return exact idempotent replays without recomputation
 SubmissionAnalyticsTriggerService | Build 39, BWM-024 | Detect only real `sessions/{sessionId}` transitions to `submitted`; transactionally queue deterministic `processingMarkers/{sessionId}` under the owning run and Student summaries; publish explicit newest-session `resultPropagation` processing/available state with 2/0-second retry authority; and prevent replay or an older event from resetting newer availability
 RunAnalyticsEngineService | Build 41, BWM-024 | Incrementally aggregate each submitted session exactly once through a deterministic per-session marker into `institutes/{instituteId}/academicYears/{yearId}/runAnalytics/{runId}`; update metadata, averages, completion rate, standard deviation, risk distribution, and internal score histograms without raw-session scans; and mark the run plus analytics summary completed when every recipient has submitted
 QuestionAnalyticsEngineService | Build 42, BWM-024 | Incrementally update `institutes/{instituteId}/questionAnalytics/{questionId}` from submitted-session payloads plus existing question analytics state, including correct/incorrect attempt counts, average response time, guess rate, overstay rate, average raw/accuracy when used, discipline stress, and risk impact, with deterministic `processingMarkers/{sessionId}` replay protection per question
@@ -555,3 +556,94 @@ comprehensive acceptance/aggregate remain substeps 7/8 and production NO_GO.
 No route/export/handler/capability/schema/index/rule/schedule/backend authority or
 credential-flow change; 120/115/0/0/5 routes, 63 exports/51 handlers/eight schedules,
 98/20 backend integration inventories remain unchanged.
+
+ExamRuntimeOwnershipContract | BWM-044 substep 2 reserved | `shared/contracts/examRuntimeOwnership.d.ts` and `docs/EXAM_RUNTIME_OWNERSHIP_CONTRACT.md` define declaration-only EXM-01 operation unions, supplementary proof/generation headers, bounded 90-second ownership/30-second renewal, proof-rotating recovery, terminal replay, redaction and absolute Student return policy. Existing SessionService/Auth/API owners implement later; no new runtime service, route/export/index/schedule or caller adoption.
+
+
+BWM-044 substep-3 backend adoption (2026-10-18): the reservation above is now
+implemented by the existing SessionService, entry/activation/answer/submission
+and identity-status handlers with the shared internal
+`functions/src/services/examRuntimeOwnership.ts` planner and guards. Session
+writers initialize ownership version 2; transaction-bound consumed-nonce,
+hashed proof and generation checks enforce acquisition, rotating recovery,
+90-second renewal/release, terminal closure and exact closing-owner submit replay.
+Existing Admin force-submit uses an explicit private internal capability.
+Backend entry accepts only v2 commands; v1 browser callers temporarily fail closed.
+Frontend/bootstrap/fragment transport, telemetry cleanup, mounted coordination
+and absolute Student returns remain substeps 4–6, so no working browser flow or
+release acceptance is claimed. Environment values/validators, public Hosting
+configuration, routes/exports, indexes/rules/schedules and cloud resources are
+unchanged. No legacy backfill; BWM-053 qualification and production NO_GO remain.
+
+
+BWM-044 substep-4 launch adoption (2026-10-18) supersedes the earlier query/v1
+producer descriptions: STU-06 now returns configured Exam `/session/{id}#launch=...`.
+`apps/exam/src/bootstrap.ts` and `launchBootstrap.ts` synchronously capture once
+and scrub history before dynamic main/Auth/monitoring/router imports; rejected
+legacy/mixed/malformed/duplicate input and later same-document launch navigation
+are scrubbed without exchange. `launchTransport.ts` uses the existing shared API
+client at fixed same-origin `/api/v1` for initial v2 entry, clearing launch/proof
+references on settlement. The raw launch token is absent from React state.
+Shared `credentialRedaction.ts`, frontend monitoring and the existing crash boundary
+redact credential fields, proofs/hashes and raw error URLs before storage; prior
+telemetry is scrubbed on read. This adds no telemetry backend. Existing no-referrer,
+CSP, CORS, environment keys/validators/values, routes/exports, schema/index/rules and
+schedules are unchanged. Initial entry is staged: proof persistence, lease renewal,
+protected mounted writes/logout/reload recovery remain substep 5; absolute returns
+remain substep 6. Protected runtime and clean reload fail closed until that adoption;
+no complete browser golden path, deployed policy or production readiness is claimed.
+
+
+BWM-044 substep-5 mounted adoption (2026-10-18) supersedes the earlier
+initial-entry-only checkpoint. `apps/exam/src/launchTransport.ts` now owns one
+document/session acquisition, exact UID/Student/tenant/year/run/session/nonce
+scope, bounded current/pending proofs in Exam sessionStorage, rotating recovery,
+conservative monotonic lease expiry, renewal and explicit Exam-only release and
+sign-out. Exam selects SDK browser-local persistence before initial listener
+registration; other portal defaults remain unchanged. Firebase ID tokens remain
+authentication. Shared API dispatch validates
+the actual token before initial and refreshed retries; owner headers attach only
+to fixed same-origin protected Exam paths. Tab announcements carry public
+session/generation only and cannot grant authority.
+
+Mounted rendering, writes, timers and media stop on ownership or identity loss.
+Answer-recovery IndexedDB stores only public generation fencing, never proofs or
+tokens; stale owners cannot overwrite/delete a newer generation. Recovery retains
+pending/acknowledged answers and uses the server deadline. No auto-submit on
+interruption, forced takeover, global UID revocation or Portal Auth bridge is
+introduced. No new endpoint, schema/index/rule/schedule, environment key/value,
+Hosting policy/header/rewrite or resource is added. The controller records local
+verification and its limits. Absolute Student returns remain substep 6; permanent
+adversarial and aggregate acceptance remain 7–8. BWM-045 camera policy/matching,
+BWM-049 exclusions, BWM-053 legacy rollout and production NO_GO remain.
+
+
+BWM-044 substep-6 return adoption (2026-10-18): all five existing Exam return
+actions and the mounted ownership-loss screen use one validated absolute
+`VITE_PORTAL_BASE_URL` plus fixed `/student/my-tests`. The raw configured value
+must be an origin only, distinct from the actual Exam origin; credentials,
+query/fragment, paths and URL-normalization tricks are rejected. Missing/unsafe
+configuration disables the action with recovery guidance; no Exam-origin fallback
+or browser-supplied redirect is accepted. Release requires non-loopback HTTPS;
+HTTP/loopback is limited to explicit isolated local Auth-emulator builds. Existing
+release validation also compares canonical origins and rejects loopback and
+normalized/empty-delimiter origin inputs. No new environment key, configured
+public origin, API route or data field is introduced. The existing Student SPA
+rewrite sources are corrected to `/student` and `/student/**` so direct return
+navigation reaches Student HTML; API-first order and security headers remain.
+Approved L5 preview qualification is required for this Hosting change at
+BWM-044 aggregate substep 8 before whole-task verification.
+Student Auth remains on the Portal origin: navigation carries no token, proof or
+identity. Local dual-Hosting verification and limits are recorded in the execution
+controller; deployment and the permanent full security/aggregate matrix remain
+unqualified here. BWM-044 stays IN_PROGRESS, BWM-045 PLANNED, production NO_GO.
+
+Current BWM-044 aggregate checkpoint (2026-10-19): VERIFIED 8/8 after local
+L1–L4 and explicitly approved public L5. Provider-bound one-day Portal/Exam
+previews pass all three actual HTTPS Chromium asset/deep-link/header/independent
+Auth/return cases with CSP bypass off. Selected staging API compatibility and one
+already-declared index were qualified; temporary owned L0 test-fixture changes
+were restored. Hosting live releases and unrelated Functions/indexes are unchanged.
+BWM-045 is READY for inspection only. Full backend/data/legacy/publication rollout
+remains with BWM-053 and the other release owners; production NO_GO. See the
+master execution plan, final substep-8 evidence and LOG-257.

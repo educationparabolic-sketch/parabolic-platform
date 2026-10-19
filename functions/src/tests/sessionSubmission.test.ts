@@ -1,3 +1,4 @@
+import {ownedSessionFixture, runtimeOwnerForTest} from "./helpers/runtimeOwnership";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {FieldValue, Timestamp} from "firebase-admin/firestore";
@@ -214,7 +215,7 @@ const seedSession = async (
   const nowMillis = Date.now();
   const sessionPath = `${SESSION_ROOT_PATH}/${sessionId}`;
 
-  await firestore.doc(sessionPath).set({
+  await firestore.doc(sessionPath).set(ownedSessionFixture({
     answerMap: {
       q36_1: {
         clientTimestamp: nowMillis - 30_000,
@@ -289,7 +290,7 @@ const seedSession = async (
       riskState: "Stable",
       skipBurstCount: 0,
     } : {}),
-  });
+  }));
 };
 
 test.before(async () => {
@@ -347,6 +348,7 @@ test("submitSession finalizes active session atomically", async () => {
   await firestore.doc(sessionPath).update({calibrationSnapshot: frozen});
 
   const result = await submissionService.submitSession({
+    runtimeOwner: runtimeOwnerForTest("uid_build_36"),
     instituteId: INSTITUTE_ID,
     reason: "manual",
     runId: RUN_ID,
@@ -402,6 +404,7 @@ test("submitSession finalizes active session atomically", async () => {
       batchId: "post-submit-write",
       batchSequence: 999,
       context: {
+        runtimeOwner: runtimeOwnerForTest("uid_build_36"),
         instituteId: INSTITUTE_ID,
         runId: RUN_ID,
         sessionId,
@@ -433,6 +436,7 @@ test("submitSession preserves an active session while institute is suspended", a
   try {
     await assert.rejects(
       submissionService.submitSession({
+        runtimeOwner: runtimeOwnerForTest("uid_build_36"),
         instituteId: INSTITUTE_ID,
         reason: "manual",
         runId: RUN_ID,
@@ -465,6 +469,7 @@ test(
 
     await assert.rejects(
       submissionService.submitSession({
+        runtimeOwner: runtimeOwnerForTest("uid_build_36"),
         instituteId: INSTITUTE_ID,
         reason: "manual",
         runId: RUN_ID,
@@ -508,6 +513,7 @@ test(
     });
 
     const result = await submissionService.submitSession({
+      runtimeOwner: runtimeOwnerForTest("uid_build_36"),
       instituteId: INSTITUTE_ID,
       reason: "manual",
       runId: RUN_ID,
@@ -535,9 +541,12 @@ test("submitSession resumes a durable lock owned by the same command", async () 
 
   await deleteIfPresent(sessionPath);
   await seedSession(sessionId, "active", true);
-  await firestore.doc(sessionPath).update({submissionLockOwnerId: lockOwnerId});
+  await firestore.doc(sessionPath).update({
+    submissionLockOwnerId: lockOwnerId, submissionLockGeneration: 1,
+  });
 
   const result = await submissionService.submitSession({
+    runtimeOwner: runtimeOwnerForTest("uid_build_36"),
     instituteId: INSTITUTE_ID,
     reason: "manual",
     runId: RUN_ID,
@@ -563,6 +572,7 @@ test(
     await seedSession(sessionId, "submitted", false);
 
     const result = await submissionService.submitSession({
+      runtimeOwner: runtimeOwnerForTest("uid_build_36"),
       instituteId: INSTITUTE_ID,
       reason: "manual",
       runId: RUN_ID,
@@ -612,6 +622,7 @@ test(
       });
 
     const result = await submissionService.submitSession({
+      runtimeOwner: runtimeOwnerForTest("uid_build_36"),
       instituteId: INSTITUTE_ID,
       reason: "manual",
       runId: RUN_ID,
@@ -632,7 +643,7 @@ test(
   },
 );
 
-test("submitSession rejects concurrent submission lock", async () => {
+test("submitSession preserves a concurrent lock without browser generation", async () => {
   const sessionId = "session_build_36_locked";
   const sessionPath = `${SESSION_ROOT_PATH}/${sessionId}`;
 
@@ -644,6 +655,7 @@ test("submitSession rejects concurrent submission lock", async () => {
       lockPollIntervalMs: 10,
       lockWaitTimeoutMs: 30,
     }).submitSession({
+      runtimeOwner: runtimeOwnerForTest("uid_build_36"),
       instituteId: INSTITUTE_ID,
       reason: "manual",
       runId: RUN_ID,
@@ -679,6 +691,7 @@ test(
 
     const primarySubmissionPromise = slowSubmissionService
       .submitSession({
+        runtimeOwner: runtimeOwnerForTest("uid_build_36"),
         instituteId: INSTITUTE_ID,
         reason: "manual",
         runId: RUN_ID,
@@ -690,6 +703,7 @@ test(
     await new Promise((resolve) => setTimeout(resolve, 30));
 
     const concurrentResult = await submissionService.submitSession({
+      runtimeOwner: runtimeOwnerForTest("uid_build_36"),
       instituteId: INSTITUTE_ID,
       reason: "manual",
       runId: RUN_ID,
@@ -723,6 +737,7 @@ test("submitSession rejects non-active sessions", async () => {
 
   await assert.rejects(
     submissionService.submitSession({
+      runtimeOwner: runtimeOwnerForTest("uid_build_36"),
       instituteId: INSTITUTE_ID,
       reason: "manual",
       runId: RUN_ID,
@@ -751,6 +766,7 @@ test("submitSession derives expiry from the persisted server deadline", async ()
   await seedSession(sessionId, "expired", false, "Controlled", -1_000);
 
   const result = await submissionService.submitSession({
+    runtimeOwner: runtimeOwnerForTest("uid_build_36"),
     instituteId: INSTITUTE_ID,
     reason: "manual",
     runId: RUN_ID,
@@ -776,6 +792,7 @@ test("submitSession rejects a claimed expiry before the server deadline", async 
 
   await assert.rejects(
     submissionService.submitSession({
+      runtimeOwner: runtimeOwnerForTest("uid_build_36"),
       instituteId: INSTITUTE_ID,
       reason: "expiry",
       runId: RUN_ID,

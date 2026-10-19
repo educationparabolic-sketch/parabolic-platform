@@ -12,6 +12,8 @@ export interface ApiClientRequestOptions<TRequestBody = unknown> {
   headers?: Record<string, string>;
   signal?: AbortSignal;
   skipAuth?: boolean;
+  /** Additional caller scope, checked against the actual outbound ID token. */
+  validateAuthToken?: (token: string | null) => void;
   emptyResultIsReady?: boolean;
   handledFailureIsReady?: boolean;
   retry?: Partial<ApiRetryPolicy>;

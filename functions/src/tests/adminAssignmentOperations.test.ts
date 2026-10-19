@@ -529,6 +529,8 @@ test("session overrides enforce revisions and recover force-submit effects", asy
     seedRun("run-force-override", "collecting", 4),
     seedSession("run-force-override", "session-force", "student-2", "expired", 2),
   ]);
+  await firestore.doc(sessionPath("run-force-override", "session-force"))
+    .update({submissionLockGeneration: 7});
   failedForceSubmissions.add("session-force");
   const forceRequest = service.normalizeSessionOverrideRequest({
     actorId: "teacher-1",
@@ -548,6 +550,9 @@ test("session overrides enforce revisions and recover force-submit effects", asy
     service.applySessionOverride(forceRequest),
     /simulated recoverable submission failure/u,
   );
+  assert.equal((await firestore.doc(sessionPath(
+    "run-force-override", "session-force",
+  )).get()).get("submissionLockGeneration"), undefined);
   const overrideQuery = await firestore.collection(
     `${institutePath}/assignmentOperationRecoveries`,
   )

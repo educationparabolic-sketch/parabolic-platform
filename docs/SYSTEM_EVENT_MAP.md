@@ -526,3 +526,27 @@ privacy exceptions, current authority, transport and remote qualification.
 Mounted Student/Admin adoption and substep-8 local acceptance are qualified;
 remote GCS/IAM/index/retention validation remains BWM-052/053, production NO_GO. Source integration inventory 96/19; classified
 non-emulator suite and historical BWM-049 exclusions unchanged.
+
+### BWM-044 ownership and terminal fencing — 2026-10-19
+
+Launch/recover/renew/release use existing EXM-01 synchronous transactions and the
+existing session document. They introduce no event, trigger, schedule or
+processing-marker collection. Recovery/renewal/release do not reset lifecycle,
+answers, start time or deadline, and ownership/identity interruption never
+auto-submits. Existing answer and submission events retain their owners.
+Submission checks the captured owner generation and lock identity again at
+final commit; a displaced finalizer cannot finalize or clear a successor lock.
+Canonical replay does not emit a second submission transition. Verified internal
+Admin/system terminal writers close ownership in their terminal transaction.
+See the normative Exam ownership contract and permanent security matrix for
+local proof; public/legacy rollout qualification remains downstream.
+
+Current BWM-044 aggregate checkpoint (2026-10-19): VERIFIED 8/8 after local
+L1–L4 and explicitly approved public L5. Provider-bound one-day Portal/Exam
+previews pass all three actual HTTPS Chromium asset/deep-link/header/independent
+Auth/return cases with CSP bypass off. Selected staging API compatibility and one
+already-declared index were qualified; temporary owned L0 test-fixture changes
+were restored. Hosting live releases and unrelated Functions/indexes are unchanged.
+BWM-045 is READY for inspection only. Full backend/data/legacy/publication rollout
+remains with BWM-053 and the other release owners; production NO_GO. See the
+master execution plan, final substep-8 evidence and LOG-257.

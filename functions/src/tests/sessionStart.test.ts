@@ -1,6 +1,7 @@
+import {randomBytes, randomUUID, createHash} from "node:crypto";
+import {RuntimeOwnershipError} from "../services/examRuntimeOwnership";
 import assert from "node:assert/strict";
 import test from "node:test";
-import {createHash} from "node:crypto";
 import {Timestamp} from "firebase-admin/firestore";
 import * as gcpMetadata from "gcp-metadata";
 import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
@@ -15,6 +16,9 @@ process.env.METADATA_SERVER_DETECTION ??= "none";
 gcpMetadata.setGCPResidency(false);
 
 const firestore = getFirestore();
+
+const launchCommand = (token: string) => ({operation: "launch" as const, token,
+  commandId: randomUUID(), nextOwnerProof: randomBytes(32).toString("base64url")});
 
 const createHashForTest = (value: string): string =>
   createHash("sha256").update(value).digest("hex");
@@ -381,6 +385,7 @@ test(
     const launchCredentialHash = createHashForTest(launchCredential);
     await seedInstituteAuthority(context.instituteId);
     await firestore.doc(sessionPath).set({
+      runtimeOwnershipVersion: 2,
       consumedLaunchCredentialHashes: [],
       instituteId: context.instituteId,
       launchCredentialHashes: [launchCredentialHash],
@@ -464,6 +469,7 @@ test(
     try {
       const result = await sessionService.validateSessionEntry({
         ...context,
+        runtimeCommand: launchCommand(launchCredential),
         sessionToken: launchCredential,
       });
       assert.equal(result.sessionId, context.sessionId);
@@ -484,17 +490,19 @@ test(
       await assert.rejects(
         sessionService.validateSessionEntry({
           ...context,
+          runtimeCommand: launchCommand(launchCredential),
           sessionToken: launchCredential,
         }),
         (error: unknown) =>
-          error instanceof SessionStartValidationError &&
+          error instanceof RuntimeOwnershipError &&
           error.code === "UNAUTHORIZED" &&
-          error.message === "Launch credential has already been consumed.",
+          error.reason === "entry_not_consumed",
       );
       await assert.rejects(
         sessionService.validateSessionEntry({
           ...context,
           sessionId: "session_bwm_018_wrong",
+          runtimeCommand: launchCommand(launchCredential),
           sessionToken: launchCredential,
         }),
         (error: unknown) =>
@@ -504,6 +512,7 @@ test(
       await assert.rejects(
         sessionService.validateSessionEntry({
           ...context,
+          runtimeCommand: launchCommand(buildCustomLaunchToken(claims, Math.floor(Date.now() / 1000) - 1)),
           sessionToken: buildCustomLaunchToken(
             claims,
             Math.floor(Date.now() / 1000) - 1,
@@ -1135,6 +1144,7 @@ test("active Exam entry is recoverably blocked by an invalidating downgrade", as
       licenseLayer: "L2",
       runId,
       sessionId,
+      runtimeCommand: launchCommand(token),
       sessionToken: token,
       studentId,
       studentUid: `uid_${studentId}`,

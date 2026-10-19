@@ -5223,9 +5223,9 @@ runs/{runId}/sessions/{sessionId}
 6. Generate short-lived signed JWT
 7. Redirect:
 
-https://exam.yourdomain.com/session/{sessionId}?token=xyz
+https://exam.yourdomain.com/session/{sessionId}#launch={encodedLaunchCredential}
 
-Portal validates token server-side before rendering.
+Exam bootstrap captures and scrubs the fragment before Auth/monitoring. Firebase exchange plus ownership-v2 launch/recovery must succeed before content or writes; see `EXAM_RUNTIME_OWNERSHIP_CONTRACT.md`.
 
 ---
 
@@ -8430,3 +8430,105 @@ comprehensive acceptance/aggregate remain substeps 7/8 and production NO_GO.
 No route/export/handler/capability/schema/index/rule/schedule/backend authority or
 credential-flow change; 120/115/0/0/5 routes, 63 exports/51 handlers/eight schedules,
 98/20 backend integration inventories remain unchanged.
+
+## BWM-044 reserved Exam ownership boundary (2026-10-18)
+
+Historical substep-2 reservation; substep-3 adoption below supersedes implementation status.
+
+The [normative Exam ownership contract](EXAM_RUNTIME_OWNERSHIP_CONTRACT.md) reserves
+fragment-only custom-token launch capture before Auth/monitoring, supplementary
+server-owned consumed-nonce/proof/generation fencing across runtime endpoints,
+proof-rotating recovery and fixed absolute Student return. Firebase ID tokens
+remain API authentication; per-origin SDK persistence and deny-by-default
+Firestore remain. No live takeover, bearer bridge or dedicated signed-session
+middleware. This is a declaration/design reservation only; existing v1 runtime
+is unchanged and BWM-044 implementation/behavioral qualification remains pending.
+
+
+BWM-044 substep-3 backend adoption (2026-10-18): the reservation above is now
+implemented by the existing SessionService, entry/activation/answer/submission
+and identity-status handlers with the shared internal
+`functions/src/services/examRuntimeOwnership.ts` planner and guards. Session
+writers initialize ownership version 2; transaction-bound consumed-nonce,
+hashed proof and generation checks enforce acquisition, rotating recovery,
+90-second renewal/release, terminal closure and exact closing-owner submit replay.
+Existing Admin force-submit uses an explicit private internal capability.
+Backend entry accepts only v2 commands; v1 browser callers temporarily fail closed.
+Frontend/bootstrap/fragment transport, telemetry cleanup, mounted coordination
+and absolute Student returns remain substeps 4–6, so no working browser flow or
+release acceptance is claimed. Environment values/validators, public Hosting
+configuration, routes/exports, indexes/rules/schedules and cloud resources are
+unchanged. No legacy backfill; BWM-053 qualification and production NO_GO remain.
+
+
+BWM-044 substep-4 launch adoption (2026-10-18) supersedes the earlier query/v1
+producer descriptions: STU-06 now returns configured Exam `/session/{id}#launch=...`.
+`apps/exam/src/bootstrap.ts` and `launchBootstrap.ts` synchronously capture once
+and scrub history before dynamic main/Auth/monitoring/router imports; rejected
+legacy/mixed/malformed/duplicate input and later same-document launch navigation
+are scrubbed without exchange. `launchTransport.ts` uses the existing shared API
+client at fixed same-origin `/api/v1` for initial v2 entry, clearing launch/proof
+references on settlement. The raw launch token is absent from React state.
+Shared `credentialRedaction.ts`, frontend monitoring and the existing crash boundary
+redact credential fields, proofs/hashes and raw error URLs before storage; prior
+telemetry is scrubbed on read. This adds no telemetry backend. Existing no-referrer,
+CSP, CORS, environment keys/validators/values, routes/exports, schema/index/rules and
+schedules are unchanged. Initial entry is staged: proof persistence, lease renewal,
+protected mounted writes/logout/reload recovery remain substep 5; absolute returns
+remain substep 6. Protected runtime and clean reload fail closed until that adoption;
+no complete browser golden path, deployed policy or production readiness is claimed.
+
+
+BWM-044 substep-5 mounted adoption (2026-10-18) supersedes the earlier
+initial-entry-only checkpoint. `apps/exam/src/launchTransport.ts` now owns one
+document/session acquisition, exact UID/Student/tenant/year/run/session/nonce
+scope, bounded current/pending proofs in Exam sessionStorage, rotating recovery,
+conservative monotonic lease expiry, renewal and explicit Exam-only release and
+sign-out. Exam selects SDK browser-local persistence before initial listener
+registration; other portal defaults remain unchanged. Firebase ID tokens remain
+authentication. Shared API dispatch validates
+the actual token before initial and refreshed retries; owner headers attach only
+to fixed same-origin protected Exam paths. Tab announcements carry public
+session/generation only and cannot grant authority.
+
+Mounted rendering, writes, timers and media stop on ownership or identity loss.
+Answer-recovery IndexedDB stores only public generation fencing, never proofs or
+tokens; stale owners cannot overwrite/delete a newer generation. Recovery retains
+pending/acknowledged answers and uses the server deadline. No auto-submit on
+interruption, forced takeover, global UID revocation or Portal Auth bridge is
+introduced. No new endpoint, schema/index/rule/schedule, environment key/value,
+Hosting policy/header/rewrite or resource is added. The controller records local
+verification and its limits. Absolute Student returns remain substep 6; permanent
+adversarial and aggregate acceptance remain 7–8. BWM-045 camera policy/matching,
+BWM-049 exclusions, BWM-053 legacy rollout and production NO_GO remain.
+
+
+BWM-044 substep-6 return adoption (2026-10-18): all five existing Exam return
+actions and the mounted ownership-loss screen use one validated absolute
+`VITE_PORTAL_BASE_URL` plus fixed `/student/my-tests`. The raw configured value
+must be an origin only, distinct from the actual Exam origin; credentials,
+query/fragment, paths and URL-normalization tricks are rejected. Missing/unsafe
+configuration disables the action with recovery guidance; no Exam-origin fallback
+or browser-supplied redirect is accepted. Release requires non-loopback HTTPS;
+HTTP/loopback is limited to explicit isolated local Auth-emulator builds. Existing
+release validation also compares canonical origins and rejects loopback and
+normalized/empty-delimiter origin inputs. No new environment key, configured
+public origin, API route or data field is introduced. The existing Student SPA
+rewrite sources are corrected to `/student` and `/student/**` so direct return
+navigation reaches Student HTML; API-first order and security headers remain.
+Approved L5 preview qualification is required for this Hosting change at
+BWM-044 aggregate substep 8 before whole-task verification.
+Student Auth remains on the Portal origin: navigation carries no token, proof or
+identity. Local dual-Hosting verification and limits are recorded in the execution
+controller; deployment and the permanent full security/aggregate matrix remain
+unqualified here. BWM-044 stays IN_PROGRESS, BWM-045 PLANNED, production NO_GO.
+
+Current BWM-044 aggregate checkpoint (2026-10-19): VERIFIED 8/8 after local
+L1–L4 and explicitly approved public L5. Provider-bound one-day Portal/Exam
+previews pass all three actual HTTPS Chromium asset/deep-link/header/independent
+Auth/return cases with CSP bypass off. Selected staging API compatibility and one
+already-declared index were qualified; temporary owned L0 test-fixture changes
+were restored. Hosting live releases and unrelated Functions/indexes are unchanged.
+BWM-045 is READY for inspection only. Full backend/data/legacy/publication rollout
+remains with BWM-053 and the other release owners; production NO_GO. See the
+master execution plan, final substep-8 evidence and LOG-257.

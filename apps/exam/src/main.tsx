@@ -10,13 +10,15 @@ import "./index.css";
 import App from "./App.tsx";
 
 try {
-  ensureFirebaseClient();
-} catch (error) {
-  console.warn("[exam] Firebase client was not initialized. Check app environment variables.", error);
+  ensureFirebaseClient({localPersistence: true});
+} catch {
+  console.warn("[exam] Firebase client was not initialized. Check app environment variables.");
 }
 initializeFrontendMonitoring({ portal: "exam" });
 
-createRoot(document.getElementById('root')!).render(
+createRoot(document.getElementById('root')!, {
+  onCaughtError: () => console.error("[exam] A render error was captured."),
+}).render(
   <StrictMode>
     <AuthProvider portalKey="exam">
       <GlobalPortalStateProvider portalKey="exam">

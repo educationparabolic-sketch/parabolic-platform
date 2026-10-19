@@ -1,3 +1,5 @@
+import {randomUUID} from "node:crypto";
+import {assertRuntimeOwner, closeRuntimeOwnership, INTERNAL_SUBMISSION_AUTHORITY} from "./examRuntimeOwnership";
 import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import {createLogger} from "./logging";
 import {dataTierPartitionService} from "./dataTierPartition";
@@ -63,6 +65,7 @@ interface SubmissionQuestionTimeSnapshot {
 }
 
 interface SubmissionServiceOptions {
+  beforeFinalize?: () => Promise<void>;
   lockHoldDurationMs?: number;
   lockPollIntervalMs?: number;
   lockWaitTimeoutMs?: number;
@@ -970,26 +973,6 @@ const buildStoredSubmissionResult = (
   };
 };
 
-const isFirestorePreconditionFailure = (error: unknown): boolean => {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  const firestoreError = error as Error & {
-    code?: string | number;
-    details?: unknown;
-  };
-
-  return firestoreError.code === 9 ||
-    firestoreError.code === "failed-precondition" ||
-    firestoreError.code === "aborted" ||
-    firestoreError.code === 10 ||
-    (typeof firestoreError.message === "string" && (
-      firestoreError.message.includes("FAILED_PRECONDITION") ||
-      firestoreError.message.includes("too much contention") ||
-      firestoreError.message.includes("Transaction lock timeout")
-    ));
-};
 
 /**
  * Validation error raised for submission contract violations.
@@ -1117,7 +1100,7 @@ export class SubmissionService {
   }
 
   /**
-   * Acquires the submission lock using a single write precondition. Parallel
+   * Acquires the submission lock with transactional owner fencing. Parallel
    * attempts wait briefly for and replay the authoritative stored result.
    * @param {FirebaseFirestore.DocumentReference} sessionReference Session ref.
    * @param {SubmissionContext} context Submission request identifiers.
@@ -1132,109 +1115,37 @@ export class SubmissionService {
     sessionPath: string,
     options: SubmissionExecutionOptions,
   ): Promise<SubmissionResult | null> {
-    const sessionSnapshot = await sessionReference.get();
-    const sessionData = sessionSnapshot.data();
-
-    if (!sessionSnapshot.exists || !isPlainObject(sessionData)) {
-      throw new SubmissionValidationError(
-        "NOT_FOUND",
-        `Session "${context.sessionId}" does not exist.`,
-      );
-    }
-
-    const validatedSession = this.validateSessionIdentity(sessionData, context);
-
-    if (validatedSession.status === "submitted") {
-      return buildStoredSubmissionResult(
-        validatedSession.sessionData,
-        sessionPath,
-      );
-    }
-
-    if (validatedSession.sessionData.submissionLock === true &&
-      options.lockOwnerId &&
-      validatedSession.sessionData.submissionLockOwnerId === options.lockOwnerId) {
-      return null;
-    }
-
-    if (validatedSession.sessionData.submissionLock === true) {
-      return this.waitForSubmittedResult(
-        sessionReference,
-        context,
-        sessionPath,
-      );
-    }
-
-    if (validatedSession.status !== "active" && validatedSession.status !== "expired") {
-      throw new SubmissionValidationError(
-        "SESSION_NOT_ACTIVE",
-        "Session must be active or server-expired before submission.",
-      );
-    }
-
-    await this.firestore.runTransaction(async (transaction) => {
-      const currentSessionSnapshot = await transaction.get(sessionReference);
-      const currentSessionData = currentSessionSnapshot.data();
-      if (!currentSessionSnapshot.exists || !isPlainObject(currentSessionData)) {
-        throw new SubmissionValidationError(
-          "NOT_FOUND",
-          `Session "${context.sessionId}" does not exist.`,
-        );
+    const outcome = await this.firestore.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(sessionReference);
+      const data = snapshot.data();
+      if (!data) throw new SubmissionValidationError("NOT_FOUND", "Session unavailable.");
+      const validated = this.validateSessionIdentity(data, context);
+      await this.assertCurrentSessionAuthority(transaction, context.instituteId, data);
+      const internal = options.internalAuthority === INTERNAL_SUBMISSION_AUTHORITY;
+      const owner = internal ? null : assertRuntimeOwner(data, context, this.options.nowMillis?.() ?? Date.now(), true);
+      if (validated.status === "submitted") {
+        return {result: buildStoredSubmissionResult(data, sessionPath),
+          wait: false};
       }
-      await this.assertCurrentSessionAuthority(
-        transaction,
-        context.instituteId,
-        currentSessionData,
-      );
+      if (validated.status !== "active" &&
+        validated.status !== "expired") {
+        throw new SubmissionValidationError("SESSION_NOT_ACTIVE",
+          "Session is not active.");
+      }
+      if (data.submissionLock === true && data.submissionLockOwnerId === options.lockOwnerId) {
+        return {
+          result: null, wait: false};
+      }
+      if (data.submissionLock === true && (internal ||
+        !Number.isSafeInteger(data.submissionLockGeneration) ||
+        data.submissionLockGeneration < 1 ||
+        data.submissionLockGeneration >= (owner?.generation ?? 0))) return {result: null, wait: true};
+      transaction.update(sessionReference, {submissionLock: true, submissionLockOwnerId: options.lockOwnerId,
+        submissionLockGeneration: owner?.generation ?? FieldValue.delete(), updatedAt: FieldValue.serverTimestamp()});
+      return {result: null, wait: false};
     });
-
-    try {
-      await sessionReference.update({
-        submissionLock: true,
-        submissionLockOwnerId: options.lockOwnerId ?? FieldValue.delete(),
-        updatedAt: FieldValue.serverTimestamp(),
-      }, {
-        lastUpdateTime: sessionSnapshot.updateTime,
-      });
-
-      return null;
-    } catch (error) {
-      if (!isFirestorePreconditionFailure(error)) {
-        throw error;
-      }
-
-      const latestSnapshot = await sessionReference.get();
-      const latestData = latestSnapshot.data();
-
-      if (!latestSnapshot.exists || !isPlainObject(latestData)) {
-        throw new SubmissionValidationError(
-          "NOT_FOUND",
-          `Session "${context.sessionId}" does not exist.`,
-        );
-      }
-
-      const latestSession = this.validateSessionIdentity(latestData, context);
-
-      if (latestSession.status === "submitted") {
-        return buildStoredSubmissionResult(
-          latestSession.sessionData,
-          sessionPath,
-        );
-      }
-
-      if (latestSession.sessionData.submissionLock === true) {
-        return this.waitForSubmittedResult(
-          sessionReference,
-          context,
-          sessionPath,
-        );
-      }
-
-      throw new SubmissionValidationError(
-        "SUBMISSION_LOCKED",
-        "Submission is already in progress for this session.",
-      );
-    }
+    if (outcome.wait) return this.waitForSubmittedResult(sessionReference, context, sessionPath, options);
+    return outcome.result;
   }
 
   /**
@@ -1242,12 +1153,14 @@ export class SubmissionService {
    * @param {FirebaseFirestore.DocumentReference} sessionReference Session ref.
    * @param {SubmissionContext} context Submission request identifiers.
    * @param {string} sessionPath Fully qualified session path.
+   * @param {SubmissionExecutionOptions} options Verified internal authority or browser owner context.
    * @return {Promise<SubmissionResult>} Stored authoritative replay result.
    */
   private async waitForSubmittedResult(
     sessionReference: FirebaseFirestore.DocumentReference,
     context: SubmissionContext,
     sessionPath: string,
+    options: SubmissionExecutionOptions,
   ): Promise<SubmissionResult> {
     const pollIntervalMs = Math.max(10, this.options.lockPollIntervalMs ?? 25);
     const waitDeadlineMs = Date.now() +
@@ -1255,18 +1168,20 @@ export class SubmissionService {
 
     while (Date.now() <= waitDeadlineMs) {
       await delay(pollIntervalMs);
-      const snapshot = await sessionReference.get();
-      const sessionData = snapshot.data();
-      if (!snapshot.exists || !isPlainObject(sessionData)) {
-        throw new SubmissionValidationError(
-          "NOT_FOUND",
-          `Session "${context.sessionId}" does not exist.`,
-        );
-      }
+      const sessionData = await this.firestore.runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(sessionReference);
+        const data = snapshot.data();
+        if (!data) throw new SubmissionValidationError("NOT_FOUND", "Session unavailable.");
+        this.validateSessionIdentity(data, context);
+        await this.assertCurrentSessionAuthority(transaction, context.instituteId, data);
+        if (options.internalAuthority !== INTERNAL_SUBMISSION_AUTHORITY) {
+          assertRuntimeOwner(data, context,
+            this.options.nowMillis?.() ?? Date.now(), true);
+        }
+        return data;
+      });
       const validatedSession = this.validateSessionIdentity(sessionData, context);
-      if (validatedSession.status === "submitted") {
-        return buildStoredSubmissionResult(sessionData, sessionPath);
-      }
+      if (validatedSession.status === "submitted") return buildStoredSubmissionResult(sessionData, sessionPath);
       if (validatedSession.sessionData.submissionLock !== true) {
         throw new SubmissionValidationError(
           "SUBMISSION_LOCKED",
@@ -1314,6 +1229,7 @@ export class SubmissionService {
         transaction.update(sessionReference, {
           submissionLock: false,
           submissionLockOwnerId: FieldValue.delete(),
+          submissionLockGeneration: FieldValue.delete(),
           updatedAt: FieldValue.serverTimestamp(),
         });
       }
@@ -1339,7 +1255,7 @@ export class SubmissionService {
     const sessionId = normalizeRequiredString(context.sessionId, "sessionId");
     const studentId = normalizeRequiredString(context.studentId, "studentId");
     const requestedReason = normalizeSubmissionReason(context.reason, "reason");
-    const lockOwnerId = executionOptions.lockOwnerId === undefined ? undefined :
+    const lockOwnerId = executionOptions.lockOwnerId === undefined ? randomUUID() :
       normalizeRequiredString(executionOptions.lockOwnerId, "lockOwnerId");
 
     const sessionPath =
@@ -1362,6 +1278,7 @@ export class SubmissionService {
     const idempotentResult = await this.acquireSubmissionLock(
       sessionReference,
       {
+        runtimeOwner: context.runtimeOwner,
         instituteId,
         reason: requestedReason,
         runId,
@@ -1370,7 +1287,7 @@ export class SubmissionService {
         yearId,
       },
       sessionPath,
-      {lockOwnerId},
+      {lockOwnerId, internalAuthority: executionOptions.internalAuthority},
     );
 
     if (idempotentResult) {
@@ -1386,9 +1303,9 @@ export class SubmissionService {
       return idempotentResult;
     }
 
-    await delay(this.options.lockHoldDurationMs ?? 0);
-
     try {
+      await delay(this.options.lockHoldDurationMs ?? 0);
+      await this.options.beforeFinalize?.();
       const result = await this.firestore.runTransaction(
         async (transaction) => {
           const [academicYearSnapshot, sessionSnapshot] = await Promise.all([
@@ -1437,6 +1354,8 @@ export class SubmissionService {
             studentId,
             yearId,
           });
+          const internal = executionOptions.internalAuthority === INTERNAL_SUBMISSION_AUTHORITY;
+          if (!internal) assertRuntimeOwner(sessionData, context, this.options.nowMillis?.() ?? Date.now(), true);
           const status = validatedSession.status;
 
           if (status === "submitted") {
@@ -1452,7 +1371,8 @@ export class SubmissionService {
 
           const submissionLock = sessionData.submissionLock === true;
 
-          if (!submissionLock) {
+          if (!submissionLock || sessionData.submissionLockOwnerId !== lockOwnerId ||
+              (!internal && sessionData.submissionLockGeneration !== context.runtimeOwner?.generation)) {
             throw new SubmissionValidationError(
               "SUBMISSION_LOCKED",
               "Submission lock is unavailable for this session.",
@@ -1609,7 +1529,10 @@ export class SubmissionService {
             questionTimeMap,
           });
 
+          if (!internal) assertRuntimeOwner(sessionData, context, this.options.nowMillis?.() ?? Date.now());
           transaction.update(sessionReference, {
+            ...closeRuntimeOwnership(sessionData, this.options.nowMillis?.() ?? Date.now()),
+            submissionLockGeneration: FieldValue.delete(),
             accuracyPercent: metrics.accuracyPercent,
             calibrationVersion,
             ...(calibrationSnapshot ? {calibrationSnapshot} : {}),

@@ -1,3 +1,4 @@
+import {ownedSessionFixture, runtimeOwnerForTest} from "./helpers/runtimeOwnership";
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as gcpMetadata from "gcp-metadata";
@@ -59,12 +60,12 @@ const seedSessionDocument = async (
   const instituteId = pathSegments[1];
 
   await seedInstituteAuthority(instituteId);
-  await firestore.doc(path).set({
+  await firestore.doc(path).set(ownedSessionFixture({
     answerMap: {},
     instituteId,
     licenseSnapshot: {currentLayer: "L1"},
     mode: "Diagnostic",
-    runId: "run_build_27",
+    runId: pathSegments[pathSegments.length - 3],
     sessionId,
     startedAt: null,
     status,
@@ -72,8 +73,8 @@ const seedSessionDocument = async (
     submissionLock: false,
     submittedAt: null,
     version: 1,
-    yearId: "2026",
-  });
+    yearId: pathSegments[pathSegments.length - 5],
+  }));
 };
 
 const seedActivationSession = async (
@@ -89,7 +90,7 @@ const seedActivationSession = async (
   const instituteId = pathSegments[1];
   const questionId = "question_lifecycle_authority";
   await seedInstituteAuthority(instituteId);
-  await firestore.doc(path).set({
+  await firestore.doc(path).set(ownedSessionFixture({
     answerMap: {},
     deadlineAt: status === "active" ? Timestamp.fromMillis(endsAtMs) : null,
     instituteId,
@@ -164,7 +165,7 @@ const seedActivationSession = async (
     submittedAt: null,
     version: 1,
     yearId,
-  });
+  }));
 };
 
 test.after(async () => {
@@ -185,6 +186,7 @@ test(
 
     const startedResult = await sessionService.transitionSessionState(
       {
+        studentId: "student_build_27", runtimeOwner: runtimeOwnerForTest("student_build_27"),
         actorType: "student",
         instituteId: "inst_build_27_success",
         runId: "run_build_27_success",
@@ -198,6 +200,7 @@ test(
 
     const activeResult = await sessionService.transitionSessionState(
       {
+        studentId: "student_build_27", runtimeOwner: runtimeOwnerForTest("student_build_27"),
         actorType: "student",
         instituteId: "inst_build_27_success",
         runId: "run_build_27_success",
@@ -287,6 +290,7 @@ test(
     await assert.rejects(
       sessionService.transitionSessionState(
         {
+          studentId: "student_build_27", runtimeOwner: runtimeOwnerForTest("student_build_27"),
           actorType: "student",
           instituteId: "inst_build_27_invalid_order",
           runId: "run_build_27_invalid_order",
@@ -366,6 +370,7 @@ test(
     await assert.rejects(
       sessionService.transitionSessionState(
         {
+          studentId: "student_build_27", runtimeOwner: runtimeOwnerForTest("student_build_27"),
           actorType: "student",
           instituteId: "inst_build_27_actor_submitted",
           runId: "run_build_27_actor_submitted",
@@ -397,6 +402,7 @@ test(
       "institutes/inst_lifecycle_activate/academicYears/2026/" +
       "runs/run_lifecycle_activate/sessions/session_lifecycle_activate";
     const context = {
+      runtimeOwner: runtimeOwnerForTest("uid_lifecycle_authority"),
       instituteId: "inst_lifecycle_activate",
       runId: "run_lifecycle_activate",
       sessionId: "session_lifecycle_activate",
@@ -441,6 +447,7 @@ test(
       "institutes/inst_lifecycle_expiry/academicYears/2026/" +
       "runs/run_lifecycle_expiry/sessions/session_lifecycle_expiry";
     const context = {
+      runtimeOwner: runtimeOwnerForTest("uid_lifecycle_authority"),
       instituteId: "inst_lifecycle_expiry",
       runId: "run_lifecycle_expiry",
       sessionId: "session_lifecycle_expiry",

@@ -1,5 +1,6 @@
+import {RuntimeOwnershipError} from "../services/examRuntimeOwnership";
+import {buildErrorResponse, STANDARD_API_ERROR_STATUS, sendErrorResponse} from "../services/apiResponse";
 import * as functions from "firebase-functions";
-import {sendErrorResponse} from "../services/apiResponse";
 import {createRequestLogger} from "../services/logging";
 import {
   LicenseLayer,
@@ -149,6 +150,11 @@ export const createMiddlewareHandler = (
     rawRequest: functions.https.Request,
     response: functions.Response,
   ): Promise<void> => {
+    if (["ExamStartApi", "ExamSessionEntryApi", "ExamSessionActivateApi",
+      "AnswerBatchApi", "SubmissionApi"].includes(options.service)) {
+      response.set("Cache-Control",
+        "private, max-age=0, no-store");
+    }
     const request = rawRequest as MiddlewareRequest;
     const logger = createRequestLogger(options.service, rawRequest);
     const requestId = logger.getRequestId();
@@ -163,6 +169,11 @@ export const createMiddlewareHandler = (
         options.controller,
       );
     } catch (error) {
+      if (error instanceof RuntimeOwnershipError) {
+        response.status(STANDARD_API_ERROR_STATUS[error.code]).json(buildErrorResponse(error.code,
+          error.message, requestId, new Date().toISOString(), {reason: error.reason}));
+        return;
+      }
       if (error instanceof MiddlewareRejectionError) {
         logger.warn("Middleware rejected request.", {
           code: error.code,

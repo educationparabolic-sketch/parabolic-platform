@@ -38,6 +38,7 @@ const selectedSourceSuites = [
   "cursorPagination.test",
   "currentVendor.test",
   "customClaimSynchronization.test",
+  "examRuntimeOwnership.test",
   "examSessionActivateApi.test",
   "examSessionEntryApi.test",
   "examStartApi.test",

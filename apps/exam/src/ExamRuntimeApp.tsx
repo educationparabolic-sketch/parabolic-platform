@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Route, Routes, useLocation, useParams } from "react-router-dom";
-import { getIdToken, signInWithCustomToken } from "firebase/auth";
 import type {
   ExamAnswerBatchResult,
   ExamAnswerFlushReason,
@@ -26,12 +25,13 @@ import { useAuthProvider } from "../../../shared/services/authProvider";
 import { useGlobalPortalState } from "../../../shared/services/globalPortalState";
 import {
   adaptExamSessionActivationResult,
-  adaptExamSessionEntryResult,
   adaptExamSubmitResult,
 } from "../../../shared/services/portalResponseAdapters";
 import { getFrontendEnvironment } from "../../../shared/services/frontendEnvironment";
 import { getFirebaseAuth } from "../../../shared/services/firebaseClient";
-import { getPortalApiClient } from "../../../shared/services/portalIntegration";
+import { getLaunchMetadata } from "./launchBootstrap";
+import { getExamRuntimeOwnership } from "./launchTransport";
+import { resolveStudentReturnUrl } from "./studentReturn";
 import "./App.css";
 
 type QuestionPaletteStatus = "not_visited" | "not_answered" | "answered" | "marked" | "answered_marked";
@@ -179,6 +179,7 @@ interface SessionRecoverySnapshot {
   lastIssuedClientTimestamp: number;
   nextClientRevision: number;
   ownerId: string;
+  runtimeGeneration?: number;
   schemaVersion: 2;
   sessionId: string;
   responseStateByQuestionId: Record<string, QuestionResponseState>;
@@ -213,7 +214,15 @@ const TICK_INTERVAL_MS = 1_000;
 const EARLY_SUBMIT_DISCIPLINE_THRESHOLD = 65;
 const EARLY_SUBMIT_PHASE_ADHERENCE_THRESHOLD = 62;
 const MAX_RUSHED_SAVE_BEFORE_SLOWDOWN = 2;
-const STUDENT_PORTAL_FALLBACK_PATH = "/student/my-tests";
+function StudentPortalReturnButton({label = "Return to Student Portal"}: {label?: string}) {
+  const target = resolveStudentReturnUrl(import.meta.env.VITE_PORTAL_BASE_URL,
+    window.location.origin, import.meta.env.VITE_FIREBASE_AUTH_EMULATOR_URL);
+  return <>
+    <button type="button" className="exam-start-button" disabled={!target}
+      onClick={() => {if (target) window.location.assign(target);}}>{label}</button>
+    {!target ? <p role="status">Student Portal link is unavailable. Contact your institute to reopen My Tests.</p> : null}
+  </>;
+}
 const ANSWER_BATCH_INTERVAL_MS = 5_000;
 const ANSWER_BATCH_MAX_SIZE = 10;
 const HEARTBEAT_INTERVAL_MS = 20_000;
@@ -507,6 +516,8 @@ async function openRecoveryDb(): Promise<IDBDatabase | null> {
 async function loadRecoverySnapshot(
   sessionId: string,
   ownerId: string,
+  generation: number,
+  current: () => boolean,
 ): Promise<SessionRecoverySnapshot | null> {
   const db = await openRecoveryDb();
   if (!db) {
@@ -514,7 +525,7 @@ async function loadRecoverySnapshot(
   }
 
   return new Promise<SessionRecoverySnapshot | null>((resolve) => {
-    const transaction = db.transaction(RECOVERY_STORE_NAME, "readonly");
+    const transaction = db.transaction(RECOVERY_STORE_NAME, "readwrite");
     const store = transaction.objectStore(RECOVERY_STORE_NAME);
     const getRequest = store.get(sessionId);
 
@@ -524,7 +535,10 @@ async function loadRecoverySnapshot(
     };
     getRequest.onsuccess = () => {
       const snapshot = getRequest.result as Partial<SessionRecoverySnapshot> | undefined;
-      db.close();
+      if (!current() || (snapshot?.ownerId && snapshot.ownerId !== ownerId) ||
+          (snapshot?.runtimeGeneration ?? 0) > generation) {db.close(); resolve(null); return;}
+      store.put({...snapshot, sessionId, ownerId, runtimeGeneration: generation});
+      transaction.oncomplete = () => db.close();
       if (
         snapshot?.schemaVersion !== RECOVERY_SCHEMA_VERSION ||
         snapshot.sessionId !== sessionId ||
@@ -538,7 +552,7 @@ async function loadRecoverySnapshot(
   });
 }
 
-async function saveRecoverySnapshot(snapshot: SessionRecoverySnapshot): Promise<void> {
+async function saveRecoverySnapshot(snapshot: SessionRecoverySnapshot, current: () => boolean): Promise<void> {
   const db = await openRecoveryDb();
   if (!db) {
     return;
@@ -546,7 +560,13 @@ async function saveRecoverySnapshot(snapshot: SessionRecoverySnapshot): Promise<
 
   await new Promise<void>((resolve) => {
     const transaction = db.transaction(RECOVERY_STORE_NAME, "readwrite");
-    transaction.objectStore(RECOVERY_STORE_NAME).put(snapshot);
+    const store = transaction.objectStore(RECOVERY_STORE_NAME);
+    const read = store.get(snapshot.sessionId);
+    read.onsuccess = () => {
+      const existing = read.result as Partial<SessionRecoverySnapshot> | undefined;
+      if (current() && (!existing?.ownerId || existing.ownerId === snapshot.ownerId) &&
+          (existing?.runtimeGeneration ?? 0) <= (snapshot.runtimeGeneration ?? 0)) store.put(snapshot);
+    };
     transaction.oncomplete = () => {
       db.close();
       resolve();
@@ -562,7 +582,7 @@ async function saveRecoverySnapshot(snapshot: SessionRecoverySnapshot): Promise<
   });
 }
 
-async function clearRecoverySnapshot(sessionId: string): Promise<void> {
+async function clearRecoverySnapshot(sessionId: string, ownerId: string, generation: number, current: () => boolean): Promise<void> {
   const db = await openRecoveryDb();
   if (!db) {
     return;
@@ -570,7 +590,12 @@ async function clearRecoverySnapshot(sessionId: string): Promise<void> {
 
   await new Promise<void>((resolve) => {
     const transaction = db.transaction(RECOVERY_STORE_NAME, "readwrite");
-    transaction.objectStore(RECOVERY_STORE_NAME).delete(sessionId);
+    const store = transaction.objectStore(RECOVERY_STORE_NAME);
+    const read = store.get(sessionId);
+    read.onsuccess = () => {
+      const existing = read.result as Partial<SessionRecoverySnapshot> | undefined;
+      if (current() && existing?.ownerId === ownerId && (existing.runtimeGeneration ?? 0) <= generation) store.delete(sessionId);
+    };
     transaction.oncomplete = () => {
       db.close();
       resolve();
@@ -998,15 +1023,7 @@ function ExamAccessRedirect(props: { reason: EntryValidationResult["reason"] }) 
           {" "}
           <strong>{reason ?? "invalid_entry"}</strong>
         </p>
-        <button
-          type="button"
-          className="exam-start-button"
-          onClick={() => {
-            window.location.assign(STUDENT_PORTAL_FALLBACK_PATH);
-          }}
-        >
-          Go to Student Portal
-        </button>
+        <StudentPortalReturnButton label="Go to Student Portal" />
       </section>
     </main>
   );
@@ -1054,13 +1071,7 @@ function ExamAuthorityInterruptionPage(props: {
             ? `, and ${pendingAnswerCount} pending response update(s) remain in this browser for recovery.`
             : "."}
         </p>
-        <button
-          type="button"
-          className="exam-start-button"
-          onClick={() => window.location.assign(STUDENT_PORTAL_FALLBACK_PATH)}
-        >
-          Return to Student Portal
-        </button>
+        <StudentPortalReturnButton />
       </section>
     </main>
   );
@@ -1224,18 +1235,18 @@ function ExamSessionPage() {
   const location = useLocation();
   const { session: authSession } = useAuthProvider();
   const globalState = useGlobalPortalState();
-  const tokenFromQuery = useMemo(() => new URLSearchParams(location.search).get("token"), [location.search]);
   const modeFromQuery = useMemo(() => new URLSearchParams(location.search).get("mode"), [location.search]);
-  const [launchCredential] = useState<string | null>(() => tokenFromQuery);
+  const launchMetadata = getLaunchMetadata();
   const devMockEntryEnabled = useMemo(() => isExamDevMockEntryEnabled(), []);
-  const devMockSessionActive = devMockEntryEnabled && launchCredential?.trim() === DEV_MOCK_SESSION_TOKEN;
+  const devMockSessionActive = devMockEntryEnabled && launchMetadata.devMock;
   const [entryValidation, setEntryValidation] = useState<EntryValidationResult>(
-    () => validateSessionEntry(launchCredential, sessionId, modeFromQuery),
+    () => validateSessionEntry(launchMetadata.devMock ? DEV_MOCK_SESSION_TOKEN : null, sessionId, modeFromQuery),
   );
   const modeInstruction = MODE_INSTRUCTIONS[entryValidation.claims.mode];
   const candidateName = entryValidation.claims.sub ?? "Student Candidate";
-  const examApiClient = useMemo(() => getPortalApiClient("exam"), []);
-  const credentialExchangeStartedRef = useRef(false);
+  const runtimeOwnership = useMemo(() => getExamRuntimeOwnership(sessionId), [sessionId]);
+  const ownership = useSyncExternalStore(runtimeOwnership.subscribe, runtimeOwnership.snapshot);
+  const examApiClient = runtimeOwnership;
   const activationInFlightRef = useRef(false);
   const expirySubmitAttemptedRef = useRef(false);
   const [entryAuthority, setEntryAuthority] = useState<ExamSessionEntryResult | null>(null);
@@ -1301,7 +1312,7 @@ function ExamSessionPage() {
   const [earlySubmitOverrideAccepted, setEarlySubmitOverrideAccepted] = useState(false);
   const [sessionConflictMessage, setSessionConflictMessage] = useState<string | null>(null);
   const [serverEntryValidationStatus, setServerEntryValidationStatus] = useState<"pending" | "valid" | "invalid">(
-    entryValidation.allowed ? "pending" : "invalid",
+    launchMetadata.status !== "invalid" && sessionId ? "pending" : "invalid",
   );
   const [controlledPhaseId, setControlledPhaseId] = useState<PhaseId>("phase1");
   const [fullscreenGateError, setFullscreenGateError] = useState<string | null>(null);
@@ -1336,7 +1347,8 @@ function ExamSessionPage() {
   const phaseVisibilityEnforced = isDiagnosticMode || isHardMode;
   const questionTimingEnforced = isHardMode;
   const isSubmitted = sessionLifecycleState === "submitted";
-  const authorityInterruption: ExamAuthorityInterruption | null =
+  const currentAuthorityScope = devMockSessionActive || runtimeOwnership.matchesToken(authSession.idToken);
+  const authorityInterruption: ExamAuthorityInterruption | null = !currentAuthorityScope ? null :
     authSession.authorityIssue === "session_revoked"
       ? "session_revoked"
       : globalState.isSuspended || authSession.authorityIssue === "institute_suspended"
@@ -1346,7 +1358,14 @@ function ExamSessionPage() {
               (globalState.license.status === "grace" || globalState.license.status === "expired"))
           ? "license_restricted"
           : null;
-  const authorityInterrupted = authorityInterruption !== null;
+  const identityInterrupted = !devMockSessionActive && entryAuthority !== null &&
+    ((authSession.status === "unauthenticated" && !getFirebaseAuth().currentUser) || (authSession.status === "authenticated" &&
+      authSession.user === getFirebaseAuth().currentUser && !runtimeOwnership.matchesToken(authSession.idToken)));
+  const ownershipInterrupted = !devMockSessionActive && (ownership.phase === "lost" || identityInterrupted || (ownership.phase === "active" && !runtimeOwnership.isCurrent()));
+  const authorityInterrupted = authorityInterruption !== null || ownershipInterrupted;
+  useEffect(() => {
+    if (identityInterrupted || (entryAuthority && authorityInterruption)) runtimeOwnership.invalidate("identity_or_authority_changed");
+  }, [authorityInterruption, identityInterrupted, runtimeOwnership, entryAuthority]);
   const instituteId = entryAuthority?.instituteId ?? entryValidation.claims.instituteId ?? "";
   const yearId = entryAuthority?.yearId ?? entryValidation.claims.yearId ?? "";
   const runId = entryAuthority?.runId ?? entryValidation.claims.runId ?? "";
@@ -1354,7 +1373,6 @@ function ExamSessionPage() {
   const effectiveSessionId = entryAuthority?.sessionId ??
     (tokenSessionId && tokenSessionId.length > 0 ? tokenSessionId : sessionId);
   const recoveryOwnerId = entryAuthority?.studentId ?? entryValidation.claims.sub ?? "";
-  const activeSessionGuardKey = `exam-active-session::${entryAuthority?.studentId ?? entryValidation.claims.sub ?? "anonymous"}::${runId}`;
   const pendingAnswers = useMemo(() => Object.values(pendingAnswerMap), [pendingAnswerMap]);
   const unansweredQuestionIdsForSubmission = useMemo(
     () =>
@@ -1418,26 +1436,8 @@ function ExamSessionPage() {
     }
   }, [applyServerLifecycleAuthority, authorityInterrupted, effectiveSessionId, entryValidation.allowed, examApiClient]);
 
-  useLayoutEffect(() => {
-    if (!tokenFromQuery) {
-      return;
-    }
-    const sanitizedUrl = new URL(window.location.href);
-    sanitizedUrl.searchParams.delete("token");
-    window.history.replaceState(
-      window.history.state,
-      "",
-      `${sanitizedUrl.pathname}${sanitizedUrl.search}${sanitizedUrl.hash}`,
-    );
-  }, [tokenFromQuery]);
-
   useEffect(() => {
-    if (credentialExchangeStartedRef.current) {
-      return;
-    }
-    credentialExchangeStartedRef.current = true;
-
-    if (!launchCredential && !sessionId) {
+    if (launchMetadata.status === "invalid" || launchMetadata.sessionId !== sessionId || window.self !== window.top) {
       setServerEntryValidationStatus("invalid");
       return;
     }
@@ -1445,7 +1445,7 @@ function ExamSessionPage() {
     if (
       import.meta.env.DEV &&
       devMockEntryEnabled &&
-      launchCredential?.trim() === DEV_MOCK_SESSION_TOKEN
+      launchMetadata.devMock
     ) {
       // TODO(EXP): remove this dev-only mock entry after exam P0/P1/P2 completion.
       void import("./devMockSessionSnapshot")
@@ -1470,29 +1470,14 @@ function ExamSessionPage() {
       return;
     }
 
-    const controller = new AbortController();
-    const endpointPath = `/exam/session/${encodeURIComponent(sessionId)}/entry`;
+    let live = true;
 
     setServerEntryValidationStatus("pending");
     const authenticateAndRequestEntry = async (): Promise<{
       authenticatedValidation: EntryValidationResult;
       responseBody: ExamSessionEntryResult;
     }> => {
-      let idToken: string;
-      let requestBody: {resume: true} | {token: string};
-      if (launchCredential) {
-        const credential = await signInWithCustomToken(getFirebaseAuth(), launchCredential);
-        idToken = await getIdToken(credential.user, true);
-        requestBody = {token: launchCredential};
-      } else {
-        const auth = getFirebaseAuth();
-        await auth.authStateReady();
-        if (!auth.currentUser) {
-          throw new Error("No authenticated exam session is available for recovery.");
-        }
-        idToken = await getIdToken(auth.currentUser, true);
-        requestBody = {resume: true};
-      }
+      const {idToken, responseBody} = await runtimeOwnership.start();
       const authenticatedValidation = validateSessionEntry(
         idToken,
         sessionId,
@@ -1501,20 +1486,12 @@ function ExamSessionPage() {
       if (!authenticatedValidation.allowed) {
         throw new Error("Firebase ID token is not bound to this exam session.");
       }
-      const responseBody = adaptExamSessionEntryResult(
-        await examApiClient.post<unknown, typeof requestBody>(
-          endpointPath,
-          {
-            body: requestBody,
-            signal: controller.signal,
-          },
-        ),
-      );
       return {authenticatedValidation, responseBody};
     };
 
     void authenticateAndRequestEntry()
       .then(({authenticatedValidation, responseBody}) => {
+        if (!live || !runtimeOwnership.isCurrent()) return;
         const serverAllowed =
           responseBody.allowed === true &&
           responseBody.sessionId === sessionId &&
@@ -1570,6 +1547,7 @@ function ExamSessionPage() {
         setServerEntryValidationStatus(serverAllowed ? "valid" : "invalid");
       })
       .catch((error) => {
+        if (!live) return;
         if (error instanceof DOMException && error.name === "AbortError") {
           return;
         }
@@ -1577,18 +1555,20 @@ function ExamSessionPage() {
         setServerEntryValidationStatus("invalid");
       });
 
-    return () => controller.abort();
+    return () => {live = false;};
   }, [
     devMockEntryEnabled,
-    entryValidation.allowed,
-    examApiClient,
-    launchCredential,
+    runtimeOwnership,
+    launchMetadata.status,
+    launchMetadata.sessionId,
+    launchMetadata.devMock,
     modeFromQuery,
     applyServerLifecycleAuthority,
     sessionId,
   ]);
 
   useEffect(() => {
+    if (authorityInterrupted) return;
     if (!instructionConfirmed || isSubmitted || authorityInterrupted) {
       return;
     }
@@ -1623,6 +1603,7 @@ function ExamSessionPage() {
   }, [authorityInterrupted, instructionConfirmed, isSubmitted, isHardMode, selectedQuestionId]);
 
   useEffect(() => {
+    if (authorityInterrupted) return;
     if (!instructionConfirmed || isSubmitted || authorityInterrupted || !deadlineEpochMs) {
       return;
     }
@@ -1638,6 +1619,7 @@ function ExamSessionPage() {
   }, [authorityInterrupted, deadlineEpochMs, instructionConfirmed, isSubmitted, sessionSnapshot.timingProfile.syncEveryMs]);
 
   useEffect(() => {
+    if (authorityInterrupted) return;
     if (
       !instructionConfirmed ||
       isSubmitted ||
@@ -1679,7 +1661,7 @@ function ExamSessionPage() {
   }, []);
 
   const queueAnswerWrite = useCallback((questionId: string, nextResponseState: QuestionResponseState): void => {
-    if (!entryValidation.allowed || authorityInterrupted) {
+    if ((!devMockSessionActive && !runtimeOwnership.isCurrent()) || !entryValidation.allowed || authorityInterrupted) {
       return;
     }
 
@@ -1709,7 +1691,7 @@ function ExamSessionPage() {
     replacePendingAnswerMap(nextPendingMap);
     setSyncState((current) => navigator.onLine ? current === "syncing" ? current : "idle" : "offline");
     setSyncMessage(`Pending answer updates: ${Object.keys(nextPendingMap).length}`);
-  }, [authorityInterrupted, entryValidation.allowed, questionTimingById, replacePendingAnswerMap, sessionSnapshot.questions]);
+  }, [authorityInterrupted, devMockSessionActive, runtimeOwnership, entryValidation.allowed, questionTimingById, replacePendingAnswerMap, sessionSnapshot.questions]);
 
   const updateQuestionResponseState = useCallback((
     questionId: string,
@@ -1888,6 +1870,7 @@ function ExamSessionPage() {
   }, [executeAnswerFlush]);
 
   useEffect(() => {
+    if (authorityInterrupted) return;
     if (!instructionConfirmed || isSubmitted || authorityInterrupted) {
       return;
     }
@@ -1913,6 +1896,7 @@ function ExamSessionPage() {
   }, [authorityInterrupted, flushAnswerBatch, instructionConfirmed, isSubmitted, pendingAnswers.length]);
 
   useEffect(() => {
+    if (authorityInterrupted) return;
     if (!instructionConfirmed || isSubmitted || authorityInterrupted) {
       return;
     }
@@ -1926,22 +1910,13 @@ function ExamSessionPage() {
   }, [authorityInterrupted, flushAnswerBatch, instructionConfirmed, isSubmitted]);
 
   useEffect(() => {
-    if (sessionLifecycleState === "active") {
-      window.sessionStorage.setItem(activeSessionGuardKey, effectiveSessionId);
+    if (!instructionConfirmed || !entryValidation.allowed || recoveryApplied || isSubmitted || authorityInterrupted) {
       return;
     }
 
-    if (sessionLifecycleState === "submitted" || sessionLifecycleState === "terminated") {
-      window.sessionStorage.removeItem(activeSessionGuardKey);
-    }
-  }, [activeSessionGuardKey, effectiveSessionId, sessionLifecycleState]);
-
-  useEffect(() => {
-    if (!instructionConfirmed || !entryValidation.allowed || recoveryApplied || isSubmitted) {
-      return;
-    }
-
-    void loadRecoverySnapshot(effectiveSessionId, recoveryOwnerId).then((snapshot) => {
+    let live = true;
+    void loadRecoverySnapshot(effectiveSessionId, recoveryOwnerId, ownership.generation, runtimeOwnership.isCurrent).then((snapshot) => {
+      if (!live || !runtimeOwnership.isCurrent()) return;
       if (!snapshot) {
         setRecoveryApplied(true);
         return;
@@ -1952,8 +1927,6 @@ function ExamSessionPage() {
       setVisitedQuestionIds(new Set(snapshot.visitedQuestionIds));
       setHardModeLockedQuestionIds(new Set(snapshot.hardModeLockedQuestionIds));
       setSelectedQuestionId(snapshot.selectedQuestionId);
-      setRemainingMs(snapshot.remainingMs);
-      setDeadlineEpochMs(snapshot.deadlineEpochMs);
       replacePendingAnswerMap(snapshot.pendingAnswerMap);
       recordLastAnswerWriteAt(snapshot.lastAnswerWriteAtMs);
       nextClientRevisionRef.current = Math.max(1, snapshot.nextClientRevision);
@@ -1964,7 +1937,11 @@ function ExamSessionPage() {
       setSyncState(navigator.onLine ? "idle" : "offline");
       setRecoveryApplied(true);
     });
+    return () => {live = false;};
   }, [
+    authorityInterrupted,
+    ownership.generation,
+    runtimeOwnership,
     effectiveSessionId,
     entryValidation.allowed,
     instructionConfirmed,
@@ -1976,7 +1953,7 @@ function ExamSessionPage() {
   ]);
 
   useEffect(() => {
-    if (!instructionConfirmed || isSubmitted || !recoveryApplied || !recoveryOwnerId) {
+    if (!instructionConfirmed || isSubmitted || !recoveryApplied || !recoveryOwnerId || authorityInterrupted) {
       return;
     }
 
@@ -1993,15 +1970,18 @@ function ExamSessionPage() {
       remainingMs,
       responseStateByQuestionId,
       savedAtIso: new Date().toISOString(),
+      runtimeGeneration: ownership.generation,
       schemaVersion: RECOVERY_SCHEMA_VERSION,
       selectedQuestionId,
       sessionId: effectiveSessionId,
       syncCounter,
       visitedQuestionIds: Array.from(visitedQuestionIds),
     };
-    void saveRecoverySnapshot(snapshot);
+    void saveRecoverySnapshot(snapshot, runtimeOwnership.isCurrent);
   }, [
-    authorityInterruption,
+    authorityInterrupted,
+    ownership.generation,
+    runtimeOwnership,
     deadlineEpochMs,
     effectiveSessionId,
     hardModeLockedQuestionIds,
@@ -2028,6 +2008,7 @@ function ExamSessionPage() {
   }, [authorityInterrupted, cameraStream]);
 
   useEffect(() => {
+    if (authorityInterrupted) return;
     if (!instructionConfirmed || isSubmitted || authorityInterrupted) {
       return;
     }
@@ -2055,8 +2036,8 @@ function ExamSessionPage() {
     }
 
     setSessionLifecycleState("submitted");
-    void clearRecoverySnapshot(effectiveSessionId);
-  }, [effectiveSessionId, isSubmitted]);
+    void clearRecoverySnapshot(effectiveSessionId, recoveryOwnerId, ownership.generation, runtimeOwnership.isCurrent);
+  }, [effectiveSessionId, isSubmitted, recoveryOwnerId, ownership.generation, runtimeOwnership]);
 
   const submitSession = useCallback(async (reason: SubmissionReason): Promise<void> => {
     if (!entryValidation.allowed || serverEntryValidationStatus !== "valid" || authorityInterrupted) {
@@ -2195,6 +2176,7 @@ function ExamSessionPage() {
     }
   }, [currentExamPhase, entryStage, getIntegritySeverity, instructionConfirmed]);
   const requestExamFullscreen = useCallback(async (): Promise<boolean> => {
+    if (authorityInterrupted) return false;
     if (!browserIntegrityGuardEnabled) {
       return true;
     }
@@ -2204,6 +2186,7 @@ function ExamSessionPage() {
 
     try {
       await document.documentElement.requestFullscreen();
+      if (!devMockSessionActive && !runtimeOwnership.isCurrent()) {void document.exitFullscreen().catch(() => undefined); return false;}
       fullscreenExitActiveRef.current = false;
       setIntegrityBlockingReason(null);
       recordBrowserIntegrityEvent("FULLSCREEN_ENTERED", "Fullscreen entered for secure exam entry.", "info");
@@ -2212,7 +2195,7 @@ function ExamSessionPage() {
       recordBrowserIntegrityEvent("FULLSCREEN_REQUEST_FAILED", "Browser rejected fullscreen entry from exam start.", "warning");
       return false;
     }
-  }, [browserIntegrityGuardEnabled, recordBrowserIntegrityEvent]);
+  }, [authorityInterrupted, devMockSessionActive, runtimeOwnership, browserIntegrityGuardEnabled, recordBrowserIntegrityEvent]);
   const startInternetCheck = useCallback(() => {
     if (!navigator.onLine) {
       setInternetCheckState("failed");
@@ -2238,12 +2221,13 @@ function ExamSessionPage() {
         },
         audio: false,
       });
+      if (!devMockSessionActive && !runtimeOwnership.isCurrent()) {stream.getTracks().forEach((track) => track.stop()); return;}
       setCameraStream(stream);
       setCameraCheckState("passed");
     } catch {
       setCameraCheckState("failed");
     }
-  }, [faceIdentityGazeGuardEnabled]);
+  }, [faceIdentityGazeGuardEnabled, devMockSessionActive, runtimeOwnership]);
   const runFaceVerificationCheck = useCallback(() => {
     if (!faceIdentityGazeGuardEnabled) {
       setFaceVerificationState("skipped");
@@ -2284,13 +2268,6 @@ function ExamSessionPage() {
     if (authorityInterrupted) {
       return false;
     }
-    const activeSessionId = window.sessionStorage.getItem(activeSessionGuardKey);
-    if (activeSessionId && activeSessionId !== effectiveSessionId) {
-      setSessionConflictMessage(
-        "Another active session is already registered for this run in this browser profile. Resume that session or submit it before starting a new one.",
-      );
-      return false;
-    }
     try {
       const authority = await requestServerActivation();
       if (!authority || authority.status !== "active") {
@@ -2316,9 +2293,7 @@ function ExamSessionPage() {
     setEntryStage("exam_active");
     return true;
   }, [
-    activeSessionGuardKey,
     authorityInterrupted,
-    effectiveSessionId,
     recordLastAnswerWriteAt,
     replacePendingAnswerMap,
     requestServerActivation,
@@ -2479,6 +2454,7 @@ function ExamSessionPage() {
   ]);
 
   useEffect(() => {
+    if (authorityInterrupted) return;
     if (!isHardMode || !selectedQuestion || isSubmitted) {
       return;
     }
@@ -2502,7 +2478,7 @@ function ExamSessionPage() {
       }, 0);
       return () => window.clearTimeout(navigateTimeout);
     }
-  }, [isHardMode, isSubmitted, questionTimingById, selectedQuestion, selectedQuestionIndex, sessionSnapshot.questions]);
+  }, [authorityInterrupted, isHardMode, isSubmitted, questionTimingById, selectedQuestion, selectedQuestionIndex, sessionSnapshot.questions]);
 
   const answeredCount = palette.filter((tile) => tile.status === "answered" || tile.status === "answered_marked").length;
   const notAnsweredCount = palette.filter((tile) => tile.status === "not_answered").length;
@@ -2585,6 +2561,7 @@ function ExamSessionPage() {
   }, [cameraStream, gazeCalibrationOverlayOpen]);
 
   useEffect(() => {
+    if (authorityInterrupted) return;
     if (!gazeCalibrationOverlayOpen) {
       return;
     }
@@ -2602,7 +2579,7 @@ function ExamSessionPage() {
       window.clearTimeout(settleTimer);
       window.removeEventListener("keydown", handleCalibrationKeyDown);
     };
-  }, [gazeCalibrationIndex, gazeCalibrationOverlayOpen]);
+  }, [authorityInterrupted, gazeCalibrationIndex, gazeCalibrationOverlayOpen]);
 
   useEffect(() => {
     return () => {
@@ -2611,7 +2588,8 @@ function ExamSessionPage() {
   }, [cameraStream]);
 
   useEffect(() => {
-    if (instructionConfirmed || isSubmitted) {
+    if (authorityInterrupted) return;
+    if (instructionConfirmed || isSubmitted || authorityInterrupted) {
       return;
     }
 
@@ -2620,10 +2598,10 @@ function ExamSessionPage() {
     }, TICK_INTERVAL_MS);
 
     return () => window.clearInterval(preExamClockInterval);
-  }, [instructionConfirmed, isSubmitted]);
+  }, [authorityInterrupted, instructionConfirmed, isSubmitted]);
 
   useEffect(() => {
-    if (instructionConfirmed || isSubmitted) {
+    if (instructionConfirmed || isSubmitted || authorityInterrupted) {
       return;
     }
 
@@ -2657,6 +2635,7 @@ function ExamSessionPage() {
 
     void beginExamSession();
   }, [
+    authorityInterrupted,
     beginExamSession,
     browserIntegrityGuardEnabled,
     declarationAccepted,
@@ -2671,7 +2650,8 @@ function ExamSessionPage() {
   ]);
 
   useEffect(() => {
-    if (!browserIntegrityGuardEnabled) {
+    if (authorityInterrupted) return;
+    if (!browserIntegrityGuardEnabled || authorityInterrupted) {
       return;
     }
     if ((!instructionConfirmed && entryStage !== "instructions_waiting") || isSubmitted) {
@@ -2777,7 +2757,7 @@ function ExamSessionPage() {
       window.removeEventListener("offline", handleOffline);
       window.removeEventListener("online", handleOnline);
     };
-  }, [browserIntegrityGuardEnabled, entryStage, instructionConfirmed, isSubmitted, recordBrowserIntegrityEvent]);
+  }, [authorityInterrupted, browserIntegrityGuardEnabled, entryStage, instructionConfirmed, isSubmitted, recordBrowserIntegrityEvent]);
 
   const timerMinutes = Math.floor(remainingMs / 1000 / 60);
   const finalWindowThresholdMinutes = sessionSnapshot.timingProfile.finalWindowMinutes;
@@ -3101,6 +3081,18 @@ function ExamSessionPage() {
     });
   };
 
+  if (ownershipInterrupted) {
+    return <main className="exam-access-shell" aria-live="polite"><section className="exam-access-card">
+      <h1>Exam runtime paused</h1>
+      <p>Ownership or sign-in changed. Pending answers are retained. Another runtime may be active; no remote browser has been closed.</p>
+      <p>Reload to request recovery, or relaunch from Student My Tests after release or lease expiry.</p>
+      <StudentPortalReturnButton />
+    </section></main>;
+  }
+  if (serverEntryValidationStatus === "pending" || (!devMockSessionActive && authSession.status === "loading")) {
+    return <ExamServerEntryValidationLoading />;
+  }
+
   if (!entryValidation.allowed) {
     return <ExamAccessRedirect reason={entryValidation.reason} />;
   }
@@ -3114,10 +3106,6 @@ function ExamSessionPage() {
     );
   }
 
-  if (serverEntryValidationStatus === "pending") {
-    return <ExamServerEntryValidationLoading />;
-  }
-
   if (serverEntryValidationStatus === "invalid") {
     return <ExamAccessRedirect reason="server_validation_failed" />;
   }
@@ -3125,6 +3113,7 @@ function ExamSessionPage() {
   if (entryStage === "entry_not_open") {
     return (
       <main className="exam-instruction-shell">
+        {!devMockSessionActive && runtimeOwnership.isCurrent() ? <button type="button" className="exam-secondary-button" onClick={() => {void runtimeOwnership.signOut().catch(() => runtimeOwnership.invalidate("sign_out_interrupted"));}}>Sign out of Exam</button> : null}
         <section className="exam-instruction-card">
           <p className="exam-instruction-eyebrow">Exam Entry Lobby</p>
           <h1>Entry Window Not Open</h1>
@@ -3147,6 +3136,7 @@ function ExamSessionPage() {
   if (entryStage === "entry_closed") {
     return (
       <main className="exam-instruction-shell">
+        {!devMockSessionActive && runtimeOwnership.isCurrent() ? <button type="button" className="exam-secondary-button" onClick={() => {void runtimeOwnership.signOut().catch(() => runtimeOwnership.invalidate("sign_out_interrupted"));}}>Sign out of Exam</button> : null}
         <section className="exam-instruction-card">
           <p className="exam-instruction-eyebrow">Exam Entry Closed</p>
           <h1>Entry Window Closed</h1>
@@ -3156,13 +3146,7 @@ function ExamSessionPage() {
             <strong>{toTimeLabel(sessionSchedule.sessionStartsAtMs, sessionSchedule.timezone)}</strong>
             . New entry is not allowed after the official start time.
           </p>
-          <button
-            type="button"
-            className="exam-start-button"
-            onClick={() => window.location.assign(STUDENT_PORTAL_FALLBACK_PATH)}
-          >
-            Return to Student Portal
-          </button>
+          <StudentPortalReturnButton />
         </section>
       </main>
     );
@@ -3171,6 +3155,7 @@ function ExamSessionPage() {
   if (entryStage === "pre_exam_lobby") {
     return (
       <main className="exam-instruction-shell">
+        {!devMockSessionActive && runtimeOwnership.isCurrent() ? <button type="button" className="exam-secondary-button" onClick={() => {void runtimeOwnership.signOut().catch(() => runtimeOwnership.invalidate("sign_out_interrupted"));}}>Sign out of Exam</button> : null}
         <section className="exam-instruction-card exam-lobby-card" aria-labelledby="exam-lobby-title">
           <header className={`exam-lobby-hero ${lobbyModeClassName}`}>
             <div className="exam-lobby-hero-copy">
@@ -3454,6 +3439,7 @@ function ExamSessionPage() {
   if (!instructionConfirmed) {
     return (
       <main className="exam-instruction-shell">
+        {!devMockSessionActive && runtimeOwnership.isCurrent() ? <button type="button" className="exam-secondary-button" onClick={() => {void runtimeOwnership.signOut().catch(() => runtimeOwnership.invalidate("sign_out_interrupted"));}}>Sign out of Exam</button> : null}
         <section className="exam-instruction-card exam-instruction-card-redesigned" aria-labelledby="exam-instruction-title">
           <header className={`exam-instruction-hero ${lobbyModeClassName}`}>
             <div className="exam-instruction-hero-copy">
@@ -3804,13 +3790,7 @@ function ExamSessionPage() {
             {" "}
             <strong>{submitError ?? "Auto-submit failed after expiry."}</strong>
           </p>
-          <button
-            type="button"
-            className="exam-start-button"
-            onClick={() => window.location.assign(STUDENT_PORTAL_FALLBACK_PATH)}
-          >
-            Return to Student Portal
-          </button>
+          <StudentPortalReturnButton />
         </section>
       </main>
     );
@@ -3849,13 +3829,7 @@ function ExamSessionPage() {
               </p>
             </div>
           ) : null}
-          <button
-            type="button"
-            className="exam-start-button"
-            onClick={() => window.location.assign(STUDENT_PORTAL_FALLBACK_PATH)}
-          >
-            Return to Student Portal
-          </button>
+          <StudentPortalReturnButton />
         </section>
       </main>
     );
@@ -3863,6 +3837,7 @@ function ExamSessionPage() {
 
   return (
     <main className={hardModeMinimalUI ? "exam-runner-shell exam-runner-shell-hard-mode" : "exam-runner-shell"}>
+        {!devMockSessionActive && runtimeOwnership.isCurrent() ? <button type="button" className="exam-secondary-button" onClick={() => {void runtimeOwnership.signOut().catch(() => runtimeOwnership.invalidate("sign_out_interrupted"));}}>Sign out of Exam</button> : null}
       <div className="exam-top-bar">
         <header className="exam-header" aria-label="Exam header bar">
           <div className="exam-header-group exam-header-identity exam-header-identity-compact">

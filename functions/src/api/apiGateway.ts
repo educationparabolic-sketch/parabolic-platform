@@ -107,6 +107,7 @@ export const handleApiV1Request = (
 ): Promise<void> | void => {
   // Privacy applies even when method/path rejection occurs before domain dispatch.
   const privateIdentityPath = [
+    /^\/api\/v1\/exam\/(?:session|start)(?:\/|$)/u,
     /^\/api\/v1\/student\/(?:dashboard|tests|performance|insights)(?:\/|$)/u,
     /^\/api\/v1\/student\/profile(?:\/|$)/u,
     /^\/api\/v1\/student\/tests\/[^/]+\/solutions(?:\/|$)/u,

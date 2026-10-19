@@ -1,3 +1,4 @@
+import { redactTelemetry } from "./credentialRedaction";
 import { getFirebaseAuth } from "./firebaseClient";
 import type {
   FrontendApiFailureEventInput,
@@ -40,13 +41,16 @@ function readFromStorage(): FrontendTelemetryEvent[] {
       return inMemoryEvents;
     }
 
-    return parsed;
+    const safe = redactTelemetry(parsed);
+    window.localStorage.setItem(TELEMETRY_STORAGE_KEY, JSON.stringify(safe));
+    return safe;
   } catch {
     return inMemoryEvents;
   }
 }
 
 function writeToStorage(events: FrontendTelemetryEvent[]): void {
+  events = redactTelemetry(events);
   inMemoryEvents = events;
 
   if (!canUseDomApis()) {
@@ -129,7 +133,7 @@ function appendTelemetryEvent(
     timestamp,
     sessionIdentifier,
     actorId,
-    ...payload,
+    ...redactTelemetry(payload),
   };
 
   if (isCriticalMonitoringEvent(eventType)) {

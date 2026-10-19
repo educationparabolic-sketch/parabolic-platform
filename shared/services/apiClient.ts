@@ -254,6 +254,7 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
           ...(options.headers ?? {}),
         });
 
+        options.validateAuthToken?.(token);
         if (token) {
           requestHeaders.set("Authorization", `Bearer ${token}`);
         }
@@ -288,6 +289,7 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
           }
           if (token) {
             assertAuthScope();
+            options.validateAuthToken?.(token);
             requestHeaders.set("Authorization", `Bearer ${token}`);
             response = await fetch(requestUrl, {
               method,

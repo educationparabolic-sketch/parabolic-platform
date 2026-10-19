@@ -210,7 +210,7 @@ erase an executable caller. Every frontend call must match a manifest key, and
 | STU-11 | `GET /api/v1/student/profile/identity-photo/{photoId}/media` | `implemented` | `studentProfile` | Secured own active Student/current photo; fresh consent/expiry/object-integrity authorization; no URL |
 | STU-12 | `GET /api/v1/student/profile/identity-photo/{photoId}/status` | `implemented` | `studentProfile` | Secured exact own media-free deletion status; narrow privacy exception |
 | EXM-06 | `GET /api/v1/exam/session/{sessionId}/identity-status` | `implemented` | `examSessionIdentityStatus` | Secured current Student/session-bound persisted authority; minimal status, automated matching unavailable |
-| EXM-01 | `POST /api/v1/exam/session/{sessionId}/entry` | `implemented` | `examSessionEntry` | Firebase ID; student; exact session claims; one-time raw launch consumption or authenticated same-owner recovery; strict candidate-safe runtime snapshot |
+| EXM-01 | `POST /api/v1/exam/session/{sessionId}/entry` | `implemented` | `examSessionEntry` | Firebase ID; student; exact session claims; v2 launch/recover/renew/release; transactional consumed binding plus hashed proof/generation/lease; candidate-safe snapshot only on acquisition |
 | EXM-02 | `POST /api/v1/exam/session/{sessionId}/answers` | `implemented` | `examSessionAnswers` | Firebase ID; student; exact session claims; active pre-deadline session; sequenced revision acknowledgements; strict runtime-question response and absolute cumulative timing validation |
 | EXM-03 | `POST /api/v1/exam/session/{sessionId}/token/refresh` | `intentionally_retired` | None | Firebase Auth SDK refreshes the per-origin ID token; no custom refresh API is served |
 | EXM-04 | `POST /api/v1/exam/session/{sessionId}/submit` | `implemented` | `examSessionSubmit` | Firebase ID; student; exact session claims; active manual or reached-deadline expiry authority; atomic idempotent finalization and replay |
@@ -1077,9 +1077,13 @@ STU-01 and STU-02 use the strict shared `StudentDashboardResult` and `StudentTes
 
 BWM-024 result propagation is explicitly eventually consistent. The submitted transition sets `resultPropagation.state` to `processing` with `retryAfterSeconds: 2` on the owning run and Student summaries; the complete post-submission pipeline changes the same newest-session authority to `available` with `retryAfterSeconds: 0`. Deterministic per-session processing-marker documents make pipeline and engine retries idempotent, including older events replayed after newer events. ADM-01 and ADM-02 consume propagated `runAnalytics` and `studentYearMetrics` summaries, deduplicate run records by run ID, and prefer analytics projections over lifecycle-only run records. Student and Admin consumers do not require fixture data, manual mutation, or raw-session scans.
 
-STU-06 uses the shared `StudentExamLaunchRequest` and `StudentExamLaunchResult` boundary. The browser sends only explicit `start|resume` intent plus the assigned run ID; institute, Student, UID, current academic year, and license authority come from verified identity and current Firestore records. A deterministic institute/year/run/Student session ID and Firestore transaction make simultaneous starts converge on one session: the first returns `created`, an exact retry returns `replayed`, and resume returns `resumed` for the same eligible `created|started|active` session. Every response includes that session ID/status, a distinct short-lived Firebase custom-token launch credential carrying a per-issuance nonce, and an absolute Exam URL whose path/token match the result. The session stores only a bounded set of credential hashes. Completed results return through the BWM-024 summary propagation boundary described above.
+STU-06 uses the shared `StudentExamLaunchRequest` and `StudentExamLaunchResult` boundary. The browser sends only explicit `start|resume` intent plus the assigned run ID; institute, Student, UID, current academic year, and license authority come from verified identity and current Firestore records. A deterministic institute/year/run/Student session ID and Firestore transaction make simultaneous starts converge on one session: the first returns `created`, an exact retry returns `replayed`, and resume returns `resumed` for the same eligible `created|started|active` session. Every response includes that session ID/status, a distinct short-lived Firebase custom-token launch credential carrying a per-issuance nonce, and an absolute Exam URL whose canonical session path and `#launch=` fragment match the result; no query credential. The session stores only a bounded set of credential hashes. Completed results return through the BWM-024 summary propagation boundary described above.
 
-EXM-01 is the launch-exchange, authenticated recovery, and authoritative runtime boundary. On first entry, the Exam app parses the Firebase custom token's nested `claims`, removes `token` from the current URL with `history.replaceState`, exchanges it with `signInWithCustomToken`, obtains a refreshed Firebase ID token, and sends `{ token: launchCredential }` through the shared authenticated client. The handler verifies the ID token with revocation checking, requires Student role plus complete institute/year/run/session/Student/nonce claims, matches the route and persisted Student UID/license snapshot, transactionally moves the credential hash from the bounded valid set to the bounded consumed set, and advances `created -> started`. After the raw credential is gone, a reload waits for Firebase Auth persistence and sends `{ resume: true }`; the handler derives every identifier from that verified session-bound identity and returns the same owned `started|active|expired` session without reopening credential consumption or accepting browser-supplied tenancy. Its strict `ExamSessionEntryResult` returns only entry/identity/status fields, `startedAt`/`deadlineAt`/`serverTime`, plus the immutable server-owned `runtimeSnapshot`: ordered candidate-visible questions/options/assets and version, subjects, mode, schedule, phase, timing, license, difficulty, and proctoring authority. Snapshot question IDs exactly match the persisted `questionTimeMap`; correct answers, correctness flags, solutions, solution assets, internal notes, and analytics are excluded. Expired, already-consumed, unissued, wrong-session, and wrong-owner first-entry attempts fail closed. EXM-05 is the secured idempotent `started -> active` boundary: it derives every identifier from the verified session token, persists server-owned `startedAt` and the runtime schedule's immutable end as `deadlineAt`, returns `serverTime` for browser skew compensation, replays active/expired authority, and persists expiry when the deadline is reached. EXM-02 writes only while the persisted session is active and before that deadline; EXM-04 finalizes an active manual submission or a server-confirmed reached-deadline expiry. EXM-03 is retired because Firebase Auth owns ID-token refresh; no browser caller, handler, export, or custom refresh credential remains.
+EXM-01 is the ownership-v2 launch/recovery boundary defined in `EXAM_RUNTIME_OWNERSHIP_CONTRACT.md` and `shared/contracts/examRuntimeOwnership.d.ts`. STU-06 delivers the custom-token credential only in `#launch=`. The first dependency-free Exam bootstrap captures it in a one-shot closure and synchronously scrubs history before Auth, monitoring or router initialization; malformed/legacy query input is scrubbed and rejected. Firebase exchanges the credential and supplies the API ID token. The raw launch credential is sent only in `{ operation: "launch", commandId, token, nextOwnerProof }` and is cleared on settlement; it is never bearer authentication or retained component state.
+
+The handler revocation-checks current Student/tenant/license authority and complete UID/institute/year/run/session/Student/nonce binding, consumes the issued credential atomically, advances `created -> started` and installs one hashed owner proof with a safe generation and 90-second lease. A fresh nonce cannot force a live takeover. Every new document, including a cloned tab or reload, sends `{ operation: "recover", commandId, nextOwnerProof, previous }` with the current owner header. `previous` selects exactly one known generation or unresolved acquisition command ID; successful recovery rotates the proof/generation before content or writes. Pending operations are persisted before dispatch, and a never-committed pending candidate fails closed without guessing an older proof. `{ operation: "renew"|"release", commandId }` requires current owner/generation headers; renew cannot revive an expired owner, and release changes no exam lifecycle, answers or deadline. Exact uncertain-command retry returns its bounded original receipt without extending it. Old `{token}`/`{resume:true}` v1 calls and ownership-less legacy sessions fail closed; BWM-053 owns reviewed legacy disposition and coordinated rollout.
+
+EXM-01 success-envelope data contains `operation` and the typed lease receipt; only launch/recover add `entry`, whose adapted `ExamSessionEntryResult` retains the immutable candidate-safe runtime snapshot, identity/status and start/deadline/server clock. Correct answers, solutions, internal notes, analytics and owner secrets are excluded. EXM-02/04/05 and optional EXM-06 supplement Firebase ID-token authentication with consumed binding and owner/generation/lease checks serialized with protected work. Activation preserves the server-owned scheduled deadline. Answer batches preserve exact revision acknowledgements. Submission captures owner generation and lock identity and rechecks both at final commit; stale finalizers cannot finalize or unlock successors. Only the exact closing owner may replay the canonical submitted result after TTL. Existing trusted Admin/system terminal paths use private internal authority, close ownership transactionally, and expose no browser bypass. EXM-03 stays retired; Firebase SDK owns ID-token refresh. No ownership/identity interruption auto-submits or deletes peer recovery data.
 
 EXM-02 uses the shared `ExamAnswerBatchRequestBody`. Every request carries a non-empty `batchId`, positive monotonic `batchSequence`, `flushReason` (`scheduled|heartbeat|reconnect|submission`), and at most ten writes. Each write carries a positive `clientRevision`, monotonic `clientTimestamp`, discriminated `response` (`unanswered`, `mcq`, `numeric`, or `matrix`), and absolute cumulative `timeSpentSeconds`. The strict result echoes the batch identity and returns one exact `{ questionId, clientRevision, disposition }` acknowledgement for every write plus compatibility ID arrays. The client removes a queued write only when its current revision matches the acknowledged revision, serializes all flush callers, and drains every remaining chunk on reconnect or before submit. Reconnect/submission drains may bypass the ordinary five-second inter-batch policy while retaining the ten-write cap; scheduled and heartbeat writes may not. The transaction validates response shape and identifiers against the immutable runtime question, derives only a positive timing delta, ignores stale and exact replays, rejects equal-timestamp conflicts, and persists explicit clears without treating them as attempts. Numeric and matrix scoring uses the same canonical representation persisted by this boundary.
 
@@ -1157,7 +1161,7 @@ Student, and Exam browser convergence is implemented; simultaneous no-mock
 multi-origin timing acceptance remains the final BWM-036 substep. Vendor remains
 a separate global identity boundary.
 
-Exam entry is a credential-exchange boundary. The Exam app exchanges the short-lived launch credential through Firebase Auth, removes it from URL/history before runtime entry, atomically consumes it through EXM-01, and uses refreshed session-bound Firebase ID tokens for EXM-01, EXM-02, EXM-04, and EXM-05. The raw launch credential is never used as bearer authorization and cannot be replayed at entry.
+Exam entry is a fragment-delivered credential-exchange and ownership-v2 boundary. Bootstrap scrubs the credential before Auth/monitoring, Firebase exchanges it, and EXM-01 launch consumes it and acquires one hashed proof/generation lease. Protected APIs authenticate Firebase ID tokens and transactionally fence consumed identity/current owner. Reload requires proof-rotating recovery, never UID-only resume. A reusable Firebase custom-token exchange alone grants no second runtime. Exact current wire shapes and recovery/return bounds are normative in `EXAM_RUNTIME_OWNERSHIP_CONTRACT.md`.
 
 Vendor global access is explicit per handler; the shared tenant guard defaults to no Vendor bypass. The five existing mixed-role Admin handlers that intentionally accept a cross-institute Vendor target opt in explicitly, while Vendor-only global APIs remain outside the institute guard.
 
@@ -1370,3 +1374,110 @@ comprehensive acceptance/aggregate remain substeps 7/8 and production NO_GO.
 No route/export/handler/capability/schema/index/rule/schedule/backend authority or
 credential-flow change; 120/115/0/0/5 routes, 63 exports/51 handlers/eight schedules,
 98/20 backend integration inventories remain unchanged.
+
+## BWM-044 reserved Exam ownership v2 (2026-10-18)
+
+Historical substep-2 reservation; substep-3 adoption below supersedes implementation status.
+
+[EXAM_RUNTIME_OWNERSHIP_CONTRACT.md](EXAM_RUNTIME_OWNERSHIP_CONTRACT.md) is the normative
+reserved transport/ownership migration. `shared/contracts/examRuntimeOwnership.d.ts`
+defines closed EXM-01 launch/recover/renew/release requests and discriminated
+results, owner headers, lease receipts and safe failure reasons. No handler or
+active DTO adopts it yet. STU-06 field names remain; its future URL uses
+`#launch=` with pre-Auth bootstrap removal, rejecting legacy query credentials.
+EXM-01/02/04/05/06 retain Firebase ID authentication and gain supplementary
+transactional consumed-nonce/proof/generation fencing; EXM-06 uses headers. No new
+route/export is reserved: counts stay 120/115/0/0/5 and 63 exports/51 handlers.
+90-second leases, 30-second renewal, proof-rotating recovery and no live takeover
+are reserved; v1 remains current until coordinated implementation. Missing v2
+session authority must fail closed after adoption. Legacy/deployed qualification
+remains BWM-053; no runtime acceptance or deployment is claimed.
+
+
+BWM-044 substep-3 backend adoption (2026-10-18): the reservation above is now
+implemented by the existing SessionService, entry/activation/answer/submission
+and identity-status handlers with the shared internal
+`functions/src/services/examRuntimeOwnership.ts` planner and guards. Session
+writers initialize ownership version 2; transaction-bound consumed-nonce,
+hashed proof and generation checks enforce acquisition, rotating recovery,
+90-second renewal/release, terminal closure and exact closing-owner submit replay.
+Existing Admin force-submit uses an explicit private internal capability.
+Backend entry accepts only v2 commands; v1 browser callers temporarily fail closed.
+Frontend/bootstrap/fragment transport, telemetry cleanup, mounted coordination
+and absolute Student returns remain substeps 4–6, so no working browser flow or
+release acceptance is claimed. Environment values/validators, public Hosting
+configuration, routes/exports, indexes/rules/schedules and cloud resources are
+unchanged. No legacy backfill; BWM-053 qualification and production NO_GO remain.
+
+
+BWM-044 substep-4 launch adoption (2026-10-18) supersedes the earlier query/v1
+producer descriptions: STU-06 now returns configured Exam `/session/{id}#launch=...`.
+`apps/exam/src/bootstrap.ts` and `launchBootstrap.ts` synchronously capture once
+and scrub history before dynamic main/Auth/monitoring/router imports; rejected
+legacy/mixed/malformed/duplicate input and later same-document launch navigation
+are scrubbed without exchange. `launchTransport.ts` uses the existing shared API
+client at fixed same-origin `/api/v1` for initial v2 entry, clearing launch/proof
+references on settlement. The raw launch token is absent from React state.
+Shared `credentialRedaction.ts`, frontend monitoring and the existing crash boundary
+redact credential fields, proofs/hashes and raw error URLs before storage; prior
+telemetry is scrubbed on read. This adds no telemetry backend. Existing no-referrer,
+CSP, CORS, environment keys/validators/values, routes/exports, schema/index/rules and
+schedules are unchanged. Initial entry is staged: proof persistence, lease renewal,
+protected mounted writes/logout/reload recovery remain substep 5; absolute returns
+remain substep 6. Protected runtime and clean reload fail closed until that adoption;
+no complete browser golden path, deployed policy or production readiness is claimed.
+
+
+BWM-044 substep-5 mounted adoption (2026-10-18) supersedes the earlier
+initial-entry-only checkpoint. `apps/exam/src/launchTransport.ts` now owns one
+document/session acquisition, exact UID/Student/tenant/year/run/session/nonce
+scope, bounded current/pending proofs in Exam sessionStorage, rotating recovery,
+conservative monotonic lease expiry, renewal and explicit Exam-only release and
+sign-out. Exam selects SDK browser-local persistence before initial listener
+registration; other portal defaults remain unchanged. Firebase ID tokens remain
+authentication. Shared API dispatch validates
+the actual token before initial and refreshed retries; owner headers attach only
+to fixed same-origin protected Exam paths. Tab announcements carry public
+session/generation only and cannot grant authority.
+
+Mounted rendering, writes, timers and media stop on ownership or identity loss.
+Answer-recovery IndexedDB stores only public generation fencing, never proofs or
+tokens; stale owners cannot overwrite/delete a newer generation. Recovery retains
+pending/acknowledged answers and uses the server deadline. No auto-submit on
+interruption, forced takeover, global UID revocation or Portal Auth bridge is
+introduced. No new endpoint, schema/index/rule/schedule, environment key/value,
+Hosting policy/header/rewrite or resource is added. The controller records local
+verification and its limits. Absolute Student returns remain substep 6; permanent
+adversarial and aggregate acceptance remain 7–8. BWM-045 camera policy/matching,
+BWM-049 exclusions, BWM-053 legacy rollout and production NO_GO remain.
+
+
+BWM-044 substep-6 return adoption (2026-10-18): all five existing Exam return
+actions and the mounted ownership-loss screen use one validated absolute
+`VITE_PORTAL_BASE_URL` plus fixed `/student/my-tests`. The raw configured value
+must be an origin only, distinct from the actual Exam origin; credentials,
+query/fragment, paths and URL-normalization tricks are rejected. Missing/unsafe
+configuration disables the action with recovery guidance; no Exam-origin fallback
+or browser-supplied redirect is accepted. Release requires non-loopback HTTPS;
+HTTP/loopback is limited to explicit isolated local Auth-emulator builds. Existing
+release validation also compares canonical origins and rejects loopback and
+normalized/empty-delimiter origin inputs. No new environment key, configured
+public origin, API route or data field is introduced. The existing Student SPA
+rewrite sources are corrected to `/student` and `/student/**` so direct return
+navigation reaches Student HTML; API-first order and security headers remain.
+Approved L5 preview qualification is required for this Hosting change at
+BWM-044 aggregate substep 8 before whole-task verification.
+Student Auth remains on the Portal origin: navigation carries no token, proof or
+identity. Local dual-Hosting verification and limits are recorded in the execution
+controller; deployment and the permanent full security/aggregate matrix remain
+unqualified here. BWM-044 stays IN_PROGRESS, BWM-045 PLANNED, production NO_GO.
+
+Current BWM-044 aggregate checkpoint (2026-10-19): VERIFIED 8/8 after local
+L1–L4 and explicitly approved public L5. Provider-bound one-day Portal/Exam
+previews pass all three actual HTTPS Chromium asset/deep-link/header/independent
+Auth/return cases with CSP bypass off. Selected staging API compatibility and one
+already-declared index were qualified; temporary owned L0 test-fixture changes
+were restored. Hosting live releases and unrelated Functions/indexes are unchanged.
+BWM-045 is READY for inspection only. Full backend/data/legacy/publication rollout
+remains with BWM-053 and the other release owners; production NO_GO. See the
+master execution plan, final substep-8 evidence and LOG-257.

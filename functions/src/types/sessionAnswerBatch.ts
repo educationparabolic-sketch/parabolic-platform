@@ -1,3 +1,4 @@
+import type {RuntimeOwnerCredentials} from "../services/examRuntimeOwnership";
 import {ExamOperationalDataAccessPolicy} from "./dataTierPartition";
 import type {
   ExamAnswerAcknowledgement,
@@ -16,6 +17,7 @@ export type AnswerBatchErrorCode =
   "VALIDATION_ERROR";
 
 export interface PersistAnswerBatchContext {
+  runtimeOwner?: RuntimeOwnerCredentials;
   instituteId: string;
   runId: string;
   sessionId: string;

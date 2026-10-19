@@ -1,3 +1,4 @@
+import {runtimeHeaders, RuntimeOwnerCredentials} from "../services/examRuntimeOwnership";
 import * as functions from "firebase-functions";
 import {DecodedIdToken} from "firebase-admin/auth";
 import {sendErrorResponse} from "../services/apiResponse";
@@ -21,6 +22,7 @@ interface ExamSessionActivateRequestDependencies {
 
 interface ExamSessionActivateValidatedRequestData
 extends Record<string, unknown> {
+  runtimeOwner: RuntimeOwnerCredentials;
   instituteId: string;
   runId: string;
   sessionId: string;
@@ -122,6 +124,7 @@ export const createExamSessionActivateHandler = (
 
         setRequestData(request, {
           instituteId: identity.instituteId,
+          runtimeOwner: {...runtimeHeaders(request), studentUid: identity.uid, launchNonce: examSession.launchNonce},
           runId: examSession.runId,
           sessionId,
           studentId: identity.studentId,

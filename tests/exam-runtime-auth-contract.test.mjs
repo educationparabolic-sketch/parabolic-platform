@@ -11,13 +11,20 @@ test("Exam runtime exchanges and removes launch credentials before ID-token APIs
   const source = await readFile(runtimePath, "utf8");
 
   assert.match(source, /payload\.claims/u);
-  assert.match(source, /signInWithCustomToken\(getFirebaseAuth\(\), launchCredential\)/u);
-  assert.match(source, /sanitizedUrl\.searchParams\.delete\("token"\)/u);
-  assert.match(source, /window\.history\.replaceState/u);
+  const bootstrap = await readFile(new URL("../apps/exam/src/bootstrap.ts", import.meta.url), "utf8");
+  const capture = await readFile(new URL("../apps/exam/src/launchBootstrap.ts", import.meta.url), "utf8");
+  const transport = await readFile(new URL("../apps/exam/src/launchTransport.ts", import.meta.url), "utf8");
+  assert.ok(bootstrap.indexOf("initializeLaunchBootstrap(import") < bootstrap.indexOf('import("./main")'));
+  assert.match(capture, /window\.history\.replaceState/u);
+  assert.match(transport, /signInWithCustomToken\(auth, token\)/u);
+  assert.match(transport, /operation: "launch"/u);
+  assert.match(transport, /finally/u);
+  assert.match(transport, /command\.token = ""/u);
+  assert.doesNotMatch(source, /launchCredential|tokenFromQuery|useLayoutEffect/u);
   assert.doesNotMatch(source, /token\/refresh/u);
   assert.doesNotMatch(source, /Authorization: `Bearer \$\{launchCredential\}`/u);
   assert.doesNotMatch(source, /skipAuth: true/u);
-  assert.match(source, /adaptExamSessionEntryResult/u);
+  assert.match(source, /runtimeOwnership\.start\(\)/u);
   assert.match(source, /setSessionSnapshot\(responseBody\.runtimeSnapshot\)/u);
   assert.doesNotMatch(source, /function buildSessionSnapshot/u);
   assert.doesNotMatch(source, /inst-build-135|year-build-135|run-build-135/u);
@@ -106,7 +113,8 @@ test("Exam answer recovery serializes revision acknowledgements and drains befor
   assert.match(source, /shouldDrainCompletely/u);
   assert.match(source, /currentWrite\?\.clientRevision === acknowledgement\.clientRevision/u);
   assert.match(source, /snapshot\.ownerId !== ownerId/u);
-  assert.match(source, /auth\.authStateReady\(\)/u);
+  // Mounted v2 reload/lease adoption is the next bounded substep.
+  assert.doesNotMatch(source, /resume:\s*true/u);
   assert.match(answerHandler, /acknowledgements: result\.acknowledgements/u);
   assert.match(entryHandler, /resumeSessionEntry/u);
 });

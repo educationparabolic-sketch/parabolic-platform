@@ -18508,3 +18508,123 @@ unchanged. Substep-8 browser privacy/failure acceptance is qualified locally;
 substep 9 records aggregate closeout. Production remains NO_GO.
 Current counts are unchanged: 120/115/0/0/5 routes, 63 HTTP exports, 51 handlers,
 eight schedules, backend integration source inventory 96/19.
+
+## BWM-044 reserved session owner fencing (2026-10-18)
+
+Historical substep-2 reservation; substep-3 adoption below supersedes implementation status.
+
+See [EXAM_RUNTIME_OWNERSHIP_CONTRACT.md](EXAM_RUNTIME_OWNERSHIP_CONTRACT.md) for
+reserved v2 consumed-nonce and owner-proof/generation checks inside the existing
+session transaction hierarchy. One bounded session object, server-owned
+90-second lease, 30-second renewal and proof rotation on reload serialize
+acquisition with activation, answers and final submission commit. Terminal
+internal writers close/fence ownership; deadlines/scoring/summary authority and
+Firebase ID authentication remain. No schema writer, index, schedule, runtime
+implementation or legacy migration occurs in this reservation step.
+
+
+BWM-044 substep-3 backend adoption (2026-10-18): the reservation above is now
+implemented by the existing SessionService, entry/activation/answer/submission
+and identity-status handlers with the shared internal
+`functions/src/services/examRuntimeOwnership.ts` planner and guards. Session
+writers initialize ownership version 2; transaction-bound consumed-nonce,
+hashed proof and generation checks enforce acquisition, rotating recovery,
+90-second renewal/release, terminal closure and exact closing-owner submit replay.
+Existing Admin force-submit uses an explicit private internal capability.
+Backend entry accepts only v2 commands; v1 browser callers temporarily fail closed.
+Frontend/bootstrap/fragment transport, telemetry cleanup, mounted coordination
+and absolute Student returns remain substeps 4–6, so no working browser flow or
+release acceptance is claimed. Environment values/validators, public Hosting
+configuration, routes/exports, indexes/rules/schedules and cloud resources are
+unchanged. No legacy backfill; BWM-053 qualification and production NO_GO remain.
+
+
+BWM-044 substep-4 launch adoption (2026-10-18) supersedes the earlier query/v1
+producer descriptions: STU-06 now returns configured Exam `/session/{id}#launch=...`.
+`apps/exam/src/bootstrap.ts` and `launchBootstrap.ts` synchronously capture once
+and scrub history before dynamic main/Auth/monitoring/router imports; rejected
+legacy/mixed/malformed/duplicate input and later same-document launch navigation
+are scrubbed without exchange. `launchTransport.ts` uses the existing shared API
+client at fixed same-origin `/api/v1` for initial v2 entry, clearing launch/proof
+references on settlement. The raw launch token is absent from React state.
+Shared `credentialRedaction.ts`, frontend monitoring and the existing crash boundary
+redact credential fields, proofs/hashes and raw error URLs before storage; prior
+telemetry is scrubbed on read. This adds no telemetry backend. Existing no-referrer,
+CSP, CORS, environment keys/validators/values, routes/exports, schema/index/rules and
+schedules are unchanged. Initial entry is staged: proof persistence, lease renewal,
+protected mounted writes/logout/reload recovery remain substep 5; absolute returns
+remain substep 6. Protected runtime and clean reload fail closed until that adoption;
+no complete browser golden path, deployed policy or production readiness is claimed.
+
+
+BWM-044 substep-5 mounted adoption (2026-10-18) supersedes the earlier
+initial-entry-only checkpoint. `apps/exam/src/launchTransport.ts` now owns one
+document/session acquisition, exact UID/Student/tenant/year/run/session/nonce
+scope, bounded current/pending proofs in Exam sessionStorage, rotating recovery,
+conservative monotonic lease expiry, renewal and explicit Exam-only release and
+sign-out. Exam selects SDK browser-local persistence before initial listener
+registration; other portal defaults remain unchanged. Firebase ID tokens remain
+authentication. Shared API dispatch validates
+the actual token before initial and refreshed retries; owner headers attach only
+to fixed same-origin protected Exam paths. Tab announcements carry public
+session/generation only and cannot grant authority.
+
+Mounted rendering, writes, timers and media stop on ownership or identity loss.
+Answer-recovery IndexedDB stores only public generation fencing, never proofs or
+tokens; stale owners cannot overwrite/delete a newer generation. Recovery retains
+pending/acknowledged answers and uses the server deadline. No auto-submit on
+interruption, forced takeover, global UID revocation or Portal Auth bridge is
+introduced. No new endpoint, schema/index/rule/schedule, environment key/value,
+Hosting policy/header/rewrite or resource is added. The controller records local
+verification and its limits. Absolute Student returns remain substep 6; permanent
+adversarial and aggregate acceptance remain 7–8. BWM-045 camera policy/matching,
+BWM-049 exclusions, BWM-053 legacy rollout and production NO_GO remain.
+
+
+BWM-044 substep-6 return adoption (2026-10-18): all five existing Exam return
+actions and the mounted ownership-loss screen use one validated absolute
+`VITE_PORTAL_BASE_URL` plus fixed `/student/my-tests`. The raw configured value
+must be an origin only, distinct from the actual Exam origin; credentials,
+query/fragment, paths and URL-normalization tricks are rejected. Missing/unsafe
+configuration disables the action with recovery guidance; no Exam-origin fallback
+or browser-supplied redirect is accepted. Release requires non-loopback HTTPS;
+HTTP/loopback is limited to explicit isolated local Auth-emulator builds. Existing
+release validation also compares canonical origins and rejects loopback and
+normalized/empty-delimiter origin inputs. No new environment key, configured
+public origin, API route or data field is introduced. The existing Student SPA
+rewrite sources are corrected to `/student` and `/student/**` so direct return
+navigation reaches Student HTML; API-first order and security headers remain.
+Approved L5 preview qualification is required for this Hosting change at
+BWM-044 aggregate substep 8 before whole-task verification.
+Student Auth remains on the Portal origin: navigation carries no token, proof or
+identity. Local dual-Hosting verification and limits are recorded in the execution
+controller; deployment and the permanent full security/aggregate matrix remain
+unqualified here. BWM-044 stays IN_PROGRESS, BWM-045 PLANNED, production NO_GO.
+
+BWM-044 substep-8 local closeout (2026-10-19): the current implementation is
+ownership v2 as specified in `EXAM_RUNTIME_OWNERSHIP_CONTRACT.md`; earlier
+reserved/substep notes above are historical. No additional API, DTO, capability,
+collection, index, rule, trigger, schedule or configured environment value is
+introduced by aggregate closeout. Existing `VITE_PORTAL_BASE_URL` supplies the
+validated fixed Student return. Route/export/handler/schedule counts remain
+120 routes (115 implemented, zero incompatible/missing, five retired), 63 HTTP
+exports, 51 handlers and eight schedules. Local index declarations remain 78;
+no deployed index or legacy migration qualification is claimed. Aggregate local
+verification does not satisfy mandatory approved public Student-rewrite L5.
+BWM-044 remains 7/8 pending that gate; BWM-045 stays PLANNED and production NO_GO.
+DEC-102/BWM-053 publication/private-capture and legacy ownership disposition,
+BWM-049 exclusions and downstream infrastructure/security gates remain in force.
+
+Final BWM-044 substep-8 qualification (2026-10-19) supersedes the preceding
+local-only checkpoint: VERIFIED 8/8. Explicitly approved parabolic-dev selected
+HTTP rollout, one already-declared missing runs index (READY) and actual-origin
+Portal/Exam one-day previews pass three real HTTPS Chromium smokes. Existing
+local index definitions/78 count, API/schema/capability/event/schedule ownership
+remain unchanged. Both Hosting live releases, 49 unrelated Functions and all 12
+previous remote indexes are unchanged; this is not full remote index qualification.
+Temporary existing synthetic L0 claims/license/year changes were restored after
+acceptance. No new runtime environment key or secret; preview release inputs use
+the actual provider URLs and live/mock-disabled/emulator-disabled artifacts.
+BWM-045 READY for inspection only; BWM-053 legacy/publication/data and all other
+release prerequisites remain. Production NO_GO. Exact release/source hashes,
+commands, mutation scope, expiry, cleanup and results: master plan LOG-257.

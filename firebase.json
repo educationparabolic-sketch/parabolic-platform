@@ -104,11 +104,11 @@
           "destination": "/admin/index.html"
         },
         {
-          "source": "student",
+          "source": "/student",
           "destination": "/student/index.html"
         },
         {
-          "source": "student/**",
+          "source": "/student/**",
           "destination": "/student/index.html"
         },
         {

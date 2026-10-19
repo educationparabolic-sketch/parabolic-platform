@@ -1,3 +1,4 @@
+import {INTERNAL_SUBMISSION_AUTHORITY, RuntimeOwnerCredentials} from "../services/examRuntimeOwnership";
 import {ExamOperationalDataAccessPolicy} from "./dataTierPartition";
 import type {
   ExamSubmissionReason,
@@ -18,11 +19,13 @@ export type SubmissionErrorCode =
   "VALIDATION_ERROR";
 
 export interface SubmissionContext extends ExamSubmitRequestBody {
+  runtimeOwner?: RuntimeOwnerCredentials;
   sessionId: string;
   studentId: string;
 }
 
 export interface SubmissionExecutionOptions {
+  internalAuthority?: typeof INTERNAL_SUBMISSION_AUTHORITY;
   lockOwnerId?: string;
 }
 

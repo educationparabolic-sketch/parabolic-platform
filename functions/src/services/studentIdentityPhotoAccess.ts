@@ -1,3 +1,4 @@
+import {assertRuntimeOwner} from "./examRuntimeOwnership";
 import {randomUUID} from "node:crypto";
 import type {Auth, DecodedIdToken} from "firebase-admin/auth";
 import {Timestamp} from "firebase-admin/firestore";
@@ -156,7 +157,8 @@ export class StudentIdentityPhotoAccessService {
     });
     return {photoId, mediaType: "image/jpeg", sizeBytes: bytes.length, contentBase64: bytes.toString("base64")};
   }
-  public async examStatus(rawToken: string, sessionId: string): Promise<ExamIdentityStatusResult> {
+  public async examStatus(rawToken: string, sessionId: string, ownership?: {proof: string;
+    generation: number}): Promise<ExamIdentityStatusResult> {
     photoAccessId(sessionId);
     return this.profiles.withOwnStudent(rawToken, async (transaction, owner, student) => {
       const token = owner.token;
@@ -177,6 +179,9 @@ export class StudentIdentityPhotoAccessService {
           !Array.isArray(data.identityStatusEntryBindings) || !data.identityStatusEntryBindings.includes(binding)) {
         return photoAccessFail("NOT_FOUND", "Entered owning session was not found.");
       }
+      assertRuntimeOwner(data, {instituteId: owner.instituteId, yearId, runId, sessionId,
+        studentId: owner.studentId, runtimeOwner: ownership ? {...ownership, studentUid: owner.studentId,
+          launchNonce: nonce} : undefined}, this.now().toMillis());
       const end = data.deadlineAt ?? data.runtimeSnapshot?.schedule?.sessionEndsAt;
       const endMillis = end instanceof Timestamp ? end.toMillis() : typeof end === "string" ? Date.parse(end) : NaN;
       if (!["started", "active"].includes(data.status) || !Number.isFinite(endMillis) ||

@@ -261,3 +261,16 @@ test("validation errors report key names without values", () => {
     },
   );
 });
+
+test("Student return release origins reject normalized paths, empty URL delimiters, loopback and equivalent Exam origins", () => {
+  const environment = createEnvironment("staging");
+  for (const value of ["https://127.0.0.1", "https://127.0.0.2", "https://[::1]", "https://sub.localhost", "https://localhost.", "https://[::ffff:7f00:1]"]) {
+    expectValidationError({...environment, VITE_PORTAL_BASE_URL: value, APP_BASE_URL: value}, "loopback origin");
+  }
+  for (const suffix of ["/../", "?", "#", "//"]) {
+    const value = `${environment.VITE_PORTAL_BASE_URL}${suffix}`;
+    expectValidationError({...environment, VITE_PORTAL_BASE_URL: value, APP_BASE_URL: value}, "origin only");
+  }
+  const value = `${environment.VITE_EXAM_BASE_URL}/`;
+  expectValidationError({...environment, VITE_PORTAL_BASE_URL: value, APP_BASE_URL: value}, "origins must be distinct");
+});

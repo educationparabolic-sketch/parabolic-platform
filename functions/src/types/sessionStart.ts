@@ -1,3 +1,5 @@
+import type {ExamRuntimeEntryRequestV2, ExamRuntimeLeaseReceipt} from "../../../shared/contracts/examRuntimeOwnership";
+import type {RuntimeOwnerCredentials} from "../services/examRuntimeOwnership";
 import {ExamOperationalDataAccessPolicy} from "./dataTierPartition";
 import type {
   ClaimPropagationFeatureFlags,
@@ -142,6 +144,7 @@ export interface SessionDocumentInitializationRecord {
   operationalDataAccessPolicy: ExamOperationalDataAccessPolicy;
   phaseConfigSnapshot: Record<string, unknown>;
   questionTimeMap: SessionQuestionTimeMap;
+  runtimeOwnershipVersion: 2;
   revision: 1;
   riskModelVersion: string;
   runtimeSnapshot: ExamRuntimeSnapshot;
@@ -173,6 +176,8 @@ export interface SessionStartResult {
 }
 
 export interface SessionEntryValidationContext {
+  runtimeCommand?: ExamRuntimeEntryRequestV2;
+  commandProof?: {proof?: string; generation?: number};
   instituteId: string;
   launchNonce: string;
   licenseLayer: "L0" | "L1" | "L2" | "L3";
@@ -185,6 +190,7 @@ export interface SessionEntryValidationContext {
 }
 
 export interface SessionEntryValidationResult {
+  ownership?: ExamRuntimeLeaseReceipt;
   deadlineAt: string | null;
   instituteId: string;
   licenseSnapshot: Record<string, unknown>;
@@ -205,10 +211,14 @@ export interface SessionEntryValidationResult {
 }
 
 export interface SessionEntryResumeContext extends SessionActivationContext {
+  launchNonce?: string;
+  runtimeCommand?: ExamRuntimeEntryRequestV2;
+  commandProof?: {proof?: string; generation?: number};
   licenseLayer: "L0" | "L1" | "L2" | "L3";
 }
 
 export interface SessionActivationContext {
+  runtimeOwner?: RuntimeOwnerCredentials;
   instituteId: string;
   runId: string;
   sessionId: string;
@@ -233,6 +243,8 @@ export type SessionTransitionActorType =
   "system";
 
 export interface SessionStateTransitionContext {
+  studentId?: string;
+  runtimeOwner?: RuntimeOwnerCredentials;
   actorType: SessionTransitionActorType;
   instituteId: string;
   runId: string;

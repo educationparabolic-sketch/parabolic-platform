@@ -66,6 +66,14 @@ test("the dedicated non-production project has explicit Hosting target mappings"
   );
 });
 
+test("Student deep links resolve to the Student SPA using absolute rewrite patterns", () => {
+  const portal = firebaseConfig.hosting.find((hosting) => hosting.target === "portal");
+  for (const source of ["/student", "/student/**"]) {
+    assert.deepEqual(portal.rewrites.find((rewrite) => rewrite.source === source),
+      {source, destination: "/student/index.html"});
+  }
+});
+
 test("every Hosting target applies the baseline security headers and least-privilege camera policy", () => {
   for (const hosting of firebaseConfig.hosting) {
     assert.equal(hosting.headers?.length, hosting.target === "portal" ? 3 : 1);

@@ -223,3 +223,28 @@ privacy exceptions, current authority, transport and remote qualification.
 Mounted Student/Admin adoption and substep-8 local acceptance are qualified;
 remote GCS/IAM/index/retention validation remains BWM-052/053, production NO_GO. Source integration inventory 96/19; classified
 non-emulator suite and historical BWM-049 exclusions unchanged.
+
+### BWM-044 runtime ownership fence — 2026-10-19
+
+Existing Student capabilities and current entitlement checks are unchanged.
+Firebase ID-token authentication remains mandatory. EXM-01 launch consumes an
+issued nonce and establishes a supplementary hashed owner proof/generation;
+recover rotates it, renew extends only an unexpired held lease, and release
+ends ownership without changing exam lifecycle. EXM-02/04/05 and optional EXM-06
+serialize consumed identity binding, current owner and lease with protected
+work. This is no new role, capability, privacy exception or UID-only recovery
+grant. Only the exact closing owner may replay canonical submission after TTL;
+internal Admin finalization uses a private server capability, never a selectable
+browser bypass. Legacy ownership-less sessions fail closed; BWM-053 owns their
+reviewed disposition and coordinated deployment. No cross-origin token bridge
+or global UID revocation is introduced for local Exam sign-out.
+
+Current BWM-044 aggregate checkpoint (2026-10-19): VERIFIED 8/8 after local
+L1–L4 and explicitly approved public L5. Provider-bound one-day Portal/Exam
+previews pass all three actual HTTPS Chromium asset/deep-link/header/independent
+Auth/return cases with CSP bypass off. Selected staging API compatibility and one
+already-declared index were qualified; temporary owned L0 test-fixture changes
+were restored. Hosting live releases and unrelated Functions/indexes are unchanged.
+BWM-045 is READY for inspection only. Full backend/data/legacy/publication rollout
+remains with BWM-053 and the other release owners; production NO_GO. See the
+master execution plan, final substep-8 evidence and LOG-257.
