@@ -18628,3 +18628,85 @@ the actual provider URLs and live/mock-disabled/emulator-disabled artifacts.
 BWM-045 READY for inspection only; BWM-053 legacy/publication/data and all other
 release prerequisites remain. Production NO_GO. Exact release/source hashes,
 commands, mutation scope, expiry, cleanup and results: master plan LOG-257.
+
+### BWM-045 reserved server policy and observation authority — DEC-111
+
+New declarations in shared/contracts/examProctoring.d.ts and normative
+docs/EXAM_PROCTORING_CONTRACT.md specify immutable supported policy, unavailable
+automated face/gaze and browser-reported readiness. No new signed-session
+authentication, capability/license flag, biometric provider or raw photo access.
+Existing assignment/session owners will enforce policy within current identity,
+tenant/year/license and BWM-044 generation/lease transactions. Legacy authority
+is never inferred; BWM-053 retains inspected migration and coordinated rollout.
+
+Reserved EXM-07 and ExamIntegrityService will persist bounded media-free client
+observations and exact replay receipts in the session hierarchy, with parent
+lifetime quota and immutable intake close, 30-day logical retention and a
+downstream-qualified asynchronous TTL purge. Reports cannot feed scoring,
+misconduct sanctions or analytics; audit writers remain separate. No active
+handler/route/schema/index/rule/schedule/env changes occur at substep 2. Local
+implementation, real emulator/browser acceptance and approved public L5 remain
+ordered work. Wider resilience/security/observability/resource/release owners
+remain BWM-046/047/051..057; production NO_GO.
+
+### BWM-045 backend policy ownership — DEC-112
+
+Substep 3 adopts the reserved policy through existing assignment creation,
+Admin run/derived readers, session creation/start/entry/recovery/renew/activation
+and answer transactions. Shared backend DTO projections and strict runtime
+parsers preserve domain/ownership authority without changing legacy mounted
+declarations ahead of their ordered migration. Generic student state transition
+cannot bypass activation. First activation stores only a disclosed client report,
+never biometric evidence; new session intake metadata initializes atomically.
+Trusted terminal submission/termination remains protected and available; only
+terminal run results may project policy unavailable. No guessed legacy migration,
+new authentication, raw photo access, integrity writer/trigger, score effect,
+index/rule/schedule/environment/provider or cloud resource change.
+
+### BWM-045 transactional integrity backend — substep 4 (DEC-113)
+
+ExamIntegrityService reuses StudentProfileService current authority and the
+BWM-044 consumed-entry/runtime owner fence inside one transaction. Only immutable
+session child receipts and bounded reporting counters are written. Exact replay
+requires fresh authority/lifecycle/lease, returns the first timestamps and does
+not write; changed intent/generation conflicts. Parent contention serializes
+new batches without scans, new queues or analytics pipelines. Intake/quota/
+logical retention and field TTL follow EXAM_PROCTORING_CONTRACT.md. TTL physical
+purge qualification remains downstream. Current routes 121/116/0/0/5, 64 exports,
+52 handlers, eight schedules, 99/20 emulator inventories, 78 unchanged composite indexes and five field overrides.
+Mounted adoption/aggregate/public acceptance remains pending; production NO_GO.
+
+### BWM-045 Admin policy boundary — substep 5 (DEC-114)
+
+The public Admin DTO uses the frozen requirements for mutations and server v1
+capabilities for reads. Shared strict response validation is reused across
+Admin create/list/detail/live/history/derived commands and replay reconciliation.
+Requirements enter the existing idempotency fingerprint through version/camera
+intent. Negative policy is confined to trusted termination acknowledgements;
+it cannot become a normal operational policy or authorize browser admission.
+The mounted UI preserves completed-stop truth while explicitly reporting that
+legacy history cannot be projected. No backend runtime owner, event writer,
+clock, scoring, lease or submission behavior changes. Exam adoption remains 6.
+
+### BWM-045 mounted Exam boundary — substep 6 / DEC-115
+
+Exam now adopts the frozen shared v1 policy/activation/receipt wire types with
+closed entry parsing. CameraReadiness owns only disclosed local browser preview,
+current mounted generation consent and track lifetime; it makes no biometric
+claim. IntegrityQueue owns at most 60 in-memory fixed observations, one protected
+in-flight <=10/8192-byte intent, exact retry/replay and strict acknowledgement.
+Authority/identity loss discards telemetry and media; answer recovery remains
+generation-fenced and independent, with terminal submission available. No new
+backend domain owner, cloud resource, reader, analytics producer or header change.
+Broader permanent acceptance/aggregate and approved L5 remain substeps 7–8.
+
+BWM-045 final qualification (DEC-118): supported v1 policy, explicit unavailable
+automated face/gaze, native camera readiness/lifetime and fenced client-observation
+receipts pass local aggregate and two CSP-on public staging cases. Real Student
+fragment-launch adapter is reconciled; no new DTO/route/event authority. Public
+receipt readback, exact replay counters, teardown and independent Student return
+pass. Both isolated synthetic fixtures are deleted and canonical staging launch
+origin restored; expiring previews are qualification artifacts. No identity-photo
+fetch or mounted EXM-06 admission. Production NO_GO; physical camera continuity,
+matching, TTL purge and full infrastructure/publication remain downstream. See
+master BWM-045 final substep-8 evidence and `docs/EXAM_PROCTORING_CONTRACT.md`.

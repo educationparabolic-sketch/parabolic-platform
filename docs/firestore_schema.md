@@ -1587,3 +1587,93 @@ the actual provider URLs and live/mock-disabled/emulator-disabled artifacts.
 BWM-045 READY for inspection only; BWM-053 legacy/publication/data and all other
 release prerequisites remain. Production NO_GO. Exact release/source hashes,
 commands, mutation scope, expiry, cleanup and results: master plan LOG-257.
+
+### BWM-045 reserved policy and integrity storage (DEC-111)
+
+Declaration only: `docs/EXAM_PROCTORING_CONTRACT.md` owns v1 immutable run
+requirements and server-derived session policy, one initial client-report
+activationPreflight, and bounded session integrityReportingState. No active
+writer/schema/index/rule is changed at substep 2. Legacy/malformed policy or
+missing initialized reporting state fails closed when adopted; BWM-053 owns
+inspected legacy disposition, never guessed backfill.
+
+Reserve session subcollection `integrityBatches/{batchId}` under the existing
+institute/academicYear/run/session hierarchy, immutable enum-only client reports
+and receipts, exact UUID/fingerprint/generation replay, server receivedAt and
+retainedUntil. Parent counters cap lifetime intake at 60 batches/600 events,
+five-second unique-batch spacing, and an immutable intake close no later than
+24 hours after server initialization (a concrete initializedAt Timestamp inside
+the creation transaction, independent of the unresolved createdAt sentinel) or
+the initial scheduled end. Recovery,
+extension and deletion never reset quota. Receipts logically expire after
+30 days; later resource qualification must prove a TTL policy on
+integrityBatches.retainedUntil, asynchronous physical purge and index exemptions
+for events/fingerprint. No composite index, collection scan or new scheduled
+worker is reserved. Parent deletion alone must not be treated as subcollection
+purge. Existing deny-all client Firestore rules and audit-retention owners remain.
+
+Only future substep 4 declares actual TTL/index overrides and writers; BWM-052/053
+qualifies deployed policy/deletion. Current 78 local index declarations and
+98-source/20-explicit backend test inventories remain unchanged.
+
+### BWM-045 backend writer adoption — substep 3 (DEC-112)
+
+Existing assignment creation persists only exact v1 requirements; duplicate/
+reassign preserves supported requirements, while reads/session creation derive
+capabilities with automated face/gaze unavailable. New session creation atomically
+initializes integrityReportingState (zero lifetime counters, null lastAcceptedAt,
+server initializedAt and bounded immutable closesAt) alongside its frozen policy.
+EXM-05 records one activationPreflight client report/consent, server receivedAt
+and owner generation at first activation; replay leaves that historical receipt
+unchanged. Policy checks serialize with protected admission/answer writes; they
+never migrate old policy, delete answers or change deadlines/scoring.
+
+No integrityBatches writer, TTL/index override, rule, collection-group query or
+schedule is implemented in this slice. Trusted terminal result projection can
+report policy unavailable without changing stored policy or terminal authority.
+Current 78 local index definitions and 98/20 integration inventories remain;
+physical TTL/resource and legacy disposition remain BWM-052/053.
+
+### BWM-045 integrity receipts — substep 4 (DEC-113)
+
+ExamIntegrityService now creates immutable session child integrityBatches/{batchId}
+with only contractVersion, batchId, generation, canonical requestFingerprint,
+ordered enum-only events, source=client_report, receivedAt and retainedUntil.
+The same transaction validates current authority/owner and the supported parent
+integrityReportingState, reads the exact child and atomically increments lifetime
+counters for a new receipt. Exact replay neither writes nor extends retention.
+No scans, counter reconstruction, reset on recovery or client rules grant.
+
+firestore.indexes.json declares integrityBatches.retainedUntil TTL with no index,
+and index exemptions for events and requestFingerprint: 78 unchanged composite indexes plus five field overrides
+(previously two); no added composite index. TTL enablement/physical purge remains
+BWM-052/053; logical expiry is enforced now. Asynchronous TTL is not guaranteed
+immediate deletion; the operational target is 48 hours after expiry. Parent
+recursive deletion/archival must account for retained children. Existing deny-all
+rules remain unchanged. No new reader, trigger or scheduled scanner.
+
+### BWM-045 Admin adoption — substep 5 (DEC-114)
+
+Mounted Admin now writes the already frozen exact v1 run requirements and reads
+server-derived capabilities through strict adapters. No Firestore field,
+backfill, legacy conversion, index, TTL, rules or data migration changes in this
+slice. Existing run policy and session snapshots remain immutable. A trusted
+legacy stop's unavailable policy is a response projection only; stored policy
+is unchanged and normal history/read projection remains fail-closed.
+
+BWM-045 substep 6 / DEC-115 changes no schema, index, rule, TTL or schedule.
+Mounted Exam consumes immutable v1 session policy and writes only the existing
+activationPreflight and EXM-07 integrityBatches through protected APIs. Browser
+consent/media/events/uncertain batches never enter local recovery storage; only
+strict receipt acknowledgement counts as saved. Server retention/physical purge
+qualification and closed-client access remain unchanged (BWM-052/053).
+
+BWM-045 / DEC-118 staging prerequisite: concurrent-session capacity enforcement
+already queries collection-group `sessions` by `instituteId == current tenant`
+and `status == active state`, with a bounded limit. Declare the exact
+COLLECTION_GROUP composite `instituteId ASC, status ASC` in
+`firestore.indexes.json`. The isolated public qualification provisions only this
+missing staging index; 79 local composite declarations and five field overrides
+are now recorded. No query weakening, tenant-data backfill or blanket remote
+index/TTL qualification is implied. Physical observation TTL purge remains
+BWM-052/053.

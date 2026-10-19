@@ -34,7 +34,7 @@ test("backend CI aggregates every emulator-backed Functions suite", async () => 
     (file) => file.endsWith(".emulator.test.js"),
   ).length;
 
-  assert.equal(firestoreSuiteCount, 98);
+  assert.equal(firestoreSuiteCount, 99);
   assert.equal(explicitSuiteCount, 20);
   for (const file of ["vendorAuditReadModel.test.ts", "vendorSystemHealthReadModel.test.ts"]) {
     assert.ok(sourceFiles.includes(file), file);

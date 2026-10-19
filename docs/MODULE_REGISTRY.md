@@ -647,3 +647,93 @@ were restored. Hosting live releases and unrelated Functions/indexes are unchang
 BWM-045 is READY for inspection only. Full backend/data/legacy/publication rollout
 remains with BWM-053 and the other release owners; production NO_GO. See the
 master execution plan, final substep-8 evidence and LOG-257.
+
+### BWM-045 contract reservation (DEC-111)
+
+ExamProctoringContract | `shared/contracts/examProctoring.d.ts`,
+`docs/EXAM_PROCTORING_CONTRACT.md`, `tests/exam-proctoring-contract.test.mjs` |
+Declaration-only v1 requirements/capabilities, client-report camera consent and
+activation, enum-only integrity ingest/acknowledgements/retention. Automated
+face/gaze is unavailable; optional EXM-06 is deliberately not mounted or gating.
+Future existing assignment/session owners enforce supported immutable policy;
+future ExamIntegrityService owns exact session-scoped transactional receipts and
+parent quotas under protected Firebase/runtime ownership. No duplicate photo
+review writer, analytics producer, new licensed capability or event-read API.
+
+`test:exam-proctoring-contract` is a root type/declaration check, not runtime
+acceptance. Active apiDtos, route manifest, HTTP exports, callers, schema, indexes
+and environment remain unchanged. BWM-045 IN_PROGRESS 2/8 after contract
+verification; substep 3 implements backend policy, 4 integrity transport, 5–6
+mounted callers, 7 acceptance and 8 aggregate/approved public qualification.
+Previous READY/inspection-only notes above are historical. Production NO_GO.
+
+### BWM-045 backend policy boundary — substep 3 (DEC-112)
+
+ExamProctoringPolicy | functions/src/services/examProctoringPolicy.ts | Exact
+requirements/capability/preflight parsers, fixed unavailable face/gaze, safe
+policy errors and bounded reporting-state initialization. Existing assignment/
+Admin run/session/answer owners enforce it, with canonical framework errors,
+raw-JSON duplicate rejection and transactional runtime ownership. No new HTTP
+route/export, licensed capability, provider, event writer or schedule.
+
+Shared examProctoringBackend.d.ts derives backend policy projections while
+legacy mounted consumers await 5–6; this is intentionally not wire compatible
+with old policy/body inputs. Trusted termination has an explicit unavailable
+policy result; other policy-bearing operational reads remain strict. The new
+pure examProctoringPolicy suite is classified (66 non-emulator files); affected
+service/API/HTTP fixtures explicitly declare v1 without weakening negative
+coverage. Source/explicit emulator inventory remains 98/20. EXM-07 stays pending
+substep 4; whole acceptance and approved public qualification remain later work.
+
+### BWM-045 integrity owner — substep 4 (DEC-113)
+
+ExamIntegrityService | functions/src/services/examIntegrity.ts | Closed batch
+parser/fingerprint, fresh own-Student authority and transactional runtime fence,
+immutable receipts, bounded lifetime counters, replay/conflict/rate/retention.
+EXM-07 | functions/src/api/examSessionIntegrityEvents.ts | Exact gateway/direct
+POST, standard no-store envelopes, raw duplicate/byte/encoding/query validation,
+fixed rate retry metadata, safe failure redaction. No mounted caller yet.
+
+StudentProfileService rethrows the existing typed ExamProctoringError across its
+shared transaction boundary, preserving canonical reasons while generic provider
+errors remain redacted. New examIntegrityApi classified suite brings pure files
+to 67; native examIntegrity suite brings source-backed emulator inventory to 99,
+explicit inventory remains 20. Routes 121/116/0/0/5, exports/handlers 64/52, eight
+schedules; 78 unchanged composite indexes and five field overrides. Whole-flow/public acceptance pending.
+
+### BWM-045 mounted Admin policy — substep 5 (DEC-114)
+
+portalResponseAdapters.adaptExamProctoringPolicyV1 is the strict shared v1 reader
+for Admin create/list/detail and assignmentOperationsApi live/history/derived
+and lifecycle responses. It validates exact requirements/capabilities without
+legacy conversion. assignmentAuthority validates full server capability truth
+before comparing immutable create intent on replay. apiDtos adopts only Admin
+wire types; examProctoringBackend retains the staged Exam snapshot projection.
+
+AssignmentManagementPage emits requirements-only v1 commands and honest camera
+readiness controls/summary/list labels. AdminAssignmentDetailPage and live list/
+monitor distinguish readiness reports from unavailable automated face/gaze.
+Trusted negative-policy termination uses its existing canonical acknowledgement
+and explicitly reports unavailable history; normal reads never guess policy.
+No new service, route, licensed capability, override, producer or dependency.
+Backend inventories remain 99 source-backed/20 explicit emulator suites, 67
+classified files, 121/116/0/0/5 routes, 64 exports/52 handlers/eight schedules.
+
+BWM-045 substep 6 / DEC-115: mounted ExamRuntimeApp uses strict v1 entry policy
+and activation preflight. Local CameraReadiness owns video-only consent, usable
+preview, track-loss/retry and mounted generation/terminal teardown. IntegrityQueue
+owns bounded memory-only observations, exact acknowledgements/replay/retries and
+visible unsaved/lost state independently of answers/lease/submission. EXM-07 is
+now frontend-declared; EXM-06 remains planned/non-gating. No biometric provider,
+identity photo consumer, trigger, schedule or cloud resource is added.
+
+BWM-045 final qualification (DEC-118): supported v1 policy, explicit unavailable
+automated face/gaze, native camera readiness/lifetime and fenced client-observation
+receipts pass local aggregate and two CSP-on public staging cases. Real Student
+fragment-launch adapter is reconciled; no new DTO/route/event authority. Public
+receipt readback, exact replay counters, teardown and independent Student return
+pass. Both isolated synthetic fixtures are deleted and canonical staging launch
+origin restored; expiring previews are qualification artifacts. No identity-photo
+fetch or mounted EXM-06 admission. Production NO_GO; physical camera continuity,
+matching, TTL purge and full infrastructure/publication remain downstream. See
+master BWM-045 final substep-8 evidence and `docs/EXAM_PROCTORING_CONTRACT.md`.

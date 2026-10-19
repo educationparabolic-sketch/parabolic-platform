@@ -1,3 +1,4 @@
+import {proctoringRequirementsForTest, proctoringPolicyForTest} from "./helpers/proctoring";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {createAdminRunsHandler} from "../api/adminRuns";
@@ -20,10 +21,7 @@ const createPayload = () => ({
   gracePeriodMinutes: 5,
   idempotencyKey: "assignment-create-build-runs",
   mode: "Diagnostic",
-  proctoringPolicy: {
-    browserIntegrityGuardEnabled: true,
-    faceIdentityGazeGuardEnabled: true,
-  },
+  proctoringPolicy: proctoringRequirementsForTest(true, true),
   recipientStudentIds: ["student_1", "student_2"],
   shuffleQuestionOrder: true,
   startWindow: "2026-05-20T09:00:00.000Z",
@@ -40,10 +38,7 @@ const createRunRecord = () => ({
   gracePeriodMinutes: 5,
   id: "run_build_admin_runs",
   mode: "Diagnostic" as const,
-  proctoringPolicy: {
-    browserIntegrityGuardEnabled: true,
-    faceIdentityGazeGuardEnabled: true,
-  },
+  proctoringPolicy: proctoringPolicyForTest(true, true),
   recipientCount: 2,
   recipientStudentIds: ["student_1", "student_2"],
   runPath:

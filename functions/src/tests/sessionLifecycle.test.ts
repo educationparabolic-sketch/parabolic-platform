@@ -1,3 +1,5 @@
+import {proctoringPolicyForTest, proctoringPreflightForTest} from "./helpers/proctoring";
+import {ExamProctoringError} from "../services/examProctoringPolicy";
 import {ownedSessionFixture, runtimeOwnerForTest} from "./helpers/runtimeOwnership";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -118,10 +120,7 @@ const seedActivationSession = async (
         phase2Percent: 45,
         phase3Percent: 15,
       },
-      proctoringPolicy: {
-        browserIntegrityGuardEnabled: false,
-        faceIdentityGazeGuardEnabled: false,
-      },
+      proctoringPolicy: proctoringPolicyForTest(false, false),
       questionSetVersion: "1",
       questions: [{
         difficulty: "easy",
@@ -173,8 +172,7 @@ test.after(async () => {
 });
 
 test(
-  "transitionSessionState allows forward-only created to started to active " +
-    "to submitted transitions",
+  "transitionSessionState preserves forward/terminal transitions and denies activation bypass",
   async () => {
     const sessionService = createSessionServiceForTests();
     const sessionPath =
@@ -198,19 +196,12 @@ test(
     assert.equal(startedResult.fromStatus, "created");
     assert.equal(startedResult.status, "started");
 
-    const activeResult = await sessionService.transitionSessionState(
-      {
-        studentId: "student_build_27", runtimeOwner: runtimeOwnerForTest("student_build_27"),
-        actorType: "student",
-        instituteId: "inst_build_27_success",
-        runId: "run_build_27_success",
-        sessionId: "session_build_27_success",
-        yearId: "2026",
-      },
-      "active",
-    );
-    assert.equal(activeResult.fromStatus, "started");
-    assert.equal(activeResult.status, "active");
+    await assert.rejects(sessionService.transitionSessionState({
+      actorType: "student", studentId: "student_build_27", runtimeOwner: runtimeOwnerForTest("student_build_27"),
+      instituteId: "inst_build_27_success", runId: "run_build_27_success",
+      sessionId: "session_build_27_success", yearId: "2026",
+    }, "active"), /Use authoritative session activation/u);
+    await firestore.doc(sessionPath).update({status: "active"});
 
     const submittedResult = await sessionService.transitionSessionState(
       {
@@ -402,6 +393,7 @@ test(
       "institutes/inst_lifecycle_activate/academicYears/2026/" +
       "runs/run_lifecycle_activate/sessions/session_lifecycle_activate";
     const context = {
+      proctoringPreflight: proctoringPreflightForTest(),
       runtimeOwner: runtimeOwnerForTest("uid_lifecycle_authority"),
       instituteId: "inst_lifecycle_activate",
       runId: "run_lifecycle_activate",
@@ -447,6 +439,7 @@ test(
       "institutes/inst_lifecycle_expiry/academicYears/2026/" +
       "runs/run_lifecycle_expiry/sessions/session_lifecycle_expiry";
     const context = {
+      proctoringPreflight: proctoringPreflightForTest(),
       runtimeOwner: runtimeOwnerForTest("uid_lifecycle_authority"),
       instituteId: "inst_lifecycle_expiry",
       runId: "run_lifecycle_expiry",
@@ -498,3 +491,67 @@ test(
     await deleteDocumentIfPresent(sessionPath);
   },
 );
+
+test("v1 activation serializes consent reports, immutable policy, legacy denial and expiry", async () => {
+  const service = createSessionServiceForTests();
+  const now = Date.now();
+  const end = now + 600_000;
+  const path = "institutes/inst_proctoring_policy/academicYears/2026/runs/run_policy/sessions/session_policy";
+  const reference = firestore.doc(path);
+  const context = {
+    runtimeOwner: runtimeOwnerForTest("uid_lifecycle_authority"),
+    instituteId: "inst_proctoring_policy", runId: "run_policy", sessionId: "session_policy",
+    studentId: "student_lifecycle_authority", studentUid: "uid_lifecycle_authority", yearId: "2026",
+    proctoringPreflight: proctoringPreflightForTest() as unknown,
+  };
+  try {
+    await seedActivationSession(path, "started", now - 1000, end);
+    await reference.update({"runtimeSnapshot.proctoringPolicy": proctoringPolicyForTest(false, true)});
+    await assert.rejects(service.activateSession(context), (e: unknown) =>
+      e instanceof ExamProctoringError && e.reason === "preflight_required");
+    assert.equal((await reference.get()).get("status"), "started");
+    assert.equal((await reference.get()).get("activationPreflight"), undefined);
+    context.proctoringPreflight = {contractVersion: 1, preflight: {camera: "client_reported_ready",
+      consentAccepted: true, consentNoticeVersion: "exam-camera-local-v1"}};
+    const results = await Promise.all([service.activateSession(context), service.activateSession(context)]);
+    assert.deepEqual(results.map((r) => r.replayed).sort(), [false, true]);
+    const first = (await reference.get()).data();
+    assert.equal(first?.activationPreflight.source, "client_report");
+    assert.equal(first?.activationPreflight.generation, 1);
+    assert.equal(first?.activationPreflight.preflight.consentAccepted, true);
+    assert.equal(first?.runtimeSnapshot.proctoringPolicy.capabilities.automatedFaceMatching, "unavailable");
+    assert.equal(first?.deadlineAt.toMillis(), end);
+    await service.activateSession(context);
+    assert.deepEqual((await reference.get()).get("activationPreflight"), first?.activationPreflight);
+    await reference.update({"runtimeSnapshot.proctoringPolicy.capabilities.automatedFaceMatching": "enabled"});
+    await assert.rejects(service.activateSession(context), (e: unknown) =>
+      e instanceof ExamProctoringError && e.reason === "policy_unsupported");
+    await reference.update({"runtimeSnapshot.proctoringPolicy": {browserIntegrityGuardEnabled: false,
+      faceIdentityGazeGuardEnabled: false}});
+    await assert.rejects(service.activateSession(context), (e: unknown) =>
+      e instanceof ExamProctoringError && e.reason === "policy_upgrade_required");
+    assert.deepEqual((await reference.get()).get("answerMap"), {});
+    assert.equal((await reference.get()).get("deadlineAt").toMillis(), end);
+    // Trusted terminal transitions retain authority even when policy cannot be admitted.
+    await service.transitionSessionState({actorType: "system", instituteId: context.instituteId,
+      yearId: context.yearId, runId: context.runId, sessionId: context.sessionId}, "expired");
+    await service.transitionSessionState({actorType: "system", instituteId: context.instituteId,
+      yearId: context.yearId, runId: context.runId, sessionId: context.sessionId}, "terminated");
+    assert.equal((await reference.get()).get("status"), "terminated");
+    await seedActivationSession(path, "started", now - 1000, end);
+    await reference.update({"runtimeSnapshot.proctoringPolicy": proctoringPolicyForTest(false, true)});
+    context.proctoringPreflight = proctoringPreflightForTest();
+    const expired = await service.activateSession(context, end);
+    assert.equal(expired.status, "expired");
+    assert.equal((await reference.get()).get("activationPreflight"), undefined);
+    await seedActivationSession(path, "started", now - 1000, end);
+    await reference.update({"runtimeSnapshot.proctoringPolicy": proctoringPolicyForTest(false, true),
+      "deadlineAt": Timestamp.fromMillis(Date.now() - 1000)});
+    assert.equal((await service.activateSession(context)).status, "expired");
+    assert.equal((await reference.get()).get("activationPreflight"), undefined);
+    assert.equal((await reference.get()).get("startedAt"), null);
+  } finally {
+    await reference.delete();
+    assert.equal((await reference.get()).exists, false);
+  }
+});

@@ -1,3 +1,4 @@
+import {proctoringRequirementsForTest, proctoringPolicyForTest} from "./helpers/proctoring";
 import {randomBytes, randomUUID, createHash} from "node:crypto";
 import {RuntimeOwnershipError} from "../services/examRuntimeOwnership";
 import assert from "node:assert/strict";
@@ -170,6 +171,7 @@ test(
     await firestore.doc(questionHardPath).set({version: 1, revision: 1, correctAnswer: "A", difficulty: "Hard"});
     await firestore.doc(questionMediumPath).set({version: 1, revision: 1, correctAnswer: "A", difficulty: "Medium"});
     await firestore.doc(runPath).set({
+      proctoringPolicy: proctoringRequirementsForTest(false, false),
       calibrationVersion: "cal_v2026_04",
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
       mode: "Diagnostic",
@@ -339,6 +341,23 @@ test(
       .where("studentId", "==", studentId)
       .get();
     assert.equal(sessionsSnapshot.size, 1);
+    assert.deepEqual(sessionData?.runtimeSnapshot.proctoringPolicy, proctoringPolicyForTest());
+    assert.equal(sessionData?.integrityReportingState.acceptedBatchCount, 0);
+    assert.equal(sessionData?.integrityReportingState.acceptedEventCount, 0);
+    assert.equal(sessionData?.integrityReportingState.closesAt.toMillis(),
+      Math.min(sessionData?.integrityReportingState.initializedAt.toMillis() + 86_400_000,
+        Date.parse(sessionData?.runtimeSnapshot.schedule.sessionEndsAt)));
+    await firestore.doc(runPath).update({proctoringPolicy: proctoringRequirementsForTest(true, true)});
+    await sessionService.startSession({...launchContext, intent: "resume"});
+    const immutable = (await firestore.doc(result.sessionPath).get()).data();
+    assert.deepEqual(immutable?.runtimeSnapshot, sessionData?.runtimeSnapshot);
+    assert.deepEqual(immutable?.integrityReportingState, sessionData?.integrityReportingState);
+    await firestore.doc(result.sessionPath).update({"runtimeSnapshot.proctoringPolicy": {
+      browserIntegrityGuardEnabled: false, faceIdentityGazeGuardEnabled: false}});
+    const legacy = (await firestore.doc(result.sessionPath).get()).data();
+    await assert.rejects(sessionService.startSession({...launchContext, intent: "resume"}),
+      (e: unknown) => e instanceof Error && e.name === "ExamProctoringError");
+    assert.deepEqual((await firestore.doc(result.sessionPath).get()).data(), legacy);
 
     await deleteDocumentIfPresent(result.sessionPath);
     await deleteDocumentIfPresent(runPath);
@@ -415,10 +434,7 @@ test(
           phase2Percent: 0,
           phase3Percent: 0,
         },
-        proctoringPolicy: {
-          browserIntegrityGuardEnabled: false,
-          faceIdentityGazeGuardEnabled: false,
-        },
+        proctoringPolicy: proctoringPolicyForTest(false, false),
         questionSetVersion: "1",
         questions: [{
           difficulty: "easy",
@@ -579,10 +595,7 @@ test(
           phase2Percent: 45,
           phase3Percent: 15,
         },
-        proctoringPolicy: {
-          browserIntegrityGuardEnabled: index === 1,
-          faceIdentityGazeGuardEnabled: false,
-        },
+        proctoringPolicy: proctoringRequirementsForTest(index === 1, false),
         questionIds: [questionIds[index]],
         recipientStudentIds: [studentId],
         riskModelVersion: "risk_v3",
@@ -685,6 +698,7 @@ test(
     await seedAcademicYear(instituteId, yearId);
     await firestore.doc(studentPath).set({status: "active", studentId});
     await firestore.doc(runPath).set({
+      proctoringPolicy: proctoringRequirementsForTest(false, false),
       calibrationVersion: "cal_v2026_04",
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
       mode: "Diagnostic",
@@ -742,6 +756,7 @@ test(
     await seedAcademicYear(instituteId, yearId);
     await firestore.doc(studentPath).set({status: "active", studentId});
     await firestore.doc(runPath).set({
+      proctoringPolicy: proctoringRequirementsForTest(false, false),
       calibrationVersion: "cal_v2026_04",
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
       mode: "Diagnostic",
@@ -801,6 +816,7 @@ test(
     await seedAcademicYear(instituteId, yearId);
     await firestore.doc(studentPath).set({status: "active", studentId});
     await firestore.doc(runPath).set({
+      proctoringPolicy: proctoringRequirementsForTest(false, false),
       calibrationVersion: "cal_v2026_04",
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
       mode: "Diagnostic",
@@ -861,6 +877,7 @@ test(
     await seedAcademicYear(instituteId, yearId);
     await firestore.doc(studentPath).set({status: "active", studentId});
     await firestore.doc(runPath).set({
+      proctoringPolicy: proctoringRequirementsForTest(false, false),
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
       mode: "Diagnostic",
       recipientStudentIds: ["some_other_student"],
@@ -919,6 +936,7 @@ test(
     await seedAcademicYear(instituteId, yearId);
     await firestore.doc(studentPath).set({status: "active", studentId});
     await firestore.doc(runPath).set({
+      proctoringPolicy: proctoringRequirementsForTest(false, false),
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
       mode: "Diagnostic",
       recipientStudentIds: [studentId],
@@ -985,6 +1003,7 @@ test(
     await seedAcademicYear(instituteId, yearId, "archived");
     await firestore.doc(studentPath).set({status: "active", studentId});
     await firestore.doc(runPath).set({
+      proctoringPolicy: proctoringRequirementsForTest(false, false),
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
       mode: "Diagnostic",
       questionIds: ["q_build_31_easy"],
@@ -1041,6 +1060,7 @@ test("startSession enforces current feature and concurrent-session authority", a
     studentId,
   });
   await firestore.doc(runPath).set({
+    proctoringPolicy: proctoringRequirementsForTest(false, false),
     endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
     mode: "Controlled",
     recipientStudentIds: [studentId],

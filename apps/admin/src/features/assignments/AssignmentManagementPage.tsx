@@ -1,3 +1,4 @@
+import type { ExamProctoringRequirementsV1 } from "../../../../../shared/contracts/examProctoring";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
@@ -45,7 +46,8 @@ const MODE_REQUIRED_LAYER: Record<ExecutionMode, LicenseLayer> = {
 
 const DEFAULT_PROCTORING_POLICY: AssignmentProctoringPolicy = {
   browserIntegrityGuardEnabled: true,
-  faceIdentityGazeGuardEnabled: true,
+  contractVersion: 1,
+  cameraReadiness: "required",
 };
 
 type AssignmentSection = "create" | "list" | "live";
@@ -124,7 +126,7 @@ interface AssignmentDraft {
   attemptLimit: string;
   gracePeriodMinutes: string;
   shuffleQuestionOrder: boolean;
-  cameraIdentityGazeGuardEnabled: boolean;
+  cameraReadinessRequired: boolean;
 }
 
 interface TemplateSelectionFilters {
@@ -175,10 +177,7 @@ interface RunStatusRecord {
   runAnalyticsSnapshot: RunAnalyticsSnapshot;
 }
 
-interface AssignmentProctoringPolicy {
-  browserIntegrityGuardEnabled: boolean;
-  faceIdentityGazeGuardEnabled: boolean;
-}
+type AssignmentProctoringPolicy = ExamProctoringRequirementsV1;
 
 interface LiveMonitorStudentSnapshot {
   runId: string;
@@ -665,7 +664,7 @@ const INITIAL_DRAFT: AssignmentDraft = {
   attemptLimit: "1",
   gracePeriodMinutes: "10",
   shuffleQuestionOrder: false,
-  cameraIdentityGazeGuardEnabled: true,
+  cameraReadinessRequired: true,
 };
 
 const INITIAL_FILTERS: AssignmentListFilters = {
@@ -1354,8 +1353,9 @@ function buildRunPayload(draft: AssignmentDraft, templates: TemplateOption[], st
     gracePeriodMinutes: Number(draft.gracePeriodMinutes),
     mode: draft.executionMode,
     proctoringPolicy: {
+      contractVersion: 1,
       browserIntegrityGuardEnabled: true,
-      faceIdentityGazeGuardEnabled: draft.cameraIdentityGazeGuardEnabled,
+      cameraReadiness: draft.cameraReadinessRequired ? "required" : "off",
     },
     recipientStudentIds,
     shuffleQuestionOrder: draft.shuffleQuestionOrder,
@@ -1378,7 +1378,8 @@ function buildRunPayload(draft: AssignmentDraft, templates: TemplateOption[], st
       String(requestWithoutKey.gracePeriodMinutes),
       String(requestWithoutKey.shuffleQuestionOrder),
       String(requestWithoutKey.proctoringPolicy.browserIntegrityGuardEnabled),
-      String(requestWithoutKey.proctoringPolicy.faceIdentityGazeGuardEnabled),
+      String(requestWithoutKey.proctoringPolicy.contractVersion),
+      requestWithoutKey.proctoringPolicy.cameraReadiness,
       [...recipientStudentIds].sort().join(","),
     ].join("|"),
   };
@@ -2275,9 +2276,10 @@ function AssignmentManagementPage() {
           <small>{row.gracePeriodMinutes} minute grace period</small>
           <small>
             Browser guard {row.proctoringPolicy.browserIntegrityGuardEnabled ? "on" : "off"}
-            {" · Camera guard "}
-            {row.proctoringPolicy.faceIdentityGazeGuardEnabled ? "on" : "off"}
+            {" · Camera readiness "}
+            {row.proctoringPolicy.cameraReadiness}
           </small>
+          <small>Automated face matching and gaze tracking: unavailable</small>
         </div>
       ),
     },
@@ -3202,20 +3204,25 @@ function AssignmentManagementPage() {
                         </UiFormField>
 
                         <UiFormField
-                          label="Face + Gaze Guard"
-                          htmlFor="assignment-camera-gaze-guard"
-                          helper="Switch off only for supervised school lab exams. Browser Integrity Guard remains enabled."
+                          label="Camera readiness"
+                          htmlFor="assignment-camera-readiness"
                         >
-                          <label className="admin-assignments-toggle">
+                          <span className="admin-assignments-toggle">
                             <input
-                              id="assignment-camera-gaze-guard"
+                              id="assignment-camera-readiness"
+                              aria-label="Camera readiness"
+                              aria-describedby="assignment-camera-readiness-limits"
                               type="checkbox"
-                              checked={draft.cameraIdentityGazeGuardEnabled}
-                              onChange={(event) => setDraft((current) => ({ ...current, cameraIdentityGazeGuardEnabled: event.target.checked }))}
+                              checked={draft.cameraReadinessRequired}
+                              onChange={(event) => setDraft((current) => ({ ...current, cameraReadinessRequired: event.target.checked }))}
                             />
-                            <span>{draft.cameraIdentityGazeGuardEnabled ? "Required" : "Off for lab"}</span>
-                          </label>
+                            <span>{draft.cameraReadinessRequired ? "Required" : "Off"}</span>
+                          </span>
+                          <small className="ui-form-helper" id="assignment-camera-readiness-limits">
+                            Requires a browser camera permission/readiness report with consent. This does not verify identity, face or gaze, or guarantee continuous camera capture. Browser Integrity Guard remains enabled.
+                          </small>
                         </UiFormField>
+                        <p>Automated face matching and gaze tracking: unavailable. Browser observations are client reports, not proof of misconduct.</p>
                       </div>
 
                       <div className="admin-tests-step-actions">
@@ -3265,7 +3272,8 @@ function AssignmentManagementPage() {
                               <p><span>Attempt Limit</span><strong>{draft.attemptLimit}</strong></p>
                               <p><span>Shuffle</span><strong>{draft.shuffleQuestionOrder ? "Enabled" : "Disabled"}</strong></p>
                               <p><span>Browser Integrity</span><strong>Enabled</strong></p>
-                              <p><span>Face + Gaze Guard</span><strong>{draft.cameraIdentityGazeGuardEnabled ? "Required" : "Off for lab"}</strong></p>
+                              <p><span>Camera readiness</span><strong>{draft.cameraReadinessRequired ? "Required" : "Off"}</strong></p>
+                              <p><span>Automated face matching and gaze tracking</span><strong>Unavailable</strong></p>
                             </div>
                           </article>
 

@@ -1,3 +1,4 @@
+import { assertTerminatedRunAcknowledgement } from "./assignmentAuthority";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { NavLink, useNavigate, useParams } from "react-router-dom";
 import type {
@@ -186,8 +187,10 @@ function AdminAssignmentLiveRunPage() {
         idempotencyKey: idempotencyKey("Terminate run"),
         justification: justification.trim(),
       });
-      if (result.run.status !== "terminated" || result.recoveryState !== "complete") {
-        throw new Error("Termination did not return a complete terminal result.");
+      assertTerminatedRunAcknowledgement(detail.run, result);
+      if ("status" in result.run.proctoringPolicy) {
+        setDetail(null);
+        return `Policy unavailable: run ${runId} was terminated, but history cannot display its older policy.`;
       }
       await verifyTerminalRun(runId, "terminated");
       navigate("/admin/assignments/history", { replace: true });
@@ -273,7 +276,7 @@ function AdminAssignmentLiveRunPage() {
       <p className="admin-content-eyebrow">Assignment Live Monitor</p>
       <h2 id="admin-assignment-live-run-title">{detail?.run.id ?? runId ?? "Unknown run"}</h2>
       <p className="admin-content-copy">
-        This view uses only <code>GET /admin/live-runs/{`{runId}`}</code> and persisted session projections. Face/camera overrides are intentionally unavailable until their policy owner is implemented.
+        This view uses only <code>GET /admin/live-runs/{`{runId}`}</code> and persisted session projections. Face/camera overrides are intentionally unavailable. Automated face matching and gaze tracking are unavailable; camera readiness is only a browser report.
       </p>
       <AssignmentsWorkspaceNav />
       <div className="admin-assignments-detail-actions">
@@ -289,6 +292,7 @@ function AdminAssignmentLiveRunPage() {
       {detail ? (
         <>
           <div className="admin-assignments-detail-grid">
+            <article className="admin-assignments-detail-card"><span>Camera readiness</span><strong>{detail.run.proctoringPolicy.cameraReadiness === "required" ? "Required" : "Off"}</strong><small>Browser permission/readiness report only; automated face matching and gaze tracking unavailable.</small></article>
             <article className="admin-assignments-detail-card"><span>Status</span><strong>{detail.run.status}</strong><small>run revision {detail.run.revision}</small></article>
             <article className="admin-assignments-detail-card"><span>Recipients</span><strong>{detail.summary.totalRecipients}</strong><small>{detail.summary.notStartedCount} not started</small></article>
             <article className="admin-assignments-detail-card"><span>Active</span><strong>{detail.summary.activeSessionCount}</strong><small>persisted session states</small></article>

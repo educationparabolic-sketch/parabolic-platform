@@ -12,7 +12,7 @@ completion propagation remains eventual and does not unlock unreleased content.
 
 This document defines the event-driven topology of the platform.
 
-Last reconciled: 2026-10-18 (`BWM-043` synchronous readers/private session capture, no new event or schedule; `BWM-042` synchronous profile/photo commands, media-free audit and eighth bounded cleanup schedule; no new domain event or parallel usage writer)
+Last reconciled: 2026-10-19 (`BWM-045` substep 3 synchronous policy/preflight only, no new event/trigger/schedule; `BWM-043` synchronous readers/private session capture, no new event or schedule; `BWM-042` synchronous profile/photo commands, media-free audit and eighth bounded cleanup schedule; no new domain event or parallel usage writer)
 
 Each event represents a state transition or trigger that initiates downstream processing.
 
@@ -550,3 +550,64 @@ were restored. Hosting live releases and unrelated Functions/indexes are unchang
 BWM-045 is READY for inspection only. Full backend/data/legacy/publication rollout
 remains with BWM-053 and the other release owners; production NO_GO. See the
 master execution plan, final substep-8 evidence and LOG-257.
+
+## BWM-045 reserved browser observations — DEC-111
+
+Substep 2 adds declarations only; no domain event, trigger, schedule or parallel
+usage/analytics writer. `docs/EXAM_PROCTORING_CONTRACT.md` reserves synchronous
+EXM-07 session-owned immutable integrity-batch creation with atomic parent quotas
+and exact replay. All event categories are client_report observations, not
+trusted audit, face/gaze verification, misconduct decisions or score/risk inputs.
+Future TTL deletes receipt documents asynchronously; it creates no new domain
+consumer or summary recomputation. Qualify trigger matching and deployed TTL
+before release; retain the existing eight schedules and BWM-024 propagation.
+The schema/API reservation is not active route/producer implementation.
+
+## BWM-045 backend policy enforcement — DEC-112
+
+Substep 3 changes synchronous existing policy/activation/answer owners only;
+no domain event, trigger, schedule, usage writer or integrity-ingest producer.
+New session reporting-state initialization and first activation preflight are
+ordinary existing session writes, subject to unchanged submission pipeline
+guards. Policy observations are still not persisted as events; substep 4 owns
+that writer/TTL declaration and its trigger-side-effect proof. Trusted terminal
+submission/termination and BWM-024 summary propagation retain their owners.
+
+## BWM-045 integrity receipt effects — substep 4 (DEC-113)
+
+EXM-07 synchronously creates session integrityBatches children and increments
+only parent reporting counters/lastAcceptedAt. No domain event producer, analytics,
+usage, score, result, sanction or audit writer is added. Existing session-update
+submission guards remain unchanged: started-to-started reporting metadata updates
+return before post-submission production. Native verification invokes the actual
+existing trigger using persisted before/after snapshots and asserts no result,
+usage or analytics documents. Functions HTTP verification also exercises actual
+parent updates. TTL child deletion matches no current trigger. Eight schedules
+remain unchanged; deployed TTL/purge behavior still requires BWM-052/053 proof.
+
+## BWM-045 Admin policy adoption — substep 5 (DEC-114)
+
+Mounted Admin v1 policy commands/retry/read validation add no event producer,
+analytics/scoring/risk/audit writer, trigger or schedule. Existing assignment
+create/lifecycle/derived-command audit and notification owners remain; no face
+verification or camera override event is invented. UI readiness labels cannot
+turn client observations into misconduct evidence. Eight schedules unchanged.
+
+BWM-045 substep 6 / DEC-115: mounted Exam captures only the frozen enum/time/phase
+client observations, including local CAMERA_READY/DENIED/LOST. EXM-07 receipts
+remain the sole durable acknowledgement; queued/sent is not saved. The bounded
+in-memory queue has no storage/beacon/terminal drain or successor replay.
+Blur/network/report failure has no punitive lifecycle/score effect; unreliable
+DEVTOOLS_SUSPECTED capture is removed. Answer and submission events retain their
+existing owners. No new Firestore trigger, schedule or analytics input.
+
+BWM-045 final qualification (DEC-118): supported v1 policy, explicit unavailable
+automated face/gaze, native camera readiness/lifetime and fenced client-observation
+receipts pass local aggregate and two CSP-on public staging cases. Real Student
+fragment-launch adapter is reconciled; no new DTO/route/event authority. Public
+receipt readback, exact replay counters, teardown and independent Student return
+pass. Both isolated synthetic fixtures are deleted and canonical staging launch
+origin restored; expiring previews are qualification artifacts. No identity-photo
+fetch or mounted EXM-06 admission. Production NO_GO; physical camera continuity,
+matching, TTL purge and full infrastructure/publication remain downstream. See
+master BWM-045 final substep-8 evidence and `docs/EXAM_PROCTORING_CONTRACT.md`.

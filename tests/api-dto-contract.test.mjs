@@ -324,10 +324,10 @@ function localDeclarationPattern(name) {
 test("aligned frontend and Functions DTOs have one shared source", async () => {
   const sharedSource = await readFile(sharedContractPath, "utf8");
 
-  assert.doesNotMatch(
-    sharedSource,
-    /^\s*import\b/m,
-    "shared transport declarations must remain portable across portal and Functions builds",
+  assert.deepEqual(
+    sharedSource.match(/^import\b.*$/gm),
+    ['import type {ExamProctoringPolicyV1, ExamProctoringRequirementsV1} from "./examProctoring.js";'],
+    "shared DTOs may reference only the portable proctoring declaration; no runtime or platform imports",
   );
 
   for (const family of dtoFamilies) {
@@ -338,7 +338,14 @@ test("aligned frontend and Functions DTOs have one shared source", async () => {
       ...frontendPaths.map((path) => readFile(path, "utf8")),
     ]);
 
-    assert.match(backendSource, /shared\/contracts\/apiDtos/);
+    const stagedPolicyOwners = new Set([
+      "functions/src/types/adminRuns.ts",
+      "functions/src/types/adminAssignmentOperations.ts",
+      "functions/src/types/sessionStart.ts",
+    ]);
+    assert.match(backendSource, stagedPolicyOwners.has(family.backend)
+      ? /shared\/contracts\/examProctoringBackend/
+      : /shared\/contracts\/apiDtos/);
     for (const frontendSource of frontendSources) {
       assert.match(frontendSource, family.sharedImportPattern ?? /shared\/contracts\/apiDtos/);
     }

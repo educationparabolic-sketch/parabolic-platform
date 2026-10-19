@@ -143,7 +143,7 @@ test.beforeAll(async () => {
       },
       proctoringPolicy: {
         browserIntegrityGuardEnabled: false,
-        faceIdentityGazeGuardEnabled: false,
+        contractVersion: 1, cameraReadiness: "off",
       },
       questionIds,
       recipientStudentIds: [studentId],
@@ -272,7 +272,7 @@ test("fragment bootstrap enters v2 without URL/storage/telemetry credentials and
     rejected.on("request", (request) => {
       if (request.url().includes("identitytoolkit") || request.url().endsWith("/entry")) authCalls++;
     });
-    for (const suffix of [`?token=${encodeURIComponent(launch.launchCredential)}`, "#launch=a&launch=b", "#launch=%ZZ", "#unknown=a", "?token=a#launch=b"]) {
+    for (const suffix of [`?token=${encodeURIComponent(launch.launchCredential)}`, "#launch=a&launch=b", "#launch=%ZZ", "#unknown=a", "?token=a#launch=b", "?faceGaze=off#launch=credential", "?cameraReadiness=off#launch=credential", "?token=dev&faceGaze=off", "?mode=Hard#launch=credential"]) {
       await rejected.goto("about:blank");
       await rejected.goto(`${url.origin}${url.pathname}${suffix}`, {waitUntil: "domcontentloaded"});
       await expect(rejected.getByRole("heading", {name: "Session Access Blocked"})).toBeVisible();
@@ -333,6 +333,11 @@ test("mounted ownership preserves activation, acknowledged/offline answers, rota
   const entryResponsePromise = page.waitForResponse((response) =>
     new URL(response.url()).pathname.endsWith(`/session/${sessionId}/entry`),
   {timeout: 90_000});
+  await page.addInitScript(() => {
+    window.__cameraOffRequests = 0;
+    const native = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = options => {window.__cameraOffRequests++; return native(options);};
+  });
   await page.goto(launchUrl.href, {waitUntil: "domcontentloaded"});
   await expect.poll(() => new URL(page.url()).searchParams.has("token"))
     .toBe(false);
@@ -381,6 +386,7 @@ test("mounted ownership preserves activation, acknowledged/offline answers, rota
   expect(Date.parse(activationEnvelope.data.deadlineAt)).not.toBeNaN();
   await expect(page.getByText("Authoritative browser snapshot question", {exact: true}))
     .toBeVisible({timeout: 30_000});
+  expect(await page.evaluate(() => window.__cameraOffRequests)).toBe(0);
   let answerRequestBody = null;
   let answerAuthorization = "";
   const answerRequestBodies = [];
@@ -695,7 +701,7 @@ async function prepareOwnershipRun(suffix, camera = false) {
   await ref.set({...template, runId, status: "scheduled",
     startWindow: Timestamp.fromMillis(Date.now() + 300000),
     endWindow: Timestamp.fromMillis(Date.now() + 3600000),
-    proctoringPolicy: {browserIntegrityGuardEnabled: false, faceIdentityGazeGuardEnabled: camera}});
+    proctoringPolicy: {contractVersion: 1, browserIntegrityGuardEnabled: false, cameraReadiness: camera ? "required" : "off"}});
   await ref.update({startWindow: Timestamp.fromMillis(Date.now() - 300000)});
 }
 async function issueLaunch(page, intent = "start") {
@@ -767,7 +773,7 @@ test("mounted ownership fences cloned tabs, independent replay, renewal, release
   const before = JSON.stringify((await sessionRef.get()).get("answerMap"));
   for (const [path, body] of [
     [entryPath, {operation: "release", commandId: crypto.randomUUID()}],
-    [entryPath.replace(/entry$/u, "activate"), {}],
+    [entryPath.replace(/entry$/u, "activate"), {contractVersion: 1, preflight: {camera: "not_requested"}}],
     [entryPath.replace(/entry$/u, "answers"), {instituteId, runId, yearId, batchId: "stale-tab", batchSequence: 100,
       flushReason: "scheduled", millisecondsSinceLastWrite: 5000, answers: [{questionId, clientRevision: 100,
         clientTimestamp: Date.now(), response: {kind: "mcq", optionId: "A"}, timeSpentSeconds: 0}]}],
@@ -828,13 +834,16 @@ test("mounted ownership revocation stops real camera tracks and preserves recove
   const launch = await issueLaunch(page);
   const initial = entryResponseFor(page, "launch");
   await page.goto(launch.examUrl); const entry = await initial; expect(entry.status()).toBe(200);
-  expect((await entry.json()).data.entry.runtimeSnapshot.proctoringPolicy.faceIdentityGazeGuardEnabled).toBe(true);
-  await page.getByRole("button", {name: /Check Camera|Enable Camera|Allow Camera/u}).click();
+  expect((await entry.json()).data.entry.runtimeSnapshot.proctoringPolicy.cameraReadiness).toBe("required");
+  const cameraAcknowledged = page.waitForResponse(r => r.url().endsWith("/integrity-events") && r.status() === 200);
+  await page.getByRole("button", {name: /I agree.*Start Camera/u}).click();
   expect(await page.evaluate(async () => {
     if (!window.__examCameraRequests.length) throw new Error("Camera request was not started.");
     await Promise.all(window.__examCameraRequests);
     return window.__examStreams.flatMap(stream => stream.getTracks()).some(track => track.readyState === "live");
   })).toBe(true);
+  await expect(page.getByText(/Local camera preview ready/u)).toBeVisible();
+  await cameraAcknowledged;
   await getAuth(adminApp).updateUser(studentUid, {disabled: true});
   try {
     const renewal = entryResponseFor(page, "renew");
@@ -1184,4 +1193,299 @@ test("security matrix recovers an actual crashed renderer through browser reload
     await cdp.detach();
     await browserCdp.detach();
   } finally {await isolated.close();}
+});
+
+test("proctoring runtime uses consent and native readiness, replays real lost reporting response and pauses questions without blocking saves or submit", async ({page}) => {
+  test.setTimeout(180000);
+  await prepareOwnershipRun("proctoring", true);
+  await page.context().grantPermissions(["camera"]);
+  await page.addInitScript(() => {
+    window.__examStreams = []; window.__examCameraCalls = []; window.__integrityPosts = [];
+    let deny = true, loseResponse = true;
+    const media = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = async options => {
+      window.__examCameraCalls.push(options);
+      if (deny) {deny = false; throw new DOMException("Denied by test", "NotAllowedError");}
+      const stream = await media(options); window.__examStreams.push(stream); return stream;
+    };
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = async (input, options) => {
+      const response = await nativeFetch(input, options);
+      if (String(input).includes("/integrity-events")) {
+        window.__integrityPosts.push({body: options.body, result: await response.clone().json()});
+        if (loseResponse && response.ok) {loseResponse = false; throw new TypeError("Simulated lost response after real commit");}
+      }
+      return response;
+    };
+  });
+  const launch = await issueLaunch(page); const initial=entryResponseFor(page,"launch");
+  await page.goto(launch.examUrl); const entry=await initial;expect(entry.status()).toBe(200);
+  const policy=(await entry.json()).data.entry.runtimeSnapshot.proctoringPolicy;
+  expect(policy).toMatchObject({contractVersion:1,cameraReadiness:"required",capabilities:{automatedFaceMatching:"unavailable",automatedGazeTracking:"unavailable"}});
+  expect(await page.evaluate(()=>window.__examCameraCalls.length)).toBe(0);
+  await expect(page.getByRole("button",{name:"Continue to Instructions"})).toBeDisabled();
+  await page.getByRole("button",{name:/I agree.*Start Camera/u}).click();
+  await expect(page.getByText(/Camera readiness unavailable/u)).toBeVisible();
+  await page.getByRole("button",{name:/I agree.*Retry Camera/u}).click();
+  await expect(page.getByText(/Local camera preview ready/u)).toBeVisible();
+  expect(await page.evaluate(()=>window.__examCameraCalls.every(c=>c.audio===false))).toBe(true);
+  const sessionRef=firestore.doc(`institutes/${instituteId}/academicYears/${yearId}/runs/${runId}/sessions/${launch.sessionId}`);
+  await expect.poll(()=>page.evaluate(()=>window.__integrityPosts.length),{timeout:30000}).toBeGreaterThanOrEqual(2);
+  const posts=await page.evaluate(()=>window.__integrityPosts);
+  expect(posts[0].body).toBe(posts[1].body);expect(posts[1].result.data.disposition).toBe("replayed");
+  const batch=JSON.parse(posts[0].body); const stored=(await sessionRef.collection("integrityBatches").doc(batch.batchId).get()).data();
+  expect(stored.events).toEqual(batch.events);expect(stored.source).toBe("client_report");
+  expect(JSON.stringify(stored)).not.toMatch(/video|audio|image|cameraStream|ownerProof/u);
+  await beginOwnedExam(page);
+  const preflight=(await sessionRef.get()).data().activationPreflight;
+  expect(preflight).toMatchObject({contractVersion:1,source:"client_report",preflight:{camera:"client_reported_ready",consentNoticeVersion:"exam-camera-local-v1",consentAccepted:true}});
+  await page.context().setOffline(true);
+  await page.getByRole("radio").nth(0).check();
+  await page.evaluate(()=>window.__examStreams.forEach(s=>s.getTracks().forEach(t=>t.stop())));
+  await expect(page.getByRole("heading",{name:"Question interaction paused"})).toBeVisible();
+  await expect(page.getByText("Authoritative browser snapshot question",{exact:true})).toBeHidden();
+  expect((await sessionRef.get()).data().status).toBe("active");
+  const answerSaved=page.waitForResponse(r=>r.url().endsWith(`/session/${launch.sessionId}/answers`) && r.status()===200,{timeout:90000});
+  await page.context().setOffline(false); await answerSaved;
+  await expect.poll(async()=> (await sessionRef.get()).get(`answerMap.${questionId}.response`), {timeout:30000}).toEqual({kind:"mcq",optionId:"A"});
+
+  await page.getByRole("button",{name:/I agree.*Retry Camera/u}).click();
+  await expect(page.getByText("Authoritative browser snapshot question",{exact:true})).toBeVisible();
+  await page.getByRole("button",{name:"Stop Camera",exact:true}).click();
+  await expect(page.getByRole("heading",{name:"Question interaction paused"})).toBeVisible();
+  // Existing real terminal UI remains available independently of camera and telemetry.
+  await page.getByRole("button",{name:"Submit Test",exact:true}).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.getByLabel(/I understand 11 question\(s\) will remain unanswered/u).check();
+  const submit=page.waitForResponse(r=>r.url().endsWith(`/session/${launch.sessionId}/submit`),{timeout:90000});
+  await page.getByRole("button",{name:"Confirm Final Submit",exact:true}).click();
+  expect((await submit).status()).toBe(200);
+  await expect.poll(()=>page.evaluate(()=>window.__examStreams.flatMap(s=>s.getTracks()).every(t=>t.readyState==="ended"))).toBe(true);
+  expect((await sessionRef.get()).data().status).toBe("submitted");
+});
+
+// Test instrumentation wraps native devices/transport. It never manufactures a
+// successful media track, API receipt or Firebase response.
+async function instrumentProctoring(context) {
+  await context.addInitScript(() => {
+    const state = window.__proctoring = {streams: [], calls: [], errors: [], posts: [], receipts: [], failReporting: false, holdNext: false, release: null};
+    const media = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = async options => {
+      state.calls.push(options);
+      let stream;
+      try {stream = await media(options);} catch (error) {state.errors.push({stage: "getUserMedia", name: error.name}); throw error;}
+      state.streams.push(stream);
+      if (state.holdNext) {state.holdNext = false; return new Promise(resolve => {state.release = () => {state.release = null; resolve(stream);};});}
+      return stream;
+    };
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = async (input, options) => {
+      const reporting = String(input instanceof Request ? input.url : input).includes("/integrity-events");
+      if (reporting) {
+        state.posts.push(options.body);
+        if (state.failReporting) throw new TypeError("Test transport unavailable before dispatch");
+      }
+      const response = await nativeFetch(input, options);
+      if (reporting) state.receipts.push(await response.clone().json());
+      return response;
+    };
+  });
+}
+const nativeTracksEnded = page => page.evaluate(() => window.__proctoring.streams.flatMap(s => s.getTracks()).every(t => t.readyState === "ended"));
+async function cameraReady(page) {
+  await page.getByRole("button", {name: /I agree.*(?:Start|Retry) Camera/u}).click();
+  await expect(page.getByText(/Local camera preview ready/u)).toBeVisible().catch(async error => {
+    const state = await page.evaluate(async () => ({permission: (await navigator.permissions.query({name: "camera"})).state,
+      calls: window.__proctoring.calls.length, errors: window.__proctoring.errors,
+      tracks: window.__proctoring.streams.flatMap(s => s.getTracks()).map(t => ({state: t.readyState, enabled: t.enabled, muted: t.muted})),
+      videos: [...document.querySelectorAll("video")].map(v => ({state: v.readyState, width: v.videoWidth, height: v.videoHeight})),
+      unavailable: document.body.innerText.includes("Camera readiness unavailable"), waiting: document.body.innerText.includes("Waiting for permission"),
+      interrupted: document.body.innerText.includes("Exam runtime paused") }));
+    await test.info().attach("native-camera-state", {body: JSON.stringify(state), contentType: "application/json"});
+    throw error;
+  });
+  await expect.poll(() => page.getByLabel("Local camera preview", {exact: true}).evaluate(video => video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0)).toBe(true);
+  expect(await page.evaluate(() => window.__proctoring.calls.every(c => c.audio === false))).toBe(true);
+  expect(await page.evaluate(() => window.__proctoring.streams.every(s => s.getAudioTracks().length === 0))).toBe(true);
+  await expect(page.getByRole("button", {name: /Verify Face|Calibration/u})).toHaveCount(0);
+}
+async function enteredCameraRun(page, suffix) {
+  await prepareOwnershipRun(suffix, true);
+  const launch = await issueLaunch(page), response = entryResponseFor(page, "launch");
+  await page.goto(launch.examUrl); expect((await response).status()).toBe(200);
+  return launch;
+}
+async function noStoredObservationIntent(page, batchId, sessionId) {
+  expect(await page.evaluate(id => JSON.stringify({...localStorage, ...sessionStorage}).includes(id), batchId)).toBe(false);
+  const recovery = await recoveryRecord(page, sessionId);
+  expect(JSON.stringify(recovery)).not.toContain(batchId);
+  expect(JSON.stringify(recovery)).not.toMatch(/cameraStream|consentAccepted|integrityEvents|integrityBatches/u);
+}
+
+test("proctoring acceptance denies native camera permission and fences cancellation, replacement and late navigation results", async () => {
+  test.setTimeout(180000);
+  // Automatic permission UI would override denial. Use the same native fake
+  // video device in a separate browser without the auto-accept flag.
+  const nativeBrowser = await chromium.launch({channel: "chromium", args: ["--use-fake-device-for-media-stream"]});
+  try {
+    const context = await nativeBrowser.newContext({baseURL: examOrigin, bypassCSP: true});
+    const page = await context.newPage();
+    await instrumentProctoring(page.context());
+    await enteredCameraRun(page, "permission_lifetime");
+    const cdp = await page.context().newCDPSession(page);
+    const {targetInfo} = await cdp.send("Target.getTargetInfo");
+    const permission = setting => cdp.send("Browser.setPermission", {permission: {name: "camera"}, setting, origin: examOrigin, browserContextId: targetInfo.browserContextId});
+    try {
+      await permission("denied");
+      expect(await page.evaluate(async () => (await navigator.permissions.query({name: "camera"})).state)).toBe("denied");
+      expect(await page.evaluate(() => window.__proctoring.calls.length)).toBe(0);
+      await page.getByRole("button", {name: /I agree.*Start Camera/u}).click();
+      await expect(page.getByText(/Camera readiness unavailable/u)).toBeVisible();
+      expect(await page.evaluate(() => window.__proctoring.streams.length)).toBe(0);
+      await expect(page.getByRole("button", {name: "Continue to Instructions"})).toBeDisabled();
+      await permission("granted"); await cameraReady(page);
+      // Native disabled track must invalidate readiness, with no automatic retry.
+      await page.evaluate(() => {window.__proctoring.streams.at(-1).getVideoTracks()[0].enabled = false;});
+      await expect(page.getByText(/Camera readiness unavailable/u)).toBeVisible();
+      await expect.poll(() => nativeTracksEnded(page)).toBe(true);
+      const calls = await page.evaluate(() => window.__proctoring.calls.length);
+      await page.evaluate(() => {window.__proctoring.holdNext = true;});
+      await page.getByRole("button", {name: /I agree.*Retry Camera/u}).click();
+      await expect.poll(() => page.evaluate(() => !!window.__proctoring.release)).toBe(true);
+      await page.getByRole("button", {name: "Stop Camera", exact: true}).click();
+      await page.evaluate(() => window.__proctoring.release());
+      await expect.poll(() => nativeTracksEnded(page)).toBe(true);
+      await expect(page.getByText(/Fresh consent and local readiness/u)).toBeVisible();
+      expect(await page.evaluate(() => window.__proctoring.calls.length)).toBe(calls + 1);
+      await cameraReady(page);
+      // A queued old-stream event must not invalidate the newly ready stream.
+      await page.evaluate(() => window.__proctoring.streams[0].getVideoTracks()[0].dispatchEvent(new Event("ended")));
+      await expect(page.getByText(/Local camera preview ready/u)).toBeVisible();
+      await page.evaluate(() => {window.__proctoring.holdNext = true;});
+      await page.getByRole("button", {name: /I agree.*Start Camera/u}).click();
+      await expect.poll(() => page.evaluate(() => !!window.__proctoring.release)).toBe(true);
+      // Real same-document route navigation unmounts the runtime while the actual
+      // native permission result is withheld. Resolve it only after teardown.
+      await page.evaluate(() => {history.pushState(null, "", "/"); dispatchEvent(new PopStateEvent("popstate"));});
+      await expect(page.getByRole("heading", {name: "Session Access Blocked"})).toBeVisible();
+      await page.evaluate(() => window.__proctoring.release());
+      await expect.poll(() => nativeTracksEnded(page)).toBe(true);
+      expect(await page.locator("video").count()).toBe(0);
+    } finally {await cdp.detach();}
+  } finally {await nativeBrowser.close();}
+});
+
+test("proctoring acceptance bounds failed reporting, explicitly retries exact intent and discards it across camera recovery ownership", async ({page}) => {
+  test.setTimeout(180000);
+  await instrumentProctoring(page.context()); await page.context().grantPermissions(["camera"]);
+  const launch = await enteredCameraRun(page, "queue_recovery"), ref = sessionFor(launch);
+  let sentHeaders;
+  page.on("request", request => {if (request.url().endsWith("/integrity-events")) sentHeaders = request.headers();});
+  await page.evaluate(() => {window.__proctoring.failReporting = true;});
+  await cameraReady(page); await beginOwnedExam(page);
+  const deadline = (await ref.get()).get("deadlineAt").toMillis();
+  await page.evaluate(() => {for (let i = 0; i < 65; i++) dispatchEvent(new Event(i % 2 ? "online" : "offline"));});
+  const status = page.getByRole("region", {name: "Client observation reporting"});
+  await expect(status).toContainText("60 not yet saved");
+  await expect(status).toContainText("6 lost or discarded");
+  await expect(status).toContainText("unavailable", {timeout: 15000});
+  const attempts = await page.evaluate(() => window.__proctoring.posts);
+  expect(attempts).toHaveLength(4); expect(new Set(attempts).size).toBe(1);
+  const batch = JSON.parse(attempts[0]);
+  expect((await ref.collection("integrityBatches").get()).size).toBe(0);
+  await noStoredObservationIntent(page, batch.batchId, launch.sessionId);
+  await expect(page.getByText("Authoritative browser snapshot question", {exact: true})).toBeVisible();
+  await page.evaluate(() => {window.__proctoring.failReporting = false;});
+  const accepted = page.waitForResponse(r => r.url().endsWith("/integrity-events") && r.status() === 200);
+  await page.getByRole("button", {name: "Retry reporting", exact: true}).click(); await accepted;
+  // Re-block later unique batches while the popup loads: the test transfers
+  // ownership with an uncertain queue, rather than racing a legitimate flush.
+  await page.evaluate(() => {window.__proctoring.failReporting = true;});
+  await expect(status).toContainText(`${batch.events.length} acknowledged`);
+  expect((await ref.collection("integrityBatches").doc(batch.batchId).get()).get("events")).toEqual(batch.events);
+  const recover = page.context().waitForEvent("response", {predicate: r => r.url().endsWith("/entry") && r.request().postDataJSON()?.operation === "recover", timeout: 90000});
+  const popup = page.waitForEvent("popup");
+  await page.evaluate(path => window.open(path, "_blank"), `/session/${launch.sessionId}`);
+  const clone = await popup;
+  try {
+    const entry = (await (await recover).json()).data; expect(entry.ownership.generation).toBe(2);
+    await expect(page.getByRole("heading", {name: "Exam runtime paused"})).toBeVisible();
+    await expect.poll(() => nativeTracksEnded(page)).toBe(true);
+    await expect(status).toContainText("stopped");
+    await expect(status).toContainText("0 not yet saved");
+    await expect(clone.getByText("Authoritative browser snapshot question", {exact: true})).toBeHidden();
+    expect(await clone.evaluate(() => window.__proctoring.calls.length)).toBe(0);
+    const oldAttempts = await page.evaluate(() => window.__proctoring.posts.length);
+    // Absence window spans the next scheduled unique-batch flush.
+    await new Promise(resolve => setTimeout(resolve, 5200));
+    expect(await page.evaluate(() => window.__proctoring.posts.length)).toBe(oldAttempts);
+    expect(await clone.evaluate(() => window.__proctoring.posts.length)).toBe(0);
+    const counts = (await ref.get()).get("integrityReportingState");
+    const denied = await page.request.post(`/api/v1/exam/session/${launch.sessionId}/integrity-events`, {data: batch, headers: {
+      authorization: sentHeaders.authorization, "X-Parabolic-Exam-Owner": sentHeaders["x-parabolic-exam-owner"],
+      "X-Parabolic-Exam-Generation": sentHeaders["x-parabolic-exam-generation"]}});
+    expect(denied.status()).toBe(409); expect((await ref.get()).get("integrityReportingState")).toEqual(counts);
+    await cameraReady(clone);
+    await expect(clone.getByText("Authoritative browser snapshot question", {exact: true})).toBeVisible();
+    await expect.poll(async () => (await ref.collection("integrityBatches").get()).size).toBe(2);
+    const fresh = await clone.evaluate(() => JSON.parse(window.__proctoring.posts[0]));
+    expect(fresh.batchId).not.toBe(batch.batchId);
+    expect((await ref.collection("integrityBatches").doc(fresh.batchId).get()).get("generation")).toBe(2);
+    expect((await ref.get()).get("integrityReportingState.acceptedBatchCount")).toBe(2);
+    expect((await ref.get()).get("integrityReportingState.acceptedEventCount")).toBe(batch.events.length + fresh.events.length);
+    expect((await ref.get()).get("deadlineAt").toMillis()).toBe(deadline);
+    const released = entryResponseFor(clone, "release");
+    await clone.getByRole("button", {name: "Sign out of Exam", exact: true}).click(); expect((await released).status()).toBe(200);
+    await expect.poll(() => nativeTracksEnded(clone)).toBe(true);
+    expect((await ref.get()).get("status")).toBe("active");
+    expect((await ref.get()).get("submittedAt")).toBeNull();
+  } finally {await clone.close();}
+});
+
+test("proctoring acceptance submits with a live camera and unavailable reporting without uploads or a terminal drain", async ({page}) => {
+  test.setTimeout(180000);
+  await instrumentProctoring(page.context()); await page.context().grantPermissions(["camera"]);
+  const launch = await enteredCameraRun(page, "terminal_camera"), ref = sessionFor(launch);
+  const mediaRequests = [];
+  page.on("request", request => {if (new URL(request.url()).pathname.startsWith("/api/v1/") && (/image|audio|video|multipart/iu.test(request.headers()["content-type"] ?? "") || /identity|upload|media/iu.test(new URL(request.url()).pathname))) mediaRequests.push(request.url());});
+  await page.evaluate(() => {window.__proctoring.failReporting = true;});
+  await cameraReady(page); await beginOwnedExam(page);
+  expect(await nativeTracksEnded(page)).toBe(false);
+  await page.getByRole("button", {name: "Submit Test", exact: true}).click();
+  await page.getByLabel(/I understand 12 question\(s\) will remain unanswered/u).check();
+  const result = page.waitForResponse(r => r.url().endsWith("/submit"), {timeout: 90000});
+  await page.getByRole("button", {name: "Confirm Final Submit", exact: true}).click(); expect((await result).status()).toBe(200);
+  await expect(page.getByRole("heading", {name: "Exam Submitted", exact: true})).toBeVisible();
+  await expect.poll(() => nativeTracksEnded(page)).toBe(true);
+  await expect(page.getByRole("region", {name: "Client observation reporting"})).toContainText("stopped");
+  expect((await ref.get()).get("integrityReportingState.acceptedBatchCount")).toBe(0);
+  expect((await ref.collection("integrityBatches").get()).size).toBe(0);
+  expect(mediaRequests).toEqual([]);
+  expect(await page.evaluate(() => window.__proctoring.calls.length)).toBe(1);
+});
+
+test("proctoring acceptance stops camera and private pending observations on an actual different-UID Firebase replacement", async ({page}) => {
+  test.setTimeout(180000);
+  await instrumentProctoring(page.context()); await page.context().grantPermissions(["camera"]);
+  const launch = await enteredCameraRun(page, "identity_camera"), ref = sessionFor(launch);
+  const receipt = page.waitForResponse(r => r.url().endsWith("/integrity-events") && r.status() === 200);
+  await cameraReady(page); await receipt; await beginOwnedExam(page);
+  const saved = page.waitForResponse(r => r.url().endsWith("/answers") && r.status() === 200);
+  await page.getByRole("radio").nth(1).check(); await saved;
+  await expect.poll(async () => (await recoveryRecord(page, launch.sessionId))?.runtimeGeneration).toBe(1);
+  await page.evaluate(() => {window.__proctoring.failReporting = true; dispatchEvent(new Event("offline"));});
+  const before = (await ref.get()).data();
+  const replacement = await getAuth(adminApp).createUser({}), tab = await page.context().newPage();
+  try {
+    const credential = await getAuth(adminApp).createCustomToken(replacement.uid, {role: "student", instituteId, yearId, runId, sessionId: launch.sessionId, studentId, launchNonce: "never-issued-other-uid"});
+    const denied = entryResponseFor(tab, "launch");
+    await tab.goto(`${examOrigin}/session/${launch.sessionId}#launch=${encodeURIComponent(credential)}`); expect((await denied).status()).toBe(401);
+    await expect(page.getByRole("heading", {name: "Exam runtime paused"})).toBeVisible({timeout: 15000});
+    await expect.poll(() => nativeTracksEnded(page)).toBe(true);
+    await expect(page.getByRole("region", {name: "Client observation reporting"})).toContainText("stopped");
+    const after = (await ref.get()).data();
+    expect(after.answerMap).toEqual(before.answerMap); expect(after.runtimeOwnership.generation).toBe(1);
+    expect(after.status).toBe("active"); expect(after.submittedAt).toBeNull();
+    expect((await recoveryRecord(page, launch.sessionId)).runtimeGeneration).toBe(1);
+  } finally {await tab.close(); await getAuth(adminApp).deleteUser(replacement.uid);}
 });

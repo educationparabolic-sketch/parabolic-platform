@@ -1,3 +1,4 @@
+import {issueProctoringPolicy, readProctoringRequirements, ExamProctoringError} from "./examProctoringPolicy";
 import {closeRuntimeOwnership, INTERNAL_SUBMISSION_AUTHORITY} from "./examRuntimeOwnership";
 /* eslint-disable require-jsdoc */
 import {createHash} from "node:crypto";
@@ -25,8 +26,7 @@ import {
 import type {
   AdminRunLifecycleStatus,
   AdminRunMode,
-  AdminRunProctoringPolicy,
-} from "../../../shared/contracts/apiDtos";
+} from "../../../shared/contracts/examProctoringBackend";
 
 const ACADEMIC_YEARS_COLLECTION = "academicYears";
 const AUDIT_LOGS_COLLECTION = "auditLogs";
@@ -239,20 +239,6 @@ function runMode(value: unknown): AdminRunMode {
   );
 }
 
-function proctoringPolicy(value: unknown): AdminRunProctoringPolicy {
-  if (!isRecord(value) ||
-    typeof value.browserIntegrityGuardEnabled !== "boolean" ||
-    typeof value.faceIdentityGazeGuardEnabled !== "boolean") {
-    throw new AdminAssignmentOperationValidationError(
-      "CONFLICT",
-      "Persisted run proctoring policy is invalid.",
-    );
-  }
-  return {
-    browserIntegrityGuardEnabled: value.browserIntegrityGuardEnabled,
-    faceIdentityGazeGuardEnabled: value.faceIdentityGazeGuardEnabled,
-  };
-}
 
 function runRevision(data: Record<string, unknown>): number {
   return typeof data.revision === "number" &&
@@ -320,11 +306,11 @@ function assertSessionOwnership(input: {
   return studentId;
 }
 
-export function toVersionedRunRecord(
+function versionedRunFields(
   runId: string,
   runPath: string,
   data: Record<string, unknown>,
-): AdminRunVersionedRecord {
+): Omit<AdminRunVersionedRecord, "proctoringPolicy"> {
   const recipients = stringArray(data.recipientStudentIds, "recipientStudentIds");
   const updatedAt = data.updatedAt instanceof Timestamp ? data.updatedAt :
     timestamp(data.createdAt, "createdAt");
@@ -339,7 +325,6 @@ export function toVersionedRunRecord(
       data.gracePeriodMinutes : 0,
     id: runId,
     mode: runMode(data.mode),
-    proctoringPolicy: proctoringPolicy(data.proctoringPolicy),
     recipientCount: recipients.length,
     recipientStudentIds: recipients,
     revision: runRevision(data),
@@ -352,6 +337,24 @@ export function toVersionedRunRecord(
     timezone: requiredString(data.timezone, "timezone"),
     updatedAt: updatedAt.toDate().toISOString(),
   };
+}
+
+export function toVersionedRunRecord(
+  runId: string, runPath: string, data: Record<string, unknown>,
+): AdminRunVersionedRecord {
+  return {...versionedRunFields(runId, runPath, data), proctoringPolicy: issueProctoringPolicy(data.proctoringPolicy)};
+}
+function terminalRunRecord(
+  runId: string, runPath: string, data: Record<string, unknown>,
+): AdminRunLifecycleServiceResult["run"] {
+  const fields = versionedRunFields(runId, runPath, data);
+  try {
+    return {...fields, proctoringPolicy: issueProctoringPolicy(data.proctoringPolicy)};
+  } catch (error) {
+    if (!(error instanceof ExamProctoringError)) throw error;
+    return {...fields, proctoringPolicy: {status: "unavailable",
+      reason: error.reason === "policy_unsupported" ? "policy_unsupported" : "policy_upgrade_required"}};
+  }
 }
 
 function stableJson(value: unknown): string {
@@ -596,7 +599,7 @@ function derivedRunData(input: {
     mode: input.source.mode,
     modeSnapshot: input.source.modeSnapshot ?? input.source.mode,
     phaseConfigSnapshot,
-    proctoringPolicy: input.source.proctoringPolicy,
+    proctoringPolicy: readProctoringRequirements(input.source.proctoringPolicy, true),
     questionIds,
     recipientCount: input.recipientStudentIds.length,
     recipientStudentIds: input.recipientStudentIds,
@@ -1619,7 +1622,7 @@ export class AdminAssignmentOperationsService {
         auditId: authority.auditId,
         disposition: "applied",
         recoveryState: "complete",
-        run: toVersionedRunRecord(
+        run: terminalRunRecord(
           request.runId,
           runReference.path,
           {...data, ...update},

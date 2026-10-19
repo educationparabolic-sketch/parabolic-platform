@@ -32,6 +32,9 @@ import { getFirebaseAuth } from "../../../shared/services/firebaseClient";
 import { getLaunchMetadata } from "./launchBootstrap";
 import { getExamRuntimeOwnership } from "./launchTransport";
 import { resolveStudentReturnUrl } from "./studentReturn";
+import { CameraReadiness, CAMERA_NOTICE, type CameraState } from "./cameraReadiness";
+import { IntegrityQueue, type ReportingState } from "./integrityQueue";
+import type { ExamProctoringActivationRequestV1, ExamIntegrityEventTypeV1 } from "../../../shared/contracts/examProctoring";
 import "./App.css";
 
 type QuestionPaletteStatus = "not_visited" | "not_answered" | "answered" | "marked" | "answered_marked";
@@ -43,23 +46,7 @@ type SessionLifecycleState = "created" | "started" | "active" | "submitted" | "e
 type ExamAuthorityInterruption = "session_revoked" | "institute_suspended" | "license_restricted";
 type ExamEntryStage = "entry_not_open" | "pre_exam_lobby" | "instructions_waiting" | "entry_closed" | "exam_active";
 type PreExamCheckState = "pending" | "passed" | "failed" | "skipped";
-type BrowserIntegritySeverity = "info" | "warning" | "blocking";
-type BrowserIntegrityEventType =
-  | "FULLSCREEN_ENTERED"
-  | "FULLSCREEN_REQUEST_FAILED"
-  | "FULLSCREEN_EXIT"
-  | "FULLSCREEN_REENTERED"
-  | "TAB_SWITCH"
-  | "WINDOW_BLUR"
-  | "WINDOW_FOCUS_RETURNED"
-  | "COPY_BLOCKED"
-  | "PASTE_BLOCKED"
-  | "CUT_BLOCKED"
-  | "CONTEXT_MENU_BLOCKED"
-  | "SHORTCUT_BLOCKED"
-  | "DEVTOOLS_SUSPECTED"
-  | "NETWORK_LOSS"
-  | "RECONNECTED";
+type BrowserIntegrityEventType = ExamIntegrityEventTypeV1;
 type CalculatorOperation =
   | "sqrt"
   | "square"
@@ -154,15 +141,6 @@ interface AdaptivePhaseSnapshot {
   disciplineIndex: number;
 }
 
-interface BrowserIntegrityEvent {
-  eventId: string;
-  eventType: BrowserIntegrityEventType;
-  severity: BrowserIntegritySeverity;
-  timestamp: string;
-  phaseId: PhaseId | "instructions" | "lobby";
-  details: string;
-}
-
 interface ExamSessionSchedule {
   earlyEntryOpensAtMs: number;
   sessionStartsAtMs: number;
@@ -230,17 +208,6 @@ const RECOVERY_DB_NAME = "parabolic-exam-runtime";
 const RECOVERY_STORE_NAME = "sessionRecovery";
 const RECOVERY_SCHEMA_VERSION = 2;
 const DEV_MOCK_SESSION_TOKEN = "dev";
-const BROWSER_INTEGRITY_EVENT_LIMIT = 60;
-const DEVTOOLS_SIZE_THRESHOLD_PX = 160;
-
-const GAZE_CALIBRATION_POINTS = [
-  { id: "center", label: "Center", x: 50, y: 50 },
-  { id: "left", label: "Left", x: 12, y: 50 },
-  { id: "right", label: "Right", x: 88, y: 50 },
-  { id: "top", label: "Top", x: 50, y: 14 },
-  { id: "bottom", label: "Bottom", x: 50, y: 86 },
-] as const;
-
 const MARKING_SCHEME = [
   "+4 for each correct answer",
   "-1 for each incorrect MCQ answer",
@@ -648,10 +615,6 @@ function toPercent(numerator: number, denominator: number): number {
   return clamp((numerator / denominator) * 100, 0, 100);
 }
 
-function buildIntegrityEventId(eventType: BrowserIntegrityEventType): string {
-  return `${eventType.toLowerCase()}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
 function isBrowserFullscreenActive(): boolean {
   return Boolean(document.fullscreenElement);
 }
@@ -741,7 +704,11 @@ function buildEmptySessionSnapshot(sessionId: string): SessionSnapshot {
     },
     proctoringPolicy: {
       browserIntegrityGuardEnabled: false,
-      faceIdentityGazeGuardEnabled: false,
+      contractVersion: 1,
+      cameraReadiness: "off",
+      capabilities: {automatedFaceMatching: "unavailable", automatedGazeTracking: "unavailable", cameraReadiness: "browser_permission_only", browserIntegrity: "browser_controls_only"},
+      identityPhotoReview: "not_required",
+      integrityReporting: "off",
     },
     questionSetVersion: "pending",
     questions: [],
@@ -1285,7 +1252,6 @@ function ExamSessionPage() {
   const preloadedQuestionImageUrlsRef = useRef<Set<string>>(new Set());
   const cachedQuestionSnapshotsRef = useRef<Map<string, SessionQuestion>>(new Map());
   const questionSnapshotReadCountRef = useRef<Map<string, number>>(new Map());
-  const devtoolsSuspectedRef = useRef(false);
   const fullscreenExitActiveRef = useRef(false);
   const [skippedQuestionsCount, setSkippedQuestionsCount] = useState(0);
   const [sessionLifecycleState, setSessionLifecycleState] = useState<SessionLifecycleState>("created");
@@ -1316,33 +1282,23 @@ function ExamSessionPage() {
   );
   const [controlledPhaseId, setControlledPhaseId] = useState<PhaseId>("phase1");
   const [fullscreenGateError, setFullscreenGateError] = useState<string | null>(null);
-  const [browserIntegrityEvents, setBrowserIntegrityEvents] = useState<BrowserIntegrityEvent[]>([]);
+  const integrityQueueRef = useRef<IntegrityQueue | null>(null);
+  const phaseRef = useRef<"lobby" | "instructions" | "exam">("lobby");
+  const [reporting, setReporting] = useState<ReportingState>({pending: 0, saved: 0, lost: 0, status: "stopped"});
   const [integrityBlockingReason, setIntegrityBlockingReason] = useState<string | null>(null);
-  const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
-  const gazeCalibrationVideoRef = useRef<HTMLVideoElement | null>(null);
   const [browserReadinessState, setBrowserReadinessState] = useState<PreExamCheckState>("passed");
   const [internetCheckState, setInternetCheckState] = useState<PreExamCheckState>("pending");
-  const [cameraCheckState, setCameraCheckState] = useState<PreExamCheckState>("pending");
-  const [faceVerificationState, setFaceVerificationState] = useState<PreExamCheckState>("pending");
-  const [gazeCalibrationState, setGazeCalibrationState] = useState<PreExamCheckState>("pending");
+  const [cameraState, setCameraState] = useState<CameraState>("pending");
+  const cameraRef = useRef<CameraReadiness | null>(null);
+  const displayedPreviewRef = useRef<HTMLVideoElement | null>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
-  const [gazeCalibrationIndex, setGazeCalibrationIndex] = useState(0);
-  const [gazeCalibrationOverlayOpen, setGazeCalibrationOverlayOpen] = useState(false);
-  const [gazeTargetSettled, setGazeTargetSettled] = useState(false);
-
   const isOperationalMode = entryValidation.claims.mode === "Operational";
   const isControlledMode = entryValidation.claims.mode === "Controlled";
   const isDiagnosticMode = entryValidation.claims.mode === "Diagnostic";
   const isHardMode = entryValidation.claims.mode === "Hard";
-  const browserIntegrityGuardEnabled =
-    sessionSnapshot.proctoringPolicy.browserIntegrityGuardEnabled;
-  const faceIdentityGazeGuardEnabled = useMemo(() => {
-    if (!devMockSessionActive) {
-      return sessionSnapshot.proctoringPolicy.faceIdentityGazeGuardEnabled;
-    }
-    const value = new URLSearchParams(location.search).get("faceGaze");
-    return value?.toLowerCase() !== "off";
-  }, [devMockSessionActive, location.search, sessionSnapshot.proctoringPolicy.faceIdentityGazeGuardEnabled]);
+  const browserIntegrityGuardEnabled = sessionSnapshot.proctoringPolicy.browserIntegrityGuardEnabled;
+  const cameraRequired = sessionSnapshot.proctoringPolicy.cameraReadiness === "required";
+  const cameraCheckState: PreExamCheckState = !cameraRequired ? "skipped" : cameraState === "requesting" ? "pending" : cameraState;
   const hardModeMinimalUI = isHardMode;
   const phaseVisibilityEnforced = isDiagnosticMode || isHardMode;
   const questionTimingEnforced = isHardMode;
@@ -1366,6 +1322,37 @@ function ExamSessionPage() {
   useEffect(() => {
     if (identityInterrupted || (entryAuthority && authorityInterruption)) runtimeOwnership.invalidate("identity_or_authority_changed");
   }, [authorityInterruption, identityInterrupted, runtimeOwnership, entryAuthority]);
+  const reportingEnabled = sessionSnapshot.proctoringPolicy.integrityReporting === "client_observations";
+  const locallyEligible = serverEntryValidationStatus === "valid" && !authorityInterrupted &&
+    nowEpochMs < sessionSchedule.sessionEndsAtMs &&
+    (sessionLifecycleState === "started" || (sessionLifecycleState === "active" && remainingMs > 0));
+  useEffect(() => {
+    phaseRef.current = instructionConfirmed ? "exam" : entryStage === "pre_exam_lobby" ? "lobby" : "instructions";
+  }, [instructionConfirmed, entryStage]);
+  useEffect(() => {
+    if (!locallyEligible || !reportingEnabled || devMockSessionActive) {integrityQueueRef.current?.stop(); return;}
+    let mounted = true;
+    const current = () => mounted && runtimeOwnership.isCurrent() && runtimeOwnership.snapshot().phase === "active" && runtimeOwnership.snapshot().generation === ownership.generation;
+    const queue = new IntegrityQueue(sessionId, ownership.generation, current, () => navigator.onLine,
+      (body, signal) => examApiClient.post(`/exam/session/${encodeURIComponent(sessionId)}/integrity-events`, {body, signal}),
+      state => {if (mounted) setReporting(state);});
+    integrityQueueRef.current = queue;
+    const online = () => {queue.capture("RECONNECTED", phaseRef.current); queue.wake();};
+    const offline = () => queue.capture("NETWORK_LOSS", phaseRef.current);
+    const exit = () => queue.stop();
+    window.addEventListener("online", online); window.addEventListener("offline", offline); window.addEventListener("pagehide", exit);
+    return () => {queue.stop(); mounted = false; window.removeEventListener("online", online); window.removeEventListener("offline", offline); window.removeEventListener("pagehide", exit); if (integrityQueueRef.current === queue) integrityQueueRef.current = null;};
+  }, [locallyEligible, reportingEnabled, devMockSessionActive, runtimeOwnership, examApiClient, ownership.generation, sessionId]);
+  useEffect(() => {
+    if (!locallyEligible || !cameraRequired) {cameraRef.current?.stop(); return;}
+    let mounted = true;
+    const camera = new CameraReadiness(() => mounted && (devMockSessionActive || (runtimeOwnership.isCurrent() && runtimeOwnership.snapshot().phase === "active" && runtimeOwnership.snapshot().generation === ownership.generation)),
+      (state, stream) => {if (mounted) {setCameraState(state); setCameraStream(stream);}},
+      type => integrityQueueRef.current?.capture(type, phaseRef.current));
+    cameraRef.current = camera;
+    const exit = () => camera.stop(); window.addEventListener("pagehide", exit);
+    return () => {camera.stop(); mounted = false; window.removeEventListener("pagehide", exit); if (cameraRef.current === camera) cameraRef.current = null;};
+  }, [locallyEligible, cameraRequired, devMockSessionActive, runtimeOwnership, ownership.generation, sessionId]);
   const instituteId = entryAuthority?.instituteId ?? entryValidation.claims.instituteId ?? "";
   const yearId = entryAuthority?.yearId ?? entryValidation.claims.yearId ?? "";
   const runId = entryAuthority?.runId ?? entryValidation.claims.runId ?? "";
@@ -1422,9 +1409,11 @@ function ExamSessionPage() {
     activationInFlightRef.current = true;
     try {
       const authority = adaptExamSessionActivationResult(
-        await examApiClient.post<unknown, Record<string, never>>(
+        await examApiClient.post<unknown, ExamProctoringActivationRequestV1>(
           `/exam/session/${encodeURIComponent(effectiveSessionId)}/activate`,
-          {body: {}},
+          {body: {contractVersion: 1, preflight: cameraRequired && cameraRef.current?.isReady() && remainingMs > 0
+            ? {camera: "client_reported_ready", consentNoticeVersion: "exam-camera-local-v1", consentAccepted: true}
+            : {camera: "not_requested"}}},
         ),
       );
       if (!applyServerLifecycleAuthority(authority)) {
@@ -1434,7 +1423,7 @@ function ExamSessionPage() {
     } finally {
       activationInFlightRef.current = false;
     }
-  }, [applyServerLifecycleAuthority, authorityInterrupted, effectiveSessionId, entryValidation.allowed, examApiClient]);
+  }, [applyServerLifecycleAuthority, authorityInterrupted, effectiveSessionId, entryValidation.allowed, examApiClient, cameraRequired, remainingMs]);
 
   useEffect(() => {
     if (launchMetadata.status === "invalid" || launchMetadata.sessionId !== sessionId || window.self !== window.top) {
@@ -2000,14 +1989,6 @@ function ExamSessionPage() {
   ]);
 
   useEffect(() => {
-    if (!authorityInterrupted) {
-      return;
-    }
-    cameraStream?.getTracks().forEach((track) => track.stop());
-    setCameraStream(null);
-  }, [authorityInterrupted, cameraStream]);
-
-  useEffect(() => {
     if (authorityInterrupted) return;
     if (!instructionConfirmed || isSubmitted || authorityInterrupted) {
       return;
@@ -2147,34 +2128,10 @@ function ExamSessionPage() {
   const elapsedPercent = toPercent(totalDurationMs - remainingMs, totalDurationMs);
   const automaticPhaseId = getPhaseId(elapsedPercent, sessionSnapshot.phaseConfigSnapshot);
   const currentExamPhase = isControlledMode ? controlledPhaseId : automaticPhaseId;
-  const getIntegritySeverity = useCallback((eventType: BrowserIntegrityEventType): BrowserIntegritySeverity => {
-    if (eventType === "FULLSCREEN_ENTERED" || eventType === "FULLSCREEN_REENTERED" || eventType === "WINDOW_FOCUS_RETURNED" || eventType === "RECONNECTED") {
-      return "info";
-    }
-
-    return "blocking";
-  }, []);
-  const recordBrowserIntegrityEvent = useCallback((
-    eventType: BrowserIntegrityEventType,
-    details: string,
-    severityOverride?: BrowserIntegritySeverity,
-  ) => {
-    const severity = severityOverride ?? getIntegritySeverity(eventType);
-    const eventRecord: BrowserIntegrityEvent = {
-      eventId: buildIntegrityEventId(eventType),
-      eventType,
-      severity,
-      timestamp: new Date().toISOString(),
-      phaseId: instructionConfirmed ? currentExamPhase : entryStage === "pre_exam_lobby" ? "lobby" : "instructions",
-      details,
-    };
-
-    setBrowserIntegrityEvents((current) => [eventRecord, ...current].slice(0, BROWSER_INTEGRITY_EVENT_LIMIT));
-
-    if (severity === "blocking") {
-      setIntegrityBlockingReason(details);
-    }
-  }, [currentExamPhase, entryStage, getIntegritySeverity, instructionConfirmed]);
+  const recordBrowserIntegrityEvent = useCallback((eventType: BrowserIntegrityEventType) => {
+    integrityQueueRef.current?.capture(eventType, phaseRef.current);
+    if (eventType === "FULLSCREEN_EXIT" && browserIntegrityGuardEnabled) setIntegrityBlockingReason("Fullscreen was exited. Re-enter to continue questions; saving and submission remain available.");
+  }, [browserIntegrityGuardEnabled]);
   const requestExamFullscreen = useCallback(async (): Promise<boolean> => {
     if (authorityInterrupted) return false;
     if (!browserIntegrityGuardEnabled) {
@@ -2189,10 +2146,10 @@ function ExamSessionPage() {
       if (!devMockSessionActive && !runtimeOwnership.isCurrent()) {void document.exitFullscreen().catch(() => undefined); return false;}
       fullscreenExitActiveRef.current = false;
       setIntegrityBlockingReason(null);
-      recordBrowserIntegrityEvent("FULLSCREEN_ENTERED", "Fullscreen entered for secure exam entry.", "info");
+      recordBrowserIntegrityEvent("FULLSCREEN_ENTERED");
       return true;
     } catch {
-      recordBrowserIntegrityEvent("FULLSCREEN_REQUEST_FAILED", "Browser rejected fullscreen entry from exam start.", "warning");
+      recordBrowserIntegrityEvent("FULLSCREEN_REQUEST_FAILED");
       return false;
     }
   }, [authorityInterrupted, devMockSessionActive, runtimeOwnership, browserIntegrityGuardEnabled, recordBrowserIntegrityEvent]);
@@ -2204,68 +2161,8 @@ function ExamSessionPage() {
 
     setInternetCheckState("passed");
   }, []);
-  const startCameraCheck = useCallback(async () => {
-    if (!faceIdentityGazeGuardEnabled) {
-      setCameraCheckState("skipped");
-      setFaceVerificationState("skipped");
-      setGazeCalibrationState("skipped");
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: "user",
-          width: { ideal: 960 },
-          height: { ideal: 540 },
-        },
-        audio: false,
-      });
-      if (!devMockSessionActive && !runtimeOwnership.isCurrent()) {stream.getTracks().forEach((track) => track.stop()); return;}
-      setCameraStream(stream);
-      setCameraCheckState("passed");
-    } catch {
-      setCameraCheckState("failed");
-    }
-  }, [faceIdentityGazeGuardEnabled, devMockSessionActive, runtimeOwnership]);
-  const runFaceVerificationCheck = useCallback(() => {
-    if (!faceIdentityGazeGuardEnabled) {
-      setFaceVerificationState("skipped");
-      return;
-    }
-
-    if (cameraCheckState !== "passed") {
-      setFaceVerificationState("failed");
-      return;
-    }
-
-    setFaceVerificationState("passed");
-  }, [cameraCheckState, faceIdentityGazeGuardEnabled]);
-  const captureGazeCalibrationPoint = useCallback(() => {
-    if (!faceIdentityGazeGuardEnabled) {
-      setGazeCalibrationState("skipped");
-      return;
-    }
-
-    if (faceVerificationState !== "passed") {
-      setGazeCalibrationState("failed");
-      return;
-    }
-
-    setGazeCalibrationIndex((current) => {
-      const next = current + 1;
-      if (next >= GAZE_CALIBRATION_POINTS.length) {
-        setGazeCalibrationState("passed");
-        setGazeCalibrationOverlayOpen(false);
-        return current;
-      }
-
-      setGazeCalibrationState("pending");
-      return next;
-    });
-  }, [faceIdentityGazeGuardEnabled, faceVerificationState]);
   const beginExamSession = useCallback(async (): Promise<boolean> => {
-    if (authorityInterrupted) {
+    if (authorityInterrupted || (cameraRequired && !cameraRef.current?.isReady())) {
       return false;
     }
     try {
@@ -2294,6 +2191,7 @@ function ExamSessionPage() {
     return true;
   }, [
     authorityInterrupted,
+    cameraRequired,
     recordLastAnswerWriteAt,
     replacePendingAnswerMap,
     requestServerActivation,
@@ -2301,9 +2199,7 @@ function ExamSessionPage() {
   const preExamChecksPassed =
     browserReadinessState === "passed" &&
     internetCheckState === "passed" &&
-    (faceIdentityGazeGuardEnabled ?
-      cameraCheckState === "passed" && faceVerificationState === "passed" && gazeCalibrationState === "passed" :
-      cameraCheckState === "skipped" && faceVerificationState === "skipped" && gazeCalibrationState === "skipped");
+    (!cameraRequired || cameraCheckState === "passed");
   const continueToInstructions = useCallback(() => {
     void (async () => {
       if (!preExamChecksPassed) {
@@ -2540,54 +2436,6 @@ function ExamSessionPage() {
   }, [adaptivePhaseSnapshot]);
 
   useEffect(() => {
-    if (!faceIdentityGazeGuardEnabled) {
-      setCameraCheckState("skipped");
-      setFaceVerificationState("skipped");
-      setGazeCalibrationState("skipped");
-    }
-  }, [faceIdentityGazeGuardEnabled]);
-
-  useEffect(() => {
-    if (!cameraStream) {
-      return;
-    }
-
-    if (cameraVideoRef.current) {
-      cameraVideoRef.current.srcObject = cameraStream;
-    }
-    if (gazeCalibrationVideoRef.current) {
-      gazeCalibrationVideoRef.current.srcObject = cameraStream;
-    }
-  }, [cameraStream, gazeCalibrationOverlayOpen]);
-
-  useEffect(() => {
-    if (authorityInterrupted) return;
-    if (!gazeCalibrationOverlayOpen) {
-      return;
-    }
-
-    setGazeTargetSettled(false);
-    const settleTimer = window.setTimeout(() => setGazeTargetSettled(true), 900);
-    const handleCalibrationKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setGazeTargetSettled(false);
-        setGazeCalibrationOverlayOpen(false);
-      }
-    };
-    window.addEventListener("keydown", handleCalibrationKeyDown);
-    return () => {
-      window.clearTimeout(settleTimer);
-      window.removeEventListener("keydown", handleCalibrationKeyDown);
-    };
-  }, [authorityInterrupted, gazeCalibrationIndex, gazeCalibrationOverlayOpen]);
-
-  useEffect(() => {
-    return () => {
-      cameraStream?.getTracks().forEach((track) => track.stop());
-    };
-  }, [cameraStream]);
-
-  useEffect(() => {
     if (authorityInterrupted) return;
     if (instructionConfirmed || isSubmitted || authorityInterrupted) {
       return;
@@ -2661,7 +2509,7 @@ function ExamSessionPage() {
     const handleFullscreenChange = () => {
       if (isBrowserFullscreenActive()) {
         if (fullscreenExitActiveRef.current) {
-          recordBrowserIntegrityEvent("FULLSCREEN_REENTERED", "Student returned to fullscreen.", "info");
+          recordBrowserIntegrityEvent("FULLSCREEN_REENTERED");
         }
         fullscreenExitActiveRef.current = false;
         setIntegrityBlockingReason(null);
@@ -2669,32 +2517,32 @@ function ExamSessionPage() {
       }
 
       fullscreenExitActiveRef.current = true;
-      recordBrowserIntegrityEvent("FULLSCREEN_EXIT", "Fullscreen was exited during the exam.");
+      recordBrowserIntegrityEvent("FULLSCREEN_EXIT");
     };
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
-        recordBrowserIntegrityEvent("TAB_SWITCH", "Exam tab became hidden.");
+        recordBrowserIntegrityEvent("TAB_SWITCH");
       }
     };
 
     const handleWindowBlur = () => {
-      recordBrowserIntegrityEvent("WINDOW_BLUR", "Exam window lost focus.");
+      recordBrowserIntegrityEvent("WINDOW_BLUR");
     };
 
     const handleWindowFocus = () => {
-      recordBrowserIntegrityEvent("WINDOW_FOCUS_RETURNED", "Exam window focus returned.", "info");
+      recordBrowserIntegrityEvent("WINDOW_FOCUS_RETURNED");
     };
 
     const blockClipboardEvent = (event: ClipboardEvent) => {
       event.preventDefault();
       const eventType = event.type === "copy" ? "COPY_BLOCKED" : event.type === "paste" ? "PASTE_BLOCKED" : "CUT_BLOCKED";
-      recordBrowserIntegrityEvent(eventType, `${event.type} action was blocked during the exam.`);
+      recordBrowserIntegrityEvent(eventType);
     };
 
     const blockContextMenu = (event: MouseEvent) => {
       event.preventDefault();
-      recordBrowserIntegrityEvent("CONTEXT_MENU_BLOCKED", "Context menu was blocked during the exam.");
+      recordBrowserIntegrityEvent("CONTEXT_MENU_BLOCKED");
     };
 
     const blockKeyboardShortcut = (event: KeyboardEvent) => {
@@ -2703,33 +2551,16 @@ function ExamSessionPage() {
       }
 
       event.preventDefault();
-      recordBrowserIntegrityEvent("SHORTCUT_BLOCKED", `Restricted keyboard shortcut was blocked: ${event.key}.`);
+      recordBrowserIntegrityEvent("SHORTCUT_BLOCKED");
     };
 
     const handleOffline = () => {
-      recordBrowserIntegrityEvent("NETWORK_LOSS", "Browser reported offline state.");
+      recordBrowserIntegrityEvent("NETWORK_LOSS");
     };
 
     const handleOnline = () => {
-      recordBrowserIntegrityEvent("RECONNECTED", "Browser reported online state.", "info");
+      recordBrowserIntegrityEvent("RECONNECTED");
     };
-
-    const devtoolsCheckInterval = window.setInterval(() => {
-      const widthDelta = Math.abs(window.outerWidth - window.innerWidth);
-      const heightDelta = Math.abs(window.outerHeight - window.innerHeight);
-      const devtoolsSuspected =
-        widthDelta > DEVTOOLS_SIZE_THRESHOLD_PX ||
-        heightDelta > DEVTOOLS_SIZE_THRESHOLD_PX;
-
-      if (devtoolsSuspected && !devtoolsSuspectedRef.current) {
-        devtoolsSuspectedRef.current = true;
-        recordBrowserIntegrityEvent("DEVTOOLS_SUSPECTED", "DevTools-like viewport difference was detected.");
-      }
-
-      if (!devtoolsSuspected) {
-        devtoolsSuspectedRef.current = false;
-      }
-    }, 1_500);
 
     document.addEventListener("fullscreenchange", handleFullscreenChange);
     document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -2744,7 +2575,6 @@ function ExamSessionPage() {
     window.addEventListener("online", handleOnline);
 
     return () => {
-      window.clearInterval(devtoolsCheckInterval);
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       document.removeEventListener("copy", blockClipboardEvent);
@@ -2827,7 +2657,8 @@ function ExamSessionPage() {
     selectedQuestionMinTimeRemainingSec > 0;
 
   const sessionLocked = sessionLifecycleState !== "active";
-  const saveDisabled = selectedQuestionRevisitLocked || saveBlockedByTiming || slowdownActive || isSubmitted || sessionLocked;
+  const localQuestionPaused = (cameraRequired && cameraCheckState !== "passed") || !!integrityBlockingReason;
+  const saveDisabled = localQuestionPaused || selectedQuestionRevisitLocked || saveBlockedByTiming || slowdownActive || isSubmitted || sessionLocked;
   const selectedQuestionTimingStatus = slowdownActive
     ? `Resume in ${slowdownSecondsRemaining}s`
     : selectedQuestionRevisitLocked
@@ -2939,12 +2770,9 @@ function ExamSessionPage() {
   const lowAdherence = adaptivePhaseSnapshot.phaseAdherencePercent < EARLY_SUBMIT_PHASE_ADHERENCE_THRESHOLD;
   const requiresEarlySubmitOverride = isControlledMode && (lowDiscipline || lowAdherence);
   const manualSubmitDisabled = isSubmitted || sessionLocked || slowdownActive || shouldRestrictManualSubmit;
-  const browserIntegrityAlertCount = browserIntegrityEvents.filter((event) => event.severity !== "info").length;
+  const browserIntegrityAlertCount = reporting.pending;
   const sessionStartCountdownMs = Math.max(0, sessionSchedule.sessionStartsAtMs - nowEpochMs);
   const entryOpenCountdownMs = Math.max(0, sessionSchedule.earlyEntryOpensAtMs - nowEpochMs);
-  const currentGazeCalibrationPoint = GAZE_CALIBRATION_POINTS[gazeCalibrationIndex] ?? GAZE_CALIBRATION_POINTS[0];
-  const gazeCalibrationCapturedCount = Math.min(gazeCalibrationIndex, GAZE_CALIBRATION_POINTS.length);
-  const gazeCalibrationProgressPercent = (gazeCalibrationCapturedCount / GAZE_CALIBRATION_POINTS.length) * 100;
   const preExamChecklist: PreExamChecklistItem[] = [
     {
       id: "session",
@@ -2970,18 +2798,6 @@ function ExamSessionPage() {
       state: cameraCheckState,
       helper: "Allow browser camera permission and keep the camera uncovered.",
     },
-    {
-      id: "face",
-      label: "Face Verification",
-      state: faceVerificationState,
-      helper: "Keep your face centered in the guide with steady lighting.",
-    },
-    {
-      id: "gaze",
-      label: "Gaze Calibration",
-      state: gazeCalibrationState,
-      helper: "Look at each full-screen marker until it is captured.",
-    },
   ];
   const completedPreExamCheckCount = preExamChecklist.filter((item) => item.state === "passed" || item.state === "skipped").length;
   const preExamProgressPercent = Math.round((completedPreExamCheckCount / preExamChecklist.length) * 100);
@@ -2993,71 +2809,16 @@ function ExamSessionPage() {
       : isDiagnosticMode
         ? "focused"
         : "hard";
-  const faceStatusState = !faceIdentityGazeGuardEnabled
-    ? "skipped"
-    : cameraCheckState === "failed"
-      ? "failed"
-      : faceVerificationState === "passed"
-        ? "passed"
-        : cameraCheckState === "passed"
-          ? "ready"
-          : "pending";
-  const faceStatusLabel = faceStatusState === "passed"
-    ? "Face Verified"
-    : faceStatusState === "ready"
-      ? "Ready to Verify"
-      : faceStatusState === "failed"
-        ? "Face Not Verified"
-        : faceStatusState === "skipped"
-          ? "Face Check Skipped"
-          : "Face Not Verified";
-  const faceStatusHint = faceStatusState === "passed"
-    ? "Identity readiness confirmed. Continue with gaze calibration."
-    : faceStatusState === "ready"
-      ? "Camera is active. Select Verify Face to complete identity readiness."
-      : faceStatusState === "failed"
-        ? "Camera access failed or identity readiness could not complete. Re-enable camera and try again."
-        : faceStatusState === "skipped"
-          ? "This assignment policy does not require face verification."
-          : "Enable camera first so the face check can run.";
-  const lobbyNextStepState = preExamChecksPassed
-    ? "complete"
-    : browserReadinessState === "failed" || internetCheckState === "failed" || cameraCheckState === "failed" || faceVerificationState === "failed" || gazeCalibrationState === "failed"
-      ? "attention"
-      : "active";
-  const lobbyNextStepTitle = preExamChecksPassed
-    ? "Entry checks complete"
-    : browserReadinessState === "failed"
-      ? "Browser needs attention"
-      : internetCheckState !== "passed"
-        ? "Check internet connection"
-        : faceIdentityGazeGuardEnabled && cameraCheckState !== "passed"
-          ? "Enable camera to continue"
-          : faceIdentityGazeGuardEnabled && faceVerificationState !== "passed"
-            ? "Now verify your face"
-            : faceIdentityGazeGuardEnabled && gazeCalibrationState !== "passed"
-              ? "Complete gaze calibration"
-              : "Review readiness checks";
-  const lobbyNextStepDetail = preExamChecksPassed
-    ? "You can continue to instructions when you are ready."
-    : browserReadinessState === "failed"
-      ? "Return to the exam tab and recheck browser readiness."
-      : internetCheckState !== "passed"
-        ? "Select Check Internet. If it fails, reconnect before starting."
-        : faceIdentityGazeGuardEnabled && cameraCheckState !== "passed"
-          ? "Allow browser camera access, then center your face in the guide."
-          : faceIdentityGazeGuardEnabled && faceVerificationState !== "passed"
-            ? "Keep your face steady and select Verify Face."
-            : faceIdentityGazeGuardEnabled && gazeCalibrationState !== "passed"
-              ? "Open the calibration screen and capture every marker."
-              : "Confirm the skipped lab checks and proceed to instructions.";
+  const lobbyNextStepState = preExamChecksPassed ? "complete" : "active";
+  const lobbyNextStepTitle = preExamChecksPassed ? "Entry checks complete" : "Complete local readiness checks";
+  const lobbyNextStepDetail = "Check internet and any required local camera preview. Automated face matching and gaze tracking are unavailable.";
   const lobbyModeStudentNote = isControlledMode
     ? "Controlled mode shows phase goals and overstay status during the exam."
     : isDiagnosticMode
       ? "Diagnostic mode may show only the questions available in the current phase."
       : isHardMode
         ? "Hard mode applies navigation locks and minimum thinking-time rules."
-        : "Operational mode keeps navigation open while integrity events are captured silently.";
+        : "Operational mode keeps navigation open with best-effort browser observations when required by server policy.";
   const canControlledProceedToPhase2 = visitedCount >= sessionSnapshot.questions.length;
   const controlledPhaseAdvanceDisabled =
     sessionLocked ||
@@ -3081,8 +2842,29 @@ function ExamSessionPage() {
     });
   };
 
+  const signOutOfExam = () => {
+    cameraRef.current?.stop(); integrityQueueRef.current?.stop();
+    void runtimeOwnership.signOut().catch(() => runtimeOwnership.invalidate("sign_out_interrupted"));
+  };
+  const cameraPanel = <section aria-label="Local camera readiness">
+    {cameraRequired ? <><p>{CAMERA_NOTICE}</p>
+      <video autoPlay playsInline muted aria-label="Local camera preview" ref={node => {if (displayedPreviewRef.current) displayedPreviewRef.current.srcObject = null; displayedPreviewRef.current = node; if (node) node.srcObject = cameraStream;}} />
+      <p role="status">{cameraState === "passed" ? "Local camera preview ready. This is a browser report, not identity verification." : cameraState === "failed" ? "Camera readiness unavailable. Retry or return to Student for help." : cameraState === "requesting" ? "Waiting for permission and usable preview." : "Fresh consent and local readiness are required."}</p>
+      <button type="button" onClick={() => void cameraRef.current?.start()} disabled={!locallyEligible || cameraState === "requesting"}>I agree — {cameraState === "failed" ? "Retry Camera" : "Start Camera"}</button>
+      <button type="button" onClick={() => {cameraRef.current?.stop(); integrityQueueRef.current?.capture("CAMERA_LOST", phaseRef.current);}}>Stop Camera</button>
+      <StudentPortalReturnButton />
+    </> : <p>Camera readiness is off. No camera permission is requested.</p>}
+    <p>Automated face matching and gaze tracking are unavailable. No identity photo is fetched.</p>
+  </section>;
+  const proctoringStatus = <section aria-label="Client observation reporting" aria-live="polite">
+    {integrityBlockingReason ? <p>{integrityBlockingReason} <button type="button" onClick={() => void requestExamFullscreen()}>Re-enter Fullscreen</button></p> : null}
+    <p>{reportingEnabled ? `Client observations: ${reporting.status}. ${reporting.saved} acknowledged, ${reporting.pending} not yet saved, ${reporting.lost} lost or discarded.` : "Client observation reporting is off."}</p>
+    <p>Observations are incomplete browser reports, never proof of misconduct. Unacknowledged observations may be lost on exit or submission. Answer saving and submission do not wait for reporting.</p>
+    {reporting.status === "unavailable" ? <button type="button" onClick={() => integrityQueueRef.current?.retry()}>Retry reporting</button> : null}
+  </section>;
   if (ownershipInterrupted) {
     return <main className="exam-access-shell" aria-live="polite"><section className="exam-access-card">
+      {proctoringStatus}
       <h1>Exam runtime paused</h1>
       <p>Ownership or sign-in changed. Pending answers are retained. Another runtime may be active; no remote browser has been closed.</p>
       <p>Reload to request recovery, or relaunch from Student My Tests after release or lease expiry.</p>
@@ -3099,10 +2881,10 @@ function ExamSessionPage() {
 
   if (authorityInterruption) {
     return (
-      <ExamAuthorityInterruptionPage
+      <>{proctoringStatus}<ExamAuthorityInterruptionPage
         interruption={authorityInterruption}
         pendingAnswerCount={pendingAnswers.length}
-      />
+      /></>
     );
   }
 
@@ -3113,7 +2895,8 @@ function ExamSessionPage() {
   if (entryStage === "entry_not_open") {
     return (
       <main className="exam-instruction-shell">
-        {!devMockSessionActive && runtimeOwnership.isCurrent() ? <button type="button" className="exam-secondary-button" onClick={() => {void runtimeOwnership.signOut().catch(() => runtimeOwnership.invalidate("sign_out_interrupted"));}}>Sign out of Exam</button> : null}
+        {proctoringStatus}
+        {!devMockSessionActive && runtimeOwnership.isCurrent() ? <button type="button" className="exam-secondary-button" onClick={signOutOfExam}>Sign out of Exam</button> : null}
         <section className="exam-instruction-card">
           <p className="exam-instruction-eyebrow">Exam Entry Lobby</p>
           <h1>Entry Window Not Open</h1>
@@ -3136,7 +2919,8 @@ function ExamSessionPage() {
   if (entryStage === "entry_closed") {
     return (
       <main className="exam-instruction-shell">
-        {!devMockSessionActive && runtimeOwnership.isCurrent() ? <button type="button" className="exam-secondary-button" onClick={() => {void runtimeOwnership.signOut().catch(() => runtimeOwnership.invalidate("sign_out_interrupted"));}}>Sign out of Exam</button> : null}
+        {proctoringStatus}
+        {!devMockSessionActive && runtimeOwnership.isCurrent() ? <button type="button" className="exam-secondary-button" onClick={signOutOfExam}>Sign out of Exam</button> : null}
         <section className="exam-instruction-card">
           <p className="exam-instruction-eyebrow">Exam Entry Closed</p>
           <h1>Entry Window Closed</h1>
@@ -3155,7 +2939,8 @@ function ExamSessionPage() {
   if (entryStage === "pre_exam_lobby") {
     return (
       <main className="exam-instruction-shell">
-        {!devMockSessionActive && runtimeOwnership.isCurrent() ? <button type="button" className="exam-secondary-button" onClick={() => {void runtimeOwnership.signOut().catch(() => runtimeOwnership.invalidate("sign_out_interrupted"));}}>Sign out of Exam</button> : null}
+        {proctoringStatus}
+        {!devMockSessionActive && runtimeOwnership.isCurrent() ? <button type="button" className="exam-secondary-button" onClick={signOutOfExam}>Sign out of Exam</button> : null}
         <section className="exam-instruction-card exam-lobby-card" aria-labelledby="exam-lobby-title">
           <header className={`exam-lobby-hero ${lobbyModeClassName}`}>
             <div className="exam-lobby-hero-copy">
@@ -3205,8 +2990,8 @@ function ExamSessionPage() {
               </strong>
             </div>
             <div>
-              <span>Face + Gaze</span>
-              <strong>{faceIdentityGazeGuardEnabled ? "Required" : "Off for lab"}</strong>
+              <span>Local camera readiness</span>
+              <strong>{cameraRequired ? "Required" : "Off"}</strong>
             </div>
           </div>
 
@@ -3266,73 +3051,7 @@ function ExamSessionPage() {
                   ) : null}
                 </article>
 
-                <article className="exam-lobby-action-panel">
-                  <div className="exam-lobby-action-header">
-                    <span>02</span>
-                    <div>
-                      <h2>Camera + Face</h2>
-                      <p>{faceIdentityGazeGuardEnabled ? "Open camera, then run the identity readiness check." : "Skipped for supervised lab assignment policy."}</p>
-                    </div>
-                  </div>
-                  <div className="exam-lobby-camera-frame">
-                    {faceIdentityGazeGuardEnabled ? (
-                      <video ref={cameraVideoRef} autoPlay playsInline muted aria-label="Camera preview" />
-                    ) : (
-                      <span>Camera skipped</span>
-                    )}
-                    {faceIdentityGazeGuardEnabled ? (
-                      <div className="exam-lobby-face-guide" aria-hidden="true">
-                        <span />
-                      </div>
-                    ) : null}
-                    <div className={`exam-lobby-face-status exam-lobby-face-status-${faceStatusState}`} aria-live="polite">
-                      <span className="exam-lobby-face-status-icon" aria-hidden="true" />
-                      <div>
-                        <strong>{faceStatusLabel}</strong>
-                        <p>{faceStatusHint}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="exam-lobby-action-row">
-                    <button type="button" className="exam-secondary-action" onClick={() => { void startCameraCheck(); }}>
-                      {cameraCheckState === "failed" ? "Retry Camera" : faceIdentityGazeGuardEnabled ? "Enable Camera" : "Mark Skipped"}
-                    </button>
-                    <button type="button" className="exam-save-next-button" onClick={runFaceVerificationCheck} disabled={faceIdentityGazeGuardEnabled && cameraCheckState !== "passed"}>
-                      {faceVerificationState === "failed" ? "Retry Face Check" : "Verify Face"}
-                    </button>
-                  </div>
-                  {cameraCheckState === "failed" || faceVerificationState === "failed" ? (
-                    <p className="exam-lobby-support-note">If this keeps failing, contact the invigilator before the official start.</p>
-                  ) : null}
-                </article>
-
-                <article className="exam-lobby-action-panel exam-lobby-gaze-panel">
-                  <div className="exam-lobby-action-header">
-                    <span>03</span>
-                    <div>
-                      <h2>Gaze Calibration</h2>
-                      <p>{faceIdentityGazeGuardEnabled ? "Open the full-screen marker calibration. Look at each marker before capturing it." : "Skipped for supervised lab assignment policy."}</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className="exam-save-next-button"
-                    onClick={() => {
-                      if (!faceIdentityGazeGuardEnabled) {
-                        captureGazeCalibrationPoint();
-                        return;
-                      }
-                      setGazeTargetSettled(false);
-                      setGazeCalibrationOverlayOpen(true);
-                    }}
-                    disabled={faceIdentityGazeGuardEnabled && faceVerificationState !== "passed"}
-                  >
-                    {gazeCalibrationState === "passed" ? "Calibration Complete" : "Open Full-Screen Calibration"}
-                  </button>
-                  {gazeCalibrationState === "failed" ? (
-                    <p className="exam-lobby-support-note">Retry calibration with your face steady and eyes on each marker.</p>
-                  ) : null}
-                </article>
+                <article className="exam-lobby-action-panel"><h2>Local camera readiness</h2>{cameraPanel}</article>
               </div>
             </section>
           </div>
@@ -3341,7 +3060,7 @@ function ExamSessionPage() {
             <div>
               <span>{preExamChecksPassed ? "Ready" : "Before You Continue"}</span>
               <strong>{preExamChecksPassed ? "Entry checks complete" : "Complete every required check"}</strong>
-              <p>{preExamChecksPassed ? "You are cleared to review instructions and start when the exam opens." : "The button below unlocks after browser, internet, camera, face, and gaze checks are ready."}</p>
+              <p>{preExamChecksPassed ? "You are cleared to review instructions and start when the exam opens." : "The button below unlocks after browser, internet and required local camera readiness checks pass."}</p>
             </div>
             <p>{lobbyModeStudentNote}</p>
           </section>
@@ -3360,77 +3079,7 @@ function ExamSessionPage() {
             </button>
             {fullscreenGateError ? <p className="exam-submit-warning">{fullscreenGateError}</p> : null}
           </footer>
-          {gazeCalibrationOverlayOpen ? (
-            <div className="exam-gaze-calibration-overlay" role="dialog" aria-modal="true" aria-labelledby="exam-gaze-calibration-title">
-              <section className="exam-gaze-calibration-surface">
-                <header className="exam-gaze-calibration-header">
-                  <div className="exam-gaze-calibration-title">
-                    <p className="exam-integrity-eyebrow">Camera verification</p>
-                    <h2 id="exam-gaze-calibration-title">Follow each target with your eyes</h2>
-                    <p>Keep your head still. Move only your eyes toward the highlighted target.</p>
-                  </div>
-                  <div className="exam-gaze-calibration-step-count" aria-live="polite">
-                    <strong>Point {Math.min(gazeCalibrationIndex + 1, GAZE_CALIBRATION_POINTS.length)} of {GAZE_CALIBRATION_POINTS.length}</strong>
-                    <span>{gazeCalibrationCapturedCount} captured</span>
-                  </div>
-                </header>
 
-                <div className="exam-gaze-calibration-progress" aria-label="Calibration progress">
-                  <span aria-hidden="true"><i style={{ width: `${gazeCalibrationProgressPercent}%` }} /></span>
-                  <ol>
-                    {GAZE_CALIBRATION_POINTS.map((point, index) => {
-                      const pointState = index < gazeCalibrationIndex ? "complete" : index === gazeCalibrationIndex ? "current" : "upcoming";
-                      return (
-                        <li key={point.id} className={`exam-gaze-progress-${pointState}`}>
-                          <b>{index < gazeCalibrationIndex ? "OK" : index + 1}</b>
-                          <small>{point.label}</small>
-                        </li>
-                      );
-                    })}
-                  </ol>
-                </div>
-
-                <div className="exam-gaze-calibration-stage">
-                  <div className="exam-gaze-calibration-stage-hint" aria-hidden="true">
-                    <strong>Head still</strong>
-                    <span>Eyes on the target</span>
-                  </div>
-                  <div
-                    key={currentGazeCalibrationPoint.id}
-                    className={`exam-gaze-calibration-marker ${gazeTargetSettled ? "exam-gaze-marker-ready" : ""}`}
-                    style={{ left: `${currentGazeCalibrationPoint.x}%`, top: `${currentGazeCalibrationPoint.y}%` }}
-                    role="img"
-                    aria-label={`${currentGazeCalibrationPoint.label} gaze target`}
-                  >
-                    <span className="exam-gaze-marker-ring" aria-hidden="true" />
-                    <span className="exam-gaze-marker-dot" aria-hidden="true" />
-                    <strong>{gazeTargetSettled ? "Look here" : "Focus"}</strong>
-                  </div>
-                </div>
-
-                <footer className="exam-gaze-calibration-footer">
-                  <div className="exam-gaze-calibration-camera">
-                    <video ref={gazeCalibrationVideoRef} autoPlay playsInline muted aria-label="Live camera framing preview" />
-                    <span className="exam-gaze-calibration-face-guide" aria-hidden="true" />
-                    <b>Face visible</b>
-                  </div>
-                  <div className="exam-gaze-calibration-instruction" aria-live="polite">
-                    <span>Current target</span>
-                    <strong>Look toward the {currentGazeCalibrationPoint.label.toLowerCase()}</strong>
-                    <p>{gazeTargetSettled ? "Keep looking at the target, then confirm." : "Hold your gaze while the target settles."}</p>
-                  </div>
-                  <div className="exam-gaze-calibration-actions">
-                    <button type="button" className="exam-secondary-action" onClick={() => { setGazeTargetSettled(false); setGazeCalibrationOverlayOpen(false); }}>
-                      Pause
-                    </button>
-                    <button type="button" className="exam-save-next-button" onClick={captureGazeCalibrationPoint} disabled={!gazeTargetSettled}>
-                      {gazeTargetSettled ? "Confirm I'm Looking Here" : "Keep Looking..."}
-                    </button>
-                  </div>
-                </footer>
-              </section>
-            </div>
-          ) : null}
         </section>
       </main>
     );
@@ -3439,7 +3088,9 @@ function ExamSessionPage() {
   if (!instructionConfirmed) {
     return (
       <main className="exam-instruction-shell">
-        {!devMockSessionActive && runtimeOwnership.isCurrent() ? <button type="button" className="exam-secondary-button" onClick={() => {void runtimeOwnership.signOut().catch(() => runtimeOwnership.invalidate("sign_out_interrupted"));}}>Sign out of Exam</button> : null}
+        {proctoringStatus}
+        {cameraPanel}
+        {!devMockSessionActive && runtimeOwnership.isCurrent() ? <button type="button" className="exam-secondary-button" onClick={signOutOfExam}>Sign out of Exam</button> : null}
         <section className="exam-instruction-card exam-instruction-card-redesigned" aria-labelledby="exam-instruction-title">
           <header className={`exam-instruction-hero ${lobbyModeClassName}`}>
             <div className="exam-instruction-hero-copy">
@@ -3782,6 +3433,7 @@ function ExamSessionPage() {
   if (sessionLifecycleState === "terminated") {
     return (
       <main className="exam-submitted-shell" aria-live="polite">
+        {proctoringStatus}
         <section className="exam-submitted-card">
           <p className="exam-access-eyebrow">Session Terminated</p>
           <h1>Submission Could Not Be Finalized</h1>
@@ -3799,6 +3451,7 @@ function ExamSessionPage() {
   if (isSubmitted) {
     return (
       <main className="exam-submitted-shell" aria-live="polite">
+        {proctoringStatus}
         <section className="exam-submitted-card">
           <p className="exam-access-eyebrow">Session Closed</p>
           <h1>Exam Submitted</h1>
@@ -3837,7 +3490,11 @@ function ExamSessionPage() {
 
   return (
     <main className={hardModeMinimalUI ? "exam-runner-shell exam-runner-shell-hard-mode" : "exam-runner-shell"}>
-        {!devMockSessionActive && runtimeOwnership.isCurrent() ? <button type="button" className="exam-secondary-button" onClick={() => {void runtimeOwnership.signOut().catch(() => runtimeOwnership.invalidate("sign_out_interrupted"));}}>Sign out of Exam</button> : null}
+      {proctoringStatus}
+      {cameraRequired ? cameraPanel : null}
+      {localQuestionPaused ? <section role="status"><h2>Question interaction paused</h2><p>Restore required local camera readiness or fullscreen. Pending answers continue syncing. Submission remains available.</p>
+      </section> : null}
+        {!devMockSessionActive && runtimeOwnership.isCurrent() ? <button type="button" className="exam-secondary-button" onClick={signOutOfExam}>Sign out of Exam</button> : null}
       <div className="exam-top-bar">
         <header className="exam-header" aria-label="Exam header bar">
           <div className="exam-header-group exam-header-identity exam-header-identity-compact">
@@ -4091,7 +3748,7 @@ function ExamSessionPage() {
               <strong>{toPercent(visitedCount, sessionSnapshot.questions.length).toFixed(0)}%</strong>
             </p>
             <p>
-              Browser Alerts:
+              Observations not yet saved:
               {" "}
               <strong>{browserIntegrityAlertCount}</strong>
             </p>
@@ -4128,7 +3785,7 @@ function ExamSessionPage() {
         </aside>
 
         <section className="exam-question-container" aria-label="Question rendering container">
-          {selectedQuestion && selectedResponseState && selectedQuestionVisible ? (
+          {localQuestionPaused ? null : selectedQuestion && selectedResponseState && selectedQuestionVisible ? (
             <article className="exam-question-surface">
               {(() => {
                 const publicQuestionFieldKey = getPublicQuestionFieldKey(selectedQuestion);
@@ -4445,24 +4102,7 @@ function ExamSessionPage() {
         timingStatus={selectedQuestionTimingStatus}
         timingProfileItems={timingProfileItems}
       />
-      {integrityBlockingReason ? (
-        <div className="exam-integrity-overlay" role="presentation">
-          <section className="exam-integrity-dialog" role="dialog" aria-modal="true" aria-label="Browser integrity restriction">
-            <p className="exam-integrity-eyebrow">Browser Integrity Guard</p>
-            <h2>Return to Fullscreen</h2>
-            <p>{integrityBlockingReason}</p>
-            <button
-              type="button"
-              className="exam-start-button"
-              onClick={() => {
-                void requestExamFullscreen();
-              }}
-            >
-              Re-enter Fullscreen
-            </button>
-          </section>
-        </div>
-      ) : null}
+
     </main>
   );
 }

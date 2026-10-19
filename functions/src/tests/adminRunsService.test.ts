@@ -1,3 +1,4 @@
+import {proctoringRequirementsForTest} from "./helpers/proctoring";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {Timestamp} from "firebase-admin/firestore";
@@ -57,10 +58,7 @@ const createRunFixture = (
   endWindow: Timestamp.fromDate(new Date("2026-08-25T11:00:00.000Z")),
   gracePeriodMinutes: 10,
   mode: "Diagnostic",
-  proctoringPolicy: {
-    browserIntegrityGuardEnabled: true,
-    faceIdentityGazeGuardEnabled: false,
-  },
+  proctoringPolicy: proctoringRequirementsForTest(true, false),
   recipientStudentIds: ["student-1", "student-2"],
   shuffleQuestionOrder: true,
   startWindow: Timestamp.fromDate(new Date("2026-08-25T09:00:00.000Z")),
@@ -224,3 +222,25 @@ test(
     ]);
   },
 );
+
+test("legacy run policy is an explicit upgrade denial rather than a normalized policy", async () => {
+  const instituteId = "inst_policy_legacy_read";
+  const yearPath = `institutes/${instituteId}/academicYears/2026`;
+  const path = `${yearPath}/runs/run-legacy`;
+  try {
+    await firestore.doc(`institutes/${instituteId}`).set(createInstituteFixture());
+    await firestore.doc(yearPath).set(createYearFixture("2026-27", "Active"));
+    await firestore.doc(path).set({...createRunFixture("run-legacy", "2026-08-20T08:00:00.000Z", "scheduled"),
+      proctoringPolicy: {browserIntegrityGuardEnabled: false, faceIdentityGazeGuardEnabled: false}});
+    for (const operation of [() => adminRunsService.getRun({instituteId, runId: "run-legacy"}),
+      () => adminRunsService.listRuns({instituteId, limit: 25})]) {
+      await assert.rejects(operation(), (e: unknown) => e instanceof Error &&
+        "code" in e && e.code === "SESSION_LOCKED" && "reason" in e && e.reason === "policy_upgrade_required");
+    }
+    assert.equal((await firestore.doc(path).get()).get("proctoringPolicy.faceIdentityGazeGuardEnabled"), false);
+  } finally {
+    await firestore.doc(path).delete();
+    await firestore.doc(yearPath).delete();
+    await firestore.doc(`institutes/${instituteId}`).delete();
+  }
+});

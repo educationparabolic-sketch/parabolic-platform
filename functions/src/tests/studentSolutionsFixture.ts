@@ -4,6 +4,7 @@ import {Timestamp} from "firebase-admin/firestore";
 import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
 import {SessionService} from "../services/session";
 import {seedConsumerVersion} from "./calibrationConsumerFixture";
+import {proctoringRequirementsForTest} from "./helpers/proctoring";
 
 export async function seedStudentSolutionsFixture(label: string, images = true) {
   if (process.env.GCLOUD_PROJECT !== "demo-parabolic-test" || !process.env.FIRESTORE_EMULATOR_HOST ||
@@ -55,6 +56,7 @@ export async function seedStudentSolutionsFixture(label: string, images = true) 
   const end = Date.now() + 20000;
   const run = year.collection("runs").doc(runId);
   await run.set({runId, testId, testName: "Owned Completed Test", academicYear: yearId, mode: "Operational",
+    proctoringPolicy: proctoringRequirementsForTest(false, false),
     recipientStudentIds: [uid], questionIds: ids, templateVersion: "1", status: "scheduled",
     calibrationVersion: "cal-solutions-v1", riskModelVersion: "risk_v3",
     phaseConfigSnapshot: {phase1Percent: 100, phase2Percent: 0, phase3Percent: 0},

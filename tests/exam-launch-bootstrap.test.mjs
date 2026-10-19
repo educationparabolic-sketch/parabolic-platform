@@ -42,14 +42,22 @@ test("invalid, ambiguous and legacy material is scrubbed without exposing a cred
   assert.throws(() => captureLaunch("https://exam.test/session/id#launch=secret", () => {throw new Error("history blocked");}));
 });
 test("the mock query remains isolated to explicit development mode", () => {
-  const href = "https://exam.test/session/id?token=dev&mode=Hard&faceGaze=off";
+  const href = "https://exam.test/session/id?token=dev&mode=Hard";
   assert.equal(captureLaunch(href, () => {}).metadata.status, "invalid");
   let clean;
   const mock = captureLaunch(href, (path) => {clean = path;}, true);
   assert.equal(mock.metadata.devMock, true);
   assert.equal(mock.takeCredential(), null);
-  assert.equal(clean, "/session/id?mode=Hard&faceGaze=off");
+  assert.equal(clean, "/session/id?mode=Hard");
   assert.equal(captureLaunch(href.replace("token=dev", "token=real"), () => {}, true).metadata.status, "invalid");
+  for (const policy of ["faceGaze=off", "faceGaze=on", "cameraReadiness=off"]) {
+    for (const allowDevMock of [false, true]) {
+      const rejected = captureLaunch(`${href}&${policy}`, path => {clean = path;}, allowDevMock);
+      assert.deepEqual(rejected.metadata, {status: "invalid", sessionId: "id", devMock: false});
+      assert.equal(rejected.takeCredential(), null);
+      assert.equal(clean, "/session/id");
+    }
+  }
 });
 test("telemetry redacts nested credentials, hashes, raw URLs and arbitrary crash text", () => {
   const proof = "a".repeat(43);

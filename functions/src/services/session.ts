@@ -1,3 +1,5 @@
+import {issueProctoringPolicy, readProctoringPolicy, readActivationPreflight,
+  assertActivationPreflight, initializeIntegrityReporting} from "./examProctoringPolicy";
 import {assertRuntimeOwner, planRuntimeCommand, parseRuntimeCommand,
   closeRuntimeOwnership} from "./examRuntimeOwnership";
 import {
@@ -47,7 +49,7 @@ import {assertSameFrozenCalibration, freezeCalibration,
 import type {
   ExamRuntimeQuestion,
   ExamRuntimeSnapshot,
-} from "../../../shared/contracts/apiDtos";
+} from "../../../shared/contracts/examProctoringBackend";
 
 const INSTITUTES_COLLECTION = "institutes";
 const ACADEMIC_YEARS_COLLECTION = "academicYears";
@@ -911,8 +913,7 @@ const buildSessionRuntimeSnapshot = (input: {
   const licenseCurrentLayer = normalizeLicenseLayer(
     input.licenseSnapshot.currentLayer,
   );
-  const proctoringPolicy = isPlainObject(input.runData.proctoringPolicy) ?
-    input.runData.proctoringPolicy : {};
+  const proctoringPolicy = issueProctoringPolicy(input.runData.proctoringPolicy);
 
   return {
     difficultyDistribution: {
@@ -935,12 +936,7 @@ const buildSessionRuntimeSnapshot = (input: {
       phase2Percent,
       phase3Percent,
     },
-    proctoringPolicy: {
-      browserIntegrityGuardEnabled:
-        proctoringPolicy.browserIntegrityGuardEnabled === true,
-      faceIdentityGazeGuardEnabled:
-        proctoringPolicy.faceIdentityGazeGuardEnabled === true,
-    },
+    proctoringPolicy,
     questionSetVersion: input.templateVersion,
     questions,
     schedule: {
@@ -1023,6 +1019,7 @@ const normalizeStoredRuntimeSnapshot = (
       "Session field \"runtimeSnapshot\" must be an object.",
     );
   }
+  readProctoringPolicy(value.proctoringPolicy);
   assertCandidateSafeRuntimeSnapshot(value);
   if (normalizeRequiredString(value.sessionId, "runtimeSnapshot.sessionId") !== sessionId) {
     throw new SessionStartValidationError(
@@ -1581,6 +1578,8 @@ export class SessionService {
           sessionData?.launchCredentialHashes,
           sessionData?.sessionTokenHash,
         );
+        readProctoringPolicy(isPlainObject(sessionData.runtimeSnapshot) ?
+          sessionData.runtimeSnapshot.proctoringPolicy : undefined);
         assertSameFrozenCalibration(runData, sessionData, instituteId);
         credentialHashes.push(launchCredentialHash);
         promoteScheduledRun();
@@ -1895,6 +1894,8 @@ export class SessionService {
       const commandPlan = planRuntimeCommand(sessionData, {instituteId, yearId, runId,
         sessionId: routeSessionId, studentId, studentUid, launchNonce}, runtimeCommand,
       context.commandProof ?? {}, Date.now());
+      readProctoringPolicy(isPlainObject(sessionData.runtimeSnapshot) ?
+        sessionData.runtimeSnapshot.proctoringPolicy : undefined);
       const storedLaunchCredentialHashes = normalizeLaunchCredentialHashes(
         sessionData.launchCredentialHashes,
         sessionData.sessionTokenHash,
@@ -2112,6 +2113,8 @@ export class SessionService {
       const commandPlan = planRuntimeCommand(sessionData, {instituteId, yearId, runId,
         sessionId: routeSessionId, studentId, studentUid, launchNonce}, runtimeCommand,
       context.commandProof ?? {}, Date.now());
+      readProctoringPolicy(isPlainObject(sessionData.runtimeSnapshot) ?
+        sessionData.runtimeSnapshot.proctoringPolicy : undefined);
       const mode = normalizeSessionExecutionMode(sessionData.mode, "session.mode");
       const timingProfileSnapshot = normalizeTimingProfileSnapshot(
         sessionData.timingProfileSnapshot,
@@ -2206,6 +2209,7 @@ export class SessionService {
       if (!data) throw new SessionStartValidationError("NOT_FOUND", "Session unavailable.");
       this.assertActiveSessionAllowed(await this.readCurrentAuthority(transaction, instituteId), data);
       const plan = planRuntimeCommand(data, context, command, context.commandProof ?? {}, Date.now());
+      if (command.operation === "renew") readProctoringPolicy(data.runtimeSnapshot?.proctoringPolicy);
       transaction.update(reference, {runtimeOwnership: plan.owner});
       return command.operation === "renew" ? {operation: "renew" as const, ownership: plan.receipt} : {
         operation: "release" as const, contractVersion: 2 as const, generation: plan.owner.generation,
@@ -2224,6 +2228,7 @@ export class SessionService {
     context: SessionActivationContext,
     nowMillis = Date.now(),
   ): Promise<SessionActivationResult> {
+    const preflight = readActivationPreflight(context.proctoringPreflight);
     const instituteId = normalizeRequiredString(context.instituteId, "instituteId");
     const runId = normalizeRequiredString(context.runId, "runId");
     const sessionId = normalizeRequiredString(context.sessionId, "sessionId");
@@ -2321,10 +2326,16 @@ export class SessionService {
         );
       }
 
-      if (status === "started" && nowMillis < scheduledDeadline.toMillis()) {
+      if ((status === "started" || status === "active") && nowMillis < Date.parse(deadlineAt)) {
+        assertActivationPreflight(runtimeSnapshot.proctoringPolicy, preflight);
+      }
+
+      if (status === "started" && nowMillis < Date.parse(deadlineAt)) {
         this.assertTransitionIsAllowed("student", status, "active");
         status = "active";
         startedAt = new Date(nowMillis).toISOString();
+        update.activationPreflight = {...preflight, source: "client_report",
+          receivedAt: Timestamp.fromMillis(Date.now()), generation: context.runtimeOwner?.generation};
         update.startedAt = Timestamp.fromMillis(nowMillis);
         update.status = status;
       }
@@ -2427,6 +2438,9 @@ export class SessionService {
 
       if (actorType === "student") {
         assertRuntimeOwner(sessionData, {...context, studentId: context.studentId ?? ""}, Date.now());
+      }
+      if (actorType === "student" && normalizedNextStatus === "active") {
+        throw new SessionStartValidationError("VALIDATION_ERROR", "Use authoritative session activation.");
       }
       this.assertTransitionIsAllowed(
         actorType,
@@ -2635,6 +2649,8 @@ export class SessionService {
         ),
       phaseConfigSnapshot: context.phaseConfigSnapshot,
       questionTimeMap: context.questionTimeMap,
+      integrityReportingState: initializeIntegrityReporting(
+        Date.parse(context.runtimeSnapshot.schedule.sessionEndsAt), Date.now()),
       runtimeOwnershipVersion: 2,
       revision: 1,
       riskModelVersion: context.riskModelVersion,

@@ -1,3 +1,4 @@
+import {proctoringPolicyForTest} from "./helpers/proctoring";
 import {ownedSessionFixture, runtimeOwnerForTest} from "./helpers/runtimeOwnership";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -107,6 +108,7 @@ const seedSession = async (
     },
     runId: "run_build_30",
     runtimeSnapshot: {
+      proctoringPolicy: proctoringPolicyForTest(false, false),
       questions: [
         {id: "q01", matrixColumns: [], matrixRows: [], options: [
           {id: "A", label: "A", text: "A"},
@@ -1237,3 +1239,29 @@ test(
     }
   },
 );
+
+test("legacy policy and forged capabilities cannot write answers under a valid owner", async () => {
+  const path = "institutes/inst_build_30/academicYears/2026/runs/run_build_30/sessions/session_policy_denied";
+  await seedSession(path);
+  const reference = firestore.doc(path);
+  const before = (await reference.get()).data();
+  try {
+    for (const policy of [{browserIntegrityGuardEnabled: false, faceIdentityGazeGuardEnabled: false},
+      {...proctoringPolicyForTest(), capabilities: {...proctoringPolicyForTest().capabilities,
+        automatedGazeTracking: "enabled"}}]) {
+      await reference.update({"runtimeSnapshot.proctoringPolicy": policy});
+      await assert.rejects(answerBatchService.persistIncrementalAnswers({
+        answers: [mcqAnswer("q02", "C", Date.now(), 20)],
+        context: {runtimeOwner: runtimeOwnerForTest("uid_build_30"), instituteId: "inst_build_30",
+          runId: "run_build_30", sessionId: "session_policy_denied", studentId: "student_build_30", yearId: "2026"},
+        millisecondsSinceLastWrite: 5000,
+      }), (e: unknown) => e instanceof Error && e.name === "ExamProctoringError");
+      assert.deepEqual((await reference.get()).get("answerMap"), before?.answerMap);
+      assert.deepEqual((await reference.get()).get("questionTimeMap"), before?.questionTimeMap);
+      assert.deepEqual((await reference.get()).get("deadlineAt"), before?.deadlineAt);
+    }
+  } finally {
+    await reference.delete();
+    assert.equal((await reference.get()).exists, false);
+  }
+});

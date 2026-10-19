@@ -1,6 +1,8 @@
 /* eslint-disable require-jsdoc, @typescript-eslint/no-var-requires */
 "use strict";
 
+const {proctoringRequirementsForTest, proctoringPreflightForTest,
+  proctoringPolicyForTest} = require("../lib/tests/helpers/proctoring.js");
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const {randomUUID, randomBytes} = require("node:crypto");
@@ -189,6 +191,7 @@ test(
         }),
         year.set({locked: false, status: "Active"}),
         run.set({
+          proctoringPolicy: proctoringRequirementsForTest(true),
           calibrationVersion: "cal_bwm_017",
           endWindow: Timestamp.fromMillis(Date.now() + (65 * 60_000)),
           mode: "Diagnostic",
@@ -328,7 +331,7 @@ test(
       let generation = 2;
       let secret = recovery.nextOwnerProof;
       assert.equal((await postExamRoute(
-        `${runtimePath}/activate`, winner.token, {},
+        `${runtimePath}/activate`, winner.token, proctoringPreflightForTest(),
         ownerHeaders(winner.command.nextOwnerProof, 1))).status, 409);
       const renewed = await postExamRoute(entryPath, winner.token, {
         operation: "renew", commandId: randomUUID()},
@@ -356,14 +359,216 @@ test(
       assert.equal((await postExamRoute(entryPath, winner.token,
         release, ownerHeaders(recovery.nextOwnerProof,
           generation - 1))).status, 409);
+      const legacyBody = await postExamRoute(`${runtimePath}/activate`,
+        other.token, {}, ownerHeaders(secret, generation));
+      assert.equal(legacyBody.status, 400);
+      assert.equal(legacyBody.body.error.details.reason,
+        "invalid_proctoring_request");
+      assert.equal((await sessionRef.get()).get("status"), "started");
+      const persisted = (await sessionRef.get()).data();
+      assert.deepEqual(persisted.runtimeSnapshot.proctoringPolicy,
+        proctoringPolicyForTest(true));
+      assert.equal(persisted.integrityReportingState.acceptedBatchCount, 0);
+      assert.equal(persisted.integrityReportingState.acceptedEventCount, 0);
+      // EXM-07: identity, persistence and gateway/direct replay.
+      const integrity = {contractVersion: 1, batchId: randomUUID(), events: [{
+        eventType: "TAB_SWITCH", observedAt: "1900-01-01T00:00:00.000Z",
+        phase: "lobby"}]};
+      const integrityPath = `${runtimePath}/integrity-events`;
+      const directOrigin = `http://${functionsHost}/${projectId}/` +
+        "us-central1/examSessionIntegrityEvents";
+      const directPath = integrityPath.replace(/^\/api\/v1/u, "");
+      const direct = async (path, body, headers = {}) => {
+        const response = await fetch(`${directOrigin}${path}`, {method: "POST",
+          headers: {"authorization": `Bearer ${other.token}`,
+            "content-type": "application/json",
+            ...ownerHeaders(secret, generation), ...headers},
+          body: typeof body === "string" ? body : JSON.stringify(body)});
+        return {status: response.status, body: await response.json(),
+          retry: response.headers.get("retry-after"),
+          cache: response.headers.get("cache-control")};
+      };
+      // Warm the direct worker and Auth/store before starting the rate clock.
+      // Cold module discovery can legitimately exceed the five-second window.
+      const warmDenial = await direct(directPath, integrity,
+        ownerHeaders(proof(), generation));
+      assert.equal(warmDenial.status, 401);
+      assert.equal(warmDenial.body.error.details.reason, "invalid_owner");
+      assert.equal((await sessionRef.get())
+        .get("integrityReportingState.acceptedBatchCount"), 0);
+      const acceptedIntegrity = await postExamRoute(integrityPath, other.token,
+        integrity, ownerHeaders(secret, generation));
+      assert.equal(acceptedIntegrity.status, 200,
+        JSON.stringify(acceptedIntegrity.body));
+      assert.match(acceptedIntegrity.cache, /no-store/u);
+      assert.equal(acceptedIntegrity.body.data.disposition, "accepted");
+      const receiptRef = sessionRef.collection("integrityBatches")
+        .doc(integrity.batchId);
+      const persistedReceipt = (await receiptRef.get()).data();
+      assert.deepEqual(persistedReceipt.events, integrity.events);
+      const replayIntegrity = await direct(directPath, integrity);
+      assert.equal(replayIntegrity.status, 200,
+        JSON.stringify(replayIntegrity.body));
+      assert.deepEqual(replayIntegrity.body.data,
+        {...acceptedIntegrity.body.data, disposition: "replayed"});
+      const rateIntegrity = await direct(directPath, {...integrity,
+        batchId: randomUUID()});
+      assert.equal(rateIntegrity.status, 409);
+      assert.equal(rateIntegrity.retry, "5");
+      assert.deepEqual(rateIntegrity.body.error.details,
+        {reason: "integrity_rate_limited", retryAfterSeconds: 5});
+      for (const [path, body, headers, status] of [
+        [directPath, {...integrity, events: [{...integrity.events[0],
+          phase: "exam"}]}, {}, 409],
+        [directPath, integrity, ownerHeaders(winner.command.nextOwnerProof, 1),
+          409],
+        [directPath + "?scope=other", integrity, {}, 400],
+        [directPath + "/extra", integrity, {}, 404],
+        ["/", integrity, {}, 404],
+        [directPath, {...integrity, image: "data:image/jpeg;base64,secret"}, {},
+          400],
+        [directPath, JSON.stringify(integrity).replace("\"phase\":\"lobby\"",
+          "\"phase\":\"lobby\",\"phase\":\"lobby\""), {}, 400],
+        [directPath, JSON.stringify(integrity).padEnd(8193, " "), {}, 400],
+        [directPath, integrity, {"content-type": "text/plain"}, 400],
+      ]) {
+        const denied = await direct(path, body, headers);
+        assert.equal(denied.status, status, JSON.stringify(denied.body));
+        assert.match(denied.cache, /no-store/u);
+      }
+      // Permanent BWM-045 adversarial HTTP matrix: use real signed identities,
+      // exact receipts, and real Firestore snapshots, without response stubs.
+      assert.equal((await postExamRoute(entryPath, other.token,
+        {operation: "renew", commandId: randomUUID()},
+        ownerHeaders(secret, generation))).status, 200);
+      const beforeDenials = (await sessionRef.get()).data();
+      const assertNoIntegrityMutation = async () => {
+        assert.deepEqual((await sessionRef.get()).data(), beforeDenials);
+        assert.equal((await sessionRef.collection("integrityBatches")
+          .get()).size,
+        1);
+      };
+      const tokenClaims = JSON.parse(Buffer.from(other.token.split(".")[1],
+        "base64url").toString());
+      const scopedClaims = Object.fromEntries(Object.entries(tokenClaims)
+        .filter(([key]) => !["iss", "aud", "auth_time", "user_id", "sub", "iat",
+          "exp", "firebase", "email", "email_verified"].includes(key)));
+      for (const patch of [{role: "teacher"},
+        {instituteId: "another-institute"},
+        {yearId: "another-year"}, {runId: "another-run"},
+        {sessionId: "another-session"}, {studentId: "another-student"},
+        {launchNonce: "unconsumed-nonce"}]) {
+        const invalidToken = await signInWithCustomToken(
+          await auth.createCustomToken(uid, {...scopedClaims, ...patch}));
+        for (const value of [integrity,
+          {...integrity, batchId: randomUUID()}]) {
+          const denied = await direct(directPath, value,
+            {authorization: `Bearer ${invalidToken}`});
+          assert.ok([401, 403, 404, 409].includes(denied.status),
+            JSON.stringify(denied.body));
+          assert.match(denied.cache, /no-store/u);
+          await assertNoIntegrityMutation();
+        }
+      }
+      for (const body of [
+        {...integrity, contractVersion: 2}, {...integrity, events: []},
+        {...integrity, events: Array(11).fill(integrity.events[0])},
+        {...integrity, batchId: integrity.batchId.toUpperCase()},
+        ...[{eventType: "DEVTOOLS_SUSPECTED"}, {phase: "grading"},
+          {observedAt: "2026-02-30T00:00:00.000Z"}, {severity: "blocking"},
+          {details: "private-text"}, {image: "private-media"}].map((event) =>
+          ({...integrity, events: [{...integrity.events[0], ...event}]})),
+      ]) {
+        const denied = await direct(directPath, body);
+        assert.equal(denied.status, 400, JSON.stringify(denied.body));
+        assert.equal(denied.body.error.details.reason,
+          "invalid_integrity_batch");
+        await assertNoIntegrityMutation();
+      }
+      assert.equal((await direct(directPath, integrity,
+        {"content-encoding": "identity"})).status, 400);
+      assert.equal((await direct(directPath, integrity,
+        {authorization: ""})).status, 401);
+      assert.equal((await direct(directPath, integrity,
+        {"X-Parabolic-Exam-Owner": ""})).status, 400);
+      assert.equal((await direct(directPath.replace(encodedSession,
+        "different-session"), integrity)).status, 403);
+      await assertNoIntegrityMutation();
+      for (const [policy, reason] of [
+        [{browserIntegrityGuardEnabled: false,
+          faceIdentityGazeGuardEnabled: false}, "policy_upgrade_required"],
+        [{...persisted.runtimeSnapshot.proctoringPolicy,
+          capabilities: {...persisted.runtimeSnapshot.proctoringPolicy
+            .capabilities, automatedFaceMatching: "enabled"}},
+        "policy_unsupported"],
+      ]) {
+        await sessionRef.update({"runtimeSnapshot.proctoringPolicy": policy});
+        const corrupt = (await sessionRef.get()).data();
+        const denied = await direct(directPath, integrity);
+        assert.equal(denied.status, 409);
+        assert.equal(denied.body.error.details.reason, reason);
+        assert.deepEqual((await sessionRef.get()).data(), corrupt);
+        await sessionRef.update({"runtimeSnapshot.proctoringPolicy":
+          persisted.runtimeSnapshot.proctoringPolicy});
+      }
+      // Valid near-capacity fixture: actual final write, replay and denial.
+      const firstReceivedAt =
+        Date.parse(acceptedIntegrity.body.data.receivedAt);
+      await new Promise((resolve) => setTimeout(resolve, Math.max(0,
+        5005 - (Date.now() - firstReceivedAt))));
+      await sessionRef.update({"integrityReportingState.acceptedBatchCount": 59,
+        "integrityReportingState.acceptedEventCount": 590});
+      const finalBatch = {...integrity, batchId: randomUUID(),
+        events: Array(10).fill(integrity.events[0])};
+      assert.equal((await direct(directPath, finalBatch)).status, 200);
+      const fullState = (await sessionRef.get()).data();
+      const lastReceipt = (await sessionRef.collection("integrityBatches")
+        .doc(finalBatch.batchId).get()).data();
+      const full = await direct(directPath, {...integrity,
+        batchId: randomUUID()});
+      assert.equal(full.status, 409);
+      assert.equal(full.body.error.details.reason,
+        "integrity_capacity_reached");
+      assert.equal((await direct(directPath, finalBatch)).body.data.disposition,
+        "replayed");
+      assert.deepEqual((await sessionRef.get()).data(), fullState);
+      assert.equal(fullState.integrityReportingState.acceptedBatchCount, 60);
+      assert.equal(fullState.integrityReportingState.acceptedEventCount, 600);
+      assert.deepEqual((await sessionRef.collection("integrityBatches")
+        .doc(finalBatch.batchId).get()).data(), lastReceipt);
+      // Fixture cleanup is privileged test setup, never a client reset path.
+      await sessionRef.update({integrityReportingState:
+        beforeDenials.integrityReportingState});
+      await sessionRef.collection("integrityBatches").doc(finalBatch.batchId)
+        .delete();
+      await assertNoIntegrityMutation();
+      assert.deepEqual((await receiptRef.get()).data(), persistedReceipt);
+      assert.equal((await sessionRef.get())
+        .get("integrityReportingState.acceptedBatchCount"), 1);
+      const ownershipBeforePolicyDenial = (await sessionRef.get())
+        .get("runtimeOwnership");
+      await sessionRef.update({"runtimeSnapshot.proctoringPolicy": {
+        browserIntegrityGuardEnabled: false,
+        faceIdentityGazeGuardEnabled: false}});
+      const unsupported = await postExamRoute(entryPath, other.token, {
+        operation: "recover", commandId: randomUUID(), previous: {
+          generation}, nextOwnerProof: proof()},
+      ownerHeaders(secret, generation));
+      assert.equal(unsupported.status, 409);
+      assert.equal(unsupported.body.error.details.reason,
+        "policy_upgrade_required");
+      assert.deepEqual((await sessionRef.get()).get("runtimeOwnership"),
+        ownershipBeforePolicyDenial);
+      await sessionRef.update({"runtimeSnapshot.proctoringPolicy":
+        proctoringPolicyForTest(true)});
       const activated = await postExamRoute(
-        `${runtimePath}/activate`, other.token, {},
+        `${runtimePath}/activate`, other.token, proctoringPreflightForTest(),
         ownerHeaders(secret, generation));
       assert.equal(activated.status, 200, JSON.stringify(activated.body));
       assert.equal(activated.body.data.status, "active");
       assert.equal(activated.body.data.replayed, false);
       const activationReplay = await postExamRoute(
-        `${runtimePath}/activate`, other.token, {},
+        `${runtimePath}/activate`, other.token, proctoringPreflightForTest(),
         ownerHeaders(secret, generation));
       assert.equal(activationReplay.status, 200);
       assert.equal(activationReplay.body.data.replayed, true);

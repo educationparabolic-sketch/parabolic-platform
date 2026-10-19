@@ -482,3 +482,75 @@ the actual provider URLs and live/mock-disabled/emulator-disabled artifacts.
 BWM-045 READY for inspection only; BWM-053 legacy/publication/data and all other
 release prerequisites remain. Production NO_GO. Exact release/source hashes,
 commands, mutation scope, expiry, cleanup and results: master plan LOG-257.
+
+### BWM-045 declaration checkpoint (DEC-111)
+
+The reserved proctoring contract introduces no environment variable, biometric
+provider, secret, external model origin or Hosting/CSP/Permissions-Policy change.
+Camera readiness is local video-only; automated face/gaze is unavailable and
+EXM-06 is not mounted for admission. Future integrity ingest uses same-origin
+/api/v1 plus existing Firebase Auth and BWM-044 owner headers. The reserved
+Firestore TTL field policy is a resource requirement, not an env flag; local
+declaration belongs to substep 4 and actual enablement/deletion qualification
+to BWM-052/053. No cloud mutation/deployment is authorized here. Approved
+compatible public L5 remains necessary at task closeout. Production NO_GO.
+
+### BWM-045 backend adoption — DEC-112
+
+Substep 3 changes no environment key/value/validator, provider, secret, header,
+CORS origin or deployment target. Existing Firebase ID tokens and supplementary
+BWM-044 owner headers protect v1 policy admission and client-report activation.
+Legacy mounted callers remain pending 5–6 and fail closed locally; coordinated
+compatible public-runtime L5 remains substep 8. Reporting-state initialization
+does not implement EXM-07, TTL resources or physical retention. No cloud change.
+
+## BWM-045 integrity backend — substep 4 (DEC-113)
+
+EXM-07 uses existing Firebase Auth/Firestore and BWM-044 owner headers. No new
+environment variable, secret, provider, bucket, IAM grant, Hosting header or
+origin. Local fieldOverrides declare integrityBatches.retainedUntil TTL and
+payload/fingerprint index exemptions; remote enablement and physical purge
+qualification belong to BWM-052/053. No remote resources were changed. Current
+78 composite indexes and five field overrides; routes 121/116/0/0/5, exports/handlers 64/52, eight schedules.
+
+## BWM-045 mounted Admin adoption — substep 5 (DEC-114)
+
+Admin v1 policy adoption uses the existing same-origin /api/v1 route and Firebase
+identity. No env variable, provider, header/CSP/Permissions Policy, secret, IAM,
+resource or cloud change. Local browser verification uses disposable demo Auth/
+Firestore/Functions/Portal Hosting. Exam camera/queue remains substep 6; public
+runtime/header/camera qualification is still required in 8. Production NO_GO.
+
+BWM-045 substep 6 / DEC-115: mounted Exam uses existing Auth/Firestore/Functions/
+Exam Hosting and BWM-044 transport. No new variable, endpoint origin, credential,
+dependency, provider, media upload or header/rewrite value. DEV faceGaze query is
+rejected/scrubbed; fixed guarded fixtures alone demonstrate supported policy.
+Existing camera=(self), microphone=() and CSP are retained; loopback synthetic
+camera acceptance does not replace approved public/hardware qualification in 8.
+
+## BWM-045 authorized staging prerequisites — DEC-118 (qualified)
+
+Explicit user authorization covers `parabolic-dev` only. The nine selected HTTP
+exports use a hashed isolated runtime snapshot with reviewed nonsecret staging
+configuration; no new environment variable or secret is introduced. `apiV1` and
+`examStart` temporarily use the provider-returned Exam preview origin for the real
+Student button qualification. Restore their saved canonical `EXAM_BASE_URL` after
+qualification and verify metadata; expiring previews are not a persistent launch
+destination. Hosting live channels are outside this rollout.
+
+Actual launch exposed two resource prerequisites: the runtime account
+`parabolic-dev@appspot.gserviceaccount.com` needs `roles/iam.serviceAccountTokenCreator`
+on its own service-account resource (no project IAM or human role grant), per
+[Firebase custom token signing](https://firebase.google.com/docs/auth/admin/create-custom-tokens);
+and the existing concurrent-session enforcement query needs the `sessions`
+COLLECTION_GROUP index on `instituteId ASC, status ASC`. Only that index is
+qualified here; no blanket index/TTL/resource rollout. Private before/after policy
+and configuration backups are retained outside Git. Production remains NO_GO.
+
+Final DEC-118 qualification PASS: both preview versions finalized and 89 public
+file hashes matched; two CSP-on public cases passed. Two owned fixtures/Auth
+identities deleted with late absence proof; apiV1/examStart canonical origin
+restored. All nine selected HTTP exports ACTIVE; 49 unrelated Functions, 13 prior
+remote indexes and both live Hosting channels unchanged. The one new session
+index is READY; self signing remains required staging configuration. This is not
+a production or general infrastructure qualification.

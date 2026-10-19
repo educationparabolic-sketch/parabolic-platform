@@ -372,4 +372,20 @@ Analytics summarize execution.
 Insights interpret patterns.
 Governance evaluates maturity.
 
+BWM-045 current policy behavior — substep 5 / DEC-114
 
+Admin assignment create/review/list/detail/live uses exact server-supported v1
+requirements: browserIntegrityGuardEnabled plus cameraReadiness=off|required.
+Required means a consented browser camera permission/readiness report; it cannot
+verify identity, face, gaze or continuous capture. Automated face matching and
+gaze tracking are unavailable, with no enabled/required or override control.
+
+All policy-bearing responses are strictly validated, including create retries,
+operational/history and derived commands. Legacy/unsupported policy fails closed;
+no fixture, silent conversion or default capability is substituted. A trusted
+completed termination may return an unavailable policy: the UI confirms only
+that stop and reports that older policy cannot be displayed in history. It does
+not claim history reconciliation. Recipient/revision/idempotency/role/tenant and
+existing command audit owners remain. No new analytics, rules, provider or cloud
+change. Exam adoption remains substep 6; complete flow/public qualification is
+pending and production remains NO_GO.

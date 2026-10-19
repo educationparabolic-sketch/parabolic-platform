@@ -15,7 +15,7 @@ export function captureLaunch(href: string, replace: (path: string) => void, all
     const query = url.searchParams;
     if (allowDevMock && sessionId && query.getAll("token").length === 1 &&
         query.get("token") === "dev" && !url.hash &&
-        [...query.keys()].every((key) => ["token", "mode", "faceGaze"].includes(key))) {
+        [...query.keys()].every((key) => ["token", "mode"].includes(key))) {
       metadata.status = "launch";
       metadata.devMock = true;
     } else if (url.search || url.hash) {
@@ -32,7 +32,7 @@ export function captureLaunch(href: string, replace: (path: string) => void, all
   // Scrub rejected material too, including unknown paths and history state.
   const devQuery = new URLSearchParams();
   if (metadata.devMock) {
-    for (const key of ["mode", "faceGaze"]) {
+    for (const key of ["mode"]) {
       const value = url.searchParams.get(key);
       if (value !== null) devQuery.set(key, value);
     }
@@ -59,7 +59,7 @@ export function initializeLaunchBootstrap(allowDevMock: boolean): void {
   // exchanging it or replacing the current document's ownership authority.
   const scrubNavigation = () => {
     if (window.location.hash || (!allowDevMock && window.location.search) ||
-        /[?&](?:token|launch|launchCredential)=/iu.test(window.location.search)) {
+        /[?&](?:token|launch|launchCredential|faceGaze)=/iu.test(window.location.search)) {
       captureLaunch(window.location.href, (path) => window.history.replaceState(null, "", path));
     }
   };

@@ -198,7 +198,7 @@ test("only minimum-time bypass and force-submit are public overrides", async () 
 test("backend context supplies identity authority separately", async () => {
   const source = await readFile(backendTypePath, "utf8");
 
-  assert.match(source, /shared\/contracts\/apiDtos/);
+  assert.match(source, /shared\/contracts\/examProctoringBackend/);
   assert.match(source, /interface AdminAssignmentOperationContext/);
   assert.match(source, /actorId: string;/);
   assert.match(source, /actorRole: string;/);

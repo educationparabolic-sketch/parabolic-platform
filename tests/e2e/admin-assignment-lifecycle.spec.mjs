@@ -335,8 +335,9 @@ test.beforeAll(async () => {
       phase3Percent: 0,
     },
     proctoringPolicy: {
+      contractVersion: 1,
       browserIntegrityGuardEnabled: true,
-      faceIdentityGazeGuardEnabled: false,
+      cameraReadiness: "off",
     },
     questionIds: [questionId],
     recipientCount: 1,
@@ -570,6 +571,13 @@ test(
       toLocalDateTimeInput(scheduledStart),
     );
     await page.getByLabel("Shuffle Question Order").check();
+    const camera = page.getByLabel("Camera readiness", {exact: true});
+    await expect(camera).toBeChecked();
+    await camera.uncheck();
+    await expect(camera).not.toBeChecked();
+    await camera.check();
+    await expect(page.getByText(/Automated face matching and gaze tracking: unavailable/)).toBeVisible();
+    await expect(page.getByLabel(/Face \+ Gaze Guard/)).toHaveCount(0);
     await page.getByRole("button", {name: "Review Final Snapshot"}).click();
     await expect(page.getByLabel("Assignment confirmation snapshot"))
       .toContainText("1 student");
@@ -603,6 +611,14 @@ test(
     expect(createdRun.templateVersion).toBe(1);
     expect(createdRun.status).toBe("scheduled");
     expect(createdRun.shuffleQuestionOrder).toBe(true);
+    expect(createResponses[0].request().postDataJSON().proctoringPolicy).toEqual({
+      contractVersion: 1, browserIntegrityGuardEnabled: true, cameraReadiness: "required",
+    });
+    expect(createdRun.proctoringPolicy).toEqual({contractVersion: 1,
+      browserIntegrityGuardEnabled: true, cameraReadiness: "required",
+      capabilities: {automatedFaceMatching: "unavailable", automatedGazeTracking: "unavailable",
+        cameraReadiness: "browser_permission_only", browserIntegrity: "browser_controls_only"},
+      identityPhotoReview: "not_required", integrityReporting: "client_observations"});
 
     const illegalTermination = await request.post(
       `/api/v1/admin/runs/${createdRun.id}/lifecycle`,
@@ -736,6 +752,10 @@ test(
     expect(persistedRun.data().recipientCount).toBe(1);
     expect(persistedRun.data().canonicalId).toBe(canonicalId);
     expect(persistedRun.data().templateVersion).toBe("1");
+    expect(persistedRun.get("proctoringPolicy")).toEqual({contractVersion: 1,
+      browserIntegrityGuardEnabled: true, cameraReadiness: "required"});
+    await expect(page.getByText("Camera readiness", {exact: true})).toBeVisible();
+    await expect(page.getByText("Automated face matching and gaze tracking", {exact: true})).toBeVisible();
 
     const otherTenantDetail = await request.get(
       `/api/v1/admin/runs/${createdRun.id}`,
@@ -905,8 +925,24 @@ test(
     ]));
 
     const uiRequestPayload = createResponses[0].request().postDataJSON();
+    const beforeInvalidPolicy = (await firestore.collection(`institutes/${instituteId}/academicYears/${yearId}/runs`).get()).size;
+    for (const proctoringPolicy of [
+      {browserIntegrityGuardEnabled: true, faceIdentityGazeGuardEnabled: false},
+      {...uiRequestPayload.proctoringPolicy, cameraReadiness: "verified"},
+      {...uiRequestPayload.proctoringPolicy, capabilities: {automatedFaceMatching: "verified"}},
+    ]) {
+      const denied = await request.post("/api/v1/admin/runs", {
+        data: {...uiRequestPayload, idempotencyKey: `invalid-policy-${Math.random()}`, proctoringPolicy},
+        headers: {Authorization: `Bearer ${teacherToken}`},
+      });
+      expect(denied.status()).toBe(400);
+      expect((await denied.json()).error.details.reason).toBe("invalid_proctoring_request");
+    }
+    expect((await firestore.collection(`institutes/${instituteId}/academicYears/${yearId}/runs`).get()).size)
+      .toBe(beforeInvalidPolicy);
     const concurrentPayload = {
       ...uiRequestPayload,
+      proctoringPolicy: {...uiRequestPayload.proctoringPolicy, cameraReadiness: "off"},
       idempotencyKey: "bwm-014-concurrent-browser-proof",
     };
     const concurrentResponses = await Promise.all([
@@ -947,5 +983,40 @@ test(
       .doc(templateId)
       .get();
     expect(finalTemplate.data().totalRuns).toBe(2);
+
+    // A loaded valid run can become legacy before a trusted stop. Never invent policy or history.
+    await page.evaluate((runId) => {
+      window.sessionStorage.setItem("bwm014.adminAssignmentRoute", `/admin/assignments/live/${runId}`);
+    }, concurrentOperationRunId);
+    await page.goto("/admin/index.html", {waitUntil: "domcontentloaded"});
+    await expect(page.getByRole("heading", {name: concurrentOperationRunId})).toBeVisible();
+    await expect(page.getByText("Camera readiness", {exact: true})).toBeVisible();
+    const legacyRef = firestore.doc(`institutes/${instituteId}/academicYears/${yearId}/runs/${concurrentOperationRunId}`);
+    await legacyRef.update({proctoringPolicy: {browserIntegrityGuardEnabled: true, faceIdentityGazeGuardEnabled: false}});
+    await page.getByLabel("Justification").fill("Trusted stop after legacy policy detected.");
+    const stoppedPromise = page.waitForResponse((response) =>
+      new URL(response.url()).pathname === `/api/v1/admin/runs/${concurrentOperationRunId}/lifecycle` &&
+      response.request().method() === "POST" && response.status() === 200);
+    await page.getByRole("button", {name: "Terminate run", exact: true}).click();
+    const stoppedResponse = await stoppedPromise;
+    const stopped = await stoppedResponse.json();
+    expect(stopped.data.run.proctoringPolicy).toEqual({status: "unavailable", reason: "policy_upgrade_required"});
+    await expect(page.getByRole("status")).toContainText("Policy unavailable");
+    await expect(page.getByRole("status")).toContainText("history cannot display its older policy");
+    await expect(page.getByRole("button", {name: "Terminate run", exact: true})).toHaveCount(0);
+    const terminatedState = (await legacyRef.get()).data();
+    expect(terminatedState.status).toBe("terminated");
+    const terminalReplay = await request.post(`/api/v1/admin/runs/${concurrentOperationRunId}/lifecycle`, {
+      data: stoppedResponse.request().postDataJSON(), headers: {Authorization: `Bearer ${teacherToken}`},
+    });
+    expect(terminalReplay.status()).toBe(200);
+    expect((await terminalReplay.json()).data.disposition).toBe("replayed");
+    expect((await legacyRef.get()).data()).toEqual(terminatedState);
+    const unavailableHistory = await request.get("/api/v1/admin/run-history", {
+      headers: {Authorization: `Bearer ${teacherToken}`},
+    });
+    expect(unavailableHistory.status()).toBe(409);
+    expect((await unavailableHistory.json()).error.details.reason).toBe("policy_upgrade_required");
+
   },
 );

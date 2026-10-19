@@ -1,3 +1,4 @@
+import {handleExamSessionIntegrityEventsRequest} from "./examSessionIntegrityEvents";
 import {handleStudentProfileRequest, handleAdminStudentIdentityPhotoMediaRequest,
   handleExamSessionIdentityStatusRequest} from "./studentProfile";
 import * as functions from "firebase-functions";
@@ -110,6 +111,7 @@ Record<string, ApiGatewayHandler>
   adminStudentsBulk: handleAdminStudentsBulkRequest,
   adminTests: handleAdminTestsRequest,
   examSessionAnswers: handleExamSessionAnswersRequest,
+  examSessionIntegrityEvents: handleExamSessionIntegrityEventsRequest,
   examSessionActivate: handleExamSessionActivateRequest,
   examSessionEntry: handleExamSessionEntryRequest,
   examSessionSubmit: handleExamSessionSubmitRequest,

@@ -100,7 +100,11 @@ export function buildDevMockSessionSnapshot(
     },
     proctoringPolicy: {
       browserIntegrityGuardEnabled: true,
-      faceIdentityGazeGuardEnabled: true,
+      contractVersion: 1,
+      cameraReadiness: "required",
+      capabilities: {automatedFaceMatching: "unavailable", automatedGazeTracking: "unavailable", cameraReadiness: "browser_permission_only", browserIntegrity: "browser_controls_only"},
+      identityPhotoReview: "not_required",
+      integrityReporting: "client_observations",
     },
     questionSetVersion: "dev-snapshot-v1",
     questions,

@@ -1,3 +1,4 @@
+import {proctoringPreflightForTest} from "./helpers/proctoring";
 import {randomBytes} from "node:crypto";
 const ownerProof = randomBytes(32).toString("base64url");
 import assert from "node:assert/strict";
@@ -23,6 +24,7 @@ test("exam activation derives the complete lifecycle scope from Firebase identit
     activateSession: async (context) => {
       activationCalls += 1;
       assert.deepEqual(context, {
+        proctoringPreflight: proctoringPreflightForTest(),
         runtimeOwner: {proof: ownerProof, generation: 1, studentUid: identity.uid, launchNonce: identity.launchNonce},
         instituteId: identity.instituteId,
         runId: identity.runId,
@@ -50,11 +52,7 @@ test("exam activation derives the complete lifecycle scope from Firebase identit
   });
   const response = createMockResponse();
   await handler(createMockRequest({
-    body: {
-      instituteId: "browser-tenant-must-not-be-authority",
-      runId: "browser-run-must-not-be-authority",
-      yearId: "1999",
-    },
+    body: proctoringPreflightForTest(),
     headers: {"authorization": "Bearer firebase-id-token", "x-parabolic-exam-owner": ownerProof,
       "x-parabolic-exam-generation": "1"},
     method: "POST",
@@ -97,4 +95,27 @@ test("exam activation rejects a Firebase identity bound to another session", asy
     (response.body as {error: {code: string}}).error.code,
     "UNAUTHORIZED",
   );
+});
+
+test("activation rejects caller authority, legacy bodies and duplicate fields before service dispatch", async () => {
+  let calls = 0;
+  const handler = createExamSessionActivateHandler({
+    activateSession: async () => {
+      calls += 1; throw new Error("must not dispatch");
+    },
+    verifyIdToken: async () => identity as never,
+  });
+  for (const body of [{}, {...proctoringPreflightForTest(), instituteId: "forged"},
+    {contractVersion: 1, preflight: {camera: "client_reported_ready", faceVerified: true}}]) {
+    const response = createMockResponse();
+    await handler(createMockRequest({body, method: "POST",
+      path: `/exam/session/${identity.sessionId}/activate`, headers: {
+        "authorization": "Bearer firebase-id-token", "x-parabolic-exam-owner": ownerProof,
+        "x-parabolic-exam-generation": "1",
+      }}) as never, response as never);
+    assert.equal(response.statusCode, 400);
+    assert.equal((response.body as {error: {details: {reason: string}}}).error.details.reason,
+      "invalid_proctoring_request");
+  }
+  assert.equal(calls, 0);
 });

@@ -14,7 +14,7 @@ import type {
   AdminRunSessionOverrideRequest,
   AdminRunSessionOverrideResult,
   AdminRunVersionedRecord,
-} from "../../../shared/contracts/apiDtos";
+} from "../../../shared/contracts/examProctoringBackend";
 
 export type {
   AdminRunCommandDisposition,
@@ -47,7 +47,7 @@ export type {
   AdminRunSessionOverrideType,
   AdminRunTerminalStatus,
   AdminRunVersionedRecord,
-} from "../../../shared/contracts/apiDtos";
+} from "../../../shared/contracts/examProctoringBackend";
 
 export interface AdminAssignmentOperationContext {
   actorId: string;

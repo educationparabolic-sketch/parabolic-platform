@@ -1,7 +1,10 @@
+import { adaptExamProctoringPolicyV1 } from "../../../../../shared/services/portalResponseAdapters";
 import type {
   AdminRunCreateRequest,
   AdminRunCreateResult,
   AdminRunRecord,
+  AdminRunLifecycleResult,
+  AdminRunVersionedRecord,
 } from "../../../../../shared/contracts/apiDtos";
 
 function assertEqual<T>(
@@ -36,6 +39,8 @@ function assertRunMatchesRequest(
   request: AdminRunCreateRequest,
   run: AdminRunRecord,
 ): void {
+  adaptExamProctoringPolicyV1(run.proctoringPolicy, "POST /admin/runs replay");
+  assertEqual("contractVersion", run.proctoringPolicy.contractVersion, request.proctoringPolicy.contractVersion);
   assertEqual("academicYear", run.academicYear, request.academicYear);
   assertEqual("attemptLimit", run.attemptLimit, request.attemptLimit);
   assertEqual("endWindow", run.endWindow, request.endWindow);
@@ -51,9 +56,9 @@ function assertRunMatchesRequest(
     request.proctoringPolicy.browserIntegrityGuardEnabled,
   );
   assertEqual(
-    "faceIdentityGazeGuardEnabled",
-    run.proctoringPolicy.faceIdentityGazeGuardEnabled,
-    request.proctoringPolicy.faceIdentityGazeGuardEnabled,
+    "cameraReadiness",
+    run.proctoringPolicy.cameraReadiness,
+    request.proctoringPolicy.cameraReadiness,
   );
   assertStringArrayEqual(
     "recipientStudentIds",
@@ -114,4 +119,17 @@ export function reconcileCreatedRun(
   }
 
   return replayResult.run;
+}
+
+
+/** Confirm only the addressed run's completed canonical stop, even if policy is unavailable. */
+export function assertTerminatedRunAcknowledgement(
+  previous: AdminRunVersionedRecord,
+  result: AdminRunLifecycleResult,
+): void {
+  if (result.recoveryState !== "complete" || result.run.status !== "terminated" ||
+      result.run.id !== previous.id || result.run.runPath !== previous.runPath ||
+      result.run.canonicalId !== previous.canonicalId || result.run.revision <= previous.revision) {
+    throw new Error("Termination did not acknowledge the addressed run at a later authoritative revision.");
+  }
 }

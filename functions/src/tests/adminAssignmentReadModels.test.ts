@@ -1,3 +1,4 @@
+import {proctoringRequirementsForTest} from "./helpers/proctoring";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {Timestamp} from "firebase-admin/firestore";
@@ -73,10 +74,7 @@ const runData = (input: {
     endWindow: Timestamp.fromMillis(NOW.toMillis() + 3_600_000),
     gracePeriodMinutes: 5,
     mode: input.mode ?? "Operational",
-    proctoringPolicy: {
-      browserIntegrityGuardEnabled: true,
-      faceIdentityGazeGuardEnabled: false,
-    },
+    proctoringPolicy: proctoringRequirementsForTest(true, false),
     recipientStudentIds: input.recipients ?? ["student_a"],
     revision: input.revision ?? 2,
     shuffleQuestionOrder: false,

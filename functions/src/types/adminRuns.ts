@@ -9,14 +9,14 @@ export type {
   AdminRunProctoringPolicy,
   AdminRunRecord,
   AdminRunStatus,
-} from "../../../shared/contracts/apiDtos";
+} from "../../../shared/contracts/examProctoringBackend";
 import type {
   AdminRunCreateRequest,
   AdminRunCreateResult,
   AdminRunDetailResult,
   AdminRunListResult,
   AdminRunStatus,
-} from "../../../shared/contracts/apiDtos";
+} from "../../../shared/contracts/examProctoringBackend";
 
 export interface AdminRunsCreatePayload {
   academicYear?: unknown;

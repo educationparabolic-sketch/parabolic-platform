@@ -1,3 +1,4 @@
+import {proctoringRequirementsForTest} from "./helpers/proctoring";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {Timestamp} from "firebase-admin/firestore";
@@ -183,10 +184,7 @@ test(
       expectedTemplateVersion: 3,
       idempotencyKeyHash: "key_hash_build_21",
       mode: "Controlled",
-      proctoringPolicy: {
-        browserIntegrityGuardEnabled: true,
-        faceIdentityGazeGuardEnabled: false,
-      },
+      proctoringPolicy: proctoringRequirementsForTest(true, false),
       recipientStudentIds: studentIds,
       requestFingerprint: "request_fingerprint_build_21",
       runId,
@@ -254,10 +252,7 @@ test(
     assert.deepEqual(runData?.recipientStudentIds, studentIds);
     assert.equal(runData?.mode, "Controlled");
     assert.equal(runData?.testName, "Build 21 assignment template");
-    assert.deepEqual(runData?.proctoringPolicy, {
-      browserIntegrityGuardEnabled: true,
-      faceIdentityGazeGuardEnabled: false,
-    });
+    assert.deepEqual(runData?.proctoringPolicy, proctoringRequirementsForTest(true, false));
     assert.deepEqual(
       runData?.questionIds,
       templateSnapshotFixture.questionIds,
@@ -288,6 +283,7 @@ test(
       assignmentCreationService.processAssignmentCreated(
         {instituteId, runId, yearId},
         {
+          proctoringPolicy: proctoringRequirementsForTest(false, false),
           ...createPayload,
           requestFingerprint: "different_request_fingerprint_build_21",
         },
@@ -357,6 +353,7 @@ test(
     });
 
     await firestore.doc(runPath).set({
+      proctoringPolicy: proctoringRequirementsForTest(false, false),
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
       mode: "Operational",
       recipientStudentIds: [studentId],
@@ -435,6 +432,7 @@ test(
     });
 
     await firestore.doc(runPath).set({
+      proctoringPolicy: proctoringRequirementsForTest(false, false),
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
       mode: "Diagnostic",
       recipientStudentIds: [studentId],
@@ -513,6 +511,7 @@ test(
       studentId,
     });
     await firestore.doc(runPath).set({
+      proctoringPolicy: proctoringRequirementsForTest(false, false),
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
       mode: "Controlled",
       recipientStudentIds: [studentId],
@@ -586,6 +585,7 @@ test(
       studentId,
     });
     await firestore.doc(runPath).set({
+      proctoringPolicy: proctoringRequirementsForTest(false, false),
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
       mode: "Operational",
       recipientStudentIds: [studentId],
@@ -664,6 +664,7 @@ test(
       studentId,
     });
     await firestore.doc(runPath).set({
+      proctoringPolicy: proctoringRequirementsForTest(false, false),
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
       mode: "Operational",
       recipientStudentIds: [studentId],
@@ -741,6 +742,7 @@ test(
       studentId,
     });
     await firestore.doc(runPath).set({
+      proctoringPolicy: proctoringRequirementsForTest(false, false),
       endWindow: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
       mode: "Operational",
       recipientStudentIds: [studentId],

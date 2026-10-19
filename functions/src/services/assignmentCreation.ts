@@ -1,3 +1,4 @@
+import {readProctoringRequirements} from "./examProctoringPolicy";
 import {
   FieldValue,
   Timestamp,
@@ -308,31 +309,6 @@ const normalizeOptionalFingerprint = (
   undefined :
   normalizeRequiredString(value, fieldName);
 
-const normalizeProctoringPolicy = (
-  value: unknown,
-): {browserIntegrityGuardEnabled: boolean;
-  faceIdentityGazeGuardEnabled: boolean} => {
-  if (!isPlainObject(value)) {
-    throw new AssignmentCreationValidationError(
-      "Assignment field \"proctoringPolicy\" must be an object.",
-    );
-  }
-
-  if (
-    typeof value.browserIntegrityGuardEnabled !== "boolean" ||
-    typeof value.faceIdentityGazeGuardEnabled !== "boolean"
-  ) {
-    throw new AssignmentCreationValidationError(
-      "Assignment proctoring policy fields must be booleans.",
-    );
-  }
-
-  return {
-    browserIntegrityGuardEnabled: value.browserIntegrityGuardEnabled,
-    faceIdentityGazeGuardEnabled: value.faceIdentityGazeGuardEnabled,
-  };
-};
-
 const normalizePercentField = (
   value: unknown,
   fieldName: string,
@@ -590,10 +566,7 @@ export class AssignmentCreationService {
     const timezone = typeof data.timezone === "undefined" ?
       "UTC" :
       normalizeRequiredString(data.timezone, "timezone");
-    const proctoringPolicy = typeof data.proctoringPolicy === "undefined" ? {
-      browserIntegrityGuardEnabled: false,
-      faceIdentityGazeGuardEnabled: false,
-    } : normalizeProctoringPolicy(data.proctoringPolicy);
+    const proctoringPolicy = readProctoringRequirements(data.proctoringPolicy);
     const idempotencyKeyHash = normalizeOptionalFingerprint(
       data.idempotencyKeyHash,
       "idempotencyKeyHash",

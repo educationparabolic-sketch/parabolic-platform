@@ -9,13 +9,13 @@ import type {
   StudentExamLaunchDisposition,
   StudentExamLaunchIntent,
   StudentExamSessionStatus,
-} from "../../../shared/contracts/apiDtos";
+} from "../../../shared/contracts/examProctoringBackend";
 
 export type {
   StudentExamLaunchDisposition,
   StudentExamLaunchIntent,
   StudentExamSessionStatus,
-} from "../../../shared/contracts/apiDtos";
+} from "../../../shared/contracts/examProctoringBackend";
 
 export type SessionStatus =
   "created" |
@@ -128,6 +128,7 @@ export interface SessionQuestionTimeRecord {
 export type SessionQuestionTimeMap = Record<string, SessionQuestionTimeRecord>;
 
 export interface SessionDocumentInitializationRecord {
+  integrityReportingState: ReturnType<typeof import("../services/examProctoringPolicy").initializeIntegrityReporting>;
   solutionSnapshot: import("../services/studentSolutionSnapshot").StudentSolutionSnapshot;
   calibrationModel?: "risk_projection_v1";
   answerMap: Record<string, unknown>;
@@ -218,6 +219,7 @@ export interface SessionEntryResumeContext extends SessionActivationContext {
 }
 
 export interface SessionActivationContext {
+  proctoringPreflight?: unknown;
   runtimeOwner?: RuntimeOwnerCredentials;
   instituteId: string;
   runId: string;

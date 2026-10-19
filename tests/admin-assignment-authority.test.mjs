@@ -20,7 +20,7 @@ const typescript = require(join(
   "functions/node_modules/typescript",
 ));
 
-function loadTypeScriptModule(source, sourcePath) {
+function loadTypeScriptModule(source, sourcePath, runtimeRequire) {
   const transpiled = typescript.transpileModule(source, {
     compilerOptions: {
       module: typescript.ModuleKind.CommonJS,
@@ -29,8 +29,8 @@ function loadTypeScriptModule(source, sourcePath) {
     fileName: sourcePath,
   }).outputText;
   const loadedModule = {exports: {}};
-  const evaluate = new Function("exports", "module", transpiled);
-  evaluate(loadedModule.exports, loadedModule);
+  const evaluate = new Function("exports", "module", "require", transpiled);
+  evaluate(loadedModule.exports, loadedModule, runtimeRequire);
   return loadedModule.exports;
 }
 
@@ -38,9 +38,12 @@ const [authoritySource, pageSource] = await Promise.all([
   readFile(authorityPath, "utf8"),
   readFile(pagePath, "utf8"),
 ]);
-const {reconcileCreatedRun} = loadTypeScriptModule(
+const adapterPath = join(rootDirectory, "shared/services/portalResponseAdapters.ts");
+const responseAdapters = loadTypeScriptModule(await readFile(adapterPath, "utf8"), adapterPath);
+const {reconcileCreatedRun, assertTerminatedRunAcknowledgement} = loadTypeScriptModule(
   authoritySource,
   authorityPath,
+  (name) => { assert.match(name, /portalResponseAdapters$/); return responseAdapters; },
 );
 
 const request = {
@@ -53,7 +56,8 @@ const request = {
   mode: "Diagnostic",
   proctoringPolicy: {
     browserIntegrityGuardEnabled: true,
-    faceIdentityGazeGuardEnabled: false,
+    contractVersion: 1,
+    cameraReadiness: "off",
   },
   recipientStudentIds: ["student-1", "student-2"],
   shuffleQuestionOrder: true,
@@ -71,7 +75,10 @@ const authoritativeRun = {
   gracePeriodMinutes: request.gracePeriodMinutes,
   id: "run_authoritative_1",
   mode: request.mode,
-  proctoringPolicy: request.proctoringPolicy,
+  proctoringPolicy: {...request.proctoringPolicy,
+    capabilities: {automatedFaceMatching: "unavailable", automatedGazeTracking: "unavailable",
+      cameraReadiness: "browser_permission_only", browserIntegrity: "browser_controls_only"},
+    identityPhotoReview: "not_required", integrityReporting: "client_observations"},
   recipientCount: request.recipientStudentIds.length,
   recipientStudentIds: request.recipientStudentIds,
   runPath:
@@ -138,4 +145,32 @@ test("live Admin create retries, reconciles, and avoids fallback run state", () 
     /if \(shouldUseLiveApi\(\)\) \{([\s\S]*?)\n      \} else \{/,
   )?.[1] ?? "";
   assert.doesNotMatch(liveBranch, /buildFallbackRunRecord|setRuns/);
+});
+
+
+test("replay reconciliation rejects changed requirements and forged capability authority", () => {
+  for (const policy of [
+    {...authoritativeRun.proctoringPolicy, cameraReadiness: "required"},
+    {...authoritativeRun.proctoringPolicy, contractVersion: 2},
+    {...authoritativeRun.proctoringPolicy, capabilities: {
+      ...authoritativeRun.proctoringPolicy.capabilities, automatedFaceMatching: "verified"}},
+    {browserIntegrityGuardEnabled: true, faceIdentityGazeGuardEnabled: false},
+  ]) {
+    const run = {...authoritativeRun, proctoringPolicy: policy};
+    assert.throws(() => reconcileCreatedRun(request, {disposition: "created", run}, {disposition: "replayed", run}));
+  }
+});
+
+
+test("terminal acknowledgement preserves run identity, revision and complete recovery", () => {
+  const previous = {...authoritativeRun, revision: 2, updatedAt: authoritativeRun.createdAt, status: "active"};
+  const result = {auditId: "audit", disposition: "applied", recoveryState: "complete",
+    run: {...previous, revision: 4, status: "terminated", proctoringPolicy: {
+      status: "unavailable", reason: "policy_upgrade_required"}}};
+  assert.doesNotThrow(() => assertTerminatedRunAcknowledgement(previous, result));
+  for (const patch of [{id: "other"}, {runPath: "other"}, {canonicalId: "other"},
+    {revision: 2}, {revision: 1}, {status: "active"}]) {
+    assert.throws(() => assertTerminatedRunAcknowledgement(previous, {...result, run: {...result.run, ...patch}}));
+  }
+  assert.throws(() => assertTerminatedRunAcknowledgement(previous, {...result, recoveryState: "pending"}));
 });

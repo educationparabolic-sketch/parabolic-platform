@@ -1,3 +1,4 @@
+import type {ExamProctoringPolicyV1} from "../contracts/examProctoring";
 import type {
   AdminQuestionLibraryResult,
   AdminRunCreateResult,
@@ -1079,17 +1080,46 @@ export function adaptAdminTestTemplateArchiveResult(
   );
 }
 
+/** Strict server policy boundary; never upgrade legacy booleans or infer verification. */
+export function adaptExamProctoringPolicyV1(
+  value: unknown,
+  route: string,
+  field = "proctoringPolicy",
+): ExamProctoringPolicyV1 {
+  const policy = readRecord(value, route, field);
+  const exact = (record: Record<string, unknown>, keys: string[], path: string): void => {
+    if (Object.keys(record).length !== keys.length || keys.some((key) => !Object.prototype.hasOwnProperty.call(record, key))) {
+      fail(route, path, "the exact supported v1 fields");
+    }
+  };
+  exact(policy, ["contractVersion", "browserIntegrityGuardEnabled", "cameraReadiness",
+    "capabilities", "identityPhotoReview", "integrityReporting"], field);
+  if (policy.contractVersion !== 1) return fail(route, field, "supported policy version 1");
+  const browserIntegrityGuardEnabled = readBoolean(policy.browserIntegrityGuardEnabled, route, `${field}.browserIntegrityGuardEnabled`);
+  const cameraReadiness = readEnum(policy.cameraReadiness, ["off", "required"] as const, route, `${field}.cameraReadiness`);
+  const capabilities: ExamProctoringPolicyV1["capabilities"] = {
+    automatedFaceMatching: "unavailable", automatedGazeTracking: "unavailable",
+    cameraReadiness: "browser_permission_only", browserIntegrity: "browser_controls_only",
+  };
+  const actual = readRecord(policy.capabilities, route, `${field}.capabilities`);
+  exact(actual, Object.keys(capabilities), `${field}.capabilities`);
+  if (Object.entries(capabilities).some(([key, expected]) => actual[key] !== expected)) {
+    return fail(route, `${field}.capabilities`, "supported unavailable automated verification and browser-only capabilities");
+  }
+  const integrityReporting = browserIntegrityGuardEnabled || cameraReadiness === "required" ? "client_observations" : "off";
+  if (policy.identityPhotoReview !== "not_required" || policy.integrityReporting !== integrityReporting) {
+    return fail(route, field, "consistent supported policy requirements and capabilities");
+  }
+  return {contractVersion: 1, browserIntegrityGuardEnabled, cameraReadiness, capabilities,
+    identityPhotoReview: "not_required", integrityReporting};
+}
+
 function adaptAdminRunRecord(
   value: unknown,
   route: string,
   field = "run",
 ): AdminRunRecord {
   const record = readRecord(value, route, field);
-  const proctoring = readRecord(
-    record.proctoringPolicy,
-    route,
-    `${field}.proctoringPolicy`,
-  );
   const recipients = readArray(
     record.recipientStudentIds,
     route,
@@ -1130,18 +1160,7 @@ function adaptAdminRunRecord(
       route,
       `${field}.mode`,
     ),
-    proctoringPolicy: {
-      browserIntegrityGuardEnabled: readBoolean(
-        proctoring.browserIntegrityGuardEnabled,
-        route,
-        `${field}.proctoringPolicy.browserIntegrityGuardEnabled`,
-      ),
-      faceIdentityGazeGuardEnabled: readBoolean(
-        proctoring.faceIdentityGazeGuardEnabled,
-        route,
-        `${field}.proctoringPolicy.faceIdentityGazeGuardEnabled`,
-      ),
-    },
+    proctoringPolicy: adaptExamProctoringPolicyV1(record.proctoringPolicy, route, `${field}.proctoringPolicy`),
     recipientCount,
     recipientStudentIds: recipients,
     runPath: readString(record.runPath, route, `${field}.runPath`),
@@ -1684,13 +1703,17 @@ export function adaptStudentExamLaunchResult(
   }
   if (
     (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") ||
-    !parsedUrl.pathname.endsWith(`/session/${encodeURIComponent(sessionId)}`) ||
-    parsedUrl.searchParams.get("token") !== launchCredential
+    parsedUrl.username !== "" || parsedUrl.password !== "" ||
+    !/^[A-Za-z0-9_-]{1,200}$/u.test(sessionId) ||
+    launchCredential.length > 8192 || /\s/u.test(launchCredential) ||
+    parsedUrl.pathname !== `/session/${encodeURIComponent(sessionId)}` ||
+    parsedUrl.search !== "" ||
+    parsedUrl.hash !== `#launch=${encodeURIComponent(launchCredential)}`
   ) {
     return fail(
       route,
       "examUrl",
-      "an absolute Exam session URL carrying the returned launch credential",
+      "an exact Exam session URL carrying only the matching fragment credential",
     );
   }
   return {
@@ -2483,18 +2506,7 @@ function adaptExamRuntimeSnapshot(
         "runtimeSnapshot.phaseConfigSnapshot.phase3Percent",
       ),
     },
-    proctoringPolicy: {
-      browserIntegrityGuardEnabled: readBoolean(
-        proctoring.browserIntegrityGuardEnabled,
-        route,
-        "runtimeSnapshot.proctoringPolicy.browserIntegrityGuardEnabled",
-      ),
-      faceIdentityGazeGuardEnabled: readBoolean(
-        proctoring.faceIdentityGazeGuardEnabled,
-        route,
-        "runtimeSnapshot.proctoringPolicy.faceIdentityGazeGuardEnabled",
-      ),
-    },
+    proctoringPolicy: adaptExamProctoringPolicyV1(proctoring, route, "runtimeSnapshot.proctoringPolicy"),
     questionSetVersion: readString(
       record.questionSetVersion,
       route,

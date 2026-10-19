@@ -222,7 +222,7 @@ export class ExamRuntimeOwnership {
     }
   }
   async post<T, B>(path: string, options: Omit<ApiClientRequestOptions<B>, "method"> = {}): Promise<T> {
-    const allowed = ["activate", "answers", "submit"].map((action) => `/exam/session/${encodeURIComponent(this.sessionId)}/${action}`);
+    const allowed = ["activate", "answers", "submit", "integrity-events"].map((action) => `/exam/session/${encodeURIComponent(this.sessionId)}/${action}`);
     const owner = this.owner;
     if (!allowed.includes(path) || options.query || !owner || !this.isCurrent() ||
         (this.state.phase === "closed" && !path.endsWith("/submit"))) throw safeError();
@@ -243,9 +243,9 @@ export class ExamRuntimeOwnership {
       }
       return value;
     } catch (error) {
-      if (!(error instanceof ApiClientError) || error.status === 401 || error.status === 403 ||
-          ["ownership_lost", "invalid_owner", "entry_not_consumed", "ownership_upgrade_required", "session_closed"].includes(
-            String((error.details as {reason?: unknown} | undefined)?.reason))) this.invalidate("ownership_lost");
+      if ((!(error instanceof ApiClientError) && !path.endsWith("/integrity-events")) || (error instanceof ApiClientError && (error.status === 401 || error.status === 403)) ||
+          ["ownership_lost", "invalid_owner", "entry_not_consumed", "ownership_upgrade_required", ...(path.endsWith("/integrity-events") ? [] : ["session_closed"])].includes(
+            String(((error as ApiClientError).details as {reason?: unknown} | undefined)?.reason))) this.invalidate("ownership_lost");
       throw error;
     }
   }

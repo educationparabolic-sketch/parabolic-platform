@@ -1,3 +1,4 @@
+import {readActivationPreflight, assertProctoringJson} from "../services/examProctoringPolicy";
 import {runtimeHeaders, RuntimeOwnerCredentials} from "../services/examRuntimeOwnership";
 import * as functions from "firebase-functions";
 import {DecodedIdToken} from "firebase-admin/auth";
@@ -22,6 +23,7 @@ interface ExamSessionActivateRequestDependencies {
 
 interface ExamSessionActivateValidatedRequestData
 extends Record<string, unknown> {
+  proctoringPreflight: unknown;
   runtimeOwner: RuntimeOwnerCredentials;
   instituteId: string;
   runId: string;
@@ -122,7 +124,10 @@ export const createExamSessionActivateHandler = (
           );
         }
 
+        assertProctoringJson(request.rawBody);
+        const proctoringPreflight = readActivationPreflight(request.body);
         setRequestData(request, {
+          proctoringPreflight,
           instituteId: identity.instituteId,
           runtimeOwner: {...runtimeHeaders(request), studentUid: identity.uid, launchNonce: examSession.launchNonce},
           runId: examSession.runId,

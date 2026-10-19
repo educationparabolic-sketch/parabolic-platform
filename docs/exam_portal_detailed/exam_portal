@@ -401,3 +401,115 @@ were restored. Hosting live releases and unrelated Functions/indexes are unchang
 BWM-045 is READY for inspection only. Full backend/data/legacy/publication rollout
 remains with BWM-053 and the other release owners; production NO_GO. See the
 master execution plan, final substep-8 evidence and LOG-257.
+
+## BWM-045 reserved proctoring adoption — DEC-111
+
+Declaration only: docs/EXAM_PROCTORING_CONTRACT.md freezes supported server
+policy, local camera consent/readiness and bounded client-report integrity
+acknowledgements. Automated face/gaze is unavailable; camera permission/clicks
+never verify identity or gaze. No EXM-06 UI/admission use, media capture/upload,
+photo-review mutation, policy query override or browser-issued capability.
+Mounted adoption remains substep 6: remove false checks, stop/replace/late-fence
+tracks, invalidate readiness on track loss and discard consent on scope change
+or terminal state, while preserving ownership, answer sync/deadline/submit.
+Reporting failures must show unsaved observations without blocking answers.
+No active code/header/environment change or new remote capability at substep 2.
+Real behavior and approved public L5 qualification remain later ordered work.
+
+## BWM-045 backend-only policy checkpoint — DEC-112
+
+Substep 3 now enforces v1 server policy, fixed unavailable automated face/gaze
+and explicit client-report activation through backend owners. Existing mounted
+Exam declarations, adapters and camera UI await substep 6; legacy policy/body
+transport fails closed against the new backend. No working local browser or
+new deployed policy is claimed. EXM-06 stays unmounted/non-gating and EXM-07
+remains reserved. Camera lifetime/false-success removal, observation queue, real
+browser acceptance and approved public qualification remain ordered work.
+
+## BWM-045 integrity backend — substep 4 (DEC-113)
+
+EXM-07 ingest and bounded immutable acknowledgements now exist locally under
+current Firebase Student identity and BWM-044 owner authority. Client observations
+are untrusted and contain only fixed event categories, client time and phase.
+The mounted Exam capture/queue/camera lifecycle remains pending substep 6; no
+browser persistence, automatic flush, verification success or biometrics claim
+is introduced here. Follow EXAM_PROCTORING_CONTRACT.md for the later queue and
+truthful unsaved/drop status. EXM-06 remains unmounted/non-gating. NO_GO.
+
+## BWM-045 Admin adoption boundary — substep 5 (DEC-114)
+
+Admin now emits/reads the frozen v1 policy and labels automated verification as
+unavailable. Mounted Exam still awaits substep 6 and fails closed against the new
+backend policy. No Exam preflight/camera/queue/adapter/launch/answer behavior is
+changed by this slice; no working complete Admin-to-Exam flow is claimed.
+
+## BWM-045 mounted Exam adoption — substep 6 (DEC-115)
+
+This checkpoint supersedes the pending-caller statements above. Public Exam DTOs
+and strict entry adapters consume exact server-issued v1 policy. No query or DEV
+faceGaze toggle chooses policy. The lobby/instructions/runtime display unavailable
+automated face matching and gaze tracking; EXM-06 remains unmounted/non-gating.
+Required camera readiness has the frozen positive consent notice, video-only
+local usable preview, live/enabled/unmuted track checks, fresh readiness after
+loss/retry/recovery, and mounted session/generation fences. Replacement/stop,
+late permission, page exit, policy-off, identity/owner loss and terminal/expiry
+stop tracks and clear consent/preview. Questions pause locally on readiness or
+policy-enabled fullscreen loss; answer recovery/sync/deadlines/submission remain
+independent. No frames, recordings, private photos or biometric provider.
+
+EXM-07 is now a mounted frontend caller under current BWM-044 protected transport.
+The memory-only queue holds at most 60 events including its one in-flight batch;
+it sends at most ten enum/time/phase observations, coalesces adjacent repeats,
+retains exact UUID/body/order until a strictly scoped receipt, and distinguishes
+acknowledged from unsaved/lost. Unique sends wait five seconds; uncertain transport
+retries use 1/2/5 seconds, then explicit retry. Rate denial uses the endpoint's
+fixed five-second Retry-After/details bound. Stop/owner loss discards unsaved
+memory, never persists or transfers to a successor, and does not drain on submit.
+Blur/network/report failures are not punitive; the viewport DevTools heuristic is
+removed. Existing least-privilege Hosting headers are unchanged. Local native
+synthetic-track proof is not hardware, CSP or public-runtime qualification.
+Permanent broader adversarial and aggregate/approved L5 work remains 7–8. NO_GO.
+
+## BWM-045 permanent local acceptance — substep 7 (DEC-116)
+
+`npm run test:exam-proctoring-acceptance:e2e` builds the live Exam and Functions
+candidate, then runs disposable demo Auth/Firestore service tests and a separate
+Auth/Firestore/Functions/Exam Hosting HTTP/browser phase. The permanent matrix
+covers wrong signed scope/current authority/stale owner, immutable exact replay,
+policy and format tampering, rate/capacity boundaries, production query rejection,
+native denied/granted readiness, disabled/replaced/canceled/late streams and route
+unmount, bounded uncertain reporting/retry/storage privacy/generation discard,
+live-camera terminal teardown and actual different-UID interruption. Full Chromium
+without automatic permission acceptance owns native permission checks; fake video
+never verifies identity or gaze. Existing answer/ownership/claim/receipt checks
+remain. No production owner or header changes, successful-response mocks, timeout
+or assertion weakening. EXM-06 stays unmounted/non-gating; no private media/photo
+behavior or Storage qualification is claimed. Compatible aggregate and approved
+public/header/hardware qualification remains substep 8. Production NO_GO.
+
+## BWM-045 local aggregate and public qualification boundary (DEC-117)
+
+Substep 8 local affected/aggregate L1-L4 passes: ten workspace gates, classified
+backend/root contracts, canonical 20/99-file emulator phases and cleanup probe,
+Admin lifecycle, Exam security/return and seven proctoring Chromium cases.
+Stale DEV query, raw gateway count and missing-policy solutions fixtures are
+reconciled without changing production owners, assertions, timeouts or exclusions.
+Review-only Portal/Exam artifacts are scanned/hashed; an isolated env-less backend
+snapshot and concrete bounded staging scope are retained in
+`test-results/bwm045-closeout/PREVIEW_REVIEW.md`. Review preparation neither grants
+cloud authority nor qualifies deployed compatibility/public CSP/camera behavior.
+BWM-045 remains BLOCKED 7/8 pending candidate-specific approved L5 and final finding
+reconciliation. No new face/gaze/hardware-verification claim; EXM-06 stays unmounted.
+Remote TTL, publication/legacy/resource and release gates remain with BWM-052/053
+and downstream owners. Production NO_GO; BWM-046 is not started.
+
+BWM-045 final qualification (DEC-118): supported v1 policy, explicit unavailable
+automated face/gaze, native camera readiness/lifetime and fenced client-observation
+receipts pass local aggregate and two CSP-on public staging cases. Real Student
+fragment-launch adapter is reconciled; no new DTO/route/event authority. Public
+receipt readback, exact replay counters, teardown and independent Student return
+pass. Both isolated synthetic fixtures are deleted and canonical staging launch
+origin restored; expiring previews are qualification artifacts. No identity-photo
+fetch or mounted EXM-06 admission. Production NO_GO; physical camera continuity,
+matching, TTL purge and full infrastructure/publication remain downstream. See
+master BWM-045 final substep-8 evidence and `docs/EXAM_PROCTORING_CONTRACT.md`.

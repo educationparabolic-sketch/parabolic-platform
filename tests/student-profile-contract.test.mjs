@@ -112,8 +112,8 @@ test("eight secured routes have exact exports and retain declaration provenance"
     acc[route.status] = (acc[route.status] ?? 0) + 1;
     return acc;
   }, {});
-  assert.deepEqual(counts, {implemented: 115, intentionally_retired: 5});
-  assert.equal(module.exports.BACKEND_HTTP_EXPORT_MANIFEST.length, 63);
+  assert.deepEqual(counts, {implemented: 116, intentionally_retired: 5});
+  assert.equal(module.exports.BACKEND_HTTP_EXPORT_MANIFEST.length, 64);
   for (const [id, method, path] of expected) {
     assert.ok(read("docs/api_contract.md").includes(`| ${id} | \`${method} /api/v1${path}\``), id);
   }

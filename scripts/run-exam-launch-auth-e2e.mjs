@@ -6,11 +6,13 @@ const npmExecutable = process.platform === "win32" ? "npm.cmd" : "npm";
 const firebaseExecutable = process.platform === "win32" ?
   "firebase.cmd" :
   "firebase";
+const proctoringAcceptance = process.argv.includes("--proctoring-acceptance");
+const proctoringRuntime = process.argv.includes("--proctoring-runtime");
 const mountedOnly = process.argv.includes("--mounted-ownership");
 const bootstrapOnly = process.argv.includes("--bootstrap-only");
 const securityMatrix = process.argv.includes("--security-matrix");
 const returnsOnly = securityMatrix || process.argv.includes("--student-returns");
-const scoped = bootstrapOnly || mountedOnly || returnsOnly;
+const scoped = bootstrapOnly || mountedOnly || returnsOnly || proctoringRuntime || proctoringAcceptance;
 const projectId = "demo-parabolic-test";
 const hostingOrigin = returnsOnly ? "http://127.0.0.1:5005" : "http://127.0.0.1:5000";
 const studentOrigin = "http://127.0.0.1:5000";
@@ -79,13 +81,20 @@ if (securityMatrix) {
   ], {CI: "true", DEBUG: ""});
 }
 
+if (proctoringAcceptance) {
+  run("Run proctoring policy/receipt/activation/answer/submission transactions", firebaseExecutable, [
+    "emulators:exec", "--project", projectId, "--only", "auth,firestore",
+    "env GCLOUD_PROJECT=demo-parabolic-test GOOGLE_CLOUD_PROJECT=demo-parabolic-test PROJECT_ID=demo-parabolic-test NODE_ENV=test NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none node --test --test-concurrency=1 functions/lib/tests/examIntegrity.test.js functions/lib/tests/examProctoringPolicy.test.js functions/lib/tests/examIntegrityApi.test.js functions/lib/tests/examSessionActivateApi.test.js functions/lib/tests/sessionLifecycle.test.js functions/lib/tests/sessionStart.test.js functions/lib/tests/sessionAnswerBatch.test.js functions/lib/tests/sessionSubmission.test.js",
+  ], {CI: "true", DEBUG: ""});
+}
+
 const emulatorArgs = [
   "emulators:exec",
   "--project",
   projectId,
   "--only",
   securityMatrix ? "auth,firestore,storage,functions,hosting:portal,hosting:exam" : returnsOnly ? "auth,firestore,functions,hosting:portal,hosting:exam" : "auth,firestore,functions,hosting:exam",
-  scoped ? "env GCLOUD_PROJECT=demo-parabolic-test GOOGLE_CLOUD_PROJECT=demo-parabolic-test PROJECT_ID=demo-parabolic-test NODE_ENV=test NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none node --test --test-concurrency=1 " + (securityMatrix ? "functions/tests/examStart.emulator.test.js functions/tests/studentProfileApi.emulator.test.js" : "functions/lib/tests/examStartApi.test.js functions/lib/tests/examRuntimeOwnership.test.js functions/lib/tests/examSessionEntryApi.test.js functions/lib/tests/sessionStart.test.js functions/tests/examStart.emulator.test.js") + " && " + (securityMatrix ? "npm run test:e2e:exam-security" : returnsOnly ? "npm run test:e2e:exam-student-return" : mountedOnly ? "npm run test:e2e:exam-runtime-ownership" : "npm run test:e2e:exam-launch-bootstrap") : "npm run test:e2e:exam-launch-auth",
+  proctoringAcceptance ? "env GCLOUD_PROJECT=demo-parabolic-test GOOGLE_CLOUD_PROJECT=demo-parabolic-test PROJECT_ID=demo-parabolic-test NODE_ENV=test NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none node --test functions/tests/examStart.emulator.test.js && npm run test:e2e:exam-proctoring-acceptance" : proctoringRuntime ? "npm run test:e2e:exam-proctoring-runtime" : scoped ? "env GCLOUD_PROJECT=demo-parabolic-test GOOGLE_CLOUD_PROJECT=demo-parabolic-test PROJECT_ID=demo-parabolic-test NODE_ENV=test NO_GCE_CHECK=true METADATA_SERVER_DETECTION=none node --test --test-concurrency=1 " + (securityMatrix ? "functions/tests/examStart.emulator.test.js functions/tests/studentProfileApi.emulator.test.js" : "functions/lib/tests/examStartApi.test.js functions/lib/tests/examRuntimeOwnership.test.js functions/lib/tests/examSessionEntryApi.test.js functions/lib/tests/sessionStart.test.js functions/tests/examStart.emulator.test.js") + " && " + (securityMatrix ? "npm run test:e2e:exam-security" : returnsOnly ? "npm run test:e2e:exam-student-return" : mountedOnly ? "npm run test:e2e:exam-runtime-ownership" : "npm run test:e2e:exam-launch-bootstrap") : "npm run test:e2e:exam-launch-auth",
 ];
 
 console.log(
@@ -121,6 +130,8 @@ if (returnsOnly) {
 }
 
 console.log(
+  proctoringAcceptance ? "\n[exam-proctoring-acceptance] PASS: permanent policy, receipt, authority, camera, privacy and queue service/HTTP/browser acceptance; aggregate and approved public qualification remain substep 8." :
+  proctoringRuntime ? "\n[exam-proctoring-runtime] PASS: mounted v1 activation, camera readiness, bounded reporting replay and answer/submission regression; broader acceptance and approved L5 remain pending." :
   securityMatrix ? "\n[exam-security] PASS: focused ownership/security service, HTTP and browser matrix plus missing-return configuration; aggregate and approved L5 remain pending." :
   returnsOnly ? "\n[exam-student-return] PASS: absolute Student Hosting returns and missing-config denial; security aggregate pending." :
   mountedOnly ? "\n[exam-runtime-ownership] PASS: scoped mounted ownership/recovery verification; absolute returns and full security aggregate remain pending." :

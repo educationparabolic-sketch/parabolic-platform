@@ -1,3 +1,4 @@
+import {proctoringPolicyForTest} from "./helpers/proctoring";
 import {randomBytes, randomUUID} from "node:crypto";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -55,10 +56,7 @@ const entryResult: SessionEntryValidationResult = {
       phase2Percent: 45,
       phase3Percent: 15,
     },
-    proctoringPolicy: {
-      browserIntegrityGuardEnabled: false,
-      faceIdentityGazeGuardEnabled: false,
-    },
+    proctoringPolicy: proctoringPolicyForTest(false, false),
     questionSetVersion: "1",
     questions: [{
       difficulty: "easy",

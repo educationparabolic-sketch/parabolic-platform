@@ -1,3 +1,4 @@
+import {proctoringRequirementsForTest} from "./helpers/proctoring";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {FieldValue, Timestamp} from "firebase-admin/firestore";
@@ -48,10 +49,7 @@ function runFixture(
     mode: "Diagnostic",
     modeSnapshot: "Diagnostic",
     phaseConfigSnapshot: {phase1: {questionIds: ["question-1"]}},
-    proctoringPolicy: {
-      browserIntegrityGuardEnabled: true,
-      faceIdentityGazeGuardEnabled: false,
-    },
+    proctoringPolicy: proctoringRequirementsForTest(true, false),
     questionIds: ["question-1", "question-2"],
     recipientCount: 2,
     recipientStudentIds: ["student-1", "student-2"],
@@ -715,4 +713,22 @@ test("reconciliation advances canonical states and normalizes stopped", async ()
     .where("actionType", "==", "RECONCILE_ASSIGNMENT_LIFECYCLE")
     .get();
   assert.equal(audits.size, 4);
+});
+
+test("legacy policy cannot duplicate but cannot obstruct trusted termination", async () => {
+  const runId = "run-legacy-policy";
+  await seedRun(runId, "active", 3, {proctoringPolicy: {
+    browserIntegrityGuardEnabled: true, faceIdentityGazeGuardEnabled: true,
+  }});
+  await seedSession(runId, "session-legacy-policy", "student-1", "active", 2);
+  const before = (await firestore.doc(runPath(runId)).get()).data();
+  await assert.rejects(service.duplicateRun(duplicateInput(runId, "legacy-policy-duplicate")),
+    (e: unknown) => e instanceof Error && e.name === "ExamProctoringError");
+  assert.deepEqual((await firestore.doc(runPath(runId)).get()).data(), before);
+  const result = await service.applyLifecycleCommand(lifecycleInput(runId, "terminate", 3, "legacy-policy-stop"));
+  assert.equal(result.run.status, "terminated");
+  assert.deepEqual(result.run.proctoringPolicy, {status: "unavailable", reason: "policy_upgrade_required"});
+  assert.equal((await firestore.doc(sessionPath(runId, "session-legacy-policy")).get()).get("status"), "terminated");
+  const replay = await service.applyLifecycleCommand(lifecycleInput(runId, "terminate", 3, "legacy-policy-stop"));
+  assert.equal(replay.disposition, "replayed");
 });

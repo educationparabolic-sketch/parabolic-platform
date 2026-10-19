@@ -1479,6 +1479,20 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "sessions",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "instituteId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": [
@@ -1509,6 +1523,22 @@
           "queryScope": "COLLECTION_GROUP"
         }
       ]
+    },
+    {
+      "collectionGroup": "integrityBatches",
+      "fieldPath": "retainedUntil",
+      "ttl": true,
+      "indexes": []
+    },
+    {
+      "collectionGroup": "integrityBatches",
+      "fieldPath": "events",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "integrityBatches",
+      "fieldPath": "requestFingerprint",
+      "indexes": []
     }
   ]
 }

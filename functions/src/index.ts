@@ -1,3 +1,4 @@
+import {handleExamSessionIntegrityEventsRequest} from "./api/examSessionIntegrityEvents";
 import {handleStudentProfileRequest, handleAdminStudentIdentityPhotoMediaRequest,
   handleExamSessionIdentityStatusRequest} from "./api/studentProfile";
 import * as functions from "firebase-functions";
@@ -205,6 +206,7 @@ export {failureRecoveryRetrySweep};
 export {claimPropagationSweepEveryMinute};
 export const apiV1 = functions.https.onRequest(handleApiV1Request);
 export const examStart = functions.https.onRequest(handleExamStartRequest);
+export const examSessionIntegrityEvents = functions.https.onRequest(handleExamSessionIntegrityEventsRequest);
 export const examSessionActivate = functions.https.onRequest(
   handleExamSessionActivateRequest,
 );

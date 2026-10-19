@@ -453,7 +453,7 @@ test("canonical route status accounting is exact", () => {
   });
 
   assert.deepEqual(statusCounts, {
-    implemented: 115,
+    implemented: 116,
     incompatible: 0,
     intentionally_retired: 5,
     missing: 0,

@@ -743,10 +743,10 @@ test("Student performance, insights, and solutions adapters reject contract drif
   );
 });
 
-test("Student exam launch adapter requires a matching absolute credential URL", () => {
+test("Student exam launch adapter requires an exact fragment credential URL and rejects legacy transport", () => {
   const launch = {
     disposition: "created",
-    examUrl: "https://exam.example.test/session/session-1?token=credential-1",
+    examUrl: "https://exam.example.test/session/session-1#launch=credential-1",
     launchCredential: "credential-1",
     sessionId: "session-1",
     status: "created",
@@ -755,7 +755,7 @@ test("Student exam launch adapter requires a matching absolute credential URL", 
   assert.throws(
     () => adapters.adaptStudentExamLaunchResult({
       ...launch,
-      examUrl: "https://exam.example.test/session/other?token=credential-1",
+      examUrl: "https://exam.example.test/session/other#launch=credential-1",
     }),
     {
       name: "PortalResponseValidationError",
@@ -765,13 +765,21 @@ test("Student exam launch adapter requires a matching absolute credential URL", 
   assert.throws(
     () => adapters.adaptStudentExamLaunchResult({
       ...launch,
-      examUrl: "https://exam.example.test/session/session-1?token=wrong",
+      examUrl: "https://exam.example.test/session/session-1#launch=wrong",
     }),
     {
       name: "PortalResponseValidationError",
       route: "POST /exam/start",
     },
   );
+  for (const examUrl of [
+    "https://exam.example.test/session/session-1?token=credential-1",
+    "https://exam.example.test/session/session-1?override=1#launch=credential-1",
+    "https://exam.example.test/prefix/session/session-1#launch=credential-1",
+    "https://user:pass@exam.example.test/session/session-1#launch=credential-1",
+    "https://exam.example.test/session/session-1#launch=credential-1&launch=other",
+  ]) assert.throws(() => adapters.adaptStudentExamLaunchResult({...launch, examUrl}),
+    {name: "PortalResponseValidationError", route: "POST /exam/start"});
 });
 
 test("Exam entry adapter accepts only an aligned candidate-safe runtime snapshot", () => {
@@ -801,7 +809,9 @@ test("Exam entry adapter accepts only an aligned candidate-safe runtime snapshot
       },
       proctoringPolicy: {
         browserIntegrityGuardEnabled: false,
-        faceIdentityGazeGuardEnabled: false,
+        contractVersion: 1, cameraReadiness: "off",
+        capabilities: {automatedFaceMatching: "unavailable", automatedGazeTracking: "unavailable", cameraReadiness: "browser_permission_only", browserIntegrity: "browser_controls_only"},
+        identityPhotoReview: "not_required", integrityReporting: "off",
       },
       questionSetVersion: "3",
       questions: [{
@@ -849,6 +859,14 @@ test("Exam entry adapter accepts only an aligned candidate-safe runtime snapshot
   };
 
   assert.deepEqual(adapters.adaptExamSessionEntryResult(entry), entry);
+  for (const policy of [
+    {browserIntegrityGuardEnabled: false, faceIdentityGazeGuardEnabled: false},
+    {...entry.runtimeSnapshot.proctoringPolicy, cameraReadiness: "optional"},
+    {...entry.runtimeSnapshot.proctoringPolicy, integrityReporting: "client_observations"},
+    {...entry.runtimeSnapshot.proctoringPolicy, capabilities: {...entry.runtimeSnapshot.proctoringPolicy.capabilities, automatedFaceMatching: "verified"}},
+    {...entry.runtimeSnapshot.proctoringPolicy, override: true},
+  ]) assert.throws(() => adapters.adaptExamSessionEntryResult({...entry, runtimeSnapshot: {...entry.runtimeSnapshot, proctoringPolicy: policy}}), {name: "PortalResponseValidationError"});
+
   assert.throws(
     () => adapters.adaptExamSessionEntryResult({
       ...entry,
@@ -967,7 +985,11 @@ test("Admin run create adapter requires complete authoritative run data", () => 
       mode: "Diagnostic",
       proctoringPolicy: {
         browserIntegrityGuardEnabled: true,
-        faceIdentityGazeGuardEnabled: false,
+        contractVersion: 1,
+        cameraReadiness: "off",
+        capabilities: {automatedFaceMatching: "unavailable", automatedGazeTracking: "unavailable",
+          cameraReadiness: "browser_permission_only", browserIntegrity: "browser_controls_only"},
+        identityPhotoReview: "not_required", integrityReporting: "client_observations",
       },
       recipientCount: 2,
       recipientStudentIds: ["student-1", "student-2"],
@@ -1007,7 +1029,11 @@ test("Admin run read adapters preserve pagination and lifecycle status", () => {
     mode: "Diagnostic",
     proctoringPolicy: {
       browserIntegrityGuardEnabled: true,
-      faceIdentityGazeGuardEnabled: false,
+      contractVersion: 1,
+        cameraReadiness: "off",
+        capabilities: {automatedFaceMatching: "unavailable", automatedGazeTracking: "unavailable",
+          cameraReadiness: "browser_permission_only", browserIntegrity: "browser_controls_only"},
+        identityPhotoReview: "not_required", integrityReporting: "client_observations",
     },
     recipientCount: 2,
     recipientStudentIds: ["student-1", "student-2"],

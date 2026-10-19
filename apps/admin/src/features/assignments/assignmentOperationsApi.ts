@@ -22,7 +22,7 @@ import type {
   AdminRunSessionOverrideResult,
   AdminRunVersionedRecord,
 } from "../../../../../shared/contracts/apiDtos";
-import { PortalResponseValidationError } from "../../../../../shared/services/portalResponseAdapters";
+import { adaptExamProctoringPolicyV1, PortalResponseValidationError } from "../../../../../shared/services/portalResponseAdapters";
 import { getPortalApiClient } from "../../../../../shared/services/portalIntegration";
 
 const apiClient = getPortalApiClient("admin");
@@ -86,13 +86,12 @@ function cursor(value: unknown, route: string): string | null {
   return value === null ? null : string(value, route, "nextCursor");
 }
 
-function adaptVersionedRun(
+function adaptRunFields(
   value: unknown,
   route: string,
   field: string,
-): AdminRunVersionedRecord {
+): Omit<AdminRunVersionedRecord, "proctoringPolicy"> {
   const run = record(value, route, field);
-  const policy = record(run.proctoringPolicy, route, `${field}.proctoringPolicy`);
   const recipientStudentIds = array(run.recipientStudentIds, route, `${field}.recipientStudentIds`)
     .map((entry, index) => string(entry, route, `${field}.recipientStudentIds[${index}]`));
   const recipientCount = integer(run.recipientCount, route, `${field}.recipientCount`, 1);
@@ -108,10 +107,6 @@ function adaptVersionedRun(
     gracePeriodMinutes: integer(run.gracePeriodMinutes, route, `${field}.gracePeriodMinutes`),
     id: string(run.id, route, `${field}.id`),
     mode: enumeration(run.mode, ["Operational", "Diagnostic", "Controlled", "Hard"] as const, route, `${field}.mode`),
-    proctoringPolicy: {
-      browserIntegrityGuardEnabled: boolean(policy.browserIntegrityGuardEnabled, route, `${field}.proctoringPolicy.browserIntegrityGuardEnabled`),
-      faceIdentityGazeGuardEnabled: boolean(policy.faceIdentityGazeGuardEnabled, route, `${field}.proctoringPolicy.faceIdentityGazeGuardEnabled`),
-    },
     recipientCount,
     recipientStudentIds,
     revision: integer(run.revision, route, `${field}.revision`, 1),
@@ -129,6 +124,27 @@ function adaptVersionedRun(
     timezone: string(run.timezone, route, `${field}.timezone`),
     updatedAt: string(run.updatedAt, route, `${field}.updatedAt`),
   };
+}
+
+function adaptVersionedRun(value: unknown, route: string, field: string): AdminRunVersionedRecord {
+  const run = record(value, route, field);
+  return {...adaptRunFields(value, route, field),
+    proctoringPolicy: adaptExamProctoringPolicyV1(run.proctoringPolicy, route, `${field}.proctoringPolicy`)};
+}
+
+function adaptLifecycleRun(value: unknown, route: string, action: AdminRunLifecycleRequest["action"]): AdminRunLifecycleResult["run"] {
+  const raw = record(value, route, "run");
+  const policy = record(raw.proctoringPolicy, route, "run.proctoringPolicy");
+  if (action === "terminate" && policy.status === "unavailable") {
+    if (Object.keys(policy).length !== 2 || !Object.prototype.hasOwnProperty.call(policy, "reason")) {
+      return invalid(route, "run.proctoringPolicy", "the exact unavailable terminal policy");
+    }
+    const run = adaptRunFields(value, route, "run");
+    if (run.status !== "terminated") return invalid(route, "run.status", "terminated");
+    return {...run, proctoringPolicy: {status: "unavailable",
+      reason: enumeration(policy.reason, ["policy_upgrade_required", "policy_unsupported"] as const, route, "run.proctoringPolicy.reason")}};
+  }
+  return adaptVersionedRun(value, route, "run");
 }
 
 function adaptSummary(value: unknown, route: string, field: string): AdminRunLiveSummary {
@@ -305,7 +321,7 @@ export function updateAdminRunLifecycle(runId: string, body: AdminRunLifecycleRe
         auditId: string(data.auditId, route, "auditId"),
         disposition: enumeration(data.disposition, ["applied", "replayed"] as const, route, "disposition"),
         recoveryState: enumeration(data.recoveryState, ["complete", "pending", "failed_recoverable"] as const, route, "recoveryState"),
-        run: adaptVersionedRun(data.run, route, "run"),
+        run: adaptLifecycleRun(data.run, route, body.action),
       };
     },
   });

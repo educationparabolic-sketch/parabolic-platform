@@ -1,3 +1,4 @@
+import {readProctoringRequirements, issueProctoringPolicy, ExamProctoringError} from "./examProctoringPolicy";
 /* eslint-disable require-jsdoc */
 import {createHash} from "node:crypto";
 import {FieldPath, Timestamp} from "firebase-admin/firestore";
@@ -14,7 +15,6 @@ import {
   AdminRunsDetailResult,
   AdminRunsListRequest,
   AdminRunsListResult,
-  AdminRunProctoringPolicy,
   AdminRunRecord,
   AdminRunStatus,
   AdminRunsValidatedRequest,
@@ -195,26 +195,6 @@ function normalizeBoolean(value: unknown, fieldName: string): boolean {
   return value;
 }
 
-function normalizeProctoringPolicy(value: unknown): AdminRunProctoringPolicy {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new AdminRunsValidationError(
-      "VALIDATION_ERROR",
-      "Field \"proctoringPolicy\" must be an object.",
-    );
-  }
-
-  const policy = value as Record<string, unknown>;
-  return {
-    browserIntegrityGuardEnabled: normalizeBoolean(
-      policy.browserIntegrityGuardEnabled,
-      "proctoringPolicy.browserIntegrityGuardEnabled",
-    ),
-    faceIdentityGazeGuardEnabled: normalizeBoolean(
-      policy.faceIdentityGazeGuardEnabled,
-      "proctoringPolicy.faceIdentityGazeGuardEnabled",
-    ),
-  };
-}
 
 function normalizeRecipientStudentIds(value: unknown): string[] {
   if (!Array.isArray(value)) {
@@ -266,6 +246,7 @@ function resolveCurrentYearId(
 }
 
 function toApiValidationError(error: unknown): AdminRunsValidationError {
+  if (error instanceof ExamProctoringError) throw error;
   if (error instanceof AdminRunsValidationError) {
     return error;
   }
@@ -358,7 +339,7 @@ function toAdminRunRecord(
     ),
     id: runId,
     mode,
-    proctoringPolicy: normalizeProctoringPolicy(data.proctoringPolicy),
+    proctoringPolicy: issueProctoringPolicy(data.proctoringPolicy),
     recipientCount: recipientStudentIds.length,
     recipientStudentIds,
     runPath,
@@ -418,7 +399,7 @@ export class AdminRunsService {
           "idempotencyKey",
         ),
         mode,
-        proctoringPolicy: normalizeProctoringPolicy(body.proctoringPolicy),
+        proctoringPolicy: readProctoringRequirements(body.proctoringPolicy),
         recipientStudentIds: normalizeRecipientStudentIds(
           body.recipientStudentIds,
         ),
@@ -563,6 +544,8 @@ export class AdminRunsService {
     request: AdminRunsValidatedRequest,
   ): Promise<AdminRunsCreateResult> {
     try {
+      request = {...request, payload: {...request.payload,
+        proctoringPolicy: readProctoringRequirements(request.payload.proctoringPolicy)}};
       const settingsSnapshot = await adminSettingsService.loadSettingsSnapshot(
         request.instituteId,
       );

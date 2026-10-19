@@ -1,3 +1,4 @@
+import {assertProctoringJson} from "../services/examProctoringPolicy";
 import * as functions from "firebase-functions";
 import {DecodedIdToken} from "firebase-admin/auth";
 import {sendErrorResponse} from "../services/apiResponse";
@@ -148,6 +149,7 @@ export const createAdminRunsHandler = (
           return;
         }
 
+        assertProctoringJson(request.rawBody);
         const validatedRequest = adminRunsService.normalizeRequest({
           actorId: identity?.uid,
           actorRole: identity?.role,

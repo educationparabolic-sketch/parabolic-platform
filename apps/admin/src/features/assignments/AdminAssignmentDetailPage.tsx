@@ -1506,9 +1506,14 @@ function AdminAssignmentDetailPage() {
                   <small>Persisted assignment policy</small>
                 </div>
                 <div>
-                  <span>Face / Identity / Gaze Guard</span>
-                  <strong>{authoritativeRun.proctoringPolicy.faceIdentityGazeGuardEnabled ? "Enabled" : "Disabled"}</strong>
-                  <small>Persisted assignment policy</small>
+                  <span>Camera readiness</span>
+                  <strong>{authoritativeRun.proctoringPolicy.cameraReadiness === "required" ? "Required" : "Off"}</strong>
+                  <small>Browser permission/readiness report only; no identity verification or continuous capture guarantee.</small>
+                </div>
+                <div>
+                  <span>Automated face matching and gaze tracking</span>
+                  <strong>Unavailable</strong>
+                  <small>Browser observations are client reports, not proof of misconduct.</small>
                 </div>
               </div>
             </section>

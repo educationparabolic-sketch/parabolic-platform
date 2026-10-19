@@ -1481,3 +1481,107 @@ were restored. Hosting live releases and unrelated Functions/indexes are unchang
 BWM-045 is READY for inspection only. Full backend/data/legacy/publication rollout
 remains with BWM-053 and the other release owners; production NO_GO. See the
 master execution plan, final substep-8 evidence and LOG-257.
+
+### BWM-045 reserved proctoring contract — substep 2 (DEC-111)
+
+`shared/contracts/examProctoring.d.ts` and
+`docs/EXAM_PROCTORING_CONTRACT.md` reserve v1 supported run requirements,
+server-derived capabilities and the closed EXM-05 activation preflight body.
+Automated face/gaze verification is unavailable; camera readiness is only a
+browser report with explicit local-preview consent. EXM-06 remains optional and
+is not adopted for Exam display/admission. Legacy policy fails closed on future
+adoption; no silent conversion of the combined boolean or legacy-body exception.
+
+EXM-07 `POST /api/v1/exam/session/{sessionId}/integrity-events` is a documentation
+reservation only, not in the active manifest. It will require current Firebase
+identity and transactional consumed-nonce/owner-generation/lease authority,
+closed media-free batches, bounded quota and exact replay receipts. Server
+receivedAt records receipt of an untrusted observation, not verified misconduct.
+No new reader, analytics effect or audit claim. See the normative contract for
+all payload, timing, retention and failure limits.
+
+Active DTOs/handlers/routes/callers still use existing behavior; substeps 3–7
+implement adoption and 8 qualifies aggregate/public behavior. Current accounting
+remains 120 routes (115 implemented, 0 incompatible, 0 missing, 5 retired),
+63 HTTP exports, 51 gateway handlers and eight schedules. Future EXM-07 is not
+counted as implemented or remotely available. No cloud deployment authorized.
+
+### BWM-045 backend adoption — substep 3 (DEC-112)
+
+Existing Admin run create/list/detail/operational and duplicate/reassign owners
+now enforce v1 requirements and derive honest capability projections. EXM-01
+launch/recovery/renew, EXM-05 activation and answer writes validate the immutable
+server snapshot; release/terminal submission and trusted terminal paths retain
+their existing authority. EXM-05 accepts only closed explicit camera consent/
+readiness reports and records the first server receipt, never a face match.
+The generic student state helper cannot bypass activation. Duplicate JSON uses
+the existing 16 KiB command bound. Policy errors preserve canonical safe reasons.
+
+Shared examProctoringBackend projections isolate this staged server migration
+from legacy mounted apiDtos/adapters pending 5–6; old callers fail closed and no
+working mounted/browser compatibility is claimed. Trusted run termination may
+return an explicit unavailable policy reason instead of blocking the command;
+normal reads/duplication cannot use that exception. EXM-07 stays reserved only;
+route/export/handler counts remain 120/115/0/0/5 and 63/51. No deployment.
+
+### BWM-045 integrity ingest — substep 4 (DEC-113)
+
+EXM-07 POST /api/v1/exam/session/{sessionId}/integrity-events is now locally
+implemented by ExamIntegrityService and examSessionIntegrityEvents, through apiV1
+and the exact direct route. Current revocation-checked Firebase identity, enabled
+own Student, current tenant/license and transactional consumed-entry/proof/
+generation/lease/lifecycle/policy checks apply to new writes and exact replay.
+Closed raw JSON is at most 8192 bytes; 1–10 enum-only client observations, no
+queries/encoding/media/credentials/extra fields or duplicate keys. Immutable
+receipts and parent lifetime counters commit together; replay makes no writes.
+60 batches/600 events, five-second spacing, fixed Retry-After, 24-hour maximum
+intake and logical 30-day retention follow EXAM_PROCTORING_CONTRACT.md exactly.
+No read/export surface or score/risk/audit meaning is introduced. Errors and
+uncertain provider failures never fabricate acknowledgement. Mounted queue is
+pending substep 6. Current counts supersede substep 3: 121 routes = 116 implemented
++ 0 incompatible + 0 missing + 5 retired, 64 HTTP exports, 52 gateway handlers,
+eight schedules. Local registration is not deployed qualification. NO_GO.
+
+### BWM-045 Admin policy adoption — substep 5 (DEC-114)
+
+Mounted Admin create/list/detail/live/history and derived-command readers now use
+v1 requirements/capabilities. apiDtos AdminRunCreateRequest carries only exact
+ExamProctoringRequirementsV1; Admin read records carry ExamProctoringPolicyV1.
+The shared strict adapter rejects legacy/missing/unknown policy and any forged
+capability, extra field or inconsistent reporting claim. Retry reconciliation
+validates capabilities and exact request version/browser/camera requirements;
+canonical idempotency keys include the v1 version and camera enum. Recipient,
+revision, actor, role and tenant authority are unchanged. Camera readiness is
+labelled as a consented browser report; automated face/gaze remain unavailable.
+
+Lifecycle acknowledgements alone permit the existing backend unavailable policy
+when action=terminate and returned status=terminated. Metadata/revision/audit and
+recovery validation remain. The UI acknowledges that confirmed stop and reports
+history unavailable without inventing policy or a successful history reload.
+Other operational/derived/history reads stay strict. Exam DTO/callers remain
+pending substep 6; no complete Exam or deployed compatibility is claimed. Counts
+remain 121/116/0/0/5 routes, 64 HTTP exports/52 handlers/eight schedules. NO_GO.
+
+### BWM-045 mounted Exam v1 adoption — substep 6 / DEC-115
+
+Public ExamRuntimeProctoringPolicy now aliases the frozen closed v1 policy; entry
+parsing reuses adaptExamProctoringPolicyV1 and rejects legacy/forged capabilities.
+Mounted EXM-05 sends the exact v1 camera report (not_requested for off/expiry;
+client_reported_ready plus current local consent for required activation). EXM-07
+is a frontend caller through the same session/generation/lease/token-fenced
+transport, with one attempt per queue send and independent retry ownership.
+Receipts validate exact keys/version/session/generation/batch/count/disposition/
+source/canonical dates and 30-day retention before anything is called saved.
+The queue is memory-only, bounded 60/10/8192, retains uncertain intent, retries
+1/2/5 seconds, honors the fixed five-second rate bound, and exposes explicit
+retry/unsaved/drop status. No answer/lease/submit command waits for telemetry.
+EXM-06 remains unmounted. Counts stay 121 routes (116 implemented/five retired),
+64 HTTP exports, 52 handlers/eight schedules. Broader acceptance/L5 remains 7–8.
+
+BWM-045 / DEC-118 Student launch caller reconciliation: the mounted Student
+response adapter accepts only HTTP(S) `/session/{sessionId}` with an empty query,
+no URL userinfo and the exact encoded `#launch={launchCredential}` fragment.
+Legacy `?token`, extra query/fragment fields, path prefixes and mismatched session
+or credential fail closed. This validates the existing server DTO; it adds no
+route, request field or token authority. Public qualification follows the real
+Student button and observes the unchanged network response before navigation.

@@ -39,6 +39,8 @@ const selectedSourceSuites = [
   "currentVendor.test",
   "customClaimSynchronization.test",
   "examRuntimeOwnership.test",
+  "examProctoringPolicy.test",
+  "examIntegrityApi.test",
   "examSessionActivateApi.test",
   "examSessionEntryApi.test",
   "examStartApi.test",

@@ -92,6 +92,12 @@ function AdminAssignmentsLivePage() {
     },
     { id: "mode", header: "Mode", render: ({ run }) => run.mode },
     { id: "status", header: "Status", render: ({ run }) => run.status },
+    { id: "policy", header: "Policy", render: ({ run }) => (
+      <div className="admin-assignments-table-stack">
+        <span>Camera readiness {run.proctoringPolicy.cameraReadiness}</span>
+        <small>Automated face matching and gaze tracking: unavailable</small>
+      </div>
+    ) },
     { id: "window", header: "Closes", render: ({ run }) => formatDateTime(run.endWindow) },
     {
       id: "sessions",

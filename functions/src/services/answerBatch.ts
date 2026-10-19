@@ -1,3 +1,4 @@
+import {readProctoringPolicy} from "./examProctoringPolicy";
 import {assertRuntimeOwner} from "./examRuntimeOwnership";
 import {FieldValue} from "firebase-admin/firestore";
 import {createLogger} from "./logging";
@@ -1173,6 +1174,8 @@ export class AnswerBatchService {
       }
 
       assertRuntimeOwner(sessionData, input.context, Date.now());
+      readProctoringPolicy(isPlainObject(sessionData.runtimeSnapshot) ?
+        sessionData.runtimeSnapshot.proctoringPolicy : undefined);
       const storedAnswerMap = isPlainObject(sessionData.answerMap) ?
         sessionData.answerMap :
         {};
@@ -1379,6 +1382,8 @@ export class AnswerBatchService {
       };
 
       assertRuntimeOwner(sessionData, input.context, Date.now());
+      readProctoringPolicy(isPlainObject(sessionData.runtimeSnapshot) ?
+        sessionData.runtimeSnapshot.proctoringPolicy : undefined);
       transaction.update(sessionReference, updatePayload);
 
       return {

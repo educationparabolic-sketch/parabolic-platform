@@ -1,3 +1,5 @@
+import type {ExamProctoringPolicyV1, ExamProctoringRequirementsV1} from "./examProctoring.js";
+
 /**
  * Transport DTOs shared by frontend portal adapters and Functions handlers.
  *
@@ -1063,10 +1065,7 @@ export type AdminRunTerminalStatus = Extract<
   "completed" | "archived" | "cancelled" | "terminated"
 >;
 
-export interface AdminRunProctoringPolicy {
-  browserIntegrityGuardEnabled: boolean;
-  faceIdentityGazeGuardEnabled: boolean;
-}
+export type AdminRunProctoringPolicy = ExamProctoringPolicyV1;
 
 export interface AdminRunCreateRequest {
   academicYear: string;
@@ -1076,7 +1075,7 @@ export interface AdminRunCreateRequest {
   gracePeriodMinutes: number;
   idempotencyKey: string;
   mode: AdminRunMode;
-  proctoringPolicy: AdminRunProctoringPolicy;
+  proctoringPolicy: ExamProctoringRequirementsV1;
   recipientStudentIds: string[];
   shuffleQuestionOrder: boolean;
   startWindow: string;
@@ -1281,7 +1280,12 @@ export interface AdminRunLifecycleResult {
   auditId: string;
   disposition: AdminRunCommandDisposition;
   recoveryState: AdminRunCommandRecoveryState;
-  run: AdminRunVersionedRecord;
+  run: Omit<AdminRunVersionedRecord, "proctoringPolicy"> & {
+    proctoringPolicy: ExamProctoringPolicyV1 | {
+      status: "unavailable";
+      reason: "policy_upgrade_required" | "policy_unsupported";
+    };
+  };
 }
 
 export interface AdminRunNotificationResendRequest {
@@ -1505,10 +1509,7 @@ export interface ExamRuntimeLicenseSnapshot {
   featureFlags: Record<string, boolean>;
 }
 
-export interface ExamRuntimeProctoringPolicy {
-  browserIntegrityGuardEnabled: boolean;
-  faceIdentityGazeGuardEnabled: boolean;
-}
+export type ExamRuntimeProctoringPolicy = ExamProctoringPolicyV1;
 
 export interface ExamRuntimeSnapshot {
   difficultyDistribution: ExamRuntimeDifficultyDistributionSnapshot;

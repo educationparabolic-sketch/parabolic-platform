@@ -692,6 +692,11 @@ export const API_ROUTE_MANIFEST: readonly ApiRouteManifestEntry[] = [
     "implemented", "examSessionIdentityStatus", "planned",
   ),
   defineRoute(
+    "EXM-07", "exam", "POST",
+    "/exam/session/{sessionId}/integrity-events",
+    "implemented", "examSessionIntegrityEvents",
+  ),
+  defineRoute(
     "VEN-01",
     "vendor",
     "POST",
