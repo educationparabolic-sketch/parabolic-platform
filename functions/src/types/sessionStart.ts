@@ -1,4 +1,5 @@
 import type {ExamRuntimeEntryRequestV2, ExamRuntimeLeaseReceipt} from "../../../shared/contracts/examRuntimeOwnership";
+import type {ExamAnswerRecoveryV1} from "../../../shared/contracts/examResilience";
 import type {RuntimeOwnerCredentials} from "../services/examRuntimeOwnership";
 import {ExamOperationalDataAccessPolicy} from "./dataTierPartition";
 import type {
@@ -191,6 +192,7 @@ export interface SessionEntryValidationContext {
 }
 
 export interface SessionEntryValidationResult {
+  recovery: ExamAnswerRecoveryV1;
   ownership?: ExamRuntimeLeaseReceipt;
   deadlineAt: string | null;
   instituteId: string;

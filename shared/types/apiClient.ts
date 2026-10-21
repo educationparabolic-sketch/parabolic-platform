@@ -14,6 +14,10 @@ export interface ApiClientRequestOptions<TRequestBody = unknown> {
   skipAuth?: boolean;
   /** Additional caller scope, checked against the actual outbound ID token. */
   validateAuthToken?: (token: string | null) => void;
+  /** Scoped transports may own refresh dispatches and provisional 401 classification. Default remains true. */
+  refreshAuthOn401?: boolean;
+  /** Headers only; callers cannot consume or replace the business response. */
+  onResponseHeaders?: (headers: Headers) => void;
   emptyResultIsReady?: boolean;
   handledFailureIsReady?: boolean;
   retry?: Partial<ApiRetryPolicy>;

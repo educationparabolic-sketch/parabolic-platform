@@ -1,4 +1,57 @@
+BWM-046 substep 5 clock/transport adoption (2026-10-20):
+
+BWM-046 substep 7 adds the permanent local resilience acceptance runner/matrix.
+Canonical local cleanup retains only a public scope/generation close fence so a
+separate stale writer/discard cannot recreate submitted recovery; queued renewal
+cannot revive a closed runtime. Known storage failure remains visible during
+retries until a real save commits. No wire route, credential, server deadline,
+scoring or analytics writer changes. See EXAM_RESILIENCE_ACCEPTANCE_MATRIX.md;
+aggregate/public qualification and finding closure remain substep 8.
+
+
+BWM-046 substep 6: Exam transport owns terminal reload probing and reconciliation
+before uncertain submit replay; the mounted runtime owns expiry/confirmation UI,
+accepted-answer-only finalization and late-change disclosure. StudentSummaryRead
+and studentResultRecovery own bounded visible current-summary recovery and
+withholding unconfirmed reflective view data. No new endpoint or analytics writer;
+full adversarial/aggregate acceptance remains BWM-046 substeps 7–8.
+
+`apps/exam/src/runtimeClock.ts` owns conservative monotonic deadline display,
+server-anchored answer timestamps and eligible foreground dwell. The mounted runtime
+pauses uncertain continuity pending held-owner reconciliation.
+`apps/exam/src/resilientTransport.ts` owns the retained three-attempt/15-second
+per-attempt budget, minimum server retry delays and one tuple-bound forced refresh.
+`launchTransport.ts` serializes those operations and coalesces uncertain renewal
+replay without moving its original receipt anchor. Existing shared HTTP client
+options expose response headers and let this scoped owner handle provisional 401;
+default callers and independent integrity reporting retain their existing policies.
+No backend/wire/resource change; terminal/result adoption remains substep 6 and all
+seven findings remain OPEN pending integrated acceptance. Production NO_GO.
+
 # MODULE REGISTRY
+
+BWM-046 substep 4 mounted answer recovery (2026-10-20):
+`apps/exam/src/answerRecovery.ts` validates bounded schema-3 snapshots under the
+complete identity/session/nonce scope hash and public generation, merges accepted
+server answers before newer pending edits, and validates exact acknowledgement
+identities/dispositions. `recoveryStorage.ts` settles IndexedDB operations within
+two seconds, serializes/coalesces saves and fences clear/late completions.
+`ExamRuntimeApp.tsx` exposes durability, unresolved/rejected changes and submission
+acknowledgement. The Exam-only `App.tsx` delegates loading/authority/error states
+to the runtime, keeping questions available during background saves; `launchTransport.ts` adds a held-owner read-only reconciliation
+method using existing EXM-01/Auth/owner headers. No route or backend writer added.
+Clock/retry/terminal recovery and full adversarial qualification remain later.
+
+BWM-046 substep 3 backend adoption (2026-10-20):
+`SessionService.reconcileSession` reuses `StudentProfileService.withOwnStudent`
+for current Auth/Student and exact session scope, operational year and transactional
+owner checks. `examRecovery.ts` projects bounded canonical candidate answers;
+`examRecoveryValidation.ts` is the contract-tested deployable mirror of the pure
+shared reader. Existing entry returns recovery, and `SubmissionService` shares a
+candidate response builder with strict stored replay. Existing Student summary
+projection adds marker-backed readiness. Shared DTO/closed adapters are adopted;
+mounted answer recovery is adopted at substep 4; retry/result UI remains 5–6. No new route/export,
+writer, event, schedule, schema/index or provider. All seven findings remain OPEN.
 
 This document records all modules implemented in the platform.
 

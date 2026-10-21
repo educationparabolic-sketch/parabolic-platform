@@ -50,6 +50,11 @@ export function parseRuntimeCommand(value: unknown): ExamRuntimeEntryRequestV2 {
   if (!record(value)) {
     return deny("VALIDATION_ERROR", "invalid_ownership_request");
   }
+  if (value.operation === "reconcile") {
+    keys(value, ["operation", "contractVersion"]);
+    if (value.contractVersion !== 1) return deny("VALIDATION_ERROR", "invalid_ownership_request");
+    return {operation: "reconcile", contractVersion: 1};
+  }
   uuid(value.commandId);
   switch (value.operation) {
   case "launch":
@@ -196,6 +201,14 @@ function consumed(data: Record<string, unknown>, identity: RuntimeIdentity): voi
   }
 }
 export function assertRuntimeOwner(data: Record<string, unknown>, context: RuntimeScopedContext, now = Date.now(), allowClosedReplay = false): RuntimeOwnershipRecord {
+  return assertOwnedRuntime(data, context, now, allowClosedReplay, false);
+}
+// Read-only terminal reconciliation; never use for protected writes.
+export function assertRuntimeReconciliationOwner(data: Record<string, unknown>, context: RuntimeScopedContext, now = Date.now()): RuntimeOwnershipRecord {
+  return assertOwnedRuntime(data, context, now, true, true);
+}
+function assertOwnedRuntime(data: Record<string, unknown>, context: RuntimeScopedContext, now: number,
+  allowClosedReplay: boolean, allowTerminatedRead: boolean): RuntimeOwnershipRecord {
   const owner = storedOwnership(data);
   if (!context.runtimeOwner) {
     return deny("UNAUTHORIZED", "invalid_owner");
@@ -210,10 +223,13 @@ export function assertRuntimeOwner(data: Record<string, unknown>, context: Runti
     return deny("UNAUTHORIZED", "invalid_owner");
   }
   if (data.status === "submitted" || data.status === "terminated") {
-    if (allowClosedReplay && data.status === "submitted" && owner.state === "closed") {
+    if (allowClosedReplay && (data.status === "submitted" || allowTerminatedRead) && owner.state === "closed") {
       return owner;
     }
     return deny("SESSION_LOCKED", "session_closed");
+  }
+  if (allowTerminatedRead && owner.state === "held" && owner.expiresAt.toMillis() <= now) {
+    return deny("CONFLICT", "lease_expired");
   }
   if (owner.state !== "held" || owner.expiresAt.toMillis() <= now) {
     return deny("CONFLICT", "ownership_lost");
@@ -233,6 +249,7 @@ export function planRuntimeCommand(data: Record<string, unknown>, identity: Runt
     replayed: boolean;
 } {
   const command = parseRuntimeCommand(raw);
+  if (command.operation === "reconcile") return deny("VALIDATION_ERROR", "invalid_ownership_request");
   const current = storedOwnership(data);
   for (const key of ["launchCredentialHashes", "consumedLaunchCredentialHashes", "identityStatusEntryBindings"]) {
     const values = data[key];

@@ -1,15 +1,15 @@
 import { Suspense, lazy } from "react";
-import { UiDataStateBoundary, UiRouteLoading } from "../../../shared/ui/components";
+import { UiRouteLoading } from "../../../shared/ui/components";
 
 const ExamRuntimeApp = lazy(() => import("./ExamRuntimeApp"));
 
 function App() {
   return (
-    <UiDataStateBoundary label="Exam runtime">
-      <Suspense fallback={<UiRouteLoading label="Loading exam runtime" />}>
-        <ExamRuntimeApp />
-      </Suspense>
-    </UiDataStateBoundary>
+    // The runtime owns entry/authority gates and answer/submission errors.
+    // Background saves must keep questions visible for newer candidate edits.
+    <Suspense fallback={<UiRouteLoading label="Loading exam runtime" />}>
+      <ExamRuntimeApp />
+    </Suspense>
   );
 }
 

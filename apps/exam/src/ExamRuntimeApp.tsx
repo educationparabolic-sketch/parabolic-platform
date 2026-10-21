@@ -1,7 +1,7 @@
+import { RuntimeClock, interactionElapsed } from "./runtimeClock";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Route, Routes, useLocation, useParams } from "react-router-dom";
 import type {
-  ExamAnswerBatchResult,
   ExamAnswerFlushReason,
   ExamAnswerBatchRequestBody,
   ExamAnswerWrite,
@@ -35,6 +35,10 @@ import { resolveStudentReturnUrl } from "./studentReturn";
 import { CameraReadiness, CAMERA_NOTICE, type CameraState } from "./cameraReadiness";
 import { IntegrityQueue, type ReportingState } from "./integrityQueue";
 import type { ExamProctoringActivationRequestV1, ExamIntegrityEventTypeV1 } from "../../../shared/contracts/examProctoring";
+import {displayResponse, mergeAnswerRecovery, readAnswerAcknowledgements, readLocalSnapshot, validatePendingAnswers,
+  type QuestionResponseState, type QuestionTimingState, type SessionRecoverySnapshot, type RejectedAnswer} from "./answerRecovery";
+import {RecoveryStorage} from "./recoveryStorage";
+import type {ExamRecoveryDurabilityV1} from "../../../shared/contracts/examResilience";
 import "./App.css";
 
 type QuestionPaletteStatus = "not_visited" | "not_answered" | "answered" | "marked" | "answered_marked";
@@ -107,28 +111,7 @@ interface PreExamChecklistItem {
   helper: string;
 }
 
-interface QuestionResponseState {
-  selectedOptionId: string | null;
-  numericResponse: string;
-  matrixSelections: string[];
-  markedForReview: boolean;
-}
-
-interface PaletteTile {
-  id: string;
-  number: number;
-  section: QuestionSection;
-  status: QuestionPaletteStatus;
-  revisitLocked: boolean;
-}
-
-interface QuestionTimingState {
-  timeSpentMs: number;
-  minTimeSec: number;
-  maxTimeSec: number;
-  maxTimeLocked: boolean;
-  minTimeViolationCount: number;
-}
+interface PaletteTile {id: string; number: number; section: QuestionSection; status: QuestionPaletteStatus; revisitLocked: boolean}
 
 interface AdaptivePhaseSnapshot {
   currentPhase: PhaseId;
@@ -151,27 +134,6 @@ interface ExamSessionSchedule {
 }
 
 type QueuedAnswerWrite = ExamAnswerWrite;
-
-interface SessionRecoverySnapshot {
-  batchSequence: number;
-  lastIssuedClientTimestamp: number;
-  nextClientRevision: number;
-  ownerId: string;
-  runtimeGeneration?: number;
-  schemaVersion: 2;
-  sessionId: string;
-  responseStateByQuestionId: Record<string, QuestionResponseState>;
-  questionTimingById: Record<string, QuestionTimingState>;
-  visitedQuestionIds: string[];
-  hardModeLockedQuestionIds: string[];
-  selectedQuestionId: string;
-  remainingMs: number;
-  deadlineEpochMs: number | null;
-  pendingAnswerMap: Record<string, QueuedAnswerWrite>;
-  lastAnswerWriteAtMs: number;
-  syncCounter: number;
-  savedAtIso: string;
-}
 
 type SyncState = "idle" | "syncing" | "offline" | "error";
 
@@ -204,9 +166,6 @@ function StudentPortalReturnButton({label = "Return to Student Portal"}: {label?
 const ANSWER_BATCH_INTERVAL_MS = 5_000;
 const ANSWER_BATCH_MAX_SIZE = 10;
 const HEARTBEAT_INTERVAL_MS = 20_000;
-const RECOVERY_DB_NAME = "parabolic-exam-runtime";
-const RECOVERY_STORE_NAME = "sessionRecovery";
-const RECOVERY_SCHEMA_VERSION = 2;
 const DEV_MOCK_SESSION_TOKEN = "dev";
 const MARKING_SCHEME = [
   "+4 for each correct answer",
@@ -439,14 +398,6 @@ function validateSessionEntry(
     };
   }
 
-  if (claims.exp && claims.exp * 1000 <= Date.now()) {
-    return {
-      allowed: false,
-      reason: "expired_token",
-      claims,
-    };
-  }
-
   if (!claims.sessionId || claims.sessionId !== sessionId) {
     return {
       allowed: false,
@@ -460,122 +411,6 @@ function validateSessionEntry(
     reason: null,
     claims,
   };
-}
-
-async function openRecoveryDb(): Promise<IDBDatabase | null> {
-  if (typeof window === "undefined" || !("indexedDB" in window)) {
-    return null;
-  }
-
-  return new Promise<IDBDatabase | null>((resolve) => {
-    const openRequest = window.indexedDB.open(RECOVERY_DB_NAME, 1);
-    openRequest.onupgradeneeded = () => {
-      const db = openRequest.result;
-      if (!db.objectStoreNames.contains(RECOVERY_STORE_NAME)) {
-        db.createObjectStore(RECOVERY_STORE_NAME, { keyPath: "sessionId" });
-      }
-    };
-    openRequest.onerror = () => resolve(null);
-    openRequest.onsuccess = () => resolve(openRequest.result);
-  });
-}
-
-async function loadRecoverySnapshot(
-  sessionId: string,
-  ownerId: string,
-  generation: number,
-  current: () => boolean,
-): Promise<SessionRecoverySnapshot | null> {
-  const db = await openRecoveryDb();
-  if (!db) {
-    return null;
-  }
-
-  return new Promise<SessionRecoverySnapshot | null>((resolve) => {
-    const transaction = db.transaction(RECOVERY_STORE_NAME, "readwrite");
-    const store = transaction.objectStore(RECOVERY_STORE_NAME);
-    const getRequest = store.get(sessionId);
-
-    getRequest.onerror = () => {
-      db.close();
-      resolve(null);
-    };
-    getRequest.onsuccess = () => {
-      const snapshot = getRequest.result as Partial<SessionRecoverySnapshot> | undefined;
-      if (!current() || (snapshot?.ownerId && snapshot.ownerId !== ownerId) ||
-          (snapshot?.runtimeGeneration ?? 0) > generation) {db.close(); resolve(null); return;}
-      store.put({...snapshot, sessionId, ownerId, runtimeGeneration: generation});
-      transaction.oncomplete = () => db.close();
-      if (
-        snapshot?.schemaVersion !== RECOVERY_SCHEMA_VERSION ||
-        snapshot.sessionId !== sessionId ||
-        snapshot.ownerId !== ownerId
-      ) {
-        resolve(null);
-        return;
-      }
-      resolve(snapshot as SessionRecoverySnapshot);
-    };
-  });
-}
-
-async function saveRecoverySnapshot(snapshot: SessionRecoverySnapshot, current: () => boolean): Promise<void> {
-  const db = await openRecoveryDb();
-  if (!db) {
-    return;
-  }
-
-  await new Promise<void>((resolve) => {
-    const transaction = db.transaction(RECOVERY_STORE_NAME, "readwrite");
-    const store = transaction.objectStore(RECOVERY_STORE_NAME);
-    const read = store.get(snapshot.sessionId);
-    read.onsuccess = () => {
-      const existing = read.result as Partial<SessionRecoverySnapshot> | undefined;
-      if (current() && (!existing?.ownerId || existing.ownerId === snapshot.ownerId) &&
-          (existing?.runtimeGeneration ?? 0) <= (snapshot.runtimeGeneration ?? 0)) store.put(snapshot);
-    };
-    transaction.oncomplete = () => {
-      db.close();
-      resolve();
-    };
-    transaction.onerror = () => {
-      db.close();
-      resolve();
-    };
-    transaction.onabort = () => {
-      db.close();
-      resolve();
-    };
-  });
-}
-
-async function clearRecoverySnapshot(sessionId: string, ownerId: string, generation: number, current: () => boolean): Promise<void> {
-  const db = await openRecoveryDb();
-  if (!db) {
-    return;
-  }
-
-  await new Promise<void>((resolve) => {
-    const transaction = db.transaction(RECOVERY_STORE_NAME, "readwrite");
-    const store = transaction.objectStore(RECOVERY_STORE_NAME);
-    const read = store.get(sessionId);
-    read.onsuccess = () => {
-      const existing = read.result as Partial<SessionRecoverySnapshot> | undefined;
-      if (current() && existing?.ownerId === ownerId && (existing.runtimeGeneration ?? 0) <= generation) store.delete(sessionId);
-    };
-    transaction.oncomplete = () => {
-      db.close();
-      resolve();
-    };
-    transaction.onerror = () => {
-      db.close();
-      resolve();
-    };
-    transaction.onabort = () => {
-      db.close();
-      resolve();
-    };
-  });
 }
 
 function statusClassName(status: QuestionPaletteStatus): string {
@@ -1216,6 +1051,9 @@ function ExamSessionPage() {
   const examApiClient = runtimeOwnership;
   const activationInFlightRef = useRef(false);
   const expirySubmitAttemptedRef = useRef(false);
+  const submitIntentRef = useRef<ExamSubmitRequestBody | null>(null);
+  const submitAttemptRunningRef = useRef(false);
+  const [submissionUncertain, setSubmissionUncertain] = useState(false);
   const [entryAuthority, setEntryAuthority] = useState<ExamSessionEntryResult | null>(null);
   const [sessionSnapshot, setSessionSnapshot] = useState<SessionSnapshot>(() =>
     buildEmptySessionSnapshot(sessionId || "runtime-session"));
@@ -1232,8 +1070,12 @@ function ExamSessionPage() {
   const [declarationAccepted, setDeclarationAccepted] = useState(false);
   const [instructionConfirmed, setInstructionConfirmed] = useState(false);
   const [remainingMs, setRemainingMs] = useState(totalDurationMs);
-  const [deadlineEpochMs, setDeadlineEpochMs] = useState<number | null>(null);
-  const [syncCounter, setSyncCounter] = useState(0);
+  const runtimeClockRef = useRef(new RuntimeClock());
+  const [clockRecoveryRequired, setClockRecoveryRequired] = useState(false);
+  const clockPausedRef = useRef(false);
+  const transportStoppedRef = useRef(false);
+  const clockAttemptRef = useRef<Promise<boolean> | null>(null);
+  const clockAttemptStoppedRef = useRef(false);
   const [calculatorOpen, setCalculatorOpen] = useState(false);
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [responseStateByQuestionId, setResponseStateByQuestionId] = useState<Record<string, QuestionResponseState>>(() =>
@@ -1259,14 +1101,22 @@ function ExamSessionPage() {
   const [submissionReason, setSubmissionReason] = useState<SubmissionReason | null>(null);
   const [submissionResult, setSubmissionResult] = useState<ExamSubmitResult | null>(null);
   const [nowEpochMs, setNowEpochMs] = useState(() => Date.now());
-  const [lastAnswerWriteAtMs, setLastAnswerWriteAtMs] = useState(() => Date.now() - ANSWER_BATCH_INTERVAL_MS);
   const [pendingAnswerMap, setPendingAnswerMap] = useState<Record<string, QueuedAnswerWrite>>({});
   const [syncState, setSyncState] = useState<SyncState>("idle");
-  const [, setSyncMessage] = useState("No pending answer updates.");
+  const [syncMessage, setSyncMessage] = useState("No pending answer updates.");
   const [, setLastHeartbeatAtIso] = useState<string | null>(null);
   const [recoveryApplied, setRecoveryApplied] = useState(false);
+  const [durability, setDurability] = useState<ExamRecoveryDurabilityV1>("saving");
+  const [recoveryNotice, setRecoveryNotice] = useState("");
+  const storageWritableRef = useRef(true);
+  const [unsupportedRecovery, setUnsupportedRecovery] = useState(false);
+  const [rejectedAnswerMap, setRejectedAnswerMap] = useState<Record<string, RejectedAnswer>>({});
+  const rejectedAnswerMapRef = useRef<Record<string, RejectedAnswer>>({});
+  const unresolvedRef = useRef(new Set<string>());
+  const [rejectionsAcknowledged, setRejectionsAcknowledged] = useState(false);
+  const rejectionsAcknowledgedRef = useRef(false);
   const pendingAnswerMapRef = useRef<Record<string, QueuedAnswerWrite>>({});
-  const lastAnswerWriteAtMsRef = useRef(Date.now() - ANSWER_BATCH_INTERVAL_MS);
+  const lastAnswerWriteAtMsRef = useRef(performance.now() - ANSWER_BATCH_INTERVAL_MS);
   const nextClientRevisionRef = useRef(1);
   const lastIssuedClientTimestampRef = useRef(0);
   const batchSequenceRef = useRef(1);
@@ -1317,14 +1167,20 @@ function ExamSessionPage() {
   const identityInterrupted = !devMockSessionActive && entryAuthority !== null &&
     ((authSession.status === "unauthenticated" && !getFirebaseAuth().currentUser) || (authSession.status === "authenticated" &&
       authSession.user === getFirebaseAuth().currentUser && !runtimeOwnership.matchesToken(authSession.idToken)));
-  const ownershipInterrupted = !devMockSessionActive && (ownership.phase === "lost" || identityInterrupted || (ownership.phase === "active" && !runtimeOwnership.isCurrent()));
+  const ownershipInterrupted = !devMockSessionActive && (ownership.phase === "lost" || ownership.reason === "refresh_pending" || identityInterrupted || (ownership.phase === "active" && !runtimeOwnership.isCurrent()));
   const authorityInterrupted = authorityInterruption !== null || ownershipInterrupted;
   useEffect(() => {
     if (identityInterrupted || (entryAuthority && authorityInterruption)) runtimeOwnership.invalidate("identity_or_authority_changed");
   }, [authorityInterruption, identityInterrupted, runtimeOwnership, entryAuthority]);
+  useEffect(() => {
+    if (["refresh_pending", "refresh_unavailable", "transport_paused"].includes(ownership.reason)) {
+      clockPausedRef.current = true; setClockRecoveryRequired(true);
+      if (ownership.reason !== "refresh_pending") clockAttemptStoppedRef.current = true;
+    }
+  }, [ownership.reason]);
   const reportingEnabled = sessionSnapshot.proctoringPolicy.integrityReporting === "client_observations";
   const locallyEligible = serverEntryValidationStatus === "valid" && !authorityInterrupted &&
-    nowEpochMs < sessionSchedule.sessionEndsAtMs &&
+    (instructionConfirmed ? remainingMs > 0 : nowEpochMs < sessionSchedule.sessionEndsAtMs) &&
     (sessionLifecycleState === "started" || (sessionLifecycleState === "active" && remainingMs > 0));
   useEffect(() => {
     phaseRef.current = instructionConfirmed ? "exam" : entryStage === "pre_exam_lobby" ? "lobby" : "instructions";
@@ -1360,6 +1216,24 @@ function ExamSessionPage() {
   const effectiveSessionId = entryAuthority?.sessionId ??
     (tokenSessionId && tokenSessionId.length > 0 ? tokenSessionId : sessionId);
   const recoveryOwnerId = entryAuthority?.studentId ?? entryValidation.claims.sub ?? "";
+  const recoveryScopeHash = runtimeOwnership.recoveryScope();
+  const recoveryStorage = useMemo(() => new RecoveryStorage(effectiveSessionId, recoveryScopeHash, ownership.generation,
+    runtimeOwnership.isCurrent), [effectiveSessionId, recoveryScopeHash, ownership.generation, runtimeOwnership]);
+  const recoveryUiRef = useRef({responseStateByQuestionId, questionTimingById, visitedQuestionIds, hardModeLockedQuestionIds, selectedQuestionId});
+  useEffect(() => {recoveryUiRef.current = {responseStateByQuestionId, questionTimingById, visitedQuestionIds, hardModeLockedQuestionIds, selectedQuestionId};},
+    [responseStateByQuestionId, questionTimingById, visitedQuestionIds, hardModeLockedQuestionIds, selectedQuestionId]);
+  const captureRecovery = useCallback((): SessionRecoverySnapshot => ({schemaVersion: 3, sessionId: effectiveSessionId,
+    scopeHash: recoveryScopeHash, runtimeGeneration: ownership.generation, batchSequence: batchSequenceRef.current,
+    nextClientRevision: nextClientRevisionRef.current, lastIssuedClientTimestamp: lastIssuedClientTimestampRef.current,
+    responseStateByQuestionId: recoveryUiRef.current.responseStateByQuestionId, questionTimingById: recoveryUiRef.current.questionTimingById,
+    visitedQuestionIds: [...recoveryUiRef.current.visitedQuestionIds], hardModeLockedQuestionIds: [...recoveryUiRef.current.hardModeLockedQuestionIds],
+    selectedQuestionId: recoveryUiRef.current.selectedQuestionId, pendingAnswerMap: pendingAnswerMapRef.current,
+    rejectedAnswerMap: rejectedAnswerMapRef.current, unresolvedQuestionIds: [...unresolvedRef.current]}),
+    [effectiveSessionId, recoveryScopeHash, ownership.generation]);
+  const recordRejections = useCallback((rejected: Record<string, RejectedAnswer>) => {
+    rejectedAnswerMapRef.current = rejected; setRejectedAnswerMap(rejected);
+    rejectionsAcknowledgedRef.current = false; setRejectionsAcknowledged(false);
+  }, []);
   const pendingAnswers = useMemo(() => Object.values(pendingAnswerMap), [pendingAnswerMap]);
   const unansweredQuestionIdsForSubmission = useMemo(
     () =>
@@ -1380,19 +1254,16 @@ function ExamSessionPage() {
   const applyServerLifecycleAuthority = useCallback((
     authority: Pick<ExamSessionActivationResult,
     "deadlineAt" | "serverTime" | "sessionId" | "status">,
+    sentAt: number,
   ): boolean => {
     if (authority.sessionId !== sessionId) {
       return false;
     }
-    const serverNowMs = Date.parse(authority.serverTime);
-    const serverDeadlineMs = Date.parse(authority.deadlineAt);
-    if (!Number.isFinite(serverNowMs) || !Number.isFinite(serverDeadlineMs)) {
-      return false;
-    }
-
-    const authoritativeRemainingMs = Math.max(0, serverDeadlineMs - serverNowMs);
-    setDeadlineEpochMs(Date.now() + authoritativeRemainingMs);
-    setRemainingMs(authoritativeRemainingMs);
+    try {
+      runtimeClockRef.current.accept(authority.serverTime, authority.deadlineAt, sentAt, performance.now());
+      setRemainingMs(runtimeClockRef.current.remaining(performance.now()));
+      setNowEpochMs(runtimeClockRef.current.serverNow(performance.now()));
+    } catch {return false;}
     setSessionLifecycleState(authority.status);
     if (authority.status === "expired") {
       setEntryStage("entry_closed");
@@ -1407,23 +1278,23 @@ function ExamSessionPage() {
       return null;
     }
     activationInFlightRef.current = true;
+    const sentAt = performance.now();
     try {
-      const authority = adaptExamSessionActivationResult(
-        await examApiClient.post<unknown, ExamProctoringActivationRequestV1>(
+      const rawAuthority = await examApiClient.post<unknown, ExamProctoringActivationRequestV1>(
           `/exam/session/${encodeURIComponent(effectiveSessionId)}/activate`,
           {body: {contractVersion: 1, preflight: cameraRequired && cameraRef.current?.isReady() && remainingMs > 0
             ? {camera: "client_reported_ready", consentNoticeVersion: "exam-camera-local-v1", consentAccepted: true}
             : {camera: "not_requested"}}},
-        ),
-      );
-      if (!applyServerLifecycleAuthority(authority)) {
+        );
+      const authority = adaptExamSessionActivationResult(rawAuthority);
+      if (!applyServerLifecycleAuthority(authority, runtimeOwnership.requestStartedAt(rawAuthority, sentAt))) {
         throw new Error("Server activation authority is not bound to this session.");
       }
       return authority;
     } finally {
       activationInFlightRef.current = false;
     }
-  }, [applyServerLifecycleAuthority, authorityInterrupted, effectiveSessionId, entryValidation.allowed, examApiClient, cameraRequired, remainingMs]);
+  }, [applyServerLifecycleAuthority, authorityInterrupted, effectiveSessionId, entryValidation.allowed, examApiClient, cameraRequired, remainingMs, runtimeOwnership]);
 
   useEffect(() => {
     if (launchMetadata.status === "invalid" || launchMetadata.sessionId !== sessionId || window.self !== window.top) {
@@ -1462,11 +1333,8 @@ function ExamSessionPage() {
     let live = true;
 
     setServerEntryValidationStatus("pending");
-    const authenticateAndRequestEntry = async (): Promise<{
-      authenticatedValidation: EntryValidationResult;
-      responseBody: ExamSessionEntryResult;
-    }> => {
-      const {idToken, responseBody} = await runtimeOwnership.start();
+    const authenticateAndRequestEntry = async () => {
+      const {idToken, responseBody, terminal, sentAt} = await runtimeOwnership.start();
       const authenticatedValidation = validateSessionEntry(
         idToken,
         sessionId,
@@ -1475,12 +1343,24 @@ function ExamSessionPage() {
       if (!authenticatedValidation.allowed) {
         throw new Error("Firebase ID token is not bound to this exam session.");
       }
-      return {authenticatedValidation, responseBody};
+      return {authenticatedValidation, responseBody, terminal, sentAt};
     };
 
     void authenticateAndRequestEntry()
-      .then(({authenticatedValidation, responseBody}) => {
+      .then(({authenticatedValidation, responseBody, terminal, sentAt}) => {
         if (!live || !runtimeOwnership.isCurrent()) return;
+        if (terminal) {
+          setEntryValidation(authenticatedValidation);
+          setServerEntryValidationStatus("valid");
+          setSessionLifecycleState(terminal.status);
+          if (terminal.status === "submitted") {
+            setSubmissionResult(terminal.submission);
+            setSubmissionReason(terminal.submission.submissionReason);
+            setSubmittedAtIso(terminal.submission.submittedAt);
+          }
+          return;
+        }
+        if (!responseBody) throw new Error("Entry confirmation is unavailable.");
         const serverAllowed =
           responseBody.allowed === true &&
           responseBody.sessionId === sessionId &&
@@ -1500,17 +1380,17 @@ function ExamSessionPage() {
           },
         };
         const firstQuestionId = responseBody.runtimeSnapshot.questions[0]?.id ?? "";
+        runtimeClockRef.current.accept(responseBody.serverTime, responseBody.deadlineAt, sentAt, performance.now());
+        setNowEpochMs(runtimeClockRef.current.serverNow(performance.now()));
         setEntryAuthority(responseBody);
         setSessionSnapshot(responseBody.runtimeSnapshot);
         setSelectedSection("All");
         setSelectedQuestionId(firstQuestionId);
-        setResponseStateByQuestionId(
-          buildInitialResponseMap(responseBody.runtimeSnapshot.questions),
-        );
-        setQuestionTimingById(buildInitialTimingMap(
-          responseBody.runtimeSnapshot.questions,
-          responseBody.runtimeSnapshot.timingProfile,
-        ));
+        const recovered = mergeAnswerRecovery(responseBody.runtimeSnapshot, responseBody.recovery, null);
+        setResponseStateByQuestionId(recovered.responses);
+        setQuestionTimingById(recovered.timings);
+        setHardModeLockedQuestionIds(recovered.locked);
+        lastIssuedClientTimestampRef.current = recovered.highWater;
         setVisitedQuestionIds(new Set(firstQuestionId ? [firstQuestionId] : []));
         setRemainingMs(responseBody.runtimeSnapshot.schedule.durationMs);
         setSessionLifecycleState(responseBody.status);
@@ -1522,11 +1402,11 @@ function ExamSessionPage() {
               serverTime: responseBody.serverTime,
               sessionId: responseBody.sessionId,
               status: responseBody.status,
-            })
+            }, sentAt)
           ) {
             throw new Error("Server lifecycle clock is invalid for this session.");
           }
-          if (responseBody.status === "active") {
+          if (responseBody.status === "active" || responseBody.status === "expired") {
             setInstructionConfirmed(true);
             setEntryStage("exam_active");
             setRecoveryApplied(false);
@@ -1557,55 +1437,33 @@ function ExamSessionPage() {
   ]);
 
   useEffect(() => {
-    if (authorityInterrupted) return;
-    if (!instructionConfirmed || isSubmitted || authorityInterrupted) {
-      return;
-    }
-
+    if (!instructionConfirmed || isSubmitted || authorityInterrupted) return;
+    let previous = performance.now(), previousWall = Date.now();
+    const reset = () => {previous = performance.now(); previousWall = Date.now();};
+    document.addEventListener("visibilitychange", reset);
     const tickInterval = window.setInterval(() => {
-      setNowEpochMs(Date.now());
-      setRemainingMs((current) => Math.max(0, current - TICK_INTERVAL_MS));
-      setQuestionTimingById((current) => {
-        const currentTiming = current[selectedQuestionId];
-        if (!currentTiming || currentTiming.maxTimeLocked) {
-          return current;
-        }
-
-        const nextTimeSpentMs = currentTiming.timeSpentMs + TICK_INTERVAL_MS;
-        const reachedMaxTime = isHardMode && nextTimeSpentMs >= currentTiming.maxTimeSec * 1000;
-        if (!reachedMaxTime && nextTimeSpentMs === currentTiming.timeSpentMs) {
-          return current;
-        }
-
-        return {
-          ...current,
-          [selectedQuestionId]: {
-            ...currentTiming,
-            timeSpentMs: nextTimeSpentMs,
-            maxTimeLocked: reachedMaxTime ? true : currentTiming.maxTimeLocked,
-          },
-        };
+      const now = performance.now();
+      const eligible = sessionLifecycleState === "active" && !submissionUncertain && document.visibilityState !== "hidden" && !clockPausedRef.current && !clockRecoveryRequired &&
+        !submitInFlight && (!cameraRequired || !!cameraRef.current?.isReady()) && !integrityBlockingReason;
+      const wall = Date.now();
+      const interval = interactionElapsed(previous, now, eligible, previousWall, wall); previous = now; previousWall = wall;
+      if (interval.uncertain) {clockPausedRef.current = true; setClockRecoveryRequired(true);}
+      if (!devMockSessionActive) {
+        try {setNowEpochMs(runtimeClockRef.current.serverNow(now)); setRemainingMs(runtimeClockRef.current.remaining(now));}
+        catch {clockPausedRef.current = true; setClockRecoveryRequired(true);}
+      } else setRemainingMs(current => Math.max(0, current - interval.elapsed));
+      if (!interval.elapsed) return;
+      setQuestionTimingById(current => {
+        const timing = current[selectedQuestionId];
+        if (!timing || timing.maxTimeLocked) return current;
+        const timeSpentMs = timing.timeSpentMs + interval.elapsed;
+        return {...current, [selectedQuestionId]: {...timing, timeSpentMs,
+          maxTimeLocked: isHardMode && timeSpentMs >= timing.maxTimeSec * 1000}};
       });
     }, TICK_INTERVAL_MS);
-
-    return () => window.clearInterval(tickInterval);
-  }, [authorityInterrupted, instructionConfirmed, isSubmitted, isHardMode, selectedQuestionId]);
-
-  useEffect(() => {
-    if (authorityInterrupted) return;
-    if (!instructionConfirmed || isSubmitted || authorityInterrupted || !deadlineEpochMs) {
-      return;
-    }
-
-    const syncInterval = window.setInterval(() => {
-      const authoritativeRemaining = Math.max(0, deadlineEpochMs - Date.now());
-      setNowEpochMs(Date.now());
-      setRemainingMs(authoritativeRemaining);
-      setSyncCounter((current) => current + 1);
-    }, sessionSnapshot.timingProfile.syncEveryMs);
-
-    return () => window.clearInterval(syncInterval);
-  }, [authorityInterrupted, deadlineEpochMs, instructionConfirmed, isSubmitted, sessionSnapshot.timingProfile.syncEveryMs]);
+    return () => {window.clearInterval(tickInterval); document.removeEventListener("visibilitychange", reset);};
+  }, [authorityInterrupted, instructionConfirmed, isSubmitted, isHardMode, selectedQuestionId,
+    clockRecoveryRequired, submitInFlight, cameraRequired, cameraCheckState, integrityBlockingReason, devMockSessionActive, sessionLifecycleState, submissionUncertain]);
 
   useEffect(() => {
     if (authorityInterrupted) return;
@@ -1646,22 +1504,35 @@ function ExamSessionPage() {
 
   const recordLastAnswerWriteAt = useCallback((writeAtMs: number): void => {
     lastAnswerWriteAtMsRef.current = writeAtMs;
-    setLastAnswerWriteAtMs(writeAtMs);
   }, []);
 
-  const queueAnswerWrite = useCallback((questionId: string, nextResponseState: QuestionResponseState): void => {
-    if ((!devMockSessionActive && !runtimeOwnership.isCurrent()) || !entryValidation.allowed || authorityInterrupted) {
-      return;
+  const queueAnswerWrite = useCallback((questionId: string, nextResponseState: QuestionResponseState): boolean => {
+    if ((!devMockSessionActive && !runtimeOwnership.isCurrent()) || !entryValidation.allowed || authorityInterrupted || !recoveryApplied || sessionLifecycleState === "expired" || submissionUncertain || clockPausedRef.current || clockRecoveryRequired || document.visibilityState === "hidden") {
+      return false;
     }
 
     const question = sessionSnapshot.questions.find((candidateQuestion) => candidateQuestion.id === questionId);
     if (!question) {
-      return;
+      return false;
     }
 
-    const response = serializeResponseForPersistence(question, nextResponseState);
+    let response: ExamQuestionResponse;
+    let incompleteNumeric = false;
+    try {
+      response = serializeResponseForPersistence(question, nextResponseState);
+      if (response.kind === "numeric") {
+        incompleteNumeric = !Number.isFinite(Number(response.value));
+        if (!incompleteNumeric) response = {kind: "numeric", value: String(Number(response.value))};
+      }
+    } catch (error) {setSyncState("error"); setSyncMessage(String(error)); return false;}
     const questionTimeSpentMs = questionTimingById[questionId]?.timeSpentMs ?? 0;
-    const clientTimestamp = Math.max(Date.now(), lastIssuedClientTimestampRef.current + 1);
+    let clientTimestamp: number;
+    try {clientTimestamp = devMockSessionActive ? Math.max(Math.floor(performance.now()), lastIssuedClientTimestampRef.current + 1)
+      : runtimeClockRef.current.timestamp(lastIssuedClientTimestampRef.current, performance.now());}
+    catch (error) {clockPausedRef.current = true; setClockRecoveryRequired(true); setSyncMessage(String(error)); return false;}
+    if (!Number.isSafeInteger(clientTimestamp) || clientTimestamp >= 8640000000000000 || nextClientRevisionRef.current >= Number.MAX_SAFE_INTEGER - 1) {
+      setSyncState("error"); setSyncMessage("Answer ordering is unavailable. Recover the session before editing."); return false;
+    }
     const clientRevision = nextClientRevisionRef.current;
     lastIssuedClientTimestampRef.current = clientTimestamp;
     nextClientRevisionRef.current += 1;
@@ -1677,186 +1548,166 @@ function ExamSessionPage() {
       ...pendingAnswerMapRef.current,
       [questionId]: queuedWrite,
     };
+    setDurability(current => current === "memory_only" ? current : "saving");
     replacePendingAnswerMap(nextPendingMap);
     setSyncState((current) => navigator.onLine ? current === "syncing" ? current : "idle" : "offline");
-    setSyncMessage(`Pending answer updates: ${Object.keys(nextPendingMap).length}`);
-  }, [authorityInterrupted, devMockSessionActive, runtimeOwnership, entryValidation.allowed, questionTimingById, replacePendingAnswerMap, sessionSnapshot.questions]);
+    setSyncMessage(incompleteNumeric ? "Complete the numeric response before saving. This draft is only in memory and blocks submission." : `Pending answer updates: ${Object.keys(nextPendingMap).length}`);
+    if (incompleteNumeric) setSyncState("error");
+    return true;
+  }, [authorityInterrupted, clockRecoveryRequired, devMockSessionActive, runtimeOwnership, entryValidation.allowed, recoveryApplied, sessionLifecycleState, submissionUncertain, questionTimingById, replacePendingAnswerMap, sessionSnapshot.questions]);
 
   const updateQuestionResponseState = useCallback((
     questionId: string,
     updater: (previous: QuestionResponseState) => QuestionResponseState,
   ): void => {
-    setResponseStateByQuestionId((current) => {
-      const currentState = current[questionId] ?? {
-        selectedOptionId: null,
-        numericResponse: "",
-        matrixSelections: [],
-        markedForReview: false,
-      };
-      const nextState = updater(currentState);
-      queueAnswerWrite(questionId, nextState);
-      return {
-        ...current,
-        [questionId]: nextState,
-      };
-    });
-  }, [queueAnswerWrite]);
+    if (!recoveryApplied || authorityInterrupted || submitInFlight || (!devMockSessionActive && !runtimeOwnership.isCurrent())) return;
+    const current = recoveryUiRef.current.responseStateByQuestionId;
+    const nextState = updater(current[questionId] ?? displayResponse(undefined));
+    if (!queueAnswerWrite(questionId, nextState)) return;
+    recoveryUiRef.current = {...recoveryUiRef.current, responseStateByQuestionId: {...current, [questionId]: nextState}};
+    setResponseStateByQuestionId(previous => ({...previous, [questionId]: nextState}));
+  }, [queueAnswerWrite, recoveryApplied, authorityInterrupted, submitInFlight, devMockSessionActive, runtimeOwnership]);
+
+  const reconcilePendingAnswers = useCallback(async (): Promise<boolean> => {
+    // The entry read already supplied a validated immutable question binding.
+    const sentAt = performance.now();
+    const result = await runtimeOwnership.reconcileAnswers();
+    if (!runtimeOwnership.isCurrent() || result.generation !== ownership.generation ||
+        (result.status !== "started" && result.status !== "active" && result.status !== "expired")) {
+      throw new Error("Answer confirmation is unavailable. Pending changes are unresolved.");
+    }
+    if (result.status === "active" || result.status === "expired") {
+      if (!result.deadlineAt || !applyServerLifecycleAuthority({...result, deadlineAt: result.deadlineAt}, runtimeOwnership.requestStartedAt(result, sentAt))) throw new Error("Clock confirmation unavailable.");
+    } else runtimeClockRef.current.accept(result.serverTime, null, runtimeOwnership.requestStartedAt(result, sentAt), performance.now());
+    const local = readLocalSnapshot(captureRecovery(), sessionSnapshot, recoveryScopeHash, ownership.generation);
+    const merged = mergeAnswerRecovery(sessionSnapshot, result.recovery, local);
+    setResponseStateByQuestionId(merged.responses); setQuestionTimingById(merged.timings);
+    setHardModeLockedQuestionIds(merged.locked); replacePendingAnswerMap(merged.pending);
+    recordRejections(merged.rejected); lastIssuedClientTimestampRef.current = merged.highWater;
+    unresolvedRef.current.clear();
+    setSyncMessage(Object.keys(merged.rejected).length ? "Some local changes were not accepted. Review the rejected changes before submitting." : "Accepted answers confirmed by the server.");
+    return true;
+  }, [runtimeOwnership, ownership.generation, captureRecovery, sessionSnapshot, recoveryScopeHash, replacePendingAnswerMap, recordRejections, applyServerLifecycleAuthority]);
+
+  const confirmCurrentAuthority = useCallback((manual = false): Promise<boolean> => {
+    if (clockAttemptRef.current) return clockAttemptRef.current;
+    if (!navigator.onLine || document.visibilityState === "hidden" || !runtimeOwnership.isCurrent() ||
+        (!manual && clockAttemptStoppedRef.current)) return Promise.resolve(false);
+    clockPausedRef.current = true; setClockRecoveryRequired(true);
+    const promise = (async () => {
+      try {
+        if (manual) await runtimeOwnership.retryTransport();
+        await reconcilePendingAnswers();
+        runtimeClockRef.current.timestamp(lastIssuedClientTimestampRef.current, performance.now());
+        if (runtimeOwnership.snapshot().reason === "transport_paused") throw new Error("Renewal needs confirmation. Use Retry.");
+        clockPausedRef.current = false; setClockRecoveryRequired(false);
+        clockAttemptStoppedRef.current = false; transportStoppedRef.current = false;
+        return true;
+      } catch (error) {
+        clockAttemptStoppedRef.current = true; setSyncState("error");
+        setSyncMessage(`Current authority confirmation unavailable. ${error instanceof Error ? error.message : "Use Retry."}`); return false;
+      } finally {clockAttemptRef.current = null;}
+    })();
+    clockAttemptRef.current = promise; return promise;
+  }, [runtimeOwnership, reconcilePendingAnswers]);
+
+  useEffect(() => {
+    if (!instructionConfirmed || isSubmitted || authorityInterrupted || devMockSessionActive) return;
+    const pause = () => {
+      clockPausedRef.current = true; setClockRecoveryRequired(true);
+      if (document.visibilityState !== "hidden" && navigator.onLine) void confirmCurrentAuthority();
+    };
+    document.addEventListener("visibilitychange", pause);
+    window.addEventListener("focus", pause);
+    if (clockRecoveryRequired || ownership.reason === "transport_paused") pause();
+    return () => {document.removeEventListener("visibilitychange", pause); window.removeEventListener("focus", pause);};
+  }, [instructionConfirmed, isSubmitted, authorityInterrupted, devMockSessionActive, confirmCurrentAuthority, clockRecoveryRequired, ownership.reason]);
 
   const executeAnswerFlush = useCallback(async (reason: ExamAnswerFlushReason): Promise<boolean> => {
-    if (
-      !entryValidation.allowed ||
-      !instructionConfirmed ||
-      authorityInterrupted ||
-      isSubmitted && reason !== "submission"
-    ) {
-      return false;
-    }
-    if (serverEntryValidationStatus !== "valid") {
-      return false;
-    }
-    if (!navigator.onLine) {
-      setSyncState("offline");
-      setSyncMessage(`Offline. ${Object.keys(pendingAnswerMapRef.current).length} answer update(s) retained locally.`);
-      return false;
-    }
-
-    const shouldDrainCompletely = reason === "reconnect" || reason === "submission";
-    let acknowledgedWriteCount = 0;
-
+    if (!entryValidation.allowed || !instructionConfirmed || !recoveryApplied || authorityInterrupted ||
+        sessionLifecycleState === "expired" || submissionUncertain ||
+        isSubmitted && reason !== "submission" || serverEntryValidationStatus !== "valid") return false;
+    if (document.visibilityState === "hidden") return false;
+    if ((transportStoppedRef.current || clockPausedRef.current) && reason !== "reconnect" && reason !== "submission") return false;
+    if ((reason === "reconnect" || reason === "submission") && (transportStoppedRef.current || clockPausedRef.current) &&
+        !await confirmCurrentAuthority(reason === "reconnect")) return false;
+    if (!navigator.onLine) {setSyncState("offline"); setSyncMessage("Offline. Pending changes are retained in this browser."); return false;}
+    const complete = reason === "reconnect" || reason === "submission";
+    let dispatchedChunks = 0;
     try {
+      if (unresolvedRef.current.size) await reconcilePendingAnswers();
       while (true) {
-        const pendingWrites = Object.values(pendingAnswerMapRef.current)
-          .sort((left, right) => left.clientRevision - right.clientRevision);
-        if (pendingWrites.length === 0) {
-          if (reason === "heartbeat") {
-            setLastHeartbeatAtIso(new Date().toISOString());
-          }
+        if (!runtimeOwnership.isCurrent()) throw new Error("Current ownership is required to save answers.");
+        const pending = Object.values(pendingAnswerMapRef.current).sort((a, b) => a.clientRevision - b.clientRevision);
+        if (!pending.length) {
           setSyncState("idle");
-          setSyncMessage(
-            acknowledgedWriteCount > 0 ?
-              `Synced ${acknowledgedWriteCount} answer update(s).` :
-              "All answer updates are synced.",
-          );
-          return true;
+          return !unresolvedRef.current.size && (!Object.keys(rejectedAnswerMapRef.current).length || rejectionsAcknowledgedRef.current);
         }
-
-        const nowMs = Date.now();
-        const millisecondsSinceLastWrite = Math.max(0, nowMs - lastAnswerWriteAtMsRef.current);
-        if (millisecondsSinceLastWrite < ANSWER_BATCH_INTERVAL_MS && !shouldDrainCompletely) {
-          return false;
+        // A fixed 500-question queue drains in at most 50 chunks. Continuous new
+        // edits cannot turn one reconnect into an unlimited dispatch loop.
+        if (dispatchedChunks >= 50) throw new Error("Newer changes remain pending. Confirm them before submitting.");
+        const nowMs = performance.now(), millisecondsSinceLastWrite = Math.max(0, Math.floor(nowMs - lastAnswerWriteAtMsRef.current));
+        if (millisecondsSinceLastWrite < ANSWER_BATCH_INTERVAL_MS && !complete) return false;
+        if (!Number.isSafeInteger(batchSequenceRef.current) || batchSequenceRef.current >= Number.MAX_SAFE_INTEGER - 1) {
+          throw new Error("Answer sequence is exhausted. Recover before saving.");
         }
-
-        const answersToPersist = pendingWrites.slice(0, ANSWER_BATCH_MAX_SIZE);
-        const batchSequence = batchSequenceRef.current;
-        batchSequenceRef.current += 1;
-        const batchId = `${effectiveSessionId}:${recoveryOwnerId}:${batchSequence}`;
-        const endpointPath = `/exam/session/${encodeURIComponent(effectiveSessionId)}/answers`;
+        validatePendingAnswers(pending, sessionSnapshot);
+        const batchSequence = batchSequenceRef.current++;
         const requestBody: ExamAnswerBatchRequestBody = {
           adaptivePhaseSnapshot: adaptivePhaseSnapshotRef.current ?? undefined,
-          answers: answersToPersist,
-          batchId,
-          batchSequence,
-          flushReason: reason,
-          instituteId,
-          millisecondsSinceLastWrite,
-          runId,
-          yearId,
+          answers: structuredClone(pending.slice(0, ANSWER_BATCH_MAX_SIZE)),
+          batchId: `${effectiveSessionId}:${ownership.generation}:${crypto.randomUUID()}`,
+          batchSequence, flushReason: reason, instituteId, millisecondsSinceLastWrite, runId, yearId,
         };
-
-        setSyncState("syncing");
-        setSyncMessage(`Syncing ${answersToPersist.length} answer update(s)...`);
-        const responseBody = await examApiClient.post<ExamAnswerBatchResult, ExamAnswerBatchRequestBody>(
-          endpointPath,
-          {body: requestBody, handledFailureIsReady: true},
-        );
-        if (responseBody.batchId !== batchId || responseBody.batchSequence !== batchSequence) {
-          throw new Error("Answer sync acknowledgement did not match the active batch.");
-        }
-
-        const sentRevisionKeys = new Set(
-          answersToPersist.map((answer) => `${answer.questionId}:${answer.clientRevision}`),
-        );
-        const acknowledgedRevisionKeys = new Set(
-          responseBody.acknowledgements.map(
-            (acknowledgement) => `${acknowledgement.questionId}:${acknowledgement.clientRevision}`,
-          ),
-        );
-        if (
-          acknowledgedRevisionKeys.size !== sentRevisionKeys.size ||
-          Array.from(sentRevisionKeys).some((key) => !acknowledgedRevisionKeys.has(key))
-        ) {
-          throw new Error("Answer sync response omitted one or more write acknowledgements.");
-        }
-
-        if (responseBody.lockedQuestionIds.length > 0) {
-          setHardModeLockedQuestionIds((current) => {
-            const next = new Set(current);
-            responseBody.lockedQuestionIds.forEach((questionId) => next.add(questionId));
-            return next;
-          });
-        }
-
-        const nextPendingMap = {...pendingAnswerMapRef.current};
-        responseBody.acknowledgements.forEach((acknowledgement) => {
-          const currentWrite = nextPendingMap[acknowledgement.questionId];
-          if (currentWrite?.clientRevision === acknowledgement.clientRevision) {
-            delete nextPendingMap[acknowledgement.questionId];
+        setSyncState("syncing"); setSyncMessage(`Saving ${requestBody.answers.length} answer update(s)...`);
+        // Until the exact receipt is validated these intents are uncertain, including response loss.
+        requestBody.answers.forEach(w => unresolvedRef.current.add(w.questionId));
+        dispatchedChunks++;
+        const raw = await examApiClient.post<unknown, ExamAnswerBatchRequestBody>(
+          `/exam/session/${encodeURIComponent(effectiveSessionId)}/answers`, {body: requestBody, handledFailureIsReady: true});
+        const receipt = readAnswerAcknowledgements(raw, requestBody);
+        if (!runtimeOwnership.isCurrent()) throw new Error("Answer receipt arrived after ownership ended.");
+        const next = {...pendingAnswerMapRef.current};
+        for (const ack of receipt.acknowledgements) {
+          if (ack.disposition === "persisted") {
+            // An older receipt cannot remove a replacement edit.
+            if (next[ack.questionId]?.clientRevision === ack.clientRevision) delete next[ack.questionId];
+            unresolvedRef.current.delete(ack.questionId);
           }
-        });
-        replacePendingAnswerMap(nextPendingMap);
-        acknowledgedWriteCount += responseBody.acknowledgements.length;
-        recordLastAnswerWriteAt(nowMs);
-
-        const remainingPending = Object.keys(nextPendingMap).length;
-        setSyncMessage(
-          remainingPending > 0 ?
-            `Synced ${acknowledgedWriteCount} answer update(s). Pending: ${remainingPending}` :
-            `Synced ${acknowledgedWriteCount} answer update(s).`,
-        );
-        if (!shouldDrainCompletely) {
-          setSyncState("idle");
-          return true;
         }
+        replacePendingAnswerMap(next); recordLastAnswerWriteAt(nowMs);
+        if (receipt.lockedQuestionIds.length) setHardModeLockedQuestionIds(current => new Set([...current, ...receipt.lockedQuestionIds]));
+        if (receipt.acknowledgements.some(ack => ack.disposition !== "persisted")) await reconcilePendingAnswers();
+        setSyncMessage(Object.keys(rejectedAnswerMapRef.current).length ? "Some changes were rejected; the displayed answers were restored from the server." : "Saved answer updates were accepted by the server.");
+        setSyncState("idle");
+        if (!complete) return true;
       }
     } catch (error) {
+      transportStoppedRef.current = true;
       setSyncState(navigator.onLine ? "error" : "offline");
-      if (error instanceof ApiClientError) {
-        setSyncMessage(`Answer sync failed with status ${error.status}`);
-      } else {
-        setSyncMessage(error instanceof Error ? error.message : "Answer sync failed.");
-      }
+      setSyncMessage(`Answer confirmation unavailable. ${error instanceof Error ? error.message : "Pending changes remain unresolved."}`);
       return false;
     }
-  }, [
-    examApiClient,
-    authorityInterrupted,
-    effectiveSessionId,
-    entryValidation.allowed,
-    instituteId,
-    instructionConfirmed,
-    isSubmitted,
-    recordLastAnswerWriteAt,
-    recoveryOwnerId,
-    replacePendingAnswerMap,
-    runId,
-    serverEntryValidationStatus,
-    yearId,
-  ]);
+  }, [entryValidation.allowed, instructionConfirmed, recoveryApplied, authorityInterrupted, isSubmitted, serverEntryValidationStatus,
+    confirmCurrentAuthority, reconcilePendingAnswers, runtimeOwnership, effectiveSessionId, ownership.generation, instituteId, runId, yearId, examApiClient, replacePendingAnswerMap, recordLastAnswerWriteAt, sessionSnapshot, sessionLifecycleState, submissionUncertain]);
 
   const flushAnswerBatch = useCallback(async (reason: ExamAnswerFlushReason): Promise<boolean> => {
-    while (flushInFlightRef.current) {
+    if (flushInFlightRef.current) {
+      // Timers coalesce. Only a caller that must drain waits for the active flush.
+      if (reason !== "submission" && reason !== "reconnect") return flushInFlightRef.current;
       await flushInFlightRef.current;
+      if (flushInFlightRef.current) return flushInFlightRef.current;
     }
-    const flushPromise = executeAnswerFlush(reason);
-    flushInFlightRef.current = flushPromise;
-    try {
-      return await flushPromise;
-    } finally {
-      if (flushInFlightRef.current === flushPromise) {
-        flushInFlightRef.current = null;
-      }
-    }
+    const promise = executeAnswerFlush(reason); flushInFlightRef.current = promise;
+    try {return await promise;} finally {if (flushInFlightRef.current === promise) flushInFlightRef.current = null;}
   }, [executeAnswerFlush]);
+
+  const recoveryDrainStartedRef = useRef(false);
+  useEffect(() => {
+    if (!recoveryApplied || !instructionConfirmed || authorityInterrupted || isSubmitted || sessionLifecycleState === "expired" || recoveryDrainStartedRef.current) return;
+    recoveryDrainStartedRef.current = true;
+    if (Object.keys(pendingAnswerMapRef.current).length) void flushAnswerBatch("reconnect");
+  }, [recoveryApplied, instructionConfirmed, authorityInterrupted, isSubmitted, sessionLifecycleState, flushAnswerBatch]);
 
   useEffect(() => {
     if (authorityInterrupted) return;
@@ -1899,94 +1750,73 @@ function ExamSessionPage() {
   }, [authorityInterrupted, flushAnswerBatch, instructionConfirmed, isSubmitted]);
 
   useEffect(() => {
-    if (!instructionConfirmed || !entryValidation.allowed || recoveryApplied || isSubmitted || authorityInterrupted) {
-      return;
-    }
-
+    if (!instructionConfirmed || !entryValidation.allowed || recoveryApplied || isSubmitted || authorityInterrupted) return;
+    if (devMockSessionActive) {setRecoveryApplied(true); return;}
+    if (!entryAuthority) return;
     let live = true;
-    void loadRecoverySnapshot(effectiveSessionId, recoveryOwnerId, ownership.generation, runtimeOwnership.isCurrent).then((snapshot) => {
+    void recoveryStorage.read().then(result => {
       if (!live || !runtimeOwnership.isCurrent()) return;
-      if (!snapshot) {
-        setRecoveryApplied(true);
-        return;
+      let local: SessionRecoverySnapshot | null = null;
+      if (result.state === "memory_only") {setDurability("memory_only"); setRecoveryNotice(result.reason);}
+      else if (result.value !== undefined) {
+        try {local = readLocalSnapshot(result.value, sessionSnapshot, recoveryScopeHash, ownership.generation);}
+        catch {
+          storageWritableRef.current = false; setUnsupportedRecovery(true); setDurability("memory_only");
+          setRecoveryNotice("Local recovery is corrupt, unsupported or belongs to another scope. Server answers were restored. Unacknowledged local edits were not adopted.");
+        }
+      } else setRecoveryNotice("Server answers restored. Pending edits without a completed local save may have been lost.");
+      const merged = mergeAnswerRecovery(sessionSnapshot, entryAuthority.recovery, local);
+      setResponseStateByQuestionId(merged.responses); setQuestionTimingById(merged.timings); setHardModeLockedQuestionIds(merged.locked);
+      if (local) {
+        setVisitedQuestionIds(new Set(local.visitedQuestionIds)); setSelectedQuestionId(local.selectedQuestionId);
+        nextClientRevisionRef.current = local.nextClientRevision; batchSequenceRef.current = local.batchSequence;
       }
-
-      setResponseStateByQuestionId(snapshot.responseStateByQuestionId);
-      setQuestionTimingById(snapshot.questionTimingById);
-      setVisitedQuestionIds(new Set(snapshot.visitedQuestionIds));
-      setHardModeLockedQuestionIds(new Set(snapshot.hardModeLockedQuestionIds));
-      setSelectedQuestionId(snapshot.selectedQuestionId);
-      replacePendingAnswerMap(snapshot.pendingAnswerMap);
-      recordLastAnswerWriteAt(snapshot.lastAnswerWriteAtMs);
-      nextClientRevisionRef.current = Math.max(1, snapshot.nextClientRevision);
-      lastIssuedClientTimestampRef.current = Math.max(0, snapshot.lastIssuedClientTimestamp);
-      batchSequenceRef.current = Math.max(1, snapshot.batchSequence);
-      setSyncCounter(snapshot.syncCounter);
-      setSyncMessage("Recovered session state from local IndexedDB snapshot.");
-      setSyncState(navigator.onLine ? "idle" : "offline");
+      replacePendingAnswerMap(merged.pending); recordRejections(merged.rejected);
+      lastIssuedClientTimestampRef.current = merged.highWater; unresolvedRef.current.clear();
       setRecoveryApplied(true);
     });
     return () => {live = false;};
-  }, [
-    authorityInterrupted,
-    ownership.generation,
-    runtimeOwnership,
-    effectiveSessionId,
-    entryValidation.allowed,
-    instructionConfirmed,
-    isSubmitted,
-    recordLastAnswerWriteAt,
-    recoveryApplied,
-    recoveryOwnerId,
-    replacePendingAnswerMap,
-  ]);
+  }, [instructionConfirmed, entryValidation.allowed, recoveryApplied, isSubmitted, authorityInterrupted, devMockSessionActive,
+    entryAuthority, recoveryStorage, runtimeOwnership, sessionSnapshot, recoveryScopeHash, ownership.generation, replacePendingAnswerMap, recordRejections]);
 
   useEffect(() => {
-    if (!instructionConfirmed || isSubmitted || !recoveryApplied || !recoveryOwnerId || authorityInterrupted) {
-      return;
-    }
+    if (!instructionConfirmed || isSubmitted || !recoveryApplied || authorityInterrupted || devMockSessionActive || !storageWritableRef.current) return;
+    let live = true;
+    try {
+      const snapshot = readLocalSnapshot(captureRecovery(), sessionSnapshot, recoveryScopeHash, ownership.generation);
+      setDurability(current => current === "memory_only" ? current : "saving");
+      void recoveryStorage.save(snapshot).then(result => {
+        if (!runtimeOwnership.isCurrent() || (result.state === "memory_only" && result.superseded)) return;
+        // A newer tick may retire this snapshot before slow storage settles.
+        // Only its success is obsolete; a real failure still applies to this
+        // current storage scope until a later transaction actually commits.
+        if (!live && result.state === "ok") return;
+        setDurability(result.state === "ok" ? "durable" : "memory_only");
+        if (result.state === "memory_only") setRecoveryNotice(result.reason);
+      });
+    } catch {setDurability("memory_only"); setRecoveryNotice("This local snapshot could not be saved safely. Pending edits may be lost on reload.");}
+    return () => {live = false;};
+  }, [instructionConfirmed, isSubmitted, recoveryApplied, authorityInterrupted, devMockSessionActive, captureRecovery, sessionSnapshot,
+    recoveryScopeHash, ownership.generation, recoveryStorage, runtimeOwnership, pendingAnswerMap, rejectedAnswerMap, responseStateByQuestionId,
+    questionTimingById, visitedQuestionIds, hardModeLockedQuestionIds, selectedQuestionId]);
 
-    const snapshot: SessionRecoverySnapshot = {
-      batchSequence: batchSequenceRef.current,
-      deadlineEpochMs,
-      hardModeLockedQuestionIds: Array.from(hardModeLockedQuestionIds),
-      lastAnswerWriteAtMs,
-      lastIssuedClientTimestamp: lastIssuedClientTimestampRef.current,
-      nextClientRevision: nextClientRevisionRef.current,
-      ownerId: recoveryOwnerId,
-      pendingAnswerMap,
-      questionTimingById,
-      remainingMs,
-      responseStateByQuestionId,
-      savedAtIso: new Date().toISOString(),
-      runtimeGeneration: ownership.generation,
-      schemaVersion: RECOVERY_SCHEMA_VERSION,
-      selectedQuestionId,
-      sessionId: effectiveSessionId,
-      syncCounter,
-      visitedQuestionIds: Array.from(visitedQuestionIds),
-    };
-    void saveRecoverySnapshot(snapshot, runtimeOwnership.isCurrent);
-  }, [
-    authorityInterrupted,
-    ownership.generation,
-    runtimeOwnership,
-    deadlineEpochMs,
-    effectiveSessionId,
-    hardModeLockedQuestionIds,
-    instructionConfirmed,
-    isSubmitted,
-    lastAnswerWriteAtMs,
-    pendingAnswerMap,
-    questionTimingById,
-    remainingMs,
-    recoveryApplied,
-    recoveryOwnerId,
-    responseStateByQuestionId,
-    selectedQuestionId,
-    syncCounter,
-    visitedQuestionIds,
-  ]);
+  const saveLocalRecovery = async (discard: boolean) => {
+    try {
+      if (discard) {
+        const result = await recoveryStorage.discard(recoveryOwnerId);
+        if (!runtimeOwnership.isCurrent()) return;
+        if (result.state !== "ok") {setRecoveryNotice(result.reason); return;}
+        storageWritableRef.current = true; setUnsupportedRecovery(false);
+        setRecoveryNotice("Unsupported local recovery discarded. Server answers and current in-memory changes remain.");
+      }
+      const snapshot = readLocalSnapshot(captureRecovery(), sessionSnapshot, recoveryScopeHash, ownership.generation);
+      setDurability(current => current === "memory_only" ? current : "saving"); const saved = await recoveryStorage.save(snapshot);
+      if (!runtimeOwnership.isCurrent()) return;
+      if (saved.state === "memory_only" && saved.superseded) return;
+      setDurability(saved.state === "ok" ? "durable" : "memory_only");
+      if (saved.state === "memory_only") setRecoveryNotice(saved.reason);
+    } catch {setDurability("memory_only"); setRecoveryNotice("Local recovery could not be saved. Complete any unfinished numeric response. Pending changes may be lost on reload.");}
+  };
 
   useEffect(() => {
     if (authorityInterrupted) return;
@@ -1995,8 +1825,9 @@ function ExamSessionPage() {
     }
 
     const handleOnline = () => {
-      setSyncMessage("Connection restored. Syncing pending responses.");
-      void flushAnswerBatch("reconnect");
+      setSyncMessage("Connection restored. Confirming current server authority before saving.");
+      clockPausedRef.current = true; setClockRecoveryRequired(true);
+      void confirmCurrentAuthority().then(confirmed => {if (confirmed) void flushAnswerBatch("reconnect");});
     };
     const handleOffline = () => {
       setSyncState("offline");
@@ -2009,7 +1840,7 @@ function ExamSessionPage() {
       window.removeEventListener("offline", handleOffline);
       window.removeEventListener("online", handleOnline);
     };
-  }, [authorityInterrupted, flushAnswerBatch, instructionConfirmed, isSubmitted]);
+  }, [authorityInterrupted, flushAnswerBatch, instructionConfirmed, isSubmitted, confirmCurrentAuthority]);
 
   useEffect(() => {
     if (!isSubmitted) {
@@ -2017,37 +1848,41 @@ function ExamSessionPage() {
     }
 
     setSessionLifecycleState("submitted");
-    void clearRecoverySnapshot(effectiveSessionId, recoveryOwnerId, ownership.generation, runtimeOwnership.isCurrent);
-  }, [effectiveSessionId, isSubmitted, recoveryOwnerId, ownership.generation, runtimeOwnership]);
+    void recoveryStorage.clear();
+  }, [isSubmitted, recoveryStorage]);
 
   const submitSession = useCallback(async (reason: SubmissionReason): Promise<void> => {
     if (!entryValidation.allowed || serverEntryValidationStatus !== "valid" || authorityInterrupted) {
       throw new Error("Missing valid Firebase exam identity for submission.");
     }
-
+    if (submitAttemptRunningRef.current) return;
+    submitAttemptRunningRef.current = true;
     setSubmitInFlight(true);
     setSubmitError(null);
 
     try {
-      const answeredPersisted = await flushAnswerBatch("submission");
+      if (!recoveryApplied) throw new Error("Wait for answer recovery before submission.");
+      const answeredPersisted = reason === "manual" && !submitIntentRef.current ? await flushAnswerBatch("submission") : true;
       if (reason === "manual" && !answeredPersisted) {
         throw new Error("Unable to flush pending answers before submission.");
       }
       if (
-        reason === "manual" &&
+        reason === "manual" && !submitIntentRef.current &&
         Object.keys(pendingAnswerMapRef.current).length > 0
       ) {
         throw new Error("Pending answers remain after the submission drain.");
       }
 
       const endpointPath = `/exam/session/${encodeURIComponent(effectiveSessionId)}/submit`;
-      const requestBody: ExamSubmitRequestBody = {
+      const requestBody: ExamSubmitRequestBody = submitIntentRef.current ?? {
         instituteId,
         runId,
         yearId,
         reason,
       };
 
+      submitIntentRef.current = requestBody;
+      setSubmissionUncertain(true);
       const responseBody = adaptExamSubmitResult(
         await examApiClient.post<unknown, ExamSubmitRequestBody>(
           endpointPath,
@@ -2056,6 +1891,7 @@ function ExamSessionPage() {
           },
         ),
       );
+      setSubmissionUncertain(false);
       setSubmissionResult(responseBody);
       setSubmissionReason(responseBody.submissionReason);
       setSubmittedAtIso(responseBody.submittedAt);
@@ -2067,10 +1903,14 @@ function ExamSessionPage() {
       setSyncMessage(responseBody.alreadySubmitted ? "Submission already finalized on server." : "Submission completed.");
     } catch (error) {
       if (error instanceof ApiClientError) {
-        throw new Error(`Submission failed with status ${error.status}`);
+        if ((error.details as {reason?: unknown} | undefined)?.reason === "session_terminated") {
+          setSessionLifecycleState("terminated"); setSubmissionUncertain(false);
+        }
+        throw new Error("Submission confirmation unavailable. Accepted answers and any existing receipt remain on the server. Retry confirmation or reload.");
       }
       throw error;
     } finally {
+      submitAttemptRunningRef.current = false;
       setSubmitInFlight(false);
     }
   }, [
@@ -2079,6 +1919,7 @@ function ExamSessionPage() {
     effectiveSessionId,
     entryValidation.allowed,
     flushAnswerBatch,
+    recoveryApplied,
     instituteId,
     replacePendingAnswerMap,
     runId,
@@ -2092,6 +1933,7 @@ function ExamSessionPage() {
       isSubmitted ||
       authorityInterrupted ||
       submitInFlight ||
+      !recoveryApplied ||
       expirySubmitAttemptedRef.current
     ) {
       return;
@@ -2102,7 +1944,7 @@ function ExamSessionPage() {
       .catch((error) => {
         setSubmitError(error instanceof Error ? error.message : "Auto-submit failed.");
       });
-  }, [authorityInterrupted, isSubmitted, sessionLifecycleState, submitInFlight, submitSession]);
+  }, [authorityInterrupted, isSubmitted, sessionLifecycleState, submitInFlight, recoveryApplied, submitSession]);
 
   const palette = useMemo<PaletteTile[]>(
     () =>
@@ -2176,10 +2018,10 @@ function ExamSessionPage() {
       );
       return false;
     }
-    recordLastAnswerWriteAt(Date.now() - ANSWER_BATCH_INTERVAL_MS);
+    recordLastAnswerWriteAt(performance.now() - ANSWER_BATCH_INTERVAL_MS);
     replacePendingAnswerMap({});
     nextClientRevisionRef.current = 1;
-    lastIssuedClientTimestampRef.current = 0;
+    lastIssuedClientTimestampRef.current = entryAuthority?.recovery.maxAcceptedClientTimestamp ?? 0;
     batchSequenceRef.current = 1;
     setSyncState("idle");
     setSyncMessage("No pending answer updates.");
@@ -2192,6 +2034,7 @@ function ExamSessionPage() {
   }, [
     authorityInterrupted,
     cameraRequired,
+    entryAuthority,
     recordLastAnswerWriteAt,
     replacePendingAnswerMap,
     requestServerActivation,
@@ -2206,7 +2049,7 @@ function ExamSessionPage() {
         return;
       }
 
-      if (!devMockSessionActive && Date.now() >= sessionSchedule.sessionEndsAtMs) {
+      if (!devMockSessionActive && runtimeClockRef.current.serverNow(performance.now()) >= sessionSchedule.sessionEndsAtMs) {
         setEntryStage("entry_closed");
         return;
       }
@@ -2442,14 +2285,14 @@ function ExamSessionPage() {
     }
 
     const preExamClockInterval = window.setInterval(() => {
-      setNowEpochMs(Date.now());
+      try {setNowEpochMs(runtimeClockRef.current.serverNow(performance.now()));} catch {if (devMockSessionActive) setNowEpochMs(Date.now());}
     }, TICK_INTERVAL_MS);
 
     return () => window.clearInterval(preExamClockInterval);
-  }, [authorityInterrupted, instructionConfirmed, isSubmitted]);
+  }, [authorityInterrupted, instructionConfirmed, isSubmitted, devMockSessionActive]);
 
   useEffect(() => {
-    if (instructionConfirmed || isSubmitted || authorityInterrupted) {
+    if (serverEntryValidationStatus !== "valid" || instructionConfirmed || isSubmitted || sessionLifecycleState === "terminated" || authorityInterrupted) {
       return;
     }
 
@@ -2463,7 +2306,7 @@ function ExamSessionPage() {
       return;
     }
 
-    if (!devMockSessionActive && nowEpochMs >= sessionSchedule.sessionEndsAtMs) {
+    if (!devMockSessionActive && runtimeClockRef.current.serverNow(performance.now()) >= sessionSchedule.sessionEndsAtMs) {
       setEntryStage("entry_closed");
       return;
     }
@@ -2492,6 +2335,8 @@ function ExamSessionPage() {
     instructionConfirmed,
     isSubmitted,
     nowEpochMs,
+    serverEntryValidationStatus,
+    sessionLifecycleState,
     sessionSchedule.earlyEntryOpensAtMs,
     sessionSchedule.sessionEndsAtMs,
     sessionSchedule.sessionStartsAtMs,
@@ -2657,7 +2502,7 @@ function ExamSessionPage() {
     selectedQuestionMinTimeRemainingSec > 0;
 
   const sessionLocked = sessionLifecycleState !== "active";
-  const localQuestionPaused = (cameraRequired && cameraCheckState !== "passed") || !!integrityBlockingReason;
+  const localQuestionPaused = clockRecoveryRequired || ownership.reason === "transport_paused" || (cameraRequired && cameraCheckState !== "passed") || !!integrityBlockingReason;
   const saveDisabled = localQuestionPaused || selectedQuestionRevisitLocked || saveBlockedByTiming || slowdownActive || isSubmitted || sessionLocked;
   const selectedQuestionTimingStatus = slowdownActive
     ? `Resume in ${slowdownSecondsRemaining}s`
@@ -2699,7 +2544,7 @@ function ExamSessionPage() {
       hint: isControlledMode ? "Guided pacing target" : "Reference pacing",
     },
   ];
-  const syncSummaryLabel = syncState === "offline"
+  const syncSummaryLabel = !recoveryApplied ? "Restoring answers" : syncState === "error" && pendingAnswers.length > 0 ? "Confirmation needed" : Object.keys(rejectedAnswerMap).length > 0 ? "Rejected changes" : syncState === "offline"
     ? `Offline · ${pendingAnswers.length} pending`
     : syncState === "syncing"
       ? `Syncing · ${pendingAnswers.length} pending`
@@ -2856,17 +2701,24 @@ function ExamSessionPage() {
     </> : <p>Camera readiness is off. No camera permission is requested.</p>}
     <p>Automated face matching and gaze tracking are unavailable. No identity photo is fetched.</p>
   </section>;
-  const proctoringStatus = <section aria-label="Client observation reporting" aria-live="polite">
+  const transportRetryWaitMs = runtimeOwnership.retryWaitMs();
+  const clockRecoveryControls = !isSubmitted && !authorityInterrupted && clockRecoveryRequired ?
+    <section className="exam-instruction-card" aria-label="Clock and connection recovery">
+      <p>{syncMessage} Confirm current clock and ownership before editing. The exam deadline continues.</p>
+      {transportRetryWaitMs > 0 ? <p>Retry available in at least {Math.ceil(transportRetryWaitMs / 1000)} seconds.</p> : null}
+      <button type="button" disabled={transportRetryWaitMs > 0 || !navigator.onLine} onClick={() => void confirmCurrentAuthority(true)}>Retry clock and connection</button>
+    </section> : null;
+  const proctoringStatus = <>{clockRecoveryControls}<section aria-label="Client observation reporting" aria-live="polite">
     {integrityBlockingReason ? <p>{integrityBlockingReason} <button type="button" onClick={() => void requestExamFullscreen()}>Re-enter Fullscreen</button></p> : null}
     <p>{reportingEnabled ? `Client observations: ${reporting.status}. ${reporting.saved} acknowledged, ${reporting.pending} not yet saved, ${reporting.lost} lost or discarded.` : "Client observation reporting is off."}</p>
     <p>Observations are incomplete browser reports, never proof of misconduct. Unacknowledged observations may be lost on exit or submission. Answer saving and submission do not wait for reporting.</p>
     {reporting.status === "unavailable" ? <button type="button" onClick={() => integrityQueueRef.current?.retry()}>Retry reporting</button> : null}
-  </section>;
+  </section></>;
   if (ownershipInterrupted) {
     return <main className="exam-access-shell" aria-live="polite"><section className="exam-access-card">
       {proctoringStatus}
       <h1>Exam runtime paused</h1>
-      <p>Ownership or sign-in changed. Pending answers are retained. Another runtime may be active; no remote browser has been closed.</p>
+      <p>{ownership.reason === "refresh_pending" ? "Checking current sign-in. Questions and camera are paused; pending answers are retained." : ownership.reason === "entry_unavailable" ? "Entry confirmation is temporarily unavailable. Reload to recover the retained entry command, or relaunch from Student My Tests." : "Ownership or sign-in changed. Pending answers are retained. Another runtime may be active; no remote browser has been closed."}</p>
       <p>Reload to request recovery, or relaunch from Student My Tests after release or lease expiry.</p>
       <StudentPortalReturnButton />
     </section></main>;
@@ -2891,6 +2743,75 @@ function ExamSessionPage() {
   if (serverEntryValidationStatus === "invalid") {
     return <ExamAccessRedirect reason="server_validation_failed" />;
   }
+
+  if (sessionLifecycleState === "terminated") {
+    return (
+      <main className="exam-submitted-shell" aria-live="polite">
+        {proctoringStatus}
+        <section className="exam-submitted-card">
+          <p className="exam-access-eyebrow">Session Terminated</p>
+          <h1>Session Terminated</h1>
+          <p>
+            Reason:
+            {" "}
+            <strong>{"The server closed this session without a submission receipt."}</strong>
+          </p>
+          <StudentPortalReturnButton />
+        </section>
+      </main>
+    );
+  }
+
+  if (isSubmitted) {
+    return (
+      <main className="exam-submitted-shell" aria-live="polite">
+        {proctoringStatus}
+        <section className="exam-submitted-card">
+          <p className="exam-access-eyebrow">Session Closed</p>
+          <h1>Exam Submitted</h1>
+          <p>
+            Reason:
+            {" "}
+            <strong>{submissionReason === "expiry" ? "Timer expiry auto-submit" : "Manual submit"}</strong>
+          </p>
+          <p>
+            Submitted At:
+            {" "}
+            <strong>{submittedAtIso ?? "N/A"}</strong>
+          </p>
+          <p>Only answers accepted by the server were submitted. Local changes received after the deadline were not accepted. Results in Student may still be processing.</p>
+          {submissionResult ? (
+            <div className="exam-submission-metrics" aria-label="Authoritative submission metrics">
+              <p>Raw Score: <strong>{submissionResult.rawScorePercent.toFixed(2)}%</strong></p>
+              <p>Accuracy: <strong>{submissionResult.accuracyPercent.toFixed(2)}%</strong></p>
+              <p>Discipline Index: <strong>{submissionResult.disciplineIndex.toFixed(2)}%</strong></p>
+              <p>Risk State: <strong>{submissionResult.riskState}</strong></p>
+              <p>Phase Adherence: <strong>{submissionResult.phaseAdherencePercent.toFixed(2)}%</strong></p>
+              <p>Guess Rate: <strong>{submissionResult.guessRatePercent.toFixed(2)}%</strong></p>
+              <p>Min-Time Violations: <strong>{submissionResult.minTimeViolationPercent.toFixed(2)}%</strong></p>
+              <p>Max-Time Violations: <strong>{submissionResult.maxTimeViolationPercent.toFixed(2)}%</strong></p>
+              <p>
+                Server Disposition:
+                {" "}
+                <strong>{submissionResult.alreadySubmitted ? "Already finalized" : "Finalized now"}</strong>
+              </p>
+            </div>
+          ) : null}
+          <StudentPortalReturnButton />
+        </section>
+      </main>
+    );
+  }
+  if (sessionLifecycleState === "expired" || submissionUncertain) return <main className="exam-submitted-shell" aria-live="polite"><section className="exam-submitted-card">
+    <h1>{sessionLifecycleState === "expired" ? "Exam time expired" : "Submission confirmation"}</h1>
+    <p>Only server-accepted answers can be finalized. Pending local changes received after the deadline are not accepted. They are retained until a canonical receipt is confirmed.</p>
+    <p role="status">{submitInFlight ? "Confirming submission with the server…" : "Submission confirmation unavailable. This does not establish whether submission committed."}</p>
+    {submitError ? <p role="alert">{submitError}</p> : null}
+    <button type="button" disabled={submitInFlight || !recoveryApplied || transportRetryWaitMs > 0 || !navigator.onLine} onClick={() => void submitSession(submitIntentRef.current?.reason ?? "expiry").catch(error => setSubmitError(error instanceof Error ? error.message : "Confirmation unavailable."))}>Retry submission confirmation</button>
+    {clockRecoveryControls}<StudentPortalReturnButton />
+  </section></main>;
+
+  if (instructionConfirmed && !recoveryApplied && !isSubmitted) return <main className="exam-instruction-shell"><p role="status">Restoring accepted answers and checking local recovery…</p></main>;
 
   if (entryStage === "entry_not_open") {
     return (
@@ -3299,7 +3220,7 @@ function ExamSessionPage() {
       const nextStreak = rushedAttemptStreak + 1;
       setRushedAttemptStreak(nextStreak);
       if (isControlledMode && nextStreak >= MAX_RUSHED_SAVE_BEFORE_SLOWDOWN) {
-        setSlowdownUntilMs(Date.now() + sessionSnapshot.timingProfile.controlledSlowdownSeconds * 1000);
+        setSlowdownUntilMs(nowEpochMs + sessionSnapshot.timingProfile.controlledSlowdownSeconds * 1000);
         setRushedAttemptStreak(0);
       }
       return;
@@ -3430,69 +3351,12 @@ function ExamSessionPage() {
     });
   };
 
-  if (sessionLifecycleState === "terminated") {
-    return (
-      <main className="exam-submitted-shell" aria-live="polite">
-        {proctoringStatus}
-        <section className="exam-submitted-card">
-          <p className="exam-access-eyebrow">Session Terminated</p>
-          <h1>Submission Could Not Be Finalized</h1>
-          <p>
-            Reason:
-            {" "}
-            <strong>{submitError ?? "Auto-submit failed after expiry."}</strong>
-          </p>
-          <StudentPortalReturnButton />
-        </section>
-      </main>
-    );
-  }
-
-  if (isSubmitted) {
-    return (
-      <main className="exam-submitted-shell" aria-live="polite">
-        {proctoringStatus}
-        <section className="exam-submitted-card">
-          <p className="exam-access-eyebrow">Session Closed</p>
-          <h1>Exam Submitted</h1>
-          <p>
-            Reason:
-            {" "}
-            <strong>{submissionReason === "expiry" ? "Timer expiry auto-submit" : "Manual submit"}</strong>
-          </p>
-          <p>
-            Submitted At:
-            {" "}
-            <strong>{submittedAtIso ?? "N/A"}</strong>
-          </p>
-          {submissionResult ? (
-            <div className="exam-submission-metrics" aria-label="Authoritative submission metrics">
-              <p>Raw Score: <strong>{submissionResult.rawScorePercent.toFixed(2)}%</strong></p>
-              <p>Accuracy: <strong>{submissionResult.accuracyPercent.toFixed(2)}%</strong></p>
-              <p>Discipline Index: <strong>{submissionResult.disciplineIndex.toFixed(2)}%</strong></p>
-              <p>Risk State: <strong>{submissionResult.riskState}</strong></p>
-              <p>Phase Adherence: <strong>{submissionResult.phaseAdherencePercent.toFixed(2)}%</strong></p>
-              <p>Guess Rate: <strong>{submissionResult.guessRatePercent.toFixed(2)}%</strong></p>
-              <p>Min-Time Violations: <strong>{submissionResult.minTimeViolationPercent.toFixed(2)}%</strong></p>
-              <p>Max-Time Violations: <strong>{submissionResult.maxTimeViolationPercent.toFixed(2)}%</strong></p>
-              <p>
-                Server Disposition:
-                {" "}
-                <strong>{submissionResult.alreadySubmitted ? "Already finalized" : "Finalized now"}</strong>
-              </p>
-            </div>
-          ) : null}
-          <StudentPortalReturnButton />
-        </section>
-      </main>
-    );
-  }
 
   return (
     <main className={hardModeMinimalUI ? "exam-runner-shell exam-runner-shell-hard-mode" : "exam-runner-shell"}>
       {proctoringStatus}
       {cameraRequired ? cameraPanel : null}
-      {localQuestionPaused ? <section role="status"><h2>Question interaction paused</h2><p>Restore required local camera readiness or fullscreen. Pending answers continue syncing. Submission remains available.</p>
+      {localQuestionPaused ? <section role="status"><h2>Question interaction paused</h2><p>{clockRecoveryRequired ? "Confirm current server clock and ownership before editing. The exam deadline continues." : "Restore required local camera readiness or fullscreen."} Pending answers continue syncing. Submission remains available.</p>
       </section> : null}
         {!devMockSessionActive && runtimeOwnership.isCurrent() ? <button type="button" className="exam-secondary-button" onClick={signOutOfExam}>Sign out of Exam</button> : null}
       <div className="exam-top-bar">
@@ -3649,12 +3513,10 @@ function ExamSessionPage() {
         </section>
       ) : null}
 
-      {(sessionLifecycleState === "expired" || submitInFlight) ? (
+      {submitInFlight ? (
         <section className="exam-enforcement-warning" aria-label="Submission finalization status">
           <p>
-            {sessionLifecycleState === "expired"
-              ? "Timer expired. Auto-submit is being finalized with the backend submission endpoint."
-              : "Submission in progress. Do not close this tab until confirmation is displayed."}
+            Submission in progress. Do not close this tab until confirmation is displayed.
           </p>
         </section>
       ) : null}
@@ -3999,6 +3861,19 @@ function ExamSessionPage() {
         </section>
       </div>
 
+      {!isSubmitted ? <section className="exam-instruction-card" aria-label="Answer recovery status">
+        <p role="status">{syncMessage}</p>
+        <p>Local recovery: {durability === "durable" ? "Saved on this device" : durability === "saving" ? "Saving on this device" : "Memory only — pending edits may be lost on reload"}.</p>
+        {recoveryNotice ? <p>{recoveryNotice}</p> : null}
+        <button type="button" onClick={() => void flushAnswerBatch("reconnect")}>Confirm pending answers</button>
+        {durability === "memory_only" ? <button type="button" onClick={() => void saveLocalRecovery(unsupportedRecovery)}>{unsupportedRecovery ? "Discard unsupported local recovery" : "Retry local save"}</button> : null}
+        {Object.entries(rejectedAnswerMap).length ? <>
+          <p>The following local changes were not accepted and will not be submitted. Newer pending changes are shown separately by the save status.</p>
+          <ul>{Object.entries(rejectedAnswerMap).map(([id, rejected]) => <li key={id}>Question {sessionSnapshot.questions.find(q => q.id === id)?.number}: {rejected.reason}. Rejected response: {JSON.stringify(rejected.write.response)}</li>)}</ul>
+          <label><input type="checkbox" checked={rejectionsAcknowledged} onChange={event => {rejectionsAcknowledgedRef.current = event.target.checked; setRejectionsAcknowledged(event.target.checked);}} />I understand these rejected changes will not be submitted.</label>
+        </> : null}
+      </section> : null}
+
       {submitDialogOpen ? (
         <div className="exam-submit-dialog-overlay" role="presentation" onClick={() => setSubmitDialogOpen(false)}>
           <section
@@ -4080,7 +3955,8 @@ function ExamSessionPage() {
                 type="button"
                 className="exam-submit-button"
                 disabled={
-                  submitInFlight ||
+                  submitInFlight || !recoveryApplied ||
+                  (Object.keys(rejectedAnswerMap).length > 0 && !rejectionsAcknowledged) ||
                   (unansweredCount > 0 && !submitWarningAcknowledged) ||
                   (requiresEarlySubmitOverride && !earlySubmitOverrideAccepted)
                 }

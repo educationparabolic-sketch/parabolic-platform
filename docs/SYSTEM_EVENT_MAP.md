@@ -1,5 +1,30 @@
 # SYSTEM EVENT MAP
 
+BWM-046 closeout: read-only reconciliation and summary polling add no domain
+event, trigger, schedule or analytics writer. A canonical result closes the local
+runtime, and queued renewal completion cannot reopen it. Local cleanup replaces
+answer/UI payloads with a public metadata close fence; it is not a server event
+or success receipt. Existing pipeline processing/available markers and metrics
+idempotency remain the only summary authorities. Permanent older/duplicate
+callback checks preserve a newer result in both delivery orders. Substep 8
+records passing aggregate/approved compatible public proof, restored staging
+origins and complete owned cleanup; no trigger or schedule was deployed.
+
+BWM-046 substep 6: timeout/lost submit response → confirmation unavailable →
+existing EXM-01 canonical read → stored receipt/termination or exact EXM-04 replay.
+Reload probes terminal ownership before rotating nonterminal recovery. Expiry
+retains/explains late local edits; only canonical confirmation clears recovery.
+Student processing/unknown → at most six visible existing-summary reads with
+2-second minimum → manual refresh. Existing newest-session marker and analytics
+idempotency remain authoritative; no new event, failed marker or writer.
+
+
+BWM-046 substep 3 adds no domain event, trigger, schedule or analytics producer.
+EXM-01 reconciliation is read-only and cannot enqueue submission or mutate
+processing markers. Existing entry expiry retains its lifecycle owner; stored
+submission replay shares the canonical projection without calling finalization.
+Current Student readiness reads only existing newest-session summary markers.
+
 BWM-043 substep 5 adds no event, trigger, schedule or summary producer. It reads
 the existing BWM-024 eventual own result authority and never treats partial
 propagation as a released solution. Archived history is summary-only; cursor and

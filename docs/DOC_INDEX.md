@@ -26,6 +26,9 @@ The documentation system is divided into the following categories:
 | File | Purpose |
 |-----|------|
 |BACKEND_WIRING_MASTER_EXECUTION_PLAN.md|Authoritative resumable plan for wiring all four portal frontends to backend APIs, closing security/test/deployment gaps, and progressing from the recorded checkpoint to production readiness|
+|EXAM_RESILIENCE_CONTRACT.md|Normative server/browser resilience and reconciliation boundaries for BWM-046|
+|EXAM_RESILIENCE_ACCEPTANCE_MATRIX.md|Permanent real-service, HTTP and browser acceptance owners and fault/cleanup limits|
+|EXAM_RESILIENCE_PREVIEW_REVIEW.md|Approved staging scope, preflight narrowing and separately approved dashboard index; qualification evidence remains in execution controller|
 
 For backend integration and deployment work, read this controller first. It takes precedence over historical UI-completion state in `PORTAL_IMPLEMENTATION_CONTROLLER.md` and `PORTAL_PROGRESS_STATE.md` while the backend-wiring program is active.
 

@@ -326,8 +326,9 @@ test("aligned frontend and Functions DTOs have one shared source", async () => {
 
   assert.deepEqual(
     sharedSource.match(/^import\b.*$/gm),
-    ['import type {ExamProctoringPolicyV1, ExamProctoringRequirementsV1} from "./examProctoring.js";'],
-    "shared DTOs may reference only the portable proctoring declaration; no runtime or platform imports",
+    ['import type {ExamProctoringPolicyV1, ExamProctoringRequirementsV1} from "./examProctoring.js";',
+      'import type {ExamAnswerRecoveryV1} from "./examResilience.js";'],
+    "shared DTOs may reference only the exact portable declarations; no runtime or platform imports",
   );
 
   for (const family of dtoFamilies) {

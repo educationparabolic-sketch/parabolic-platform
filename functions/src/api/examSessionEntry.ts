@@ -2,6 +2,7 @@ import {assertUniqueCommandJson, parseRuntimeCommand, runtimeHeaders} from "../s
 import type {ExamRuntimeEntryRequestV2} from "../../../shared/contracts/examRuntimeOwnership";
 import * as functions from "firebase-functions";
 import {DecodedIdToken} from "firebase-admin/auth";
+import {StudentProfileValidationError} from "../types/studentProfile";
 import {sendErrorResponse} from "../services/apiResponse";
 import {sessionService, SessionStartValidationError} from "../services/session";
 import {verifyCurrentAuthorityIdToken} from "../services/instituteAuthorityEnforcement";
@@ -12,11 +13,12 @@ import {
   setRequestData,
 } from "../middleware/framework";
 import {MiddlewareRequest} from "../types/middleware";
-import {createAuthenticationMiddleware} from "../middleware/auth";
+import {createAuthenticationMiddleware, getBearerToken} from "../middleware/auth";
 import {createRoleAuthorizationMiddleware} from "../middleware/role";
 import {createTenantGuardMiddleware} from "../middleware/tenant";
 
 interface ExamSessionEntryRequestDependencies {
+  reconcileSession?: typeof sessionService.reconcileSession;
   manageRuntimeOwnership?: typeof sessionService.manageRuntimeOwnership;
   resumeSessionEntry: typeof sessionService.resumeSessionEntry;
   validateSessionEntry: typeof sessionService.validateSessionEntry;
@@ -103,7 +105,10 @@ export const createExamSessionEntryHandler = (
     const context = {...validatedData, runtimeCommand: command,
       sessionToken: command.operation === "launch" ? command.token : ""};
     let data;
-    if (command.operation === "renew" || command.operation === "release") {
+    if (command.operation === "reconcile") {
+      if (!dependencies.reconcileSession) throw new Error("Reconciliation service unavailable.");
+      data = await dependencies.reconcileSession(context, getBearerToken(request.headers.authorization));
+    } else if (command.operation === "renew" || command.operation === "release") {
       if (!dependencies.manageRuntimeOwnership) throw new Error("Lease service unavailable.");
       data = await dependencies.manageRuntimeOwnership(context);
     } else {
@@ -111,7 +116,7 @@ export const createExamSessionEntryHandler = (
         await dependencies.validateSessionEntry(context) : await dependencies.resumeSessionEntry(context);
       if (!result.ownership) throw new Error("Ownership receipt unavailable.");
       data = {operation: command.operation, ownership: result.ownership, entry: {
-        allowed: true, deadlineAt: result.deadlineAt, instituteId: result.instituteId,
+        allowed: true, recovery: result.recovery, deadlineAt: result.deadlineAt, instituteId: result.instituteId,
         runId: result.runId, runtimeSnapshot: result.runtimeSnapshot, serverTime: result.serverTime,
         sessionId: result.sessionId, startedAt: result.startedAt, status: result.status,
         studentId: result.studentId, yearId: result.yearId,
@@ -179,7 +184,7 @@ export const createExamSessionEntryHandler = (
     }),
   ],
   onError: (error, context): boolean => {
-    if (error instanceof SessionStartValidationError) {
+    if (error instanceof SessionStartValidationError || error instanceof StudentProfileValidationError) {
       context.logger.warn("Exam session entry rejected", {
         code: error.code,
         error,
@@ -199,6 +204,7 @@ export const createExamSessionEntryHandler = (
 });
 
 export const handleExamSessionEntryRequest = createExamSessionEntryHandler({
+  reconcileSession: sessionService.reconcileSession.bind(sessionService),
   manageRuntimeOwnership: sessionService.manageRuntimeOwnership.bind(sessionService),
   resumeSessionEntry:
     sessionService.resumeSessionEntry.bind(sessionService),

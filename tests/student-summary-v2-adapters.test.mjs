@@ -10,7 +10,10 @@ const source = ts.transpileModule(readFileSync(path, "utf8"), {
   compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022},
 }).outputText;
 const mod = {exports: {}};
-new Function("exports", "module", source)(mod.exports, mod);
+new Function("exports", "module", "require", source)(mod.exports, mod, (id) => {
+  if (id === "./examRecoveryValidation") return functionsRequire("./lib/services/examRecoveryValidation.js");
+  return functionsRequire(id);
+});
 const adapt = mod.exports.adaptStudentSummaryResult;
 function loadTs(relativePath, dependencies = {}) {
   const sourcePath = new URL(relativePath, import.meta.url);

@@ -1,7 +1,12 @@
 import {issueProctoringPolicy, readProctoringPolicy, readActivationPreflight,
   assertActivationPreflight, initializeIntegrityReporting} from "./examProctoringPolicy";
 import {assertRuntimeOwner, planRuntimeCommand, parseRuntimeCommand,
-  closeRuntimeOwnership} from "./examRuntimeOwnership";
+  closeRuntimeOwnership, assertRuntimeReconciliationOwner} from "./examRuntimeOwnership";
+import {projectExamRecovery, ExamRecoveryError} from "./examRecovery";
+import {readCanonicalStoredSubmission} from "./submission";
+import {StudentProfileService} from "./studentProfile";
+import {StudentProfileValidationError} from "../types/studentProfile";
+import type {ExamReconcileResultV1} from "../../../shared/contracts/examResilience";
 import {
   FieldValue,
   Timestamp,
@@ -1949,7 +1954,7 @@ export class SessionService {
         runtimeSnapshot.schedule.sessionEndsAt,
         "runtimeSnapshot.schedule.sessionEndsAt",
       );
-      let startedAt = normalizeOptionalSessionTimestampIso(
+      const startedAt = normalizeOptionalSessionTimestampIso(
         sessionData.startedAt,
         "session.startedAt",
       );
@@ -1982,22 +1987,17 @@ export class SessionService {
         status = "started";
         update.status = status;
       }
-      if (status === "active" && deadlineAt === null) {
-        deadlineAt = scheduledDeadline.toDate().toISOString();
-        update.deadlineAt = scheduledDeadline;
-      }
-      if (status === "active" && startedAt === null) {
-        startedAt = new Date(nowMillis).toISOString();
-        update.startedAt = Timestamp.fromMillis(nowMillis);
-      }
-      if (
-        status === "active" &&
-        deadlineAt !== null &&
-        nowMillis >= Date.parse(deadlineAt)
-      ) {
+      if (status === "active" && (deadlineAt === null || startedAt === null)) throw new ExamRecoveryError();
+      if ((status === "active" || status === "started") &&
+          nowMillis >= Date.parse(deadlineAt ?? scheduledDeadline.toDate().toISOString())) {
         status = "expired";
         update.expiredAt = Timestamp.fromMillis(nowMillis);
         update.status = status;
+      }
+      if (status === "expired" && deadlineAt === null) {
+        if (startedAt !== null) throw new ExamRecoveryError();
+        deadlineAt = scheduledDeadline.toDate().toISOString();
+        update.deadlineAt = scheduledDeadline;
       }
       if (sessionData.sessionTokenHash === launchCredentialHash) {
         update.sessionTokenHash = FieldValue.delete();
@@ -2005,6 +2005,7 @@ export class SessionService {
       transaction.update(sessionReference, update);
 
       result = {
+        recovery: projectExamRecovery(sessionData, runtimeSnapshot),
         ownership: commandPlan.receipt,
         deadlineAt,
         instituteId,
@@ -2147,21 +2148,26 @@ export class SessionService {
         sessionData.startedAt,
         "session.startedAt",
       );
-      const deadlineAt = normalizeOptionalSessionTimestampIso(
+      let deadlineAt = normalizeOptionalSessionTimestampIso(
         sessionData.deadlineAt,
         "session.deadlineAt",
       );
-      if (status === "active" && deadlineAt !== null && nowMillis >= Date.parse(deadlineAt)) {
+      if (status === "active" && (deadlineAt === null || startedAt === null)) throw new ExamRecoveryError();
+      if ((status === "active" || status === "started") &&
+          nowMillis >= Date.parse(deadlineAt ?? runtimeSnapshot.schedule.sessionEndsAt)) {
         status = "expired";
-        transaction.update(sessionReference, {
-          expiredAt: Timestamp.fromMillis(nowMillis),
-          status,
-          updatedAt: FieldValue.serverTimestamp(),
-        });
+        transaction.update(sessionReference, {expiredAt: Timestamp.fromMillis(nowMillis),
+          status, updatedAt: FieldValue.serverTimestamp()});
+      }
+      if (status === "expired" && deadlineAt === null) {
+        if (startedAt !== null) throw new ExamRecoveryError();
+        deadlineAt = runtimeSnapshot.schedule.sessionEndsAt;
+        transaction.update(sessionReference, {deadlineAt: Timestamp.fromMillis(Date.parse(deadlineAt))});
       }
 
       transaction.update(sessionReference, {runtimeOwnership: commandPlan.owner});
       result = {
+        recovery: projectExamRecovery(sessionData, runtimeSnapshot),
         ownership: commandPlan.receipt,
         deadlineAt,
         instituteId,
@@ -2191,6 +2197,93 @@ export class SessionService {
       );
     }
     return result;
+  }
+
+  // Read-only own-runtime reconciliation; acquisition and finalization remain separate.
+  public async reconcileSession(context: SessionEntryValidationContext, rawToken: string,
+    now: () => number = Date.now): Promise<ExamReconcileResultV1> {
+    const command = parseRuntimeCommand(context.runtimeCommand);
+    if (command.operation !== "reconcile") {
+      throw new SessionStartValidationError("VALIDATION_ERROR", "Reconciliation operation required.");
+    }
+    for (const key of ["instituteId", "yearId", "runId", "sessionId",
+      "studentId", "studentUid", "launchNonce"] as const) {
+      const id = context[key];
+      if (typeof id !== "string" || !id || id.trim() !== id || id.length > 256 || id.includes("/") ||
+          id === "." || id === "..") throw new SessionStartValidationError("UNAUTHORIZED", "Invalid exam identity.");
+    }
+    const path = `institutes/${context.instituteId}/academicYears/${context.yearId}/runs/${
+      context.runId}/sessions/${context.sessionId}`;
+    const reference = this.firestore.doc(path);
+    return new StudentProfileService().withOwnStudent(rawToken, async (transaction, identity) => {
+      if (identity.instituteId !== context.instituteId || identity.studentId !== context.studentId ||
+          identity.studentId !== context.studentUid || ["yearId", "runId", "sessionId", "launchNonce"].some(
+        (key) => identity.token[key] !== context[key as keyof SessionEntryValidationContext])) {
+        throw new StudentProfileValidationError("UNAUTHORIZED", "Exam identity does not match.");
+      }
+      const yearReference = this.firestore.doc(`institutes/${context.instituteId}/academicYears/${context.yearId}`);
+      const year = await transaction.get(yearReference);
+      if (!year.exists) throw new ExamRecoveryError("recovery_unavailable");
+      try {
+        dataTierPartitionService.assertOperationalAcademicYearAccess({operation: "session reconciliation",
+          partition: dataTierPartitionService.buildAcademicYearPartition(yearReference.path, year.data() ?? {})});
+      } catch {
+        throw new StudentProfileValidationError("FORBIDDEN", "Operational academic year is required.");
+      }
+      const record = await transaction.get(reference);
+      const data = record.data();
+      if (!data) throw new StudentProfileValidationError("NOT_FOUND", "Session unavailable.");
+      try {
+        this.assertActiveSessionAllowed(await this.readCurrentAuthority(transaction, context.instituteId), data);
+      } catch (error) {
+        if (error instanceof SessionStartValidationError) {
+          throw new StudentProfileValidationError(error.code, "Current runtime authority denied access.");
+        }
+        throw error;
+      }
+      const ownerContext = {...context, runtimeOwner: {studentUid: context.studentUid, launchNonce: context.launchNonce,
+        proof: context.commandProof?.proof ?? "", generation: context.commandProof?.generation ?? 0}};
+      const owner = assertRuntimeReconciliationOwner(data, ownerContext, now());
+      const scope = {operation: "reconcile" as const, contractVersion: 1 as const,
+        sessionId: context.sessionId, generation: owner.generation, serverTime: new Date(now()).toISOString()};
+      if (data.status === "submitted") {
+        return {...scope, status: "submitted" as const,
+          submission: {...readCanonicalStoredSubmission(data, path), alreadySubmitted: true as const}};
+      }
+      if (data.status === "terminated") return {...scope, status: "terminated" as const};
+      try {
+        const snapshot = normalizeStoredRuntimeSnapshot(data.runtimeSnapshot, context.sessionId, data.questionTimeMap);
+        const recovery = projectExamRecovery(data, snapshot);
+        const startedAt = normalizeOptionalSessionTimestampIso(data.startedAt, "session.startedAt");
+        let deadlineAt = normalizeOptionalSessionTimestampIso(data.deadlineAt, "session.deadlineAt");
+        const scheduledEnd = normalizeRunWindowTimestamp(snapshot.schedule.sessionEndsAt,
+          "runtimeSnapshot.schedule.sessionEndsAt").toDate().toISOString();
+        if ((data.status === "started" && (startedAt !== null || deadlineAt !== null)) ||
+            (deadlineAt !== null && Date.parse(deadlineAt) > Date.parse(scheduledEnd)) ||
+            (startedAt !== null && deadlineAt !== null && Date.parse(startedAt) > Date.parse(deadlineAt))) {
+          throw new ExamRecoveryError();
+        }
+        const time = now();
+        let status = data.status;
+        if (status === "started" && time >= Date.parse(scheduledEnd)) status = "expired";
+        if (status === "active" && (!startedAt || !deadlineAt)) throw new ExamRecoveryError();
+        if (status === "active" && deadlineAt && time >= Date.parse(deadlineAt)) status = "expired";
+        if (status === "expired" && !deadlineAt && !startedAt) deadlineAt = scheduledEnd;
+        assertRuntimeReconciliationOwner(data, ownerContext, now());
+        if (status === "started") {
+          if (startedAt || deadlineAt) throw new ExamRecoveryError();
+          return {...scope, serverTime: new Date(time).toISOString(),
+            status, startedAt: null, deadlineAt: null, recovery};
+        }
+        if (status !== "active" && status !== "expired" || !deadlineAt) throw new ExamRecoveryError();
+        return status === "active" ? {...scope, serverTime: new Date(time).toISOString(), status,
+          startedAt: startedAt as string, deadlineAt, recovery} : {...scope, serverTime: new Date(time).toISOString(),
+          status, startedAt, deadlineAt, recovery};
+      } catch (error) {
+        if (error instanceof SessionStartValidationError) throw new ExamRecoveryError();
+        throw error;
+      }
+    });
   }
 
   public async manageRuntimeOwnership(context: SessionEntryValidationContext) {

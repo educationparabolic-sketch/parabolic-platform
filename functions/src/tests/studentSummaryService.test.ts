@@ -9,6 +9,8 @@ import {StudentSolutionsService} from "../services/studentSolutions";
 import {seedStudentSummaryFixture} from "./studentSummaryFixture";
 import {seedStudentSolutionsFixture} from "./studentSolutionsFixture";
 import {StudentSummaryValidationError} from "../types/studentSummary";
+import {ExamRecoveryError} from "../services/examRecovery";
+import {ownedSessionFixture, runtimeOwnerForTest} from "./helpers/runtimeOwnership";
 assert.equal(process.env.GCLOUD_PROJECT, "demo-parabolic-test");
 assert.ok(process.env.FIRESTORE_EMULATOR_HOST);
 assert.ok(process.env.FIREBASE_AUTH_EMULATOR_HOST);
@@ -26,6 +28,120 @@ const rejected = (code: string) => (error: unknown) => {
   assert.doesNotMatch(error.message, /HIDDEN|password|Signature|answerMap/u);
   return true;
 };
+
+test("real own-Student reconciliation preserves authoritative answers and terminal state without writes", async () => {
+  const own = await seedStudentSolutionsFixture("resilience");
+  const auth = getFirebaseAdminApp().auth();
+  const now = Date.now();
+  const context = {...own.context, yearId: own.yearId, sessionId: own.session.id,
+    launchNonce: "fixture-owned-nonce", sessionToken: "",
+    runtimeCommand: {operation: "reconcile" as const, contractVersion: 1 as const},
+    commandProof: runtimeOwnerForTest(own.uid)};
+  try {
+    await auth.setCustomUserClaims(own.uid, {...own.claims, yearId: own.yearId, runId: own.runId,
+      sessionId: own.session.id, launchNonce: context.launchNonce});
+    const login = await fetch(`http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/` +
+      "identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo", {method: "POST",
+      headers: {"content-type": "application/json"}, body: JSON.stringify({email: own.email,
+        password: own.password, returnSecureToken: true})});
+    assert.equal(login.status, 200);
+    const token = ((await login.json()) as {idToken: string}).idToken;
+    const source = {...own.captured, status: "active", startedAt: Timestamp.fromMillis(now - 30_000),
+      deadlineAt: Timestamp.fromMillis(own.end), answerMap: {},
+      instituteId: own.instituteId, yearId: own.yearId, runId: own.runId, sessionId: own.session.id,
+      studentId: own.uid, studentUid: own.uid};
+    await own.session.set(ownedSessionFixture(source));
+    await own.session.update({[`answerMap.${own.ids[0]}`]: {clientTimestamp: now - 10_000,
+      response: {kind: "mcq", optionId: "B"}, selectedOption: "B", timeSpentSeconds: 5},
+    [`questionTimeMap.${own.ids[0]}.cumulativeTimeSpent`]: 5});
+    const read = () => own.sessions.reconcileSession(context, token);
+    const before = (await own.session.get()).data();
+    const result = await read();
+    assert.equal(result.status, "active");
+    if (result.status !== "active") throw new Error("Expected active projection");
+    assert.deepEqual(result.recovery.questions[0].answer?.response, {kind: "mcq", optionId: "B"});
+    assert.deepEqual((await own.session.get()).data(), before);
+    assert.doesNotMatch(JSON.stringify(result), /correctAnswer|ownerProofHash|identityStatusEntryBindings/u);
+    for (const fields of [{"runtimeSnapshot.schedule.sessionEndsAt": "not-a-date"},
+      {deadlineAt: Timestamp.fromMillis(own.end + 1)},
+      {startedAt: Timestamp.fromMillis(own.end + 1)}]) {
+      await own.session.update(fields);
+      const malformed = (await own.session.get()).data();
+      await assert.rejects(read(), ExamRecoveryError);
+      assert.deepEqual((await own.session.get()).data(), malformed);
+      await own.session.set(before as FirebaseFirestore.DocumentData);
+    }
+    for (const changed of [{studentUid: "other"}, {launchNonce: "other"},
+      {commandProof: {...context.commandProof, generation: 2}},
+      {commandProof: {...context.commandProof, proof: Buffer.alloc(32, 9).toString("base64url")}}]) {
+      await assert.rejects(own.sessions.reconcileSession({...context, ...changed}, token));
+    }
+    await own.institute.collection("students").doc(own.uid).update({status: "suspended"});
+    await assert.rejects(read());
+    await own.institute.collection("students").doc(own.uid).update({status: "active"});
+    await auth.setCustomUserClaims(own.uid, {...own.claims, role: "teacher"});
+    await assert.rejects(read());
+    await auth.setCustomUserClaims(own.uid, own.claims);
+    await own.year.update({status: "archived"});
+    await assert.rejects(read());
+    await own.year.update({status: "active"});
+    await own.session.update({deadlineAt: Timestamp.fromMillis(now - 1)});
+    const expiredBefore = (await own.session.get()).data();
+    assert.equal((await read()).status, "expired");
+    assert.deepEqual((await own.session.get()).data(), expiredBefore);
+    await own.session.update({startedAt: null});
+    await assert.rejects(read(), ExamRecoveryError);
+    await own.session.set(ownedSessionFixture({...source, status: "started", startedAt: null, deadlineAt: null,
+      runtimeSnapshot: {...own.captured?.runtimeSnapshot, schedule: {...own.captured?.runtimeSnapshot.schedule,
+        sessionEndsAt: new Date(now - 1).toISOString()}}}));
+    const unactivatedBefore = (await own.session.get()).data();
+    assert.equal((await read()).status, "expired");
+    assert.deepEqual((await own.session.get()).data(), unactivatedBefore);
+    await own.session.update({"status": "terminated", "runtimeOwnership.state": "closed",
+      "runtimeOwnership.expiresAt": Timestamp.fromMillis(now - 100_000)});
+    const terminalBefore = (await own.session.get()).data();
+    const terminal = await read();
+    assert.equal(terminal.status, "terminated");
+    assert.equal("recovery" in terminal, false); assert.equal("submission" in terminal, false);
+    assert.deepEqual((await own.session.get()).data(), terminalBefore);
+    await own.session.update({status: "submitted"});
+    await assert.rejects(read(), ExamRecoveryError);
+  } finally {
+    await own.cleanup();
+  }
+});
+
+test("readiness is derived only from the own current summary marker and never raw session data", async () => {
+  const token = await f.setEntitlement("L2");
+  const readers = [service.getDashboard.bind(service), service.getPerformance.bind(service),
+    service.getInsights.bind(service)];
+  for (const reader of readers) {
+    assert.deepEqual((await reader(token)).resultReadiness,
+      {state: "unknown", sessionId: null, retryAfterSeconds: 0});
+  }
+  for (const [state, retryAfterSeconds] of [["processing", 2], ["available", 0]] as const) {
+    const marker = {state, retryAfterSeconds, sessionId: "newest-owned-session", submittedAt: Timestamp.now(),
+      updatedAt: Timestamp.now(), internalNotes: "HIDDEN_READINESS"};
+    await f.metrics.update({resultPropagation: marker});
+    for (const reader of readers) {
+      const before = (await f.metrics.get()).data();
+      const result = await reader(token);
+      assert.deepEqual(result.resultReadiness, {state, retryAfterSeconds, sessionId: marker.sessionId});
+      assert.doesNotMatch(JSON.stringify(result), /HIDDEN_READINESS/u);
+      assert.deepEqual((await f.metrics.get()).data(), before);
+    }
+  }
+  for (const marker of [{state: "failed", sessionId: "s"}, {state: "available", sessionId: "s", retryAfterSeconds: 0},
+    {state: "processing", sessionId: "s", retryAfterSeconds: 0,
+      submittedAt: Timestamp.now(), updatedAt: Timestamp.now()}]) {
+    await f.metrics.update({resultPropagation: marker});
+    assert.equal((await service.getDashboard(token)).resultReadiness.state, "unknown");
+  }
+  const l0 = await f.setEntitlement("L0");
+  assert.equal((await service.getDashboard(l0)).disciplineIndex, null);
+  const tests = await service.listTests(l0);
+  assert.equal("resultReadiness" in tests, false);
+});
 
 test("L0..L3 and independent flags redact every top/nested/legacy group without fabricating zero", async () => {
   for (const layer of ["L0", "L1", "L2", "L3"] as const) {

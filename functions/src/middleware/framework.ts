@@ -1,4 +1,5 @@
 import {ExamProctoringError} from "../services/examProctoringPolicy";
+import {ExamRecoveryError} from "../services/examRecovery";
 import {RuntimeOwnershipError} from "../services/examRuntimeOwnership";
 import {buildErrorResponse, STANDARD_API_ERROR_STATUS, sendErrorResponse} from "../services/apiResponse";
 import * as functions from "firebase-functions";
@@ -170,7 +171,8 @@ export const createMiddlewareHandler = (
         options.controller,
       );
     } catch (error) {
-      if (error instanceof RuntimeOwnershipError || error instanceof ExamProctoringError) {
+      if (error instanceof RuntimeOwnershipError || error instanceof ExamProctoringError ||
+          error instanceof ExamRecoveryError) {
         response.status(STANDARD_API_ERROR_STATUS[error.code]).json(buildErrorResponse(error.code,
           error.message, requestId, new Date().toISOString(), {reason: error.reason}));
         return;

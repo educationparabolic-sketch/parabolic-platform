@@ -4,6 +4,7 @@
  * Firebase ID tokens remain mandatory; owner proofs are supplementary fencing.
  */
 import type {ExamSessionEntryResult} from "./apiDtos.js";
+import type {ExamReconcileRequestV1, ExamReconcileResultV1} from "./examResilience.js";
 
 /** Positive safe integer generation and 32 random bytes as 43-char base64url. */
 export interface ExamRuntimeOwnerProof {
@@ -32,6 +33,7 @@ export interface ExamRuntimeLeaseReceipt {
 
 /** POST to existing EXM-01; no browser tenant, UID, nonce or lease duration. */
 export type ExamRuntimeEntryRequestV2 =
+  | ExamReconcileRequestV1
   | {
     operation: "launch";
     commandId: string;
@@ -50,6 +52,7 @@ export type ExamRuntimeEntryRequestV2 =
   | {operation: "release"; commandId: string};
 
 export type ExamRuntimeEntryResultV2 =
+  | ExamReconcileResultV1
   | {
     operation: "launch" | "recover";
     entry: ExamSessionEntryResult;
@@ -66,7 +69,7 @@ export type ExamRuntimeEntryResultV2 =
 
 /** Canonical envelope codes; reason is a safe error.details field. */
 export type ExamRuntimeOwnershipFailure =
-  | {code: "CONFLICT"; reason: "owner_busy" | "ownership_lost"}
+  | {code: "CONFLICT"; reason: "owner_busy" | "ownership_lost" | "lease_expired"}
   | {code: "SESSION_LOCKED"; reason: "ownership_upgrade_required" | "session_closed"}
   | {code: "UNAUTHORIZED"; reason: "entry_not_consumed" | "invalid_owner"}
   | {code: "VALIDATION_ERROR"; reason: "invalid_ownership_request"};

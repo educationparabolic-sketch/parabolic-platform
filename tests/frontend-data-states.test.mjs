@@ -89,11 +89,11 @@ test("frontend data-state lifecycle classifies loading, empty, permission, valid
   assert.equal(dataState.getFrontendDataStateSnapshot().kind, "unavailable");
 });
 
-test("shared client and every portal route boundary use the data-state contract", async () => {
+test("shared client and portal boundaries preserve explicit loading and failure ownership", async () => {
   const [componentSource, apiClientSource, ...appSources] = await Promise.all([
     readFile(componentPath, "utf8"),
     readFile(apiClientPath, "utf8"),
-    ...["admin", "student", "exam", "vendor"].map((portal) =>
+    ...["admin", "student", "vendor"].map((portal) =>
       readFile(join(rootDirectory, `apps/${portal}/src/App.tsx`), "utf8"),
     ),
   ]);
@@ -116,4 +116,13 @@ test("shared client and every portal route boundary use the data-state contract"
   for (const source of appSources) {
     assert.match(source, /<UiDataStateBoundary label=/u);
   }
+  // Exam must keep accepted questions interactive during a pending save. Its
+  // runtime owns strict entry/authority/loading/error states instead of hiding
+  // all content behind a global request indicator.
+  const exam = await readFile(join(rootDirectory, "apps/exam/src/ExamRuntimeApp.tsx"), "utf8");
+  const shell = await readFile(join(rootDirectory, "apps/exam/src/App.tsx"), "utf8");
+  assert.doesNotMatch(shell, /UiDataStateBoundary/u);
+  for (const state of [/serverEntryValidationStatus === "pending"/u, /serverEntryValidationStatus === "invalid"/u,
+    /if \(authorityInterruption\)/u, /if \(ownershipInterrupted\)/u, /setSyncState\("error"\)/u,
+    /setSubmitError/u, /adaptExamSubmitResult/u, /runtimeOwnership\.start\(\)/u]) assert.match(exam, state);
 });

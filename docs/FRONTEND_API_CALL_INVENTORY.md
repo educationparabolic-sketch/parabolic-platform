@@ -1,5 +1,48 @@
 # Frontend API Call Inventory
 
+BWM-046 substep 7 adds the permanent local resilience acceptance runner/matrix.
+Canonical local cleanup retains only a public scope/generation close fence so a
+separate stale writer/discard cannot recreate submitted recovery; queued renewal
+cannot revive a closed runtime. Known storage failure remains visible during
+retries until a real save commits. No wire route, credential, server deadline,
+scoring or analytics writer changes. See EXAM_RESILIENCE_ACCEPTANCE_MATRIX.md;
+aggregate/public qualification and finding closure remain substep 8.
+
+
+BWM-046 substep 6: existing EXM-01 additionally probes exact retained terminal
+ownership on reload before rotating recovery. An exact held expired lease returns
+safe `lease_expired`; other ownership/Auth denial cannot trigger recovery. EXM-04
+uncertain retry reconciles before replaying its retained body; expiry controls need
+no instruction/camera readiness and canonical receipts disclose excluded late edits.
+STU-01/03/04 existing summary callers now poll visibly at two-second minimums,
+maximum six reads per identity/manual cycle, then expose manual refresh. Same-user
+SDK token refresh preserves that counter and retry minimum. Unknown
+and read failure never fabricate failure or availability; reflective values are
+withheld while permitted basic scores remain. STU-02/05, writer idempotency,
+route/export counts and deployed qualification are unchanged. Full acceptance is
+still BWM-046 substeps 7–8; production NO_GO.
+
+
+BWM-046 substep 5: Existing EXM-01/02/04/05 callers now use one serialized,
+retained three-attempt operation with 15-second attempt bounds covering SDK,
+refresh, fetch and decoding. Shared-client default policy is unchanged; scoped
+Exam opts out of hidden 401 replay/classification and observes only response
+headers for minimum server retry delay. A provisional 401 pauses questions/camera;
+reported current-identity denial is fenced and refresh-network uncertainty remains
+recoverable with explicit confirmation. Clock/answer ordering is server-anchored
+and monotonic; visibility/reconnect/uncertain continuity requires held-owner
+reconciliation. No route, wire shape, capability or resource was added; EXM-07
+retains its independently frozen policy. Substep 6 adopts expiry/terminal/result UX;
+all seven findings remain OPEN and production NO_GO.
+
+BWM-046 substep 4: Exam entry recovery initializes accepted answers; the mounted
+answer consumer calls existing EXM-01 `reconcile` with held owner headers after
+ignored/blocked/uncertain receipts. This adds no inventory tuple or credentials.
+EXM-02 strictly validates acknowledgements, and EXM-04 manual submit requires a
+complete settled drain plus acknowledgement of known rejected changes. Browser
+schema-3 durability and merge are adopted; terminal/result UX remain
+substep 6 and full acceptance/aggregate qualification remain 7–8.
+
 BWM-043 substep 6: mounted STU-01..05 callers now consume closed v2 scope/access,
 recursive nullable fields and cursor pages. My Tests sends current/history scope
 and exact test/run solution intent, without numeric pages or inferred year.
@@ -118,8 +161,8 @@ BWM-041 reconciles all ten canonical Vendor frontend routes and seven shell regi
 | STU-04 | `GET` | `/student/insights` | `/api/v1/student/insights` | `implemented` | Mounted Analytics uses strict v2 server access; L1 reflection requires riskOverview, numeric guesses and discipline remain L2. |
 | STU-05 | `GET` | `/student/tests/{testId}/solutions` | `/api/v1/student/tests/{testId}/solutions` | `implemented` | Mounted exact run/cursor v2 solutions consume authorized immutable answers and nullable signed assets; legacy numeric pages fail 400. |
 | STU-06 | `POST` | `/exam/start` | `/api/v1/exam/start` | `implemented` | Shared request sends explicit `start|resume` intent plus run ID only; handler derives tenant, Student, UID, current year, and license from verified authority, converges retries on one session, and returns a strictly adapted absolute Exam launch result with fragment-only `#launch=` delivery. |
-| EXM-01 | `POST` | `/exam/session/{sessionId}/entry` | `/api/v1/exam/session/{sessionId}/entry` | `implemented` | Mounted ownership controller sends closed v2 launch/recover/renew/release commands with UUID command IDs; atomic consumed binding and hashed proof/generation grant one 90-second owner lease. Every new document rotates proof before content/writes; exact uncertain-command retry never extends its receipt. |
-| EXM-02 | `POST` | `/exam/session/{sessionId}/answers` | `/api/v1/exam/session/{sessionId}/answers` | `implemented` | Runtime serializes max-ten revision-aware batches, retains exact acknowledgements, drains all chunks after reconnect/before submit, and uses the Firebase-authenticated shared client; handler checks exact session-bound Student claims and current consumed owner proof/generation inside the write transaction. |
+| EXM-01 | `POST` | `/exam/session/{sessionId}/entry` | `/api/v1/exam/session/{sessionId}/entry` | `implemented` | Mounted ownership controller sends closed v2 launch/recover/renew/release commands with UUID command IDs; atomic consumed binding and hashed proof/generation grant one 90-second owner lease. Every nonterminal new document rotates proof before questions/writes; exact closing-owner terminal probes grant read-only receipt access after TTL; exact uncertain-command retry never extends its receipt. BWM-046 mounts separate read-only held-owner reconciliation after ignored/blocked/uncertain answer outcomes; it cannot renew or acquire. |
+| EXM-02 | `POST` | `/exam/session/{sessionId}/answers` | `/api/v1/exam/session/{sessionId}/answers` | `implemented` | Runtime serializes max-ten revision-aware batches, validates closed unique acknowledgements and disposition sets, reconciles ignored/blocked/uncertain intents, drains all chunks after reconnect/before manual submit, and uses the Firebase-authenticated shared client; handler checks exact session-bound Student claims and current consumed owner proof/generation inside the write transaction. |
 | EXM-03 | `POST` | Retired (no frontend call) | `/api/v1/exam/session/{sessionId}/token/refresh` | `intentionally retired` | Firebase Auth SDK refreshes the current Exam-origin ID token; the nonexistent custom refresh request and credential fields were removed. |
 | EXM-04 | `POST` | `/exam/session/{sessionId}/submit` | `/api/v1/exam/session/{sessionId}/submit` | `implemented` | Runtime sends the exact four-field shared request after the final drain, then strictly consumes server-owned status, reason, time, replay disposition, and metrics; parallel/repeated and reached-deadline expiry submits converge on one stored result; final commit fences the captured owner generation and stored replay requires the exact closing owner. |
 | EXM-05 | `POST` | `/exam/session/{sessionId}/activate` | `/api/v1/exam/session/{sessionId}/activate` | `implemented` | Runtime requests activation only after entry checks/declaration; the secured idempotent handler transactionally verifies current owner proof/generation and persists `active`, `startedAt`, and the immutable scheduled `deadlineAt`, returns `serverTime`, and deterministically reconciles expiry. |
@@ -350,11 +393,19 @@ the mounted interventions destination with authoritative reloads.
 | STU-05 | `GET /student/tests/{testId}/solutions` | URL-encoded testId; closed query `{ runId, pageSize?, cursor? }`, exact run required, pageSize 1..20; numeric page rejected | `StudentSolutionsResultV2`, strict cursor page without total; captured answers and nullable short-lived assets; signed URL bytes preserved | Same fresh authority rechecked before signing; exact assigned current-year licensed completed run, reached release, unique owned submitted immutable capture; no archive access | `studentSolutions` (`api/studentSolutions.ts`) | `features/my-tests/studentMyTestsDataset.ts` via `services/studentSummaryApi.ts` |
 | STU-06 | `POST /exam/start` | Shared `StudentExamLaunchRequest` `{ intent: "start"|"resume", runId }`; no browser tenant, Student, year, test, or license override | Strict shared `StudentExamLaunchResult` `{ disposition, examUrl, launchCredential, sessionId, status }` inside the standard envelope; absolute clean session path and fragment launch tuple is validated; no query credential | Firebase ID; `student`; identity tenant/Student/UID/license; active non-deleted Student; server-resolved current year; assigned licensed run in the active window; exactly one eligible session | `examStart` (`api/examStart.ts`) plus transactional `SessionService`; first start creates, retry replays, and resume locates the same session | `features/my-tests/studentMyTestsDataset.ts` and `StudentMyTestsPage.tsx` |
 
+BWM-046 substep 3: STU-01/03/04 now require marker-backed `resultReadiness`
+(unknown/processing/available) in current summaries; STU-02/05 are unchanged.
+EXM-01 launch/recover entry requires bounded candidate `recovery`; read-only
+`{operation: "reconcile", contractVersion: 1}` is implemented on that same path
+with current own-Student/year and exact owner headers, including exact closed
+terminal read after TTL. Its adapter is available, but no mounted reconcile
+caller/merge/terminal UI is claimed before substeps 4–6. Route counts unchanged.
+
 ## Exam runtime — 5 contracts
 
 | ID | Method and current path | Frontend request | Frontend response | Auth / role / tenant / license | Current Functions handler | Frontend source |
 | --- | --- | --- | --- | --- | --- | --- |
-| EXM-01 | `POST /exam/session/{sessionId}/entry` | Closed `ExamRuntimeEntryRequestV2`: launch `{ operation, commandId, token, nextOwnerProof }`; recover `{ operation, commandId, previous, nextOwnerProof }` plus owner header; renew/release `{ operation, commandId }` plus owner/generation headers. `previous` selects exactly one generation or pending command ID. | `ExamRuntimeEntryResultV2`: operation and bounded lease; launch/recover also carry adapted existing candidate-safe entry data. Renew/release expose no snapshot. | Revocation/current authority checked Firebase ID; exact verified UID/institute/year/run/session/Student/nonce; consumed binding and one hashed proof/generation/lease checked transactionally. Fresh nonce cannot force a live takeover; v1/ownerless recovery fails closed. | Existing `examSessionEntry` plus `SessionService` and internal `examRuntimeOwnership.ts` | `apps/exam/src/launchTransport.ts`; `ExamRuntimeApp.tsx` consumes subscription and adapted entry |
+| EXM-01 | `POST /exam/session/{sessionId}/entry` | Closed `ExamRuntimeEntryRequestV2`: launch `{ operation, commandId, token, nextOwnerProof }`; recover `{ operation, commandId, previous, nextOwnerProof }` plus owner header; renew/release `{ operation, commandId }` plus owner/generation headers; read-only reconcile `{ operation: "reconcile", contractVersion: 1 }` with both headers. `previous` selects exactly one generation or pending command ID. | `ExamRuntimeEntryResultV2`: operation and bounded lease; launch/recover also carry adapted candidate-safe entry plus required bounded `recovery`. Reconcile returns exact active/expired recovery or canonical submitted/terminated state without a lease; its new own-Student/year checks are in the read transaction. Renew/release expose no snapshot. | Revocation/current authority checked Firebase ID; exact verified UID/institute/year/run/session/Student/nonce; consumed binding and one hashed proof/generation/lease checked transactionally. Fresh nonce cannot force a live takeover; v1/ownerless recovery fails closed. | Existing `examSessionEntry` plus `SessionService` and internal `examRuntimeOwnership.ts` | `apps/exam/src/launchTransport.ts`; `ExamRuntimeApp.tsx` consumes subscription and adapted entry |
 | EXM-02 | `POST /exam/session/{sessionId}/answers` | Shared `ExamAnswerBatchRequestBody` with `batchId`, positive `batchSequence`, `flushReason`, max-ten writes, and optional adaptive phase; each answer adds positive `clientRevision` to its discriminated response and absolute cumulative `timeSpentSeconds` | Strict `ExamAnswerBatchResult` echoes batch identity and acknowledges every exact question/revision/disposition, plus persisted/ignored/locked IDs | Firebase ID from shared client; `student`; exact body/route/session claims; active pre-deadline session; current owner proof/generation/consumed binding checked in the answer transaction; response must match immutable runtime question/options/matrix axes; only reconnect/submission drains bypass the ordinary five-second interval | `examSessionAnswers` (`api/examSessionAnswers.ts`) plus transactional `AnswerBatchService` | `apps/exam/src/ExamRuntimeApp.tsx` via `launchTransport.ts` |
 | EXM-03 | Retired `/exam/session/{sessionId}/token/refresh` | None | None | Firebase Auth SDK owns ID-token refresh; no custom refresh route or credential | Intentionally retired; no handler/export | No frontend caller |
 | EXM-04 | `POST /exam/session/{sessionId}/submit` | Exact shared `ExamSubmitRequestBody`: `{ instituteId, reason, runId, yearId }` | Strict shared result with `submitted` status, server reason/time, `alreadySubmitted`, raw/accuracy/discipline/guess/phase/min/max/risk metrics, and operational access policy | Firebase ID from shared client; `student`; exact body/route/session claims; active manual or reached-deadline expiry authority; current consumed owner proof/generation checked at lock acquisition and final commit; only exact closing owner may replay the stored result after TTL; no launch credential | `examSessionSubmit` (`api/examSessionSubmit.ts`) plus transactional `SubmissionService` | `apps/exam/src/ExamRuntimeApp.tsx` via `launchTransport.ts` |

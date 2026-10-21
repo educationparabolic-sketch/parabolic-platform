@@ -1,4 +1,12 @@
 Excellent.
+
+BWM-046 substep 6 adoption: expired entry has dedicated finalization/retry UI
+without camera/instruction readiness. Late edits remain unaccepted and are
+explicitly disclosed with canonical receipt; stopped attempts never claim ongoing
+finalization. Lost response/reload reads the exact closing-owner canonical result
+before recovery/replay. Termination displays no successful-submission metrics.
+Full adversarial and public qualification remain BWM-046 substeps 7–8.
+
 Now we formalize the Test Portal (Execution Engine) — JEE-Mains Style Implementation with:
     • Instruction screen first
     • Built-in scientific calculator
@@ -513,3 +521,41 @@ origin restored; expiring previews are qualification artifacts. No identity-phot
 fetch or mounted EXM-06 admission. Production NO_GO; physical camera continuity,
 matching, TTL purge and full infrastructure/publication remain downstream. See
 master BWM-045 final substep-8 evidence and `docs/EXAM_PROCTORING_CONTRACT.md`.
+
+
+BWM-046 substep 3 adopts backend and strict shared recovery/reconciliation
+contracts only (`EXAM_RESILIENCE_CONTRACT.md`). Launch/recover entry now includes
+candidate-safe accepted answers/timing; EXM-01 read-only reconcile checks current
+own-Student/year plus exact consumed proof/generation, with canonical closed
+terminal replay and no lease/finalization mutation. New local adapters require
+the matching fields/backend. Mounted local merge, durability, monotonic clock,
+bounded retry and expiry/unknown-result UX remain substeps 4–6. No proctoring,
+private image, scoring, deadline extension, route/resource or deployed acceptance
+is added; all findings remain OPEN and production NO_GO.
+
+BWM-046 substep 4 (2026-10-20): mounted answer recovery now starts from the
+candidate-safe server projection and merges only validated newer schema-3 pending
+edits. Local saving/durable/memory-only states disclose crash-before-commit loss.
+Strict receipts preserve replacement edits; ignored/blocked/uncertain outcomes
+use held-owner EXM-01 reconciliation before acceptance, with explicit rejected
+change acknowledgement before manual submit. Storage failure never fabricates a
+server receipt. Monotonic timing, bounded retries and terminal/result recovery
+remain substeps 5–6; full adversarial and public qualification remain 7–8.
+The Exam shell delegates loading and errors to the explicit runtime states, so a
+pending save leaves questions available for a newer edit. Authority denial still
+hides protected interaction through the runtime's identity/ownership gates.
+
+
+BWM-046 substep 5 (2026-10-20): deadline display and answer ordering use fresh
+server authority plus monotonic elapsed time, with full request time deducted from
+remaining time. Foreground eligible dwell excludes hidden/camera/fullscreen or
+clock-recovery pauses and uncertain sleep/throttle gaps. Current-owner confirmation
+precedes editing on visibility/focus/reconnect recovery. Signed transient operations
+retain the same serialized body for at most three attempts, with 15-second attempt
+bounds including token/refresh/decoding and server minimum retry delay. A scoped
+shared-client option delegates provisional 401 refresh to the Exam owner so hidden
+extra dispatch/revocation cannot defeat the budget; final denial remains fenced.
+Answer interval retries stop after exhaustion. Renewal uncertainty retains the
+same command and original monotonic send anchor with explicit retry, never a new
+90-second allowance inferred from a late response. No terminal/result-delay UI
+adoption or whole-finding/public qualification is implied; next is substep 6.

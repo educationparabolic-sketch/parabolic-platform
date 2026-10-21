@@ -274,3 +274,54 @@ test(
     );
   },
 );
+
+test("older and duplicate propagation callbacks cannot replace a newer result", async () => {
+  for (const order of ["new-first", "old-first"]) {
+    const instituteId = `inst_bwm_046_markers_${order}`;
+    const yearId = "2026";
+    const runId = "run-marker-order";
+    const studentId = "student-marker-order";
+    const institute = firestore.doc(`institutes/${instituteId}`);
+    const base = `institutes/${instituteId}/academicYears/${yearId}`;
+    const summaries = [firestore.doc(`${base}/runAnalytics/${runId}`),
+      firestore.doc(`${base}/studentYearMetrics/${studentId}`)];
+    const context = (sessionId: string) => ({instituteId, yearId, runId,
+      sessionId, eventId: `event-${sessionId}`});
+    const older = {status: "submitted", studentId,
+      submittedAt: Timestamp.fromMillis(Date.now() - 5000)};
+    const newer = {...older, submittedAt: Timestamp.now()};
+    const enqueue = (id: string, data: typeof older) =>
+      submissionAnalyticsTriggerService.processSessionSubmissionTransition(
+        context(id), {status: "active", studentId}, data);
+    try {
+      if (order === "old-first") await enqueue("older", older);
+      await enqueue("newer", newer);
+      const processing = await Promise.all(summaries.map(async (ref) =>
+        (await ref.get()).get("resultPropagation")));
+      await submissionAnalyticsTriggerService.markResultPropagationAvailable(
+        context("older"), older);
+      await enqueue("older", older);
+      for (let i = 0; i < summaries.length; i++) {
+        assert.deepEqual((await summaries[i].get()).get("resultPropagation"),
+          processing[i]);
+      }
+      await submissionAnalyticsTriggerService.markResultPropagationAvailable(
+        context("newer"), newer);
+      const available = await Promise.all(summaries.map(async (ref) =>
+        (await ref.get()).get("resultPropagation")));
+      await enqueue("newer", newer);
+      await enqueue("older", older);
+      await submissionAnalyticsTriggerService.markResultPropagationAvailable(
+        context("older"), older);
+      for (let i = 0; i < summaries.length; i++) {
+        const marker = (await summaries[i].get()).get("resultPropagation");
+        assert.deepEqual(marker, available[i]);
+        assert.equal(marker.sessionId, "newer");
+        assert.equal(marker.state, "available");
+      }
+    } finally {
+      await firestore.recursiveDelete(institute);
+      assert.equal((await institute.listCollections()).length, 0);
+    }
+  }
+});

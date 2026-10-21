@@ -99,15 +99,19 @@ function toDateInputEpoch(value: string, endOfDay = false): number | null {
 
 async function loadPerformance() {
   const dataset = await fetchStudentPerformanceDataset(10);
+  let resultReadiness = dataset.resultReadiness;
   let insights: Awaited<ReturnType<typeof fetchStudentInsightsDataset>> | null = null;
   let topicWeaknessRows: TopicWeaknessInsight[] = [];
   let insightError: string | null = null;
   if (dataset.access.metrics.insights) {
     try { insights = await fetchStudentInsightsDataset(6);
-      topicWeaknessRows = insights.topicWeaknessSummary; }
+      if (insights.resultReadiness.state !== "available") {
+        resultReadiness = insights.resultReadiness; insights = null;
+        insightError = "Reflective results are not confirmed yet.";
+      } else topicWeaknessRows = insights.topicWeaknessSummary; }
     catch { insightError = "Reflective insights are unavailable. Refresh to retry."; }
   }
-  return {dataset, topicWeaknessRows, insights, insightError};
+  return {dataset, topicWeaknessRows, insights, insightError, resultReadiness};
 }
 function StudentPerformancePage() {
   return <StudentSummaryRead load={loadPerformance} label="analytics">

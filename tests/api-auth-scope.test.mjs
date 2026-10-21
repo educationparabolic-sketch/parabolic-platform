@@ -19,7 +19,7 @@ function client({getToken, fetch}) {
     "firebase/auth": {getIdToken: (user, force) => getToken?.(current, user, force) ?? Promise.resolve("test-token")},
     "./firebaseClient": {getFirebaseAuth: () => ({currentUser: current.user})},
     "./frontendEnvironment": {getFrontendEnvironment: () => ({apiBaseUrl: "/api/v1"})},
-    "./authSessionConvergence": {buildFirebaseRefreshAuthoritySignal: () => null, classifyApiAuthorityFailure: () => null, publishAuthAuthoritySignal: signal => signals.push(signal)},
+    "./authSessionConvergence": {buildFirebaseRefreshAuthoritySignal: () => null, classifyApiAuthorityFailure: input => input.status === 401 ? {issue: "session_revoked"} : null, publishAuthAuthoritySignal: signal => signals.push(signal)},
     "./frontendDataState": {beginFrontendDataRequest: () => "test", completeFrontendDataRequest: () => {}, failFrontendDataRequest: () => {}},
     "./frontendMonitoring": {captureFrontendApiFailure: () => {}, captureFrontendApiTiming: () => {}},
     "../types/apiClient": errors, "../types/apiResponse": responses,
@@ -72,4 +72,15 @@ test("a caller can fence same-UID session replacement before dispatch and 401 re
   const first = client({fetch: () => {requests++; return ok();}});
   await assert.rejects(first.api.post("/exam/session/id/answers", {body: {}, validateAuthToken}));
   assert.equal(requests, 1);
+});
+
+
+test("scoped retry owners can disable the shared 401 replay and observe headers without reading the body", async () => {
+  let requests = 0, refreshes = 0, retry;
+  const env = client({getToken: (_current, _user, force) => {if (force) refreshes++; return "same-scope-token";},
+    fetch: () => {requests++; return new Response(JSON.stringify({success: false, error: {code: "UNAUTHORIZED", message: "refresh required"},
+      requestId: "test", timestamp: "2026-10-14T00:00:00.000Z"}), {status: 401, headers: {"content-type": "application/json", "Retry-After": "2"}});}});
+  await assert.rejects(env.api.post("/exam/session/s/answers", {body: {batchId: "retained"}, refreshAuthOn401: false,
+    onResponseHeaders: headers => {retry = headers.get("Retry-After");}}), error => error.status === 401);
+  assert.equal(requests, 1); assert.equal(refreshes, 0); assert.equal(retry, "2"); assert.deepEqual(env.signals, []);
 });

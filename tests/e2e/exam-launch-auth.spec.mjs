@@ -1,6 +1,8 @@
 import {createRequire} from "node:module";
+import {readFile} from "node:fs/promises";
 import {chromium, expect, test} from "playwright/test";
 import {calibrationConsumerFixture} from "./calibration-consumer-fixture.mjs";
+import {openNativeForegroundTab} from "./native-visibility.mjs";
 
 const require = createRequire(import.meta.url);
 const {
@@ -322,16 +324,8 @@ test("mounted ownership preserves activation, acknowledged/offline answers, rota
   expect(launchUrl.pathname).toBe(`/session/${encodeURIComponent(sessionId)}`);
   expect(decodeURIComponent(launchUrl.hash.slice("#launch=".length))).toBe(launchCredential);
 
-  let entryAuthorization = "";
-  let entryRequestBody = null;
-  page.on("request", (request) => {
-    if (new URL(request.url()).pathname.endsWith(`/session/${sessionId}/entry`)) {
-      entryAuthorization = request.headers().authorization ?? "";
-      entryRequestBody = request.postDataJSON();
-    }
-  });
   const entryResponsePromise = page.waitForResponse((response) =>
-    new URL(response.url()).pathname.endsWith(`/session/${sessionId}/entry`),
+    new URL(response.url()).pathname.endsWith(`/session/${sessionId}/entry`) && response.request().postDataJSON()?.operation === "launch",
   {timeout: 90_000});
   await page.addInitScript(() => {
     window.__cameraOffRequests = 0;
@@ -342,11 +336,14 @@ test("mounted ownership preserves activation, acknowledged/offline answers, rota
   await expect.poll(() => new URL(page.url()).searchParams.has("token"))
     .toBe(false);
   const entryResponse = await entryResponsePromise;
+  const entryRequestBody = entryResponse.request().postDataJSON();
+  const entryAuthorization = entryResponse.request().headers().authorization ?? "";
   expect(entryResponse.status()).toBe(200);
   const entryEnvelope = await entryResponse.json();
   expect(entryEnvelope.success).toBe(true);
   expect(entryEnvelope.data.operation).toBe("launch");
   const initialGeneration = entryEnvelope.data.ownership.generation;
+  const initialRenewal = entryResponseFor(page, "renew");
   entryEnvelope.data = entryEnvelope.data.entry;
   expect(entryEnvelope.data.allowed).toBe(true);
   expect(entryEnvelope.data.status).toBe("started");
@@ -375,7 +372,8 @@ test("mounted ownership preserves activation, acknowledged/offline answers, rota
     new URL(response.url()).pathname.endsWith(`/session/${sessionId}/activate`),
   {timeout: 90_000});
   await page.getByRole("button", {name: "Continue to Instructions"}).click();
-  await page.getByLabel(/I have read and understood the instructions/u).check();
+  // Activation unmounts the checkbox; verify the real server transition below.
+  await page.getByLabel(/I have read and understood the instructions/u).click({noWaitAfter: true});
   const activationResponse = await activationResponsePromise;
   expect(activationResponse.status()).toBe(200);
   const activationEnvelope = await activationResponse.json();
@@ -463,6 +461,9 @@ test("mounted ownership preserves activation, acknowledged/offline answers, rota
     await replayContext.close();
   }
 
+  // Keep this below-renewal offline drain independent of slow initial loading.
+  // Exhausted/offline renewal is covered separately; never bypass its pause.
+  expect((await initialRenewal).status()).toBe(200);
   await page.context().setOffline(true);
   const palette = page.getByLabel("Question status tiles");
   for (let index = 0; index < questionIds.length; index += 1) {
@@ -491,28 +492,29 @@ test("mounted ownership preserves activation, acknowledged/offline answers, rota
         const snapshot = request.result;
         database.close();
         resolve({
-          ownerId: snapshot?.ownerId ?? null,
+          scopeValid: /^[a-f0-9]{64}$/u.test(snapshot?.scopeHash ?? ""),
           pendingCount: Object.keys(snapshot?.pendingAnswerMap ?? {}).length,
           schemaVersion: snapshot?.schemaVersion ?? null,
         });
       };
     });
   }, {expectedOwnerId: studentId, expectedSessionId: sessionId})).toEqual({
-    ownerId: studentId,
+    scopeValid: true,
     pendingCount: 12,
-    schemaVersion: 2,
+    schemaVersion: 3,
   });
 
   const recoveryAnswerRequestStart = answerRequestBodies.length;
   const resumedEntryResponsePromise = page.waitForResponse((response) =>
-    new URL(response.url()).pathname.endsWith(`/session/${sessionId}/entry`),
+    new URL(response.url()).pathname.endsWith(`/session/${sessionId}/entry`) && response.request().postDataJSON()?.operation === "recover",
   {timeout: 90_000});
   await page.context().setOffline(false);
   await page.reload({waitUntil: "domcontentloaded"});
   const resumedEntryResponse = await resumedEntryResponsePromise;
   expect(resumedEntryResponse.status()).toBe(200);
-  expect(entryRequestBody.operation).toBe("recover");
-  expect(entryRequestBody.previous.generation).toBe(initialGeneration);
+  const recoveredEntryRequest = resumedEntryResponse.request().postDataJSON();
+  expect(recoveredEntryRequest.operation).toBe("recover");
+  expect(recoveredEntryRequest.previous.generation).toBe(initialGeneration);
   expect((await resumedEntryResponse.json()).data.ownership.generation).toBe(initialGeneration + 1);
   await expect(page.getByText("Offline recovery question 12", {exact: true}))
     .toBeVisible({timeout: 30_000});
@@ -716,7 +718,7 @@ const entryResponseFor = (page, operation) => page.waitForResponse(response =>
 async function beginOwnedExam(page) {
   await page.getByRole("button", {name: "Check Internet"}).click();
   await page.getByRole("button", {name: "Continue to Instructions"}).click();
-  await page.getByLabel(/I have read and understood the instructions/u).check();
+  await page.getByLabel(/I have read and understood the instructions/u).click({noWaitAfter: true});
   await expect(page.getByText("Authoritative browser snapshot question", {exact: true})).toBeVisible({timeout: 30000});
 }
 async function recoveryRecord(page, sessionId) {
@@ -732,6 +734,307 @@ async function recoveryRecord(page, sessionId) {
     });
   }, sessionId);
 }
+
+async function editRecoveryRecord(page, sessionId, edit) {
+  return page.evaluate(async ({id, action}) => {
+    const db = await new Promise((resolve, reject) => {
+      const request = indexedDB.open("parabolic-exam-runtime", 1);
+      request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);
+    });
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction("sessionRecovery", "readwrite"), store = tx.objectStore("sessionRecovery");
+      tx.oncomplete = resolve; tx.onabort = () => reject(tx.error); tx.onerror = () => reject(tx.error);
+      if (action === "delete") store.delete(id);
+    });
+    db.close();
+  }, {id: sessionId, action: edit});
+}
+
+test("resilience transport keeps exact signed intent through 429 and 503 and refreshes a 401 within budget", async ({page}) => {
+  test.setTimeout(180000);
+  await prepareOwnershipRun("resilience_transport");
+  const launch = await issueLaunch(page), ref = sessionFor(launch);
+  const entry = entryResponseFor(page, "launch"); await page.goto(launch.examUrl); expect((await entry).status()).toBe(200);
+  await beginOwnedExam(page);
+  const original = (await ref.get()).data();
+  const cdp = await page.context().newCDPSession(page);
+  let failures = [429, 503], dispatches = [], tokenRefreshes = 0, driverError;
+  page.on("request", request => {if (request.url().includes("securetoken.googleapis.com")) tokenRefreshes++;});
+  cdp.on("Fetch.requestPaused", async event => {
+    try {
+      if (!event.request.url.endsWith("/answers")) {await cdp.send("Fetch.continueRequest", {requestId: event.requestId}); return;}
+      const headers = Object.fromEntries(Object.entries(event.request.headers).map(([key, value]) => [key.toLowerCase(), value]));
+      expect(headers.authorization).toMatch(/^Bearer /u);
+      expect(headers["x-parabolic-exam-owner"]).toBeTruthy(); expect(headers["x-parabolic-exam-generation"]).toBe("1");
+      dispatches.push({body: event.request.postData, at: performance.now()});
+      if (failures.length) {
+        // The signed request reached the real backend. Replace only its response with a failure.
+        const status = failures.shift();
+        await cdp.send("Fetch.fulfillRequest", {requestId: event.requestId, responseCode: status,
+          responseHeaders: [{name: "Content-Type", value: "application/json"}, {name: "Retry-After", value: "1"}],
+          body: Buffer.from(JSON.stringify({success: false, error: {code: status === 401 ? "UNAUTHORIZED" : "INTERNAL_ERROR", message: "Injected transport failure"},
+            requestId: "transport-fault", timestamp: new Date().toISOString()})).toString("base64")});
+      } else await cdp.send("Fetch.continueRequest", {requestId: event.requestId});
+    } catch (error) {driverError = error; await cdp.send("Fetch.continueRequest", {requestId: event.requestId}).catch(() => undefined);}
+  });
+  await cdp.send("Fetch.enable", {patterns: [{urlPattern: `${examOrigin}/api/v1/exam/session/*/answers`, requestStage: "Response"}]});
+  try {
+    let acceptedResponse = page.waitForResponse(response => response.url().endsWith("/answers") && response.status() === 200);
+    await page.getByRole("radio").nth(1).check(); await acceptedResponse;
+    await expect.poll(async () => (await recoveryRecord(page, launch.sessionId))?.pendingAnswerMap ?? null, {timeout: 30000}).toEqual({});
+    expect(driverError).toBeUndefined(); expect(dispatches).toHaveLength(3);
+    expect(new Set(dispatches.map(item => item.body)).size).toBe(1);
+    expect(dispatches[1].at - dispatches[0].at).toBeGreaterThanOrEqual(950);
+    expect(dispatches[2].at - dispatches[1].at).toBeGreaterThanOrEqual(1950);
+    expect((await ref.get()).data().answerMap[questionId].response).toEqual({kind: "mcq", optionId: "B"});
+    failures = [401]; dispatches = []; const refreshBefore = tokenRefreshes;
+    acceptedResponse = page.waitForResponse(response => response.url().endsWith("/answers") && response.status() === 200);
+    await page.getByRole("radio").nth(0).check(); await acceptedResponse;
+    await expect.poll(async () => (await recoveryRecord(page, launch.sessionId))?.pendingAnswerMap ?? null, {timeout: 30000}).toEqual({});
+    expect(driverError).toBeUndefined(); expect(dispatches).toHaveLength(2);
+    expect(dispatches[0].body).toBe(dispatches[1].body); expect(tokenRefreshes).toBeGreaterThan(refreshBefore);
+    const final = (await ref.get()).data();
+    expect(final.answerMap[questionId].response).toEqual({kind: "mcq", optionId: "A"});
+    expect(final.deadlineAt.toMillis()).toBe(original.deadlineAt.toMillis());
+    expect(final.startedAt.toMillis()).toBe(original.startedAt.toMillis()); expect(final.status).toBe("active"); expect(final.submittedAt).toBeNull();
+  } finally {await cdp.send("Fetch.disable").catch(() => undefined); await cdp.detach();}
+});
+
+test("resilience lobby exposes explicit recovery after bounded uncertain renewal without extending its receipt", async ({page}) => {
+  test.setTimeout(120000);
+  await prepareOwnershipRun("resilience_lobby");
+  const launch = await issueLaunch(page), ref = sessionFor(launch);
+  const entry = entryResponseFor(page, "launch"); await page.goto(launch.examUrl); expect((await entry).status()).toBe(200);
+  await expect(page.getByText("Complete Entry Check", {exact: true})).toBeVisible();
+  const initial = (await ref.get()).data(), commands = [];
+  const cdp = await page.context().newCDPSession(page); let driverError;
+  cdp.on("Fetch.requestPaused", async event => {
+    try {
+      const body = JSON.parse(event.request.postData ?? "{}");
+      if (body.operation !== "renew") {await cdp.send("Fetch.continueRequest", {requestId: event.requestId}); return;}
+      commands.push(body);
+      if (commands.length <= 3) await cdp.send("Fetch.fulfillRequest", {requestId: event.requestId, responseCode: 429,
+        responseHeaders: [{name: "Content-Type", value: "application/json"}, {name: "Retry-After", value: "1"}],
+        body: Buffer.from(JSON.stringify({success: false, error: {code: "INTERNAL_ERROR", message: "Injected renewal response loss"},
+          requestId: "renewal-fault", timestamp: new Date().toISOString()})).toString("base64")});
+      else await cdp.send("Fetch.continueRequest", {requestId: event.requestId});
+    } catch (error) {driverError = error; await cdp.send("Fetch.continueRequest", {requestId: event.requestId}).catch(() => undefined);}
+  });
+  await cdp.send("Fetch.enable", {patterns: [{urlPattern: `${examOrigin}/api/v1/exam/session/*/entry`, requestStage: "Response"}]});
+  try {
+    await expect.poll(() => commands.length, {timeout: 45000}).toBe(3);
+    await expect(page.getByRole("button", {name: "Retry clock and connection"})).toBeVisible();
+    expect(driverError).toBeUndefined(); expect(new Set(commands.map(command => command.commandId)).size).toBe(1);
+    const uncertain = (await ref.get()).data();
+    expect(uncertain.runtimeOwnership.generation).toBe(1); expect(uncertain.status).toBe("started");
+    await expect(page.getByRole("button", {name: "Retry clock and connection"})).toBeEnabled();
+    await page.getByRole("button", {name: "Retry clock and connection"}).click();
+    await expect(page.getByRole("button", {name: "Retry clock and connection"})).toHaveCount(0);
+    expect(commands).toHaveLength(4); expect(new Set(commands.map(command => command.commandId)).size).toBe(1);
+    const final = (await ref.get()).data();
+    expect(final.runtimeOwnership.expiresAt.toMillis()).toBe(uncertain.runtimeOwnership.expiresAt.toMillis());
+    expect(final.status).toBe("started"); expect(final.startedAt).toEqual(initial.startedAt);
+    expect(final.deadlineAt).toEqual(initial.deadlineAt); expect(final.submittedAt).toBeNull();
+    await expect(page.getByText("Complete Entry Check", {exact: true})).toBeVisible();
+  } finally {await cdp.send("Fetch.disable").catch(() => undefined); await cdp.detach();}
+});
+
+test("resilience clock ignores both wall jumps and reconciles after a real blocked renderer without inventing dwell", async ({page}) => {
+  test.setTimeout(180000);
+  await prepareOwnershipRun("resilience_clock");
+  const launch = await issueLaunch(page), ref = sessionFor(launch);
+  const entry = entryResponseFor(page, "launch"); await page.goto(launch.examUrl); expect((await entry).status()).toBe(200);
+  await beginOwnedExam(page);
+  const initial = (await ref.get()).data(), timer = page.locator(".exam-header-timer");
+  const seconds = text => text.split(":").reduce((total, part) => total * 60 + Number(part), 0);
+  const started = await page.evaluate(() => performance.now()), before = seconds(await timer.innerText());
+  await page.evaluate(() => {window.originalClockNow = Date.now; Date.now = () => window.originalClockNow() + 86400000;});
+  let saved = page.waitForResponse(response => response.url().endsWith("/answers") && response.status() === 200);
+  await page.getByRole("radio").nth(1).check(); await saved;
+  let accepted = (await ref.get()).data().answerMap[questionId];
+  expect(Math.abs(accepted.clientTimestamp - Date.now())).toBeLessThan(30000);
+  await page.evaluate(() => {Date.now = () => window.originalClockNow() - 86400000;});
+  saved = page.waitForResponse(response => response.url().endsWith("/answers") && response.status() === 200);
+  await page.getByRole("radio").nth(0).check(); await saved;
+  const previousTimestamp = accepted.clientTimestamp; accepted = (await ref.get()).data().answerMap[questionId];
+  expect(accepted.clientTimestamp).toBeGreaterThan(previousTimestamp);
+  expect(Math.abs(accepted.clientTimestamp - Date.now())).toBeLessThan(30000);
+  const elapsed = (await page.evaluate(() => performance.now()) - started) / 1000;
+  expect(Math.abs(before - seconds(await timer.innerText()) - elapsed)).toBeLessThan(2.5);
+  await page.evaluate(() => {Date.now = window.originalClockNow;});
+  // Finish wall-jump reconciliation before measuring the separate renderer stall.
+  const restored = entryResponseFor(page, "reconcile");
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  expect((await restored).status()).toBe(200);
+  await expect(page.getByRole("button", {name: "Retry clock and connection"})).toHaveCount(0);
+  await expect.poll(async () => (await recoveryRecord(page, launch.sessionId))?.pendingAnswerMap ?? null).toEqual({});
+  const dwell = (await recoveryRecord(page, launch.sessionId)).questionTimingById[questionId].timeSpentMs;
+  const reconcile = entryResponseFor(page, "reconcile");
+  // Block the actual renderer task queue. CDP lifecycle freeze alone can leave foreground timers running.
+  const blockedMs = await page.evaluate(() => {
+    const start = performance.now();
+    while (performance.now() - start < 6500) { /* Real long task: no synthetic clock or business response. */ }
+    return performance.now() - start;
+  });
+  expect(blockedMs).toBeGreaterThanOrEqual(6500);
+  expect((await reconcile).status()).toBe(200);
+  await expect(page.getByRole("button", {name: "Retry clock and connection"})).toHaveCount(0);
+  await expect(page.getByRole("radio").nth(0)).toBeChecked();
+  const snapshot = await recoveryRecord(page, launch.sessionId);
+  expect(snapshot.questionTimingById[questionId].timeSpentMs - dwell).toBeLessThan(5000);
+  const final = (await ref.get()).data();
+  expect(snapshot.questionTimingById[questionId].timeSpentMs).toBeGreaterThanOrEqual(final.questionTimeMap[questionId].cumulativeTimeSpent * 1000);
+  expect(final.deadlineAt.toMillis()).toBe(initial.deadlineAt.toMillis()); expect(final.startedAt.toMillis()).toBe(initial.startedAt.toMillis());
+  expect(final.answerMap[questionId].response).toEqual({kind: "mcq", optionId: "A"}); expect(final.status).toBe("active");
+});
+
+test("resilience answers reconstruct server state after stale/missing storage and disclose memory-only crash loss", async () => {
+  test.setTimeout(180000);
+  const isolated = await chromium.launch();
+  try {
+    const context = await isolated.newContext({baseURL: examOrigin, bypassCSP: true});
+    const page = await context.newPage();
+    await prepareOwnershipRun("resilience_storage");
+    const launch = await issueLaunch(page), ref = sessionFor(launch);
+    let entry = entryResponseFor(page, "launch");
+    await page.goto(launch.examUrl); expect((await entry).status()).toBe(200);
+    await beginOwnedExam(page);
+    const answer = page.waitForResponse(r => r.url().endsWith("/answers"));
+    await page.getByRole("radio").nth(1).check();
+    const saved = await answer; expect(saved.status()).toBe(200);
+    const headers = {authorization: saved.request().headers().authorization,
+      "X-Parabolic-Exam-Owner": saved.request().headers()["x-parabolic-exam-owner"],
+      "X-Parabolic-Exam-Generation": saved.request().headers()["x-parabolic-exam-generation"]};
+    const before = (await ref.get()).data();
+    await page.context().setOffline(true);
+    await page.getByRole("radio").nth(0).check();
+    await expect.poll(async () => (await recoveryRecord(page, launch.sessionId))?.pendingAnswerMap[questionId]?.response.optionId).toBe("A");
+    const local = await recoveryRecord(page, launch.sessionId);
+    expect(local.schemaVersion).toBe(3); expect(local.scopeHash).toMatch(/^[a-f0-9]{64}$/u);
+    expect(JSON.stringify(local)).not.toMatch(/"proof"|"token"|"ownerId"|launchNonce/u);
+    // Establish a genuinely newer accepted answer through the real signed handler.
+    const accepted = {...saved.request().postDataJSON(), batchId: crypto.randomUUID(), batchSequence: 900,
+      answers: [{...local.pendingAnswerMap[questionId], clientRevision: 900,
+        clientTimestamp: local.lastIssuedClientTimestamp + 1, response: {kind: "mcq", optionId: "B"}}]};
+    const newer = await page.request.post(`/api/v1/exam/session/${launch.sessionId}/answers`, {headers, data: accepted});
+    expect(newer.status()).toBe(200);
+    await page.context().setOffline(false);
+    entry = entryResponseFor(page, "recover"); await page.reload(); expect((await entry).status()).toBe(200);
+    await expect(page.getByRole("radio").nth(1)).toBeChecked();
+    const status = page.getByRole("region", {name: "Answer recovery status"});
+    await expect(status).toContainText("superseded");
+    await expect(status.getByRole("checkbox")).not.toBeChecked();
+    await expect.poll(async () => Object.keys((await recoveryRecord(page, launch.sessionId))?.pendingAnswerMap ?? {unknown: 1}).length).toBe(0);
+    expect((await ref.get()).get(`answerMap.${questionId}.clientTimestamp`)).toBe(accepted.answers[0].clientTimestamp);
+    // Remove only this disposable local record; accepted server data must reconstruct it.
+    await editRecoveryRecord(page, launch.sessionId, "delete");
+    entry = entryResponseFor(page, "recover"); await page.reload(); expect((await entry).status()).toBe(200);
+    await expect(page.getByRole("radio").nth(1)).toBeChecked();
+    await expect(status).toContainText("Pending edits without a completed local save may have been lost");
+    // Break only the exam's IndexedDB. Firebase identity persistence remains real.
+    await page.addInitScript(() => {
+      const original = IDBFactory.prototype.open;
+      IDBFactory.prototype.open = function(name, ...args) {
+        if (name === "parabolic-exam-runtime") throw new DOMException("Injected local storage failure", "QuotaExceededError");
+        return original.call(this, name, ...args);
+      };
+    });
+    entry = entryResponseFor(page, "recover"); await page.reload(); expect((await entry).status()).toBe(200);
+    await expect(page.getByRole("radio").nth(1)).toBeChecked(); await expect(status).toContainText("Memory only");
+    // Keep identity/reload networking real. Abort only answer dispatch so this
+    // memory-only edit cannot commit before the actual renderer crash.
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Network.enable");
+    // Native URL blocking needs no Playwright routing callback after a crash.
+    await cdp.send("Network.setBlockedURLs", {urls: [`${examOrigin}/api/v1/exam/session/${launch.sessionId}/answers`]});
+    await page.getByRole("radio").nth(0).check();
+    await expect(page.getByRole("radio").nth(0)).toBeChecked(); await expect(status).toContainText("may be lost on reload");
+    expect((await ref.get()).get(`answerMap.${questionId}.response.optionId`)).toBe("B");
+    const generation = (await ownerRecord(page)).current.generation;
+    const browserCdp = await isolated.newBrowserCDPSession();
+    const crashed = page.waitForEvent("crash");
+    const {processInfo} = await browserCdp.send("SystemInfo.getProcessInfo");
+    const renderers = processInfo.filter(info => info.type === "renderer"); expect(renderers.length).toBeGreaterThan(0);
+    for (const renderer of renderers) {
+      expect(Number.isSafeInteger(renderer.id) && renderer.id > 0 && renderer.id !== process.pid).toBe(true);
+      try {process.kill(renderer.id, "SIGKILL");} catch (error) {if (error.code !== "ESRCH") throw error;}
+    }
+    await crashed;
+    // Playwright closes page action scopes after a real crash. Reload this same
+    // surviving target through CDP, as in the permanent durable-pending case.
+    await cdp.send("Page.reload");
+    let lastCrashState;
+    await expect.poll(async () => {
+      try {
+        const result = await cdp.send("Runtime.evaluate", {expression: `JSON.stringify((() => {let generation = null; try {generation = JSON.parse(sessionStorage.getItem(${JSON.stringify(ownerKey)}))?.current?.generation ?? null;} catch {} return {generation, accepted: document.querySelectorAll('[role="radiogroup"] input')[1]?.checked === true, disclosed: document.body.innerText.includes('Memory only'), heading: document.querySelector('h1')?.textContent ?? '', protocol: location.protocol};})())`, returnByValue: true});
+        const value = result.result.value ? JSON.parse(result.result.value) : null;
+        if (JSON.stringify(value) !== lastCrashState) {lastCrashState = JSON.stringify(value); console.info("[exam-memory-crash]", lastCrashState);}
+        return value ? {generation: value.generation, accepted: value.accepted, disclosed: value.disclosed} : null;
+      } catch {return null;}
+    }, {timeout: 90000}).toEqual({generation: generation + 1, accepted: true, disclosed: true});
+    const final = (await ref.get()).data();
+    expect(final.answerMap[questionId].response.optionId).toBe("B");
+    expect(final.deadlineAt.toMillis()).toBe(before.deadlineAt.toMillis()); expect(final.startedAt.toMillis()).toBe(before.startedAt.toMillis());
+    expect(final.status).toBe("active"); expect(final.submittedAt).toBeNull();
+    await cdp.detach(); await browserCdp.detach();
+  } finally {await isolated.close();}
+});
+
+test("resilience answers preserve a newer edit across an old receipt and reconcile a real ignored write before submission", async ({page}) => {
+  test.setTimeout(180000);
+  await prepareOwnershipRun("resilience_receipts");
+  const launch = await issueLaunch(page), ref = sessionFor(launch);
+  const entry = entryResponseFor(page, "launch"); await page.goto(launch.examUrl); expect((await entry).status()).toBe(200);
+  await beginOwnedExam(page);
+  let gate = await pauseEntry(page, null, "Response", "answers");
+  try {
+    await page.getByRole("radio").nth(1).check();
+    expect((await gate.paused).responseStatusCode).toBe(200);
+    await page.getByRole("radio").nth(0).check();
+  } finally {await gate.dispose();}
+  await expect.poll(async () => (await ref.get()).get(`answerMap.${questionId}.response.optionId`), {timeout: 30000}).toBe("A");
+  await expect.poll(async () => Object.keys((await recoveryRecord(page, launch.sessionId))?.pendingAnswerMap ?? {unknown: 1}).length).toBe(0);
+  const before = (await ref.get()).data();
+  gate = await pauseEntry(page, null, "Request", "answers");
+  let sent;
+  try {
+    await page.getByRole("radio").nth(1).check();
+    const paused = await gate.paused; sent = JSON.parse(paused.request.postData);
+    const headers = Object.fromEntries(Object.entries(paused.request.headers).filter(([key]) =>
+      ["authorization", "x-parabolic-exam-owner", "x-parabolic-exam-generation"].includes(key.toLowerCase())));
+    const accepted = {...sent, batchId: crypto.randomUUID(), batchSequence: sent.batchSequence + 1000,
+      answers: [{...sent.answers[0], clientRevision: sent.answers[0].clientRevision + 1000,
+        clientTimestamp: sent.answers[0].clientTimestamp + 1, response: {kind: "mcq", optionId: "A"}}]};
+    const response = await page.request.post(`/api/v1/exam/session/${launch.sessionId}/answers`, {headers, data: accepted});
+    expect(response.status()).toBe(200);
+    const ignored = page.waitForResponse(r => r.url().endsWith("/answers") && r.request().postDataJSON().batchId === sent.batchId);
+    const reconcile = entryResponseFor(page, "reconcile");
+    await gate.dispose(); gate = null;
+    const receipt = await ignored; expect(receipt.status()).toBe(200);
+    expect((await receipt.json()).data.acknowledgements[0].disposition).toBe("ignored");
+    expect((await reconcile).status()).toBe(200);
+  } finally {if (gate) await gate.dispose();}
+  await expect(page.getByRole("radio").nth(0)).toBeChecked();
+  const status = page.getByRole("region", {name: "Answer recovery status"});
+  await expect(status).toContainText("superseded");
+  await page.getByRole("button", {name: "Submit Test", exact: true}).click();
+  const dialog = page.getByRole("dialog", {name: "Confirm exam submission"});
+  await dialog.getByLabel(/I understand.*will remain unanswered/u).check();
+  await expect(dialog.getByRole("button", {name: "Confirm Final Submit"})).toBeDisabled();
+  // A known rejected change needs explicit disclosure acceptance; uncertainty cannot be waived.
+  await dialog.getByRole("button", {name: "Cancel", exact: true}).click();
+  await status.getByRole("checkbox").check();
+  await page.getByRole("button", {name: "Submit Test", exact: true}).click();
+  await dialog.getByLabel(/I understand.*will remain unanswered/u).check();
+  const submitted = page.waitForResponse(r => r.url().endsWith("/submit"));
+  await dialog.getByRole("button", {name: "Confirm Final Submit"}).click();
+  expect((await submitted).status()).toBe(200);
+  const final = (await ref.get()).data(); expect(final.status).toBe("submitted");
+  expect(final.answerMap[questionId].response.optionId).toBe("A");
+  expect(final.deadlineAt.toMillis()).toBe(before.deadlineAt.toMillis());
+  await expect.poll(async () => (await recoveryRecord(page, launch.sessionId))?.closed).toBe(true);
+  expect(Object.keys(await recoveryRecord(page, launch.sessionId)).sort()).toEqual(["closed", "runtimeGeneration", "schemaVersion", "scopeHash", "sessionId"]);
+});
 
 test("mounted ownership fences cloned tabs, independent replay, renewal, release and same-UID replacement", async ({page, browser}) => {
   test.setTimeout(180000);
@@ -875,13 +1178,19 @@ if (studentOrigin) {
     await expect(page.getByRole("heading", {name: "Session Access Blocked"})).toBeVisible();
     await returnToUnauthenticatedStudent(page, "Go to Student Portal");
     await prepareOwnershipRun("returns");
+    // Use a real short server window. Wall-clock jumps cannot close the
+    // monotonic server-anchored lobby introduced by resilience recovery.
+    const returnRun = firestore.doc(`institutes/${instituteId}/academicYears/${yearId}/runs/${runId}`);
+    await returnRun.update({endWindow: Timestamp.fromMillis(Date.now() + 20000)});
     const launch = await issueLaunch(page);
     const entry = entryResponseFor(page, "launch");
     await page.goto(launch.examUrl); const initial = await entry; expect(initial.status()).toBe(200);
     const body = (await initial.json()).data.entry;
     await expect(page.getByText("Complete Entry Check", {exact: true})).toBeVisible();
     await page.clock.setFixedTime(Date.parse(body.runtimeSnapshot.schedule.sessionEndsAt) + 1000);
-    await expect(page.getByRole("heading", {name: "Entry Window Closed"})).toBeVisible();
+    await expect(page.getByText("Complete Entry Check", {exact: true})).toBeVisible();
+    await expect(page.getByRole("heading", {name: "Entry Window Closed"})).not.toBeVisible();
+    await expect(page.getByRole("heading", {name: "Entry Window Closed"})).toBeVisible({timeout: 25000});
     await returnToUnauthenticatedStudent(page, "Return to Student Portal");
     const independent = await browser.newContext({bypassCSP: true});
     try {
@@ -1101,16 +1410,32 @@ if (studentOrigin) {
           await service.transitionSessionState(context, "expired");
           await service.transitionSessionState(context, "terminated");
           expect((await ref.get()).get("runtimeOwnership.state")).toBe("closed");
-          const recovery = entryResponseFor(page, "recover");
-          await page.reload(); expect((await recovery).status()).toBe(409);
+          const closed = (await ref.get()).data();
+          const reconciliation = entryResponseFor(page, "reconcile");
+          const writes = [];
+          const observe = request => {
+            if (/\/(?:activate|answers|submit)$/u.test(request.url()) ||
+              request.url().endsWith("/entry") && request.postDataJSON()?.operation === "recover") writes.push(request.url());
+          };
+          page.on("request", observe);
+          try {
+            await page.reload();
+            const response = await reconciliation; expect(response.status()).toBe(200);
+            expect((await response.json()).data.status).toBe("terminated");
+            await expect(page.getByRole("heading", {name: "Session Terminated", exact: true})).toBeVisible();
+            expect(writes).toEqual([]);
+            const final = (await ref.get()).data();
+            expect(final.runtimeOwnership).toEqual(closed.runtimeOwnership);
+            expect(final.startedAt).toEqual(closed.startedAt); expect(final.deadlineAt).toEqual(closed.deadlineAt);
+            expect(final.result ?? null).toBeNull();
+          } finally {page.off("request", observe);}
         } else {
           await firestore.doc(`institutes/${instituteId}`).update({status: "suspended"});
           const renewal = entryResponseFor(page, "renew");
           expect((await renewal).status()).toBe(403);
         }
-        // Terminal/authority failure reaches the live ownership interruption
-        // guard, before legacy terminal/authority presentation branches.
-        await expect(page.getByRole("heading", {name: "Exam runtime paused"})).toBeVisible();
+        // Canonical termination is read-only; authority loss remains paused.
+        await expect(page.getByRole("heading", {name: state === "terminated" ? "Session Terminated" : "Exam runtime paused", exact: true})).toBeVisible();
         await expect(page.getByText("Authoritative browser snapshot question", {exact: true})).not.toBeVisible();
         const navigation = page.waitForResponse(response => response.request().isNavigationRequest() && response.url() === `${studentOrigin}/student/my-tests`);
         await page.getByRole("button", {name: "Return to Student Portal", exact: true}).click();
@@ -1488,4 +1813,313 @@ test("proctoring acceptance stops camera and private pending observations on an 
     expect(after.status).toBe("active"); expect(after.submittedAt).toBeNull();
     expect((await recoveryRecord(page, launch.sessionId)).runtimeGeneration).toBe(1);
   } finally {await tab.close(); await getAuth(adminApp).deleteUser(replacement.uid);}
+});
+
+test("resilience expiry entry needs no camera or instructions and recovers after exhausted finalization", async ({page}) => {
+  test.setTimeout(180000);
+  await instrumentProctoring(page.context());
+  await prepareOwnershipRun("resilience_expired_entry", true);
+  const launch = await issueLaunch(page), ref = sessionFor(launch);
+  const deadline = Timestamp.fromMillis(Date.now() - 1000);
+  await ref.update({status: "expired", deadlineAt: deadline});
+  let dispatches = 0;
+  const cdp = await page.context().newCDPSession(page);
+  cdp.on("Fetch.requestPaused", event => {dispatches++; void cdp.send("Fetch.failRequest", {requestId: event.requestId, errorReason: "Aborted"});});
+  await cdp.send("Fetch.enable", {patterns: [{urlPattern: "*/api/v1/exam/session/*/submit", requestStage: "Request"}]});
+  await page.goto(launch.examUrl, {waitUntil: "domcontentloaded"});
+  await expect(page.getByRole("heading", {name: "Exam time expired", exact: true})).toBeVisible({timeout: 60000});
+  await expect(page.getByRole("button", {name: "Retry submission confirmation", exact: true})).toBeEnabled({timeout: 30000});
+  await expect.poll(() => dispatches).toBe(3);
+  await expect(page.getByRole("status").filter({hasText: "Submission confirmation unavailable"})).toBeVisible();
+  expect((await ref.get()).get("status")).toBe("expired");
+  await expect(page.getByRole("button", {name: "Continue to Instructions"})).toHaveCount(0);
+  await expect(page.locator("video")).toHaveCount(0);
+  expect(await page.evaluate(() => window.__proctoring.calls.length)).toBe(0);
+  await cdp.detach();
+  await page.getByRole("button", {name: "Retry submission confirmation", exact: true}).click();
+  await expect(page.getByRole("heading", {name: "Exam Submitted", exact: true})).toBeVisible({timeout: 60000});
+  expect((await ref.get()).get("submissionReason")).toBe("expiry");
+  expect((await ref.get()).get("deadlineAt").toMillis()).toBe(deadline.toMillis());
+});
+
+test("resilience expiry retains late offline edits and reads a lost committed receipt on reload", async ({page, context}) => {
+  test.setTimeout(180000);
+  await prepareOwnershipRun("resilience_lost_expiry");
+  const runRef = firestore.doc(`institutes/${instituteId}/academicYears/${yearId}/runs/${runId}`);
+  await runRef.update({endWindow: Timestamp.fromMillis(Date.now() + 25000)});
+  const launch = await issueLaunch(page), ref = sessionFor(launch);
+  await page.goto(launch.examUrl, {waitUntil: "domcontentloaded"}); await beginOwnedExam(page);
+  await page.getByRole("radio").nth(1).check();
+  await expect.poll(async () => (await ref.get()).get(`answerMap.${questionId}.response.optionId`), {timeout: 20000}).toBe("B");
+  const before = (await ref.get()).data();
+  await context.setOffline(true);
+  await page.getByRole("radio").nth(0).check();
+  await expect.poll(async () => Object.keys((await recoveryRecord(page, launch.sessionId))?.pendingAnswerMap ?? {}).length).toBeGreaterThan(0);
+  const wait = before.deadlineAt.toMillis() - Date.now() + 1500;
+  if (wait > 0) await page.waitForTimeout(wait);
+  expect((await ref.get()).get(`answerMap.${questionId}.response.optionId`)).toBe("B");
+  const gate = await pauseEntry(page, null, "Response", "submit");
+  await context.setOffline(false);
+  await gate.paused;
+  const committed = (await ref.get()).data();
+  expect(committed.status).toBe("submitted"); expect(committed.submissionReason).toBe("expiry");
+  expect(committed.answerMap[questionId].response.optionId).toBe("B");
+  expect(committed.deadlineAt.toMillis()).toBe(before.deadlineAt.toMillis());
+  await gate.abort(); await gate.dispose();
+  const probe = entryResponseFor(page, "reconcile");
+  await page.reload({waitUntil: "domcontentloaded"});
+  expect((await probe).status()).toBe(200);
+  await expect(page.getByRole("heading", {name: "Exam Submitted", exact: true})).toBeVisible({timeout: 60000});
+  await expect(page.getByText("Already finalized", {exact: true})).toBeVisible();
+  await expect(page.getByText(/Local changes received after the deadline were not accepted/u)).toBeVisible();
+  const replay = (await ref.get()).data();
+  expect(replay.submittedAt.toMillis()).toBe(committed.submittedAt.toMillis());
+  expect(replay.runtimeOwnership.generation).toBe(committed.runtimeOwnership.generation);
+  expect(replay.runtimeOwnership.expiresAt.toMillis()).toBeLessThanOrEqual(Date.now());
+  expect(replay.answerMap).toEqual(committed.answerMap);
+});
+
+test("resilience terminal reload shows termination without submission metrics or acquisition", async ({page}) => {
+  await prepareOwnershipRun("resilience_terminal_read");
+  const launch = await issueLaunch(page), ref = sessionFor(launch);
+  const entered = entryResponseFor(page, "launch");
+  await page.goto(launch.examUrl, {waitUntil: "domcontentloaded"}); expect((await entered).status()).toBe(200);
+  const owner = (await ref.get()).get("runtimeOwnership");
+  await expect.poll(async () => (await ownerRecord(page))?.current?.generation).toBe(owner.generation);
+  await ref.update({status: "terminated", "runtimeOwnership.state": "closed", "runtimeOwnership.expiresAt": Timestamp.fromMillis(Date.now() - 1000)});
+  const operations = [];
+  page.on("request", request => {if (request.url().endsWith("/entry")) operations.push(request.postDataJSON().operation);});
+  await page.reload({waitUntil: "domcontentloaded"});
+  await expect(page.getByRole("heading", {name: "Session Terminated", exact: true})).toBeVisible({timeout: 60000});
+  await expect(page.getByRole("heading", {name: "Exam Submitted", exact: true})).toHaveCount(0);
+  await expect(page.locator('[aria-label="Authoritative submission metrics"]')).toHaveCount(0);
+  expect(operations).toEqual(["reconcile"]);
+  expect((await ref.get()).get("runtimeOwnership.generation")).toBe(owner.generation);
+});
+
+test("resilience acceptance restores accepted answers through corrupt foreign legacy aborted slow and blocked native storage", async ({browser}) => {
+  test.setTimeout(300000);
+  for (const mode of ["corrupt", "foreign", "legacy", "abort", "slow", "blocked"]) {
+    const context = await browser.newContext({baseURL: examOrigin, bypassCSP: true});
+    const page = await context.newPage();
+    try {
+      await prepareOwnershipRun(`acceptance_storage_${mode}`);
+      const launch = await issueLaunch(page), ref = sessionFor(launch);
+      await page.goto(launch.examUrl); await beginOwnedExam(page);
+      const saved = page.waitForResponse(response => response.url().endsWith("/answers") && response.status() === 200);
+      await page.getByRole("radio").nth(1).check(); await saved;
+      await expect.poll(async () => (await recoveryRecord(page, launch.sessionId))?.pendingAnswerMap ?? null).toEqual({});
+      const before = (await ref.get()).data();
+      if (["corrupt", "foreign", "legacy"].includes(mode)) {
+        await page.evaluate(async ({id, mode, studentId}) => {
+          const db = await new Promise((resolve, reject) => {const request = indexedDB.open("parabolic-exam-runtime", 1); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);});
+          await new Promise((resolve, reject) => {
+            const tx = db.transaction("sessionRecovery", "readwrite"), store = tx.objectStore("sessionRecovery"), read = store.get(id);
+            read.onsuccess = () => {
+              const row = read.result;
+              if (mode === "corrupt") delete row.questionTimingById;
+              if (mode === "foreign") row.scopeHash = "b".repeat(64);
+              if (mode === "legacy") {row.schemaVersion = 2; delete row.scopeHash; row.ownerId = studentId;}
+              store.put(row);
+            };
+            tx.oncomplete = resolve; tx.onabort = () => reject(tx.error);
+          }); db.close();
+        }, {id: launch.sessionId, mode, studentId});
+      } else if (mode === "abort") {
+        await page.addInitScript(() => {
+          const transaction = IDBDatabase.prototype.transaction;
+          IDBDatabase.prototype.transaction = function(...args) {
+            const tx = transaction.apply(this, args);
+            if (this.name === "parabolic-exam-runtime") queueMicrotask(() => {try {tx.abort(); window.__nativeRecoveryAborts = (window.__nativeRecoveryAborts ?? 0) + 1;} catch {}});
+            return tx;
+          };
+        });
+      } else if (mode === "slow") {
+        await page.addInitScript(() => {
+          const open = IDBFactory.prototype.open, setter = Object.getOwnPropertyDescriptor(IDBRequest.prototype, "onsuccess").set;
+          IDBFactory.prototype.open = function(name, ...args) {
+            const request = open.call(this, name, ...args);
+            if (name === "parabolic-exam-runtime") Object.defineProperty(request, "onsuccess", {set(handler) {
+              setter.call(request, event => {
+                window.__nativeRecoverySuccesses = (window.__nativeRecoverySuccesses ?? 0) + 1;
+                setTimeout(() => {window.__lateRecoveryCallbacks = (window.__lateRecoveryCallbacks ?? 0) + 1; handler.call(request, event);}, 2500);
+              });
+            }});
+            return request;
+          };
+        });
+      } else {
+        const blocker = await context.newPage(); await blocker.goto(examOrigin);
+        await blocker.evaluate(async () => {
+          window.__heldRecoveryDb = await new Promise((resolve, reject) => {const request = indexedDB.open("parabolic-exam-runtime", 1); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error);});
+          window.__heldRecoveryDb.onversionchange = () => {};
+          const upgrade = indexedDB.open("parabolic-exam-runtime", 2);
+          upgrade.onblocked = () => {window.__nativeRecoveryBlocked = true;};
+        });
+        await expect.poll(() => blocker.evaluate(() => window.__nativeRecoveryBlocked === true)).toBe(true);
+      }
+      const recovered = entryResponseFor(page, "recover"); await page.reload(); expect((await recovered).status()).toBe(200);
+      await expect(page.getByRole("radio").nth(1)).toBeChecked({timeout: 15000});
+      const status = page.getByRole("region", {name: "Answer recovery status"});
+      if (["corrupt", "foreign", "legacy"].includes(mode)) {
+        await expect(status).toContainText("corrupt, unsupported or belongs to another scope");
+        const row = await recoveryRecord(page, launch.sessionId);
+        if (mode === "foreign") expect(row.scopeHash).toBe("b".repeat(64));
+        if (mode === "legacy") expect(row.schemaVersion).toBe(2);
+        if (mode === "corrupt") expect(row.questionTimingById).toBeUndefined();
+      } else {
+        await expect(status).toContainText("Memory only");
+        if (mode === "abort") expect(await page.evaluate(() => window.__nativeRecoveryAborts)).toBeGreaterThan(0);
+        if (mode === "slow") {
+          await expect.poll(() => page.evaluate(() => window.__lateRecoveryCallbacks ?? 0)).toBeGreaterThan(0);
+          expect(await page.evaluate(() => window.__nativeRecoverySuccesses)).toBeGreaterThan(0);
+          await expect(page.getByRole("radio").nth(1)).toBeChecked();
+        }
+      }
+      const after = (await ref.get()).data();
+      expect(after.answerMap).toEqual(before.answerMap); expect(after.runtimeOwnership.generation).toBe(2);
+      expect(after.startedAt).toEqual(before.startedAt); expect(after.deadlineAt).toEqual(before.deadlineAt);
+      expect(after.status).toBe("active"); expect(after.submittedAt).toBeNull();
+    } finally {await context.close();}
+  }
+});
+
+test("resilience acceptance bounds a genuinely hung committed answer response and ignores its late receipt", async ({page}) => {
+  test.setTimeout(90000);
+  await prepareOwnershipRun("acceptance_hung_answer");
+  const launch = await issueLaunch(page), ref = sessionFor(launch);
+  await page.goto(launch.examUrl); await beginOwnedExam(page);
+  const before = (await ref.get()).data(), requests = [];
+  page.on("request", request => {if (request.url().endsWith("/answers")) requests.push({body: request.postDataJSON(), at: performance.now()});});
+  const gate = await pauseEntry(page, null, "Response", "answers");
+  try {
+    await page.getByRole("radio").nth(1).check(); expect((await gate.paused).responseStatusCode).toBe(200);
+    await expect.poll(() => requests.length, {timeout: 25000}).toBe(2);
+    expect(requests[1].at - requests[0].at).toBeGreaterThanOrEqual(15000);
+    expect(requests[1].body).toEqual(requests[0].body);
+    await expect.poll(async () => (await recoveryRecord(page, launch.sessionId))?.pendingAnswerMap ?? null).toEqual({});
+    const newer = page.waitForResponse(response => response.url().endsWith("/answers") && response.status() === 200);
+    await page.getByRole("radio").nth(0).check(); await newer;
+  } finally {await gate.dispose();}
+  await expect(page.getByRole("radio").nth(0)).toBeChecked();
+  await expect.poll(async () => (await ref.get()).get(`answerMap.${questionId}.response.optionId`)).toBe("A");
+  const after = (await ref.get()).data();
+  expect(after.deadlineAt).toEqual(before.deadlineAt); expect(after.startedAt).toEqual(before.startedAt);
+  expect(after.status).toBe("active"); expect(after.submittedAt).toBeNull();
+});
+
+test("resilience acceptance excludes real hidden-tab dwell and reconciles foreground authority", async () => {
+  test.setTimeout(120000);
+  const nativeBrowser = await chromium.launch({headless: false,
+    args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"]});
+  try {
+  const context = await nativeBrowser.newContext({baseURL: examOrigin, bypassCSP: true});
+  const page = await context.newPage();
+  await prepareOwnershipRun("acceptance_visibility");
+  const launch = await issueLaunch(page), ref = sessionFor(launch);
+  await page.goto(launch.examUrl); await beginOwnedExam(page);
+  await expect.poll(async () => (await recoveryRecord(page, launch.sessionId))?.runtimeGeneration).toBe(1);
+  const before = (await ref.get()).data();
+  const initialDwell = (await recoveryRecord(page, launch.sessionId)).questionTimingById[questionId].timeSpentMs;
+  const foreground = await openNativeForegroundTab(page);
+  await expect.poll(() => page.evaluate(() => document.visibilityState)).toBe("hidden");
+  await foreground.waitForTimeout(6500);
+  const reconciled = entryResponseFor(page, "reconcile"); await page.bringToFront(); expect((await reconciled).status()).toBe(200);
+  await expect(page.getByText("Authoritative browser snapshot question", {exact: true})).toBeVisible();
+  const dwell = (await recoveryRecord(page, launch.sessionId)).questionTimingById[questionId].timeSpentMs;
+  expect(dwell - initialDwell).toBeLessThan(5000);
+  const after = (await ref.get()).data();
+  expect(after.deadlineAt).toEqual(before.deadlineAt); expect(after.startedAt).toEqual(before.startedAt);
+  expect(after.answerMap).toEqual(before.answerMap); expect(after.status).toBe("active"); await foreground.close();
+  } finally {await nativeBrowser.close();}
+});
+
+test("resilience acceptance converges concurrent real submits and fences a stale native writer after canonical close", async ({page}) => {
+  test.setTimeout(180000);
+  await prepareOwnershipRun("acceptance_submit_race");
+  const launch = await issueLaunch(page), ref = sessionFor(launch);
+  await page.goto(launch.examUrl); await beginOwnedExam(page);
+  const saved = page.waitForResponse(response => response.url().endsWith("/answers") && response.status() === 200);
+  await page.getByRole("radio").nth(1).check(); await saved;
+  await expect.poll(async () => (await recoveryRecord(page, launch.sessionId))?.pendingAnswerMap ?? null).toEqual({});
+  const local = await recoveryRecord(page, launch.sessionId), before = (await ref.get()).data();
+  const ts = require("../../functions/node_modules/typescript");
+  const source = await readFile(new URL("../../apps/exam/src/recoveryStorage.ts", import.meta.url), "utf8");
+  const compiled = ts.transpileModule(source, {compilerOptions: {module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022}}).outputText;
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`;
+  await page.evaluate(async ({moduleUrl, local}) => {
+    const {RecoveryStorage} = await import(moduleUrl);
+    // A separate instance deliberately retains stale observer knowledge. The
+    // native transaction must still honor the persisted close fence.
+    window.__staleRecoveryWriter = new RecoveryStorage(local.sessionId, local.scopeHash, local.runtimeGeneration, () => true);
+    window.__staleRecoverySnapshot = local;
+  }, {moduleUrl, local});
+  const gate = await pauseEntry(page, null, "Request", "submit");
+  let body, headers, canonical;
+  try {
+    await page.getByRole("button", {name: "Submit Test", exact: true}).click();
+    await page.getByRole("dialog", {name: "Confirm exam submission"}).getByLabel(/I understand.*will remain unanswered/u).check();
+    const mounted = page.waitForResponse(response => response.url().endsWith("/submit"), {timeout: 90000});
+    await page.getByRole("button", {name: "Confirm Final Submit", exact: true}).click();
+    const paused = await gate.paused; body = JSON.parse(paused.request.postData);
+    headers = Object.fromEntries(Object.entries(paused.request.headers).filter(([key]) => ["authorization", "x-parabolic-exam-owner", "x-parabolic-exam-generation"].includes(key.toLowerCase())));
+    const concurrent = page.request.post(`/api/v1/exam/session/${launch.sessionId}/submit`, {headers, data: body, timeout: 90000});
+    await gate.dispose();
+    const [first, other] = await Promise.all([mounted, concurrent]);
+    expect([200, 409]).toContain(first.status()); expect([200, 409]).toContain(other.status());
+    expect([first.status(), other.status()]).toContain(200);
+    canonical = (await (first.status() === 200 ? first : other).json()).data;
+    if (first.status() !== 200) await page.getByRole("button", {name: "Retry submission confirmation", exact: true}).click();
+    await expect(page.getByRole("heading", {name: "Exam Submitted", exact: true})).toBeVisible({timeout: 30000});
+  } finally {await gate.dispose().catch(() => undefined);}
+  await expect.poll(async () => (await recoveryRecord(page, launch.sessionId))?.closed).toBe(true);
+  const late = await page.evaluate(async () => {
+    const save = await window.__staleRecoveryWriter.save(window.__staleRecoverySnapshot);
+    const discard = await window.__staleRecoveryWriter.discard("stale");
+    return {save: save.state, discard: discard.state};
+  });
+  expect(late).toEqual({save: "memory_only", discard: "memory_only"});
+  const fence = await recoveryRecord(page, launch.sessionId);
+  expect(Object.keys(fence).sort()).toEqual(["closed", "runtimeGeneration", "schemaVersion", "scopeHash", "sessionId"]);
+  const metrics = firestore.doc(`institutes/${instituteId}/academicYears/${yearId}/studentYearMetrics/${studentId}`);
+  await expect.poll(async () => (await metrics.get()).get("resultPropagation"), {timeout: 30000}).toMatchObject({state: "available", sessionId: launch.sessionId});
+  const total = (await metrics.get()).get("totalTests");
+  const replay = await page.request.post(`/api/v1/exam/session/${launch.sessionId}/submit`, {headers, data: body, timeout: 90000});
+  expect(replay.status()).toBe(200); expect((await replay.json()).data).toEqual({...canonical, alreadySubmitted: true});
+  await page.reload(); await expect(page.getByRole("heading", {name: "Exam Submitted", exact: true})).toBeVisible();
+  const after = (await ref.get()).data();
+  expect(after.startedAt).toEqual(before.startedAt); expect(after.deadlineAt).toEqual(before.deadlineAt);
+  expect(after.answerMap[questionId].response.optionId).toBe("B");
+  expect(after.runtimeOwnership.generation).toBe(before.runtimeOwnership.generation);
+  expect(after.submittedAt.toDate().toISOString()).toBe(canonical.submittedAt);
+  expect((await metrics.get()).get("totalTests")).toBe(total);
+});
+
+test("resilience acceptance recovers above both real lease expiry and exam deadline without accepting late local edits", async ({page, context}) => {
+  test.setTimeout(180000);
+  await prepareOwnershipRun("acceptance_both_expired");
+  await firestore.doc(`institutes/${instituteId}/academicYears/${yearId}/runs/${runId}`).update({endWindow: Timestamp.fromMillis(Date.now() + 25000)});
+  const launch = await issueLaunch(page), ref = sessionFor(launch);
+  await page.goto(launch.examUrl); await beginOwnedExam(page);
+  const saved = page.waitForResponse(response => response.url().endsWith("/answers") && response.status() === 200);
+  await page.getByRole("radio").nth(1).check(); await saved;
+  const before = (await ref.get()).data();
+  await context.setOffline(true);
+  try {
+    await page.getByRole("radio").nth(0).check();
+    await expect.poll(async () => (await recoveryRecord(page, launch.sessionId))?.pendingAnswerMap[questionId]?.response.optionId).toBe("A");
+    await expect(page.getByRole("heading", {name: "Exam runtime paused", exact: true})).toBeVisible({timeout: 100000});
+    const expired = (await ref.get()).data();
+    expect(expired.runtimeOwnership.expiresAt.toMillis()).toBeLessThanOrEqual(Date.now());
+    expect(expired.deadlineAt.toMillis()).toBeLessThan(Date.now());
+    expect(expired.status).toBe("active"); expect(expired.submittedAt).toBeNull();
+    expect(expired.answerMap[questionId].response.optionId).toBe("B");
+  } finally {await context.setOffline(false);}
+  const recovered = entryResponseFor(page, "recover"); await page.reload(); expect((await recovered).status()).toBe(200);
+  await expect(page.getByRole("heading", {name: "Exam Submitted", exact: true})).toBeVisible({timeout: 30000});
+  await expect(page.getByText(/Local changes received after the deadline were not accepted/u)).toBeVisible();
+  const after = (await ref.get()).data();
+  expect(after.runtimeOwnership.generation).toBe(before.runtimeOwnership.generation + 1);
+  expect(after.deadlineAt).toEqual(before.deadlineAt); expect(after.startedAt).toEqual(before.startedAt);
+  expect(after.answerMap).toEqual(before.answerMap); expect(after.submissionReason).toBe("expiry");
 });

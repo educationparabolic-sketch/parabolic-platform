@@ -1,5 +1,24 @@
 # Exam launch and runtime ownership contract
 
+BWM-046 substep 7 adds the permanent local resilience acceptance runner/matrix.
+Canonical local cleanup retains only a public scope/generation close fence so a
+separate stale writer/discard cannot recreate submitted recovery; queued renewal
+cannot revive a closed runtime. Known storage failure remains visible during
+retries until a real save commits. No wire route, credential, server deadline,
+scoring or analytics writer changes. See EXAM_RESILIENCE_ACCEPTANCE_MATRIX.md;
+aggregate/public qualification and finding closure remain substep 8.
+
+
+BWM-046 substep 6 mounts the frozen read-only terminal reload exception: an exact
+current record with no pending acquisition probes reconciliation before rotating.
+Submitted/terminated receipts may be read after closing lease TTL without writes
+or recovery. Only `CONFLICT/lease_expired`, emitted after complete exact held-owner
+validation, permits expiry recovery fallback; wrong/released/displaced authority
+stays denied. A nonterminal read still requires rotating recovery before content
+or writes. Uncertain submit checks canonical state before exact-body replay; no
+new owner, UID-only result access or deadline extension is introduced.
+
+
 BWM-044 substep 2 froze contract v2 in
 `shared/contracts/examRuntimeOwnership.d.ts`. Substep 3 implements the backend
 ownership commands and transactional fencing. Substep 4 implements fragment
@@ -108,6 +127,25 @@ clock, release beacon or tab message can create/extend authority. Expired owners
 does not change exam lifecycle or scheduled deadline. An expired exam may acquire
 ownership only for existing server-authorized expiry finalization/recovery; it
 does not gain answer-write permission.
+
+BWM-046 substep 3 adds a separate read-only EXM-01 `reconcile` operation under
+`EXAM_RESILIENCE_CONTRACT.md`. It requires both existing owner headers and fresh
+own-Student/current-year authority. Only the exact retained closed owner can read
+submitted or terminated state after TTL; no acquisition/renewal/receipt mutation
+or new write/replay authority follows. Launch/recover also return bounded
+candidate answer recovery. The mutation planner explicitly rejects reconcile.
+BWM-046 substep 4 mounts held-owner answer reconciliation and schema-3 durable
+merge under the complete existing scope hash. It cannot acquire, rotate or renew; the mounted answer consumer does not adopt
+terminal receipt UI. Terminal reload
+probing remains substep 6. BWM-046 substep 5 now adopts monotonic clock/timing and
+bounded transient retry through the existing shared client. One operation permits
+three attempts with 15-second attempt deadlines including SDK/decoding; one exact
+identity-tuple forced refresh is inside that budget. Pending renewal commands and
+original send anchors survive uncertain failures, with coalesced explicit retry;
+429/exhaustion pauses without extending or revoking the lease. A provisional 401
+pauses questions/camera during scoped refresh; exhausted network uncertainty needs
+explicit confirmation, while actual disabled/revoked/mismatched identity is fenced. Visibility/reconnect
+requires held-owner confirmation before fresh edits. See EXAM_RESILIENCE_CONTRACT.md.
 
 ## EXM-01 command semantics
 

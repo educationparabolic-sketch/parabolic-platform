@@ -1,5 +1,39 @@
 # Parabolic Platform API Contract
 
+BWM-046 closeout reconciliation: substeps 3–7 implement the existing EXM-01
+recovery/read-only terminal boundary and STU-01/03/04 readiness consumers. The
+permanent local matrix, affected aggregate and approved compatible public closeout
+are qualified in substep 8. Canonical staging origins and complete owned cleanup
+are verified; production remains NO_GO. See `EXAM_RESILIENCE_ACCEPTANCE_MATRIX.md` and the approved
+`EXAM_RESILIENCE_PREVIEW_REVIEW.md`. No new route, export, handler or schedule;
+current callers must not be paired with older recovery/readiness backends.
+
+BWM-046 substep 6 adopts terminal/expiry/result consumers. EXM-01 now distinguishes
+`CONFLICT/lease_expired` only for an exact held owner after identity/binding/proof/
+generation checks; ordinary protected-write denials stay unchanged. This narrow
+safe reason enables the frozen terminal-probe/expiry-recovery distinction. No
+success DTO or route changes. EXM-04 uncertainty uses read-only reconciliation
+before immutable-body replay. STU-01/03/04 visible bounded polling uses existing
+readiness; history/solutions and canonical analytics writers remain unchanged.
+
+
+BWM-046 substep 3 adopts `docs/EXAM_RESILIENCE_CONTRACT.md` and
+`shared/contracts/examResilience.d.ts`: EXM-01 now accepts the closed read-only
+`{operation: "reconcile", contractVersion: 1}` body with both existing owner
+headers and fresh exact own-Student authority. Launch/recover entry requires a
+bounded candidate `recovery` projection; renew/release are unchanged. Exact
+closing-owner submitted/terminated reads after TTL never grant a lease, score,
+finalize or mutate state. STU-01/03/04 require marker-backed current-summary
+`resultReadiness`; missing/unsupported markers are unknown. Strict shared
+adapters reject missing fields and private/contradictory reconciliation data.
+No route/export/capability is added. Substep 4 mounts EXM-01 held-owner reads
+for ignored/blocked/uncertain answer receipts and uses entry recovery for the
+server-first schema-3 merge. EXM-02 shape stays unchanged: closed unique sent
+question/revision/disposition acknowledgements and consistent ID arrays are
+required before adoption. Manual submit waits for unresolved writes and requires
+explicit acceptance of known rejected changes. Clock/retry/expiry/result UX is adopted in
+BWM-046 substeps 5–6. The permanent adversarial matrix is locally qualified in substep 7; aggregate and approved compatible public qualification passed in substep 8. Local proof alone is not public qualification.
+
 Status: canonical route and response-envelope contract
 
 BWM-043 release boundary (2026-10-18, DEC-102): strict immutable reader fixtures

@@ -13,7 +13,10 @@ function load(path, imports = () => { throw Error("Unexpected runtime dependency
   new Function("exports", "module", "require", output)(module.exports, module, imports);
   return module.exports;
 }
-const adapters = load("shared/services/portalResponseAdapters.ts");
+const recoveryValidation = load("shared/services/examRecoveryValidation.ts");
+const adapters = load("shared/services/portalResponseAdapters.ts", name => {
+  assert.equal(name, "./examRecoveryValidation"); return recoveryValidation;
+});
 let wire;
 const client = {get: async (_path, options) => options.responseAdapter(wire),
   post: async (_path, options) => options.responseAdapter(wire)};

@@ -3,15 +3,14 @@ import * as functions from "firebase-functions";
 import {DecodedIdToken} from "firebase-admin/auth";
 import {sendErrorResponse} from "../services/apiResponse";
 import {
-  SubmissionResponseData,
   SubmissionResult,
   SubmissionSuccessResponse,
 } from "../types/submission";
 import {
   submissionService,
+  buildSubmissionResponseData,
   SubmissionValidationError,
 } from "../services/submission";
-import {dataTierPartitionService} from "../services/dataTierPartition";
 import {verifyCurrentAuthorityIdToken} from "../services/instituteAuthorityEnforcement";
 import {
   createMethodMiddleware,
@@ -81,26 +80,6 @@ const normalizeSubmissionReason = (value: unknown): ExamSubmissionReason => {
   );
 };
 
-const buildSubmissionResponseData = (
-  result: SubmissionResult,
-): SubmissionResponseData => ({
-  accuracyPercent: result.accuracyPercent,
-  alreadySubmitted: result.idempotent,
-  disciplineIndex: result.disciplineIndex,
-  guessRatePercent: result.guessRatePercent ?? result.guessRate,
-  maxTimeViolationPercent: result.maxTimeViolationPercent,
-  minTimeViolationPercent: result.minTimeViolationPercent,
-  operationalDataAccessPolicy:
-    dataTierPartitionService.buildExamOperationalDataAccessPolicy(
-      result.sessionPath,
-    ),
-  phaseAdherencePercent: result.phaseAdherencePercent,
-  rawScorePercent: result.rawScorePercent,
-  riskState: result.riskState,
-  status: result.status,
-  submissionReason: result.submissionReason,
-  submittedAt: result.submittedAt,
-});
 
 export const buildSubmissionSuccessResponse = (
   result: SubmissionResult,

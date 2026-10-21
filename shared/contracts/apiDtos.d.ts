@@ -1,4 +1,5 @@
 import type {ExamProctoringPolicyV1, ExamProctoringRequirementsV1} from "./examProctoring.js";
+import type {ExamAnswerRecoveryV1} from "./examResilience.js";
 
 /**
  * Transport DTOs shared by frontend portal adapters and Functions handlers.
@@ -1618,6 +1619,7 @@ export interface ExamSubmitResult {
 }
 
 export interface ExamSessionEntryResult {
+  recovery: ExamAnswerRecoveryV1;
   allowed: true;
   deadlineAt: string | null;
   instituteId: string;

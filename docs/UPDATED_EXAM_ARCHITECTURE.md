@@ -1,5 +1,19 @@
 A. LAYER AWARE EXAM PORTAL
 
+BWM-046 resilience implementation is normative in `EXAM_RESILIENCE_CONTRACT.md`;
+the permanent proof map is `EXAM_RESILIENCE_ACCEPTANCE_MATRIX.md`. Server start,
+deadline, accepted answers, ownership lease and one canonical result remain the
+authorities. Monotonic browser display/timing and local recovery grant no extra
+time, accepted response or ownership. EXM-01 read-only reconciliation projects
+bounded candidate state; terminal reload uses only the exact retained closing
+owner without acquiring or scoring. Native local transactions persist a
+metadata-only close fence against stale writers. Bounded serialized requests and
+current-scope SDK refresh preserve intent; renewal cannot reopen canonical close.
+Student reflection is withheld until current marker-backed readiness confirms it,
+within current entitlement. All seven findings closed after substep-8 aggregate
+and approved compatible public qualification, canonical-origin restoration and
+complete owned cleanup. DEC-102/BWM-053 prerequisites and production NO_GO remain.
+
 # Exam Modes Architecture
 ============================================================
 ============================================================

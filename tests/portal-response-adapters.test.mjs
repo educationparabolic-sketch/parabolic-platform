@@ -48,8 +48,11 @@ function loadTypeScriptModule(source, sourcePath) {
     fileName: sourcePath,
   }).outputText;
   const loadedModule = { exports: {} };
-  const evaluate = new Function("exports", "module", transpiled);
-  evaluate(loadedModule.exports, loadedModule);
+  const evaluate = new Function("exports", "module", "require", transpiled);
+  evaluate(loadedModule.exports, loadedModule, (id) => {
+    if (id === "./examRecoveryValidation") return require(join(rootDirectory, "functions/lib/services/examRecoveryValidation.js"));
+    return require(id);
+  });
   return loadedModule.exports;
 }
 
@@ -59,6 +62,38 @@ const [adapterSource, envelopeSource, studentPolicySource] = await Promise.all([
   readFile(studentPolicyPath, "utf8"),
 ]);
 const adapters = loadTypeScriptModule(adapterSource, adapterPath);
+
+test("reconciliation adapters bind session/generation and preserve terminal and accepted-answer truth", () => {
+  const recovery = {contractVersion: 1, maxAcceptedClientTimestamp: 123,
+    questions: [{questionId: "q", answer: {clientTimestamp: 123, response: {kind: "unanswered"},
+      timeSpentSeconds: 5}, cumulativeTimeSpentSeconds: 5, maxTimeLocked: false}]};
+  const common = {operation: "reconcile", contractVersion: 1, sessionId: "s", generation: 2,
+    serverTime: "2026-10-20T10:00:00.000Z"};
+  const active = {...common, status: "active", startedAt: "2026-10-20T09:00:00.000Z",
+    deadlineAt: "2026-10-20T11:00:00.000Z", recovery};
+  assert.deepEqual(adapters.adaptExamReconcileResult(active, "s", 2), active);
+  const terminal = {...common, status: "terminated"};
+  assert.deepEqual(adapters.adaptExamReconcileResult(terminal, "s", 2), terminal);
+  const submission = {accuracyPercent: 0, alreadySubmitted: true, disciplineIndex: 0, guessRatePercent: 0,
+    maxTimeViolationPercent: 0, minTimeViolationPercent: 0, operationalDataAccessPolicy: {},
+    phaseAdherencePercent: 0, rawScorePercent: 0, riskState: "Stable", status: "submitted",
+    submissionReason: "expiry", submittedAt: common.serverTime};
+  const submitted = {...common, status: "submitted", submission};
+  assert.deepEqual(adapters.adaptExamReconcileResult(submitted, "s", 2), submitted);
+  for (const invalid of [{...active, sessionId: "other"}, {...active, generation: 1},
+    {...active, ownership: {proof: "secret"}}, {...active, startedAt: null},
+    {...active, recovery: {...recovery, maxAcceptedClientTimestamp: null}},
+    {...active, recovery: {...recovery, questions: [...recovery.questions, ...recovery.questions]}},
+    {...active, recovery: {...recovery, questions: [{...recovery.questions[0], answer: {
+      ...recovery.questions[0].answer, response: {kind: "unanswered", correctAnswer: "A"}}}]}},
+    {...terminal, recovery}, {...submitted, recovery},
+    {...submitted, submission: {...submission, alreadySubmitted: false}},
+    {...submitted, submission: {...submission, rawScorePercent: 101}},
+    {...submitted, submission: {...submission, solutionSnapshot: {secret: "HIDDEN"}}}]) {
+    assert.throws(() => adapters.adaptExamReconcileResult(invalid, "s", 2),
+      {name: "PortalResponseValidationError"});
+  }
+});
 const { unwrapApiSuccessData } = loadTypeScriptModule(envelopeSource, envelopePath);
 const { assertStudentSummaryPayload } = loadTypeScriptModule(
   studentPolicySource,
@@ -784,6 +819,7 @@ test("Student exam launch adapter requires an exact fragment credential URL and 
 
 test("Exam entry adapter accepts only an aligned candidate-safe runtime snapshot", () => {
   const entry = {
+    recovery: {contractVersion: 1, maxAcceptedClientTimestamp: null, questions: [{questionId: "question-001", answer: null, cumulativeTimeSpentSeconds: 0, maxTimeLocked: false}]},
     allowed: true,
     deadlineAt: null,
     instituteId: "inst-001",

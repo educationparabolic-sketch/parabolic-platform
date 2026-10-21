@@ -221,7 +221,8 @@
     "test:e2e:exam-security": "playwright test tests/e2e/exam-launch-auth.spec.mjs --grep \"mounted ownership|fragment bootstrap|Student returns|security matrix\"",
     "test:exam-security:e2e": "node scripts/run-exam-launch-auth-e2e.mjs --student-returns --security-matrix",
     "prepare:exam-ownership-preview": "node scripts/prepare-exam-ownership-preview.mjs",
-    "test:e2e:exam-ownership-preview": "playwright test tests/e2e/exam-ownership-preview.spec.mjs --project=chromium"
+    "test:e2e:exam-ownership-preview": "playwright test tests/e2e/exam-ownership-preview.spec.mjs --project=chromium",
+    "test:exam-resilience:acceptance": "node scripts/run-exam-resilience-acceptance.mjs"
   },
   "devDependencies": {
     "playwright": "1.59.1"

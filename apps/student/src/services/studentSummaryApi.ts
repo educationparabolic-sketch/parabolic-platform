@@ -3,6 +3,8 @@ import { adaptStudentSummaryResult } from "../../../../shared/services/studentSu
 import type { StudentSummaryResults } from "../../../../shared/services/studentSummaryResponseAdapters";
 import { assertStudentSummaryPayload } from "./studentSummaryDataPolicy";
 
+import {withholdUnconfirmedMetrics} from "./studentResultRecovery";
+
 const apiClient = getPortalApiClient("student");
 
 type StudentSummaryRoute =
@@ -34,7 +36,7 @@ export async function getStudentSummaryResource<K extends Exclude<keyof StudentS
     responseAdapter: (value) => {
       const payload = adaptStudentSummaryResult(value, resource);
       assertStudentSummaryPayload(payload, resource);
-      return payload;
+      return withholdUnconfirmedMetrics(payload);
     },
   });
 }

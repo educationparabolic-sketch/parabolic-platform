@@ -253,6 +253,17 @@ function discoverFrontendRoutes() {
 
       const methodName = node.expression.name.text.toLowerCase();
       const clientName = node.expression.expression.getText(sourceFile);
+      // Exam ownership delegates POST dispatch through its bounded transport.
+      // Discover actual literal call sites; do not invent a manifest exception.
+      if (
+        methodName === "request" && clientName === "this" &&
+        path.relative(WORKSPACE_ROOT, filePath).replace(/\\/g, "/") ===
+          "apps/exam/src/launchTransport.ts"
+      ) {
+        const routePath = node.arguments[0] &&
+          resolveLiteralPath(node.arguments[0], sourceFile);
+        if (routePath) recordRoute("POST", routePath, sourceFile, node);
+      }
       if (!API_METHODS.has(methodName) || !/apiClient$/i.test(clientName)) {
         ts.forEachChild(node, visit);
         return;

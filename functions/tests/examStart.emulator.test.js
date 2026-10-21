@@ -313,6 +313,22 @@ test(
       const ownerHeaders = (secret, generation) => ({
         "X-Parabolic-Exam-Owner": secret,
         "X-Parabolic-Exam-Generation": String(generation)});
+      const reconcileCommand = {operation: "reconcile", contractVersion: 1};
+      const beforeRead = (await sessionRef.get()).data();
+      const read = await postExamRoute(entryPath, winner.token,
+        reconcileCommand, ownerHeaders(winner.command.nextOwnerProof, 1));
+      assert.equal(read.status, 200, JSON.stringify(read.body));
+      assert.equal(read.body.data.status, "started");
+      assert.deepEqual(read.body.data.recovery,
+        entered.body.data.entry.recovery);
+      assert.match(read.cache, /no-store/u);
+      assert.deepEqual((await sessionRef.get()).get("runtimeOwnership"),
+        beforeRead.runtimeOwnership);
+      assert.equal((await postExamRoute(entryPath, winner.token,
+        reconcileCommand)).status, 400);
+      assert.equal((await postExamRoute(entryPath, other.token,
+        reconcileCommand, ownerHeaders(winner.command.nextOwnerProof, 1)))
+        .status, 401);
       assert.equal((await postExamRoute(entryPath, other.token, {
         operation: "recover", commandId: randomUUID(), previous: {
           generation: 1}, nextOwnerProof: proof()},
@@ -610,6 +626,10 @@ test(
       // only lease time; the browser suite waits the real 90 seconds.
       await sessionRef.update({
         "runtimeOwnership.expiresAt": Timestamp.fromMillis(Date.now() - 1)});
+      const expiredHeldRead = await postExamRoute(entryPath, other.token,
+        reconcileCommand, ownerHeaders(secret, generation));
+      assert.equal(expiredHeldRead.status, 409);
+      assert.equal(expiredHeldRead.body.error.details.reason, "lease_expired");
       const freshLaunch = await launch(idToken, "resume", runId);
       assert.equal(freshLaunch.status, 200);
       const expiredToken = other.token;
@@ -728,6 +748,34 @@ test(
       assert.equal(replay.body.data.alreadySubmitted, true);
       assert.equal(replay.body.data.submittedAt,
         submitted.body.data.submittedAt);
+      const beforeTerminalRead = (await sessionRef.get()).data();
+      assert.ok(beforeTerminalRead.runtimeOwnership.expiresAt.toMillis() <=
+        Date.now());
+      const terminalRead = await postExamRoute(entryPath, other.token,
+        reconcileCommand, ownerHeaders(secret, generation));
+      assert.equal(terminalRead.status, 200, JSON.stringify(terminalRead.body));
+      assert.equal(terminalRead.body.data.status, "submitted");
+      assert.deepEqual(terminalRead.body.data.submission, replay.body.data);
+      assert.equal("recovery" in terminalRead.body.data, false);
+      assert.equal((await postExamRoute(entryPath, winner.token,
+        reconcileCommand, ownerHeaders(winner.command.nextOwnerProof, 1)))
+        .status, 409);
+      const directEntry = await fetch(`http://${functionsHost}/${projectId}/` +
+        "us-central1/examSessionEntry" + entryPath.replace(/^\/api\/v1/u, ""), {
+        method: "POST", headers: {"authorization": `Bearer ${other.token}`,
+          "content-type": "application/json",
+          ...ownerHeaders(secret, generation)},
+        body: JSON.stringify(reconcileCommand),
+        signal: AbortSignal.timeout(90_000)});
+      assert.equal(directEntry.status, 200);
+      assert.match(directEntry.headers.get("cache-control"), /no-store/u);
+      assert.deepEqual((await directEntry.json()).data.submission,
+        replay.body.data);
+      const afterTerminalRead = (await sessionRef.get()).data();
+      for (const field of ["runtimeOwnership", "answerMap", "deadlineAt",
+        "startedAt", "submittedAt", "submissionLock", "status"]) {
+        assert.deepEqual(afterTerminalRead[field], beforeTerminalRead[field]);
+      }
       assert.equal((await sessionRef.get()).get(
         "runtimeOwnership.state"), "closed");
       assert.equal((await sessionRef.get()).get("submissionLock"), false);

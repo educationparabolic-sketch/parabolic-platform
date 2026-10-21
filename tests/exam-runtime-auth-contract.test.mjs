@@ -42,7 +42,10 @@ test("Exam production runtime consumes the authoritative sanitized entry snapsho
   );
 
   assert.match(source, /responseBody\.runtimeSnapshot\.questions/u);
-  assert.match(source, /responseBody\.runtimeSnapshot\.timingProfile/u);
+  assert.match(source, /mergeAnswerRecovery\(responseBody\.runtimeSnapshot, responseBody\.recovery, null\)/u);
+  const recovery = await readFile(new URL("../apps/exam/src/answerRecovery.ts", import.meta.url), "utf8");
+  assert.match(recovery, /runtime\.timingProfile\.minTimeByDifficultySec/u);
+  assert.match(recovery, /runtime\.timingProfile\.maxTimeByDifficultySec/u);
   assert.match(source, /toExamSessionSchedule\(sessionSnapshot\)/u);
   assert.match(source, /sessionSnapshot\.proctoringPolicy/u);
   assert.match(entryHandler, /runtimeSnapshot: result\.runtimeSnapshot/u);
@@ -62,7 +65,9 @@ test("Exam runtime lifecycle is server-activated and deadline-authoritative", as
 
   assert.match(source, /adaptExamSessionActivationResult/u);
   assert.match(source, /\/activate/u);
-  assert.match(source, /serverDeadlineMs - serverNowMs/u);
+  assert.match(source, /runtimeClockRef\.current\.accept/u);
+  const clock = await readFile(new URL("../apps/exam/src/runtimeClock.ts", import.meta.url), "utf8");
+  assert.match(clock, /end - server - \(receivedAt - sentAt\)/u);
   assert.doesNotMatch(source, /setSessionLifecycleState\("active"\)/u);
   assert.doesNotMatch(source, /setSessionLifecycleState\("expired"\)/u);
   assert.match(answerService, /ACTIVE_WRITE_STATUSES = new Set\(\["active"\]\)/u);
@@ -109,11 +114,18 @@ test("Exam answer recovery serializes revision acknowledgements and drains befor
   assert.match(sharedDtos, /clientRevision: number/u);
   assert.match(sharedDtos, /batchSequence: number/u);
   assert.match(sharedDtos, /acknowledgements: ExamAnswerAcknowledgement\[\]/u);
+  const shell = await readFile(new URL("../apps/exam/src/App.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(shell, /UiDataStateBoundary/u);
+  assert.match(source, /serverEntryValidationStatus === "pending"/u);
+  assert.match(source, /if \(authorityInterruption\)/u);
   assert.match(source, /flushInFlightRef/u);
-  assert.match(source, /shouldDrainCompletely/u);
-  assert.match(source, /currentWrite\?\.clientRevision === acknowledgement\.clientRevision/u);
-  assert.match(source, /snapshot\.ownerId !== ownerId/u);
-  // Mounted v2 reload/lease adoption is the next bounded substep.
+  assert.match(source, /reason === "reconnect" \|\| reason === "submission"/u);
+  assert.match(source, /next\[ack\.questionId\]\?\.clientRevision === ack\.clientRevision/u);
+  assert.match(source, /readLocalSnapshot/u);
+  const recovery = await readFile(new URL("../apps/exam/src/answerRecovery.ts", import.meta.url), "utf8");
+  assert.match(recovery, /value\.scopeHash !== scopeHash/u);
+  assert.match(recovery, /positive\(value\.runtimeGeneration\) > generation/u);
+  // Schema-3 recovery preserves full identity scope and generation fencing.
   assert.doesNotMatch(source, /resume:\s*true/u);
   assert.match(answerHandler, /acknowledgements: result\.acknowledgements/u);
   assert.match(entryHandler, /resumeSessionEntry/u);
@@ -144,7 +156,8 @@ test("Exam submission uses the strict shared contract and renders server authori
   assert.match(source, /submissionResult\.rawScorePercent/u);
   assert.doesNotMatch(source, /setSubmittedAtIso\(new Date/u);
   assert.match(submitHandler, /Unexpected submission field/u);
-  assert.match(submitHandler, /alreadySubmitted: result\.idempotent/u);
+  assert.match(submitHandler, /buildSubmissionResponseData/u);
+  assert.match(submissionService, /alreadySubmitted: result\.idempotent/u);
   assert.match(submissionService, /waitForSubmittedResult/u);
   assert.match(submissionService, /Timestamp\.fromMillis\(serverSubmittedAtMillis\)/u);
 });

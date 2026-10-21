@@ -1,4 +1,6 @@
 import type {ExamProctoringPolicyV1} from "../contracts/examProctoring";
+import type {ExamReconcileResultV1} from "../contracts/examResilience";
+import {readExamAnswerRecovery, recoveryKeys} from "./examRecoveryValidation";
 import type {
   AdminQuestionLibraryResult,
   AdminRunCreateResult,
@@ -2578,6 +2580,10 @@ export function adaptExamSessionEntryResult(
   return {
     allowed: readBoolean(data.allowed, route, "allowed") === true ? true :
       fail(route, "allowed", "true"),
+    recovery: (() => {
+      try {return readExamAnswerRecovery(data.recovery, runtimeSnapshot.questions);}
+      catch {return fail(route, "recovery", "bounded candidate recovery");}
+    })(),
     deadlineAt: data.deadlineAt === null ? null : readExamRuntimeIsoString(
       data.deadlineAt,
       route,
@@ -2626,6 +2632,48 @@ export function adaptExamSessionActivationResult(
       "status",
     ),
   };
+}
+
+/** Read-only response; possession of this value never grants a lease. */
+export function adaptExamReconcileResult(value: unknown, sessionId: string, generation: number): ExamReconcileResultV1 {
+  const route = "POST /exam/session/{sessionId}/entry";
+  const data = readRecord(value, route);
+  try {
+    const common = ["operation", "contractVersion", "sessionId", "generation", "serverTime", "status"];
+    const status = data.status;
+    recoveryKeys(data, [...common, ...(status === "submitted" ? ["submission"] :
+      status === "terminated" ? [] : ["startedAt", "deadlineAt", "recovery"])]);
+    if (data.operation !== "reconcile" || data.contractVersion !== 1 || data.sessionId !== sessionId ||
+        !Number.isSafeInteger(generation) || generation < 1 || data.generation !== generation) throw new Error();
+    const scope = {operation: "reconcile" as const, contractVersion: 1 as const, sessionId, generation,
+      serverTime: readExamRuntimeIsoString(data.serverTime, route, "serverTime")};
+    if (status === "terminated") return {...scope, status};
+    if (status === "submitted") {
+      recoveryKeys(data.submission, ["accuracyPercent", "alreadySubmitted", "disciplineIndex", "guessRatePercent",
+        "maxTimeViolationPercent", "minTimeViolationPercent", "operationalDataAccessPolicy", "phaseAdherencePercent",
+        "rawScorePercent", "riskState", "status", "submissionReason", "submittedAt"]);
+      const submission = adaptExamSubmitResult(data.submission);
+      if (!submission.alreadySubmitted) throw new Error();
+      for (const value of [submission.accuracyPercent, submission.disciplineIndex, submission.guessRatePercent,
+        submission.maxTimeViolationPercent, submission.minTimeViolationPercent, submission.phaseAdherencePercent,
+        submission.rawScorePercent]) if (value < 0 || value > 100) throw new Error();
+      return {...scope, status, submission: {...submission, alreadySubmitted: true}};
+    }
+    const recovery = readExamAnswerRecovery(data.recovery);
+    if (status === "started") {
+      if (data.startedAt !== null || data.deadlineAt !== null) throw new Error();
+      return {...scope, status, startedAt: null, deadlineAt: null, recovery};
+    }
+    if (status !== "active" && status !== "expired") throw new Error();
+    const deadlineAt = readExamRuntimeIsoString(data.deadlineAt, route, "deadlineAt");
+    const startedAt = data.startedAt === null ? null : readExamRuntimeIsoString(data.startedAt, route, "startedAt");
+    if (status === "active") {
+      if (!startedAt || Date.parse(startedAt) > Date.parse(deadlineAt) ||
+          Date.parse(deadlineAt) <= Date.parse(scope.serverTime)) throw new Error();
+      return {...scope, status, startedAt, deadlineAt, recovery};
+    }
+    return {...scope, status, startedAt, deadlineAt, recovery};
+  } catch {return fail(route, "reconciliation", "exact own-runtime reconciliation");}
 }
 
 export function adaptExamSubmitResult(value: unknown): ExamSubmitAdapterResult {

@@ -18,6 +18,8 @@ import {
 } from "../types/submission";
 import {DEFAULT_RISK_MODEL_VERSION} from "../types/riskEngine";
 import {assertSameFrozenCalibration} from "./calibrationConsumer";
+import {ExamRecoveryError} from "./examRecovery";
+import type {SubmissionResponseData} from "../types/submission";
 
 const INSTITUTES_COLLECTION = "institutes";
 const ACADEMIC_YEARS_COLLECTION = "academicYears";
@@ -972,6 +974,39 @@ const buildStoredSubmissionResult = (
     submittedAt: new Date(submittedAtMillis).toISOString(),
   };
 };
+
+// The same candidate projection is used for submit and read-only replay.
+export const buildSubmissionResponseData = (result: SubmissionResult): SubmissionResponseData => ({
+  accuracyPercent: result.accuracyPercent, alreadySubmitted: result.idempotent,
+  disciplineIndex: result.disciplineIndex, guessRatePercent: result.guessRatePercent ?? result.guessRate,
+  maxTimeViolationPercent: result.maxTimeViolationPercent, minTimeViolationPercent: result.minTimeViolationPercent,
+  operationalDataAccessPolicy: dataTierPartitionService.buildExamOperationalDataAccessPolicy(result.sessionPath),
+  phaseAdherencePercent: result.phaseAdherencePercent, rawScorePercent: result.rawScorePercent,
+  riskState: result.riskState, status: result.status, submissionReason: result.submissionReason,
+  submittedAt: result.submittedAt,
+});
+
+// Never repair a missing stored result or infer a missing reason on reconciliation.
+export function readCanonicalStoredSubmission(value: Record<string, unknown>, path: string): SubmissionResponseData {
+  const fields = ["accuracyPercent", "disciplineIndex", "maxTimeViolationPercent", "minTimeViolationPercent",
+    "phaseAdherencePercent", "rawScorePercent"];
+  if (value.status !== "submitted" || !["manual", "expiry"].includes(String(value.submissionReason)) ||
+      !(value.submittedAt instanceof Timestamp) ||
+      fields.some((key) => typeof value[key] !== "number" || !Number.isFinite(value[key]) ||
+        Number(value[key]) < 0 || Number(value[key]) > 100) ||
+      typeof value.guessRate !== "number" || !Number.isFinite(value.guessRate) ||
+      value.guessRate < 0 || value.guessRate > 100 ||
+      (value.guessRatePercent !== undefined && (typeof value.guessRatePercent !== "number" ||
+        !Number.isFinite(value.guessRatePercent) || value.guessRatePercent < 0 || value.guessRatePercent > 100)) ||
+      !["Stable", "Drift-Prone", "Impulsive", "Overextended", "Volatile"].includes(String(value.riskState))) {
+    throw new ExamRecoveryError();
+  }
+  try {
+    return buildSubmissionResponseData(buildStoredSubmissionResult(value, path));
+  } catch {
+    throw new ExamRecoveryError();
+  }
+}
 
 
 /**

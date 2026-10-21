@@ -6,6 +6,7 @@ const {
   seedStudentSummaryFixture,
 } = require("../lib/tests/studentSummaryFixture");
 const {getFirebaseAdminApp} = require("../lib/utils/firebaseAdmin");
+const {Timestamp} = require("firebase-admin/firestore");
 assert.equal(process.env.GCLOUD_PROJECT, "demo-parabolic-test");
 assert.ok(process.env.FIREBASE_AUTH_EMULATOR_HOST);
 const host = process.env.FUNCTIONS_EMULATOR_HOST ?? "127.0.0.1:5001";
@@ -52,6 +53,27 @@ test("v2 summaries enforce own scope, null gates and history", async () => {
     assert.equal(i.status, 200);
     assert.equal(i.body.data.snapshots[0].guessDetectionPercent, null);
     assert.equal(i.body.data.topicWeaknessSummary[0].tutorialVideoLink, null);
+    for (const result of [d, p, i]) {
+      assert.deepEqual(result.body.data.resultReadiness,
+        {state: "unknown", sessionId: null, retryAfterSeconds: 0});
+    }
+    for (const [state, retryAfterSeconds] of [["processing", 2],
+      ["available", 0]]) {
+      await f.metrics.update({resultPropagation: {state, retryAfterSeconds,
+        sessionId: "newest-http-session", submittedAt: Timestamp.now(),
+        updatedAt: Timestamp.now()}});
+      for (const [path, direct] of [["dashboard", "studentDashboard"],
+        ["performance", "studentPerformance"],
+        ["insights", "studentInsights"]]) {
+        const a = await read(`/api/v1/student/${path}`);
+        const b = await read(`/api/v1/student/${path}`, token, direct);
+        assert.equal(a.status, 200); assert.equal(b.status, 200);
+        assert.deepEqual(a.body.data.resultReadiness, {state,
+          retryAfterSeconds, sessionId: "newest-http-session"});
+        assert.deepEqual(b.body.data.resultReadiness,
+          a.body.data.resultReadiness);
+      }
+    }
     assert.doesNotMatch(
       JSON.stringify([d.body, p.body, i.body]),
       /HIDDEN_987|secret\.example|answerMap|solutionSnapshot/u,

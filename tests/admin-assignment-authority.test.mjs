@@ -39,7 +39,11 @@ const [authoritySource, pageSource] = await Promise.all([
   readFile(pagePath, "utf8"),
 ]);
 const adapterPath = join(rootDirectory, "shared/services/portalResponseAdapters.ts");
-const responseAdapters = loadTypeScriptModule(await readFile(adapterPath, "utf8"), adapterPath);
+const validationPath = join(rootDirectory, "shared/services/examRecoveryValidation.ts");
+const recoveryValidation = loadTypeScriptModule(await readFile(validationPath, "utf8"), validationPath,
+  name => {throw new Error(`Unexpected validator dependency ${name}`);});
+const responseAdapters = loadTypeScriptModule(await readFile(adapterPath, "utf8"), adapterPath,
+  name => {assert.equal(name, "./examRecoveryValidation"); return recoveryValidation;});
 const {reconcileCreatedRun, assertTerminatedRunAcknowledgement} = loadTypeScriptModule(
   authoritySource,
   authorityPath,

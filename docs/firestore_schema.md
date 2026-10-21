@@ -1,5 +1,33 @@
 # Firestore Schema Reference
 
+BWM-046 closeout reconciliation adds no Firestore field, writer, collection or
+index definition. The separately approved existing dashboard runs index was
+enabled in staging; local index count remains 79. Canonical browser cleanup retains only a local schema-3 close fence:
+`{schemaVersion, sessionId, scopeHash, runtimeGeneration, closed: true}`. Answer,
+timing and UI payloads are removed; reads hide a valid owned fence, while native
+transactions reject stale same/older-generation save/discard across instances.
+The internal superseded-save flag is a transient return value, never persisted
+as authority or sent on the wire. Server deadlines/ownership and existing
+newest-session result markers remain authoritative. Legacy/publication/TTL
+qualification stays DEC-102/BWM-053. Aggregate and approved compatible public
+acceptance, canonical-origin restoration and complete owned cleanup passed in substep 8.
+
+BWM-046 substep 3 adds no schema field, collection, revision watermark, TTL or
+index. `EXAM_RESILIENCE_CONTRACT.md` specifies a bounded candidate projector
+from existing `answerMap`, `questionTimeMap`, immutable runtime and stored result.
+Read-only reconciliation verifies current own-Student/operational-year and exact
+consumed owner authority transactionally; it does not update lease/lock/lifecycle
+or analytics. Existing entry/recovery may persist deadline expiry, using the
+immutable end only for never-activated sessions; missing active start/deadline
+now fails closed rather than being invented. Existing summary `resultPropagation`
+markers project unknown/processing/available readiness without a raw-session join.
+Substep 4 adopts browser-only schema 3 in the existing `sessionRecovery` store:
+full scope hash/generation, canonical pending/rejected writes, unresolved question
+IDs, validated UI/timing state and counters, bounded to 512 KiB. No proof/token or
+stored deadline authority. Unsupported schema 2 is never silently promoted;
+explicit discard is limited to the matching legacy owner or current scope.
+This is not a Firestore schema migration; legacy/backfill remains BWM-053.
+
 BWM-043 substep 5 adds no data writer or collection: current/history reads use
 existing own `studentYearMetrics/{studentId}` and `results/{runId}` summaries.
 History never joins runs, sessions, questions or media. Optional stored ownership/

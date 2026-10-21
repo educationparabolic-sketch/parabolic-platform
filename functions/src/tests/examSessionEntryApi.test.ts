@@ -22,6 +22,8 @@ const sessionPath =
   "runs/run_exam_entry_api/sessions/session_exam_entry_api";
 
 const entryResult: SessionEntryValidationResult = {
+  recovery: {contractVersion: 1, maxAcceptedClientTimestamp: null, questions: [{
+    questionId: "question_exam_entry_api", answer: null, cumulativeTimeSpentSeconds: 0, maxTimeLocked: false}]},
   deadlineAt: null,
   instituteId: identity.instituteId,
   licenseSnapshot: {currentLayer: "L1"},
@@ -119,6 +121,13 @@ const publicResult = {...entryResult, ownership: receipt};
 const invoke = async (body: unknown, overrides: Record<string, unknown> = {}, rawBody?: string) => {
   let calls = 0;
   const handler = createExamSessionEntryHandler({
+    reconcileSession: async (context) => {
+      calls++;
+      assert.equal(context.runtimeCommand?.operation, "reconcile");
+      assert.equal(context.commandProof?.generation, 1);
+      return {operation: "reconcile", contractVersion: 1, sessionId: identity.sessionId,
+        generation: 1, serverTime: entryResult.serverTime, status: "terminated"};
+    },
     validateSessionEntry: async (context) => {
       calls++;
       assert.equal(context.studentUid, identity.uid);
@@ -176,4 +185,18 @@ test("renew dispatches without returning runtime content", async () => {
   const {response, calls} = await invoke({operation: "renew", commandId: randomUUID()});
   assert.equal(calls, 1); assert.equal(response.statusCode, 200);
   assert.equal("entry" in (response.body as {data: object}).data, false);
+});
+
+test("read-only reconcile dispatches exactly and rejects overrides without business calls", async () => {
+  const command = {operation: "reconcile", contractVersion: 1};
+  const result = await invoke(command);
+  assert.equal(result.calls, 1); assert.equal(result.response.statusCode, 200);
+  assert.deepEqual((result.response.body as {data: unknown}).data, {operation: "reconcile", contractVersion: 1,
+    sessionId: identity.sessionId, generation: 1, serverTime: entryResult.serverTime, status: "terminated"});
+  assert.match(result.response.headers["cache-control"], /no-store/u);
+  for (const body of [{...command, contractVersion: 2}, {...command, commandId: randomUUID()},
+    {...command, force: true}, {...command, instituteId: "other"}]) {
+    const rejected = await invoke(body);
+    assert.equal(rejected.calls, 0); assert.equal(rejected.response.statusCode, 400);
+  }
 });

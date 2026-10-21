@@ -404,6 +404,7 @@ test(
     const launchCredentialHash = createHashForTest(launchCredential);
     await seedInstituteAuthority(context.instituteId);
     await firestore.doc(sessionPath).set({
+      answerMap: {},
       runtimeOwnershipVersion: 2,
       consumedLaunchCredentialHashes: [],
       instituteId: context.instituteId,

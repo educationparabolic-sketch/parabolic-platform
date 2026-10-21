@@ -1,4 +1,5 @@
 import {ExamProctoringError} from "./examProctoringPolicy";
+import {ExamRecoveryError} from "./examRecovery";
 import {RuntimeOwnershipError} from "./examRuntimeOwnership";
 import {assertPhotoStudentBinding} from "./studentIdentityPhotoLifecycleAuthority";
 import {createHash} from "node:crypto";
@@ -205,7 +206,8 @@ export class StudentProfileService {
         return work(transaction, scope, student);
       });
     } catch (error) {
-      if (error instanceof RuntimeOwnershipError || error instanceof ExamProctoringError) throw error;
+      if (error instanceof RuntimeOwnershipError || error instanceof ExamProctoringError ||
+          error instanceof ExamRecoveryError) throw error;
       if (error instanceof StudentProfileValidationError) throw error;
       if (error instanceof InstituteAuthorityEnforcementError) {
         return fail(

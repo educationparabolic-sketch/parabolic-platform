@@ -1,4 +1,5 @@
 /* eslint-disable require-jsdoc */
+import type {StudentResultReadinessV1} from "../../../shared/contracts/examResilience";
 import {Timestamp} from "firebase-admin/firestore";
 import type {StudentInsightPattern, AdminRunMode, StudentTestStatus} from "../../../shared/contracts/apiDtos";
 import type {StudentReadAccess, StudentDashboardResultV2, StudentPerformanceResultV2,
@@ -120,7 +121,8 @@ Omit<StudentDashboardResultV2, "contractVersion" | "scope" | "access" | "upcomin
     .map((p, i) => ({label: `P${i + 1}`, value: percent(p.value)})) :
     records(engine.recentGovernanceMetrics).map((p, i) => ({label: `P${i + 1}`,
       value: percent(p.phaseAdherencePercent)}));
-  return {licenseLayer: access.licenseLayer, avgRawScorePercent: percent(metrics.avgRawScorePercent),
+  return {resultReadiness: resultReadiness(metrics),
+    licenseLayer: access.licenseLayer, avgRawScorePercent: percent(metrics.avgRawScorePercent),
     avgAccuracyPercent: percent(metrics.avgAccuracyPercent),
     testsAttempted: count(metrics.testsAttempted ?? metrics.totalTests),
     batchRank: Number.isSafeInteger(rank) && number(rank) > 0 ? number(rank) : null,
@@ -147,7 +149,8 @@ export function performanceProjection(metrics: Record<string, unknown>, access: 
   const g = access.metrics;
   const guess = percent(metrics.guessRatePercent ?? metrics.avgGuessRatePercent);
   const c = record(metrics.controlledModeComparison) ? metrics.controlledModeComparison : {};
-  return {licenseLayer: access.licenseLayer, timeline,
+  return {resultReadiness: resultReadiness(metrics),
+    licenseLayer: access.licenseLayer, timeline,
     disciplineIndex: g.advanced ? percent(metrics.disciplineIndex ?? metrics.avgDisciplineIndex) : null,
     phaseCompliancePercent: g.execution ? percent(metrics.phaseCompliancePercent ??
       metrics.avgPhaseAdherencePercent) : null,
@@ -197,7 +200,8 @@ export function insightProjection(metrics: Record<string, unknown>, access: Stud
     }
   }
   const latest = snapshots[snapshots.length - 1];
-  return {licenseLayer: access.licenseLayer, currentYearSolutionAccessOnly: true, snapshots,
+  return {resultReadiness: resultReadiness(metrics),
+    licenseLayer: access.licenseLayer, currentYearSolutionAccessOnly: true, snapshots,
     archivedSummaryOnlyCount: count(metrics.archivedSummaryOnlyCount),
     mostFrequentBehaviorPattern: [...frequencies].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ??
       "No Pattern Yet",
@@ -214,4 +218,21 @@ export function insightProjection(metrics: Record<string, unknown>, access: Stud
       .map((p) => ({topic: required(p.topic ?? p.name), weaknessPercent: percent(p.weaknessPercent),
         feedback: "Use a focused review before the next timed practice.", tutorialVideoLink: null,
         simulationLink: null}))};
+}
+
+// Only the existing summary marker can attest readiness; absence is not failure.
+export function resultReadiness(metrics: Record<string, unknown>): StudentResultReadinessV1 {
+  const marker = metrics.resultPropagation;
+  if (!record(marker) || typeof marker.sessionId !== "string" || !marker.sessionId ||
+      marker.sessionId.trim() !== marker.sessionId || marker.sessionId.length > 128 || marker.sessionId.includes("/") ||
+      !(marker.submittedAt instanceof Timestamp) || !(marker.updatedAt instanceof Timestamp)) {
+    return {state: "unknown", sessionId: null, retryAfterSeconds: 0};
+  }
+  if (marker.state === "processing" && marker.retryAfterSeconds === 2) {
+    return {state: "processing", sessionId: marker.sessionId, retryAfterSeconds: 2};
+  }
+  if (marker.state === "available" && marker.retryAfterSeconds === 0) {
+    return {state: "available", sessionId: marker.sessionId, retryAfterSeconds: 0};
+  }
+  return {state: "unknown", sessionId: null, retryAfterSeconds: 0};
 }

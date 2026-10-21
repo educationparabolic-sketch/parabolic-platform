@@ -14,6 +14,7 @@ import type {
   StudentTestRecord,
   StudentTestStatus,
 } from "./apiDtos.js";
+import type {StudentResultReadinessV1} from "./examResilience.js";
 
 export interface StudentCurrentYearScope {
   kind: "current";
@@ -126,7 +127,7 @@ type NullableFields<T, K extends keyof T> = Omit<T, K> & {
   [P in K]: T[P] | null;
 };
 
-export type StudentDashboardResultV2 = StudentCurrentRead & NullableFields<
+export type StudentDashboardResultV2 = StudentCurrentRead & {resultReadiness: StudentResultReadinessV1} & NullableFields<
   StudentDashboardResult,
   | "disciplineIndex" | "riskState" | "phaseAdherencePercent"
   | "easyNeglectPercent" | "hardBiasPercent" | "timeMisallocationPercent"
@@ -141,7 +142,7 @@ export type StudentPerformancePointV2 = NullableFields<
   | "maxTimeViolationPercent" | "overstayFrequencyPercent"
 >;
 
-export type StudentPerformanceResultV2 = StudentCurrentRead & NullableFields<
+export type StudentPerformanceResultV2 = StudentCurrentRead & {resultReadiness: StudentResultReadinessV1} & NullableFields<
   Omit<StudentPerformanceResult, "timeline" | "controlledModeComparison">,
   | "disciplineIndex" | "phaseCompliancePercent" | "controlledModeImprovementPercent"
   | "overstayFrequencyPercent" | "guessProbabilityPercent" | "guessProbabilityCluster"
@@ -157,7 +158,7 @@ export type StudentInsightSnapshotV2 = NullableFields<
   StudentInsightSnapshot, "guessDetectionPercent"
 >;
 
-export type StudentInsightsResultV2 = StudentCurrentRead & NullableFields<
+export type StudentInsightsResultV2 = StudentCurrentRead & {resultReadiness: StudentResultReadinessV1} & NullableFields<
   Omit<StudentInsightsResult, "snapshots">,
   "guessDetectionAlertPercent" | "disciplineImprovementSuggestions"
 > & {snapshots: StudentInsightSnapshotV2[]};

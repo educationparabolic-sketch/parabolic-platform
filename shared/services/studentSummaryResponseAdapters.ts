@@ -1,3 +1,4 @@
+import {readStudentResultReadiness} from "./examRecoveryValidation";
 import type {
   StudentDashboardResultV2, StudentPerformanceResultV2, StudentInsightsResultV2,
   StudentTestsResultV2, StudentSolutionsResultV2, StudentReadAccess,
@@ -69,6 +70,7 @@ export function adaptStudentSummaryResult<K extends keyof StudentSummaryResults>
   const shape: Record<string, Check> = {...current};
   if (resource === "dashboard" || resource === "performance" || resource === "insights") {
     shape.licenseLayer = literal(a.licenseLayer);
+    shape.resultReadiness = (value, path) => {try {readStudentResultReadiness(value);} catch {invalid(path);}};
   }
   if (resource === "dashboard") Object.assign(shape, {
     avgRawScorePercent: number, avgAccuracyPercent: number, testsAttempted: integer, batchRank: nullable(positive),

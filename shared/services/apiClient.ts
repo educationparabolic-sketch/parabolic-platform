@@ -266,6 +266,7 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
           body: options.body === undefined ? undefined : JSON.stringify(options.body),
         });
 
+        options.onResponseHeaders?.(response.headers);
         payload = await readResponseBody(response);
         assertAuthScope();
 
@@ -276,7 +277,7 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
           currentUser = null;
         }
 
-        if (!response.ok && response.status === 401 && !options.skipAuth && currentUser) {
+        if (!response.ok && response.status === 401 && options.refreshAuthOn401 !== false && !options.skipAuth && currentUser) {
           try {
             token = await refreshToken(currentUser);
           } catch (error) {
@@ -371,7 +372,9 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
           throw new ApiClientError(error.message, response.status, "INVALID_RESPONSE", payload);
         }
 
-        if (!options.skipAuth) {
+        // A scoped retry owner handles a provisional 401 before deciding authority is lost.
+        if (!options.skipAuth && !(options.refreshAuthOn401 === false &&
+            (response.status === 401 || errorEnvelope.error.code === "UNAUTHORIZED"))) {
           const signal = classifyApiAuthorityFailure({
             code: errorEnvelope.error.code,
             idToken: token,
