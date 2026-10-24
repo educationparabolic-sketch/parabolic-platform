@@ -1,3 +1,4 @@
+import {verifyCurrentAuthorityIdToken} from "../services/instituteAuthorityEnforcement";
 import * as functions from "firebase-functions";
 import {createMiddlewareHandler} from "../middleware/framework";
 import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
@@ -54,5 +55,5 @@ export const handleVendorCalibrationVersionsRequest = createVendorCalibrationVer
   listVersions: listCalibrationVersions,
   readVersion: readCalibrationVersion,
   getUser: (uid) => getFirebaseAdminApp().auth().getUser(uid),
-  verifyIdToken: (token) => getFirebaseAdminApp().auth().verifyIdToken(token, true),
+  verifyIdToken: (token) => verifyCurrentAuthorityIdToken(token),
 });

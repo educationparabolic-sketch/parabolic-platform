@@ -1,7 +1,7 @@
+import {createClosedLegacyHandler} from "./closedLegacyHandler";
 import * as functions from "firebase-functions";
 import {DecodedIdToken} from "firebase-admin/auth";
 import {sendErrorResponse} from "../services/apiResponse";
-import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
 import {createAuthenticationMiddleware} from "../middleware/auth";
 import {
   createMethodMiddleware,
@@ -130,13 +130,6 @@ export const createVendorLicenseUpdateHandler = (
 });
 
 export const handleVendorLicenseUpdateRequest =
-  createVendorLicenseUpdateHandler({
-    updateInstituteLicense:
-      licenseManagementService.updateInstituteLicense.bind(
-        licenseManagementService,
-      ),
-    verifyIdToken: (idToken: string) =>
-      getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
-  });
+  createClosedLegacyHandler("LegacyVendorLicenseUpdateApi");
 
 export {buildSuccessResponse};

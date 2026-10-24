@@ -4,14 +4,15 @@ import { readdir, readFile } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { firebaseEmulatorHarness } from "./firebase-emulator-harness-config.mjs";
+import { firebaseEmulatorHarness, firebaseIntegrationGroups } from "./firebase-emulator-harness-config.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const functionsRoot = resolve(repositoryRoot, "functions");
-const npmExecutable = process.platform === "win32" ? "npm.cmd" : "npm";
 const expectedProjectId = firebaseEmulatorHarness.projectId;
 const fullServicesPhase = process.argv.includes("--full-services");
 const firestoreOnlyPhase = process.argv.includes("--firestore-only");
+const integrationGroup = process.argv.find((argument) => argument.startsWith("--group="))?.slice(8);
+assert.ok(integrationGroup === undefined || fullServicesPhase && Object.hasOwn(firebaseIntegrationGroups, integrationGroup), "Unknown integration suite group");
 const emulatorMarkers = [
   "FIRESTORE_EMULATOR_HOST",
   "FIREBASE_AUTH_EMULATOR_HOST",
@@ -119,16 +120,18 @@ const explicitSuites = await discoverExplicitEmulatorSuites();
 assert.equal(firestoreSuites.length, 99, "Firestore suite inventory changed");
 assert.equal(explicitSuites.length, 20, "explicit emulator suite inventory changed");
 
-const selectedSuites = fullServicesPhase ? explicitSuites : firestoreSuites;
+assert.deepEqual(Object.values(firebaseIntegrationGroups).flat().sort(), explicitSuites.map((suite) => basename(suite)).sort(), "Every explicit suite belongs to exactly one lifecycle group");
+const selectedSuites = fullServicesPhase ? explicitSuites.filter((suite) =>
+  integrationGroup === undefined || firebaseIntegrationGroups[integrationGroup].includes(basename(suite))) : firestoreSuites;
 const phaseLabel = fullServicesPhase ?
-  `${explicitSuites.length} explicit full-service emulator suites` :
+  `${selectedSuites.length} explicit full-service emulator suites (${integrationGroup ?? "all"})` :
   `${firestoreSuites.length} Firestore-backed suites`;
 
 console.log(`[emulator-suite] Running ${phaseLabel} serially.`);
 
 let result;
 try {
-  if (fullServicesPhase) {
+  if (fullServicesPhase && (integrationGroup === undefined || integrationGroup === "foundation")) {
     const smokeResult = spawnSync(
       process.execPath,
       ["scripts/firebase-emulator-smoke.mjs"],

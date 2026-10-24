@@ -54,14 +54,19 @@ test("BWM-034 registers the exact secured institute route boundary", async () =>
 
 test("Vendor institute transport derives current Auth and exact capability authority", async () => {
   const source = await read("functions/src/api/vendorInstitutes.ts");
+  const currentVendor = await read("functions/src/middleware/currentVendor.ts");
+  assert.match(currentVendor, /await dependencies.getUser\(identity.uid\)/u);
+  assert.match(currentVendor, /user.disabled \|\| !hasConsistentVendorClaims\(user.customClaims/u);
+  const currentPolicy = await read("functions/src/policy/vendorRolePolicy.ts");
+  assert.match(currentPolicy, /claims.isSuspended === undefined \|\| claims.isSuspended === false/u);
+  assert.match(currentPolicy, /claims.suspended === undefined \|\| claims.suspended === false/u);
   for (const requiredBoundary of [
-    "verifyIdToken(idToken, true)",
-    "getUser(identity.uid)",
-    "user.disabled",
-    "claims.isSuspended === true",
+    "verifyCurrentAuthorityIdToken(idToken)",
+    "assertCurrentVendorIdentity(request, dependencies,",
+    "getFirebaseAdminApp().auth().getUser(userId)",
     '"vendor.institutes.read"',
     '"vendor.institutes.manage_lifecycle"',
-    "assertVendorCapability(request, capability)",
+    "assertCurrentVendorIdentity(request, dependencies, capability)",
     "request.params.instituteId",
     "request.params.onboardingId",
     "buildSuccessResponse",

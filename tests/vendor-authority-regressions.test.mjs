@@ -24,7 +24,9 @@ async function instituteEnvironment(api, canManage = true) {
 }
 async function commercialEnvironment(api) {
   const h = componentHarness(), scope = await h.load("apps/vendor/src/features/shared/useVendorReadScope.ts");
+  const assetPolicy = await h.load("shared/services/managedAssetPolicy.ts");
   const module = await h.load(commercialPath, {
+    "../../../../../shared/services/managedAssetPolicy": assetPolicy,
     "../shared/useVendorReadScope": scope, "../../portals/vendorAccess": {useVendorCapability: () => true},
     "./vendorCommercialApi": {vendorCommercialApi: api, classifyVendorCommercialFailure: failure,
       createCommercialIdempotencyKey: randomUUID, providerFailure: () => null},

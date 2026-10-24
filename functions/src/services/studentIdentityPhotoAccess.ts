@@ -9,6 +9,7 @@ import {StudentProfileService} from "./studentProfile";
 import {currentManagedPhoto, identityPhotoHash, validPhotoId} from "./studentIdentityPhotoLifecycleAuthority";
 import {PrivateIdentityPhotoMediaStore, resolveIdentityPhotosBucket} from "./studentIdentityPhotoStorage";
 import {InstituteAuthorityEnforcementService} from "./instituteAuthorityEnforcement";
+import {hasCurrentStaffMembership} from "./currentAccountIdentity";
 
 export function photoAccessFail(code: StudentProfileValidationError["code"], message: string): never {
   throw new StudentProfileValidationError(code, message);
@@ -66,6 +67,10 @@ export class IdentityPhotoAdminAuthority {
     const authority = await this.authority.readCurrentAuthority(transaction, instituteId);
     this.authority.assertTokenAuthority(authority, token);
     this.authority.assertTokenAuthority(authority, current);
+    const institute = await transaction.get(this.firestore.doc(`institutes/${instituteId}`));
+    if (!hasCurrentStaffMembership(institute.get("settingsUsers"), token.uid, "admin")) {
+      return photoAccessFail("FORBIDDEN", "Current Admin membership is required.");
+    }
   }
   public async withStudent<T>(rawToken: string, studentId: string, work: (
     transaction: FirebaseFirestore.Transaction, student: FirebaseFirestore.DocumentSnapshot, token: DecodedIdToken,

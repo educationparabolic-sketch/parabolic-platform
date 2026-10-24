@@ -67,6 +67,10 @@ function StudentLoginPage(props: { loginPath: string; protectedPath: string }) {
   const { session, signIn, clearError } = useAuthProvider();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const fromPath = typeof location.state === "object" && location.state !== null &&
+    "from" in location.state ? (location.state as { from?: unknown }).from : undefined;
+  const nextTarget = STUDENT_PRIMARY_NAVIGATION.some((item) => item.path === fromPath)
+    ? String(fromPath) : protectedPath;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -74,17 +78,12 @@ function StudentLoginPage(props: { loginPath: string; protectedPath: string }) {
 
     const signedIn = await signIn({ email, password });
     if (signedIn) {
-      const nextTarget =
-        typeof location.state === "object" && location.state !== null && "from" in location.state
-          ? String((location.state as { from?: string }).from ?? protectedPath)
-          : protectedPath;
-
       navigate(nextTarget, { replace: true });
     }
   }
 
   if (session.status === "authenticated") {
-    return <Navigate replace to={protectedPath} />;
+    return <Navigate replace to={nextTarget} />;
   }
 
   return (

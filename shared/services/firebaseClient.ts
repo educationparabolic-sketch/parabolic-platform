@@ -1,7 +1,8 @@
 import { FirebaseError, initializeApp, type FirebaseApp, getApps } from "firebase/app";
-import { browserLocalPersistence, connectAuthEmulator, getAuth, initializeAuth, type Auth } from "firebase/auth";
+import { browserLocalPersistence, connectAuthEmulator, initializeAuth, type Auth } from "firebase/auth";
 import { isLoopbackHostname } from "./browserRuntimeEnvironment";
 import { getFrontendEnvironment, validateFrontendEnvironment } from "./frontendEnvironment";
+import { assertBrowserAuthPersistenceAvailable } from "./browserAuthPersistence";
 
 interface FirebaseClient {
   app: FirebaseApp;
@@ -64,7 +65,10 @@ function connectConfiguredAuthEmulator(auth: Auth): void {
   connectAuthEmulator(auth, parsedUrl.origin, { disableWarnings: true });
 }
 
-export function ensureFirebaseClient(options: {localPersistence?: boolean} = {}): FirebaseClient {
+export function ensureFirebaseClient(options: {localPersistence?: boolean} = {localPersistence: true}): FirebaseClient {
+  if (options.localPersistence === false) {
+    throw new FirebaseError("frontend/unsupported-auth-persistence", "Origin-local Auth persistence is required.");
+  }
   if (firebaseClient) {
     return firebaseClient;
   }
@@ -78,11 +82,11 @@ export function ensureFirebaseClient(options: {localPersistence?: boolean} = {})
   }
 
   const existingApp = getApps()[0];
+  assertBrowserAuthPersistenceAvailable();
   const app = existingApp ?? initializeApp(buildFirebaseConfig());
-  // Exam must register cross-tab listeners on the persistence it actually uses.
+  // Every portal must register cross-tab listeners on the persistence it actually uses.
   // Switching from the default IndexedDB backend later can leave stale listeners.
-  const auth = options.localPersistence ?
-    initializeAuth(app, {persistence: browserLocalPersistence}) : getAuth(app);
+  const auth = initializeAuth(app, {persistence: browserLocalPersistence});
   connectConfiguredAuthEmulator(auth);
 
   firebaseClient = {

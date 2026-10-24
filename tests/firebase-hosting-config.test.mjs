@@ -11,7 +11,8 @@ const firebaseRc = JSON.parse(await readFile(new URL("../.firebaserc", import.me
 
 const baselineSecurityHeaders = {
   "Content-Security-Policy":
-    "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; media-src 'self' blob: https:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebaseapp.com; frame-src 'none'; worker-src 'self' blob:; manifest-src 'self'",
+    "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; media-src 'self' blob:; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com; frame-src 'none'; worker-src 'self'; manifest-src 'self'",
+  "Cache-Control": "no-cache, max-age=0, must-revalidate",
   "Referrer-Policy": "no-referrer",
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
@@ -76,9 +77,9 @@ test("Student deep links resolve to the Student SPA using absolute rewrite patte
 
 test("every Hosting target applies the baseline security headers and least-privilege camera policy", () => {
   for (const hosting of firebaseConfig.hosting) {
-    assert.equal(hosting.headers?.length, hosting.target === "portal" ? 3 : 1);
+    assert.equal(hosting.headers?.length, hosting.target === "portal" ? 4 : 2);
     if (hosting.target === "portal") {
-      assert.deepEqual(hosting.headers.slice(1), ["/student", "/student/**"].map((source) => ({source, headers: [{key: "Permissions-Policy", value: permissionsPolicyByTarget.exam}]})));
+      assert.deepEqual(hosting.headers.slice(1, 3), ["/student", "/student/**"].map((source) => ({source, headers: [{key: "Permissions-Policy", value: permissionsPolicyByTarget.exam}]})));
     }
     assert.equal(hosting.headers[0].source, "**");
     const configuredHeaders = Object.fromEntries(
@@ -96,5 +97,14 @@ test("every Hosting target applies the baseline security headers and least-privi
       permissionsPolicyByTarget[hosting.target],
       `${hosting.target} must use its least-privilege camera policy`,
     );
+  }
+});
+
+// A real reload must reach the same application as client-side navigation.
+test("Admin login and deep links resolve using absolute rewrite patterns", () => {
+  const portal = firebaseConfig.hosting.find((hosting) => hosting.target === "portal");
+  for (const source of ["/admin", "/admin/**", "/login"]) {
+    assert.deepEqual(portal.rewrites.find((rewrite) => rewrite.source === source),
+      {source, destination: "/admin/index.html"});
   }
 });

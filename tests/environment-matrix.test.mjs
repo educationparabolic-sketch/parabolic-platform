@@ -17,6 +17,8 @@ const portalExamples = {
 const frontendSourceKeys = [
   "VITE_ADMIN_SETTINGS_INSTITUTE_ID",
   "VITE_API_BASE_URL",
+  "VITE_APP_CHECK_MODE",
+  "VITE_APP_CHECK_PROVIDER_KEY",
   "VITE_BASE_PATH",
   "VITE_CDN_BASE_URL",
   "VITE_DATA_MODE",
@@ -89,6 +91,8 @@ const functionsPlatformKeys = [
 
 const commonPortalExampleKeys = [
   "VITE_API_BASE_URL",
+  "VITE_APP_CHECK_MODE",
+  "VITE_APP_CHECK_PROVIDER_KEY",
   "VITE_CDN_BASE_URL",
   "VITE_DATA_MODE",
   "VITE_EXAM_BASE_URL",

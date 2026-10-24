@@ -1,8 +1,8 @@
+import {verifyCurrentAuthorityIdToken} from "../services/instituteAuthorityEnforcement";
 import {assertProctoringJson} from "../services/examProctoringPolicy";
 import * as functions from "firebase-functions";
 import {DecodedIdToken} from "firebase-admin/auth";
 import {sendErrorResponse} from "../services/apiResponse";
-import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
 import {createAuthenticationMiddleware} from "../middleware/auth";
 import {
   createMiddlewareHandler,
@@ -192,7 +192,7 @@ export const handleAdminRunsRequest = createAdminRunsHandler({
   getRun: adminRunsService.getRun.bind(adminRunsService),
   listRuns: adminRunsService.listRuns.bind(adminRunsService),
   verifyIdToken: (idToken: string) =>
-    getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
+    verifyCurrentAuthorityIdToken(idToken),
 });
 
 export {buildSuccessResponse};

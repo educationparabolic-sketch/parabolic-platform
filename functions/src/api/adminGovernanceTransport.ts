@@ -1,3 +1,4 @@
+import {verifyCurrentAuthorityIdToken} from "../services/instituteAuthorityEnforcement";
 import * as functions from "firebase-functions";
 import {DecodedIdToken} from "firebase-admin/auth";
 import type {
@@ -34,7 +35,6 @@ import {
   GovernanceSnapshotAccessValidationError,
 } from "../types/governanceAccess";
 import {MiddlewareRequest, MiddlewareRejectionError} from "../types/middleware";
-import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
 
 type Operation = "download" | "generate" | "list" | "snapshots";
 
@@ -251,5 +251,5 @@ export const handleAdminGovernanceTransportRequest =
       governanceSnapshotAccessService,
     ),
     verifyIdToken: (idToken) =>
-      getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
+      verifyCurrentAuthorityIdToken(idToken),
   });

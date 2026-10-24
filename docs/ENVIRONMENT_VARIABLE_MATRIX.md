@@ -107,13 +107,28 @@ below; branch/site mappings remain the final BWM-005 substep.
 
 ## Release artifact scan
 
-Both CI jobs run `scan-release-artifacts.mjs --scan` after all four portal
-builds. Validation scans the four portal `dist` trees. The deploy job runs
-after assembling the combined Portal Hosting directory and scans that exact
-directory plus the Exam and Vendor Hosting directories before installing
-Firebase deployment tooling. The scanner fails closed when a requested tree is
-missing, empty, or contains a symbolic link, and reports policy IDs and paths
-without echoing matched values.
+Both CI jobs prepare the Portal bundle, then run `scan-release-artifacts.mjs --scan`
+across all four `dist` trees and `.firebase/hosting/portal`. CLI overrides cannot
+omit any built/served root. Missing/empty roots, root/ancestor/child symlinks,
+`.map` files, JS/CSS sourceMappingURL directives (external or inline), and renamed
+map/source-content payloads fail closed. Every file is inspected regardless of
+extension; paths/policy IDs are reported without matched source values. Explicit
+partial-candidate calls to the library are not whole-release qualification.
+
+BWM-047 substep 5 adds `prepare-security-hosting.mjs` after release validation and
+scanning. It writes ignored `.firebase-security-release.json` from the exact
+matching `VITE_CDN_BASE_URL` / `CDN_BASE_URL`, preserving its managed path prefix
+in application validation while adding only its parsed exact HTTPS origin to
+CSP. Missing/ambiguous/credential-bearing/query/fragment/traversal/loopback bases
+and unexpected ports fail release validation. No broad provider wildcard is a
+fallback. The Hosting deployment command consumes this generated config. Only
+existing generated content-hashed assets receive exact immutable header rules;
+HTML, unknown/missing assets, manifests and login/deep links revalidate. APIs
+always use private/no-store. Portal root uses the prepared revalidated HTML
+redirect to `/admin`; the former Hosting 302 omitted custom headers locally.
+All four Vite configurations explicitly disable public source maps. Public
+provider/CDN/header qualification remains BWM-047 substep 8 / BWM-052..056;
+local emulator and synthetic TLS exceptions cannot ship as release policy.
 
 The gate rejects loopback endpoints using `localhost` or `127.0.0.1`, embedded
 development/mock/test/fixture token assignments and JWTs, enabled fixture-mode
@@ -178,8 +193,10 @@ their mapped target origins.
 | `VITE_FIREBASE_MESSAGING_SENDER_ID` | All portals | `O` | `O` | `O` | `O` | Supply only when Firebase Messaging or another selected SDK requires it. |
 | `VITE_FIREBASE_MEASUREMENT_ID` | All portals | `O` | `O` | `O` | `O` | Supply only when approved Analytics collection is enabled for that environment. |
 | `VITE_FIREBASE_AUTH_EMULATOR_URL` | All portals | `O` | `O` | `F` | `F` | Optional origin-only `http://localhost:<port>` or `http://127.0.0.1:<port>` connection for local Auth emulator proof. Runtime use also requires the browser page itself to be on loopback; release CI injects blank and the artifact scanner rejects loopback literals. |
+| `VITE_APP_CHECK_MODE` | All portals | `R` | `R` | `R` | `R` | Explicit pending_provisioning only for non-production qualification; production enforced and must agree with server APP_CHECK_MODE. |
+| `VITE_APP_CHECK_PROVIDER_KEY` | All portals | `C` | `C` | `C` | `R` | Public reCAPTCHA Enterprise site key required for enforced acquisition; provider/CSP provisioning remains BWM-052. |
 | `VITE_API_BASE_URL` | All portals | `O` | `O` | `F` | `F` | Developer/test diagnostic override only. Staging and production must leave it absent/blank so the reviewed same-origin `/api/v1` rewrite is used. |
-| `VITE_CDN_BASE_URL` | All portals | `O` | `O` | `R` | `R` | Absolute environment-specific HTTPS CDN base URL. It may include an environment-owned bucket path but never credentials, query, or fragment. The local `/cdn` fallback is allowed only in development/test. |
+| `VITE_CDN_BASE_URL` | All portals | `O` | `O` | `R` | `R` | Absolute environment-specific HTTPS CDN base URL. It may include an environment-owned bucket path but never credentials, query, or fragment. Mounted delivery fails closed without a configured managed signed URL; no unsigned `/cdn` or Storage-URL rewrite fallback. |
 | `VITE_PORTAL_BASE_URL` | All portals | `O` | `O` | `R` | `R` | Absolute Admin/Student Hosting origin, without a trailing slash. Do not persist an expiring preview URL as the canonical value. |
 | `VITE_EXAM_BASE_URL` | All portals | `O` | `O` | `R` | `R` | Absolute Exam Hosting origin, without a trailing slash. |
 | `VITE_VENDOR_BASE_URL` | All portals | `O` | `O` | `R` | `R` | Absolute Vendor Hosting origin, without a trailing slash. |
@@ -214,6 +231,9 @@ closed before a notification-authoritative command commits.
 | Variable | Development | Test | Staging | Production | Value contract |
 |---|---:|---:|---:|---:|---|
 | `PROJECT_ID` | `R` | `R` | `R` | `R` | Application-level project selector. Test uses a disposable `demo-*` ID, staging is `parabolic-dev`, and production remains unresolved until BWM-052. Must agree with Google/Firebase runtime metadata. |
+| `APP_CHECK_MODE` | `C` | `R` | `R` | `R` | Explicit server-owned enforced or permitted pending_provisioning. Production enforced only; local provisional mode requires isolated demo emulators. |
+| `APP_CHECK_ALLOWED_APP_IDS` | `C` | `R` | `R` | `R` | Explicit approved web app IDs; release allowlist includes VITE_FIREBASE_APP_ID. |
+| `SECURITY_TEST_APP_CHECK_KEY` | `F` | `C` | `F` | `F` | Trusted isolated demo-emulator HMAC verifier injection only, never browser output or release materialization. |
 | `NODE_ENV` | `R` | `R` | `R` | `R` | Exactly `development`, `test`, `staging`, or `production`; no implicit release default. |
 | `APP_BASE_URL` | `R` | `R` | `R` | `R` | Absolute Admin/Student origin for links and redirects. Loopback is allowed only in development/test. |
 | `EXAM_BASE_URL` | `R` | `R` | `R` | `R` | Absolute Exam origin for the selected environment. |
@@ -554,3 +574,43 @@ restored. All nine selected HTTP exports ACTIVE; 49 unrelated Functions, 13 prio
 remote indexes and both live Hosting channels unchanged. The one new session
 index is READY; self signing remains required staging configuration. This is not
 a production or general infrastructure qualification.
+
+### BWM-047 application admission (SEC-14/15)
+
+`APP_CHECK_MODE` is server-owned and must explicitly equal `VITE_APP_CHECK_MODE` at release validation. Values are `enforced` or the recorded non-production `pending_provisioning`; production accepts only `enforced`. `APP_CHECK_ALLOWED_APP_IDS` is a comma-separated explicit web app allowlist including `VITE_FIREBASE_APP_ID`. Both server values are materialized into the Functions runtime environment. `VITE_APP_CHECK_PROVIDER_KEY` is the public reCAPTCHA Enterprise site key required in enforced browser builds. No request header selects a mode.
+
+`SECURITY_TEST_APP_CHECK_KEY` is never materialized or emitted into browser builds. Only an isolated `demo-*` project with NODE_ENV=test, Functions emulator and exact loopback Auth/Firestore emulator endpoints accepts this trusted process injection. Debug/test injection is rejected by release validation. BWM-052 must provision/qualify the provider, allowed apps/sites/domains, quota/cost/privacy and exact CSP dependencies before replacing provisional staging mode; BWM-054/056 must prove genuine provider-backed requests. Existing provisional staging artifacts cannot qualify production.
+
+
+## BWM-047 substep 8 reconciliation — local verification passed; public pending
+
+Current source accounting is 121 routes (116 implemented, zero incompatible or
+missing, five retired), 64 guarded HTTP exports, 52 gateway handlers and eight
+schedules. Earlier task-specific counts above are historical. The permanent
+SEC-A01..09 matrix owns current-account/tenant/resource, browser persistence,
+disclosure, cache/CSP/assets/maps and shared admission proof; the master controller
+records actual results and limits. Application counters remain the sole new
+security schema owner from substep 6; no new business writer, role, route, index,
+rule or dependency is introduced by closeout. Public preparation is documented in
+`docs/CROSS_PORTAL_SECURITY_PREVIEW_REVIEW.md`. It is review-only, uses no cloud
+authority, and cannot qualify the real provider, CDN/IAM, remote TTL or production.
+Local aggregate qualification passed; all eight findings remain OPEN pending
+approved public qualification. Current unchanged index declarations are 79
+composite indexes and 13 field overrides (five prior plus eight security-counter
+overrides inherited from substep 6).
+BWM-049 exclusions, DEC-102/BWM-053 and BWM-052/054/056 prerequisites remain;
+production NO_GO.
+
+
+## BWM-047 final security qualification — 2026-10-24
+
+The controller records VERIFIED 8/8 under DEC-135 / LOG-283: local aggregate and
+approved compatible public qualification pass; all eight application findings close
+within the frozen contract. Exact 43-existing-HTTP staging uploads, three obsolete
+public invocation closures, 121 canonical/40 direct negatives, six real CSP-on
+public cases, canonical-origin restoration and owned fixture cleanup are verified.
+No local route/export/handler/schedule/index/dependency inventory changes.
+App Check remains explicit staging pending_provisioning, with genuine provider,
+proxy/edge/load/TTL/infra gates owned by BWM-052/054/056 and monitoring transport
+by BWM-051. Preserve BWM-049 exclusions and DEC-102/BWM-053 prerequisites;
+production NO_GO. Earlier pending statements are historical checkpoints.

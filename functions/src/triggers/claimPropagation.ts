@@ -1,3 +1,5 @@
+import {guardBackgroundDiagnostics} from "../services/diagnosticDisclosure";
+import {createLogger} from "../services/logging";
 import * as functions from "firebase-functions";
 import {
   claimPropagationScheduleService,
@@ -14,7 +16,7 @@ export const handleClaimPropagationSchedule = async (
     {eventId: workerId},
     async () => {
       const result = await claimPropagationScheduleService.execute(workerId);
-      functions.logger.info("Processed scheduled claim propagation work.", result);
+      createLogger("claimPropagationTrigger").info("Processed scheduled claim propagation work.", {...result});
       return result;
     },
   );
@@ -22,4 +24,5 @@ export const handleClaimPropagationSchedule = async (
 export const claimPropagationSweepEveryMinute = functions.pubsub
   .schedule("every 1 minutes")
   .timeZone("UTC")
-  .onRun((context) => handleClaimPropagationSchedule(context.eventId));
+  .onRun(guardBackgroundDiagnostics((context: functions.EventContext) =>
+    handleClaimPropagationSchedule(context.eventId)));

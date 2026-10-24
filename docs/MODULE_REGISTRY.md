@@ -1,3 +1,49 @@
+BWM-047 substep 5 header/cache/asset/map adoption (2026-10-22; verification in master controller):
+
+- `httpExportGuard.ts` applies private/max-age=0/no-store and nosniff before all 64 HTTP exports, including gateway, health and raw-byte webhook exceptions. Gateway and Vendor audit/health boundaries preserve the same cache policy.
+- `managedAssetPolicy.ts` / `cdnAssetDelivery.ts` validate exact configured CDN origin/prefix, immutable managed object syntax and signed-query presence without rewriting signature bytes. Mounted Admin previews bind the exact projected object path; Exam/Student render only managed delivery, private photo Blob reads retain their owner, and business links reject active schemes/credentials/control characters.
+- `prepare-security-hosting.mjs` generates exact-candidate CSP and per-existing-file immutable headers after all-five-root artifact scanning. The base config remains restrictive and revalidates HTML/deep links/manifests/404. The existing Portal HTML redirect replaces a headerless platform root 302. All four Vite release builds explicitly disable maps.
+- The CLI scanner cannot omit a built or served root, follows no root/ancestor/child symlink, and rejects external/inline/renamed maps while retaining existing secret/fixture/dev gates. CI prepares the served root and deploys Hosting with the generated ignored configuration. No new environment key, provider, cloud resource, role, route, writer or source-map upload pipeline.
+- `npm run test:cross-portal-authorization -- --phase headers` adds actual Hosting/API header, CSP negative, camera, synthetic signed TLS asset and mounted text/history checks before the existing native SDK/Exam cases. Local synthetic DNS/TLS/emulator exceptions do not qualify a public CDN/provider. Findings remain OPEN; broader/approved public acceptance stays in substeps 7–8 and downstream owners.
+
+BWM-047 substep 4 backend disclosure adoption (2026-10-21; verification in master controller):
+
+- `diagnosticDisclosure.ts` owns bounded allowlisted metadata/message/error disclosure, safe request correlation, scope/release hashing, typed public error details and platform-safe background rejection.
+- `backendDisclosureCatalog.ts` is a reviewed source-static catalogue, generated/checked by `scripts/backend-disclosure-catalog.mjs`; static concatenation/branches and exact compatibility prose are supported, runtime interpolation is withheld.
+- Existing logging, Error Reporting and API response owners apply that policy before SDK/error emission. All 19 background registrations use a safe rejection boundary; six raw-trigger logging files now delegate to the structured owner. Retry/package diagnostic text is normalized at the existing writers; business intent/lifecycle fields and schemas retain their owners.
+- `npm run test:backend-disclosure` builds first, runs 17 focused cases and six real isolated emulator cases, then checks actual emitted application/Error Reporting entries for sentinel disclosure. Sequential shared-worker proof claims no runtime timeout/concurrency or remote logging transport; ordinary affected/browser gates stay separate. No new BWM-049 exclusion, provider/monitoring infrastructure, resource or historical scrub.
+
+BWM-047 substep 3 authorization/persistence adoption (2026-10-21; verification in master controller):
+
+- `functions/src/services/currentAccountIdentity.ts` owns revocation-checked current
+  Auth identity/alias comparison and exact active staff membership projection.
+  Existing `verifyCurrentAuthorityIdToken` adds coherent persisted institute/license
+  authority and staff admission for production standard API bindings. Private
+  Student/summary/media/integrity authorities keep their transactional exceptions.
+- `functions/src/api/httpExportGuard.ts` owns direct export/method/path admission;
+  `apiRouteParameters.ts` prevents decoded resource identifiers from escaping one
+  authorized path segment on both transports. `closedLegacyHandler.ts` retains
+  three direct export names while denying their legacy standalone business writes.
+- `shared/services/browserAuthPersistence.ts` probes known browser storage failure
+  using a unique token-free transient key. `firebaseClient.ts` initializes SDK
+  local persistence early for every portal; `authProvider.tsx` gates observer/sign-in
+  readiness and fences late observer/refresh/sign-in/sign-out completion by scope.
+- `tests/revoked-token-verification.test.mjs` discovers every source HTTP export,
+  production verifier binding/delegation and raw revocation call; it has explicit
+  private-service/closed/webhook/health proof owners and negative controls instead
+  of a literal-count assertion. `scripts/run-cross-portal-authorization.mjs` owns
+  the repeatable real emulator/browser matrix. Its sequential shared-worker guard
+  phase proves authorization, not runtime timeouts/concurrency; ordinary-mode
+  regression and CSP-enforced native SDK browser phases remain separate.
+
+Admin deep-link Hosting rewrites use absolute paths; Student login and peer-tab
+authentication share one validated return target. Both repairs are prerequisites
+for genuine native session restore qualification; approved public L5 remains pending.
+
+No API/business schema/index/event/schedule/provider or production grant is added.
+Whole-finding closure, uniform public headers/redaction/abuse policy, real-provider
+App Check and release qualification retain BWM-047 later-step/downstream owners.
+
 BWM-046 substep 5 clock/transport adoption (2026-10-20):
 
 BWM-046 substep 7 adds the permanent local resilience acceptance runner/matrix.
@@ -502,7 +548,7 @@ FrontendRouteChunkingStrategy | Shared | Build 141 implemented portal route-leve
 UiRouteLoadingFallback | Shared | Build 141 implemented reusable lazy-route fallback UI in `shared/ui/components/UiRouteLoading.tsx` with shared export wiring in `shared/ui/components/index.ts` and styling in `shared/ui/components/shared-ui-components.css` for deterministic cross-portal route-loading states
 ExamRuntimeDeferredChunk | Exam | Build 141 split the exam runtime into a deferred module by moving runtime-heavy implementation to `apps/exam/src/ExamRuntimeApp.tsx` and using a lazy wrapper entry in `apps/exam/src/App.tsx`, keeping secure route behavior (`/`, `/session/:sessionId`, wildcard guard) unchanged while reducing initial exam entry parse load; BWM-019 removes production `buildSessionSnapshot` use, hydrates that chunk from strict EXM-01 server authority, and isolates the optional mock snapshot behind a directly eliminable development-only import guard
 FrontendBuild141VerificationArtifacts | Shared | Build 141 added deterministic cross-portal browser verification harness `artifacts/build-141/verify-routes.mjs` with route/viewport console+network+responsive+guard evidence persisted in `artifacts/build-141/verification-results.json` and captured screenshots for affected routes
-CdnAssetDeliveryService | Shared | Build 142 added shared frontend CDN asset resolution and path-builder utilities in `shared/services/cdnAssetDelivery.ts`, including `VITE_CDN_BASE_URL`-aware URL normalization, direct-storage URL translation safeguards, question asset URL builders, and student report URL builders for deterministic portal asset delivery
+CdnAssetDeliveryService | Shared | BWM-047 substep 5 uses `cdnAssetDelivery.ts` / `managedAssetPolicy.ts` for exact configured-origin/prefix and signed immutable-object delivery; original query bytes survive and raw Storage/unsigned/arbitrary HTTPS URLs fail closed. Legacy path builders cannot manufacture delivery authority; managed publication/signing remain backend-owned.
 StudentCdnAssetAdapter | Student | Build 142 updated `apps/student/src/features/my-tests/studentMyTestsDataset.ts` to normalize solution images and summary report links through CDN URL resolution for both fallback fixtures and API payload hydration, preserving lazy-loaded current-year solution behavior and archived summary-only restrictions
 ExamCdnQuestionAssetLoader | Exam | Build 142 updated `apps/exam/src/ExamRuntimeApp.tsx` to load question images via CDN asset URLs, preserve next-question-only preload behavior via normalized CDN URLs, and avoid direct storage endpoint exposure in exam question rendering
 FrontendBuild142VerificationArtifacts | Shared | Build 142 added deterministic student/exam browser verification harness `artifacts/build-142/verify-routes.mjs` with desktop/mobile route checks and console/network/responsive/guard evidence persisted in `artifacts/build-142/verification-results.json` plus captured screenshots
@@ -790,3 +836,39 @@ origin restored; expiring previews are qualification artifacts. No identity-phot
 fetch or mounted EXM-06 admission. Production NO_GO; physical camera continuity,
 matching, TTL purge and full infrastructure/publication remain downstream. See
 master BWM-045 final substep-8 evidence and `docs/EXAM_PROCTORING_CONTRACT.md`.
+
+BWM-047 SEC-14/15 admission owner: `functions/src/api/httpExportGuard.ts` delegates shared application checks to `services/applicationAdmission.ts` and atomic metadata counters to `services/securityRateLimits.ts`. Gateway/direct dispatch share a request-local admission promise; all 64 outer HTTP exports retain private cache headers and local bounded ingress. Existing domain authorization/idempotency writers remain authoritative. Browser acquisition is `shared/services/applicationAttestation.ts`, with exact method/path inventory in `securityApiRoutes.ts` checked against the authoritative manifest; `apiClient.ts` owns header forwarding and Retry-After transport. Exam ownership and integrity queues preserve independent budgets. Local proof: `tests/security-admission.test.mjs`, `tests/security/admission.emulator.cjs`, runner `scripts/run-security-admission.mjs`. Provider/public/proxy/load qualification remains downstream.
+
+
+## BWM-047 substep 8 reconciliation — local verification passed; public pending
+
+Current source accounting is 121 routes (116 implemented, zero incompatible or
+missing, five retired), 64 guarded HTTP exports, 52 gateway handlers and eight
+schedules. Earlier task-specific counts above are historical. The permanent
+SEC-A01..09 matrix owns current-account/tenant/resource, browser persistence,
+disclosure, cache/CSP/assets/maps and shared admission proof; the master controller
+records actual results and limits. Application counters remain the sole new
+security schema owner from substep 6; no new business writer, role, route, index,
+rule or dependency is introduced by closeout. Public preparation is documented in
+`docs/CROSS_PORTAL_SECURITY_PREVIEW_REVIEW.md`. It is review-only, uses no cloud
+authority, and cannot qualify the real provider, CDN/IAM, remote TTL or production.
+Local aggregate qualification passed; all eight findings remain OPEN pending
+approved public qualification. Current unchanged index declarations are 79
+composite indexes and 13 field overrides (five prior plus eight security-counter
+overrides inherited from substep 6).
+BWM-049 exclusions, DEC-102/BWM-053 and BWM-052/054/056 prerequisites remain;
+production NO_GO.
+
+
+## BWM-047 final security qualification — 2026-10-24
+
+The controller records VERIFIED 8/8 under DEC-135 / LOG-283: local aggregate and
+approved compatible public qualification pass; all eight application findings close
+within the frozen contract. Exact 43-existing-HTTP staging uploads, three obsolete
+public invocation closures, 121 canonical/40 direct negatives, six real CSP-on
+public cases, canonical-origin restoration and owned fixture cleanup are verified.
+No local route/export/handler/schedule/index/dependency inventory changes.
+App Check remains explicit staging pending_provisioning, with genuine provider,
+proxy/edge/load/TTL/infra gates owned by BWM-052/054/056 and monitoring transport
+by BWM-051. Preserve BWM-049 exclusions and DEC-102/BWM-053 prerequisites;
+production NO_GO. Earlier pending statements are historical checkpoints.

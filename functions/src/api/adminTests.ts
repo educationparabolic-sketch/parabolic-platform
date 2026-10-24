@@ -1,3 +1,4 @@
+import {verifyCurrentAuthorityIdToken} from "../services/instituteAuthorityEnforcement";
 /* eslint-disable require-jsdoc */
 import * as functions from "firebase-functions";
 import {DecodedIdToken} from "firebase-admin/auth";
@@ -5,7 +6,6 @@ import {
   buildSuccessResponse,
   sendErrorResponse,
 } from "../services/apiResponse";
-import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
 import {createAuthenticationMiddleware} from "../middleware/auth";
 import {
   createMiddlewareHandler,
@@ -249,5 +249,5 @@ export const handleAdminTestsRequest = createAdminTestsHandler({
   publishTemplate: adminTestsService.publishTemplate.bind(adminTestsService),
   updateTemplate: adminTestsService.updateTemplate.bind(adminTestsService),
   verifyIdToken: (idToken: string) =>
-    getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
+    verifyCurrentAuthorityIdToken(idToken),
 });

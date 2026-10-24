@@ -1,3 +1,4 @@
+import {verifyCurrentAuthorityIdToken} from "../services/instituteAuthorityEnforcement";
 /* eslint-disable max-len */
 import * as functions from "firebase-functions";
 import {DecodedIdToken, UserRecord} from "firebase-admin/auth";
@@ -156,7 +157,7 @@ const dependencies: VendorSupportDependencies = {
   getUser: (userId) => getFirebaseAdminApp().auth().getUser(userId),
   getVendorTicketDetail: adminSupportService.getVendorTicketDetail.bind(adminSupportService),
   listVendorTickets: adminSupportService.listVendorTickets.bind(adminSupportService),
-  verifyIdToken: (idToken) => getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
+  verifyIdToken: (idToken) => verifyCurrentAuthorityIdToken(idToken),
 };
 
 export const handleVendorSupportRequest = createVendorSupportHandler(dependencies);

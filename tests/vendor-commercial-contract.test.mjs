@@ -166,11 +166,16 @@ test("request implementation is bounded, secured, replay-safe, and entitlement-n
   assert.doesNotMatch(service, /transaction\.(?:set|update)\(licenseReference/u);
   assert.doesNotMatch(service, /LICENSE_HISTORY_COLLECTION/u);
 
+  const currentVendor = await read("functions/src/middleware/currentVendor.ts");
+  assert.match(currentVendor, /await dependencies.getUser\(identity.uid\)/u);
+  assert.match(currentVendor, /user.disabled \|\| !hasConsistentVendorClaims\(user.customClaims/u);
+  const currentPolicy = await read("functions/src/policy/vendorRolePolicy.ts");
+  assert.match(currentPolicy, /claims.isSuspended === undefined \|\| claims.isSuspended === false/u);
+  assert.match(currentPolicy, /claims.suspended === undefined \|\| claims.suspended === false/u);
   for (const requiredBoundary of [
-    "verifyIdToken(idToken, true)",
-    "getUser(identity.uid)",
-    "user.disabled",
-    "claims.isSuspended === true",
+    "verifyCurrentAuthorityIdToken(idToken)",
+    "assertCurrentVendorIdentity(request, dependencies,",
+    "getFirebaseAdminApp().auth().getUser(userId)",
     '"vendor.licenses.manage"',
     "request.params.instituteId",
     "request.params.requestId",

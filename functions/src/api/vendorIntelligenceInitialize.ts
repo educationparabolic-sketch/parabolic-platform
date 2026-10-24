@@ -1,3 +1,4 @@
+import {verifyCurrentAuthorityIdToken} from "../services/instituteAuthorityEnforcement";
 import {
   intelligenceReadMiddlewares,
   parseVendorIntelligenceQuery,
@@ -79,7 +80,7 @@ export const handleVendorIntelligenceInitializeRequest =
     ),
     getUser: (uid) => getFirebaseAdminApp().auth().getUser(uid),
     verifyIdToken: (idToken: string) =>
-      getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
+      verifyCurrentAuthorityIdToken(idToken),
   });
 
 export {buildSuccessResponse};

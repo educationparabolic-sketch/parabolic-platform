@@ -22,7 +22,7 @@ export const vendorAuditHealthMiddlewares = (
   dependencies: VendorAuditHealthIdentityDependencies,
 ): Middleware[] => [
   async (request, response, next): Promise<void> => {
-    response.setHeader("Cache-Control", "private, no-store");
+    response.setHeader("Cache-Control", "private, max-age=0, no-store");
     if (request.method !== "GET") {
       response.setHeader("Allow", "GET");
       throw new MiddlewareRejectionError("METHOD_NOT_ALLOWED", "Use GET.");

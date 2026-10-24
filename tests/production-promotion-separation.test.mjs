@@ -11,7 +11,7 @@ function workflowJobs(source) {
   const jobsStart = source.indexOf("\njobs:\n");
   assert.ok(jobsStart >= 0, "workflow must contain a jobs block");
   const jobsSource = source.slice(jobsStart + 1);
-  const matches = [...jobsSource.matchAll(/^  ([a-z][a-z0-9-]*):\n/gmu)];
+  const matches = [...jobsSource.matchAll(/^ {2}([a-z][a-z0-9-]*):\n/gmu)];
 
   return new Map(
     matches.map((match, index) => {
@@ -29,7 +29,7 @@ function workflowDispatchInputs(source) {
   assert.ok(dispatchStart >= 0 && permissionsStart > dispatchStart);
   const dispatch = source.slice(dispatchStart, permissionsStart);
 
-  return [...dispatch.matchAll(/^      ([a-z][a-z0-9_]*):\n/gmu)].map((match) => match[1]);
+  return [...dispatch.matchAll(/^ {6}([a-z][a-z0-9_]*):\n/gmu)].map((match) => match[1]);
 }
 
 test("Firebase deployment remains staging-only across every workflow", async () => {
@@ -52,13 +52,17 @@ test("Firebase deployment remains staging-only across every workflow", async () 
       deploymentCommandCount += jobDeploymentCount;
       assert.equal(workflowName, stagingWorkflowName);
       assert.equal(jobName, "staging-deploy");
-      assert.match(job, /environment:\n      name: staging/u);
+      assert.match(job, /environment:\n {6}name: staging/u);
       assert.match(job, /github\.ref_name == 'staging'/u);
       assert.match(job, /inputs\.deploy_staging == true/u);
       assert.match(job, /inputs\.staging_project_id == 'parabolic-dev'/u);
       assert.match(job, /FIREBASE_PROJECT_ID: \$\{\{ vars\.FIREBASE_PROJECT_ID \}\}/u);
       assert.equal((job.match(/--project "\$\{FIREBASE_PROJECT_ID\}"/gu) ?? []).length, 4);
-      assert.doesNotMatch(job, /\bproduction\b|github\.ref_name == 'main'/u);
+      const deploymentPolicy = job.replace(
+        /^(\s+)NODE_ENV=production ((?:VITE_BASE_PATH=\/(?:admin|student)\/ )?npm --prefix apps\/(?:admin|student|exam|vendor) run build)$/gmu,
+        "$1$2",
+      );
+      assert.doesNotMatch(deploymentPolicy, /\bproduction\b|github\.ref_name == 'main'/u);
     }
 
     assert.doesNotMatch(source, /deploy_production|production_project_id|production-deploy/iu);

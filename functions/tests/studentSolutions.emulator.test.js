@@ -240,7 +240,14 @@ test("solutions enforce authority, release and privacy", async () => {
     assert.equal((await call(`?runId=${f.runId}`, token)).response.status, 409);
     await newYear.update({status: "draft"});
     await getAuth().setCustomUserClaims(f.uid, {...f.claims, role: "teacher"});
-    assert.equal((await call(`?runId=${f.runId}`)).response.status, 403);
+    assert.equal((await call(`?runId=${f.runId}`)).response.status, 401);
+    await f.institute.update({
+      [`settingsUsers.${f.uid}`]: {role: "teacher", status: "active"},
+    });
+    const teacherToken = await fresh({role: "teacher"});
+    assert.equal(
+      (await call(`?runId=${f.runId}`, teacherToken)).response.status, 403,
+    );
   } finally {
     if (peerCreated) await getAuth().deleteUser(peerUid);
     await other.cleanup();

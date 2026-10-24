@@ -35,20 +35,13 @@
         "**/.*",
         "**/node_modules/**"
       ],
-      "redirects": [
-        {
-          "source": "/",
-          "destination": "/admin",
-          "type": 302
-        }
-      ],
       "headers": [
         {
           "source": "**",
           "headers": [
             {
               "key": "Content-Security-Policy",
-              "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; media-src 'self' blob: https:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebaseapp.com; frame-src 'none'; worker-src 'self' blob:; manifest-src 'self'"
+              "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; media-src 'self' blob:; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com; frame-src 'none'; worker-src 'self'; manifest-src 'self'"
             },
             {
               "key": "X-Frame-Options",
@@ -65,6 +58,10 @@
             {
               "key": "Permissions-Policy",
               "value": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(self)"
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache, max-age=0, must-revalidate"
             }
           ]
         },
@@ -83,6 +80,15 @@
             {
               "key": "Permissions-Policy",
               "value": "camera=(self), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(self)"
+            }
+          ]
+        },
+        {
+          "source": "/api/v1/**",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "private, max-age=0, no-store"
             }
           ]
         }
@@ -96,11 +102,11 @@
           }
         },
         {
-          "source": "admin",
+          "source": "/admin",
           "destination": "/admin/index.html"
         },
         {
-          "source": "admin/**",
+          "source": "/admin/**",
           "destination": "/admin/index.html"
         },
         {
@@ -112,7 +118,7 @@
           "destination": "/student/index.html"
         },
         {
-          "source": "login",
+          "source": "/login",
           "destination": "/admin/index.html"
         }
       ]
@@ -131,7 +137,7 @@
           "headers": [
             {
               "key": "Content-Security-Policy",
-              "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; media-src 'self' blob: https:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebaseapp.com; frame-src 'none'; worker-src 'self' blob:; manifest-src 'self'"
+              "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; media-src 'self' blob:; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com; frame-src 'none'; worker-src 'self'; manifest-src 'self'"
             },
             {
               "key": "X-Frame-Options",
@@ -148,6 +154,19 @@
             {
               "key": "Permissions-Policy",
               "value": "camera=(self), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(self)"
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache, max-age=0, must-revalidate"
+            }
+          ]
+        },
+        {
+          "source": "/api/v1/**",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "private, max-age=0, no-store"
             }
           ]
         }
@@ -180,7 +199,7 @@
           "headers": [
             {
               "key": "Content-Security-Policy",
-              "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; media-src 'self' blob: https:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebaseapp.com; frame-src 'none'; worker-src 'self' blob:; manifest-src 'self'"
+              "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; media-src 'self' blob:; connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com; frame-src 'none'; worker-src 'self'; manifest-src 'self'"
             },
             {
               "key": "X-Frame-Options",
@@ -197,6 +216,19 @@
             {
               "key": "Permissions-Policy",
               "value": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(self)"
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache, max-age=0, must-revalidate"
+            }
+          ]
+        },
+        {
+          "source": "/api/v1/**",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "private, max-age=0, no-store"
             }
           ]
         }

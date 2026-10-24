@@ -1,3 +1,4 @@
+import {safeRuntimeError} from "./diagnosticDisclosure";
 import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import {getFunctions} from "firebase-admin/functions";
 import {createLogger} from "./logging";
@@ -171,17 +172,8 @@ const toQueueJobReadModel = (
 };
 
 const toFailureErrorMetadata = (error: unknown): QueueFailureErrorMetadata => {
-  if (error instanceof Error) {
-    return {
-      message: error.message,
-      name: error.name,
-    };
-  }
-
-  return {
-    message: String(error),
-    name: "UnknownError",
-  };
+  const safe = safeRuntimeError(error);
+  return {message: safe.message, name: safe.name};
 };
 
 const toBooleanFlag = (value: unknown, defaultValue: boolean): boolean => {

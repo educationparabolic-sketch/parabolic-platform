@@ -1,8 +1,8 @@
+import {verifyCurrentAuthorityIdToken} from "../services/instituteAuthorityEnforcement";
 /* eslint-disable require-jsdoc */
 import * as functions from "firebase-functions";
 import {DecodedIdToken} from "firebase-admin/auth";
 import {sendErrorResponse} from "../services/apiResponse";
-import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
 import {createAuthenticationMiddleware} from "../middleware/auth";
 import {
   createMiddlewareHandler,
@@ -142,7 +142,7 @@ export const handleAdminQuestionTagsRequest = createAdminQuestionTagsHandler({
   getTags: adminQuestionTagsService.getTags.bind(adminQuestionTagsService),
   mutateTags: adminQuestionTagsService.mutateTags.bind(adminQuestionTagsService),
   verifyIdToken: (idToken: string) =>
-    getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
+    verifyCurrentAuthorityIdToken(idToken),
 });
 
 export {buildSuccessResponse};

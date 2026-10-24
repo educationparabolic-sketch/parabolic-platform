@@ -1,3 +1,4 @@
+import {verifyCurrentAuthorityIdToken} from "../services/instituteAuthorityEnforcement";
 import {createMiddlewareHandler} from "../middleware/framework";
 import {buildSuccessResponse, sendErrorResponse} from "../services/apiResponse";
 import {VendorSystemHealthReadService} from "../services/vendorSystemHealthReadModel";
@@ -28,5 +29,5 @@ export const createVendorSystemHealthHandler = (dependencies: Dependencies) => c
 export const handleVendorSystemHealthRequest = createVendorSystemHealthHandler({
   read: () => new VendorSystemHealthReadService({firestore: getFirestore()}).read(),
   getUser: (uid) => getFirebaseAdminApp().auth().getUser(uid),
-  verifyIdToken: (token) => getFirebaseAdminApp().auth().verifyIdToken(token, true),
+  verifyIdToken: (token) => verifyCurrentAuthorityIdToken(token),
 });

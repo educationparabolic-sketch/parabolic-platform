@@ -3,6 +3,7 @@
 
 const assert = require("node:assert/strict");
 const test = require("node:test");
+const securityFixture = require("./helpers/crossPortalSecurity");
 const {deleteApp, initializeApp} = require("firebase-admin/app");
 const {getAuth} = require("firebase-admin/auth");
 const {getFirestore, Timestamp} = require("firebase-admin/firestore");
@@ -48,7 +49,10 @@ async function createIdentity(auth, label, claims) {
   const password = `bwm-008-${label}-negative`;
   const user = await auth.createUser({email, password});
   await auth.setCustomUserClaims(user.uid, {
-    licenseState: "active", licenseVersion: "bwm008-fixture-v1", ...claims,
+    licenseState: "active", licenseVersion: "bwm008-fixture-v1",
+    authorizationVersion: 1,
+    featureFlags: {...securityFixture.flags, ...claims.featureFlags},
+    ...claims, ...(claims.role === "student" ? {studentId: user.uid} : {}),
   });
 
   return {
@@ -96,6 +100,7 @@ test(
     const auth = getAuth(app);
     const firestore = getFirestore(app);
     const createdUserIds = [];
+    const createdInstitutes = new Set();
     const upgradedInstituteId = "inst_bwm_008_upgraded_license";
     const upgradedLicenseReference = firestore.doc(
       `institutes/${upgradedInstituteId}/license/current`,
@@ -108,6 +113,25 @@ test(
     const createTrackedIdentity = async (label, claims) => {
       const identity = await createIdentity(auth, label, claims);
       createdUserIds.push(identity.uid);
+      if (claims.instituteId) {
+        const institute = firestore.doc(`institutes/${claims.instituteId}`);
+        if (!(await institute.get()).exists) {
+          await securityFixture.seedInstitute(firestore, claims.instituteId);
+          createdInstitutes.add(claims.instituteId);
+        }
+        await institute.update({
+          licenseVersion: "bwm008-fixture-v1",
+          [`settingsUsers.${identity.uid}`]: {
+            role: claims.role, status: "active",
+          },
+        });
+        await institute.collection("license").doc("current").update({
+          currentLayer: claims.licenseLayer,
+          licenseVersion: "bwm008-fixture-v1",
+          expiryDate: null, gracePeriodEndsAt: null,
+          featureFlags: {...securityFixture.flags, ...claims.featureFlags},
+        });
+      }
       return identity;
     };
 
@@ -117,7 +141,7 @@ test(
 
         assertCanonicalError(result, {
           code: "UNAUTHORIZED",
-          message: "Missing authorization header.",
+          message: "Authentication is required.",
           status: 401,
         });
       });
@@ -191,17 +215,13 @@ test(
       await t.test(
         "stale lower license claim cannot borrow an upgraded institute layer",
         async () => {
-          await upgradedLicenseReference.set({
-            currentLayer: "L3",
-            featureFlags: {riskOverview: true},
-            licenseLayer: "L3",
-          });
           const teacher = await createTrackedIdentity("stale-license", {
             featureFlags: {riskOverview: true},
             instituteId: upgradedInstituteId,
             licenseLayer: "L0",
             role: "teacher",
           });
+          await upgradedLicenseReference.update({currentLayer: "L3"});
           const result = await callJson(
             `${gatewayOrigin}/api/v1/admin/interventions?yearId=2026`,
             {
@@ -210,9 +230,10 @@ test(
           );
 
           assertCanonicalError(result, {
-            code: "LICENSE_RESTRICTED",
-            message: "Capability requires license layer L1.",
-            status: 403,
+            code: "UNAUTHORIZED",
+            message: "Authentication entitlement authority is stale; " +
+              "refresh the session.",
+            status: 401,
           });
         },
       );
@@ -328,6 +349,9 @@ test(
       );
     } finally {
       await Promise.all(createdUserIds.map((uid) => auth.deleteUser(uid)));
+      for (const id of createdInstitutes) {
+        await firestore.recursiveDelete(firestore.doc(`institutes/${id}`));
+      }
       await upgradedLicenseReference.delete();
       await vendorTargetSnapshotReference.delete();
       await deleteApp(app);

@@ -18,15 +18,27 @@ const gateway = base + "apiV1/api/v1/vendor/calibration";
 const app = getFirebaseAdminApp();
 const db = getFirestore();
 const accounts = {};
+const ownedAccounts = [];
 const ownedInstitutes = new Set();
 const ownedVersions = new Set();
 const ownedOperations = new Set();
 const fakeId = "cal_" + "a".repeat(64);
 const weights = {guessWeight: 1, phaseWeight: 0, easyNeglectWeight: 0, hardBiasWeight: 0, wrongStreakWeight: 0};
 async function request(path, token = accounts.vendor.token, method = "GET", body, origin = gateway) {
-  const response = await fetch(origin + path, {method, headers: {"content-type": "application/json",
-    ...(token ? {authorization: `Bearer ${token}`} : {})},
-  ...(body === undefined ? {} : {body: JSON.stringify(body)}), signal: AbortSignal.timeout(30000)});
+  let response;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    response = await fetch(origin + path, {method, headers: {"content-type": "application/json",
+      ...(token ? {authorization: `Bearer ${token}`} : {})},
+    ...(body === undefined ? {} : {body: JSON.stringify(body)}), signal: AbortSignal.timeout(30000)});
+    if (response.status !== 429 || attempt === 1) break;
+    const seconds = Number(response.headers.get("retry-after"));
+    assert.ok(Number.isInteger(seconds) && seconds >= 1 && seconds <= 60);
+    const denied = await response.json();
+    assert.equal(denied.error.code, "RATE_LIMITED");
+    assert.equal(denied.data, undefined);
+    console.log("[calibration-functional-client] Honoring real Retry-After; quotas and counters unchanged.");
+    await new Promise((resolve) => setTimeout(resolve, seconds * 1000 + 100));
+  }
   assert.match(response.headers.get("content-type"), /^application\/json/);
   const data = await response.json();
   assert.equal(typeof data.requestId, "string");
@@ -67,6 +79,7 @@ test.before(async () => {
     });
     assert.equal(login.status, 200);
     accounts[role] = {uid: user.uid, token: (await login.json()).idToken};
+    ownedAccounts.push(accounts[role]);
   }
   await app.auth().setCustomUserClaims(accounts.demoted.uid, {role: "student"});
   await app.auth().setCustomUserClaims(accounts.suspended.uid, {role: "vendor", isSuspended: true});
@@ -76,10 +89,25 @@ test.before(async () => {
   await new Promise((resolve) => setTimeout(resolve, 1100));
   await app.auth().revokeRefreshTokens(accounts.revoked.uid);
 });
+// Independent functional scenarios have independent real actors and budgets.
+// Replays, races and owner checks within each scenario retain the same UID.
+async function freshVendorActor() {
+  const email = `atomic-scenario-${randomUUID()}@example.test`;
+  const password = randomUUID();
+  const user = await app.auth().createUser({email, password});
+  await app.auth().setCustomUserClaims(user.uid, {role: "vendor", licenseLayer: "L0", isVendor: true});
+  const response = await fetch("http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo-key", {
+    method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify({email, password, returnSecureToken: true}),
+  });
+  assert.equal(response.status, 200);
+  accounts.vendor = {uid: user.uid, token: (await response.json()).idToken};
+  ownedAccounts.push(accounts.vendor);
+}
+test.beforeEach(freshVendorActor);
 test.after(async () => {
   for (const id of ownedInstitutes) await db.recursiveDelete(db.doc(`institutes/${id}`));
   for (const id of ownedVersions) await db.doc(`globalCalibration/${id}`).delete();
-  for (const account of Object.values(accounts)) {
+  for (const account of ownedAccounts) {
     const journals = await db.collection("vendorCalibrationRollouts").where("vendorUid", "==", account.uid).get();
     for (const journal of journals.docs) ownedOperations.add(journal.id);
     await app.auth().deleteUser(account.uid).catch((error) => {
@@ -246,6 +274,7 @@ for (const kind of ["rollout", "rollback"]) {
     test(`real transaction fault matrix ${kind}/${phase}: closed status, zero partial writes and exact HTTP recovery`, async () => {
       const points = calibrationFaultPoints(kind).filter((point) => point.phase === phase);
       for (const [index, point] of points.entries()) {
+        await freshVendorActor();
         const intent = await seed(`matrix_${kind}_${phase}_${index}`, 2);
         let original;
         if (kind === "rollback") {

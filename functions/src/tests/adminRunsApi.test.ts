@@ -293,7 +293,7 @@ test("admin runs handler loads a tenant-current run detail", async () => {
   assert.deepEqual((response.body as {data: unknown}).data, {run});
 });
 
-test("admin runs handler maps missing tenant-current details to 404", async () => {
+test("admin runs handler maps missing tenant-current details to 404 without echoing resource IDs", async () => {
   const handler = createAdminRunsHandler({
     createRun: unusedCreateRun,
     getRun: async () => {
@@ -321,6 +321,7 @@ test("admin runs handler maps missing tenant-current details to 404", async () =
   assertStructuredError(
     response.body,
     "NOT_FOUND",
-    "Run \"run_missing\" was not found in the current academic year.",
+    "The requested resource was not found.",
   );
+  assert.equal(JSON.stringify(response.body).includes("run_missing"), false);
 });

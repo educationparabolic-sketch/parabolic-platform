@@ -1,3 +1,4 @@
+import {verifyCurrentAuthorityIdToken} from "../services/instituteAuthorityEnforcement";
 import {createMiddlewareHandler} from "../middleware/framework";
 import {buildSuccessResponse, sendErrorResponse} from "../services/apiResponse";
 import {VendorAuditReadError, VendorAuditReadService} from "../services/vendorAuditReadModel";
@@ -32,5 +33,5 @@ export const handleVendorAuditEventsRequest = createVendorAuditEventsHandler({
     firestore: getFirestore(), cursorKey: await loadVendorAuditCursorKey(),
   }).listEvents(query),
   getUser: (uid) => getFirebaseAdminApp().auth().getUser(uid),
-  verifyIdToken: (token) => getFirebaseAdminApp().auth().verifyIdToken(token, true),
+  verifyIdToken: (token) => verifyCurrentAuthorityIdToken(token),
 });

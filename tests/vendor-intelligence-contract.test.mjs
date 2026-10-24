@@ -105,7 +105,7 @@ test("all intelligence handlers enforce the canonical global capability before a
     const handler = await read(`functions/src/api/${file}.ts`);
     assert.match(handler, /intelligenceReadMiddlewares\(dependencies\)/u);
     assert.match(handler, /parseVendorIntelligenceQuery\(request\)/u);
-    assert.match(handler, /verifyIdToken\(idToken, true\)/u);
+    assert.match(handler, /verifyCurrentAuthorityIdToken\(idToken\)/u);
   }
   const indexes = JSON.parse(await read("firestore.indexes.json"));
   for (const field of ["monthlyRecurringRevenue.amountMinor", "lastActivityAt"]) {

@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { createConnection } from "node:net";
 import { fileURLToPath } from "node:url";
 
-import { firebaseEmulatorHarness } from "./firebase-emulator-harness-config.mjs";
+import { firebaseEmulatorHarness, firebaseIntegrationGroups } from "./firebase-emulator-harness-config.mjs";
 
 const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
 const npmExecutable = process.platform === "win32" ? "npm.cmd" : "npm";
@@ -173,19 +173,21 @@ if (failureProbe) {
   process.exit(0);
 }
 
-const fullServicesResult = await runEmulatorPhase(
-  "Full-service smoke and explicit integration suites",
-  firebaseEmulatorHarness.services,
-  "node scripts/firebase-emulator-integration-suite.mjs --full-services",
-  {
-    FUNCTIONS_DISCOVERY_TIMEOUT: "120",
-    IDENTITY_PHOTOS_BUCKET: `${projectId}-identity-photos`,
-    FUNCTIONS_EMULATOR_HOST:
-      `127.0.0.1:${firebaseEmulatorHarness.ports.functions}`,
-  },
-);
-if (fullServicesResult.status !== 0) {
-  process.exit(fullServicesResult.status ?? 1);
+for (const group of Object.keys(firebaseIntegrationGroups)) {
+  const fullServicesResult = await runEmulatorPhase(
+    `Full-service integration group: ${group}`,
+    firebaseEmulatorHarness.services,
+    `node scripts/firebase-emulator-integration-suite.mjs --full-services --group=${group}`,
+    {
+      FUNCTIONS_DISCOVERY_TIMEOUT: "120",
+      IDENTITY_PHOTOS_BUCKET: `${projectId}-identity-photos`,
+      FUNCTIONS_EMULATOR_HOST:
+        `127.0.0.1:${firebaseEmulatorHarness.ports.functions}`,
+    },
+  );
+  if (fullServicesResult.status !== 0) {
+    process.exit(fullServicesResult.status ?? 1);
+  }
 }
 
 const firestoreResult = await runEmulatorPhase(

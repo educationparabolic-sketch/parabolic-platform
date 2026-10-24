@@ -1,3 +1,4 @@
+import {cdnReleaseOrigin} from "./prepare-security-hosting.mjs";
 const ENVIRONMENTS = new Set(["development", "test", "staging", "production"]);
 
 const REQUIRED_KEYS = [
@@ -190,6 +191,13 @@ function validateEnvironmentBoundary(environmentName, environment, errors) {
 export function validateBuildEnvironment(input = process.env) {
   const environment = normalizeEnvironment(input);
   const errors = [];
+  const mode = environment.APP_CHECK_MODE;
+  if (!["enforced", "pending_provisioning"].includes(mode) || mode !== environment.VITE_APP_CHECK_MODE) errors.push("APP_CHECK_MODE and VITE_APP_CHECK_MODE must explicitly agree");
+  if (environment.PARABOLIC_BUILD_ENVIRONMENT === "production" && mode !== "enforced") errors.push("Production App Check must be enforced");
+  const appIds = (environment.APP_CHECK_ALLOWED_APP_IDS ?? "").split(",");
+  if (!appIds.length || appIds.some(id => !FIREBASE_APP_ID_PATTERN.test(id)) || !appIds.includes(environment.VITE_FIREBASE_APP_ID)) errors.push("APP_CHECK_ALLOWED_APP_IDS must contain approved web apps including VITE_FIREBASE_APP_ID");
+  if (mode === "enforced" && !environment.VITE_APP_CHECK_PROVIDER_KEY) errors.push("VITE_APP_CHECK_PROVIDER_KEY is required for enforced App Check");
+  if (Object.entries(environment).some(([key, value]) => value && (/APP.?CHECK.*DEBUG|SECURITY_TEST_APP_CHECK/iu.test(key)))) errors.push("App Check debug/test injection is forbidden in release configuration");
 
   for (const key of REQUIRED_KEYS) {
     if (!environment[key]) {
@@ -251,6 +259,12 @@ export function validateBuildEnvironment(input = process.env) {
     !/^G-[A-Z0-9]+$/u.test(environment.VITE_FIREBASE_MEASUREMENT_ID)
   ) {
     errors.push("VITE_FIREBASE_MEASUREMENT_ID has an invalid measurement ID format");
+  }
+
+  if (environmentName === "staging" || environmentName === "production") {
+    try {cdnReleaseOrigin(environment);} catch {
+      errors.push("VITE_CDN_BASE_URL/CDN_BASE_URL require one exact safe HTTPS release base");
+    }
   }
 
   for (const key of ORIGIN_KEYS) {

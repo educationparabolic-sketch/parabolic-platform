@@ -1,3 +1,5 @@
+import {toCdnAssetUrl} from "../../../../../shared/services/cdnAssetDelivery";
+import {safeBusinessUrl} from "../../../../../shared/services/managedAssetPolicy";
 import { useEffect, useState } from "react";
 import { NavLink, useParams } from "react-router-dom";
 import type { AdminQuestionDetailResult, AdminQuestionTemplateUsageRecord } from "../../../../../shared/contracts/apiDtos";
@@ -68,8 +70,8 @@ function AdminQuestionBankQuestionDetailPage() {
             <article className="admin-question-library-panel"><h4>Managed Assets</h4><dl className="admin-question-library-definition-list">
               <div><dt>Question Image</dt><dd>{question.questionImageFile ? <button type="button" onClick={() => setPreviewAsset({fileName: question.questionImageFile, src: question.questionImagePreviewUrl, title: "Question Image"})}>{question.questionImageFile}</button> : "Not attached"}</dd></div>
               <div><dt>Solution Image</dt><dd>{question.solutionImageFile ? <button type="button" onClick={() => setPreviewAsset({fileName: question.solutionImageFile, src: question.solutionImagePreviewUrl, title: "Solution Image"})}>{question.solutionImageFile}</button> : "Not attached"}</dd></div>
-              <div><dt>Tutorial</dt><dd>{question.tutorialVideoLink ? <a href={question.tutorialVideoLink} target="_blank" rel="noreferrer">Open tutorial</a> : "Not added"}</dd></div>
-              <div><dt>Simulation</dt><dd>{question.simulationLink ? <a href={question.simulationLink} target="_blank" rel="noreferrer">Open simulation</a> : "Not added"}</dd></div>
+              <div><dt>Tutorial</dt><dd>{question.tutorialVideoLink ? <a href={safeBusinessUrl(question.tutorialVideoLink)} target="_blank" rel="noreferrer">Open tutorial</a> : "Not added"}</dd></div>
+              <div><dt>Simulation</dt><dd>{question.simulationLink ? <a href={safeBusinessUrl(question.simulationLink)} target="_blank" rel="noreferrer">Open simulation</a> : "Not added"}</dd></div>
             </dl></article>
             <article className="admin-question-library-panel admin-question-library-panel-wide"><h4>Version History</h4><div className="admin-question-library-version-list">
               {detail.versions.map((version) => <div key={version.questionId} className="admin-question-library-version-row"><strong>{version.questionId}</strong><small>v{version.version} · {version.status} · revision {version.revision}</small></div>)}
@@ -82,7 +84,7 @@ function AdminQuestionBankQuestionDetailPage() {
         </section>
       ) : null}
       <UiModal isOpen={Boolean(previewAsset)} title={previewAsset?.title ?? "Image Preview"} description={previewAsset?.fileName ?? ""} onClose={() => setPreviewAsset(null)} footer={<button type="button" onClick={() => setPreviewAsset(null)}>Close</button>}>
-        {previewAsset ? <img className="admin-question-library-preview-image" src={previewAsset.src} alt={`${previewAsset.title}: ${previewAsset.fileName}`} /> : null}
+        {previewAsset ? <img className="admin-question-library-preview-image" src={toCdnAssetUrl(previewAsset.src, previewAsset.fileName)} alt={`${previewAsset.title}: ${previewAsset.fileName}`} /> : null}
       </UiModal>
     </section>
   );

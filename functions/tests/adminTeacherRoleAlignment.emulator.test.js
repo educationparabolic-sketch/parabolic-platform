@@ -3,6 +3,8 @@
 
 const assert = require("node:assert/strict");
 const test = require("node:test");
+const {getFirestore} = require("firebase-admin/firestore");
+const securityFixture = require("./helpers/crossPortalSecurity");
 const {deleteApp, initializeApp} = require("firebase-admin/app");
 const {getAuth} = require("firebase-admin/auth");
 
@@ -46,9 +48,14 @@ async function createIdentity(auth, role) {
   const user = await auth.createUser({email, password});
   await auth.setCustomUserClaims(user.uid, {
     instituteId: "inst_bwm_008_teacher_alignment",
-    licenseLayer: "L3",
+    licenseLayer: "L3", licenseState: "active", licenseVersion: "security-v1",
+    authorizationVersion: 1, featureFlags: securityFixture.flags,
     role,
   });
+  await getFirestore(auth.app)
+    .doc("institutes/inst_bwm_008_teacher_alignment").update({
+      [`settingsUsers.${user.uid}`]: {role, status: "active"},
+    });
   return {
     idToken: await signInWithPassword(email, password),
     uid: user.uid,
@@ -79,6 +86,9 @@ test("teacher token passes aligned Admin role boundaries", async () => {
   const createdUserIds = [];
 
   try {
+    await securityFixture.seedInstitute(
+      getFirestore(app), "inst_bwm_008_teacher_alignment",
+    );
     const teacher = await createIdentity(auth, "teacher");
     createdUserIds.push(teacher.uid);
     const requests = [
@@ -130,6 +140,9 @@ test("teacher token passes aligned Admin role boundaries", async () => {
     );
   } finally {
     await Promise.all(createdUserIds.map((uid) => auth.deleteUser(uid)));
+    await getFirestore(app).recursiveDelete(
+      getFirestore(app).doc("institutes/inst_bwm_008_teacher_alignment"),
+    );
     await deleteApp(app);
   }
 });

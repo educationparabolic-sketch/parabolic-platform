@@ -1,3 +1,4 @@
+import {guardBackgroundDiagnostics} from "../services/diagnosticDisclosure";
 import * as functions from "firebase-functions";
 import {patternEngineService} from "../services/patternEngine";
 import {riskEngineService} from "../services/riskEngine";
@@ -55,4 +56,4 @@ export const handleStudentYearMetricsWritten = async (
 
 export const studentYearMetricsOnWrite = functions.firestore
   .document(STUDENT_YEAR_METRICS_DOCUMENT_PATH)
-  .onWrite(handleStudentYearMetricsWritten);
+  .onWrite(guardBackgroundDiagnostics(handleStudentYearMetricsWritten));

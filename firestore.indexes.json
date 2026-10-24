@@ -1539,6 +1539,48 @@
       "collectionGroup": "integrityBatches",
       "fieldPath": "requestFingerprint",
       "indexes": []
+    },
+    {
+      "collectionGroup": "securityRateLimits",
+      "fieldPath": "version",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "securityRateLimits",
+      "fieldPath": "windowStartMs",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "securityRateLimits",
+      "fieldPath": "used",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "securityRateLimits",
+      "fieldPath": "expiresAt",
+      "indexes": [],
+      "ttl": true
+    },
+    {
+      "collectionGroup": "securityGlobalRateLimits",
+      "fieldPath": "version",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "securityGlobalRateLimits",
+      "fieldPath": "windowStartMs",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "securityGlobalRateLimits",
+      "fieldPath": "used",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "securityGlobalRateLimits",
+      "fieldPath": "expiresAt",
+      "indexes": [],
+      "ttl": true
     }
   ]
 }

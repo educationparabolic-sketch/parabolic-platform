@@ -1,3 +1,4 @@
+import {guardBackgroundDiagnostics} from "../services/diagnosticDisclosure";
 import * as functions from "firebase-functions";
 import {systemEventTopologyService} from "../services/systemEventTopology";
 import {usageMeteringService} from "../services/usageMetering";
@@ -36,4 +37,4 @@ export const handleStudentUsageUpdated = async (
 
 export const instituteStudentOnWrite = functions.firestore
   .document(STUDENTS_DOCUMENT_PATH)
-  .onWrite(handleStudentUsageUpdated);
+  .onWrite(guardBackgroundDiagnostics(handleStudentUsageUpdated));

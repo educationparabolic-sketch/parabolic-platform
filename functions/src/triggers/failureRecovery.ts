@@ -1,3 +1,5 @@
+import {guardBackgroundDiagnostics} from "../services/diagnosticDisclosure";
+import {createLogger} from "../services/logging";
 import * as functions from "firebase-functions";
 import {failureRecoveryService} from "../services/failureRecovery";
 
@@ -15,7 +17,7 @@ export const handleFailureRecoveryDispatch = async (
   const jobId = typeof data.jobId === "string" ? data.jobId.trim() : "";
 
   if (!jobId) {
-    functions.logger.warn("Skipping failure recovery task without a jobId.");
+    createLogger("failureRecoveryTrigger").warn("Skipping failure recovery task without a jobId.");
     return;
   }
 
@@ -29,7 +31,7 @@ export const handleFailureRecoveryDispatch = async (
 export const handleFailureRecoveryRetrySweep = async (): Promise<void> => {
   const processedCount = await failureRecoveryService.sweepDueJobs(20);
 
-  functions.logger.info("Processed failure recovery scheduled retry sweep.", {
+  createLogger("failureRecoveryTrigger").info("Processed failure recovery scheduled retry sweep.", {
     processedCount,
   });
 };
@@ -43,9 +45,9 @@ export const failureRecoveryDispatch = functions.tasks
       minBackoffSeconds: 10,
     },
   })
-  .onDispatch(handleFailureRecoveryDispatch);
+  .onDispatch(guardBackgroundDiagnostics(handleFailureRecoveryDispatch));
 
 export const failureRecoveryRetrySweep = functions.pubsub
   .schedule("every 5 minutes")
   .timeZone("UTC")
-  .onRun(handleFailureRecoveryRetrySweep);
+  .onRun(guardBackgroundDiagnostics(handleFailureRecoveryRetrySweep));

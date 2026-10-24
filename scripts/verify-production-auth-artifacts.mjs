@@ -8,6 +8,8 @@ const npmExecutable = process.platform === "win32" ? "npm.cmd" : "npm";
 const projectId = "demo-parabolic-test";
 
 const releaseBuildEnvironment = {
+  VITE_APP_CHECK_MODE: "enforced",
+  VITE_APP_CHECK_PROVIDER_KEY: "synthetic-public-site-key-no-provider-activation",
   VITE_ADMIN_SETTINGS_INSTITUTE_ID: "",
   VITE_API_BASE_URL: "",
   VITE_CDN_BASE_URL: "https://cdn.release.example.test",
@@ -58,6 +60,9 @@ for (const [portal, basePath] of [
   buildPortal(portal, basePath);
 }
 
+const prepare = spawnSync(process.execPath, ["scripts/frontend-cicd/prepare-portal-hosting.mjs"], {
+  cwd: repositoryRoot, stdio: "inherit"});
+if (prepare.status !== 0) throw new Error("Portal preparation failed");
 const result = await scanReleaseArtifacts();
 console.log(
   `\n[production-auth-artifacts] PASS: ${result.filesScanned} files across ` +

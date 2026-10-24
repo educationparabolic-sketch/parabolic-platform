@@ -1,3 +1,4 @@
+import {safeBusinessUrl} from "../../../../../shared/services/managedAssetPolicy";
 import {
   useCallback,
   useEffect,
@@ -418,7 +419,7 @@ function AdminLicensingWorkspace() {
                   <div><h3 id="license-invoices-title">Billing records</h3><p>Read-only provider-backed records. The browser does not generate invoices.</p></div>
                   <div className="admin-license-invoice-actions">
                     {snapshot.externalActions.map((action) => (
-                      <a key={action.action} className="admin-primary-link" href={action.url} target="_blank" rel="noreferrer">
+                      <a key={action.action} className="admin-primary-link" href={safeBusinessUrl(action.url)} target="_blank" rel="noreferrer">
                         {actionLabel(action.action)}
                       </a>
                     ))}

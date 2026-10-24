@@ -161,9 +161,15 @@ test(
     assert.equal(afterThirdAttempt?.status, "failed");
     assert.equal(afterThirdAttempt?.retryCount, 3);
     assert.equal(deadLetterData?.finalErrorName, "Error");
-    assert.match(
-      String(deadLetterData?.finalErrorMessage),
-      /deterministic pipeline failure/i,
+    assert.equal(
+      deadLetterData?.finalErrorMessage, "Unexpected runtime failure.",
+    );
+    assert.equal(
+      afterThirdAttempt?.lastErrorMessage, "Unexpected runtime failure.",
+    );
+    assert.doesNotMatch(
+      JSON.stringify({retry: afterThirdAttempt, deadLetter: deadLetterData}),
+      /deterministic pipeline failure|initial failure/i,
     );
 
     await deleteDocumentIfPresent(retryJobPath);

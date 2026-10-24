@@ -1,3 +1,4 @@
+import {verifyCurrentAuthorityIdToken} from "../services/instituteAuthorityEnforcement";
 /* eslint-disable max-len */
 import * as functions from "firebase-functions";
 import {DecodedIdToken, UserRecord} from "firebase-admin/auth";
@@ -388,7 +389,7 @@ const dependencies: VendorCommercialDependencies = {
   listRequests: vendorLicenseRequestsService.listRequests,
   retryEvent: vendorPaymentEventsService.retryEvent,
   verifyIdToken: (idToken) =>
-    getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
+    verifyCurrentAuthorityIdToken(idToken),
 };
 
 export const handleVendorCommercialRequest =

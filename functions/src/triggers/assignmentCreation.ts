@@ -1,3 +1,4 @@
+import {guardBackgroundDiagnostics} from "../services/diagnosticDisclosure";
 import * as functions from "firebase-functions";
 import {assignmentCreationService} from "../services/assignmentCreation";
 import {
@@ -62,4 +63,4 @@ export const handleAssignmentCreated = async (
 
 export const runAssignmentOnCreate = functions.firestore
   .document(RUNS_DOCUMENT_PATH)
-  .onCreate(handleAssignmentCreated);
+  .onCreate(guardBackgroundDiagnostics(handleAssignmentCreated));

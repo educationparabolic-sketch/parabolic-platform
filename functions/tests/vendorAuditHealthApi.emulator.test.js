@@ -130,7 +130,7 @@ test("real gateway and dedicated audit/health exports enforce current Vendor aut
     const token = accounts.vendor.token;
     const page = await request(paths[0] + "?limit=2", token);
     assert.equal(page.status, 200, JSON.stringify(page.body));
-    assert.equal(page.cache, "private, no-store");
+    assert.equal(page.cache, "private, max-age=0, no-store");
     assert.equal(page.body.data.items.length, 2);
     assert.equal(page.body.data.hasMore, true);
     const cursor = page.body.data.nextCursor;
@@ -178,8 +178,12 @@ test("real gateway and dedicated audit/health exports enforce current Vendor aut
     assert.equal(health.status, 200);
     assert.equal(health.body.data.emailDelivery.availability, "unavailable");
     assert.equal(health.body.data.failureRecovery.availability, "available");
-    assert.equal((await request("vendorAuditEvents/vendor/system-health", token)).status, 400);
-    assert.equal((await request("vendorSystemHealth/vendor/audit-events", token)).status, 400);
+    for (const path of ["vendorAuditEvents/vendor/system-health", "vendorSystemHealth/vendor/audit-events"]) {
+      const wrongExport = await request(path, token);
+      assert.equal(wrongExport.status, 404);
+      assert.equal(wrongExport.body.error.code, "NOT_FOUND");
+      assert.equal(wrongExport.cache, "private, max-age=0, no-store");
+    }
   } finally {
     await Promise.all(Object.keys(documents).map((path) => db.doc(path).delete()));
     await Promise.all(Object.values(accounts).map(({uid}) => auth.deleteUser(uid).catch((error) => {

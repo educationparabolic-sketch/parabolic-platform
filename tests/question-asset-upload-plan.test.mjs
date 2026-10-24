@@ -181,27 +181,15 @@ test("asset uploads finish before yielding both managed commit paths", async () 
   );
 });
 
-test("live question upload retains ZIP bytes and uploads before commit", () => {
-  assert.match(
-    managementPageSource,
-    /assetFiles\[fileName\]\s*=\s*await inflateZipEntry\(/,
-  );
-  assert.match(
-    managementPageSource,
-    /post<\s*unknown,\s*QuestionAssetUploadRequest\s*>\(\s*"\/admin\/questions\/assets"/s,
-  );
-  assert.doesNotMatch(managementPageSource, /inst-build-125/);
-
-  const uploadIndex = managementPageSource.indexOf(
-    "await uploadQuestionAssetPlan(",
-  );
-  const commitIndex = managementPageSource.indexOf(
-    "const commitResponse = await validateQuestionsWithApi({",
-  );
-  assert.ok(uploadIndex >= 0, "asset upload call must exist");
-  assert.ok(commitIndex > uploadIndex, "asset uploads must finish before commit");
-  assert.match(
-    managementPageSource.slice(commitIndex, commitIndex + 500),
-    /assetPathsByRow/,
-  );
+test("live question upload sends retained archive bytes to authoritative validation before revision-bound package commit", async () => {
+  assert.match(managementPageSource, /assetFiles\[fileName\]\s*=\s*await inflateZipEntry\(/);
+  assert.match(managementPageSource, /validateQuestionPackageWithApi\(\{\s*contentBase64: await fileToBase64\(selectedUploadFile\)/s);
+  assert.match(managementPageSource, /packageAuthority.state !== "validated"/);
+  assert.match(managementPageSource, /commitQuestionPackage\(packageAuthority.packageId, \{\s*expectedPackageRevision: packageAuthority.packageRevision,/s);
+  assert.doesNotMatch(managementPageSource, /inst-build-125|uploadQuestionAssetPlan\(/);
+  assert.ok(managementPageSource.indexOf("await validateQuestionPackageWithApi(") < managementPageSource.indexOf("await commitQuestionPackage("));
+  const api = await readFile(join(rootDirectory, "apps/admin/src/features/tests/questionBankApi.ts"), "utf8");
+  assert.match(api, /post<unknown, AdminQuestionPackageValidateRequest>\(\s*"\/admin\/questions\/packages\/validate"/s);
+  assert.match(api, /post<unknown, AdminQuestionPackageCommitRequest>\(/);
+  assert.match(api, /encodeURIComponent\(packageId\)\}\/commit/);
 });

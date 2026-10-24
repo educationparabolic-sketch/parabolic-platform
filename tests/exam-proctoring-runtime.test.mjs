@@ -450,3 +450,17 @@ test("late ended/mute from a replaced stream cannot invalidate fresh readiness",
   assert.equal(replacementTrack.readyState, "live");
   f.camera.stop();
 });
+
+test("shared 429 waits the server minimum across explicit Retry and preserves the exact uncertain integrity batch", async () => {
+  const c=clock(),{IntegrityQueue}=load("integrityQueue",c.globals);const sent=[];let state;
+  const q=new IntegrityQueue("session",2,()=>true,()=>true,async batch=>{sent.push(structuredClone(batch));if(sent.length===1)throw {status:429,retryAfterMs:60000};return receipt(batch);},value=>{state=value;});
+  q.capture("NETWORK_LOSS","exam");await c.tick(0);q.retry();await c.tick(59999);assert.equal(sent.length,1);assert.equal(state.saved,0);
+  await c.tick(1);assert.equal(sent.length,2);assert.deepEqual(sent[0],sent[1]);assert.equal(state.saved,1);q.stop();
+});
+
+test("shared integrity rate failures exhaust the existing three-retry budget and require explicit recovery",async()=>{
+  const c=clock(),{IntegrityQueue}=load("integrityQueue",c.globals);let attempts=0,state;
+  const q=new IntegrityQueue("session",2,()=>true,()=>true,async()=>{attempts++;throw {status:429,retryAfterMs:1000};},value=>{state=value;});
+  q.capture("NETWORK_LOSS","exam");await c.tick(10000);assert.equal(attempts,4);assert.equal(state.status,'unavailable');assert.equal(state.saved,0);
+  await c.tick(60000);assert.equal(attempts,4);q.stop();
+});

@@ -1,3 +1,4 @@
+import {safeDiagnosticMessage, safeErrorDetails, safeRequestId} from "./diagnosticDisclosure";
 import * as functions from "firebase-functions";
 import {
   StandardApiSuccessResponse,
@@ -14,6 +15,7 @@ export const STANDARD_API_ERROR_STATUS: Readonly<
   LICENSE_RESTRICTED: 403,
   METHOD_NOT_ALLOWED: 405,
   NOT_FOUND: 404,
+  RATE_LIMITED: 429,
   SESSION_LOCKED: 409,
   SESSION_NOT_ACTIVE: 409,
   SUBMISSION_LOCKED: 409,
@@ -33,7 +35,7 @@ export function buildSuccessResponse<TData>(
     code: "OK",
     data,
     message,
-    requestId,
+    requestId: safeRequestId(requestId),
     success: true,
     timestamp,
   };
@@ -46,15 +48,35 @@ export function buildErrorResponse<TDetails = unknown>(
   timestamp: string,
   details?: TDetails,
 ): StandardApiErrorResponse<TDetails> {
+  const responseCode = Object.prototype.hasOwnProperty.call(STANDARD_API_ERROR_STATUS, code) ? code : "INTERNAL_ERROR";
+  const safeDetails = safeErrorDetails(details) as TDetails | undefined;
+  const fallback: Record<StandardApiErrorCode, string> = {
+    CONFLICT: "The operation conflicts with current state.",
+    FORBIDDEN: "Access is forbidden.",
+    INTERNAL_ERROR: "Unexpected error while processing request.",
+    LICENSE_RESTRICTED: "License access is restricted.",
+    METHOD_NOT_ALLOWED: "Method is not allowed for this API route.",
+    NOT_FOUND: "The requested resource was not found.",
+    RATE_LIMITED: "Request rate limit reached. Retry later.",
+    SESSION_LOCKED: "Exam session is locked.",
+    SESSION_NOT_ACTIVE: "Exam session is not active.",
+    SUBMISSION_LOCKED: "Submission is locked.",
+    TENANT_MISMATCH: "Tenant access does not match.",
+    UNAUTHORIZED: "Authentication is required.",
+    VALIDATION_ERROR: "Request validation failed.",
+    WINDOW_CLOSED: "The operation window is closed.",
+  };
   return {
     error: {
-      code,
-      ...(typeof details === "undefined" ? {} : {details}),
-      message,
+      code: responseCode,
+      ...(typeof safeDetails === "undefined" ? {} : {details: safeDetails}),
+      message: safeDiagnosticMessage(message, fallback[responseCode]),
     },
-    requestId,
+    requestId: safeRequestId(requestId),
     success: false,
-    timestamp,
+    timestamp: typeof timestamp === "string" && timestamp.length <= 30 &&
+      /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/u.test(timestamp) ?
+      timestamp : new Date().toISOString(),
   };
 }
 
@@ -64,9 +86,10 @@ export const sendErrorResponse = (
   code: StandardApiErrorCode,
   message: string,
 ): void => {
-  response.status(STANDARD_API_ERROR_STATUS[code]).json(
+  const responseCode = Object.prototype.hasOwnProperty.call(STANDARD_API_ERROR_STATUS, code) ? code : "INTERNAL_ERROR";
+  response.status(STANDARD_API_ERROR_STATUS[responseCode]).json(
     buildErrorResponse(
-      code,
+      responseCode,
       message,
       requestId,
       new Date().toISOString(),

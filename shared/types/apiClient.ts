@@ -39,6 +39,7 @@ export interface ApiErrorPayload extends Partial<Omit<ApiErrorEnvelope, "error">
 export interface ApiClientErrorMetadata<TDetails = unknown> {
   details?: TDetails;
   requestId?: string | null;
+  retryAfterMs?: number;
 }
 
 export class ApiClientError<TDetails = unknown> extends Error {
@@ -47,6 +48,7 @@ export class ApiClientError<TDetails = unknown> extends Error {
   readonly payload: unknown;
   readonly requestId: string | null;
   readonly details: TDetails | undefined;
+  readonly retryAfterMs: number | null;
 
   constructor(
     message: string,
@@ -62,6 +64,7 @@ export class ApiClientError<TDetails = unknown> extends Error {
     this.payload = payload;
     this.requestId = metadata.requestId ?? null;
     this.details = metadata.details;
+    this.retryAfterMs = metadata.retryAfterMs ?? null;
   }
 }
 

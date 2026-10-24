@@ -18,6 +18,7 @@ import {
 } from "firebase/auth";
 import { isLoopbackHostname } from "./browserRuntimeEnvironment";
 import { getFirebaseAuth } from "./firebaseClient";
+import { assertBrowserAuthPersistenceAvailable } from "./browserAuthPersistence";
 import { clearLegacyBrowserTokenCopies } from "./legacyBrowserTokenStorage";
 import {
   buildFirebaseRefreshAuthoritySignal,
@@ -121,6 +122,8 @@ export function AuthProvider({ children, portalKey }: AuthProviderProps) {
   const authRef = useRef<ReturnType<typeof getFirebaseAuth> | null>(null);
   const localFallbackActiveRef = useRef(false);
   const terminalSignalRef = useRef<AuthAuthoritySignal | null>(null);
+  const observationGenerationRef = useRef(0);
+  const signInAttemptRef = useRef(0);
 
   const applyAuthenticatedToken = useCallback((user: NonNullable<AuthSession["user"]>, token: string) => {
     if (authRef.current && authRef.current.currentUser?.uid !== user.uid) {
@@ -144,6 +147,7 @@ export function AuthProvider({ children, portalKey }: AuthProviderProps) {
   }, []);
 
   const syncUserSession = useCallback(async (user: AuthSession["user"], status: AuthSession["status"]) => {
+    const generation = ++observationGenerationRef.current;
     if (localFallbackActiveRef.current && !user) {
       return;
     }
@@ -165,8 +169,10 @@ export function AuthProvider({ children, portalKey }: AuthProviderProps) {
     try {
       localFallbackActiveRef.current = false;
       const token = await getIdToken(user, false);
+      if (generation !== observationGenerationRef.current) return;
       applyAuthenticatedToken(user, token);
     } catch (error) {
+      if (generation !== observationGenerationRef.current || authRef.current?.currentUser?.uid !== user.uid) return;
       setSession({
         status: "unauthenticated",
         user: null,
@@ -181,32 +187,37 @@ export function AuthProvider({ children, portalKey }: AuthProviderProps) {
 
   useEffect(() => {
     let unsubscribe: (() => void) | null = null;
+    let disposed = false;
     clearLegacyBrowserTokenCopies();
 
-    try {
-      const auth = getFirebaseAuth();
-      authRef.current = auth;
-
-      setPersistence(auth, browserLocalPersistence).catch(() => {
-        // Ignore persistence failures and keep default behavior.
-      });
-
-      unsubscribe = onIdTokenChanged(auth, (user) => {
-        void syncUserSession(user, user ? "authenticated" : "unauthenticated");
-      });
-    } catch (error) {
-      setSession({
-        status: "unauthenticated",
-        user: null,
-        idToken: null,
-        lastTokenRefreshAt: null,
-        error: normalizeErrorMessage(error),
-        authorityIssue: null,
-        authorityIssueObservedVersion: null,
-      });
-    }
+    void (async () => {
+      try {
+        const auth = getFirebaseAuth();
+        assertBrowserAuthPersistenceAvailable();
+        await setPersistence(auth, browserLocalPersistence);
+        if (disposed) return;
+        authRef.current = auth;
+        unsubscribe = onIdTokenChanged(auth, (user) => {
+          void syncUserSession(user, user ? "authenticated" : "unauthenticated");
+        });
+      } catch (error) {
+        if (disposed) return;
+        authRef.current = null;
+        setSession({
+          status: "unauthenticated",
+          user: null,
+          idToken: null,
+          lastTokenRefreshAt: null,
+          error: normalizeErrorMessage(error),
+          authorityIssue: null,
+          authorityIssueObservedVersion: null,
+        });
+      }
+    })();
 
     return () => {
+      disposed = true;
+      ++observationGenerationRef.current;
       if (unsubscribe) {
         unsubscribe();
       }
@@ -220,6 +231,7 @@ export function AuthProvider({ children, portalKey }: AuthProviderProps) {
     }
 
     if (signal.issue === "session_revoked") {
+      ++observationGenerationRef.current;
       terminalSignalRef.current = signal;
       localFallbackActiveRef.current = false;
       setSession({
@@ -247,9 +259,13 @@ export function AuthProvider({ children, portalKey }: AuthProviderProps) {
 
     const currentUser = authRef.current?.currentUser;
     if (currentUser) {
+      const generation = observationGenerationRef.current;
+      const isCurrent = () => generation === observationGenerationRef.current &&
+        authRef.current?.currentUser?.uid === currentUser.uid;
       void getIdToken(currentUser, true)
-        .then((token) => applyAuthenticatedToken(currentUser, token))
+        .then((token) => { if (isCurrent()) applyAuthenticatedToken(currentUser, token); })
         .catch((error) => {
+          if (!isCurrent()) return;
           const terminalSignal = buildFirebaseRefreshAuthoritySignal(error, null);
           if (terminalSignal) {
             publishAuthAuthoritySignal(terminalSignal);
@@ -269,9 +285,13 @@ export function AuthProvider({ children, portalKey }: AuthProviderProps) {
       ? GLOBAL_IDENTITY_TOKEN_REFRESH_INTERVAL_MS
       : INSTITUTE_TOKEN_REFRESH_INTERVAL_MS;
     const refreshTimer = window.setInterval(() => {
+      const generation = observationGenerationRef.current;
+      const isCurrent = () => generation === observationGenerationRef.current &&
+        authRef.current?.currentUser?.uid === authenticatedUser.uid;
       void getIdToken(authenticatedUser, true)
-        .then((token) => applyAuthenticatedToken(authenticatedUser, token))
+        .then((token) => { if (isCurrent()) applyAuthenticatedToken(authenticatedUser, token); })
         .catch((error) => {
+          if (!isCurrent()) return;
           const terminalSignal = buildFirebaseRefreshAuthoritySignal(error, session.idToken);
           if (terminalSignal) {
             publishAuthAuthoritySignal(terminalSignal);
@@ -288,6 +308,8 @@ export function AuthProvider({ children, portalKey }: AuthProviderProps) {
   }, [applyAuthenticatedToken, portalKey, session.idToken, session.status, session.user]);
 
   const signIn = useCallback(async ({ email, password }: SignInInput): Promise<boolean> => {
+    const attempt = ++signInAttemptRef.current;
+    const startingUid = authRef.current?.currentUser?.uid;
     terminalSignalRef.current = null;
     setSession((current) => ({
       ...current,
@@ -329,7 +351,7 @@ export function AuthProvider({ children, portalKey }: AuthProviderProps) {
       setSession((current) => ({
         ...current,
         status: "unauthenticated",
-        error: "Firebase Authentication is not configured for this environment.",
+        error: "Authentication is unavailable because browser session setup did not complete.",
         authorityIssue: null,
         authorityIssueObservedVersion: null,
       }));
@@ -339,6 +361,7 @@ export function AuthProvider({ children, portalKey }: AuthProviderProps) {
     try {
       const credential = await signInWithEmailAndPassword(authRef.current, email, password);
       const token = await getIdToken(credential.user, true);
+      if (attempt !== signInAttemptRef.current || authRef.current?.currentUser?.uid !== credential.user.uid) return false;
       localFallbackActiveRef.current = false;
 
       setSession({
@@ -353,6 +376,7 @@ export function AuthProvider({ children, portalKey }: AuthProviderProps) {
 
       return true;
     } catch (error) {
+      if (attempt !== signInAttemptRef.current || authRef.current?.currentUser?.uid !== startingUid) return false;
       const fallback = tryLocalFallbackSignIn(email, password);
       if (fallback) {
         localFallbackActiveRef.current = true;
@@ -380,6 +404,7 @@ export function AuthProvider({ children, portalKey }: AuthProviderProps) {
   }, []);
 
   const signOut = useCallback(async () => {
+    ++signInAttemptRef.current;
     terminalSignalRef.current = null;
     if (!authRef.current) {
       localFallbackActiveRef.current = false;
@@ -397,6 +422,7 @@ export function AuthProvider({ children, portalKey }: AuthProviderProps) {
     }
 
     await firebaseSignOut(authRef.current);
+    if (authRef.current?.currentUser) return;
     localFallbackActiveRef.current = false;
     clearLegacyBrowserTokenCopies();
     setSession({
@@ -419,11 +445,17 @@ export function AuthProvider({ children, portalKey }: AuthProviderProps) {
       return null;
     }
 
+    const generation = observationGenerationRef.current;
+    const uid = session.user.uid;
+    const isCurrent = () => generation === observationGenerationRef.current &&
+      authRef.current?.currentUser?.uid === uid;
     try {
       const token = await getIdToken(session.user, true);
+      if (!isCurrent()) return null;
       applyAuthenticatedToken(session.user, token);
       return token;
     } catch (error) {
+      if (!isCurrent()) return null;
       const terminalSignal = buildFirebaseRefreshAuthoritySignal(error, session.idToken);
       if (terminalSignal) {
         publishAuthAuthoritySignal(terminalSignal);

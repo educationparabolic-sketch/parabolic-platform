@@ -1,3 +1,4 @@
+import {verifyCurrentAuthorityIdToken} from "../services/instituteAuthorityEnforcement";
 /* eslint-disable max-len */
 import * as functions from "firebase-functions";
 import {DecodedIdToken} from "firebase-admin/auth";
@@ -22,7 +23,6 @@ import {
   AdminSupportValidationError,
 } from "../types/adminSupport";
 import {MiddlewareRequest} from "../types/middleware";
-import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
 
 interface AdminSupportDependencies {
   createTicket: typeof adminSupportService.createTicket;
@@ -192,7 +192,7 @@ const dependencies: AdminSupportDependencies = {
   getTicketDetail: adminSupportService.getTicketDetail.bind(adminSupportService),
   listTickets: adminSupportService.listTickets.bind(adminSupportService),
   verifyIdToken: (idToken) =>
-    getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
+    verifyCurrentAuthorityIdToken(idToken),
 };
 
 export const handleAdminSupportRequest = createAdminSupportHandler(dependencies);

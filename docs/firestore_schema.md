@@ -1705,3 +1705,58 @@ missing staging index; 79 local composite declarations and five field overrides
 are now recorded. No query weakening, tenant-data backfill or blanket remote
 index/TTL qualification is implied. Physical observation TTL purge remains
 BWM-052/053.
+
+
+## BWM-047 security admission counters (SEC-14, local adoption)
+
+`institutes/{instituteId}/securityRateLimits/{digest}` and
+`securityGlobalRateLimits/{digest}` are security metadata, never business writers.
+Global documents are for verified global Vendor identity; service identities use
+their verified institute root. Digest = SHA-256(JSON.stringify(["security-rate-v1",
+projectId, canonicalUid, "institute:" + instituteId or "global-vendor", bucket])).
+Each request atomically reads/updates exactly two stable documents: `all` plus its
+fixed operation class. No IDs/body/query/idempotency values choose a class or key.
+Fields: `version: 1`, `windowStartMs` (server epoch fixed minute), `used` (nonnegative
+safe integer), `expiresAt` (Timestamp, minute end plus 24 hours). A malformed,
+future-window or prematurely expiring record fails closed. Live windows ignore TTL;
+TTL is delayed cleanup, not enforcement. Both documents update atomically only if
+both limits permit admission; denials have no domain receipts/audits/writes.
+No raw UID, token, answer, URL, body, IP or client command ID is stored in fields.
+Every field is single-field-index exempt; no composite/query scan is required.
+`expiresAt` has local TTL declaration. Remote TTL/IAM/retention/proxy qualification
+remains an explicit BWM-052/054 prerequisite; no remote resource was changed.
+Client Firestore rules remain deny-all, including these collections.
+
+
+## BWM-047 substep 8 reconciliation — local verification passed; public pending
+
+Current source accounting is 121 routes (116 implemented, zero incompatible or
+missing, five retired), 64 guarded HTTP exports, 52 gateway handlers and eight
+schedules. Earlier task-specific counts above are historical. The permanent
+SEC-A01..09 matrix owns current-account/tenant/resource, browser persistence,
+disclosure, cache/CSP/assets/maps and shared admission proof; the master controller
+records actual results and limits. Application counters remain the sole new
+security schema owner from substep 6; no new business writer, role, route, index,
+rule or dependency is introduced by closeout. Public preparation is documented in
+`docs/CROSS_PORTAL_SECURITY_PREVIEW_REVIEW.md`. It is review-only, uses no cloud
+authority, and cannot qualify the real provider, CDN/IAM, remote TTL or production.
+Local aggregate qualification passed; all eight findings remain OPEN pending
+approved public qualification. Current unchanged index declarations are 79
+composite indexes and 13 field overrides (five prior plus eight security-counter
+overrides inherited from substep 6).
+BWM-049 exclusions, DEC-102/BWM-053 and BWM-052/054/056 prerequisites remain;
+production NO_GO.
+
+
+## BWM-047 final security qualification — 2026-10-24
+
+The controller records VERIFIED 8/8 under DEC-135 / LOG-283: local aggregate and
+approved compatible public qualification pass; all eight application findings close
+within the frozen contract. Exact 43-existing-HTTP staging uploads, three obsolete
+public invocation closures, 121 canonical/40 direct negatives, six real CSP-on
+public cases, canonical-origin restoration and owned fixture cleanup are verified.
+No local route/export/handler/schedule/index/dependency inventory changes.
+App Check remains explicit staging pending_provisioning, with genuine provider,
+proxy/edge/load/TTL/infra gates owned by BWM-052/054/056 and monitoring transport
+by BWM-051. Preserve BWM-049 exclusions and DEC-102/BWM-053 prerequisites;
+production NO_GO. Earlier pending statements are historical checkpoints.

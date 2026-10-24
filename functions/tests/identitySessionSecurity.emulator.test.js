@@ -90,6 +90,10 @@ test(
         isVendor: false,
         licenseLayer: "L0",
         licenseState: "active", licenseVersion: "bwm009-session-v1",
+        featureFlags: {
+          adaptivePhase: false, controlledMode: false,
+          governanceAccess: false, hardMode: false, riskOverview: false,
+        },
         authorizationVersion: 1,
         role: "admin",
       });
@@ -99,6 +103,10 @@ test(
         isVendor: false,
         licenseLayer: "L0",
         licenseState: "active", licenseVersion: "bwm009-session-v1",
+        featureFlags: {
+          adaptivePhase: false, controlledMode: false,
+          governanceAccess: false, hardMode: false, riskOverview: false,
+        },
         authorizationVersion: 1,
         role: "teacher",
       });

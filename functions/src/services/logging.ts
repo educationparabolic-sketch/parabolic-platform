@@ -1,4 +1,3 @@
-import {randomUUID} from "crypto";
 import * as functions from "firebase-functions";
 import {
   createErrorReporterContextFromLog,
@@ -6,157 +5,32 @@ import {
 } from "./errorReporting";
 import {LogContext, LogLevel, StructuredLogEntry} from "../types/logging";
 
-const REDACTED_VALUE = "[REDACTED]";
-
-const SENSITIVE_KEY_PATTERN = new RegExp(
-  "answer|api[-_]?key|auth|authorization|cookie|" +
-  "credential|password|secret|token",
-  "i",
-);
-
-const MAX_LOG_DEPTH = 6;
-
-const PRODUCTION_ENVIRONMENT = "production";
-
-const isPlainObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" &&
-  value !== null &&
-  !Array.isArray(value) &&
-  !(value instanceof Error) &&
-  !(value instanceof Date);
-
-const getRuntimeEnvironment = (): string =>
-  process.env.NODE_ENV?.trim() || "development";
-
-const getRuntimeVersion = (): string =>
-  process.env.K_REVISION?.trim() ||
-  process.env.FUNCTIONS_VERSION?.trim() ||
-  process.env.npm_package_version?.trim() ||
-  "unknown";
-
-const sanitizeValue = (value: unknown, depth = 0): unknown => {
-  if (depth >= MAX_LOG_DEPTH) {
-    return "[MAX_DEPTH_REACHED]";
-  }
-
-  if (value === undefined || value === null) {
-    return value;
-  }
-
-  if (
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean"
-  ) {
-    return value;
-  }
-
-  if (value instanceof Date) {
-    return value.toISOString();
-  }
-
-  if (value instanceof Error) {
-    return {
-      message: value.message,
-      name: value.name,
-      stack: value.stack,
-    };
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((item) => sanitizeValue(item, depth + 1));
-  }
-
-  if (isPlainObject(value)) {
-    const sanitizedEntries = Object.entries(value).map(([key, nestedValue]) => [
-      key,
-      SENSITIVE_KEY_PATTERN.test(key) ?
-        REDACTED_VALUE :
-        sanitizeValue(nestedValue, depth + 1),
-    ]);
-
-    return Object.fromEntries(sanitizedEntries);
-  }
-
-  return String(value);
-};
+import {
+  discloseDiagnostics, mergeDiagnosticContexts, requestCorrelationId, runtimeEnvironment,
+  runtimeVersion, safeDiagnosticMessage, safeRequestId, safeService,
+} from "./diagnosticDisclosure";
 
 const emitLog = (entry: StructuredLogEntry): void => {
-  switch (entry.level) {
-  case "DEBUG":
-    if (entry.environment === PRODUCTION_ENVIRONMENT) {
-      return;
-    }
-    functions.logger.debug(entry.message, entry);
-    return;
-  case "INFO":
-    functions.logger.info(entry.message, entry);
-    return;
-  case "WARNING":
-    functions.logger.warn(entry.message, entry);
-    return;
-  case "ERROR":
-  case "CRITICAL":
-    functions.logger.error(entry.message, entry);
-    return;
-  default: {
-    const exhaustiveLevel: never = entry.level;
-    throw new Error(`Unsupported log level: ${exhaustiveLevel}`);
-  }
-  }
+  if (entry.level === "DEBUG" && entry.environment === "production") return;
+  // write avoids the SDK error() helper creating a second, unsanitized stack/message.
+  functions.logger.write({...entry, severity: entry.level});
 };
 
-const maybeReportRuntimeError = (
-  level: LogLevel,
-  message: string,
-  context: LogContext,
-): void => {
-  if (!("error" in context) || context.error === undefined) {
-    return;
-  }
-
-  if (level !== "ERROR" && level !== "CRITICAL") {
-    return;
-  }
-
-  reportRuntimeError(
-    context.error,
-    createErrorReporterContextFromLog(context, level, message),
-  );
+const maybeReportRuntimeError = (level: LogLevel, message: string, context: LogContext): void => {
+  if (context.error === undefined || (level !== "ERROR" && level !== "CRITICAL")) return;
+  reportRuntimeError(context.error, createErrorReporterContextFromLog(context, level, message));
 };
 
-const buildLogEntry = (
-  level: LogLevel,
-  message: string,
-  context: LogContext,
-): StructuredLogEntry => {
-  const runtimeEnvironment = context.environment ?? getRuntimeEnvironment();
-  const runtimeVersion = context.version ?? getRuntimeVersion();
-  const requestId = context.requestId ?? randomUUID();
-
-  return {
-    ...sanitizeValue({
-      ...context,
-      environment: runtimeEnvironment,
-      requestId,
-      service: context.service ?? "unknown-service",
-      version: runtimeVersion,
-    }) as LogContext,
-    level,
-    message,
-    timestamp: new Date().toISOString(),
-  };
-};
-
-const normalizeRequestHeaderValue = (
-  headerValue: string | string[] | undefined,
-): string | undefined => {
-  if (Array.isArray(headerValue)) {
-    return headerValue[0];
-  }
-
-  return headerValue;
-};
+const buildLogEntry = (level: LogLevel, message: string, context: LogContext): StructuredLogEntry => ({
+  ...discloseDiagnostics(context),
+  environment: runtimeEnvironment(),
+  version: runtimeVersion(),
+  requestId: safeRequestId(context.requestId),
+  service: safeService(context.service),
+  level,
+  message: safeDiagnosticMessage(message),
+  timestamp: new Date().toISOString(),
+});
 
 /**
  * Emits structured Cloud Logging events for a single backend service.
@@ -171,8 +45,8 @@ export class StructuredLogger {
    */
   constructor(service: string, context: LogContext = {}) {
     this.baseContext = {
-      ...context,
-      requestId: context.requestId ?? randomUUID(),
+      ...mergeDiagnosticContexts(context),
+      requestId: safeRequestId(mergeDiagnosticContexts(context).requestId),
       service,
     };
   }
@@ -184,9 +58,8 @@ export class StructuredLogger {
    */
   public child(context: LogContext): StructuredLogger {
     return new StructuredLogger(this.baseContext.service ?? "unknown-service", {
-      ...this.baseContext,
-      ...context,
-      requestId: context.requestId ?? this.baseContext.requestId,
+      ...mergeDiagnosticContexts(this.baseContext, context),
+      requestId: safeRequestId(mergeDiagnosticContexts(context).requestId ?? this.baseContext.requestId),
     });
   }
 
@@ -195,7 +68,7 @@ export class StructuredLogger {
    * @return {string} The request identifier used for traceability.
    */
   public getRequestId(): string {
-    return this.baseContext.requestId ?? randomUUID();
+    return this.baseContext.requestId as string;
   }
 
   /**
@@ -231,8 +104,9 @@ export class StructuredLogger {
    * @param {LogContext} context Additional metadata for this log entry.
    */
   public error(message: string, context: LogContext = {}): void {
-    maybeReportRuntimeError("ERROR", message, this.mergeContext(context));
-    emitLog(buildLogEntry("ERROR", message, this.mergeContext(context)));
+    const merged = this.mergeContext(context);
+    maybeReportRuntimeError("ERROR", message, merged);
+    emitLog(buildLogEntry("ERROR", message, merged));
   }
 
   /**
@@ -241,8 +115,9 @@ export class StructuredLogger {
    * @param {LogContext} context Additional metadata for this log entry.
    */
   public critical(message: string, context: LogContext = {}): void {
-    maybeReportRuntimeError("CRITICAL", message, this.mergeContext(context));
-    emitLog(buildLogEntry("CRITICAL", message, this.mergeContext(context)));
+    const merged = this.mergeContext(context);
+    maybeReportRuntimeError("CRITICAL", message, merged);
+    emitLog(buildLogEntry("CRITICAL", message, merged));
   }
 
   /**
@@ -252,9 +127,8 @@ export class StructuredLogger {
    */
   private mergeContext(context: LogContext): LogContext {
     return {
-      ...this.baseContext,
-      ...context,
-      requestId: context.requestId ?? this.baseContext.requestId,
+      ...mergeDiagnosticContexts(this.baseContext, context),
+      requestId: safeRequestId(mergeDiagnosticContexts(context).requestId ?? this.baseContext.requestId),
       service: this.baseContext.service,
     };
   }
@@ -270,19 +144,10 @@ export const createRequestLogger = (
   request: functions.https.Request,
   context: LogContext = {},
 ): StructuredLogger => {
-  const requestId =
-    normalizeRequestHeaderValue(request.header("x-request-id")) ||
-    normalizeRequestHeaderValue(request.header("x-correlation-id")) ||
-    randomUUID();
-
+  const requestId = requestCorrelationId(request);
   return createLogger(service, {
-    ...context,
-    request: {
-      ip: request.ip,
-      method: request.method,
-      path: request.path,
-      userAgent: request.get("user-agent"),
-    },
+    ...mergeDiagnosticContexts(context),
+    request: {method: request.method},
     requestId,
   });
 };

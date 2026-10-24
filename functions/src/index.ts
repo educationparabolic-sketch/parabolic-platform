@@ -1,3 +1,4 @@
+import {guardHttpExport} from "./api/httpExportGuard";
 import {handleExamSessionIntegrityEventsRequest} from "./api/examSessionIntegrityEvents";
 import {handleStudentProfileRequest, handleAdminStudentIdentityPhotoMediaRequest,
   handleExamSessionIdentityStatusRequest} from "./api/studentProfile";
@@ -204,178 +205,188 @@ export {processEmailQueue};
 export {failureRecoveryDispatch};
 export {failureRecoveryRetrySweep};
 export {claimPropagationSweepEveryMinute};
-export const apiV1 = functions.https.onRequest(handleApiV1Request);
-export const examStart = functions.https.onRequest(handleExamStartRequest);
-export const examSessionIntegrityEvents = functions.https.onRequest(handleExamSessionIntegrityEventsRequest);
+export const apiV1 = functions.https.onRequest(
+  guardHttpExport("apiV1", handleApiV1Request),
+);
+export const examStart = functions.https.onRequest(
+  guardHttpExport("examStart", handleExamStartRequest),
+);
+export const examSessionIntegrityEvents = functions.https.onRequest(
+  guardHttpExport("examSessionIntegrityEvents", handleExamSessionIntegrityEventsRequest),
+);
 export const examSessionActivate = functions.https.onRequest(
-  handleExamSessionActivateRequest,
+  guardHttpExport("examSessionActivate", handleExamSessionActivateRequest),
 );
 export const examSessionAnswers = functions.https.onRequest(
-  handleExamSessionAnswersRequest,
+  guardHttpExport("examSessionAnswers", handleExamSessionAnswersRequest),
 );
 export const examSessionEntry = functions.https.onRequest(
-  handleExamSessionEntryRequest,
+  guardHttpExport("examSessionEntry", handleExamSessionEntryRequest),
 );
 export const examSessionSubmit = functions.https.onRequest(
-  handleExamSessionSubmitRequest,
+  guardHttpExport("examSessionSubmit", handleExamSessionSubmitRequest),
 );
 export const internalEmailQueue = functions.https.onRequest(
-  handleInternalEmailQueueRequest,
+  guardHttpExport("internalEmailQueue", handleInternalEmailQueueRequest),
 );
 export const vendorSimulationEnvironment = functions.https.onRequest(
-  handleVendorSimulationEnvironmentRequest,
+  guardHttpExport("vendorSimulationEnvironment", handleVendorSimulationEnvironmentRequest),
 );
 export const vendorSimulationStudents = functions.https.onRequest(
-  handleVendorSimulationStudentsRequest,
+  guardHttpExport("vendorSimulationStudents", handleVendorSimulationStudentsRequest),
 );
 export const vendorSimulationSessions = functions.https.onRequest(
-  handleVendorSimulationSessionsRequest,
+  guardHttpExport("vendorSimulationSessions", handleVendorSimulationSessionsRequest),
 );
 export const vendorSimulationLoad = functions.https.onRequest(
-  handleVendorSimulationLoadRequest,
+  guardHttpExport("vendorSimulationLoad", handleVendorSimulationLoadRequest),
 );
 export const vendorSimulationValidation = functions.https.onRequest(
-  handleVendorSimulationValidationRequest,
+  guardHttpExport("vendorSimulationValidation", handleVendorSimulationValidationRequest),
 );
 export const vendorIntelligenceInitialize = functions.https.onRequest(
-  handleVendorIntelligenceInitializeRequest,
+  guardHttpExport("vendorIntelligenceInitialize", handleVendorIntelligenceInitializeRequest),
 );
 export const vendorRevenueAnalytics = functions.https.onRequest(
-  handleVendorRevenueAnalyticsRequest,
+  guardHttpExport("vendorRevenueAnalytics", handleVendorRevenueAnalyticsRequest),
 );
 export const vendorLayerDistribution = functions.https.onRequest(
-  handleVendorLayerDistributionRequest,
+  guardHttpExport("vendorLayerDistribution", handleVendorLayerDistributionRequest),
 );
 export const vendorChurnTracking = functions.https.onRequest(
-  handleVendorChurnTrackingRequest,
+  guardHttpExport("vendorChurnTracking", handleVendorChurnTrackingRequest),
 );
 export const vendorRevenueForecasting = functions.https.onRequest(
-  handleVendorRevenueForecastingRequest,
+  guardHttpExport("vendorRevenueForecasting", handleVendorRevenueForecastingRequest),
 );
 export const vendorLicenseUpdate = functions.https.onRequest(
-  handleVendorLicenseUpdateRequest,
+  guardHttpExport("vendorLicenseUpdate", handleVendorLicenseUpdateRequest),
 );
 export const vendorCalibrationPush = functions.https.onRequest(
-  handleVendorCalibrationPushRequest,
+  guardHttpExport("vendorCalibrationPush", handleVendorCalibrationPushRequest),
 );
 export const vendorCalibrationVersions = functions.https.onRequest(
-  handleVendorCalibrationVersionsRequest,
+  guardHttpExport("vendorCalibrationVersions", handleVendorCalibrationVersionsRequest),
 );
 export const vendorCalibrationOperations = functions.https.onRequest(
-  handleVendorCalibrationOperationsRequest,
+  guardHttpExport("vendorCalibrationOperations", handleVendorCalibrationOperationsRequest),
 );
-export const vendorAuditEvents = functions.https.onRequest(handleVendorAuditEventsRequest);
-export const vendorSystemHealth = functions.https.onRequest(handleVendorSystemHealthRequest);
+export const vendorAuditEvents = functions.https.onRequest(
+  guardHttpExport("vendorAuditEvents", handleVendorAuditEventsRequest),
+);
+export const vendorSystemHealth = functions.https.onRequest(
+  guardHttpExport("vendorSystemHealth", handleVendorSystemHealthRequest),
+);
 export const vendorCalibrationSimulation = functions.https.onRequest(
-  handleVendorCalibrationSimulationRequest,
+  guardHttpExport("vendorCalibrationSimulation", handleVendorCalibrationSimulationRequest),
 );
 export const stripeWebhook = functions.https.onRequest(
-  handleStripeWebhookRequest,
+  guardHttpExport("stripeWebhook", handleStripeWebhookRequest),
 );
 export const adminGovernanceTransport = functions.https.onRequest(
-  handleAdminGovernanceTransportRequest,
+  guardHttpExport("adminGovernanceTransport", handleAdminGovernanceTransportRequest),
 );
 export const adminInterventionTimeline = functions.https.onRequest(
-  handleAdminInterventionTimelineRequest,
+  guardHttpExport("adminInterventionTimeline", handleAdminInterventionTimelineRequest),
 );
 export const adminInterventionMutation = functions.https.onRequest(
-  handleAdminInterventionMutationRequest,
+  guardHttpExport("adminInterventionMutation", handleAdminInterventionMutationRequest),
 );
 export const adminAnalytics = functions.https.onRequest(
-  handleAdminAnalyticsRequest,
+  guardHttpExport("adminAnalytics", handleAdminAnalyticsRequest),
 );
 export const adminAcademicYearArchive = functions.https.onRequest(
-  handleAdminAcademicYearArchiveRequest,
+  guardHttpExport("adminAcademicYearArchive", handleAdminAcademicYearArchiveRequest),
 );
 export const adminStudentDataExport = functions.https.onRequest(
-  handleAdminStudentDataExportRequest,
+  guardHttpExport("adminStudentDataExport", handleAdminStudentDataExportRequest),
 );
 export const adminStudentSoftDelete = functions.https.onRequest(
-  handleAdminStudentSoftDeleteRequest,
+  guardHttpExport("adminStudentSoftDelete", handleAdminStudentSoftDeleteRequest),
 );
 export const adminStudentsBulk = functions.https.onRequest(
-  handleAdminStudentsBulkRequest,
+  guardHttpExport("adminStudentsBulk", handleAdminStudentsBulkRequest),
 );
 export const adminStudents = functions.https.onRequest(
-  handleAdminStudentsRequest,
+  guardHttpExport("adminStudents", handleAdminStudentsRequest),
 );
 export const adminStudentOnboardingResend = functions.https.onRequest(
-  handleAdminStudentOnboardingResendRequest,
+  guardHttpExport("adminStudentOnboardingResend", handleAdminStudentOnboardingResendRequest),
 );
 export const adminStudentMutations = functions.https.onRequest(
-  handleAdminStudentMutationsRequest,
+  guardHttpExport("adminStudentMutations", handleAdminStudentMutationsRequest),
 );
 export const adminRuns = functions.https.onRequest(
-  handleAdminRunsRequest,
+  guardHttpExport("adminRuns", handleAdminRunsRequest),
 );
 export const adminAssignmentOperations = functions.https.onRequest(
-  handleAdminAssignmentOperationsRequest,
+  guardHttpExport("adminAssignmentOperations", handleAdminAssignmentOperationsRequest),
 );
 export const studentDashboard = functions.https.onRequest(
-  handleStudentDashboardRequest,
+  guardHttpExport("studentDashboard", handleStudentDashboardRequest),
 );
 export const studentPerformance = functions.https.onRequest(
-  handleStudentPerformanceRequest,
+  guardHttpExport("studentPerformance", handleStudentPerformanceRequest),
 );
 export const studentInsights = functions.https.onRequest(
-  handleStudentInsightsRequest,
+  guardHttpExport("studentInsights", handleStudentInsightsRequest),
 );
 export const studentSolutions = functions.https.onRequest(
-  handleStudentSolutionsRequest,
+  guardHttpExport("studentSolutions", handleStudentSolutionsRequest),
 );
 export const studentTests = functions.https.onRequest(
-  handleStudentTestsRequest,
+  guardHttpExport("studentTests", handleStudentTestsRequest),
 );
 export const adminQuestionAssets = functions.https.onRequest(
-  handleAdminQuestionAssetsRequest,
+  guardHttpExport("adminQuestionAssets", handleAdminQuestionAssetsRequest),
 );
 export const adminQuestionLibrary = functions.https.onRequest(
-  handleAdminQuestionLibraryRequest,
+  guardHttpExport("adminQuestionLibrary", handleAdminQuestionLibraryRequest),
 );
 export const adminQuestionUploadLogs = functions.https.onRequest(
-  handleAdminQuestionUploadLogsRequest,
+  guardHttpExport("adminQuestionUploadLogs", handleAdminQuestionUploadLogsRequest),
 );
 export const adminQuestionDistribution = functions.https.onRequest(
-  handleAdminQuestionDistributionRequest,
+  guardHttpExport("adminQuestionDistribution", handleAdminQuestionDistributionRequest),
 );
 export const adminQuestionsBulk = functions.https.onRequest(
-  handleAdminQuestionsBulkRequest,
+  guardHttpExport("adminQuestionsBulk", handleAdminQuestionsBulkRequest),
 );
 export const adminQuestionTags = functions.https.onRequest(
-  handleAdminQuestionTagsRequest,
+  guardHttpExport("adminQuestionTags", handleAdminQuestionTagsRequest),
 );
 export const adminQuestionMutations = functions.https.onRequest(
-  handleAdminQuestionMutationsRequest,
+  guardHttpExport("adminQuestionMutations", handleAdminQuestionMutationsRequest),
 );
 export const adminQuestionPackages = functions.https.onRequest(
-  handleAdminQuestionPackagesRequest,
+  guardHttpExport("adminQuestionPackages", handleAdminQuestionPackagesRequest),
 );
 export const adminSettings = functions.https.onRequest(
-  handleAdminSettingsRequest,
+  guardHttpExport("adminSettings", handleAdminSettingsRequest),
 );
 export const adminLicensing = functions.https.onRequest(
-  handleAdminLicensingRequest,
+  guardHttpExport("adminLicensing", handleAdminLicensingRequest),
 );
 export const adminSupport = functions.https.onRequest(
-  handleAdminSupportRequest,
+  guardHttpExport("adminSupport", handleAdminSupportRequest),
 );
 export const vendorSupport = functions.https.onRequest(
-  handleVendorSupportRequest,
+  guardHttpExport("vendorSupport", handleVendorSupportRequest),
 );
 export const vendorInstitutes = functions.https.onRequest(
-  handleVendorInstitutesRequest,
+  guardHttpExport("vendorInstitutes", handleVendorInstitutesRequest),
 );
 export const vendorCommercial = functions.https.onRequest(
-  handleVendorCommercialRequest,
+  guardHttpExport("vendorCommercial", handleVendorCommercialRequest),
 );
 export const adminOverview = functions.https.onRequest(
-  handleAdminOverviewRequest,
+  guardHttpExport("adminOverview", handleAdminOverviewRequest),
 );
 export const adminTests = functions.https.onRequest(
-  handleAdminTestsRequest,
+  guardHttpExport("adminTests", handleAdminTestsRequest),
 );
 
-export const helloWorld = functions.https.onRequest(async (
+export const helloWorld = functions.https.onRequest(guardHttpExport("helloWorld", async (
   req: functions.https.Request,
   res: functions.Response,
 ) => {
@@ -405,8 +416,14 @@ export const helloWorld = functions.https.onRequest(async (
       "Failed to load runtime configuration.",
     );
   }
-});
+}));
 
-export const studentProfile = functions.https.onRequest(handleStudentProfileRequest);
-export const adminStudentIdentityPhotoMedia = functions.https.onRequest(handleAdminStudentIdentityPhotoMediaRequest);
-export const examSessionIdentityStatus = functions.https.onRequest(handleExamSessionIdentityStatusRequest);
+export const studentProfile = functions.https.onRequest(
+  guardHttpExport("studentProfile", handleStudentProfileRequest),
+);
+export const adminStudentIdentityPhotoMedia = functions.https.onRequest(
+  guardHttpExport("adminStudentIdentityPhotoMedia", handleAdminStudentIdentityPhotoMediaRequest),
+);
+export const examSessionIdentityStatus = functions.https.onRequest(
+  guardHttpExport("examSessionIdentityStatus", handleExamSessionIdentityStatusRequest),
+);

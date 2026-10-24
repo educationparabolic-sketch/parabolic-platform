@@ -18,6 +18,7 @@ export default defineConfig({
     dedupe: ["react", "react-dom"],
   },
   build: {
+    sourcemap: false,
     outDir: "dist",
   },
 });

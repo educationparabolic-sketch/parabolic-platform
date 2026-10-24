@@ -313,6 +313,13 @@ test("v2 summaries enforce own scope, null gates and history", async () => {
       .auth()
       .setCustomUserClaims(f.uid, {...f.claims(), role: "teacher"});
     for (const path of ["dashboard", "tests", "performance", "insights"]) {
+      assert.equal((await read(`/api/v1/student/${path}`)).status, 401);
+    }
+    await f.institute.update({
+      [`settingsUsers.${f.uid}`]: {role: "teacher", status: "active"},
+    });
+    token = await f.signIn();
+    for (const path of ["dashboard", "tests", "performance", "insights"]) {
       assert.equal((await read(`/api/v1/student/${path}`)).status, 403);
     }
   } finally {

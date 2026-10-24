@@ -56,7 +56,7 @@ test("strict transport rejects ambiguous filters, body bytes and wrong direct pa
   const result = await invoke(audit, {url: "/?limit=2&category=billing", query: {limit: "2", category: "billing"}});
   assert.equal(result.statusCode, 200);
   assert.deepEqual(result.body.data, {limit: 2, category: "billing"});
-  assert.equal(result.headers["Cache-Control"], "private, no-store");
+  assert.equal(result.headers["Cache-Control"], "private, max-age=0, no-store");
 });
 
 test("current Vendor capability boundary denies changed identity before service invocation", async () => {

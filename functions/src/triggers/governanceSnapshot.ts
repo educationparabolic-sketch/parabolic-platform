@@ -1,3 +1,4 @@
+import {guardBackgroundDiagnostics} from "../services/diagnosticDisclosure";
 import * as functions from "firebase-functions";
 import {
   governanceSnapshotAggregationService,
@@ -20,4 +21,4 @@ export const handleGovernanceSnapshotSchedule = async (
 export const governanceSnapshotMonthly = functions.pubsub
   .schedule("0 0 1 * *")
   .timeZone("UTC")
-  .onRun(handleGovernanceSnapshotSchedule);
+  .onRun(guardBackgroundDiagnostics(handleGovernanceSnapshotSchedule));

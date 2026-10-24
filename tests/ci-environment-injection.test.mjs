@@ -70,6 +70,13 @@ test("CI builds receive the canonical public and release environment", async () 
   assert.equal(countOccurrences(workflow, "VITE_RELEASE_BUILT_AT=${built_at}"), 2);
   assert.equal(countOccurrences(workflow, 'echo "RELEASE_BUILT_AT=${built_at}'), 2);
   assert.equal(countOccurrences(workflow, "npm --prefix functions run build"), 3);
+  for (const app of ["admin", "student", "exam", "vendor"]) {
+    const base = ["admin", "student"].includes(app) ? `VITE_BASE_PATH=/${app}/ ` : "";
+    assert.equal(countOccurrences(workflow, `NODE_ENV=production ${base}npm --prefix apps/${app} run build`), 2,
+      `${app}: both frontend build jobs must use production semantics independently of server NODE_ENV`);
+  }
+  assert.match(workflow, /NODE_ENV: "test"/u);
+  assert.match(workflow, /NODE_ENV: "staging"/u);
   assert.equal(countOccurrences(workflow, "PARABOLIC_BUILD_ENVIRONMENT:"), 2);
   assert.equal(countOccurrences(workflow, "Validate build environment"), 2);
   assert.equal(
@@ -84,9 +91,10 @@ test("CI builds receive the canonical public and release environment", async () 
     countOccurrences(workflow, "node scripts/frontend-cicd/scan-release-artifacts.mjs --scan"),
     2,
   );
-  assert.equal(countOccurrences(workflow, "--root .firebase/hosting/portal"), 1);
-  assert.equal(countOccurrences(workflow, "--root apps/exam/dist"), 1);
-  assert.equal(countOccurrences(workflow, "--root apps/vendor/dist"), 1);
+  assert.equal(countOccurrences(workflow, "node scripts/frontend-cicd/prepare-portal-hosting.mjs"), 2);
+  assert.equal(countOccurrences(workflow, "node scripts/frontend-cicd/prepare-security-hosting.mjs"), 1);
+  assert.match(workflow, /firebase deploy --config \.firebase-security-release\.json --project/u);
+  assert.doesNotMatch(workflow, /--root /u); // CLI gate scans all built and served roots.
   assert.equal(countOccurrences(workflow, "Validate deploy target mapping"), 1);
   assert.equal(
     countOccurrences(workflow, "node scripts/frontend-cicd/validate-deploy-target.mjs --validate"),
@@ -132,10 +140,10 @@ test("CI builds receive the canonical public and release environment", async () 
   }
 
   for (const key of ["VITE_RELEASE_ID", "VITE_RELEASE_COMMIT_SHA", "VITE_RELEASE_BUILT_AT"]) {
-    assert.match(frontendEnvironmentSource, new RegExp(`readEnvValue\\(\"${key}\"\\)`, "u"));
+    assert.match(frontendEnvironmentSource, new RegExp(`readEnvValue\\("${key}"\\)`, "u"));
   }
 
   for (const key of ["RELEASE_ID", "RELEASE_COMMIT_SHA", "RELEASE_BUILT_AT"]) {
-    assert.match(functionsEnvironmentSource, new RegExp(`getOptionalEnv\\(\"${key}\"\\)`, "u"));
+    assert.match(functionsEnvironmentSource, new RegExp(`getOptionalEnv\\("${key}"\\)`, "u"));
   }
 });

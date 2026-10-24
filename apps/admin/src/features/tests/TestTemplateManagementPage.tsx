@@ -1,3 +1,4 @@
+import {toCdnAssetUrl} from "../../../../../shared/services/cdnAssetDelivery";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ApiClientError } from "../../../../../shared/services/apiClient";
@@ -694,6 +695,8 @@ function normalizeQuestionRecord(
     negativeMarks: Math.max(0, toNumberOrZero(record.negativeMarks ?? fallback?.negativeMarks ?? 0)),
     primaryTag: toNonEmptyString(record.primaryTag, fallback?.primaryTag ?? "untagged"),
     prompt: toNonEmptyString(record.prompt, fallback?.prompt ?? ""),
+    questionImageFile: typeof record.questionImageFile === "string" ? record.questionImageFile : "",
+    questionImagePreviewUrl: typeof record.questionImagePreviewUrl === "string" ? record.questionImagePreviewUrl : "",
     questionType: toNonEmptyString(record.questionType, fallback?.questionType ?? "Question"),
     secondaryTag: toNonEmptyString(record.secondaryTag, fallback?.secondaryTag ?? "none"),
     simulationLink: toNonEmptyString(record.simulationLink, fallback?.simulationLink ?? ""),
@@ -1504,6 +1507,7 @@ function TestTemplateManagementPage() {
     });
   }, [templateLibraryFilters, templatesWithDerivedThermalState]);
   const previewQuestion = questionPreviewId ? questionPoolById.get(questionPreviewId) ?? null : null;
+  const previewQuestionImageSource = toCdnAssetUrl(previewQuestion?.questionImagePreviewUrl, previewQuestion?.questionImageFile);
   const activePhaseStrategy =
     phaseStrategyMode === "default" ? activeStrategy.phaseStrategy : customPhaseStrategy;
   const phaseStrategyTotal =
@@ -2879,14 +2883,14 @@ function TestTemplateManagementPage() {
       >
         {previewQuestion ? (
           <div className="admin-question-library-image-preview">
-            {!questionPreviewImageFailed && previewQuestion.questionImageFile ? (
+            {!questionPreviewImageFailed && previewQuestionImageSource ? (
               <img
-                src={previewQuestion.questionImageFile}
+                src={previewQuestionImageSource}
                 alt={`Question prompt preview for ${previewQuestion.id}`}
                 onError={() => setQuestionPreviewImageFailed(true)}
               />
             ) : null}
-            {previewQuestion.questionImageFile && !questionPreviewImageFailed ? null : (
+            {previewQuestionImageSource && !questionPreviewImageFailed ? null : (
               <p>
                 No question image is currently attached for <strong>{previewQuestion.id}</strong>. This record can still be
                 selected, but the uploaded question image file is not available in the current dataset.

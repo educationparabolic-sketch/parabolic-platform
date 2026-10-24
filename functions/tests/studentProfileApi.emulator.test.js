@@ -80,6 +80,7 @@ test.before(async () => {
   for (const role of ["student", "admin", "teacher", "director", "vendor", "other", "foreign", "alias", "admin_alias"]) {
     tokens[role] = await account(role, {...base, role: role === "admin_alias" ? "admin" : ["other", "foreign", "alias"].includes(role) ? "student" : role, ...(role === "student" ? {studentId: uid} : {}), ...(role === "foreign" ? {instituteId: "bwm042_transport_foreign_inst"} : {})});
   }
+  await institute.update({primaryAdminUserId: "bwm042_transport_admin", settingsUsers: {bwm042_transport_admin: {role: "admin", status: "active", displayName: "Synthetic Admin", email: "bwm042_transport_admin@emulator.test", updatedAt: Timestamp.now()}}});
   await institute.collection("students").doc("bwm042_transport_other").set({studentId: "bwm042_transport_other", status: "active"});
   const foreign = db.doc("institutes/bwm042_transport_foreign_inst");
   await db.recursiveDelete(foreign);
@@ -158,7 +159,7 @@ test("real enrollment and exact owner/Admin media, closed managed review and aud
   assert.equal((await request(`adminStudentMutations/admin/students/${uid}/photo-review`, tokens.admin, "POST", review)).data.disposition, "replayed");
   assert.equal((await request(own(), tokens.student)).data.identityPhoto.status, "verified");
   await auth.setCustomUserClaims("bwm042_transport_admin", {...base, role: "teacher"});
-  assert.equal((await request(reviewPath, tokens.admin, "POST", review)).status, 403);
+  assert.equal((await request(reviewPath, tokens.admin, "POST", review)).status, 401); // Presented role is stale at shared admission.
   await auth.setCustomUserClaims("bwm042_transport_admin", {...base, role: "admin"});
   const roster = await request(gateway("/admin/students"), tokens.admin);
   assert.equal(roster.status, 200, JSON.stringify(roster));
@@ -229,7 +230,7 @@ test("authority/provider/expiry denials, concurrent withdrawal after bytes, and 
   })).status, 500);
   await student.update({deleted: false});
   await auth.setCustomUserClaims(uid, {...base, role: "teacher"});
-  assert.equal((await request(path, tokens.student)).status, 403);
+  assert.equal((await request(path, tokens.student)).status, 401); // Current-account role changed.
   await auth.setCustomUserClaims(uid, {...base, role: "student", studentId: uid});
   await auth.updateUser(uid, {disabled: true});
   assert.equal((await request(path, tokens.student)).status, 401);

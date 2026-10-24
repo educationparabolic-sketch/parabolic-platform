@@ -3,6 +3,7 @@
 
 const assert = require("node:assert/strict");
 const test = require("node:test");
+const securityFixture = require("./helpers/crossPortalSecurity");
 const {deleteApp, initializeApp} = require("firebase-admin/app");
 const {getAuth} = require("firebase-admin/auth");
 const {getFirestore, Timestamp} = require("firebase-admin/firestore");
@@ -94,6 +95,9 @@ test("commercial routes enforce Auth and execute all registered read/command bou
         isVendor: user.role === "vendor",
         licenseLayer: "L0",
         role: user.role,
+        ...(user.role !== "vendor" ? await securityFixture.currentRoleClaims(
+          firestore, record.uid, user.role, instituteId + "_role_authority",
+        ) : {}),
       });
     }
 
@@ -359,6 +363,7 @@ test("commercial routes enforce Auth and execute all registered read/command bou
     assert.equal(typeof offline.get("evidenceReferenceHash"), "string");
   } finally {
     await Promise.allSettled(createdUsers.map((uid) => auth.deleteUser(uid)));
+    await firestore.recursiveDelete(firestore.doc(`institutes/${instituteId}_role_authority`));
     await Promise.allSettled([
       firestore.recursiveDelete(firestore.doc(`institutes/${instituteId}`)),
       firestore.recursiveDelete(firestore.doc("vendorConfig/pricingPlans")),

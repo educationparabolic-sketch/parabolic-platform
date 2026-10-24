@@ -1,3 +1,4 @@
+import {safeBusinessUrl} from "../../../../../shared/services/managedAssetPolicy";
 import { useVendorReadScope } from "../shared/useVendorReadScope";
 import { useVendorCapability } from "../../portals/vendorAccess";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
@@ -826,8 +827,8 @@ export default function VendorCommercialAuthorityPage() {
               <div className="vendor-authority-actions">
                 <button type="button" disabled={mutating || !canManage} onClick={() => communicateInvoice("resend_invoice")}>Resend invoice</button>
                 <button type="button" disabled={mutating || !canManage} onClick={() => communicateInvoice("send_payment_reminder")}>Send payment reminder</button>
-                {selectedInvoice.externalActions.downloadUrl ? <a href={selectedInvoice.externalActions.downloadUrl}>Authorized invoice download</a> : null}
-                {selectedInvoice.externalActions.hostedPaymentUrl ? <a href={selectedInvoice.externalActions.hostedPaymentUrl}>Provider payment page</a> : null}
+                {selectedInvoice.externalActions.downloadUrl ? <a href={safeBusinessUrl(selectedInvoice.externalActions.downloadUrl)} target="_blank" rel="noreferrer">Authorized invoice download</a> : null}
+                {selectedInvoice.externalActions.hostedPaymentUrl ? <a href={safeBusinessUrl(selectedInvoice.externalActions.hostedPaymentUrl)} target="_blank" rel="noreferrer">Provider payment page</a> : null}
               </div>
               <form className="vendor-authority-form" onSubmit={recordOfflinePayment}>
                 <h4>Record offline payment</h4>

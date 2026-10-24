@@ -1,3 +1,4 @@
+import {verifyCurrentAuthorityIdToken} from "../services/instituteAuthorityEnforcement";
 import * as functions from "firebase-functions";
 import {DecodedIdToken} from "firebase-admin/auth";
 import type {
@@ -26,7 +27,6 @@ import {
   AdminInterventionTimelineValidatedRequest,
 } from "../types/adminGovernanceInterventions";
 import {MiddlewareRequest} from "../types/middleware";
-import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
 
 interface Dependencies {
   createRecommendation:
@@ -209,7 +209,7 @@ const dependencies: Dependencies = {
     interventionRecommendationService,
   ),
   verifyIdToken: (idToken) =>
-    getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
+    verifyCurrentAuthorityIdToken(idToken),
 };
 
 export const handleAdminInterventionTimelineRequest =

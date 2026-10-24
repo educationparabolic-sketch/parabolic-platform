@@ -25,6 +25,28 @@ on:
       - "firebase.json"
       - "package.json"
       - "scripts/frontend-cicd/**"
+      - "tests/**"
+      - "playwright.config.mjs"
+      - "package-lock.json"
+      - ".firebaserc"
+      - "tests/security/**"
+      - "tests/e2e/**"
+      - "tests/*security*.test.mjs"
+      - "tests/*disclosure*.test.mjs"
+      - "tests/*identity*.test.mjs"
+      - "tests/*persistence*.test.mjs"
+      - "tests/browser-*.test.mjs"
+      - "tests/exam-*.test.mjs"
+      - "tests/hosting-*.test.mjs"
+      - "tests/release-artifact-scan.test.mjs"
+      - "scripts/run-*.mjs"
+      - "scripts/security-matrix-contract.mjs"
+      - "scripts/security-source-inventory.mjs"
+      - "scripts/prepare-security-preview.mjs"
+      - "scripts/firebase-emulator-*.mjs"
+      - "scripts/verify-production-auth-artifacts.mjs"
+      - "scripts/backend-disclosure-catalog.mjs"
+      - "docs/CROSS_PORTAL_SECURITY_CONTRACT.md"
   push:
     branches:
       - dev
@@ -49,6 +71,28 @@ on:
       - "firebase.json"
       - "package.json"
       - "scripts/frontend-cicd/**"
+      - "tests/**"
+      - "playwright.config.mjs"
+      - "package-lock.json"
+      - ".firebaserc"
+      - "tests/security/**"
+      - "tests/e2e/**"
+      - "tests/*security*.test.mjs"
+      - "tests/*disclosure*.test.mjs"
+      - "tests/*identity*.test.mjs"
+      - "tests/*persistence*.test.mjs"
+      - "tests/browser-*.test.mjs"
+      - "tests/exam-*.test.mjs"
+      - "tests/hosting-*.test.mjs"
+      - "tests/release-artifact-scan.test.mjs"
+      - "scripts/run-*.mjs"
+      - "scripts/security-matrix-contract.mjs"
+      - "scripts/security-source-inventory.mjs"
+      - "scripts/prepare-security-preview.mjs"
+      - "scripts/firebase-emulator-*.mjs"
+      - "scripts/verify-production-auth-artifacts.mjs"
+      - "scripts/backend-disclosure-catalog.mjs"
+      - "docs/CROSS_PORTAL_SECURITY_CONTRACT.md"
   workflow_dispatch:
     inputs:
       deploy_staging:
@@ -75,6 +119,9 @@ jobs:
       VITE_FIREBASE_AUTH_DOMAIN: "demo-parabolic-test.firebaseapp.com"
       VITE_FIREBASE_PROJECT_ID: "demo-parabolic-test"
       VITE_FIREBASE_APP_ID: "1:000000000000:web:ci"
+      APP_CHECK_MODE: "pending_provisioning"
+      VITE_APP_CHECK_MODE: "pending_provisioning"
+      APP_CHECK_ALLOWED_APP_IDS: "1:000000000000:web:ci"
       VITE_FIREBASE_AUTH_EMULATOR_URL: ""
       VITE_FIREBASE_STORAGE_BUCKET: "demo-parabolic-test.firebasestorage.app"
       VITE_FIREBASE_MESSAGING_SENDER_ID: "000000000000"
@@ -147,11 +194,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VITE_BASE_PATH=/admin/ npm --prefix apps/admin run build
-          VITE_BASE_PATH=/student/ npm --prefix apps/student run build
-          npm --prefix apps/exam run build
-          npm --prefix apps/vendor run build
+          NODE_ENV=production VITE_BASE_PATH=/admin/ npm --prefix apps/admin run build
+          NODE_ENV=production VITE_BASE_PATH=/student/ npm --prefix apps/student run build
+          NODE_ENV=production npm --prefix apps/exam run build
+          NODE_ENV=production npm --prefix apps/vendor run build
           npm --prefix functions run build
+
+      - name: Prepare served Portal artifacts
+        run: node scripts/frontend-cicd/prepare-portal-hosting.mjs
 
       - name: Scan release artifacts
         run: node scripts/frontend-cicd/scan-release-artifacts.mjs --scan
@@ -170,6 +220,9 @@ jobs:
     env:
       CI: "true"
       NODE_ENV: "test"
+      # Explicit isolated-emulator compatibility; the admission matrix overrides to enforced.
+      APP_CHECK_MODE: "pending_provisioning"
+      APP_CHECK_ALLOWED_APP_IDS: "1:123:web:approved"
       PROJECT_ID: "demo-parabolic-test"
       GCLOUD_PROJECT: "demo-parabolic-test"
       GOOGLE_CLOUD_PROJECT: "demo-parabolic-test"
@@ -201,6 +254,8 @@ jobs:
           npm ci
           npm ci --prefix apps/admin
           npm ci --prefix apps/student
+          npm ci --prefix apps/exam
+          npm ci --prefix apps/vendor
           npm ci --prefix shared
           npm ci --prefix functions
 
@@ -241,6 +296,23 @@ jobs:
           npm run test:staging-smoke-contract
           npm run test:production-promotion-separation
 
+      - name: Run permanent cross-portal adversarial security matrix
+        run: npm run test:security-matrix
+
+      - name: Retain security matrix receipts and candidate hashes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cross-portal-security-${{ github.run_id }}
+          path: |
+            test-results/bwm047-matrix/run/receipt.json
+            test-results/bwm047-matrix/run/source-candidate.json
+            test-results/bwm047-matrix/run/*/artifacts.json
+            test-results/bwm047-matrix/run/*/source-inventory.json
+            test-results/bwm047-matrix/run/*/output.log
+            test-results/bwm047-matrix/run/*/*receipt.json
+          if-no-files-found: warn
+
   staging-deploy:
     name: Staging Deploy
     runs-on: ubuntu-latest
@@ -268,6 +340,10 @@ jobs:
       VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
       VITE_FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
       VITE_FIREBASE_APP_ID: ${{ vars.VITE_FIREBASE_APP_ID }}
+      # Explicit provisional staging qualification; BWM-052 replaces both modes after provider/CSP provisioning.
+      APP_CHECK_MODE: "pending_provisioning"
+      VITE_APP_CHECK_MODE: "pending_provisioning"
+      APP_CHECK_ALLOWED_APP_IDS: ${{ vars.VITE_FIREBASE_APP_ID }}
       VITE_FIREBASE_AUTH_EMULATOR_URL: ""
       VITE_FIREBASE_STORAGE_BUCKET: ${{ vars.VITE_FIREBASE_STORAGE_BUCKET }}
       VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ vars.VITE_FIREBASE_MESSAGING_SENDER_ID }}
@@ -343,19 +419,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VITE_BASE_PATH=/admin/ npm --prefix apps/admin run build
-          VITE_BASE_PATH=/student/ npm --prefix apps/student run build
-          npm --prefix apps/exam run build
-          npm --prefix apps/vendor run build
+          NODE_ENV=production VITE_BASE_PATH=/admin/ npm --prefix apps/admin run build
+          NODE_ENV=production VITE_BASE_PATH=/student/ npm --prefix apps/student run build
+          NODE_ENV=production npm --prefix apps/exam run build
+          NODE_ENV=production npm --prefix apps/vendor run build
           npm --prefix functions run build
           node scripts/frontend-cicd/prepare-portal-hosting.mjs
 
       - name: Scan release artifacts
-        run: >-
-          node scripts/frontend-cicd/scan-release-artifacts.mjs --scan
-          --root .firebase/hosting/portal
-          --root apps/exam/dist
-          --root apps/vendor/dist
+        run: node scripts/frontend-cicd/scan-release-artifacts.mjs --scan
+
+      - name: Prepare exact candidate Hosting security policy
+        run: node scripts/frontend-cicd/prepare-security-hosting.mjs
 
       - name: Install pinned Firebase CLI
         shell: bash
@@ -396,7 +471,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          firebase deploy --project "${FIREBASE_PROJECT_ID}" --only hosting:portal,hosting:exam,hosting:vendor --non-interactive --token "${FIREBASE_TOKEN}" --message "${RELEASE_ID} staging Hosting"
+          firebase deploy --config .firebase-security-release.json --project "${FIREBASE_PROJECT_ID}" --only hosting:portal,hosting:exam,hosting:vendor --non-interactive --token "${FIREBASE_TOKEN}" --message "${RELEASE_ID} staging Hosting"
 
       - name: Run post-deploy staging smoke
         env:

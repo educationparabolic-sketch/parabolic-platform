@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import {firebaseIntegrationGroups} from "../scripts/firebase-emulator-harness-config.mjs";
 
 const repositoryFile = (path) => fileURLToPath(new URL(`../${path}`, import.meta.url));
 
@@ -36,6 +37,13 @@ test("backend CI aggregates every emulator-backed Functions suite", async () => 
 
   assert.equal(firestoreSuiteCount, 99);
   assert.equal(explicitSuiteCount, 20);
+  assert.equal(workflow.split('- "scripts/firebase-emulator-*.mjs"').length - 1, 2);
+  assert.deepEqual(Object.keys(firebaseIntegrationGroups), ["foundation", "student", "vendor"]);
+  assert.deepEqual(Object.values(firebaseIntegrationGroups).map((group) => group.length), [8, 5, 7]);
+  assert.deepEqual(Object.values(firebaseIntegrationGroups).flat().sort(), externalFiles.filter((name) => name.endsWith(".emulator.test.js")).sort());
+  assert.match(outerRunner, /for \(const group of Object.keys\(firebaseIntegrationGroups\)\)/u);
+  assert.match(innerRunner, /Every explicit suite belongs to exactly one lifecycle group/u);
+  assert.doesNotMatch(outerRunner, /inspect-functions/u);
   for (const file of ["vendorAuditReadModel.test.ts", "vendorSystemHealthReadModel.test.ts"]) {
     assert.ok(sourceFiles.includes(file), file);
   }
@@ -68,7 +76,7 @@ test("backend CI aggregates every emulator-backed Functions suite", async () => 
   assert.match(innerRunner, /Select exactly one emulator integration phase/u);
   assert.match(innerRunner, /cleanupMaxAttempts = 3/u);
   assert.match(innerRunner, /transientCleanupCodes/u);
-  assert.match(innerRunner, /finally \{\n  await clearEmulatorData\(\);\n\}/u);
+  assert.match(innerRunner, /finally \{\n {2}await clearEmulatorData\(\);\n\}/u);
 });
 
 test("emulator phases supply explicit scoped per-phase cursor keys without changing process environment", async () => {
@@ -92,4 +100,16 @@ test("emulator phases supply explicit scoped per-phase cursor keys without chang
   assert.equal(first.FUNCTIONS_EMULATOR_HOST, undefined);
   assert.equal(second.FUNCTIONS_EMULATOR_HOST, "127.0.0.1:5001");
   assert.equal(process.env.VENDOR_AUDIT_CURSOR_KEY, originalKey);
+});
+
+test("the cross-portal export matrix has a dedicated local owner separate from ordinary concurrency regressions", async () => {
+  const rootPackage = JSON.parse(await readFile(repositoryFile("package.json"), "utf8"));
+  assert.equal(rootPackage.scripts["test:cross-portal-authorization"], "node scripts/run-cross-portal-authorization.mjs");
+  const runner = await readFile(repositoryFile("scripts/run-cross-portal-authorization.mjs"), "utf8");
+  const spec = await readFile(repositoryFile("tests/security/cross-portal-authorization.emulator.cjs"), "utf8");
+  assert.match(runner, /tests\/security\/cross-portal-authorization\.emulator\.cjs/u);
+  assert.match(runner, /phase === "all" \? \["guards", "services", "browser"\]/u);
+  assert.match(runner, /selected === "guards" \? \["--inspect-functions=9231"\] : \[\]/u);
+  assert.match(spec, /for \(const route of API_ROUTE_MANIFEST\)/u);
+  assert.match(spec, /for \(const item of BACKEND_HTTP_EXPORT_MANIFEST\)/u);
 });

@@ -1,3 +1,4 @@
+import {verifyCurrentAuthorityIdToken} from "../services/instituteAuthorityEnforcement";
 /* eslint-disable require-jsdoc */
 import * as functions from "firebase-functions";
 import {DecodedIdToken} from "firebase-admin/auth";
@@ -17,7 +18,6 @@ import {
   StudentSummaryValidationError,
 } from "../types/studentSummary";
 import {MiddlewareRequest} from "../types/middleware";
-import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
 
 interface StudentSolutionsDependencies {
   getSolutions: typeof studentSolutionsService.getSolutions;
@@ -103,5 +103,5 @@ export const createStudentSolutionsHandler = (
 export const handleStudentSolutionsRequest = createStudentSolutionsHandler({
   getSolutions: studentSolutionsService.getSolutions.bind(studentSolutionsService),
   verifyIdToken: (idToken: string) =>
-    getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
+    verifyCurrentAuthorityIdToken(idToken),
 });

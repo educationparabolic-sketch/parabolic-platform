@@ -64,7 +64,7 @@ with visible loading/denied/error/empty states and no fixture success. Numeric
 page requests still fail 400. Permanent local acceptance is recorded in BWM-043 substep 7 and aggregate
 closeout in substep 8; no deployment qualification follows.
 
-Last reconciled: 2026-10-18 (BWM-043 mounted Student v2 adoption; `BWM-042` secured Student profile/photo APIs and mounted Student/Admin local acceptance; 120/115/0/0/5 routes, 63 HTTP exports, 51 handlers, eight schedules; production NO_GO)
+Last reconciled: 2026-10-23 (BWM-047 substep 8 local aggregate qualification passed, approved public qualification pending; 121/116/0/0/5 routes, 64 HTTP exports, 52 handlers, eight schedules; approved public acceptance pending; production NO_GO)
 
 ## Sources of truth
 
@@ -80,8 +80,8 @@ offline-payment, and payment-event authority. The strict mounted
 `/vendor/licensing` caller consumes all fourteen routes. VEN-31..VEN-35 are
 registered aggregate-intelligence GET reads requiring current Vendor Auth and
 `vendor.intelligence.read`; mounted intelligence and Overview now consume one strict live adapter.
-Canonical accounting is 120 routes: 115 implemented, zero incompatible, zero
-missing, and five retired; 63 HTTP exports map through 51 gateway handlers.
+Canonical accounting is 121 routes: 116 implemented, zero incompatible, zero
+missing, and five retired; 64 HTTP exports map through 52 gateway handlers.
 
 BWM-041's current-identity alignment uses one shared fresh-Auth guard across
 the six existing Vendor boundary families (all 41 implemented Vendor routes).
@@ -156,7 +156,7 @@ null; authorized Admin media loads only on explicit request before review.
 - `missing`: no current Functions handler/export implements the canonical contract.
 - `intentionally_retired`: explicit product/architecture evidence says the route must not be served.
 
-Current totals: 115 implemented, 0 incompatible, 0 missing, 5 intentionally retired.
+Current totals: 116 implemented, 0 incompatible, 0 missing, 5 intentionally retired (121 routes).
 
 Routes marked `planned` in the code manifest retain their original task-reserved
 declaration provenance. They stay `missing` until an owning substep registers a
@@ -246,6 +246,7 @@ erase an executable caller. Every frontend call must match a manifest key, and
 | EXM-06 | `GET /api/v1/exam/session/{sessionId}/identity-status` | `implemented` | `examSessionIdentityStatus` | Secured current Student/session-bound persisted authority; minimal status, automated matching unavailable |
 | EXM-01 | `POST /api/v1/exam/session/{sessionId}/entry` | `implemented` | `examSessionEntry` | Firebase ID; student; exact session claims; v2 launch/recover/renew/release; transactional consumed binding plus hashed proof/generation/lease; candidate-safe snapshot only on acquisition |
 | EXM-02 | `POST /api/v1/exam/session/{sessionId}/answers` | `implemented` | `examSessionAnswers` | Firebase ID; student; exact session claims; active pre-deadline session; sequenced revision acknowledgements; strict runtime-question response and absolute cumulative timing validation |
+| EXM-07 | `POST /api/v1/exam/session/{sessionId}/integrity-events` | `implemented` | `examSessionIntegrityEvents` | Fresh own Student/Auth/institute/year/session, consumed entry and current proof/generation/lease; enum-only bounded durable intake, exact replay and logical retention; no media/scoring authority |
 | EXM-03 | `POST /api/v1/exam/session/{sessionId}/token/refresh` | `intentionally_retired` | None | Firebase Auth SDK refreshes the per-origin ID token; no custom refresh API is served |
 | EXM-04 | `POST /api/v1/exam/session/{sessionId}/submit` | `implemented` | `examSessionSubmit` | Firebase ID; student; exact session claims; active manual or reached-deadline expiry authority; atomic idempotent finalization and replay |
 | EXM-05 | `POST /api/v1/exam/session/{sessionId}/activate` | `implemented` | `examSessionActivate` | Firebase ID; student; exact persisted session identity; secured idempotent activation with server clock and immutable scheduled deadline |
@@ -1137,10 +1138,10 @@ supported browser transport.
 
 ## Backend HTTP export accounting
 
-`functions/src/apiRouteManifest.ts` accounts for all 60 current `functions.https.onRequest` exports:
+`functions/src/apiRouteManifest.ts` accounts for all 64 current `functions.https.onRequest` exports:
 
 - `apiV1` is the single versioned `gateway` export; it resolves exact manifest method/path pairs, preserves decoded route parameters, and dispatches non-null `functionExport` mappings through the existing raw request handlers;
-- 48 exports are referenced by one or more canonical routes;
+- 52 exports are referenced by one or more canonical routes;
 - 6 portal-oriented Vendor exports remain `unmapped_portal`; the five intelligence exports now map canonically to VEN-31..VEN-35 and both mounted surfaces now consume the strict adapter;
 - `internalEmailQueue`, `adminQuestionsBulk`, and `adminQuestionAssets` are `internal_only`;
 - `stripeWebhook` is a `webhook` boundary;
@@ -1619,3 +1620,129 @@ Legacy `?token`, extra query/fragment fields, path prefixes and mismatched sessi
 or credential fail closed. This validates the existing server DTO; it adds no
 route, request field or token authority. Public qualification follows the real
 Student button and observes the unchanged network response before navigation.
+
+## BWM-047 authorization and persistence adoption — substep 3
+
+`CROSS_PORTAL_SECURITY_CONTRACT.md` SEC-01..08 defines the current adoption target.
+Every named HTTP export is wrapped by `api/httpExportGuard.ts`: canonical direct
+paths must match the addressed export/method; only a single-operation export or
+explicit direct-only service/simulation may use its root alias. Unknown paths and
+multi-operation roots reject before business work. Gateway and direct transport
+reject decoded slash/backslash/control/dot-segment resource IDs before dispatch;
+existing private-domain response headers also apply to outer-guard denials.
+The gateway still mounts exactly 52 handlers and 116 implemented routes; five
+retired routes remain 404, with no new role, route or business writer.
+
+Production standard API verifiers delegate to `verifyCurrentAuthorityIdToken`.
+`currentAccountIdentity.ts` checks SDK revocation, fresh enabled current Auth,
+consistent role/tenant/own-Student aliases and signed/current identity agreement;
+it returns the original signed identity rather than adopting newer privileges.
+Non-Vendor operational admission checks both token and current claims against
+current institute/license/version authority in a bounded read transaction, plus
+an exact active `settingsUsers` record for staff. Existing Student profile,
+summary, private media and integrity services retain their fresh transactional
+identity/privacy/session exceptions. Private Admin photo authority additionally
+requires the current active staff record. Known account denials remain 401/403;
+Auth-provider or persisted-authority outages remain retryable generic 500 and cannot
+masquerade as a revoked-user response.
+
+The direct `vendorLicenseUpdate`, `adminQuestionAssets` and `adminQuestionsBulk`
+export names remain present but their external handlers return canonical 404
+without invoking standalone legacy mutation services. Package/revisioned-content
+and commercial command APIs remain the supported writers. Five simulation exports
+retain current Vendor admission and their existing non-production environment
+guard. Backend-service email and raw signed Stripe webhook exceptions are not
+converted into portal roles or App Check bypass inputs. Manifest disposition
+labels remain source accounting, never proof of a private network boundary.
+
+All portals initialize SDK origin-local persistence before observers. A unique,
+token-free browser storage probe checks known write/read/delete failure before
+Auth initialization and provider readiness; SDK session records stay exclusively
+SDK-owned. Persistence failure stays unauthenticated and cannot issue sign-in.
+Observer generations and sign-in/identity fences suppress late old-user observer,
+refresh and sign-in success or failure, and sign-out cannot clear a subsequently installed identity. Real
+cross-tab/storage and current-authority proof is tracked in BWM-047 substep 3;
+permanent/aggregate/public qualification remains substeps 7–8. Other security
+policy clauses, App Check/rate resources and production rollout remain unadopted
+or downstream-owned as recorded in the controller. Production remains NO_GO.
+
+
+## BWM-047 bounded backend disclosure — substep 4
+
+Canonical errors now pass through a shared source-static disclosure policy before response emission. Existing codes/statuses and reviewed static messages remain; arbitrary provider/resource/field interpolation becomes a generic code-appropriate message. Unknown runtime codes normalize to INTERNAL_ERROR. Error details retain only reviewed field labels, the existing Exam ownership/proctoring/recovery reason enums and bounded retry seconds. Success data remains the owning business DTO.
+
+One 1–128-character safe request/correlation ID is shared across gateway/direct guard, handler, response and both logging sinks. Duplicates, controls, commas and credential/proof-shaped values receive a server UUID. This ID supplies correlation only. Diagnostics disclose reviewed static messages/categories, bounded safe scalar metadata and known basename/line frames; scope identifiers and release identity are hashes. Unknown metadata keys/values, raw messages/stacks/causes, URLs/headers/body/claims, proofs/answers and private bytes are withheld before both SDK writes. Source-static catalogue drift is checked; runtime strings never extend the catalogue. Background export rejection remains retryable with a safe platform-visible Error. Existing retry/package diagnostic fields use the same policy; historical records are not migrated by this change.
+
+Local proof and its sequential shared-worker/remote-transport limits are recorded in the master controller. Permanent/aggregate/public qualification, remaining per-target policy and App Check/abuse work retain their later owners. All eight findings remain OPEN; production NO_GO.
+
+
+## BWM-047 headers, assets and source maps — substep 5
+
+All 64 exported HTTP entry points set `Cache-Control: private, max-age=0, no-store`
+and `X-Content-Type-Options: nosniff` before dispatch. This includes gateway
+unknown/wrong-method outcomes, private media, direct guard rejection, raw-byte
+Stripe signature handling and minimal public liveness; successful business DTOs,
+canonical status/code and raw webhook bytes retain their existing owners. The
+Vendor audit/health boundary uses the same complete cache value.
+
+Hosting CSP permits only self scripts/workers/fonts, the two exact supported
+Firebase Auth REST origins and the reviewed candidate's exact managed CDN image
+origin. Camera remains enabled only for Student path scopes and Exam. HTML,
+login/deep links, manifests and missing assets revalidate; exact existing generated
+hashed assets alone are immutable. Portal root uses its prepared HTML redirect to
+Admin so the entry response receives the policy headers too. Release builds and
+all-five-root scans forbid public maps, inline/external map directives and renamed
+source-content payloads. CI generates and uses `.firebase-security-release.json`;
+raw `firebase.json` supplies the restrictive self-image baseline.
+
+Frontend managed-image boundaries preserve signed query bytes while checking
+configured origin/prefix and immutable path syntax; Admin previews additionally
+match the authoritative projected object path. These syntax checks grant no
+object access: tenant/session/revision/signature authority stays with existing
+backend publication/read/signing services. Raw Storage URLs are never rewritten
+into unsigned delivery. Private profile JPEG reads still create local Blob URLs.
+Business actions use validated HTTPS projections and safe opener behavior, with
+no bearer/proof forwarding. No route/export, schema, index, rule, role or business
+writer changed. All findings remain OPEN pending permanent/aggregate and approved
+public qualification; local synthetic TLS and emulators do not qualify real CDN
+bytes/IAM or Firebase public headers.
+
+### Shared application admission — BWM-047 / SEC-14/15
+
+Every protected canonical/direct HTTP operation passes shared admission before domain dispatch. Current Firebase account identity remains independently verified, followed by required reusable `X-Firebase-AppCheck` verification in enforced mode and atomic fixed-minute aggregate/class counters. The browser acquires attestation only for exact implemented same-origin methods/routes. Missing/invalid/expired/wrong-project/unapproved-app tokens return FORBIDDEN/403 with safe `app_check_denied`; verifier outage returns INTERNAL_ERROR/500. These responses never manufacture Firebase-user logout or Exam ownership loss. Service-only email queue, raw signed Stripe webhook and minimal liveness retain their separate existing verification contracts. Disabled legacy writers stay closed.
+
+RATE_LIMITED/429 uses the canonical error envelope and integer Retry-After 1–60 seconds to the next fixed window. Denial does not invoke the business handler or consume business receipts/Exam commands. Shared clients honor the minimum within existing retry attempts and abort signals; Exam retains its existing intent/proof/deadline owner. The stricter integrity CONFLICT/5-second lifetime/intake quota remains independent. Limits, storage and deployment prerequisites are frozen in SEC-14/15 and firestore_schema.md. Local bounded ingress is best-effort per worker, never a distributed DDoS claim. Provider/CSP/trusted-proxy/load/public proof remains BWM-052/054/056; production NO_GO.
+
+
+## BWM-047 substep 8 reconciliation — local verification passed; public pending
+
+Current source accounting is 121 routes (116 implemented, zero incompatible or
+missing, five retired), 64 guarded HTTP exports, 52 gateway handlers and eight
+schedules. Earlier task-specific counts above are historical. The permanent
+SEC-A01..09 matrix owns current-account/tenant/resource, browser persistence,
+disclosure, cache/CSP/assets/maps and shared admission proof; the master controller
+records actual results and limits. Application counters remain the sole new
+security schema owner from substep 6; no new business writer, role, route, index,
+rule or dependency is introduced by closeout. Public preparation is documented in
+`docs/CROSS_PORTAL_SECURITY_PREVIEW_REVIEW.md`. It is review-only, uses no cloud
+authority, and cannot qualify the real provider, CDN/IAM, remote TTL or production.
+Local aggregate qualification passed; all eight findings remain OPEN pending
+approved public qualification. Current unchanged index declarations are 79
+composite indexes and 13 field overrides (five prior plus eight security-counter
+overrides inherited from substep 6).
+BWM-049 exclusions, DEC-102/BWM-053 and BWM-052/054/056 prerequisites remain;
+production NO_GO.
+
+
+## BWM-047 final security qualification — 2026-10-24
+
+The controller records VERIFIED 8/8 under DEC-135 / LOG-283: local aggregate and
+approved compatible public qualification pass; all eight application findings close
+within the frozen contract. Exact 43-existing-HTTP staging uploads, three obsolete
+public invocation closures, 121 canonical/40 direct negatives, six real CSP-on
+public cases, canonical-origin restoration and owned fixture cleanup are verified.
+No local route/export/handler/schedule/index/dependency inventory changes.
+App Check remains explicit staging pending_provisioning, with genuine provider,
+proxy/edge/load/TTL/infra gates owned by BWM-052/054/056 and monitoring transport
+by BWM-051. Preserve BWM-049 exclusions and DEC-102/BWM-053 prerequisites;
+production NO_GO. Earlier pending statements are historical checkpoints.

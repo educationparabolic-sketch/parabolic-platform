@@ -1,3 +1,5 @@
+import {guardBackgroundDiagnostics} from "../services/diagnosticDisclosure";
+import {createLogger} from "../services/logging";
 import * as functions from "firebase-functions";
 import {questionIngestionService} from "../services/questionIngestion";
 import {systemEventTopologyService} from "../services/systemEventTopology";
@@ -99,7 +101,7 @@ export const handleQuestionCreated = async (
   const latestSnapshot = await snapshot.ref.get();
 
   if (isStaleEvent(snapshot, latestSnapshot)) {
-    functions.logger.info("Skipping stale question create ingestion event.", {
+    createLogger("questionIngestionTrigger").info("Skipping stale question create ingestion event.", {
       eventId: context.eventId,
       instituteId,
       questionId,
@@ -142,7 +144,7 @@ export const handleQuestionUpdated = async (
   const latestSnapshot = await change.after.ref.get();
 
   if (isStaleEvent(change.after, latestSnapshot)) {
-    functions.logger.info("Skipping stale question update ingestion event.", {
+    createLogger("questionIngestionTrigger").info("Skipping stale question update ingestion event.", {
       eventId: context.eventId,
       instituteId,
       questionId,
@@ -172,8 +174,8 @@ export const handleQuestionUpdated = async (
 
 export const questionBankOnCreate = functions.firestore
   .document(QUESTION_BANK_DOCUMENT_PATH)
-  .onCreate(handleQuestionCreated);
+  .onCreate(guardBackgroundDiagnostics(handleQuestionCreated));
 
 export const questionBankOnUpdate = functions.firestore
   .document(QUESTION_BANK_DOCUMENT_PATH)
-  .onUpdate(handleQuestionUpdated);
+  .onUpdate(guardBackgroundDiagnostics(handleQuestionUpdated));

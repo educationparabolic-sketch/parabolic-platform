@@ -198,6 +198,10 @@ export class IntegrityQueue {
       }
       if (reason === "integrity_rate_limited")
         this.nextAt = Date.now() + Math.max(5, Number(e.details?.retryAfterSeconds) || 5) * 1000;
+      else if (e.status === 429 && this.retries < 3) {
+        this.retries++;
+        this.nextAt = Date.now() + Math.max(1000, (e as {retryAfterMs?: number}).retryAfterMs || 60000);
+      }
       else if ((e.status === 0 || (e.status ?? 0) >= 500) && this.retries < 3)
         this.nextAt = Date.now() + [1000, 2000, 5000][this.retries++];
       else this.unavailable = true; // malformed ACK and deterministic denials require explicit retry; never claim saved.

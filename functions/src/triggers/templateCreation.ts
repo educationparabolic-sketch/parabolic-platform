@@ -1,3 +1,4 @@
+import {guardBackgroundDiagnostics} from "../services/diagnosticDisclosure";
 import * as functions from "firebase-functions";
 import {
   templateConfigurationSnapshotService,
@@ -104,4 +105,4 @@ export const handleTemplateCreated = async (
 
 export const testTemplateOnCreate = functions.firestore
   .document(TESTS_DOCUMENT_PATH)
-  .onCreate(handleTemplateCreated);
+  .onCreate(guardBackgroundDiagnostics(handleTemplateCreated));

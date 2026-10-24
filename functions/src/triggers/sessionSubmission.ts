@@ -1,3 +1,5 @@
+import {guardBackgroundDiagnostics} from "../services/diagnosticDisclosure";
+import {createLogger} from "../services/logging";
 import * as functions from "firebase-functions";
 import {failureRecoveryService} from "../services/failureRecovery";
 import {
@@ -69,7 +71,7 @@ export const handleSessionUpdated = async (
           error,
         );
 
-        functions.logger.warn(
+        createLogger("sessionSubmissionTrigger").warn(
           "Deferred post-submission processing to failure recovery queue.",
           {
             eventId: context.eventId,
@@ -86,4 +88,4 @@ export const handleSessionUpdated = async (
 
 export const examSessionOnUpdate = functions.firestore
   .document(SESSIONS_DOCUMENT_PATH)
-  .onUpdate(handleSessionUpdated);
+  .onUpdate(guardBackgroundDiagnostics(handleSessionUpdated));

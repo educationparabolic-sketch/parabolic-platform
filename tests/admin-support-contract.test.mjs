@@ -188,7 +188,10 @@ test("support backend owns identity, replay, notifications, operator authority, 
   ]) {
     assert.ok(service.includes(requiredAuthority), requiredAuthority);
   }
-  assert.match(vendorApi, /allowedRoles: \["vendor"\]/u);
+  assert.match(vendorApi, /allowedRoles: VENDOR_CAPABILITY_ROLES\["vendor.support.manage"\]/u);
+  const policy = require("../functions/lib/policy/vendorRolePolicy.js");
+  assert.deepEqual(policy.VENDOR_CAPABILITY_ROLES["vendor.support.manage"], ["vendor"]);
+  assert.match(vendorApi, /assertCurrentVendorIdentity\(request, dependencies, "vendor.support.manage"\)/u);
   assert.match(vendorApi, /getUser/u);
   assert.match(service, /vendorAuditLogs/u);
   assert.match(service, /vendorFilterKeys/u);

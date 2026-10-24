@@ -1,4 +1,4 @@
-import { readdir, readFile, stat } from "node:fs/promises";
+import { readdir, readFile, lstat, realpath } from "node:fs/promises";
 import { extname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -9,19 +9,8 @@ export const DEFAULT_ARTIFACT_ROOTS = [
   "apps/student/dist",
   "apps/exam/dist",
   "apps/vendor/dist",
+  ".firebase/hosting/portal",
 ];
-
-const TEXT_EXTENSIONS = new Set([
-  ".css",
-  ".html",
-  ".js",
-  ".json",
-  ".map",
-  ".mjs",
-  ".svg",
-  ".txt",
-  ".webmanifest",
-]);
 
 const POLICIES = [
   {
@@ -110,7 +99,7 @@ async function collectTextFiles(directory) {
     }
     if (entry.isDirectory()) {
       files.push(...(await collectTextFiles(entryPath)));
-    } else if (entry.isFile() && TEXT_EXTENSIONS.has(extname(entry.name).toLowerCase())) {
+    } else if (entry.isFile()) {
       files.push(entryPath);
     }
   }
@@ -123,19 +112,20 @@ export async function scanReleaseArtifacts({
   rootDirectory = workspaceRoot,
 } = {}) {
   const errors = [];
+  if (artifactRoots.length === 0) throw new ReleaseArtifactScanError(["No release roots supplied"]);
   let filesScanned = 0;
 
   for (const artifactRoot of artifactRoots) {
     const absoluteRoot = resolve(rootDirectory, artifactRoot);
     let rootStat;
     try {
-      rootStat = await stat(absoluteRoot);
+      rootStat = await lstat(absoluteRoot);
     } catch {
       errors.push(`${artifactRoot} is missing`);
       continue;
     }
 
-    if (!rootStat.isDirectory()) {
+    if (rootStat.isSymbolicLink() || await realpath(absoluteRoot) !== absoluteRoot || !rootStat.isDirectory()) {
       errors.push(`${artifactRoot} is not a directory`);
       continue;
     }
@@ -149,6 +139,19 @@ export async function scanReleaseArtifacts({
     for (const file of files) {
       filesScanned += 1;
       const source = await readFile(file, "utf8");
+      let mapPayload = false;
+      try {
+        const payload = JSON.parse(source.replace(/^\uFEFF/u, ""));
+        mapPayload = payload && typeof payload === "object" &&
+          ("sourcesContent" in payload || payload.version === 3 && ("mappings" in payload || "sections" in payload));
+      } catch { /* Ordinary JS, CSS and binary assets are not JSON. */ }
+      // Scan every file regardless of suffix: a renamed map remains public source.
+      if (mapPayload || extname(file).toLowerCase() === ".map" ||
+          /(?:\/\/[#@]|\/\*[#@])\s*sourceMappingURL\s*=/iu.test(source) ||
+          /(?:["']sourcesContent["']|\bsourcesContent)\s*:/u.test(source) ||
+          /"version"\s*:\s*3\s*[,}]/u.test(source) && /"mappings"\s*:/u.test(source) && /"sources"\s*:/u.test(source)) {
+        errors.push(`${relative(rootDirectory, file)} violates public-source-map`);
+      }
       for (const policy of POLICIES) {
         if (policy.pattern) {
           policy.pattern.lastIndex = 0;
@@ -186,6 +189,10 @@ export function parseArtifactScanArguments(args) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     const artifactRoots = parseArtifactScanArguments(process.argv.slice(2));
+    if (DEFAULT_ARTIFACT_ROOTS.some(required => !artifactRoots.some(root => {
+      const path = relative(resolve(root), resolve(required));
+      return path === "" || (!path.startsWith("..") && !path.startsWith("/"));
+    }))) throw new Error("All built and served release roots are required");
     try {
       const result = await scanReleaseArtifacts({ artifactRoots });
       console.log(

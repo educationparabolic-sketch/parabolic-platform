@@ -1,7 +1,6 @@
 import * as functions from "firebase-functions";
 import {
   ErrorReportingContext,
-  NormalizedRuntimeError,
   RuntimeErrorReport,
 } from "../types/errorReporting";
 import {LogContext} from "../types/logging";
@@ -17,66 +16,10 @@ const DEFAULT_SERVICE_NAME =
 
 let globalHandlersRegistered = false;
 
-const getRuntimeEnvironment = (): string =>
-  process.env.NODE_ENV?.trim() || "development";
-
-const getRuntimeVersion = (): string =>
-  process.env.K_REVISION?.trim() ||
-  process.env.FUNCTIONS_VERSION?.trim() ||
-  process.env.npm_package_version?.trim() ||
-  "unknown";
-
-const toError = (error: unknown): Error => {
-  if (error instanceof Error) {
-    return error;
-  }
-
-  if (typeof error === "string") {
-    return new Error(error);
-  }
-
-  try {
-    return new Error(JSON.stringify(error));
-  } catch {
-    return new Error(String(error));
-  }
-};
-
-const normalizeError = (error: unknown): NormalizedRuntimeError => {
-  const normalizedError = toError(error);
-
-  return {
-    message: normalizedError.message,
-    name: normalizedError.name,
-    stack: normalizedError.stack,
-  };
-};
-
-const buildReportedMessage = (
-  normalizedError: NormalizedRuntimeError,
-  context: ErrorReportingContext,
-): string => {
-  const baseMessage = context.message ||
-    `${normalizedError.name}: ${normalizedError.message}`;
-  const stack = normalizedError.stack || baseMessage;
-  const requestIdLine = context.requestId ?
-    `\nrequestId: ${context.requestId}` :
-    "";
-
-  return `${baseMessage}\n${stack}${requestIdLine}`;
-};
-
-const sanitizeContext = (
-  context: ErrorReportingContext,
-): Record<string, unknown> => {
-  const metadata = {...context};
-
-  if (metadata.featureFlags && !Array.isArray(metadata.featureFlags)) {
-    metadata.featureFlags = [String(metadata.featureFlags)];
-  }
-
-  return metadata;
-};
+import {
+  discloseDiagnostics, mergeDiagnosticContexts, runtimeEnvironment, runtimeVersion,
+  safeDiagnosticMessage, safeRequestId, safeRuntimeError, safeService,
+} from "./diagnosticDisclosure";
 
 /**
  * Emits Cloud Error Reporting-compatible runtime failure events.
@@ -91,7 +34,7 @@ export class RuntimeErrorReporter {
    */
   constructor(service: string, context: ErrorReportingContext = {}) {
     this.baseContext = {
-      ...context,
+      ...mergeDiagnosticContexts(context),
       service,
     };
   }
@@ -105,9 +48,8 @@ export class RuntimeErrorReporter {
     return new RuntimeErrorReporter(
       this.baseContext.service ?? DEFAULT_SERVICE_NAME,
       {
-        ...this.baseContext,
-        ...context,
-        service: context.service ?? this.baseContext.service,
+        ...mergeDiagnosticContexts(this.baseContext, context),
+        service: String(mergeDiagnosticContexts(context).service ?? this.baseContext.service),
       },
     );
   }
@@ -123,23 +65,20 @@ export class RuntimeErrorReporter {
     context: ErrorReportingContext = {},
   ): RuntimeErrorReport {
     const mergedContext = this.mergeContext(context);
-    const normalizedError = normalizeError(error);
-    const service = mergedContext.service ?? DEFAULT_SERVICE_NAME;
-    const version = mergedContext.version ?? getRuntimeVersion();
-    const message = buildReportedMessage(normalizedError, mergedContext);
+    const normalizedError = safeRuntimeError(error);
+    const service = safeService(mergedContext.service);
+    const version = runtimeVersion();
+    const message = `${safeDiagnosticMessage(mergedContext.message, normalizedError.message).slice(0, 400)}\n` +
+      `${normalizedError.stack.slice(0, 1400)}\nrequestId: ${mergedContext.requestId}`;
     const metadata = {
-      ...sanitizeContext(mergedContext),
+      ...discloseDiagnostics(mergedContext),
       "errorName": normalizedError.name,
       "errorMessage": normalizedError.message,
       "stack": normalizedError.stack,
-      "serviceContext": {
-        service,
-        version,
-      },
+      "serviceContext": {service, version},
       "@type": ERROR_REPORT_EVENT_TYPE,
     };
-
-    functions.logger.error(message, metadata);
+    functions.logger.write({...metadata, severity: mergedContext.severity ?? "ERROR", message});
 
     return {
       error: normalizedError,
@@ -159,20 +98,14 @@ export class RuntimeErrorReporter {
    * @return {ErrorReportingContext} Merged report context.
    */
   private mergeContext(context: ErrorReportingContext): ErrorReportingContext {
+    const merged = mergeDiagnosticContexts(this.baseContext, context);
     return {
-      ...this.baseContext,
-      ...context,
-      environment: context.environment ??
-        this.baseContext.environment ??
-        getRuntimeEnvironment(),
-      service:
-        context.service ??
-        this.baseContext.service ??
-        DEFAULT_SERVICE_NAME,
-      version:
-        context.version ??
-        this.baseContext.version ??
-        getRuntimeVersion(),
+      ...merged,
+      requestId: safeRequestId(merged.requestId),
+      environment: runtimeEnvironment(),
+      service: safeService(merged.service ?? DEFAULT_SERVICE_NAME),
+      severity: merged.severity === "CRITICAL" ? "CRITICAL" : "ERROR",
+      version: runtimeVersion(),
     };
   }
 }
@@ -186,7 +119,7 @@ export const reportRuntimeError = (
   error: unknown,
   context: ErrorReportingContext = {},
 ): RuntimeErrorReport => {
-  const service = context.service ?? DEFAULT_SERVICE_NAME;
+  const service = String(mergeDiagnosticContexts(context).service ?? DEFAULT_SERVICE_NAME);
   return createErrorReporter(service, context).report(error, context);
 };
 
@@ -195,12 +128,12 @@ const getUnhandledErrorContext = (
   operation: string,
   severity: ErrorReportingContext["severity"],
 ): ErrorReportingContext => ({
-  environment: getRuntimeEnvironment(),
+  environment: runtimeEnvironment(),
   handled: false,
   operation,
   service,
   severity,
-  version: getRuntimeVersion(),
+  version: runtimeVersion(),
 });
 
 export const registerGlobalErrorHandlers = (): void => {

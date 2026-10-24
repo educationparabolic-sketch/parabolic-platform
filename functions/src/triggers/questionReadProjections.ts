@@ -1,3 +1,4 @@
+import {guardBackgroundDiagnostics} from "../services/diagnosticDisclosure";
 import * as functions from "firebase-functions";
 import {questionDistributionProjectionService} from
   "../services/questionDistributionProjection";
@@ -45,10 +46,10 @@ export const handleTemplateUsageProjectionWrite = async (
 };
 
 export const questionDistributionOnQuestionWrite = functions.firestore
-  .document(QUESTION_PATH).onWrite(handleQuestionProjectionWrite);
+  .document(QUESTION_PATH).onWrite(guardBackgroundDiagnostics(handleQuestionProjectionWrite));
 
 export const questionDistributionOnAnalyticsWrite = functions.firestore
-  .document(ANALYTICS_PATH).onWrite(handleQuestionAnalyticsProjectionWrite);
+  .document(ANALYTICS_PATH).onWrite(guardBackgroundDiagnostics(handleQuestionAnalyticsProjectionWrite));
 
 export const questionUsageOnTemplateWrite = functions.firestore
-  .document(TEMPLATE_PATH).onWrite(handleTemplateUsageProjectionWrite);
+  .document(TEMPLATE_PATH).onWrite(guardBackgroundDiagnostics(handleTemplateUsageProjectionWrite));

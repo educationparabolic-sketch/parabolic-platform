@@ -1,3 +1,5 @@
+import {guardBackgroundDiagnostics} from "../services/diagnosticDisclosure";
+import {createLogger} from "../services/logging";
 import * as functions from "firebase-functions";
 import {
   adminSettingsCommunicationService,
@@ -13,7 +15,7 @@ export const handleEmailQueueSchedule = async (): Promise<void> => {
     supportNotificationService.processDueNotifications(50),
     vendorAdministratorCommunicationService.processDueCommunications(50),
   ]);
-  functions.logger.info("Processed due asynchronous email communications.", {
+  createLogger("emailQueueTrigger").info("Processed due asynchronous email communications.", {
     adminSettingsProcessed,
     supportProcessed,
     vendorAdministratorProcessed,
@@ -23,4 +25,4 @@ export const handleEmailQueueSchedule = async (): Promise<void> => {
 export const processEmailQueue = functions.pubsub
   .schedule("every 1 minutes")
   .timeZone("UTC")
-  .onRun(handleEmailQueueSchedule);
+  .onRun(guardBackgroundDiagnostics(handleEmailQueueSchedule));

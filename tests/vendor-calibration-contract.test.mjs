@@ -27,7 +27,7 @@ test("calibration transport enforces current Vendor and safe disposable emulator
   for (const file of ["vendorCalibrationPush", "vendorCalibrationSimulation", "vendorCalibrationVersions", "vendorCalibrationOperations"]) {
     const source = await read(`functions/src/api/${file}.ts`);
     assert.ok(source.includes("calibrationMiddlewares("));
-    assert.ok(source.includes("verifyIdToken(token, true)"));
+    assert.ok(source.includes("verifyCurrentAuthorityIdToken(token)"));
   }
   const reads = await read("functions/src/services/calibrationVersionReads.ts");
   for (const requirement of ["limit + 1", "limit > 50", "?? 25", "cursor.length > 512", "validateStoredCalibrationVersion",
@@ -53,11 +53,11 @@ test("calibration version reads are implemented bounded handlers", async () => {
     ["VEN-36", "/api/v1/vendor/calibration/versions", "GET", "implemented", "vendorCalibrationVersions", "planned"],
     ["VEN-37", "/api/v1/vendor/calibration/versions/{versionId}", "GET", "implemented", "vendorCalibrationVersions", "planned"],
   ]);
-  assert.equal(API_ROUTE_MANIFEST.length, 120);
-  assert.equal(API_ROUTE_MANIFEST.filter(({status}) => status === "implemented").length, 107);
+  assert.equal(API_ROUTE_MANIFEST.length, 121);
+  assert.equal(API_ROUTE_MANIFEST.filter(({status}) => status === "implemented").length, 116);
   assert.equal(API_ROUTE_MANIFEST.filter(({status}) => status === "incompatible").length, 0);
-  assert.equal(API_ROUTE_MANIFEST.filter(({status}) => status === "missing").length, 8);
-  assert.equal(BACKEND_HTTP_EXPORT_MANIFEST.length, 60);
+  assert.equal(API_ROUTE_MANIFEST.filter(({status}) => status === "missing").length, 0);
+  assert.equal(BACKEND_HTTP_EXPORT_MANIFEST.length, 64);
   assert.equal(API_ROUTE_MANIFEST.find(({id}) => id === "VEN-01").status, "implemented");
 });
 

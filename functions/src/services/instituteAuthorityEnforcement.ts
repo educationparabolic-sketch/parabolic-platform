@@ -8,6 +8,8 @@ import type {
   InstituteSessionEnforcementReason,
 } from "../../../shared/contracts/claimPropagation";
 import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
+import {hasCurrentStaffMembership, verifyCurrentAccountIdentity} from "./currentAccountIdentity";
+import {MiddlewareRejectionError} from "../types/middleware";
 
 const ACTIVE_SESSION_STATUSES = ["created", "started", "active"] as const;
 const LAYER_ORDER: Record<ClaimPropagationLicenseLayer, number> = {
@@ -430,10 +432,24 @@ export const instituteAuthorityEnforcementService =
 export const verifyCurrentAuthorityIdToken = async (
   idToken: string,
 ): Promise<DecodedIdToken> => {
-  const decodedToken = await getFirebaseAdminApp().auth()
-    .verifyIdToken(idToken, true);
-  await instituteAuthorityEnforcementService.assertDecodedTokenAuthority(
-    decodedToken,
-  );
-  return decodedToken;
+  const {token, user} = await verifyCurrentAccountIdentity(getFirebaseAdminApp().auth(), idToken);
+  if (token.role === "vendor") return token;
+  const instituteId = token.instituteId ?? token.tenantId;
+  try {
+    await getFirestore().runTransaction(async (transaction) => {
+      const authority = await instituteAuthorityEnforcementService.readCurrentAuthority(transaction, instituteId);
+      instituteAuthorityEnforcementService.assertTokenAuthority(authority, token);
+      instituteAuthorityEnforcementService.assertTokenAuthority(authority, user.customClaims ?? {});
+      if (["admin", "teacher", "director"].includes(String(token.role).toLowerCase())) {
+        const institute = await transaction.get(getFirestore().doc(`institutes/${instituteId}`));
+        if (!hasCurrentStaffMembership(institute.get("settingsUsers"), token.uid, token.role)) {
+          throw new MiddlewareRejectionError("FORBIDDEN", "Current staff membership is unavailable.");
+        }
+      }
+    });
+  } catch (error) {
+    if (error instanceof MiddlewareRejectionError || error instanceof InstituteAuthorityEnforcementError) throw error;
+    throw new MiddlewareRejectionError("INTERNAL_ERROR", "Current authorization authority is unavailable.");
+  }
+  return token;
 };

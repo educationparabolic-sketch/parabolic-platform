@@ -23,13 +23,22 @@ const version = (versionId, extra = {}) => ({
 });
 const simBody = {academicYearId: "2026", institutes: ["inst_cal_api"], weights: proposed};
 
-async function request(path, token, method = "GET", body) {
+async function request(path, token, method = "GET", body, admissionRetry = true) {
   const response = await fetch(origin + path, {
     method, headers: {"content-type": "application/json", ...(token ? {authorization: `Bearer ${token}`} : {})},
     ...(body === undefined ? {} : {body: JSON.stringify(body)}), signal: AbortSignal.timeout(30000),
   });
   assert.match(response.headers.get("content-type"), /^application\/json/);
   const result = await response.json();
+  if (response.status === 429 && admissionRetry) {
+    // The domain matrix deliberately exceeds the shared expensive-operation budget.
+    // Obey one genuine server window; retain the same actor, method and exact intent.
+    assert.equal(result.error.code, "RATE_LIMITED");
+    const seconds = response.headers.get("retry-after");
+    assert.match(seconds, /^(?:[1-9]|[1-5][0-9]|60)$/);
+    await new Promise((resolve) => setTimeout(resolve, Number(seconds) * 1000));
+    return request(path, token, method, body, false);
+  }
   assert.equal(typeof result.requestId, "string");
   assert.match(result.timestamp, /^\d{4}-\d{2}-\d{2}T/);
   return {status: response.status, body: result, allow: response.headers.get("allow")};

@@ -1,3 +1,4 @@
+import {verifyCurrentAuthorityIdToken} from "../services/instituteAuthorityEnforcement";
 import {createMiddlewareHandler} from "../middleware/framework";
 import {buildSuccessResponse, sendErrorResponse} from "../services/apiResponse";
 import {calibrationRolloutService, CalibrationRolloutError, calibrationRollbackIdentity,
@@ -79,5 +80,5 @@ export const handleVendorCalibrationOperationsRequest = createVendorCalibrationO
   readOperation: calibrationRolloutService.readOperation.bind(calibrationRolloutService),
   rollback: calibrationRolloutService.rollback.bind(calibrationRolloutService),
   getUser: (uid) => getFirebaseAdminApp().auth().getUser(uid),
-  verifyIdToken: (token) => getFirebaseAdminApp().auth().verifyIdToken(token, true),
+  verifyIdToken: (token) => verifyCurrentAuthorityIdToken(token),
 });

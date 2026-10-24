@@ -3,6 +3,7 @@
 
 const assert = require("node:assert/strict");
 const test = require("node:test");
+const securityFixture = require("./helpers/crossPortalSecurity");
 const {deleteApp, initializeApp} = require("firebase-admin/app");
 const {getAuth} = require("firebase-admin/auth");
 const {getFirestore, Timestamp} = require("firebase-admin/firestore");
@@ -98,6 +99,9 @@ test("Vendor routes enforce Auth and execute pagination, replay, race, lifecycle
         isVendor: user.role === "vendor",
         licenseLayer: "L0",
         role: user.role,
+        ...(user.role !== "vendor" ? await securityFixture.currentRoleClaims(
+          firestore, record.uid, user.role, instituteA + "_role_authority",
+        ) : {}),
       });
     }
     await Promise.all([
@@ -210,6 +214,7 @@ test("Vendor routes enforce Auth and execute pagination, replay, race, lifecycle
     });
   } finally {
     await Promise.allSettled(createdUsers.map((uid) => auth.deleteUser(uid)));
+    await firestore.recursiveDelete(firestore.doc(`institutes/${instituteA}_role_authority`));
     await Promise.all([
       firestore.recursiveDelete(firestore.doc(`institutes/${instituteA}`)),
       firestore.recursiveDelete(firestore.doc(`institutes/${instituteB}`)),

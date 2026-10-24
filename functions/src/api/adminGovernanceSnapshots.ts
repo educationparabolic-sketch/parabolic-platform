@@ -1,7 +1,7 @@
+import {verifyCurrentAuthorityIdToken} from "../services/instituteAuthorityEnforcement";
 import * as functions from "firebase-functions";
 import {DecodedIdToken} from "firebase-admin/auth";
 import {sendErrorResponse} from "../services/apiResponse";
-import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
 import {createAuthenticationMiddleware} from "../middleware/auth";
 import {createGovernanceAccessMiddleware} from "../middleware/governanceAccess";
 import {
@@ -131,7 +131,7 @@ export const handleAdminGovernanceSnapshotsRequest =
       governanceSnapshotAccessService,
     ),
     verifyIdToken: (idToken: string) =>
-      getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
+      verifyCurrentAuthorityIdToken(idToken),
   });
 
 export {buildSuccessResponse};

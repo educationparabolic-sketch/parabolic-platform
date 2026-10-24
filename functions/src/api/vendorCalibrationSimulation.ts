@@ -1,3 +1,4 @@
+import {verifyCurrentAuthorityIdToken} from "../services/instituteAuthorityEnforcement";
 import * as functions from "firebase-functions";
 import {sendErrorResponse} from "../services/apiResponse";
 import {calibrationSimulationService, normalizeInput} from "../services/calibrationSimulation";
@@ -45,6 +46,6 @@ export const createVendorCalibrationSimulationHandler = (
 export const handleVendorCalibrationSimulationRequest = createVendorCalibrationSimulationHandler({
   simulateCalibrationImpact: calibrationSimulationService.simulateCalibrationImpact.bind(calibrationSimulationService),
   getUser: (uid) => getFirebaseAdminApp().auth().getUser(uid),
-  verifyIdToken: (token) => getFirebaseAdminApp().auth().verifyIdToken(token, true),
+  verifyIdToken: (token) => verifyCurrentAuthorityIdToken(token),
 });
 export {buildSuccessResponse};

@@ -1,3 +1,4 @@
+import {verifyCurrentAuthorityIdToken} from "../services/instituteAuthorityEnforcement";
 import {createMiddlewareHandler} from "../middleware/framework";
 import {buildSuccessResponse} from "../services/apiResponse";
 import {calibrationRolloutService, calibrationRolloutIdentity,
@@ -42,5 +43,5 @@ export const createVendorCalibrationPushHandler = (dependencies: Dependencies) =
 export const handleVendorCalibrationPushRequest = createVendorCalibrationPushHandler({
   apply: calibrationRolloutService.apply.bind(calibrationRolloutService),
   getUser: (uid) => getFirebaseAdminApp().auth().getUser(uid),
-  verifyIdToken: (token) => getFirebaseAdminApp().auth().verifyIdToken(token, true),
+  verifyIdToken: (token) => verifyCurrentAuthorityIdToken(token),
 });

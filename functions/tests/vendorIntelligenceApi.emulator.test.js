@@ -3,6 +3,7 @@
 
 const assert = require("node:assert/strict");
 const test = require("node:test");
+const securityFixture = require("./helpers/crossPortalSecurity");
 const {getFirebaseAdminApp, getFirestore} = require("../lib/utils/firebaseAdmin");
 const {seedVendorIntelligenceReadFixtures, resetVendorIntelligenceReadFixtures} =
   require("../lib/tests/vendorIntelligenceReadFixtures");
@@ -17,11 +18,21 @@ const routes = ["readiness", "revenue", "layer-distribution", "churn", "revenue-
 const suffix = "?asOfMonth=2026-08&windowMonths=3";
 
 async function request(route, token, query = suffix, method = "GET") {
-  const response = await fetch(`${origin}/api/v1/vendor/intelligence/${route}${query}`, {
-    headers: token ? {Authorization: `Bearer ${token}`} : {},
-    method,
-    signal: AbortSignal.timeout(60_000),
-  });
+  let response;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    response = await fetch(`${origin}/api/v1/vendor/intelligence/${route}${query}`, {
+      headers: token ? {Authorization: `Bearer ${token}`} : {}, method,
+      signal: AbortSignal.timeout(60_000),
+    });
+    if (response.status !== 429 || attempt === 1) break;
+    const seconds = Number(response.headers.get("retry-after"));
+    assert.ok(Number.isInteger(seconds) && seconds >= 1 && seconds <= 60);
+    const denied = await response.json();
+    assert.equal(denied.error.code, "RATE_LIMITED");
+    assert.equal(denied.data, undefined);
+    console.log("[intelligence-functional-client] Honoring real Retry-After; quotas unchanged.");
+    await new Promise((resolve) => setTimeout(resolve, seconds * 1000 + 100));
+  }
   assert.match(response.headers.get("content-type"), /application\/json/u);
   const body = await response.json();
   assert.equal(typeof body.requestId, "string");
@@ -60,6 +71,7 @@ test("VEN-31..VEN-35 serve exact bounded aggregate truth through real Auth/Fires
       await auth.setCustomUserClaims(user.uid, {
         role: actualRole, isVendor: actualRole === "vendor", licenseLayer: "L0",
         isSuspended: role === "suspended",
+        ...(actualRole !== "vendor" ? await securityFixture.currentRoleClaims(firestore, user.uid, actualRole, `bwm047_intelligence_roles_${timestamp}`) : {}),
       });
       accounts[role] = {uid: user.uid, token: await signIn(email, password)};
     }
@@ -141,7 +153,7 @@ test("VEN-31..VEN-35 serve exact bounded aggregate truth through real Auth/Fires
     await new Promise((resolve) => setTimeout(resolve, 1100));
     await auth.revokeRefreshTokens(accounts.revoked.uid);
     for (const route of routes) {
-      assert.equal((await request(route, accounts.stale.token)).status, 403);
+      assert.equal((await request(route, accounts.stale.token)).status, 401);
       assert.equal((await request(route, accounts.disabled.token)).status, 401);
       assert.equal((await request(route, accounts.revoked.token)).status, 401);
     }
@@ -151,6 +163,7 @@ test("VEN-31..VEN-35 serve exact bounded aggregate truth through real Auth/Fires
     assert.equal(direct.status, 403, "Vendor clients must not read raw tenant Firestore authority");
   } finally {
     await resetVendorIntelligenceReadFixtures();
+    await firestore.recursiveDelete(firestore.doc(`institutes/bwm047_intelligence_roles_${timestamp}`));
     await firestore.recursiveDelete(firestore.doc("institutes/inst_reader_private"));
     await Promise.all(users.map((uid) => auth.deleteUser(uid)));
     await app.delete();

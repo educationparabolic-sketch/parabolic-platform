@@ -13,9 +13,10 @@ function compile(source, dependencies = {}, globals = {}) {
   return module.exports;
 }
 const errors = compile(errorSource), responses = compile(responseSource);
-function client({getToken, fetch}) {
+function client({getToken, fetch, attestation, retryPolicy}) {
   const current = {user: {uid: "actor_a"}}, signals = [];
   const sdk = compile(source, {
+    "./applicationAttestation": {applicationAttestation: attestation ?? (async () => null)},
     "firebase/auth": {getIdToken: (user, force) => getToken?.(current, user, force) ?? Promise.resolve("test-token")},
     "./firebaseClient": {getFirebaseAuth: () => ({currentUser: current.user})},
     "./frontendEnvironment": {getFrontendEnvironment: () => ({apiBaseUrl: "/api/v1"})},
@@ -24,7 +25,7 @@ function client({getToken, fetch}) {
     "./frontendMonitoring": {captureFrontendApiFailure: () => {}, captureFrontendApiTiming: () => {}},
     "../types/apiClient": errors, "../types/apiResponse": responses,
   }, {window: {location: {origin: "http://unit.test"}, setTimeout}, fetch: (...args) => fetch(current, ...args)});
-  return {current, signals, api: sdk.createApiClient({baseUrl: "http://unit.test/api/v1", retryPolicy: {maxAttempts: 1}})};
+  return {current, signals, api: sdk.createApiClient({baseUrl: "http://unit.test/api/v1", retryPolicy: {maxAttempts: 1, ...retryPolicy}})};
 }
 const ok = () => new Response(JSON.stringify({success: true, code: "OK", data: {confirmed: true}, message: "OK", requestId: "test", timestamp: "2026-10-14T00:00:00.000Z"}), {status: 200, headers: {"content-type": "application/json"}});
 
@@ -83,4 +84,24 @@ test("scoped retry owners can disable the shared 401 replay and observe headers 
   await assert.rejects(env.api.post("/exam/session/s/answers", {body: {batchId: "retained"}, refreshAuthOn401: false,
     onResponseHeaders: headers => {retry = headers.get("Retry-After");}}), error => error.status === 401);
   assert.equal(requests, 1); assert.equal(refreshes, 0); assert.equal(retry, "2"); assert.deepEqual(env.signals, []);
+});
+
+
+test("attestation owner forwards acquired token and strips caller-supplied tokens; 403 does not publish logout", async () => {
+  const seen = [];
+  const env = client({attestation: async (method, url) => method === "GET" && url === "http://unit.test/api/v1/vendor/institutes" ? "approved-app-token" : null,
+    fetch: (_current, _url, options) => {seen.push(options.headers.get("X-Firebase-AppCheck")); return ok();}});
+  await env.api.get("/vendor/institutes", {headers: {"X-Firebase-AppCheck": "caller-token"}});
+  await env.api.get("/unknown", {headers: {"X-Firebase-AppCheck": "caller-token"}});
+  assert.deepEqual(seen, ["approved-app-token", null]);
+  const denied = client({fetch: () => new Response(JSON.stringify({success:false,error:{code:"FORBIDDEN",message:"Application attestation is required.",details:{reason:"app_check_denied"}},requestId:"test",timestamp:"2026-10-22T00:00:00.000Z"}), {status:403,headers:{"content-type":"application/json"}})});
+  await assert.rejects(denied.api.get("/vendor/institutes"),e=>e.status===403);assert.deepEqual(denied.signals,[]);
+});
+
+test("429 metadata preserves server wait and abort cancels a long wait without dispatching again", async () => {
+  let requests=0;
+  const limited=()=>{requests++;return new Response(JSON.stringify({success:false,error:{code:"RATE_LIMITED",message:"Request rate limit reached. Retry later."},requestId:"test",timestamp:"2026-10-22T00:00:00.000Z"}),{status:429,headers:{"content-type":"application/json","Retry-After":"60"}});};
+  const one=client({fetch:limited});await assert.rejects(one.api.get("/vendor/institutes"),e=>e.status===429&&e.retryAfterMs===60000);
+  const more=client({fetch:limited,retryPolicy:{maxAttempts:3}});const controller=new AbortController();
+  setTimeout(()=>controller.abort(),30);await assert.rejects(more.api.get("/vendor/institutes",{signal:controller.signal}),e=>e.code==="ABORTED");assert.equal(requests,2);
 });

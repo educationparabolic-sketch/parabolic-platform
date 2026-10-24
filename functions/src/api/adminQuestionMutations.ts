@@ -1,3 +1,4 @@
+import {verifyCurrentAuthorityIdToken} from "../services/instituteAuthorityEnforcement";
 import * as functions from "firebase-functions";
 import {DecodedIdToken} from "firebase-admin/auth";
 import {createAuthenticationMiddleware} from "../middleware/auth";
@@ -20,7 +21,6 @@ import {
 } from "../types/adminQuestionBank";
 import {StandardApiSuccessResponse} from "../types/apiResponse";
 import {MiddlewareRequest} from "../types/middleware";
-import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
 
 type Operation = "lifecycle" | "metadata" | "structure" | "version";
 
@@ -175,7 +175,7 @@ export const handleAdminQuestionMutationsRequest =
       adminQuestionMutationsService,
     ),
     verifyIdToken: (idToken) =>
-      getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
+      verifyCurrentAuthorityIdToken(idToken),
   });
 
 export {buildSuccessResponse, resolveOperation};

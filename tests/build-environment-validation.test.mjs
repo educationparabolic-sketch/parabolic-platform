@@ -26,6 +26,10 @@ function createEnvironment(environmentName = "test") {
   const domainSuffix = environmentName === "test" ? "test.invalid" : "example.com";
 
   return {
+    APP_CHECK_MODE: environmentName === "production" ? "enforced" : "pending_provisioning",
+    VITE_APP_CHECK_MODE: environmentName === "production" ? "enforced" : "pending_provisioning",
+    APP_CHECK_ALLOWED_APP_IDS: "1:000000000000:web:ci",
+    VITE_APP_CHECK_PROVIDER_KEY: "synthetic-public-site-key",
     PARABOLIC_BUILD_ENVIRONMENT: environmentName,
     FIREBASE_PROJECT_ID: projectId,
     VITE_FIREBASE_API_KEY:
@@ -273,4 +277,9 @@ test("Student return release origins reject normalized paths, empty URL delimite
   }
   const value = `${environment.VITE_EXAM_BASE_URL}/`;
   expectValidationError({...environment, VITE_PORTAL_BASE_URL: value, APP_BASE_URL: value}, "origins must be distinct");
+});
+
+test("App Check modes, approved apps, provider key and absence of injection are mandatory release boundaries", () => {
+  for (const change of [{APP_CHECK_MODE:"pending_provisioning",VITE_APP_CHECK_MODE:"pending_provisioning"},{APP_CHECK_MODE:""},{VITE_APP_CHECK_PROVIDER_KEY:""},{APP_CHECK_ALLOWED_APP_IDS:"1:123:web:other"},{SECURITY_TEST_APP_CHECK_KEY:"private"},{VITE_FIREBASE_APP_CHECK_DEBUG_TOKEN:"true"}])
+    assert.throws(()=>validateBuildEnvironment({...createEnvironment("production"),...change}),BuildEnvironmentValidationError);
 });

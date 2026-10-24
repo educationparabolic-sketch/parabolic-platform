@@ -1,3 +1,4 @@
+import {safeRuntimeError} from "./diagnosticDisclosure";
 /* eslint-disable require-jsdoc */
 import {createHash} from "node:crypto";
 import {FieldValue, Timestamp} from "firebase-admin/firestore";
@@ -842,7 +843,7 @@ export class AdminQuestionPackagesService {
       await this.cleanupCanonicalObjects(assetPaths);
     } catch (error) {
       await references.packageReference.update({
-        failureMessage: error instanceof Error ? error.message : String(error),
+        failureMessage: safeRuntimeError(error).message,
         recoveryPhase: "rollback_asset_cleanup",
         state: "failed_recoverable",
       });
@@ -1102,7 +1103,7 @@ export class AdminQuestionPackagesService {
       cleanupFailed = true;
     }
     await references.packageReference.set({
-      failureMessage: error instanceof Error ? error.message : String(error),
+      failureMessage: safeRuntimeError(error).message,
       recoveryPhase: cleanupFailed ? "validation_staging_cleanup" : null,
       state: cleanupFailed ? "failed_recoverable" : "validation_failed",
     }, {merge: true});
@@ -1721,7 +1722,7 @@ export class AdminQuestionPackagesService {
   ): Promise<void> {
     await references.packageReference.update({
       createdCanonicalObjects,
-      failureMessage: error instanceof Error ? error.message : String(error),
+      failureMessage: safeRuntimeError(error).message,
       recoveryPhase,
       state: "failed_recoverable",
     });

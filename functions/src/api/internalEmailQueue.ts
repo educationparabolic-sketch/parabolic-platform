@@ -1,3 +1,4 @@
+import {verifyCurrentAuthorityIdToken} from "../services/instituteAuthorityEnforcement";
 import * as functions from "firebase-functions";
 import {DecodedIdToken} from "firebase-admin/auth";
 import {sendErrorResponse} from "../services/apiResponse";
@@ -5,7 +6,6 @@ import {
   emailQueueService,
   EmailQueueValidationError,
 } from "../services/emailQueue";
-import {getFirebaseAdminApp} from "../utils/firebaseAdmin";
 import {
   EmailQueueRequestPayload,
   EmailQueueSuccessResponse,
@@ -151,7 +151,7 @@ export const createInternalEmailQueueHandler = (
 export const handleInternalEmailQueueRequest = createInternalEmailQueueHandler({
   enqueueEmailJob: emailQueueService.enqueueEmailJob.bind(emailQueueService),
   verifyIdToken: (idToken: string) =>
-    getFirebaseAdminApp().auth().verifyIdToken(idToken, true),
+    verifyCurrentAuthorityIdToken(idToken),
 });
 
 export {buildSuccessResponse};

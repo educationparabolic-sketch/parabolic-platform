@@ -245,6 +245,7 @@ export const createAuthenticationMiddleware = (
   try {
     decodedToken = await dependencies.verifyIdToken(idToken);
   } catch (error) {
+    if (error instanceof MiddlewareRejectionError) throw error;
     if (error instanceof InstituteAuthorityEnforcementError) {
       throw mapInstituteAuthorityRejection(error);
     }

@@ -193,3 +193,13 @@ test("a renewal queued behind canonical submit cannot revive or invalidate the c
   release(); await submission; await new Promise(resolve => setTimeout(resolve, 30));
   assert.equal(env.owner.snapshot().phase, "closed");
 });
+
+test("App Check 403 retains owner intent/proof and lease while an ordinary authority 403 remains terminal",async()=>{
+  for(const reason of ["app_check_denied","ownership_lost"]){
+    const env=harness({request:async path=>{if(path.endsWith('/answers'))throw new errors.ApiClientError('denied',403,'FORBIDDEN',null,{details:{reason}});}});
+    await env.owner.start();const generation=env.owner.snapshot().generation;
+    await assert.rejects(env.owner.post('/exam/session/s/answers',{body:{batchId:'retained',answers:[]}}));
+    assert.equal(env.owner.snapshot().phase,reason==='app_check_denied'?'active':'lost');
+    if(reason==='app_check_denied'){assert.equal(env.owner.snapshot().generation,generation);assert.equal(env.owner.isCurrent(),true);assert.equal(env.writes.filter(b=>b.batchId==='retained').length,1);}
+  }
+});

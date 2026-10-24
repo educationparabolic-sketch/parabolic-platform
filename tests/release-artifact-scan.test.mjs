@@ -98,3 +98,27 @@ test("parses default and explicit release roots and rejects malformed CLI input"
   assert.throws(() => parseArtifactScanArguments([]), /scan mode is required/u);
   assert.throws(() => parseArtifactScanArguments(["--scan", "--root"]), /artifact roots must use/u);
 });
+
+for (const [name, source] of [
+  ["chunk.MAP", "{}"], ["renamed.bin", '{"version":3,"sourcesContent":["private source"]}'],
+  ["escaped.png", '{"version":3,"sources\\u0043ontent":["private source"]}'],
+  ["renamed.mjs", 'export default {version:3,sourcesContent:["private source"]};'],
+  ["no-source.dat", '{"version":3,"sources":["private.ts"],"mappings":"AAAA"}'],
+  ["index.js", "//# sourceMappingURL=chunk.js.map"],
+  ["index.css", "/*# sourceMappingURL=data:application/json;base64,e30= */"],
+]) test(`rejects public source map in ${name}`, async () => {
+  await withArtifact({[name]: source}, async rootDirectory => {
+    await assert.rejects(scanReleaseArtifacts({artifactRoots: ["dist"], rootDirectory}), /public-source-map/u);
+  });
+});
+test("rejects symlinks at root, parent and file boundaries", async () => {
+  const {symlink} = await import("node:fs/promises");
+  await withArtifact({"app.js": "export const safe = true;"}, async rootDirectory => {
+    await symlink(join(rootDirectory, "dist"), join(rootDirectory, "alias"));
+    await assert.rejects(scanReleaseArtifacts({artifactRoots: ["alias"], rootDirectory}), /not a directory/u);
+    await symlink(rootDirectory, join(rootDirectory, "parent-alias"));
+    await assert.rejects(scanReleaseArtifacts({artifactRoots: ["parent-alias/dist"], rootDirectory}), /not a directory/u);
+    await symlink(join(rootDirectory, "dist/app.js"), join(rootDirectory, "dist/alias.js"));
+    await assert.rejects(scanReleaseArtifacts({artifactRoots: ["dist"], rootDirectory}), /symbolic link/u);
+  });
+});

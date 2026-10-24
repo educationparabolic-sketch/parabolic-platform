@@ -135,10 +135,17 @@ function delayForAttempt(policy: ApiRetryPolicy, attempt: number): number {
   return Math.min(policy.maxDelayMs, exponential);
 }
 
-async function delay(ms: number): Promise<void> {
-  await new Promise((resolve) => {
-    window.setTimeout(resolve, ms);
+async function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) throw new ApiClientError("Request cancelled.", 0, "ABORTED", null);
+  await new Promise<void>((resolve, reject) => {
+    const cancelled = () => {clearTimeout(timer); reject(new ApiClientError("Request cancelled.", 0, "ABORTED", null));};
+    const timer = setTimeout(() => {signal?.removeEventListener("abort", cancelled); resolve();}, ms);
+    signal?.addEventListener("abort", cancelled, {once: true});
   });
+}
+function serverRetryDelay(response: Response | null): number {
+  const raw = response?.headers.get("Retry-After") ?? "";
+  return /^[1-9][0-9]?$/u.test(raw) && Number(raw) <= 60 ? Number(raw) * 1000 : 0;
 }
 
 async function resolveToken(skipAuth?: boolean): Promise<string | null> {
@@ -177,6 +184,7 @@ function toApiError<TDetails>(
   context: ApiRequestContext,
   status: number,
   payload: ApiErrorEnvelope<TDetails>,
+  retryAfterMs = 0,
 ): ApiClientError<TDetails> {
   const code = payload.error.code;
   const message = payload.error.message ||
@@ -184,6 +192,7 @@ function toApiError<TDetails>(
 
   return new ApiClientError(message, status, code, payload, {
     details: payload.error.details,
+    retryAfterMs,
     requestId: payload.requestId,
   });
 }
@@ -254,6 +263,14 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
           ...(options.headers ?? {}),
         });
 
+        // Caller headers cannot forward attestation outside the exact protected same-origin route set.
+        requestHeaders.delete("X-Firebase-AppCheck");
+        if (typeof window !== "undefined") {
+          const {applicationAttestation} = await import("./applicationAttestation");
+          const applicationToken = await applicationAttestation(method, requestUrl);
+          if (applicationToken) requestHeaders.set("X-Firebase-AppCheck", applicationToken);
+          assertAuthScope();
+        }
         options.validateAuthToken?.(token);
         if (token) {
           requestHeaders.set("Authorization", `Bearer ${token}`);
@@ -298,6 +315,7 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
               signal: options.signal,
               body: options.body === undefined ? undefined : JSON.stringify(options.body),
             });
+            options.onResponseHeaders?.(response.headers);
             payload = await readResponseBody(response);
             assertAuthScope();
           }
@@ -403,7 +421,7 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
             code: errorEnvelope.error.code,
             message: errorEnvelope.error.message,
           });
-          throw toApiError(context, response.status, errorEnvelope);
+          throw toApiError(context, response.status, errorEnvelope, serverRetryDelay(response));
         }
       } catch (error) {
         const alreadyTypedError = error instanceof ApiClientError;
@@ -437,7 +455,7 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
         }
       }
 
-      await delay(delayForAttempt(policy, attempt));
+      await delay(Math.max(delayForAttempt(policy, attempt), serverRetryDelay(response)), options.signal);
     }
 
     throw new ApiClientError(

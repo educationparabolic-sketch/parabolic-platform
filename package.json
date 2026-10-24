@@ -222,7 +222,11 @@
     "test:exam-security:e2e": "node scripts/run-exam-launch-auth-e2e.mjs --student-returns --security-matrix",
     "prepare:exam-ownership-preview": "node scripts/prepare-exam-ownership-preview.mjs",
     "test:e2e:exam-ownership-preview": "playwright test tests/e2e/exam-ownership-preview.spec.mjs --project=chromium",
-    "test:exam-resilience:acceptance": "node scripts/run-exam-resilience-acceptance.mjs"
+    "test:exam-resilience:acceptance": "node scripts/run-exam-resilience-acceptance.mjs",
+    "test:cross-portal-authorization": "node scripts/run-cross-portal-authorization.mjs",
+    "test:backend-disclosure": "node scripts/run-backend-disclosure.mjs",
+    "test:security-admission": "node scripts/run-security-admission.mjs",
+    "test:security-matrix": "node scripts/run-security-matrix.mjs"
   },
   "devDependencies": {
     "playwright": "1.59.1"

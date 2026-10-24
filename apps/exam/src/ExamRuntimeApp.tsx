@@ -1,3 +1,4 @@
+import {safeBusinessUrl} from "../../../shared/services/managedAssetPolicy";
 import { RuntimeClock, interactionElapsed } from "./runtimeClock";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Route, Routes, useLocation, useParams } from "react-router-dom";
@@ -3673,7 +3674,7 @@ function ExamSessionPage() {
                   <p>
                     <strong>{selectedQuestion.media.title}</strong>
                   </p>
-                  <a href={selectedQuestion.media.url} target="_blank" rel="noreferrer">
+                  <a href={safeBusinessUrl(selectedQuestion.media.url)} target="_blank" rel="noreferrer">
                     Open {selectedQuestion.media.type} reference
                   </a>
                 </section>

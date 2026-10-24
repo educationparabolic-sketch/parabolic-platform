@@ -1,3 +1,5 @@
+import {toCdnAssetUrl} from "../../../../../shared/services/cdnAssetDelivery";
+import {safeBusinessUrl} from "../../../../../shared/services/managedAssetPolicy";
 import { useCallback, useEffect, useState } from "react";
 import type { StudentCurrentTestRecord, StudentHistoryRecord, StudentSolutionsResultV2, StudentTestsQueryV2, StudentTestsResultV2 } from "../../../../../shared/contracts/studentEntitlements";
 import StudentSummaryRead from "../../services/StudentSummaryRead";
@@ -126,12 +128,12 @@ function ReleasedSolutions({result, yearId}: {result: StudentSolutionsResultV2; 
     {result.page.items.map((item) => <article key={`${item.questionId}:${item.questionRevision}`} className="student-my-tests-solution-card">
       <h4>Question {item.questionId}</h4>
       {item.assetsExpireAt !== null && Date.parse(item.assetsExpireAt) <= now ? <p>Solution images expired. Refresh solutions to request access again.</p> : <>
-        {item.questionImageUrl ? <img src={item.questionImageUrl} alt={`Question ${item.questionId}`} /> : <p>Question image unavailable.</p>}
-        {item.solutionImageUrl ? <img src={item.solutionImageUrl} alt={`Solution ${item.questionId}`} /> : <p>Solution image unavailable.</p>}
+        {item.questionImageUrl ? <img src={toCdnAssetUrl(item.questionImageUrl)} alt={`Question ${item.questionId}`} /> : <p>Question image unavailable.</p>}
+        {item.solutionImageUrl ? <img src={toCdnAssetUrl(item.solutionImageUrl)} alt={`Solution ${item.questionId}`} /> : <p>Solution image unavailable.</p>}
       </>}
       <p>Correct Answer: {item.correctAnswer} · Student Response: {item.studentAnswer ?? "Unanswered"}</p>
-      {item.tutorialVideoLink ? <a href={item.tutorialVideoLink} target="_blank" rel="noreferrer">Video</a> : null}
-      {item.simulationLink ? <a href={item.simulationLink} target="_blank" rel="noreferrer">Simulation</a> : null}
+      {item.tutorialVideoLink ? <a href={safeBusinessUrl(item.tutorialVideoLink)} target="_blank" rel="noreferrer">Video</a> : null}
+      {item.simulationLink ? <a href={safeBusinessUrl(item.simulationLink)} target="_blank" rel="noreferrer">Simulation</a> : null}
     </article>)}
   </div>;
 }

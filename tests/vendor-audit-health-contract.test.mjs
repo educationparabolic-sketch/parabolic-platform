@@ -104,7 +104,7 @@ test("audit/health transport follows distinct canonical capability policy and de
     assert.deepEqual(module.exports.CAPABILITY_MATRIX[capability].allowedRoles, ["vendor"]);
     const handler = read(`functions/src/api/${file}.ts`);
     assert.ok(handler.includes(`vendorAuditHealthMiddlewares("${capability}"`));
-    assert.ok(handler.includes("verifyIdToken(token, true)"));
+    assert.ok(handler.includes("verifyCurrentAuthorityIdToken(token)"));
   }
   const indexes = JSON.parse(read("firestore.indexes.json"));
   const override = indexes.fieldOverrides.find((entry) =>

@@ -290,7 +290,7 @@ export class ExamRuntimeOwnership {
       if (this.state.reason === "refresh_unavailable") this.publish("active");
       return result;
     } catch (error) {
-      if ((error instanceof ApiClientError && (error.status === 401 || error.status === 403)) ||
+      if ((error instanceof ApiClientError && (error.status === 401 || error.status === 403 && (error.details as {reason?: unknown} | undefined)?.reason !== "app_check_denied")) ||
           ["ownership_lost", "invalid_owner", "entry_not_consumed", "ownership_upgrade_required"].includes(
             String(((error as ApiClientError).details as {reason?: unknown} | undefined)?.reason))) this.invalidate("ownership_lost");
       throw error;
@@ -321,7 +321,7 @@ export class ExamRuntimeOwnership {
       this.install(lease, this.renewSentAt); this.renewCommand = undefined; this.publish("active");
     } catch (error) {
       if (this.snapshot().phase === "closed") return;
-      const fatal = error instanceof ApiClientError && (error.status === 401 || error.status === 403 ||
+      const fatal = error instanceof ApiClientError && (error.status === 401 || error.status === 403 && (error.details as {reason?: unknown} | undefined)?.reason !== "app_check_denied" ||
         ["ownership_lost", "invalid_owner", "entry_not_consumed", "ownership_upgrade_required"].includes(
           String((error.details as {reason?: unknown} | undefined)?.reason)));
       if (!fatal && this.isCurrent()) {
@@ -367,7 +367,7 @@ export class ExamRuntimeOwnership {
       }
       return value;
     } catch (error) {
-      if ((error instanceof ApiClientError && (error.status === 401 || error.status === 403)) ||
+      if ((error instanceof ApiClientError && (error.status === 401 || error.status === 403 && (error.details as {reason?: unknown} | undefined)?.reason !== "app_check_denied")) ||
           ["ownership_lost", "invalid_owner", "entry_not_consumed", "ownership_upgrade_required", ...(path.endsWith("/integrity-events") || path.endsWith("/submit") ? [] : ["session_closed"])].includes(
             String(((error as ApiClientError).details as {reason?: unknown} | undefined)?.reason))) this.invalidate("ownership_lost");
       throw error;

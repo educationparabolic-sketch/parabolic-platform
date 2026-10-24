@@ -10,6 +10,8 @@ import {
 } from "./validate-deploy-target.mjs";
 
 export const FUNCTIONS_RUNTIME_KEYS = Object.freeze([
+  "APP_CHECK_MODE",
+  "APP_CHECK_ALLOWED_APP_IDS",
   "PROJECT_ID",
   "NODE_ENV",
   "APP_BASE_URL",

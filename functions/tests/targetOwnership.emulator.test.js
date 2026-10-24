@@ -51,7 +51,7 @@ async function createStudentIdentity(auth, label, claims) {
     licenseState: "active",
     licenseVersion: "bwm008-fixture-v1",
     role: "student",
-    studentId: `student_${label}`,
+    studentId: user.uid,
     ...claims,
   });
   return {
@@ -99,14 +99,13 @@ test(
         missingTenant.idToken,
         "inst_bwm_008_requested",
       );
-      assert.equal(missingResult.response.status, 403);
+      assert.equal(missingResult.response.status, 401);
       assert.equal(missingResult.body.success, false);
       // Current authority fails before launch intent can consume browser scope.
-      assert.equal(missingResult.body.error?.code, "LICENSE_RESTRICTED");
+      assert.equal(missingResult.body.error?.code, "UNAUTHORIZED");
       assert.equal(
         missingResult.body.error?.message,
-        "Current institute authority field \"token.instituteId\" " +
-          "is missing or invalid.",
+        "Current authentication authority is unavailable.",
       );
 
       await institute.set({status: "active", authorizationVersion: 1,

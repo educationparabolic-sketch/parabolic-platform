@@ -34,7 +34,9 @@ let studentEmail;
 let studentPassword;
 let studentUid;
 
-test.use({bypassCSP: true, launchOptions: {args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"]}});
+const bypassCSP = process.env.PARABOLIC_SECURITY_CSP_ENFORCED !== "1";
+
+test.use({bypassCSP, launchOptions: {args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"]}});
 
 async function signInWithPassword(email, password) {
   const response = await fetch(
@@ -267,7 +269,7 @@ test("fragment bootstrap enters v2 without URL/storage/telemetry credentials and
   ).get()).data());
   expect(persisted).not.toContain(command.nextOwnerProof);
   expect(persisted).not.toContain(launch.launchCredential);
-  const context = await browser.newContext({bypassCSP: true});
+  const context = await browser.newContext({bypassCSP});
   try {
     const rejected = await context.newPage();
     let authCalls = 0;
@@ -435,7 +437,7 @@ test("mounted ownership preserves activation, acknowledged/offline answers, rota
   expect(consumedSession.data().questionTimeMap[questionId].cumulativeTimeSpent)
     .toBe(consumedSession.data().answerMap[questionId].timeSpentSeconds);
 
-  const replayContext = await browser.newContext({bypassCSP: true});
+  const replayContext = await browser.newContext({bypassCSP});
   const replayPage = await replayContext.newPage();
   try {
     let replayAuthorization = "";
@@ -892,7 +894,7 @@ test("resilience answers reconstruct server state after stale/missing storage an
   test.setTimeout(180000);
   const isolated = await chromium.launch();
   try {
-    const context = await isolated.newContext({baseURL: examOrigin, bypassCSP: true});
+    const context = await isolated.newContext({baseURL: examOrigin, bypassCSP});
     const page = await context.newPage();
     await prepareOwnershipRun("resilience_storage");
     const launch = await issueLaunch(page), ref = sessionFor(launch);
@@ -1087,7 +1089,7 @@ test("mounted ownership fences cloned tabs, independent replay, renewal, release
   }
   expect(JSON.stringify((await sessionRef.get()).get("answerMap"))).toBe(before);
   expect((await sessionRef.get()).get("submissionLock")).toBe(false);
-  const outsider = await browser.newContext({bypassCSP: true});
+  const outsider = await browser.newContext({bypassCSP});
   try {
     const other = await outsider.newPage();
     const denied = entryResponseFor(other, "launch");
@@ -1192,7 +1194,7 @@ if (studentOrigin) {
     await expect(page.getByRole("heading", {name: "Entry Window Closed"})).not.toBeVisible();
     await expect(page.getByRole("heading", {name: "Entry Window Closed"})).toBeVisible({timeout: 25000});
     await returnToUnauthenticatedStudent(page, "Return to Student Portal");
-    const independent = await browser.newContext({bypassCSP: true});
+    const independent = await browser.newContext({bypassCSP});
     try {
       const deniedPage = await independent.newPage();
       const denied = entryResponseFor(deniedPage, "launch");
@@ -1463,7 +1465,7 @@ test("security matrix recovers an actual crashed renderer through browser reload
   // a developer browser. SystemInfo returns only this browser's child PIDs.
   const isolated = await chromium.launch();
   try {
-    const context = await isolated.newContext({baseURL: examOrigin, bypassCSP: true});
+    const context = await isolated.newContext({baseURL: examOrigin, bypassCSP});
     const page = await context.newPage();
     await prepareOwnershipRun("renderer_crash");
     const launch = await issueLaunch(page);
@@ -1653,7 +1655,7 @@ test("proctoring acceptance denies native camera permission and fences cancellat
   // video device in a separate browser without the auto-accept flag.
   const nativeBrowser = await chromium.launch({channel: "chromium", args: ["--use-fake-device-for-media-stream"]});
   try {
-    const context = await nativeBrowser.newContext({baseURL: examOrigin, bypassCSP: true});
+    const context = await nativeBrowser.newContext({baseURL: examOrigin, bypassCSP});
     const page = await context.newPage();
     await instrumentProctoring(page.context());
     await enteredCameraRun(page, "permission_lifetime");
@@ -1900,7 +1902,7 @@ test("resilience terminal reload shows termination without submission metrics or
 test("resilience acceptance restores accepted answers through corrupt foreign legacy aborted slow and blocked native storage", async ({browser}) => {
   test.setTimeout(300000);
   for (const mode of ["corrupt", "foreign", "legacy", "abort", "slow", "blocked"]) {
-    const context = await browser.newContext({baseURL: examOrigin, bypassCSP: true});
+    const context = await browser.newContext({baseURL: examOrigin, bypassCSP});
     const page = await context.newPage();
     try {
       await prepareOwnershipRun(`acceptance_storage_${mode}`);
@@ -2013,7 +2015,7 @@ test("resilience acceptance excludes real hidden-tab dwell and reconciles foregr
   const nativeBrowser = await chromium.launch({headless: false,
     args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"]});
   try {
-  const context = await nativeBrowser.newContext({baseURL: examOrigin, bypassCSP: true});
+  const context = await nativeBrowser.newContext({baseURL: examOrigin, bypassCSP});
   const page = await context.newPage();
   await prepareOwnershipRun("acceptance_visibility");
   const launch = await issueLaunch(page), ref = sessionFor(launch);

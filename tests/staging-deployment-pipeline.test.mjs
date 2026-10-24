@@ -15,6 +15,9 @@ const workflowPath = fileURLToPath(
 
 function createStagingEnvironment() {
   return {
+    APP_CHECK_MODE: "pending_provisioning",
+    VITE_APP_CHECK_MODE: "pending_provisioning",
+    APP_CHECK_ALLOWED_APP_IDS: "1:123456789012:web:staging",
     PARABOLIC_DEPLOY_BRANCH: "staging",
     PARABOLIC_BUILD_ENVIRONMENT: "staging",
     FIREBASE_PROJECT_ID: "parabolic-dev",

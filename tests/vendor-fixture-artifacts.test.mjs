@@ -18,7 +18,7 @@ test("production Vendor artifacts exclude fixture authority even when fixture mo
   const directory = await mkdtemp(join(tmpdir(), "vendor-regression-artifacts-"));
   try {
     for (const dataMode of ["live", "fixture"]) {
-      const out = join(directory, dataMode), env = {...process.env, VITE_DATA_MODE: dataMode, VITE_API_BASE_URL: ""};
+      const out = join(directory, dataMode), env = {...process.env, NODE_ENV: "production", VITE_DATA_MODE: dataMode, VITE_API_BASE_URL: ""};
       delete env.NODE_TEST_CONTEXT;
       const result = spawnSync("node_modules/.bin/vite", ["build", "--mode", "production", "--outDir", out, "--emptyOutDir"],
         {cwd: join(root, "apps/vendor"), env, encoding: "utf8", timeout: 120000});

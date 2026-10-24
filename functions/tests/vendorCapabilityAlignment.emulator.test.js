@@ -65,21 +65,22 @@ test("all 41 live Vendor routes reject stale/contradictory current identity; exp
       {...originalClaims, isSuspended: true}, {...originalClaims, suspended: true},
     ]) {
       await auth.setCustomUserClaims(uid, claims);
+      const expectedStatus = claims.isSuspended === true || claims.suspended === true ? 403 : 401;
       for (const route of routes) {
         const response = await call(`apiV1${materialize(route.canonicalPath)}`, token, route.method, route.method === "GET" ? undefined : {actorId: "spoof", actorRole: "vendor", instituteId: b});
-        assert.equal(response.status, 403, `${route.id} must reject current ${JSON.stringify(claims)}`);
-        assert.equal(response.data.error.code, "FORBIDDEN");
+        assert.equal(response.status, expectedStatus, `${route.id} must reject current ${JSON.stringify(claims)}`);
+        assert.equal(response.data.error.code, expectedStatus === 403 ? "FORBIDDEN" : "UNAUTHORIZED");
       }
       for (const route of direct) {
         const response = await call(`${route.functionExport}${materialize(route.currentFrontendPath)}`, token, route.method, route.method === "GET" ? undefined : {});
-        assert.equal(response.status, 403, `${route.functionExport} direct current-identity denial`);
+        assert.equal(response.status, expectedStatus, `${route.functionExport} direct current-identity denial`);
       }
     }
     await auth.setCustomUserClaims(uid, originalClaims);
     await auth.updateUser(uid, {disabled: true});
     for (const path of ["/vendor/institutes", "/vendor/license-requests", "/vendor/support/tickets", "/vendor/calibration/versions", "/vendor/intelligence/readiness", "/vendor/audit-events", "/vendor/system-health"]) {
       const response = await call(`apiV1/api/v1${path}`, token);
-      assert.ok([401, 403].includes(response.status), `disabled current identity ${path}`);
+      assert.equal(response.status, 401, `disabled current identity ${path}`);
     }
     await auth.updateUser(uid, {disabled: false});
     assert.deepEqual((await db.doc(`institutes/${a}`).get()).data(), beforeA);
@@ -99,7 +100,7 @@ test("all 41 live Vendor routes reject stale/contradictory current identity; exp
     assert.equal(audit.docs[0].get("actorRole"), "vendor");
     await auth.setCustomUserClaims(uid, {...originalClaims, isVendor: false});
     const contradictoryToken = await login(email, password);
-    assert.equal((await call("apiV1/api/v1/vendor/institutes", contradictoryToken)).status, 403);
+    assert.equal((await call("apiV1/api/v1/vendor/institutes", contradictoryToken)).status, 401);
   } finally {
     const audit = await db.collection("vendorAuditLogs").where("instituteId", "==", a).limit(20).get();
     await Promise.all(audit.docs.map((doc) => doc.ref.delete()));
