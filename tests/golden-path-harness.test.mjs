@@ -19,17 +19,19 @@ test("golden-path command owns one exact local Firebase boundary", () => {
   );
   assert.equal(
     packageManifest.scripts["test:e2e:golden-path"],
-    "playwright test tests/e2e/golden-path.spec.mjs",
+    "node scripts/run-golden-path-browser.mjs",
   );
   assert.match(runnerSource, /firebase\.golden-path\.json/u);
   assert.match(runnerSource, /demo-parabolic-test/u);
   assert.match(runnerSource, /auth,firestore,functions,hosting/u);
   assert.match(runnerSource, /npm run test:e2e:golden-path/u);
+  for (const route of ["/admin", "/admin/**", "/student", "/student/**", "/session/**"]) assert.ok(firebaseConfig.hosting.rewrites.some(row => row.source === route));
   assert.deepEqual(firebaseConfig.emulators, {
     auth: { host: "127.0.0.1", port: 9099 },
     firestore: { host: "127.0.0.1", port: 8080 },
     functions: { host: "127.0.0.1", port: 5001 },
     hosting: { host: "127.0.0.1", port: 5000 },
+    storage: { host: "127.0.0.1", port: 9199 },
     singleProjectMode: true,
     ui: { enabled: false },
   });

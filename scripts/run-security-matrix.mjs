@@ -8,7 +8,7 @@ import {resolve, dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {SECURITY_MATRIX, SECURITY_PHASES} from './security-matrix-contract.mjs';
 export const ARTIFACT_ROOTS = ['apps/admin/dist','apps/student/dist','apps/exam/dist','apps/vendor/dist','.firebase/hosting/portal'];
-export async function artifactHashes(root) {
+export async function artifactHashes(root, roots = ARTIFACT_ROOTS) {
   const hashes = {};
   async function visit(relative) {
     if (!existsSync(resolve(root, relative))) return;
@@ -17,21 +17,21 @@ export async function artifactHashes(root) {
     if (stat.isDirectory()) for (const name of (await readdir(resolve(root,relative))).sort()) await visit(`${relative}/${name}`);
     else hashes[relative] = createHash('sha256').update(readFileSync(resolve(root,relative))).digest('hex');
   }
-  for (const path of ARTIFACT_ROOTS) await visit(path);
+  for (const path of roots) await visit(path);
   return hashes;
 }
-export async function withRestoredArtifacts(root, operation) {
-  const initial = await artifactHashes(root), backup = await mkdtemp(join(tmpdir(),'bwm047-matrix-'));
-  const present = ARTIFACT_ROOTS.filter(path => existsSync(resolve(root,path)));
+export async function withRestoredArtifacts(root, operation, roots = ARTIFACT_ROOTS) {
+  const initial = await artifactHashes(root, roots), backup = await mkdtemp(join(tmpdir(),'bwm047-matrix-'));
+  const present = roots.filter(path => existsSync(resolve(root,path)));
   try {
     for (const path of present) {await mkdir(dirname(resolve(backup,path)),{recursive:true});await cp(resolve(root,path),resolve(backup,path),{recursive:true});}
     try {return await operation();}
     finally {
-      for (const path of ARTIFACT_ROOTS) {
+      for (const path of roots) {
         await rm(resolve(root,path),{recursive:true,force:true});
         if (present.includes(path)) {await mkdir(dirname(resolve(root,path)),{recursive:true});await cp(resolve(backup,path),resolve(root,path),{recursive:true});}
       }
-      assert.deepEqual(await artifactHashes(root), initial, 'Artifact restoration failed');
+      assert.deepEqual(await artifactHashes(root, roots), initial, 'Artifact restoration failed');
     }
   } finally {await rm(backup,{recursive:true,force:true});}
 }

@@ -26,6 +26,7 @@ const selectedSourceSuites = [
   "adminSettingsApi.test",
   "adminSupportApi.test",
   "adminStudentMutationsApi.test",
+  "adminStudentsApi.test",
   "adminStudentsBulkApi.test",
   "adminTestsApi.test",
   "apiErrorHandling.test",
@@ -73,10 +74,6 @@ const selectedSourceSuites = [
 ];
 
 const baselineExclusions = new Map([
-  [
-    "adminStudentsApi.test",
-    "existing validation assertion expects 400 but middleware currently returns 403",
-  ],
   [
     "endpointTestingFramework.test",
     "existing endpoint framework baseline is 55 passing and 13 failing subtests",

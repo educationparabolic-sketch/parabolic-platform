@@ -582,7 +582,7 @@ test(
         prompt: `Authoritative prompt ${index + 1}`,
         questionId: questionIds[index],
         questionImageUrl: `${instituteId}/questions/${questionIds[index]}/v1/question-r1.png`,
-        questionType: "MCQ",
+        questionType: index === 0 ? "single_correct" : "MCQ",
         solutionImageUrl: `${instituteId}/questions/${questionIds[index]}/v1/solution-r1.png`,
         subject: index === 0 ? "Physics" : "Mathematics",
       })));
@@ -639,6 +639,7 @@ test(
       ).map((question) => question.id);
       assert.deepEqual(runtimeQuestionIds, Object.keys(sessionData?.questionTimeMap));
       assert.equal(sessionData?.runtimeSnapshot.questionSetVersion, String(index + 1));
+      assert.equal(sessionData?.runtimeSnapshot.questions[0].type, "mcq");
       const serializedRuntime = JSON.stringify(sessionData?.runtimeSnapshot);
       assert.doesNotMatch(
         serializedRuntime,

@@ -1746,3 +1746,7 @@ App Check remains explicit staging pending_provisioning, with genuine provider,
 proxy/edge/load/TTL/infra gates owned by BWM-052/054/056 and monitoring transport
 by BWM-051. Preserve BWM-049 exclusions and DEC-102/BWM-053 prerequisites;
 production NO_GO. Earlier pending statements are historical checkpoints.
+
+#### Exam entry question-image delivery (BWM-048-G / DEC-143)
+
+After existing identity, tenant, session and runtime-owner authorization succeeds, launch/recovery entry responses project frozen canonical question image paths to fresh signed HTTPS CDN URLs using the existing `examSession` signing context. Persisted runtime snapshots keep immutable paths; entry does not reread the mutable question bank or return solution pointers. Present images must match the authorized institute and frozen question ID, positive content/asset revisions and question-image kind. Missing signing configuration or malformed/foreign/legacy paths fail closed. Text-only questions keep an empty image URL. Frontend managed URL validation remains strict. Local TLS/DNS and test signing keys qualify emulator byte delivery only, not deployed CDN/IAM or legacy migration.

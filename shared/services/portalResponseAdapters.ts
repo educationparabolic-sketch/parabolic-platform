@@ -332,7 +332,6 @@ export function adaptAdminOverviewResult<TSnapshot>(value: unknown): TSnapshot {
     [
       "activeConcurrentSessions",
       "activeStudents",
-      "billingCount",
       "lastTestCompletionRatePercent",
       "testsConducted",
       "testsScheduled",
@@ -340,6 +339,7 @@ export function adaptAdminOverviewResult<TSnapshot>(value: unknown): TSnapshot {
     route,
     "operationalSnapshot",
   );
+  readNullableNumber(operational.billingCount, route, "operationalSnapshot.billingCount");
 
   const activity = readRecord(data.currentActivity, route, "currentActivity");
   validateNumberFields(
@@ -479,17 +479,9 @@ export function adaptAdminOverviewResult<TSnapshot>(value: unknown): TSnapshot {
   );
 
   const system = readRecord(data.systemHealthAndLicensing, route, "systemHealthAndLicensing");
-  validateNumberFields(
-    system,
-    [
-      "activeStudentCount",
-      "eligibilityL1Percentage",
-      "eligibilityL2Percentage",
-      "peakConcurrencyThisMonth",
-    ],
-    route,
-    "systemHealthAndLicensing",
-  );
+  for (const field of ["eligibilityL1Percentage", "eligibilityL2Percentage", "activeStudentCount", "peakConcurrencyThisMonth"]) {
+    readNullableNumber(system[field], route, `systemHealthAndLicensing.${field}`);
+  }
   validateStringFields(
     system,
     [

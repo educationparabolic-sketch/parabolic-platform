@@ -29,6 +29,25 @@ const rejected = (code: string) => (error: unknown) => {
   return true;
 };
 
+test("upcoming dashboard rows expose only the closed DTO for the own scheduled run", async () => {
+  const source = (await f.run.get()).data();
+  const start = Timestamp.fromMillis(Date.now() + 60_000);
+  const end = Timestamp.fromMillis(start.toMillis() + 30 * 60_000);
+  const own = f.year.collection("runs").doc("own-scheduled");
+  await own.set({...source, runId: own.id, status: "scheduled", startWindow: start, endWindow: end});
+  await f.year.collection("runs").doc("other-scheduled").set({...source,
+    runId: "other-scheduled", recipientStudentIds: ["another-student"],
+    status: "scheduled", startWindow: start, endWindow: end});
+  const before = (await own.get()).data();
+  const result = await service.getDashboard(f.token);
+  assert.deepEqual(result.upcomingTests, [{runId: own.id, testName: f.summary.testName,
+    mode: "Operational", startAt: start.toDate().toISOString(), endAt: end.toDate().toISOString(),
+    durationMinutes: 30}]);
+  assert.deepEqual((await own.get()).data(), before);
+  await own.update({testId: FieldValue.delete()});
+  await assert.rejects(service.getDashboard(f.token), rejected("CONFLICT"));
+});
+
 test("real own-Student reconciliation preserves authoritative answers and terminal state without writes", async () => {
   const own = await seedStudentSolutionsFixture("resilience");
   const auth = getFirebaseAdminApp().auth();

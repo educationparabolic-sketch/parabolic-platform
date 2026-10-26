@@ -71,5 +71,12 @@ test("backend CI gates deploy on Functions lint, build, and deterministic tests"
 
   assert.match(runner, /--test-concurrency=1/u);
   assert.match(runner, /source suite inventory changed/u);
+  const exclusionStart = runner.indexOf("const baselineExclusions");
+  const exclusionEnd = runner.indexOf("const selectedExternalSuites");
+  assert.ok(exclusionStart > 0 && exclusionEnd > exclusionStart);
+  assert.ok(runner.slice(0, exclusionStart).includes('"adminStudentsApi.test"'),
+    "the repaired Admin student handler suite must run in mandatory CI");
+  assert.ok(!runner.slice(exclusionStart, exclusionEnd).includes('"adminStudentsApi.test"'),
+    "the repaired Admin student handler suite must not remain excluded");
   assert.match(runner, /existing endpoint framework baseline is 55 passing and 13 failing/u);
 });

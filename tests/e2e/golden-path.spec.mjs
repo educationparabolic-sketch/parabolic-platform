@@ -1,3 +1,7 @@
+import {createHash} from "node:crypto";
+import {readFile, mkdir, writeFile} from "node:fs/promises";
+import {join} from "node:path";
+import {calibrationConsumerFixture} from "./calibration-consumer-fixture.mjs";
 import { createRequire } from "node:module";
 import { expect, test } from "playwright/test";
 
@@ -14,15 +18,18 @@ const {
 const projectId = "demo-parabolic-test";
 const instituteId = "inst_bwm_025_golden_path";
 const otherInstituteId = "inst_bwm_025_other";
+const l0InstituteId = `${instituteId}_l0`;
 const yearId = "2026";
-const questionId = "question-bwm-025-golden-path";
-const studentId = "student-bwm-025-golden-path";
-const suspendedStudentId = "student-bwm-025-suspended";
+const pricingPlanId = "L2-BWM025-GOLDEN";
+let questionId;
+let studentId = "student-bwm-025-golden-path";
+let suspendedStudentId = "student-bwm-025-suspended";
 const l0StudentId = "student-bwm-025-l0";
 const templateName = "BWM-025 Golden Path Draft";
 const editedTemplateName = "BWM-025 Golden Path Assessment";
 const authHost = process.env.FIREBASE_AUTH_EMULATOR_HOST;
 const identities = {
+  admin: {email: "bwm-025-admin@example.test", password: "bwm-025-admin-password"},
   l0: {
     email: "bwm-025-l0@example.test",
     password: "bwm-025-l0-password",
@@ -43,8 +50,13 @@ const identities = {
 
 let adminApp;
 let firestore;
+let storageBucket;
+const featureFlags = {adaptivePhase: false, controlledMode: true, hardMode: false, riskOverview: true, governanceAccess: false};
+const license = {licenseVersion: "license-bwm-025", licenseState: "active", expiryDate: "2099-12-31T23:59:59.000Z", gracePeriodEndsAt: null, featureFlags};
 
-test.use({ bypassCSP: true });
+test.use({bypassCSP: true, ignoreHTTPSErrors: true, launchOptions: {args: [
+  "--no-proxy-server", "--host-resolver-rules=MAP golden-cdn.test.invalid:443 127.0.0.1:9443",
+]}});
 
 function timingProfile() {
   return {
@@ -57,7 +69,7 @@ function timingProfile() {
 function templateBody(name, canonicalId) {
   return {
     canonicalId,
-    difficultyDistribution: { easy: 1, hard: 0, medium: 0 },
+    difficultyDistribution: { easy: 0, hard: 0, medium: 1 },
     examType: "JEEMains",
     questionIds: [questionId],
     selectionMethod: "manual",
@@ -67,29 +79,8 @@ function templateBody(name, canonicalId) {
   };
 }
 
-function questionBody(targetInstituteId = instituteId) {
-  return {
-    commit: true,
-    instituteId: targetInstituteId,
-    questions: [
-      {
-        chapter: "Kinematics",
-        correctAnswer: "A",
-        difficulty: "Easy",
-        examType: "JEEMains",
-        marks: 4,
-        negativeMarks: 1,
-        questionId,
-        questionTextKeywords: ["golden", "path", "motion"],
-        questionType: "MCQ",
-        status: "active",
-        subject: "Physics",
-        tags: ["motion", "kinematics"],
-        uniqueKey: "bwm-025-golden-path-question",
-        version: 1,
-      },
-    ],
-  };
+function questionBody() {
+  return { contentBase64: "aW52YWxpZA==", examType: "JEEMains", subject: "Physics", fileName: "golden-path.zip", idempotencyKey: "bwm-025-question-package"};
 }
 
 async function signIn(request, identity) {
@@ -135,7 +126,10 @@ async function cleanupNamespace() {
     return;
   }
   await firestore.recursiveDelete(firestore.collection("institutes").doc(instituteId));
+  await firestore.recursiveDelete(firestore.collection("institutes").doc(l0InstituteId));
   await deleteRootJobs();
+  if (storageBucket) {const [files] = await storageBucket.getFiles({prefix: `${instituteId}/`}); await Promise.all(files.map(file => file.delete({ignoreNotFound: true})));}
+  await firestore.doc(`vendorConfig/pricingPlans/pricingPlans/${pricingPlanId}`).delete();
   const auth = getAuth(adminApp);
   await Promise.all(
     Object.values(identities).map((identity) => deleteIdentityIfPresent(auth, identity.email)),
@@ -160,7 +154,8 @@ function trackExternalRequests(context, target) {
     if (
       (url.protocol === "http:" || url.protocol === "https:") &&
       url.hostname !== "127.0.0.1" &&
-      url.hostname !== "localhost"
+      url.hostname !== "localhost" &&
+      url.hostname !== "golden-cdn.test.invalid"
     ) {
       target.push(url.origin);
     }
@@ -171,30 +166,38 @@ test.beforeAll(async () => {
   test.setTimeout(180_000);
   expect(authHost).toBeTruthy();
   expect(process.env.FIRESTORE_EMULATOR_HOST).toBeTruthy();
-  adminApp = initializeApp({ projectId }, `bwm-025-golden-${Date.now()}`);
+  expect(process.env.FIREBASE_STORAGE_EMULATOR_HOST).toBeTruthy();
+  adminApp = initializeApp({ projectId, storageBucket: `${projectId}.appspot.com` }, `bwm-025-golden-${Date.now()}`);
   firestore = getFirestore(adminApp);
+  storageBucket = require("../../functions/node_modules/firebase-admin/lib/storage/index.js").getStorage(adminApp).bucket();
   await cleanupNamespace();
 
   const auth = getAuth(adminApp);
-  const [teacher, student, suspended, l0] = await Promise.all([
+  const [teacher, student, suspended, l0, administrator] = await Promise.all([
     auth.createUser(identities.teacher),
     auth.createUser(identities.student),
     auth.createUser(identities.suspended),
     auth.createUser(identities.l0),
+    auth.createUser(identities.admin),
   ]);
+  studentId = student.uid; suspendedStudentId = suspended.uid;
   await Promise.all([
+    auth.setCustomUserClaims(administrator.uid, {...license, authorizationVersion: 1, instituteId, licenseLayer: "L2", role: "admin"}),
     auth.setCustomUserClaims(teacher.uid, {
+      ...license, authorizationVersion: 1,
       instituteId,
       licenseLayer: "L2",
       role: "teacher",
     }),
     auth.setCustomUserClaims(student.uid, {
+      ...license, authorizationVersion: 1,
       instituteId,
       licenseLayer: "L2",
       role: "student",
       studentId,
     }),
     auth.setCustomUserClaims(suspended.uid, {
+      ...license, authorizationVersion: 1,
       instituteId,
       isSuspended: true,
       licenseLayer: "L1",
@@ -202,21 +205,35 @@ test.beforeAll(async () => {
       studentId: suspendedStudentId,
     }),
     auth.setCustomUserClaims(l0.uid, {
-      instituteId,
+      ...license, licenseVersion: "license-bwm-025-l0", featureFlags: Object.fromEntries(Object.keys(featureFlags).map(key => [key, false])), authorizationVersion: 1,
+      instituteId: l0InstituteId,
       licenseLayer: "L0",
       role: "student",
-      studentId: l0StudentId,
+      studentId: l0.uid,
     }),
   ]);
 
+  const low = firestore.collection("institutes").doc(l0InstituteId);
+  const lowLicense = {...license, licenseVersion: "license-bwm-025-l0", currentLayer: "L0", activeStudentLimit: 100, concurrentSessionLimit: 20,
+    featureFlags: Object.fromEntries(Object.keys(featureFlags).map(key => [key, false]))};
+  await Promise.all([low.set({status: "active", authorizationVersion: 1, licenseVersion: lowLicense.licenseVersion}),
+    low.collection("license").doc("current").set(lowLicense), low.collection("license").doc("main").set(lowLicense),
+    low.collection("academicYears").doc(yearId).set({status: "Active"}),
+    low.collection("students").doc(l0.uid).set({studentId: l0.uid, fullName: "L0 Student", email: identities.l0.email, status: "active"})]);
   const institute = firestore.collection("institutes").doc(instituteId);
   await Promise.all([
+    institute.collection("calibration").doc("cal-bwm-025").set(calibrationConsumerFixture("cal-bwm-025")),
+    firestore.doc(`vendorConfig/pricingPlans/pricingPlans/${pricingPlanId}`).set({planId: pricingPlanId, layer: "L2", name: "Golden L2", studentLimit: 100, concurrencyLimit: 20, currency: "inr", basePriceMonthly: 100, pricePerStudent: 1, featureFlags}),
     institute.set({
+      instituteName: "BWM-025 Golden Path Institute", primaryAdminUserId: administrator.uid,
+      securitySettings: {allowMultipleAdminSessions: false, forceLogoutOnPasswordChange: true, sessionTimeoutDuration: 30},
+      instituteId, status: "active", authorizationVersion: 1, licenseVersion: license.licenseVersion,
+      settingsRevision: 0, settingsUsers: {[administrator.uid]: {displayName: "Golden Administrator", email: identities.admin.email, role: "admin", status: "active", updatedAt: new Date().toISOString()}, [teacher.uid]: {displayName: "Golden Teacher", email: identities.teacher.email, role: "teacher", status: "active", updatedAt: new Date().toISOString()}},
       calibrationVersion: "cal-bwm-025",
-      profile: { instituteName: "BWM-025 Golden Path Institute" },
+      profile: {instituteName: "BWM-025 Golden Path Institute", academicYearFormat: "YYYY-YY", contactEmail: "golden@example.test", contactPhone: "+1-555-0250", defaultExamType: "JEEMains", logoReference: "logos/golden.png", timeZone: "Asia/Kolkata"},
     }),
     institute.collection("academicYears").doc(yearId).set({
-      label: yearId,
+      label: yearId, academicYearLabel: "2026-27", runCount: 0, studentCount: 3,
       locked: false,
       status: "Active",
     }),
@@ -224,14 +241,16 @@ test.beforeAll(async () => {
       .collection("license")
       .doc("main")
       .set({
+        ...license, activeStudentLimit: 100, concurrentSessionLimit: 20,
         currentLayer: "L2",
         eligibilityFlags: { l1Eligible: true, l2Eligible: true },
-        featureFlags: { controlledMode: true, hardMode: false },
+        featureFlags,
       }),
     institute
       .collection("license")
       .doc("current")
       .set({
+        ...license, concurrentSessionLimit: 20, concurrencyLimit: 20, planId: pricingPlanId, billingCycle: "annual", externalActions: [],
         activeStudentCount: 3,
         activeStudentLimit: 100,
         currentLayer: "L2",
@@ -246,7 +265,7 @@ test.beforeAll(async () => {
         batchId: "batch-bwm-025",
         batchName: "BWM-025 Batch",
         email,
-        name,
+        name, fullName: name, version: 1,
         status: "active",
         studentId: id,
       }),
@@ -300,16 +319,18 @@ test("complete Admin to analytics golden path and all required negatives", async
   expect(unauthenticated.status()).toBe(401);
   expect((await unauthenticated.json()).error.code).toBe("UNAUTHORIZED");
 
-  const wrongRole = await request.post("/api/v1/admin/questions/bulk", {
+  const wrongRole = await request.post("/api/v1/admin/questions/packages/validate", {
     data: questionBody(),
     headers: { Authorization: `Bearer ${studentToken}` },
   });
   expect(wrongRole.status()).toBe(403);
   expect((await wrongRole.json()).error.code).toBe("FORBIDDEN");
 
-  const wrongTenant = await request.post("/api/v1/admin/questions/bulk", {
-    data: questionBody(otherInstituteId),
-    headers: { Authorization: `Bearer ${teacherToken}` },
+  // Package tenancy comes exclusively from identity; exercise the explicit
+  // tenant boundary on the protected answer route instead of an ignored field.
+  const wrongTenant = await request.post("/api/v1/exam/session/foreign-session/answers", {
+    data: {instituteId: otherInstituteId},
+    headers: { Authorization: `Bearer ${studentToken}` },
   });
   expect(wrongTenant.status()).toBe(403);
   expect((await wrongTenant.json()).error.code).toBe("TENANT_MISMATCH");
@@ -324,7 +345,7 @@ test("complete Admin to analytics golden path and all required negatives", async
     headers: { Authorization: `Bearer ${l0Token}` },
   });
   expect(insufficientLicense.status()).toBe(403);
-  expect((await insufficientLicense.json()).error.message).toContain("L1 or higher");
+  expect((await insufficientLicense.json()).error.message).toContain("Current license does not permit Student insights");
 
   const overviewResponsePromise = page.waitForResponse(
     (response) =>
@@ -332,7 +353,7 @@ test("complete Admin to analytics golden path and all required negatives", async
     { timeout: 90_000 },
   );
   await page.addInitScript(() => {
-    window.history.replaceState(null, "", "/admin/overview");
+    if (window.location.pathname === "/admin/index.html") window.history.replaceState(null, "", "/admin/overview");
   });
   await page.goto("/admin/index.html", { waitUntil: "domcontentloaded" });
   await page.getByLabel("Email", { exact: true }).fill(identities.teacher.email);
@@ -343,15 +364,37 @@ test("complete Admin to analytics golden path and all required negatives", async
     timeout: 30_000,
   });
 
-  const questionResponse = await request.post("/api/v1/admin/questions/bulk", {
-    data: questionBody(),
-    headers: { Authorization: `Bearer ${teacherToken}` },
+  // Use the real managed-package producer; the retired JSON bulk route is not authority.
+  const retired = await request.post("/api/v1/admin/questions/bulk", {headers: {Authorization: `Bearer ${teacherToken}`}, data: {}});
+  expect(retired.status()).toBe(404);
+  await page.goto("/admin/question-bank/upload-package", {waitUntil: "domcontentloaded"});
+  await expect(page.getByRole("button", {name: "Download Sample ZIP"})).toBeVisible({timeout: 30_000});
+  const downloadPromise = page.waitForEvent("download", {timeout: 30_000});
+  await page.getByRole("button", {name: "Download Sample ZIP"}).click();
+  const packageBytes = await readFile(await (await downloadPromise).path());
+  const questionResponse = await request.post("/api/v1/admin/questions/packages/validate", {
+    data: {...questionBody(), contentBase64: packageBytes.toString("base64")}, headers: {Authorization: `Bearer ${teacherToken}`},
   });
-  expect(questionResponse.status()).toBe(200);
-  const questionEnvelope = await questionResponse.json();
-  expect(questionEnvelope.data.committed).toBe(true);
-  expect(questionEnvelope.data.summary.created).toBe(1);
-  expect(questionEnvelope.data.rows[0]).toMatchObject({ questionId, version: 1 });
+  const validationEnvelope = await questionResponse.json();
+  expect(questionResponse.status(), JSON.stringify(validationEnvelope)).toBe(200);
+  questionId = validationEnvelope.data.rows[0].questionId;
+  const committed = await request.post(`/api/v1/admin/questions/packages/${validationEnvelope.data.packageId}/commit`, {
+    headers: {Authorization: `Bearer ${teacherToken}`}, data: {expectedPackageRevision: 1, idempotencyKey: "bwm-025-package-commit"},
+  });
+  const questionEnvelope = await committed.json();
+  expect(committed.status(), JSON.stringify(questionEnvelope)).toBe(200);
+  expect(questionEnvelope.data.state).toBe("committed");
+  expect(questionEnvelope.data.questions[0].questionId).toBe(questionId);
+  // The local TLS edge serves these exact committed and hash-checked Storage bytes.
+  const [assets] = await storageBucket.getFiles({prefix: `${instituteId}/questions/${questionId}/`});
+  expect(assets).toHaveLength(2);
+  for (const asset of assets) {
+    const target = join(process.cwd(), ".firebase/hosting/golden-path/question-assets", asset.name);
+    const [bytes] = await asset.download();
+    const [metadata] = await asset.getMetadata();
+    expect(createHash("sha256").update(bytes).digest("hex")).toBe(metadata.metadata.contentSha256);
+    await mkdir(join(target, ".."), {recursive: true}); await writeFile(target, bytes);
+  }
 
   const createTemplateResponse = await request.post("/api/v1/admin/tests", {
     data: templateBody(templateName, "bwm-025-golden-canonical-v1"),
@@ -373,7 +416,7 @@ test("complete Admin to analytics golden path and all required negatives", async
       mode: "Operational",
       proctoringPolicy: {
         browserIntegrityGuardEnabled: false,
-        faceIdentityGazeGuardEnabled: false,
+        contractVersion: 1, cameraReadiness: "off",
       },
       recipientStudentIds: [studentId],
       shuffleQuestionOrder: false,
@@ -405,7 +448,8 @@ test("complete Admin to analytics golden path and all required negatives", async
   const publishResult = (await publishResponse.json()).data;
   expect(publishResult.template.status).toBe("ready");
 
-  const startWindow = new Date(Date.now() + 60_000);
+  // Allow cold emulator workers to finish Student login before the scheduled start.
+  const startWindow = new Date(Date.now() + 180_000);
   const runRequest = {
     academicYear: yearId,
     attemptLimit: 1,
@@ -416,7 +460,7 @@ test("complete Admin to analytics golden path and all required negatives", async
     mode: "Operational",
     proctoringPolicy: {
       browserIntegrityGuardEnabled: false,
-      faceIdentityGazeGuardEnabled: false,
+      contractVersion: 1, cameraReadiness: "off",
     },
     recipientStudentIds: [studentId],
     shuffleQuestionOrder: false,
@@ -428,8 +472,9 @@ test("complete Admin to analytics golden path and all required negatives", async
     data: runRequest,
     headers: { Authorization: `Bearer ${teacherToken}` },
   });
-  expect(runResponse.status()).toBe(201);
-  const createdRun = (await runResponse.json()).data.run;
+  const runEnvelope = await runResponse.json();
+  expect(runResponse.status(), JSON.stringify(runEnvelope)).toBe(201);
+  const createdRun = runEnvelope.data.run;
   const runId = createdRun.id;
   const runPath = `institutes/${instituteId}/academicYears/${yearId}/runs/${runId}`;
   const runAnalyticsPath = `institutes/${instituteId}/academicYears/${yearId}/runAnalytics/${runId}`;
@@ -439,7 +484,15 @@ test("complete Admin to analytics golden path and all required negatives", async
     "run analytics initialization",
   );
 
-  const studentContext = await browser.newContext({ bypassCSP: true });
+  // Warm the two real signed reads mounted together after Student login.
+  // This follows the existing Exam acceptance preflight; no response is mocked.
+  const studentPreflight = await Promise.all(["dashboard", "profile"].map(resource =>
+    request.get(`/api/v1/student/${resource}`, {
+      headers: {Authorization: `Bearer ${studentToken}`}, timeout: 90_000,
+    })));
+  for (const response of studentPreflight) expect(response.status()).toBe(200);
+
+  const studentContext = await browser.newContext({ bypassCSP: true, ignoreHTTPSErrors: true });
   trackExternalRequests(studentContext, externalRequests);
   const studentPage = await studentContext.newPage();
   let launchCredential;
@@ -464,6 +517,7 @@ test("complete Admin to analytics golden path and all required negatives", async
     await studentPage.getByLabel("Password", { exact: true }).fill(identities.student.password);
     await studentPage.getByRole("button", { name: "Login", exact: true }).click();
     const dashboardEnvelope = await (await dashboardResponsePromise).json();
+    expect(dashboardEnvelope.data.upcomingTests).toHaveLength(1);
     expect(dashboardEnvelope.data.upcomingTests[0].runId).toBe(runId);
     await expect(studentPage.getByText(editedTemplateName, { exact: true }).first()).toBeVisible({
       timeout: 30_000,
@@ -474,7 +528,7 @@ test("complete Admin to analytics golden path and all required negatives", async
         const url = new URL(response.url());
         return (
           url.pathname === "/api/v1/student/tests" &&
-          url.searchParams.get("status") === "scheduled" &&
+          url.searchParams.get("status") === "all" &&
           response.status() === 200
         );
       },
@@ -485,18 +539,19 @@ test("complete Admin to analytics golden path and all required negatives", async
       .getByRole("link", { name: /^My Tests\b/u })
       .click();
     const scheduledEnvelope = await (await scheduledResponsePromise).json();
-    expect(scheduledEnvelope.data.tests[0].runId).toBe(runId);
+    expect(scheduledEnvelope.data.page.items[0].runId).toBe(runId);
 
     await expect
-      .poll(() => Date.now(), { timeout: 90_000 })
+      .poll(() => Date.now(), { timeout: 210_000 })
       .toBeGreaterThanOrEqual(startWindow.getTime());
     const firstStart = await studentPage.request.post("/api/v1/exam/start", {
       data: { intent: "start", runId },
       headers: { Authorization: `Bearer ${studentToken}` },
       timeout: 90_000,
     });
-    expect(firstStart.status()).toBe(201);
-    const firstStartResult = (await firstStart.json()).data;
+    const firstStartEnvelope = await firstStart.json();
+    expect(firstStart.status(), JSON.stringify(firstStartEnvelope)).toBe(201);
+    const firstStartResult = firstStartEnvelope.data;
     const duplicateStart = await studentPage.request.post("/api/v1/exam/start", {
       data: { intent: "start", runId },
       headers: { Authorization: `Bearer ${studentToken}` },
@@ -523,7 +578,7 @@ test("complete Admin to analytics golden path and all required negatives", async
       timeout: 30_000,
     });
 
-    const replayContext = await browser.newContext({ bypassCSP: true });
+    const replayContext = await browser.newContext({ bypassCSP: true, ignoreHTTPSErrors: true });
     trackExternalRequests(replayContext, externalRequests);
     const replayPage = await replayContext.newPage();
     try {
@@ -548,15 +603,21 @@ test("complete Admin to analytics golden path and all required negatives", async
     await studentPage.getByRole("button", { name: "Continue to Instructions" }).click();
     await studentPage.getByLabel(/I have read and understood the instructions/u).check();
     expect((await activateResponsePromise).status()).toBe(200);
-    await expect(studentPage.getByText("Physics · Kinematics · MCQ", { exact: true })).toBeVisible({
+    await expect(studentPage.getByLabel("Current question context").getByText("Physics • Question 1", { exact: true })).toBeVisible({
       timeout: 30_000,
     });
 
+    await expect(studentPage.getByLabel("Current question context")).toContainText("Type MCQ");
+    const publishedImage = studentPage.getByRole("img", {name: "Question 1 prompt", exact: true});
+    await expect(publishedImage).toBeVisible();
+    await expect.poll(() => publishedImage.evaluate(image => image.complete && image.naturalWidth > 0)).toBe(true);
+
     const answerBodies = [];
-    let answerAuthorization = "";
+    let answerAuthorization = ""; let answerOwnerHeaders = {};
     studentPage.on("request", (browserRequest) => {
       if (new URL(browserRequest.url()).pathname.endsWith(`/session/${sessionId}/answers`)) {
         answerAuthorization = browserRequest.headers().authorization ?? "";
+        answerOwnerHeaders = {"X-Parabolic-Exam-Owner": browserRequest.headers()["x-parabolic-exam-owner"], "X-Parabolic-Exam-Generation": browserRequest.headers()["x-parabolic-exam-generation"]};
         answerBodies.push(browserRequest.postDataJSON());
       }
     });
@@ -612,17 +673,18 @@ test("complete Admin to analytics golden path and all required negatives", async
         flushReason: "reconnect",
         millisecondsSinceLastWrite: 0,
       },
-      headers: { Authorization: answerAuthorization },
+      headers: { Authorization: answerAuthorization, ...answerOwnerHeaders },
       timeout: 90_000,
     });
     expect(staleBatch.status()).toBe(200);
     expect((await staleBatch.json()).data.acknowledgements[0].disposition).toBe("ignored");
 
-    let submitAuthorization = "";
+    let submitAuthorization = ""; let submitOwnerHeaders = {};
     let submitBody;
     studentPage.on("request", (browserRequest) => {
       if (new URL(browserRequest.url()).pathname.endsWith(`/session/${sessionId}/submit`)) {
         submitAuthorization = browserRequest.headers().authorization ?? "";
+        submitOwnerHeaders = {"X-Parabolic-Exam-Owner": browserRequest.headers()["x-parabolic-exam-owner"], "X-Parabolic-Exam-Generation": browserRequest.headers()["x-parabolic-exam-generation"]};
         submitBody = browserRequest.postDataJSON();
       }
     });
@@ -646,7 +708,7 @@ test("complete Admin to analytics golden path and all required negatives", async
       `/api/v1/exam/session/${sessionId}/submit`,
       {
         data: submitBody,
-        headers: { Authorization: submitAuthorization },
+        headers: { Authorization: submitAuthorization, ...submitOwnerHeaders },
         timeout: 90_000,
       },
     );
@@ -687,7 +749,8 @@ test("complete Admin to analytics golden path and all required negatives", async
   const sessionSnapshot = await firestore.doc(`${runPath}/sessions/${sessionId}`).get();
   expect(sessionSnapshot.data().status).toBe("submitted");
   expect(sessionSnapshot.data().answerMap[questionId].response).toEqual({ kind: "unanswered" });
-  expect((await firestore.doc(questionEnvelope.data.uploadLogPath).get()).exists).toBe(true);
+  const uploadLogPath = `institutes/${instituteId}/questionUploadLogs/${questionEnvelope.data.uploadLogId}`;
+  expect((await firestore.doc(uploadLogPath).get()).exists).toBe(true);
   expect((await firestore.doc(publishResult.auditPath).get()).exists).toBe(true);
   expect(
     (
@@ -698,7 +761,7 @@ test("complete Admin to analytics golden path and all required negatives", async
   ).toBe(true);
   expect((await firestore.collection(`${runPath}/sessions`).get()).size).toBe(1);
 
-  const resultContext = await browser.newContext({ bypassCSP: true });
+  const resultContext = await browser.newContext({ bypassCSP: true, ignoreHTTPSErrors: true });
   trackExternalRequests(resultContext, externalRequests);
   const resultPage = await resultContext.newPage();
   try {
@@ -737,8 +800,9 @@ test("complete Admin to analytics golden path and all required negatives", async
       .getByRole("navigation", { name: "Student navigation" })
       .getByRole("link", { name: /^My Tests\b/u })
       .click();
+    await resultPage.getByRole("tab", {name: "Completed", exact: true}).click();
     const completedEnvelope = await (await completedResponsePromise).json();
-    expect(completedEnvelope.data.tests[0]).toMatchObject({ runId, sessionId });
+    expect(completedEnvelope.data.page.items[0]).toMatchObject({ runId, sessionId });
 
     const performancePromise = resultPage.waitForResponse(
       (response) =>
@@ -766,7 +830,7 @@ test("complete Admin to analytics golden path and all required negatives", async
     await resultContext.close();
   }
 
-  const adminResultContext = await browser.newContext({ bypassCSP: true });
+  const adminResultContext = await browser.newContext({ bypassCSP: true, ignoreHTTPSErrors: true });
   trackExternalRequests(adminResultContext, externalRequests);
   const adminResultPage = await adminResultContext.newPage();
   try {
@@ -776,7 +840,7 @@ test("complete Admin to analytics golden path and all required negatives", async
       { timeout: 90_000 },
     );
     await adminResultPage.addInitScript(() => {
-      window.history.replaceState(null, "", "/admin/overview");
+      if (window.location.pathname === "/admin/index.html") window.history.replaceState(null, "", "/admin/overview");
     });
     await adminResultPage.goto("/admin/index.html", {
       waitUntil: "domcontentloaded",

@@ -48,7 +48,11 @@ test("Exam production runtime consumes the authoritative sanitized entry snapsho
   assert.match(recovery, /runtime\.timingProfile\.maxTimeByDifficultySec/u);
   assert.match(source, /toExamSessionSchedule\(sessionSnapshot\)/u);
   assert.match(source, /sessionSnapshot\.proctoringPolicy/u);
-  assert.match(entryHandler, /runtimeSnapshot: result\.runtimeSnapshot/u);
+  assert.match(entryHandler, /runtimeSnapshot: projectExamRuntimeAssets\(\s*result\.runtimeSnapshot, result\.instituteId/u);
+  const assets = await readFile(new URL("../functions/src/services/examRuntimeAssets.ts", import.meta.url), "utf8");
+  assert.match(assets, /accessContext: "examSession"/u);
+  assert.match(assets, /question\.imageUrl\.startsWith\(prefix\)/u);
+  assert.doesNotMatch(assets, /getFirestore|collection\(|solutionImageUrl/u);
   assert.doesNotMatch(entryHandler, /licenseSnapshot: result\.licenseSnapshot/u);
   assert.doesNotMatch(entryHandler, /templateSnapshot: result\.templateSnapshot/u);
   assert.match(sessionService, /buildCandidateSafeRuntimeQuestion/u);

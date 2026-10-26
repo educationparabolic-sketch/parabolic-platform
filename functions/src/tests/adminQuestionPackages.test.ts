@@ -6,6 +6,7 @@ import {
   AdminQuestionPackagesService,
   PackageStorageAdapter,
 } from "../services/adminQuestionPackages";
+import {captureStudentSolutionSnapshot} from "../services/studentSolutionSnapshot";
 import {StorageObjectTarget} from "../types/storageBucketArchitecture";
 import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
 
@@ -277,11 +278,12 @@ function resolveTarget(input: {
   instituteId: string;
   questionId: string;
   version: number;
+  revision?: number;
 }): StorageObjectTarget {
   const extension = input.extension ?? "png";
   const name = input.assetKind === "questionImage" ? "question" : "solution";
   const objectPath = `${input.instituteId}/questions/${input.questionId}/` +
-    `v${input.version}/${name}.${extension}`;
+    `v${input.version}/${name}${input.revision ? `-r${input.revision}` : ""}.${extension}`;
   return {
     bucketKey: "questionAssets",
     bucketName: "memory",
@@ -458,8 +460,16 @@ test("commit preserves full schema, assets, audit, cleanup, and replay", async (
     assert.deepEqual(question.get("tags"), [
       "Kinematics", "Velocity", "Mechanics",
     ]);
-    assert.match(question.get("questionImageUrl"), /\/v1\/question\.png$/);
-    assert.match(question.get("solutionImageUrl"), /\/v1\/solution\.png$/);
+    assert.match(question.get("questionImageUrl"), /\/v1\/question-r1\.png$/);
+    assert.match(question.get("solutionImageUrl"), /\/v1\/solution-r1\.png$/);
+    assert.equal(question.get("questionImageRevision"), 1);
+    assert.equal(question.get("solutionImageRevision"), 1);
+    const captured = captureStudentSolutionSnapshot(
+      instituteId, "1", [questionId], [question],
+    );
+    assert.deepEqual(captured.questions[0].questionAsset, {version: 1, revision: 1, extension: "png"});
+    assert.deepEqual(captured.questions[0].solutionAsset, {version: 1, revision: 1, extension: "png"});
+    assert.equal(captured.questions[0].correctAnswer, "B");
     cleanupPaths.push(
       question.get("questionImageUrl"),
       question.get("solutionImageUrl"),
@@ -760,6 +770,66 @@ test("rollback asset cleanup failure is recoverable by exact retry", async () =>
     ).get()).size, 2);
     const replay = await service.rollbackPackage(rollbackRequest);
     assert.equal(replay.disposition, "replayed");
+  } finally {
+    await clearInstitute(instituteId);
+  }
+});
+
+test("concurrent package reservations cannot delete the winning package assets", async () => {
+  const instituteId = "inst-bwm-048-package-concurrent-assets";
+  const storage = new MemoryPackageStorage();
+  const service = memoryService(storage);
+  const reference = firestore.doc(`institutes/${instituteId}/questionBank/pkg-concurrent-v1`);
+  await clearInstitute(instituteId);
+  try {
+    const validations = await Promise.all(["first", "second"].map((key) =>
+      service.validatePackage(validateRequest(service, instituteId,
+        packageBytes([validRow("PKG-CONCURRENT")]), `validation-${key}`))));
+    const commits = validations.map((validation, index) => service.normalizeCommitRequest({
+      ...authority(instituteId), packageId: validation.packageId,
+      body: {expectedPackageRevision: 1, idempotencyKey: `commit-${index}`},
+    }));
+    const results = await Promise.allSettled(commits.map((request) => service.commitPackage(request)));
+    assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+    assert.equal(results.filter((result) => result.status === "rejected").length, 1);
+    const question = await reference.get();
+    const captured = captureStudentSolutionSnapshot(instituteId, "1", [reference.id], [question]);
+    assert.equal(captured.questions[0].questionAsset?.revision, question.get("questionImageRevision"));
+    assert.ok(storage.objects.has(question.get("questionImageUrl")));
+    assert.ok(storage.objects.has(question.get("solutionImageUrl")));
+    assert.equal([...storage.objects.keys()].filter((path) => path.includes("/questions/")).length, 2);
+
+    // A metadata-only reimport of a used question preserves actual immutable assets.
+    await reference.update({status: "used", usedCount: 1});
+    const row = validRow("PKG-CONCURRENT");
+    row[14] = "Updated reviewer note";
+    const validation = await service.validatePackage(validateRequest(service, instituteId,
+      packageBytes([row]), "metadata-validation"));
+    assert.equal(validation.state, "validated");
+    const request = service.normalizeCommitRequest({...authority(instituteId),
+      packageId: validation.packageId,
+      body: {expectedPackageRevision: 1, idempotencyKey: "metadata-commit"}});
+    await service.commitPackage(request);
+    const updated = await reference.get();
+    assert.equal(updated.get("questionImageUrl"), question.get("questionImageUrl"));
+    assert.equal(updated.get("solutionImageRevision"), question.get("solutionImageRevision"));
+    assert.equal(updated.get("revision"), 2);
+    assert.equal((await service.commitPackage(request)).disposition, "replayed");
+
+    const pending = await service.validatePackage(validateRequest(service, instituteId,
+      packageBytes([row]), "stale-validation"));
+    await reference.update({revision: 3});
+    await assert.rejects(service.commitPackage(service.normalizeCommitRequest({
+      ...authority(instituteId), packageId: pending.packageId,
+      body: {expectedPackageRevision: 1, idempotencyKey: "stale-commit"},
+    })), /revision changed after validation/);
+    assert.ok(storage.objects.has(question.get("questionImageUrl")));
+    const changed = [...row];
+    changed[9] = "A";
+    const denied = await service.validatePackage(validateRequest(service, instituteId,
+      packageBytes([changed]), "used-structure-validation"));
+    assert.equal(denied.state, "validation_failed");
+    assert.match(denied.rows[0].errors.join(" "), /Used question structure/);
   } finally {
     await clearInstitute(instituteId);
   }

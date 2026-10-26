@@ -45,6 +45,9 @@ function phaseEnvironment(extraEnvironment = {}) {
     METADATA_SERVER_DETECTION: "none",
     // Explicit disposable test key shared by Functions workers in this phase.
     VENDOR_AUDIT_CURSOR_KEY: randomBytes(32).toString("base64url"),
+    CDN_BASE_URL: "https://cdn.emulator.test.invalid/published",
+    CDN_SIGNED_URL_KEY_NAME: "bwm-048-local-only",
+    CDN_SIGNED_URL_KEY_VALUE: randomBytes(32).toString("base64url"),
     ...extraEnvironment,
   };
   if (!("FUNCTIONS_EMULATOR_HOST" in extraEnvironment)) {

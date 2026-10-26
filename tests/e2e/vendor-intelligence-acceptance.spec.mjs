@@ -1,9 +1,12 @@
 import { randomUUID } from "node:crypto";
+import {paceVendorExpensiveRequests, seedVendorDeniedIdentity} from "./vendor-denied-identity.mjs";
 import { createRequire } from "node:module";
-import { expect, test } from "playwright/test";
+import { expect as baseExpect, test } from "playwright/test";
+const expect = baseExpect.configure({timeout: 60000});
 
 const require = createRequire(import.meta.url);
 const { getFirebaseAdminApp, getFirestore } = require("../../functions/lib/utils/firebaseAdmin");
+const {SECURITY_LIMITS} = require("../../functions/lib/services/securityRateLimits");
 const { seedVendorIntelligenceReadFixtures, resetVendorIntelligenceReadFixtures } = require("../../functions/lib/tests/vendorIntelligenceReadFixtures");
 const routes = ["readiness", "revenue", "layer-distribution", "churn", "revenue-forecasting"];
 const prefix = "/api/v1/vendor/intelligence/";
@@ -44,7 +47,9 @@ test("Vendor intelligence exact values, persisted filters, fresh sessions, denia
   const responses = [];
   const bodies = [];
   let vendorToken;
+  let ownerUid, rateState;
   const watch = async (target) => {
+    await paceVendorExpensiveRequests(target, ownerUid, SECURITY_LIMITS.expensive, rateState);
     target.setDefaultTimeout(30_000);
     target.on("request", (req) => {
       if (/^https?:/u.test(req.url()) && !["127.0.0.1", "localhost"].includes(new URL(req.url()).hostname)) externalRequests.push(req.url());
@@ -61,12 +66,14 @@ test("Vendor intelligence exact values, persisted filters, fresh sessions, denia
     // Prevent remote calls, never replace an API success or failure response.
     await target.route("https://**/*", (route) => route.abort("failed"));
   };
+  const authorityCleanup = [];
   const makeAccount = async (role = "vendor", extra = {}) => {
     const email = `intelligence-acceptance-${role}-${randomUUID()}@example.test`;
     const password = "local-bwm037-acceptance-only";
     const user = await auth.createUser({ email, password });
     users.push(user.uid);
     await auth.setCustomUserClaims(user.uid, { role, isVendor: role === "vendor", licenseLayer: "L0", isSuspended: false, ...extra });
+    if (role !== "vendor") authorityCleanup.push(await seedVendorDeniedIdentity(auth, db, user, role));
     return { ...user, email, password };
   };
   const call = async (route, token = vendorToken, suffix = "?asOfMonth=2026-08&windowMonths=3") => {
@@ -84,10 +91,11 @@ test("Vendor intelligence exact values, persisted filters, fresh sessions, denia
     await db.doc(privateStudent).set({ name: "DO_NOT_EXPOSE_STUDENT", email: "private@example.test", answerMap: "SECRET_ANSWER" });
     await db.doc(privateSession).set({ answerMap: "SECRET_SESSION" });
     const account = await makeAccount();
+    ownerUid = account.uid; rateState = {sent: [], turn: Promise.resolve()};
     await watch(page);
     expect((await request.get(`${prefix}readiness`, { timeout: 90_000 })).status()).toBe(401);
     await signIn(page, account);
-    const intelligence = page.locator(".vendor-intelligence-page");
+    let intelligence = page.locator(".vendor-intelligence-page");
     await expect(intelligence.getByText("Complete intelligence authority", { exact: true })).toBeVisible({ timeout: 60_000 });
     await expect(card(intelligence, "Total Institutes")).toHaveText("3");
     await expect(card(intelligence, "Active Students")).toHaveText("180");
@@ -217,12 +225,23 @@ test("Vendor intelligence exact values, persisted filters, fresh sessions, denia
       { role: "vendor", isVendor: true, isSuspended: true, licenseLayer: "L0" },
     ]) {
       await auth.setCustomUserClaims(account.uid, claims);
-      for (const route of routes) expect((await call(route)).status).toBe(403);
+      for (const route of routes) expect((await call(route)).status).toBe(claims.isSuspended ? 403 : 401);
       await intelligence.getByRole("button", { name: "Refresh intelligence", exact: true }).click();
-      await expect(intelligence.getByRole("heading", { name: "Permission required" })).toBeVisible();
-      await expect(intelligence).not.toContainText("₹1,800.00");
+      if (claims.isSuspended) {
+        await expect(intelligence.getByRole("heading", { name: "Permission required" })).toBeVisible();
+        await expect(intelligence).not.toContainText("₹1,800.00");
+      }
+      else {
+        await expect(page.getByRole("heading", {name: "Vendor role required", exact: true})).toBeVisible({timeout: 60000});
+        await expect(intelligence).toHaveCount(0);
+      }
       await auth.setCustomUserClaims(account.uid, { role: "vendor", isVendor: true, isSuspended: false, licenseLayer: "L0" });
-      await intelligence.getByRole("button", { name: "Retry authoritative load" }).click();
+      if (claims.isSuspended) await intelligence.getByRole("button", { name: "Retry authoritative load" }).click();
+      else {
+        const freshContext = await browser.newContext({baseURL: "http://127.0.0.1:5000", bypassCSP: true}); contexts.push(freshContext);
+        await page.close(); page = await freshContext.newPage(); intelligence = page.locator(".vendor-intelligence-page");
+        await watch(page); await signIn(page, account);
+      }
       await expect(card(intelligence, "Monthly Recurring Revenue")).toHaveText("₹1,800.00");
     }
     for (const kind of ["disabled", "revoked"]) {
@@ -259,6 +278,7 @@ test("Vendor intelligence exact values, persisted filters, fresh sessions, denia
     expect(externalRequests).toEqual([]);
   } finally {
     await Promise.all(contexts.map((context) => context.close()));
+    await Promise.all(authorityCleanup.map(cleanup => cleanup()));
     await resetVendorIntelligenceReadFixtures();
     await db.recursiveDelete(db.doc(privateRoot));
     await Promise.all(users.map((uid) => auth.deleteUser(uid)));

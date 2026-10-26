@@ -25,6 +25,7 @@ function run(label, executable, args, extraEnvironment = {}) {
 }
 
 const buildEnvironment = {
+  VITE_CDN_BASE_URL: "https://golden-cdn.test.invalid/question-assets",
   VITE_API_BASE_URL: "",
   VITE_DATA_MODE: "live",
   VITE_EXAM_DEV_MOCK_ENTRY: "false",
@@ -62,7 +63,7 @@ const emulatorArgs = [
   "--project",
   projectId,
   "--only",
-  "auth,firestore,functions,hosting",
+  "auth,firestore,functions,hosting,storage",
   "npm run test:e2e:golden-path",
 ];
 
@@ -73,8 +74,12 @@ console.log(
 );
 run("Run complete no-mock Admin to analytics golden path", firebaseExecutable, emulatorArgs, {
   CI: "true",
+  QUESTION_ASSETS_BUCKET: `${projectId}.appspot.com`,
+  CDN_BASE_URL: "https://golden-cdn.test.invalid/question-assets",
+  CDN_SIGNED_URL_KEY_NAME: "bwm-025-local-only",
+  CDN_SIGNED_URL_KEY_VALUE: Buffer.from("bwm-025-local-test-key").toString("base64url"),
   EXAM_BASE_URL: hostingOrigin,
-  FUNCTIONS_DISCOVERY_TIMEOUT: "30",
+  FUNCTIONS_DISCOVERY_TIMEOUT: "120",
   NODE_ENV: "test",
   PARABOLIC_E2E_BASE_URL: hostingOrigin,
   PROJECT_ID: projectId,

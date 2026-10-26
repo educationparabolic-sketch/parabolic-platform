@@ -86,20 +86,26 @@ test("emulator phases supply explicit scoped per-phase cursor keys without chang
   assert.ok(start >= 0 && end > start);
   const make = new Function("randomBytes", "projectId", `${source.slice(start, end)}\nreturn phaseEnvironment;`)(randomBytes, "demo-parabolic-test");
   const originalKey = process.env.VENDOR_AUDIT_CURSOR_KEY;
+  const originalCdnKey = process.env.CDN_SIGNED_URL_KEY_VALUE;
   const first = make(), second = make({FUNCTIONS_EMULATOR_HOST: "127.0.0.1:5001"});
   for (const environment of [first, second]) {
     assert.equal(environment.NODE_ENV, "test");
     for (const name of ["PROJECT_ID", "GCLOUD_PROJECT", "GOOGLE_CLOUD_PROJECT"]) {
       assert.equal(environment[name], "demo-parabolic-test");
     }
+    assert.equal(environment.CDN_BASE_URL, "https://cdn.emulator.test.invalid/published");
+    assert.equal(environment.CDN_SIGNED_URL_KEY_NAME, "bwm-048-local-only");
+    assert.equal(Buffer.from(environment.CDN_SIGNED_URL_KEY_VALUE, "base64url").length, 32);
     const bytes = Buffer.from(environment.VENDOR_AUDIT_CURSOR_KEY, "base64url");
     assert.equal(bytes.length, 32);
     assert.equal(bytes.toString("base64url"), environment.VENDOR_AUDIT_CURSOR_KEY);
   }
   assert.notEqual(first.VENDOR_AUDIT_CURSOR_KEY, second.VENDOR_AUDIT_CURSOR_KEY);
+  assert.notEqual(first.CDN_SIGNED_URL_KEY_VALUE, second.CDN_SIGNED_URL_KEY_VALUE);
   assert.equal(first.FUNCTIONS_EMULATOR_HOST, undefined);
   assert.equal(second.FUNCTIONS_EMULATOR_HOST, "127.0.0.1:5001");
   assert.equal(process.env.VENDOR_AUDIT_CURSOR_KEY, originalKey);
+  assert.equal(process.env.CDN_SIGNED_URL_KEY_VALUE, originalCdnKey);
 });
 
 test("the cross-portal export matrix has a dedicated local owner separate from ordinary concurrency regressions", async () => {

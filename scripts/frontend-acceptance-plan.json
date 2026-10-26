@@ -1,0 +1,264 @@
+{
+  "version": 1,
+  "project": "demo-parabolic-test",
+  "stages": [
+    {
+      "id": "golden-path",
+      "script": "test:golden-path:e2e"
+    },
+    {
+      "id": "admin",
+      "script": "test:admin-acceptance:e2e"
+    },
+    {
+      "id": "student-profile",
+      "script": "test:student-profile-acceptance:e2e"
+    },
+    {
+      "id": "student-solutions",
+      "script": "test:student-solutions:e2e"
+    },
+    {
+      "id": "exam-resilience",
+      "script": "test:exam-resilience:acceptance"
+    },
+    {
+      "id": "exam-proctoring",
+      "script": "test:exam-proctoring-acceptance:e2e"
+    },
+    {
+      "id": "vendor",
+      "script": "test:vendor-acceptance:e2e"
+    }
+  ],
+  "browsers": [
+    {
+      "file": "tests/e2e/admin-acceptance-matrix.spec.mjs",
+      "disposition": "required",
+      "stage": "admin",
+      "reason": "Executed by the named required aggregate; Exam proctoring adds its distinct camera/reporting cases."
+    },
+    {
+      "file": "tests/e2e/admin-assignment-lifecycle.spec.mjs",
+      "disposition": "focused-owner",
+      "stage": null,
+      "reason": "Retain the existing focused workflow in the ownership manifest. This exact spec is not claimed executed by the critical aggregate; family-level acceptance and security retain their required owners."
+    },
+    {
+      "file": "tests/e2e/admin-governance-interventions.spec.mjs",
+      "disposition": "focused-owner",
+      "stage": null,
+      "reason": "Retain the existing focused workflow in the ownership manifest. This exact spec is not claimed executed by the critical aggregate; family-level acceptance and security retain their required owners."
+    },
+    {
+      "file": "tests/e2e/admin-licensing.spec.mjs",
+      "disposition": "focused-owner",
+      "stage": null,
+      "reason": "Retain the existing focused workflow in the ownership manifest. This exact spec is not claimed executed by the critical aggregate; family-level acceptance and security retain their required owners."
+    },
+    {
+      "file": "tests/e2e/admin-settings.spec.mjs",
+      "disposition": "focused-owner",
+      "stage": null,
+      "reason": "Retain the existing focused workflow in the ownership manifest. This exact spec is not claimed executed by the critical aggregate; family-level acceptance and security retain their required owners."
+    },
+    {
+      "file": "tests/e2e/admin-student-mutations.spec.mjs",
+      "disposition": "focused-owner",
+      "stage": null,
+      "reason": "Retain the existing focused workflow in the ownership manifest. This exact spec is not claimed executed by the critical aggregate; family-level acceptance and security retain their required owners."
+    },
+    {
+      "file": "tests/e2e/admin-summary-contract.spec.mjs",
+      "disposition": "focused-owner",
+      "stage": null,
+      "reason": "Retain the existing focused workflow in the ownership manifest. This exact spec is not claimed executed by the critical aggregate; family-level acceptance and security retain their required owners."
+    },
+    {
+      "file": "tests/e2e/admin-support.spec.mjs",
+      "disposition": "focused-owner",
+      "stage": null,
+      "reason": "Retain the existing focused workflow in the ownership manifest. This exact spec is not claimed executed by the critical aggregate; family-level acceptance and security retain their required owners."
+    },
+    {
+      "file": "tests/e2e/admin-teacher-access.spec.mjs",
+      "disposition": "focused-owner",
+      "stage": null,
+      "reason": "Retain the existing focused workflow in the ownership manifest. This exact spec is not claimed executed by the critical aggregate; family-level acceptance and security retain their required owners."
+    },
+    {
+      "file": "tests/e2e/admin-template-lifecycle.spec.mjs",
+      "disposition": "focused-owner",
+      "stage": null,
+      "reason": "Retain the existing focused workflow in the ownership manifest. This exact spec is not claimed executed by the critical aggregate; family-level acceptance and security retain their required owners."
+    },
+    {
+      "file": "tests/e2e/browser-token-storage.spec.mjs",
+      "disposition": "focused-owner",
+      "stage": null,
+      "reason": "Retain the existing focused workflow in the ownership manifest. This exact spec is not claimed executed by the critical aggregate; family-level acceptance and security retain their required owners."
+    },
+    {
+      "file": "tests/e2e/bwm-007-production-failures.spec.mjs",
+      "disposition": "focused-owner",
+      "stage": null,
+      "reason": "Retain the existing focused workflow in the ownership manifest. This exact spec is not claimed executed by the critical aggregate; family-level acceptance and security retain their required owners."
+    },
+    {
+      "file": "tests/e2e/claim-propagation-browser.spec.mjs",
+      "disposition": "focused-owner",
+      "stage": null,
+      "reason": "Retain the existing focused workflow in the ownership manifest. This exact spec is not claimed executed by the critical aggregate; family-level acceptance and security retain their required owners."
+    },
+    {
+      "file": "tests/e2e/cross-portal-authorization.spec.mjs",
+      "disposition": "focused-owner",
+      "stage": null,
+      "reason": "Retain the existing focused workflow in the ownership manifest. This exact spec is not claimed executed by the critical aggregate; family-level acceptance and security retain their required owners."
+    },
+    {
+      "file": "tests/e2e/exam-hosting.camera.spec.mjs",
+      "disposition": "focused-owner",
+      "stage": null,
+      "reason": "Retain the existing focused workflow in the ownership manifest. This exact spec is not claimed executed by the critical aggregate; family-level acceptance and security retain their required owners."
+    },
+    {
+      "file": "tests/e2e/exam-launch-auth.spec.mjs",
+      "disposition": "required",
+      "stage": "exam-resilience",
+      "reason": "Executed by the named required aggregate; Exam proctoring adds its distinct camera/reporting cases."
+    },
+    {
+      "file": "tests/e2e/golden-path.spec.mjs",
+      "disposition": "required",
+      "stage": "golden-path",
+      "reason": "Executed by the named required aggregate; Exam proctoring adds its distinct camera/reporting cases."
+    },
+    {
+      "file": "tests/e2e/hosting-security-policy.spec.mjs",
+      "disposition": "focused-owner",
+      "stage": null,
+      "reason": "Retain the existing focused workflow in the ownership manifest. This exact spec is not claimed executed by the critical aggregate; family-level acceptance and security retain their required owners."
+    },
+    {
+      "file": "tests/e2e/portal-hosting.smoke.spec.mjs",
+      "disposition": "focused-owner",
+      "stage": null,
+      "reason": "Retain the existing focused workflow in the ownership manifest. This exact spec is not claimed executed by the critical aggregate; family-level acceptance and security retain their required owners."
+    },
+    {
+      "file": "tests/e2e/production-auth-hardening.spec.mjs",
+      "disposition": "focused-owner",
+      "stage": null,
+      "reason": "Retain the existing focused workflow in the ownership manifest. This exact spec is not claimed executed by the critical aggregate; family-level acceptance and security retain their required owners."
+    },
+    {
+      "file": "tests/e2e/question-bank-lifecycle.spec.mjs",
+      "disposition": "focused-owner",
+      "stage": null,
+      "reason": "Retain the existing focused workflow in the ownership manifest. This exact spec is not claimed executed by the critical aggregate; family-level acceptance and security retain their required owners."
+    },
+    {
+      "file": "tests/e2e/question-creation.spec.mjs",
+      "disposition": "focused-owner",
+      "stage": null,
+      "reason": "Retain the existing focused workflow in the ownership manifest. This exact spec is not claimed executed by the critical aggregate; family-level acceptance and security retain their required owners."
+    },
+    {
+      "file": "tests/e2e/result-propagation.spec.mjs",
+      "disposition": "focused-owner",
+      "stage": null,
+      "reason": "Retain the existing focused workflow in the ownership manifest. This exact spec is not claimed executed by the critical aggregate; family-level acceptance and security retain their required owners."
+    },
+    {
+      "file": "tests/e2e/student-profile-ui.spec.mjs",
+      "disposition": "required",
+      "stage": "student-profile",
+      "reason": "Executed by the named required aggregate; Exam proctoring adds its distinct camera/reporting cases."
+    },
+    {
+      "file": "tests/e2e/student-solutions.spec.mjs",
+      "disposition": "required",
+      "stage": "student-solutions",
+      "reason": "Executed by the named required aggregate; Exam proctoring adds its distinct camera/reporting cases."
+    },
+    {
+      "file": "tests/e2e/student-summary-contract.spec.mjs",
+      "disposition": "required",
+      "stage": "exam-resilience",
+      "reason": "Executed by the named required aggregate; Exam proctoring adds its distinct camera/reporting cases."
+    },
+    {
+      "file": "tests/e2e/student-vendor-role-guards.spec.mjs",
+      "disposition": "focused-owner",
+      "stage": null,
+      "reason": "Retain the existing focused workflow in the ownership manifest. This exact spec is not claimed executed by the critical aggregate; family-level acceptance and security retain their required owners."
+    },
+    {
+      "file": "tests/e2e/vendor-acceptance-shells.spec.mjs",
+      "disposition": "required",
+      "stage": "vendor",
+      "reason": "Executed by the named required aggregate; Exam proctoring adds its distinct camera/reporting cases."
+    },
+    {
+      "file": "tests/e2e/vendor-audit-health-smoke.spec.mjs",
+      "disposition": "required",
+      "stage": "vendor",
+      "reason": "Executed by the named required aggregate; Exam proctoring adds its distinct camera/reporting cases."
+    },
+    {
+      "file": "tests/e2e/vendor-calibration-acceptance.spec.mjs",
+      "disposition": "required",
+      "stage": "vendor",
+      "reason": "Executed by the named required aggregate; Exam proctoring adds its distinct camera/reporting cases."
+    },
+    {
+      "file": "tests/e2e/vendor-calibration-rollout-acceptance.spec.mjs",
+      "disposition": "required",
+      "stage": "vendor",
+      "reason": "Executed by the named required aggregate; Exam proctoring adds its distinct camera/reporting cases."
+    },
+    {
+      "file": "tests/e2e/vendor-calibration-smoke.spec.mjs",
+      "disposition": "focused-owner",
+      "stage": null,
+      "reason": "Retain the existing focused workflow in the ownership manifest. This exact spec is not claimed executed by the critical aggregate; family-level acceptance and security retain their required owners."
+    },
+    {
+      "file": "tests/e2e/vendor-capability-alignment.spec.mjs",
+      "disposition": "required",
+      "stage": "vendor",
+      "reason": "Executed by the named required aggregate; Exam proctoring adds its distinct camera/reporting cases."
+    },
+    {
+      "file": "tests/e2e/vendor-commercial.spec.mjs",
+      "disposition": "required",
+      "stage": "vendor",
+      "reason": "Executed by the named required aggregate; Exam proctoring adds its distinct camera/reporting cases."
+    },
+    {
+      "file": "tests/e2e/vendor-institutes.spec.mjs",
+      "disposition": "required",
+      "stage": "vendor",
+      "reason": "Executed by the named required aggregate; Exam proctoring adds its distinct camera/reporting cases."
+    },
+    {
+      "file": "tests/e2e/vendor-intelligence-acceptance.spec.mjs",
+      "disposition": "required",
+      "stage": "vendor",
+      "reason": "Executed by the named required aggregate; Exam proctoring adds its distinct camera/reporting cases."
+    },
+    {
+      "file": "tests/e2e/vendor-intelligence-smoke.spec.mjs",
+      "disposition": "focused-owner",
+      "stage": null,
+      "reason": "Retain the existing focused workflow in the ownership manifest. This exact spec is not claimed executed by the critical aggregate; family-level acceptance and security retain their required owners."
+    },
+    {
+      "file": "tests/e2e/vendor-truthfulness-repair.spec.mjs",
+      "disposition": "required",
+      "stage": "vendor",
+      "reason": "Executed by the named required aggregate; Exam proctoring adds its distinct camera/reporting cases."
+    }
+  ]
+}

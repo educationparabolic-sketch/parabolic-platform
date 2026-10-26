@@ -89,8 +89,8 @@ console.log(
 );
 run(
   "Run no-mock Student summary and solution browser flow",
-  firebaseExecutable,
-  emulatorArgs,
+  process.env.DISPLAY ? firebaseExecutable : "xvfb-run",
+  process.env.DISPLAY ? emulatorArgs : ["--auto-servernum", firebaseExecutable, ...emulatorArgs],
   {
     CI: "true",
     FUNCTIONS_DISCOVERY_TIMEOUT: "120",

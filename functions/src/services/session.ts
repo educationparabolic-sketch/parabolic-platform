@@ -648,7 +648,7 @@ const normalizeRuntimeQuestionType = (
   const normalized = normalizeRequiredString(value, "question.questionType")
     .toLowerCase()
     .replace(/[\s_-]+/g, "");
-  if (["mcq", "multiplechoice", "singlechoice"].includes(normalized)) {
+  if (["mcq", "multiplechoice", "singlechoice", "singlecorrect"].includes(normalized)) {
     return "mcq";
   }
   if (["numeric", "numerical", "number"].includes(normalized)) {

@@ -82,6 +82,8 @@ const noFeatureFlags = {
   riskOverview: false,
 };
 const accounts = [];
+const variantInstitutes = [`${instituteId}_feature_off`, `${instituteId}_low_layer`];
+const variantPlans = [`${planId}-feature-off`, `${planId}-low-layer`];
 const identities = {};
 let app;
 let auth;
@@ -108,11 +110,12 @@ async function createAccount(label, role, options = {}) {
   const user = await auth.createUser({email, password});
   accounts.push(user.uid);
   await auth.setCustomUserClaims(user.uid, {
-    instituteId,
+    instituteId: options.instituteId ?? instituteId,
+    authorizationVersion: 1,
     role,
     ...entitlement(options),
   });
-  return {email, password, role, uid: user.uid};
+  return {email, password, role, uid: user.uid, instituteId: options.instituteId ?? instituteId};
 }
 
 async function idToken(request, identity) {
@@ -213,6 +216,7 @@ async function seedAuthority() {
     institute.set({
       instituteId,
       instituteName: "BWM-033 Acceptance Institute",
+      authorizationVersion: 1,
       licenseVersion,
       primaryAdminUserId: identities.admin.uid,
       profile: {
@@ -245,6 +249,7 @@ async function seedAuthority() {
       activeStudentLimit: 500,
       billingCycle: "annual",
       concurrencyLimit: 100,
+      concurrentSessionLimit: 100,
       currentLayer: "L3",
       expiryDate: "2099-12-31T00:00:00.000Z",
       externalActions: [],
@@ -305,14 +310,39 @@ test.beforeAll(async () => {
   identities.teacherFeatureOff = await createAccount(
     "acceptance-teacher-feature-off",
     "teacher",
-    {flags: noFeatureFlags},
+    {flags: noFeatureFlags, instituteId: variantInstitutes[0]},
   );
   identities.teacherLowLayer = await createAccount(
     "acceptance-teacher-low-layer",
     "teacher",
-    {layer: "L0"},
+    {layer: "L0", flags: noFeatureFlags, instituteId: variantInstitutes[1]},
   );
+  identities.adminFeatureOff = await createAccount("acceptance-admin-feature-off", "admin",
+    {flags: noFeatureFlags, instituteId: variantInstitutes[0]});
+  identities.adminLowLayer = await createAccount("acceptance-admin-low-layer", "admin",
+    {layer: "L0", flags: noFeatureFlags, instituteId: variantInstitutes[1]});
   await seedAuthority();
+  const root = (await institute.get()).data();
+  const license = (await institute.collection("license").doc("current").get()).data();
+  const pricing = (await pricingPlan.get()).data();
+  const year = (await institute.collection("academicYears").doc("2026").get()).data();
+  for (const [index, teacher, administrator, layer] of [
+    [0, identities.teacherFeatureOff, identities.adminFeatureOff, "L3"],
+    [1, identities.teacherLowLayer, identities.adminLowLayer, "L0"],
+  ]) {
+    const reference = db.doc(`institutes/${variantInstitutes[index]}`);
+    const settingsUsers = Object.fromEntries([teacher, administrator].map(identity => [identity.uid,
+      {displayName: `${identity.role} restricted acceptance user`, email: identity.email,
+        role: identity.role, status: "active", updatedAt: Timestamp.now()}]));
+    await Promise.all([
+      reference.set({...root, instituteId: reference.id, primaryAdminUserId: administrator.uid, settingsUsers}),
+      reference.collection("license").doc("current").set({...license, currentLayer: layer,
+        featureFlags: noFeatureFlags, planId: variantPlans[index], planName: `BWM-033 Restricted ${layer} Plan ${index}`}),
+      reference.collection("academicYears").doc("2026").set(year),
+      db.doc(`${pricingCollection}/${variantPlans[index]}`).set({...pricing, planId: variantPlans[index],
+        layer, featureFlags: noFeatureFlags, name: `BWM-033 Restricted ${layer} Plan ${index}`}),
+    ]);
+  }
 });
 
 test.afterAll(async () => {
@@ -323,9 +353,15 @@ test.afterAll(async () => {
     await Promise.all(communications.docs.map((document) => document.ref.delete()));
     await Promise.all([
       db.recursiveDelete(institute),
+      ...variantInstitutes.map(id => db.recursiveDelete(db.doc(`institutes/${id}`))),
+      ...variantPlans.map(id => db.doc(`${pricingCollection}/${id}`).delete()),
       pricingPlan.delete(),
     ]);
-    await auth.deleteUsers(accounts);
+    expect((await auth.deleteUsers(accounts)).failureCount).toBe(0);
+    expect((await auth.getUsers(accounts.map(uid => ({uid})))).users).toHaveLength(0);
+    for (const reference of [institute, ...variantInstitutes.map(id => db.doc(`institutes/${id}`))]) {
+      expect((await reference.get()).exists).toBe(false);
+    }
   } finally {
     await deleteApp(app);
   }
@@ -505,9 +541,13 @@ test("authenticated Admin matrix traverses every mount and proves persisted and 
     response.url().endsWith("/api/v1/admin/settings") &&
     response.request().postDataJSON()?.actionType === "UPDATE_INSTITUTE_PROFILE");
   await pages.admin.getByRole("button", {name: "Save General Settings"}).click();
-  expect((await conflictResponse).status()).toBe(409);
+  const conflict = await conflictResponse;
+  expect(conflict.status()).toBe(409);
+  expect((await conflict.json()).error.code).toBe("CONFLICT");
+  expect((await institute.get()).get("profile.contactEmail")).toBe("concurrent-acceptance@example.test");
+  expect((await institute.get()).get("profile.contactPhone")).toBe("+1-555-0331");
   await expect(pages.admin.locator(".admin-settings-load-state"))
-    .toContainText("Settings revision conflict");
+    .toHaveText("The operation conflicts with current state.");
 
   await navigateInApp(pages.admin, "/admin/settings/execution-policy");
   await expect(pages.admin.getByRole("heading", {name: "Settings action unavailable"}))

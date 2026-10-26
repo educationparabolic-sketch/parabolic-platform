@@ -9,7 +9,7 @@ test.setTimeout(180000);
 test.afterAll(async () => { await getFirebaseAdminApp().delete(); });
 test("mounted v2 dashboard, analytics, current tests and past-year cursors never fabricate locked or failed data", async ({page}) => {
   const f = await seedStudentSummaryFixture("browser");
-  const token = await f.setEntitlement("L1");
+  let token = await f.setEntitlement("L1");
   await f.metrics.update({resultPropagation: {state: "available", sessionId: f.summary.sessionId, retryAfterSeconds: 0, submittedAt: f.summary.submittedAt, updatedAt: f.summary.submittedAt}});
   const requests = [];
   page.on("request", (r) => { if (r.url().includes("/api/v1/student/")) requests.push(r.url()); });
@@ -71,6 +71,9 @@ test("mounted v2 dashboard, analytics, current tests and past-year cursors never
     expect((await read("tests?page=1")).status).toBe(400);
     expect((await read("performance?yearId=z-past-year")).status).toBe(400);
     await f.institute.collection("license").doc("current").update({"featureFlags.riskOverview": false});
+    // Fresh authority rejects the old entitlement before feature admission.
+    expect((await read("insights")).status).toBe(401);
+    token = await f.setEntitlement("L1", {riskOverview: false});
     expect((await read("insights")).status).toBe(403);
   } finally { await f.cleanup(); }
 });

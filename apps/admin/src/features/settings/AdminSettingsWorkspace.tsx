@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { readInstituteScopeFromToken } from "../../../../../shared/services/authSessionConvergence";
+import { resolveGlobalPortalState } from "../../../../../shared/services/globalPortalState";
 import { useAuthProvider } from "../../../../../shared/services/authProvider";
 import { UiFormField, UiStatCard } from "../../../../../shared/ui/components";
 import { hasAdminCapability, resolveAdminAccessContext } from "../../portals/adminAccess";
@@ -110,6 +112,11 @@ function AdminSettingsWorkspace() {
   const navigate = useNavigate();
   const { session } = useAuthProvider();
   const accessContext = resolveAdminAccessContext(session);
+  const authority = resolveGlobalPortalState({ portal: "admin", session });
+  // Refreshing the same authority's token must not overwrite an unsaved draft.
+  const settingsScopeKey = JSON.stringify([session.status, session.user?.uid,
+    readInstituteScopeFromToken(session.idToken), authority.authorizationVersion,
+    authority.role, authority.license, authority.authorityIssue, authority.isSuspended]);
   const activeView = resolveView(location.pathname);
   const fixtureMode = isLocalSettingsReadMode();
   const hasManageCapability = hasAdminCapability("admin.settings.manage", accessContext);
@@ -186,7 +193,7 @@ function AdminSettingsWorkspace() {
     return () => {
       mounted = false;
     };
-  }, [fixtureMode, session.idToken]);
+  }, [fixtureMode, settingsScopeKey]);
 
   const activeYear = snapshot.academicYears.find((year) => year.status === "Active") ?? null;
   const selectedYear =
@@ -584,7 +591,7 @@ function AdminSettingsWorkspace() {
                   id="settings-email"
                   type="email"
                   value={profileDraft.contactEmail}
-                  disabled={!canManageSettings || isSaving}
+                  disabled={!canManageSettings || isSaving || isLoading}
                   onChange={(event) =>
                     setProfileDraft((current) => ({ ...current, contactEmail: event.target.value }))
                   }
@@ -595,7 +602,7 @@ function AdminSettingsWorkspace() {
                 <input
                   id="settings-phone"
                   value={profileDraft.contactPhone}
-                  disabled={!canManageSettings || isSaving}
+                  disabled={!canManageSettings || isSaving || isLoading}
                   onChange={(event) =>
                     setProfileDraft((current) => ({ ...current, contactPhone: event.target.value }))
                   }
@@ -606,7 +613,7 @@ function AdminSettingsWorkspace() {
                 <select
                   id="settings-timezone"
                   value={profileDraft.timeZone}
-                  disabled={!canManageSettings || isSaving}
+                  disabled={!canManageSettings || isSaving || isLoading}
                   onChange={(event) =>
                     setProfileDraft((current) => ({ ...current, timeZone: event.target.value }))
                   }
@@ -620,7 +627,7 @@ function AdminSettingsWorkspace() {
                 <select
                   id="settings-exam"
                   value={profileDraft.defaultExamType}
-                  disabled={!canManageSettings || isSaving}
+                  disabled={!canManageSettings || isSaving || isLoading}
                   onChange={(event) =>
                     setProfileDraft((current) => ({
                       ...current,
@@ -638,7 +645,7 @@ function AdminSettingsWorkspace() {
                 <select
                   id="settings-year-format"
                   value={profileDraft.academicYearFormat}
-                  disabled={!canManageSettings || isSaving}
+                  disabled={!canManageSettings || isSaving || isLoading}
                   onChange={(event) =>
                     setProfileDraft((current) => ({
                       ...current,
@@ -658,14 +665,14 @@ function AdminSettingsWorkspace() {
                   setProfileDraft(snapshot.profile);
                   setLogoImageFailed(false);
                 }}
-                disabled={!canManageSettings || isSaving}
+                disabled={!canManageSettings || isSaving || isLoading}
               >
                 Reset
               </button>
               <button
                 type="submit"
                 className="admin-primary-link"
-                disabled={!canManageSettings || isSaving}
+                disabled={!canManageSettings || isSaving || isLoading}
               >
                 {isSaving ? "Saving..." : "Save General Settings"}
               </button>
@@ -763,7 +770,7 @@ function AdminSettingsWorkspace() {
                       <input
                         type="checkbox"
                         checked={lockConfirmed}
-                        disabled={!canManageSettings || isSaving}
+                        disabled={!canManageSettings || isSaving || isLoading}
                         onChange={(event) => setLockConfirmed(event.target.checked)}
                       />{" "}
                       I confirm all examinations and attempts have reached terminal states.
@@ -790,14 +797,14 @@ function AdminSettingsWorkspace() {
                       <input
                         type="checkbox"
                         checked={archiveConfirmed}
-                        disabled={!canManageSettings || isSaving}
+                        disabled={!canManageSettings || isSaving || isLoading}
                         onChange={(event) => setArchiveConfirmed(event.target.checked)}
                       />{" "}
                       I understand this immediately starts the irreversible archive workflow.
                     </label>
                     <input
                       value={archiveTypedLabel}
-                      disabled={!canManageSettings || isSaving}
+                      disabled={!canManageSettings || isSaving || isLoading}
                       placeholder={`Type ${selectedYear.academicYearLabel}`}
                       onChange={(event) => setArchiveTypedLabel(event.target.value)}
                     />
@@ -924,7 +931,7 @@ function AdminSettingsWorkspace() {
                     <button
                       type="button"
                       onClick={() => void sendPasswordReset()}
-                      disabled={!canManageSettings || isSaving}
+                      disabled={!canManageSettings || isSaving || isLoading}
                     >
                       Send Reset Email
                     </button>
@@ -959,7 +966,7 @@ function AdminSettingsWorkspace() {
                   <input
                     id="settings-invite-name"
                     value={userDraft.displayName}
-                    disabled={!canManageSettings || isSaving}
+                    disabled={!canManageSettings || isSaving || isLoading}
                     onChange={(event) =>
                       setUserDraft((current) => ({ ...current, displayName: event.target.value }))
                     }
@@ -971,7 +978,7 @@ function AdminSettingsWorkspace() {
                     id="settings-invite-email"
                     type="email"
                     value={userDraft.email}
-                    disabled={!canManageSettings || isSaving}
+                    disabled={!canManageSettings || isSaving || isLoading}
                     onChange={(event) =>
                       setUserDraft((current) => ({ ...current, email: event.target.value }))
                     }
@@ -982,7 +989,7 @@ function AdminSettingsWorkspace() {
                   <select
                     id="settings-invite-role"
                     value={userDraft.role}
-                    disabled={!canManageSettings || isSaving}
+                    disabled={!canManageSettings || isSaving || isLoading}
                     onChange={(event) =>
                       setUserDraft((current) => ({
                         ...current,
@@ -1000,7 +1007,7 @@ function AdminSettingsWorkspace() {
                 <button
                   type="submit"
                   className="admin-primary-link"
-                  disabled={!canManageSettings || isSaving}
+                  disabled={!canManageSettings || isSaving || isLoading}
                 >
                   Create Invitation
                 </button>
@@ -1027,7 +1034,7 @@ function AdminSettingsWorkspace() {
                     max={720}
                     step={1}
                     value={sessionTimeoutDraft}
-                    disabled={!canManageSettings || isSaving}
+                    disabled={!canManageSettings || isSaving || isLoading}
                     onChange={(event) => setSessionTimeoutDraft(event.target.value)}
                   />
                 </UiFormField>
@@ -1035,7 +1042,7 @@ function AdminSettingsWorkspace() {
                   <input
                     type="checkbox"
                     checked={sessionPolicyDraft.allowMultipleAdminSessions}
-                    disabled={!canManageSettings || isSaving}
+                    disabled={!canManageSettings || isSaving || isLoading}
                     onChange={(event) =>
                       setSessionPolicyDraft((current) => ({
                           ...current,
@@ -1049,7 +1056,7 @@ function AdminSettingsWorkspace() {
                   <input
                     type="checkbox"
                     checked={sessionPolicyDraft.forceLogoutOnPasswordChange}
-                    disabled={!canManageSettings || isSaving}
+                    disabled={!canManageSettings || isSaving || isLoading}
                     onChange={(event) =>
                       setSessionPolicyDraft((current) => ({
                           ...current,
@@ -1064,7 +1071,7 @@ function AdminSettingsWorkspace() {
                 <button
                   type="submit"
                   className="admin-primary-link"
-                  disabled={!canManageSettings || isSaving}
+                  disabled={!canManageSettings || isSaving || isLoading}
                 >
                   Save Session Policy
                 </button>

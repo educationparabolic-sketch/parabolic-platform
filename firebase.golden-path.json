@@ -10,12 +10,22 @@
       "source": "functions",
       "codebase": "default",
       "disallowLegacyRuntimeConfig": true,
-      "ignore": ["node_modules", ".git", "firebase-debug.log", "firebase-debug.*.log", "*.local"]
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
     }
   ],
   "hosting": {
     "public": ".firebase/hosting/golden-path",
-    "ignore": ["firebase*.json", "**/.*", "**/node_modules/**"],
+    "ignore": [
+      "firebase*.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
     "headers": [
       {
         "source": "**",
@@ -48,19 +58,19 @@
         }
       },
       {
-        "source": "admin",
+        "source": "/admin",
         "destination": "/admin/index.html"
       },
       {
-        "source": "admin/**",
+        "source": "/admin/**",
         "destination": "/admin/index.html"
       },
       {
-        "source": "student",
+        "source": "/student",
         "destination": "/student/index.html"
       },
       {
-        "source": "student/**",
+        "source": "/student/**",
         "destination": "/student/index.html"
       },
       {
@@ -68,7 +78,7 @@
         "destination": "/exam/index.html"
       },
       {
-        "source": "login",
+        "source": "/login",
         "destination": "/admin/index.html"
       }
     ]
@@ -93,6 +103,13 @@
     "ui": {
       "enabled": false
     },
-    "singleProjectMode": true
+    "singleProjectMode": true,
+    "storage": {
+      "host": "127.0.0.1",
+      "port": 9199
+    }
+  },
+  "storage": {
+    "rules": "storage.rules"
   }
 }

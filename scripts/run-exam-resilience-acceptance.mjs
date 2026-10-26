@@ -16,7 +16,10 @@ const phase = process.argv.includes("--phase") ? process.argv[process.argv.index
 assert.ok(["all", "static", "services", "browser"].includes(phase));
 assert.ok(child === null || ["services", "browser"].includes(child));
 const commands = [];
-const common = {...process.env, DEBUG: "", CI: "true", NODE_ENV: "test",
+const common = {...process.env,
+  CDN_BASE_URL: "https://cdn.exam-local.test.invalid/published",
+  CDN_SIGNED_URL_KEY_NAME: "bwm-048-local-only",
+  CDN_SIGNED_URL_KEY_VALUE: Buffer.from("bwm-048-local-exam-test-key").toString("base64url"), DEBUG: "", CI: "true", NODE_ENV: "test",
   GCLOUD_PROJECT: projectId, GOOGLE_CLOUD_PROJECT: projectId, PROJECT_ID: projectId,
   NO_GCE_CHECK: "true", METADATA_SERVER_DETECTION: "none",
   FUNCTIONS_DISCOVERY_TIMEOUT: "120", IDENTITY_PHOTOS_BUCKET: `${projectId}-identity-photos`,
@@ -92,11 +95,16 @@ if (child === "services") {
   emulatorIdentity(); assertCandidate();
   run("Signed HTTP entry, canonical submit and current summaries", process.execPath,
     ["--test", "--test-concurrency=1", "functions/tests/examStart.emulator.test.js", "functions/tests/studentSummary.emulator.test.js"]);
-  run("Permanent Exam browser matrix", resolve(root, "node_modules/.bin/playwright"),
-    ["test", "tests/e2e/exam-launch-auth.spec.mjs", "--grep", "fragment bootstrap|mounted ownership|security matrix|resilience ", "--project=chromium"],
+  // Native tab visibility requires headed Chromium. Unattended Linux owners
+  // provide a real virtual display rather than substituting visibility state.
+  const playwright = resolve(root, "node_modules/.bin/playwright");
+  const browserArgs = ["test", "tests/e2e/exam-launch-auth.spec.mjs", "--grep", "fragment bootstrap|mounted ownership|security matrix|resilience ", "--project=chromium"];
+  run("Permanent Exam browser matrix", process.env.DISPLAY ? playwright : "xvfb-run",
+    process.env.DISPLAY ? browserArgs : ["--auto-servernum", playwright, ...browserArgs],
     {...common, PARABOLIC_E2E_BASE_URL: examOrigin});
-  run("Permanent Student result/entitlement browser matrix", resolve(root, "node_modules/.bin/playwright"),
-    ["test", "tests/e2e/student-summary-contract.spec.mjs", "--project=chromium"],
+  const summaryArgs = ["test", "tests/e2e/student-summary-contract.spec.mjs", "--project=chromium"];
+  run("Permanent Student result/entitlement browser matrix", process.env.DISPLAY ? playwright : "xvfb-run",
+    process.env.DISPLAY ? summaryArgs : ["--auto-servernum", playwright, ...summaryArgs],
     {...common, PARABOLIC_E2E_BASE_URL: portalOrigin});
   assertCandidate();
 } else {

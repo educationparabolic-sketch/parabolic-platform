@@ -1760,3 +1760,9 @@ App Check remains explicit staging pending_provisioning, with genuine provider,
 proxy/edge/load/TTL/infra gates owned by BWM-052/054/056 and monitoring transport
 by BWM-051. Preserve BWM-049 exclusions and DEC-102/BWM-053 prerequisites;
 production NO_GO. Earlier pending statements are historical checkpoints.
+
+### Managed question asset revision reservation (BWM-048-G / DEC-143)
+
+`institutes/{instituteId}/questionAssetRevisionCounters/{questionId}` is backend-only authority containing a positive safe-integer `revision`. Package validation and individual image edits share the allocator, which transactionally reserves an increasing revision above the counter and known question/asset revisions before staging new immutable objects. Failed validation, conflicts and rollback intentionally leave gaps; counters are never rolled back or reused. No question is published by reservation. Existing deny-by-default client rules remain.
+
+New managed package rows freeze `baseQuestionRevision`, `questionImageRevision` and `solutionImageRevision` in their existing rows fingerprint. Commit rejects changed document revisions, creates and verifies actual immutable `v{version}/question-r{revision}.{extension}` and `solution-r{revision}.{extension}` bytes, then publishes each asset revision/hash/path atomically with the question. An unchanged existing asset is reused only with matching hash, positive revision and canonical path. Used-question structural locks and strict private solution capture remain. Legacy staged rows without this authority fail closed; no legacy bank or captured session is backfilled. Deployed resource, old data and CDN/IAM qualification remain downstream gates.

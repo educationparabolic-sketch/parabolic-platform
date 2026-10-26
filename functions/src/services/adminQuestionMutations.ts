@@ -1,4 +1,5 @@
 /* eslint-disable require-jsdoc */
+import {reserveQuestionAssetRevision} from "./questionAssetRevisions";
 import {createHash} from "node:crypto";
 import {Timestamp} from "firebase-admin/firestore";
 import {getFirestore} from "../utils/firebaseAdmin";
@@ -699,11 +700,6 @@ export class AdminQuestionMutationsService {
   public async updateMetadata(
     request: AdminQuestionMetadataUpdateValidatedRequest,
   ): Promise<AdminQuestionUpdateResult> {
-    const preparedAsset = await this.prepareEditAsset(
-      request,
-      "solutionImage",
-      request.solutionImage,
-    );
     const command = "metadata-update";
     const authority = buildCommandAuthority({
       command,
@@ -729,8 +725,17 @@ export class AdminQuestionMutationsService {
       authority.auditId,
     );
 
+    const replay = readReplayResult<AdminQuestionUpdateResult>(
+      await auditReference.get(), authority.requestFingerprint,
+    );
+    if (replay) return replay;
+    const preparedAsset = await this.prepareEditAsset(
+      request,
+      "solutionImage",
+      request.solutionImage,
+    );
     try {
-      return await this.dependencies.firestore.runTransaction(async (transaction) => {
+      const result = await this.dependencies.firestore.runTransaction(async (transaction) => {
         const auditSnapshot = await transaction.get(auditReference);
         const replay = readReplayResult<AdminQuestionUpdateResult>(
           auditSnapshot,
@@ -802,6 +807,10 @@ export class AdminQuestionMutationsService {
         }));
         return result;
       });
+      if (result.disposition === "replayed") {
+        await this.cleanupRejectedAsset(request, preparedAsset, new Error("Concurrent command replay."));
+      }
+      return result;
     } catch (error) {
       await this.cleanupRejectedAsset(request, preparedAsset, error);
       throw error;
@@ -811,11 +820,6 @@ export class AdminQuestionMutationsService {
   public async updateStructure(
     request: AdminQuestionStructureUpdateValidatedRequest,
   ): Promise<AdminQuestionUpdateResult> {
-    const preparedAsset = await this.prepareEditAsset(
-      request,
-      "questionImage",
-      request.questionImage,
-    );
     const command = "structure-update";
     const authority = buildCommandAuthority({
       command,
@@ -841,8 +845,17 @@ export class AdminQuestionMutationsService {
     const {auditReference, instituteReference, questionReference} =
       this.references(request.instituteId, request.questionId, authority.auditId);
 
+    const replay = readReplayResult<AdminQuestionUpdateResult>(
+      await auditReference.get(), authority.requestFingerprint,
+    );
+    if (replay) return replay;
+    const preparedAsset = await this.prepareEditAsset(
+      request,
+      "questionImage",
+      request.questionImage,
+    );
     try {
-      return await this.dependencies.firestore.runTransaction(async (transaction) => {
+      const result = await this.dependencies.firestore.runTransaction(async (transaction) => {
         const auditSnapshot = await transaction.get(auditReference);
         const replay = readReplayResult<AdminQuestionUpdateResult>(
           auditSnapshot,
@@ -945,6 +958,10 @@ export class AdminQuestionMutationsService {
         }));
         return result;
       });
+      if (result.disposition === "replayed") {
+        await this.cleanupRejectedAsset(request, preparedAsset, new Error("Concurrent command replay."));
+      }
+      return result;
     } catch (error) {
       await this.cleanupRejectedAsset(request, preparedAsset, error);
       throw error;
@@ -1230,7 +1247,8 @@ export class AdminQuestionMutationsService {
     const snapshot = await reference.get();
     const question = requireQuestion(snapshot, request.questionId);
     assertExpectedRevision(question, request.expectedRevision, request.questionId);
-    const revision = request.expectedRevision + 1;
+    const revision = await reserveQuestionAssetRevision(this.dependencies.firestore,
+      request.instituteId, request.questionId, question);
     const bytes = decodeImageMutation(mutation);
     const contentSha256 = sha256(bytes);
     const resolveStorageTarget = this.dependencies.resolveStorageTarget ??

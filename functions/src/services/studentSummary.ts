@@ -162,11 +162,14 @@ export class StudentSummaryService {
         .where("startWindow", ">", Timestamp.fromDate(this.now())).orderBy("startWindow", "asc")
         .orderBy(FieldPath.documentId(), "asc").limit(49));
       const upcomingTests = upcoming.docs.filter((d) => runOwned(d.data(), scope, d.id) &&
-        this.allowed(scope, d.data())).slice(0, 4).map((d) => ({runId: d.id, testId: required(d.get("testId")),
-        testName: required(d.get("testName") ?? d.get("runName")), mode: mode(d.get("mode")),
-        startAt: iso(d.get("startWindow")), endAt: iso(d.get("endWindow")),
-        durationMinutes: Math.max(0, Math.round((Date.parse(iso(d.get("endWindow"))) -
-          Date.parse(iso(d.get("startWindow")))) / 60000))}));
+        this.allowed(scope, d.data())).slice(0, 4).map((d) => {
+        required(d.get("testId"));
+        return {runId: d.id,
+          testName: required(d.get("testName") ?? d.get("runName")), mode: mode(d.get("mode")),
+          startAt: iso(d.get("startWindow")), endAt: iso(d.get("endWindow")),
+          durationMinutes: Math.max(0, Math.round((Date.parse(iso(d.get("endWindow"))) -
+              Date.parse(iso(d.get("startWindow")))) / 60000))};
+      });
       const summaries = await tx.get(this.results(scope).orderBy("submittedAt", "desc").limit(5));
       const source: Record<string, unknown>[] = summaries.empty ? records(metrics.recentResults).slice(0, 5) :
         summaries.docs.map((d) => {

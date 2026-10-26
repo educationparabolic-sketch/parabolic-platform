@@ -185,7 +185,7 @@
     "test:e2e:student-summary-contracts": "playwright test tests/e2e/student-summary-contract.spec.mjs",
     "test:e2e:exam-launch-auth": "playwright test tests/e2e/exam-launch-auth.spec.mjs",
     "test:e2e:result-propagation": "playwright test tests/e2e/result-propagation.spec.mjs",
-    "test:e2e:golden-path": "playwright test tests/e2e/golden-path.spec.mjs",
+    "test:e2e:golden-path": "node scripts/run-golden-path-browser.mjs",
     "test:e2e:bwm-007-failures": "playwright test tests/e2e/bwm-007-production-failures.spec.mjs",
     "test:e2e:browser-token-storage": "playwright test tests/e2e/browser-token-storage.spec.mjs",
     "test:e2e:production-auth-hardening": "playwright test tests/e2e/production-auth-hardening.spec.mjs",
@@ -226,7 +226,12 @@
     "test:cross-portal-authorization": "node scripts/run-cross-portal-authorization.mjs",
     "test:backend-disclosure": "node scripts/run-backend-disclosure.mjs",
     "test:security-admission": "node scripts/run-security-admission.mjs",
-    "test:security-matrix": "node scripts/run-security-matrix.mjs"
+    "test:security-matrix": "node scripts/run-security-matrix.mjs",
+    "test:frontend": "node scripts/run-frontend-tests.mjs --scope all",
+    "test:frontend:acceptance": "node scripts/run-frontend-acceptance.mjs",
+    "test:frontend:shared": "node scripts/run-frontend-tests.mjs --scope shared",
+    "test:frontend:infrastructure": "node scripts/run-frontend-tests.mjs --scope infrastructure",
+    "test:frontend:ownership": "node scripts/run-frontend-tests.mjs --check"
   },
   "devDependencies": {
     "playwright": "1.59.1"

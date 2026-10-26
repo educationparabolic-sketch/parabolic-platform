@@ -23,8 +23,12 @@ on:
       - "firestore.indexes.json"
       - "storage.rules"
       - "firebase.json"
+      - "firebase*.json"
       - "package.json"
       - "scripts/frontend-cicd/**"
+      - "scripts/*.mjs"
+      - "scripts/*.json"
+      - "docs/FRONTEND_TESTS.md"
       - "tests/**"
       - "playwright.config.mjs"
       - "package-lock.json"
@@ -69,8 +73,12 @@ on:
       - "firestore.indexes.json"
       - "storage.rules"
       - "firebase.json"
+      - "firebase*.json"
       - "package.json"
       - "scripts/frontend-cicd/**"
+      - "scripts/*.mjs"
+      - "scripts/*.json"
+      - "docs/FRONTEND_TESTS.md"
       - "tests/**"
       - "playwright.config.mjs"
       - "package-lock.json"
@@ -155,6 +163,7 @@ jobs:
           node-version: "20"
           cache: npm
           cache-dependency-path: |
+            package-lock.json
             apps/admin/package-lock.json
             apps/student/package-lock.json
             apps/exam/package-lock.json
@@ -169,6 +178,7 @@ jobs:
           for app in admin student exam vendor; do
             npm ci --prefix "apps/${app}"
           done
+          npm ci
           npm ci --prefix shared
           npm ci --prefix functions
 
@@ -210,9 +220,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          npm run test:frontend:ownership
           for app in admin student exam vendor; do
-            npm --prefix "apps/${app}" run test --if-present
+            npm --prefix "apps/${app}" test
           done
+          npm run test:frontend:shared
+          npm run test:frontend:infrastructure
 
   backend-ci:
     name: Backend Validate
@@ -264,6 +277,8 @@ jobs:
         run: |
           set -euo pipefail
           npm run playwright:install
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y xvfb xauth
           npm install --global firebase-tools@15.9.0
           java -version
           firebase --version
@@ -298,6 +313,17 @@ jobs:
 
       - name: Run permanent cross-portal adversarial security matrix
         run: npm run test:security-matrix
+
+      - name: Run required critical frontend browser acceptance
+        run: npm run test:frontend:acceptance
+
+      - name: Retain frontend acceptance receipts and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-acceptance-${{ github.run_id }}
+          path: test-results/bwm048-acceptance/
+          if-no-files-found: warn
 
       - name: Retain security matrix receipts and candidate hashes
         if: always()

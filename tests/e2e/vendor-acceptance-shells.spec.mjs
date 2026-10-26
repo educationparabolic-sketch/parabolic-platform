@@ -81,8 +81,15 @@ test("Vendor matrix shell navigation, missing targets, stale current identities 
     await expect(page.getByLabel("Registered name", {exact: true})).toHaveCount(0);
     for (const current of [{...claims, role: "admin"}, {...claims, isSuspended: true}]) {
       await auth.setCustomUserClaims(user.uid, current);
-      expect((await request.get(path(a), {headers})).status()).toBe(403);
-      expect((await request.patch(path(b), {headers, data: {expectedRevision: 1, idempotencyKey: randomUUID(), profile: {registeredName: "Denied current actor"}}})).status()).toBe(403);
+      // Inconsistent current role/marker invalidates identity before role
+      // admission; a suspended current identity retains its explicit denial.
+      const deniedRead = (await request.get(path(a), {headers})).status();
+      const deniedWrite = (await request.patch(path(b), {headers, data: {expectedRevision: 1, idempotencyKey: randomUUID(), profile: {registeredName: "Denied current actor"}}})).status();
+      if (current.isSuspended) {
+        expect(deniedRead).toBe(403); expect(deniedWrite).toBe(403);
+      } else {
+        expect(deniedRead).toBe(401); expect(deniedWrite).toBe(401);
+      }
     }
     await auth.setCustomUserClaims(user.uid, claims);
     await page.goto(`/vendor/institutes/${a}`);

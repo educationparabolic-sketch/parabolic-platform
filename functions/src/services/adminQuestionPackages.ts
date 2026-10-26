@@ -1,3 +1,4 @@
+import {reserveQuestionAssetRevision} from "./questionAssetRevisions";
 import {safeRuntimeError} from "./diagnosticDisclosure";
 /* eslint-disable require-jsdoc */
 import {createHash} from "node:crypto";
@@ -78,6 +79,7 @@ interface StoredPackageRow {
   action: "create" | "update";
   additionalTag: string | null;
   chapter: string;
+  baseQuestionRevision: number | null;
   correctAnswer: string;
   difficulty: "Easy" | "Medium" | "Hard";
   internalNotes: string | null;
@@ -86,6 +88,7 @@ interface StoredPackageRow {
   primaryTag: string;
   questionId: string;
   questionImageFile: string;
+  questionImageRevision: number;
   questionNo: string;
   questionText: string | null;
   questionType: string;
@@ -93,6 +96,7 @@ interface StoredPackageRow {
   secondaryTag: string;
   simulationLink: string | null;
   solutionImageFile: string;
+  solutionImageRevision: number;
   topic: string | null;
   tutorialVideoLink: string | null;
   uniqueKey: string;
@@ -935,12 +939,33 @@ export class AdminQuestionPackagesService {
         row.primaryTag &&
         row.secondaryTag
       ) {
+        const existingData = existing?.data() ?? {};
+        const reusableRevision = (kind: "questionImage" | "solutionImage", file: string): number | null => {
+          const current = existingData[`${kind}Revision`];
+          const asset = parsed.assets.get(file);
+          if (Number.isSafeInteger(current) && current > 0 && asset &&
+            existingData[`${kind}Sha256`] === asset.contentSha256 &&
+            existingData[`${kind}Url`] === this.assetTarget(
+              request.instituteId, questionId, version, kind, asset, current,
+            ).objectPath) return current;
+          return null;
+        };
+        const questionRevision = reusableRevision("questionImage", row.questionImageFile);
+        const solutionRevision = reusableRevision("solutionImage", row.solutionImageFile);
+        // Reserve new immutable names before staging. Gaps are intentional: failed or
+        // concurrent packages must never reuse a name another package can clean up.
+        const reservedRevision = questionRevision !== null && solutionRevision !== null ? 0 :
+          await reserveQuestionAssetRevision(this.dependencies.firestore, request.instituteId,
+            questionId, existingData);
+        const questionImageRevision = questionRevision ?? reservedRevision;
+        const solutionImageRevision = solutionRevision ?? reservedRevision;
         const questionTarget = this.assetTarget(
           request.instituteId,
           questionId,
           version,
           "questionImage",
           parsed.assets.get(row.questionImageFile),
+          questionImageRevision,
         );
         const solutionTarget = this.assetTarget(
           request.instituteId,
@@ -948,9 +973,11 @@ export class AdminQuestionPackagesService {
           version,
           "solutionImage",
           parsed.assets.get(row.solutionImageFile),
+          solutionImageRevision,
         );
         const storedRow: StoredPackageRow = {
           academicYear: row.academicYear,
+          baseQuestionRevision: existingData.revision ?? null,
           action: action as "create" | "update",
           additionalTag: row.additionalTag,
           chapter: row.chapter,
@@ -962,6 +989,7 @@ export class AdminQuestionPackagesService {
           primaryTag: row.primaryTag,
           questionId,
           questionImageFile: row.questionImageFile,
+          questionImageRevision,
           questionNo: row.questionNo,
           questionText: row.questionText,
           questionType: row.questionType,
@@ -969,6 +997,7 @@ export class AdminQuestionPackagesService {
           secondaryTag: row.secondaryTag,
           simulationLink: row.simulationLink,
           solutionImageFile: row.solutionImageFile,
+          solutionImageRevision,
           topic: row.topic,
           tutorialVideoLink: row.tutorialVideoLink,
           uniqueKey: row.uniqueKey,
@@ -1020,6 +1049,7 @@ export class AdminQuestionPackagesService {
     version: number,
     assetKind: "questionImage" | "solutionImage",
     asset: ParsedQuestionPackageAsset | undefined,
+    revision: number,
   ): StorageObjectTarget {
     if (!asset) {
       throw new AdminQuestionBankValidationError(
@@ -1032,6 +1062,7 @@ export class AdminQuestionPackagesService {
       extension: asset.extension,
       instituteId,
       questionId,
+      revision,
       version,
     });
   }
@@ -1399,6 +1430,7 @@ export class AdminQuestionPackagesService {
           extension: asset.extension,
           instituteId,
           questionId: row.questionId,
+          revision: positiveInteger(row[`${assetKind}Revision`], "assetRevision"),
           version: row.version,
         });
         plans.push({
@@ -1503,6 +1535,12 @@ export class AdminQuestionPackagesService {
           );
         }
         const existing = snapshot.data() ?? {};
+        if ((existing.revision ?? null) !== row.baseQuestionRevision) {
+          throw new AdminQuestionBankValidationError(
+            "CONFLICT",
+            `Question "${row.questionId}" revision changed after validation.`,
+          );
+        }
         if (snapshot.exists && existing.uniqueKey !== row.uniqueKey) {
           throw new AdminQuestionBankValidationError(
             "CONFLICT",
@@ -1571,6 +1609,7 @@ export class AdminQuestionPackagesService {
           parentQuestionId: existing.parentQuestionId ?? null,
           primaryTag: row.primaryTag,
           questionId: row.questionId,
+          questionImageRevision: row.questionImageRevision,
           questionImageSha256: questionPlan.asset.contentSha256,
           questionImageUrl: questionPlan.objectPath,
           questionNo: row.questionNo,
@@ -1581,6 +1620,7 @@ export class AdminQuestionPackagesService {
           searchTokens: existing.searchTokens ?? [],
           secondaryTag: row.secondaryTag,
           simulationLink: row.simulationLink,
+          solutionImageRevision: row.solutionImageRevision,
           solutionImageSha256: solutionPlan.asset.contentSha256,
           solutionImageUrl: solutionPlan.objectPath,
           status: existing.status === "used" ? "used" : "active",

@@ -237,11 +237,19 @@ test("metadata replacement persists a revisioned managed solution asset", async 
   const instituteId = "inst-bwm-027-metadata-asset";
   const questionId = "question-metadata-asset-v1";
   const objects = new Map<string, Buffer>();
+  let uploadCount = 0;
+  let releaseUploads: () => void = () => undefined;
+  const uploaded = new Promise<void>((resolve) => {
+    releaseUploads = resolve;
+  });
   await prepareInstitute(instituteId);
   const question = firestore.doc(
     `institutes/${instituteId}/questionBank/${questionId}`,
   );
   await question.set(questionData({questionId, uniqueKey: "META-ASSET-v1"}));
+
+  await firestore.doc(`institutes/${instituteId}/questionAssetRevisionCounters/${questionId}`)
+    .set({revision: 7});
 
   try {
     const service = new AdminQuestionMutationsService({
@@ -268,6 +276,9 @@ test("metadata replacement persists a revisioned managed solution asset", async 
         },
         async putObject(input) {
           objects.set(input.objectPath, Buffer.from(input.bytes));
+          uploadCount += 1;
+          if (uploadCount === 2) releaseUploads();
+          await uploaded;
           return "created";
         },
       },
@@ -286,15 +297,19 @@ test("metadata replacement persists a revisioned managed solution asset", async 
       },
       questionId,
     });
-    const result = await service.updateMetadata(request);
+    const results = await Promise.all([service.updateMetadata(request), service.updateMetadata(request)]);
+    assert.deepEqual(results.map((result) => result.disposition).sort(), ["applied", "replayed"]);
     const snapshot = await question.get();
     const expectedPath = `${instituteId}/questions/${questionId}/` +
-      "v1/solution-r2.png";
-    assert.equal(result.revision, 2);
+      `v1/solution-r${snapshot.get("solutionImageRevision")}.png`;
+    assert.equal(results[0].revision, 2);
     assert.equal(snapshot.get("solutionImageUrl"), expectedPath);
-    assert.equal(snapshot.get("solutionImageRevision"), 2);
+    assert.ok([8, 9].includes(snapshot.get("solutionImageRevision")));
     assert.equal(snapshot.get("solutionImageSha256").length, 64);
     assert.equal(objects.has(expectedPath), true);
+    assert.equal((await service.updateMetadata(request)).disposition, "replayed");
+    assert.equal(objects.size, 1);
+    assert.equal(uploadCount, 2);
   } finally {
     await cleanupInstitute(instituteId);
   }

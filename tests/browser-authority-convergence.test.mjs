@@ -129,3 +129,12 @@ test("all institute portals implement bounded convergence while Vendor stays glo
   assert.match(exam, /The exam was not auto-submitted/u);
   assert.match(exam, /authorityInterrupted/u);
 });
+
+test("institute view-scope reads stay nullable and never guess authentication authority", () => {
+  assert.equal(convergence.readInstituteScopeFromToken(token({instituteId: "tenant-a"})), "tenant-a");
+  assert.equal(convergence.readInstituteScopeFromToken(token({instituteId: "tenant-b", authorizationVersion: 1})), "tenant-b");
+  for (const value of [null, "", "not-a-token", "a.!.c", token(null), token({}),
+    token({instituteId: 4}), token({instituteId: "  "})]) {
+    assert.equal(convergence.readInstituteScopeFromToken(value), null);
+  }
+});

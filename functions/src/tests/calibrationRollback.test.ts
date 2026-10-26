@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {randomUUID} from "node:crypto";
-import {CalibrationRolloutService, calibrationRolloutIdentity, calibrationRollbackIdentity,
+import {CalibrationRolloutError, CalibrationRolloutService, calibrationRolloutIdentity, calibrationRollbackIdentity,
   parseCalibrationRollout} from "../services/calibrationRollout";
 import {getFirebaseAdminApp, getFirestore} from "../utils/firebaseAdmin";
 import {consumerVersion} from "./calibrationConsumerFixture";
@@ -191,18 +191,40 @@ test("same-key inverse convergence and different-key concurrency have exactly on
   assert.equal(results[0].state, "applied");
   assert.deepEqual(results[0], results[1]);
   const racing = await appliedFixture("racing_keys");
-  const races = await Promise.allSettled([service.rollback(vendor, racing.applied.operationId,
-    inverseRequest(racing.applied.operationId)), service.rollback(vendor, racing.applied.operationId,
-    inverseRequest(racing.applied.operationId))]);
+  const requests = [inverseRequest(racing.applied.operationId), inverseRequest(racing.applied.operationId)];
+  const races = await Promise.allSettled(requests.map((request) =>
+    service.rollback(vendor, racing.applied.operationId, request)));
   const winners = races.filter((response) => response.status === "fulfilled" && response.value.state === "applied");
   assert.equal(winners.length, 1);
-  for (const response of races) {
+  for (const [index, response] of races.entries()) {
     if (response.status === "fulfilled" && response.value.state !== "applied") {
       assert.equal(response.value.state, "not_applied");
-      assert.equal(response.value.receipt?.failureCode, "OPERATION_CONFLICT");
+      // Exhausted SDK lock retries may fail before the original-state conflict is observed.
+      assert.ok(["OPERATION_CONFLICT", "APPLY_FAILED"].includes(response.value.receipt?.failureCode ?? ""));
+      assert.deepEqual(response.value.receipt?.targets, []);
+      assert.deepEqual(await service.rollback(vendor, racing.applied.operationId, requests[index]), response.value);
+    } else if (response.status === "rejected") {
+      assert.ok(response.reason instanceof CalibrationRolloutError);
+      assert.equal(response.reason.code, "OPERATION_CONFLICT");
     }
   }
+  const winner = races.find((response) => response.status === "fulfilled" && response.value.state === "applied");
+  assert.ok(winner?.status === "fulfilled");
+  assert.equal((await journal(racing.applied.operationId).get()).get("rollbackOperationId"), winner.value.operationId);
   assert.equal((await journal(racing.applied.operationId).get()).get("revision"), 3);
+  for (const target of racing.receipt.targets) {
+    for (const [field, suffix] of [["institutePointer", ""], ["currentLicensePointer", "/license/current"],
+      ["compatibilityLicensePointer", "/license/main"]] as const) {
+      const actual = (await firestore.doc(`institutes/${target.instituteId}${suffix}`).get()).data();
+      assert.ok(actual);
+      const captured = target.before[field];
+      assert.equal(Object.prototype.hasOwnProperty.call(actual, "calibrationVersion"), captured.present);
+      if (captured.present) assert.equal(actual.calibrationVersion, captured.value);
+    }
+    const history = await firestore.collection(`institutes/${target.instituteId}/calibrationHistory`).get();
+    assert.deepEqual(history.docs.map((doc) => doc.id).sort(),
+      [racing.applied.operationId, winner.value.operationId].sort());
+  }
 });
 
 test("precommit inverse failure is terminal and leaves original apply and pointers intact", async () => {

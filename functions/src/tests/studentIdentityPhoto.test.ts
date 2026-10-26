@@ -253,12 +253,18 @@ test("same-key retries converge; changed intent and stale competing writers conf
   assert.equal((await student.get()).get("version"), 2);
   await assert.rejects(makeService().enroll(token, {...body, expectedVersion: 2}), denied("CONFLICT"));
   const target = results[0].committedPhoto.photoId;
-  const competing = await Promise.allSettled([
-    makeService().enroll(token, request(2, target)),
-    makeService().enroll(token, request(2, target)),
-  ]);
+  const competingIntents = [request(2, target), request(2, target)];
+  const competing = await Promise.allSettled(competingIntents.map((intent) => makeService().enroll(token, intent)));
   assert.equal(competing.filter(({status}) => status === "fulfilled").length, 1);
-  for (const result of competing) if (result.status === "rejected") denied("CONFLICT")(result.reason);
+  for (const [index, result] of competing.entries()) {
+    if (result.status !== "rejected") continue;
+    assert.ok(result.reason instanceof StudentProfileValidationError);
+    if (result.reason.code === "INTERNAL_ERROR") {
+      // A real SDK lock timeout leaves completion unknown. Retry the exact
+      // losing intent once after the winner settles; never invent a receipt.
+      await assert.rejects(makeService().enroll(token, competingIntents[index]), denied("CONFLICT"));
+    } else denied("CONFLICT")(result.reason);
+  }
   assert.equal((await student.get()).get("version"), 3);
   assert.equal((await audits.get()).size, 2);
   const states = (await photos.get()).docs.map((row) => row.get("state"));

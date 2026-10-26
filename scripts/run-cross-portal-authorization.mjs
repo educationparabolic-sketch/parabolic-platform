@@ -11,7 +11,10 @@ mkdirSync(out, {recursive: true});
 const phase = process.argv.includes("--phase") ? process.argv[process.argv.indexOf("--phase") + 1] : "all";
 const child = process.argv.includes("--child");
 assert.ok(["all", "services", "browser", "guards", "headers"].includes(phase));
-const common = {...process.env, VENDOR_AUDIT_CURSOR_KEY: child ? process.env.VENDOR_AUDIT_CURSOR_KEY : randomBytes(32).toString("base64url"), APP_CHECK_MODE: "pending_provisioning", APP_CHECK_ALLOWED_APP_IDS: "1:123456789:web:bwm047security", DEBUG: "", CI: "true", NODE_ENV: "test", PROJECT_ID: projectId,
+const common = {...process.env,
+  CDN_BASE_URL: "https://cdn.exam-local.test.invalid/published",
+  CDN_SIGNED_URL_KEY_NAME: "bwm-048-local-only",
+  CDN_SIGNED_URL_KEY_VALUE: Buffer.from("bwm-048-local-exam-test-key").toString("base64url"), VENDOR_AUDIT_CURSOR_KEY: child ? process.env.VENDOR_AUDIT_CURSOR_KEY : randomBytes(32).toString("base64url"), APP_CHECK_MODE: "pending_provisioning", APP_CHECK_ALLOWED_APP_IDS: "1:123456789:web:bwm047security", DEBUG: "", CI: "true", NODE_ENV: "test", PROJECT_ID: projectId,
   GCLOUD_PROJECT: projectId, GOOGLE_CLOUD_PROJECT: projectId, NO_GCE_CHECK: "true", METADATA_SERVER_DETECTION: "none",
   FUNCTIONS_DISCOVERY_TIMEOUT: "120", IDENTITY_PHOTOS_BUCKET: `${projectId}-identity-photos`,
   PARABOLIC_SECURITY_PORTAL_ORIGIN: "http://127.0.0.1:5000", PARABOLIC_SECURITY_VENDOR_ORIGIN: "http://127.0.0.1:5006",

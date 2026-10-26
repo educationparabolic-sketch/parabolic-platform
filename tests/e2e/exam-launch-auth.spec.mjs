@@ -356,7 +356,7 @@ test("mounted ownership preserves activation, acknowledged/offline answers, rota
   expect(entryEnvelope.data.runtimeSnapshot.questions).toHaveLength(12);
   expect(entryEnvelope.data.runtimeSnapshot.questions[0]).toMatchObject({
     id: questionId,
-    imageUrl: `${instituteId}/questions/${questionId}/v1/question-r1.png`,
+    imageUrl: expect.stringMatching(/^https:\/\/[^/]+\/.*\/question-r1\.png\?Expires=\d+&KeyName=[^&]+&Signature=/u),
     text: "Authoritative browser snapshot question",
   });
   expect(JSON.stringify(entryEnvelope.data.runtimeSnapshot)).not.toMatch(

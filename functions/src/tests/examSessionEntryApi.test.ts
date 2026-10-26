@@ -1,3 +1,5 @@
+import {projectExamRuntimeAssets} from "../services/examRuntimeAssets";
+import {signedUrlService} from "../services/signedUrl";
 import {proctoringPolicyForTest} from "./helpers/proctoring";
 import {randomBytes, randomUUID} from "node:crypto";
 import assert from "node:assert/strict";
@@ -63,7 +65,7 @@ const entryResult: SessionEntryValidationResult = {
     questions: [{
       difficulty: "easy",
       id: "question_exam_entry_api",
-      imageUrl: "questions/question_exam_entry_api/v1/question.png",
+      imageUrl: `${identity.instituteId}/questions/question_exam_entry_api/v1/question-r1.png`,
       matrixColumns: [],
       matrixRows: [],
       media: null,
@@ -121,6 +123,10 @@ const publicResult = {...entryResult, ownership: receipt};
 const invoke = async (body: unknown, overrides: Record<string, unknown> = {}, rawBody?: string) => {
   let calls = 0;
   const handler = createExamSessionEntryHandler({
+    signAssetUrl: (input) => signedUrlService.generateSignedUrlForCdnPath(input, {
+      cdnBaseUrl: "https://cdn.example.test/published", signedUrlKeyName: "test-key",
+      signedUrlKeyValue: Buffer.from("local-exam-assets-test").toString("base64url"),
+    }),
     reconcileSession: async (context) => {
       calls++;
       assert.equal(context.runtimeCommand?.operation, "reconcile");
@@ -164,7 +170,15 @@ test("entry dispatches owned launch/recovery and strips backend-only snapshot fi
     const {response, calls} = await invoke(command);
     assert.equal(calls, 1); assert.equal(response.statusCode, 200);
     const data = (response.body as {data: {entry: Record<string, unknown>}}).data;
-    assert.deepEqual(data.entry.runtimeSnapshot, entryResult.runtimeSnapshot);
+    const snapshot = data.entry.runtimeSnapshot as typeof entryResult.runtimeSnapshot;
+    assert.deepEqual({...snapshot, questions: snapshot.questions.map((question) =>
+      ({...question, imageUrl: entryResult.runtimeSnapshot.questions[0].imageUrl}))}, entryResult.runtimeSnapshot);
+    const asset = new URL(snapshot.questions[0].imageUrl);
+    assert.equal(asset.origin, "https://cdn.example.test");
+    assert.equal(asset.pathname, `/published/${entryResult.runtimeSnapshot.questions[0].imageUrl}`);
+    assert.ok(asset.searchParams.get("Signature"));
+    assert.ok(Number(asset.searchParams.get("Expires")) > Date.now() / 1000);
+    assert.equal(entryResult.runtimeSnapshot.questions[0].imageUrl.includes("Signature"), false);
     for (const privateKey of ["sessionPath", "licenseSnapshot",
       "templateSnapshot"]) assert.equal(privateKey in data.entry, false);
     assert.match(response.headers["cache-control"], /no-store/u);
@@ -199,4 +213,29 @@ test("read-only reconcile dispatches exactly and rejects overrides without busin
     const rejected = await invoke(body);
     assert.equal(rejected.calls, 0); assert.equal(rejected.response.statusCode, 400);
   }
+});
+
+
+test("runtime asset projection rejects foreign, solution, unsigned legacy and traversal paths before signing", () => {
+  let calls = 0;
+  const sign: Parameters<typeof projectExamRuntimeAssets>[2] = () => {
+    calls++;
+    throw new Error("Unexpected signing");
+  };
+  const snapshot = entryResult.runtimeSnapshot;
+  const original = snapshot.questions[0];
+  for (const imageUrl of ["other/questions/question_exam_entry_api/v1/question-r1.png",
+    `${identity.instituteId}/questions/other/v1/question-r1.png`,
+    `${identity.instituteId}/questions/${original.id}/v1/solution-r1.png`,
+    `${identity.instituteId}/questions/${original.id}/v1/question.png`,
+    `${identity.instituteId}/questions/${original.id}/v1/../question-r1.png`,
+    "https://foreign.invalid/secret.png"]) {
+    assert.throws(() => projectExamRuntimeAssets({...snapshot, questions: [{...original, imageUrl}]},
+      identity.instituteId, sign), /Exam question asset is unavailable/);
+  }
+  assert.equal(calls, 0);
+  const empty = projectExamRuntimeAssets(
+    {...snapshot, questions: [{...original, imageUrl: ""}]}, identity.instituteId, sign);
+  assert.equal(empty.questions[0].imageUrl, "");
+  assert.equal(calls, 0);
 });

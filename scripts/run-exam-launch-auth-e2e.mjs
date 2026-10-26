@@ -40,6 +40,7 @@ function run(label, executable, args, extraEnvironment = {}) {
 }
 
 const liveBuildEnvironment = {
+  VITE_CDN_BASE_URL: "https://cdn.exam-local.test.invalid/published",
   VITE_API_BASE_URL: "",
   VITE_BASE_PATH: "/",
   VITE_DATA_MODE: "live",
@@ -108,6 +109,9 @@ run(
   emulatorArgs,
   {
     CI: "true",
+    CDN_BASE_URL: "https://cdn.exam-local.test.invalid/published",
+    CDN_SIGNED_URL_KEY_NAME: "bwm-048-local-only",
+    CDN_SIGNED_URL_KEY_VALUE: Buffer.from("bwm-048-local-exam-test-key").toString("base64url"),
     ...(scoped ? {DEBUG: ""} : {}),
     EXAM_BASE_URL: hostingOrigin,
     ...(scoped ? {IDENTITY_PHOTOS_BUCKET: `${projectId}-identity-photos`} : {}),

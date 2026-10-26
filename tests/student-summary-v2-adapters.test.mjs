@@ -38,6 +38,15 @@ function dashboard(a) { return {...current(a), ...dashboardProjection({avgRawSco
 function performance(a) { return {...current(a), ...performanceProjection({}, a, [performancePoint({runId: "r", runLabel: "Own",
   submittedAt: "2026-10-17T10:00:00Z", rawScorePercent: 0, accuracyPercent: 0, timeSpentMinutes: 0}, a, 0)])}; }
 
+test("scheduled dashboard rows preserve the closed DTO and reject undeclared producer fields", () => {
+  const data = dashboard(access());
+  data.upcomingTests = [{runId: "scheduled", testName: "Own scheduled run", mode: "Operational",
+    startAt: "2026-10-24T12:00:00Z", endAt: "2026-10-24T12:30:00Z", durationMinutes: 30}];
+  assert.deepEqual(adapt(data, "dashboard"), data);
+  data.upcomingTests[0].testId = "undeclared-selector";
+  assert.throws(() => adapt(data, "dashboard"), /dashboard.upcomingTests\[0\]/);
+});
+
 test("v2 adapters retain real zero, recursive nulls and empty lists across the layer/feature matrix", () => {
   for (const layer of ["L0", "L1", "L2", "L3"]) for (const controlledComparison of [false, true]) for (const hardTiming of [false, true]) {
     const a = access(layer, {controlledComparison: ["L2", "L3"].includes(layer) && controlledComparison,

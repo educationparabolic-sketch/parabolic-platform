@@ -1,3 +1,5 @@
+import {projectExamRuntimeAssets} from "../services/examRuntimeAssets";
+import {signedUrlService} from "../services/signedUrl";
 import {assertUniqueCommandJson, parseRuntimeCommand, runtimeHeaders} from "../services/examRuntimeOwnership";
 import type {ExamRuntimeEntryRequestV2} from "../../../shared/contracts/examRuntimeOwnership";
 import * as functions from "firebase-functions";
@@ -18,6 +20,7 @@ import {createRoleAuthorizationMiddleware} from "../middleware/role";
 import {createTenantGuardMiddleware} from "../middleware/tenant";
 
 interface ExamSessionEntryRequestDependencies {
+  signAssetUrl?: typeof signedUrlService.generateSignedUrlForCdnPath;
   reconcileSession?: typeof sessionService.reconcileSession;
   manageRuntimeOwnership?: typeof sessionService.manageRuntimeOwnership;
   resumeSessionEntry: typeof sessionService.resumeSessionEntry;
@@ -117,7 +120,8 @@ export const createExamSessionEntryHandler = (
       if (!result.ownership) throw new Error("Ownership receipt unavailable.");
       data = {operation: command.operation, ownership: result.ownership, entry: {
         allowed: true, recovery: result.recovery, deadlineAt: result.deadlineAt, instituteId: result.instituteId,
-        runId: result.runId, runtimeSnapshot: result.runtimeSnapshot, serverTime: result.serverTime,
+        runId: result.runId, runtimeSnapshot: projectExamRuntimeAssets(
+          result.runtimeSnapshot, result.instituteId, dependencies.signAssetUrl), serverTime: result.serverTime,
         sessionId: result.sessionId, startedAt: result.startedAt, status: result.status,
         studentId: result.studentId, yearId: result.yearId,
       }};

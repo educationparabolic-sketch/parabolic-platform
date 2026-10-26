@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import {seedVendorDeniedIdentity} from "./vendor-denied-identity.mjs";
 import { createRequire } from "node:module";
 import { expect, test } from "playwright/test";
 
@@ -336,11 +337,13 @@ test("Vendor commercial authority persists through real Auth, Firestore, Functio
   const vendorToken = await signInToken(request, identities.vendor);
   const unauthenticated = await request.get("/api/v1/vendor/license-catalog");
   expect(unauthenticated.status()).toBe(401);
+  const cleanupDenied = await seedVendorDeniedIdentity(auth, db, identities.admin, "admin");
   const adminToken = await signInToken(request, identities.admin);
   const wrongRole = await request.get("/api/v1/vendor/license-catalog", {
     headers: { Authorization: `Bearer ${adminToken}` },
   });
   expect(wrongRole.status()).toBe(403);
+  await cleanupDenied();
   const allowed = await request.get("/api/v1/vendor/license-catalog", {
     headers: { Authorization: `Bearer ${vendorToken}` },
   });

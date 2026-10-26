@@ -137,15 +137,75 @@ test("admin students handler rejects disallowed roles", async () => {
   );
 });
 
-test("admin students handler maps validation errors", async () => {
+test("admin students handler rejects missing tenant authority before validation or service access", async () => {
+  let serviceCalls = 0;
+  for (const instituteId of [undefined, "", "   "]) {
+    const handler = createAdminStudentsHandler({
+      listStudents: async () => {
+        serviceCalls += 1;
+        throw new Error("listStudents should not be called");
+      },
+      verifyIdToken: async () => createAdminToken({instituteId}) as never,
+    });
+    const response = createMockResponse();
+
+    await handler(createMockRequest({
+      headers: {authorization: "Bearer build_admin_students_missing_tenant"},
+      method: "GET",
+      path: "/admin/students",
+      query: {limit: "0"},
+    }) as never, response as never);
+
+    assert.equal(response.statusCode, 403);
+    assertStructuredError(response.body, "TENANT_MISMATCH",
+      "Authenticated identity is missing required instituteId claim.");
+    assert.equal(serviceCalls, 0);
+  }
+});
+
+test("admin students handler validates limits with coherent tenant authority before service access", async () => {
+  let serviceCalls = 0;
   const handler = createAdminStudentsHandler({
     listStudents: async () => {
+      serviceCalls += 1;
+      throw new Error("listStudents should not be called");
+    },
+    verifyIdToken: async () => createAdminToken() as never,
+  });
+
+  for (const limit of ["0", "1001", "not-a-number"]) {
+    const response = createMockResponse();
+    await handler(createMockRequest({
+      headers: {authorization: "Bearer build_admin_students_invalid_limit"},
+      method: "GET",
+      path: "/admin/students",
+      query: {limit},
+    }) as never, response as never);
+
+    assert.equal(response.statusCode, 400);
+    assertStructuredError(response.body, "VALIDATION_ERROR",
+      "Field \"limit\" must be a number between 1 and 1000.");
+    assert.equal(serviceCalls, 0);
+  }
+});
+
+test("admin students handler maps service validation errors after authenticated request validation", async () => {
+  let serviceCalls = 0;
+  const handler = createAdminStudentsHandler({
+    listStudents: async (request) => {
+      serviceCalls += 1;
+      assert.deepEqual(request, {
+        actorId: "admin_build_students",
+        actorRole: "admin",
+        instituteId: "inst_build_admin_students_api",
+        limit: 250,
+      });
       throw new AdminStudentsValidationError(
         "VALIDATION_ERROR",
-        "Field \"instituteId\" must be a non-empty string.",
+        "Field \"limit\" must be a number between 1 and 1000.",
       );
     },
-    verifyIdToken: async () => createAdminToken({instituteId: ""}) as never,
+    verifyIdToken: async () => createAdminToken() as never,
   });
   const response = createMockResponse();
 
@@ -156,6 +216,7 @@ test("admin students handler maps validation errors", async () => {
       },
       method: "GET",
       path: "/admin/students",
+      query: {limit: "250"},
     }) as never,
     response as never,
   );
@@ -164,6 +225,7 @@ test("admin students handler maps validation errors", async () => {
   assertStructuredError(
     response.body,
     "VALIDATION_ERROR",
-    "Field \"instituteId\" must be a non-empty string.",
+    "Field \"limit\" must be a number between 1 and 1000.",
   );
+  assert.equal(serviceCalls, 1);
 });

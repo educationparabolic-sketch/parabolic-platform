@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import {seedVendorDeniedIdentity} from "./vendor-denied-identity.mjs";
 import { createRequire } from "node:module";
 import { expect, test } from "playwright/test";
 
@@ -224,11 +225,13 @@ test("Vendor institute authority persists through real Auth, Firestore, Function
   const vendorToken = await signInToken(request, identities.vendor);
   const unauthenticated = await request.get("/api/v1/vendor/institutes");
   expect(unauthenticated.status()).toBe(401);
+  const cleanupDenied = await seedVendorDeniedIdentity(auth, db, identities.admin, "admin");
   const adminToken = await signInToken(request, identities.admin);
   const wrongRole = await request.get("/api/v1/vendor/institutes", {
     headers: { Authorization: `Bearer ${adminToken}` },
   });
   expect(wrongRole.status()).toBe(403);
+  await cleanupDenied();
   const allowed = await request.get("/api/v1/vendor/institutes?limit=1", {
     headers: { Authorization: `Bearer ${vendorToken}` },
   });
@@ -396,11 +399,18 @@ test("Vendor institute authority persists through real Auth, Firestore, Function
   await expect(page.getByRole("heading", { name: "Institutes", exact: true }).last()).toBeVisible();
   const invalidQuery = "x".repeat(100);
   await page.locator(".vendor-authority-filters").getByLabel("Search").fill(invalidQuery);
+  const invalidResponse = page.waitForResponse(response => {
+    const url = new URL(response.url());
+    return url.pathname === "/api/v1/vendor/institutes" && url.searchParams.get("query") === invalidQuery;
+  });
   await page
     .locator(".vendor-authority-filters")
     .getByRole("button", { name: "Apply filters" })
     .click();
-  await expect(page.getByText(/Field "query" must be at most 80 characters/u)).toBeVisible({
+  const rejected = await invalidResponse;
+  expect(rejected.status()).toBe(400);
+  expect((await rejected.json()).error.code).toBe("VALIDATION_ERROR");
+  await expect(page.getByText("Request validation failed.", {exact: true})).toBeVisible({
     timeout: 60_000,
   });
   await page.locator(".vendor-authority-filters").getByRole("button", { name: "Clear" }).click();
@@ -427,8 +437,12 @@ test("Vendor institute authority persists through real Auth, Firestore, Function
   const wrongRoleContext = await browser.newContext({ bypassCSP: true });
   const wrongRolePage = await wrongRoleContext.newPage();
   await signInPortal(wrongRolePage, identities.admin);
-  await expect(wrongRolePage).toHaveURL(/\/unauthorized$/u);
+  await expect(wrongRolePage.getByRole("heading", { name: "Vendor role required" })).toBeVisible({timeout: 60000});
+  // Settle the sign-in handler before probing a fresh protected navigation.
+  await wrongRolePage.goto("/vendor/institutes", {waitUntil: "domcontentloaded"});
+  await expect(wrongRolePage).toHaveURL(/\/unauthorized$/u, {timeout: 60000});
   await expect(wrongRolePage.getByRole("heading", { name: "Vendor role required" })).toBeVisible();
+  await expect(wrongRolePage.locator(".admin-content-container")).toHaveCount(0);
   await wrongRoleContext.close();
 
   const mutationRequests = vendorRequests.filter(

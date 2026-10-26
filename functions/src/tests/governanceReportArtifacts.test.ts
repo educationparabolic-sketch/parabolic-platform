@@ -220,8 +220,10 @@ test(
     assert.equal(download.reportId, report.reportId);
     assert.equal(download.sha256, report.sha256);
     assert.equal(download.sizeBytes, report.sizeBytes);
-    assert.equal(url.origin, "https://cdn.example.com");
-    assert.equal(url.pathname, `/${objectPath}`);
+    assert.ok(process.env.CDN_BASE_URL);
+    const cdnBase = new URL(process.env.CDN_BASE_URL);
+    assert.equal(url.origin, cdnBase.origin);
+    assert.equal(url.pathname, `${cdnBase.pathname.replace(/\/$/u, "")}/${objectPath}`);
     assert.ok(new Date(download.expiresAt).getTime() - beforeDownload <= 600_000);
     assert.doesNotMatch(
       JSON.stringify({download, report}),

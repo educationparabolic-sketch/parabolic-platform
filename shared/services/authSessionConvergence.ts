@@ -60,6 +60,22 @@ export function readAuthorizationVersionFromToken(idToken: string | null): numbe
   }
 }
 
+// Presentation metadata for invalidating a view, never authentication or a
+// request target. Missing/malformed claims have no guessed institute fallback.
+export function readInstituteScopeFromToken(idToken: string | null): string | null {
+  if (!idToken) return null;
+  try {
+    const segments = idToken.split(".");
+    if (segments.length !== 3) return null;
+    const payload = segments[1].replace(/-/g, "+").replace(/_/g, "/");
+    const claims = JSON.parse(atob(payload.padEnd(Math.ceil(payload.length / 4) * 4, "=")));
+    return typeof claims?.instituteId === "string" && claims.instituteId.trim()
+      ? claims.instituteId.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
 export function hasAuthorizationAdvanced(
   observedAuthorizationVersion: number | null,
   idToken: string | null,

@@ -46,7 +46,7 @@ test.beforeAll(async () => {
     profile: {academicYearFormat: "YYYY-YY", contactEmail: "institute@emulator.test", contactPhone: "0000000000", defaultExamType: "Synthetic", instituteName: "Synthetic UI", logoReference: "none", timeZone: "Asia/Kolkata"},
     securitySettings: {allowMultipleAdminSessions: false, forceLogoutOnPasswordChange: true, sessionTimeoutDuration: 30}});
   await institute.collection("license").doc("current").set({currentLayer: "L0", licenseVersion, licenseState: "active", featureFlags, activeStudentLimit: 100, concurrentSessionLimit: 10, expiryDate: "2099-01-01T00:00:00Z", gracePeriodEndsAt: null});
-  await institute.collection("academicYears").doc("year").set({status: "active", academicYearLabel: "Synthetic year", runCount: 0, studentCount: 1});
+  await institute.collection("academicYears").doc("year").set({status: "Active", academicYearLabel: "Synthetic year", runCount: 0, studentCount: 1});
   for (const role of ["student", "admin", "other"]) {
     const uid = role === "student" ? studentId : `${instituteId}_${role}`;
     const email = `${uid}@emulator.test`, password = randomUUID();
@@ -54,6 +54,9 @@ test.beforeAll(async () => {
     await auth.setCustomUserClaims(uid, {role: role === "other" ? "student" : role, instituteId, authorizationVersion: 1, licenseLayer: "L0", licenseVersion, licenseState: "active", featureFlags, ...(role !== "admin" ? {studentId: uid} : {})});
     identities[role] = {uid, email, password};
   }
+  await institute.set({primaryAdminUserId: identities.admin.uid, settingsRevision: 0,
+    settingsUsers: {[identities.admin.uid]: {role: "admin", status: "active", email: identities.admin.email,
+      displayName: "Synthetic UI Administrator", updatedAt: new Date().toISOString()}}}, {merge: true});
   await institute.collection("students").doc(identities.other.uid).set({studentId: identities.other.uid, fullName: "Other Synthetic Student", email: identities.other.email, status: "active", version: 1});
   await institute.collection("students").doc(studentId).set({studentId, fullName: "Synthetic UI Student", email: identities.student.email, status: "active", version: 1, livePhotoVerified: true, livePhotoUrl: "https://invalid.example/legacy.jpg"});
 });

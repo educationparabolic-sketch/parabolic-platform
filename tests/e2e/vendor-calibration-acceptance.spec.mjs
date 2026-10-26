@@ -1,9 +1,11 @@
 import {randomUUID} from "node:crypto";
+import {paceVendorExpensiveRequests, seedVendorDeniedIdentity} from "./vendor-denied-identity.mjs";
 import {createRequire} from "node:module";
 import {expect, test} from "playwright/test";
 
 const require = createRequire(import.meta.url);
 const {getFirebaseAdminApp, getFirestore} = require("../../functions/lib/utils/firebaseAdmin");
+const {SECURITY_LIMITS} = require("../../functions/lib/services/securityRateLimits");
 const prefix = "/api/v1/vendor/calibration/";
 const weights = {guessWeight: 1, phaseWeight: 0, easyNeglectWeight: 0, hardBiasWeight: 0, wrongStreakWeight: 0};
 const phaseWeights = {...weights, guessWeight: 0, phaseWeight: 1};
@@ -49,10 +51,12 @@ test("calibration permanent real authority, selection, recovery, denial and isol
       if (!localStorage.getItem(auditKey)) localStorage.setItem(auditKey, JSON.stringify([{logId: "FORGED_LOCAL_CALIBRATION", actionType: "CalibrationPushed", actorUid: "forged", actorRole: "Vendor", targetCollection: "auditLogs", targetId: "forged", eventScope: "Global", instituteIds: [], calibrationVersionId: "FORGED_LOCAL_VERSION", note: "FORGED_LOCAL_CALIBRATION", createdAt: "2026-01-01T00:00:00.000Z"}]));
     }, {auditKey});
   };
+  const authorityCleanup = [];
   const makeAccount = async (claims = {role: "vendor", isVendor: true, licenseLayer: "L0"}) => {
     const email = `cal-accept-${randomUUID()}@example.test`, password = "local-calibration-acceptance-only";
     const user = await auth.createUser({email, password}); users.push(user.uid);
     await auth.setCustomUserClaims(user.uid, claims);
+    if (claims.role !== "vendor") authorityCleanup.push(await seedVendorDeniedIdentity(auth, db, user, claims.role));
     return {...user, email, password};
   };
   const tokenFor = async account => {
@@ -72,11 +76,15 @@ test("calibration permanent real authority, selection, recovery, denial and isol
   const versionData = (versionId, actor) => ({schemaVersion: 1, versionId, weights, isActive: versionId === versionIds[0], createdBy: actor,
     createdAt: "2026-01-01T00:00:00.000Z", activationDate: versionId === versionIds[0] ? "2026-01-01T00:00:00.000Z" : null,
     thresholds: {guessFactorEasy: 1, guessFactorMedium: 1, guessFactorHard: 1, phaseDeviationThreshold: 20}});
-  const workspace = page.locator(".vendor-calibration-page");
+  let workspace, versions, detail, directory, results;
   const section = title => workspace.locator(":scope > section").filter({has: page.getByRole("heading", {name: title, exact: true})});
-  const versions = section("Authoritative versions"), detail = section("Selected version and proposed weights"), directory = section("Authoritative target selection");
+  const bindWorkspace = () => {
+    workspace = page.locator(".vendor-calibration-page");
+    versions = section("Authoritative versions"); detail = section("Selected version and proposed weights");
+    directory = section("Authoritative target selection"); results = workspace.getByLabel("Authoritative simulation results");
+  };
+  bindWorkspace();
   const run = () => workspace.getByRole("button", {name: "Run simulation", exact: true});
-  const results = workspace.getByLabel("Authoritative simulation results");
   const choose = async () => {
     await versions.getByRole("button", {name: `${versionIds[0]} (Active)`, exact: true}).click();
     await expect(workspace.getByLabel("guessWeight", {exact: true})).toHaveValue("1");
@@ -98,6 +106,7 @@ test("calibration permanent real authority, selection, recovery, denial and isol
   };
   try {
     const account = await makeAccount();
+    const rateState = await paceVendorExpensiveRequests(page, account.uid, SECURITY_LIMITS.expensive);
     const batch = db.batch();
     for (const id of versionIds) batch.set(db.doc(`globalCalibration/${id}`), versionData(id, account.uid));
     for (const [i, id] of instituteIds.entries()) batch.set(db.doc(`institutes/${id}`), {instituteId: id, instituteRevision: 1,
@@ -234,11 +243,24 @@ test("calibration permanent real authority, selection, recovery, denial and isol
         const denied = await makeAccount({role, isVendor: false, licenseLayer: "L0"}); await allRoutesDenied(await tokenFor(denied), 403);
       }
       for (const claims of [{role: "admin", isVendor: true, licenseLayer: "L0"}, {role: "vendor", isVendor: true, isSuspended: true, licenseLayer: "L0"}]) {
-        await auth.setCustomUserClaims(account.uid, claims); await allRoutesDenied(vendorToken, 403);
+        await auth.setCustomUserClaims(account.uid, claims); await allRoutesDenied(vendorToken, claims.isSuspended ? 403 : 401);
         await versions.getByRole("button", {name: "Refresh versions", exact: true}).click();
-        await expect(versions.getByRole("alert")).toContainText("permission:"); await expect(results).toHaveCount(0);
+        if (claims.isSuspended) {
+          await expect(versions.getByRole("alert")).toContainText("permission:");
+        } else {
+          await expect(page.getByRole("heading", {name: "Vendor role required", exact: true})).toBeVisible({timeout: 60000});
+          await expect(workspace).toHaveCount(0);
+        }
+        await expect(results).toHaveCount(0);
         await auth.setCustomUserClaims(account.uid, {role: "vendor", isVendor: true, isSuspended: false, licenseLayer: "L0"});
-        await retry(versions); await choose(); await phase(); await year("2026"); await run().click(); await exactResult("50.00", "40.00", 5, 1);
+        if (claims.isSuspended) await retry(versions);
+        else {
+          const freshContext = await browser.newContext({baseURL: "http://127.0.0.1:5000", bypassCSP: true}); contexts.push(freshContext);
+          await page.close(); page = await freshContext.newPage(); bindWorkspace();
+          await paceVendorExpensiveRequests(page, account.uid, SECURITY_LIMITS.expensive, rateState);
+          await observe(page); await signIn(page, account); await expect(versions).toBeVisible({timeout: 60000});
+        }
+        await choose(); await phase(); await selectA(); await year("2026"); await run().click(); await exactResult("50.00", "40.00", 5, 1);
       }
       for (const kind of ["disabled", "revoked"]) {
         const denied = await makeAccount(), token = await tokenFor(denied);
@@ -282,6 +304,7 @@ test("calibration permanent real authority, selection, recovery, denial and isol
     }
   } finally {
     await Promise.all(contexts.map(context => context.close()));
+    await Promise.all(authorityCleanup.map(cleanup => cleanup()));
     // Only explicitly named demo fixtures owned by this suite; never reset a database.
     await Promise.all(instituteIds.map(id => db.recursiveDelete(db.doc(`institutes/${id}`))));
     await Promise.all(versionIds.map(id => db.doc(`globalCalibration/${id}`).delete()));
