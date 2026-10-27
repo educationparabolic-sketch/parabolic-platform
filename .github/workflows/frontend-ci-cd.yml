@@ -29,6 +29,7 @@ on:
       - "scripts/*.mjs"
       - "scripts/*.json"
       - "docs/FRONTEND_TESTS.md"
+      - "docs/BACKEND_TESTS.md"
       - "tests/**"
       - "playwright.config.mjs"
       - "package-lock.json"
@@ -79,6 +80,7 @@ on:
       - "scripts/*.mjs"
       - "scripts/*.json"
       - "docs/FRONTEND_TESTS.md"
+      - "docs/BACKEND_TESTS.md"
       - "tests/**"
       - "playwright.config.mjs"
       - "package-lock.json"
@@ -283,33 +285,16 @@ jobs:
           java -version
           firebase --version
 
-      - name: Lint Functions
-        run: npm --prefix functions run lint
+      - name: Run complete backend verification
+        run: npm run test:backend
 
-      - name: Build Functions
-        run: npm --prefix functions run build
-
-      - name: Run deterministic non-emulator tests
-        run: npm --prefix functions run test:ci:non-emulator
-
-      - name: Run accumulated emulator integration tests
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm run test:emulators:ci
-          npm run test:emulators:failure-cleanup
-
-      - name: Validate backend CI contract
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm run test:backend-ci-trigger-coverage
-          npm run test:backend-ci-validation
-          npm run test:emulator-harness-contract
-          npm run test:emulator-aggregate-contract
-          npm run test:staging-deployment-pipeline
-          npm run test:staging-smoke-contract
-          npm run test:production-promotion-separation
+      - name: Retain complete backend receipts and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-verification-${{ github.run_id }}
+          path: test-results/backend/
+          if-no-files-found: warn
 
       - name: Run permanent cross-portal adversarial security matrix
         run: npm run test:security-matrix

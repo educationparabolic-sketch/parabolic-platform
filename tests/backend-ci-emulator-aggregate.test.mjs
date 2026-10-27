@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import {BACKEND_STAGES} from "../scripts/run-backend-tests.mjs";
 import { randomBytes } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -58,8 +59,9 @@ test("backend CI aggregates every emulator-backed Functions suite", async () => 
     "node scripts/run-emulator-integration-suite.mjs --failure-cleanup-probe",
   );
   assert.match(workflow, /npm install --global firebase-tools@15\.9\.0/u);
-  assert.match(workflow, /npm run test:emulators:ci/u);
-  assert.match(workflow, /npm run test:emulators:failure-cleanup/u);
+  assert.match(workflow, /npm run test:backend/u);
+  assert.deepEqual(BACKEND_STAGES.find(s => s.id === "emulators").args, ["run", "test:emulators:ci"]);
+  assert.deepEqual(BACKEND_STAGES.find(s => s.id === "failure-cleanup").args, ["run", "test:emulators:failure-cleanup"]);
   assert.match(outerRunner, /async function runEmulatorPhase/u);
   assert.match(outerRunner, /await assertPortsReleased\(\)/u);
   assert.match(outerRunner, /FUNCTIONS_EMULATOR_HOST:/u);
@@ -69,14 +71,15 @@ test("backend CI aggregates every emulator-backed Functions suite", async () => 
   assert.match(outerRunner, /QUESTION_ASSETS_BUCKET:/u);
   assert.match(outerRunner, /IDENTITY_PHOTOS_BUCKET: `\$\{projectId\}-identity-photos`/u);
   assert.match(outerRunner, /VENDOR_AUDIT_CURSOR_KEY: randomBytes\(32\)\.toString\("base64url"\)/u);
-  assert.match(innerRunner, /--test-concurrency=1/u);
+  assert.match(innerRunner, /executeBackendSuite/u);
   assert.match(innerRunner, /selectedSuites\.map\(\(suite\) => \[suite\]\)/u);
-  assert.match(innerRunner, /firstFailedResult \?\? result/u);
+  assert.match(innerRunner, /result: "FAIL", failure: error.message/u);
+  assert.match(innerRunner, /assertBackendEmulators\(process.env, fullServicesPhase\)/u);
   assert.match(innerRunner, /Fire(?:store phase completed|store-backed suites)/u);
   assert.match(innerRunner, /Select exactly one emulator integration phase/u);
   assert.match(innerRunner, /cleanupMaxAttempts = 3/u);
   assert.match(innerRunner, /transientCleanupCodes/u);
-  assert.match(innerRunner, /finally \{\n {2}await clearEmulatorData\(\);\n\}/u);
+  assert.match(innerRunner, /finally \{await clearEmulatorData\(\);\}/u);
 });
 
 test("emulator phases supply explicit scoped per-phase cursor keys without changing process environment", async () => {

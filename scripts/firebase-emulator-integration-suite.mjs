@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import {mkdir, writeFile} from "node:fs/promises";
+import {assertBackendEmulators, executeBackendSuite, executeBackendCommand, assertBackendResult} from "./backend-test-process.mjs";
 import { readdir, readFile } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,20 +28,11 @@ assert.notEqual(
   firestoreOnlyPhase,
   "Select exactly one emulator integration phase",
 );
-assert.equal(process.env.GCLOUD_PROJECT, expectedProjectId);
-assert.equal(process.env.GOOGLE_CLOUD_PROJECT, expectedProjectId);
-assert.equal(process.env.PROJECT_ID, expectedProjectId);
-assert.ok(process.env.FIREBASE_EMULATOR_HUB);
-assert.ok(process.env.FIRESTORE_EMULATOR_HOST);
-if (fullServicesPhase) {
-  assert.ok(process.env.FIREBASE_AUTH_EMULATOR_HOST);
-  assert.ok(process.env.FUNCTIONS_EMULATOR_HOST);
-  assert.ok(process.env.FIREBASE_STORAGE_EMULATOR_HOST);
-}
+assertBackendEmulators(process.env, fullServicesPhase);
 
 async function discoverCompiledFirestoreSuites() {
   const sourceDirectory = resolve(functionsRoot, "src/tests");
-  const sourceFiles = (await readdir(sourceDirectory))
+  const sourceFiles = (await readdir(sourceDirectory, {recursive: true}))
     .filter((file) => file.endsWith(".test.ts"))
     .sort();
   const suites = [];
@@ -57,7 +49,7 @@ async function discoverCompiledFirestoreSuites() {
 
 async function discoverExplicitEmulatorSuites() {
   const externalDirectory = resolve(functionsRoot, "tests");
-  return (await readdir(externalDirectory))
+  return (await readdir(externalDirectory, {recursive: true}))
     .filter((file) => file.endsWith(".emulator.test.js"))
     .sort()
     .map((file) => resolve(externalDirectory, file));
@@ -129,86 +121,35 @@ const phaseLabel = fullServicesPhase ?
 
 console.log(`[emulator-suite] Running ${phaseLabel} serially.`);
 
-let result;
+const controller = new AbortController();
+const interrupt = () => controller.abort();
+process.on("SIGINT", interrupt); process.on("SIGTERM", interrupt);
+const receipts = [];
+const evidence = process.env.BACKEND_TEST_STAGE_DIRECTORY ?? resolve(repositoryRoot, "test-results/backend-emulator/run");
+await mkdir(evidence, {recursive: true});
+const save = () => writeFile(resolve(evidence, `${integrationGroup ?? "firestore"}-suites.json`), JSON.stringify(receipts, null, 2));
 try {
   if (fullServicesPhase && (integrationGroup === undefined || integrationGroup === "foundation")) {
-    const smokeResult = spawnSync(
-      process.execPath,
-      ["scripts/firebase-emulator-smoke.mjs"],
-      {
-        cwd: repositoryRoot,
-        env: process.env,
-        stdio: "inherit",
-      },
-    );
-    if (smokeResult.error) {
-      throw smokeResult.error;
-    }
-    if (smokeResult.status !== 0) {
-      result = smokeResult;
-    }
+    const smoke = await executeBackendCommand({root: repositoryRoot, command: process.execPath,
+      args: ["scripts/firebase-emulator-smoke.mjs"], env: process.env, signal: controller.signal, timeoutMs: 180_000});
+    assertBackendResult(smoke, "Hosting/Auth/Firestore/Storage smoke");
   }
-  if (!result) {
-    const suiteGroups = firestoreOnlyPhase ?
-      selectedSuites.map((suite) => [suite]) :
-      [selectedSuites];
-    let firstFailedResult;
-    let firestoreAssertionCount = 0;
-    for (const suiteGroup of suiteGroups) {
-      result = spawnSync(
-        process.execPath,
-        [
-          "--test",
-          "--test-concurrency=1",
-          ...suiteGroup,
-        ],
-        {
-          cwd: repositoryRoot,
-          env: {
-            ...process.env,
-            FAILURE_RECOVERY_USE_CLOUD_TASKS: "false",
-            STRIPE_WEBHOOK_SECRET: "whsec_bwm_010_emulator",
-          },
-          ...(firestoreOnlyPhase ? {
-            encoding: "utf8",
-            maxBuffer: 10 * 1024 * 1024,
-            stdio: ["ignore", "pipe", "pipe"],
-          } : {stdio: "inherit"}),
-        },
-      );
-      if (result.error) {
-        throw result.error;
-      }
-      if (firestoreOnlyPhase) {
-        const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
-        if (result.status === 0) {
-          const assertionCount = Number(output.match(/# tests (\d+)/u)?.[1] ?? 0);
-          firestoreAssertionCount += assertionCount;
-          console.log(
-            `[emulator-suite] PASS: ${basename(suiteGroup[0])} ` +
-              `(${assertionCount} assertions).`,
-          );
-        } else {
-          process.stdout.write(output);
-        }
-      }
-      if (firestoreOnlyPhase) {
-        await clearEmulatorData();
-      }
-      if (result.status !== 0 && !firstFailedResult) {
-        firstFailedResult = result;
-      }
-    }
-    if (firestoreOnlyPhase) {
-      console.log(
-        `[emulator-suite] Firestore phase completed ${selectedSuites.length} ` +
-          `files with ${firestoreAssertionCount} passing assertions.`,
-      );
-    }
-    result = firstFailedResult ?? result;
+  const suiteGroups = selectedSuites.map((suite) => [suite]);
+  for (const [suite] of suiteGroups) {
+    await clearEmulatorData();
+    try {
+      const receipt = await executeBackendSuite(repositoryRoot, suite, {
+        ...process.env, FAILURE_RECOVERY_USE_CLOUD_TASKS: "false", STRIPE_WEBHOOK_SECRET: "whsec_bwm_010_emulator",
+      }, {signal: controller.signal, timeoutMs: fullServicesPhase ? 15 * 60_000 : 180_000});
+      receipts.push({file: suite, result: "PASS", ...receipt}); await save();
+      console.log(`[emulator-suite] PASS: ${basename(suite)} (${receipt.passed} assertions).`);
+    } catch (error) {
+      receipts.push({file: suite, result: "FAIL", failure: error.message}); await save(); throw error;
+    } finally {await clearEmulatorData();}
   }
+  console.log(`[emulator-suite] ${fullServicesPhase ? "HTTP" : "Firestore"} phase completed ${selectedSuites.length} ` +
+    `files with ${receipts.reduce((sum, entry) => sum + entry.passed, 0)} passing assertions; zero skips/TODOs.`);
 } finally {
+  process.off("SIGINT", interrupt); process.off("SIGTERM", interrupt);
   await clearEmulatorData();
 }
-
-process.exit(result?.status ?? 1);

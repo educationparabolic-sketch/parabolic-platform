@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import {BACKEND_STAGES, BACKEND_CONTRACTS} from "../scripts/run-backend-tests.mjs";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -26,7 +27,7 @@ test("backend CI gates deploy on Functions lint, build, and deterministic tests"
   assert.match(backendJob, /^  backend-ci:\n    name: Backend Validate$/mu);
   const javaSetup = backendJob.indexOf("uses: actions/setup-java@v5");
   const firebaseCliInstall = backendJob.indexOf("npm install --global firebase-tools@15.9.0");
-  const aggregateStart = backendJob.indexOf("npm run test:emulators:ci");
+  const aggregateStart = backendJob.indexOf("npm run test:backend");
   assert.match(backendJob, /distribution: "temurin"/u);
   assert.match(backendJob, /java-version: "21"/u);
   assert.match(backendJob, /java -version/u);
@@ -42,14 +43,16 @@ test("backend CI gates deploy on Functions lint, build, and deterministic tests"
       `${dependencyRoot} dependencies must be installed before the aggregate builds Portal Hosting`,
     );
   }
-  assert.match(workflow, /npm --prefix functions run lint/u);
-  assert.match(workflow, /npm --prefix functions run build/u);
-  assert.match(workflow, /npm --prefix functions run test:ci:non-emulator/u);
-  assert.match(workflow, /npm run test:emulators:ci/u);
-  assert.match(workflow, /npm run test:emulators:failure-cleanup/u);
-  assert.match(workflow, /npm run test:staging-deployment-pipeline/u);
-  assert.match(workflow, /npm run test:staging-smoke-contract/u);
-  assert.match(workflow, /npm run test:production-promotion-separation/u);
+  assert.match(backendJob, /- name: Run complete backend verification\n        run: npm run test:backend/u);
+  assert.deepEqual(BACKEND_STAGES.slice(0, 2).map(stage => stage.args),
+    [["--prefix", "functions", "run", "lint"], ["--prefix", "functions", "run", "build"]]);
+  assert.deepEqual(BACKEND_STAGES.find(stage => stage.id === "unit").args,
+    ["--prefix", "functions", "run", "test:ci:non-emulator"]);
+  assert.deepEqual(BACKEND_STAGES.find(stage => stage.id === "emulators").args, ["run", "test:emulators:ci"]);
+  assert.deepEqual(BACKEND_STAGES.find(stage => stage.id === "failure-cleanup").args, ["run", "test:emulators:failure-cleanup"]);
+  for (const file of ["staging-deployment-pipeline", "staging-smoke", "production-promotion-separation"]) {
+    assert.ok(BACKEND_CONTRACTS.includes(`tests/${file}.test.mjs`));
+  }
   assert.match(workflow, /needs: \[frontend-ci, backend-ci\]/u);
   assert.equal(
     functionsPackage.scripts["test:ci:non-emulator"],
@@ -69,14 +72,18 @@ test("backend CI gates deploy on Functions lint, build, and deterministic tests"
     assert.ok(runner.includes(`\"${requiredSuite}\"`), `${requiredSuite} must be selected`);
   }
 
-  assert.match(runner, /--test-concurrency=1/u);
+  assert.match(runner, /for \(const file of testFiles\)/u);
+  assert.match(runner, /executeBackendSuite/u);
   assert.match(runner, /source suite inventory changed/u);
   const exclusionStart = runner.indexOf("const baselineExclusions");
-  const exclusionEnd = runner.indexOf("const selectedExternalSuites");
+  const exclusionEnd = runner.indexOf("export const selectedExternalSuites");
   assert.ok(exclusionStart > 0 && exclusionEnd > exclusionStart);
   assert.ok(runner.slice(0, exclusionStart).includes('"adminStudentsApi.test"'),
     "the repaired Admin student handler suite must run in mandatory CI");
   assert.ok(!runner.slice(exclusionStart, exclusionEnd).includes('"adminStudentsApi.test"'),
     "the repaired Admin student handler suite must not remain excluded");
-  assert.match(runner, /existing endpoint framework baseline is 55 passing and 13 failing/u);
+  assert.ok(runner.slice(0, exclusionStart).includes('"endpointTestingFramework.test"'),
+    "the repaired endpoint framework must execute in mandatory CI");
+  assert.match(runner.slice(exclusionStart, exclusionEnd).trim(), /^const baselineExclusions = new Map\(\);$/u,
+    "both repaired baseline suites must remain selected, with no baseline exclusions");
 });

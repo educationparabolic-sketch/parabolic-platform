@@ -1,6 +1,6 @@
 import {runtimeHeaders, RuntimeOwnerCredentials} from "../services/examRuntimeOwnership";
 import * as functions from "firebase-functions";
-import {DecodedIdToken} from "firebase-admin/auth";
+import type {AuthenticationMiddlewareDependencies} from "../middleware/auth";
 import {answerBatchService} from "../services/answerBatch";
 import {sendErrorResponse} from "../services/apiResponse";
 import {SessionStartValidationError} from "../services/session";
@@ -31,10 +31,9 @@ interface ExamSessionAnswersRequestBody {
   yearId?: unknown;
 }
 
-interface ExamSessionAnswersRequestDependencies {
+interface ExamSessionAnswersRequestDependencies extends AuthenticationMiddlewareDependencies {
   persistIncrementalAnswers:
     typeof answerBatchService.persistIncrementalAnswers;
-  verifyIdToken: (idToken: string) => Promise<DecodedIdToken>;
 }
 
 interface ExamSessionAnswersValidatedRequestData

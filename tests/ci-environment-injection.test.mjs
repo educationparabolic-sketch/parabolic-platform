@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import {BACKEND_STAGES} from "../scripts/run-backend-tests.mjs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
@@ -69,7 +70,11 @@ test("CI builds receive the canonical public and release environment", async () 
   assert.equal(countOccurrences(workflow, "Inject release build timestamp"), 2);
   assert.equal(countOccurrences(workflow, "VITE_RELEASE_BUILT_AT=${built_at}"), 2);
   assert.equal(countOccurrences(workflow, 'echo "RELEASE_BUILT_AT=${built_at}'), 2);
-  assert.equal(countOccurrences(workflow, "npm --prefix functions run build"), 3);
+  assert.equal(countOccurrences(workflow, "npm --prefix functions run build"), 2);
+  assert.equal(countOccurrences(workflow, "run: npm run test:backend"), 1);
+  const backendBuild = BACKEND_STAGES.find(stage => stage.id === "build");
+  assert.equal(backendBuild.command, "npm");
+  assert.deepEqual(backendBuild.args, ["--prefix", "functions", "run", "build"]);
   for (const app of ["admin", "student", "exam", "vendor"]) {
     const base = ["admin", "student"].includes(app) ? `VITE_BASE_PATH=/${app}/ ` : "";
     assert.equal(countOccurrences(workflow, `NODE_ENV=production ${base}npm --prefix apps/${app} run build`), 2,

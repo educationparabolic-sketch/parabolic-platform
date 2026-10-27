@@ -17,6 +17,7 @@
       "historical-ui": "Historical screenshots/visual script only; requires that historical artifact build, its hardcoded local preview server and app-local Playwright where imported. Not current API/persistence acceptance; never selected by frontend runner."
   },
   "suites": [
+    {"file": "tests/backend-full-command.test.mjs", "kind": "node", "owners": ["infrastructure"], "proof": ["contract", "behavior"], "prerequisites": ["node", "functions-deps"], "workflow": null},
     {"file": "tests/frontend-ci-acceptance.test.mjs", "kind": "node", "owners": ["infrastructure"], "proof": ["contract", "behavior"], "prerequisites": ["node", "functions-deps", "functions-build"], "workflow": null},
     {"file": "tests/vendor-boundary-behavior.test.mjs", "kind": "node", "owners": ["vendor"], "proof": ["behavior"], "prerequisites": ["node", "functions-deps"], "workflow": null},
     {"file": "tests/vendor-mounted-behavior.test.mjs", "kind": "node", "owners": ["vendor"], "proof": ["behavior"], "prerequisites": ["node", "functions-deps"], "workflow": null},

@@ -1,6 +1,6 @@
 import {runtimeHeaders, RuntimeOwnerCredentials} from "../services/examRuntimeOwnership";
 import * as functions from "firebase-functions";
-import {DecodedIdToken} from "firebase-admin/auth";
+import type {AuthenticationMiddlewareDependencies} from "../middleware/auth";
 import {sendErrorResponse} from "../services/apiResponse";
 import {
   SubmissionResult,
@@ -31,9 +31,8 @@ type ExamSessionSubmitRequestBody = Partial<
   Record<keyof ExamSubmitRequestBody, unknown>
 > & Record<string, unknown>;
 
-interface ExamSessionSubmitRequestDependencies {
+interface ExamSessionSubmitRequestDependencies extends AuthenticationMiddlewareDependencies {
   submitSession: typeof submissionService.submitSession;
-  verifyIdToken: (idToken: string) => Promise<DecodedIdToken>;
 }
 
 interface ExamSessionSubmitValidatedRequestData

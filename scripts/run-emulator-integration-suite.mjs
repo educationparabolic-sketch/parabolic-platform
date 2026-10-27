@@ -1,4 +1,8 @@
-import { spawnSync } from "node:child_process";
+import {mkdtemp, readFile, rm} from "node:fs/promises";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
+import assert from "node:assert/strict";
+import {executeBackendCommand, assertBackendResult} from "./backend-test-process.mjs";
 import { randomBytes } from "node:crypto";
 import { createConnection } from "node:net";
 import { fileURLToPath } from "node:url";
@@ -16,19 +20,15 @@ const allPorts = [
   ...supportPorts,
 ];
 
-function runBuild(label, executable, args, extraEnvironment = {}) {
+const controller = new AbortController();
+const interrupt = () => controller.abort();
+process.on("SIGINT", interrupt); process.on("SIGTERM", interrupt);
+process.on("exit", () => {process.off("SIGINT", interrupt); process.off("SIGTERM", interrupt);});
+async function runBuild(label, executable, args, extraEnvironment = {}) {
   console.log(`\n[emulator-suite] ${label}`);
-  const result = spawnSync(executable, args, {
-    cwd: repositoryRoot,
-    env: { ...process.env, ...extraEnvironment },
-    stdio: "inherit",
-  });
-  if (result.error) {
-    throw result.error;
-  }
-  if (result.status !== 0) {
-    process.exit(result.status ?? 1);
-  }
+  const result = await executeBackendCommand({root: repositoryRoot, command: executable, args,
+    env: {...process.env, ...extraEnvironment}, signal: controller.signal, timeoutMs: 10 * 60_000});
+  assertBackendResult(result, label);
 }
 
 function phaseEnvironment(extraEnvironment = {}) {
@@ -50,8 +50,14 @@ function phaseEnvironment(extraEnvironment = {}) {
     CDN_SIGNED_URL_KEY_VALUE: randomBytes(32).toString("base64url"),
     ...extraEnvironment,
   };
-  if (!("FUNCTIONS_EMULATOR_HOST" in extraEnvironment)) {
-    delete environment.FUNCTIONS_EMULATOR_HOST;
+  for (const key of Object.keys(environment)) {
+    if (/EMULATOR_(HOST|HUB)$/u.test(key) && !(key in extraEnvironment)) delete environment[key];
+  }
+  delete environment.GOOGLE_APPLICATION_CREDENTIALS;
+  delete environment.FIREBASE_TOKEN;
+  delete environment.NODE_TEST_CONTEXT;
+  for (const key of ["PROJECT_ID", "GCLOUD_PROJECT", "GOOGLE_CLOUD_PROJECT"]) {
+    if (environment[key] !== projectId) throw new Error("Non-demo emulator project override rejected");
   }
   return environment;
 }
@@ -87,45 +93,37 @@ async function assertPortsReleased() {
   throw new Error(`Emulator listeners remain on ports: ${remaining.join(", ")}`);
 }
 
-const version = spawnSync(firebaseExecutable, ["--version"], {
-  cwd: repositoryRoot,
-  encoding: "utf8",
-});
-if (version.error) {
-  throw version.error;
-}
-if (version.status !== 0) {
-  process.stderr.write(version.stderr);
-  process.exit(version.status ?? 1);
-}
-const firebaseCliVersion = version.stdout.trim();
-if (firebaseCliVersion !== firebaseEmulatorHarness.firebaseCliVersion) {
-  throw new Error(
-    `Expected Firebase CLI ${firebaseEmulatorHarness.firebaseCliVersion}, ` +
-      `received ${firebaseCliVersion || "no version"}.`,
-  );
-}
+const versionDirectory = await mkdtemp(join(tmpdir(), "backend-firebase-version-"));
+let firebaseCliVersion;
+try {
+  const log = join(versionDirectory, "version.log");
+  const version = await executeBackendCommand({root: repositoryRoot, command: firebaseExecutable,
+    args: ["--version"], log, signal: controller.signal, timeoutMs: 30_000});
+  assertBackendResult(version, "Firebase CLI version");
+  firebaseCliVersion = (await readFile(log, "utf8")).trim();
+} finally {await rm(versionDirectory, {recursive: true, force: true});}
+assert.equal(firebaseCliVersion, firebaseEmulatorHarness.firebaseCliVersion, "Firebase CLI version changed");
 console.log(`[emulator-suite] Firebase CLI ${firebaseCliVersion}`);
 
 if (!failureProbe) {
-  runBuild(
+  await runBuild(
     "Build Admin Hosting artifact",
     npmExecutable,
     ["--prefix", "apps/admin", "run", "build"],
     { VITE_API_BASE_URL: "", VITE_BASE_PATH: "/admin/" },
   );
-  runBuild(
+  await runBuild(
     "Build Student Hosting artifact",
     npmExecutable,
     ["--prefix", "apps/student", "run", "build"],
     { VITE_API_BASE_URL: "", VITE_BASE_PATH: "/student/" },
   );
-  runBuild(
+  await runBuild(
     "Build Functions artifact",
     npmExecutable,
     ["--prefix", "functions", "run", "build"],
   );
-  runBuild(
+  await runBuild(
     "Prepare combined portal Hosting artifact",
     process.execPath,
     ["scripts/frontend-cicd/prepare-portal-hosting.mjs"],
@@ -148,31 +146,24 @@ async function runEmulatorPhase(label, services, innerCommand, environment = {})
       value.includes(" ") ? JSON.stringify(value) : value).join(" ")}`,
   );
 
-  const result = spawnSync(firebaseExecutable, emulatorArgs, {
-    cwd: repositoryRoot,
-    env: phaseEnvironment(environment),
-    stdio: "inherit",
-  });
-
+  const result = await executeBackendCommand({root: repositoryRoot, command: firebaseExecutable,
+    args: emulatorArgs, env: phaseEnvironment(environment), signal: controller.signal, timeoutMs: 45 * 60_000});
   await assertPortsReleased();
-  if (result.error) {
-    throw result.error;
-  }
+  if (result.timedOut || result.aborted || result.descendants) throw new Error("Emulator phase interrupted or not cleaned");
   return result;
 }
 
 if (failureProbe) {
-  const result = await runEmulatorPhase(
-    "Intentional failure cleanup proof",
-    ["auth", "firestore"],
-    "node functions/tests/emulatorFailureCleanup.probe.js",
-  );
-  if (result.status === 0) {
-    throw new Error("Intentional failure probe unexpectedly exited successfully.");
-  }
-  console.log(
-    "[emulator-suite] PASS: intentional failure cleaned data and released processes.",
-  );
+  const temporary = await mkdtemp(join(tmpdir(), "backend-failure-cleanup-"));
+  try {
+    const receiptPath = join(temporary, "verified.json");
+    const result = await runEmulatorPhase("Intentional failure cleanup proof", ["auth", "firestore"],
+      "node functions/tests/emulatorFailureCleanup.probe.js", {BACKEND_FAILURE_CLEANUP_RECEIPT: receiptPath});
+    assert.equal(result.code, 23, "Only the verified deliberate exit 23 qualifies cleanup");
+    assert.deepEqual(JSON.parse(await readFile(receiptPath, "utf8")),
+      {project: projectId, dataRemoved: true, intentionalExit: 23});
+    console.log("[emulator-suite] PASS: intentional failure cleaned data and released processes.");
+  } finally {await rm(temporary, {recursive: true, force: true});}
   process.exit(0);
 }
 
@@ -188,8 +179,8 @@ for (const group of Object.keys(firebaseIntegrationGroups)) {
         `127.0.0.1:${firebaseEmulatorHarness.ports.functions}`,
     },
   );
-  if (fullServicesResult.status !== 0) {
-    process.exit(fullServicesResult.status ?? 1);
+  if (fullServicesResult.code !== 0) {
+    process.exit(fullServicesResult.code ?? 1);
   }
 }
 
@@ -199,8 +190,8 @@ const firestoreResult = await runEmulatorPhase(
   "node scripts/firebase-emulator-integration-suite.mjs --firestore-only",
   {QUESTION_ASSETS_BUCKET: `${projectId}.appspot.com`},
 );
-if (firestoreResult.status !== 0) {
-  process.exit(firestoreResult.status ?? 1);
+if (firestoreResult.code !== 0) {
+  process.exit(firestoreResult.code ?? 1);
 }
 
 console.log(

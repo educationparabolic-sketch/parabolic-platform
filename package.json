@@ -20,6 +20,7 @@
     "smoke:emulators": "node scripts/run-emulator-smoke.mjs",
     "test:emulator-harness-contract": "node --test tests/backend-ci-emulator-harness.test.mjs",
     "test:emulator-aggregate-contract": "node --test tests/backend-ci-emulator-aggregate.test.mjs",
+    "test:backend": "node scripts/run-backend-tests.mjs",
     "test:emulators:ci": "node scripts/run-emulator-integration-suite.mjs",
     "test:emulators:failure-cleanup": "node scripts/run-emulator-integration-suite.mjs --failure-cleanup-probe",
     "test:api-gateway:emulator": "node scripts/run-api-gateway-emulator-tests.mjs",

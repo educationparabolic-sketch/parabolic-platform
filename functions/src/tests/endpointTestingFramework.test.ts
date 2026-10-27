@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, {mock} from "node:test";
+import {Socket} from "node:net";
+import * as firebaseAdmin from "../utils/firebaseAdmin";
 import {
   createExamStartHandler,
 } from "../api/examStart";
@@ -120,6 +122,46 @@ import {
 import {
   ComputeVendorRevenueForecastingResult,
 } from "../types/vendorRevenueForecasting";
+
+// This suite exercises real middleware/controllers with explicit unit service dependencies.
+// Any accidental default SDK call or socket is a fixture isolation failure, even if caught.
+const externalAttempts: string[] = [];
+const rejectExternalAccess = (name: string) => (): never => {
+  externalAttempts.push(name);
+  throw new Error(`Endpoint unit isolation blocked ${name}.`);
+};
+test.before(() => {
+  for (const name of ["GCLOUD_PROJECT", "GOOGLE_CLOUD_PROJECT", "PROJECT_ID"]) {
+    if (process.env[name]) assert.equal(process.env[name], "demo-parabolic-test");
+  }
+  mock.method(firebaseAdmin, "getFirestore", rejectExternalAccess("Firestore"));
+  mock.method(firebaseAdmin, "getFirebaseAdminApp", rejectExternalAccess("Admin SDK"));
+  mock.method(Socket.prototype, "connect", rejectExternalAccess("socket"));
+});
+test.afterEach(() => assert.deepEqual(externalAttempts, [], "endpoint units must not use SDK/network authority"));
+test.after(() => mock.restoreAll());
+
+const activationCalls: Array<{instituteId: string; studentId: string}> = [];
+test.beforeEach(() => {
+  activationCalls.length = 0;
+});
+const studentAuthentication = {
+  activateInvitedStudentOnFirstLogin: async (input: {instituteId: string; studentId: string}) => {
+    activationCalls.push(input);
+    assert.ok(input.instituteId.startsWith("inst_"));
+    assert.equal(input.studentId, "student_build_50");
+  },
+};
+const ownerHeaders = {
+  "x-parabolic-exam-owner": Buffer.alloc(32, 7).toString("base64url"),
+  "x-parabolic-exam-generation": "1",
+};
+const expectedRuntimeOwner = {
+  proof: ownerHeaders["x-parabolic-exam-owner"],
+  generation: 1,
+  studentUid: "uid_build_50",
+  launchNonce: "launch_nonce_build_50",
+};
 
 const createStudentToken = (overrides: Record<string, unknown> = {}) => ({
   instituteId: "inst_build_50",
@@ -286,6 +328,10 @@ const revenueForecastingResult: ComputeVendorRevenueForecastingResult = {
 const createDirectorToken = (overrides: Record<string, unknown> = {}) => ({
   instituteId: "inst_build_89",
   licenseLayer: "L3",
+  licenseState: "active",
+  licenseVersion: "license_build_89",
+  expiryDate: null,
+  gracePeriodEndsAt: null,
   role: "director",
   uid: "director_build_89",
   ...overrides,
@@ -315,7 +361,7 @@ const createEnvironmentConfig = (
     vendorBaseUrl: "http://localhost:6173",
   },
   nodeEnv,
-  projectId: "parabolic-platform-build-76-tests",
+  projectId: "demo-parabolic-test",
   release: {
     id: "endpoint-testing-framework",
     commitSha: "0000000000000000000000000000000000000000",
@@ -370,41 +416,48 @@ const assertStructuredError = (
 
 test("exam start handler accepts a valid student request", async () => {
   const handler = createExamStartHandler({
-    startSession: async () => ({
-      disposition: "created",
-      launchCredential: "session_token_build_50",
-      operationalDataAccessPolicy: {
-        allowedOperationalCollections: ["sessions"],
-        archiveExportPolicy: "BigQuery export only during academic-year archive",
-        liveSessionPath:
+    ...studentAuthentication,
+    loadEnvironmentConfig: async () => createEnvironmentConfig("test"),
+    startSession: async (input) => {
+      assert.deepEqual(input, {instituteId: "inst_build_50", studentId: "student_build_50",
+        studentUid: "uid_build_50", licenseLayer: "L1", runId: "run_build_50", intent: "start"});
+      return ({
+        disposition: "created",
+        launchCredential: "session_token_build_50",
+        operationalDataAccessPolicy: {
+          allowedOperationalCollections: ["sessions"],
+          archiveExportPolicy: "BigQuery export only during academic-year archive",
+          liveSessionPath:
           "institutes/inst_build_50/academicYears/2026/runs/run_build_50/" +
           "sessions/session_build_50",
-        prohibitedRuntimeSources: [
-          "runAnalytics",
-          "studentYearMetrics",
-          "questionAnalytics",
-          "BigQuery",
-        ],
-        summarySinksAfterSubmission: [
-          "runAnalytics",
-          "studentYearMetrics",
-          "questionAnalytics",
-        ],
-        tier: "HOT",
-        writeModel: "incremental session document updates",
-      },
-      sessionId: "session_build_50",
-      sessionPath:
+          prohibitedRuntimeSources: [
+            "runAnalytics",
+            "studentYearMetrics",
+            "questionAnalytics",
+            "BigQuery",
+          ],
+          summarySinksAfterSubmission: [
+            "runAnalytics",
+            "studentYearMetrics",
+            "questionAnalytics",
+          ],
+          tier: "HOT",
+          writeModel: "incremental session document updates",
+        },
+        sessionId: "session_build_50",
+        sessionPath:
         "institutes/inst_build_50/academicYears/2026/runs/run_build_50/" +
         "sessions/session_build_50",
-      status: "created",
-      yearId: "2026",
-    }),
+        status: "created",
+        yearId: "2026",
+      });
+    },
     verifyIdToken: async () => createStudentToken() as never,
   });
   const request = createMockRequest({
     body: {
-      instituteId: "inst_build_50",
+      instituteId: "untrusted_browser_tenant",
+      intent: "start",
       runId: "run_build_50",
       yearId: "2026",
     },
@@ -417,11 +470,14 @@ test("exam start handler accepts a valid student request", async () => {
 
   await handler(request as never, response as never);
 
-  assert.equal(response.statusCode, 200);
+  assert.deepEqual(activationCalls, [{instituteId: "inst_build_50", studentId: "student_build_50"}]);
+  assert.equal(response.statusCode, 201);
   assert.equal(
     (response.body as {code: string}).code,
     "OK",
   );
+  assert.equal((response.body as {data: {examUrl: string}}).data.examUrl,
+    "http://localhost:4173/session/session_build_50#launch=session_token_build_50");
   assert.equal(
     (response.body as {data: {sessionId: string}}).data.sessionId,
     "session_build_50",
@@ -430,6 +486,8 @@ test("exam start handler accepts a valid student request", async () => {
 
 test("exam start handler rejects missing authentication", async () => {
   const handler = createExamStartHandler({
+    ...studentAuthentication,
+    loadEnvironmentConfig: async () => createEnvironmentConfig("test"),
     startSession: async () => {
       throw new Error("startSession should not be called");
     },
@@ -441,6 +499,7 @@ test("exam start handler rejects missing authentication", async () => {
     createMockRequest({
       body: {
         instituteId: "inst_build_50",
+        intent: "start",
         runId: "run_build_50",
         yearId: "2026",
       },
@@ -459,6 +518,8 @@ test("exam start handler rejects missing authentication", async () => {
 
 test("exam start handler rejects tokens missing required claims", async () => {
   const handler = createExamStartHandler({
+    ...studentAuthentication,
+    loadEnvironmentConfig: async () => createEnvironmentConfig("test"),
     startSession: async () => {
       throw new Error("startSession should not be called");
     },
@@ -471,6 +532,7 @@ test("exam start handler rejects tokens missing required claims", async () => {
     createMockRequest({
       body: {
         instituteId: "inst_build_50",
+        intent: "start",
         runId: "run_build_50",
         yearId: "2026",
       },
@@ -492,6 +554,8 @@ test("exam start handler rejects tokens missing required claims", async () => {
 
 test("exam start handler rejects role violations", async () => {
   const handler = createExamStartHandler({
+    ...studentAuthentication,
+    loadEnvironmentConfig: async () => createEnvironmentConfig("test"),
     startSession: async () => {
       throw new Error("startSession should not be called");
     },
@@ -503,6 +567,7 @@ test("exam start handler rejects role violations", async () => {
     createMockRequest({
       body: {
         instituteId: "inst_build_50",
+        intent: "start",
         runId: "run_build_50",
         yearId: "2026",
       },
@@ -522,10 +587,16 @@ test("exam start handler rejects role violations", async () => {
   );
 });
 
-test("exam start handler rejects cross-tenant access", async () => {
+test("exam start uses token tenant authority and preserves a scoped run denial", async () => {
   const handler = createExamStartHandler({
-    startSession: async () => {
-      throw new Error("startSession should not be called");
+    ...studentAuthentication,
+    loadEnvironmentConfig: async () => createEnvironmentConfig("test"),
+    startSession: async (input) => {
+      assert.equal(input.instituteId, "inst_other_build_50");
+      assert.equal(input.studentId, "student_build_50");
+      assert.equal(input.runId, "run_build_50");
+      throw new SessionStartValidationError("TENANT_MISMATCH",
+        "Token instituteId does not match request instituteId.");
     },
     verifyIdToken: async () =>
       createStudentToken({instituteId: "inst_other_build_50"}) as never,
@@ -536,6 +607,7 @@ test("exam start handler rejects cross-tenant access", async () => {
     createMockRequest({
       body: {
         instituteId: "inst_build_50",
+        intent: "start",
         runId: "run_build_50",
         yearId: "2026",
       },
@@ -557,6 +629,8 @@ test("exam start handler rejects cross-tenant access", async () => {
 
 test("exam start handler surfaces license restriction failures", async () => {
   const handler = createExamStartHandler({
+    ...studentAuthentication,
+    loadEnvironmentConfig: async () => createEnvironmentConfig("test"),
     startSession: async () => {
       throw new SessionStartValidationError(
         "LICENSE_RESTRICTED",
@@ -571,6 +645,7 @@ test("exam start handler surfaces license restriction failures", async () => {
     createMockRequest({
       body: {
         instituteId: "inst_build_50",
+        intent: "start",
         runId: "run_build_50",
         yearId: "2026",
       },
@@ -592,6 +667,8 @@ test("exam start handler surfaces license restriction failures", async () => {
 
 test("exam start handler rejects invalid payloads", async () => {
   const handler = createExamStartHandler({
+    ...studentAuthentication,
+    loadEnvironmentConfig: async () => createEnvironmentConfig("test"),
     startSession: async () => {
       throw new Error("startSession should not be called");
     },
@@ -603,6 +680,7 @@ test("exam start handler rejects invalid payloads", async () => {
     createMockRequest({
       body: {
         instituteId: "inst_build_50",
+        intent: "start",
         runId: "",
         yearId: "2026",
       },
@@ -618,7 +696,7 @@ test("exam start handler rejects invalid payloads", async () => {
   assertStructuredError(
     response.body,
     "VALIDATION_ERROR",
-    "Field \"runId\" must be a non-empty string.",
+    "Request validation failed.",
   );
 });
 
@@ -1438,7 +1516,7 @@ test(
     assertStructuredError(
       response.body,
       "VALIDATION_ERROR",
-      "Field \"confirmIrreversibleArchive\" must be true to confirm archive execution.",
+      "Request validation failed.",
     );
   },
 );
@@ -1478,75 +1556,82 @@ test(
     assertStructuredError(
       response.body,
       "VALIDATION_ERROR",
-      "Archive requires all active sessions to be closed before execution.",
+      "Request validation failed.",
     );
   },
 );
 
 test("exam session answers handler accepts a valid request", async () => {
   const handler = createExamSessionAnswersHandler({
-    persistIncrementalAnswers: async (): Promise<PersistAnswerBatchResult> => ({
-      acknowledgements: [{
-        clientRevision: 1,
-        disposition: "persisted",
-        questionId: "q1",
-      }],
-      adaptivePhaseSnapshotPersisted: false,
-      batchId: "batch-build-50-1",
-      batchSequence: 1,
-      blockedQuestionIds: [],
-      ignoredQuestionIds: [],
-      lockedQuestionIds: [],
-      maxTimeEnforcementLevel: "none",
-      maxTimeViolations: [],
-      minTimeEnforcementLevel: "none",
-      minTimeViolations: [],
-      operationalDataAccessPolicy: {
-        allowedOperationalCollections: ["sessions"],
-        archiveExportPolicy: "BigQuery export only during academic-year archive",
-        liveSessionPath:
+    ...studentAuthentication,
+    persistIncrementalAnswers: async (input): Promise<PersistAnswerBatchResult> => {
+      assert.deepEqual(input.context, {instituteId: "inst_build_50", yearId: "2026",
+        runId: "run_build_50", sessionId: "session_build_50", studentId: "student_build_50",
+        runtimeOwner: expectedRuntimeOwner});
+      assert.equal(input.batchId, "batch-build-50-1");
+      return ({
+        acknowledgements: [{
+          clientRevision: 1,
+          disposition: "persisted",
+          questionId: "q1",
+        }],
+        adaptivePhaseSnapshotPersisted: false,
+        batchId: "batch-build-50-1",
+        batchSequence: 1,
+        blockedQuestionIds: [],
+        ignoredQuestionIds: [],
+        lockedQuestionIds: [],
+        maxTimeEnforcementLevel: "none",
+        maxTimeViolations: [],
+        minTimeEnforcementLevel: "none",
+        minTimeViolations: [],
+        operationalDataAccessPolicy: {
+          allowedOperationalCollections: ["sessions"],
+          archiveExportPolicy: "BigQuery export only during academic-year archive",
+          liveSessionPath:
           "institutes/inst_build_50/academicYears/2026/runs/run_build_50/" +
           "sessions/session_build_50",
-        prohibitedRuntimeSources: [
-          "runAnalytics",
-          "studentYearMetrics",
-          "questionAnalytics",
-          "BigQuery",
-        ],
-        summarySinksAfterSubmission: [
-          "runAnalytics",
-          "studentYearMetrics",
-          "questionAnalytics",
-        ],
-        tier: "HOT",
-        writeModel: "incremental session document updates",
-      },
-      persistedQuestionIds: ["q1"],
-      sessionPath:
+          prohibitedRuntimeSources: [
+            "runAnalytics",
+            "studentYearMetrics",
+            "questionAnalytics",
+            "BigQuery",
+          ],
+          summarySinksAfterSubmission: [
+            "runAnalytics",
+            "studentYearMetrics",
+            "questionAnalytics",
+          ],
+          tier: "HOT",
+          writeModel: "incremental session document updates",
+        },
+        persistedQuestionIds: ["q1"],
+        sessionPath:
         "institutes/inst_build_50/academicYears/2026/runs/run_build_50/" +
         "sessions/session_build_50",
-      timingMetricsExport: {
-        averageTimePerQuestion: 30,
-        disciplineIndexInputs: {
-          impulsiveAnsweringRiskPercent: 0,
-          overthinkingRiskPercent: 0,
+        timingMetricsExport: {
+          averageTimePerQuestion: 30,
+          disciplineIndexInputs: {
+            impulsiveAnsweringRiskPercent: 0,
+            overthinkingRiskPercent: 0,
+          },
+          maxTimeViolationCount: 0,
+          maxTimeViolationPercent: 0,
+          minTimeViolationCount: 0,
+          minTimeViolationPercent: 0,
+          phaseDeviationFlags: {
+            hasMaxTimeDeviation: false,
+            hasMinTimeDeviation: false,
+          },
+          questionLevelCumulativeTimeRecords: [],
+          serverValidatedTimingMetrics: {
+            evaluatedQuestionCount: 1,
+            persistedQuestionCount: 1,
+            totalCumulativeTimeSpent: 30,
+          },
         },
-        maxTimeViolationCount: 0,
-        maxTimeViolationPercent: 0,
-        minTimeViolationCount: 0,
-        minTimeViolationPercent: 0,
-        phaseDeviationFlags: {
-          hasMaxTimeDeviation: false,
-          hasMinTimeDeviation: false,
-        },
-        questionLevelCumulativeTimeRecords: [],
-        serverValidatedTimingMetrics: {
-          evaluatedQuestionCount: 1,
-          persistedQuestionCount: 1,
-          totalCumulativeTimeSpent: 30,
-        },
-      },
-    }),
+      });
+    },
     verifyIdToken: async () => createExamStudentToken() as never,
   });
   const response = createMockResponse();
@@ -1564,6 +1649,7 @@ test("exam session answers handler accepts a valid request", async () => {
         yearId: "2026",
       },
       headers: {
+        ...ownerHeaders,
         authorization: "Bearer build_50_answers",
       },
       path: "/exam/session/session_build_50/answers",
@@ -1571,6 +1657,7 @@ test("exam session answers handler accepts a valid request", async () => {
     response as never,
   );
 
+  assert.deepEqual(activationCalls, [{instituteId: "inst_build_50", studentId: "student_build_50"}]);
   assert.equal(response.statusCode, 200);
   assert.equal(
     (response.body as {data: {persistedQuestionIds: string[]}})
@@ -1591,6 +1678,7 @@ test("exam session answers handler accepts a valid request", async () => {
 
 test("exam session answers handler rejects invalid payloads", async () => {
   const handler = createExamSessionAnswersHandler({
+    ...studentAuthentication,
     persistIncrementalAnswers: async () => {
       throw new Error("persistIncrementalAnswers should not be called");
     },
@@ -1611,6 +1699,7 @@ test("exam session answers handler rejects invalid payloads", async () => {
         yearId: "2026",
       },
       headers: {
+        ...ownerHeaders,
         authorization: "Bearer build_50_answers_invalid",
       },
       path: "/exam/session/session_build_50/answers",
@@ -1622,12 +1711,13 @@ test("exam session answers handler rejects invalid payloads", async () => {
   assertStructuredError(
     response.body,
     "VALIDATION_ERROR",
-    "Field \"millisecondsSinceLastWrite\" must be a non-negative integer.",
+    "Request validation failed.",
   );
 });
 
 test("exam session answers handler rejects cross-tenant access", async () => {
   const handler = createExamSessionAnswersHandler({
+    ...studentAuthentication,
     persistIncrementalAnswers: async () => {
       throw new Error("persistIncrementalAnswers should not be called");
     },
@@ -1646,6 +1736,7 @@ test("exam session answers handler rejects cross-tenant access", async () => {
         yearId: "2026",
       },
       headers: {
+        ...ownerHeaders,
         authorization: "Bearer build_50_answers_tenant",
       },
       path: "/exam/session/session_build_50/answers",
@@ -1663,27 +1754,33 @@ test("exam session answers handler rejects cross-tenant access", async () => {
 
 test("exam session submit handler accepts a valid request", async () => {
   const handler = createExamSessionSubmitHandler({
-    submitSession: async (): Promise<SubmissionResult> => ({
-      accuracyPercent: 80,
-      consecutiveWrongStreakMax: 1,
-      disciplineIndex: 72,
-      easyRemainingAfterPhase1Percent: 0,
-      guessRate: 0,
-      hardInPhase1Percent: 0,
-      idempotent: false,
-      maxTimeViolationPercent: 0,
-      minTimeViolationPercent: 0,
-      phaseAdherencePercent: 100,
-      rawScorePercent: 78,
-      riskState: "Stable",
-      sessionPath:
+    ...studentAuthentication,
+    submitSession: async (input): Promise<SubmissionResult> => {
+      assert.deepEqual(input, {instituteId: "inst_build_50", yearId: "2026", runId: "run_build_50",
+        sessionId: "session_build_50", studentId: "student_build_50", reason: "manual",
+        runtimeOwner: expectedRuntimeOwner});
+      return ({
+        accuracyPercent: 80,
+        consecutiveWrongStreakMax: 1,
+        disciplineIndex: 72,
+        easyRemainingAfterPhase1Percent: 0,
+        guessRate: 0,
+        hardInPhase1Percent: 0,
+        idempotent: false,
+        maxTimeViolationPercent: 0,
+        minTimeViolationPercent: 0,
+        phaseAdherencePercent: 100,
+        rawScorePercent: 78,
+        riskState: "Stable",
+        sessionPath:
         "institutes/inst_build_50/academicYears/2026/runs/run_build_50/" +
         "sessions/session_build_50",
-      skipBurstCount: 0,
-      status: "submitted",
-      submissionReason: "manual",
-      submittedAt: "2026-08-31T10:00:00.000Z",
-    }),
+        skipBurstCount: 0,
+        status: "submitted",
+        submissionReason: "manual",
+        submittedAt: "2026-08-31T10:00:00.000Z",
+      });
+    },
     verifyIdToken: async () => createExamStudentToken() as never,
   });
   const response = createMockResponse();
@@ -1697,6 +1794,7 @@ test("exam session submit handler accepts a valid request", async () => {
         yearId: "2026",
       },
       headers: {
+        ...ownerHeaders,
         authorization: "Bearer build_50_submit",
       },
       path: "/exam/session/session_build_50/submit",
@@ -1704,6 +1802,7 @@ test("exam session submit handler accepts a valid request", async () => {
     response as never,
   );
 
+  assert.deepEqual(activationCalls, [{instituteId: "inst_build_50", studentId: "student_build_50"}]);
   assert.equal(response.statusCode, 200);
   assert.equal(
     (response.body as {data: {rawScorePercent: number}})
@@ -1715,6 +1814,7 @@ test("exam session submit handler accepts a valid request", async () => {
 test("exam session submit handler enforces the exact reason-bound request", async () => {
   let submitCallCount = 0;
   const handler = createExamSessionSubmitHandler({
+    ...studentAuthentication,
     submitSession: async () => {
       submitCallCount += 1;
       throw new Error("submitSession should not be called");
@@ -1731,6 +1831,7 @@ test("exam session submit handler enforces the exact reason-bound request", asyn
         yearId: "2026",
       },
       headers: {
+        ...ownerHeaders,
         authorization: "Bearer build_50_submit_missing_reason",
       },
       path: "/exam/session/session_build_50/submit",
@@ -1756,6 +1857,7 @@ test("exam session submit handler enforces the exact reason-bound request", asyn
         yearId: "2026",
       },
       headers: {
+        ...ownerHeaders,
         authorization: "Bearer build_50_submit_legacy_field",
       },
       path: "/exam/session/session_build_50/submit",
@@ -1767,13 +1869,14 @@ test("exam session submit handler enforces the exact reason-bound request", asyn
   assertStructuredError(
     legacyFieldResponse.body,
     "VALIDATION_ERROR",
-    "Unexpected submission field \"clientSubmittedAt\".",
+    "Request validation failed.",
   );
   assert.equal(submitCallCount, 0);
 });
 
 test("exam session submit handler rejects cross-tenant access", async () => {
   const handler = createExamSessionSubmitHandler({
+    ...studentAuthentication,
     submitSession: async () => {
       throw new Error("submitSession should not be called");
     },
@@ -1791,6 +1894,7 @@ test("exam session submit handler rejects cross-tenant access", async () => {
         yearId: "2026",
       },
       headers: {
+        ...ownerHeaders,
         authorization: "Bearer build_50_submit_tenant",
       },
       path: "/exam/session/session_build_50/submit",
@@ -1810,6 +1914,7 @@ test(
   "exam session submit handler surfaces deterministic submission errors",
   async () => {
     const handler = createExamSessionSubmitHandler({
+      ...studentAuthentication,
       submitSession: async () => {
         throw new SubmissionValidationError(
           "SESSION_NOT_ACTIVE",
@@ -1829,6 +1934,7 @@ test(
           yearId: "2026",
         },
         headers: {
+          ...ownerHeaders,
           authorization: "Bearer build_50_submit_locked",
         },
         path: "/exam/session/session_build_50/submit",
@@ -1840,7 +1946,7 @@ test(
     assertStructuredError(
       response.body,
       "SESSION_NOT_ACTIVE",
-      "Session must be active before submission.",
+      "Exam session is not active.",
     );
   },
 );
@@ -2729,7 +2835,7 @@ test(
     assertStructuredError(
       response.body,
       "VALIDATION_ERROR",
-      "License field \"newLayer\" must be a string.",
+      "Request validation failed.",
     );
   },
 );
@@ -2802,8 +2908,9 @@ test(
     assertStructuredError(
       response.body,
       "NOT_FOUND",
-      "Institute \"inst_build_93\" does not exist.",
+      "The requested resource was not found.",
     );
+    assert.doesNotMatch(JSON.stringify(response.body), /inst_build_93/u);
   },
 );
 
@@ -3043,9 +3150,9 @@ test(
     assertStructuredError(
       response.body,
       "NOT_FOUND",
-      "Institute \"inst_build_98_missing\" does not have aggregated " +
-        "student metrics available for simulation.",
+      "The requested resource was not found.",
     );
+    assert.doesNotMatch(JSON.stringify(response.body), /inst_build_98_missing|aggregated student metrics/u);
   },
 );
 
@@ -3094,7 +3201,7 @@ test("vendor calibration push handler rejects role violations", async () => {
     },
   }));
   assert.equal(response.statusCode, 403);
-  assertStructuredError(response.body, "FORBIDDEN", "Capability vendor.calibration.manage requires Vendor authority.");
+  assertStructuredError(response.body, "FORBIDDEN", "Access is forbidden.");
 });
 
 test("vendor calibration push returns terminal not_applied as operation truth", async () => {
@@ -3157,7 +3264,7 @@ test(
     assertStructuredError(
       response.body,
       "FORBIDDEN",
-      "Capability vendor.intelligence.read requires Vendor authority.",
+      "Access is forbidden.",
     );
   },
 );
@@ -3223,7 +3330,7 @@ test(
     assertStructuredError(
       response.body,
       "FORBIDDEN",
-      "Capability vendor.intelligence.read requires Vendor authority.",
+      "Access is forbidden.",
     );
   },
 );
@@ -3289,7 +3396,7 @@ test(
     assertStructuredError(
       response.body,
       "FORBIDDEN",
-      "Capability vendor.intelligence.read requires Vendor authority.",
+      "Access is forbidden.",
     );
   },
 );
@@ -3355,7 +3462,7 @@ test(
     assertStructuredError(
       response.body,
       "FORBIDDEN",
-      "Capability vendor.intelligence.read requires Vendor authority.",
+      "Access is forbidden.",
     );
   },
 );
@@ -3425,7 +3532,88 @@ test(
     assertStructuredError(
       response.body,
       "FORBIDDEN",
-      "Capability vendor.intelligence.read requires Vendor authority.",
+      "Access is forbidden.",
     );
   },
 );
+
+
+test("student endpoint factories await injected onboarding failure before any service", async () => {
+  let activationCount = 0;
+  let serviceCount = 0;
+  const dependencies = {
+    activateInvitedStudentOnFirstLogin: async () => {
+      activationCount += 1;
+      throw new Error("synthetic onboarding unavailable");
+    },
+    verifyIdToken: async () => createExamStudentToken() as never,
+  };
+  const unreachable = async (): Promise<never> => {
+    serviceCount += 1;
+    throw new Error("controller dependencies must not run after onboarding failure");
+  };
+  const handlers = [
+    createExamStartHandler({...dependencies, loadEnvironmentConfig: unreachable, startSession: unreachable}),
+    createExamSessionAnswersHandler({...dependencies, persistIncrementalAnswers: unreachable}),
+    createExamSessionSubmitHandler({...dependencies, submitSession: unreachable}),
+  ];
+  for (const [index, handler] of handlers.entries()) {
+    const response = createMockResponse();
+    await handler(createMockRequest({headers: {authorization: "Bearer injected-onboarding-failure"}}) as never,
+      response as never);
+    assert.equal(response.statusCode, 500);
+    assertStructuredError(response.body, "INTERNAL_ERROR", "Unexpected error while processing request.");
+    assert.doesNotMatch(JSON.stringify(response.body), /synthetic onboarding unavailable/u);
+    assert.equal(activationCount, index + 1);
+    assert.equal(serviceCount, 0);
+  }
+});
+
+test("governance factories reject incomplete entitlement before their injected service", async () => {
+  let serviceCount = 0;
+  const unreachable = async (): Promise<never> => {
+    serviceCount += 1;
+    throw new Error("governance service must not run without complete entitlement");
+  };
+  const verifyIdToken = async () => createDirectorToken({licenseState: undefined, licenseVersion: undefined}) as never;
+  const handlers = [
+    createAdminGovernanceSnapshotsHandler({verifyIdToken, readSnapshots: unreachable}),
+    createAdminGovernanceReportsHandler({verifyIdToken, generateReport: unreachable}),
+  ];
+  for (const handler of handlers) {
+    const response = createMockResponse();
+    await handler(createMockRequest({
+      headers: {authorization: "Bearer incomplete-governance-entitlement"},
+      body: {instituteId: "inst_build_89", yearId: "2026"},
+    }) as never, response as never);
+    assert.equal(response.statusCode, 403);
+    assertStructuredError(response.body, "LICENSE_RESTRICTED", "License entitlement claims are incomplete.");
+    assert.equal(serviceCount, 0);
+  }
+});
+
+test("answer and submit factories reject missing owner proof before their injected service", async () => {
+  let serviceCount = 0;
+  const unreachable = async (): Promise<never> => {
+    serviceCount += 1;
+    throw new Error("service must not run without owner proof");
+  };
+  const dependencies = {...studentAuthentication, verifyIdToken: async () => createExamStudentToken() as never};
+  const cases = [
+    {handler: createExamSessionAnswersHandler({...dependencies, persistIncrementalAnswers: unreachable}),
+      route: "answers", body: {answers: [], batchId: "owned-batch", batchSequence: 1,
+        flushReason: "scheduled", millisecondsSinceLastWrite: 5000}},
+    {handler: createExamSessionSubmitHandler({...dependencies, submitSession: unreachable}),
+      route: "submit", body: {reason: "manual"}},
+  ];
+  for (const {handler, route, body} of cases) {
+    const response = createMockResponse();
+    await handler(createMockRequest({headers: {authorization: "Bearer missing-owner-proof"},
+      path: `/exam/session/session_build_50/${route}`,
+      body: {...body, instituteId: "inst_build_50", yearId: "2026", runId: "run_build_50"},
+    }) as never, response as never);
+    assert.equal(response.statusCode, 400);
+    assert.equal((response.body as {error: {code: string}}).error.code, "VALIDATION_ERROR");
+    assert.equal(serviceCount, 0);
+  }
+});
